@@ -17,7 +17,7 @@ import { ChevronRight, ChevronDown, ClipboardList, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LogSistema } from '@/lib/supabase';
 import { descreverAcao, campoLabel, normalizarDescricao } from '@/lib/logs-catalogo';
-import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
+import { SeloCategoria, SeloSeveridade, SeloNovoDispositivo, AvatarAutor } from './comum';
 import {
   iconeDaCategoria, rotuloDoDia, dataHoraCompleta, horaMinuto, numeroBr,
 } from './formatos';
@@ -103,6 +103,7 @@ function CardGrupo({
   const primeiro = grupo.eventos[0];
   const perfis = primeiro.perfis as { nome?: string; foto_url?: string } | undefined;
   const critico = grupo.eventos.some(e => e.severidade === 'critico');
+  const novoDispositivo = grupo.eventos.some(e => e.dispositivo_alterado);
   // Um evento de dentro está selecionado no painel lateral: o card se destaca
   // para a pessoa não perder de onde veio o detalhe aberto.
   const contemDestacado = !!idDestacado && grupo.eventos.some(e => e.id === idDestacado);
@@ -158,6 +159,7 @@ function CardGrupo({
             <span className="text-muted-foreground/30">·</span>
             <SeloCategoria categoria={primeiro.categoria} comIcone={false} />
             {critico && <SeloSeveridade severidade="critico" />}
+            {novoDispositivo && <SeloNovoDispositivo />}
             <span className="text-[10px] text-muted-foreground truncate max-w-[320px]">
               {r.tabelas.join(' · ')}
             </span>
@@ -236,6 +238,7 @@ function LinhaEvento({
           <span className="text-muted-foreground/30">·</span>
           <SeloCategoria categoria={log.categoria} comIcone={false} />
           {log.severidade !== 'info' && <SeloSeveridade severidade={log.severidade} />}
+          {log.dispositivo_alterado && <SeloNovoDispositivo />}
 
           {/* Campos alterados: o resumo do diff sem abrir o detalhe. É o que
               permite varrer 40 linhas e achar "quem mexeu no valor". */}

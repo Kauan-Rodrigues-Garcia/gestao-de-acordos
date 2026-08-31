@@ -14,7 +14,7 @@
 import { cn } from '@/lib/utils';
 import type { LogSistema } from '@/lib/supabase';
 import { descreverAcao, campoLabel, formatarValorLog, origemLabel, normalizarDescricao } from '@/lib/logs-catalogo';
-import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
+import { SeloCategoria, SeloSeveridade, SeloNovoDispositivo, AvatarAutor } from './comum';
 import { dataHoraCompleta, tempoRelativo } from './formatos';
 import { Vazio } from './LogsTimeline';
 import { rotuloLocalizacaoIp, type LocalizacoesPorIp } from '@/services/ipLocalizacao.service';
@@ -85,6 +85,7 @@ export default function LogsTabela({
                   <p className="text-foreground leading-snug">
                     {normalizarDescricao(log.descricao) || descreverAcao(log.acao)}
                   </p>
+                  {log.dispositivo_alterado && <SeloNovoDispositivo className="mt-1" />}
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="text-[10px] font-mono text-muted-foreground/70">{log.acao}</span>
                     {log.tabela && (

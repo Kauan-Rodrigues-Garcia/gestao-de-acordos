@@ -1932,6 +1932,9 @@ export type Database = {
           depois: Json | null
           descricao: string | null
           detalhes: Json | null
+          dispositivo_alterado: boolean
+          dispositivo_anterior_id: string | null
+          dispositivo_id: string | null
           empresa_id: string | null
           id: string
           ip: string | null
@@ -1957,6 +1960,9 @@ export type Database = {
           depois?: Json | null
           descricao?: string | null
           detalhes?: Json | null
+          dispositivo_alterado?: boolean
+          dispositivo_anterior_id?: string | null
+          dispositivo_id?: string | null
           empresa_id?: string | null
           id?: string
           ip?: string | null
@@ -1982,6 +1988,9 @@ export type Database = {
           depois?: Json | null
           descricao?: string | null
           detalhes?: Json | null
+          dispositivo_alterado?: boolean
+          dispositivo_anterior_id?: string | null
+          dispositivo_id?: string | null
           empresa_id?: string | null
           id?: string
           ip?: string | null

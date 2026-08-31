@@ -11,7 +11,7 @@
  * Funções puras de formatação moram em `formatos.ts`, não aqui: um módulo que
  * exporta componentes e utilitários juntos quebra o Fast Refresh.
  */
-import { Server } from 'lucide-react';
+import { MonitorUp, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { categoriaMeta, severidadeMeta } from '@/lib/logs-catalogo';
 import { iconeDaCategoria, iniciais } from './formatos';
@@ -75,6 +75,21 @@ export function SeloSeveridade({
     >
       <span className={cn('w-1.5 h-1.5 rounded-full', meta.ponto)} />
       {meta.label}
+    </span>
+  );
+}
+
+export function SeloNovoDispositivo({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/10 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300 whitespace-nowrap',
+        className,
+      )}
+      title="Conta acessada por computador diferente do último login identificado"
+    >
+      <MonitorUp className="w-3 h-3" />
+      Novo computador
     </span>
   );
 }

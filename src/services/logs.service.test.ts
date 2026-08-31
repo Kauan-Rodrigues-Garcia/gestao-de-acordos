@@ -340,7 +340,9 @@ describe('exportarLogsCsv', () => {
     expect(cabecalho).toContain('"Data/Hora"');
     expect(cabecalho).toContain('"Campos alterados"');
     // Separador ponto e vírgula: o Excel em pt-BR usa vírgula como decimal.
-    expect(cabecalho.split(';')).toHaveLength(17);
+    expect(cabecalho).toContain('"Computador"');
+    expect(cabecalho).toContain('"Alerta de novo computador"');
+    expect(cabecalho.split(';')).toHaveLength(20);
     expect(primeira).toContain('Mudou o status do acordo NR 123');
     expect(primeira).toContain('Status: Não pago → Pago');
     expect(primeira).toContain('Banco de dados');

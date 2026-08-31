@@ -18,13 +18,14 @@
 import { useEffect, useState } from 'react';
 import {
   Clock, User, Building2, Database, Globe, Monitor, Copy, Check,
-  History, Loader2, Hash, Route,
+  History, Loader2, Hash, Route, MonitorUp,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
+import { rotuloDispositivo } from '@/lib/dispositivo';
 import type { LogSistema } from '@/lib/supabase';
 import {
   descreverAcao, montarDiferencas, origemLabel, alvoLabel, campoLabel,
@@ -118,6 +119,19 @@ export default function LogDetalhe({
         <Separator />
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {log.dispositivo_alterado && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200">
+              <MonitorUp className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold">Acesso por um computador diferente</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed opacity-90">
+                  O último login identificado foi em {rotuloDispositivo(log.dispositivo_anterior_id)};
+                  este acesso veio de {rotuloDispositivo(log.dispositivo_id)}.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ── Autor ───────────────────────────────────────────────────────── */}
           <section>
             <Rotulo>Quem fez</Rotulo>
@@ -237,6 +251,22 @@ export default function LogDetalhe({
               <Linha icone={User} termo="Origem" valor={origemLabel(log.origem)} />
               {log.rota && <Linha icone={Route} termo="Rota" valor={log.rota} mono />}
               {log.ip && <Linha icone={Globe} termo="IP" valor={log.ip} mono />}
+              {(log.acao === 'login' || log.dispositivo_id) && (
+                <Linha
+                  icone={Monitor}
+                  termo="Computador"
+                  valor={rotuloDispositivo(log.dispositivo_id)}
+                  mono
+                />
+              )}
+              {log.dispositivo_anterior_id && (
+                <Linha
+                  icone={Monitor}
+                  termo="Computador anterior"
+                  valor={rotuloDispositivo(log.dispositivo_anterior_id)}
+                  mono
+                />
+              )}
               {rotuloLocalizacaoIp(localizacaoIp) && (
                 <Linha
                   icone={Globe}

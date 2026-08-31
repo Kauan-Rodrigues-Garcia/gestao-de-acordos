@@ -27,6 +27,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { LogSistema } from '@/lib/supabase';
+import { rotuloDispositivo } from '@/lib/dispositivo';
 import type { CategoriaLog, SeveridadeLog, OrigemLog } from '@/lib/logs-catalogo';
 import { descreverAcao, campoLabel, formatarValorLog, origemLabel, normalizarDescricao } from '@/lib/logs-catalogo';
 
@@ -453,7 +454,8 @@ export async function exportarLogsCsv(filtros: FiltrosLogs): Promise<ResultadoEx
   const colunas = [
     'Data/Hora', 'Severidade', 'Categoria', 'Ação', 'Descrição',
     'Autor', 'Cargo', 'E-mail', 'Empresa', 'Alvo', 'Tabela',
-    'Registro', 'Campos alterados', 'Origem', 'Rota', 'IP', 'Detalhes',
+    'Registro', 'Campos alterados', 'Origem', 'Rota', 'IP', 'Computador',
+    'Computador anterior', 'Alerta de novo computador', 'Detalhes',
   ];
 
   const linhas: string[] = [colunas.map(celulaCsv).join(';')];
@@ -508,6 +510,9 @@ function linhaCsv(log: LogSistema): string {
     origemLabel(log.origem),
     log.rota ?? '',
     log.ip ?? '',
+    log.dispositivo_id ? rotuloDispositivo(log.dispositivo_id) : '',
+    log.dispositivo_anterior_id ? rotuloDispositivo(log.dispositivo_anterior_id) : '',
+    log.dispositivo_alterado ? 'Sim' : 'Não',
     log.detalhes ? JSON.stringify(log.detalhes) : '',
   ].map(celulaCsv).join(';');
 }

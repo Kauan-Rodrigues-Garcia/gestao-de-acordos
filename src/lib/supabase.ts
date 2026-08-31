@@ -1,16 +1,23 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
+import { obterDispositivoId } from './dispositivo';
 
 export type { Database };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
+function cabecalhosDoDispositivo(): Record<string, string> {
+  const dispositivoId = obterDispositivoId();
+  return dispositivoId ? { 'x-device-id': dispositivoId } : {};
+}
+
 let _instance: SupabaseClient<Database> | null = null;
 
 function getSupabase(): SupabaseClient<Database> {
   if (_instance) return _instance;
   _instance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    global: { headers: cabecalhosDoDispositivo() },
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -29,6 +36,7 @@ export const supabase = getSupabase();
  */
 export function createIsolatedAuthClient(): SupabaseClient<Database> {
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    global: { headers: cabecalhosDoDispositivo() },
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -274,6 +282,9 @@ export interface LogSistema {
   rota?: string | null;
   ip?: string | null;
   user_agent?: string | null;
+  dispositivo_id?: string | null;
+  dispositivo_anterior_id?: string | null;
+  dispositivo_alterado?: boolean;
 
   perfis?: Perfil;
   empresas?: { id: string; nome: string } | null;
