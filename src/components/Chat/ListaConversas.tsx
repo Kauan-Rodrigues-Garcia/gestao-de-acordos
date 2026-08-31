@@ -228,22 +228,31 @@ export function ListaConversas({
     <div className="flex flex-col h-full min-h-0">
       {/* Abas */}
       {/*
-        O espaço à direita é reservado para o botão de ação, que é `absolute`.
-        Reservar por `aba !== 'historico'` sobrava 40px de vazio para quem NÃO
-        pode iniciar conversa — e nessas contas as três abas eram espremidas
-        (e truncadas) para abrir lugar a um botão que nunca era desenhado.
-        A condição agora é a MESMA do botão, então os dois nunca divergem.
+        Régua de abas: flexbox comum, sem `absolute`.
+        ─────────────────────────────────────────────────────────────────────
+        A versão anterior punha o botão de ação em `absolute right-2 top-2` e
+        reservava o espaço dele com um `pr-10` no contêiner. Dois números para
+        a mesma coisa, cada um com sua condição — e eles divergiam:
+
+          • na janela compacta o botão caía POR CIMA da terceira aba, que é
+            justamente a de Disparos. Clicar em Disparos parecia apagar as
+            outras porque a régua inteira estava desalinhada por causa do
+            elemento fora do fluxo;
+          • e o botão de Novo disparo simplesmente não aparecia, coberto pela
+            aba que ele deveria acompanhar.
+
+        Sendo um item de flex de verdade, o navegador reserva o espaço sozinho
+        e nada se sobrepõe a nada. As abas continuam com largura igual
+        (`flex-1 basis-0`) e truncam quando falta espaço, em vez de sumir.
       */}
-      <div className={cn(
-        'relative flex items-center px-2 pt-2 shrink-0',
-        podeIniciar && aba !== 'historico' ? 'pr-10' : 'pr-2',
-      )}>
-        <div className="grid min-w-0 flex-1 grid-cols-3 gap-0.5 overflow-hidden rounded-lg bg-muted/35 p-0.5">
+      <div className="flex shrink-0 items-center gap-1 px-2 pt-2">
+        <div className="flex min-w-0 flex-1 gap-0.5 rounded-lg bg-muted/35 p-0.5">
           {(['conversas', 'historico', 'disparos'] as const).map(a => (
             <button
               key={a} onClick={() => setAba(a)}
+              title={a === 'conversas' ? 'Conversas' : a === 'historico' ? 'Histórico' : 'Disparos'}
               className={cn(
-                'min-w-0 truncate rounded-md px-1.5 py-1.5 text-[11px] font-medium transition-colors',
+                'min-w-0 flex-1 basis-0 truncate rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 aba === a
                   ? 'bg-background text-foreground shadow-sm'
@@ -259,8 +268,9 @@ export function ListaConversas({
         </div>
         {podeIniciar && aba !== 'historico' && (
           <Button variant="ghost" size="icon"
-                  className="absolute right-2 top-2 z-20 h-7 w-7"
+                  className="h-7 w-7 shrink-0"
                   onClick={aba === 'conversas' ? onNovaConversa : onNovoDisparo}
+                  title={aba === 'conversas' ? 'Nova conversa' : 'Novo disparo'}
                   aria-label={aba === 'conversas' ? 'Nova conversa' : 'Novo disparo'}>
             {aba === 'conversas' ? <MessageSquarePlus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           </Button>

@@ -64,7 +64,7 @@ export interface UseChat {
   verAnteriores:  () => void;
   abrir:          (conversaId: string | null) => void;
   abrirCom:       (pessoaId: string) => Promise<string | null>;
-  enviar:         (texto: string, anexos?: AnexoChat[]) => Promise<string | null>;
+  enviar: (texto: string, anexos?: AnexoChat[], respondendoId?: string | null) => Promise<string | null>;
   recarregar:     () => void;
 }
 
@@ -287,10 +287,13 @@ export function useChat(
     return id;
   }, [abrir]);
 
-  const enviar = useCallback(async (texto: string, anexos: AnexoChat[] = []) => {
+  const enviar = useCallback(async (
+    texto: string, anexos: AnexoChat[] = [], respondendoId?: string | null,
+  ) => {
     if (!conversaAberta || !empresa?.id || !meuId) return 'Conversa não está aberta.';
     const { erro } = await enviarNoBanco({
       conversaId: conversaAberta, empresaId: empresa.id, autorId: meuId, texto, anexos,
+      respondendoId,
     });
     if (!erro) agendarRefazer();
     return erro;

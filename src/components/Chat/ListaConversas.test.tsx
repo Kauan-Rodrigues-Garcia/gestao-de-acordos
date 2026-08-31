@@ -121,7 +121,17 @@ describe('ListaConversas', () => {
     await waitFor(() => expect(screen.queryByText('Pessoa 1')).not.toBeInTheDocument());
   });
 
-  it('mantém o botão de novo disparo reservado no cabeçalho estreito', async () => {
+  /*
+   * Este teste já cobrou `absolute right-2 z-20` do botão — as classes exatas
+   * da implementação anterior. Era justamente ela que quebrava: fora do fluxo,
+   * o botão caía por cima da aba Disparos na janela compacta, e escolher
+   * Disparos parecia apagar as outras duas abas.
+   *
+   * Fixar classe de posicionamento em teste trava o defeito no lugar. O que
+   * precisa continuar verdade é o COMPORTAMENTO: as três abas seguem
+   * alcançáveis depois de trocar de aba, e o botão da aba ativa é clicável.
+   */
+  it('mantém as três abas e o botão de novo disparo alcançáveis na aba Disparos', async () => {
     const user = userEvent.setup();
     const disparo: DisparoChat = {
       id: 'd-compacto', texto: 'Aviso', anexos: [],
@@ -131,8 +141,11 @@ describe('ListaConversas', () => {
     render(<ListaConversas {...baseProps} conversas={[]} disparos={[disparo]} />);
     await user.click(screen.getByRole('button', { name: /Disparos 1/i }));
 
+    for (const nome of [/Conversas/i, /Histórico/i, /Disparos 1/i]) {
+      expect(screen.getByRole('button', { name: nome })).toBeInTheDocument();
+    }
+
     const botao = screen.getByRole('button', { name: 'Novo disparo' });
-    expect(botao).toHaveClass('absolute', 'right-2', 'z-20');
     await user.click(botao);
     expect(baseProps.onNovoDisparo).toHaveBeenCalledTimes(1);
   });

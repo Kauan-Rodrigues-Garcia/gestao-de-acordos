@@ -198,35 +198,6 @@ export function BolhaChat() {
 
   const conversaAtual = chat.aberta;
 
-  /*
-   * ESC fecha a CONVERSA, não a janela.
-   *
-   * Na janela pequena a conversa ocupa o lugar da lista, então fechá-la é
-   * literalmente voltar para a lista. Na expandida as duas convivem, e o efeito
-   * é a coluna da direita voltar para "Escolha uma conversa". Um caminho só nos
-   * dois tamanhos, porque `mostraLista` já resolve o resto.
-   *
-   * Sem conversa aberta o ESC não faz nada: fechar o chat inteiro por tecla
-   * seria destruir contexto que ninguém pediu para destruir.
-   *
-   * `capture: false` e a checagem dos diálogos existem porque NovaConversa,
-   * Disparo, Sobre e o visualizador de mídia têm ESC próprio. Sem isso, um ESC
-   * dentro do diálogo fecharia o diálogo E a conversa atrás dele.
-   */
-  useEffect(() => {
-    if (!aberto || !conversaAtual) return;
-    function aoTeclar(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      if (novaConversa || novoDisparo || sobre || pendente) return;
-      // Um diálogo do Radix montado em qualquer lugar da página tem prioridade.
-      if (document.querySelector('[role="dialog"][data-state="open"]')) return;
-      e.stopPropagation();
-      chat.abrir(null);
-    }
-    window.addEventListener('keydown', aoTeclar);
-    return () => window.removeEventListener('keydown', aoTeclar);
-  }, [aberto, conversaAtual, novaConversa, novoDisparo, sobre, pendente, chat]);
-
   const abrirJanela = useCallback(() => {
     abertoRef.current = true;
     setAberto(true);

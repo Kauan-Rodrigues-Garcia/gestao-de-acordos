@@ -61,6 +61,11 @@ export interface MensagemChat {
   /** Saiu de um disparo. A tela não mostra isso a quem recebeu — ver a migration. */
   disparo_id:   string | null;
   expurgado_em: string | null;
+  /** Mensagem citada por esta, se for uma resposta. */
+  respondendo_id: string | null;
+  /** Quem curtiu. Uma por mensagem: o chat e 1 para 1. */
+  curtida_por:  string | null;
+  curtida_em:   string | null;
 }
 
 /** Uma linha da lista de conversas, já com a outra pessoa resolvida. */
@@ -319,7 +324,7 @@ export async function listarMensagens(
   conversaId: string, antesDe?: string,
 ): Promise<{ mensagens: MensagemChat[]; temMais: boolean }> {
   let q = db('chat_mensagens')
-    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em')
+    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_por, curtida_em')
     .eq('conversa_id', conversaId);
 
   if (antesDe) q = q.lt('criado_em', antesDe);
@@ -441,6 +446,8 @@ export async function enviarMensagem(params: {
   autorId:    string;
   texto:      string;
   anexos?:    AnexoChat[];
+  /** Id da mensagem citada, quando for resposta. */
+  respondendoId?: string | null;
 }): Promise<{ erro: string | null }> {
   const anexos = params.anexos ?? [];
   const texto  = params.texto.trim();
@@ -452,6 +459,7 @@ export async function enviarMensagem(params: {
     autor_id:    params.autorId,
     texto:       texto || null,
     anexos,
+    respondendo_id: params.respondendoId ?? null,
   });
   return { erro: error ? traduzir(error.message) : null };
 }
@@ -619,4 +627,25 @@ function traduzir(mensagem: string): string {
     return 'Esta conversa não está disponível para você.';
   }
   return 'Não foi possível concluir. Tente de novo.';
+}
+
+/**
+ * Liga ou desliga o coração de uma mensagem.
+ *
+ * Vai por RPC porque `chat_mensagens` não tem policy de UPDATE para
+ * `authenticated`: dar uma abriria a porta para reescrever o texto da mensagem
+ * alheia. A função confere `fn_chat_sou_parte` antes de gravar.
+ *
+ * O outro lado não precisa de aviso próprio — o UPDATE viaja pelo realtime que
+ * `useChat` já escuta, e a mensagem na tela é remendada com o novo valor.
+ */
+export async function curtirMensagem(
+  mensagemId: string,
+  curtir: boolean,
+): Promise<{ erro: string | null }> {
+  const { error } = await rpcSemTipo<string>('fn_chat_curtir', {
+    p_mensagem_id: mensagemId,
+    p_curtir:      curtir,
+  });
+  return { erro: error ? traduzir(error.message) : null };
 }

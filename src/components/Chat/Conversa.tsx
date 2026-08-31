@@ -16,13 +16,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Paperclip, Send, Smile, X, Loader2, Mic, Trash2, Check,
+  Heart, CornerUpLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/components/ui/use-toast';
 import {
-  subirAnexo, LIMITE_ANEXO,
+  subirAnexo, curtirMensagem, LIMITE_ANEXO,
   type MensagemChat, type ConversaChat, type AnexoChat,
 } from '@/services/chat/chat.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
@@ -44,7 +46,7 @@ interface Props {
   gravando:   boolean;
   expandido:  boolean;
   onVoltar?:  () => void;
-  onEnviar:   (texto: string, anexos: AnexoChat[]) => Promise<string | null>;
+  onEnviar:   (texto: string, anexos: AnexoChat[], respondendoId?: string | null) => Promise<string | null>;
   onDigitando: () => void;
   /** Avisa o outro lado que estou gravando. Chamado em ritmo — ver o efeito. */
   onGravando: () => void;
@@ -59,6 +61,7 @@ export function Conversa({
   onDigitando, onGravando, temMais, carregandoMais, onVerAnteriores,
 }: Props) {
   const { perfil } = useAuth();
+  const { toast } = useToast();
   const meuId = perfil?.id ?? '';
 
   const [texto, setTexto] = useState('');
@@ -66,6 +69,8 @@ export function Conversa({
   const [subindo, setSubindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
+  /** Mensagem que a próxima vai citar. Null = mensagem solta. */
+  const [respondendo, setRespondendo] = useState<MensagemChat | null>(null);
 
   const rolagem = useRef<HTMLDivElement>(null);
   const campo   = useRef<HTMLTextAreaElement>(null);
@@ -218,14 +223,95 @@ export function Conversa({
       if (anexo) anexos.push(anexo);
     }
 
-    const falha = await onEnviar(corpo, anexos);
+    const falha = await onEnviar(corpo, anexos, respondendo?.id ?? null);
     setSubindo(false);
     if (falha) { setErro(falha); return; }
 
     setTexto('');
     setPendentes([]);
+    setRespondendo(null);
     campo.current?.focus();
-  }, [texto, pendentes, subindo, conversa.id, onEnviar]);
+  }, [texto, pendentes, subindo, conversa.id, onEnviar, respondendo]);
+
+  /** Índice por id: a citação precisa achar a mensagem original para desenhar. */
+  const porId = useMemo(() => new Map(mensagens.map(m => [m.id, m])), [mensagens]);
+
+  const responder = useCallback((m: MensagemChat) => {
+    setRespondendo(m);
+    campo.current?.focus();
+  }, []);
+
+  const curtir = useCallback(async (m: MensagemChat) => {
+    // Otimista de propósito: o coração é a interação mais leve do chat e
+    // esperar o servidor para pintá-lo faz o toque parecer que não pegou.
+    // O realtime traz o valor real logo em seguida; se falhar, some sozinho.
+    const { erro: falha } = await curtirMensagem(m.id, !m.curtida_por);
+    if (falha) setErro(falha);
+  }, []);
+
+  /*
+   * Aviso de curtida.
+   *
+   * Não é notificação de banco: a curtida já viaja como UPDATE no realtime que
+   * `useChat` escuta, e criar uma linha em `notificacoes` para um coração
+   * encheria o sino de ruído. O aviso aparece para quem está com a conversa
+   * aberta, que é quem pode reagir a ele.
+   *
+   * `curtidasVistas` começa preenchido com o que já estava na tela — sem isso,
+   * abrir uma conversa antiga dispararia um toast para cada coração antigo.
+   */
+  const curtidasVistas = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const minhasCurtidas = new Set(
+      mensagens.filter(m => m.curtida_por && m.autor_id === meuId).map(m => m.id),
+    );
+    if (curtidasVistas.current === null) { curtidasVistas.current = minhasCurtidas; return; }
+    for (const id of minhasCurtidas) {
+      if (curtidasVistas.current.has(id)) continue;
+      const m = mensagens.find(x => x.id === id);
+      if (m?.curtida_por === meuId) continue;   // curtir a própria não avisa
+      toast({
+        title: `${conversa.outro_nome} curtiu sua mensagem`,
+        description: m?.texto ? m.texto.slice(0, 80) : 'Anexo',
+      });
+    }
+    curtidasVistas.current = minhasCurtidas;
+  }, [mensagens, meuId, conversa.outro_nome]);
+
+  // Conversa trocada: o conjunto de curtidas já vistas é de outra conversa.
+  useEffect(() => { curtidasVistas.current = null; }, [conversa.id]);
+
+  /*
+   * ESC fecha a conversa.
+   *
+   * Mora AQUI, e não no `BolhaChat`, porque só aqui se sabe o que há para
+   * desfazer antes: o visualizador de mídia e a citação em edição são estado
+   * deste componente. Um ESC no pai não enxergaria nenhum dos dois e fecharia a
+   * conversa por cima de um modal aberto.
+   *
+   * A ordem é a de sempre em interface: desfaz a camada mais rasa primeiro.
+   *   1. visualizador de mídia aberto — ele tem ESC próprio, aqui só se sai
+   *   2. citação em edição — cancela a resposta
+   *   3. nada disso — fecha a conversa (na janela pequena isso É voltar para a
+   *      lista; na expandida, esvaziar a coluna da direita)
+   *
+   * O `closest('[role="dialog"]')` é o que impede o ESC de Nova conversa,
+   * Disparo ou Sobre de fechar a conversa que está atrás deles: os diálogos
+   * são renderizados em portal, fora desta árvore, e o alvo do evento denuncia
+   * de onde a tecla veio.
+   */
+  useEffect(() => {
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const alvo = e.target as HTMLElement | null;
+      if (alvo?.closest?.('[role="dialog"]')) return;
+      if (midiaAberta !== null) return;
+      if (respondendo) { setRespondendo(null); return; }
+      onVoltar?.();
+    }
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [midiaAberta, respondendo, onVoltar]);
 
   const temAlgoParaEnviar = !!texto.trim() || pendentes.length > 0;
 
@@ -343,12 +429,30 @@ export function Conversa({
                   </span>
                 </div>
               )}
-              <div className={cn('flex', meu ? 'justify-end' : 'justify-start')}>
+              {/*
+                `group` + ações fora do balão: responder e curtir aparecem ao
+                passar o mouse, do lado de dentro da conversa. Ficam FORA da
+                caixa para não empurrar o texto nem competir com o anexo, e
+                `focus-within` mantém as duas alcançáveis por teclado.
+              */}
+              <div className={cn('group flex items-center gap-1', meu ? 'justify-end' : 'justify-start')}>
+                {meu && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} />}
                 <div className={cn(
-                  'max-w-[78%] rounded-2xl px-3 py-1.5 space-y-1.5',
+                  'relative max-w-[78%] rounded-2xl px-3 py-1.5 space-y-1.5',
                   meu ? 'bg-primary text-primary-foreground rounded-br-md'
                       : 'bg-muted rounded-bl-md',
+                  // Espaço para o coração não encostar na hora.
+                  m.curtida_por && 'mb-2',
                 )}>
+                  {/* Citação: o pedaço de cima do balão, como no WhatsApp. */}
+                  {m.respondendo_id && (
+                    <Citacao
+                      alvo={porId.get(m.respondendo_id) ?? null}
+                      meu={meu}
+                      souOAutorDoAlvo={porId.get(m.respondendo_id)?.autor_id === meuId}
+                      nomeDoOutro={conversa.outro_nome}
+                    />
+                  )}
                   {m.anexos.map((a, i) => (
                     <AnexoNoBalao
                       key={i} anexo={a} meu={meu}
@@ -373,7 +477,24 @@ export function Conversa({
                     {horaDoBalao(m.criado_em)}
                     {estado && <StatusMensagem estado={estado} noBalao className="ml-1" />}
                   </p>
+
+                  {/* O coração encosta na quina de baixo do balão, meio para
+                      fora, como no Instagram: pertence à mensagem sem ocupar
+                      uma linha dela. */}
+                  {m.curtida_por && (
+                    <span
+                      className={cn(
+                        'absolute -bottom-2 flex h-5 w-5 items-center justify-center',
+                        'rounded-full bg-background shadow ring-1 ring-border',
+                        meu ? 'left-1' : 'right-1',
+                      )}
+                      title={m.curtida_por === meuId ? 'Você curtiu' : `${conversa.outro_nome} curtiu`}
+                    >
+                      <Heart className="h-3 w-3 fill-red-500 text-red-500" />
+                    </span>
+                  )}
                 </div>
+                {!meu && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} />}
               </div>
             </div>
           );
@@ -386,6 +507,31 @@ export function Conversa({
 
       {/* Escrita */}
       <div className="border-t border-border px-2.5 py-2 space-y-2 shrink-0">
+        {/*
+          A citação em edição fica acima do campo, como no WhatsApp: quem está
+          escrevendo precisa ver o que está respondendo sem tirar o olho de onde
+          digita. O X cancela; o ESC também (ver o handler de teclado).
+        */}
+        {respondendo && (
+          <div className="flex items-start gap-2 rounded-lg border-l-2 border-primary bg-muted/60 px-2 py-1.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold leading-none text-primary">
+                Respondendo {respondendo.autor_id === meuId ? 'você mesmo' : conversa.outro_nome}
+              </p>
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                {respondendo.texto?.trim() || (respondendo.anexos.length ? 'Anexo' : 'Mensagem')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRespondendo(null)}
+              aria-label="Cancelar resposta"
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {erro && (
           <p className="text-[11px] text-destructive flex items-start gap-1">
             <span className="flex-1">{erro}</span>
@@ -534,6 +680,93 @@ export function Conversa({
           <p className="text-sm font-medium text-primary">Solte para anexar</p>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Responder e curtir, ao lado do balão.
+ *
+ * Aparecem no hover (e no foco, para quem usa teclado). Ficam fora do balão de
+ * propósito: dentro, empurrariam o texto e brigariam com o anexo — e num balão
+ * de uma palavra a caixa ficaria maior que a mensagem.
+ *
+ * Responder fica EM CIMA de curtir, como pedido: é a ação que continua a
+ * conversa, e a de baixo é a que só reage.
+ */
+function AcoesBalao({
+  m, onResponder, onCurtir,
+}: {
+  m: MensagemChat;
+  onResponder: (m: MensagemChat) => void;
+  onCurtir: (m: MensagemChat) => void;
+}) {
+  // Mensagem sem conteúdo (expurgada) não se responde nem se curte.
+  if (m.expurgado_em) return null;
+  return (
+    <div className="flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <button
+        type="button"
+        onClick={() => onResponder(m)}
+        title="Responder"
+        aria-label="Responder a esta mensagem"
+        className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <CornerUpLeft className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void onCurtir(m)}
+        title={m.curtida_por ? 'Descurtir' : 'Curtir'}
+        aria-label={m.curtida_por ? 'Descurtir esta mensagem' : 'Curtir esta mensagem'}
+        aria-pressed={!!m.curtida_por}
+        className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-red-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Heart className={cn('h-3.5 w-3.5', m.curtida_por && 'fill-red-500 text-red-500')} />
+      </button>
+    </div>
+  );
+}
+
+/** Prévia da mensagem citada, no topo do balão que a responde. */
+function Citacao({
+  alvo, meu, souOAutorDoAlvo, nomeDoOutro,
+}: {
+  alvo: MensagemChat | null;
+  meu: boolean;
+  souOAutorDoAlvo: boolean;
+  nomeDoOutro: string;
+}) {
+  /*
+   * `alvo` nulo não é erro: a citada pode estar numa página anterior que ainda
+   * não foi carregada, ou ter sido apagada (o FK é ON DELETE SET NULL, mas a
+   * linha some da lista antes disso). Some melhor que sumir a resposta inteira.
+   */
+  const resumo = !alvo
+    ? 'Mensagem indisponível'
+    : alvo.expurgado_em ? 'Mensagem removida'
+    : alvo.texto?.trim() || (alvo.anexos.length ? 'Anexo' : 'Mensagem');
+
+  return (
+    <div className={cn(
+      'flex flex-col gap-0.5 rounded-lg border-l-2 px-2 py-1',
+      meu
+        ? 'border-primary-foreground/60 bg-primary-foreground/10'
+        : 'border-primary bg-background/60',
+    )}>
+      <span className={cn(
+        'text-[10px] font-semibold leading-none',
+        meu ? 'text-primary-foreground/80' : 'text-primary',
+      )}>
+        {souOAutorDoAlvo ? 'Você' : nomeDoOutro}
+      </span>
+      <span className={cn(
+        'line-clamp-2 text-[11px] leading-snug',
+        meu ? 'text-primary-foreground/70' : 'text-muted-foreground',
+        !alvo && 'italic',
+      )}>
+        {resumo}
+      </span>
     </div>
   );
 }
