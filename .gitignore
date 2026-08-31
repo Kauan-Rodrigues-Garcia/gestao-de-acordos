@@ -103,3 +103,7 @@ Thumbs.db
 uploaded_files/
 
 yarn.lock
+
+# --- Rascunhos locais (relatorios gerados, scripts de apoio) ---
+outputs/
+work/
