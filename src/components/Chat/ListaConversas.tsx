@@ -225,7 +225,15 @@ export function ListaConversas({
     : listaDaAba;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    /*
+      `w-full min-w-0 overflow-hidden`: sem isso a coluna cresce com o conteúdo.
+      Um disparo de texto longo alargava a lista além da janela e, como item de
+      flex com `min-width: auto`, ela não encolhia de volta — o cabeçalho ia
+      junto, jogando o botão de Novo disparo para fora da área visível (a bolha
+      é `overflow-hidden`) e levando a régua de abas com ele. Era por isso que o
+      defeito só aparecia com disparo feito, e só na janela compacta.
+    */
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden min-h-0">
       {/* Abas */}
       {/*
         Régua de abas: flexbox comum, sem `absolute`.
@@ -290,7 +298,7 @@ export function ListaConversas({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {aba !== 'disparos' ? (
           <>
             {carregando && (
