@@ -70,6 +70,7 @@ import {
 } from '@/lib/unidadeValor';
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { cn } from '@/lib/utils';
+import { TagDesligado } from '@/components/TagDesligado';
 import {
   getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PP_HO_PERCENTUAL,
 } from '@/lib/index';
@@ -563,10 +564,22 @@ export function QuartisOperadores({
           // `situacao` (férias/desligado) é outra coisa e continua adiante — em
           // agosto/2026 havia 1 pessoa desativada com `situacao = 'ativo'`, então
           // um dos dois filtros sozinho não cobria o outro.
-          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao')
+          /*
+           * `ativo = true` OU desligado: desligar zera `ativo` (é o que bloqueia
+           * o login), e um `.eq('ativo', true)` seco tirava a pessoa da lista no
+           * mesmo instante. Desde 31/08/2026 ela fica até a virada do mês, com
+           * etiqueta — quem trabalhou até o dia 20 produziu até o dia 20.
+           *
+           * `arquivado` é o corte de verdade: na virada a pessoa some daqui e
+           * passa a existir só na aba Desligados. `is.null` entra na conta
+           * porque a coluna é nula nas linhas antigas, e `arquivado <> true`
+           * sozinho descartaria todas elas.
+           */
+          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao, arquivado')
             .eq('empresa_id', empresaId)
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
-            .eq('ativo', true)
+            .or('ativo.eq.true,situacao.eq.desligado')
+            .or('arquivado.is.null,arquivado.eq.false')
             .order('nome'),
           // `select('*')` de propósito, e não a lista de colunas: as duas da
           // meta indireta só existem depois da migration 20260818160000, e o
@@ -679,8 +692,16 @@ export function QuartisOperadores({
     // Clone: o operador conta no setor da equipe clonada, não só no dele.
     // Mesma fonte usada pelo Total recebido e por Desempenho Equipes.
     const visiveis = operadores
-      // Item 5: férias/desligado somem do quartil (recebimento segue nos totais).
-      .filter(o => (o.situacao ?? 'ativo') === 'ativo')
+      /*
+       * FÉRIAS some do quartil; o recebimento segue nos totais.
+       *
+       * DESLIGADO continua aqui desde 31/08/2026, com etiqueta. Quem saiu no
+       * dia 20 produziu até o dia 20, e sumir no ato fazia o número da equipe
+       * encolher no meio do mês sem que nada tivesse mudado no relatório. Na
+       * virada a pessoa é ARQUIVADA e nem chega nesta lista — some antes, na
+       * consulta de perfis. Ver a migration 20260831160000.
+       */
+      .filter(o => (o.situacao ?? 'ativo') !== 'ferias')
       .filter(o => !setorEfetivo || setoresDoOperador(
         o.id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
       ).has(setorEfetivo))
@@ -907,6 +928,7 @@ export function QuartisOperadores({
                                 <span className="font-medium truncate max-w-[150px]" title={l.op.nome}>
                                   {l.op.nome}
                                 </span>
+                                <TagDesligado situacao={l.op.situacao} />
                                 {/* Sem este selo, a META e o RECEBIMENTO desta
                                     linha pareceriam errados para quem sabe a
                                     meta direta de cabeça. */}

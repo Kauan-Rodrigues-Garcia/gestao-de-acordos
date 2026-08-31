@@ -1,15 +1,19 @@
 /**
  * situacaoUsuario.service.ts — situação operacional do usuário (item 5).
  *
- * ativo | ferias | desligado. Férias/desligado somem de ranking e quartil
- * (filtro na aplicação); o recebimento deles NÃO é filtrado, então os totais de
- * setor/equipe seguem inteiros. Desligado não loga (ativo=false + bloqueio no
- * useAuth) e é arquivado na virada do mês. Ver migration 20260723c.
+ * ativo | ferias | desligado.
+ *
+ * FÉRIAS some de ranking e quartil (filtro na aplicação); o recebimento não é
+ * filtrado, então os totais de setor/equipe seguem inteiros.
+ *
+ * DESLIGADO não loga (ativo=false + bloqueio no useAuth), mas continua INTEIRO
+ * nas listas até a virada do mês — com uma etiqueta. Na virada é arquivado e
+ * some de tudo, indo para a aba Desligados. Ver 20260723c e 20260831160000.
  */
 import { supabase } from '@/lib/supabase';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { ehMesAtual } from '@/lib/mesReferencia';
-import { tabelaSemTipo } from '@/lib/supabaseSemTipo';
+import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 
 /**
  * Define a situação de um usuário, ajustando os efeitos colaterais:
@@ -40,26 +44,66 @@ export async function definirSituacao(
   const { error } = await supabase.from('perfis').update(patch).eq('id', perfilId);
   if (error) return { error: error.message };
 
-  if (situacao === 'desligado' && contexto?.empresaId) {
-    try {
-      const { liberarVinculosDeDesligado } = await import('@/services/desligamento.service');
-      await liberarVinculosDeDesligado({
-        perfilId,
-        empresaId:   contexto.empresaId,
-        isPaguePlay: contexto.isPaguePlay ?? false,
-      });
-    } catch (e) {
-      console.warn('[situacaoUsuario] falha ao liberar vínculos do desligado', e);
-    }
-  }
+  /*
+   * Os vinculos NAO sao soltos aqui desde 31/08/2026.
+   *
+   * Quem trabalhou ate o dia 20 produziu recebimento ate o dia 20, e esse
+   * dinheiro e da equipe naquele mes. Soltar os pareamentos no ato do
+   * desligamento fazia o total da equipe encolher no meio do mes sem que uma
+   * linha do relatorio tivesse mudado — foi assim que R$ 370,00 sumiram do
+   * Desempenho Equipes de agosto/2026 e continuaram no relatorio do ERP.
+   *
+   * A liberação passou para o ARQUIVAMENTO, na virada do mês — ver
+   * `arquivarDesligadosAnteriores` aqui embaixo e a migration 20260831160000.
+   */
   return { error: null };
 }
 
-/** Arquiva desligados de meses anteriores (some das listas). Best-effort. */
-export async function arquivarDesligadosAnteriores(empresaId: string): Promise<number> {
-  const { data, error } = await supabase.rpc('fn_arquivar_desligados_anteriores', { p_empresa_id: empresaId });
+/**
+ * Arquiva os desligados de meses anteriores: eles somem das listas e passam a
+ * existir só na aba Desligados.
+ *
+ * É AQUI que os vínculos de acordo são soltos, e não mais no ato do
+ * desligamento. Enquanto o mês corre, a pessoa desligada continua inteira —
+ * na equipe, no analítico, nos cards — com uma etiqueta "Desligado". A conta do
+ * mês em que ela trabalhou não pode encolher no meio do caminho.
+ *
+ * Best-effort dos dois lados: o arquivamento vale mesmo que a liberação falhe,
+ * e a próxima passagem por aqui não tenta de novo (a pessoa já está arquivada).
+ * O `pg_cron` da migration cuida do arquivamento sozinho todo dia às 00:10 de
+ * São Paulo; esta função existe para o caso de alguém abrir a tela antes disso.
+ */
+export async function arquivarDesligadosAnteriores(
+  empresaId: string,
+  contexto?: { isPaguePlay?: boolean },
+): Promise<number> {
+  const { data, error } = await rpcSemTipo<{ fn_arquivar_desligados_ids: string }[] | string[]>(
+    'fn_arquivar_desligados_ids', { p_empresa_id: empresaId },
+  );
   if (error) return 0;
-  return (data as number) ?? 0;
+
+  // A RPC devolve SETOF uuid; o PostgREST entrega ora uma lista de strings, ora
+  // uma lista de objetos de uma chave, conforme a versão.
+  const ids = (data ?? []).map(linha =>
+    typeof linha === 'string' ? linha : linha.fn_arquivar_desligados_ids,
+  ).filter(Boolean);
+
+  if (ids.length > 0) {
+    try {
+      const { liberarVinculosDeDesligado } = await import('@/services/desligamento.service');
+      for (const perfilId of ids) {
+        await liberarVinculosDeDesligado({
+          perfilId,
+          empresaId,
+          isPaguePlay: contexto?.isPaguePlay ?? false,
+        });
+      }
+    } catch (e) {
+      console.warn('[situacaoUsuario] falha ao liberar vínculos de arquivado', e);
+    }
+  }
+
+  return ids.length;
 }
 
 /**
@@ -100,9 +144,16 @@ export async function buscarSituacaoOperadores(
   return out;
 }
 
-/** IDs que devem sumir de ranking/quartil (situacao != 'ativo'). */
+/**
+ * IDs que devem sumir de ranking e quartil.
+ *
+ * So FERIAS. Desligado ficava aqui e sumia no ato — mas quem foi desligado
+ * neste mes trabalhou nele, e o numero e da equipe ate a virada. A partir do
+ * dia 1 a pessoa e ARQUIVADA e nem chega ate aqui: some antes, na consulta de
+ * operadores. Ver a migration 20260831160000.
+ */
 export function idsOcultosRankingQuartil(mapa: Record<string, SituacaoUsuario>): Set<string> {
   const s = new Set<string>();
-  for (const [id, sit] of Object.entries(mapa)) if (sit !== 'ativo') s.add(id);
+  for (const [id, sit] of Object.entries(mapa)) if (sit === 'ferias') s.add(id);
   return s;
 }

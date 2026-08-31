@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { TagDesligado } from '@/components/TagDesligado';
 import {
   Users,
   Plus,
@@ -168,6 +169,9 @@ function OperadorChip({
       <span className={`font-medium text-foreground truncate ${compact ? 'text-xs max-w-[90px]' : 'text-sm max-w-[110px]'}`}>
         {operador.nome}
       </span>
+      {/* Saiu, mas continua na equipe até a virada do mês: o recebimento dele é
+          desta equipe no mês em que trabalhou. Ver a migration 20260831160000. */}
+      <TagDesligado situacao={(operador as { situacao?: string | null }).situacao} />
       <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 ${compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'} ${cargoCss}`}>
         {cargoLabel}
       </span>
@@ -385,7 +389,7 @@ export default function AdminEquipes() {
 
       let operadoresQuery = supabase
         .from('perfis')
-        .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id')
+        .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id, situacao')
         .eq('empresa_id', empresaId)
         .in('perfil', ['operador', 'lider', 'elite'])
         .order('nome');

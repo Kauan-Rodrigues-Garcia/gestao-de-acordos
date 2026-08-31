@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper, AlertTriangle, UserX } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
@@ -33,6 +33,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ChevronDown } from 'lucide-react';
 import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
 import { definirSituacao, arquivarDesligadosAnteriores } from '@/services/situacaoUsuario.service';
+import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
@@ -136,6 +137,8 @@ export default function AdminUsuarios() {
     podeVerEquipes && 'equipes',
     podeVerMetas && 'metas',
     podeVerComemoracoes && 'comemoracoes',
+    // Arquivo morto: so quem administra contas. Nao e uma aba de operacao.
+    podeAdministrarContas && 'desligados',
   ].filter((aba): aba is string => Boolean(aba));
   const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
   const selecionarAba = (aba: string) => {
@@ -145,6 +148,8 @@ export default function AdminUsuarios() {
     setSearchParams(novosParametros, { replace: true });
   };
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
+  /** Arquivados: saíram em meses anteriores e só existem na aba Desligados. */
+  const [desligados,  setDesligados]  = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -215,7 +220,7 @@ export default function AdminUsuarios() {
     setLoading(true);
     // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
     const empAlvo = (!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
-    if (empAlvo) { try { await arquivarDesligadosAnteriores(empAlvo); } catch { /* best-effort */ } }
+    if (empAlvo) { try { await arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: tenant.isPaguePlay }); } catch { /* best-effort */ } }
     let usuariosData: Perfil[] = [];
     try {
       let usersQuery = supabase
@@ -278,6 +283,7 @@ export default function AdminUsuarios() {
     }
     // Arquivados somem da lista padrão (item 5).
     setUsuarios(usuariosData.filter(u => !u.arquivado));
+    setDesligados(usuariosData.filter(u => u.arquivado === true));
     setSetores(setoresData);
     setEmpresas(emps);
     // Escolhe um setor de partida só para quem PERTENCE a um setor. Este
@@ -716,6 +722,14 @@ export default function AdminUsuarios() {
               <Target className="w-4 h-4" /> Metas
             </TabsTrigger>
             )}
+            {podeAdministrarContas && (
+            <TabsTrigger
+              value="desligados"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <UserX className="w-4 h-4" /> Desligados
+            </TabsTrigger>
+            )}
             {podeVerComemoracoes && (
             <TabsTrigger
               value="comemoracoes"
@@ -984,6 +998,22 @@ export default function AdminUsuarios() {
         {/* ─── Aba: Comemorações ─────────────────────────────────────── */}
         {/* Sem `p-6` aqui: a página já traz o próprio espaçamento, como
             Setores e Equipes. O Suspense é obrigatório — o import é lazy. */}
+        {podeAdministrarContas && (
+          <TabsContent value="desligados" className="flex-1 overflow-y-auto mt-0">
+            <AdminDesligadosAba
+              desligados={desligados}
+              loading={loading}
+              onReativar={async (p) => {
+                // Reativar devolve `arquivado = false` e libera o login. Os
+                // vínculos de acordo NÃO voltam: eles foram soltos no
+                // arquivamento e o NR já pode estar com outra pessoa.
+                await definirSituacao(p.id, 'ativo');
+                await fetchDados();
+              }}
+            />
+          </TabsContent>
+        )}
+
         {podeVerComemoracoes && (
           <TabsContent value="comemoracoes" className="flex-1 overflow-y-auto mt-0">
             <Suspense fallback={
