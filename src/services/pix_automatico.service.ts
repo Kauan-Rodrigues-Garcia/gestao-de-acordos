@@ -14,6 +14,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { Database } from '@/lib/database.types';
 
 type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
@@ -96,6 +97,16 @@ export interface PixAutoAcordo {
   ajuste_em: string | null;
   ajuste_por: string | null;
   ajuste_por_nome: string | null;
+  /**
+   * Etiqueta EXTRA — marcador VISUAL para a conferência do líder.
+   *
+   * Não altera comissão, não libera duplicidade e não pula autorização. Existe
+   * porque o mesmo Pix às vezes é lançado pelo operador, pelo Receptivo e por
+   * um terceiro setor: três registros, um dinheiro. Quem decide se o caso é
+   * legítimo é quem confere, e a etiqueta é o pedido de que se confira duas
+   * vezes.
+   */
+  extra: boolean;
   criado_em: string;
   atualizado_em: string;
 }
@@ -370,7 +381,9 @@ export async function criarAcordoPix(p: {
   setorId: string | null;
   nrCliente: string;
   valor: number;
-}): Promise<{ ok: boolean; error?: string }> {
+  /** Etiqueta visual para a conferência. Não muda regra nenhuma. */
+  extra?: boolean;
+}): Promise<{ ok: boolean; error?: string; nrDuplicado?: boolean }> {
   const { error } = await supabase.from('pix_automatico_acordos').insert({
     empresa_id:    p.empresaId,
     operador_id:   p.operadorId,
@@ -379,8 +392,21 @@ export async function criarAcordoPix(p: {
     nr_cliente:    p.nrCliente.trim(),
     valor:         p.valor,
     status:        'pendente',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `extra` só entra no tipo gerado depois da migration 20260902100000.
+    ...(p.extra ? { extra: true } as any : {}),
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    /*
+     * O trigger `fn_pix_nr_bloqueia_duplicado` recusa com `unique_violation`.
+     *
+     * A tela precisa distinguir esse caso dos outros: aqui não é erro, é o
+     * ponto onde se oferece o pedido de autorização ao líder. Sem o
+     * sinalizador, ela mostraria «erro ao registrar» e a pessoa desistiria.
+     */
+    const duplicado = error.code === '23505'
+      || /já está registrado no Pix/i.test(error.message);
+    return { ok: false, error: error.message, nrDuplicado: duplicado };
+  }
   return { ok: true };
 }
 
@@ -1165,4 +1191,148 @@ export async function retirarSaldoDoAcordo(
   const { data, error } = await supabase.rpc('fn_pix_saldo_retirar', { p_acordo_id: acordoId });
   if (error) return { ok: false, error: mensagemSaldo(error.message) };
   return { ok: true, acordo: (data as unknown as PixAutoAcordo) ?? undefined };
+}
+
+// ── Autorização de NR duplicado ─────────────────────────────────────────────
+//
+// Até 02/09/2026 o segundo registro de um NR era simplesmente recusado, e a
+// mensagem mandava «excluir o registro existente para liberá-lo». Isso punha a
+// decisão no pior lugar possível: quem apagaria seria o operador do OUTRO
+// setor, que não sabe do caso e não deveria poder desfazer registro alheio.
+//
+// Agora o segundo vira PEDIDO. O líder vê os dois lado a lado — quem registrou
+// primeiro, quem está pedindo, os valores, se é Extra — e decide. É o mesmo
+// enredo do Receptivo lançando um Pix que outro setor já lançou.
+//
+// Toda escrita passa por RPC: não há policy de INSERT/UPDATE na tabela. Um
+// INSERT solto criaria pedido em nome de outro; um UPDATE solto se
+// autoaprovaria.
+
+export type PixNrPedidoStatus = 'pendente' | 'aprovado' | 'recusado';
+
+export interface PixNrPedido {
+  id: string;
+  empresa_id: string;
+  /** Quem FICA com o acordo se for aprovado — pode não ser quem pediu. */
+  operador_id: string;
+  operador_nome: string | null;
+  setor_id: string | null;
+  nr_cliente: string;
+  valor: number;
+  extra: boolean;
+  /**
+   * O registro que já existia, por id e DESNORMALIZADO.
+   *
+   * A cópia importa: o acordo em conflito pode ser excluído entre o pedido e a
+   * decisão, e sem ela o líder decidiria sobre «um registro que não existe
+   * mais», sem saber de quem era nem de quanto.
+   */
+  conflito_acordo_id: string | null;
+  conflito_operador: string | null;
+  conflito_valor: number | null;
+  conflito_status: string | null;
+  conflito_em: string | null;
+  motivo: string | null;
+  status: PixNrPedidoStatus;
+  decidido_por: string | null;
+  decidido_por_nome: string | null;
+  decidido_em: string | null;
+  decisao_motivo: string | null;
+  acordo_id: string | null;
+  criado_por: string | null;
+  criado_em: string;
+}
+
+/** Traduz o `RAISE EXCEPTION` do banco para a frase que a tela mostra. */
+function mensagemPedidoNr(bruta: string): string {
+  if (/nao esta registrado|não está registrado/i.test(bruta)) {
+    return 'Este NR não está mais registrado — faça o registro normal.';
+  }
+  if (/ja foi decidido|já foi decidido/i.test(bruta)) {
+    return 'Outra pessoa já decidiu este pedido.';
+  }
+  if (/nao pode decidir|não pode decidir/i.test(bruta)) {
+    return 'Você não tem permissão para decidir autorizações do Pix.';
+  }
+  return bruta.replace(/^.*?:\s*/, '') || 'Não foi possível concluir.';
+}
+
+/**
+ * Os pedidos da empresa. `apenasAbertos` é o que a fila do líder usa; o
+ * histórico completo serve à conferência de «por que este NR tem dois».
+ */
+export async function fetchPedidosNr(
+  empresaId: string,
+  apenasAbertos = true,
+): Promise<PixNrPedido[]> {
+  // `tabelaSemTipo`: a tabela so entra em database.types.ts quando os tipos
+  // forem regerados, e a migration 20260902100000 e mais nova que eles.
+  let q = tabelaSemTipo<PixNrPedido>('pix_automatico_nr_pedidos')
+    .select('*')
+    .eq('empresa_id', empresaId);
+  if (apenasAbertos) q = q.eq('status', 'pendente');
+
+  const { data, error } = await q;
+  if (error) {
+    // A tabela só existe depois da migration 20260902100000. Sem ela a tela
+    // desenha a fila vazia — que é o estado correto, não um erro na cara.
+    if (!/does not exist|schema cache/i.test(error.message)) {
+      console.warn('[pix_automatico.service] fetchPedidosNr:', error.message);
+    }
+    return [];
+  }
+  // A ordenação é no cliente: `tabelaSemTipo` é de propósito estreita (só
+  // `select` e `eq`), e a fila de pedidos abertos é curta — ordená-la aqui
+  // custa menos que alargar o atalho para todo o projeto.
+  return [...((data as unknown as PixNrPedido[]) ?? [])]
+    .sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+}
+
+/** Pede ao líder autorização para registrar um NR que já existe. */
+export async function pedirAutorizacaoNr(p: {
+  operadorId: string;
+  nrCliente: string;
+  valor: number;
+  extra?: boolean;
+  motivo?: string | null;
+}): Promise<{ ok: boolean; pedido?: PixNrPedido; error?: string }> {
+  const { data, error } = await rpcSemTipo<PixNrPedido>('fn_pix_nr_pedir', {
+    p_operador_id: p.operadorId,
+    p_nr_cliente:  p.nrCliente.trim(),
+    p_valor:       p.valor,
+    p_extra:       p.extra ?? false,
+    p_motivo:      p.motivo ?? null,
+  });
+  if (error) return { ok: false, error: mensagemPedidoNr(error.message) };
+  return { ok: true, pedido: (data as unknown as PixNrPedido) ?? undefined };
+}
+
+/**
+ * Aprova ou recusa.
+ *
+ * Aprovado, o acordo nasce PENDENTE — autorizar a duplicidade não é aprovar a
+ * comissão. O líder ainda vai avaliar o registro como avalia qualquer outro, e
+ * é o que mantém as duas decisões separadas.
+ */
+export async function decidirPedidoNr(
+  pedidoId: string,
+  aprovar: boolean,
+  motivo?: string | null,
+): Promise<{ ok: boolean; pedido?: PixNrPedido; error?: string }> {
+  const { data, error } = await rpcSemTipo<PixNrPedido>('fn_pix_nr_pedido_decidir', {
+    p_pedido_id: pedidoId,
+    p_aprovar:   aprovar,
+    p_motivo:    motivo ?? null,
+  });
+  if (error) return { ok: false, error: mensagemPedidoNr(error.message) };
+  return { ok: true, pedido: (data as unknown as PixNrPedido) ?? undefined };
+}
+
+/** Desiste do próprio pedido. Não precisa de líder para desfazer um engano. */
+export async function cancelarPedidoNr(pedidoId: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await rpcSemTipo('fn_pix_nr_pedido_cancelar', {
+    p_pedido_id: pedidoId,
+  });
+  if (error) return { ok: false, error: mensagemPedidoNr(error.message) };
+  return { ok: true };
 }

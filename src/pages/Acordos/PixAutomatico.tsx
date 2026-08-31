@@ -22,7 +22,7 @@ import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
   Copy, Upload, Download, Building2, Lock,
-  Pencil, Banknote, AlertTriangle, History, Scale, Eraser,
+  Pencil, Banknote, AlertTriangle, History, Scale, Eraser, Sparkles,
 } from 'lucide-react';
 import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
@@ -83,9 +83,13 @@ import {
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
+  fetchPedidosNr, pedirAutorizacaoNr, type PixNrPedido,
   type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo,
 } from '@/services/pix_automatico.service';
 import { PixSaldoPainel } from './PixSaldoPainel';
+import { PixPainelPremiacoes } from './PixPainelPremiacoes';
+import { PixPedidosNr } from './PixPedidosNr';
+import { aPagarComDivergencia } from './pixPremiacao';
 import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { LinhaViva } from '@/components/LinhaViva';
@@ -212,6 +216,10 @@ export function PixAutomatico() {
   // Form de registro
   const [nrNovo, setNrNovo]       = useState('');
   const [valorNovo, setValorNovo] = useState('');
+  /** Etiqueta EXTRA do proximo registro. Some depois de registrar. */
+  const [extraNovo, setExtraNovo] = useState(false);
+  /** Fila de NRs duplicados esperando decisao do lider. */
+  const [pedidosNr, setPedidosNr] = useState<PixNrPedido[]>([]);
   const [salvando, setSalvando]   = useState(false);
   // Vínculo do acordo a um operador (líder+): busca por nome
   const [vinculoBusca, setVinculoBusca] = useState('');
@@ -354,7 +362,7 @@ export function PixAutomatico() {
         }
       }
 
-      const [lista, cfgs, bloqueados, saldosDoEscopo] = await Promise.all([
+      const [lista, cfgs, bloqueados, saldosDoEscopo, pedidos] = await Promise.all([
         fetchAcordosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
@@ -365,12 +373,16 @@ export function PixAutomatico() {
         fetchSaldosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
+        // A RLS ja recorta: o operador so ve os proprios pedidos, quem aprova
+        // Pix ve os da empresa. Nao ha filtro a repetir aqui.
+        fetchPedidosNr(empresa.id),
       ]);
       // Reconciliação: a linha que não mudou volta com a MESMA referência, e
       // uma releitura sem novidade devolve o array anterior — nesse caso o
       // React não renderiza nada. Ver `lib/dadosVivos`.
       setItens(atual => reconciliarLista(atual, lista, { chave: i => i.id }));
       setSaldos(atual => reconciliarLista(atual, saldosDoEscopo, { chave: s => s.id }));
+      setPedidosNr(atual => reconciliarLista(atual, pedidos, { chave: x => x.id }));
       const mapa: Record<string, PixAutoConfig> = {};
       cfgs.forEach(c => { mapa[c.setor_id] = { ...c, permite_registro_operador: c.permite_registro_operador ?? true }; });
       setConfigs(atual => reconciliarMapa(atual, mapa));
@@ -519,6 +531,22 @@ export function PixAutomatico() {
   // nada na tela explicando a diferença. Agora os dois números aparecem.
   const pagamento = useMemo(() => totalPagoPix(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
 
+  /*
+   * O que de fato vai sair, ja com a divergencia em aberto descontada.
+   *
+   * Ate 02/09/2026 o saldo de divergencia era so um painel ao lado: nao
+   * entrava em numero nenhum, e quem devia R$ 20,00 aparecia com a premiacao
+   * cheia. So descia para o valor certo se alguem lembrasse de carimbar o
+   * acerto num acordo a mao — e quem nao lembrasse pagava a mais.
+   *
+   * A divergencia ja RESERVADA num acordo nao entra aqui: ela ja esta dentro
+   * de `valorAPagarDe` daquela linha, e contar duas vezes seria o erro oposto.
+   */
+  const aPagarLiquido = useMemo(
+    () => aPagarComDivergencia(visiveis, saldos, pctPorSetor),
+    [visiveis, saldos, pctPorSetor],
+  );
+
   const meusDesaprovados = itens.filter(i => i.operador_id === perfil?.id && i.status === 'desaprovado').length;
 
   /** Quanto falta para este desaprovado ser excluído. `null` = sem prazo. */
@@ -655,7 +683,14 @@ export function PixAutomatico() {
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
     if (isNaN(valor) || valor <= 0) { toast.error('Valor inválido'); return; }
     if (nrsBloqueados.has(normalizarNr(nr))) {
-      toast.error(`O NR ${nr} já registrou um acordo no Pix automático.`);
+      /*
+       * NR ja registrado deixou de ser beco sem saida.
+       *
+       * A mensagem antiga mandava «exclua o registro existente», e quem teria
+       * de excluir era o operador do OUTRO setor. Agora o caminho e pedir
+       * autorizacao ao lider, que ve os dois lados e decide.
+       */
+      await pedirAutorizacao(nr, valor);
       return;
     }
     if (!podeRegistrar) {
@@ -666,26 +701,66 @@ export function PixAutomatico() {
     const dono = podeAgirSobreOutros && vinculoOp ? vinculoOp : null;
     setSalvando(true);
     try {
-      const { ok, error } = await criarAcordoPix({
+      const { ok, error, nrDuplicado } = await criarAcordoPix({
         empresaId:    empresa.id,
         operadorId:   dono ? dono.id : perfil.id,
         operadorNome: dono ? dono.nome : (perfil.nome ?? perfil.email ?? '—'),
         setorId:      dono ? dono.setor_id : (perfil.setor_id ?? null),
         nrCliente:    nr,
         valor,
+        extra:        extraNovo,
       });
-      if (!ok) { toast.error('Erro ao registrar: ' + error); return; }
+      if (!ok) {
+        /*
+         * A lista local de NRs bloqueados pode estar velha — outra pessoa
+         * registrou o mesmo NR depois do último carregamento. O trigger é quem
+         * tem a verdade, e quando ele recusa por duplicidade o caminho é o
+         * mesmo do bloqueio antecipado: pedir autorização.
+         */
+        if (nrDuplicado) { await pedirAutorizacao(nr, valor); return; }
+        toast.error('Erro ao registrar: ' + error);
+        return;
+      }
       toast.success(dono
         ? `Acordo Pix registrado para ${dono.nome} — aguardando verificação.`
         : 'Acordo Pix registrado — aguardando verificação do líder.');
       setNrNovo('');
       setValorNovo('');
+      setExtraNovo(false);
       setVinculoOp(null);
       setVinculoBusca('');
       await carregar();
     } finally {
       setSalvando(false);
     }
+  }
+
+  /**
+   * O NR já existe: em vez de recusar, pede autorização ao líder.
+   *
+   * Quem decide é quem já decide Pix (`aprovar_pix_automatico`). Aprovado, o
+   * acordo nasce PENDENTE — autorizar a duplicidade não é aprovar a comissão,
+   * e o líder ainda vai avaliar o registro como avalia qualquer outro.
+   */
+  async function pedirAutorizacao(nr: string, valor: number) {
+    if (!perfil?.id) return;
+    const dono = podeAgirSobreOutros && vinculoOp ? vinculoOp : null;
+    const { ok, error } = await pedirAutorizacaoNr({
+      operadorId: dono ? dono.id : perfil.id,
+      nrCliente:  nr,
+      valor,
+      extra:      extraNovo,
+    });
+    if (!ok) { toast.error(error ?? 'Não foi possível pedir autorização.'); return; }
+
+    toast.success(
+      `O NR ${nr} já está registrado. Pedido enviado ao líder — ele vê os dois lançamentos e decide.`,
+      { duration: 7000 },
+    );
+    setNrNovo('');
+    setValorNovo('');
+    setExtraNovo(false);
+    await carregar();
   }
 
   async function avaliar(item: PixAutoAcordo, aprovar: boolean) {
@@ -1253,7 +1328,13 @@ export function PixAutomatico() {
       cls: 'from-teal-500/15 to-teal-600/5 border-teal-500/25', icon: <Banknote className="w-4 h-4 text-teal-400" />,
       comissaoCls: 'text-teal-400',
       rodape: pagamento.aPagar.comissao > 0
-        ? `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`
+        ? (Math.abs(aPagarLiquido.divergencia) >= 0.005
+            // O bruto continua a vista: sem ele o numero encolhe sem explicacao,
+            // e um valor que muda sozinho e o que ninguem confere.
+            ? `Ainda a receber: ${formatCurrency(aPagarLiquido.liquido)} `
+              + `(${formatCurrency(aPagarLiquido.bruto)} − `
+              + `${formatCurrency(Math.abs(aPagarLiquido.divergencia))} de divergência)`
+            : `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`)
         : null,
     },
   ];
@@ -1362,6 +1443,36 @@ export function PixAutomatico() {
                 )}
               </div>
             )}
+            {/*
+              A etiqueta EXTRA, antes de registrar.
+              ─────────────────────────────────────────────────────────────────
+              Ela é SÓ visual: não muda comissão, não libera NR duplicado e não
+              pula a autorização do líder. Existe porque o mesmo Pix às vezes é
+              lançado pelo operador, pelo Receptivo e por um terceiro setor —
+              três registros, um dinheiro — e quem confere precisa saber que
+              este é candidato a esse enredo.
+
+              Está aqui e não num menu escondido porque a decisão é de quem
+              lança, no momento em que ele lança.
+            */}
+            <label className="flex cursor-pointer select-none items-center gap-1.5 pb-2.5 text-xs">
+              <input
+                type="checkbox"
+                checked={extraNovo}
+                onChange={e => setExtraNovo(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+              />
+              <span className={cn(
+                'flex items-center gap-1 font-medium',
+                extraNovo ? 'text-fuchsia-500' : 'text-muted-foreground',
+              )}>
+                <Sparkles className="h-3 w-3" /> Marcar como Extra
+              </span>
+              <span className="text-muted-foreground/70" title="A etiqueta só chama a atenção do líder na conferência — não altera nenhuma regra.">
+                (aviso ao líder)
+              </span>
+            </label>
+
             {valorNovo && !isNaN(parseCurrencyInput(valorNovo)) && parseCurrencyInput(valorNovo) > 0 && (
               <p className="text-[11px] text-muted-foreground pb-2.5">
                 Comissão estimada:{' '}
@@ -1450,6 +1561,33 @@ export function PixAutomatico() {
           salvando={salvandoMetaPix}
           onSalvar={salvarMetaPix}
           parseValor={parseCurrencyInput}
+        />
+      )}
+
+      {/* ── NRs duplicados esperando decisão ──
+          No topo da área de painéis: é fila de trabalho, e fila que fica
+          embaixo não é vista. O operador enxerga só o próprio pedido — quem
+          recorta é a RLS, não esta condição. */}
+      {!loading && pedidosNr.length > 0 && (
+        <PixPedidosNr
+          pedidos={pedidosNr}
+          podeDecidir={temPermissao('aprovar_pix_automatico')}
+          meuId={perfil?.id ?? null}
+          onMudou={carregar}
+        />
+      )}
+
+      {/* ── Quanto ainda sai para cada pessoa ──
+          Só para quem já vê o Pix dos outros: é a lista de pagamento, e ela
+          responde a pergunta que obrigava a somar as linhas de cabeça. Lê a
+          MESMA lista visível, então filtrar por equipe filtra o painel junto. */}
+      {!loading && podeVerDeOutros && (
+        <PixPainelPremiacoes
+          itens={visiveis}
+          saldos={saldos}
+          pctPorSetor={pctPorSetor}
+          mes={mesAtual()}
+          metaPorSetor={metaPorSetor}
         />
       )}
 
@@ -1826,6 +1964,19 @@ export function PixAutomatico() {
                           ) : (
                             <div className="flex items-center gap-1.5">
                               <span>{item.nr_cliente}</span>
+                              {/* A etiqueta EXTRA fica colada no NR porque é do
+                                  NR que ela fala: «este número pode ter sido
+                                  lançado por mais de um setor». Só chama a
+                                  atenção — não muda comissão, não libera
+                                  duplicidade, não pula autorização. */}
+                              {item.extra && (
+                                <span
+                                  title="Marcado como Extra por quem lançou — confira se este Pix não foi lançado também por outro setor"
+                                  className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-px text-[9px] font-bold uppercase leading-none tracking-wide bg-fuchsia-500/15 text-fuchsia-600 ring-1 ring-fuchsia-500/30 dark:text-fuchsia-400"
+                                >
+                                  <Sparkles className="h-2.5 w-2.5" /> extra
+                                </span>
+                              )}
                               <button title="Copiar NR" onClick={() => copiarTexto(item.nr_cliente, 'NR copiado.')}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-violet-400">
                                 <Copy className="w-3 h-3" />
