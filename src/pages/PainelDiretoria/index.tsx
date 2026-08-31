@@ -177,6 +177,7 @@ export default function PainelDiretoria() {
     const out: Record<string, number> = {};
     if (!usarAnalitico || !fontes) return out;
     for (const s of setoresDetalhes) {
+      if (!s.id) continue;
       const escopoSetor = escopoDeSetor({
         setorId:     s.id,
         alternativo: setorSomaPorUsuarios({
@@ -196,28 +197,29 @@ export default function PainelDiretoria() {
   }, [usarAnalitico, fontes, setoresDetalhes, analiticoDash.linhas, isPP, carimboDisponivel,
       exclusoes, setorDoOperador]);
 
+  // O agregado já vem somado do banco (`fn_diretoria_setores_do_mes`). Aqui só
+  // se decide a FONTE do recebido — relatório quando existe, tabulação quando
+  // não — e se calcula a conversão, que depende dessa escolha.
   const setoresAgendamento = useMemo(() => {
     return setoresDetalhes.map(s => {
-      const acs = s.acordos;
-      const totalAgendado = sumSafe(acs.map(a => a.valor));
-      const naoPagos = acs.filter(a => a.status === 'nao_pago');
-      const pendentes = acs.filter(a => a.status === 'verificar_pendente');
-      // Recebido do RELATÓRIO. Sem relatório, cai no que está tabulado.
       const totalRecebido = usarAnalitico
-        ? (recebidoPorSetor[s.id] ?? 0)
-        : sumSafe(acs.filter(a => a.status === 'pago').map(a => a.valor));
-      const totalNaoPago = sumSafe(naoPagos.map(a => a.valor));
-      const totalPendente = sumSafe(pendentes.map(a => a.valor));
-      const perc = totalAgendado > 0 ? Math.min(Math.round((totalRecebido / totalAgendado) * 100), 100) : 0;
-      const porTipo: Record<string, { agendado: number; recebido: number; qtd: number }> = {};
-      acs.forEach(a => {
-        const tipo = a.tipo ?? 'sem_tipo';
-        if (!porTipo[tipo]) porTipo[tipo] = { agendado: 0, recebido: 0, qtd: 0 };
-        porTipo[tipo].agendado += safeNum(a.valor);
-        porTipo[tipo].qtd++;
-        if (a.status === 'pago') porTipo[tipo].recebido += safeNum(a.valor);
-      });
-      return { id: s.id, nome: s.nome, totalAgendado, totalRecebido, totalNaoPago, totalPendente, totalAcordos: acs.length, porTipo, perc };
+        ? (recebidoPorSetor[s.id ?? ''] ?? 0)
+        : s.totalRecebido;
+      const perc = s.totalAgendado > 0
+        ? Math.min(Math.round((totalRecebido / s.totalAgendado) * 100), 100)
+        : 0;
+      return {
+        id:            s.id ?? '',
+        nome:          s.nome ?? '—',
+        totalAgendado: s.totalAgendado,
+        totalRecebido,
+        totalNaoPago:  s.totalNaoPago,
+        totalRestante: s.totalRestante,
+        qtdRestante:   s.qtdRestante,
+        totalAcordos:  s.totalAcordos,
+        porTipo:       s.porTipo,
+        perc,
+      };
     }).filter(s => s.totalAcordos > 0 || setoresDetalhes.length <= 10)
       .sort((a, b) => b.totalAgendado - a.totalAgendado);
   }, [setoresDetalhes, usarAnalitico, recebidoPorSetor]);

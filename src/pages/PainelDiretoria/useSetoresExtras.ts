@@ -1,25 +1,74 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { safeNum } from '@/lib/money';
-import {
-  deslocarMes, normalizarMes, primeiroDiaDoMes, ultimoDiaDoMes,
-} from '@/lib/mesReferencia';
+import { deslocarMes, normalizarMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import type { MesAnteriorData } from './types';
 
 /**
- * Acordos do mês por setor, o mês anterior para o comparativo e os
+ * Agregado do mês por setor, o mês anterior para o comparativo e os
  * recebimentos Extra (PaguePlay).
  *
- * Tudo aqui é TABULAÇÃO — é a fonte certa para agendado, pendente, não pago e
- * quantidade de acordos. Os valores RECEBIDOS do painel não saem daqui: vêm do
- * relatório analítico (ver `PainelDiretoria/index.tsx`).
+ * Tudo aqui é TABULAÇÃO — é a fonte certa para agendado, agendado restante,
+ * não pago e quantidade de acordos. Os valores RECEBIDOS do painel não saem
+ * daqui: vêm do relatório analítico (ver `PainelDiretoria/index.tsx`).
+ *
+ * A soma acontece no BANCO, via `fn_diretoria_setores_do_mes`. Antes esta
+ * função baixava todo acordo do mês e somava em JavaScript — e o `.select()`
+ * não tinha paginação nem `order`, então o teto de 1000 linhas do PostgREST
+ * cortava o mês numa fatia arbitrária. Com mais de 1000 acordos o painel
+ * inteiro passava a mentir sem exibir erro nenhum: foi o que zerou o card
+ * "Pendente" enquanto o agendado seguia mostrando número.
  *
  * @param mesRef mês a carregar (`yyyy-MM`). Antes era sempre `new Date()`, o
  *   que deixava o painel preso ao mês corrente — no dia 02 ele abre zerado e
  *   não havia como conferir o mês que fechou.
  */
+
+/** Uma linha do agregado. `id` nulo é o balde dos acordos sem setor. */
+export interface SetorAgregado {
+  id: string | null;
+  nome: string | null;
+  totalAgendado: number;
+  /** Recebido TABULADO. O painel troca pelo relatório quando ele existe. */
+  totalRecebido: number;
+  totalNaoPago: number;
+  /** Agendado do mês que ainda não virou pago nem não pago. */
+  totalRestante: number;
+  totalAcordos: number;
+  qtdRestante: number;
+  porTipo: Record<string, { agendado: number; recebido: number; qtd: number }>;
+}
+
+interface LinhaRpc {
+  setor_id: string | null;
+  setor_nome: string | null;
+  total_agendado: number | string | null;
+  total_recebido: number | string | null;
+  total_nao_pago: number | string | null;
+  total_restante: number | string | null;
+  total_acordos: number | string | null;
+  qtd_restante: number | string | null;
+  por_tipo: Record<string, { agendado: number; recebido: number; qtd: number }> | null;
+}
+
+function normalizar(linhas: LinhaRpc[]): SetorAgregado[] {
+  return linhas.map(l => ({
+    id:            l.setor_id,
+    nome:          l.setor_nome,
+    totalAgendado: safeNum(l.total_agendado),
+    totalRecebido: safeNum(l.total_recebido),
+    totalNaoPago:  safeNum(l.total_nao_pago),
+    totalRestante: safeNum(l.total_restante),
+    totalAcordos:  safeNum(l.total_acordos),
+    qtdRestante:   safeNum(l.qtd_restante),
+    porTipo:       l.por_tipo ?? {},
+  }));
+}
+
 export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, mesRef?: string | null) {
-  const [setoresDetalhes, setSetoresDetalhes] = useState<{ id: string; nome: string; acordos: any[] }[]>([]);
+  const [setoresDetalhes, setSetoresDetalhes] = useState<SetorAgregado[]>([]);
+  /** Acordos sem setor: não vira card, mas conta nos totais do painel. */
+  const [semSetor, setSemSetor] = useState<SetorAgregado | null>(null);
   const [loadingSetores, setLoadingSetores] = useState(false);
   const [mesAnterior, setMesAnterior] = useState<MesAnteriorData | null>(null);
 
@@ -35,39 +84,29 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
     if (!empresaId) return;
     setLoadingSetores(true);
     try {
-      const inicio = primeiroDiaDoMes(mes);
-      const fim    = ultimoDiaDoMes(mes);
-      const mesPrev    = deslocarMes(mes, -1);
-      const inicioPrev = primeiroDiaDoMes(mesPrev);
-      const fimPrev    = ultimoDiaDoMes(mesPrev);
+      const mesPrev = deslocarMes(mes, -1);
 
-      const [{ data: setoresData }, { data: acordosMesData }, { data: acordosPrevData }] = await Promise.all([
-        supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
-        supabase.from('acordos').select('id, valor, status, tipo, setor_id, vencimento, tipo_vinculo')
-          .eq('empresa_id', empresaId).neq('tipo_vinculo', 'extra')
-          .gte('vencimento', inicio).lte('vencimento', fim),
-        supabase.from('acordos').select('id, valor, status, vencimento, tipo_vinculo')
-          .eq('empresa_id', empresaId).neq('tipo_vinculo', 'extra')
-          .gte('vencimento', inicioPrev).lte('vencimento', fimPrev),
+      const [atual, anterior] = await Promise.all([
+        supabase.rpc('fn_diretoria_setores_do_mes', { p_empresa_id: empresaId, p_mes: mes }),
+        supabase.rpc('fn_diretoria_setores_do_mes', { p_empresa_id: empresaId, p_mes: mesPrev }),
       ]);
 
-      if (setoresData && acordosMesData) {
-        const detalhes = (setoresData as { id: string; nome: string }[]).map(s => ({
-          ...s,
-          acordos: (acordosMesData as any[]).filter(a => a.setor_id === s.id),
-        }));
-        setSetoresDetalhes(detalhes);
-      }
+      if (atual.error) throw atual.error;
 
-      if (acordosPrevData) {
-        const prev = acordosPrevData as any[];
-        const prevPagos = prev.filter(a => a.status === 'pago');
+      const linhas = normalizar((atual.data ?? []) as unknown as LinhaRpc[]);
+      setSetoresDetalhes(linhas.filter(l => l.id !== null));
+      setSemSetor(linhas.find(l => l.id === null) ?? null);
+
+      if (!anterior.error) {
+        // Soma TODAS as linhas, inclusive a de sem setor: o comparativo é do
+        // mês inteiro, não do que coube em card.
+        const prev = normalizar((anterior.data ?? []) as unknown as LinhaRpc[]);
         setMesAnterior({
-          valorAgendado: prev.reduce((s: number, a: any) => s + safeNum(a.valor), 0),
-          // Mantido para o fallback de quando o analítico não está disponível;
-          // o comparativo do painel usa o recebido do RELATÓRIO do mês anterior.
-          valorRecebido: prevPagos.reduce((s: number, a: any) => s + safeNum(a.valor), 0),
-          totalAcordos: prev.length,
+          valorAgendado: prev.reduce((s, l) => s + l.totalAgendado, 0),
+          // Fallback de quando o analítico não está disponível; o comparativo
+          // do painel usa o recebido do RELATÓRIO do mês anterior.
+          valorRecebido: prev.reduce((s, l) => s + l.totalRecebido, 0),
+          totalAcordos:  prev.reduce((s, l) => s + l.totalAcordos, 0),
         });
       }
     } catch (err) {
@@ -134,7 +173,7 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
   }
 
   return {
-    setoresDetalhes, loadingSetores, mesAnterior,
+    setoresDetalhes, semSetor, loadingSetores, mesAnterior,
     extrasAcordos, extrasOperadoresMap, extrasOpEquipeMap, extrasEquipesMap, loadingExtras,
     reload,
   };

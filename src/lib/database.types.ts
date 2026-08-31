@@ -5000,6 +5000,20 @@ export type Database = {
           total_recebido: number
         }[]
       }
+      fn_diretoria_setores_do_mes: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: {
+          por_tipo: Json
+          qtd_restante: number
+          setor_id: string | null
+          setor_nome: string | null
+          total_acordos: number
+          total_agendado: number
+          total_nao_pago: number
+          total_recebido: number
+          total_restante: number
+        }[]
+      }
       fn_direto_extra_ativo: {
         Args: { p_empresa_id: string; p_user_id: string }
         Returns: boolean

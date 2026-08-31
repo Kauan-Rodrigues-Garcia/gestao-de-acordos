@@ -6,7 +6,15 @@ export interface SetorAgendamento {
   totalAgendado: number;
   totalRecebido: number;
   totalNaoPago: number;
-  totalPendente: number;
+  /**
+   * Agendado do mês que ainda não virou pago nem não pago.
+   *
+   * Era `totalPendente`, com o card rotulado "Pendente". Mesmo cálculo, nome
+   * honesto: o número responde "quanto do agendado ainda está de pé", e é o
+   * mesmo que o KPI "Agendado restante" do topo do painel mostra.
+   */
+  totalRestante: number;
+  qtdRestante: number;
   totalAcordos: number;
   porTipo: Record<string, { agendado: number; recebido: number; qtd: number }>;
   perc: number;

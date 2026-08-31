@@ -227,9 +227,12 @@ export function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; ind
               <div className={cn('p-3 rounded-xl border text-center bg-warning/5 border-warning/20')}>
                 <div className="flex items-center justify-center gap-1 mb-1">
                   <Clock className="w-3 h-3 text-warning" />
-                  <p className="text-[10px] text-warning font-bold uppercase tracking-wide">Pendente</p>
+                  <p className="text-[10px] text-warning font-bold uppercase tracking-wide">Agendado restante</p>
                 </div>
-                <p className="text-sm font-extrabold text-warning font-mono">{formatBRL(setor.totalPendente)}</p>
+                <p className="text-sm font-extrabold text-warning font-mono">{formatBRL(setor.totalRestante)}</p>
+                <p className="text-[9px] text-warning/70 mt-0.5">
+                  {setor.qtdRestante} a verificar
+                </p>
               </div>
               <div className={cn('p-3 rounded-xl border text-center bg-destructive/5 border-destructive/20')}>
                 <div className="flex items-center justify-center gap-1 mb-1">
@@ -247,8 +250,8 @@ export function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; ind
                   {setor.totalRecebido > 0 && (
                     <div className="h-full bg-success" style={{ width: `${Math.round((setor.totalRecebido / setor.totalAgendado) * 100)}%` }} />
                   )}
-                  {setor.totalPendente > 0 && (
-                    <div className="h-full bg-warning" style={{ width: `${Math.round((setor.totalPendente / setor.totalAgendado) * 100)}%` }} />
+                  {setor.totalRestante > 0 && (
+                    <div className="h-full bg-warning" style={{ width: `${Math.round((setor.totalRestante / setor.totalAgendado) * 100)}%` }} />
                   )}
                   {setor.totalNaoPago > 0 && (
                     <div className="h-full bg-destructive" style={{ width: `${Math.round((setor.totalNaoPago / setor.totalAgendado) * 100)}%` }} />
@@ -256,7 +259,7 @@ export function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; ind
                 </div>
                 <div className="flex gap-4 mt-1.5 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-success inline-block" />Rec.</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-warning inline-block" />Pend.</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-warning inline-block" />Restante</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-destructive inline-block" />N. pago</span>
                 </div>
               </div>
