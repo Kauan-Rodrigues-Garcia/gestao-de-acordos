@@ -140,6 +140,15 @@ ALTER TABLE public.chat_mensagens ADD CONSTRAINT chat_msg_nao_vazia CHECK (
 -- 4. Curtida deixa de ser de um para virar contagem
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- `curtida_em` é escrita por `fn_chat_curtir` para acordar o Realtime, e nasceu
+-- na 20260831140000. Garantida aqui porque o histórico de migrations deste
+-- projeto está defasado (ver CLAUDE.md): o corpo de uma função plpgsql não é
+-- validado na criação, então a falta da coluna só apareceria na primeira
+-- curtida de alguém, em produção.
+ALTER TABLE public.chat_mensagens
+  ADD COLUMN IF NOT EXISTS curtida_em  TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS curtida_por UUID REFERENCES public.perfis(id) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS public.chat_curtidas (
   mensagem_id UUID NOT NULL REFERENCES public.chat_mensagens(id) ON DELETE CASCADE,
   perfil_id   UUID NOT NULL REFERENCES public.perfis(id) ON DELETE CASCADE,
@@ -152,11 +161,26 @@ CREATE INDEX IF NOT EXISTS idx_chat_curtidas_msg
 
 -- As curtidas de 31/08 a 01/09 estavam na coluna. Migram para a tabela em vez
 -- de sumirem: são poucas, e uma curtida que desaparece no deploy parece bug.
-INSERT INTO public.chat_curtidas (mensagem_id, perfil_id, criado_em)
-SELECT m.id, m.curtida_por, COALESCE(m.curtida_em, m.criado_em)
-  FROM public.chat_mensagens m
- WHERE m.curtida_por IS NOT NULL
-ON CONFLICT DO NOTHING;
+--
+-- Sob `DO` com checagem de coluna porque `curtida_por` nasceu na 20260831140000,
+-- e o histórico de migrations deste projeto está defasado (ver CLAUDE.md): num
+-- ambiente onde aquela não passou, um SELECT da coluna abortaria esta migration
+-- inteira por causa de um backfill que não tinha nada para fazer.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'chat_mensagens'
+       AND column_name = 'curtida_por'
+  ) THEN
+    INSERT INTO public.chat_curtidas (mensagem_id, perfil_id, criado_em)
+    SELECT m.id, m.curtida_por, COALESCE(m.curtida_em, m.criado_em)
+      FROM public.chat_mensagens m
+     WHERE m.curtida_por IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
+END;
+$$;
 
 ALTER TABLE public.chat_curtidas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_curtidas REPLICA IDENTITY FULL;
@@ -338,6 +362,12 @@ CREATE POLICY chat_msg_insert ON public.chat_mensagens FOR INSERT TO authenticat
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 8. Curtir — agora acumula
 -- ═══════════════════════════════════════════════════════════════════════════
+
+-- A versão de 20260831140000 devolvia VOID; esta devolve a CONTAGEM, para a
+-- tela não precisar de uma segunda consulta só para saber o novo total.
+-- `CREATE OR REPLACE` não troca o tipo de retorno («cannot change return type
+-- of existing function») — tem de derrubar antes.
+DROP FUNCTION IF EXISTS public.fn_chat_curtir(UUID, BOOLEAN);
 
 CREATE OR REPLACE FUNCTION public.fn_chat_curtir(p_mensagem_id UUID, p_curtir BOOLEAN)
 RETURNS INTEGER
@@ -1018,21 +1048,42 @@ UPDATE public.cargos_permissoes cp
 -- Reaproveita o balde `chat`, que já existe e já tem policy de leitura para
 -- quem está autenticado. A foto vai para `grupos/<conversa_id>/…`.
 
+/**
+ * `grupos/<conversa_id>/<arquivo>` → administro aquele grupo?
+ *
+ * O cast para UUID mora AQUI, dentro de um CASE, e não solto na policy. Um
+ * `((storage.foldername(name))[2])::UUID` na condição parece protegido pelo
+ * `[1] = 'grupos'` ao lado, mas o Postgres não promete avaliar os ramos de um
+ * AND em ordem: ele pode tentar o cast primeiro, e aí QUALQUER anexo comum do
+ * chat (`anexos/<uuid>/foto.png`, `audio/…`) faria a policy estourar com
+ * «invalid input syntax for type uuid» — quebrando o upload de anexo, que não
+ * tem nada a ver com grupo.
+ *
+ * `CASE` garante a ordem, e o regex garante que só texto de UUID chega ao cast.
+ */
+CREATE OR REPLACE FUNCTION public.fn_chat_grupo_foto_minha(p_caminho TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT CASE
+    WHEN (storage.foldername(p_caminho))[1] <> 'grupos' THEN FALSE
+    WHEN COALESCE((storage.foldername(p_caminho))[2], '') !~*
+         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN FALSE
+    ELSE public.fn_chat_grupo_administro(((storage.foldername(p_caminho))[2])::UUID)
+  END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.fn_chat_grupo_foto_minha(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fn_chat_grupo_foto_minha(TEXT) TO authenticated, anon, service_role;
+
 DROP POLICY IF EXISTS chat_grupo_foto_write ON storage.objects;
 CREATE POLICY chat_grupo_foto_write ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (
-    bucket_id = 'chat'
-    AND (storage.foldername(name))[1] = 'grupos'
-    AND public.fn_chat_grupo_administro(((storage.foldername(name))[2])::UUID)
-  );
+  WITH CHECK (bucket_id = 'chat' AND public.fn_chat_grupo_foto_minha(name));
 
 DROP POLICY IF EXISTS chat_grupo_foto_del ON storage.objects;
 CREATE POLICY chat_grupo_foto_del ON storage.objects FOR DELETE TO authenticated
-  USING (
-    bucket_id = 'chat'
-    AND (storage.foldername(name))[1] = 'grupos'
-    AND public.fn_chat_grupo_administro(((storage.foldername(name))[2])::UUID)
-  );
+  USING (bucket_id = 'chat' AND public.fn_chat_grupo_foto_minha(name));
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 15. Realtime
