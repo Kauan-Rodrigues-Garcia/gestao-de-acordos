@@ -32,7 +32,9 @@ export const TELA_LABEL: Record<string, string> = {
   'acordos/importar':          'Importar Excel',
   'analitico':                 'Analítico',
   'lider':                     'Painel do Líder',
-  'lider:time':                'Painel do Líder · Acompanhamento',
+  // Aba removida em 31/08/2026. O rótulo FICA: já há histórico de uso gravado
+  // com esta chave, e sem ele o Monitoramento exibiria a chave crua.
+  'lider:time':                'Painel do Líder · Acompanhamento (removida)',
   'lider:desempenho':          'Painel do Líder · Desempenho Equipes',
   'lider:quartis':             'Painel do Líder · Quartis',
   'lider:grafico':             'Painel do Líder · Gráfico recebimento',

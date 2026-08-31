@@ -57,20 +57,38 @@ function catalogoSql(): LinhaSql[] {
 
   const base = definicoes[baseIndex].sql;
   const corpos = [base.slice(base.indexOf('LATERAL (VALUES'), base.indexOf('AS t(chave'))];
+  /**
+   * Chaves aposentadas.
+   *
+   * O catálogo SQL é construído por ACUMULAÇÃO: cada migration soma um `VALUES`
+   * ao resultado da anterior. Sem uma forma declarada de remover, aposentar uma
+   * permissão deixaria este teste acusando divergência para sempre — e a saída
+   * fácil seria manter a chave morta dos dois lados.
+   *
+   * A convenção é um comentário `-- REMOVE_PERMISSOES: chave, outra` na
+   * migration que faz a remoção de verdade no banco.
+   */
+  const removidas = new Set<string>();
   for (const { sql } of definicoes.slice(baseIndex + 1)) {
     const inicio = sql.indexOf('SELECT * FROM (VALUES');
     const fim = sql.indexOf('AS novas(chave');
     if (inicio >= 0 && fim > inicio) corpos.push(sql.slice(inicio, fim));
+
+    for (const m of sql.matchAll(/--\s*REMOVE_PERMISSOES:\s*(.+)/g)) {
+      for (const chave of m[1].split(',')) removidas.add(chave.trim());
+    }
   }
 
   const linha = /\(\s*'([a-z_]+)',\s*(NULL::TEXT\[\]|ARRAY\[[^\]]*\](?:\s*::TEXT\[\])?),\s*(lideranca|todos|cupula|ninguem|ARRAY\[[^\]]*\](?:\s*::TEXT\[\])?),\s*(true|false)\s*\)/g;
 
-  return [...corpos.join('\n').matchAll(linha)].map(m => ({
-    chave: m[1],
-    tenants: /^NULL/i.test(m[2]) ? null : listaDeArray(m[2]),
-    padrao: listaDeArray(m[3]),
-    explicita: m[4] === 'true',
-  }));
+  return [...corpos.join('\n').matchAll(linha)]
+    .map(m => ({
+      chave: m[1],
+      tenants: /^NULL/i.test(m[2]) ? null : listaDeArray(m[2]),
+      padrao: listaDeArray(m[3]),
+      explicita: m[4] === 'true',
+    }))
+    .filter(l => !removidas.has(l.chave));
 }
 
 const SQL = catalogoSql();

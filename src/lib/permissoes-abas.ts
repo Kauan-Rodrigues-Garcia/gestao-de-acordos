@@ -170,7 +170,6 @@ export interface LeituraPorAba {
 
 const SECOES_USUARIOS: Record<string, string> = {
   usuarios_sub_usuarios: 'Aba interna Usuários',
-  ver_operadores: 'Aba interna Usuários',
   usuarios_administrar: 'Aba interna Usuários',
   usuarios_editar_do_setor: 'Aba interna Usuários',
   usuarios_ver_administradores: 'Aba interna Usuários',

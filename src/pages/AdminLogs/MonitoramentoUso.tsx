@@ -94,7 +94,9 @@ const CARGOS = [
  * quando ninguém as abriu no período — que é justamente o caso interessante.
  */
 const TELAS_ADOCAO = [
-  'lider:desempenho', 'lider:quartis', 'lider:grafico', 'lider:time',
+  // `lider:time` saiu com a aba Acompanhamento (31/08/2026): não faz sentido
+  // perguntar "quem ainda não abriu" uma tela que não existe mais.
+  'lider:desempenho', 'lider:quartis', 'lider:grafico',
   'lider', 'analitico', 'admin/metas', 'diretoria',
 ] as const;
 

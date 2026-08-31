@@ -609,11 +609,10 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir a lista de equipes e seus membros',
     grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
-  {
-    key: 'ver_operadores', label: 'Ver dados de operadores',
-    descricao: 'Ver informações detalhadas de outras pessoas do setor',
-    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
-  },
+  // `ver_operadores` saiu em 31/08/2026, junto com a aba Acompanhamento. Ela
+  // liberava o drill-down da lista de operadores daquela aba — "ver informações
+  // detalhadas de outras pessoas do setor" era literalmente aquele painel — e
+  // nenhum outro código a consultava. Ver 20260831123000.
 
   // ── Metas ────────────────────────────────────────────────────────────────
   {
@@ -865,11 +864,10 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Ver no Painel Líder qualquer setor, com o filtro de setor disponível',
     grupo: 'Painel Líder', padrao: { diretoria: true },
   },
-  {
-    key: 'painel_lider_sub_acompanhamento', label: 'Painel Líder: Acompanhamento',
-    descricao: 'Abrir a aba interna de acompanhamento do time',
-    grupo: 'Painel Líder', padrao: LIDERANCA,
-  },
+  // `painel_lider_sub_acompanhamento` saiu daqui em 31/08/2026, junto com a aba
+  // que ela abria. A chave continua nos JSONBs de cargos_permissoes — apagá-la
+  // de lá exigiria migrar empresa por empresa para desligar uma permissão que
+  // já não tem efeito nenhum. Fora do catálogo, ela some do Admin → Cargos.
   {
     key: 'painel_lider_sub_desempenho_equipes', label: 'Painel Líder: Desempenho Equipes',
     descricao: 'Abrir a aba interna de desempenho por equipe',
