@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
@@ -53,7 +53,7 @@ interface KpiCardProps {
   delay?: number;
 }
 
-export function KpiCard({ label, value, sub, icon: Icon, color, bg, delta, delay = 0 }: KpiCardProps) {
+export const KpiCard = memo(function KpiCard({ label, value, sub, icon: Icon, color, bg, delta, delay = 0 }: KpiCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -61,9 +61,9 @@ export function KpiCard({ label, value, sub, icon: Icon, color, bg, delta, delay
       transition={{ delay, duration: 0.4, ease: 'easeOut' }}
       className="h-full"
     >
-      <div className="relative h-full rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm p-4 hover:border-border/70 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden group">
+      <div className="relative h-full rounded-2xl border border-border/40 bg-card/95 p-4 shadow-sm hover:border-border/70 hover:shadow-md hover:-translate-y-0.5 transition-[border-color,box-shadow,transform] duration-200 overflow-hidden group">
         <div className={cn('absolute inset-x-0 top-0 h-0.5 rounded-t-2xl opacity-70', bg.replace('/10', ''))} />
-        <div className={cn('absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition-opacity', bg)} />
+        <div className={cn('absolute -top-7 -right-7 w-20 h-20 scale-125 rounded-full opacity-[0.12] group-hover:opacity-20 transition-opacity', bg)} />
         <div className="flex items-start justify-between gap-3 relative">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider truncate">{label}</p>
@@ -95,7 +95,7 @@ export function KpiCard({ label, value, sub, icon: Icon, color, bg, delta, delay
       </div>
     </motion.div>
   );
-}
+});
 
 // ─── Section Label ─────────────────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ export function KpiSkeletons({ count }: { count: number }) {
 
 // ─── Setor Row ─────────────────────────────────────────────────────────────────
 
-export function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; index: number; tipos: string[] }) {
+export const SetorRow = memo(function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; index: number; tipos: string[] }) {
   const [expandido, setExpandido] = useState(false);
 
   const percColor = setor.perc >= 80
@@ -132,10 +132,10 @@ export function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; ind
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -10 }}
+      initial={index < 4 ? { opacity: 0, x: -10 } : false}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.35 }}
-      className="rounded-xl border border-border/40 overflow-hidden bg-card/60 backdrop-blur-sm hover:border-border/70 transition-all duration-200"
+      transition={{ delay: Math.min(index, 3) * 0.04, duration: 0.3 }}
+      className="rounded-xl border border-border/40 overflow-hidden bg-card/90 shadow-sm hover:border-border/70 transition-[border-color,box-shadow] duration-200"
     >
       <button
         onClick={() => setExpandido(v => !v)}
@@ -316,4 +316,4 @@ export function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; ind
       )}
     </motion.div>
   );
-}
+});

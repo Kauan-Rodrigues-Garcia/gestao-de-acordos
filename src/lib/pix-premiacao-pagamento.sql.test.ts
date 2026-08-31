@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const MIGRATION = path.resolve(
   __dirname,
-  '../../supabase/migrations/20260831201807_pix_premiacao_status_pagamento.sql',
+  '../../supabase/migrations/20260831203244_pix_premiacao_status_pagamento.sql',
 );
 const SQL = fs.readFileSync(MIGRATION, 'utf8').toLowerCase();
 

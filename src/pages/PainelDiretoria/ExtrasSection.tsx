@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Building2, Users2, User, ArrowUpRight, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,7 +18,7 @@ interface ExtrasSectionProps {
   setores: { id: string; nome: string }[];
 }
 
-export function ExtrasSection({
+export const ExtrasSection = memo(function ExtrasSection({
   extrasAcordos,
   extrasOperadoresMap,
   extrasOpEquipeMap,
@@ -135,7 +135,7 @@ export function ExtrasSection({
   const temFiltroAtivo = !!(extraSetorFiltro || extraEquipeFiltro || extraOperadorFiltro || extraDataInicioAplicada || extraDataFimAplicada);
 
   return (
-    <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden">
+    <div className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
@@ -273,10 +273,13 @@ export function ExtrasSection({
                     return (
                       <motion.div
                         key={op.id}
-                        initial={{ opacity: 0, x: -6 }}
+                        initial={i < 6 ? { opacity: 0, x: -6 } : false}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.04 }}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-accent/10 transition-colors"
+                        transition={{ delay: Math.min(i, 5) * 0.04, duration: 0.3 }}
+                        className={cn(
+                          'flex items-center gap-3 px-4 py-3 hover:bg-accent/10 transition-colors',
+                          i >= 6 && '[content-visibility:auto] [contain-intrinsic-size:0_52px]',
+                        )}
                       >
                         <span className={cn(
                           'w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 border',
@@ -300,9 +303,9 @@ export function ExtrasSection({
                             <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
                               <motion.div
                                 className="h-full rounded-full bg-violet-500"
-                                initial={{ width: 0 }}
+                                initial={i < 6 ? { width: 0 } : false}
                                 animate={{ width: `${barW}%` }}
-                                transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.05 }}
+                                transition={{ duration: 0.45, ease: 'easeOut', delay: Math.min(i, 5) * 0.04 }}
                               />
                             </div>
                             <span className={cn(
@@ -325,4 +328,4 @@ export function ExtrasSection({
       </div>
     </div>
   );
-}
+});

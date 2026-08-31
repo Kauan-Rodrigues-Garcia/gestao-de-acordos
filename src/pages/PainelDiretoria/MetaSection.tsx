@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Target, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,13 +16,13 @@ interface MetaSectionProps {
   mesNome: string;
 }
 
-export function MetaSection({
+export const MetaSection = memo(function MetaSection({
   meta, percMeta, isPP, valorHOMes, valorRecebidoMes,
   valorCorenMes, valorCofenMes, projecaoMes, mesNome,
 }: MetaSectionProps) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-      <div className="relative rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden p-5">
+      <div className="relative rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden p-5">
         <div
           className="absolute inset-x-0 bottom-0 h-0.5 opacity-60"
           style={{ background: `linear-gradient(to right, ${percMeta >= 100 ? '#22c55e' : percMeta >= 70 ? '#f59e0b' : '#ef4444'} ${percMeta}%, transparent ${percMeta}%)` }}
@@ -100,4 +101,4 @@ export function MetaSection({
       </div>
     </motion.div>
   );
-}
+});

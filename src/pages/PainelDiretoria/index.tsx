@@ -21,7 +21,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
-import { formatBRL, safeNum, sumSafe } from '@/lib/money';
+import { formatBRL } from '@/lib/money';
 import {
   deslocarMes, diasDecorridos, diasNoMes as diasDoMes, mesAtual, rotuloDoMes,
 } from '@/lib/mesReferencia';
@@ -288,7 +288,7 @@ export default function PainelDiretoria() {
 
       {/* ── Cabeçalho ─────────────────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-        className="relative rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden"
+        className="relative rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden"
       >
         <div className="h-1 w-full bg-gradient-to-r from-primary via-chart-3 to-chart-5" />
         <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -391,7 +391,7 @@ export default function PainelDiretoria() {
 
       {/* ── Breakdown por setor ───────────────────────────────────────────────── */}
       <SectionLabel>Breakdown por setor</SectionLabel>
-      <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden">
+      <div className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20"><Building2 className="w-4 h-4 text-primary" /></div>
@@ -427,7 +427,7 @@ export default function PainelDiretoria() {
         <>
           <SectionLabel>Recebido por forma de pagamento</SectionLabel>
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="relative rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden">
+            <div className="relative rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-border/30">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-chart-2/10 border border-chart-2/20"><PieChart className="w-3.5 h-3.5 text-chart-2" /></div>
@@ -442,7 +442,7 @@ export default function PainelDiretoria() {
               <div className="p-4 relative">
                 <ResponsiveContainer width="100%" height={240}>
                   <RechartsPie>
-                    <Pie data={distribuicaoPorForma} cx="50%" cy="50%" innerRadius={65} outerRadius={95} paddingAngle={4} dataKey="value" nameKey="name" strokeWidth={0}>
+                    <Pie data={distribuicaoPorForma} cx="50%" cy="50%" innerRadius={65} outerRadius={95} paddingAngle={4} dataKey="value" nameKey="name" strokeWidth={0} isAnimationActive={false}>
                       {distribuicaoPorForma.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                     </Pie>
                     <Tooltip content={<CustomPieTooltip />} />
@@ -458,7 +458,7 @@ export default function PainelDiretoria() {
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden">
+            <div className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-border/30">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-chart-3/10 border border-chart-3/20"><CreditCard className="w-3.5 h-3.5 text-chart-3" /></div>
@@ -502,7 +502,7 @@ export default function PainelDiretoria() {
       {/* ── Evolução diária ───────────────────────────────────────────────────── */}
       <SectionLabel>Evolução diária</SectionLabel>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-        className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden"
+        className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden"
       >
         <div className="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -539,8 +539,8 @@ export default function PainelDiretoria() {
                 <XAxis dataKey="dia" tick={{ fontSize: 10, fill: tickColor }} stroke="transparent" tickLine={false} dy={4} />
                 <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: tickColor }} stroke="transparent" tickLine={false} width={52} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="agendado" name="Agendado" stroke={EVOL_AGENDADO} strokeWidth={1.5} fill="url(#colorAgeDiretor)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                <Area type="monotone" dataKey="recebido" name="Recebido" stroke={EVOL_RECEBIDO} strokeWidth={2.5} fill="url(#colorRecDiretor)" dot={false} activeDot={{ r: 5, strokeWidth: 0 }} />
+                <Area type="monotone" dataKey="agendado" name="Agendado" stroke={EVOL_AGENDADO} strokeWidth={1.5} fill="url(#colorAgeDiretor)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} isAnimationActive={false} />
+                <Area type="monotone" dataKey="recebido" name="Recebido" stroke={EVOL_RECEBIDO} strokeWidth={2.5} fill="url(#colorRecDiretor)" dot={false} activeDot={{ r: 5, strokeWidth: 0 }} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -568,7 +568,7 @@ export default function PainelDiretoria() {
         <>
           <SectionLabel>Comparativo mensal</SectionLabel>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden"
+            className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden"
           >
             <div className="px-5 py-4 border-b border-border/30">
               <h3 className="text-sm font-bold text-foreground">Comparativo com mês anterior</h3>
@@ -615,7 +615,7 @@ export default function PainelDiretoria() {
         <>
           <SectionLabel>Distribuição por status</SectionLabel>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-            className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden"
+            className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden"
           >
             <div className="px-5 py-4 border-b border-border/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -689,7 +689,7 @@ export default function PainelDiretoria() {
                         return <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-2.5 shadow-xl text-xs"><p className="font-bold text-popover-foreground mb-1" style={{ color: d.color }}>{d.name}</p><p className="text-popover-foreground">{d.value} acordos <span className="text-muted-foreground">({pct}%)</span></p></div>;
                       }}
                     />
-                    <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={64}>
+                    <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={64} isAnimationActive={false}>
                       {porStatus.map((entry, i) => <Cell key={i} fill={entry.color} fillOpacity={0.85} />)}
                     </Bar>
                   </BarChart>

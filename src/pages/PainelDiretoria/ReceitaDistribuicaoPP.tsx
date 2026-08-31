@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Percent, Banknote, PiggyBank } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,16 +18,15 @@ interface ReceitaDistribuicaoPPProps {
   percMeta: number;
 }
 
-export function ReceitaDistribuicaoPP({
+export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
   valorHOMes, valorHOAgendado, valorNaoPago,
   valorCorenMes, valorCofenMes, valorCorenAge, valorCofenAge,
   meta, percMeta,
 }: ReceitaDistribuicaoPPProps) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-      <div className="relative rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden">
+      <div className="relative rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-violet-500/5 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-orange-500/5 blur-3xl pointer-events-none" />
         <div className="relative p-5">
           <div className="flex items-center gap-2.5 mb-1">
             <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
@@ -168,4 +168,4 @@ export function ReceitaDistribuicaoPP({
       </div>
     </motion.div>
   );
-}
+});
