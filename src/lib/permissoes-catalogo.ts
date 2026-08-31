@@ -565,8 +565,8 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Acordos', tenants: ['pagueplay'], padrao: {},
   },
   {
-    key: 'acordos_campos_admin', label: 'Campos de administrador no formulário',
-    descricao: 'Ver e preencher os campos restritos no cadastro rápido de acordo',
+    key: 'acordos_campos_admin', label: 'Preencher acordo por imagem (IA/OCR)',
+    descricao: 'Enviar, colar ou capturar prints para preencher automaticamente os dados do acordo',
     grupo: 'Acordos', tenants: ['bookplay'], padrao: {},
   },
 

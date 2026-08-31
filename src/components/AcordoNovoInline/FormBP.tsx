@@ -41,8 +41,9 @@ export function FormBP({ state }: { state: SharedFormState }) {
   } = state;
 
   const { temPermissao } = useCargoPermissoes();
-  // Os campos restritos saem do painel, não do cargo.
-  const admin = temPermissao('acordos_campos_admin');
+  // O painel decide quem pode usar o preenchimento automático por imagem.
+  // A chave técnica antiga é mantida para preservar as configurações salvas.
+  const podePreencherPorImagem = temPermissao('acordos_campos_admin');
   // O botão precisa aparecer ANTES de a entrada ser ligada, então não pode
   // depender de `temEntradaForm` (que o pai já entrega desligado quando a
   // entrada não se aplica).
@@ -62,7 +63,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
               </Button>
             </div>
 
-            {admin && (
+            {podePreencherPorImagem && (
             <DropzoneImagensAcordo
               disabled={salvando}
               onDados={(d) => {

@@ -31,8 +31,8 @@ const MAX_IMAGENS = 5;
  * ou colar (Ctrl+V) um ou mais prints. Roda o motor híbrido IA→OCR e devolve
  * os campos via `onDados` para o formulário preencher.
  *
- * Componente puro (sem auth): a restrição de visibilidade (admin-only na fase
- * de testes) é responsabilidade de quem o renderiza — ver FormBP.
+ * Componente puro (sem auth): a permissão de visibilidade é responsabilidade
+ * de quem o renderiza — ver FormBP.
  */
 export function DropzoneImagensAcordo({ onDados, disabled, className }: DropzoneImagensAcordoProps) {
   const [imagens, setImagens] = useState<ImagemSel[]>([]);
@@ -156,7 +156,7 @@ export function DropzoneImagensAcordo({ onDados, disabled, className }: Dropzone
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
           <Wand2 className="w-3 h-3" /> Preencher por imagem
           <span className="font-normal normal-case text-muted-foreground/50 ml-1">
-            IA + OCR · admin
+            IA + OCR · acesso por permissão
           </span>
         </p>
         <Button

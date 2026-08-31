@@ -74,7 +74,8 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ perfil: perfilValue }),
 }));
 
-// O formulário pergunta ao PAINEL quais campos mostra (`acordos_campos_admin`)
+// O formulário pergunta ao PAINEL se mostra o preenchimento por imagem
+// (`acordos_campos_admin`)
 // desde 24/08/2026. Sem este mock o hook real tenta abrir um canal de realtime
 // no supabase falso e derruba a montagem inteira.
 vi.mock('@/hooks/useCargoPermissoes', () => ({
