@@ -54,7 +54,10 @@ export default function Dashboard() {
   // varre todos os acordos do mês — e o `AnalyticsPanel` logo abaixo monta o
   // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
   // rodava sem mês, presa ao corrente, enquanto o painel usa o mês do seletor.
-  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor, niveis } = useSetoresEquipes();
+  const {
+    setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor, niveis,
+    podeTodasEquipes,
+  } = useSetoresEquipes();
   // Os quatro testes por cargo que moravam aqui (`isAdmin`, `isLiderOuElite`,
   // `isElite`, `isLider`) decidiam quem via cada filtro. Quem decide agora sao
   // os niveis da aba, resolvidos em `useSetoresEquipes` e lidos por
@@ -690,6 +693,7 @@ export default function Dashboard() {
           setorFiltro={setorFiltro}
           onSetor={setSetorFiltro}
           equipes={equipesDoSetor}
+          podeTodasEquipes={podeTodasEquipes}
           visao={visaoFiltro}
           onVisao={setVisaoFiltro}
           setorDoPerfil={perfil?.setor_id ?? null}

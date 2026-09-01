@@ -52,6 +52,14 @@ interface Props {
   onSetor: (id: string | null) => void;
   /** Equipes do setor em foco — já recortadas por quem chama. */
   equipes: readonly EquipeResumo[];
+  /**
+   * O alcance de equipe cobre TODAS as equipes do setor?
+   *
+   * `false` esconde o botão «Todas as equipes» — ele É o setor sem recorte, e
+   * oferecê-lo a quem foi limitado à própria equipe desfaz o limite com um
+   * clique.
+   */
+  podeTodasEquipes: boolean;
   visao: VisaoEscopo;
   onVisao: (v: VisaoEscopo) => void;
   /** Setor do próprio perfil, para quem não escolhe. */
@@ -59,17 +67,25 @@ interface Props {
 }
 
 export function FiltroEscopo({
-  niveis, setores, setorFiltro, onSetor, equipes, visao, onVisao, setorDoPerfil,
+  niveis, setores, setorFiltro, onSetor, equipes, podeTodasEquipes,
+  visao, onVisao, setorDoPerfil,
 }: Props) {
   const podeEscolherSetor = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
   /*
-   * «Todas as equipes» é o SETOR sem recorte — e é por isso que ele só aparece
-   * para quem alcança o setor. Antes aparecia sempre que houvesse equipes: um
-   * cargo com alcance de equipe e nada além dela ganhava, num clique, a visão
-   * do setor inteiro que o painel não lhe deu.
+   * «Todas as equipes» é o SETOR sem recorte, e some por dois motivos
+   * independentes:
+   *
+   *   • sem alcance de setor, ele daria num clique a visão que o painel negou;
+   *   • com `dashboard_escopo_equipe_todas` desligada, ele desfaz o limite que
+   *     a chave acabou de impor — a pessoa foi limitada à própria equipe e o
+   *     botão devolveria o setor inteiro.
+   *
+   * O segundo motivo é pedido explícito: «se essa opção de ver todas as
+   * equipes estiver desativada, o botão de todas as equipes deve sumir».
    */
-  const podeSetorGeral = niveis.includes('setor') || podeEscolherSetor;
+  const mostrarTodasEquipes =
+    (niveis.includes('setor') || podeEscolherSetor) && podeTodasEquipes;
 
   /*
    * Quem escolhe setor usa o escolhido; quem não escolhe fica no próprio. Este
@@ -81,6 +97,17 @@ export function FiltroEscopo({
   const mostrarEquipes = podeEquipe && setorEmFoco !== null && equipes.length > 0;
   // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
   const mostrarIndividual = niveis.includes('individual') && niveis.length > 1;
+
+  /*
+   * O "sair do individual" da linha Pessoa.
+   *
+   * Era sempre `'setor'`, e isso é uma porta dos fundos para o botão que
+   * acabamos de esconder: quem está limitado à própria equipe clicaria em
+   * «Todas as pessoas» e cairia no setor inteiro. Sem «Todas as equipes» na
+   * tela, o mais amplo que essa pessoa tem é a primeira equipe da lista.
+   */
+  const visaoMaisAmpla: VisaoEscopo =
+    mostrarTodasEquipes || !mostrarEquipes ? 'setor' : `equipe:${equipes[0].id}`;
 
   // Nada a oferecer: o controle inteiro some em vez de virar moldura vazia.
   if (!podeEscolherSetor && !mostrarEquipes && !mostrarIndividual) return null;
@@ -119,7 +146,7 @@ export function FiltroEscopo({
 
       {mostrarEquipes && (
         <Linha icone={<Layers className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Equipe">
-          {podeSetorGeral && (
+          {mostrarTodasEquipes && (
             <Chip
               ativo={visao === 'setor'}
               onClick={() => onVisao('setor')}
@@ -145,7 +172,7 @@ export function FiltroEscopo({
         <Linha icone={<Users className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Pessoa">
           <Chip
             ativo={visao !== 'individual'}
-            onClick={() => onVisao('setor')}
+            onClick={() => onVisao(visaoMaisAmpla)}
             titulo="Ver os dados de todo mundo no recorte acima"
           >
             Todas as pessoas
