@@ -460,11 +460,45 @@ export function Conversa({
   const ultimoToque = useRef<Map<string, number>>(new Map());
   const ESPERA_DUPLO_CLIQUE = 600;
 
-  const curtirPorToque = useCallback((m: MensagemChat) => {
+  /**
+   * Havia uma seleção de texto ANTES deste duplo clique?
+   *
+   * O duplo clique do navegador marca a palavra sob o cursor, então perguntar
+   * "tem texto selecionado?" depois do evento responde sempre que sim. A
+   * pergunta útil é outra: o que está selecionado é MAIOR que a palavra que
+   * este clique acabou de marcar? Se for, a pessoa estava copiando um trecho e
+   * clicou dentro dele — curtir ali seria sequestrar o gesto.
+   */
+  function selecionavaAntes(alvo: EventTarget | null): boolean {
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+    const texto = sel?.toString() ?? '';
+    if (!texto.trim()) return false;
+    // Uma palavra só (sem espaço no meio) é o que o próprio duplo clique
+    // produz — não conta como seleção anterior.
+    if (!/\s/.test(texto.trim())) return false;
+    const no = alvo instanceof Node ? alvo : null;
+    return !!no && !!sel && sel.rangeCount > 0
+      && sel.containsNode(no, true);
+  }
+
+  const curtirPorToque = useCallback((m: MensagemChat, evento?: { target: EventTarget | null }) => {
+    // Copiar ganha do curtir: quem tinha um trecho marcado estava copiando.
+    if (evento && selecionavaAntes(evento.target)) return;
+
     const agora = Date.now();
     const anterior = ultimoToque.current.get(m.id) ?? 0;
     if (agora - anterior < ESPERA_DUPLO_CLIQUE) return;
     ultimoToque.current.set(m.id, agora);
+
+    /*
+     * Desfaz a palavra que o duplo clique marcou.
+     *
+     * Sem isto, curtir deixa um pedaço do balão realçado em azul, que parece
+     * defeito. `collapseToEnd` some com a marca sem mexer no que a pessoa possa
+     * ter selecionado noutro lugar da tela.
+     */
+    try { window.getSelection()?.collapseToEnd(); } catch { /* sem seleção */ }
+
     void curtir(m);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -735,14 +769,22 @@ export function Conversa({
                 {meu && !somenteLeitura && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
                 {/*
                   Duplo clique no balão curte, como no Instagram.
-                  `select-none` evita que o gesto marque o texto no caminho, e o
-                  botão de coração ao lado continua existindo para quem prefere
+                  O balão é `select-text`: dá para arrastar e copiar o texto,
+                  que era o que o `select-none` de antes impedia — ele existia
+                  só para o duplo clique não deixar uma palavra marcada.
+
+                  Agora as duas coisas convivem: arrastar seleciona, duplo
+                  clique curte, e o `curtirPorToque` desfaz a palavra que o
+                  próprio duplo clique marcou. Selecionar UM PEDAÇO e dar duplo
+                  clique dentro dele não curte — ali a intenção é copiar.
+
+                  O botão de coração ao lado continua existindo para quem prefere
                   o alvo explícito (e para o teclado, que não dá duplo clique).
                 */}
                 <div
-                  onDoubleClick={() => { if (!m.expurgado_em) curtirPorToque(m); }}
+                  onDoubleClick={e => { if (!m.expurgado_em) curtirPorToque(m, e); }}
                   className={cn(
-                    'relative max-w-[78%] select-none rounded-2xl px-3 py-1.5 space-y-1.5',
+                    'relative max-w-[78%] select-text rounded-2xl px-3 py-1.5 space-y-1.5',
                     meu ? 'bg-primary text-primary-foreground rounded-br-md'
                         : 'bg-muted rounded-bl-md',
                     // Espaço para o coração não encostar na hora.
