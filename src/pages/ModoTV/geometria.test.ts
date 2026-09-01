@@ -13,6 +13,8 @@ import {
   PALCO_LARGURA,
   PALCO_ALTURA,
   escalaDoPalco,
+  encaixar,
+  limitarAoPalco,
   estiloDaFonte,
   ordenarPorCamada,
   percentualDaMeta,
@@ -60,6 +62,20 @@ describe('escalaDoPalco', () => {
     expect(escalaDoPalco(0, 0)).toBe(0);
     expect(escalaDoPalco(-10, 500)).toBe(0);
   });
+
+  it('altura zero com largura boa deduz da proporção, não apaga a tela', () => {
+    /*
+     * Regressão de 01/09/2026: o contêiner da prévia tirava a altura de
+     * `aspect-ratio` e o `height: 100%` do filho não resolvia contra isso. A
+     * caixa media 1920×0, a escala dava 0 e o palco ficava escondido — a
+     * prévia era preta e nada do que se adicionasse aparecia.
+     *
+     * O layout foi corrigido. Este teste garante que, se acontecer de novo por
+     * outro caminho, a prévia saia levemente errada em vez de sumir.
+     */
+    expect(escalaDoPalco(1920, 0)).toBe(1);
+    expect(escalaDoPalco(960, 0)).toBe(0.5);
+  });
 });
 
 describe('estiloDaFonte', () => {
@@ -86,6 +102,50 @@ describe('estiloDaFonte', () => {
 
   it('a camada vira z-index', () => {
     expect(estiloDaFonte(fonte({ camada: 7 })).zIndex).toBe(7);
+  });
+});
+
+describe('encaixar', () => {
+  it('perto do meio vira o meio exato', () => {
+    // 49,7% numa TV de 55 polegadas é meio centímetro fora do centro — visível,
+    // e impossível de consertar no olho arrastando.
+    expect(encaixar(49.7)).toBe(50);
+    expect(encaixar(50.9)).toBe(50);
+  });
+
+  it('longe de tudo fica onde a pessoa soltou', () => {
+    expect(encaixar(38)).toBe(38);
+    expect(encaixar(62.4)).toBe(62.4);
+  });
+
+  it('encosta nas bordas e nos terços', () => {
+    expect(encaixar(0.8)).toBe(0);
+    expect(encaixar(99.2)).toBe(100);
+    expect(encaixar(24.5)).toBe(25);
+    expect(encaixar(75.6)).toBe(75);
+  });
+
+  it('escolhe a linha mais próxima quando duas estão ao alcance', () => {
+    expect(encaixar(24.9, [24, 25])).toBe(25);
+    expect(encaixar(24.1, [24, 25])).toBe(24);
+  });
+});
+
+describe('limitarAoPalco', () => {
+  it('deixa sangrar um pouco na borda, que é recurso legítimo', () => {
+    expect(limitarAoPalco(-15)).toBe(-15);
+    expect(limitarAoPalco(112)).toBe(112);
+  });
+
+  it('não deixa a fonte sair de vez e sumir', () => {
+    // Fonte fora do palco some da TV e some da prévia junto — a pessoa fica
+    // procurando o que "apagou".
+    expect(limitarAoPalco(-500)).toBe(-20);
+    expect(limitarAoPalco(999)).toBe(120);
+  });
+
+  it('arredonda para uma casa, para o banco não guardar lixo do arrasto', () => {
+    expect(limitarAoPalco(33.333333)).toBe(33.3);
   });
 });
 

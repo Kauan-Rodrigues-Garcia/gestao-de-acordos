@@ -15,7 +15,10 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink } from 'lucide-react';
+import {
+  Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink,
+  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,6 +38,8 @@ const TIPOS: { tipo: TipoFonte; nome: string; Icone: typeof Type }[] = [
   { tipo: 'imagem',  nome: 'Imagem',  Icone: Image },
   { tipo: 'ranking', nome: 'Ranking', Icone: Trophy },
   { tipo: 'meta',    nome: 'Meta',    Icone: Target },
+  { tipo: 'fundo',   nome: 'Fundo',   Icone: Square },
+  { tipo: 'relogio', nome: 'Relógio', Icone: Clock },
 ];
 
 export default function ModoTV() {
@@ -214,7 +219,7 @@ export default function ModoTV() {
               selecionadaId={selecionadaId}
               onSelecionar={podeEditar ? setSelecionadaId : undefined}
               arrastavel={podeEditar}
-              onMover={(id, x, y) => { void tv.atualizarFonte(id, { x, y }); }}
+              onMover={tv.moverFonte}
               vazio="Nenhuma cena escolhida"
             />
             <QuadroPalco
@@ -284,6 +289,7 @@ export default function ModoTV() {
               fonte={selecionada}
               onMudar={(m) => { void tv.atualizarFonte(selecionada.id, m); }}
               onRemover={() => { void tv.removerFonte(selecionada.id); setSelecionadaId(null); }}
+              onCamada={(d) => { void tv.moverCamada(selecionada.id, d); }}
               podeEnviarMidia={podeEnviarMidia}
               onEnviarImagem={tv.enviarImagem}
               enviando={tv.enviandoImagem}
@@ -367,44 +373,26 @@ function QuadroPalco({
   selecionadaId?: string | null;
   onSelecionar?: (id: string) => void;
   arrastavel?: boolean;
-  onMover?: (id: string, x: number, y: number) => void;
+  onMover?: (id: string, x: number, y: number, definitivo: boolean) => void;
   vazio: string;
 }) {
-  /*
-   * O arrasto converte pixel de tela em PERCENTUAL do palco antes de gravar.
-   * Fazer a conta aqui (e não no `Palco`) mantém o renderizador ignorante de
-   * mouse — é o mesmo componente que roda na TV, onde não há cursor nenhum.
-   */
-  const aoSoltar = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!arrastavel || !onMover || !selecionadaId) return;
-    const caixa = e.currentTarget.getBoundingClientRect();
-    if (caixa.width === 0 || caixa.height === 0) return;
-    const x = ((e.clientX - caixa.left) / caixa.width) * 100;
-    const y = ((e.clientY - caixa.top) / caixa.height) * 100;
-    onMover(selecionadaId, arredondar(x), arredondar(y));
-  };
-
   return (
     <div>
       <p className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${cor}`}>{rotulo}</p>
       <div
         className={`relative rounded-md overflow-hidden border-2 ${borda} bg-[#0a0f13]`}
         style={{ aspectRatio: '16 / 9' }}
-        onPointerUp={aoSoltar}
       >
         <Palco
           fontes={fontes}
           selecionadaId={selecionadaId}
           onSelecionar={onSelecionar}
+          onMoverFonte={arrastavel ? onMover : undefined}
           aviso={fontes.length === 0 ? vazio : null}
         />
       </div>
     </div>
   );
-}
-
-function arredondar(n: number): number {
-  return Math.round(Math.max(-20, Math.min(120, n)) * 10) / 10;
 }
 
 function rotuloDaFonte(f: Fonte): string {
@@ -420,11 +408,12 @@ function rotuloDaFonte(f: Fonte): string {
 // ── Inspetor ─────────────────────────────────────────────────────────────────
 
 function Inspetor({
-  fonte, onMudar, onRemover, podeEnviarMidia, onEnviarImagem, enviando,
+  fonte, onMudar, onRemover, onCamada, podeEnviarMidia, onEnviarImagem, enviando,
 }: {
   fonte: Fonte;
   onMudar: (m: Partial<Fonte>) => void;
   onRemover: () => void;
+  onCamada: (d: 'frente' | 'tras') => void;
   podeEnviarMidia: boolean;
   onEnviarImagem: (a: File) => Promise<string | null>;
   enviando: boolean;
@@ -532,25 +521,95 @@ function Inspetor({
         </Campo>
       )}
 
-      {/* Enquadramento — igual para todo tipo de fonte */}
-      <Campo label={`Largura — ${fonte.largura}%`}>
-        <Slider
-          min={5} max={100} step={1}
-          value={[fonte.largura]}
-          onValueChange={([v]) => onMudar({ largura: v })}
-        />
-      </Campo>
-      <Campo label={`Escala — ${fonte.escala.toFixed(2)}×`}>
-        <Slider
-          min={0.2} max={3} step={0.05}
-          value={[fonte.escala]}
-          onValueChange={([v]) => onMudar({ escala: v })}
-        />
-      </Campo>
+      {fonte.tipo === 'fundo' && (
+        <>
+          <Campo label="Cor">
+            <input type="color" value={texto(fonte.config, 'cor', '#0d1b24')}
+                   onChange={e => mudarConfig('cor', e.target.value)}
+                   className="h-8 w-full rounded border bg-transparent" />
+          </Campo>
+          <Campo label="Segunda cor (degradê)">
+            <div className="flex gap-1">
+              <input type="color" value={texto(fonte.config, 'cor_2', '#08323d')}
+                     onChange={e => mudarConfig('cor_2', e.target.value)}
+                     className="h-8 flex-1 rounded border bg-transparent" />
+              {/* Sem segunda cor o fundo vira sólido — é assim que se desliga o degradê. */}
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs"
+                      onClick={() => mudarConfig('cor_2', '')}>
+                Sólido
+              </Button>
+            </div>
+          </Campo>
+        </>
+      )}
 
-      <p className="text-[11px] text-muted-foreground">
-        Para mover: com a fonte escolhida, clique no ponto da prévia onde ela deve ficar.
-      </p>
+      {fonte.tipo === 'relogio' && (
+        <>
+          <Campo label={`Tamanho — ${numero(fonte.config, 'tamanho', 120)}`}>
+            <Slider min={48} max={320} step={8}
+                    value={[numero(fonte.config, 'tamanho', 120)]}
+                    onValueChange={([v]) => mudarConfig('tamanho', v)} />
+          </Campo>
+          <Campo label="Cor">
+            <input type="color" value={texto(fonte.config, 'cor', '#ffffff')}
+                   onChange={e => mudarConfig('cor', e.target.value)}
+                   className="h-8 w-full rounded border bg-transparent" />
+          </Campo>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Mostrar segundos</Label>
+            <Switch checked={ligado(fonte.config, 'segundos', false)}
+                    onCheckedChange={v => mudarConfig('segundos', v)} />
+          </div>
+        </>
+      )}
+
+      {/* Enquadramento — igual para todo tipo de fonte, menos o fundo, que
+          cobre o palco inteiro e não tem o que enquadrar. */}
+      {fonte.tipo !== 'fundo' && (
+        <>
+          <Campo label={`Largura — ${fonte.largura}%`}>
+            <Slider
+              min={5} max={100} step={1}
+              value={[fonte.largura]}
+              onValueChange={([v]) => onMudar({ largura: v })}
+            />
+          </Campo>
+          <Campo label={`Escala — ${fonte.escala.toFixed(2)}×`}>
+            <Slider
+              min={0.2} max={3} step={0.05}
+              value={[fonte.escala]}
+              onValueChange={([v]) => onMudar({ escala: v })}
+            />
+          </Campo>
+        </>
+      )}
+
+      <div className="flex items-center gap-1 pt-1">
+        <Button variant="secondary" size="sm" className="h-8 px-2 flex-1"
+                onClick={() => onCamada('tras')} title="Mandar para trás">
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="secondary" size="sm" className="h-8 px-2 flex-1"
+                onClick={() => onCamada('frente')} title="Trazer para a frente">
+          <ChevronUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="secondary" size="sm" className="h-8 px-2 flex-1"
+          onClick={() => onMudar({ visivel: fonte.visivel === false })}
+          title={fonte.visivel === false ? 'Mostrar' : 'Esconder'}
+        >
+          {fonte.visivel === false
+            ? <EyeOff className="h-3.5 w-3.5" />
+            : <Eye className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
+      {fonte.tipo !== 'fundo' && (
+        <p className="text-[11px] text-muted-foreground">
+          Arraste a fonte na prévia para posicionar. Ela encaixa sozinha no meio
+          e nos terços.
+        </p>
+      )}
 
       <Button variant="ghost" size="sm" className="w-full text-destructive hover:text-destructive"
               onClick={onRemover}>

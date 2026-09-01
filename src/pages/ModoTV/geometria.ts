@@ -29,7 +29,7 @@ export const PALCO_LARGURA = 1920;
 export const PALCO_ALTURA = 1080;
 export const PALCO_PROPORCAO = PALCO_LARGURA / PALCO_ALTURA;
 
-export type TipoFonte = 'texto' | 'imagem' | 'ranking' | 'meta';
+export type TipoFonte = 'texto' | 'imagem' | 'ranking' | 'meta' | 'fundo' | 'relogio';
 
 export interface LinhaRanking {
   nome: string;
@@ -54,6 +54,11 @@ export interface Fonte {
   largura: number;
   escala: number;
   camada: number;
+  /**
+   * Desligada some da TV E da prévia. O banco já a filtra em `fn_tv_palco`;
+   * aqui é opcional porque a prévia lê a tabela direto, sem esse filtro.
+   */
+  visivel?: boolean;
   /** Preenchido pelo banco para `ranking` e `meta`; nulo nos demais. */
   dados: LinhaRanking[] | DadosMeta | null;
 }
@@ -75,7 +80,21 @@ export interface CenaNoAr {
  * a borda esconderia justamente o que alguém posicionou lá.
  */
 export function escalaDoPalco(larguraCaixa: number, alturaCaixa: number): number {
-  if (!(larguraCaixa > 0) || !(alturaCaixa > 0)) return 0;
+  if (!(larguraCaixa > 0)) return 0;
+
+  /*
+   * Altura zero com largura boa NÃO é caso teórico: já aconteceu. O contêiner
+   * da prévia tirava a altura de `aspect-ratio`, o `height: 100%` do filho não
+   * resolvia contra isso, e a caixa media 1920×0 — escala 0, palco escondido,
+   * prévia preta.
+   *
+   * O layout foi corrigido, mas a regra fica: se a altura não veio, deduzir da
+   * largura pela proporção do palco. Uma prévia levemente fora do lugar é um
+   * problema que a pessoa vê e reporta; uma tela preta ela interpreta como
+   * "não funciona" e desiste.
+   */
+  if (!(alturaCaixa > 0)) return larguraCaixa / PALCO_LARGURA;
+
   return Math.min(larguraCaixa / PALCO_LARGURA, alturaCaixa / PALCO_ALTURA);
 }
 
@@ -137,6 +156,45 @@ export function percentualDaMeta(dados: DadosMeta | null | undefined): {
   if (alvo <= 0) return { exibido: 0, barra: 0 };
   const bruto = (realizado / alvo) * 100;
   return { exibido: Math.round(bruto), barra: Math.max(0, Math.min(100, bruto)) };
+}
+
+/**
+ * Onde a fonte encosta ao ser arrastada perto de uma linha notável.
+ *
+ * Sem encaixe, "centralizar" vira 49,7% — e 49,7% numa TV de 55 polegadas é um
+ * deslocamento de meio centímetro que a pessoa vê e não consegue consertar no
+ * olho. Com encaixe, soltar perto do meio significa o meio.
+ *
+ * A tolerância é em % do palco, não em pixel: a prévia é pequena e a TV é
+ * grande, e um encaixe medido em pixel de tela seria generoso demais na TV e
+ * apertado demais na prévia.
+ */
+export const LINHAS_DE_ENCAIXE = [0, 25, 50, 75, 100] as const;
+const TOLERANCIA_ENCAIXE = 1.6;
+
+export function encaixar(valor: number, linhas: readonly number[] = LINHAS_DE_ENCAIXE): number {
+  let melhor = valor;
+  let menorDistancia = TOLERANCIA_ENCAIXE;
+  for (const linha of linhas) {
+    const distancia = Math.abs(valor - linha);
+    if (distancia < menorDistancia) {
+      menorDistancia = distancia;
+      melhor = linha;
+    }
+  }
+  return melhor;
+}
+
+/**
+ * Mantém a fonte dentro do palco, com sangria.
+ *
+ * O limite é o mesmo do CHECK em `tv_fontes` (-20 a 120). Deixar sair um pouco
+ * é proposital — arte sangrando na borda é recurso legítimo. Deixar sair de
+ * vez não é: a fonte some da tela e some também da prévia, e a pessoa fica
+ * procurando o que "apagou".
+ */
+export function limitarAoPalco(valor: number): number {
+  return Math.round(Math.max(-20, Math.min(120, valor)) * 10) / 10;
 }
 
 /** As fontes na ordem de desenho: camada de baixo primeiro. */

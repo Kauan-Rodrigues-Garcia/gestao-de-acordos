@@ -291,19 +291,33 @@ export function useModoTV() {
       imagem:  { config: { url: '', ajuste: 'cover' }, largura: 40 },
       ranking: { config: { titulo: 'Ranking do mês', quantidade: 5, mostrar_valor: true }, largura: 55 },
       meta:    { config: { titulo: 'Meta do mês' }, largura: 45 },
+      fundo:   { config: { cor: '#0d1b24', cor_2: '#08323d', angulo: 160 }, largura: 100 },
+      relogio: { config: { tamanho: 120, cor: '#ffffff', segundos: false }, largura: 30 },
     };
+
+    /*
+     * O fundo nasce ATRÁS de tudo, e não no topo da pilha como as demais.
+     * Adicionar um fundo e ver a cena inteira sumir atrás dele seria o
+     * comportamento literal do "última fonte fica na frente" — e ninguém
+     * espera isso de algo chamado fundo.
+     */
+    const camadas = fontes.map(f => f.camada);
+    const camada = tipo === 'fundo'
+      ? Math.min(0, ...camadas) - 1
+      : Math.max(0, ...camadas) + 1;
+
     const { error } = await db('tv_fontes').insert({
       cena_id: cenaId,
       tipo,
       config: padroes[tipo].config,
       x: 50, y: 50, largura: padroes[tipo].largura, escala: 1,
-      camada: fontes.length,
+      camada,
       visivel: true,
     });
     if (error) { setErro(error.message); return; }
     await lerFontes();
     await lerDadosPrevia();
-  }, [cenaId, fontes.length, lerFontes, lerDadosPrevia]);
+  }, [cenaId, fontes, lerFontes, lerDadosPrevia]);
 
   /**
    * Grava a mudança de uma fonte.
@@ -330,6 +344,43 @@ export function useModoTV() {
     const { error } = await db('tv_fontes').update(gravavel).eq('id', id);
     if (error) setErro(error.message);
   }, []);
+
+  /**
+   * O arrasto.
+   *
+   * Enquanto o botão está apertado só o estado local muda — a fonte acompanha o
+   * cursor no mesmo quadro. A gravação acontece UMA vez, ao soltar. Sem essa
+   * separação, atravessar o palco com uma fonte dispararia uma centena de
+   * UPDATEs, e a fonte andaria aos trancos atrás do cursor esperando cada um.
+   */
+  const moverFonte = useCallback((id: string, x: number, y: number, definitivo: boolean) => {
+    setFontes(atual => atual.map(f => (f.id === id ? { ...f, x, y } : f)));
+    if (definitivo) void db('tv_fontes').update({ x, y }).eq('id', id);
+  }, []);
+
+  /**
+   * Sobe ou desce a fonte uma camada, trocando de lugar com a vizinha.
+   *
+   * Troca em vez de renumerar tudo: são duas escritas em vez de N, e o número
+   * das outras fontes não muda — o que importa se alguém estiver com a mesa
+   * aberta em outra aba.
+   */
+  const moverCamada = useCallback(async (id: string, direcao: 'frente' | 'tras') => {
+    const ordenadas = [...fontes].sort((a, b) => a.camada - b.camada);
+    const i = ordenadas.findIndex(f => f.id === id);
+    const j = direcao === 'frente' ? i + 1 : i - 1;
+    if (i < 0 || j < 0 || j >= ordenadas.length) return;
+
+    const a = ordenadas[i];
+    const b = ordenadas[j];
+    setFontes(atual => atual.map(f => {
+      if (f.id === a.id) return { ...f, camada: b.camada };
+      if (f.id === b.id) return { ...f, camada: a.camada };
+      return f;
+    }));
+    await db('tv_fontes').update({ camada: b.camada }).eq('id', a.id);
+    await db('tv_fontes').update({ camada: a.camada }).eq('id', b.id);
+  }, [fontes]);
 
   const removerFonte = useCallback(async (id: string) => {
     const { error } = await db('tv_fontes').delete().eq('id', id);
@@ -403,7 +454,7 @@ export function useModoTV() {
     carregando, erro, limparErro: () => setErro(null),
     enviarImagem, enviandoImagem,
     criarCena, renomearCena, apagarCena,
-    adicionarFonte, atualizarFonte, removerFonte,
+    adicionarFonte, atualizarFonte, removerFonte, moverFonte, moverCamada,
     cortar, cortando,
     recarregar: async () => { await lerTelas(); await lerCenas(); await lerFontes(); await lerNoAr(); },
   };
