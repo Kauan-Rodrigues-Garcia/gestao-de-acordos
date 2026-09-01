@@ -209,6 +209,22 @@ export function podeAutorizarTabulacao(perfil: string | null | undefined): boole
  */
 export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO = ['operador', 'elite'] as const;
 
+/**
+ * Cargos de LIDERANÇA que podem receber um ajuste manual de recebimento.
+ *
+ * Não é a mesma pergunta de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`, e por isso é
+ * outra lista. Lá a pergunta é "quem produz recebimento", e a resposta exclui
+ * quem supervisiona — um líder no ranking disputaria quartil com o próprio
+ * time. Aqui a pergunta é "quem pode receber um lançamento por fora", e um
+ * valor no nome do líder ou do gerente do setor é lançamento legítimo: foi o
+ * pedido de 03/09/2026.
+ *
+ * `diretoria`, `administrador` e `super_admin` ficam de fora: eles não
+ * pertencem a um setor (ver `CARGOS_DA_EMPRESA`), e um ajuste precisa cair em
+ * algum setor para entrar na soma.
+ */
+export const PERFIS_LIDERANCA_AJUSTE = ['lider', 'gerencia'] as const;
+
 /** Este cargo conta como operador no recebimento? Ver a lista acima. */
 export function contaNoRecebimento(perfil: string | null | undefined): boolean {
   return (PERFIS_QUE_CONTAM_NO_RECEBIMENTO as readonly string[])

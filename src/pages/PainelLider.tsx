@@ -25,7 +25,7 @@ import { supabase, Perfil } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_LIDERANCA_AJUSTE } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import {
@@ -154,6 +154,16 @@ export default function PainelLider() {
   const noMesAtual = ehMesAtualRef(mesRef);
 
   const [operadores, setOperadores] = useState<Perfil[]>([]);
+  /*
+   * Liderança do escopo — só para o Ajuste de recebimento.
+   *
+   * Ela fica FORA de `operadores` de propósito: essa lista é a base do
+   * ranking, dos quartis, do gráfico e do Desempenho Equipes, e um líder
+   * dentro dela apareceria disputando quartil com o próprio time. Aqui a
+   * pergunta é outra — «quem pode receber um lançamento manual» — e um valor
+   * por fora no nome do líder ou do gerente é lançamento legítimo.
+   */
+  const [liderancaAjuste, setLiderancaAjuste] = useState<Perfil[]>([]);
   const [loading, setLoading]       = useState(true);
   const [erro, setErro]             = useState<string | null>(null);
 
@@ -240,15 +250,21 @@ export default function PainelLider() {
    * vazio tiraria o valor da soma do setor.
    */
   const operadoresParaAjuste = useMemo(
-    () => operadores
-      .map(o => ({
-        id: o.id,
-        nome: o.nome ?? o.email ?? 'Sem nome',
-        setorId:  equipesInfo?.operadorEquipeMap[o.id]?.setor_id ?? o.setor_id ?? null,
-        equipeId: equipesInfo?.operadorEquipeMap[o.id]?.equipe_id ?? null,
-      }))
-      .sort((a, b) => a.nome.localeCompare(b.nome)),
-    [operadores, equipesInfo],
+    () => {
+      // Operadores + liderança do escopo, sem repetir quem já veio nas duas
+      // listas (um `elite` que também lidera equipe, por exemplo).
+      const vistos = new Set<string>();
+      return [...operadores, ...liderancaAjuste]
+        .filter(o => (vistos.has(o.id) ? false : (vistos.add(o.id), true)))
+        .map(o => ({
+          id: o.id,
+          nome: o.nome ?? o.email ?? 'Sem nome',
+          setorId:  equipesInfo?.operadorEquipeMap[o.id]?.setor_id ?? o.setor_id ?? null,
+          equipeId: equipesInfo?.operadorEquipeMap[o.id]?.equipe_id ?? null,
+        }))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+    },
+    [operadores, liderancaAjuste, equipesInfo],
   );
   const nomeSetorTravado = useMemo(
     () => (escopoAbas.podeFiltrarSetor || !setorAbas
@@ -454,6 +470,30 @@ export default function PainelLider() {
     return (data as Perfil[]) ?? [];
   }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isBookplay, soMeuSetor]);
 
+  /**
+   * Líderes e gerentes do escopo, para o Ajuste de recebimento.
+   *
+   * O mesmo recorte de setor de `carregarOperadores` — sem os clones, que são
+   * um arranjo de operador. Falha aqui não derruba o painel: o ajuste continua
+   * oferecendo os operadores, que é o caso comum.
+   */
+  const carregarLiderancaAjuste = useCallback(async (): Promise<Perfil[]> => {
+    if (!perfil || !empresa?.id) return [];
+    let q = supabase
+      .from('perfis')
+      .select('*, setores(id, nome)')
+      .eq('empresa_id', empresa.id)
+      .in('perfil', [...PERFIS_LIDERANCA_AJUSTE])
+      .eq('ativo', true);
+    if (soMeuSetor && perfil.setor_id) q = q.eq('setor_id', perfil.setor_id);
+    const { data, error } = await q.order('nome');
+    if (error) {
+      console.warn('[PainelLider] liderança para o ajuste:', error.message);
+      return [];
+    }
+    return (data as Perfil[]) ?? [];
+  }, [perfil?.id, perfil?.setor_id, empresa?.id, soMeuSetor]);
+
   // ── Carregar acordos do mês para os operadores ────────────────────────────
   // ── Orquestra a carga (operadores) ────────────────────────────────────────
   const carregarTudo = useCallback(async () => {
@@ -461,13 +501,18 @@ export default function PainelLider() {
     setLoading(true);
     setErro(null);
     try {
-      setOperadores(await carregarOperadores());
+      const [ops, lids] = await Promise.all([
+        carregarOperadores(),
+        carregarLiderancaAjuste(),
+      ]);
+      setOperadores(ops);
+      setLiderancaAjuste(lids);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
-  }, [perfil?.id, empresa?.id, carregarOperadores]);
+  }, [perfil?.id, empresa?.id, carregarOperadores, carregarLiderancaAjuste]);
 
   useEffect(() => { void carregarTudo(); }, [carregarTudo]);
 
