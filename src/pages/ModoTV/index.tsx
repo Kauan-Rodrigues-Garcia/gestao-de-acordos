@@ -18,7 +18,7 @@ import { Link } from 'react-router-dom';
 import {
   Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink,
   Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff, Flag, Dices,
-  Maximize2, Minimize2, Undo2,
+  Maximize2, Minimize2, Undo2, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -429,6 +429,33 @@ export default function ModoTV() {
 
         {/* ── Fontes ─────────────────────────────────────────────────────── */}
         <aside className="space-y-3">
+          {/*
+            O inspetor vem PRIMEIRO, e grudado no topo.
+
+            Ele morava no fim da coluna, depois da lista de fontes, do alerta e
+            do sorteio. Selecionar um elemento na prévia e ter de procurar onde
+            editá-lo era a queixa — e era uma queixa sobre distância: o olho
+            está no palco, o controle estava três blocos abaixo.
+
+            `sticky` porque a coluna rola: com a cena cheia, editar a última
+            fonte da lista levaria o inspetor para fora da tela de novo.
+          */}
+          {selecionada && podeEditar && (
+            <div className="sticky top-2 z-20 -mx-1 px-1">
+              <Inspetor
+                fonte={selecionada}
+                onFechar={() => setSelecionadaId(null)}
+                onMudar={(m) => { void tv.atualizarFonte(selecionada.id, m); }}
+                onRemover={() => { void tv.removerFonte(selecionada.id); setSelecionadaId(null); }}
+                onCamada={(d) => { void tv.moverCamada(selecionada.id, d); }}
+                podeEnviarMidia={podeEnviarMidia}
+                onEnviarImagem={tv.enviarImagem}
+                enviando={tv.enviandoImagem}
+                midias={tv.midias}
+              />
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Fontes</Label>
             {podeEditar && (
@@ -494,18 +521,6 @@ export default function ModoTV() {
             podeCortar={podeCortar}
           />
 
-          {selecionada && podeEditar && (
-            <Inspetor
-              fonte={selecionada}
-              onMudar={(m) => { void tv.atualizarFonte(selecionada.id, m); }}
-              onRemover={() => { void tv.removerFonte(selecionada.id); setSelecionadaId(null); }}
-              onCamada={(d) => { void tv.moverCamada(selecionada.id, d); }}
-              podeEnviarMidia={podeEnviarMidia}
-              onEnviarImagem={tv.enviarImagem}
-              enviando={tv.enviandoImagem}
-              midias={tv.midias}
-            />
-          )}
         </aside>
       </div>
 
@@ -722,12 +737,14 @@ function rotuloDaFonte(f: Fonte): string {
 // ── Inspetor ─────────────────────────────────────────────────────────────────
 
 function Inspetor({
-  fonte, onMudar, onRemover, onCamada, podeEnviarMidia, onEnviarImagem, enviando, midias,
+  fonte, onMudar, onRemover, onCamada, onFechar,
+  podeEnviarMidia, onEnviarImagem, enviando, midias,
 }: {
   fonte: Fonte;
   onMudar: (m: Partial<Fonte>) => void;
   onRemover: () => void;
   onCamada: (d: 'frente' | 'tras') => void;
+  onFechar: () => void;
   podeEnviarMidia: boolean;
   onEnviarImagem: (a: File) => Promise<{ url: string; tipo: 'imagem' | 'video' } | null>;
   enviando: boolean;
@@ -737,10 +754,27 @@ function Inspetor({
     onMudar({ config: { ...fonte.config, [chave]: valor } });
 
   return (
-    <div className="rounded-md border p-3 space-y-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-        {rotuloDaFonte(fonte)}
-      </p>
+    /*
+     * Fundo opaco e anel de destaque: o inspetor fica GRUDADO no topo da coluna
+     * e passa por cima do que rola atrás. Com fundo translúcido, o texto da
+     * lista atravessaria os campos.
+     */
+    <div className="rounded-md border-2 border-sky-500/60 bg-card p-3 space-y-3 shadow-lg">
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-sky-500 shrink-0" />
+        <p className="text-xs font-bold uppercase tracking-wide text-sky-600 dark:text-sky-400 truncate">
+          {rotuloDaFonte(fonte)}
+        </p>
+        <button
+          type="button"
+          onClick={onFechar}
+          className="ml-auto shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground
+                     focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+          title="Fechar a edição desta fonte (Esc)"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
       {fonte.tipo === 'texto' && (
         <>
