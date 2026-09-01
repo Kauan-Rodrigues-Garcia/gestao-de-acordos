@@ -24,7 +24,7 @@
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, LifeBuoy, Megaphone, MessageSquarePlus,
-  Ticket, ClipboardList,
+  Ticket, ClipboardList, Tv,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -97,6 +97,12 @@ export const NAV_ITEMS: NavItem[] = [
   // e equipes dela. O produto `rh`, quando tiver tela, terá a sua — com a
   // visão das quatro empresas, que esta não tem.
   { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           produtos: SO_COBRANCA, permissaoKey: 'ver_rh_gestao' },
+  // Modo TV. Sem lista de cargo, como as demais: quem abre é a chave. Ela nasce
+  // desligada para todo cargo configurável, então hoje o item só aparece para
+  // quem tem acesso total — que é o pedido enquanto a fase 1 está sendo provada
+  // na parede. O palco (`/tv/:slug`) não entra em menu nenhum: ele é endereço
+  // de TV, não tela de gente.
+  { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, permissaoKey: 'ver_modo_tv' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o

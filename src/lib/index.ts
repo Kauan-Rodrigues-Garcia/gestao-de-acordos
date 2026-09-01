@@ -25,6 +25,18 @@ export const ROUTE_PATHS = {
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',
   COMEMORACOES: '/comemoracoes',
+  /** A mesa do Modo TV: prévia, no ar e o corte. Atrás do painel. */
+  MODO_TV: '/modo-tv',
+  /**
+   * O palco. É a ÚNICA rota com dado que roda sem sessão, e isso é deliberado:
+   * ela abre no PC ligado à TV por HDMI, em tela cheia, o dia inteiro, sem
+   * ninguém sentado na frente. Exigir login ali produziria uma parede exibindo
+   * tela de sessão expirada no meio da tarde.
+   *
+   * O que a protege não é sessão, é superfície: o palco fala com uma RPC só
+   * (`fn_tv_palco`), somente leitura, que devolve apenas o que está na tela.
+   */
+  TV_PALCO: '/tv/:slug',
   /**
    * Área dos criadores. NÃO entra em menu nenhum de propósito — chega-se aqui
    * por cinco cliques rápidos no logo (ver `useEasterEggCriadores`). A rota

@@ -65,6 +65,10 @@ const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
+const ModoTV            = lazy(() => import('@/pages/ModoTV'));
+// O palco. Lazy como o resto, e aqui isso importa por um motivo extra: o PC da
+// TV baixa SÓ este pedaço, e não a mesa nem o Gestão inteiro.
+const TvPalco           = lazy(() => import('@/pages/TvPalco'));
 // Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
 // Gestão e nunca descobre o Easter Egg não baixa um byte dele.
 const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
@@ -395,6 +399,33 @@ export default function App() {
                   <CreatorsLab />
                 </ProtectedRoute>
               } />
+
+              {/*
+                Modo TV — a mesa. Atrás do painel como todo o resto: a chave
+                `ver_modo_tv` nasce desligada para todo cargo configurável, então
+                hoje só quem tem acesso total abre.
+              */}
+              <Route path={ROUTE_PATHS.MODO_TV} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_modo_tv">
+                    <ModoTV />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/*
+                O palco — a ÚNICA rota com dado que roda sem sessão.
+
+                Sem `LayoutWrapper`, sem `ProtectedRoute` e sem `PublicRoute`:
+                ele toma a tela inteira e não pode redirecionar ninguém. Um
+                `PublicRoute` aqui mandaria a TV para o Dashboard toda vez que
+                alguém abrisse o palco de um navegador já logado.
+
+                O que protege esta rota não é sessão, é superfície: ela fala com
+                uma RPC só, somente leitura, que devolve apenas o que está na
+                tela. Ver a migration 20260902110000.
+              */}
+              <Route path={ROUTE_PATHS.TV_PALCO} element={<TvPalco />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

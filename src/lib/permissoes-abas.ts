@@ -32,7 +32,8 @@ export type ModuloPermissaoId =
   | 'analitico'
   | 'campanha_facil'
   | 'importar_excel'
-  | 'chat';
+  | 'chat'
+  | 'modo_tv';
 
 interface DefinicaoModulo {
   id: ModuloPermissaoId;
@@ -142,6 +143,17 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'chat', rotulo: 'Chat', interruptor: 'ver_chat', escopo: 'chat',
     descricao: 'Conversas internas, alcance e cargos disponíveis.', grupos: ['Chat'],
+  },
+  {
+    /*
+     * Sem `escopo`: o alcance do Modo TV não vem de níveis por aba, vem da
+     * TELA. Cada tela pertence a um setor, e a cena só vai para a tela do
+     * próprio setor — a regra mora em `fn_tv_cortar`, não numa escala de
+     * "equipe / setor / todos".
+     */
+    id: 'modo_tv', rotulo: 'Modo TV', interruptor: 'ver_modo_tv',
+    descricao: 'A apresentação na TV do setor: cenas, quem monta e quem manda ao ar.',
+    grupos: ['Modo TV'], tenants: ['bookplay'],
   },
 ] as const;
 
