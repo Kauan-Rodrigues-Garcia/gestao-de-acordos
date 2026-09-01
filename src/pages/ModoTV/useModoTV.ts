@@ -21,6 +21,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
 import type { CenaNoAr, DadosSorteio, Fonte, TipoFonte } from './geometria';
 import { normalizarSlug } from './slug';
+import type { Template } from './templates';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
 
@@ -152,6 +153,27 @@ export function useModoTV() {
       setSetores((data ?? []) as unknown as { id: string; nome: string }[]);
     })();
   }, [empresa?.id]);
+
+  /*
+   * As equipes do setor DESTA tela.
+   *
+   * Alimentam o recorte do ranking. Saem do setor da tela e não do setor de
+   * quem está na mesa: a parede do Play 4 mostra as equipes do Play 4, mesmo
+   * que quem monte a cena seja da gerência.
+   */
+  const [equipes, setEquipes] = useState<{ id: string; nome: string }[]>([]);
+
+  useEffect(() => {
+    if (!empresa?.id || !tela?.setor_id) { setEquipes([]); return; }
+    void (async () => {
+      const { data } = await db('equipes')
+        .select('id, nome')
+        .eq('empresa_id', empresa.id)
+        .eq('setor_id', tela.setor_id)
+        .order('nome');
+      setEquipes((data ?? []) as unknown as { id: string; nome: string }[]);
+    })();
+  }, [empresa?.id, tela?.setor_id]);
 
   /**
    * Cadastra um palco.
@@ -394,6 +416,7 @@ export function useModoTV() {
   type AcaoDesfazer =
     | { tipo: 'atualizar'; id: string; antes: Partial<Fonte>; rotulo: string }
     | { tipo: 'criar';     id: string; rotulo: string }
+    | { tipo: 'criar_varias'; ids: string[]; rotulo: string }
     | { tipo: 'remover';   fonte: Fonte; cenaId: string; rotulo: string };
 
   const LIMITE_PILHA = 40;
@@ -474,6 +497,47 @@ export function useModoTV() {
     await lerFontes();
     await lerDadosPrevia();
     return novoId;
+  }, [cenaId, fontes, lerFontes, lerDadosPrevia, empilhar]);
+
+  /**
+   * Aplica uma receita da galeria.
+   *
+   * Um template pode trazer VÁRIAS fontes (o «Painel da meta» traz quatro), e
+   * elas entram numa inserção só — meia receita aplicada seria pior que
+   * nenhuma, e é o que aconteceria com um `insert` por fonte se o terceiro
+   * falhasse.
+   *
+   * As camadas são relativas dentro da receita e ganham a base da cena aqui: o
+   * fundo do template continua atrás do fundo que já existia, e o texto dele
+   * continua na frente do próprio fundo.
+   */
+  const adicionarTemplate = useCallback(async (template: Template) => {
+    if (!cenaId) return;
+    const camadas = fontes.map(f => f.camada);
+    const topo = fontes.length ? Math.max(...camadas) : 0;
+    const base = fontes.length ? Math.min(...camadas) : 0;
+
+    const linhas = template.fontes.map((f, i) => ({
+      cena_id: cenaId,
+      tipo: f.tipo,
+      config: f.config,
+      x: f.x, y: f.y, largura: f.largura, escala: f.escala ?? 1,
+      // Camada negativa na receita = "atrás de tudo"; positiva = empilha em cima.
+      camada: (f.camada ?? 0) < 0 ? base + (f.camada ?? 0) : topo + 1 + i,
+      visivel: true,
+    }));
+
+    const { data, error } = await db('tv_fontes').insert(linhas).select('id');
+    if (error) { setErro(error.message); return; }
+
+    const ids = ((data ?? []) as { id?: string }[]).map(l => l.id).filter(Boolean) as string[];
+    // Uma entrada só na pilha: desfazer um template tira o template inteiro, e
+    // não uma fonte por clique.
+    if (ids.length) empilhar({ tipo: 'criar_varias', ids, rotulo: `adicionar «${template.nome}»` });
+
+    await lerFontes();
+    await lerDadosPrevia();
+    return ids[ids.length - 1];
   }, [cenaId, fontes, lerFontes, lerDadosPrevia, empilhar]);
 
   /**
@@ -635,6 +699,17 @@ export function useModoTV() {
     if (acao.tipo === 'criar') {
       const { error } = await db('tv_fontes').delete().eq('id', acao.id);
       if (error) setErro(error.message);
+      await lerFontes();
+      return;
+    }
+
+    if (acao.tipo === 'criar_varias') {
+      // Uma a uma: o cliente sem tipo deste arquivo não expõe `in()`, e um
+      // template traz no máximo meia dúzia de fontes.
+      for (const id of acao.ids) {
+        const { error } = await db('tv_fontes').delete().eq('id', id);
+        if (error) setErro(error.message);
+      }
       await lerFontes();
       return;
     }
@@ -922,14 +997,14 @@ export function useModoTV() {
   }, [sorteio, lerSorteio, avisarPalco]);
 
   return {
-    empresa, telas, tela, telaId, setTelaId, setores, criarTela, apagarTela, renomearTela,
+    empresa, telas, tela, telaId, setTelaId, setores, equipes, criarTela, apagarTela, renomearTela,
     dispararAlerta, sorteio, criarSorteio, sortear, fontesPorTela,
     cenas, cenaId, setCenaId, cenaNoArId,
     fontes, fontesDaPrevia, fontesNoAr,
     carregando, erro, limparErro: () => setErro(null),
     enviarImagem, enviandoImagem,
     criarCena, renomearCena, apagarCena, atualizarCena,
-    adicionarFonte, atualizarFonte, removerFonte, moverFonte, moverCamada,
+    adicionarFonte, adicionarTemplate, atualizarFonte, removerFonte, moverFonte, moverCamada,
     redimensionarFonte, desfazer, podeDesfazer: ultimaAcao !== null, ultimaAcao,
     midias, soltarArquivo, alternarRotacao,
     cortar, cortando,

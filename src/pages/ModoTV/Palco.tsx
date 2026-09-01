@@ -20,6 +20,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { formatBRL } from '@/lib/money';
+import { alvoDiario } from './templates';
 import {
   PALCO_LARGURA,
   PALCO_ALTURA,
@@ -687,11 +688,80 @@ function FonteImagem({ config }: { config: Record<string, unknown> }) {
   );
 }
 
+/**
+ * O pódio.
+ *
+ * Ordem de desenho 2º–1º–3º, que é como pódio se lê: o mais alto no meio.
+ * Ordenar por colocação da esquerda para a direita poria o campeão na ponta e
+ * quebraria o reconhecimento imediato da forma.
+ */
+function RankingPodio({
+  config, linhas,
+}: { config: Record<string, unknown>; linhas: LinhaRanking[] }) {
+  const mostrarValor = ligado(config, 'mostrar_valor', true);
+  const tres = linhas.slice(0, 3);
+  const ordem = [tres[1], tres[0], tres[2]];
+  const alturas = [230, 330, 170];
+  const cores = ['#a9bcc3', '#e8c65a', '#c98a52'];
+  const posicoes = [2, 1, 3];
+
+  if (tres.length === 0) {
+    return (
+      <div>
+        <Titulo>{texto(config, 'titulo', 'Pódio do mês')}</Titulo>
+        <p style={{ color: CINZA, fontSize: 40 }}>Sem recebimento no mês ainda.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Titulo>{texto(config, 'titulo', 'Pódio do mês')}</Titulo>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 28, justifyContent: 'center' }}>
+        {ordem.map((pessoa, i) => {
+          if (!pessoa) return <div key={i} style={{ flex: 1 }} />;
+          return (
+            <div key={i} style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+              {pessoa.foto_url
+                ? <img src={pessoa.foto_url} alt=""
+                       style={{ width: 132, height: 132, borderRadius: '50%', objectFit: 'cover',
+                                margin: '0 auto 16px', border: `6px solid ${cores[i]}` }} />
+                : <div style={{ width: 132, height: 132, borderRadius: '50%', margin: '0 auto 16px',
+                                background: 'rgba(255,255,255,.10)', border: `6px solid ${cores[i]}` }} />}
+              <p style={{ margin: '0 0 6px', color: '#ffffff', fontSize: 46, fontWeight: 700,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {primeiroNome(pessoa.nome)}
+              </p>
+              {mostrarValor && (
+                <p style={{ margin: '0 0 14px', color: CINZA, fontSize: 34, fontWeight: 600,
+                            fontVariantNumeric: 'tabular-nums' }}>
+                  {formatBRL(pessoa.total)}
+                </p>
+              )}
+              <div style={{
+                height: alturas[i], borderRadius: '14px 14px 0 0',
+                background: `linear-gradient(180deg, ${cores[i]}, rgba(255,255,255,.06))`,
+                display: 'grid', placeItems: 'center',
+              }}>
+                <span style={{ color: '#06141b', fontSize: 96, fontWeight: 900 }}>{posicoes[i]}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function FonteRanking({
   config, dados,
 }: { config: Record<string, unknown>; dados: LinhaRanking[] | null }) {
   const linhas = Array.isArray(dados) ? dados : [];
   const mostrarValor = ligado(config, 'mostrar_valor', true);
+
+  if (texto(config, 'modelo', 'lista') === 'podio') {
+    return <RankingPodio config={config} linhas={linhas} />;
+  }
 
   return (
     <div>
@@ -747,43 +817,322 @@ function FonteRanking({
   );
 }
 
+/*
+ * ── Os modelos de meta ───────────────────────────────────────────────────────
+ *
+ * Todos leem o MESMO pacote (`fn_tv_metricas_setor`). O que muda é qual número
+ * ganha o palco. Ver `templates.ts` para as receitas.
+ */
+
+const CIANO = '#7fd8e8';
+const VERDE = '#5fbe7e';
+const CINZA = '#8fa3ab';
+
+/**
+ * Um número que ANDA até o valor novo, em vez de pular.
+ *
+ * É o pedido de "atualizar sem parecer loading": quando o analítico é
+ * importado, a parede não deve piscar um número novo — ela deve subir até ele.
+ * Uma contagem de 900ms é longa o bastante para o olho seguir e curta o
+ * bastante para não atrasar a informação.
+ *
+ * `prefers-reduced-motion` corta a animação inteira: quem pediu menos movimento
+ * recebe o valor final direto, e não uma versão mais lenta do mesmo efeito.
+ */
+function useNumeroSuave(alvo: number, duracaoMs = 900): number {
+  const [valor, setValor] = useState(alvo);
+  const de = useRef(alvo);
+
+  useEffect(() => {
+    const parado = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (parado || !Number.isFinite(alvo)) { de.current = alvo; setValor(alvo); return; }
+
+    const inicio = performance.now();
+    const partida = de.current;
+    if (partida === alvo) return;
+
+    let vivo = true;
+    const passo = (agora: number) => {
+      if (!vivo) return;
+      const t = Math.min(1, (agora - inicio) / duracaoMs);
+      // easeOutCubic: rápido no começo, assentando no fim. É o que faz o número
+      // "chegar" em vez de parar de repente.
+      const suave = 1 - Math.pow(1 - t, 3);
+      setValor(partida + (alvo - partida) * suave);
+      if (t < 1) requestAnimationFrame(passo);
+      else de.current = alvo;
+    };
+    requestAnimationFrame(passo);
+    return () => { vivo = false; de.current = alvo; };
+  }, [alvo, duracaoMs]);
+
+  return valor;
+}
+
+function Titulo({ children }: { children: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <h3 style={{ margin: '0 0 20px', color: CIANO, fontSize: 44, fontWeight: 700,
+                 letterSpacing: '.06em', textTransform: 'uppercase' }}>
+      {children}
+    </h3>
+  );
+}
+
 function FonteMeta({
   config, dados,
 }: { config: Record<string, unknown>; dados: DadosMeta | null }) {
+  const modelo = texto(config, 'modelo', 'barra');
+  const titulo = texto(config, 'titulo', '');
+
+  switch (modelo) {
+    case 'rosca':      return <MetaRosca      titulo={titulo} config={config} dados={dados} />;
+    case 'projecao':   return <MetaProjecao   titulo={titulo} dados={dados} />;
+    case 'diaria':     return <MetaDiaria     titulo={titulo} config={config} dados={dados} />;
+    case 'ritmo':      return <MetaRitmo      titulo={titulo} dados={dados} />;
+    case 'termometro': return <MetaTermometro titulo={titulo} dados={dados} />;
+    case 'placar':     return <MetaPlacar     titulo={titulo} dados={dados} />;
+    default:           return <MetaBarra      titulo={titulo} dados={dados} />;
+  }
+}
+
+function MetaBarra({ titulo, dados }: { titulo: string; dados: DadosMeta | null }) {
   const { exibido, barra } = percentualDaMeta(dados);
   const bateu = exibido >= 100;
+  const recebido = useNumeroSuave(dados?.realizado ?? 0);
+  const pct = useNumeroSuave(barra);
 
   return (
     <div>
-      <h3 style={{ margin: '0 0 20px', color: '#7fd8e8', fontSize: 44, fontWeight: 700,
-                   letterSpacing: '.06em', textTransform: 'uppercase' }}>
-        {texto(config, 'titulo', 'Meta do mês')}
-      </h3>
+      <Titulo>{titulo || 'Meta do mês'}</Titulo>
 
       <p style={{ margin: '0 0 8px', color: '#ffffff', fontSize: 116, fontWeight: 800,
                   lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-        {formatBRL(dados?.realizado ?? 0)}
+        {formatBRL(recebido)}
       </p>
 
-      <p style={{ margin: '0 0 28px', color: '#8fa3ab', fontSize: 40, fontWeight: 500 }}>
+      <p style={{ margin: '0 0 28px', color: CINZA, fontSize: 40, fontWeight: 500 }}>
         de {formatBRL(dados?.alvo ?? 0)}
       </p>
 
       <div style={{ height: 34, borderRadius: 17, background: 'rgba(255,255,255,.09)',
                     overflow: 'hidden' }}>
-        <div
-          style={{
-            height: '100%', width: `${barra}%`, borderRadius: 17,
-            background: bateu ? '#5fbe7e' : '#7fd8e8',
-            transition: 'width .6s ease',
-          }}
-        />
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 17,
+                      background: bateu ? VERDE : CIANO }} />
       </div>
 
-      <p style={{ margin: '20px 0 0', color: bateu ? '#5fbe7e' : '#a9bcc3', fontSize: 52,
+      <p style={{ margin: '20px 0 0', color: bateu ? VERDE : '#a9bcc3', fontSize: 52,
                   fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
         {exibido}%{bateu ? ' — meta batida' : ''}
       </p>
+    </div>
+  );
+}
+
+/**
+ * A rosca.
+ *
+ * SVG e não um `conic-gradient`: o gradiente cônico não anima, e a rosca existe
+ * justamente para fechar diante de quem está olhando. Com `stroke-dasharray` o
+ * anel cresce junto com o número.
+ */
+function MetaRosca({
+  titulo, config, dados,
+}: { titulo: string; config: Record<string, unknown>; dados: DadosMeta | null }) {
+  const { exibido, barra } = percentualDaMeta(dados);
+  const bateu = exibido >= 100;
+  const pct = useNumeroSuave(barra);
+  const recebido = useNumeroSuave(dados?.realizado ?? 0);
+
+  const raio = 42;
+  const volta = 2 * Math.PI * raio;
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <Titulo>{titulo}</Titulo>
+      <div style={{ position: 'relative' }}>
+        <svg viewBox="0 0 100 100" style={{ width: '100%', display: 'block', overflow: 'visible' }}>
+          {/* -90° põe o zero no topo; sem isso o anel começa às três horas. */}
+          <g transform="rotate(-90 50 50)">
+            <circle cx="50" cy="50" r={raio} fill="none"
+                    stroke="rgba(255,255,255,.10)" strokeWidth="11" />
+            <circle
+              cx="50" cy="50" r={raio} fill="none"
+              stroke={bateu ? VERDE : CIANO} strokeWidth="11" strokeLinecap="round"
+              strokeDasharray={volta}
+              strokeDashoffset={volta * (1 - pct / 100)}
+            />
+          </g>
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+        }}>
+          <div>
+            <p style={{ margin: 0, color: bateu ? VERDE : '#ffffff', fontSize: 92, fontWeight: 800,
+                        lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+              {exibido}%
+            </p>
+            {ligado(config, 'mostrar_valor', true) && (
+              <p style={{ margin: '10px 0 0', color: CINZA, fontSize: 34, fontWeight: 600 }}>
+                {formatBRL(recebido)}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetaProjecao({ titulo, dados }: { titulo: string; dados: DadosMeta | null }) {
+  const alvo = Number(dados?.alvo) || 0;
+  const projecao = Number(dados?.projecao) || 0;
+  const suave = useNumeroSuave(projecao);
+  const diferenca = projecao - alvo;
+  const vaiBater = diferenca >= 0;
+  const restantes = Number(dados?.dias_restantes) || 0;
+
+  return (
+    <div>
+      <Titulo>{titulo || 'Projeção do mês'}</Titulo>
+      <p style={{ margin: '0 0 10px', color: vaiBater ? VERDE : '#e8a33d', fontSize: 110,
+                  fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+        {formatBRL(suave)}
+      </p>
+      <p style={{ margin: '0 0 24px', color: CINZA, fontSize: 38, fontWeight: 500 }}>
+        no ritmo de hoje, contra a meta de {formatBRL(alvo)}
+      </p>
+      <p style={{ margin: 0, color: vaiBater ? VERDE : '#e8a33d', fontSize: 52, fontWeight: 800,
+                  fontVariantNumeric: 'tabular-nums' }}>
+        {vaiBater ? '+' : '−'}{formatBRL(Math.abs(diferenca))}
+        <span style={{ color: CINZA, fontSize: 34, fontWeight: 500 }}>
+          {vaiBater ? ' acima da meta' : ' abaixo da meta'}
+        </span>
+      </p>
+      {restantes > 0 && (
+        <p style={{ margin: '14px 0 0', color: CINZA, fontSize: 32 }}>
+          faltam {restantes} {restantes === 1 ? 'dia útil' : 'dias úteis'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MetaDiaria({
+  titulo, config, dados,
+}: { titulo: string; config: Record<string, unknown>; dados: DadosMeta | null }) {
+  const alvo = alvoDiario(config, Number(dados?.meta_diaria) || 0);
+  const hoje = Number(dados?.realizado_hoje) || 0;
+  const suave = useNumeroSuave(hoje);
+  const pct = alvo > 0 ? Math.min(100, (hoje / alvo) * 100) : 0;
+  const pctSuave = useNumeroSuave(pct);
+  const bateu = alvo > 0 && hoje >= alvo;
+
+  return (
+    <div>
+      <Titulo>{titulo || 'Meta de hoje'}</Titulo>
+      <p style={{ margin: '0 0 8px', color: bateu ? VERDE : '#ffffff', fontSize: 108,
+                  fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+        {formatBRL(suave)}
+      </p>
+      <p style={{ margin: '0 0 26px', color: CINZA, fontSize: 38, fontWeight: 500 }}>
+        de {formatBRL(alvo)} hoje
+        {config.origem === 'manual' && (
+          <span style={{ color: '#e8a33d' }}> · desafio</span>
+        )}
+      </p>
+      <div style={{ height: 28, borderRadius: 14, background: 'rgba(255,255,255,.09)',
+                    overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pctSuave}%`, borderRadius: 14,
+                      background: bateu ? VERDE : CIANO }} />
+      </div>
+      {bateu && (
+        <p style={{ margin: '18px 0 0', color: VERDE, fontSize: 46, fontWeight: 800 }}>
+          Meta do dia batida
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MetaRitmo({ titulo, dados }: { titulo: string; dados: DadosMeta | null }) {
+  const ritmo = Number(dados?.ritmo_necessario) || 0;
+  const suave = useNumeroSuave(ritmo);
+  const restantes = Number(dados?.dias_restantes) || 0;
+  const acabou = restantes === 0;
+
+  return (
+    <div>
+      <Titulo>{titulo || 'Precisamos por dia'}</Titulo>
+      <p style={{ margin: '0 0 10px', color: acabou ? VERDE : '#ffffff', fontSize: 112,
+                  fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+        {acabou ? formatBRL(0) : formatBRL(suave)}
+      </p>
+      <p style={{ margin: 0, color: CINZA, fontSize: 38, fontWeight: 500 }}>
+        {acabou
+          ? 'o mês fechou'
+          : `por dia útil, nos ${restantes} que faltam`}
+      </p>
+      <p style={{ margin: '22px 0 0', color: CINZA, fontSize: 32 }}>
+        faltam {formatBRL(Number(dados?.falta) || 0)} para a meta
+      </p>
+    </div>
+  );
+}
+
+function MetaTermometro({ titulo, dados }: { titulo: string; dados: DadosMeta | null }) {
+  const { exibido, barra } = percentualDaMeta(dados);
+  const bateu = exibido >= 100;
+  const pct = useNumeroSuave(barra);
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <Titulo>{titulo}</Titulo>
+      {/* A coluna cresce DE BAIXO: `justifyContent: flex-end` faz o preenchimento
+          encostar no fundo, que é como termômetro se lê. */}
+      <div style={{
+        height: 520, width: '100%', borderRadius: 999, background: 'rgba(255,255,255,.09)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        overflow: 'hidden', border: '4px solid rgba(255,255,255,.14)',
+      }}>
+        <div style={{
+          height: `${pct}%`, borderRadius: 999,
+          background: bateu ? VERDE : `linear-gradient(0deg, ${CIANO}, #b6ecf7)`,
+        }} />
+      </div>
+      <p style={{ margin: '20px 0 0', color: bateu ? VERDE : '#ffffff', fontSize: 68,
+                  fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+        {exibido}%
+      </p>
+    </div>
+  );
+}
+
+function MetaPlacar({ titulo, dados }: { titulo: string; dados: DadosMeta | null }) {
+  const recebido = useNumeroSuave(dados?.realizado ?? 0);
+  const falta = useNumeroSuave(Number(dados?.falta) || 0);
+  const bateu = (Number(dados?.falta) || 0) <= 0 && (Number(dados?.alvo) || 0) > 0;
+
+  const celula = (rotulo: string, valor: string, cor: string) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <p style={{ margin: '0 0 8px', color: CINZA, fontSize: 30, fontWeight: 600,
+                  letterSpacing: '.08em', textTransform: 'uppercase' }}>{rotulo}</p>
+      <p style={{ margin: 0, color: cor, fontSize: 62, fontWeight: 800, lineHeight: 1.05,
+                  fontVariantNumeric: 'tabular-nums' }}>{valor}</p>
+    </div>
+  );
+
+  return (
+    <div>
+      <Titulo>{titulo}</Titulo>
+      <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start' }}>
+        {celula('Recebido', formatBRL(recebido), '#ffffff')}
+        {celula('Meta', formatBRL(dados?.alvo ?? 0), CIANO)}
+        {celula(bateu ? 'Passou' : 'Falta',
+                formatBRL(bateu ? Math.abs(Number(dados?.realizado) - Number(dados?.alvo)) : falta),
+                bateu ? VERDE : '#e8a33d')}
+      </div>
     </div>
   );
 }

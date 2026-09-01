@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink,
-  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff, Flag, Dices,
+  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff,
   Maximize2, Minimize2, Undo2, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ import { useModoTV, telaOnline, type Midia, type Cena } from './useModoTV';
 import { numero, texto, ligado, type Fonte, type TipoFonte } from './geometria';
 import { normalizarSlug } from './slug';
 import { PainelAlerta, PainelSorteio, Mosaico, AcoesDaTela } from './PainelEstudio';
+import { Galeria, BotaoGaleria } from './Galeria';
 
 const TIPOS: { tipo: TipoFonte; nome: string; Icone: typeof Type }[] = [
   { tipo: 'texto',   nome: 'Texto',   Icone: Type },
@@ -43,9 +44,16 @@ const TIPOS: { tipo: TipoFonte; nome: string; Icone: typeof Type }[] = [
   { tipo: 'fundo',   nome: 'Fundo',   Icone: Square },
   { tipo: 'relogio', nome: 'Relógio', Icone: Clock },
   { tipo: 'video',   nome: 'Vídeo',   Icone: Film },
-  { tipo: 'desafio', nome: 'Desafio', Icone: Flag },
-  { tipo: 'sorteio', nome: 'Sorteio', Icone: Dices },
 ];
+
+/*
+ * Desafio, sorteio, roleta e bingo saíram desta lista em 03/09/2026.
+ *
+ * Eles não são "mais um tipo de fonte": cada um tem configuração própria,
+ * histórico e um jeito de rodar. Como botão solto ao lado de Texto e Imagem
+ * eles prometiam simplicidade que não têm. Vivem na galeria, com nome, exemplo
+ * e uma frase do que aparece na parede.
+ */
 
 export default function ModoTV() {
   const { temPermissao } = useCargoPermissoes();
@@ -62,6 +70,7 @@ export default function ModoTV() {
    * perde a razão de existir quando um dos lados desaparece.
    */
   const [expandido, setExpandido] = useState<'nenhum' | 'previa' | 'noar'>('nenhum');
+  const [galeriaAberta, setGaleriaAberta] = useState(false);
 
   const podeEditar = temPermissao('tv_editar_cenas');
   const podeCortar = temPermissao('tv_cortar');
@@ -99,7 +108,10 @@ export default function ModoTV() {
       }
       if (digitando || e.ctrlKey || e.altKey || e.metaKey) return;
 
-      if (e.key === 'Escape') { setSelecionadaId(null); setExpandido('nenhum'); return; }
+      if (e.key === 'Escape') {
+        if (galeriaAberta) { setGaleriaAberta(false); return; }
+        setSelecionadaId(null); setExpandido('nenhum'); return;
+      }
 
       /*
        * Delete apaga o que está selecionado.
@@ -131,7 +143,7 @@ export default function ModoTV() {
     };
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);
-  }, [tv, podeCortar, podeEditar, selecionadaId]);
+  }, [tv, podeCortar, podeEditar, selecionadaId, galeriaAberta]);
 
   if (tv.carregando) {
     return <div className="p-8 text-muted-foreground">Carregando o Modo TV…</div>;
@@ -452,6 +464,7 @@ export default function ModoTV() {
                 onEnviarImagem={tv.enviarImagem}
                 enviando={tv.enviandoImagem}
                 midias={tv.midias}
+                equipes={tv.equipes}
               />
             </div>
           )}
@@ -480,6 +493,10 @@ export default function ModoTV() {
               </Button>
             )}
           </div>
+
+          {podeEditar && tv.cenaId && (
+            <BotaoGaleria onClick={() => setGaleriaAberta(true)} />
+          )}
 
           {podeEditar && tv.cenaId && (
             <div className="grid grid-cols-2 gap-1">
@@ -523,6 +540,16 @@ export default function ModoTV() {
 
         </aside>
       </div>
+
+      <Galeria
+        aberta={galeriaAberta}
+        onFechar={() => setGaleriaAberta(false)}
+        onEscolher={t => {
+          // O `then` seleciona a fonte recém-criada: quem escolheu um template
+          // quer ajustá-lo, e o inspetor já está no topo esperando.
+          void tv.adicionarTemplate(t).then(id => { if (id) setSelecionadaId(id); });
+        }}
+      />
 
       <Mosaico
         telas={tv.telas}
@@ -738,7 +765,7 @@ function rotuloDaFonte(f: Fonte): string {
 
 function Inspetor({
   fonte, onMudar, onRemover, onCamada, onFechar,
-  podeEnviarMidia, onEnviarImagem, enviando, midias,
+  podeEnviarMidia, onEnviarImagem, enviando, midias, equipes,
 }: {
   fonte: Fonte;
   onMudar: (m: Partial<Fonte>) => void;
@@ -749,6 +776,8 @@ function Inspetor({
   onEnviarImagem: (a: File) => Promise<{ url: string; tipo: 'imagem' | 'video' } | null>;
   enviando: boolean;
   midias: Midia[];
+  /** Equipes do setor desta tela, para o recorte do ranking. */
+  equipes: { id: string; nome: string }[];
 }) {
   const mudarConfig = (chave: string, valor: unknown) =>
     onMudar({ config: { ...fonte.config, [chave]: valor } });
@@ -903,6 +932,39 @@ function Inspetor({
               onValueChange={([v]) => mudarConfig('quantidade', v)}
             />
           </Campo>
+          <Campo label="Layout">
+            <Select
+              value={texto(fonte.config, 'modelo', 'lista')}
+              onValueChange={v => mudarConfig('modelo', v)}
+            >
+              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lista">Lista numerada</SelectItem>
+                <SelectItem value="podio">Pódio</SelectItem>
+              </SelectContent>
+            </Select>
+          </Campo>
+
+          {/*
+            Setor inteiro ou uma equipe. O valor vazio é «todas» — e vai ao
+            banco como ausência da chave, que é o que `fn_tv_palco` entende
+            como "sem recorte".
+          */}
+          <Campo label="Quem entra">
+            <Select
+              value={texto(fonte.config, 'equipe_id', 'todas')}
+              onValueChange={v => mudarConfig('equipe_id', v === 'todas' ? undefined : v)}
+            >
+              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">O setor inteiro</SelectItem>
+                {equipes.map(e => (
+                  <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Campo>
+
           <div className="flex items-center justify-between">
             <Label className="text-xs">Mostrar valor</Label>
             <Switch
@@ -914,13 +976,78 @@ function Inspetor({
       )}
 
       {fonte.tipo === 'meta' && (
-        <Campo label="Título">
-          <Input
-            value={texto(fonte.config, 'titulo', '')}
-            onChange={e => mudarConfig('titulo', e.target.value)}
-            className="h-8"
-          />
-        </Campo>
+        <>
+          <Campo label="Título">
+            <Input
+              value={texto(fonte.config, 'titulo', '')}
+              onChange={e => mudarConfig('titulo', e.target.value)}
+              className="h-8"
+            />
+          </Campo>
+
+          {/*
+            Trocar o modelo aqui é o mesmo que trocar de template: os NÚMEROS
+            são os mesmos, muda o desenho. É por isso que ele é um seletor e não
+            uma fonte diferente — quem montou uma barra e quis uma rosca não
+            deveria ter de apagar e recomeçar.
+          */}
+          <Campo label="Modelo">
+            <Select
+              value={texto(fonte.config, 'modelo', 'barra')}
+              onValueChange={v => mudarConfig('modelo', v)}
+            >
+              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="barra">Barra</SelectItem>
+                <SelectItem value="rosca">Rosca</SelectItem>
+                <SelectItem value="termometro">Termômetro</SelectItem>
+                <SelectItem value="placar">Placar</SelectItem>
+                <SelectItem value="projecao">Projeção do mês</SelectItem>
+                <SelectItem value="diaria">Meta de hoje</SelectItem>
+                <SelectItem value="ritmo">Ritmo necessário</SelectItem>
+              </SelectContent>
+            </Select>
+          </Campo>
+
+          {texto(fonte.config, 'modelo', 'barra') === 'diaria' && (
+            <>
+              <Campo label="Alvo do dia">
+                <Select
+                  value={texto(fonte.config, 'origem', 'mensal')}
+                  onValueChange={v => mudarConfig('origem', v)}
+                >
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mensal">Da meta do mês ÷ dias úteis</SelectItem>
+                    <SelectItem value="manual">Valor que eu digitar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Campo>
+
+              {texto(fonte.config, 'origem', 'mensal') === 'manual' && (
+                <Campo label="Meta desafio de hoje (R$)">
+                  <Input
+                    type="number" min={0} step={100}
+                    value={String(numero(fonte.config, 'meta_diaria_manual', 0))}
+                    onChange={e => mudarConfig('meta_diaria_manual', Number(e.target.value) || 0)}
+                    className="h-8"
+                  />
+                </Campo>
+              )}
+
+              {/*
+                O que o alvo NÃO muda: o realizado. Vale dizer isso na tela,
+                porque "meta que eu digito" convida a achar que o resto também
+                é digitável — e recebimento digitado à mão é como se perde a
+                confiança na parede inteira.
+              */}
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                O que já entrou hoje vem sempre do relatório analítico, mesmo com
+                o alvo digitado.
+              </p>
+            </>
+          )}
+        </>
       )}
 
       {fonte.tipo === 'fundo' && (

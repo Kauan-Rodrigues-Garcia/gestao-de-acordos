@@ -75,9 +75,32 @@ export interface LinhaRanking {
   total: number;
 }
 
+/**
+ * Tudo o que os templates de meta desenham, resolvido por
+ * `fn_tv_metricas_setor` — a MESMA régua de dia útil do dashboard.
+ *
+ * Os campos além de `alvo`/`realizado` são opcionais porque uma cena montada
+ * antes da fase 2 pode estar no ar quando o build novo sobe. Faltando, o
+ * desenho cai no que dá para dizer com dois números — e não em `NaN%` na
+ * parede, que é o modo caro de descobrir que o dado mudou de forma.
+ */
 export interface DadosMeta {
   alvo: number;
   realizado: number;
+  /** Só o que entrou HOJE. */
+  realizado_hoje?: number;
+  falta?: number;
+  dias_uteis?: number;
+  dias_decorridos?: number;
+  dias_restantes?: number;
+  /** Meta do mês ÷ dias úteis. Não muda ao longo do mês. */
+  meta_diaria?: number;
+  /** O que ainda falta ÷ dias que sobram. Sobe quando se fica para trás. */
+  ritmo_necessario?: number;
+  esperado_ate_hoje?: number;
+  /** No ritmo de hoje, onde o mês termina. */
+  projecao?: number;
+  serie?: { dia: string; valor: number }[];
 }
 
 export interface Fonte {
