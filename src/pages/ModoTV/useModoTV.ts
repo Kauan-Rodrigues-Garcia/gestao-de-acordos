@@ -957,7 +957,7 @@ export function useModoTV() {
   const lerSorteio = useCallback(async () => {
     if (!tela) { setSorteio(null); return; }
     const { data } = await db('tv_sorteios')
-      .select('id, tipo, titulo, participantes, resultado, estado, girado_em')
+      .select('id, tipo, titulo, participantes, resultado, config, estado, girado_em, girado_por_nome')
       .eq('setor_id', tela.setor_id)
       .order('criado_em', { ascending: false });
     setSorteio(((data ?? [])[0] as DadosSorteio | undefined) ?? null);
@@ -965,8 +965,35 @@ export function useModoTV() {
 
   useEffect(() => { void lerSorteio(); }, [lerSorteio]);
 
+  /*
+   * Quem pode ser sorteado neste setor.
+   *
+   * Com foto: o palco e ANONIMO e nao consegue ir buscar o rosto depois, entao
+   * ele viaja junto com o participante na hora de abrir o jogo.
+   */
+  const [pessoasDoSetor, setPessoasDoSetor] = useState<
+    { id: string; nome: string; foto_url: string | null }[]
+  >([]);
+
+  useEffect(() => {
+    if (!empresa?.id || !tela?.setor_id) { setPessoasDoSetor([]); return; }
+    void (async () => {
+      const { data } = await db('perfis')
+        .select('id, nome, email, foto_url')
+        .eq('empresa_id', empresa.id)
+        .eq('setor_id', tela.setor_id)
+        .eq('ativo', true)
+        .order('nome');
+      setPessoasDoSetor(((data ?? []) as { id: string; nome: string | null; email: string | null; foto_url: string | null }[])
+        .map(p => ({ id: p.id, nome: (p.nome ?? '').trim() || p.email || 'Sem nome', foto_url: p.foto_url })));
+    })();
+  }, [empresa?.id, tela?.setor_id]);
+
   const criarSorteio = useCallback(async (
-    tipo: 'roleta' | 'bingo', titulo: string, participantes?: string[],
+    tipo: 'roleta' | 'bingo' | 'sorteio',
+    titulo: string,
+    participantes?: unknown[] | null,
+    config?: Record<string, unknown>,
   ) => {
     if (!tela) return;
     const { error } = await rpc('fn_tv_sorteio_criar', {
@@ -974,16 +1001,23 @@ export function useModoTV() {
       p_tipo: tipo,
       p_titulo: titulo,
       p_participantes: participantes && participantes.length > 0 ? participantes : null,
+      p_config: config ?? {},
     });
     if (error) {
-      setErro((error as { message?: string }).message ?? 'Não foi possível abrir o sorteio.');
+      setErro((error as { message?: string }).message ?? 'Não foi possível abrir o jogo.');
       return;
     }
     await lerSorteio();
     await avisarPalco();
   }, [tela, lerSorteio, avisarPalco]);
 
-  /** Gira a roleta, ou tira o próximo número do bingo. O servidor decide. */
+  /**
+   * Gira, ou tira o próximo número. O SERVIDOR decide o resultado.
+   *
+   * A parede é avisada logo depois: sem o aviso, a animação só começaria na
+   * releitura de 20s do palco, e a sala inteira ficaria olhando para uma roda
+   * parada depois de alguém apertar o botão.
+   */
   const sortear = useCallback(async () => {
     if (!sorteio) return;
     const fn = sorteio.tipo === 'bingo' ? 'fn_tv_bingo_sortear' : 'fn_tv_sorteio_girar';
@@ -996,9 +1030,42 @@ export function useModoTV() {
     await avisarPalco();
   }, [sorteio, lerSorteio, avisarPalco]);
 
+  /** Alguém bateu: o BINGO toma a parede. */
+  const encerrarBingo = useCallback(async (quem: string) => {
+    if (!sorteio) return;
+    const { error } = await rpc('fn_tv_bingo_encerrar', {
+      p_sorteio_id: sorteio.id, p_vencedor: quem,
+    });
+    if (error) {
+      setErro((error as { message?: string }).message ?? 'Não foi possível anunciar o bingo.');
+      return;
+    }
+    await lerSorteio();
+    await avisarPalco();
+  }, [sorteio, lerSorteio, avisarPalco]);
+
+  /**
+   * Nova rodada, sem apagar o jogo.
+   *
+   * Devolve todos à lista (roleta e sorteio) ou zera a cartela e soma uma
+   * rodada (bingo). Apagar e criar de novo perderia o título e a configuração
+   * — e a pessoa refaria a lista de trinta nomes.
+   */
+  const reiniciarSorteio = useCallback(async () => {
+    if (!sorteio) return;
+    const { error } = await rpc('fn_tv_sorteio_reiniciar', { p_sorteio_id: sorteio.id });
+    if (error) {
+      setErro((error as { message?: string }).message ?? 'Não foi possível reiniciar.');
+      return;
+    }
+    await lerSorteio();
+    await avisarPalco();
+  }, [sorteio, lerSorteio, avisarPalco]);
+
   return {
     empresa, telas, tela, telaId, setTelaId, setores, equipes, criarTela, apagarTela, renomearTela,
-    dispararAlerta, sorteio, criarSorteio, sortear, fontesPorTela,
+    dispararAlerta, sorteio, criarSorteio, sortear, encerrarBingo, reiniciarSorteio,
+    pessoasDoSetor, fontesPorTela,
     cenas, cenaId, setCenaId, cenaNoArId,
     fontes, fontesDaPrevia, fontesNoAr,
     carregando, erro, limparErro: () => setErro(null),

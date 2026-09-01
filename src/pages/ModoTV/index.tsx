@@ -533,8 +533,11 @@ export default function ModoTV() {
 
           <PainelSorteio
             sorteio={tv.sorteio}
+            pessoasDoSetor={tv.pessoasDoSetor}
             onCriar={tv.criarSorteio}
             onSortear={tv.sortear}
+            onEncerrarBingo={tv.encerrarBingo}
+            onReiniciar={tv.reiniciarSorteio}
             podeCortar={podeCortar}
           />
 

@@ -25,6 +25,10 @@ import {
   larguraVisivel,
   LARGURA_MIN,
   ESCALA_MAX,
+  anguloDaRoleta,
+  VOLTAS_DA_ROLETA,
+  nomeDoItem,
+  fotoDoItem,
   primeiroNome,
   texto,
   numero,
@@ -301,5 +305,62 @@ describe('redimensionar pelas alças', () => {
 
   it('largura visível é a caixa vezes a escala', () => {
     expect(larguraVisivel({ largura: 40, escala: 1.5 })).toBe(60);
+  });
+});
+
+/*
+ * A roleta.
+ *
+ * O que estes testes prendem: o ponteiro fica no TOPO e nao se mexe, e e ele
+ * que define o resultado. Se o angulo errar o sinal ou a meia-fatia, a roda
+ * para numa fatia e a tela anuncia outra — e ninguem descobre pelo codigo, e
+ * sim na frente da sala inteira.
+ */
+describe('para onde a roleta gira', () => {
+  it('a primeira fatia para com o centro dela no ponteiro', () => {
+    // 4 itens: fatias de 90°. O centro da fatia 0 esta a 45° do topo, entao a
+    // roda tem de voltar 45°.
+    expect(anguloDaRoleta(0, 4, 0)).toBe(-45);
+  });
+
+  it('cada fatia seguinte pede uma fatia inteira a mais', () => {
+    expect(anguloDaRoleta(1, 4, 0)).toBe(-135);
+    expect(anguloDaRoleta(2, 4, 0)).toBe(-225);
+    expect(anguloDaRoleta(3, 4, 0)).toBe(-315);
+  });
+
+  it('cada giro soma voltas inteiras, e o angulo so cresce', () => {
+    const primeiro = anguloDaRoleta(3, 4, 1);
+    // Indice MENOR no giro seguinte: sem as voltas, a roda andaria para tras.
+    const segundo = anguloDaRoleta(0, 4, 2);
+    expect(segundo).toBeGreaterThan(primeiro);
+    expect(segundo - primeiro).toBe(VOLTAS_DA_ROLETA * 360 - 45 + 315);
+  });
+
+  it('a volta inteira e multipla de 360, entao a fatia final nao muda', () => {
+    // O resto de dividir por 360 e o mesmo com 1 volta ou com 10: e isso que
+    // garante que girar mais nao muda onde para.
+    const a = anguloDaRoleta(2, 6, 1);
+    const b = anguloDaRoleta(2, 6, 9);
+    expect(((a % 360) + 360) % 360).toBeCloseTo(((b % 360) + 360) % 360, 9);
+  });
+
+  it('lista vazia nao gira, e nao devolve NaN', () => {
+    expect(anguloDaRoleta(0, 0, 3)).toBe(0);
+  });
+
+  it('indice fora da lista e contido em vez de sair da roda', () => {
+    // Vem do banco; um indice maior que a lista significaria dado inconsistente,
+    // e girar para o infinito e pior que parar na ultima fatia.
+    expect(anguloDaRoleta(99, 4, 0)).toBe(anguloDaRoleta(3, 4, 0));
+    expect(anguloDaRoleta(-5, 4, 0)).toBe(anguloDaRoleta(0, 4, 0));
+  });
+
+  it('nome e foto saem de item de texto ou de pessoa', () => {
+    expect(nomeDoItem('Folga na sexta')).toBe('Folga na sexta');
+    expect(nomeDoItem({ nome: 'Ana', foto_url: 'x.png' })).toBe('Ana');
+    expect(nomeDoItem(null)).toBe('');
+    expect(fotoDoItem('Folga')).toBeNull();
+    expect(fotoDoItem({ nome: 'Ana', foto_url: 'x.png' })).toBe('x.png');
   });
 });

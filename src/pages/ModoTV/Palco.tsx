@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatBRL } from '@/lib/money';
 import { alvoDiario } from './templates';
+import { Roleta, Bingo, SorteioPessoa } from './Jogos';
 import {
   PALCO_LARGURA,
   PALCO_ALTURA,
@@ -458,72 +459,31 @@ function FonteDesafio({
  * sorteio fosse decidido aqui, duas telas do mesmo setor mostrariam vencedores
  * diferentes, e não haveria como responder depois quem realmente ganhou.
  */
+/**
+ * O jogo, seja ele qual for.
+ *
+ * A fonte diz em `config.modelo` o que ela é, e o banco já devolveu o jogo
+ * daquele tipo. Aqui só se escolhe o desenho — os três moram em `Jogos.tsx`,
+ * porque cada um tem animação própria e juntá-los aqui faria deste arquivo o
+ * lugar onde tudo cabe.
+ */
 function FonteSorteio({
   config, dados,
 }: { config: Record<string, unknown>; dados: DadosSorteio | null }) {
+  const modelo = texto(config, 'modelo', dados?.tipo ?? 'roleta');
+
   if (!dados) {
     return (
       <p style={{ margin: 0, color: '#5b7079', fontSize: 40 }}>
-        Nenhum sorteio aberto
+        Nenhum {modelo === 'bingo' ? 'bingo' : modelo === 'sorteio' ? 'sorteio' : 'giro'} aberto —
+        abra um no painel da mesa.
       </p>
     );
   }
 
-  const titulo = texto(config, 'titulo', '') || dados.titulo;
-
-  if (dados.tipo === 'bingo') {
-    const numeros = dados.resultado?.numeros ?? [];
-    const ultimo = numeros[numeros.length - 1];
-    return (
-      <div style={{ textAlign: 'center' }}>
-        <h3 style={{ margin: '0 0 16px', color: '#7fd8e8', fontSize: 40, fontWeight: 700,
-                     letterSpacing: '.06em', textTransform: 'uppercase' }}>{titulo}</h3>
-        <p style={{ margin: '0 0 8px', color: '#ffffff', fontSize: 200, fontWeight: 800,
-                    lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-          {ultimo ?? '—'}
-        </p>
-        <p style={{ margin: '0 0 20px', color: '#8fa3ab', fontSize: 32 }}>
-          {numeros.length} de 75 sorteados
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-          {numeros.slice(0, -1).slice(-24).map(n => (
-            <span key={n} style={{ color: '#a9bcc3', fontSize: 34, fontWeight: 700,
-                                   background: 'rgba(255,255,255,.07)', borderRadius: 10,
-                                   padding: '4px 14px', fontVariantNumeric: 'tabular-nums' }}>
-              {n}
-            </span>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const vencedor = dados.resultado?.vencedor;
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <h3 style={{ margin: '0 0 20px', color: '#7fd8e8', fontSize: 40, fontWeight: 700,
-                   letterSpacing: '.06em', textTransform: 'uppercase' }}>{titulo}</h3>
-
-      {vencedor ? (
-        <>
-          <p style={{ margin: '0 0 10px', color: '#8fa3ab', fontSize: 40 }}>E o sorteado é</p>
-          <p style={{ margin: 0, color: '#5fbe7e', fontSize: 128, fontWeight: 800,
-                      lineHeight: 1.05, textWrap: 'balance' }}>
-            {vencedor}
-          </p>
-        </>
-      ) : (
-        <>
-          <p style={{ margin: '0 0 18px', color: '#ffffff', fontSize: 56, fontWeight: 700 }}>
-            {dados.participantes.length} concorrendo
-          </p>
-          <p style={{ margin: 0, color: '#8fa3ab', fontSize: 36 }}>
-            Aguardando o giro…
-          </p>
-        </>
-      )}
-    </div>
-  );
+  if (modelo === 'bingo')   return <Bingo config={config} dados={dados} />;
+  if (modelo === 'sorteio') return <SorteioPessoa config={config} dados={dados} />;
+  return <Roleta config={config} dados={dados} />;
 }
 
 /**

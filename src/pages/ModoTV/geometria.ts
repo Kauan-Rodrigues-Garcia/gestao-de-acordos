@@ -53,14 +53,56 @@ export interface DadosDesafio {
   dias_restantes: number;
 }
 
+/** Uma pessoa sorteável: o palco anônimo precisa da foto junto, não depois. */
+export interface Participante {
+  id?: string;
+  nome: string;
+  foto_url?: string | null;
+}
+
+/** Um item da roleta é texto livre; uma pessoa é um objeto. */
+export type ItemSorteio = string | Participante;
+
+export function nomeDoItem(item: ItemSorteio | undefined | null): string {
+  if (item == null) return '';
+  if (typeof item === 'string') return item;
+  return item.nome ?? '';
+}
+
+export function fotoDoItem(item: ItemSorteio | undefined | null): string | null {
+  if (item == null || typeof item === 'string') return null;
+  return item.foto_url ?? null;
+}
+
+export interface GiroDoSorteio {
+  item: ItemSorteio;
+  indice: number;
+  em: string;
+}
+
 export interface DadosSorteio {
   id: string;
-  tipo: 'roleta' | 'bingo';
+  tipo: 'roleta' | 'bingo' | 'sorteio';
   titulo: string;
-  participantes: string[];
-  resultado: { vencedor?: string; indice?: number; numeros?: number[] };
+  participantes: ItemSorteio[];
+  resultado: {
+    /** roleta e sorteio: cada giro, na ordem. */
+    historico?: GiroDoSorteio[];
+    ultimo?: GiroDoSorteio;
+    /** bingo. */
+    numeros?: number[];
+    rodada?: number;
+    bingo?: { quem: string; em: string };
+  };
+  /** Comportamento e estética, decididos na mesa. */
+  config?: {
+    remover_ao_sair?: boolean;
+    layout?: 'classica' | 'neon' | 'sobria';
+    ate?: number;
+  };
   estado: 'aberto' | 'girando' | 'encerrado';
   girado_em: string | null;
+  girado_por_nome?: string | null;
 }
 
 /** Como uma cena entra no lugar da outra. */
@@ -366,6 +408,35 @@ export function redimensionar(
     largura: Math.round(largura * 10) / 10,
     escala: Math.round(escala * 100) / 100,
   };
+}
+
+/*
+ * ── A roleta ────────────────────────────────────────────────────────────────
+ */
+
+/** Voltas completas antes de a roda parar. */
+export const VOLTAS_DA_ROLETA = 5;
+
+/**
+ * Para onde a roda tem de girar para o ponteiro cair na fatia `indice`.
+ *
+ * O ponteiro fica no TOPO e não se mexe — é ele que define o resultado. As
+ * fatias são desenhadas a partir do topo, no sentido horário, então trazer o
+ * CENTRO da fatia `i` até o ponteiro é girar `-(i·fatia + fatia/2)`.
+ *
+ * `giros` são as voltas acumuladas desde que a tela abriu, e entram como
+ * múltiplos de 360 para que o ângulo SÓ CRESÇA. Se a conta fosse absoluta, um
+ * índice novo menor que o anterior faria a roda dar meia-volta para trás — o
+ * que na parede parece defeito, não sorteio.
+ *
+ * A mesa e a TV chegam ao mesmo número porque ambas partem do índice que o
+ * servidor gravou: nada é combinado entre elas.
+ */
+export function anguloDaRoleta(indice: number, total: number, giros: number): number {
+  if (!(total > 0)) return 0;
+  const fatia = 360 / total;
+  const i = Math.max(0, Math.min(total - 1, Math.floor(indice) || 0));
+  return giros * VOLTAS_DA_ROLETA * 360 - (i * fatia + fatia / 2);
 }
 
 /** As fontes na ordem de desenho: camada de baixo primeiro. */
