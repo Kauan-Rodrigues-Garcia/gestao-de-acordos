@@ -1039,6 +1039,30 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Ver no Dashboard os acordos da equipe, com o filtro de equipe',
     grupo: 'Dashboard', padrao: LIDERANCA,
   },
+  /*
+   * Qualificador do nível `equipe`, e não um quinto nível.
+   *
+   * `dashboard_escopo_equipe` responde «enxerga equipe?»; esta responde «qual
+   * equipe?». Sem ela, ligar o alcance de equipe num operador entregava todas
+   * as equipes do setor — mais do que ele precisa para acompanhar a própria.
+   *
+   * NÃO entra em `ABAS_COM_ESCOPO`: aquele registro descreve a escada
+   * individual → equipe → setor → todos, e `fn_user_escopo()` no banco lê os
+   * quatro nomes por composição (`dashboard_escopo_` + nível). Um quinto nome
+   * ali viraria um peso que não existe.
+   *
+   * Só decide alguma coisa quando `equipe` é o teto da pessoa: quem alcança o
+   * setor já alcança todas as equipes dele, por definição.
+   */
+  {
+    key: 'dashboard_escopo_equipe_todas', label: 'Dashboard: todas as equipes',
+    descricao: 'Com o alcance de equipe, ver qualquer equipe do setor — desligada, só as equipes de que a pessoa participa',
+    grupo: 'Dashboard', padrao: LIDERANCA,
+    depende: {
+      chaves: ['dashboard_escopo_equipe'],
+      motivo: 'Ela qualifica o alcance de equipe; sem ele nao ha equipe nenhuma para ampliar',
+    },
+  },
   {
     key: 'dashboard_escopo_setor', label: 'Dashboard: dados do setor',
     descricao: 'Ver no Dashboard os acordos do setor inteiro',

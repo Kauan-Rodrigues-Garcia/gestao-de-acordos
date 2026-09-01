@@ -63,6 +63,13 @@ export function FiltroEscopo({
 }: Props) {
   const podeEscolherSetor = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
+  /*
+   * «Todas as equipes» é o SETOR sem recorte — e é por isso que ele só aparece
+   * para quem alcança o setor. Antes aparecia sempre que houvesse equipes: um
+   * cargo com alcance de equipe e nada além dela ganhava, num clique, a visão
+   * do setor inteiro que o painel não lhe deu.
+   */
+  const podeSetorGeral = niveis.includes('setor') || podeEscolherSetor;
 
   /*
    * Quem escolhe setor usa o escolhido; quem não escolhe fica no próprio. Este
@@ -112,13 +119,15 @@ export function FiltroEscopo({
 
       {mostrarEquipes && (
         <Linha icone={<Layers className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Equipe">
-          <Chip
-            ativo={visao === 'setor'}
-            onClick={() => onVisao('setor')}
-            titulo="Ver o setor inteiro, sem recorte por equipe"
-          >
-            Todas as equipes
-          </Chip>
+          {podeSetorGeral && (
+            <Chip
+              ativo={visao === 'setor'}
+              onClick={() => onVisao('setor')}
+              titulo="Ver o setor inteiro, sem recorte por equipe"
+            >
+              Todas as equipes
+            </Chip>
+          )}
           {equipes.map(eq => (
             <Chip
               key={eq.id}

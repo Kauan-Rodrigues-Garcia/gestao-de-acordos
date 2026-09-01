@@ -141,7 +141,14 @@ export function AnalyticsPanel({
     setSetorFiltro,
     setEquipeFiltro,
     setOperadorFiltro,
-  } = useAnalytics(mesAnalise, { niveis: niveisDashboard });
+  } = useAnalytics(mesAnalise, {
+    niveis: niveisDashboard,
+    // Só pesa quando `equipe` é o teto: quem alcança o setor já alcança todas
+    // as equipes dele. Ver `dashboard_escopo_equipe_todas` no catálogo.
+    podeTodasEquipes: niveisDashboard.includes('setor')
+      || niveisDashboard.includes('todos_setores')
+      || temPermissao('dashboard_escopo_equipe_todas'),
+  });
 
   const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
     if (!isPP) {
@@ -178,7 +185,14 @@ export function AnalyticsPanel({
   const veTodosSetores = niveisDashboard.includes('todos_setores');
   // Sem visão global o painel fica travado no setor do usuário — os números de
   // um setor nunca somam nos do outro.
-  const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
+  //
+  // «Travado no setor» pressupõe alcance de setor. Para quem só alcança a
+  // equipe, travar aqui somaria o SETOR INTEIRO num painel que o painel de
+  // permissões limitou à equipe — e o banco, que agora obedece ao mesmo
+  // alcance, entregaria só a equipe: o total na tela sairia menor que o
+  // rótulo, exatamente a divergência que esta rodada veio consertar.
+  const veSetor = niveisDashboard.includes('setor');
+  const setorTravado = !veTodosSetores && veSetor ? (perfil?.setor_id ?? null) : null;
   const setorEmFoco  = (setorExterno ?? null) || setorTravado;
 
   // Membros, clones que contam (`conta_recebimento`) e setores alternativos —

@@ -179,6 +179,15 @@ export interface OpcoesAnalytics {
    * valor padrão, o compilador cobra.
    */
   niveis: readonly NivelEscopo[];
+  /**
+   * O alcance de equipe cobre TODAS as equipes do setor?
+   *
+   * Só decide alguma coisa quando `equipe` é o teto da aba — quem alcança o
+   * setor já alcança todas as equipes dele. Padrão `true`, que é o
+   * comportamento de sempre; quem passa `false` é o Dashboard, lendo
+   * `dashboard_escopo_equipe_todas`.
+   */
+  podeTodasEquipes?: boolean;
 }
 
 export function useAnalytics(
@@ -187,7 +196,7 @@ export function useAnalytics(
 ): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const { niveis } = opcoes;
+  const { niveis, podeTodasEquipes = true } = opcoes;
   /*
    * `todos_setores` e `setor` são o que decidia, antes, `isAdmin ||
    * isDiretoria || (isLider && ver_todos_setores)` e o ramo de liderança.
@@ -246,11 +255,12 @@ export function useAnalytics(
     'analytics', empresa?.id, perfil?.id, perfil?.perfil, perfil?.setor_id,
     mes, ano, setorFiltro, equipeFiltro, operadorFiltro,
     podeTodosSetores ? 'T' : '-', podeSetor ? 'S' : '-', podeEquipe ? 'E' : '-',
+    podeTodasEquipes ? 'Q' : '-',
     isBookplay ? 'bp' : 'pp',
   ), [
     empresa?.id, perfil?.id, perfil?.perfil, perfil?.setor_id, mes, ano,
     setorFiltro, equipeFiltro, operadorFiltro,
-    podeTodosSetores, podeSetor, podeEquipe, isBookplay,
+    podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay,
   ]);
 
   /**
@@ -356,6 +366,52 @@ export function useAnalytics(
         operadoresDaEquipe = ((membros as { id: string }[]) ?? []).map(m => m.id);
       }
 
+      /*
+       * Alcance de EQUIPE sem alcance de setor, e sem equipe escolhida.
+       *
+       * Este ramo não existia: a busca tinha `todos_setores`, `setor` e o
+       * individual, e quem tivesse só `equipe` caía no individual. Ou seja,
+       * ligar o alcance de equipe num cargo mudava o filtro da tela e não mudava
+       * uma linha do que chegava — a queixa de sempre, «eu libero e não
+       * acontece nada».
+       *
+       * O conjunto padrão são as MINHAS equipes (a do cadastro mais aquelas em
+       * que fui clonado). Com `dashboard_escopo_equipe_todas` ligada, todas as
+       * do meu setor. É a mesma conta que `fn_operador_no_meu_alcance_de_equipe`
+       * faz no banco — aqui ela recorta a consulta, lá ela decide as linhas.
+       */
+      let operadoresDoAlcanceEquipe: string[] | null = null;
+      if (podeEquipe && !podeSetor && !podeTodosSetores && !operadorFiltro && !equipeFiltro) {
+        const minhaEquipe =
+          (perfil as (typeof perfil & { equipe_id?: string | null }))?.equipe_id ?? null;
+
+        let equipesAlvo: string[];
+        if (podeTodasEquipes && perfil.setor_id) {
+          const { data: eqs } = await supabase
+            .from('equipes').select('id')
+            .eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
+          equipesAlvo = ((eqs as { id: string }[]) ?? []).map(e => e.id);
+        } else {
+          const { data: clones } = await supabase
+            .from('equipe_operadores_clones').select('equipe_id')
+            .eq('empresa_id', empresa.id).eq('operador_id', perfil.id);
+          equipesAlvo = ((clones as { equipe_id: string }[]) ?? []).map(c => c.equipe_id);
+          if (minhaEquipe) equipesAlvo.push(minhaEquipe);
+        }
+
+        if (equipesAlvo.length === 0) {
+          operadoresDoAlcanceEquipe = [];
+        } else {
+          const { data: membros } = await supabase
+            .from('perfis').select('id')
+            .eq('empresa_id', empresa.id).in('equipe_id', [...new Set(equipesAlvo)]);
+          const ids = new Set(((membros as { id: string }[]) ?? []).map(m => m.id));
+          // Eu entro sempre: sem equipe cadastrada eu ainda vejo o meu.
+          ids.add(perfil.id);
+          operadoresDoAlcanceEquipe = [...ids];
+        }
+      }
+
       // BookPlay: operadores CLONADOS em equipes do setor do líder (setor de
       // origem diferente). A visão geral do setor precisa incluí-los, senão um
       // setor formado só por clones (ex.: Digital) fica com o dashboard zerado.
@@ -419,6 +475,18 @@ export function useAnalytics(
           } else {
             q = q.eq('setor_id', perfil.setor_id);
           }
+        } else if (podeEquipe && operadoresDaEquipe !== null) {
+          // Alcance de equipe, com uma equipe escolhida no filtro.
+          q = operadoresDaEquipe.length === 0
+            ? q.eq('operador_id', '00000000-0000-0000-0000-000000000000')
+            : q.in('operador_id', operadoresDaEquipe);
+        } else if (podeEquipe && operadorFiltro) {
+          q = q.eq('operador_id', operadorFiltro);
+        } else if (podeEquipe && operadoresDoAlcanceEquipe !== null) {
+          // Alcance de equipe, sem escolha: as equipes que o painel me deu.
+          q = operadoresDoAlcanceEquipe.length === 0
+            ? q.eq('operador_id', perfil.id)
+            : q.in('operador_id', operadoresDoAlcanceEquipe);
         } else {
           q = q.eq('operador_id', perfil.id);
         }
@@ -475,9 +543,26 @@ export function useAnalytics(
           // Alcance de empresa com um setor filtrado → meta do setor filtrado
           tipoMeta = 'setor';
           refId    = setorFiltro;
-        } else if (veDeOutros && perfil.setor_id) {
+        } else if (podeSetor && perfil.setor_id) {
           tipoMeta = 'setor';
           refId    = perfil.setor_id;
+        } else if (podeEquipe) {
+          /*
+           * Alcance de equipe e nada além dela.
+           *
+           * Era `veDeOutros && perfil.setor_id → meta do setor`, e `veDeOutros`
+           * inclui `equipe`. Ou seja: quem alcança só a equipe recebia o
+           * realizado da EQUIPE contra a meta do SETOR — a mesma soma
+           * desencontrada que produziu a divergência de agosto/2026, só que um
+           * degrau abaixo. A referência certa é a equipe da pessoa; sem equipe
+           * cadastrada não há meta principal, e o painel mostra o card sem %.
+           */
+          const minhaEquipe =
+            (perfil as (typeof perfil & { equipe_id?: string | null }))?.equipe_id ?? null;
+          if (minhaEquipe) {
+            tipoMeta = 'equipe';
+            refId    = minhaEquipe;
+          }
         } else if (!veDeOutros) {
           tipoMeta = 'operador';
           refId    = perfil.id;

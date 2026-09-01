@@ -53,6 +53,16 @@ export interface SetoresEquipes {
   equipesDoSetor: EquipeResumo[];
   /** Níveis que este cargo pode escolher NO DASHBOARD. */
   niveis: NivelEscopo[];
+  /**
+   * O alcance de equipe cobre TODAS as equipes do setor?
+   *
+   * `false` = só as equipes de que a pessoa participa, e `equipesDoSetor` já
+   * vem recortado assim. Sai daqui, e não de cada tela, porque o
+   * `<FiltroEscopo />` também precisa saber: com o alcance limitado à própria
+   * equipe, o botão «Todas as equipes» ofereceria um recorte que a pessoa não
+   * tem.
+   */
+  podeTodasEquipes: boolean;
   loading: boolean;
 }
 
@@ -77,9 +87,18 @@ export function useSetoresEquipes(): SetoresEquipes {
   const niveis = useMemo(() => niveisLiberados('dashboard', temPermissao), [temPermissao]);
   const podeTodosSetores = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
+  /*
+   * Quem alcança o setor alcança todas as equipes dele por definição — a chave
+   * só decide alguma coisa quando `equipe` é o teto. Escrever a condição assim,
+   * e não só `temPermissao(...)`, evita que desligar a chave estreite o filtro
+   * de um líder que continua com o setor liberado.
+   */
+  const podeTodasEquipes = niveis.includes('setor') || podeTodosSetores
+    || temPermissao('dashboard_escopo_equipe_todas');
 
   const [setores, setSetores]               = useState<SetorResumo[]>(VAZIO);
   const [equipes, setEquipes] = useState<EquipeResumo[]>(VAZIO_EQUIPES);
+  const [minhasEquipes, setMinhasEquipes]   = useState<ReadonlySet<string>>(() => new Set());
   const [setorFiltro, setSetorFiltro]       = useState<string | null>(null);
   const [loading, setLoading]               = useState(true);
 
@@ -93,6 +112,9 @@ export function useSetoresEquipes(): SetoresEquipes {
   const cargo    = perfil?.perfil ?? null;
   const setorId  = perfil?.setor_id ?? null;
   const empresaId = empresa?.id ?? null;
+  const meuId    = perfil?.id ?? null;
+  const minhaEquipeId =
+    (perfil as (typeof perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null;
 
   const carregar = useCallback(async () => {
     if (!cargo || !empresaId) { setLoading(false); return; }
@@ -121,12 +143,38 @@ export function useSetoresEquipes(): SetoresEquipes {
       } else {
         setEquipes(VAZIO_EQUIPES);
       }
+
+      /*
+       * As MINHAS equipes: a do cadastro mais aquelas em que fui clonado.
+       *
+       * Só é consultado quando o alcance está limitado à própria equipe — para
+       * quem vê todas, a lista acima já é a resposta e esta consulta seria uma
+       * ida ao banco cujo resultado ninguém lê. Espelha
+       * `fn_equipes_do_operador` no banco, que é quem decide as LINHAS.
+       */
+      if (podeEquipe && !podeTodasEquipes) {
+        const ids: string[] = [];
+        // A do cadastro sai do próprio perfil, sem ida ao banco. O `meuId` só
+        // gateia a consulta dos clones — sem ele a equipe cadastrada ainda
+        // vale, e perdê-la deixaria a pessoa sem filtro nenhum.
+        if (minhaEquipeId) ids.push(minhaEquipeId);
+        if (meuId) {
+          const { data: clones } = await supabase
+            .from('equipe_operadores_clones').select('equipe_id')
+            .eq('empresa_id', empresaId).eq('operador_id', meuId);
+          for (const c of ((clones as { equipe_id: string }[]) ?? [])) ids.push(c.equipe_id);
+        }
+        setMinhasEquipes(new Set(ids));
+      } else {
+        setMinhasEquipes(new Set());
+      }
     } catch (err) {
       console.warn('[useSetoresEquipes] erro ao carregar listas:', err);
     } finally {
       setLoading(false);
     }
-  }, [cargo, setorId, empresaId, podeTodosSetores, podeEquipe]);
+  }, [cargo, setorId, empresaId, podeTodosSetores, podeEquipe, podeTodasEquipes,
+      meuId, minhaEquipeId]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -135,10 +183,15 @@ export function useSetoresEquipes(): SetoresEquipes {
    * equipes DELE. Sem setor escolhido, a lista como veio — que para quem não
    * pode escolher setor já é a do próprio setor.
    */
-  const equipesDoSetor = useMemo(
-    () => (setorFiltro ? equipes.filter(e => e.setor_id === setorFiltro) : equipes),
-    [equipes, setorFiltro],
-  );
+  const equipesDoSetor = useMemo(() => {
+    const doSetor = setorFiltro ? equipes.filter(e => e.setor_id === setorFiltro) : equipes;
+    // Alcance limitado à própria equipe: o filtro lista só as minhas. Nada de
+    // mostrar o botão de uma equipe cujo dado o banco vai negar.
+    return podeTodasEquipes ? doSetor : doSetor.filter(e => minhasEquipes.has(e.id));
+  }, [equipes, setorFiltro, podeTodasEquipes, minhasEquipes]);
 
-  return { setores, setorFiltro, setSetorFiltro, equipesDoSetor, niveis, loading };
+  return {
+    setores, setorFiltro, setSetorFiltro, equipesDoSetor, niveis,
+    podeTodasEquipes, loading,
+  };
 }

@@ -38,12 +38,22 @@ vi.mock('@/lib/supabase', () => ({
 
 const { useSetoresEquipes } = await import('@/hooks/useSetoresEquipes');
 
-/** Construtor encadeável que devolve `linhas` no `.order()`. */
+/**
+ * Construtor encadeável que devolve `linhas`.
+ *
+ * `then` existe porque nem toda consulta do hook termina em `.order()`: a das
+ * minhas equipes clonadas é `select().eq().eq()` e é aguardada direto, como o
+ * PostgREST permite. Sem o `then` ela devolveria o próprio construtor e o
+ * `data` viria `undefined` — um vazio que passaria por resposta legítima.
+ */
 function construtor(linhas: Record<string, unknown>[]) {
+  const resposta = () => Promise.resolve({ data: linhas, error: null });
   const alvo = {
     select: () => alvo,
     eq:     () => alvo,
-    order:  () => Promise.resolve({ data: linhas, error: null }),
+    in:     () => alvo,
+    order:  resposta,
+    then:   (aceita: (v: unknown) => unknown) => resposta().then(aceita),
   };
   return alvo;
 }
@@ -53,8 +63,15 @@ beforeEach(() => {
   empresaRef.current   = { id: 'emp-1' };
   // Padrao: o caso do lider — enxerga o proprio setor e escolhe equipe, mas
   // nao escolhe setor.
+  //
+  // `dashboard_escopo_setor` entra aqui desde 03/09/2026: com ele a pessoa
+  // alcanca todas as equipes do setor por definicao, que e como o lider real
+  // esta configurado nas duas empresas. Sem ele, o recorte de
+  // `dashboard_escopo_equipe_todas` passa a valer e a lista mostra so as
+  // equipes de que a pessoa participa — o que os casos proprios cobrem abaixo.
   chavesRef.current = new Set([
     'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+    'dashboard_escopo_setor',
   ]);
   fromSpy.mockReset();
   fromSpy.mockImplementation((tabela: string) =>
@@ -191,6 +208,114 @@ describe('useSetoresEquipes — o que cada nivel enxerga', () => {
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.setores).toEqual([]);
+    expect(result.current.equipesDoSetor).toEqual([]);
+  });
+});
+
+/*
+ * `dashboard_escopo_equipe_todas` — 03/09/2026.
+ *
+ * O pedido: «não tem a opção de se eu posso ver todas as equipes ou só a
+ * minha». Antes, ligar o alcance de equipe num operador listava TODAS as
+ * equipes do setor. A chave nova qualifica o nível: desligada, o filtro mostra
+ * só as equipes de que a pessoa participa.
+ *
+ * Ela não pesa para quem alcança o setor — setor contém todas as equipes dele —
+ * e é o que o primeiro caso aqui prova.
+ */
+describe('useSetoresEquipes — só a minha equipe ou todas', () => {
+  /** As três equipes do setor; a pessoa está na do meio. */
+  function tresEquipes(clonesEm: string[] = []) {
+    fromSpy.mockImplementation((tabela: string) => {
+      if (tabela === 'equipes') {
+        return construtor([
+          { id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' },
+          { id: 'eq-2', nome: 'Equipe B', setor_id: 'setor-1' },
+          { id: 'eq-3', nome: 'Equipe C', setor_id: 'setor-1' },
+        ]);
+      }
+      if (tabela === 'equipe_operadores_clones') {
+        return construtor(clonesEm.map(id => ({ equipe_id: id })));
+      }
+      return construtor([{ id: 's-1', nome: 'Setor 1' }]);
+    });
+  }
+
+  it('quem alcança o setor continua vendo todas as equipes, chave desligada ou não', async () => {
+    perfilRef.current = { id: 'eu', perfil: 'lider', setor_id: 'setor-1', equipe_id: 'eq-2' };
+    chavesRef.current = new Set([
+      'ver_dashboard', 'dashboard_escopo_individual',
+      'dashboard_escopo_equipe', 'dashboard_escopo_setor',
+    ]);
+    tresEquipes();
+
+    const { result } = renderHook(() => useSetoresEquipes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.podeTodasEquipes).toBe(true);
+    expect(result.current.equipesDoSetor).toHaveLength(3);
+    // E nem chega a perguntar quais são as minhas: a resposta não seria usada.
+    expect(fromSpy).not.toHaveBeenCalledWith('equipe_operadores_clones');
+  });
+
+  it('sem setor e sem a chave, o filtro lista só a equipe da pessoa', async () => {
+    perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1', equipe_id: 'eq-2' };
+    chavesRef.current = new Set([
+      'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+    ]);
+    tresEquipes();
+
+    const { result } = renderHook(() => useSetoresEquipes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.podeTodasEquipes).toBe(false);
+    expect(result.current.equipesDoSetor.map(e => e.id)).toEqual(['eq-2']);
+  });
+
+  it('a equipe em que a pessoa foi CLONADA também é dela', async () => {
+    perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1', equipe_id: 'eq-2' };
+    chavesRef.current = new Set([
+      'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+    ]);
+    tresEquipes(['eq-3']);
+
+    const { result } = renderHook(() => useSetoresEquipes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.equipesDoSetor.map(e => e.id)).toEqual(['eq-2', 'eq-3']);
+  });
+
+  it('com a chave ligada e sem setor, volta a listar todas', async () => {
+    perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1', equipe_id: 'eq-2' };
+    chavesRef.current = new Set([
+      'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+      'dashboard_escopo_equipe_todas',
+    ]);
+    tresEquipes();
+
+    const { result } = renderHook(() => useSetoresEquipes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.podeTodasEquipes).toBe(true);
+    expect(result.current.equipesDoSetor).toHaveLength(3);
+  });
+
+  /*
+   * Sem equipe cadastrada e sem clone, a lista fica vazia — e o
+   * `<FiltroEscopo />` esconde a linha inteira em vez de mostrar uma moldura
+   * com um botão só. Zerar aqui é melhor que devolver o setor: devolver o setor
+   * é exatamente o que a chave veio impedir.
+   */
+  it('sem equipe nenhuma, a lista fica vazia em vez de cair no setor', async () => {
+    perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1' };
+    chavesRef.current = new Set([
+      'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+    ]);
+    tresEquipes();
+
+    const { result } = renderHook(() => useSetoresEquipes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
     expect(result.current.equipesDoSetor).toEqual([]);
   });
 });
