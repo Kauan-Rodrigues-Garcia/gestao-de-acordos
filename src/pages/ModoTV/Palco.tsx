@@ -241,8 +241,60 @@ function DesenhoDaFonte({ fonte }: { fonte: Fonte }) {
     case 'meta':    return <FonteMeta    config={fonte.config} dados={fonte.dados as DadosMeta | null} />;
     case 'fundo':   return <FonteFundo   config={fonte.config} />;
     case 'relogio': return <FonteRelogio config={fonte.config} />;
+    case 'video':   return <FonteVideo   fonte={fonte} />;
     default:        return null;
   }
+}
+
+/**
+ * Vídeo em laço.
+ *
+ * `muted` no atributo E `volume` na propriedade: o navegador só aceita começar
+ * a tocar sozinho se o vídeo estiver mudo, então todo vídeo NASCE mudo e o som
+ * só entra depois que alguém destravou o áudio da página (ver `TvPalco`). Sem
+ * isso o vídeo nem começa — e não há erro nenhum na tela dizendo por quê.
+ */
+function FonteVideo({ fonte }: { fonte: Fonte }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const url = texto(fonte.config, 'url', '');
+  const mudo = fonte.mudo !== false;
+  const volume = Math.max(0, Math.min(1, Number(fonte.volume ?? 1)));
+
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    el.volume = volume;
+    el.muted = mudo;
+    // `play()` rejeita quando a política de autoplay barra. Engolir é correto:
+    // é o estado esperado até alguém destravar o áudio, não um defeito.
+    void el.play().catch(() => {});
+  }, [volume, mudo, url]);
+
+  if (!url) {
+    return (
+      <div style={{ aspectRatio: '16 / 9', display: 'grid', placeItems: 'center',
+                    border: '4px dashed #2a3a42', borderRadius: 12, color: '#5b7079', fontSize: 32 }}>
+        Sem vídeo
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={video}
+      src={url}
+      loop
+      autoPlay
+      playsInline
+      muted={mudo}
+      style={{
+        display: 'block',
+        width: '100%',
+        borderRadius: numero(fonte.config, 'arredondamento', 16),
+        objectFit: texto(fonte.config, 'ajuste', 'cover') as 'cover' | 'contain',
+      }}
+    />
+  );
 }
 
 /**

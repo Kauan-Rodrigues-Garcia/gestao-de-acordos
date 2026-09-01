@@ -29,7 +29,14 @@ export const PALCO_LARGURA = 1920;
 export const PALCO_ALTURA = 1080;
 export const PALCO_PROPORCAO = PALCO_LARGURA / PALCO_ALTURA;
 
-export type TipoFonte = 'texto' | 'imagem' | 'ranking' | 'meta' | 'fundo' | 'relogio';
+export type TipoFonte =
+  | 'texto' | 'imagem' | 'ranking' | 'meta' | 'fundo' | 'relogio' | 'video';
+
+/** Como uma cena entra no lugar da outra. */
+export type Transicao = 'corte' | 'fade' | 'deslize';
+
+/** Quanto dura a troca. Curta de propósito: transição longa cansa em laço. */
+export const DURACAO_TRANSICAO_MS = 600;
 
 export interface LinhaRanking {
   nome: string;
@@ -59,15 +66,25 @@ export interface Fonte {
    * aqui é opcional porque a prévia lê a tabela direto, sem esse filtro.
    */
   visivel?: boolean;
+  /** 0 a 1. Só vale para fonte com áudio. */
+  volume?: number;
+  mudo?: boolean;
   /** Preenchido pelo banco para `ranking` e `meta`; nulo nos demais. */
   dados: LinhaRanking[] | DadosMeta | null;
 }
 
 export interface CenaNoAr {
   encontrada: boolean;
-  tela?: { nome: string; slug: string };
-  cena?: { id: string; nome: string } | null;
+  tela?: { nome: string; slug: string; rotacao?: boolean };
+  cena?: { id: string; nome: string; transicao?: Transicao } | null;
   fontes?: Fonte[];
+  /**
+   * Segundos até a próxima troca, quando a rotação está ligada.
+   *
+   * É o que permite ao palco agendar a releitura no instante certo, em vez de
+   * perguntar de 20 em 20 segundos e trocar de cena sempre atrasado.
+   */
+  proxima_em_s?: number | null;
   servidor_em?: string;
 }
 

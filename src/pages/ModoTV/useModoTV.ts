@@ -52,6 +52,7 @@ export interface Tela {
   setor_id: string;
   empresa_id: string;
   ultimo_sinal: string | null;
+  rotacao_ativa: boolean;
 }
 
 export interface Cena {
@@ -60,6 +61,18 @@ export interface Cena {
   ordem: number;
   setor_id: string;
   empresa_id: string;
+  transicao: 'corte' | 'fade' | 'deslize';
+  duracao_s: number;
+  na_rotacao: boolean;
+  emergencia: boolean;
+}
+
+export interface Midia {
+  id: string;
+  url: string;
+  caminho: string;
+  tipo: 'imagem' | 'video';
+  nome: string;
 }
 
 /** Quanto tempo sem sinal até considerar a TV fora do ar. */
@@ -102,7 +115,7 @@ export function useModoTV() {
   const lerTelas = useCallback(async () => {
     if (!empresa?.id) return;
     const { data, error } = await db('tv_telas')
-      .select('id, slug, nome, setor_id, empresa_id, ultimo_sinal')
+      .select('id, slug, nome, setor_id, empresa_id, ultimo_sinal, rotacao_ativa')
       .eq('empresa_id', empresa.id)
       .eq('ativa', true)
       .order('nome');
@@ -176,7 +189,7 @@ export function useModoTV() {
   const lerCenas = useCallback(async () => {
     if (!tela) { setCenas([]); return; }
     const { data, error } = await db('tv_cenas')
-      .select('id, nome, ordem, setor_id, empresa_id')
+      .select('id, nome, ordem, setor_id, empresa_id, transicao, duracao_s, na_rotacao, emergencia')
       .eq('setor_id', tela.setor_id)
       .order('ordem');
     if (error) { setErro(error.message); return; }
@@ -203,7 +216,7 @@ export function useModoTV() {
   const lerFontes = useCallback(async () => {
     if (!cenaId) { setFontes([]); return; }
     const { data, error } = await db('tv_fontes')
-      .select('id, tipo, config, x, y, largura, escala, camada, visivel')
+      .select('id, tipo, config, x, y, largura, escala, camada, visivel, volume, mudo')
       .eq('cena_id', cenaId)
       .order('camada');
     if (error) { setErro(error.message); return; }
@@ -293,6 +306,7 @@ export function useModoTV() {
       meta:    { config: { titulo: 'Meta do mês' }, largura: 45 },
       fundo:   { config: { cor: '#0d1b24', cor_2: '#08323d', angulo: 160 }, largura: 100 },
       relogio: { config: { tamanho: 120, cor: '#ffffff', segundos: false }, largura: 30 },
+      video:   { config: { url: '', ajuste: 'cover' }, largura: 50 },
     };
 
     /*
@@ -355,7 +369,22 @@ export function useModoTV() {
    */
   const moverFonte = useCallback((id: string, x: number, y: number, definitivo: boolean) => {
     setFontes(atual => atual.map(f => (f.id === id ? { ...f, x, y } : f)));
-    if (definitivo) void db('tv_fontes').update({ x, y }).eq('id', id);
+    if (!definitivo) return;
+    /*
+     * `.then()` e NÃO `void db(...)`.
+     *
+     * O builder do supabase-js é preguiçoso: ele só dispara a requisição quando
+     * alguém o aguarda. `void` descarta o thenable sem nunca executá-lo — a
+     * gravação parece ter acontecido e não saiu do navegador.
+     *
+     * Foi exatamente este o defeito: arrastar mexia na prévia (estado local) e
+     * o banco continuava com 50/50, então a TV desenhava tudo no centro. A
+     * prévia e a parede discordavam, que é o único jeito de esta ferramenta
+     * perder a razão de existir.
+     */
+    void db('tv_fontes').update({ x, y }).eq('id', id).then(({ error }) => {
+      if (error) setErro(error.message);
+    });
   }, []);
 
   /**
@@ -388,6 +417,30 @@ export function useModoTV() {
     await lerFontes();
   }, [lerFontes]);
 
+  /** Ajustes da cena: transição, duração na fila, emergência. */
+  const atualizarCena = useCallback(async (id: string, mudanca: Partial<Cena>) => {
+    setCenas(atual => atual.map(c => (c.id === id ? { ...c, ...mudanca } : c)));
+    const { error } = await db('tv_cenas')
+      .update({ ...mudanca, atualizado_em: new Date().toISOString() })
+      .eq('id', id);
+    if (error) { setErro(error.message); await lerCenas(); }
+  }, [lerCenas]);
+
+  // ── Biblioteca de mídia ───────────────────────────────────────────────────
+
+  const [midias, setMidias] = useState<Midia[]>([]);
+
+  const lerMidias = useCallback(async () => {
+    if (!empresa?.id) return;
+    const { data } = await db('tv_midias')
+      .select('id, url, caminho, tipo, nome')
+      .eq('empresa_id', empresa.id)
+      .order('criado_em', { ascending: false });
+    setMidias((data ?? []) as unknown as Midia[]);
+  }, [empresa?.id]);
+
+  useEffect(() => { void lerMidias(); }, [lerMidias]);
+
   // ── Envio de imagem ───────────────────────────────────────────────────────
   //
   // O bucket `tv` é público na leitura porque o palco é anônimo: a TV precisa
@@ -396,8 +449,24 @@ export function useModoTV() {
 
   const [enviandoImagem, setEnviandoImagem] = useState(false);
 
-  const enviarImagem = useCallback(async (arquivo: File): Promise<string | null> => {
+  /**
+   * Envia um arquivo e o registra na biblioteca.
+   *
+   * O registro em `tv_midias` é o que torna a arte REAPROVEITÁVEL. Sem ele a
+   * mesma peça de campanha seria enviada de novo a cada cena, e o bucket viraria
+   * depósito de duplicatas que ninguém consegue mais distinguir.
+   */
+  const enviarImagem = useCallback(async (
+    arquivo: File,
+  ): Promise<{ url: string; tipo: 'imagem' | 'video' } | null> => {
     if (!empresa?.id) return null;
+
+    const ehVideo = arquivo.type.startsWith('video/');
+    if (!ehVideo && !arquivo.type.startsWith('image/')) {
+      setErro('Só imagem, GIF ou vídeo — este arquivo não é nenhum dos três.');
+      return null;
+    }
+
     setEnviandoImagem(true);
     try {
       // Nome sorteado, e não o do arquivo: dois "campanha.png" enviados por
@@ -411,26 +480,56 @@ export function useModoTV() {
       if (error) { setErro(error.message); return null; }
 
       const { data } = supabase.storage.from('tv').getPublicUrl(caminho);
-      return data.publicUrl;
+      const tipo: 'imagem' | 'video' = ehVideo ? 'video' : 'imagem';
+
+      // Falhar aqui não perde o arquivo: ele já está no bucket e a URL serve.
+      // Só não entra na biblioteca, e o aviso diz isso.
+      const { error: erroRegistro } = await db('tv_midias').insert({
+        empresa_id: empresa.id,
+        caminho,
+        url: data.publicUrl,
+        tipo,
+        nome: arquivo.name.slice(0, 120),
+        tamanho: arquivo.size,
+        criado_por: perfil?.id ?? null,
+      });
+      if (erroRegistro) setErro(`Enviado, mas fora da biblioteca: ${erroRegistro.message}`);
+      else await lerMidias();
+
+      return { url: data.publicUrl, tipo };
     } finally {
       setEnviandoImagem(false);
     }
-  }, [empresa?.id]);
+  }, [empresa?.id, perfil?.id, lerMidias]);
 
   // ── O corte ───────────────────────────────────────────────────────────────
 
   const [cortando, setCortando] = useState(false);
 
-  const cortar = useCallback(async () => {
-    if (!telaId || !cenaId || !tela) return;
+  /**
+   * Manda a cena ao ar. `null` TIRA do ar.
+   *
+   * O botão de cortar não fica desativado quando a cena já está no ar, e isso é
+   * proposital: cortar de novo é como se empurra para a parede uma alteração
+   * recém-feita, sem esperar a releitura de 20 segundos. Desativar prendia a
+   * pessoa — mexia na cena e não tinha como publicar.
+   */
+  const cortar = useCallback(async (alvo?: string | null) => {
+    if (!telaId || !tela) return;
+    const cena = alvo === null ? null : (alvo ?? cenaId);
+    if (cena === undefined) return;
+
     setCortando(true);
-    const { error } = await rpc('fn_tv_cortar', { p_tela_id: telaId, p_cena_id: cenaId });
+    const { error } = await rpc('fn_tv_cortar', { p_tela_id: telaId, p_cena_id: cena });
     setCortando(false);
     if (error) {
       setErro((error as { message?: string }).message ?? 'Não foi possível mandar ao ar.');
       return;
     }
-    setCenaNoArId(cenaId);
+    setCenaNoArId(cena);
+    // Cortar à mão desliga a rotação no banco; refletir aqui evita a mesa
+    // mostrar "rotação ligada" logo depois de ela ter sido desligada.
+    setTelas(atual => atual.map(t => (t.id === telaId ? { ...t, rotacao_ativa: false } : t)));
     await lerNoArDesenhado();
 
     /*
@@ -447,14 +546,67 @@ export function useModoTV() {
     void supabase.removeChannel(canal);
   }, [telaId, cenaId, tela, lerNoArDesenhado]);
 
+  /**
+   * Liga e desliga a fila automática.
+   *
+   * Com ela ligada, a cena vem do RELÓGIO e não de `tv_estado` — a parede troca
+   * sozinha o dia inteiro sem ninguém na mesa, que é a razão de o Modo TV
+   * funcionar quando você não está olhando.
+   */
+  const alternarRotacao = useCallback(async (ativa: boolean) => {
+    if (!telaId || !tela) return;
+    setTelas(atual => atual.map(t => (t.id === telaId ? { ...t, rotacao_ativa: ativa } : t)));
+    const { error } = await rpc('fn_tv_rotacao', { p_tela_id: telaId, p_ativa: ativa });
+    if (error) {
+      setErro((error as { message?: string }).message ?? 'Não foi possível mudar a rotação.');
+      await lerTelas();
+      return;
+    }
+    const canal = supabase.channel(`tv-palco-${tela.slug}`);
+    await canal.subscribe();
+    await canal.send({ type: 'broadcast', event: 'cortar', payload: {} });
+    void supabase.removeChannel(canal);
+    await lerNoArDesenhado();
+  }, [telaId, tela, lerTelas, lerNoArDesenhado]);
+
+  /**
+   * Solta um arquivo na prévia e ele vira fonte, no ponto onde foi solto.
+   *
+   * É o caminho curto entre "tenho a arte da campanha aqui" e "está na parede".
+   * Sem isto seriam quatro passos: adicionar fonte, escolher tipo, abrir o
+   * seletor, enviar.
+   */
+  const soltarArquivo = useCallback(async (arquivo: File, x: number, y: number) => {
+    if (!cenaId) return;
+    const enviado = await enviarImagem(arquivo);
+    if (!enviado) return;
+
+    const camadas = fontes.map(f => f.camada);
+    const { error } = await db('tv_fontes').insert({
+      cena_id: cenaId,
+      tipo: enviado.tipo === 'video' ? 'video' : 'imagem',
+      config: { url: enviado.url, ajuste: 'cover' },
+      x, y,
+      largura: enviado.tipo === 'video' ? 50 : 40,
+      escala: 1,
+      camada: Math.max(0, ...camadas) + 1,
+      visivel: true,
+      mudo: true,
+    });
+    if (error) { setErro(error.message); return; }
+    await lerFontes();
+    await lerDadosPrevia();
+  }, [cenaId, fontes, enviarImagem, lerFontes, lerDadosPrevia]);
+
   return {
     empresa, telas, tela, telaId, setTelaId, setores, criarTela,
     cenas, cenaId, setCenaId, cenaNoArId,
     fontes, fontesDaPrevia, fontesNoAr,
     carregando, erro, limparErro: () => setErro(null),
     enviarImagem, enviandoImagem,
-    criarCena, renomearCena, apagarCena,
+    criarCena, renomearCena, apagarCena, atualizarCena,
     adicionarFonte, atualizarFonte, removerFonte, moverFonte, moverCamada,
+    midias, soltarArquivo, alternarRotacao,
     cortar, cortando,
     recarregar: async () => { await lerTelas(); await lerCenas(); await lerFontes(); await lerNoAr(); },
   };

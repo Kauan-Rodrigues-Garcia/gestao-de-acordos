@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink,
-  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown,
+  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Palco } from './Palco';
-import { useModoTV, telaOnline } from './useModoTV';
+import { useModoTV, telaOnline, type Midia, type Cena } from './useModoTV';
 import { numero, texto, ligado, type Fonte, type TipoFonte } from './geometria';
 import { normalizarSlug } from './slug';
 
@@ -40,6 +40,7 @@ const TIPOS: { tipo: TipoFonte; nome: string; Icone: typeof Type }[] = [
   { tipo: 'meta',    nome: 'Meta',    Icone: Target },
   { tipo: 'fundo',   nome: 'Fundo',   Icone: Square },
   { tipo: 'relogio', nome: 'Relógio', Icone: Clock },
+  { tipo: 'video',   nome: 'Vídeo',   Icone: Film },
 ];
 
 export default function ModoTV() {
@@ -55,6 +56,7 @@ export default function ModoTV() {
   const podeEnviarMidia = temPermissao('tv_enviar_midia');
 
   const selecionada = tv.fontesDaPrevia.find(f => f.id === selecionadaId) ?? null;
+  const cenaAtual = tv.cenas.find(c => c.id === tv.cenaId) ?? null;
   const noArAgora = tv.cenaNoArId === tv.cenaId;
 
   if (tv.carregando) {
@@ -197,14 +199,62 @@ export default function ModoTV() {
             </form>
           )}
 
-          {podeEditar && tv.cenaId && (
-            <Button
-              variant="ghost" size="sm"
-              className="w-full text-destructive hover:text-destructive"
-              onClick={() => { void tv.apagarCena(tv.cenaId!); setSelecionadaId(null); }}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" /> Apagar cena
-            </Button>
+          {podeEditar && cenaAtual && (
+            <div className="rounded-md border p-2.5 space-y-2.5">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Esta cena
+              </p>
+
+              <Campo label="Como ela entra">
+                <Select
+                  value={cenaAtual.transicao}
+                  onValueChange={v => { void tv.atualizarCena(cenaAtual.id, { transicao: v as Cena['transicao'] }); }}
+                >
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="corte">Corte seco</SelectItem>
+                    <SelectItem value="fade">Fade</SelectItem>
+                    <SelectItem value="deslize">Deslize</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Campo>
+
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Entra na rotação</Label>
+                <Switch
+                  checked={cenaAtual.na_rotacao}
+                  onCheckedChange={v => { void tv.atualizarCena(cenaAtual.id, { na_rotacao: v }); }}
+                />
+              </div>
+
+              {cenaAtual.na_rotacao && (
+                <Campo label={`Fica ${cenaAtual.duracao_s}s no ar`}>
+                  <Slider
+                    min={5} max={180} step={5}
+                    value={[cenaAtual.duracao_s]}
+                    onValueChange={([v]) => { void tv.atualizarCena(cenaAtual.id, { duracao_s: v }); }}
+                  />
+                </Campo>
+              )}
+
+              <div className="flex items-center justify-between">
+                <Label className="text-xs" title="Entra quando não há nada no ar">
+                  Cena de emergência
+                </Label>
+                <Switch
+                  checked={cenaAtual.emergencia}
+                  onCheckedChange={v => { void tv.atualizarCena(cenaAtual.id, { emergencia: v }); }}
+                />
+              </div>
+
+              <Button
+                variant="ghost" size="sm"
+                className="w-full text-destructive hover:text-destructive"
+                onClick={() => { void tv.apagarCena(cenaAtual.id); setSelecionadaId(null); }}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Apagar cena
+              </Button>
+            </div>
           )}
         </aside>
 
@@ -220,6 +270,8 @@ export default function ModoTV() {
               onSelecionar={podeEditar ? setSelecionadaId : undefined}
               arrastavel={podeEditar}
               onMover={tv.moverFonte}
+              onSoltarArquivo={podeEditar && podeEnviarMidia ? tv.soltarArquivo : undefined}
+              enviando={tv.enviandoImagem}
               vazio="Nenhuma cena escolhida"
             />
             <QuadroPalco
@@ -231,16 +283,51 @@ export default function ModoTV() {
             />
           </div>
 
-          <div className="flex items-center justify-center gap-3">
+          {/*
+            O botão NÃO desativa quando a cena já está no ar.
+
+            Antes desativava, e isso prendia: a pessoa mexia na cena e não tinha
+            como publicar a mudança — o botão ficava cinza dizendo "Já está no
+            ar" enquanto a parede exibia a versão antiga. Cortar de novo é o
+            jeito de empurrar a alteração na hora.
+          */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <Button
               size="lg"
               className="px-10 font-bold tracking-wide"
-              disabled={!podeCortar || !tv.cenaId || tv.cortando || noArAgora}
+              disabled={!podeCortar || !tv.cenaId || tv.cortando}
               onClick={() => { void tv.cortar(); }}
             >
-              {noArAgora ? 'Já está no ar' : tv.cortando ? 'Mandando…' : 'CORTAR PARA O AR'}
+              {tv.cortando ? 'Mandando…' : noArAgora ? 'ATUALIZAR NO AR' : 'CORTAR PARA O AR'}
             </Button>
+
+            <Button
+              size="lg" variant="outline"
+              disabled={!podeCortar || tv.cortando || tv.cenaNoArId === null}
+              onClick={() => { void tv.cortar(null); }}
+            >
+              <PowerOff className="h-4 w-4 mr-1.5" /> Tirar do ar
+            </Button>
+
+            {tv.tela && (
+              <Button
+                size="lg"
+                variant={tv.tela.rotacao_ativa ? 'default' : 'outline'}
+                disabled={!podeCortar}
+                onClick={() => { void tv.alternarRotacao(!tv.tela!.rotacao_ativa); }}
+                title="A parede troca de cena sozinha, na ordem e na duração de cada uma"
+              >
+                <Repeat className="h-4 w-4 mr-1.5" />
+                {tv.tela.rotacao_ativa ? 'Rotação ligada' : 'Rotação'}
+              </Button>
+            )}
           </div>
+
+          {tv.tela?.rotacao_ativa && (
+            <p className="text-center text-xs text-muted-foreground">
+              A fila está no ar. Cortar qualquer cena à mão desliga a rotação.
+            </p>
+          )}
 
           {!podeCortar && (
             <p className="text-center text-xs text-muted-foreground">
@@ -293,6 +380,7 @@ export default function ModoTV() {
               podeEnviarMidia={podeEnviarMidia}
               onEnviarImagem={tv.enviarImagem}
               enviando={tv.enviandoImagem}
+              midias={tv.midias}
             />
           )}
         </aside>
@@ -364,7 +452,8 @@ function NovaTela({
 // ── Quadro ───────────────────────────────────────────────────────────────────
 
 function QuadroPalco({
-  rotulo, cor, borda, fontes, selecionadaId, onSelecionar, arrastavel, onMover, vazio,
+  rotulo, cor, borda, fontes, selecionadaId, onSelecionar, arrastavel, onMover,
+  onSoltarArquivo, enviando, vazio,
 }: {
   rotulo: string;
   cor: string;
@@ -374,14 +463,49 @@ function QuadroPalco({
   onSelecionar?: (id: string) => void;
   arrastavel?: boolean;
   onMover?: (id: string, x: number, y: number, definitivo: boolean) => void;
+  onSoltarArquivo?: (arquivo: File, x: number, y: number) => void | Promise<void>;
+  enviando?: boolean;
   vazio: string;
 }) {
+  const [sobrevoando, setSobrevoando] = useState(false);
+
+  /*
+   * Soltar imagem, GIF ou vídeo direto na prévia adiciona a fonte NO PONTO onde
+   * o arquivo foi solto. É o caminho curto entre "tenho a arte aqui" e "está na
+   * parede" — sem isso são quatro passos até o mesmo resultado.
+   */
+  const aoSoltar = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setSobrevoando(false);
+    if (!onSoltarArquivo) return;
+
+    const arquivo = e.dataTransfer.files?.[0];
+    if (!arquivo) return;
+
+    const caixa = e.currentTarget.getBoundingClientRect();
+    if (caixa.width === 0 || caixa.height === 0) return;
+    const x = ((e.clientX - caixa.left) / caixa.width) * 100;
+    const y = ((e.clientY - caixa.top) / caixa.height) * 100;
+
+    await onSoltarArquivo(arquivo, Math.round(x * 10) / 10, Math.round(y * 10) / 10);
+  };
+
   return (
     <div>
       <p className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${cor}`}>{rotulo}</p>
       <div
-        className={`relative rounded-md overflow-hidden border-2 ${borda} bg-[#0a0f13]`}
+        className={`relative rounded-md overflow-hidden border-2 bg-[#0a0f13] ${
+          sobrevoando ? 'border-sky-400' : borda
+        }`}
         style={{ aspectRatio: '16 / 9' }}
+        onDragOver={onSoltarArquivo ? e => {
+          // Sem o `preventDefault` o navegador ABRE o arquivo numa aba nova, e
+          // a mesa some da frente da pessoa.
+          e.preventDefault();
+          setSobrevoando(true);
+        } : undefined}
+        onDragLeave={onSoltarArquivo ? () => setSobrevoando(false) : undefined}
+        onDrop={onSoltarArquivo ? e => { void aoSoltar(e); } : undefined}
       >
         <Palco
           fontes={fontes}
@@ -390,6 +514,14 @@ function QuadroPalco({
           onMoverFonte={arrastavel ? onMover : undefined}
           aviso={fontes.length === 0 ? vazio : null}
         />
+
+        {(sobrevoando || enviando) && (
+          <div className="absolute inset-0 grid place-items-center bg-sky-500/20 pointer-events-none">
+            <span className="rounded-full bg-background/90 px-4 py-2 text-sm font-semibold">
+              {enviando ? 'Enviando…' : 'Solte para adicionar aqui'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -408,15 +540,16 @@ function rotuloDaFonte(f: Fonte): string {
 // ── Inspetor ─────────────────────────────────────────────────────────────────
 
 function Inspetor({
-  fonte, onMudar, onRemover, onCamada, podeEnviarMidia, onEnviarImagem, enviando,
+  fonte, onMudar, onRemover, onCamada, podeEnviarMidia, onEnviarImagem, enviando, midias,
 }: {
   fonte: Fonte;
   onMudar: (m: Partial<Fonte>) => void;
   onRemover: () => void;
   onCamada: (d: 'frente' | 'tras') => void;
   podeEnviarMidia: boolean;
-  onEnviarImagem: (a: File) => Promise<string | null>;
+  onEnviarImagem: (a: File) => Promise<{ url: string; tipo: 'imagem' | 'video' } | null>;
   enviando: boolean;
+  midias: Midia[];
 }) {
   const mudarConfig = (chave: string, valor: unknown) =>
     onMudar({ config: { ...fonte.config, [chave]: valor } });
@@ -454,27 +587,53 @@ function Inspetor({
         </>
       )}
 
-      {fonte.tipo === 'imagem' && (
+      {(fonte.tipo === 'imagem' || fonte.tipo === 'video') && (
         <>
           {podeEnviarMidia && (
             <Campo label="Enviar do computador">
               <Input
                 type="file"
-                accept="image/*"
+                accept={fonte.tipo === 'video' ? 'video/*' : 'image/*'}
                 disabled={enviando}
                 className="h-8 text-xs file:text-xs"
                 onChange={async e => {
                   const arquivo = e.target.files?.[0];
                   if (!arquivo) return;
-                  const url = await onEnviarImagem(arquivo);
-                  if (url) mudarConfig('url', url);
+                  const enviado = await onEnviarImagem(arquivo);
+                  if (enviado) mudarConfig('url', enviado.url);
                   // Limpa o campo para o mesmo arquivo poder ser reenviado.
                   e.target.value = '';
                 }}
               />
             </Campo>
           )}
-          <Campo label="Ou o endereço de uma imagem">
+
+          {/* Biblioteca: o que já foi enviado é reaproveitável em outra cena. */}
+          {midias.filter(m => m.tipo === (fonte.tipo === 'video' ? 'video' : 'imagem')).length > 0 && (
+            <Campo label="Ou da biblioteca">
+              <div className="grid grid-cols-4 gap-1 max-h-32 overflow-y-auto">
+                {midias
+                  .filter(m => m.tipo === (fonte.tipo === 'video' ? 'video' : 'imagem'))
+                  .map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => mudarConfig('url', m.url)}
+                      title={m.nome}
+                      className={`aspect-square rounded border overflow-hidden ${
+                        texto(fonte.config, 'url', '') === m.url
+                          ? 'ring-2 ring-primary' : 'hover:opacity-80'
+                      }`}
+                    >
+                      {m.tipo === 'video'
+                        ? <span className="text-[10px] px-1">vídeo</span>
+                        : <img src={m.url} alt="" className="w-full h-full object-cover" />}
+                    </button>
+                  ))}
+              </div>
+            </Campo>
+          )}
+
+          <Campo label="Ou o endereço">
             <Input
               value={texto(fonte.config, 'url', '')}
               onChange={e => mudarConfig('url', e.target.value)}
@@ -482,6 +641,33 @@ function Inspetor({
               className="h-8"
             />
           </Campo>
+        </>
+      )}
+
+      {/* Mesa de som — só para fonte que tem áudio. */}
+      {fonte.tipo === 'video' && (
+        <>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Com som</Label>
+            <Switch
+              checked={fonte.mudo === false}
+              onCheckedChange={v => onMudar({ mudo: !v })}
+            />
+          </div>
+          {fonte.mudo === false && (
+            <Campo label={`Volume — ${Math.round((fonte.volume ?? 1) * 100)}%`}>
+              <Slider min={0} max={1} step={0.05}
+                      value={[fonte.volume ?? 1]}
+                      onValueChange={([v]) => onMudar({ volume: v })} />
+            </Campo>
+          )}
+          {fonte.mudo === false && (
+            <p className="text-[11px] text-muted-foreground">
+              No PC da TV o som só sai depois de alguém destravar uma vez, ou com a
+              flag <code className="font-mono">--autoplay-policy=no-user-gesture-required</code> no
+              atalho do Chrome.
+            </p>
+          )}
         </>
       )}
 
