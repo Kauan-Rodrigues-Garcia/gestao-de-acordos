@@ -115,12 +115,16 @@ AS $function$
          SELECT public.fn_setores_do_operador((SELECT auth.uid()))
        )
     )
-    -- Só a minha: a equipe tem que ser literalmente uma das minhas.
+    -- Só a minha: a equipe do CADASTRO, e só ela. Não vale a equipe em que eu
+    -- fui clonado — clone é empréstimo de mão de obra para outro setor, e
+    -- contar a equipe emprestada devolveria o alcance que a chave veio tirar.
     ELSE EXISTS (
-      SELECT 1 FROM public.fn_equipes_do_operador(p_operador) dele
-       WHERE dele.equipe_id IN (
-         SELECT eq.equipe_id FROM public.fn_equipes_do_operador((SELECT auth.uid())) eq
-       )
+      SELECT 1
+        FROM public.perfis dele
+        JOIN public.perfis eu ON eu.id = (SELECT auth.uid())
+       WHERE dele.id = p_operador
+         AND dele.equipe_id IS NOT NULL
+         AND dele.equipe_id = eu.equipe_id
     )
   END;
 $function$;

@@ -392,11 +392,10 @@ export function useAnalytics(
             .eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
           equipesAlvo = ((eqs as { id: string }[]) ?? []).map(e => e.id);
         } else {
-          const { data: clones } = await supabase
-            .from('equipe_operadores_clones').select('equipe_id')
-            .eq('empresa_id', empresa.id).eq('operador_id', perfil.id);
-          equipesAlvo = ((clones as { equipe_id: string }[]) ?? []).map(c => c.equipe_id);
-          if (minhaEquipe) equipesAlvo.push(minhaEquipe);
+          // A equipe do CADASTRO, e só ela — nem a que a pessoa foi clonada.
+          // Clone é empréstimo para outro setor, e contar a equipe emprestada
+          // devolveria o alcance que a chave desligada acabou de tirar.
+          equipesAlvo = minhaEquipe ? [minhaEquipe] : [];
         }
 
         if (equipesAlvo.length === 0) {

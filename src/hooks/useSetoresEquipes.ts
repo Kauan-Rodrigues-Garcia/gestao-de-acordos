@@ -88,13 +88,24 @@ export function useSetoresEquipes(): SetoresEquipes {
   const podeTodosSetores = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
   /*
-   * Quem alcança o setor alcança todas as equipes dele por definição — a chave
-   * só decide alguma coisa quando `equipe` é o teto. Escrever a condição assim,
-   * e não só `temPermissao(...)`, evita que desligar a chave estreite o filtro
-   * de um líder que continua com o setor liberado.
+   * A chave decide sozinha, e é isso que ela promete no rótulo.
+   *
+   * A primeira versão desta linha era
+   *
+   *   niveis.includes('setor') || podeTodosSetores || temPermissao(...)
+   *
+   * com o argumento de que quem alcança o setor alcança todas as equipes dele
+   * por definição. O argumento é verdadeiro sobre DADO e falso sobre esta
+   * tela: desligar a chave num cargo que continua com `dashboard_escopo_setor`
+   * não mudava nada, e a única forma de ver o efeito era desligar duas coisas.
+   * Isso é um interruptor que liga e não acontece nada — o defeito que o painel
+   * inteiro existe para não repetir.
+   *
+   * Agora a chave manda na LISTA de equipes do filtro, e o alcance de setor
+   * segue mandando no que a pessoa soma quando não escolhe equipe nenhuma. São
+   * duas perguntas, e cada uma tem o seu controle.
    */
-  const podeTodasEquipes = niveis.includes('setor') || podeTodosSetores
-    || temPermissao('dashboard_escopo_equipe_todas');
+  const podeTodasEquipes = temPermissao('dashboard_escopo_equipe_todas');
 
   const [setores, setSetores]               = useState<SetorResumo[]>(VAZIO);
   const [equipes, setEquipes] = useState<EquipeResumo[]>(VAZIO_EQUIPES);
@@ -112,7 +123,6 @@ export function useSetoresEquipes(): SetoresEquipes {
   const cargo    = perfil?.perfil ?? null;
   const setorId  = perfil?.setor_id ?? null;
   const empresaId = empresa?.id ?? null;
-  const meuId    = perfil?.id ?? null;
   const minhaEquipeId =
     (perfil as (typeof perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null;
 
@@ -145,36 +155,29 @@ export function useSetoresEquipes(): SetoresEquipes {
       }
 
       /*
-       * As MINHAS equipes: a do cadastro mais aquelas em que fui clonado.
+       * A MINHA equipe: a do cadastro, e só ela.
        *
-       * Só é consultado quando o alcance está limitado à própria equipe — para
-       * quem vê todas, a lista acima já é a resposta e esta consulta seria uma
-       * ida ao banco cujo resultado ninguém lê. Espelha
-       * `fn_equipes_do_operador` no banco, que é quem decide as LINHAS.
+       * Sem equipe cadastrada não aparece nenhuma; com uma, aparece uma. Quem
+       * está CLONADO em outra equipe continua vendo só a de origem — o clone é
+       * um empréstimo de mão de obra para o outro setor, não uma segunda casa,
+       * e listar a equipe emprestada devolveria à pessoa exatamente o alcance
+       * que esta chave veio tirar.
+       *
+       * Sai do próprio perfil, sem ida ao banco: `perfis` é `select('*')` no
+       * `useAuth`, então `equipe_id` já está em mãos.
        */
-      if (podeEquipe && !podeTodasEquipes) {
-        const ids: string[] = [];
-        // A do cadastro sai do próprio perfil, sem ida ao banco. O `meuId` só
-        // gateia a consulta dos clones — sem ele a equipe cadastrada ainda
-        // vale, e perdê-la deixaria a pessoa sem filtro nenhum.
-        if (minhaEquipeId) ids.push(minhaEquipeId);
-        if (meuId) {
-          const { data: clones } = await supabase
-            .from('equipe_operadores_clones').select('equipe_id')
-            .eq('empresa_id', empresaId).eq('operador_id', meuId);
-          for (const c of ((clones as { equipe_id: string }[]) ?? [])) ids.push(c.equipe_id);
-        }
-        setMinhasEquipes(new Set(ids));
-      } else {
-        setMinhasEquipes(new Set());
-      }
+      setMinhasEquipes(
+        podeEquipe && !podeTodasEquipes && minhaEquipeId
+          ? new Set([minhaEquipeId])
+          : new Set(),
+      );
     } catch (err) {
       console.warn('[useSetoresEquipes] erro ao carregar listas:', err);
     } finally {
       setLoading(false);
     }
   }, [cargo, setorId, empresaId, podeTodosSetores, podeEquipe, podeTodasEquipes,
-      meuId, minhaEquipeId]);
+      minhaEquipeId]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 

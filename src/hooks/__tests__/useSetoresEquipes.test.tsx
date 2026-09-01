@@ -64,14 +64,13 @@ beforeEach(() => {
   // Padrao: o caso do lider — enxerga o proprio setor e escolhe equipe, mas
   // nao escolhe setor.
   //
-  // `dashboard_escopo_setor` entra aqui desde 03/09/2026: com ele a pessoa
-  // alcanca todas as equipes do setor por definicao, que e como o lider real
-  // esta configurado nas duas empresas. Sem ele, o recorte de
-  // `dashboard_escopo_equipe_todas` passa a valer e a lista mostra so as
-  // equipes de que a pessoa participa — o que os casos proprios cobrem abaixo.
+  // `dashboard_escopo_setor` e `dashboard_escopo_equipe_todas` entram aqui
+  // desde 03/09/2026: e como o lider real esta configurado nas duas empresas
+  // depois do backfill. Sem a segunda, a lista mostra so a equipe cadastrada da
+  // pessoa — o que os casos proprios cobrem abaixo.
   chavesRef.current = new Set([
     'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
-    'dashboard_escopo_setor',
+    'dashboard_escopo_setor', 'dashboard_escopo_equipe_todas',
   ]);
   fromSpy.mockReset();
   fromSpy.mockImplementation((tabela: string) =>
@@ -241,8 +240,17 @@ describe('useSetoresEquipes — só a minha equipe ou todas', () => {
     });
   }
 
-  it('quem alcança o setor continua vendo todas as equipes, chave desligada ou não', async () => {
-    perfilRef.current = { id: 'eu', perfil: 'lider', setor_id: 'setor-1', equipe_id: 'eq-2' };
+  /*
+   * A chave manda SOZINHA, e este é o caso que a primeira versão errou.
+   *
+   * Ela nasceu como «setor OU todos_setores OU a chave», com o argumento de
+   * que quem alcança o setor alcança todas as equipes dele. Na prática o
+   * administrador desligava a chave num cargo que continua com
+   * `dashboard_escopo_setor` e não acontecia nada — um interruptor morto, que
+   * é o defeito que o painel inteiro existe para não repetir.
+   */
+  it('alcance de setor NÃO passa por cima da chave desligada', async () => {
+    perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1', equipe_id: 'eq-2' };
     chavesRef.current = new Set([
       'ver_dashboard', 'dashboard_escopo_individual',
       'dashboard_escopo_equipe', 'dashboard_escopo_setor',
@@ -252,10 +260,8 @@ describe('useSetoresEquipes — só a minha equipe ou todas', () => {
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.podeTodasEquipes).toBe(true);
-    expect(result.current.equipesDoSetor).toHaveLength(3);
-    // E nem chega a perguntar quais são as minhas: a resposta não seria usada.
-    expect(fromSpy).not.toHaveBeenCalledWith('equipe_operadores_clones');
+    expect(result.current.podeTodasEquipes).toBe(false);
+    expect(result.current.equipesDoSetor.map(e => e.id)).toEqual(['eq-2']);
   });
 
   it('sem setor e sem a chave, o filtro lista só a equipe da pessoa', async () => {
@@ -272,7 +278,12 @@ describe('useSetoresEquipes — só a minha equipe ou todas', () => {
     expect(result.current.equipesDoSetor.map(e => e.id)).toEqual(['eq-2']);
   });
 
-  it('a equipe em que a pessoa foi CLONADA também é dela', async () => {
+  /*
+   * Clone é empréstimo de mão de obra para outro setor, não uma segunda casa.
+   * Listar a equipe emprestada devolveria à pessoa exatamente o alcance que
+   * esta chave veio tirar.
+   */
+  it('quem está CLONADO em outra equipe continua vendo só a de origem', async () => {
     perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1', equipe_id: 'eq-2' };
     chavesRef.current = new Set([
       'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
@@ -282,10 +293,12 @@ describe('useSetoresEquipes — só a minha equipe ou todas', () => {
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.equipesDoSetor.map(e => e.id)).toEqual(['eq-2', 'eq-3']);
+    expect(result.current.equipesDoSetor.map(e => e.id)).toEqual(['eq-2']);
+    // E nem pergunta pelos clones: a resposta não mudaria a lista.
+    expect(fromSpy).not.toHaveBeenCalledWith('equipe_operadores_clones');
   });
 
-  it('com a chave ligada e sem setor, volta a listar todas', async () => {
+  it('com a chave ligada, volta a listar todas', async () => {
     perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1', equipe_id: 'eq-2' };
     chavesRef.current = new Set([
       'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
@@ -301,12 +314,12 @@ describe('useSetoresEquipes — só a minha equipe ou todas', () => {
   });
 
   /*
-   * Sem equipe cadastrada e sem clone, a lista fica vazia — e o
+   * Sem equipe cadastrada, a lista fica vazia — e o
    * `<FiltroEscopo />` esconde a linha inteira em vez de mostrar uma moldura
    * com um botão só. Zerar aqui é melhor que devolver o setor: devolver o setor
    * é exatamente o que a chave veio impedir.
    */
-  it('sem equipe nenhuma, a lista fica vazia em vez de cair no setor', async () => {
+  it('sem equipe cadastrada, a lista fica vazia em vez de cair no setor', async () => {
     perfilRef.current = { id: 'eu', perfil: 'operador', setor_id: 'setor-1' };
     chavesRef.current = new Set([
       'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',

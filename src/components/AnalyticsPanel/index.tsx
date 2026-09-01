@@ -143,11 +143,9 @@ export function AnalyticsPanel({
     setOperadorFiltro,
   } = useAnalytics(mesAnalise, {
     niveis: niveisDashboard,
-    // Só pesa quando `equipe` é o teto: quem alcança o setor já alcança todas
-    // as equipes dele. Ver `dashboard_escopo_equipe_todas` no catálogo.
-    podeTodasEquipes: niveisDashboard.includes('setor')
-      || niveisDashboard.includes('todos_setores')
-      || temPermissao('dashboard_escopo_equipe_todas'),
+    // A chave decide sozinha — ver o comentário em `useSetoresEquipes`, que faz
+    // a mesma leitura para a LISTA do filtro.
+    podeTodasEquipes: temPermissao('dashboard_escopo_equipe_todas'),
   });
 
   const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
