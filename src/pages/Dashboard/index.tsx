@@ -9,7 +9,7 @@ import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
-  ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
+  ROUTE_PATHS, formatCurrency, formatDate, getTodayISO, contaNoRecebimento,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -60,7 +60,23 @@ export default function Dashboard() {
   // os niveis da aba, resolvidos em `useSetoresEquipes` e lidos por
   // <FiltroEscopo />.
 
-  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
+  /*
+   * Onde o Dashboard ABRE.
+   *
+   * Era sempre 'setor'. Enquanto só a liderança tinha alcance de setor isso
+   * estava certo — é a pergunta dela. Com o setor e a equipe liberados também
+   * para operador (03/09/2026), o mesmo padrão faria o operador abrir a tela
+   * no total do setor e ter de clicar em «Só os meus» toda vez para ver o
+   * próprio número, que é o que ele veio ver.
+   *
+   * Quem PRODUZ recebimento abre no próprio (`contaNoRecebimento` — a mesma
+   * lista do ranking, dos quartis e do Pix); quem supervisiona abre no setor.
+   * Não é uma decisão de acesso: os dois continuam podendo escolher os dois
+   * lados no `<FiltroEscopo />` logo acima. É só por onde a tela começa.
+   */
+  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>(
+    () => (contaNoRecebimento(perfil?.perfil) ? 'individual' : 'setor'),
+  );
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
   const operadorFiltroAtivo = visaoFiltro === 'individual' ? (perfil?.id ?? null) : null;
   const eliteVisaoGeral = visaoFiltro !== 'individual';
