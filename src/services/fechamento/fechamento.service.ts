@@ -49,13 +49,15 @@ import {
   ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
 import { buscarDiretoExtraDoMes } from '@/services/analitico/diretoExtra.service';
+import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
+import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO, ordenarQuartis, quartilAtual,
 } from '@/lib/diasUteis';
 import { calcularProjecao, pctLimitado } from '@/lib/projecaoMetas';
 import {
-  partesDoMes, rotuloDoMes, normalizarMes, ehMesAtual, diasNoMes,
+  partesDoMes, rotuloDoMes, normalizarMes, ehMesAtual, diasNoMes, primeiroDiaDoMes,
 } from '@/lib/mesReferencia';
 import { mesFechado } from '@/lib/fechamentoMes';
 import { getTodayISO } from '@/lib/index';
@@ -119,6 +121,41 @@ function rotuloDiaCurto(iso: string): string {
   return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')} (${DIAS_CURTOS[d.getDay()]})`;
 }
 
+/**
+ * Quando o relatório analítico deste mês foi importado pela última vez.
+ *
+ * Existe por um motivo concreto: importar o dia 31 já em setembro muda o total
+ * de agosto DEPOIS de o fechamento ter sido apresentado. Sem esta linha, quem
+ * está com o PDF na mão e a tela ao lado vê dois números e não tem como saber
+ * que a diferença é de data, não de conta. `null` quando o mês não tem
+ * nenhuma linha importada, ou quando a coluna não pôde ser lida.
+ */
+async function ultimaImportacaoDoMes(
+  empresaId: string, mes: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('analitico_recebimentos')
+    .select('importado_em')
+    .eq('empresa_id', empresaId)
+    .eq('mes_referencia', primeiroDiaDoMes(mes))
+    .order('importado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.importado_em) return null;
+  return data.importado_em;
+}
+
+/** "15/08/2026 às 14:32" — o mesmo formato do carimbo do relatório. */
+function instanteLegivel(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const data = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const hora = d.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
+  });
+  return `${data} às ${hora}`;
+}
+
 /** "15/08/2026 às 14:32" — quando o relatório foi tirado. */
 function carimboDeHora(): string {
   const agora = new Date();
@@ -132,17 +169,29 @@ function carimboDeHora(): string {
 /**
  * O escopo de um setor, montado fora do React.
  *
- * Espelha o `useEscopoAnalitico` — mesma decisão de carimbo × soma de usuários.
- * O que ele NÃO traz é a exclusão de origens (`analitico_exclusoes_setor`): o
- * relatório de fechamento é o retrato do que o RELATÓRIO trouxe para o setor, e
- * excluir origens é um ajuste de acompanhamento do mês corrente. Está nos
- * avisos quando houver diferença.
+ * Espelha o `useEscopoAnalitico` — carimbo × soma de usuários E a exclusão de
+ * origens (`analitico_exclusoes_setor`).
+ *
+ * ## Por que a exclusão entrou (03/09/2026)
+ *
+ * Ela não estava aqui, de propósito: a ideia era que o fechamento fosse "o que
+ * o relatório trouxe", e a exclusão, um ajuste de acompanhamento do mês
+ * corrente. Na prática produziu o pior resultado possível — o Analítico, o
+ * Painel do Líder e o Painel da Diretoria descontam as origens excluídas, o
+ * relatório de fechamento não descontava, e o mesmo setor tinha DOIS totais
+ * para o mesmo mês. Quem lia os dois não tinha como saber qual era o certo.
+ *
+ * O relatório é levado para a diretoria; ele tem de dizer o mesmo que a tela
+ * aberta na mesma sala. A exclusão é decisão de quem responde pelo setor, e vale
+ * para os dois lados ou não vale para nenhum.
  */
 function escopoDoSetor(params: {
   setorId: string;
   fontes: FontesDeEscopo;
   isPaguePlay: boolean;
   temCarimbo: boolean;
+  origensExcluidas?: ReadonlySet<OrigemKey>;
+  setorDoOperador?: (id: string) => string | null | undefined;
 }): EscopoAnalitico {
   const { setorId, fontes, isPaguePlay, temCarimbo } = params;
   return escopoDeSetor({
@@ -153,6 +202,8 @@ function escopoDoSetor(params: {
     }),
     operadores: operadoresDoSetor(setorId, fontes),
     temCarimbo,
+    origensExcluidas: params.origensExcluidas,
+    setorDoOperador: params.setorDoOperador,
   });
 }
 
@@ -273,7 +324,7 @@ export async function montarFechamento(
   const avisos: string[] = [];
 
   // ── 1. As bases: linhas do mês, quem é quem, metas e config ────────────────
-  const [analitico, fontes, metas, cfg, perfisResp, setoresResp] = await Promise.all([
+  const [analitico, fontes, metas, cfg, perfisResp, setoresResp, exclusoesResp] = await Promise.all([
     buscarAnaliticoDashboardMes(params.empresaId, mes),
     buscarFontesDeEscopo(params.empresaId, mes),
     buscarMetasDoMes(params.empresaId, mes),
@@ -282,6 +333,9 @@ export async function montarFechamento(
       .select('id, nome, usuario, setor_id, equipe_id, situacao')
       .eq('empresa_id', params.empresaId),
     supabase.from('setores').select('id, nome').eq('empresa_id', params.empresaId),
+    // As origens que cada setor tirou do acumulado. Tabela vazia = tudo conta,
+    // que é o comportamento de sempre; migration ausente devolve vazio também.
+    buscarExclusoesSetor(params.empresaId, mes),
   ]);
 
   const linhas = analitico.data;
@@ -289,6 +343,16 @@ export async function montarFechamento(
   const quartisConfig: QuartilConfig[] = config?.quartis?.length ? config.quartis : QUARTIS_PADRAO;
   const feriados = config?.feriados ?? [];
   const temCarimbo = temCarimboDeSetor(linhas);
+
+  /*
+   * Exclusões por setor e "de que setor é esta pessoa" — o par que
+   * `linhaNoEscopo` usa para decidir se uma origem ainda conta. O setor sai da
+   * equipe primeiro e do cadastro na falta dela, igual ao `useEscopoAnalitico`:
+   * duas respostas diferentes para a mesma pessoa reabririam a divergência que
+   * este trecho existe para fechar.
+   */
+  const exclusoesPorSetor = exclusoesResp.porSetor;
+  const setorDoOperador = (id: string) => fontes.operadorEquipeMap[id]?.setor_id ?? null;
 
   const perfis = ((perfisResp.data as PerfilFechamento[] | null) ?? []);
   const perfilPorId = new Map(perfis.map(p => [p.id, p]));
@@ -321,6 +385,8 @@ export async function montarFechamento(
   } else if (params.nivel === 'setor' && params.setorId) {
     escopo = escopoDoSetor({
       setorId: params.setorId, fontes, isPaguePlay: params.isPaguePlay, temCarimbo,
+      origensExcluidas: exclusoesPorSetor[params.setorId],
+      setorDoOperador,
     });
     rotuloEscopo = `Setor ${nomeSetor.get(params.setorId) ?? '—'}`;
     membrosDoEscopo = operadoresDoSetor(params.setorId, fontes);
@@ -542,6 +608,8 @@ export async function montarFechamento(
     for (const s of setores) {
       const escopoSetor = escopoDoSetor({
         setorId: s.id, fontes, isPaguePlay: params.isPaguePlay, temCarimbo,
+        origensExcluidas: exclusoesPorSetor[s.id],
+        setorDoOperador,
       });
       const agg = agregarAnalitico(linhas, escopoSetor);
       const membros = operadoresDoSetor(s.id, fontes);
@@ -595,6 +663,42 @@ export async function montarFechamento(
   }
   if (noMesAtual) {
     avisos.push(`${rotuloDoMes(mes)} ainda está aberto: este é um retrato parcial, tirado em ${carimboDeHora()}.`);
+  }
+
+  /*
+   * Origens excluídas: o relatório passou a descontá-las (ver `escopoDoSetor`),
+   * e o aviso existe para o número não encolher em silêncio. Quem lê precisa
+   * saber que a decisão de excluir foi de alguém, e qual.
+   */
+  const setoresComExclusao = (params.nivel === 'setor' && params.setorId
+    ? [params.setorId]
+    : params.nivel === 'diretoria' ? setores.map(x => x.id) : []
+  ).filter(id => (exclusoesPorSetor[id]?.size ?? 0) > 0);
+
+  if (setoresComExclusao.length > 0) {
+    const nomes = setoresComExclusao
+      .map(id => nomeSetor.get(id) ?? 'setor')
+      .join(', ');
+    avisos.push(
+      `Origens excluídas do acumulado foram descontadas, como no Analítico e no `
+      + `Painel do Líder (${nomes}). O ajuste é de quem responde pelo setor — `
+      + 'Analítico › Composição do acumulado mostra o que ficou de fora.',
+    );
+  }
+
+  /*
+   * Mês fechado que recebeu importação DEPOIS da virada. É o caso do relatório
+   * do dia 31 subido no dia 1º: o número deste PDF é o certo, e um fechamento
+   * tirado antes dessa importação não é.
+   */
+  const importadoEm = await ultimaImportacaoDoMes(params.empresaId, mes);
+  if (importadoEm) {
+    const depoisDaVirada = !noMesAtual && importadoEm.slice(0, 7) > mes;
+    avisos.push(depoisDaVirada
+      ? `O relatório de ${rotuloDoMes(mes)} foi importado pela última vez em `
+        + `${instanteLegivel(importadoEm)} — já com o mês virado. Um fechamento `
+        + 'tirado antes dessa importação mostra um total menor; este aqui já a inclui.'
+      : `Relatório analítico importado pela última vez em ${instanteLegivel(importadoEm)}.`);
   }
   if (!config) {
     avisos.push('Feriados e quartis não foram configurados para o mês — a contagem de dias úteis usou apenas segunda a sexta.');
