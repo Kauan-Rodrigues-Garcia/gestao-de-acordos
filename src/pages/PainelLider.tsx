@@ -51,10 +51,14 @@ import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
 import { escopoEfetivo, niveisLiberados } from '@/lib/permissoes-escopo';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
+import {
+  deslocarMes, ehMesAtual as ehMesAtualRef, mesAtual, primeiroDiaDoMes,
+  rotuloDoMes, ultimoDiaDoMes, type MesRef,
+} from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
-interface MesRef { ano: number; mes: number }   // mes: 0-11
 
 
 
@@ -64,15 +68,19 @@ type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'ajuste';
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
-const pad = (n: number) => String(n).padStart(2, '0');
-
-function periodoDoMes(m: MesRef) {
-  const inicio = `${m.ano}-${pad(m.mes + 1)}-01`;
-  const ultimoDia = new Date(m.ano, m.mes + 1, 0).getDate();
-  const fim = `${m.ano}-${pad(m.mes + 1)}-${pad(ultimoDia)}`;
-  const d = new Date(m.ano, m.mes, 1);
-  const nome = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  return { inicio, fim, label: nome.charAt(0).toUpperCase() + nome.slice(1) };
+/**
+ * O período do mês de referência (`yyyy-MM`).
+ *
+ * A conta de calendário — inclusive o último dia e a virada de ano — sai de
+ * `mesReferencia`, que é onde ela mora para todas as telas. A versão anterior
+ * refazia tudo à mão com `new Date(ano, mes + 1, 0)`.
+ */
+function periodoDoMes(mes: MesRef) {
+  return {
+    inicio: primeiroDiaDoMes(mes),
+    fim:    ultimoDiaDoMes(mes),
+    label:  rotuloDoMes(mes),
+  };
 }
 
 
@@ -137,15 +145,13 @@ export default function PainelLider() {
   const soMeuSetor = niveisLiberados('painel_lider', temPermissao).includes('setor')
     && !verTodosSetores;
 
-  const [mesRef, setMesRef] = useState<MesRef>(() => {
-    const d = new Date();
-    return { ano: d.getFullYear(), mes: d.getMonth() };
-  });
+  /*
+   * O mês do sistema inteiro (`MesProvider`): escolher agosto aqui vale no
+   * Dashboard, nos Acordos e no Analítico, e sobrevive à troca de página.
+   */
+  const { mes: mesRef, setMes: setMesRef } = useMesGlobal();
   const periodo = useMemo(() => periodoDoMes(mesRef), [mesRef]);
-  const ehMesAtual = useMemo(() => {
-    const d = new Date();
-    return mesRef.ano === d.getFullYear() && mesRef.mes === d.getMonth();
-  }, [mesRef]);
+  const noMesAtual = ehMesAtualRef(mesRef);
 
   const [operadores, setOperadores] = useState<Perfil[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -182,7 +188,7 @@ export default function PainelLider() {
   // Aceita `null` — nenhuma aba liberada é um fato a registrar, e não uma aba
   // inventada que sujaria a contagem.
   useSubAbaUso(abaVisivel);
-  const mesStr = `${mesRef.ano}-${pad(mesRef.mes + 1)}`;
+  const mesStr = mesRef;
 
   // ── Recorte das abas analíticas: setor + equipe, um só para as três ────────
   //
@@ -465,12 +471,7 @@ export default function PainelLider() {
 
   useEffect(() => { void carregarTudo(); }, [carregarTudo]);
 
-  function irMes(delta: number) {
-    setMesRef(m => {
-      const d = new Date(m.ano, m.mes + delta, 1);
-      return { ano: d.getFullYear(), mes: d.getMonth() };
-    });
-  }
+  const irMes = (delta: number) => setMesRef(deslocarMes(mesRef, delta));
 
   // ── Guard ──────────────────────────────────────────────────────────────────
   if (!perfil || !empresa?.id) return null;
@@ -508,9 +509,9 @@ export default function PainelLider() {
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => irMes(1)} title="Próximo mês">
             <ChevronRight className="w-4 h-4" />
           </Button>
-          {!ehMesAtual && (
+          {!noMesAtual && (
             <Button variant="ghost" size="sm" className="h-7 text-xs px-2 text-primary"
-              onClick={() => { const d = new Date(); setMesRef({ ano: d.getFullYear(), mes: d.getMonth() }); }}>
+              onClick={() => setMesRef(mesAtual())}>
               Hoje
             </Button>
           )}

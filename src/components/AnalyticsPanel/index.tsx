@@ -25,7 +25,8 @@ import {
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { formatCurrency, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
-import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
+import { diasDecorridos, diasNoMes, ehMesAtual } from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { containerVariants, itemVariants } from './constants';
@@ -85,7 +86,12 @@ export function AnalyticsPanel({
    * o mesmo painel de antes. Vale para os dois tenants: este componente é o
    * painel de métricas tanto da PaguePlay quanto da BookPlay.
    */
-  const [mesAnalise, setMesAnalise] = useState<string>(() => mesAtual());
+  /*
+   * O mês vem do `MesProvider`, não de um estado local: escolher agosto aqui
+   * tem que valer também nos Acordos, no Analítico e no Pix, e continuar valendo
+   * depois de trocar de página.
+   */
+  const { mes: mesAnalise, setMes: setMesAnalise } = useMesGlobal();
 
   /**
    * H.O. ou bruto — PaguePlay.

@@ -25,7 +25,8 @@ import { ROUTE_PATHS, formatCurrency, formatDate, getTodayISO } from '@/lib/inde
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
-import { deslocarMes, mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
+import { deslocarMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
 import { cn } from '@/lib/utils';
 import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
@@ -151,7 +152,11 @@ export default function Acordos() {
   const highlightFoundRef  = useRef(false);
   const findAttemptsRef    = useRef(0);
 
-  const [mesFiltro, setMesFiltro] = useState<string>(() => mesAtual());
+  /*
+   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
+   * Dashboard e clicar em Acordos tem que continuar em agosto.
+   */
+  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
 
   /**
    * Cadeado do mês. A lista é recortada por `vencimento` dentro de `mesFiltro`,

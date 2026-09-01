@@ -14,8 +14,9 @@ import {
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
 import {
-  deslocarMes, mesAtual, primeiroDiaDoMes, ultimoDiaDoMes,
+  deslocarMes, primeiroDiaDoMes, ultimoDiaDoMes,
 } from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
 import { cn } from '@/lib/utils';
 import { supabase, type Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
@@ -71,7 +72,11 @@ export default function Dashboard() {
 
   const [hojeMinimizado, setHojeMinimizado] = useState(false);
 
-  const [mesFiltro, setMesFiltro] = useState<string>(() => mesAtual());
+  /*
+   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
+   * Dashboard e clicar em Acordos tem que continuar em agosto.
+   */
+  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [busca,        setBusca]        = useState(searchParams.get('busca')  || '');

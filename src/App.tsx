@@ -19,6 +19,7 @@ import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
 import { RastreioUsoProvider } from '@/providers/RastreioUsoProvider';
 import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
+import { MesProvider } from '@/providers/MesProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -180,6 +181,9 @@ export default function App() {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
+          {/* Acima de tudo que desenha número: o mês escolhido vale para o
+              sistema inteiro, e não pode se perder ao trocar de página. */}
+          <MesProvider>
           <RealtimeAcordosProvider>
           <PresenceProvider>
           {/* Acima do Router: o sino do header (Layout) e o painel
@@ -437,6 +441,7 @@ export default function App() {
           </NotificacoesProvider>
           </PresenceProvider>
           </RealtimeAcordosProvider>
+          </MesProvider>
         </EmpresaProvider>
         <DevToolsAdminOnly />
       </AuthProvider>

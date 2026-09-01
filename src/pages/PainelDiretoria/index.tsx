@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
@@ -23,8 +23,9 @@ import { PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { formatBRL } from '@/lib/money';
 import {
-  deslocarMes, diasDecorridos, diasNoMes as diasDoMes, mesAtual, rotuloDoMes,
+  deslocarMes, diasDecorridos, diasNoMes as diasDoMes, rotuloDoMes,
 } from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
 import {
   operadoresDoSetor,
 } from '@/services/analitico/analitico.service';
@@ -88,7 +89,11 @@ export default function PainelDiretoria() {
   );
 
   /** Mês em análise. Nasce no corrente; o seletor permite ver o mês fechado. */
-  const [mesAnalise, setMesAnalise] = useState<string>(() => mesAtual());
+  /*
+   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
+   * Dashboard e clicar em Acordos tem que continuar em agosto.
+   */
+  const { mes: mesAnalise, setMes: setMesAnalise } = useMesGlobal();
 
   // Sem realtime de propósito: esta tela é de leitura. Os dados chegam ao abrir
   // a página e pelo botão de atualizar do cabeçalho — número que se mexe sozinho

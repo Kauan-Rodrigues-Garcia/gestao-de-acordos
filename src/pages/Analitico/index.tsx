@@ -25,6 +25,8 @@ import { AbaDiario } from './Diario';
 import { AbaColchao } from './Colchao';
 import { AbaDesafios } from './Desafios';
 import { useSetoresDoDesafio } from '@/hooks/useDesafios';
+import { deslocarMes, mesAtual, rotuloDoMes } from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 
 export default function PaginaAnalitico() {
@@ -132,10 +134,13 @@ export default function PaginaAnalitico() {
     ? abaPrincipal
     : (abasPrincipais[0]?.key ?? null);
 
-  const [mesFiltro, setMesFiltro] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  /*
+   * O mês do sistema inteiro (`MesProvider`). Era um estado local montado com
+   * `new Date()` — dois defeitos num só: sumia ao trocar de página e usava o
+   * fuso da MÁQUINA, então das 21h do dia 31 em diante a tela já virava o mês
+   * antes da empresa.
+   */
+  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
 
   // PP: janela que completa parcelamento/estado antes de abrir o Novo Acordo
   const [tabularPendente, setTabularPendente] = useState<{
@@ -319,22 +324,11 @@ export default function PaginaAnalitico() {
     navigate(ROUTE_PATHS.DASHBOARD + '?' + qs.toString());
   }
 
-  function mesAnterior() {
-    const [y, m] = mesFiltro.split('-').map(Number);
-    const prev = new Date(y, m - 2, 1);
-    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
-  }
-
-  function mesProximo() {
-    const [y, m] = mesFiltro.split('-').map(Number);
-    const next = new Date(y, m, 1);
-    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
-  }
-
-  function mesAtual() {
-    const d = new Date();
-    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
+  // A aritmética de calendário mora em `mesReferencia` — três cópias dela
+  // viviam aqui, e a virada de ano era feita à mão em cada uma.
+  const mesAnterior = () => setMesFiltro(deslocarMes(mesFiltro, -1));
+  const mesProximo  = () => setMesFiltro(deslocarMes(mesFiltro, 1));
+  const irParaMesAtual = () => setMesFiltro(mesAtual());
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
@@ -424,12 +418,12 @@ export default function PaginaAnalitico() {
               <ChevronLeft className="w-3.5 h-3.5" />
             </Button>
             <span className="text-sm font-semibold min-w-[130px] text-center">
-              {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              {rotuloDoMes(mesFiltro)}
             </span>
             <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesProximo}>
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={mesAtual}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={irParaMesAtual}>
               Mês atual
             </Button>
           </div>
