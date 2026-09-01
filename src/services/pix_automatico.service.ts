@@ -20,7 +20,16 @@ import { primeiroDiaDoMes, type MesRef } from '@/lib/mesReferencia';
 
 type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
 type PixAutoAcordoUpdate = Database['public']['Tables']['pix_automatico_acordos']['Update'];
-export type PixPremiacaoPagamento = Database['public']['Tables']['pix_automatico_premiacoes_pagamento']['Row'];
+/**
+ * Pagamento mensal da premiação.
+ *
+ * `valor_pago` sai da migration 20260903100000 e ainda não está no tipo gerado,
+ * por isso entra aqui como opcional. NULL numa linha marcada como paga é o
+ * legado: significa "quitou o que faltava", e é assim que `pixPremiacao` a lê.
+ */
+export type PixPremiacaoPagamento =
+  Database['public']['Tables']['pix_automatico_premiacoes_pagamento']['Row']
+  & { valor_pago?: number | null };
 
 export type PixAutoStatus = 'pendente' | 'aprovado' | 'desaprovado';
 
@@ -408,22 +417,58 @@ function mensagemPremiacaoPagamento(bruta: string): string {
   return bruta;
 }
 
-/** Escrita atômica e auditada; a RPC confere novamente cargo e empresa. */
+/**
+ * Escrita atômica e auditada; a RPC confere novamente cargo e empresa.
+ *
+ * `valorPago` é o que de fato saiu — o "falta pagar" da pessoa no instante do
+ * clique. Antes desta versão o pagamento era só um booleano, e o painel exibia
+ * "Pago" ao lado de "Falta pagar R$ 412,30" sem que uma coisa falasse com a
+ * outra. Com o valor gravado, marcar a premiação quita a linha do mesmo jeito
+ * que marcar um acordo do Pix quita o dele.
+ *
+ * Omitido, a RPC grava NULL e a linha vale como quitação total — que é como as
+ * linhas antigas continuam sendo lidas.
+ */
 export async function marcarPremiacaoPaga(p: {
   empresaId: string;
   operadorId: string;
   mes: MesRef;
   pago: boolean;
+  valorPago?: number | null;
 }): Promise<{ ok: boolean; pagamento?: PixPremiacaoPagamento; error?: string }> {
   const { data, error } = await supabase.rpc('fn_pix_premiacao_marcar_pagamento', {
     p_empresa_id: p.empresaId,
     p_operador_id: p.operadorId,
     p_mes: primeiroDiaDoMes(p.mes),
     p_pago: p.pago,
-  });
+    // Nunca negativo: "já saiu mais do que era devido" é assunto do saldo de
+    // divergência, e a RPC recusa o negativo de qualquer forma.
+    ...(p.pago && p.valorPago != null
+      ? { p_valor_pago: Math.max(Math.round(p.valorPago * 100) / 100, 0) }
+      : {}),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `p_valor_pago` só entra no tipo gerado depois da migration 20260903100000.
+  } as any);
 
   if (error) return { ok: false, error: mensagemPremiacaoPagamento(error.message) };
-  return { ok: true, pagamento: data ?? undefined };
+  return { ok: true, pagamento: (data as PixPremiacaoPagamento | null) ?? undefined };
+}
+
+/**
+ * O instante que carimba um registro lançado em outro mês.
+ *
+ * A tela do Pix passou a seguir o mês escolhido no sistema, e lançar um acordo
+ * com agosto na tela tem que produzir um acordo DE AGOSTO — todas as contas da
+ * aba (dobra, ranking, meta, premiação) filtram por `criado_em.startsWith(mes)`.
+ * Sem isto, o registro nasceria em setembro e sumiria da tela que o criou.
+ *
+ * Meio-dia local, e não meia-noite: `criado_em` é `timestamptz`, e 00:00 em
+ * São Paulo é 03:00 UTC do MESMO dia, mas 00:00 UTC seria 21:00 do dia
+ * anterior. Meio-dia deixa a data local certa nos dois sentidos.
+ */
+export function instanteDoDiaPix(dia: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return null;
+  const d = new Date(`${dia}T12:00:00`);
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 export async function criarAcordoPix(p: {
@@ -435,7 +480,13 @@ export async function criarAcordoPix(p: {
   valor: number;
   /** Etiqueta visual para a conferência. Não muda regra nenhuma. */
   extra?: boolean;
+  /**
+   * Dia do registro (`yyyy-MM-dd`). Omitido = agora, o padrão da coluna.
+   * Só a tela preenche, e só quando está olhando um mês que não é o corrente.
+   */
+  dia?: string | null;
 }): Promise<{ ok: boolean; error?: string; nrDuplicado?: boolean }> {
+  const criadoEm = p.dia ? instanteDoDiaPix(p.dia) : null;
   const { error } = await supabase.from('pix_automatico_acordos').insert({
     empresa_id:    p.empresaId,
     operador_id:   p.operadorId,
@@ -444,6 +495,7 @@ export async function criarAcordoPix(p: {
     nr_cliente:    p.nrCliente.trim(),
     valor:         p.valor,
     status:        'pendente',
+    ...(criadoEm ? { criado_em: criadoEm } : {}),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `extra` só entra no tipo gerado depois da migration 20260902100000.
     ...(p.extra ? { extra: true } as any : {}),
   });
@@ -530,7 +582,10 @@ export async function fetchNrRegistros(empresaId: string): Promise<PixNrRegistro
 export async function criarAcordosPixLote(
   empresaId: string,
   linhas: LinhaPixLote[],
+  /** Dia do lote (`yyyy-MM-dd`). Omitido = agora. Ver `instanteDoDiaPix`. */
+  dia?: string | null,
 ): Promise<{ ok: boolean; importados: number; ignorados: number; duplicados: number; error?: string }> {
+  const criadoEm = dia ? instanteDoDiaPix(dia) : null;
   const bloqueados = await fetchNrsBloqueados(empresaId);
 
   let ignorados = 0;
@@ -553,6 +608,7 @@ export async function criarAcordosPixLote(
       nr_cliente:    nr,
       valor,
       status:        'pendente',
+      ...(criadoEm ? { criado_em: criadoEm } : {}),
     });
   }
 

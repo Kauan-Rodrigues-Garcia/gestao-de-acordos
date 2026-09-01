@@ -200,3 +200,88 @@ describe('painelPremiacoes', () => {
     expect(t.falta).toBe(1590);
   });
 });
+
+/*
+ * ── O carimbo mensal da premiação ─────────────────────────────────────────
+ *
+ * Até 03/09/2026 marcar a premiação como paga gravava um booleano e nada mais:
+ * o painel mostrava «Pago» no switch e «Falta pagar R$ 412,30» na mesma linha.
+ * Agora o carimbo carrega o valor e entra na conta — e o carimbo ANTIGO, sem
+ * valor, é lido como quitação total. Reabrir o que a operação considera pago
+ * seria o pior desfecho possível de uma migração.
+ */
+describe('premiacaoDoOperador — pagamento mensal da premiação', () => {
+  const dezAcordos = Array.from({ length: 10 }, (_, i) =>
+    acordo({ id: `a${i}`, valor: 1000 }));   // 1% de 1000 = R$ 10,00 cada
+
+  it('sem carimbo, o que falta é a premiação inteira', () => {
+    const r = premiacaoDoOperador({
+      operadorId: 'ana', nome: 'Ana', itens: dezAcordos, pctPorSetor: PCT, mes: MES,
+    });
+    expect(r.premiacao).toBe(100);
+    expect(r.jaPago).toBe(0);
+    expect(r.pagoNaPremiacao).toBe(0);
+    expect(r.falta).toBe(100);
+    expect(r.premiacaoPaga).toBe(false);
+  });
+
+  it('carimbo com valor entra no já pago e desconta do que falta', () => {
+    const r = premiacaoDoOperador({
+      operadorId: 'ana', nome: 'Ana', itens: dezAcordos, pctPorSetor: PCT, mes: MES,
+      pagamentoMensal: { pago: true, valorPago: 40 },
+    });
+    expect(r.pagoNaPremiacao).toBe(40);
+    expect(r.jaPago).toBe(40);
+    expect(r.falta).toBe(60);
+    expect(r.premiacaoPaga).toBe(true);
+  });
+
+  it('carimbo antigo (sem valor) quita o que faltava', () => {
+    const r = premiacaoDoOperador({
+      operadorId: 'ana', nome: 'Ana', itens: dezAcordos, pctPorSetor: PCT, mes: MES,
+      pagamentoMensal: { pago: true, valorPago: null },
+    });
+    expect(r.pagoNaPremiacao).toBe(100);
+    expect(r.falta).toBe(0);
+  });
+
+  it('carimbo antigo não paga de novo o que as linhas já pagaram', () => {
+    // Metade das linhas já estava marcada como paga: o carimbo sem valor cobre
+    // só o resto. Cobrir a premiação inteira faria o painel afirmar que saíram
+    // R$ 150,00 de uma premiação de R$ 100,00.
+    const metadePaga = dezAcordos.map((a, i) => (i < 5 ? { ...a, pago: true } : a));
+    const r = premiacaoDoOperador({
+      operadorId: 'ana', nome: 'Ana', itens: metadePaga, pctPorSetor: PCT, mes: MES,
+      pagamentoMensal: { pago: true, valorPago: null },
+    });
+    expect(r.pagoNaPremiacao).toBe(50);
+    expect(r.jaPago).toBe(100);
+    expect(r.falta).toBe(0);
+  });
+
+  it('desmarcado, o carimbo não conta nem com valor gravado', () => {
+    const r = premiacaoDoOperador({
+      operadorId: 'ana', nome: 'Ana', itens: dezAcordos, pctPorSetor: PCT, mes: MES,
+      pagamentoMensal: { pago: false, valorPago: 40 },
+    });
+    expect(r.pagoNaPremiacao).toBe(0);
+    expect(r.falta).toBe(100);
+  });
+
+  it('painelPremiacoes repassa o carimbo de cada pessoa', () => {
+    const itens = [
+      ...dezAcordos,
+      acordo({ id: 'b1', valor: 2000, operador_id: 'bruno', operador_nome: 'Bruno' }),
+    ];
+    const linhas = painelPremiacoes({
+      itens, pctPorSetor: PCT, mes: MES,
+      pagamentoPorOperador: { ana: { pago: true, valorPago: 100 } },
+    });
+    const ana   = linhas.find(l => l.operadorId === 'ana');
+    const bruno = linhas.find(l => l.operadorId === 'bruno');
+    expect(ana?.falta).toBe(0);
+    expect(bruno?.falta).toBe(20);
+    expect(totalDoPainel(linhas).falta).toBe(20);
+    expect(totalDoPainel(linhas).pagoNaPremiacao).toBe(100);
+  });
+});

@@ -164,6 +164,53 @@ describe('filtrarItensPix', () => {
 
 // ── Totais ──────────────────────────────────────────────────────────────────
 
+/*
+ * ── O recorte de MÊS ──────────────────────────────────────────────────────
+ *
+ * A aba passou a seguir o mês escolhido no sistema (03/09/2026). O filtro usa o
+ * MESMO critério dos cards (`criado_em.startsWith`): se a tabela e os cards
+ * discordassem sobre o que é "do mês", o total embaixo da lista não fecharia
+ * com o card em cima dela.
+ */
+describe('filtrarItensPix — recorte de mês', () => {
+  const mapas = {
+    porEquipe: mapaOperadorEquipe(OPERADORES),
+    porSetor:  mapaOperadorSetor(OPERADORES),
+  };
+  const itens = [
+    item({ nr_cliente: 'AGO-01', criado_em: '2026-08-01T09:00:00Z' }),
+    item({ nr_cliente: 'AGO-31', criado_em: '2026-08-31T18:00:00Z' }),
+    item({ nr_cliente: 'SET-02', criado_em: '2026-09-02T09:00:00Z' }),
+  ];
+
+  it('sem mês, nada muda — é o comportamento anterior', () => {
+    expect(filtrarItensPix(itens, {}, mapas)).toHaveLength(3);
+    expect(filtrarItensPix(itens, { mes: '' }, mapas)).toHaveLength(3);
+    expect(filtrarItensPix(itens, { mes: null }, mapas)).toHaveLength(3);
+  });
+
+  it('com mês, só as linhas daquele mês', () => {
+    expect(filtrarItensPix(itens, { mes: '2026-08' }, mapas).map(i => i.nr_cliente))
+      .toEqual(['AGO-01', 'AGO-31']);
+    expect(filtrarItensPix(itens, { mes: '2026-09' }, mapas).map(i => i.nr_cliente))
+      .toEqual(['SET-02']);
+  });
+
+  it('mês sem registro devolve lista vazia, não a lista inteira', () => {
+    expect(filtrarItensPix(itens, { mes: '2026-07' }, mapas)).toHaveLength(0);
+  });
+
+  it('o mês se combina com os outros filtros', () => {
+    const comStatus = [
+      item({ nr_cliente: 'A', status: 'aprovado', criado_em: '2026-08-10T10:00:00Z' }),
+      item({ nr_cliente: 'B', status: 'pendente', criado_em: '2026-08-11T10:00:00Z' }),
+      item({ nr_cliente: 'C', status: 'aprovado', criado_em: '2026-09-01T10:00:00Z' }),
+    ];
+    expect(filtrarItensPix(comStatus, { mes: '2026-08', status: 'aprovado' }, mapas)
+      .map(i => i.nr_cliente)).toEqual(['A']);
+  });
+});
+
 describe('filtrarItensPix — pagamento e período', () => {
   const mapas = {
     porEquipe: mapaOperadorEquipe(OPERADORES),

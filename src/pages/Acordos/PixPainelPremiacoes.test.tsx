@@ -68,7 +68,42 @@ describe('PixPainelPremiacoes — status de pagamento', () => {
     expect(screen.getByText('Foi pago?')).toBeInTheDocument();
     expect(screen.getByText('Não pago')).toBeInTheDocument();
     await user.click(screen.getByRole('switch', { name: /marcar premiação de Ana Operadora/i }));
-    expect(onMarcarPago).toHaveBeenCalledWith('operador-1', true);
+    // O terceiro argumento é o que a marcação QUITA: R$ 100,00 de comissão
+    // (1% de R$ 10.000,00), nada pago ainda. Sem ele o switch voltaria a ser
+    // um carimbo que não conversa com o «falta pagar» da mesma linha.
+    expect(onMarcarPago).toHaveBeenCalledWith('operador-1', true, 100);
+  });
+
+  it('marcar como paga zera o que falta, mesmo sem valor gravado (linha antiga)', () => {
+    render(
+      <PixPainelPremiacoes
+        itens={[acordo]}
+        pctPorSetor={{ 'setor-1': 1 }}
+        mes={MES}
+        pagamentos={[pagamento]}
+      />,
+    );
+
+    // `pagamento` é anterior à migration 20260903100000: `pago` sem valor.
+    // A leitura conservadora é «quitou o que faltava» — quem já marcou
+    // pagamento antes desta versão não pode ver a dívida reabrir.
+    const cabecalho = screen.getByRole('button', { name: /Premiação a pagar/i });
+    expect(within(cabecalho).getByText('R$ 0,00')).toBeInTheDocument();
+    expect(screen.getByText(/R\$ 100,00 na premiação/)).toBeInTheDocument();
+  });
+
+  it('valor gravado parcial deixa o resto visível', () => {
+    render(
+      <PixPainelPremiacoes
+        itens={[acordo]}
+        pctPorSetor={{ 'setor-1': 1 }}
+        mes={MES}
+        pagamentos={[{ ...pagamento, valor_pago: 40 }]}
+      />,
+    );
+
+    const cabecalho = screen.getByRole('button', { name: /Premiação a pagar/i });
+    expect(within(cabecalho).getByText('R$ 60,00')).toBeInTheDocument();
   });
 
   it('mostra o estado para quem só pode consultar e tira o pago do total pendente', () => {

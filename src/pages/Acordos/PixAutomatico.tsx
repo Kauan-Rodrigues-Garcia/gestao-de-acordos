@@ -15,6 +15,20 @@
  * a linha libera o NR (migration 20260811c). Todo movimento — registro, edição,
  * avaliação, pagamento, exclusão e restauração — vai para `pix_automatico_log`,
  * que o botão "Histórico" mostra.
+ *
+ * ## A aba segue o mês do sistema
+ *
+ * Todas as contas daqui — dobra, ranking, meta por equipe, premiação — são "no
+ * mês". Até 01/09/2026 esse mês era `mesAtual()` fixo, em sete lugares: virou
+ * setembro e a meta de agosto sumiu da tela (continuava no banco, só ninguém
+ * pedia por ela), o card de comissão dobrada desapareceu para quem ainda não
+ * tinha acordo no mês novo, e a premiação de agosto ficou inalcançável.
+ *
+ * Agora o mês vem do `MesProvider`, o mesmo do Dashboard e do Analítico. Olhar
+ * agosto aqui mostra agosto inteiro — e continua sendo possível registrar,
+ * editar e avaliar ali, porque o Pix é conferência de comissão e ela não fecha
+ * junto com o mês do relatório. O que muda é que o registro lançado com agosto
+ * na tela nasce COM DATA DE AGOSTO (ver `dia` em `criarAcordoPix`).
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
@@ -54,7 +68,11 @@ import { formatCurrency, parseCurrencyInput, getTodayISO, PERFIL_NIVEL } from '@
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
-import { mesAtual } from '@/lib/mesReferencia';
+import {
+  ehMesAtual, mesAtual, partesDoMes, primeiroDiaDoMes, rotuloDoMes, ultimoDiaDoMes,
+} from '@/lib/mesReferencia';
+import { useMesGlobal } from '@/providers/MesProvider';
+import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 // As contas desta tela vivem em `pixAutomaticoView`: são puras e têm teste
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
@@ -215,11 +233,30 @@ export function PixAutomatico() {
   const [ajustandoId, setAjustandoId] = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
 
+  /*
+   * O mês da aba é o do sistema (`MesProvider`) — o mesmo que o Dashboard e o
+   * Analítico mostram. Ver o cabeçalho deste arquivo.
+   */
+  const { mes, setMes } = useMesGlobal();
+  const noMesAtual = ehMesAtual(mes);
+  const inicioDoMes = primeiroDiaDoMes(mes);
+  const fimDoMes    = ultimoDiaDoMes(mes);
+
   // Form de registro
   const [nrNovo, setNrNovo]       = useState('');
   const [valorNovo, setValorNovo] = useState('');
   /** Etiqueta EXTRA do proximo registro. Some depois de registrar. */
   const [extraNovo, setExtraNovo] = useState(false);
+  /*
+   * Dia do registro quando a aba está fora do mês corrente.
+   *
+   * Sem ele, lançar um acordo olhando agosto criaria uma linha de setembro:
+   * ela sumiria da tela no mesmo instante e não entraria em nenhuma conta de
+   * agosto. O padrão é o último dia do mês olhado, que é o que a operação faz
+   * ao fechar o mês; o calendário não deixa sair do mês.
+   */
+  const [diaNovo, setDiaNovo] = useState<string>(() => ultimoDiaDoMes(mesAtual()));
+  useEffect(() => { setDiaNovo(ultimoDiaDoMes(mes)); }, [mes]);
   /** Fila de NRs duplicados esperando decisao do lider. */
   const [pedidosNr, setPedidosNr] = useState<PixNrPedido[]>([]);
   const [salvando, setSalvando]   = useState(false);
@@ -391,7 +428,7 @@ export function PixAutomatico() {
         // Pix ve os da empresa. Nao ha filtro a repetir aqui.
         fetchPedidosNr(empresa.id),
         podeVerDeOutros
-          ? fetchPremiacoesPagamento(empresa.id, mesAtual())
+          ? fetchPremiacoesPagamento(empresa.id, mes)
           : Promise.resolve([]),
       ]);
       // Reconciliação: a linha que não mudou volta com a MESMA referência, e
@@ -438,7 +475,7 @@ export function PixAutomatico() {
       if (comEsqueleto) setLoading(false);
       primeiraCargaPix.current = false;
     }
-  }, [empresa?.id, perfil?.id, podeVerDeOutros, setorEscopo]);
+  }, [empresa?.id, perfil?.id, podeVerDeOutros, setorEscopo, mes]);
 
   // Escopo novo (outro setor, outra empresa) é conteúdo novo: a lista em tela
   // é de outro recorte, e mantê-la seria apresentá-la como resposta do filtro.
@@ -463,18 +500,18 @@ export function PixAutomatico() {
     let cancelado = false;
     void (async () => {
       if (!empresa?.id || !perfil?.id) return;
-      const hoje = new Date();
-      const mes = hoje.getMonth() + 1;
-      const ano = hoje.getFullYear();
-      const mesStr = `${ano}-${String(mes).padStart(2, '0')}`;
+      // Do MÊS OLHADO, não de hoje: em setembro, olhando agosto, a dobra tem
+      // de ser conferida contra a meta e o recebido de agosto.
+      const { ano, mes: mesNum } = partesDoMes(mes);
+      const mesStr = mes;
       try {
         const [{ data: metasRows }, cfg, resumo] = await Promise.all([
           // TODAS as metas de operador do mes, e nao so a minha: o painel do
           // lider precisa saber quem bateu a meta para saber quem dobra.
           supabase.from('metas').select('referencia_id, meta_valor')
             .eq('tipo', 'operador')
-            .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano),
-          getMetasConfig(empresa.id, mes, ano),
+            .eq('empresa_id', empresa.id).eq('mes', mesNum).eq('ano', ano),
+          getMetasConfig(empresa.id, mesNum, ano),
           buscarResumoOperadoresAnalitico(empresa.id, mesStr),
         ]);
         if (cancelado) return;
@@ -502,17 +539,19 @@ export function PixAutomatico() {
       } catch { /* sem meta/config → card não aparece */ }
     })();
     return () => { cancelado = true; };
-  }, [empresa?.id, perfil?.id]);
+  }, [empresa?.id, perfil?.id, mes]);
 
   // Metas de Pix das EQUIPES do setor em foco. A meta do setor é a soma
   // delas — não existe uma linha "do setor" para carregar.
   const carregarMetaPix = useCallback(async () => {
     if (!empresa?.id || !setorConfig) { setMetasPix([]); return; }
-    const hoje = new Date();
-    const metas = await fetchMetasPixEquipes(
-      empresa.id, setorConfig, hoje.getMonth() + 1, hoje.getFullYear());
+    // A meta é gravada POR MÊS. Ler sempre o mês de hoje foi o que fez a meta
+    // de agosto "sumir" no dia 1º de setembro: ela nunca saiu do banco — a
+    // tela é que passou a perguntar por outro mês.
+    const { ano, mes: mesNum } = partesDoMes(mes);
+    const metas = await fetchMetasPixEquipes(empresa.id, setorConfig, mesNum, ano);
     setMetasPix(metas);
-  }, [empresa?.id, setorConfig]);
+  }, [empresa?.id, setorConfig, mes]);
 
   useEffect(() => { void carregarMetaPix(); }, [carregarMetaPix]);
 
@@ -534,11 +573,11 @@ export function PixAutomatico() {
       itens,
       { busca, status: filtroStatus, operadorId: filtroOperador,
         equipeId: filtroEquipe, setorId: setorEscopo ?? filtroSetor,
-        pagamento: filtroPagamento, de: dataDe, ate: dataAte },
+        pagamento: filtroPagamento, de: dataDe, ate: dataAte, mes },
       { porEquipe: operadorEquipe, porSetor: operadorSetor },
     ),
     [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
-     filtroPagamento, dataDe, dataAte, setorEscopo, operadorEquipe, operadorSetor],
+     filtroPagamento, dataDe, dataAte, mes, setorEscopo, operadorEquipe, operadorSetor],
   );
 
   // ── Paginação da tabela ─────────────────────────────────────────────────
@@ -552,7 +591,7 @@ export function PixAutomatico() {
   const paginaAtual = Math.min(pagina, totalPaginas);
   useEffect(() => { setPagina(1); }, [
     busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
-    filtroPagamento, dataDe, dataAte,
+    filtroPagamento, dataDe, dataAte, mes,
   ]);
 
   const daPagina = useMemo(
@@ -570,7 +609,10 @@ export function PixAutomatico() {
   const pagamento = useMemo(() => totalPagoPix(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
 
 
-  const meusDesaprovados = itens.filter(i => i.operador_id === perfil?.id && i.status === 'desaprovado').length;
+  const meusDesaprovados = itens.filter(i =>
+    i.operador_id === perfil?.id
+    && i.status === 'desaprovado'
+    && i.criado_em.startsWith(mes)).length;
 
   /** Quanto falta para este desaprovado ser excluído. `null` = sem prazo. */
   function prazoDesaprovado(item: PixAutoAcordo): string | null {
@@ -638,8 +680,8 @@ export function PixAutomatico() {
   const bonusMeta = useMemo(() => calcularBonusMeta({
     operadorId: perfil?.id, itens, pctPorSetor, metaValor, recebidoMes, configMes,
     // Mês e "hoje" de São Paulo, não do relógio de quem abre a tela.
-    mes: mesAtual(), hojeISO: getTodayISO(),
-  }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes]);
+    mes, hojeISO: getTodayISO(),
+  }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes, mes]);
 
   // ── Comissão dobrada: 18 acordos + meta do mês ──────────────────────────
   // Sempre sobre os acordos do próprio usuário, mesmo quando ele é líder e a
@@ -654,10 +696,10 @@ export function PixAutomatico() {
   );
 
   const dobra = useMemo(
-    () => calcularDobraComissao(itens, perfil?.id, pctPorSetor, mesAtual(), {
+    () => calcularDobraComissao(itens, perfil?.id, pctPorSetor, mes, {
       metaValor, recebidoMes,
     }, metaPorSetor),
-    [itens, perfil?.id, pctPorSetor, metaValor, recebidoMes, metaPorSetor],
+    [itens, perfil?.id, pctPorSetor, metaValor, recebidoMes, metaPorSetor, mes],
   );
 
   // ── Ranking do setor ────────────────────────────────────────────────────
@@ -670,8 +712,8 @@ export function PixAutomatico() {
   }, [operadores]);
 
   const ranking = useMemo(
-    () => rankingPixSetor(itens, pctPorSetor, mesAtual(), nomePorOperador, metaPorSetor),
-    [itens, pctPorSetor, nomePorOperador, metaPorSetor],
+    () => rankingPixSetor(itens, pctPorSetor, mes, nomePorOperador, metaPorSetor),
+    [itens, pctPorSetor, nomePorOperador, metaPorSetor, mes],
   );
 
   // ── Meta de Pix do setor ────────────────────────────────────────────────
@@ -694,9 +736,9 @@ export function PixAutomatico() {
         })),
       equipePorOperador: operadorEquipe,
       configMes,
-      mes: mesAtual(), hojeISO: getTodayISO(),
+      mes, hojeISO: getTodayISO(),
     });
-  }, [podeVerDeOutros, itens, metasPix, equipes, operadorEquipe, configMes]);
+  }, [podeVerDeOutros, itens, metasPix, equipes, operadorEquipe, configMes, mes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
@@ -732,6 +774,9 @@ export function PixAutomatico() {
         nrCliente:    nr,
         valor,
         extra:        extraNovo,
+        // Só quando a aba está fora do mês corrente. No mês de hoje o padrão
+        // da coluna (`now()`) continua sendo a verdade.
+        dia:          noMesAtual ? null : diaNovo,
       });
       if (!ok) {
         /*
@@ -744,9 +789,10 @@ export function PixAutomatico() {
         toast.error('Erro ao registrar: ' + error);
         return;
       }
+      const emOutroMes = noMesAtual ? '' : ` em ${new Date(diaNovo + 'T12:00:00').toLocaleDateString('pt-BR')}`;
       toast.success(dono
-        ? `Acordo Pix registrado para ${dono.nome} — aguardando verificação.`
-        : 'Acordo Pix registrado — aguardando verificação do líder.');
+        ? `Acordo Pix registrado para ${dono.nome}${emOutroMes} — aguardando verificação.`
+        : `Acordo Pix registrado${emOutroMes} — aguardando verificação do líder.`);
       setNrNovo('');
       setValorNovo('');
       setExtraNovo(false);
@@ -894,15 +940,25 @@ export function PixAutomatico() {
     }
   }
 
-  async function alternarPremiacaoPaga(operadorId: string, pago: boolean) {
+  /**
+   * Marca a premiação do mês como paga — e grava QUANTO saiu.
+   *
+   * O valor vem do painel: é o "falta pagar" daquela pessoa no instante do
+   * clique. Antes só o booleano era gravado, e a linha continuava mostrando
+   * "falta R$ X" ao lado de "Pago".
+   */
+  async function alternarPremiacaoPaga(
+    operadorId: string, pago: boolean, valorPago: number,
+  ) {
     if (!empresa?.id || !podeMarcarPremiacaoPaga) return;
     setAlterandoPremiacaoId(operadorId);
     try {
       const resultado = await marcarPremiacaoPaga({
         empresaId: empresa.id,
         operadorId,
-        mes: mesAtual(),
+        mes,
         pago,
+        valorPago: pago ? valorPago : null,
       });
       if (!resultado.ok || !resultado.pagamento) {
         toast.error(resultado.error ?? 'Não foi possível alterar o pagamento da premiação.');
@@ -913,7 +969,7 @@ export function PixAutomatico() {
         resultado.pagamento!,
       ]);
       toast.success(pago
-        ? 'Premiação marcada como paga.'
+        ? `Premiação marcada como paga${valorPago > 0 ? ` — ${formatCurrency(valorPago)}` : ''}.`
         : 'Pagamento da premiação desmarcado.');
     } finally {
       setAlterandoPremiacaoId(null);
@@ -953,15 +1009,15 @@ export function PixAutomatico() {
   // RECEBIMENTO do operador (card de bônus), e sombreá-lo aqui é convite a erro.
   async function salvarMetaPix(equipeId: string, valorAlvo: number, acordosAlvo: number) {
     if (!empresa?.id || !perfil?.id || !setorConfig) return;
-    const hoje = new Date();
+    const { ano, mes: mesNum } = partesDoMes(mes);
     setSalvandoMetaPix(true);
     try {
       const { ok, error } = await upsertMetaPixEquipe({
         empresaId: empresa.id,
         setorId: setorConfig,
         equipeId,
-        mes: hoje.getMonth() + 1,
-        ano: hoje.getFullYear(),
+        mes: mesNum,
+        ano,
         metaValor: valorAlvo,
         metaAcordos: acordosAlvo,
         atualizadoPor: perfil.id,
@@ -1336,7 +1392,7 @@ export function PixAutomatico() {
         return { nrCliente: nr, valor, operadorId: opId, operadorNome: opNomeFinal, setorId };
       });
 
-      const r = await criarAcordosPixLote(empresa.id, linhas);
+      const r = await criarAcordosPixLote(empresa.id, linhas, noMesAtual ? null : diaNovo);
       if (!r.ok) { toast.error('Erro ao importar: ' + r.error); return; }
       toast.success(
         `Importados: ${r.importados}` +
@@ -1395,6 +1451,12 @@ export function PixAutomatico() {
             <p className="text-[11px] text-muted-foreground">
               Comissão de {fmtPct(pctDoMeuSetor)} por acordo aprovado — sem vínculo com a lista de acordos.
             </p>
+            {/* O MESMO seletor do Dashboard e do Analítico, ligado ao mesmo
+                mês: a aba inteira (lista, metas, dobra, ranking, premiação)
+                fala do mês escolhido aqui. */}
+            <div className="-ml-1.5 mt-0.5">
+              <SeletorMes mes={mes} onChange={setMes} desabilitado={loading} />
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1433,6 +1495,28 @@ export function PixAutomatico() {
         </div>
       </div>
 
+      {/* ── Fora do mês corrente: a tela inteira mudou de assunto ──
+          O Pix continua editável em mês passado de propósito: ele é conferência
+          de comissão, e ela costuma fechar depois da virada. O que não pode é
+          alguém lançar achando que está lançando em hoje. */}
+      {!noMesAtual && (
+        <Card className="border-amber-500/30 bg-amber-500/[0.06]">
+          <CardContent className="p-3 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-xs font-semibold text-foreground">
+                Você está vendo {rotuloDoMes(mes)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Lista, metas, comissão dobrada, ranking e premiação são deste mês.
+                Registrar e avaliar continua liberado — o acordo novo entra com a
+                data escolhida no formulário, dentro de {rotuloDoMes(mes)}.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Registrar novo ── */}
       {podeRegistrar ? (
       <Card className="border-violet-500/20 bg-violet-500/[0.03]">
@@ -1449,6 +1533,24 @@ export function PixAutomatico() {
                 placeholder="0,00" className="h-9 text-sm font-mono"
                 onKeyDown={e => { if (e.key === 'Enter') registrar(); }} />
             </div>
+            {/* Só fora do mês corrente. No mês de hoje a data é agora, e um
+                campo a mais só daria chance de errá-la. O calendário é preso ao
+                mês olhado: escolher outro mês criaria um acordo que sumiria da
+                tela no instante seguinte. */}
+            {!noMesAtual && (
+              <div className="space-y-1 flex-1 max-w-[200px]">
+                <DatePickerField
+                  label="Data do registro *"
+                  labelClassName="text-xs font-medium"
+                  triggerClassName="h-9 text-sm"
+                  size="md"
+                  value={diaNovo}
+                  onChange={setDiaNovo}
+                  minDate={inicioDoMes}
+                  maxDate={fimDoMes}
+                />
+              </div>
+            )}
             {podeVerDeOutros && (
               <div className="space-y-1 flex-1 max-w-[260px] relative">
                 <Label className="text-xs font-medium flex items-center gap-1">
@@ -1628,7 +1730,7 @@ export function PixAutomatico() {
         <PixPainelPremiacoes
           itens={visiveis}
           pctPorSetor={pctPorSetor}
-          mes={mesAtual()}
+          mes={mes}
           metaPorOperador={metaPorOperador}
           metaPorSetor={metaPorSetor}
           pagamentos={pagamentosPremiacao}

@@ -12,6 +12,16 @@
  * não como o resto. «R$ 2.000,00» com R$ 1.000,00 já pagos, e quem lesse
  * pagaria duas vezes.
  *
+ * ## Marcar como pago QUITA — não é só um carimbo
+ *
+ * O switch «Foi pago?» gravava um booleano e nada mais: a linha continuava
+ * dizendo «Falta pagar R$ 412,30» ao lado de «Pago». Agora o clique registra
+ * o valor que saiu (o próprio «falta» daquele instante), e ele entra no «já
+ * pago» — a mesma mecânica do pagamento por linha do Pix. Um fato, um número.
+ *
+ * Premiação marcada antes desta mudança não tem valor gravado; ela é lida como
+ * quitação total do que faltava. Ver `PagamentoMensalPremiacao`.
+ *
  * ## As três parcelas ficam à vista
  *
  * Premiação, já pago e falta, lado a lado, sempre. O resultado sozinho seria
@@ -63,7 +73,10 @@ interface Props {
   pagamentos?: readonly PixPremiacaoPagamento[];
   podeMarcarPago?: boolean;
   alterandoOperadorId?: string | null;
-  onMarcarPago?: (operadorId: string, pago: boolean) => void | Promise<void>;
+  /** `valorPago` é o que sai agora: o «falta pagar» da linha no clique. */
+  onMarcarPago?: (
+    operadorId: string, pago: boolean, valorPago: number,
+  ) => void | Promise<void>;
 }
 
 /** Uma parcela da conta, com o rótulo em cima e o número embaixo. */
@@ -89,13 +102,21 @@ function LinhaPremiacao({
   pagamento?: PixPremiacaoPagamento;
   podeMarcarPago: boolean;
   alterando: boolean;
-  onMarcarPago?: (operadorId: string, pago: boolean) => void | Promise<void>;
+  onMarcarPago?: (
+    operadorId: string, pago: boolean, valorPago: number,
+  ) => void | Promise<void>;
 }) {
   const quitado = Math.abs(l.falta) < 0.005;
   const deve    = l.falta < -0.005;
-  const pago    = pagamento?.pago === true;
+  // O estado vem da conta, não do carimbo cru: é ela que já sabe ler a linha
+  // antiga sem valor gravado.
+  const pago    = l.premiacaoPaga;
   const tituloPagamento = pago
-    ? `Pago${pagamento?.pago_por_nome ? ` por ${pagamento.pago_por_nome}` : ''}${pagamento?.pago_em ? ` em ${new Date(pagamento.pago_em).toLocaleString('pt-BR')}` : ''}`
+    ? [
+        `Pago${l.pagoNaPremiacao > 0 ? ` — ${formatCurrency(l.pagoNaPremiacao)}` : ''}`,
+        pagamento?.pago_por_nome ? `por ${pagamento.pago_por_nome}` : '',
+        pagamento?.pago_em ? `em ${new Date(pagamento.pago_em).toLocaleString('pt-BR')}` : '',
+      ].filter(Boolean).join(' ')
     : 'Premiação ainda não marcada como paga';
 
   return (
@@ -141,14 +162,27 @@ function LinhaPremiacao({
           </p>
         )}
       </div>
-      <Parcela rotulo="Já pago" valor={l.jaPago} cls="text-muted-foreground" />
+      <div className="min-w-0">
+        <Parcela rotulo="Já pago" valor={l.jaPago} cls="text-muted-foreground" />
+        {/* Quanto veio do carimbo mensal: sem isto o «já pago» sobe sozinho
+            depois do clique e parece número que apareceu do nada. */}
+        {l.pagoNaPremiacao > 0 && (
+          <p className="text-[10px] leading-tight text-muted-foreground tabular-nums">
+            {formatCurrency(l.pagoNaPremiacao)} na premiação
+          </p>
+        )}
+      </div>
       <div className="flex min-w-0 items-center gap-2" title={tituloPagamento}>
         {podeMarcarPago ? (
           <>
             <Switch
               checked={pago}
               disabled={alterando}
-              onCheckedChange={marcado => void onMarcarPago?.(l.operadorId, marcado)}
+              /* Marcar quita o que falta AGORA; negativo (pagou demais) vira
+                 zero — esse acerto é do saldo de divergência, não daqui. */
+              onCheckedChange={marcado => void onMarcarPago?.(
+                l.operadorId, marcado, Math.max(l.falta, 0),
+              )}
               aria-label={`${pago ? 'Desmarcar' : 'Marcar'} premiação de ${l.nome} como paga`}
             />
             {alterando
@@ -191,24 +225,34 @@ export function PixPainelPremiacoes({
   const [busca, setBusca] = useState('');
   const [soPendentes, setSoPendentes] = useState(false);
 
-  const linhas = useMemo(
-    () => painelPremiacoes({
-      itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
-    }),
-    [itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor],
-  );
-
-  const total = useMemo(() => totalDoPainel(linhas), [linhas]);
   const pagamentoPorOperador = useMemo(
     () => new Map(pagamentos.map(p => [p.operador_id, p])),
     [pagamentos],
   );
-  const faltaPagar = useMemo(
-    () => totalDoPainel(
-      linhas.filter(l => pagamentoPorOperador.get(l.operadorId)?.pago !== true),
-    ).falta,
-    [linhas, pagamentoPorOperador],
+
+  /** O carimbo mensal no formato que a conta entende. */
+  const carimbos = useMemo(() => {
+    const m: Record<string, { pago: boolean; valorPago?: number | null }> = {};
+    for (const p of pagamentos) {
+      m[p.operador_id] = {
+        pago: p.pago === true,
+        valorPago: p.valor_pago == null ? null : Number(p.valor_pago),
+      };
+    }
+    return m;
+  }, [pagamentos]);
+
+  const linhas = useMemo(
+    () => painelPremiacoes({
+      itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
+      pagamentoPorOperador: carimbos,
+    }),
+    [itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor, carimbos],
   );
+
+  const total = useMemo(() => totalDoPainel(linhas), [linhas]);
+  // O «falta» de cada linha já desconta o carimbo mensal — somar é o bastante.
+  const faltaPagar = total.falta;
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -216,10 +260,8 @@ export function PixPainelPremiacoes({
       .filter(l => (termo ? l.nome.toLowerCase().includes(termo) : true))
       // «Só quem falta» é o modo de trabalho: a lista fica com o que ainda
       // precisa de ação, e some quem já está quitado.
-      .filter(l => (soPendentes
-        ? Math.abs(l.falta) >= 0.005 && pagamentoPorOperador.get(l.operadorId)?.pago !== true
-        : true));
-  }, [linhas, busca, soPendentes, pagamentoPorOperador]);
+      .filter(l => (soPendentes ? Math.abs(l.falta) >= 0.005 : true));
+  }, [linhas, busca, soPendentes]);
 
   if (linhas.length === 0) return null;
 

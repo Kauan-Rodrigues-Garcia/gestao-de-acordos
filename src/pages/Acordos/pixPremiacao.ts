@@ -51,6 +51,20 @@ function centavos(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
+/**
+ * O carimbo mensal da premiação, como o painel o entrega.
+ *
+ * `valorPago` NULL numa linha PAGA é o legado da migration 20260831203244,
+ * quando o pagamento era só um booleano: não dá para saber quanto saiu, e o
+ * único significado honesto é "quitou o que faltava". Ler assim preserva o
+ * trabalho de quem já marcou pagamentos antes desta versão — o contrário seria
+ * reabrir dívidas que a operação considera pagas.
+ */
+export interface PagamentoMensalPremiacao {
+  pago: boolean;
+  valorPago?: number | null;
+}
+
 export interface Premiacao {
   operadorId: string;
   nome: string;
@@ -64,8 +78,17 @@ export interface Premiacao {
   /** O que a pessoa tem direito a receber no mês: comissão + bônus. */
   premiacao: number;
 
-  /** O que já saiu — soma de `valorAPagarDe` das linhas marcadas como pagas. */
+  /**
+   * O que já saiu: as linhas marcadas como pagas MAIS o pagamento mensal da
+   * premiação. Os dois são dinheiro que saiu do caixa pelo mesmo mês.
+   */
   jaPago: number;
+
+  /** Só a parte paga pelo carimbo mensal da premiação. */
+  pagoNaPremiacao: number;
+
+  /** A premiação do mês está marcada como paga? */
+  premiacaoPaga: boolean;
 
   /**
    * O que ainda sai: premiação − já pago.
@@ -90,6 +113,8 @@ export function premiacaoDoOperador(p: {
   mes: MesRef;
   metaRecebimento?: MetaRecebimentoDobra;
   metaPorSetor?: Record<string, number>;
+  /** O carimbo mensal, quando existir. Ver `PagamentoMensalPremiacao`. */
+  pagamentoMensal?: PagamentoMensalPremiacao;
 }): Premiacao {
   const doMes = p.itens.filter(
     i => i.operador_id === p.operadorId && i.criado_em.startsWith(p.mes),
@@ -110,9 +135,25 @@ export function premiacaoDoOperador(p: {
    * extrato. `valorAPagarDe` já inclui o acerto de divergência carimbado
    * naquela linha — é por ali que a divergência entra nesta conta.
    */
-  const jaPago = centavos(
+  const pagoNasLinhas = centavos(
     doMes.filter(i => i.pago).reduce((s, i) => s + valorAPagarDe(i, p.pctPorSetor), 0),
   );
+
+  /*
+   * O carimbo mensal também é dinheiro que saiu.
+   *
+   * Sem ele nesta conta, o painel mostrava "Pago" no switch e "Falta pagar
+   * R$ 412,30" na mesma linha — dois números para o mesmo fato, discordando.
+   * Sem valor gravado (linha antiga), o carimbo vale pelo que faltava: é o
+   * único significado que não inventa número nem reabre pagamento feito.
+   */
+  const premiacaoPaga = p.pagamentoMensal?.pago === true;
+  const pagoNaPremiacao = premiacaoPaga
+    ? centavos(p.pagamentoMensal?.valorPago
+        ?? Math.max(premiacao - pagoNasLinhas, 0))
+    : 0;
+
+  const jaPago = centavos(pagoNasLinhas + pagoNaPremiacao);
 
   return {
     operadorId: p.operadorId,
@@ -122,6 +163,8 @@ export function premiacaoDoOperador(p: {
     bonus,
     premiacao,
     jaPago,
+    pagoNaPremiacao,
+    premiacaoPaga,
     falta: centavos(premiacao - jaPago),
   };
 }
@@ -142,6 +185,8 @@ export function painelPremiacoes(p: {
   /** Meta de recebimento por operador — é ela que decide a dobra. */
   metaPorOperador?: Record<string, MetaRecebimentoDobra>;
   metaPorSetor?: Record<string, number>;
+  /** Carimbo mensal por operador. Ausente = premiação ainda não paga. */
+  pagamentoPorOperador?: Record<string, PagamentoMensalPremiacao>;
 }): Premiacao[] {
   const ids = new Map<string, string>();
   for (const i of p.itens) {
@@ -157,6 +202,7 @@ export function painelPremiacoes(p: {
       itens: p.itens, pctPorSetor: p.pctPorSetor, mes: p.mes,
       metaRecebimento: p.metaPorOperador?.[operadorId],
       metaPorSetor: p.metaPorSetor,
+      pagamentoMensal: p.pagamentoPorOperador?.[operadorId],
     }))
     .filter(l => l.premiacao > 0 || l.jaPago > 0)
     .sort((a, b) => b.falta - a.falta || a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -164,11 +210,13 @@ export function painelPremiacoes(p: {
 
 /** O total do painel, para o cabeçalho não obrigar a somar de cabeça. */
 export function totalDoPainel(linhas: readonly Premiacao[]): {
-  premiacao: number; jaPago: number; falta: number; bonus: number; comDobra: number;
+  premiacao: number; jaPago: number; pagoNaPremiacao: number;
+  falta: number; bonus: number; comDobra: number;
 } {
   return {
     premiacao: centavos(linhas.reduce((s, l) => s + l.premiacao, 0)),
     jaPago:    centavos(linhas.reduce((s, l) => s + l.jaPago, 0)),
+    pagoNaPremiacao: centavos(linhas.reduce((s, l) => s + l.pagoNaPremiacao, 0)),
     falta:     centavos(linhas.reduce((s, l) => s + l.falta, 0)),
     bonus:     centavos(linhas.reduce((s, l) => s + l.bonus, 0)),
     comDobra:  linhas.filter(l => l.dobrou).length,

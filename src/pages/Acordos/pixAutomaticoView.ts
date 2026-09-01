@@ -95,6 +95,15 @@ export interface FiltrosPix {
   de?: string | null;
   /** Registrado ATÉ 'yyyy-MM-dd', inclusive. */
   ate?: string | null;
+  /**
+   * Mês da aba (`yyyy-MM`). Omitido = todos os meses (o comportamento antigo).
+   *
+   * Recorta pelo MESMO critério dos cards (`criado_em.startsWith`), e não pela
+   * data local do filtro de período: se a tabela e os cards discordassem sobre
+   * o que é "do mês", o total embaixo da lista não fecharia com o card em cima
+   * dela — que é a primeira coisa que alguém confere.
+   */
+  mes?: string | null;
 }
 
 /**
@@ -134,7 +143,9 @@ export function filtrarItensPix(
   const termo = (filtros.busca ?? '').trim().toLowerCase();
   const de  = (filtros.de  ?? '').trim();
   const ate = (filtros.ate ?? '').trim();
+  const mes = (filtros.mes ?? '').trim();
   return itens.filter(i => {
+    if (mes && !i.criado_em.startsWith(mes)) return false;
     if (filtros.status && filtros.status !== 'todos' && i.status !== filtros.status) return false;
     if (filtros.operadorId && i.operador_id !== filtros.operadorId) return false;
     if (filtros.equipeId && mapas.porEquipe[i.operador_id] !== filtros.equipeId) return false;
