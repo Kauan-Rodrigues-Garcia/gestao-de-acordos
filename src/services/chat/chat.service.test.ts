@@ -13,7 +13,9 @@ vi.mock('@/lib/supabaseSemTipo', () => ({
   rpcSemTipo: (...args: unknown[]) => mockRpc(...args),
 }));
 
-import { listarDestinosDisparo, PAGINA_DESTINOS_DISPARO } from './chat.service';
+import {
+  listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, esbocoDeConversa, abrirConversa,
+} from './chat.service';
 
 describe('listarDestinosDisparo', () => {
   beforeEach(() => {
@@ -75,5 +77,69 @@ describe('listarDestinosDisparo', () => {
     expect(resultado).toEqual({
       destinos: [], temMais: false, erro: 'Não foi possível carregar os destinatários.',
     });
+  });
+});
+
+
+/*
+ * ── A conversa nova ───────────────────────────────────────────────────────
+ *
+ * Conversa recém-aberta não está em `fn_chat_minhas_conversas` (a lista exige
+ * `ultima_mensagem_em`, e ela ainda não tem mensagem). Até 03/09/2026 a tela
+ * dependia só de `buscarConversa` para essa primeira pintura, e qualquer
+ * tropeço ali deixava a janela sem conversa nenhuma — o «não abre».
+ */
+describe('esbocoDeConversa', () => {
+  const contato = {
+    perfil_id: 'p-1',
+    nome: 'Ana Operadora',
+    usuario: 'ana_op',
+    foto_url: 'https://exemplo/ana.png',
+    empresa_slug: 'bookplay',
+  };
+
+  it('monta a conversa com o que a tela já sabe da pessoa', () => {
+    const c = esbocoDeConversa('conv-1', contato);
+    expect(c.id).toBe('conv-1');
+    expect(c.outro_id).toBe('p-1');
+    expect(c.outro_nome).toBe('Ana Operadora');
+    expect(c.outro_foto).toBe('https://exemplo/ana.png');
+    expect(c.outro_empresa).toBe('bookplay');
+    expect(c.tipo).toBe('direta');
+  });
+
+  it('nasce sem mensagem e sem não lidas — é uma conversa que ainda não aconteceu', () => {
+    const c = esbocoDeConversa('conv-1', contato);
+    expect(c.ultima_mensagem_em).toBeNull();
+    expect(c.ultimo_texto).toBeNull();
+    expect(c.nao_lidas).toBe(0);
+    expect(c.em_historico).toBe(false);
+  });
+
+  it('pessoa sem nome não vira conversa sem cabeçalho', () => {
+    const c = esbocoDeConversa('conv-1', { perfil_id: 'p-2', nome: '' });
+    expect(c.outro_nome).toBe('Sem nome');
+    expect(c.outro_usuario).toBeNull();
+    expect(c.outro_foto).toBeNull();
+  });
+});
+
+describe('abrirConversa', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('devolve o id da conversa', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'conv-9', error: null });
+    await expect(abrirConversa('p-1')).resolves.toEqual({ id: 'conv-9', erro: null });
+  });
+
+  it('a recusa vira motivo legível — e vai para o console com nome', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'fora_do_alcance' } });
+    const r = await abrirConversa('p-1');
+    expect(r.id).toBeNull();
+    expect(r.erro).toBeTruthy();
+    expect(console.warn).toHaveBeenCalled();
   });
 });

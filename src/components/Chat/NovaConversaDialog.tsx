@@ -19,7 +19,12 @@ interface Props {
   aberto:    boolean;
   online:    Set<string>;
   onFechar:  () => void;
-  onEscolher: (pessoaId: string) => void;
+  /**
+   * O contato inteiro, e não só o id: a tela já tem nome e foto, e passá-los
+   * adiante faz a conversa nova abrir com o cabeçalho pronto em vez de esperar
+   * uma segunda leitura no banco (ver `esbocoDeConversa`).
+   */
+  onEscolher: (contato: ContatoChat) => void;
 }
 
 /**
@@ -113,7 +118,7 @@ export function NovaConversaDialog({ aberto, online, onFechar, onEscolher }: Pro
           {pessoas.map(p => (
             <button
               key={p.perfil_id}
-              onClick={() => { onEscolher(p.perfil_id); onFechar(); }}
+              onClick={() => { onEscolher(p); onFechar(); }}
               className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
             >
               <AvatarChat nome={p.nome} foto={p.foto_url} tamanho={34}

@@ -344,6 +344,11 @@ export async function buscarConversa(
    * que só chega o que eu posso ver, e é este caminho que faz o grupo recém
    * criado abrir em vez de cair numa tela em branco.
    */
+  if (error) {
+    // Engolir isto em silêncio foi o que transformou uma falha de leitura em
+    // «a conversa nova não abre e ninguém sabe por quê». O erro tem de ter nome.
+    console.warn('[chat] buscarConversa:', error.message);
+  }
   if (error || !c) return buscarGrupo(conversaId);
 
   return {
@@ -550,10 +555,65 @@ export async function listarDestinosDisparo(
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
 
+/**
+ * Dados da pessoa que quem abre a conversa JÁ tem na mão.
+ *
+ * A janela de «Nova conversa» acabou de desenhar o nome e a foto de quem foi
+ * escolhido. Passar isso adiante deixa a conversa abrir com o cabeçalho pronto,
+ * sem depender de uma segunda leitura no banco — ver `esbocoDeConversa`.
+ */
+export interface ContatoEscolhido {
+  perfil_id:     string;
+  nome:          string;
+  usuario?:      string | null;
+  foto_url?:     string | null;
+  empresa_slug?: string | null;
+}
+
+/**
+ * A conversa recém-aberta, montada com o que a tela já sabe.
+ *
+ * Existe porque a conversa NOVA não está em `fn_chat_minhas_conversas` (a lista
+ * exige `ultima_mensagem_em`, e ela ainda não tem mensagem nenhuma). Até
+ * 03/09/2026 a tela dependia inteiramente de `buscarConversa` para essa
+ * primeira pintura: qualquer tropeço ali — e `.then(setAvulsa)` gravava o
+ * `null` do tropeço — deixava a janela sem conversa, exatamente o «não abre».
+ *
+ * Este esboço é o piso. `buscarConversa` continua rodando e substitui o esboço
+ * quando responde; quando não responde, a conversa abre do mesmo jeito.
+ */
+export function esbocoDeConversa(id: string, contato: ContatoEscolhido): ConversaChat {
+  return {
+    id,
+    outro_id:            contato.perfil_id,
+    outro_nome:          contato.nome || 'Sem nome',
+    outro_usuario:       contato.usuario ?? null,
+    outro_foto:          contato.foto_url ?? null,
+    outro_perfil:        null,
+    outro_empresa:       contato.empresa_slug ?? null,
+    ultima_mensagem_em:  null,
+    ultima_atividade_em: null,
+    em_historico:        false,
+    ultimo_texto:        null,
+    ultimo_autor_id:     null,
+    tipo:                'direta',
+    participantes:       1,
+    sou_admin:           false,
+    somente_lideranca:   false,
+    nao_lidas:           0,
+    leitura_do_outro:    null,
+    entrega_minha:       null,
+    entrega_do_outro:    null,
+  };
+}
+
 /** Abre (ou reabre) a conversa com alguém. Devolve o id, ou o motivo da recusa. */
 export async function abrirConversa(alvoId: string): Promise<{ id: string | null; erro: string | null }> {
   const { data, error } = await rpcSemTipo<string>('fn_chat_abrir', { p_alvo: alvoId });
-  if (error) return { id: null, erro: traduzir(error.message) };
+  if (error) {
+    console.warn('[chat] abrirConversa:', error.message);
+    return { id: null, erro: traduzir(error.message) };
+  }
   return { id: (data as unknown as string) ?? null, erro: null };
 }
 

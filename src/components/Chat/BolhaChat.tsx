@@ -35,7 +35,7 @@ import { useChat } from '@/hooks/useChat';
 import { useChatPresenca } from '@/hooks/useChatPresenca';
 import {
   apagarConversa, buscarConversa, possoUsarOChat, rotuloAnexo,
-  type MensagemChat,
+  type MensagemChat, type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
 import { ListaConversas } from './ListaConversas';
@@ -155,7 +155,9 @@ export function BolhaChat() {
    * clique. O cartão é uma pausa, não um cancelamento.
    */
   const [pendente, setPendente] = useState<
-    { tipo: 'abrir'; id: string } | { tipo: 'pessoa'; id: string } | null
+    | { tipo: 'abrir'; id: string }
+    | { tipo: 'pessoa'; id: string; contato?: ContatoEscolhido }
+    | null
   >(null);
   const jaLeu = !!perfil?.chat_boas_vindas_em;
 
@@ -243,8 +245,8 @@ export function BolhaChat() {
     if (chat.conversaAberta) chat.abrir(chat.conversaAberta);
   }, [chat]);
 
-  const abrirCom = useCallback(async (pessoaId: string) => {
-    const id = await chat.abrirCom(pessoaId);
+  const abrirCom = useCallback(async (pessoaId: string, contato?: ContatoEscolhido) => {
+    const id = await chat.abrirCom(pessoaId, contato);
     if (!id) toast({ title: 'Não foi possível abrir a conversa', variant: 'destructive' });
     else {
       abertoRef.current = true;
@@ -258,9 +260,11 @@ export function BolhaChat() {
     chat.abrir(id);
   }, [jaLeu, chat]);
 
-  const pedirPessoa = useCallback((pessoaId: string) => {
-    if (!jaLeu) { setPendente({ tipo: 'pessoa', id: pessoaId }); return; }
-    void abrirCom(pessoaId);
+  const pedirPessoa = useCallback((contato: ContatoEscolhido) => {
+    // O cartão de boas-vindas atrasa a abertura; o contato viaja junto para a
+    // conversa abrir igual depois dele.
+    if (!jaLeu) { setPendente({ tipo: 'pessoa', id: contato.perfil_id, contato }); return; }
+    void abrirCom(contato.perfil_id, contato);
   }, [jaLeu, abrirCom]);
 
   const depoisDeLer = useCallback(() => {
@@ -268,7 +272,7 @@ export function BolhaChat() {
     setPendente(null);
     if (!p) return;
     if (p.tipo === 'abrir') chat.abrir(p.id);
-    else void abrirCom(p.id);
+    else void abrirCom(p.id, p.contato);
   }, [pendente, chat, abrirCom]);
 
   const apagar = useCallback(async (conversaId: string) => {

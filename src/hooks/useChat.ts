@@ -30,7 +30,9 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   listarConversas, listarMensagens, listarDisparos, buscarConversa,
   marcarEntregue, marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
+  esbocoDeConversa,
   type ConversaChat, type MensagemChat, type DisparoChat, type AnexoChat,
+  type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 
 /** Espera antes de refazer a lista. Junta a rajada de eventos numa consulta só. */
@@ -63,7 +65,11 @@ export interface UseChat {
   carregandoMais: boolean;
   verAnteriores:  () => void;
   abrir:          (conversaId: string | null) => void;
-  abrirCom:       (pessoaId: string) => Promise<string | null>;
+  /**
+   * Abre a conversa com uma pessoa. `contato` é o que a tela já sabe dela —
+   * com ele a conversa nova pinta na hora, sem depender de uma segunda leitura.
+   */
+  abrirCom:       (pessoaId: string, contato?: ContatoEscolhido) => Promise<string | null>;
   enviar: (texto: string, anexos?: AnexoChat[], respondendoId?: string | null) => Promise<string | null>;
   recarregar:     () => void;
 }
@@ -245,9 +251,11 @@ export function useChat(
   }, [ativo, empresa?.id, meuId, agendarRefazer, agendarLido, recarregar]);
 
   // ── Abrir / fechar ─────────────────────────────────────────────────────────
-  const abrir = useCallback((conversaId: string | null) => {
+  const abrir = useCallback((conversaId: string | null, esboco?: ConversaChat) => {
     setConversaAberta(conversaId);
     if (!conversaId) { setMensagens([]); setAvulsa(null); setTemMais(false); return; }
+    // O esboço primeiro: a conversa nova aparece no mesmo quadro do clique.
+    if (esboco) setAvulsa(esboco);
     void listarMensagens(conversaId).then(r => {
       setMensagens(r.mensagens);
       setTemMais(r.temMais);
@@ -257,7 +265,12 @@ export function useChat(
       // Busca sempre, e não só quando falta na lista: no clique a lista pode
       // estar de uma leitura anterior, e decidir por ela erraria justamente no
       // caso que este código existe para cobrir.
-      void buscarConversa(conversaId).then(setAvulsa);
+      //
+      // `if (c)`, e não `.then(setAvulsa)`: a versão anterior gravava o `null`
+      // de uma leitura que falhou POR CIMA do que a tela tinha, e a janela
+      // ficava sem conversa nenhuma — o «a conversa nova não abre». Resposta
+      // que não veio não é resposta vazia; é resposta que não veio.
+      void buscarConversa(conversaId).then(c => { if (c) setAvulsa(c); });
     }
   }, [meuId, agendarRefazer]);
 
@@ -280,10 +293,10 @@ export function useChat(
     if (r.mensagens.length) setMensagens(atual => [...r.mensagens, ...atual]);
   }, [mensagens, carregandoMais]);
 
-  const abrirCom = useCallback(async (pessoaId: string) => {
+  const abrirCom = useCallback(async (pessoaId: string, contato?: ContatoEscolhido) => {
     const { id, erro } = await abrirConversa(pessoaId);
     if (erro || !id) return null;
-    abrir(id);
+    abrir(id, contato ? esbocoDeConversa(id, contato) : undefined);
     return id;
   }, [abrir]);
 
