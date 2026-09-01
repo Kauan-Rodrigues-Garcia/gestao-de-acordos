@@ -30,9 +30,15 @@ import {
   ordenarPorCamada,
   percentualDaMeta,
   primeiroNome,
+  redimensionar,
   texto,
   numero,
   ligado,
+  ALCAS,
+  alcaEhCanto,
+  alcaNoOeste,
+  type Alca,
+  type Redimensionamento,
   type Fonte,
   type LinhaRanking,
   type DadosMeta,
@@ -55,10 +61,21 @@ interface PalcoProps {
    * uma vez. Sem essa distinção, arrastar produziria um UPDATE por pixel.
    */
   onMoverFonte?: (id: string, x: number, y: number, definitivo: boolean) => void;
+  /**
+   * Redimensionar pelas alças. Só a mesa passa, e só a fonte SELECIONADA
+   * ganha alças — oito pontinhos em cada elemento da cena seria um campo de
+   * minas sobre a arte.
+   *
+   * Mesma separação de `onMoverFonte`: `definitivo` só no soltar.
+   */
+  onRedimensionar?: (id: string, r: Redimensionamento, definitivo: boolean) => void;
 }
 
+/** Tamanho da alça em pixels DE TELA — ver `contraEscala`. */
+const ALCA_PX = 12;
+
 export function Palco({
-  fontes, aviso, selecionadaId, onSelecionar, onMoverFonte,
+  fontes, aviso, selecionadaId, onSelecionar, onMoverFonte, onRedimensionar,
 }: PalcoProps) {
   const caixa = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
@@ -71,6 +88,16 @@ export function Palco({
    */
   const [arrastando, setArrastando] = useState<
     { id: string; desvioX: number; desvioY: number } | null
+  >(null);
+  /*
+   * O redimensionamento guarda o estado INICIAL da fonte, não o corrente.
+   *
+   * Recalcular sempre a partir do início é o que mantém a borda oposta parada:
+   * aplicar deltas sobre o valor já alterado acumula o arredondamento de cada
+   * quadro, e depois de atravessar o palco a âncora escorregou visivelmente.
+   */
+  const [redimensionando, setRedimensionando] = useState<
+    { id: string; alca: Alca; inicio: { x: number; largura: number; escala: number } } | null
   >(null);
 
   /*
@@ -101,6 +128,27 @@ export function Palco({
       definitivo,
     );
   };
+
+  const aoRedimensionar = (e: React.PointerEvent, definitivo: boolean) => {
+    if (!redimensionando || !onRedimensionar) return;
+    const p = posicaoEmPercentual(e);
+    if (!p) return;
+    onRedimensionar(
+      redimensionando.id,
+      redimensionar(redimensionando.inicio, redimensionando.alca, p.x),
+      definitivo,
+    );
+  };
+
+  /** Um gesto de cada vez: ou anda, ou cresce. */
+  const emGesto = !!arrastando || !!redimensionando;
+
+  const aoMover = (e: React.PointerEvent, definitivo: boolean) => {
+    if (arrastando) aoArrastar(e, definitivo);
+    else aoRedimensionar(e, definitivo);
+  };
+
+  const encerrarGesto = () => { setArrastando(null); setRedimensionando(null); };
 
   /*
    * `ResizeObserver` e não `window.resize`: a prévia da mesa muda de tamanho
@@ -139,11 +187,11 @@ export function Palco({
     <div
       ref={caixa}
       className="absolute inset-0 overflow-hidden bg-[#0a0f13]"
-      onPointerMove={arrastando ? e => aoArrastar(e, false) : undefined}
-      onPointerUp={arrastando ? e => { aoArrastar(e, true); setArrastando(null); } : undefined}
+      onPointerMove={emGesto ? e => aoMover(e, false) : undefined}
+      onPointerUp={emGesto ? e => { aoMover(e, true); encerrarGesto(); } : undefined}
       // Ponteiro saiu da caixa com o botão apertado: grava onde parou em vez de
       // deixar a fonte "presa" ao cursor para sempre.
-      onPointerLeave={arrastando ? e => { aoArrastar(e, true); setArrastando(null); } : undefined}
+      onPointerLeave={emGesto ? e => { aoMover(e, true); encerrarGesto(); } : undefined}
     >
       <div
         ref={canvas}
@@ -199,6 +247,32 @@ export function Palco({
             }
           >
             <DesenhoDaFonte fonte={fonte} />
+
+            {/*
+              As alças, só na fonte selecionada e só na mesa.
+
+              Ficam DENTRO da caixa da fonte para acompanharem posição e
+              tamanho sem nenhuma conta — mas por isso herdam o `scale` dela e
+              o do palco. `contraEscala` desfaz os dois: a alça mede os mesmos
+              12px na prévia de 400px e na TV de 1920, que é o que a torna
+              clicável em vez de decorativa.
+            */}
+            {onRedimensionar && selecionadaId === fonte.id && escala > 0 && (
+              <Alcas
+                fonte={fonte}
+                contraEscala={1 / (escala * (fonte.escala || 1))}
+                aoPegar={(alca, e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setArrastando(null);
+                  setRedimensionando({
+                    id: fonte.id,
+                    alca,
+                    inicio: { x: fonte.x, largura: fonte.largura, escala: fonte.escala },
+                  });
+                }}
+              />
+            )}
           </div>
         ))}
 
@@ -230,6 +304,97 @@ export function Palco({
         )}
       </div>
     </div>
+  );
+}
+
+// ── As alças de redimensionar ────────────────────────────────────────────────
+
+/** Onde cada alça encosta na caixa da fonte, em % da própria caixa. */
+const CANTO_DA_ALCA: Record<Alca, { esquerda: string; topo: string }> = {
+  nw: { esquerda: '0%',   topo: '0%'   },
+  ne: { esquerda: '100%', topo: '0%'   },
+  sw: { esquerda: '0%',   topo: '100%' },
+  se: { esquerda: '100%', topo: '100%' },
+  w:  { esquerda: '0%',   topo: '50%'  },
+  e:  { esquerda: '100%', topo: '50%'  },
+};
+
+const CURSOR_DA_ALCA: Record<Alca, string> = {
+  nw: 'nwse-resize', se: 'nwse-resize',
+  ne: 'nesw-resize', sw: 'nesw-resize',
+  w:  'ew-resize',   e:  'ew-resize',
+};
+
+/**
+ * Os seis pontos de agarrar da fonte selecionada.
+ *
+ * Cantos crescem a fonte inteira (escala); laterais mudam só a largura da
+ * caixa. Não há alça em cima nem embaixo porque a altura vem do conteúdo —
+ * ver `ALCAS` em `geometria.ts`.
+ *
+ * A área CLICÁVEL é maior que o desenho: um quadradinho de 12px é difícil de
+ * pegar com o mouse, e mais ainda no toque. O `padding` do botão cresce o alvo
+ * sem engordar o ponto que a pessoa vê.
+ */
+function Alcas({
+  fonte, contraEscala, aoPegar,
+}: {
+  fonte: Fonte;
+  contraEscala: number;
+  aoPegar: (alca: Alca, e: React.PointerEvent) => void;
+}) {
+  const lado = ALCA_PX * contraEscala;
+  return (
+    <>
+      {ALCAS.map(alca => (
+        <div
+          key={alca}
+          role="presentation"
+          onPointerDown={e => aoPegar(alca, e)}
+          style={{
+            position: 'absolute',
+            left: CANTO_DA_ALCA[alca].esquerda,
+            top: CANTO_DA_ALCA[alca].topo,
+            width: lado,
+            height: lado,
+            marginLeft: -lado / 2,
+            marginTop: -lado / 2,
+            boxSizing: 'border-box',
+            background: '#ffffff',
+            border: `${Math.max(1, lado / 8)}px solid #38bdf8`,
+            borderRadius: alcaEhCanto(alca) ? lado / 6 : lado / 2,
+            cursor: CURSOR_DA_ALCA[alca],
+            touchAction: 'none',
+            zIndex: 10,
+            boxShadow: `0 0 ${lado / 2}px rgba(0,0,0,.45)`,
+          }}
+          title={alcaEhCanto(alca)
+            ? 'Arraste para crescer a fonte inteira'
+            : `Arraste para mudar a largura da caixa (${alcaNoOeste(alca) ? 'esquerda' : 'direita'})`}
+        />
+      ))}
+      {/* O tamanho atual, para quem quer um número e não o olho. */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '0%',
+          transform: 'translate(-50%, -140%)',
+          background: 'rgba(2,17,26,.86)',
+          color: '#bde8f5',
+          padding: `${2 * contraEscala}px ${7 * contraEscala}px`,
+          borderRadius: 999 * contraEscala,
+          fontSize: 11 * contraEscala,
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          fontVariantNumeric: 'tabular-nums',
+          zIndex: 10,
+        }}
+      >
+        {fonte.largura.toFixed(0)}% · {fonte.escala.toFixed(2)}×
+      </div>
+    </>
   );
 }
 

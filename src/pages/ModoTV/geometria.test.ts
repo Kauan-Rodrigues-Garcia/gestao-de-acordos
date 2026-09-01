@@ -18,6 +18,13 @@ import {
   estiloDaFonte,
   ordenarPorCamada,
   percentualDaMeta,
+  redimensionar,
+  ALCAS,
+  alcaEhCanto,
+  alcaNoOeste,
+  larguraVisivel,
+  LARGURA_MIN,
+  ESCALA_MAX,
   primeiroNome,
   texto,
   numero,
@@ -222,5 +229,77 @@ describe('leitura do config', () => {
     expect(ligado({ mostrar_valor: false }, 'mostrar_valor', true)).toBe(false);
     expect(ligado({ mostrar_valor: 'sim' }, 'mostrar_valor', true)).toBe(true);
     expect(ligado({}, 'mostrar_valor', true)).toBe(true);
+  });
+});
+
+/*
+ * Redimensionar pelas alças.
+ *
+ * A regra que estes testes prendem é uma só: a borda OPOSTA à alça não se mexe.
+ * É ela que permite encostar um elemento na margem e depois esticar o outro
+ * lado sem perder o encosto — e é a primeira coisa que quebra quando alguém
+ * troca um sinal, porque `x` é o CENTRO e não o canto.
+ */
+describe('redimensionar pelas alças', () => {
+  /** Fonte de 40% de largura, escala 1, centrada: bordas em 30 e 70. */
+  const base = { x: 50, largura: 40, escala: 1 };
+
+  it('a lateral leste estica a largura e deixa a borda oeste parada', () => {
+    const r = redimensionar(base, 'e', 90);
+    expect(r.largura).toBe(60);          // de 30 até 90
+    expect(r.escala).toBe(1);            // lateral não mexe na escala
+    expect(r.x).toBe(60);                // novo centro: 30 + 60/2
+  });
+
+  it('a lateral oeste estica para a esquerda e deixa a borda leste parada', () => {
+    const r = redimensionar(base, 'w', 10);
+    expect(r.largura).toBe(60);          // de 10 até 70
+    expect(r.x).toBe(40);                // 70 − 60/2
+  });
+
+  it('o canto mexe na ESCALA e não na largura', () => {
+    const r = redimensionar(base, 'se', 70 + 20);
+    expect(r.largura).toBe(40);          // a caixa não muda
+    expect(r.escala).toBe(1.5);          // 60 visíveis ÷ 40 de caixa
+    expect(r.x).toBe(60);
+  });
+
+  it('encolher até o mínimo para de encolher, e a âncora continua parada', () => {
+    // Arrastar a alça leste para trás da borda oeste pediria largura negativa.
+    const r = redimensionar(base, 'e', 20);
+    expect(r.largura).toBe(LARGURA_MIN);
+    // Borda oeste continua em 30: o centro é 30 + mínimo/2.
+    expect(r.x).toBeCloseTo(30 + LARGURA_MIN / 2, 5);
+  });
+
+  it('a escala para no teto sem a fonte escorregar de lado', () => {
+    // Caixa de 20% já em escala 4,9: ocupa 98% do palco, âncora oeste em 1.
+    const largo = { x: 50, largura: 20, escala: 4.9 };
+    // Puxar até 120 pediria escala 5,95 — acima do teto de 5.
+    const r = redimensionar(largo, 'se', 120);
+    expect(r.escala).toBe(ESCALA_MAX);
+    // A âncora não se mexe: 1 + (20 × 5)/2 = 51.
+    expect(r.x).toBe(limitarAoPalco(1 + (20 * ESCALA_MAX) / 2));
+  });
+
+  it('a borda que anda encaixa nas guias', () => {
+    // 74,4 está dentro da tolerância de 75 — a borda vai para 75 exato.
+    const r = redimensionar(base, 'e', 74.4);
+    expect(r.largura).toBe(45);          // de 30 até 75
+  });
+
+  it('as alças de cima e de baixo não existem', () => {
+    // A altura vem do conteúdo; uma alça vertical prometeria o que o modelo
+    // não tem. Se alguém acrescentar 'n'/'s', este teste cobra a decisão.
+    expect([...ALCAS].sort()).toEqual(['e', 'ne', 'nw', 'se', 'sw', 'w']);
+  });
+
+  it('canto e lateral se distinguem, e o lado oeste é o que ancora à direita', () => {
+    expect(ALCAS.filter(alcaEhCanto)).toEqual(['nw', 'ne', 'sw', 'se']);
+    expect(ALCAS.filter(alcaNoOeste)).toEqual(['nw', 'sw', 'w']);
+  });
+
+  it('largura visível é a caixa vezes a escala', () => {
+    expect(larguraVisivel({ largura: 40, escala: 1.5 })).toBe(60);
   });
 });

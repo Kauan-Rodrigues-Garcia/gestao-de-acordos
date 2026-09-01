@@ -379,6 +379,58 @@ export function useModoTV() {
     await lerNoAr();
   }, [lerCenas, lerNoAr]);
 
+  /*
+   * ── O desfazer ────────────────────────────────────────────────────────────
+   *
+   * A pilha guarda AÇÕES INVERSAS, não retratos da cena inteira. Retrato seria
+   * mais simples de escrever e errado de usar: desfazer um arrasto devolveria
+   * também a edição de texto que veio depois, e ninguém pede isso quando aperta
+   * "desfazer".
+   *
+   * Vive numa `ref` porque a pilha em si não pinta nada; o que a tela precisa
+   * saber — se há o que desfazer e o nome da última ação — sai de um estado
+   * pequeno, atualizado junto.
+   */
+  type AcaoDesfazer =
+    | { tipo: 'atualizar'; id: string; antes: Partial<Fonte>; rotulo: string }
+    | { tipo: 'criar';     id: string; rotulo: string }
+    | { tipo: 'remover';   fonte: Fonte; cenaId: string; rotulo: string };
+
+  const LIMITE_PILHA = 40;
+  const pilha = useRef<AcaoDesfazer[]>([]);
+  const [ultimaAcao, setUltimaAcao] = useState<string | null>(null);
+
+  const empilhar = useCallback((acao: AcaoDesfazer) => {
+    pilha.current = [...pilha.current, acao].slice(-LIMITE_PILHA);
+    setUltimaAcao(acao.rotulo);
+  }, []);
+
+  /*
+   * O gesto em curso.
+   *
+   * Arrastar e redimensionar chegam aqui dezenas de vezes com `definitivo =
+   * false` e uma vez com `true`. Uma entrada na pilha por quadro faria
+   * "desfazer" andar um pixel de cada vez — quarenta cliques para voltar de
+   * onde se saiu. Aqui o estado ANTERIOR ao gesto é capturado na primeira
+   * chamada e só vira entrada quando o gesto termina.
+   */
+  const gesto = useRef<{ id: string; antes: Partial<Fonte> } | null>(null);
+
+  const abrirGesto = useCallback((id: string, campos: (keyof Fonte)[]) => {
+    if (gesto.current?.id === id) return;
+    const atual = fontes.find(f => f.id === id);
+    if (!atual) return;
+    const antes: Partial<Fonte> = {};
+    for (const campo of campos) (antes as Record<string, unknown>)[campo] = atual[campo];
+    gesto.current = { id, antes };
+  }, [fontes]);
+
+  const fecharGesto = useCallback((rotulo: string) => {
+    const g = gesto.current;
+    gesto.current = null;
+    if (g) empilhar({ tipo: 'atualizar', id: g.id, antes: g.antes, rotulo });
+  }, [empilhar]);
+
   const adicionarFonte = useCallback(async (tipo: TipoFonte) => {
     if (!cenaId) return;
     const padroes: Record<TipoFonte, { config: Record<string, unknown>; largura: number }> = {
@@ -404,18 +456,25 @@ export function useModoTV() {
       ? Math.min(0, ...camadas) - 1
       : Math.max(0, ...camadas) + 1;
 
-    const { error } = await db('tv_fontes').insert({
+    // `.select('id')` para o desfazer saber O QUE remover. Sem o id de volta,
+    // "desfazer adicionar" teria de adivinhar qual das fontes nasceu agora.
+    const { data, error } = await db('tv_fontes').insert({
       cena_id: cenaId,
       tipo,
       config: padroes[tipo].config,
       x: 50, y: 50, largura: padroes[tipo].largura, escala: 1,
       camada,
       visivel: true,
-    });
+    }).select('id');
     if (error) { setErro(error.message); return; }
+
+    const novoId = ((data ?? [])[0] as { id?: string } | undefined)?.id;
+    if (novoId) empilhar({ tipo: 'criar', id: novoId, rotulo: `adicionar ${tipo}` });
+
     await lerFontes();
     await lerDadosPrevia();
-  }, [cenaId, fontes, lerFontes, lerDadosPrevia]);
+    return novoId;
+  }, [cenaId, fontes, lerFontes, lerDadosPrevia, empilhar]);
 
   /**
    * Grava a mudança de uma fonte.
@@ -424,7 +483,7 @@ export function useModoTV() {
    * responder no mesmo quadro, e esperar a resposta do servidor a cada pixel
    * faria o elemento andar aos trancos atrás do cursor.
    */
-  const atualizarFonte = useCallback(async (id: string, mudanca: Partial<Fonte>) => {
+  const gravarFonte = useCallback(async (id: string, mudanca: Partial<Fonte>) => {
     setFontes(atual => atual.map(f => (f.id === id ? { ...f, ...mudanca } : f)));
 
     /*
@@ -444,6 +503,28 @@ export function useModoTV() {
   }, []);
 
   /**
+   * Edição vinda do painel lateral: grava E entra na pilha do desfazer.
+   *
+   * Separada de `gravarFonte` porque o desfazer também precisa gravar — e uma
+   * gravação de desfazer que se empilhasse sozinha faria "desfazer" virar um
+   * botão de vai-e-volta infinito.
+   */
+  const atualizarFonte = useCallback(async (id: string, mudanca: Partial<Fonte>) => {
+    const atual = fontes.find(f => f.id === id);
+    if (atual) {
+      const antes: Partial<Fonte> = {};
+      for (const chave of Object.keys(mudanca) as (keyof Fonte)[]) {
+        if (chave === 'dados') continue;
+        (antes as Record<string, unknown>)[chave] = atual[chave];
+      }
+      if (Object.keys(antes).length > 0) {
+        empilhar({ tipo: 'atualizar', id, antes, rotulo: 'editar fonte' });
+      }
+    }
+    await gravarFonte(id, mudanca);
+  }, [fontes, gravarFonte, empilhar]);
+
+  /**
    * O arrasto.
    *
    * Enquanto o botão está apertado só o estado local muda — a fonte acompanha o
@@ -452,8 +533,10 @@ export function useModoTV() {
    * UPDATEs, e a fonte andaria aos trancos atrás do cursor esperando cada um.
    */
   const moverFonte = useCallback((id: string, x: number, y: number, definitivo: boolean) => {
+    abrirGesto(id, ['x', 'y']);
     setFontes(atual => atual.map(f => (f.id === id ? { ...f, x, y } : f)));
     if (!definitivo) return;
+    fecharGesto('mover');
     /*
      * `.then()` e NÃO `void db(...)`.
      *
@@ -469,7 +552,27 @@ export function useModoTV() {
     void db('tv_fontes').update({ x, y }).eq('id', id).then(({ error }) => {
       if (error) setErro(error.message);
     });
-  }, []);
+  }, [abrirGesto, fecharGesto]);
+
+  /**
+   * O redimensionamento pelas alças.
+   *
+   * Mesma economia do arrasto: durante o gesto só o estado local muda, e a
+   * gravação sai uma vez no soltar. `x` viaja junto porque crescer pela alça
+   * move o centro — é o que mantém a borda oposta parada.
+   */
+  const redimensionarFonte = useCallback((
+    id: string, r: { x: number; largura: number; escala: number }, definitivo: boolean,
+  ) => {
+    abrirGesto(id, ['x', 'largura', 'escala']);
+    setFontes(atual => atual.map(f => (f.id === id ? { ...f, ...r } : f)));
+    if (!definitivo) return;
+    fecharGesto('redimensionar');
+    void db('tv_fontes')
+      .update({ x: r.x, largura: r.largura, escala: r.escala })
+      .eq('id', id)
+      .then(({ error }) => { if (error) setErro(error.message); });
+  }, [abrirGesto, fecharGesto]);
 
   /**
    * Sobe ou desce a fonte uma camada, trocando de lugar com a vizinha.
@@ -496,10 +599,56 @@ export function useModoTV() {
   }, [fontes]);
 
   const removerFonte = useCallback(async (id: string) => {
+    // Guarda a linha ANTES de apagar: é a única cópia que vai existir, e é ela
+    // que o desfazer reinsere — com o MESMO id, para que uma segunda ação sobre
+    // a mesma fonte, ainda na pilha, continue apontando para a linha certa.
+    const antes = fontes.find(f => f.id === id);
     const { error } = await db('tv_fontes').delete().eq('id', id);
     if (error) { setErro(error.message); return; }
+    if (antes && cenaId) {
+      empilhar({ tipo: 'remover', fonte: antes, cenaId, rotulo: `apagar ${antes.tipo}` });
+    }
     await lerFontes();
-  }, [lerFontes]);
+  }, [lerFontes, fontes, cenaId, empilhar]);
+
+  /**
+   * Desfaz a última modificação de fonte desta sessão.
+   *
+   * A pilha é local à aba: recarregar a mesa esvazia. É proposital — desfazer é
+   * "volta o que EU acabei de fazer", e uma pilha persistida ofereceria desfazer
+   * a alteração de outra pessoa, em outro dia, sem contexto nenhum.
+   *
+   * O desfazer NÃO empilha: quem grava aqui é `gravarFonte`, e não
+   * `atualizarFonte`. Fosse o contrário, o botão viraria um vai-e-volta.
+   */
+  const desfazer = useCallback(async () => {
+    const acao = pilha.current[pilha.current.length - 1];
+    if (!acao) return;
+    pilha.current = pilha.current.slice(0, -1);
+    setUltimaAcao(pilha.current[pilha.current.length - 1]?.rotulo ?? null);
+
+    if (acao.tipo === 'atualizar') {
+      await gravarFonte(acao.id, acao.antes);
+      return;
+    }
+
+    if (acao.tipo === 'criar') {
+      const { error } = await db('tv_fontes').delete().eq('id', acao.id);
+      if (error) setErro(error.message);
+      await lerFontes();
+      return;
+    }
+
+    const f = acao.fonte;
+    const { error } = await db('tv_fontes').insert({
+      id: f.id, cena_id: acao.cenaId, tipo: f.tipo, config: f.config,
+      x: f.x, y: f.y, largura: f.largura, escala: f.escala, camada: f.camada,
+      visivel: f.visivel ?? true, volume: f.volume ?? 1, mudo: f.mudo ?? true,
+    });
+    if (error) setErro(error.message);
+    await lerFontes();
+    await lerDadosPrevia();
+  }, [gravarFonte, lerFontes, lerDadosPrevia]);
 
   /** Ajustes da cena: transição, duração na fila, emergência. */
   const atualizarCena = useCallback(async (id: string, mudanca: Partial<Cena>) => {
@@ -781,6 +930,7 @@ export function useModoTV() {
     enviarImagem, enviandoImagem,
     criarCena, renomearCena, apagarCena, atualizarCena,
     adicionarFonte, atualizarFonte, removerFonte, moverFonte, moverCamada,
+    redimensionarFonte, desfazer, podeDesfazer: ultimaAcao !== null, ultimaAcao,
     midias, soltarArquivo, alternarRotacao,
     cortar, cortando,
     recarregar: async () => { await lerTelas(); await lerCenas(); await lerFontes(); await lerNoAr(); },

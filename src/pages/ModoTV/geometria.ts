@@ -247,6 +247,104 @@ export function limitarAoPalco(valor: number): number {
   return Math.round(Math.max(-20, Math.min(120, valor)) * 10) / 10;
 }
 
+/*
+ * ── Redimensionar pelas alças ───────────────────────────────────────────────
+ *
+ * Os limites são os MESMOS CHECK de `tv_fontes`. Repetidos aqui porque quem
+ * arrasta precisa parar na borda, e não descobrir o limite quando o banco
+ * recusa a gravação depois de a alça já ter ido longe.
+ */
+export const LARGURA_MIN = 2;
+export const LARGURA_MAX = 100;
+export const ESCALA_MIN = 0.1;
+export const ESCALA_MAX = 5;
+
+/**
+ * As alças que existem — e as que não existem.
+ *
+ * Não há alça em cima nem embaixo, e a ausência é honesta: a ALTURA de uma
+ * fonte sai do conteúdo (o texto quebra, o ranking tem N linhas), não de um
+ * número guardado. Uma alça vertical prometeria um controle que o modelo não
+ * tem, e arrastá-la não faria nada — que é pior do que ela não estar lá.
+ *
+ * Os quatro cantos mexem na ESCALA: crescem a fonte inteira, como puxar o canto
+ * de uma foto. As duas laterais mexem na LARGURA: mudam a caixa sem mudar o
+ * corpo do texto, que é o que se quer para reflow.
+ */
+export type Alca = 'nw' | 'ne' | 'sw' | 'se' | 'w' | 'e';
+export const ALCAS: readonly Alca[] = ['nw', 'ne', 'sw', 'se', 'w', 'e'];
+
+/** A alça está do lado esquerdo? Decide qual borda fica ancorada. */
+export function alcaNoOeste(alca: Alca): boolean {
+  return alca === 'nw' || alca === 'sw' || alca === 'w';
+}
+
+/** Canto mexe na escala; lateral mexe na largura. */
+export function alcaEhCanto(alca: Alca): boolean {
+  return alca === 'nw' || alca === 'ne' || alca === 'sw' || alca === 'se';
+}
+
+/** Largura que a fonte OCUPA na tela: a caixa vezes a escala. */
+export function larguraVisivel(f: Pick<Fonte, 'largura' | 'escala'>): number {
+  return f.largura * f.escala;
+}
+
+export interface Redimensionamento {
+  x: number;
+  largura: number;
+  escala: number;
+}
+
+/**
+ * Onde a fonte fica depois de arrastar uma alça até `ponteiroX`.
+ *
+ * A borda OPOSTA à alça fica parada — é o que todo editor de imagem faz, e é o
+ * que permite encostar um elemento numa margem e depois só esticar o outro
+ * lado. O centro (`x`) é recalculado para que isso aconteça, porque no modelo
+ * `x` é o centro e não o canto.
+ *
+ * `y` não muda. Com a escala aplicada em torno do centro, crescer pelo canto
+ * cresce para cima e para baixo em partes iguais — previsível, e o único
+ * comportamento possível sem conhecer a altura, que vem do conteúdo.
+ *
+ * Tudo em % do palco: a conta vale igual na prévia de 400px e na TV de 1920.
+ */
+export function redimensionar(
+  inicio: Pick<Fonte, 'x' | 'largura' | 'escala'>,
+  alca: Alca,
+  ponteiroX: number,
+): Redimensionamento {
+  const visivel = larguraVisivel(inicio);
+  const oeste = alcaNoOeste(alca);
+  // A borda que fica parada.
+  const ancora = oeste ? inicio.x + visivel / 2 : inicio.x - visivel / 2;
+
+  // A borda que anda encaixa nas guias, igual ao arrasto: soltar perto da
+  // margem significa a margem.
+  const borda = encaixar(ponteiroX);
+  const novaVisivel = oeste ? ancora - borda : borda - ancora;
+
+  let largura = inicio.largura;
+  let escala = inicio.escala;
+
+  if (alcaEhCanto(alca)) {
+    escala = Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, novaVisivel / inicio.largura));
+  } else {
+    largura = Math.min(LARGURA_MAX, Math.max(LARGURA_MIN, novaVisivel / inicio.escala));
+  }
+
+  // Recalcula a partir dos valores JÁ limitados: se o limite mordeu, a âncora
+  // continua parada e a fonte para de crescer, em vez de escorregar de lado.
+  const visivelFinal = largura * escala;
+  const x = oeste ? ancora - visivelFinal / 2 : ancora + visivelFinal / 2;
+
+  return {
+    x: limitarAoPalco(x),
+    largura: Math.round(largura * 10) / 10,
+    escala: Math.round(escala * 100) / 100,
+  };
+}
+
 /** As fontes na ordem de desenho: camada de baixo primeiro. */
 export function ordenarPorCamada(fontes: readonly Fonte[]): Fonte[] {
   return [...fontes].sort((a, b) => a.camada - b.camada);

@@ -18,6 +18,7 @@ import { Link } from 'react-router-dom';
 import {
   Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink,
   Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff, Flag, Dices,
+  Maximize2, Minimize2, Undo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,15 @@ export default function ModoTV() {
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
   const [nomeCenaNova, setNomeCenaNova] = useState('');
   const [mostrarNovaTela, setMostrarNovaTela] = useState(false);
+  /*
+   * Qual dos dois quadros está em foco.
+   *
+   * Montar cena pede prévia grande; conferir o que foi ao ar pede o contrário.
+   * Em vez de escolher um tamanho que serve mal aos dois, a pessoa escolhe na
+   * hora — e o outro quadro encolhe em vez de sumir, porque a mesa de corte
+   * perde a razão de existir quando um dos lados desaparece.
+   */
+  const [expandido, setExpandido] = useState<'nenhum' | 'previa' | 'noar'>('nenhum');
 
   const podeEditar = temPermissao('tv_editar_cenas');
   const podeCortar = temPermissao('tv_cortar');
@@ -78,9 +88,35 @@ export default function ModoTV() {
       const digitando = !!alvo && (
         alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable
       );
+      // Ctrl+Z / Cmd+Z é a única combinação que passa: desfazer é o atalho que
+      // a mão procura sozinha, e recusá-lo por causa da guarda geral seria
+      // recusar justamente o que ela espera encontrar.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (digitando || !podeEditar) return;
+        e.preventDefault();
+        void tv.desfazer();
+        return;
+      }
       if (digitando || e.ctrlKey || e.altKey || e.metaKey) return;
 
-      if (e.key === 'Escape') { setSelecionadaId(null); return; }
+      if (e.key === 'Escape') { setSelecionadaId(null); setExpandido('nenhum'); return; }
+
+      /*
+       * Delete apaga o que está selecionado.
+       *
+       * `Backspace` entra junto porque no teclado de notebook é a tecla que a
+       * mão encontra — e não apagar quando a pessoa apertou apagar é o tipo de
+       * ausência que ela lê como travamento.
+       *
+       * Sem confirmação, de propósito: o desfazer está ao lado, e uma caixa de
+       * "tem certeza?" a cada elemento tornaria montar cena insuportável.
+       */
+      if ((e.key === 'Delete' || e.key === 'Backspace') && podeEditar && selecionadaId) {
+        e.preventDefault();
+        void tv.removerFonte(selecionadaId);
+        setSelecionadaId(null);
+        return;
+      }
 
       if (e.key === 'Enter' && podeCortar && tv.cenaId) {
         e.preventDefault();
@@ -95,7 +131,7 @@ export default function ModoTV() {
     };
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);
-  }, [tv, podeCortar]);
+  }, [tv, podeCortar, podeEditar, selecionadaId]);
 
   if (tv.carregando) {
     return <div className="p-8 text-muted-foreground">Carregando o Modo TV…</div>;
@@ -302,7 +338,15 @@ export default function ModoTV() {
 
         {/* ── Prévia e no ar ─────────────────────────────────────────────── */}
         <section className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
+          {/*
+            Flex com `flex-basis` animado, e não `grid-template-columns`.
+
+            O grid animaria mais limpo, mas `transition` em
+            `grid-template-columns` só existe em navegador recente — e a mesa
+            roda em qualquer PC do escritório. `flex-basis` transiciona em todos
+            desde sempre, e o resultado na tela é o mesmo.
+          */}
+          <div className="flex flex-col md:flex-row gap-3">
             <QuadroPalco
               rotulo="Prévia"
               cor="text-emerald-600 dark:text-emerald-400"
@@ -312,9 +356,12 @@ export default function ModoTV() {
               onSelecionar={podeEditar ? setSelecionadaId : undefined}
               arrastavel={podeEditar}
               onMover={tv.moverFonte}
+              onRedimensionar={podeEditar ? tv.redimensionarFonte : undefined}
               onSoltarArquivo={podeEditar && podeEnviarMidia ? tv.soltarArquivo : undefined}
               enviando={tv.enviandoImagem}
               vazio="Nenhuma cena escolhida"
+              proporcao={expandido === 'previa' ? 'grande' : expandido === 'noar' ? 'pequeno' : 'igual'}
+              onExpandir={() => setExpandido(e => (e === 'previa' ? 'nenhum' : 'previa'))}
             />
             <QuadroPalco
               rotulo="No ar"
@@ -322,6 +369,8 @@ export default function ModoTV() {
               borda="border-red-500/60"
               fontes={tv.fontesNoAr}
               vazio="Nada no ar nesta tela"
+              proporcao={expandido === 'noar' ? 'grande' : expandido === 'previa' ? 'pequeno' : 'igual'}
+              onExpandir={() => setExpandido(e => (e === 'noar' ? 'nenhum' : 'noar'))}
             />
           </div>
 
@@ -380,7 +429,30 @@ export default function ModoTV() {
 
         {/* ── Fontes ─────────────────────────────────────────────────────── */}
         <aside className="space-y-3">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Fontes</Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Fontes</Label>
+            {podeEditar && (
+              /*
+               * O desfazer fica AQUI, e não perto do corte.
+               *
+               * Ele desfaz edição de cena, nunca o que está no ar — e um botão
+               * de desfazer ao lado do botão de mandar à parede seria lido como
+               * "tirar do ar", que é outra coisa e tem outro botão.
+               */
+              <Button
+                variant="ghost" size="sm"
+                className="ml-auto h-7 px-2 text-xs"
+                disabled={!tv.podeDesfazer}
+                onClick={() => { void tv.desfazer(); }}
+                title={tv.ultimaAcao
+                  ? `Desfazer: ${tv.ultimaAcao} (Ctrl+Z)`
+                  : 'Nada para desfazer nesta sessão'}
+              >
+                <Undo2 className="h-3.5 w-3.5 mr-1" />
+                Desfazer
+              </Button>
+            )}
+          </div>
 
           {podeEditar && tv.cenaId && (
             <div className="grid grid-cols-2 gap-1">
@@ -514,9 +586,26 @@ function NovaTela({
 
 // ── Quadro ───────────────────────────────────────────────────────────────────
 
+/**
+ * Quanto cada quadro ocupa da linha.
+ *
+ * O que encolhe não some: 28% de 16:9 ainda é uma miniatura legível, e a mesa
+ * de corte existe justamente para ver os dois lados ao mesmo tempo. Um
+ * acordeão que fecha um dos lados seria mais fácil de escrever e destruiria a
+ * função da tela.
+ *
+ * `calc(… - 6px)` desconta a metade do `gap-3` de cada lado — sem isso os dois
+ * quadros somam 100% mais o vão e a linha quebra no fim da animação.
+ */
+const BASE_DO_QUADRO: Record<'igual' | 'grande' | 'pequeno', string> = {
+  igual:   'calc(50% - 6px)',
+  grande:  'calc(72% - 6px)',
+  pequeno: 'calc(28% - 6px)',
+};
+
 function QuadroPalco({
   rotulo, cor, borda, fontes, selecionadaId, onSelecionar, arrastavel, onMover,
-  onSoltarArquivo, enviando, vazio,
+  onRedimensionar, onSoltarArquivo, enviando, vazio, proporcao = 'igual', onExpandir,
 }: {
   rotulo: string;
   cor: string;
@@ -526,9 +615,14 @@ function QuadroPalco({
   onSelecionar?: (id: string) => void;
   arrastavel?: boolean;
   onMover?: (id: string, x: number, y: number, definitivo: boolean) => void;
+  onRedimensionar?: (
+    id: string, r: { x: number; largura: number; escala: number }, definitivo: boolean,
+  ) => void;
   onSoltarArquivo?: (arquivo: File, x: number, y: number) => void | Promise<void>;
   enviando?: boolean;
   vazio: string;
+  proporcao?: 'igual' | 'grande' | 'pequeno';
+  onExpandir?: () => void;
 }) {
   const [sobrevoando, setSobrevoando] = useState(false);
 
@@ -554,8 +648,32 @@ function QuadroPalco({
   };
 
   return (
-    <div>
-      <p className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${cor}`}>{rotulo}</p>
+    <div
+      className="min-w-0 motion-reduce:transition-none"
+      style={{
+        flexBasis: BASE_DO_QUADRO[proporcao],
+        flexGrow: 0,
+        flexShrink: 0,
+        transition: 'flex-basis 420ms cubic-bezier(.22,.61,.36,1)',
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <p className={`text-[11px] font-bold uppercase tracking-widest ${cor}`}>{rotulo}</p>
+        {onExpandir && (
+          <button
+            type="button"
+            onClick={onExpandir}
+            className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground
+                       focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+            title={proporcao === 'grande' ? 'Voltar ao tamanho normal' : `Ampliar ${rotulo.toLowerCase()}`}
+            aria-pressed={proporcao === 'grande'}
+          >
+            {proporcao === 'grande'
+              ? <Minimize2 className="h-3.5 w-3.5" />
+              : <Maximize2 className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
       <div
         className={`relative rounded-md overflow-hidden border-2 bg-[#0a0f13] ${
           sobrevoando ? 'border-sky-400' : borda
@@ -575,6 +693,7 @@ function QuadroPalco({
           selecionadaId={selecionadaId}
           onSelecionar={onSelecionar}
           onMoverFonte={arrastavel ? onMover : undefined}
+          onRedimensionar={arrastavel ? onRedimensionar : undefined}
           aviso={fontes.length === 0 ? vazio : null}
         />
 
