@@ -99,15 +99,19 @@ export function FiltroEscopo({
   const mostrarIndividual = niveis.includes('individual') && niveis.length > 1;
 
   /*
-   * O "sair do individual" da linha Pessoa.
+   * «Todas as pessoas» só existe quando há um recorte mais amplo de verdade.
    *
-   * Era sempre `'setor'`, e isso é uma porta dos fundos para o botão que
-   * acabamos de esconder: quem está limitado à própria equipe clicaria em
-   * «Todas as pessoas» e cairia no setor inteiro. Sem «Todas as equipes» na
-   * tela, o mais amplo que essa pessoa tem é a primeira equipe da lista.
+   * Para quem escolhe entre a própria equipe e os próprios números, ele não
+   * dizia nada: ficava aceso junto com a equipe selecionada — dois botões
+   * ligados ao mesmo tempo dizendo a mesma coisa — e clicar nele era o único
+   * caminho que ainda devolvia o setor inteiro a quem o painel limitou à
+   * equipe. Sem ele a escolha fica binária, que é como foi pedido: ou a equipe,
+   * ou só os meus.
+   *
+   * Quem NÃO tem alcance de equipe continua com o botão: para essa pessoa ele é
+   * a única forma de sair do individual.
    */
-  const visaoMaisAmpla: VisaoEscopo =
-    mostrarTodasEquipes || !mostrarEquipes ? 'setor' : `equipe:${equipes[0].id}`;
+  const mostrarTodasPessoas = mostrarTodasEquipes || !mostrarEquipes;
 
   // Nada a oferecer: o controle inteiro some em vez de virar moldura vazia.
   if (!podeEscolherSetor && !mostrarEquipes && !mostrarIndividual) return null;
@@ -170,13 +174,15 @@ export function FiltroEscopo({
 
       {mostrarIndividual && (
         <Linha icone={<Users className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Pessoa">
-          <Chip
-            ativo={visao !== 'individual'}
-            onClick={() => onVisao(visaoMaisAmpla)}
-            titulo="Ver os dados de todo mundo no recorte acima"
-          >
-            Todas as pessoas
-          </Chip>
+          {mostrarTodasPessoas && (
+            <Chip
+              ativo={visao !== 'individual'}
+              onClick={() => onVisao('setor')}
+              titulo="Ver os dados de todo mundo no recorte acima"
+            >
+              Todas as pessoas
+            </Chip>
+          )}
           <Chip
             ativo={visao === 'individual'}
             onClick={() => onVisao('individual')}
