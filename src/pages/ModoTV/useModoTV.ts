@@ -15,11 +15,11 @@
  * recorte no cliente criaria duas verdades, e a que engana é sempre a do
  * cliente.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
-import type { CenaNoAr, Fonte, TipoFonte } from './geometria';
+import type { CenaNoAr, DadosSorteio, Fonte, TipoFonte } from './geometria';
 import { normalizarSlug } from './slug';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
@@ -184,6 +184,35 @@ export function useModoTV() {
     await lerTelas();
   }, [empresa?.id, perfil?.id, lerTelas]);
 
+  /**
+   * Aposenta uma tela.
+   *
+   * DESATIVA em vez de apagar. Apagar levaria junto, por cascata, o `tv_estado`
+   * e a auditoria de quem cortou o quê naquela tela — e o endereço ficaria
+   * livre para ser reaproveitado por outra, o que faria o PC daquela sala
+   * passar a exibir a parede de outro setor sem ninguém ter mexido nele.
+   *
+   * Desativada, ela some da mesa, o `/tv/<slug>` para de encontrar a tela, e o
+   * histórico continua de pé.
+   */
+  const apagarTela = useCallback(async (id: string) => {
+    const { error } = await db('tv_telas')
+      .update({ ativa: false, atualizado_em: new Date().toISOString() })
+      .eq('id', id);
+    if (error) { setErro(error.message); return; }
+    setTelaId(atual => (atual === id ? null : atual));
+    await lerTelas();
+  }, [lerTelas]);
+
+  /** Renomeia a tela. O endereço NÃO muda: mudá-lo quebraria o PC já configurado. */
+  const renomearTela = useCallback(async (id: string, nome: string) => {
+    const { error } = await db('tv_telas')
+      .update({ nome: nome.trim() || 'Tela sem nome', atualizado_em: new Date().toISOString() })
+      .eq('id', id);
+    if (error) { setErro(error.message); return; }
+    await lerTelas();
+  }, [lerTelas]);
+
   // ── Cenas do setor da tela ────────────────────────────────────────────────
 
   const lerCenas = useCallback(async () => {
@@ -254,11 +283,14 @@ export function useModoTV() {
   // discorda da parede, que é o pior dos dois mundos.
 
   const [fontesNoAr, setFontesNoAr] = useState<Fonte[]>([]);
+  const [proximaTrocaS, setProximaTrocaS] = useState<number | null>(null);
 
   const lerNoArDesenhado = useCallback(async () => {
-    if (!tela?.slug) { setFontesNoAr([]); return; }
+    if (!tela?.slug) { setFontesNoAr([]); setProximaTrocaS(null); return; }
     const { data } = await rpc<CenaNoAr>('fn_tv_palco', { p_slug: tela.slug });
     setFontesNoAr(data?.fontes ?? []);
+    setCenaNoArId(data?.cena?.id ?? null);
+    setProximaTrocaS(data?.proxima_em_s ?? null);
   }, [tela?.slug]);
 
   useEffect(() => {
@@ -266,6 +298,56 @@ export function useModoTV() {
     const relogio = setInterval(() => { void lerNoArDesenhado(); }, 30_000);
     return () => clearInterval(relogio);
   }, [lerNoArDesenhado]);
+
+  /*
+   * O espelho da parede tem que trocar QUANDO a parede troca.
+   *
+   * Com a rotação ligada, a releitura de 30s deixava a mesa até meia dúzia de
+   * cenas atrasada em relação à TV — e o quadro "No ar" existe justamente para
+   * responder "o que está na parede agora". Atrasado, ele responde errado, que
+   * é pior do que não existir.
+   *
+   * O palco usa o mesmo `proxima_em_s` para se agendar; aqui a mesa passa a
+   * usar o mesmo relógio. Os dois trocam no mesmo instante porque a conta é a
+   * mesma, feita no banco.
+   */
+  useEffect(() => {
+    if (proximaTrocaS == null || proximaTrocaS < 0) return;
+    const t = setTimeout(() => { void lerNoArDesenhado(); }, proximaTrocaS * 1000 + 600);
+    return () => clearTimeout(t);
+  }, [proximaTrocaS, lerNoArDesenhado]);
+
+  /*
+   * UM canal só para esta tela, guardado numa ref.
+   *
+   * Ele escuta (outra pessoa cortou de outra sessão) e é por ele que a mesa
+   * AVISA o palco. Antes eram dois: um permanente para escutar e um temporário
+   * criado a cada corte, com o MESMO tópico.
+   *
+   * `supabase.channel(nome)` não deduplica: dois canais com o mesmo tópico
+   * coexistem, e o `removeChannel` do temporário derrubaria a assinatura do
+   * permanente. É o defeito que já foi diagnosticado duas vezes neste projeto
+   * e que motivou o `src/lib/realtime.ts` — não vale reintroduzir aqui.
+   */
+  const canalDaTela = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => {
+    if (!tela?.slug) return;
+    const canal = supabase
+      .channel(`tv-palco-${tela.slug}`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'cortar' }, () => { void lerNoArDesenhado(); })
+      .subscribe();
+    canalDaTela.current = canal;
+    return () => {
+      canalDaTela.current = null;
+      void supabase.removeChannel(canal);
+    };
+  }, [tela?.slug, lerNoArDesenhado]);
+
+  /** Avisa o palco para reler agora, em vez de esperar os 20s dele. */
+  const avisarPalco = useCallback(async () => {
+    await canalDaTela.current?.send({ type: 'broadcast', event: 'cortar', payload: {} });
+  }, []);
 
   // ── Escrita ───────────────────────────────────────────────────────────────
 
@@ -307,6 +389,8 @@ export function useModoTV() {
       fundo:   { config: { cor: '#0d1b24', cor_2: '#08323d', angulo: 160 }, largura: 100 },
       relogio: { config: { tamanho: 120, cor: '#ffffff', segundos: false }, largura: 30 },
       video:   { config: { url: '', ajuste: 'cover' }, largura: 50 },
+      desafio: { config: { titulo: 'Desafio' }, largura: 55 },
+      sorteio: { config: { titulo: '' }, largura: 60 },
     };
 
     /*
@@ -540,11 +624,8 @@ export function useModoTV() {
      * Sem carga: o palco relê pela RPC. Mandar a cena inteira por aqui criaria
      * um segundo caminho para o mesmo dado, e é assim que os dois divergem.
      */
-    const canal = supabase.channel(`tv-palco-${tela.slug}`);
-    await canal.subscribe();
-    await canal.send({ type: 'broadcast', event: 'cortar', payload: {} });
-    void supabase.removeChannel(canal);
-  }, [telaId, cenaId, tela, lerNoArDesenhado]);
+    await avisarPalco();
+  }, [telaId, cenaId, tela, lerNoArDesenhado, avisarPalco]);
 
   /**
    * Liga e desliga a fila automática.
@@ -562,12 +643,9 @@ export function useModoTV() {
       await lerTelas();
       return;
     }
-    const canal = supabase.channel(`tv-palco-${tela.slug}`);
-    await canal.subscribe();
-    await canal.send({ type: 'broadcast', event: 'cortar', payload: {} });
-    void supabase.removeChannel(canal);
+    await avisarPalco();
     await lerNoArDesenhado();
-  }, [telaId, tela, lerTelas, lerNoArDesenhado]);
+  }, [telaId, tela, lerTelas, lerNoArDesenhado, avisarPalco]);
 
   /**
    * Solta um arquivo na prévia e ele vira fonte, no ponto onde foi solto.
@@ -598,8 +676,105 @@ export function useModoTV() {
     await lerDadosPrevia();
   }, [cenaId, fontes, enviarImagem, lerFontes, lerDadosPrevia]);
 
+  // ── Mosaico: o que cada tela está exibindo ────────────────────────────────
+  //
+  // Uma chamada por tela, e não uma consulta que devolva tudo: é a MESMA RPC
+  // que alimenta cada parede, então o mosaico mostra o que está lá de verdade
+  // em vez de uma reconstrução a partir do estado local. Com duas ou três telas
+  // o custo é irrelevante; se um dia forem vinte, aí vale uma RPC de lote.
+
+  const [fontesPorTela, setFontesPorTela] = useState<Record<string, Fonte[]>>({});
+
+  const lerMosaico = useCallback(async () => {
+    if (telas.length < 2) { setFontesPorTela({}); return; }
+    const pares = await Promise.all(telas.map(async t => {
+      const { data } = await rpc<CenaNoAr>('fn_tv_palco', { p_slug: t.slug });
+      return [t.id, data?.fontes ?? []] as const;
+    }));
+    setFontesPorTela(Object.fromEntries(pares));
+  }, [telas]);
+
+  useEffect(() => {
+    void lerMosaico();
+    const relogio = setInterval(() => { void lerMosaico(); }, 20_000);
+    return () => clearInterval(relogio);
+  }, [lerMosaico]);
+
+  // ── Alertas e sorteios ────────────────────────────────────────────────────
+
+  /**
+   * Dispara o alerta e avisa a parede na hora.
+   *
+   * Sem o aviso, ele só apareceria na próxima releitura do palco — até 20
+   * segundos depois. Um alerta que chega atrasado perde exatamente aquilo que o
+   * torna útil: a coincidência entre o que aconteceu e a comemoração.
+   */
+  const dispararAlerta = useCallback(async (
+    titulo: string, mensagem?: string, midiaUrl?: string, somUrl?: string, duracaoS = 10,
+  ) => {
+    if (!tela) return;
+    const { error } = await rpc('fn_tv_alerta_disparar', {
+      p_setor_id: tela.setor_id,
+      p_titulo: titulo,
+      p_mensagem: mensagem ?? null,
+      p_midia_url: midiaUrl ?? null,
+      p_som_url: somUrl ?? null,
+      p_duracao_s: duracaoS,
+    });
+    if (error) {
+      setErro((error as { message?: string }).message ?? 'Não foi possível disparar o alerta.');
+      return;
+    }
+    await avisarPalco();
+  }, [tela, avisarPalco]);
+
+  const [sorteio, setSorteio] = useState<DadosSorteio | null>(null);
+
+  const lerSorteio = useCallback(async () => {
+    if (!tela) { setSorteio(null); return; }
+    const { data } = await db('tv_sorteios')
+      .select('id, tipo, titulo, participantes, resultado, estado, girado_em')
+      .eq('setor_id', tela.setor_id)
+      .order('criado_em', { ascending: false });
+    setSorteio(((data ?? [])[0] as DadosSorteio | undefined) ?? null);
+  }, [tela]);
+
+  useEffect(() => { void lerSorteio(); }, [lerSorteio]);
+
+  const criarSorteio = useCallback(async (
+    tipo: 'roleta' | 'bingo', titulo: string, participantes?: string[],
+  ) => {
+    if (!tela) return;
+    const { error } = await rpc('fn_tv_sorteio_criar', {
+      p_setor_id: tela.setor_id,
+      p_tipo: tipo,
+      p_titulo: titulo,
+      p_participantes: participantes && participantes.length > 0 ? participantes : null,
+    });
+    if (error) {
+      setErro((error as { message?: string }).message ?? 'Não foi possível abrir o sorteio.');
+      return;
+    }
+    await lerSorteio();
+    await avisarPalco();
+  }, [tela, lerSorteio, avisarPalco]);
+
+  /** Gira a roleta, ou tira o próximo número do bingo. O servidor decide. */
+  const sortear = useCallback(async () => {
+    if (!sorteio) return;
+    const fn = sorteio.tipo === 'bingo' ? 'fn_tv_bingo_sortear' : 'fn_tv_sorteio_girar';
+    const { error } = await rpc(fn, { p_sorteio_id: sorteio.id });
+    if (error) {
+      setErro((error as { message?: string }).message ?? 'Não foi possível sortear.');
+      return;
+    }
+    await lerSorteio();
+    await avisarPalco();
+  }, [sorteio, lerSorteio, avisarPalco]);
+
   return {
-    empresa, telas, tela, telaId, setTelaId, setores, criarTela,
+    empresa, telas, tela, telaId, setTelaId, setores, criarTela, apagarTela, renomearTela,
+    dispararAlerta, sorteio, criarSorteio, sortear, fontesPorTela,
     cenas, cenaId, setCenaId, cenaNoArId,
     fontes, fontesDaPrevia, fontesNoAr,
     carregando, erro, limparErro: () => setErro(null),

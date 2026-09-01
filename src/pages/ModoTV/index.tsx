@@ -13,11 +13,11 @@
  * divergirem algum dia, o quadro da direita mostra a divergência em vez de
  * escondê-la.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Tv, Plus, Trash2, Radio, Type, Image, Trophy, Target, ExternalLink,
-  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff,
+  Square, Clock, Eye, EyeOff, ChevronUp, ChevronDown, Film, Repeat, PowerOff, Flag, Dices,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,7 @@ import { Palco } from './Palco';
 import { useModoTV, telaOnline, type Midia, type Cena } from './useModoTV';
 import { numero, texto, ligado, type Fonte, type TipoFonte } from './geometria';
 import { normalizarSlug } from './slug';
+import { PainelAlerta, PainelSorteio, Mosaico, AcoesDaTela } from './PainelEstudio';
 
 const TIPOS: { tipo: TipoFonte; nome: string; Icone: typeof Type }[] = [
   { tipo: 'texto',   nome: 'Texto',   Icone: Type },
@@ -41,6 +42,8 @@ const TIPOS: { tipo: TipoFonte; nome: string; Icone: typeof Type }[] = [
   { tipo: 'fundo',   nome: 'Fundo',   Icone: Square },
   { tipo: 'relogio', nome: 'Relógio', Icone: Clock },
   { tipo: 'video',   nome: 'Vídeo',   Icone: Film },
+  { tipo: 'desafio', nome: 'Desafio', Icone: Flag },
+  { tipo: 'sorteio', nome: 'Sorteio', Icone: Dices },
 ];
 
 export default function ModoTV() {
@@ -58,6 +61,41 @@ export default function ModoTV() {
   const selecionada = tv.fontesDaPrevia.find(f => f.id === selecionadaId) ?? null;
   const cenaAtual = tv.cenas.find(c => c.id === tv.cenaId) ?? null;
   const noArAgora = tv.cenaNoArId === tv.cenaId;
+
+  /*
+   * Atalhos de teclado.
+   *
+   * Numa mesa de transmissão a mão não sai do teclado, e trocar de cena com o
+   * mouse é lento justamente na hora em que a pressa importa.
+   *
+   * A guarda do `tagName` é obrigatória: sem ela, digitar "1" no nome de uma
+   * cena trocaria a cena, e apertar Enter num campo mandaria a parede ao ar no
+   * meio de uma edição.
+   */
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      const alvo = e.target as HTMLElement | null;
+      const digitando = !!alvo && (
+        alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable
+      );
+      if (digitando || e.ctrlKey || e.altKey || e.metaKey) return;
+
+      if (e.key === 'Escape') { setSelecionadaId(null); return; }
+
+      if (e.key === 'Enter' && podeCortar && tv.cenaId) {
+        e.preventDefault();
+        void tv.cortar();
+        return;
+      }
+
+      if (/^[1-9]$/.test(e.key)) {
+        const cena = tv.cenas[Number(e.key) - 1];
+        if (cena) { tv.setCenaId(cena.id); setSelecionadaId(null); }
+      }
+    };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [tv, podeCortar]);
 
   if (tv.carregando) {
     return <div className="p-8 text-muted-foreground">Carregando o Modo TV…</div>;
@@ -124,6 +162,10 @@ export default function ModoTV() {
               /tv/{tv.tela.slug} <ExternalLink className="h-3 w-3" />
             </Link>
           </>
+        )}
+
+        {podeGerenciarTelas && tv.tela && (
+          <AcoesDaTela tela={tv.tela} onRenomear={tv.renomearTela} onApagar={tv.apagarTela} />
         )}
 
         {podeGerenciarTelas && (
@@ -371,6 +413,15 @@ export default function ModoTV() {
             ))}
           </div>
 
+          <PainelAlerta onDisparar={tv.dispararAlerta} podeCortar={podeCortar} />
+
+          <PainelSorteio
+            sorteio={tv.sorteio}
+            onCriar={tv.criarSorteio}
+            onSortear={tv.sortear}
+            podeCortar={podeCortar}
+          />
+
           {selecionada && podeEditar && (
             <Inspetor
               fonte={selecionada}
@@ -385,6 +436,18 @@ export default function ModoTV() {
           )}
         </aside>
       </div>
+
+      <Mosaico
+        telas={tv.telas}
+        fontesPorTela={tv.fontesPorTela}
+        telaAtiva={tv.telaId}
+        onEscolher={id => { tv.setTelaId(id); setSelecionadaId(null); }}
+      />
+
+      <p className="text-[11px] text-muted-foreground">
+        Atalhos: <kbd>1</kbd>–<kbd>9</kbd> escolhem a cena, <kbd>Enter</kbd> manda ao ar,{' '}
+        <kbd>Esc</kbd> tira a seleção da fonte.
+      </p>
     </div>
   );
 }

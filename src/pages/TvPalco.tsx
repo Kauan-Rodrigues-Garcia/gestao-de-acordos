@@ -32,7 +32,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Palco } from './ModoTV/Palco';
-import { DURACAO_TRANSICAO_MS, type CenaNoAr, type Fonte, type Transicao } from './ModoTV/geometria';
+import { AlertaAoVivo } from './ModoTV/AlertaAoVivo';
+import { DURACAO_TRANSICAO_MS, type CenaNoAr, type Fonte, type Transicao, type Alerta } from './ModoTV/geometria';
 
 /** De quanto em quanto tempo a TV se corrige sozinha. */
 const INTERVALO_RELEITURA_MS = 20_000;
@@ -208,7 +209,9 @@ export default function TvPalco() {
 
   const fontes: Fonte[] = cena?.fontes ?? [];
   /* Só oferece destravar o áudio se houver de fato algo com som na cena. */
-  const temSom = fontes.some(f => f.mudo === false);
+  const alertas: Alerta[] = cena?.alertas ?? [];
+  /* Oferece destravar se houver som na cena OU num alerta vivo. */
+  const temSom = fontes.some(f => f.mudo === false) || alertas.some(a => !!a.som_url);
 
   let aviso: string | null = null;
   if (!cena && primeiraLeitura.current) aviso = 'Carregando…';
@@ -251,6 +254,9 @@ export default function TvPalco() {
           @keyframes tv-sai-deslize { to { opacity: 0; } }
         }
       `}</style>
+
+      {/* O alerta fica ACIMA de tudo, inclusive da transicao. */}
+      <AlertaAoVivo alertas={cena?.alertas ?? []} audioLiberado={audioLiberado} />
 
       {temSom && !audioLiberado && (
         <button

@@ -36,6 +36,8 @@ import {
   type Fonte,
   type LinhaRanking,
   type DadosMeta,
+  type DadosDesafio,
+  type DadosSorteio,
 } from './geometria';
 
 interface PalcoProps {
@@ -242,8 +244,120 @@ function DesenhoDaFonte({ fonte }: { fonte: Fonte }) {
     case 'fundo':   return <FonteFundo   config={fonte.config} />;
     case 'relogio': return <FonteRelogio config={fonte.config} />;
     case 'video':   return <FonteVideo   fonte={fonte} />;
+    case 'desafio': return <FonteDesafio config={fonte.config} dados={fonte.dados as DadosDesafio | null} />;
+    case 'sorteio': return <FonteSorteio config={fonte.config} dados={fonte.dados as DadosSorteio | null} />;
     default:        return null;
   }
+}
+
+/** O desafio que está valendo: nome, prêmio e quanto falta. */
+function FonteDesafio({
+  config, dados,
+}: { config: Record<string, unknown>; dados: DadosDesafio | null }) {
+  if (!dados) {
+    return (
+      <p style={{ margin: 0, color: '#5b7079', fontSize: 40 }}>
+        Nenhum desafio no ar neste setor
+      </p>
+    );
+  }
+  const dias = Number(dados.dias_restantes) || 0;
+  return (
+    <div>
+      <h3 style={{ margin: '0 0 20px', color: '#7fd8e8', fontSize: 40, fontWeight: 700,
+                   letterSpacing: '.06em', textTransform: 'uppercase' }}>
+        {texto(config, 'titulo', 'Desafio')}
+      </h3>
+      <p style={{ margin: '0 0 16px', color: '#ffffff', fontSize: 72, fontWeight: 800,
+                  lineHeight: 1.05, textWrap: 'balance' }}>
+        {dados.nome}
+      </p>
+      {dados.premio && (
+        <p style={{ margin: '0 0 20px', color: '#e8f1f3', fontSize: 44, fontWeight: 500 }}>
+          🏆 {dados.premio}
+        </p>
+      )}
+      <p style={{ margin: 0, color: dias <= 2 ? '#e8a33d' : '#8fa3ab', fontSize: 40,
+                  fontWeight: 700 }}>
+        {dias === 0 ? 'Último dia!' : dias === 1 ? 'Falta 1 dia' : `Faltam ${dias} dias`}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Roleta e bingo.
+ *
+ * O vencedor e os números vêm PRONTOS do servidor — esta tela só desenha. Se o
+ * sorteio fosse decidido aqui, duas telas do mesmo setor mostrariam vencedores
+ * diferentes, e não haveria como responder depois quem realmente ganhou.
+ */
+function FonteSorteio({
+  config, dados,
+}: { config: Record<string, unknown>; dados: DadosSorteio | null }) {
+  if (!dados) {
+    return (
+      <p style={{ margin: 0, color: '#5b7079', fontSize: 40 }}>
+        Nenhum sorteio aberto
+      </p>
+    );
+  }
+
+  const titulo = texto(config, 'titulo', '') || dados.titulo;
+
+  if (dados.tipo === 'bingo') {
+    const numeros = dados.resultado?.numeros ?? [];
+    const ultimo = numeros[numeros.length - 1];
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <h3 style={{ margin: '0 0 16px', color: '#7fd8e8', fontSize: 40, fontWeight: 700,
+                     letterSpacing: '.06em', textTransform: 'uppercase' }}>{titulo}</h3>
+        <p style={{ margin: '0 0 8px', color: '#ffffff', fontSize: 200, fontWeight: 800,
+                    lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+          {ultimo ?? '—'}
+        </p>
+        <p style={{ margin: '0 0 20px', color: '#8fa3ab', fontSize: 32 }}>
+          {numeros.length} de 75 sorteados
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          {numeros.slice(0, -1).slice(-24).map(n => (
+            <span key={n} style={{ color: '#a9bcc3', fontSize: 34, fontWeight: 700,
+                                   background: 'rgba(255,255,255,.07)', borderRadius: 10,
+                                   padding: '4px 14px', fontVariantNumeric: 'tabular-nums' }}>
+              {n}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const vencedor = dados.resultado?.vencedor;
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <h3 style={{ margin: '0 0 20px', color: '#7fd8e8', fontSize: 40, fontWeight: 700,
+                   letterSpacing: '.06em', textTransform: 'uppercase' }}>{titulo}</h3>
+
+      {vencedor ? (
+        <>
+          <p style={{ margin: '0 0 10px', color: '#8fa3ab', fontSize: 40 }}>E o sorteado é</p>
+          <p style={{ margin: 0, color: '#5fbe7e', fontSize: 128, fontWeight: 800,
+                      lineHeight: 1.05, textWrap: 'balance' }}>
+            {vencedor}
+          </p>
+        </>
+      ) : (
+        <>
+          <p style={{ margin: '0 0 18px', color: '#ffffff', fontSize: 56, fontWeight: 700 }}>
+            {dados.participantes.length} concorrendo
+          </p>
+          <p style={{ margin: 0, color: '#8fa3ab', fontSize: 36 }}>
+            Aguardando o giro…
+          </p>
+        </>
+      )}
+    </div>
+  );
 }
 
 /**

@@ -30,7 +30,38 @@ export const PALCO_ALTURA = 1080;
 export const PALCO_PROPORCAO = PALCO_LARGURA / PALCO_ALTURA;
 
 export type TipoFonte =
-  | 'texto' | 'imagem' | 'ranking' | 'meta' | 'fundo' | 'relogio' | 'video';
+  | 'texto' | 'imagem' | 'ranking' | 'meta' | 'fundo' | 'relogio' | 'video'
+  | 'sorteio' | 'desafio';
+
+/** O Alert Box: entra por cima da cena, fica alguns segundos e sai. */
+export interface Alerta {
+  id: string;
+  titulo: string;
+  mensagem: string | null;
+  midia_url: string | null;
+  som_url: string | null;
+  duracao_s: number;
+  criado_em: string;
+  /** Quanto ainda falta dele, calculado pelo banco. Pode vir negativo. */
+  resta_s: number;
+}
+
+export interface DadosDesafio {
+  nome: string;
+  premio: string | null;
+  data_fim: string;
+  dias_restantes: number;
+}
+
+export interface DadosSorteio {
+  id: string;
+  tipo: 'roleta' | 'bingo';
+  titulo: string;
+  participantes: string[];
+  resultado: { vencedor?: string; indice?: number; numeros?: number[] };
+  estado: 'aberto' | 'girando' | 'encerrado';
+  girado_em: string | null;
+}
 
 /** Como uma cena entra no lugar da outra. */
 export type Transicao = 'corte' | 'fade' | 'deslize';
@@ -70,7 +101,7 @@ export interface Fonte {
   volume?: number;
   mudo?: boolean;
   /** Preenchido pelo banco para `ranking` e `meta`; nulo nos demais. */
-  dados: LinhaRanking[] | DadosMeta | null;
+  dados: LinhaRanking[] | DadosMeta | DadosDesafio | DadosSorteio | null;
 }
 
 export interface CenaNoAr {
@@ -84,6 +115,8 @@ export interface CenaNoAr {
    * É o que permite ao palco agendar a releitura no instante certo, em vez de
    * perguntar de 20 em 20 segundos e trocar de cena sempre atrasado.
    */
+  /** Alertas ainda vivos neste setor, do mais novo para o mais velho. */
+  alertas?: Alerta[];
   proxima_em_s?: number | null;
   servidor_em?: string;
 }
