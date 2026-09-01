@@ -781,8 +781,24 @@ export function DesempenhoEquipes({
               return (
                 <CardEquipe
                   key={eq.id}
-                  titulo={(lideres[eq.id]?.length === 1 ? lideres[eq.id][0].nome : eq.nome)}
-                  subtitulo={inicioTreino ? `Equipe ${eq.nome} · treino` : `Equipe ${eq.nome}`}
+                  /*
+                   * A EQUIPE é o título; a liderança vem pequena embaixo.
+                   *
+                   * Era o contrário quando havia um líder só: o nome dele
+                   * ocupava o título e a equipe virava a linha miúda. Quem lê o
+                   * painel procura a equipe — «como foi o Time Matheus» —, e o
+                   * card respondia com um nome de pessoa. Com dois líderes já
+                   * caía na equipe, então a mesma tela tinha duas hierarquias
+                   * conforme quantas pessoas lideram. Agora é uma só, nos dois
+                   * tenants (o card é o mesmo componente).
+                   */
+                  titulo={eq.nome}
+                  subtitulo={[
+                    lideres[eq.id]?.length
+                      ? lideres[eq.id].map(l => l.nome).join(' · ')
+                      : null,
+                    inicioTreino ? 'treino' : null,
+                  ].filter(Boolean).join(' · ') || undefined}
                   lideres={lideres[eq.id] ?? []}
                   mostrarHO={isPP}
                   metaHO={metaEquipe !== null ? metaEquipe * PP_HO_PERCENTUAL : null}
