@@ -544,12 +544,30 @@ export default function AdminEquipes() {
       .filter((x): x is { clone: CloneEquipe; operador: CloneOperadorInfo } => !!x.operador);
 
   // ── Líderes por equipe (item 10) ───────────────────────────────────────────
-  /** Líderes definidos para a equipe (resolve nome/setor do líder). */
-  const lideresDaEquipe = (equipeId: string) =>
+  /**
+   * Líderes definidos para a equipe (resolve nome/setor do líder).
+   *
+   * O vínculo em `equipe_lideres` é legível pela empresa inteira, mas o PERFIL
+   * do líder passa pela RLS de `perfis`: quem está no escopo "somente o setor"
+   * pode não receber a linha de um líder clonado de outro setor. Antes isso
+   * derrubava o chip em silêncio — a caixa aparecia vazia e ninguém tinha como
+   * saber que existia um líder ali. Agora o vínculo é sempre mostrado; o que
+   * falta é só o nome, e a tela diz isso em vez de esconder a pessoa.
+   */
+  const lideresDaEquipe = (equipeId: string): { vinculo: LiderEquipe; info: CloneOperadorInfo; naoResolvido: boolean }[] =>
     (lideresEq ?? [])
       .filter(v => v.equipe_id === equipeId)
-      .map(v => ({ vinculo: v, info: resolverOperadorClone(v.lider_id) }))
-      .filter((x): x is { vinculo: LiderEquipe; info: CloneOperadorInfo } => !!x.info);
+      .map(v => {
+        const info = resolverOperadorClone(v.lider_id);
+        if (info) return { vinculo: v, info, naoResolvido: false };
+        const placeholder: CloneOperadorInfo = {
+          id: v.lider_id,
+          nome: 'Líder de outro setor',
+          equipe_id: null,
+          setor_id: null,
+        };
+        return { vinculo: v, info: placeholder, naoResolvido: true };
+      });
 
   /** Líderes que podem ser adicionados. BookPlay: catálogo da empresa toda (do
    *  setor da equipe primeiro, depois de outros setores como clone). PaguePlay:
@@ -1287,12 +1305,19 @@ export default function AdminEquipes() {
                                     <p className="text-[10px] text-muted-foreground italic">Nenhum líder definido.</p>
                                   ) : (
                                     <div className="flex flex-wrap gap-1">
-                                      {lideresDaEquipe(equipe.id).map(({ vinculo, info }) => {
+                                      {lideresDaEquipe(equipe.id).map(({ vinculo, info, naoResolvido }) => {
                                         const cross = !!info.setor_id && info.setor_id !== equipe.setor_id;
                                         return (
                                           <span
                                             key={vinculo.id}
-                                            className="inline-flex items-center gap-1 text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 rounded-full pl-2 pr-1 py-0.5"
+                                            title={naoResolvido
+                                              ? 'Este líder é de outro setor e o seu acesso mostra apenas o próprio setor, então o nome dele não pode ser carregado.'
+                                              : undefined}
+                                            className={`inline-flex items-center gap-1 text-[11px] border rounded-full pl-2 pr-1 py-0.5 ${
+                                              naoResolvido
+                                                ? 'bg-muted text-muted-foreground border-border italic'
+                                                : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
+                                            }`}
                                           >
                                             <Crown className="w-2.5 h-2.5 shrink-0" /> {info.nome}
                                             {cross && (
