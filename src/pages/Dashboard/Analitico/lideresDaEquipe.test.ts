@@ -131,3 +131,63 @@ describe('bordas', () => {
     expect(lideresDaEquipe({ lideres: [], explicitos: [], clones: [] })).toEqual({});
   });
 });
+
+/*
+ * A troca de liderança entre duas equipes — BookPlay, Play 4, 02/09/2026.
+ *
+ * Trocaram quem lidera "Digital Bruno" e "Maria - Capitã" e só `equipe_lideres`
+ * acompanhou. Maria Oliveira lidera a segunda e continua com `perfis.equipe_id`
+ * apontando para a primeira; Tamires Valentin ficou presa na segunda sem
+ * liderar nada. É desse resíduo que saem "duas fotos" e "a foto do líder
+ * antigo".
+ */
+describe('quem já lidera alguma equipe não volta pela reserva', () => {
+  const maria: PerfilLider = {
+    id: 'l-maria', nome: 'Maria Oliveira', foto_url: 'maria.jpg', equipe_id: 'eq-digital-bruno',
+  };
+  const brunno: PerfilLider = {
+    id: 'l-brunno', nome: 'Brunno Piccolo', foto_url: 'brunno.jpg', equipe_id: null,
+  };
+
+  it('a equipe antiga não mostra o líder que saiu, nem quando perde o vínculo próprio', () => {
+    const r = lideresDaEquipe({
+      lideres:    [maria, brunno],
+      // "Digital Bruno" ficou sem vínculo explícito — é quando a reserva entra.
+      explicitos: [{ equipe_id: 'eq-maria-capita', lider_id: 'l-maria' }],
+      clones:     [],
+    });
+    expect(nomes(r, 'eq-maria-capita')).toEqual(['Maria Oliveira']);
+    expect(r['eq-digital-bruno']).toBeUndefined();
+  });
+
+  it('duas fotos: o líder de hoje e o preso pelo cadastro não se somam', () => {
+    const r = lideresDaEquipe({
+      lideres:    [maria, brunno],
+      explicitos: [
+        { equipe_id: 'eq-digital-bruno', lider_id: 'l-brunno' },
+        { equipe_id: 'eq-maria-capita',  lider_id: 'l-maria'  },
+      ],
+      clones: [],
+    });
+    expect(nomes(r, 'eq-digital-bruno')).toEqual(['Brunno Piccolo']);
+  });
+
+  it('o clone também não ressuscita quem lidera outra equipe', () => {
+    const r = lideresDaEquipe({
+      lideres:    [maria],
+      explicitos: [{ equipe_id: 'eq-maria-capita', lider_id: 'l-maria' }],
+      clones:     [{ equipe_id: 'eq-antiga', operador_id: 'l-maria' }],
+    });
+    expect(r['eq-antiga']).toBeUndefined();
+  });
+
+  it('quem não lidera nada continua valendo como reserva', () => {
+    // Tamires: presa em "Maria - Capitã" pelo cadastro, sem vínculo nenhum. A
+    // reserva é o que sustenta os 22 líderes da BookPlay fora de equipe_lideres.
+    const tamires: PerfilLider = {
+      id: 'l-tamires', nome: 'Tamires Valentin', foto_url: 't.jpg', equipe_id: 'eq-sozinha',
+    };
+    const r = lideresDaEquipe({ lideres: [tamires], explicitos: [], clones: [] });
+    expect(nomes(r, 'eq-sozinha')).toEqual(['Tamires Valentin']);
+  });
+});

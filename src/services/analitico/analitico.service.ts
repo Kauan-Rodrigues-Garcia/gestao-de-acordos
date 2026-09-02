@@ -25,7 +25,7 @@ import {
   aplicarFantasmas,
   type FantasmaTransferencia, type MarcaTransferido,
 } from './fantasmaTransferencia';
-import { equipeUnicaPorLider } from '@/services/equipes/equipeDoLider';
+import { equipeUnicaPorLider, equipeQueCredita } from '@/services/equipes/equipeDoLider';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import {
@@ -1892,7 +1892,9 @@ async function buscarComposicaoAoVivo(
    */
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id, setor_id, situacao, ativo, arquivado, desligado_em, equipes(id, nome, setor_id)')
+    // `perfil` entrou por causa de `equipeQueCredita`: é o cargo que decide se
+    // manda o cadastro ou o vínculo de liderança. Ver `equipeDoLider.ts`.
+    .select('id, perfil, equipe_id, setor_id, situacao, ativo, arquivado, desligado_em, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId);
 
   // Equipes vêm da tabela, não dos perfis: uma equipe formada SÓ por clones
@@ -1952,6 +1954,7 @@ async function buscarComposicaoAoVivo(
 
   for (const p of (data ?? []) as {
     id: string;
+    perfil: string | null;
     equipe_id: string | null;
     setor_id: string | null;
     situacao: string | null;
@@ -1962,11 +1965,17 @@ async function buscarComposicaoAoVivo(
     // Ver o comentário no SELECT: só o arquivado e o desativado-à-mão saem.
     if (p.arquivado === true) continue;
     if (p.ativo === false && (p.situacao ?? 'ativo') !== 'desligado') continue;
-    // O cadastro manda; na falta dele, o vínculo explícito de líder. Sem esta
-    // linha, o recebimento de quem lidera pela tela de Equipes ficava só no
-    // total do setor, e o setor deixava de fechar com a soma das equipes.
-    const equipeId = p.equipe_id ?? equipeDoLider[p.id] ?? null;
-    const eq = p.equipes ?? (equipeId ? equipePorId.get(equipeId) ?? null : null);
+    // Quem é membro segue o cadastro; quem tem cargo `lider` segue a equipe que
+    // LIDERA. Sem a segunda metade, o recebimento do líder ficava na equipe
+    // antiga depois de uma troca de liderança — o `perfis.equipe_id` dele é
+    // resíduo que a tela de Equipes nem mostra. Ver `equipeDoLider.ts`.
+    const equipeId = equipeQueCredita(p.perfil, p.equipe_id, equipeDoLider[p.id]);
+    // O catálogo primeiro, o embed só como reserva. O embed responde pela
+    // equipe do CADASTRO, e para o líder a equipe resolvida pode ser outra —
+    // usá-lo antes gravaria o nome e o setor da equipe errada.
+    const eq = equipeId
+      ? (equipePorId.get(equipeId) ?? (equipeId === p.equipe_id ? p.equipes : null) ?? null)
+      : null;
     operadorEquipeMap[p.id] = {
       equipe_id:   equipeId,
       equipe_nome: eq?.nome ?? 'Sem equipe',

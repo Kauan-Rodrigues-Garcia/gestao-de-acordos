@@ -401,9 +401,10 @@ export async function resolverEscopoDoDia(params: {
     }
 
     const porEquipe = await membrosPorEquipe(empresaId, equipes.map(e => e.id));
-    // O próprio líder entra no total: o acordo que ele tabula é produção da
-    // equipe dele. Fica fora das equipes individuais porque não é membro de
-    // nenhuma — está acima delas.
+    // O próprio líder entra no total, e desde 02/09/2026 também em CADA equipe
+    // que ele lidera (`juntarLideres`). Antes ele só aparecia no total: quem
+    // lidera uma equipe só via um número em «todas» e outro, menor, ao escolher
+    // a própria equipe no seletor — a mesma produção, dois valores.
     const todos = new Set([...porEquipe.values()].flat().concat(perfilId));
 
     return {
@@ -472,11 +473,22 @@ async function escopoDeSetorInteiro(
   ]);
 
   // Agrupa em memória: as pessoas do setor já vieram com a equipe de cada uma,
-  // então montar o seletor não custa consulta nova.
-  const porEquipe = agruparPorEquipe(pessoas);
+  // então montar o seletor não custa consulta nova. Os líderes são a exceção —
+  // eles não têm `perfis.equipe_id` apontando para a equipe que comandam, e
+  // sem esta consulta escolher a equipe deles no seletor os deixaria de fora.
+  const porEquipe = juntarLideres(
+    agruparPorEquipe(pessoas),
+    await lideresPorEquipe(empresaId, equipes.map(e => e.id)),
+  );
+
+  // O conjunto do SETOR inclui quem lidera uma equipe daqui sem ser do setor
+  // (líder clonado de outro setor): ele já aparece no seletor de equipe, e
+  // deixá-lo fora do total faria «setor» somar menos que a soma das equipes.
+  const doSetor = new Set(pessoas.map(p => p.id));
+  for (const ids of porEquipe.values()) for (const id of ids) doSetor.add(id);
 
   return {
-    escopo: { tipo: 'equipe', operadores: new Set(pessoas.map(p => p.id)) },
+    escopo: { tipo: 'equipe', operadores: doSetor },
     rotulo: nome ? `Setor ${nome}` : 'Seu setor',
     operadorId: null,
     setorId,
@@ -532,9 +544,63 @@ async function membrosPorEquipe(
     .eq('empresa_id', empresaId)
     .in('equipe_id', equipeIds);
 
-  return agruparPorEquipe(
+  const mapa = agruparPorEquipe(
     (data as { id: string; equipe_id: string | null }[] | null) ?? [],
   );
+  return juntarLideres(mapa, await lideresPorEquipe(empresaId, equipeIds));
+}
+
+/**
+ * `equipe_id` → líderes explícitos dela.
+ *
+ * Tabela ausente (migration pendente) devolve mapa vazio, como o resto do
+ * arquivo faz — o painel volta ao comportamento antigo em vez de quebrar.
+ */
+async function lideresPorEquipe(
+  empresaId: string, equipeIds: string[],
+): Promise<Map<string, string[]>> {
+  if (!equipeIds.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('equipe_lideres')
+    .select('equipe_id, lider_id')
+    .eq('empresa_id', empresaId)
+    .in('equipe_id', equipeIds);
+  if (error) return new Map();
+
+  const mapa = new Map<string, string[]>();
+  for (const v of ((data as { equipe_id: string; lider_id: string }[] | null) ?? [])) {
+    // Linha sem os dois lados não é vínculo. Sem esta guarda, um `undefined`
+    // entraria no conjunto de operadores e o painel somaria um a mais.
+    if (!v?.equipe_id || !v?.lider_id) continue;
+    const atual = mapa.get(v.equipe_id);
+    if (atual) atual.push(v.lider_id);
+    else mapa.set(v.equipe_id, [v.lider_id]);
+  }
+  return mapa;
+}
+
+/**
+ * O líder entra no conjunto da equipe que ele lidera.
+ *
+ * O total de «todas as equipes» já somava o líder, mas escolher UMA equipe no
+ * seletor o deixava de fora: os membros saíam só de `perfis.equipe_id`, e o
+ * líder não tem esse campo apontando para a equipe que comanda. O painel então
+ * mostrava um número para «todas» e outro, menor, para a única equipe da
+ * pessoa — a mesma produção, dois valores.
+ *
+ * O acordo que o líder tabula é produção da equipe dele; é a mesma regra que o
+ * Desempenho Equipes usa no analítico (`equipeQueCredita`).
+ */
+function juntarLideres(
+  membros: Map<string, string[]>, lideres: Map<string, string[]>,
+): Map<string, string[]> {
+  for (const [equipeId, ids] of lideres) {
+    const atual = membros.get(equipeId);
+    if (!atual) { membros.set(equipeId, [...ids]); continue; }
+    for (const id of ids) if (!atual.includes(id)) atual.push(id);
+  }
+  return membros;
 }
 
 async function pessoasDoSetor(

@@ -47,11 +47,20 @@ export async function adicionarLiderEquipe(
   return data as LiderEquipe;
 }
 
-/** Remove um líder de uma equipe (não afeta o cadastro do usuário). */
+/**
+ * Remove um líder de uma equipe (não afeta o cadastro do usuário).
+ *
+ * O `.select()` no fim não é enfeite: um DELETE que a RLS filtra apaga ZERO
+ * linhas e volta sem erro nenhum. A versão anterior devolvia `true` nesse caso,
+ * a tela tirava o chip da lista local, dizia "Líder removido da equipe" — e o
+ * vínculo continuava no banco, reaparecendo no próximo carregamento. Era um dos
+ * caminhos da queixa "troquei a liderança e a foto antiga voltou".
+ */
 export async function removerLiderEquipe(vinculoId: string): Promise<boolean> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('equipe_lideres')
     .delete()
-    .eq('id', vinculoId);
-  return !error;
+    .eq('id', vinculoId)
+    .select('id');
+  return !error && (data?.length ?? 0) > 0;
 }

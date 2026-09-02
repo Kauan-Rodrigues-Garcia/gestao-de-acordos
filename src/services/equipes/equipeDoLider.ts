@@ -57,3 +57,51 @@ export function equipeUnicaPorLider(
   }
   return saida;
 }
+
+/**
+ * Cargo que a tela de Equipes trata como LIDERANÇA, e não como membro.
+ *
+ * É a mesma comparação de `AdminEquipes.ehLiderExcluido` e de
+ * `lideresDisponiveis` — quem tem este cargo não aparece na lista de membros de
+ * equipe nenhuma, e só pode ser ligado a uma equipe pelo espaço "Líderes".
+ * Usar `isPerfilLider` aqui alargaria a regra para `elite`/`gerencia`, que a
+ * tela continua tratando como membros comuns.
+ */
+const CARGO_DE_LIDERANCA = 'lider';
+
+/**
+ * A equipe em que o recebimento desta pessoa credita.
+ *
+ * ## Por que o cargo decide a precedência
+ *
+ * Para quem é MEMBRO, o cadastro (`perfis.equipe_id`) é a verdade: a pessoa
+ * pertence àquela equipe, e um vínculo de liderança em outra não a muda de
+ * lugar — mover o recebimento dela tiraria dinheiro da equipe de que ela faz
+ * parte.
+ *
+ * Para quem tem cargo `lider` é o contrário. A tela de Equipes esconde o líder
+ * de toda lista de membros e só edita `equipe_lideres`; o `perfis.equipe_id`
+ * dele é resíduo do modelo antigo, invisível e ineditável pela interface. Ao
+ * trocar a liderança entre duas equipes, esse resíduo fica apontando para a
+ * equipe ANTIGA e continua mandando no dinheiro.
+ *
+ * Medido na BookPlay, setor Play 4, em 02/09/2026: Maria Oliveira lidera
+ * "Maria - Capitã" e tem `perfis.equipe_id` = "Digital Bruno" (que hoje é do
+ * Brunno Piccolo). Os R$ 7.916,99 dela em agosto contavam no card do Brunno.
+ * Na mesma troca, Tamires Valentin ficou presa em "Maria - Capitã" sem liderar
+ * nada — é a "foto do líder antigo" que reaparece assim que a equipe perde o
+ * vínculo explícito.
+ *
+ * @param perfil     cargo da pessoa (`perfis.perfil`)
+ * @param cadastro   `perfis.equipe_id`
+ * @param lideranca  equipe do vínculo ÚNICO de `equipe_lideres`, se houver
+ */
+export function equipeQueCredita(
+  perfil: string | null | undefined,
+  cadastro: string | null | undefined,
+  lideranca: string | null | undefined,
+): string | null {
+  return perfil === CARGO_DE_LIDERANCA
+    ? (lideranca ?? cadastro ?? null)
+    : (cadastro ?? lideranca ?? null);
+}

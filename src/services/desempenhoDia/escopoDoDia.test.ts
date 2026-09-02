@@ -153,7 +153,9 @@ describe('resolverEscopoDoDia — por cargo', () => {
 
 describe('resolverEscopoDoDia — líder', () => {
   it('vê a equipe que lidera, com o nome dela no rótulo', async () => {
-    respostas.equipe_lideres = [{ equipes: { id: 'eq-1', nome: 'Matheus' } }];
+    respostas.equipe_lideres = [
+      { equipe_id: 'eq-1', lider_id: 'u-1', equipes: { id: 'eq-1', nome: 'Matheus' } },
+    ];
     respostas.perfis = [{ id: 'a', equipe_id: 'eq-1' }, { id: 'b', equipe_id: 'eq-1' }];
 
     const r = await resolverEscopoDoDia({ ...BASE, niveis: niveisDoCargo('lider') });
@@ -171,8 +173,8 @@ describe('resolverEscopoDoDia — líder', () => {
   it('liderando mais de uma equipe, soma todas e oferece o seletor', async () => {
     // Acontece: 13 vínculos para 9 líderes na BookPlay.
     respostas.equipe_lideres = [
-      { equipes: { id: 'eq-1', nome: 'Matheus' } },
-      { equipes: { id: 'eq-2', nome: 'Bryan' } },
+      { equipe_id: 'eq-1', lider_id: 'u-1', equipes: { id: 'eq-1', nome: 'Matheus' } },
+      { equipe_id: 'eq-2', lider_id: 'u-1', equipes: { id: 'eq-2', nome: 'Bryan' } },
     ];
     respostas.perfis = [
       { id: 'a', equipe_id: 'eq-1' },
@@ -186,6 +188,29 @@ describe('resolverEscopoDoDia — líder', () => {
     if (r.escopo.tipo === 'equipe') expect(r.escopo.operadores.size).toBe(4);
     // Ordenadas por nome, para o seletor não trocar de ordem entre aberturas.
     expect(r.equipes.map(e => e.nome)).toEqual(['Bryan', 'Matheus']);
+  });
+
+  /*
+   * 02/09/2026: o líder entra na equipe que lidera, e não só no total.
+   *
+   * `membrosPorEquipe` saía só de `perfis.equipe_id`, e o líder não tem esse
+   * campo apontando para a equipe que comanda — a tela de Equipes o esconde de
+   * toda lista de membros. Escolher a própria equipe no seletor então mostrava
+   * um número MENOR que «todas», com a mesma produção atrás.
+   */
+  it('escolher a equipe que ele lidera não tira os números dele da conta', async () => {
+    respostas.equipe_lideres = [
+      { equipe_id: 'eq-1', lider_id: 'u-1', equipes: { id: 'eq-1', nome: 'Matheus' } },
+      { equipe_id: 'eq-2', lider_id: 'u-1', equipes: { id: 'eq-2', nome: 'Bryan' } },
+    ];
+    respostas.perfis = [{ id: 'a', equipe_id: 'eq-1' }, { id: 'c', equipe_id: 'eq-2' }];
+
+    const base = await resolverEscopoDoDia({ ...BASE, niveis: niveisDoCargo('lider') });
+    const so1 = aplicarEquipeEscolhida(base, 'eq-1');
+
+    if (so1.escopo.tipo === 'equipe') {
+      expect([...so1.escopo.operadores].sort()).toEqual(['a', 'u-1']);
+    }
   });
 
   /** 22 dos 31 líderes da BookPlay estão neste caso. */

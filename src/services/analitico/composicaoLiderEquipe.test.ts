@@ -163,3 +163,63 @@ describe('buscarEquipesComOperadores — líder conta na equipe que lidera', () 
     expect(c.equipes.map(e => e.id)).toEqual([EQ_MATHEUS]);
   });
 });
+
+/*
+ * A troca de liderança — BookPlay, Play 4, 02/09/2026.
+ *
+ * Maria Oliveira (cargo `lider`) passou a liderar "Maria - Capitã" e continuou
+ * com `perfis.equipe_id` = "Digital Bruno", a equipe que hoje é do Brunno. Os
+ * R$ 7.916,99 dela em agosto contavam no card do outro. A tela de Equipes só
+ * escreve `equipe_lideres` e esconde líderes das listas de membros, então esse
+ * `equipe_id` é resíduo invisível — e era ele que mandava no dinheiro.
+ */
+describe('buscarEquipesComOperadores — troca de liderança leva o recebimento junto', () => {
+  const MARIA   = 'p-maria-oliveira';
+  const EQ_ANTIGA = EQ_OUTRA;   // "Digital Bruno"
+  const EQ_NOVA   = EQ_MATHEUS; // "Maria - Capitã"
+
+  function montarTroca(perfil: string) {
+    respostas.set('perfis', {
+      data: [{
+        id: MARIA, perfil, equipe_id: EQ_ANTIGA, setor_id: RECEPTIVO,
+        situacao: 'ativo',
+        equipes: { id: EQ_ANTIGA, nome: 'Outra', setor_id: RECEPTIVO },
+      }],
+      error: null,
+    });
+    respostas.set('equipes', {
+      data: [
+        { id: EQ_NOVA,   nome: 'Matheus', setor_id: RECEPTIVO },
+        { id: EQ_ANTIGA, nome: 'Outra',   setor_id: RECEPTIVO },
+      ],
+      error: null,
+    });
+    respostas.set('equipe_operadores_clones', { data: [], error: null });
+    respostas.set('equipe_lideres', { data: [{ equipe_id: EQ_NOVA, lider_id: MARIA }], error: null });
+    respostas.set('perfis_transferencias', { data: [], error: null });
+  }
+
+  it('cargo lider: o recebimento vai para a equipe que ele LIDERA hoje', async () => {
+    montarTroca('lider');
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    // Nome e setor saem da equipe resolvida, não do embed do cadastro — usar o
+    // embed gravaria "Outra" no card da equipe certa.
+    expect(c.operadorEquipeMap[MARIA]).toEqual({
+      equipe_id:   EQ_NOVA,
+      equipe_nome: 'Matheus',
+      setor_id:    RECEPTIVO,
+    });
+  });
+
+  it('membro que lidera outra equipe continua contando onde é membro', async () => {
+    // A outra metade da regra: tirar o recebimento dele da equipe de que ele
+    // faz parte esvaziaria aquele card.
+    montarTroca('operador');
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    expect(c.operadorEquipeMap[MARIA].equipe_id).toBe(EQ_ANTIGA);
+  });
+});

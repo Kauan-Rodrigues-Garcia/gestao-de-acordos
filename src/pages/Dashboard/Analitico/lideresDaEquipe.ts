@@ -29,7 +29,9 @@
  *
  *   • equipe COM vínculo em `equipe_lideres` → a lista é essa, e só essa;
  *   • equipe SEM nenhum vínculo → cai no legado (`perfis.equipe_id`) mais os
- *     clones, como antes.
+ *     clones, como antes;
+ *   • quem JÁ lidera alguma equipe explicitamente não entra pela reserva em
+ *     lugar nenhum — 02/09/2026, ver `jaLideraAlgo` mais abaixo.
  *
  * A reserva não pode sumir: 22 dos 31 líderes da BookPlay não estão em
  * `equipe_lideres` (ver `desempenhoDia.service.ts`), e removê-la esvaziaria o
@@ -88,10 +90,31 @@ export function lideresDaEquipe(entrada: EntradaLideres): Record<string, LiderIn
   const doExplicito = new Map<string, string[]>();
   for (const e of explicitos) acumular(doExplicito, e.equipe_id, e.lider_id);
 
+  /**
+   * Quem já tem vínculo explícito em ALGUMA equipe.
+   *
+   * A reserva não pode pôr essa pessoa numa equipe que ela não lidera. Trocar a
+   * liderança entre duas equipes só reescreve `equipe_lideres`; o
+   * `perfis.equipe_id` do líder continua apontando para a equipe ANTIGA, e a
+   * tela de Equipes nem mostra esse campo (ela esconde líderes das listas de
+   * membros). Sem esta linha, a equipe antiga volta a exibir a foto dele assim
+   * que ficar sem vínculo explícito próprio — a "foto do líder antigo".
+   *
+   * Medido na BookPlay, Play 4, em 02/09/2026: Maria Oliveira lidera
+   * "Maria - Capitã" e está presa em "Digital Bruno" pelo cadastro.
+   */
+  const jaLideraAlgo = new Set(explicitos.map(e => e.lider_id));
+
   const daReserva = new Map<string, string[]>();
-  for (const l of lideres) acumular(daReserva, l.equipe_id, l.id);
+  for (const l of lideres) {
+    if (jaLideraAlgo.has(l.id)) continue;
+    acumular(daReserva, l.equipe_id, l.id);
+  }
   // Clone só entra se a pessoa for líder — `porId` já filtra isso.
-  for (const c of clones) acumular(daReserva, c.equipe_id, c.operador_id);
+  for (const c of clones) {
+    if (jaLideraAlgo.has(c.operador_id)) continue;
+    acumular(daReserva, c.equipe_id, c.operador_id);
+  }
 
   const saida: Record<string, LiderInfo[]> = {};
   // A reserva primeiro, para o explícito sobrescrever a equipe inteira quando
