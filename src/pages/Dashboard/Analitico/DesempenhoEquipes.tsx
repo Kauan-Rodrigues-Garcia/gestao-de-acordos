@@ -40,6 +40,7 @@ import {
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
   mapaSetorDaEquipe, setoresDoOperador, operadoresDaEquipe, operadoresDoSetor,
+  buscarLideresDoRetrato,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
@@ -47,6 +48,7 @@ import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { CardEquipe, type LiderInfo } from './CardEquipe';
 import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
 import { lideresDaEquipe, type PerfilLider } from './lideresDaEquipe';
+import { ehMesAtual } from '@/lib/mesReferencia';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
@@ -496,7 +498,21 @@ export function DesempenhoEquipes({
          * Agora o explícito manda e o legado é reserva. A função é testada à
          * parte — decidir QUEM aparece é regra, não desenho.
          */
-        setLideres(lideresDaEquipe({
+        /*
+         * Mês FECHADO lê a liderança do retrato; o corrente resolve ao vivo.
+         *
+         * Sem isto, filtrar agosto mostrava a composição de agosto com os
+         * líderes de HOJE — as equipes do Amauri apareciam com a foto do
+         * Brunno Piccolo, que assumiu em setembro. A regra já foi resolvida na
+         * hora da foto (`fn_composicao_mes_snapshot`); reavaliá-la aqui seria
+         * uma chance de a tela discordar do retrato.
+         *
+         * `null` = retrato de liderança ausente (mês anterior à migration
+         * `20260903340000`) → cai no caminho ao vivo, que é o de antes.
+         */
+        const doRetrato = ehMesAtual(mes) ? null : await buscarLideresDoRetrato(empresaId, mes);
+        if (cancelado) return;
+        setLideres(doRetrato ?? lideresDaEquipe({
           lideres:    (lideresData as PerfilLider[]) ?? [],
           explicitos: (equipeLideresData as { equipe_id: string; lider_id: string }[]) ?? [],
           clones:     (clonesData as { equipe_id: string; operador_id: string }[]) ?? [],

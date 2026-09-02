@@ -1820,6 +1820,73 @@ interface LinhaComposicaoEquipe {
   setor_id: string | null;
 }
 
+interface LinhaComposicaoLider {
+  equipe_id: string;
+  lider_id: string;
+  ordem: number | null;
+}
+
+/** O que o card precisa para desenhar um avatar de líder. */
+export interface LiderDoRetrato {
+  nome: string;
+  foto_url: string | null;
+}
+
+/**
+ * Quem liderava cada equipe NAQUELE mês — do retrato, não de hoje.
+ *
+ * ## O defeito que isto corrige
+ *
+ * `composicao_mes` congelava a composição e `composicao_mes_equipe` o nome da
+ * equipe, mas as FOTOS dos líderes o Desempenho Equipes sempre montou de
+ * `equipe_lideres` ao vivo, sem filtro de mês. Filtrar agosto mostrava a
+ * composição de agosto com os líderes de hoje: as equipes do Amauri apareciam
+ * com a foto do Brunno Piccolo, que assumiu em setembro.
+ *
+ * A regra (explícito manda, legado é reserva) já foi resolvida na hora da foto,
+ * dentro de `fn_composicao_mes_snapshot` — aqui só se lê o resultado. Para um
+ * mês fechado não pode haver segunda avaliação: seria uma chance de a tela
+ * divergir da foto.
+ *
+ * `null` = sem retrato de liderança para o mês (migration `20260903340000`
+ * pendente, ou mês anterior a ela). Quem chama cai no caminho ao vivo, que é o
+ * comportamento antigo.
+ *
+ * Nome e foto saem de `perfis` HOJE, de propósito: é a mesma pessoa, e ninguém
+ * quer ver a foto antiga de alguém. O que o retrato responde é QUEM, não a cara.
+ */
+export async function buscarLideresDoRetrato(
+  empresaId: string, mes: string,
+): Promise<Record<string, LiderDoRetrato[]> | null> {
+  const { data, error } = await tabelaSemTipo<LinhaComposicaoLider>('composicao_mes_lider')
+    .select('equipe_id, lider_id, ordem')
+    .eq('empresa_id', empresaId).eq('mes', mes);
+
+  if (error || !data?.length) return null;
+
+  // Por id, e não por `perfil = 'lider'`: quem liderava em agosto pode ter
+  // mudado de cargo depois, e cair fora do filtro apagaria a foto dele do mês
+  // em que ele liderava de fato.
+  const ids = [...new Set(data.map(l => l.lider_id))];
+  const { data: perfis } = await supabase
+    .from('perfis').select('id, nome, foto_url').in('id', ids);
+
+  const porId = new Map(
+    ((perfis as { id: string; nome: string; foto_url: string | null }[] | null) ?? [])
+      .map(p => [p.id, p]),
+  );
+
+  const saida: Record<string, LiderDoRetrato[]> = {};
+  for (const l of [...data].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))) {
+    const p = porId.get(l.lider_id);
+    // Perfil ilegível (RLS de setor) ou excluído depois: o vínculo existiu, mas
+    // não há nome nem foto. Fica de fora em vez de virar um avatar anônimo.
+    if (!p) continue;
+    (saida[l.equipe_id] ??= []).push({ nome: p.nome, foto_url: p.foto_url });
+  }
+  return saida;
+}
+
 /** Lê o retrato congelado. `null` quando não há retrato para o mês. */
 async function buscarComposicaoDoRetrato(
   empresaId: string, mes: string,
