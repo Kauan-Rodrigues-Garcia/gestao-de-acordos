@@ -80,6 +80,38 @@ export default function Dashboard() {
   const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>(
     () => (contaNoRecebimento(perfil?.perfil) ? 'individual' : 'setor'),
   );
+
+  /*
+   * A tela não pode ABRIR fora do que o painel liberou.
+   *
+   * O padrão acima é «por onde começar», e ele partia do cargo. Isso deixava um
+   * beco sem saída no caso que o painel veio justamente permitir: liberar
+   * `dashboard_escopo_setor` para o operador SEM `dashboard_escopo_individual`.
+   * A tela abria em «individual» — que aquele cargo já não tem —, e o
+   * `<FiltroEscopo />` sumia por não ter duas opções a oferecer. Resultado: a
+   * chave ligada no painel, e a pessoa presa nos próprios números, sem um
+   * controle na tela para sair. Foi a queixa de 02/09/2026.
+   *
+   * A correção é uma só regra: individual sem o nível de individual cai no mais
+   * amplo que a pessoa TEM. Quem tem o nível continua abrindo nele — não é uma
+   * decisão de acesso, é só por onde a tela começa.
+   *
+   * Sem alcance de setor, o mais amplo é a primeira equipe da lista, e não
+   * «setor»: é a mesma escolha que o botão «Todas as pessoas» já faz desde
+   * 513fda9, e mandar para «setor» quem foi limitado à equipe seria oferecer
+   * pelo estado inicial o recorte que o filtro se recusa a oferecer no clique.
+   */
+  useEffect(() => {
+    if (niveis.length === 0) return;               // aba fechada: outro guard trata
+    if (visaoFiltro !== 'individual') return;
+    if (niveis.includes('individual')) return;
+    if (niveis.includes('setor') || niveis.includes('todos_setores')) {
+      setVisaoFiltro('setor');
+      return;
+    }
+    const primeira = equipesDoSetor[0];
+    if (primeira) setVisaoFiltro(`equipe:${primeira.id}`);
+  }, [niveis, visaoFiltro, equipesDoSetor]);
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
   const operadorFiltroAtivo = visaoFiltro === 'individual' ? (perfil?.id ?? null) : null;
   const eliteVisaoGeral = visaoFiltro !== 'individual';
