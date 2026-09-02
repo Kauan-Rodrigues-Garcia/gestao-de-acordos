@@ -23,19 +23,24 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Loader2, Camera, Trash2, UserPlus, LogOut, Lock, Users, ShieldCheck,
+  MoreVertical, ShieldOff, Search, X,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   listarMembros, configurarGrupo, removerDoGrupo, sairDoGrupo,
-  adicionarAoGrupo, subirFotoDoGrupo, type MembroGrupo,
+  adicionarAoGrupo, subirFotoDoGrupo, definirAdminGrupo, type MembroGrupo,
 } from '@/services/chat/grupos.service';
 import { listarContatos, type ContatoChat, type ConversaChat } from '@/services/chat/chat.service';
 import { AvatarChat, useFotoResolvida } from './comum';
@@ -63,6 +68,10 @@ export function ConfigGrupoDialog({
   const [erro, setErro] = useState<string | null>(null);
   const [adicionando, setAdicionando] = useState(false);
   const [candidatos, setCandidatos] = useState<ContatoChat[]>([]);
+  /** Marcados na lista de adicionar. Vários de uma vez, num pedido só. */
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [buscaAdd, setBuscaAdd] = useState('');
+  const [carregandoCandidatos, setCarregandoCandidatos] = useState(false);
   const inputFoto = useRef<HTMLInputElement>(null);
   // O balde do chat e privado: o caminho gravado vira URL assinada aqui.
   const fotoAtual = useFotoResolvida(conversa.outro_foto);
@@ -83,6 +92,8 @@ export function ConfigGrupoDialog({
     setTravado(conversa.somente_lideranca);
     setErro(null);
     setAdicionando(false);
+    setMarcados(new Set());
+    setBuscaAdd('');
     recarregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, conversa.id]);
@@ -114,13 +125,59 @@ export function ConfigGrupoDialog({
 
   async function abrirAdicionar() {
     setAdicionando(true);
-    if (candidatos.length === 0) setCandidatos(await listarContatos());
+    setMarcados(new Set());
+    setBuscaAdd('');
+    if (candidatos.length > 0) return;
+    setCarregandoCandidatos(true);
+    try { setCandidatos(await listarContatos()); }
+    finally { setCarregandoCandidatos(false); }
+  }
+
+  function alternarMarcado(perfilId: string) {
+    setMarcados(atual => {
+      const proximo = new Set(atual);
+      if (!proximo.delete(perfilId)) proximo.add(perfilId);
+      return proximo;
+    });
+  }
+
+  /**
+   * Adiciona todos os marcados num pedido só.
+   *
+   * `fn_chat_grupo_adicionar` já recebe um array e devolve QUANTOS entraram —
+   * ela pula em silêncio quem está fora do meu alcance. Por isso o retorno é
+   * comparado com o que foi pedido: entrar em cinco e o banco aceitar três é
+   * uma informação que a pessoa precisa ter, não um sucesso.
+   */
+  async function adicionarMarcados() {
+    const ids = [...marcados];
+    if (ids.length === 0) return;
+    setSalvando(true);
+    setErro(null);
+    try {
+      const { adicionados, erro: falha } = await adicionarAoGrupo(conversa.id, ids);
+      if (falha) { setErro(falha); return; }
+      if (adicionados < ids.length) {
+        setErro(adicionados === 0
+          ? 'Ninguém foi adicionado: essas pessoas estão fora do seu alcance.'
+          : `${adicionados} de ${ids.length} entraram. O restante está fora do seu alcance.`);
+      }
+      setMarcados(new Set());
+      setAdicionando(false);
+      recarregar();
+      onMudou();
+    } finally { setSalvando(false); }
   }
 
   // Quem já está dentro não entra na lista de adicionar — oferecer alguém que
   // já é membro é oferecer uma ação sem efeito.
   const dentro = new Set(membros.map(m => m.perfil_id));
-  const paraAdicionar = candidatos.filter(c => !dentro.has(c.perfil_id));
+  const buscaLimpa = buscaAdd.trim().toLowerCase();
+  const paraAdicionar = candidatos
+    .filter(c => !dentro.has(c.perfil_id))
+    .filter(c => !buscaLimpa
+      || c.nome.toLowerCase().includes(buscaLimpa)
+      || (c.usuario ?? '').toLowerCase().includes(buscaLimpa));
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o && !salvando) onFechar(); }}>
@@ -233,81 +290,172 @@ export function ConfigGrupoDialog({
               )}
             </div>
 
+            {/*
+              A lista de adicionar vem ANTES dos membros, e não depois.
+              Empurrada para o fim, ela nascia fora do campo de visão de um
+              grupo com dez pessoas: clicar em «Adicionar» não mudava nada na
+              tela, e era preciso descobrir sozinho que havia o que rolar.
+            */}
+            {adicionando && (
+              <div className="mb-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Quem você alcança e ainda não está no grupo
+                  </p>
+                  <button
+                    type="button" onClick={() => setAdicionando(false)}
+                    aria-label="Fechar a lista de adicionar"
+                    className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="relative mb-1.5">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={buscaAdd} onChange={e => setBuscaAdd(e.target.value)}
+                    placeholder="Buscar pelo nome…"
+                    className="h-7 pl-7 text-xs"
+                  />
+                </div>
+
+                {carregandoCandidatos ? (
+                  <p className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…
+                  </p>
+                ) : paraAdicionar.length === 0 ? (
+                  <p className="py-2 text-center text-xs text-muted-foreground">
+                    {buscaLimpa
+                      ? 'Ninguém com esse nome.'
+                      : 'Todo mundo do seu alcance já está aqui.'}
+                  </p>
+                ) : (
+                  <div className="max-h-44 space-y-0.5 overflow-y-auto">
+                    {paraAdicionar.map(c => {
+                      const marcado = marcados.has(c.perfil_id);
+                      return (
+                        <label
+                          key={c.perfil_id}
+                          className={cn(
+                            'flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors',
+                            marcado ? 'bg-primary/10' : 'hover:bg-muted/60',
+                          )}
+                        >
+                          <Checkbox
+                            checked={marcado}
+                            disabled={salvando}
+                            onCheckedChange={() => alternarMarcado(c.perfil_id)}
+                            aria-label={`Adicionar ${c.nome} ao grupo`}
+                          />
+                          <AvatarChat nome={c.nome} foto={c.foto_url} tamanho={24} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs">{c.nome}</span>
+                            {c.setor_nome && (
+                              <span className="block truncate text-[10px] text-muted-foreground">
+                                {c.setor_nome}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Um pedido só para todos os marcados: adicionar cinco pessoas
+                    não pode custar cinco idas ao banco e cinco avisos no meio
+                    da conversa. */}
+                <Button
+                  size="sm" className="mt-1.5 h-7 w-full gap-1.5 text-xs"
+                  disabled={salvando || marcados.size === 0}
+                  onClick={() => void adicionarMarcados()}
+                >
+                  {salvando
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <UserPlus className="h-3.5 w-3.5" />}
+                  {marcados.size === 0
+                    ? 'Escolha quem entra'
+                    : `Adicionar ${marcados.size} ${marcados.size === 1 ? 'pessoa' : 'pessoas'}`}
+                </Button>
+              </div>
+            )}
+
             {carregando ? (
               <p className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…
               </p>
-            ) : membros.map(m => (
-              <div key={m.perfil_id} className="flex items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-muted/50">
-                <AvatarChat nome={m.nome} foto={m.foto_url} tamanho={30} />
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 text-sm leading-tight">
-                    <span className="truncate">{m.perfil_id === meuId ? 'Você' : m.nome}</span>
-                    {m.admin && (
-                      <span title="Administra o grupo"
-                            className="inline-flex shrink-0 items-center gap-0.5 rounded bg-primary/10 px-1 py-px text-[9px] font-bold uppercase text-primary">
-                        <ShieldCheck className="h-2.5 w-2.5" /> adm
-                      </span>
-                    )}
-                  </p>
-                  <p className="truncate text-[11px] leading-tight text-muted-foreground">
-                    {m.usuario ? `@${m.usuario}` : m.cargo}
-                  </p>
-                </div>
-                {podeRemover && m.perfil_id !== meuId && (
-                  <button
-                    type="button" disabled={salvando}
-                    onClick={() => void agir(
-                      () => removerDoGrupo(conversa.id, m.perfil_id), recarregar,
-                    )}
-                    title={`Remover ${m.nome} do grupo`}
-                    className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-
-            {/* Lista de adicionar: aparece embaixo dos membros, não numa
-                segunda janela — quem adiciona acabou de olhar quem já está. */}
-            {adicionando && (
-              <div className="mt-2 rounded-lg border border-dashed border-border p-2">
-                <p className="mb-1.5 text-[11px] text-muted-foreground">
-                  Quem você alcança e ainda não está no grupo:
-                </p>
-                {paraAdicionar.length === 0 ? (
-                  <p className="py-2 text-center text-xs text-muted-foreground">
-                    Todo mundo do seu alcance já está aqui.
-                  </p>
-                ) : (
-                  <div className="max-h-40 space-y-0.5 overflow-y-auto">
-                    {paraAdicionar.map(c => (
-                      <button
-                        key={c.perfil_id}
-                        disabled={salvando}
-                        onClick={() => void agir(
-                          async () => {
-                            const r = await adicionarAoGrupo(conversa.id, [c.perfil_id]);
-                            return { erro: r.erro };
-                          },
-                          recarregar,
-                        )}
-                        className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-muted/60"
-                      >
-                        <AvatarChat nome={c.nome} foto={c.foto_url} tamanho={24} />
-                        <span className="truncate text-xs">{c.nome}</span>
-                        <UserPlus className="ml-auto h-3 w-3 shrink-0 text-muted-foreground" />
-                      </button>
-                    ))}
+            ) : membros.map(m => {
+              const souEu = m.perfil_id === meuId;
+              // O menu só existe se houver ao menos um item dentro dele. Um
+              // botão que abre um menu vazio é pior que a ausência do botão.
+              const podeMexerNoAdmin = podeEditar && !souEu;
+              const podeTirar        = podeRemover && !souEu;
+              const temMenu          = podeMexerNoAdmin || podeTirar;
+              return (
+                <div key={m.perfil_id} className="flex items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-muted/50">
+                  <AvatarChat nome={m.nome} foto={m.foto_url} tamanho={30} />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-sm leading-tight">
+                      <span className="truncate">{souEu ? 'Você' : m.nome}</span>
+                      {m.admin && (
+                        <span title="Administra o grupo"
+                              className="inline-flex shrink-0 items-center gap-0.5 rounded bg-primary/10 px-1 py-px text-[9px] font-bold uppercase text-primary">
+                          <ShieldCheck className="h-2.5 w-2.5" /> adm
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-[11px] leading-tight text-muted-foreground">
+                      {m.usuario ? `@${m.usuario}` : m.cargo}
+                    </p>
                   </div>
-                )}
-                <Button variant="ghost" size="sm" className="mt-1 h-7 w-full text-xs"
-                        onClick={() => setAdicionando(false)}>
-                  Fechar
-                </Button>
-              </div>
-            )}
+
+                  {/* Três pontos no lugar da lixeira solta. A lixeira dizia que
+                      só havia uma coisa a fazer com uma pessoa, e agora há
+                      mais de uma — e uma delas é destrutiva o bastante para
+                      não ficar a um clique de distância. */}
+                  {temMenu && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button" disabled={salvando}
+                          title={`Opções de ${m.nome}`}
+                          aria-label={`Abrir as opções de ${m.nome}`}
+                          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        {podeMexerNoAdmin && (
+                          <DropdownMenuItem
+                            className="gap-2 text-xs"
+                            onClick={() => void agir(
+                              () => definirAdminGrupo(conversa.id, m.perfil_id, !m.admin),
+                              recarregar,
+                            )}
+                          >
+                            {m.admin
+                              ? <><ShieldOff className="h-3.5 w-3.5" /> Deixar de ser administrador</>
+                              : <><ShieldCheck className="h-3.5 w-3.5" /> Tornar administrador</>}
+                          </DropdownMenuItem>
+                        )}
+                        {podeTirar && (
+                          <DropdownMenuItem
+                            className="gap-2 text-xs text-destructive focus:text-destructive"
+                            onClick={() => void agir(
+                              () => removerDoGrupo(conversa.id, m.perfil_id), recarregar,
+                            )}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Remover do grupo
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              );
+            })}
           </section>
 
           {erro && (

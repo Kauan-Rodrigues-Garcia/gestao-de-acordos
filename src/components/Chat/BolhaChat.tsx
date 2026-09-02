@@ -34,7 +34,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useChat } from '@/hooks/useChat';
 import { useChatPresenca } from '@/hooks/useChatPresenca';
 import {
-  apagarConversa, buscarConversa, possoUsarOChat, rotuloAnexo,
+  apagarConversa, buscarConversa, possoUsarOChat, rotuloAnexo, quemCurtiu,
   type MensagemChat, type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
@@ -146,6 +146,55 @@ export function BolhaChat() {
     });
   }, []);
 
+  /**
+   * Curtiram a minha mensagem.
+   *
+   * Mesmo formato do aviso de mensagem nova — foi o pedido —, com duas
+   * diferenças que importam:
+   *
+   *  • ele aparece mesmo com a conversa ABERTA. `deveNotificarMensagemChat`
+   *    cala o aviso da conversa que está na tela, e ali isso é certo: a
+   *    mensagem já está à vista. A curtida não está: ela acontece num balão
+   *    que pode estar cem linhas acima, fora do campo de visão.
+   *  • o nome de quem curtiu vem de `quemCurtiu`, porque o Realtime traz o id.
+   *    É uma consulta por curtida recebida, e só quando alguém curte de fato.
+   */
+  const aoCurtirem = useCallback((mensagem: MensagemChat) => {
+    void executarNotificacaoChatUmaVez(`curtida:${mensagem.id}:${mensagem.curtida_em ?? ''}`, () => {
+      void (async () => {
+        const quem = mensagem.curtida_por;
+        if (!quem) return;
+
+        const lista = await quemCurtiu(mensagem.id);
+        const autor = lista.find(p => p.perfil_id === quem);
+        // Sem nome não há aviso: «alguém curtiu sua mensagem» não diz nada que
+        // o coração no balão já não diga.
+        if (!autor) return;
+
+        const trecho = mensagem.texto?.trim()
+          || (mensagem.anexos.length ? rotuloAnexo(mensagem.anexos) : '');
+
+        toastFlutuante.custom(id => (
+          <NotificacaoMensagem
+            nome={autor.nome}
+            foto={autor.foto_url}
+            mensagem={trecho
+              ? `curtiu sua mensagem: "${trecho}"`
+              : 'curtiu sua mensagem.'}
+            onFechar={() => toastFlutuante.dismiss(id)}
+            onAbrir={() => {
+              toastFlutuante.dismiss(id);
+              chatRef.current?.abrir(mensagem.conversa_id);
+              abertoRef.current = true;
+              setAberto(true);
+            }}
+          />
+        ), { duration: 6_000 });
+        tocarSomChat();
+      })();
+    });
+  }, []);
+
   /*
    * As boas-vindas: aparecem uma vez, antes da PRIMEIRA conversa.
    *
@@ -203,7 +252,7 @@ export function BolhaChat() {
    * que tem mensagem. Custa uma assinatura de realtime, que já é compartilhada
    * com o resto do app.
    */
-  const chat = useChat(podeVer, aberto, aoMensagemRecebida);
+  const chat = useChat(podeVer, aberto, aoMensagemRecebida, aoCurtirem);
   chatRef.current = chat;
   const { online, digitando, gravando, avisarAtividade } = useChatPresenca(podeVer);
 
@@ -365,6 +414,32 @@ export function BolhaChat() {
         <header className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
           <MessageCircle className="w-4 h-4 text-primary" />
           <span className="text-sm font-semibold flex-1">Chat</span>
+          {/*
+            O Monitor mora AQUI, ao lado do controle de tamanho, e não mais na
+            régua de abas.
+
+            Ele nunca foi uma aba: não ficava selecionado e trocava a janela
+            inteira ao ser clicado. Ocupando um quarto da régua, espremia as
+            três abas que são abas de verdade — «Disparos» chegava a truncar na
+            janela compacta. Este cabeçalho é o lugar dos comandos DA JANELA, e
+            é exatamente isso que o Monitor é.
+          */}
+          {podeMonitorar && (
+            <button
+              onClick={() => setModoMonitor(m => !m)}
+              className={cn(
+                'rounded p-1.5 text-base leading-none transition-colors',
+                modoMonitor
+                  ? 'bg-amber-500/15 ring-1 ring-amber-500/40'
+                  : 'hover:bg-muted',
+              )}
+              title={modoMonitor ? 'Sair do monitoramento' : 'Monitoramento de chats'}
+              aria-label={modoMonitor ? 'Sair do monitoramento' : 'Abrir o monitoramento de chats'}
+              aria-pressed={modoMonitor}
+            >
+              🖥️
+            </button>
+          )}
           <button onClick={() => setExpandido(e => !e)}
                   className="p-1.5 rounded hover:bg-muted transition-colors"
                   aria-label={expandido ? 'Diminuir a janela' : 'Aumentar a janela'}>
@@ -406,8 +481,6 @@ export function BolhaChat() {
                 onNovaConversa={() => setNovaConversa(true)}
                 onNovoDisparo={() => setNovoDisparo(true)}
                 onNovoGrupo={podeCriarGrupo ? () => setNovoGrupo(true) : undefined}
-                podeMonitorar={podeMonitorar}
-                onAbrirMonitor={() => setModoMonitor(true)}
               />
             </div>
           )}

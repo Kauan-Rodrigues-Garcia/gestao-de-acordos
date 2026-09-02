@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Paperclip, Send, Smile, X, Loader2, Mic, Trash2, Check,
-  Heart, CornerUpLeft, Settings2, Lock, Eye,
+  Heart, CornerUpLeft, Settings2, Lock, Eye, LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -39,6 +39,7 @@ import {
   horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
 import { VisualizadorMidia } from './VisualizadorMidia';
+import { InfoGrupoPainel } from './InfoGrupoPainel';
 import { StatusMensagem } from './StatusMensagem';
 import { estadoMensagem } from './estadoMensagem';
 
@@ -129,10 +130,21 @@ export function Conversa({
   const [arrastando, setArrastando] = useState(false);
   /** Mensagem que a próxima vai citar. Null = mensagem solta. */
   const [respondendo, setRespondendo] = useState<MensagemChat | null>(null);
+  /** O painel «dados do grupo» está por cima da conversa? */
+  const [infoAberta, setInfoAberta] = useState(false);
 
   const rolagem = useRef<HTMLDivElement>(null);
   const campo   = useRef<HTMLTextAreaElement>(null);
   const gravador = useGravadorAudio();
+  /**
+   * O arrasto começou DENTRO da conversa?
+   *
+   * Arrastar uma foto que já está no chat não é anexar nada — não há arquivo
+   * novo do lado de fora. Antes a tela não distinguia as duas coisas: soltar a
+   * imagem de volta reanexava a mesma foto, e dava para clonar o anexo quantas
+   * vezes se quisesse. Ver também `arrastoDeFora`, que cuida da outra metade.
+   */
+  const arrastoInterno = useRef(false);
 
   /*
    * As mensagens que já estavam na tela quando ela montou.
@@ -602,17 +614,106 @@ export function Conversa({
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void enviar(); }
   };
 
+  /**
+   * Este arrasto traz ARQUIVO de fora?
+   *
+   * Duas perguntas, e as duas precisam ser feitas:
+   *
+   *  1. O arrasto nasceu aqui dentro (`arrastoInterno`)? Então é a foto que já
+   *     está na conversa sendo movida, e não há nada a anexar.
+   *  2. O que vem no arrasto é arquivo? `dataTransfer.types` traz `Files`
+   *     quando o sistema entrega arquivo de verdade, e só `text/html` e
+   *     `text/uri-list` quando é uma imagem arrastada de dentro de uma página.
+   *
+   * A primeira sozinha não basta: uma imagem arrastada de OUTRA aba do
+   * navegador também não é arquivo. A segunda sozinha também não, porque em
+   * alguns navegadores o arrasto interno de uma imagem carrega `Files` junto.
+   */
+  const arrastoDeFora = (e: React.DragEvent) =>
+    !arrastoInterno.current && [...(e.dataTransfer?.types ?? [])].includes('Files');
+
+  const ehGrupo = conversa.tipo === 'grupo';
+
+  /**
+   * O miolo do cabeçalho: nome, etiquetas e a linha de baixo.
+   *
+   * Fica numa variável porque a mesma árvore é usada em dois invólucros — um
+   * `<button>` no grupo, que abre os dados, e uma `<div>` na conversa direta,
+   * que não abre nada. Duplicar o conteúdo faria a próxima etiqueta ser
+   * acrescentada em um dos dois e esquecida no outro.
+   */
+  const tituloDaConversa = (
+    <>
+      <p className="flex items-center gap-1.5 text-sm font-medium leading-tight">
+        <span className="truncate">{conversa.outro_nome}</span>
+        <TagAdm perfil={conversa.outro_perfil} />
+        {ehGrupo && conversa.somente_lideranca && (
+          <span title="Só a liderança escreve neste grupo"
+                className="shrink-0 rounded bg-muted px-1 py-px text-[9px] font-bold uppercase text-muted-foreground ring-1 ring-border">
+            travado
+          </span>
+        )}
+        {conversa.sai && (
+          <span title="Você saiu deste grupo"
+                className="shrink-0 rounded bg-destructive/10 px-1 py-px text-[9px] font-bold uppercase text-destructive">
+            saiu
+          </span>
+        )}
+      </p>
+      {/*
+        Login não entra aqui: quem está conversando já sabe com quem fala, e o
+        que muda de minuto a minuto é se a pessoa está do outro lado. «online»
+        quer dizer com o sistema aberto agora — não é «trabalhando».
+
+        Gravando vem ANTES de digitando: quem está com o microfone aberto não
+        está escrevendo, e mostrar "digitando…" enquanto o outro grava faz a
+        pessoa esperar um texto que nunca chega.
+      */}
+      <p className="text-[11px] leading-tight">
+        {ehGrupo
+          ? (
+            // No grupo, quem está dentro. É o subtítulo do WhatsApp, e responde
+            // a pergunta que o nome do grupo não responde.
+            <span className="truncate text-muted-foreground">
+              {membros.length > 0
+                ? membros.slice(0, 4).map(x => (x.perfil_id === euNaTela ? 'Você' : x.nome.split(' ')[0])).join(', ')
+                  + (membros.length > 4 ? ` e mais ${membros.length - 4}` : '')
+                : `${conversa.participantes} participantes`}
+            </span>
+          )
+          : gravando
+            ? <span className="text-primary">gravando áudio…</span>
+            : digitando
+              ? <span className="text-primary">digitando…</span>
+              : online
+                ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
+                : <span className="text-muted-foreground">offline</span>}
+      </p>
+    </>
+  );
+
   // ── Balões ─────────────────────────────────────────────────────────────────
   let diaAnterior = '';
 
   return (
     <div
       className="flex flex-col h-full min-h-0 relative"
-      onDragOver={e => { e.preventDefault(); setArrastando(true); }}
+      /*
+       * `dragstart` de qualquer coisa daqui de dentro borbulha até este nó, e é
+       * assim que a conversa aprende que o arrasto é dela. Ver `arrastoDeFora`.
+       */
+      onDragStart={() => { arrastoInterno.current = true; }}
+      onDragEnd={() => { arrastoInterno.current = false; }}
+      onDragOver={e => {
+        if (!arrastoDeFora(e)) return;
+        e.preventDefault();
+        setArrastando(true);
+      }}
       onDragLeave={e => { if (e.currentTarget === e.target) setArrastando(false); }}
       onDrop={e => {
-        e.preventDefault();
         setArrastando(false);
+        if (!arrastoDeFora(e)) return;
+        e.preventDefault();
         receberArquivos([...e.dataTransfer.files]);
       }}
     >
@@ -630,48 +731,29 @@ export function Conversa({
           // «quem está online?» com um sim ou não que não pertence a ninguém.
           online={conversa.tipo === 'grupo' ? false : online}
         />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-sm font-medium leading-tight">
-            <span className="truncate">{conversa.outro_nome}</span>
-            <TagAdm perfil={conversa.outro_perfil} />
-            {conversa.tipo === 'grupo' && conversa.somente_lideranca && (
-              <span title="Só a liderança escreve neste grupo"
-                    className="shrink-0 rounded bg-muted px-1 py-px text-[9px] font-bold uppercase text-muted-foreground ring-1 ring-border">
-                travado
-              </span>
-            )}
-          </p>
-          {/*
-            Login não entra aqui: quem está conversando já sabe com quem fala, e
-            o que muda de minuto a minuto é se a pessoa está do outro lado.
-            «online» quer dizer com o sistema aberto agora — não é «trabalhando».
-          */}
-          {/*
-            Gravando vem ANTES de digitando: quem está com o microfone aberto
-            não está escrevendo, e mostrar "digitando…" enquanto o outro grava
-            faz a pessoa esperar um texto que nunca chega.
-          */}
-          <p className="text-[11px] leading-tight">
-            {conversa.tipo === 'grupo'
-              ? (
-                // No grupo, quem está dentro. É o subtítulo do WhatsApp, e
-                // responde a pergunta que o nome do grupo não responde.
-                <span className="truncate text-muted-foreground">
-                  {membros.length > 0
-                    ? membros.slice(0, 4).map(x => (x.perfil_id === euNaTela ? 'Você' : x.nome.split(' ')[0])).join(', ')
-                      + (membros.length > 4 ? ` e mais ${membros.length - 4}` : '')
-                    : `${conversa.participantes} participantes`}
-                </span>
-              )
-              : gravando
-                ? <span className="text-primary">gravando áudio…</span>
-                : digitando
-                  ? <span className="text-primary">digitando…</span>
-                  : online
-                    ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
-                    : <span className="text-muted-foreground">offline</span>}
-          </p>
-        </div>
+        {/*
+          No grupo, a faixa inteira do nome abre os dados — foto, participantes
+          e galeria. É onde a mão vai procurar, e era o único lugar do cabeçalho
+          que não fazia nada.
+
+          São duas árvores em vez de um elemento com props variáveis: `<button>`
+          e `<div>` não aceitam o mesmo conjunto de atributos, e escolher a tag
+          em tempo de execução obriga a mentir para o TypeScript sobre isso. O
+          conteúdo em `titulo` é o mesmo nos dois ramos.
+        */}
+        {ehGrupo ? (
+          <button
+            type="button"
+            onClick={() => setInfoAberta(true)}
+            title="Ver os dados do grupo"
+            aria-label={`Ver os dados do grupo ${conversa.outro_nome}`}
+            className="-mx-1 min-w-0 flex-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-muted/60"
+          >
+            {tituloDaConversa}
+          </button>
+        ) : (
+          <div className="min-w-0 flex-1">{tituloDaConversa}</div>
+        )}
 
         {/* Configurações do grupo. Só aparece para quem administra: o botão
             que abre uma tela onde tudo está desabilitado é pior que a ausência
@@ -865,6 +947,16 @@ export function Conversa({
           <Eye className="h-3.5 w-3.5 shrink-0" />
           Monitoramento em tempo real — somente leitura.
         </div>
+      ) : conversa.sai ? (
+        /*
+          Saí do grupo: o histórico até a saída continua aqui, e a conversa
+          continua na lista até eu apagá-la. O que acabou foi a participação —
+          e é o banco que garante isso (`fn_chat_leio_ate`), não esta frase.
+        */
+        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-3 py-3 text-center text-xs text-muted-foreground">
+          <LogOut className="h-3.5 w-3.5 shrink-0" />
+          Você não está mais neste grupo. O histórico até a sua saída continua aqui.
+        </div>
       ) : conversa.tipo === 'grupo' && conversa.somente_lideranca && !podeEscreverNoGrupo ? (
         <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-3 py-3 text-center text-xs text-muted-foreground">
           <Lock className="h-3.5 w-3.5 shrink-0" />
@@ -1047,6 +1139,17 @@ export function Conversa({
           <p className="text-sm font-medium text-primary">Solte para anexar</p>
         </div>
       )}
+
+      {/* Os dados do grupo entram por cima da conversa, não numa janela nova:
+          é consulta, e consulta não deve tirar ninguém do lugar. */}
+      {ehGrupo && (
+        <InfoGrupoPainel
+          conversa={conversa}
+          meuId={euNaTela}
+          aberto={infoAberta}
+          onFechar={() => setInfoAberta(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1179,6 +1282,10 @@ function AvisoDeSistema({
     case 'entrou':   frase = <>{nomeDoAutor} adicionou {alvo}</>; break;
     case 'removido': frase = <>{nomeDoAutor} removeu {alvo}</>; break;
     case 'saiu':     frase = <>{nomeDoAutor} saiu do grupo</>; break;
+    // Quem administra decide quem entra e quem sai — por isso a mudança é
+    // anunciada no grupo, e não fica só na tela de configurações de quem fez.
+    case 'promovido': frase = <>{nomeDoAutor} tornou {alvo} administrador do grupo</>; break;
+    case 'rebaixado': frase = <>{nomeDoAutor} tirou a administração de {alvo}</>; break;
     case 'nome':     frase = <>{nomeDoAutor} mudou o nome para <strong>{String(dados.para ?? '')}</strong></>; break;
     case 'escrita':  frase = dados.travado
       ? <>{nomeDoAutor} deixou o grupo só para a liderança escrever</>

@@ -31,7 +31,7 @@ import { cargosChatLiberados } from '@/lib/permissoes-chat';
 import { StatusMensagem } from './StatusMensagem';
 import { estadoMensagem } from './estadoMensagem';
 
-type Aba = 'conversas' | 'historico' | 'disparos' | 'monitor';
+type Aba = 'conversas' | 'historico' | 'disparos';
 
 interface Props {
   conversas:   ConversaChat[];
@@ -47,19 +47,6 @@ interface Props {
   onNovoDisparo:  () => void;
   /** Abre o diálogo de criar grupo. Ausente = sem permissão de criar. */
   onNovoGrupo?:   () => void;
-  /**
-   * A aba Monitor existe? Ela NÃO abre aqui dentro.
-   *
-   * Monitoria tem duas colunas próprias — a lista de conversas da pessoa e a
-   * conversa aberta — e não cabe na coluna estreita da lista, que na janela
-   * compacta é a tela toda e na expandida tem 260 px. Renderizada aqui, ela
-   * empilhava as duas no mesmo lugar e simplesmente não abria no tamanho menor.
-   *
-   * Então o botão é só um GATILHO: clicar avisa o pai, que troca o corpo
-   * inteiro da janela pelo painel. Ausente = sem permissão, sem aba.
-   */
-  podeMonitorar?:  boolean;
-  onAbrirMonitor?: () => void;
 }
 
 interface CardDisparoProps {
@@ -222,7 +209,6 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
   onAbrir, onApagar, onNovaConversa, onNovoDisparo, onNovoGrupo,
-  podeMonitorar = false, onAbrirMonitor,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -239,16 +225,15 @@ export function ListaConversas({
   /*
    * A régua de abas é montada, não escrita à mão.
    *
-   * «Monitor» só existe para quem tem a permissão — e o pai já respondeu isso
-   * ao passar (ou não) `painelMonitor`. Repetir a pergunta aqui seria uma
-   * segunda régua de acesso para manter em dia.
+   * O Monitor SAIU daqui em 03/09/2026. Ele nunca foi uma aba de verdade — não
+   * ficava selecionado, e clicar nele trocava a janela inteira —, e ocupando um
+   * quarto da régua espremia as três abas que são abas mesmo. Agora é um botão
+   * ao lado do controle de tamanho, no cabeçalho da janela, que é onde moram os
+   * comandos DA JANELA. Ver `BolhaChat`.
    */
-  const ABAS: Aba[] = podeMonitorar
-    ? ['conversas', 'historico', 'disparos', 'monitor']
-    : ['conversas', 'historico', 'disparos'];
+  const ABAS: Aba[] = ['conversas', 'historico', 'disparos'];
   const ROTULO_ABA: Record<Aba, string> = {
-    conversas: 'Conversas', historico: 'Histórico',
-    disparos: 'Disparos',  monitor: 'Monitor',
+    conversas: 'Conversas', historico: 'Histórico', disparos: 'Disparos',
   };
 
   const atuais = conversas.filter(c => !c.em_historico);
@@ -293,8 +278,7 @@ export function ListaConversas({
         <div className="flex min-w-0 flex-1 gap-0.5 rounded-lg bg-muted/35 p-0.5">
           {ABAS.map(a => (
             <button
-              // Monitor nao vira aba selecionada: ele troca a janela inteira.
-              key={a} onClick={() => (a === 'monitor' ? onAbrirMonitor?.() : setAba(a))}
+              key={a} onClick={() => setAba(a)}
               title={ROTULO_ABA[a]}
               className={cn(
                 'min-w-0 flex-1 basis-0 truncate rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors',

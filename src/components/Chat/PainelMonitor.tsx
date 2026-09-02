@@ -49,8 +49,8 @@ import { ArrowLeft, Eye, Loader2, Search, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { assinarTabela } from '@/lib/realtime';
 import {
-  listarMonitoraveis, listarConversasDe,
-  type PessoaMonitoravel, type ConversaMonitorada,
+  listarMonitoraveis, listarConversasDe, listarRecentes,
+  type PessoaMonitoravel, type ConversaMonitorada, type ConversaRecente,
 } from '@/services/chat/monitor.service';
 import {
   listarMensagens, type MensagemChat, type ConversaChat,
@@ -68,6 +68,17 @@ interface Props {
 
 /** Espera antes de refazer a lista. Junta a rajada de eventos numa consulta só. */
 const ESPERA_REFAZER = 300;
+
+/**
+ * O card «Chats recentes do setor»: cinco por vez, até quinze.
+ *
+ * O teto não é economia de consulta — a RPC devolve as quinze de uma vez. É o
+ * recorte da pergunta: o card responde «o que está acontecendo AGORA», e a
+ * décima sexta conversa mais recente já não responde isso. Quem procura uma
+ * conversa específica tem a lista de pessoas logo abaixo.
+ */
+const RECENTES_PAGINA = 5;
+const RECENTES_TETO   = 15;
 
 /**
  * «sua equipe», «seu setor», «a empresa inteira» — o alcance, em uma frase.
@@ -91,6 +102,10 @@ export function PainelMonitor({ expandido, onSair }: Props) {
   const [busca, setBusca] = useState('');
   const [pessoas, setPessoas] = useState<PessoaMonitoravel[]>([]);
   const [carregandoPessoas, setCarregandoPessoas] = useState(true);
+
+  const [recentes, setRecentes] = useState<ConversaRecente[]>([]);
+  const [carregandoRecentes, setCarregandoRecentes] = useState(true);
+  const [quantasRecentes, setQuantasRecentes] = useState(RECENTES_PAGINA);
 
   const [alvo, setAlvo] = useState<PessoaMonitoravel | null>(null);
   const [conversas, setConversas] = useState<ConversaMonitorada[]>([]);
@@ -118,6 +133,47 @@ export function PainelMonitor({ expandido, onSair }: Props) {
     }, 280);
     return () => { cancelado = true; clearTimeout(id); };
   }, [busca, alvo]);
+
+  // ── Chats recentes do setor ───────────────────────────────────────────────
+  //
+  // A RPC já devolve o teto de uma vez: `quantasRecentes` só decide quantas a
+  // tela DESENHA. Paginar no servidor por cinco custaria três consultas para
+  // mostrar quinze linhas que cabem numa.
+  const recarregarRecentes = useCallback(async () => {
+    const r = await listarRecentes(RECENTES_TETO);
+    setRecentes(r);
+    setCarregandoRecentes(false);
+  }, []);
+
+  useEffect(() => { void recarregarRecentes(); }, [recarregarRecentes]);
+
+  /*
+   * O card se refaz sozinho enquanto o monitor está aberto na primeira tela.
+   *
+   * Foi pedido explicitamente: mensagem nova durante o acompanhamento tem de
+   * reordenar a lista sem F5. A assinatura só existe enquanto NÃO há alvo
+   * escolhido — com alguém escolhido o card sai de cena, e manter o canal vivo
+   * seria refazer, a cada mensagem da empresa, uma consulta que ninguém vê.
+   *
+   * Tópico próprio pelo mesmo motivo dos outros dois: ciclos de vida
+   * diferentes não devem compartilhar canal.
+   */
+  const timerRecentes = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRecentes.current) clearTimeout(timerRecentes.current); }, []);
+
+  useEffect(() => {
+    if (alvo) return;
+    return assinarTabela(
+      { topico: 'rt-chat-monitor-recentes', escutas: [{ tabela: 'chat_mensagens' }] },
+      {
+        onEvento: () => {
+          if (timerRecentes.current) clearTimeout(timerRecentes.current);
+          timerRecentes.current = setTimeout(() => { void recarregarRecentes(); }, ESPERA_REFAZER);
+        },
+        onReconectado: () => { void recarregarRecentes(); },
+      },
+    );
+  }, [alvo, recarregarRecentes]);
 
   // ── A lista de conversas do alvo ──────────────────────────────────────────
   const recarregarConversas = useCallback(async (perfilId: string) => {
@@ -199,6 +255,51 @@ export function PainelMonitor({ expandido, onSair }: Props) {
     });
   }
 
+  /**
+   * Conversa que o card pediu para abrir, esperando a lista do alvo chegar.
+   *
+   * O card entrega uma conversa; a monitoria é sempre do ponto de vista de uma
+   * PESSOA. Então clicar ali faz duas coisas em ordem: escolhe a pessoa do meu
+   * alcance que justifica aquela linha, e, quando a lista dela responder, abre
+   * a conversa certa. Sem esta espera o `abrir` rodaria antes de existir uma
+   * `ConversaMonitorada` — que é o objeto que carrega o «outro» do ponto de
+   * vista dela, e é dele que o cabeçalho tira os dois nomes.
+   */
+  const recentePendente = useRef<string | null>(null);
+
+  useEffect(() => {
+    const alvoId = recentePendente.current;
+    if (!alvoId || carregandoConversas) return;
+    const achada = conversas.find(c => c.id === alvoId);
+    if (!achada) {
+      // A conversa não está na lista dela: sobrou pendência que nunca resolve.
+      // Limpar evita que o próximo carregamento abra a conversa errada.
+      if (conversas.length > 0) recentePendente.current = null;
+      return;
+    }
+    recentePendente.current = null;
+    abrir(achada);
+    // `abrir` é estável o bastante — depende só de setters de estado.
+     
+  }, [conversas, carregandoConversas]);
+
+  function abrirRecente(c: ConversaRecente) {
+    if (!c.quem_id) return;
+    recentePendente.current = c.conversa_id;
+    // A pessoa já carregada traz setor e foto; a de fora da página atual entra
+    // com o mínimo que o cabeçalho precisa, e a lista dela corrige o resto.
+    const conhecida = pessoas.find(p => p.perfil_id === c.quem_id);
+    setAlvo(conhecida ?? {
+      perfil_id:    c.quem_id,
+      nome:         c.quem_nome ?? 'Pessoa',
+      usuario:      null,
+      foto_url:     null,
+      cargo:        '',
+      setor_nome:   null,
+      empresa_slug: null,
+    });
+  }
+
   const verAnteriores = useCallback(async () => {
     const maisAntiga = mensagens[0]?.criado_em;
     if (!aberta || !maisAntiga || carregandoMais) return;
@@ -252,6 +353,10 @@ export function PainelMonitor({ expandido, onSair }: Props) {
       participantes: c.participantes,
       sou_admin: false,
       somente_lideranca: false,
+      // `sai` é sobre MIM, e aqui eu não sou parte de nada: quem monitora nunca
+      // esteve no grupo para poder ter saído. Falso evita o aviso «você não
+      // está mais neste grupo» aparecer numa tela que já diz o que é.
+      sai: false,
     };
   }
 
@@ -295,6 +400,60 @@ export function PainelMonitor({ expandido, onSair }: Props) {
       </div>
 
       <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/*
+          O card vem PRIMEIRO, e é a correção pedida: o monitor abria numa lista
+          de nomes, e para achar o que estava acontecendo era preciso adivinhar
+          em quem clicar. A pergunta real é «o que se falou por último», e agora
+          ela é a primeira coisa na tela.
+
+          Some durante a busca: quem digitou um nome está procurando UMA pessoa,
+          e o card empurraria o resultado para fora do campo de visão.
+        */}
+        {!busca.trim() && (
+          <section className="border-b border-border px-2 pb-2 pt-1">
+            <p className="px-1 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Chats recentes do setor
+            </p>
+
+            {carregandoRecentes ? (
+              <p className="flex items-center gap-2 px-1 py-3 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…
+              </p>
+            ) : recentes.length === 0 ? (
+              <p className="px-1 py-3 text-xs text-muted-foreground">
+                Nenhuma conversa recente no seu alcance.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-0.5">
+                  {recentes.slice(0, quantasRecentes).map(c => (
+                    <LinhaRecente
+                      key={c.conversa_id}
+                      recente={c}
+                      onAbrir={() => abrirRecente(c)}
+                    />
+                  ))}
+                </div>
+                {quantasRecentes < Math.min(recentes.length, RECENTES_TETO) && (
+                  <button
+                    type="button"
+                    onClick={() => setQuantasRecentes(n => n + RECENTES_PAGINA)}
+                    className="mt-1 w-full rounded-md border border-border py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                  >
+                    Carregar mais
+                  </button>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {!busca.trim() && (
+          <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Acompanhar uma pessoa
+          </p>
+        )}
+
         {carregandoPessoas && (
           <p className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…
@@ -498,5 +657,55 @@ export function PainelMonitor({ expandido, onSair }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Uma linha do card «Chats recentes do setor».
+ *
+ * Mostra três coisas, nesta ordem de importância: de quem é a conversa, o que
+ * foi dito por último, e QUANDO. O quando é o que transforma a lista num
+ * acompanhamento — sem ele, «recentes» é uma promessa que a tela não cumpre, e
+ * uma conversa de anteontem parece estar acontecendo agora.
+ *
+ * `quem_nome` aparece abaixo do título porque explica por que a linha existe:
+ * é a pessoa do MEU alcance que puxa aquela conversa para cá, e é por ela que
+ * a réplica abre ao clicar.
+ */
+function LinhaRecente({
+  recente, onAbrir,
+}: { recente: ConversaRecente; onAbrir: () => void }) {
+  const ehGrupo = recente.tipo === 'grupo';
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      disabled={!recente.quem_id}
+      className={cn(
+        'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors',
+        recente.quem_id ? 'hover:bg-muted/60' : 'cursor-default opacity-60',
+      )}
+    >
+      <AvatarChat nome={recente.titulo} foto={recente.foto_url} tamanho={32} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          {ehGrupo && (
+            <Users aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground" />
+          )}
+          <p className="min-w-0 truncate text-[13px] font-medium leading-tight">
+            {recente.titulo}
+          </p>
+        </div>
+        <p className="truncate text-[11px] leading-tight text-muted-foreground">
+          {recente.ultimo_autor_nome && (
+            <span className="opacity-70">{recente.ultimo_autor_nome.split(' ')[0]}: </span>
+          )}
+          {recente.ultimo_texto ?? 'Anexo'}
+        </p>
+      </div>
+      <span className="shrink-0 self-start pt-0.5 text-[10px] text-muted-foreground">
+        {horaCurta(recente.ultima_mensagem_em)}
+      </span>
+    </button>
   );
 }

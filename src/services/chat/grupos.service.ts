@@ -21,6 +21,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import type { AnexoChat } from './chat.service';
 
 export interface MembroGrupo {
   perfil_id: string;
@@ -93,6 +94,24 @@ export async function adicionarAoGrupo(
   return { adicionados: Number(data ?? 0), erro: null };
 }
 
+/**
+ * Promove ou rebaixa quem administra o grupo.
+ *
+ * O banco recusa deixar o grupo sem nenhum administrador — a tela não repete
+ * essa conta, só mostra o erro. Repetir criaria duas verdades, e a que engana
+ * é sempre a do cliente (o painel pode estar aberto com a lista de ontem).
+ */
+export async function definirAdminGrupo(
+  conversaId: string, perfilId: string, admin: boolean,
+): Promise<{ erro: string | null }> {
+  const { error } = await rpcSemTipo('fn_chat_grupo_admin', {
+    p_conversa: conversaId,
+    p_membro:   perfilId,
+    p_admin:    admin,
+  });
+  return { erro: error ? traduzir(error.message) : null };
+}
+
 export async function removerDoGrupo(
   conversaId: string, perfilId: string,
 ): Promise<{ erro: string | null }> {
@@ -117,6 +136,40 @@ export async function listarMembros(conversaId: string): Promise<MembroGrupo[]> 
     return [];
   }
   return data ?? [];
+}
+
+/** Uma imagem, GIF ou vídeo já enviado na conversa. Alimenta a galeria. */
+export interface MidiaDaConversa {
+  mensagem_id: string;
+  criado_em:   string;
+  autor_id:    string | null;
+  autor_nome:  string | null;
+  anexo:       AnexoChat;
+}
+
+/**
+ * As mídias da conversa INTEIRA, e não só das mensagens já carregadas.
+ *
+ * A galeria existe justamente para dispensar a subida manual pela conversa
+ * toda; montá-la a partir de `mensagens` na tela devolveria só a última página
+ * e mentiria por omissão — a foto de três semanas atrás simplesmente não
+ * estaria lá, sem nada indicando que faltou.
+ *
+ * O corte de quem saiu do grupo é do banco (`fn_chat_midias` repete o recorte
+ * da policy): a galeria não mostra o que foi enviado depois da saída.
+ */
+export async function listarMidias(
+  conversaId: string, limite = 120,
+): Promise<MidiaDaConversa[]> {
+  const { data, error } = await rpcSemTipo<MidiaDaConversa[]>('fn_chat_midias', {
+    p_conversa: conversaId,
+    p_limite:   limite,
+  });
+  if (error) {
+    console.warn('[chat/grupos] listarMidias:', error.message);
+    return [];
+  }
+  return (data ?? []).filter(m => !!m.anexo?.url);
 }
 
 /** Tamanho máximo da foto do grupo. Igual ao anexo do chat. */

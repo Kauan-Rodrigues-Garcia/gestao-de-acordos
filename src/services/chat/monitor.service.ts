@@ -70,6 +70,53 @@ export async function listarMonitoraveis(busca?: string): Promise<PessoaMonitora
   return data ?? [];
 }
 
+/**
+ * Uma conversa do setor, vista de fora, para o card «Chats recentes».
+ *
+ * `quem_id` é a pessoa DO MEU ALCANCE que faz a conversa aparecer aqui — é por
+ * ela que a réplica abre, e é o nome que explica ao monitor por que a linha
+ * existe. Sem esse campo o clique não teria por onde entrar: a monitoria é
+ * sempre do ponto de vista de uma pessoa, nunca da conversa solta.
+ */
+export interface ConversaRecente {
+  conversa_id:        string;
+  tipo:               'direta' | 'grupo';
+  titulo:             string;
+  foto_url:           string | null;
+  participantes:      number;
+  ultima_mensagem_em: string | null;
+  ultimo_texto:       string | null;
+  ultimo_anexos:      AnexoChat[] | null;
+  ultimo_autor_id:    string | null;
+  ultimo_autor_nome:  string | null;
+  quem_id:            string | null;
+  quem_nome:          string | null;
+}
+
+/**
+ * As conversas mais recentes dentro do meu alcance de monitoria.
+ *
+ * O alcance é o mesmo de `listarMonitoraveis` — pessoa a pessoa, por
+ * `fn_chat_posso_monitorar`. Isto não abre nada novo: só responde, de uma vez,
+ * a pergunta que antes exigia adivinhar em quem clicar.
+ *
+ * As minhas próprias conversas ficam de fora: elas já estão na minha lista, e
+ * o monitor não é para me ver.
+ */
+export async function listarRecentes(limite = 15): Promise<ConversaRecente[]> {
+  const { data, error } = await rpcSemTipo<ConversaRecente[]>('fn_chat_monitor_recentes', {
+    p_limite: limite,
+  });
+  if (error) {
+    console.warn('[chat/monitor] listarRecentes:', error.message);
+    return [];
+  }
+  return (data ?? []).map(c => ({
+    ...c,
+    ultimo_anexos: Array.isArray(c.ultimo_anexos) ? c.ultimo_anexos : [],
+  }));
+}
+
 export async function listarConversasDe(perfilId: string): Promise<ConversaMonitorada[]> {
   const { data, error } = await rpcSemTipo<ConversaMonitorada[]>('fn_chat_monitor_conversas', {
     p_alvo: perfilId,

@@ -73,8 +73,19 @@ export interface MensagemChat {
    */
   curtida_em:   string | null;
   /**
+   * Quem curtiu POR ÚLTIMO — e só para o aviso ao autor da mensagem.
+   *
+   * Não conta e não desenha o selo: quem faz as duas coisas é `chat_curtidas`,
+   * pelo motivo de sempre (em grupo, uma coluna única apagaria a curtida
+   * anterior em silêncio). O campo voltou em 03/09/2026 porque o UPDATE que
+   * carrega `curtida_em` já viaja pelo Realtime, e é ele que avisa o autor sem
+   * custar consulta nenhuma. Descurtir zera — o aviso é de algo que aconteceu.
+   */
+  curtida_por:  string | null;
+  /**
    * Aviso do sistema no meio da conversa: 'entrou', 'saiu', 'removido',
-   * 'foto', 'nome', 'escrita', 'criou'. `null` é mensagem de gente.
+   * 'promovido', 'rebaixado', 'foto', 'nome', 'escrita', 'criou'. `null` é
+   * mensagem de gente.
    */
   sistema:       string | null;
   sistema_dados: Record<string, unknown> | null;
@@ -140,6 +151,15 @@ export interface ConversaChat {
   sou_admin:          boolean;
   /** Grupo travado: só quem administra escreve. Sempre false na direta. */
   somente_lideranca:  boolean;
+  /**
+   * Saí (ou fui removido) deste grupo, e ainda não apaguei a conversa.
+   *
+   * A linha continua na lista e o histórico ATÉ A SAÍDA continua legível — foi
+   * o pedido. O que ela não é mais é uma conversa: nada de escrever, curtir ou
+   * receber mensagem nova, e o banco recorta isso sozinho (`fn_chat_leio_ate`).
+   * A tela usa o campo para trocar o campo de escrita por um aviso.
+   */
+  sai:                boolean;
 }
 
 export interface ContatoChat {
@@ -273,7 +293,7 @@ export async function listarConversas(): Promise<ConversaChat[]> {
     // Só existem depois da migration 20260901120000; até lá chegam undefined
     // e caem nos padrões de conversa direta lá embaixo.
     tipo?: 'direta' | 'grupo'; participantes?: number;
-    sou_admin?: boolean; somente_lideranca?: boolean;
+    sou_admin?: boolean; somente_lideranca?: boolean; sai?: boolean;
   }[]>('fn_chat_minhas_conversas', {});
 
   if (error) {
@@ -305,6 +325,7 @@ export async function listarConversas(): Promise<ConversaChat[]> {
       participantes:      c.participantes ?? 1,
       sou_admin:          c.sou_admin === true,
       somente_lideranca:  c.somente_lideranca === true,
+      sai:                c.sai === true,
     };
   });
 }
@@ -366,6 +387,8 @@ export async function buscarConversa(
     participantes:      1,
     sou_admin:          false,
     somente_lideranca:  false,
+    // Conversa direta não tem de onde sair: só grupo marca este campo.
+    sai:                false,
     nao_lidas:          0,
     leitura_do_outro:   null,
     entrega_minha:      null,
@@ -426,6 +449,9 @@ async function buscarGrupo(conversaId: string): Promise<ConversaChat | null> {
     participantes:      0,
     sou_admin:          souAdmin === true,
     somente_lideranca:  g.somente_lideranca === true,
+    // Este caminho cobre a conversa recém-aberta, onde ninguém saiu ainda. A
+    // lista corrige no primeiro refresh, com o valor que vem do banco.
+    sai:                false,
   };
 }
 
@@ -446,7 +472,7 @@ export async function listarMensagens(
   conversaId: string, antesDe?: string,
 ): Promise<{ mensagens: MensagemChat[]; temMais: boolean }> {
   let q = db('chat_mensagens')
-    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_em, sistema, sistema_dados')
+    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_em, curtida_por, sistema, sistema_dados')
     .eq('conversa_id', conversaId);
 
   if (antesDe) q = q.lt('criado_em', antesDe);
@@ -600,11 +626,57 @@ export function esbocoDeConversa(id: string, contato: ContatoEscolhido): Convers
     participantes:       1,
     sou_admin:           false,
     somente_lideranca:   false,
+    sai:                 false,
     nao_lidas:           0,
     leitura_do_outro:    null,
     entrega_minha:       null,
     entrega_do_outro:    null,
   };
+}
+
+/**
+ * Eu PARTICIPO desta conversa agora?
+ *
+ * Existe por causa de um vazamento de aviso, não de dado. A RLS de
+ * `chat_mensagens` deixa o monitor LER a conversa alheia — é o objetivo da
+ * monitoria —, e o Realtime respeita a RLS: o cliente de quem monitora recebe
+ * o INSERT de mensagens de conversas de que ele não participa. Ler é o certo;
+ * ser NOTIFICADO não é. Foi assim que a conta de super admin passou a receber
+ * aviso de grupos do play 3 sem estar em nenhum deles.
+ *
+ * A tela pergunta isto antes de tocar o som. `fn_chat_sou_parte` é a mesma
+ * função que autoriza escrever, então a resposta é a definição de participar,
+ * não uma segunda regra que pode divergir.
+ *
+ * O resultado fica em memória: numa rajada de mensagens do mesmo grupo a
+ * pergunta é uma só. O mapa vive enquanto a aba vive — entrar ou sair de um
+ * grupo recarrega a página do chat de qualquer forma.
+ */
+const cacheSouParte = new Map<string, Promise<boolean>>();
+
+export function souParte(conversaId: string): Promise<boolean> {
+  const emCache = cacheSouParte.get(conversaId);
+  if (emCache) return emCache;
+
+  const pergunta = rpcSemTipo<boolean>('fn_chat_sou_parte', { p_conversa: conversaId })
+    .then(({ data, error }) => {
+      if (error) {
+        // Não sabendo, não avisa. Um aviso a menos é um incômodo; um aviso a
+        // mais é a conversa de outra pessoa piscando na tela de quem monitora.
+        console.warn('[chat] souParte:', error.message);
+        cacheSouParte.delete(conversaId);
+        return false;
+      }
+      return data === true;
+    });
+
+  cacheSouParte.set(conversaId, pergunta);
+  return pergunta;
+}
+
+/** Esquece o que foi respondido — usar ao entrar ou sair de uma conversa. */
+export function limparCacheSouParte(): void {
+  cacheSouParte.clear();
 }
 
 /** Abre (ou reabre) a conversa com alguém. Devolve o id, ou o motivo da recusa. */

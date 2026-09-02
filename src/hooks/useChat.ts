@@ -30,7 +30,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   listarConversas, listarMensagens, listarDisparos, buscarConversa,
   marcarEntregue, marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
-  esbocoDeConversa,
+  esbocoDeConversa, souParte,
   type ConversaChat, type MensagemChat, type DisparoChat, type AnexoChat,
   type ContatoEscolhido,
 } from '@/services/chat/chat.service';
@@ -78,6 +78,7 @@ export function useChat(
   ativo: boolean,
   conversaVisivel = true,
   aoMensagemRecebida?: (mensagem: MensagemChat) => void,
+  aoCurtiremMinhaMensagem?: (mensagem: MensagemChat) => void,
 ): UseChat {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
@@ -101,6 +102,19 @@ export function useChat(
   visivelRef.current = conversaVisivel;
   const aoReceberRef = useRef(aoMensagemRecebida);
   aoReceberRef.current = aoMensagemRecebida;
+  const aoCurtidaRef = useRef(aoCurtiremMinhaMensagem);
+  aoCurtidaRef.current = aoCurtiremMinhaMensagem;
+
+  /*
+   * Curtidas já anunciadas, por `id da mensagem + carimbo`.
+   *
+   * O mesmo UPDATE volta pelo Realtime mais de uma vez — reconexão, e o
+   * `onReconectado` que relê a conversa — e sem esta marca o autor levaria o
+   * mesmo «fulano curtiu» duas vezes. O carimbo entra na chave porque uma
+   * segunda curtida na MESMA mensagem é um aviso novo, e só o `curtida_em`
+   * distingue as duas.
+   */
+  const curtidasAvisadas = useRef(new Set<string>());
 
   const recarregar = useCallback(async () => {
     if (!meuId || !ativo) return;
@@ -209,11 +223,28 @@ export function useChat(
               ...msg,
               anexos: Array.isArray(msg.anexos) ? msg.anexos : [],
             };
-            // O segundo check só nasce quando o cliente do destinatário
-            // recebeu de fato o INSERT pelo Realtime.
+            /*
+             * O segundo check só nasce quando o cliente do destinatário
+             * recebeu de fato o INSERT pelo Realtime.
+             *
+             * `souParte` é a trava contra um vazamento de AVISO. A RLS deixa
+             * quem monitora LER a conversa alheia — é o objetivo da monitoria —
+             * e o Realtime respeita a RLS, então o INSERT de uma conversa de
+             * que eu não participo chega aqui. Ler é o certo; ser notificado
+             * não é. Sem esta pergunta, a conta de super admin (que alcança
+             * todo mundo) tocava som e piscava aviso de grupos do play 3 em que
+             * ela nunca esteve.
+             *
+             * Vale também para `marcarEntregue`: carimbar entrega numa conversa
+             * que não é minha é escrever a passagem do monitor onde o operador
+             * a veria.
+             */
             if (payload.eventType === 'INSERT' && msg.autor_id !== meuId) {
-              void marcarEntregue(msg.conversa_id, meuId);
-              aoReceberRef.current?.(normalizada);
+              void souParte(msg.conversa_id).then(sou => {
+                if (!sou) return;
+                void marcarEntregue(msg.conversa_id, meuId);
+                aoReceberRef.current?.(normalizada);
+              });
             }
             // Mensagem da conversa aberta entra direto: aqui o evento é o dado.
             if (msg.conversa_id === abertaRef.current && payload.eventType === 'INSERT') {
@@ -228,6 +259,30 @@ export function useChat(
             // continuaria legível na tela de quem está com ela aberta.
             if (msg.conversa_id === abertaRef.current && payload.eventType === 'UPDATE') {
               setMensagens(atual => atual.map(m => (m.id === msg.id ? { ...m, ...msg } : m)));
+            }
+            /*
+             * Curtiram a MINHA mensagem.
+             *
+             * `fn_chat_curtir` carimba `curtida_em` e grava em `curtida_por`
+             * quem curtiu, e esse UPDATE já viajava pelo Realtime para acordar
+             * o selo do coração. O aviso pega carona nele: nenhuma consulta a
+             * mais, nenhuma tabela a mais.
+             *
+             * As três condições são todas necessárias. `autor_id === meuId`
+             * porque o aviso é do autor. `curtida_por` preenchido porque
+             * descurtir zera o campo, e ninguém quer «fulano curtiu» quando
+             * fulano acabou de descurtir. E `!== meuId` porque curtir a própria
+             * mensagem é uma coisa que se faz de propósito, olhando para a tela.
+             */
+            if (payload.eventType === 'UPDATE'
+                && msg.autor_id === meuId
+                && msg.curtida_por
+                && msg.curtida_por !== meuId) {
+              const marca = `${msg.id}:${msg.curtida_em ?? ''}`;
+              if (!curtidasAvisadas.current.has(marca)) {
+                curtidasAvisadas.current.add(marca);
+                aoCurtidaRef.current?.(normalizada);
+              }
             }
             agendarRefazer();
             return;
