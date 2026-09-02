@@ -1075,22 +1075,29 @@ export interface PixAutoMeta {
  * quem exibe — guardar o total do setor também deixaria dois números para a
  * mesma verdade, e um deles ficaria velho.
  *
+ * `setorId` NULO devolve as metas de todos os setores da empresa no mês. É o que
+ * a tela pede quando quem olha escolheu «Todos os setores»: sem isso o painel
+ * de metas simplesmente não existia para o super admin que não filtrou — a
+ * consulta exigia um setor que ninguém tinha escolhido. Cada linha carrega o
+ * próprio `setor_id`, então quem exibe agrupa sem uma segunda ida ao banco.
+ *
  * Tolera a migration ausente (tabela inexistente → lista vazia), no mesmo
  * padrão de `fetchNrsBloqueados`: o recurso some, o resto da tela segue.
  */
 export async function fetchMetasPixEquipes(
   empresaId: string,
-  setorId: string,
+  setorId: string | null,
   mes: number,
   ano: number,
 ): Promise<PixAutoMeta[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('pix_automatico_metas')
     .select('*')
     .eq('empresa_id', empresaId)
-    .eq('setor_id', setorId)
     .eq('mes', mes)
     .eq('ano', ano);
+  if (setorId) q = q.eq('setor_id', setorId);
+  const { data, error } = await q;
   if (error) {
     console.warn('[pix_automatico.service] fetchMetasPixEquipes:', error.message);
     return [];

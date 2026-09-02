@@ -109,6 +109,8 @@ import { PixSaldoPainel } from './PixSaldoPainel';
 import { PixPainelPremiacoes } from './PixPainelPremiacoes';
 import { PixPedidosNr } from './PixPedidosNr';
 import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
+import { chaveDeCache, gravarInstantaneo, valorInstantaneo } from '@/lib/cacheInstantaneo';
+import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { LinhaViva } from '@/components/LinhaViva';
 import { AnimatePresence } from 'framer-motion';
@@ -125,6 +127,31 @@ function conjuntosIguais(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false;
   for (const x of a) if (!b.has(x)) return false;
   return true;
+}
+
+/**
+ * Equipe com o setor a que pertence.
+ *
+ * O `setor_id` não é enfeite: a consulta traz as equipes da EMPRESA para quem
+ * enxerga mais de um setor, e sem ele não há como responder «quais são as
+ * equipes do Play 3» depois que a lista já chegou.
+ */
+interface EquipeComSetor { id: string; nome: string; setor_id: string | null }
+
+/**
+ * A última resposta da aba, guardada para a volta não custar um esqueleto.
+ *
+ * Só o que a tela PINTA. Nada de estado de edição, seleção ou carregamento:
+ * reabrir com um diálogo pela metade seria pior que reabrir vazio.
+ */
+interface InstantaneoPix {
+  itens: PixAutoAcordo[];
+  configs: Record<string, PixAutoConfig>;
+  operadores: OperadorInfo[];
+  equipes: EquipeComSetor[];
+  setores: { id: string; nome: string }[];
+  saldos: PixAutoSaldo[];
+  pagamentos: PixPremiacaoPagamento[];
 }
 
 const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
@@ -221,23 +248,70 @@ export function PixAutomatico() {
    */
   const podeAjustarSaldo = podeVerDeOutros && temPermissao('pix_ajustar_saldo');
 
-  const [itens, setItens]           = useState<PixAutoAcordo[]>([]);
-  const [configs, setConfigs]       = useState<Record<string, PixAutoConfig>>({});
-  const [operadores, setOperadores] = useState<OperadorInfo[]>([]);
-  const [equipes, setEquipes]       = useState<{ id: string; nome: string }[]>([]);
-  const [setores, setSetores]       = useState<{ id: string; nome: string }[]>([]);
-  const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
-  const [saldos, setSaldos]         = useState<PixAutoSaldo[]>([]);
-  const [pagamentosPremiacao, setPagamentosPremiacao] = useState<PixPremiacaoPagamento[]>([]);
-  const [alterandoPremiacaoId, setAlterandoPremiacaoId] = useState<string | null>(null);
-  const [ajustandoId, setAjustandoId] = useState<string | null>(null);
-  const [loading, setLoading]       = useState(true);
-
   /*
    * O mês da aba é o do sistema (`MesProvider`) — o mesmo que o Dashboard e o
    * Analítico mostram. Ver o cabeçalho deste arquivo.
+   *
+   * Fica ANTES dos estados porque a chave do instantâneo precisa dele: sem o
+   * mês na chave, voltar para a aba em setembro pintaria a lista de agosto.
    */
   const { mes, setMes } = useMesGlobal();
+
+  const meuSetor = perfil?.setor_id ?? null;
+  /**
+   * Setor a que o líder está preso.
+   *
+   * A RLS do Pix libera o líder para a EMPRESA inteira, não para o setor dele —
+   * então a tela puxava acordos, operadores e equipes de todos os setores, e o
+   * líder do Receptivo via "Digital Amauri", "Isabela" e companhia no filtro de
+   * equipes. Cargo multi-setor (gerência, diretoria, admin) continua vendo tudo
+   * e escolhendo no filtro de setor; líder/elite ficam no próprio.
+   *
+   * O fix 54ba8ea do repositório resolveu o mesmo problema com o nome
+   * `setorEscopo`; as duas expressões eram idênticas e ficou esta, que já
+   * era aplicada também nas consultas de perfis/equipes/setores.
+   */
+  const setorEscopo = podeVerDeOutros && !podeVerTodosSetores ? meuSetor : null;
+
+  /**
+   * A última resposta desta aba, para a volta não custar um esqueleto.
+   *
+   * Sair do Pix, abrir o Analítico e voltar desmontava tudo: a tela renascia
+   * vazia, ligava `loading`, pintava o esqueleto por 400 ms e no fim mostrava
+   * exatamente os mesmos números. Quem estava conferindo NR a NR perdia o lugar
+   * a cada ida e volta — a queixa de 02/09/2026.
+   *
+   * Só memória (`persistir` fica no padrão `false` de `gravarInstantaneo`): a
+   * lista tem centenas de linhas e serializá-la não pagaria o custo. Memória já
+   * resolve a navegação, que é o caso que importa. Ver `cacheInstantaneo`.
+   */
+  const chaveDados = chaveDeCache(
+    'pix-auto-dados', empresa?.id, perfil?.id, setorEscopo, mes,
+  );
+  const guardado = valorInstantaneo<InstantaneoPix>(chaveDados);
+
+  const [itens, setItens]           = useState<PixAutoAcordo[]>(() => guardado?.itens ?? []);
+  const [configs, setConfigs]       = useState<Record<string, PixAutoConfig>>(() => guardado?.configs ?? {});
+  const [operadores, setOperadores] = useState<OperadorInfo[]>(() => guardado?.operadores ?? []);
+  /*
+   * `setor_id` viaja junto, e é ele que faz o recorte por setor existir.
+   *
+   * Sem a coluna, quem escolhia «Play 3» no filtro continuava vendo as equipes
+   * de todos os setores no painel de metas e no seletor de equipe — a lista
+   * vinha da empresa inteira e não havia como estreitá-la depois.
+   */
+  const [equipes, setEquipes]       = useState<EquipeComSetor[]>(() => guardado?.equipes ?? []);
+  const [setores, setSetores]       = useState<{ id: string; nome: string }[]>(() => guardado?.setores ?? []);
+  const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
+  const [saldos, setSaldos]         = useState<PixAutoSaldo[]>(() => guardado?.saldos ?? []);
+  const [pagamentosPremiacao, setPagamentosPremiacao] = useState<PixPremiacaoPagamento[]>(
+    () => guardado?.pagamentos ?? [],
+  );
+  const [alterandoPremiacaoId, setAlterandoPremiacaoId] = useState<string | null>(null);
+  const [ajustandoId, setAjustandoId] = useState<string | null>(null);
+  // Já houve resposta para este recorte? Então não há esqueleto a pintar.
+  const [loading, setLoading]       = useState(() => guardado == null);
+
   const noMesAtual = ehMesAtual(mes);
   const inicioDoMes = primeiroDiaDoMes(mes);
   const fimDoMes    = ultimoDiaDoMes(mes);
@@ -265,18 +339,32 @@ export function PixAutomatico() {
   const [vinculoOp, setVinculoOp]       = useState<OperadorInfo | null>(null);
   const [vinculoAberto, setVinculoAberto] = useState(false);
 
-  // Filtros (líder)
-  const [busca, setBusca]                   = useState('');
-  const [filtroStatus, setFiltroStatus]     = useState<'todos' | PixAutoStatus>('todos');
-  const [filtroOperador, setFiltroOperador] = useState('');
-  const [filtroEquipe, setFiltroEquipe]     = useState('');
-  const [filtroSetor, setFiltroSetor]       = useState('');
+  /*
+   * ── Filtros (líder) ───────────────────────────────────────────────────────
+   *
+   * Lembrados entre montagens, e não `useState` puro.
+   *
+   * Sair da aba para conferir um NR, abrir o Analítico, voltar — e a tela
+   * reabria com a busca vazia, o status em «todos» e o período limpo. Quem
+   * estava validando uma lista nome a nome recomeçava do zero a cada ida e
+   * volta, que era a queixa de 02/09/2026.
+   *
+   * A chave leva empresa e perfil: o depósito é por aba do navegador, e trocar
+   * de conta na mesma aba é um caminho real — o filtro de uma pessoa não pode
+   * reaparecer na sessão da próxima.
+   */
+  const chaveAba = chaveDeCache('pix-auto', empresa?.id, perfil?.id);
+  const [busca, setBusca]                   = useEstadoLembrado(`${chaveAba}|busca`, '');
+  const [filtroStatus, setFiltroStatus]     = useEstadoLembrado<'todos' | PixAutoStatus>(`${chaveAba}|status`, 'todos');
+  const [filtroOperador, setFiltroOperador] = useEstadoLembrado(`${chaveAba}|operador`, '');
+  const [filtroEquipe, setFiltroEquipe]     = useEstadoLembrado(`${chaveAba}|equipe`, '');
+  const [filtroSetor, setFiltroSetor]       = useEstadoLembrado(`${chaveAba}|setor`, '');
   // Pagamento e período — os dois valem para operador e líder: o operador
   // precisa saber o que já caiu, o líder precisa achar o que registrou na
   // semana passada sem rolar a lista inteira.
-  const [filtroPagamento, setFiltroPagamento] = useState<FiltroPagamento>('todos');
-  const [dataDe, setDataDe]   = useState('');
-  const [dataAte, setDataAte] = useState('');
+  const [filtroPagamento, setFiltroPagamento] = useEstadoLembrado<FiltroPagamento>(`${chaveAba}|pagamento`, 'todos');
+  const [dataDe, setDataDe]   = useEstadoLembrado(`${chaveAba}|data-de`, '');
+  const [dataAte, setDataAte] = useEstadoLembrado(`${chaveAba}|data-ate`, '');
 
   // Config % (líder)
   const [pctInput, setPctInput]     = useState('');
@@ -332,25 +420,56 @@ export function PixAutomatico() {
   const [editValor, setEditValor]       = useState('');
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
-  const meuSetor = perfil?.setor_id ?? null;
   // Setor cuja configuração (% e interruptor) está em edição: multi-setor usa o
   // filtro de setor; líder/elite sempre o próprio setor.
   const setorConfig = podeVerTodosSetores ? (filtroSetor || meuSetor) : meuSetor;
 
   /**
-   * Setor a que o líder está preso.
+   * O setor que a tela está OLHANDO. `null` = todos.
    *
-   * A RLS do Pix libera o líder para a EMPRESA inteira, não para o setor dele —
-   * então a tela puxava acordos, operadores e equipes de todos os setores, e o
-   * líder do Receptivo via "Digital Amauri", "Isabela" e companhia no filtro de
-   * equipes. Cargo multi-setor (gerência, diretoria, admin) continua vendo tudo
-   * e escolhendo no filtro de setor; líder/elite ficam no próprio.
+   * Não é o mesmo que `setorConfig`, e a diferença é o defeito que esta linha
+   * conserta. `setorConfig` cai no próprio setor quando ninguém filtrou, porque
+   * editar o percentual precisa de um alvo concreto. Para o RECORTE isso mente:
+   * um super admin com «Todos os setores» escolhido, mas com setor no cadastro,
+   * teria as listas estreitadas ao setor dele sem ter pedido.
    *
-   * O fix 54ba8ea do repositório resolveu o mesmo problema com o nome
-   * `setorEscopo`; as duas expressões eram idênticas e ficou esta, que já
-   * era aplicada também nas consultas de perfis/equipes/setores.
+   * Aqui, quem escolhe setor vê exatamente o que escolheu — inclusive «todos»,
+   * que é uma escolha e não uma ausência.
    */
-  const setorEscopo = podeVerDeOutros && !podeVerTodosSetores ? meuSetor : null;
+  const setorFoco = podeVerTodosSetores ? (filtroSetor || null) : meuSetor;
+
+  /**
+   * As equipes do setor em foco.
+   *
+   * A consulta traz a empresa inteira para quem enxerga mais de um setor, e sem
+   * este recorte filtrar «Play 3» deixava no painel de metas e no seletor de
+   * equipe as equipes de todos os setores — o defeito relatado em 02/09/2026.
+   *
+   * Equipe sem setor cadastrado fica de fora de qualquer recorte: ela não
+   * pertence a setor nenhum, e colocá-la em todos seria pior que omiti-la.
+   */
+  const equipesDoFoco = useMemo(
+    () => (setorFoco ? equipes.filter(e => e.setor_id === setorFoco) : equipes),
+    [equipes, setorFoco],
+  );
+
+  /*
+   * Trocar de setor solta a equipe escolhida no setor anterior.
+   *
+   * Sem isto, escolher «Play 3» com uma equipe do Receptivo ainda selecionada
+   * cruzaria dois recortes impossíveis e devolveria lista vazia — parecendo
+   * «não há acordos» quando o filtro é que era contraditório. O seletor nem
+   * mostraria a equipe culpada, porque ela já não está na lista do setor novo.
+   *
+   * Só age quando a equipe some da lista: enquanto ela pertencer ao foco, a
+   * escolha de quem está olhando fica de pé.
+   */
+  useEffect(() => {
+    if (!filtroEquipe) return;
+    if (equipes.length === 0) return;   // listas ainda não chegaram
+    if (equipesDoFoco.some(e => e.id === filtroEquipe)) return;
+    setFiltroEquipe('');
+  }, [filtroEquipe, equipes, equipesDoFoco, setFiltroEquipe]);
 
   const pctPorSetor = useMemo(() => {
     const m: Record<string, number> = {};
@@ -388,8 +507,13 @@ export function PixAutomatico() {
    * Agora o esqueleto vale para a primeira carga e para a troca de escopo. A
    * releitura das ações passa por `reconciliarLista`: só a linha que mudou é
    * substituída, e as outras 99 mantêm a mesma referência.
+   *
+   * «Primeira carga» é a primeira DESTE recorte, e não a primeira montagem: com
+   * um instantâneo em mãos a tela já está pintada, e ligar `loading` para
+   * substituí-la por barras cinzas seria desfazer o que o instantâneo veio
+   * fazer.
    */
-  const primeiraCargaPix = useRef(true);
+  const primeiraCargaPix = useRef(guardado == null);
 
   const carregar = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
@@ -447,12 +571,16 @@ export function PixAutomatico() {
       // dele re-renderizaria a cada ação, com o mesmo conteúdo dentro.
       setNrsBloqueados(atual => conjuntosIguais(atual, bloqueados) ? atual : bloqueados);
 
+      let listaOps: OperadorInfo[] = [];
+      let listaEqs: EquipeComSetor[] = [];
+      let listaSets: { id: string; nome: string }[] = [];
+
       if (podeVerDeOutros) {
         // Nomes/equipes/setores para filtros, vínculo e coluna Operador.
         // Presos ao setor do líder — ver `setorEscopo`.
         let qOps = supabase.from('perfis').select('id, nome, equipe_id, setor_id, perfil')
           .eq('empresa_id', empresa.id);
-        let qEqs = supabase.from('equipes').select('id, nome')
+        let qEqs = supabase.from('equipes').select('id, nome, setor_id')
           .eq('empresa_id', empresa.id);
         let qSets = supabase.from('setores').select('id, nome')
           .eq('empresa_id', empresa.id);
@@ -464,22 +592,57 @@ export function PixAutomatico() {
         const [{ data: ops }, { data: eqs }, { data: sets }] = await Promise.all([
           qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
         ]);
-        setOperadores(atual => reconciliarLista(
-          atual, (ops ?? []) as OperadorInfo[], { chave: o => o.id }));
-        setEquipes(atual => reconciliarLista(
-          atual, (eqs ?? []) as { id: string; nome: string }[], { chave: e => e.id }));
-        setSetores(atual => reconciliarLista(
-          atual, (sets ?? []) as { id: string; nome: string }[], { chave: x => x.id }));
+        listaOps  = (ops  ?? []) as OperadorInfo[];
+        listaEqs  = (eqs  ?? []) as EquipeComSetor[];
+        listaSets = (sets ?? []) as { id: string; nome: string }[];
+        setOperadores(atual => reconciliarLista(atual, listaOps, { chave: o => o.id }));
+        setEquipes(atual => reconciliarLista(atual, listaEqs, { chave: e => e.id }));
+        setSetores(atual => reconciliarLista(atual, listaSets, { chave: x => x.id }));
       }
+
+      // O retrato para a próxima montagem. Ver `chaveDados`.
+      gravarInstantaneo<InstantaneoPix>(chaveDados, {
+        itens: lista,
+        configs: mapa,
+        operadores: listaOps,
+        equipes: listaEqs,
+        setores: listaSets,
+        saldos: saldosDoEscopo,
+        pagamentos: pagamentos as PixPremiacaoPagamento[],
+      });
     } finally {
       if (comEsqueleto) setLoading(false);
       primeiraCargaPix.current = false;
     }
-  }, [empresa?.id, perfil?.id, podeVerDeOutros, setorEscopo, mes]);
+  }, [empresa?.id, perfil?.id, podeVerDeOutros, setorEscopo, mes, chaveDados]);
 
-  // Escopo novo (outro setor, outra empresa) é conteúdo novo: a lista em tela
-  // é de outro recorte, e mantê-la seria apresentá-la como resposta do filtro.
-  useEffect(() => { primeiraCargaPix.current = true; }, [empresa?.id, setorEscopo]);
+  /*
+   * Recorte novo (outro mês, outro setor, outra empresa) é conteúdo novo.
+   *
+   * Duas saídas, e a diferença entre elas é ter ou não um retrato do recorte
+   * NOVO. Com retrato, a tela troca para ele na hora e a rede corrige em
+   * silêncio. Sem retrato, o esqueleto volta — porque o que está pintado é a
+   * resposta de OUTRA pergunta, e deixá-lo no lugar seria apresentá-lo como
+   * resposta desta.
+   *
+   * A primeira execução não faz nada de novo: os estados já nasceram com o
+   * mesmo retrato, e reaplicá-lo devolveria os mesmos objetos.
+   */
+  useEffect(() => {
+    const retrato = valorInstantaneo<InstantaneoPix>(chaveDados);
+    primeiraCargaPix.current = retrato == null;
+    if (!retrato) return;
+    setItens(atual => reconciliarLista(atual, retrato.itens, { chave: i => i.id }));
+    setConfigs(atual => reconciliarMapa(atual, retrato.configs));
+    setOperadores(atual => reconciliarLista(atual, retrato.operadores, { chave: o => o.id }));
+    setEquipes(atual => reconciliarLista(atual, retrato.equipes, { chave: e => e.id }));
+    setSetores(atual => reconciliarLista(atual, retrato.setores, { chave: s => s.id }));
+    setSaldos(atual => reconciliarLista(atual, retrato.saldos, { chave: s => s.id }));
+    setPagamentosPremiacao(atual => reconciliarLista(
+      atual, retrato.pagamentos, { chave: p => String(p.id) },
+    ));
+    setLoading(false);
+  }, [chaveDados]);
 
   /*
    * A primeira pintura da tabela não anima.
@@ -544,14 +707,21 @@ export function PixAutomatico() {
   // Metas de Pix das EQUIPES do setor em foco. A meta do setor é a soma
   // delas — não existe uma linha "do setor" para carregar.
   const carregarMetaPix = useCallback(async () => {
-    if (!empresa?.id || !setorConfig) { setMetasPix([]); return; }
+    if (!empresa?.id) { setMetasPix([]); return; }
+    /*
+     * `setorFoco` nulo lê TODOS os setores, e não nenhum.
+     *
+     * Era `if (!setorConfig) return []`, e por isso o painel de metas não
+     * existia para o super admin sem setor no cadastro: ele nunca escolhia um
+     * setor, a leitura desistia, e a tela não tinha o que mostrar.
+     */
     // A meta é gravada POR MÊS. Ler sempre o mês de hoje foi o que fez a meta
     // de agosto "sumir" no dia 1º de setembro: ela nunca saiu do banco — a
     // tela é que passou a perguntar por outro mês.
     const { ano, mes: mesNum } = partesDoMes(mes);
-    const metas = await fetchMetasPixEquipes(empresa.id, setorConfig, mesNum, ano);
+    const metas = await fetchMetasPixEquipes(empresa.id, setorFoco, mesNum, ano);
     setMetasPix(metas);
-  }, [empresa?.id, setorConfig, mes]);
+  }, [empresa?.id, setorFoco, mes]);
 
   useEffect(() => { void carregarMetaPix(); }, [carregarMetaPix]);
 
@@ -721,24 +891,67 @@ export function PixAutomatico() {
   // o operador só tem os próprios, então o painel fica restrito a líder+ —
   // "faltam X para o setor" calculado só com as linhas de uma pessoa seria
   // um número errado apresentado como certo.
-  const consolidadoMetaPix = useMemo(() => {
-    if (!podeVerDeOutros) return null;
+  /**
+   * Um bloco de meta por SETOR em foco.
+   *
+   * Com um setor escolhido a lista tem um item, que é o que a tela sempre
+   * mostrou. Com «Todos os setores», ela tem um por setor — e é isso que faz o
+   * painel finalmente existir para o super admin sem setor no cadastro.
+   *
+   * Os acordos de cada bloco são recortados pelo `setor_id` da própria linha.
+   * Passar `itens` inteiro devolveria, no «Total do setor», a soma da empresa
+   * embaixo do nome de um setor só: um número errado apresentado como certo,
+   * que é exatamente o que este painel existe para não fazer.
+   *
+   * A exceção é o líder preso a um setor: ali a CONSULTA já recortou, e filtrar
+   * de novo por `setor_id` tiraria do total as linhas que estão com o carimbo
+   * vazio — dinheiro que sempre contou, sumindo por causa de uma correção que
+   * não era sobre ele.
+   */
+  const blocosMetaPix = useMemo(() => {
+    if (!podeVerDeOutros) return [];
+    const recortarPorSetor = setorEscopo == null;
     const nomeEquipe = new Map(equipes.map(e => [e.id, e.nome]));
-    return calcularMetaPixPorEquipe({
-      itens,
-      metas: metasPix
-        .filter(m => m.equipe_id)
-        .map(m => ({
-          equipeId:    m.equipe_id!,
-          equipeNome:  nomeEquipe.get(m.equipe_id!) ?? 'Equipe',
-          metaValor:   Number(m.meta_valor)   || 0,
-          metaAcordos: Number(m.meta_acordos) || 0,
-        })),
-      equipePorOperador: operadorEquipe,
-      configMes,
-      mes, hojeISO: getTodayISO(),
-    });
-  }, [podeVerDeOutros, itens, metasPix, equipes, operadorEquipe, configMes, mes]);
+    const nomeSetor  = new Map(setores.map(s => [s.id, s.nome]));
+
+    // Quais setores desenhar: o escolhido, ou todos os que têm equipe ou meta.
+    const ids = setorFoco
+      ? [setorFoco]
+      : [...new Set([
+          ...equipes.map(e => e.setor_id).filter((s): s is string => !!s),
+          ...metasPix.map(m => m.setor_id),
+        ])].sort((a, b) =>
+          (nomeSetor.get(a) ?? '').localeCompare(nomeSetor.get(b) ?? '', 'pt-BR'));
+
+    return ids.map(sid => ({
+      setorId: sid,
+      nome: nomeSetor.get(sid) ?? 'Setor',
+      equipes: equipes.filter(e => e.setor_id === sid),
+      metasAtuais: Object.fromEntries(
+        metasPix
+          .filter(m => m.setor_id === sid && m.equipe_id)
+          .map(m => [
+            m.equipe_id!,
+            { valor: Number(m.meta_valor) || 0, acordos: Number(m.meta_acordos) || 0 },
+          ]),
+      ),
+      consolidado: calcularMetaPixPorEquipe({
+        itens: recortarPorSetor ? itens.filter(i => i.setor_id === sid) : itens,
+        metas: metasPix
+          .filter(m => m.setor_id === sid && m.equipe_id)
+          .map(m => ({
+            equipeId:    m.equipe_id!,
+            equipeNome:  nomeEquipe.get(m.equipe_id!) ?? 'Equipe',
+            metaValor:   Number(m.meta_valor)   || 0,
+            metaAcordos: Number(m.meta_acordos) || 0,
+          })),
+        equipePorOperador: operadorEquipe,
+        configMes,
+        mes, hojeISO: getTodayISO(),
+      }),
+    }));
+  }, [podeVerDeOutros, itens, metasPix, equipes, setores, setorFoco, setorEscopo,
+      operadorEquipe, configMes, mes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
@@ -1007,14 +1220,23 @@ export function PixAutomatico() {
   // ── Meta de Pix do setor (líder+) ─────────────────────────────────────────
   // Parâmetros não se chamam `metaValor`: esse nome já é o estado da meta de
   // RECEBIMENTO do operador (card de bônus), e sombreá-lo aqui é convite a erro.
-  async function salvarMetaPix(equipeId: string, valorAlvo: number, acordosAlvo: number) {
-    if (!empresa?.id || !perfil?.id || !setorConfig) return;
+  /*
+   * O setor vem por parâmetro, e não de `setorConfig`.
+   *
+   * Com «Todos os setores» a tela desenha um bloco por setor, e cada bloco tem
+   * de gravar no SEU. Lendo `setorConfig` aqui, salvar a meta da equipe do Play
+   * 3 gravaria no setor do cadastro de quem clicou.
+   */
+  async function salvarMetaPix(
+    setorId: string, equipeId: string, valorAlvo: number, acordosAlvo: number,
+  ) {
+    if (!empresa?.id || !perfil?.id || !setorId) return;
     const { ano, mes: mesNum } = partesDoMes(mes);
     setSalvandoMetaPix(true);
     try {
       const { ok, error } = await upsertMetaPixEquipe({
         empresaId: empresa.id,
-        setorId: setorConfig,
+        setorId,
         equipeId,
         mes: mesNum,
         ano,
@@ -1691,23 +1913,20 @@ export function PixAutomatico() {
       {/* ── Meta de Pix do setor (líder+): quanto falta e projeção ──
           Não se mistura com a meta de recebimento: o valor do Pix já entra no
           recebimento pelo analítico, e somar de novo contaria duas vezes. */}
-      {!loading && podeVerDeOutros && setorConfig && (
+      {!loading && podeVerDeOutros && blocosMetaPix.map(b => (
         <PixMetaPainel
-          consolidado={consolidadoMetaPix}
-          nomeSetor={setores.find(s => s.id === setorConfig)?.nome}
-          equipes={equipes}
-          metasAtuais={Object.fromEntries(
-            metasPix.filter(m => m.equipe_id).map(m => [
-              m.equipe_id!,
-              { valor: Number(m.meta_valor) || 0, acordos: Number(m.meta_acordos) || 0 },
-            ]),
-          )}
+          key={b.setorId}
+          consolidado={b.consolidado}
+          nomeSetor={b.nome}
+          equipes={b.equipes}
+          metasAtuais={b.metasAtuais}
           podeEditar={podeEditarConfig}
           salvando={salvandoMetaPix}
-          onSalvar={salvarMetaPix}
+          onSalvar={(equipeId, valor, acordos) =>
+            salvarMetaPix(b.setorId, equipeId, valor, acordos)}
           parseValor={parseCurrencyInput}
         />
-      )}
+      ))}
 
       {/* ── NRs duplicados esperando decisão ──
           No topo da área de painéis: é fila de trabalho, e fila que fica
@@ -1736,6 +1955,8 @@ export function PixAutomatico() {
           pagamentos={pagamentosPremiacao}
           podeMarcarPago={podeMarcarPremiacaoPaga}
           alterandoOperadorId={alterandoPremiacaoId}
+          // Aberto/fechado, busca e recorte sobrevivem a sair da aba e voltar.
+          chaveEstado={`${chaveAba}|premiacoes`}
           onMarcarPago={alternarPremiacaoPaga}
         />
       )}
@@ -1901,9 +2122,11 @@ export function PixAutomatico() {
               <SelectTrigger className="h-9 w-40 text-xs rounded-lg">
                 <Layers className="w-3 h-3 mr-1 shrink-0" /><SelectValue />
               </SelectTrigger>
+              {/* Só as equipes do setor em foco — escolher «Play 3» e continuar
+                  vendo as equipes de todos os setores era o defeito relatado. */}
               <SelectContent>
                 <SelectItem value="__todas__">Todas as equipes</SelectItem>
-                {equipes.map(eq => <SelectItem key={eq.id} value={eq.id}>{eq.nome}</SelectItem>)}
+                {equipesDoFoco.map(eq => <SelectItem key={eq.id} value={eq.id}>{eq.nome}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filtroOperador || '__todos__'}
