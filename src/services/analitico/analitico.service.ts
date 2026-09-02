@@ -1826,6 +1826,11 @@ interface LinhaComposicaoLider {
   ordem: number | null;
 }
 
+interface LinhaComposicaoSetor {
+  setor_id: string;
+  nome: string;
+}
+
 /** O que o card precisa para desenhar um avatar de líder. */
 export interface LiderDoRetrato {
   nome: string;
@@ -1884,6 +1889,31 @@ export async function buscarLideresDoRetrato(
     if (!p) continue;
     (saida[l.equipe_id] ??= []).push({ nome: p.nome, foto_url: p.foto_url });
   }
+  return saida;
+}
+
+/**
+ * O nome de cada setor NAQUELE mês — do retrato, não de hoje.
+ *
+ * O `setor_id` do retrato sempre esteve certo; o RÓTULO é que saía de `setores`
+ * ao vivo e viajava no tempo. O setor "Amauri Digital" virou "Marília Digital"
+ * em 01/09/2026, e agosto passou a exibir um nome que não existiu no mês inteiro
+ * que estava sendo mostrado.
+ *
+ * `null` = sem retrato de setor para o mês → quem chama usa os nomes de hoje,
+ * que é o comportamento antigo.
+ */
+export async function buscarSetoresDoRetrato(
+  empresaId: string, mes: string,
+): Promise<Record<string, string> | null> {
+  const { data, error } = await tabelaSemTipo<LinhaComposicaoSetor>('composicao_mes_setor')
+    .select('setor_id, nome')
+    .eq('empresa_id', empresaId).eq('mes', mes);
+
+  if (error || !data?.length) return null;
+
+  const saida: Record<string, string> = {};
+  for (const s of data) saida[s.setor_id] = s.nome;
   return saida;
 }
 

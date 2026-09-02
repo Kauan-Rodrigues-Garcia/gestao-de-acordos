@@ -40,7 +40,7 @@ import {
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
   mapaSetorDaEquipe, setoresDoOperador, operadoresDaEquipe, operadoresDoSetor,
-  buscarLideresDoRetrato,
+  buscarLideresDoRetrato, buscarSetoresDoRetrato,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
@@ -510,7 +510,8 @@ export function DesempenhoEquipes({
          * `null` = retrato de liderança ausente (mês anterior à migration
          * `20260903340000`) → cai no caminho ao vivo, que é o de antes.
          */
-        const doRetrato = ehMesAtual(mes) ? null : await buscarLideresDoRetrato(empresaId, mes);
+        const fechado = !ehMesAtual(mes);
+        const doRetrato = fechado ? await buscarLideresDoRetrato(empresaId, mes) : null;
         if (cancelado) return;
         setLideres(doRetrato ?? lideresDaEquipe({
           lideres:    (lideresData as PerfilLider[]) ?? [],
@@ -523,7 +524,21 @@ export function DesempenhoEquipes({
           sMap[s.id] = s.nome;
           fMap[s.id] = s.foto_url ?? null;
         }
-        setSetores(sMap);
+        /*
+         * Mês fechado usa o NOME do setor daquele mês.
+         *
+         * O `setor_id` sempre esteve certo — o rótulo é que saía de `setores`
+         * ao vivo. "Amauri Digital" virou "Marília Digital" em 01/09/2026, e
+         * agosto passou a mostrar um nome que não existiu no mês inteiro que
+         * estava na tela.
+         *
+         * Sobrepõe em vez de substituir: um setor criado depois não está no
+         * retrato, e sem o mapa de hoje por baixo ele ficaria "Sem setor" —
+         * ninguém ganha nada trocando um nome novo por nenhum.
+         */
+        const setoresDoMes = fechado ? await buscarSetoresDoRetrato(empresaId, mes) : null;
+        if (cancelado) return;
+        setSetores(setoresDoMes ? { ...sMap, ...setoresDoMes } : sMap);
         setSetorFotos(fMap);
         // `data` nulo = migration 20260805a pendente; o card só fica sem foto.
         const rMap: Record<string, string | null> = {};

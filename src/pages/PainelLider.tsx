@@ -29,7 +29,7 @@ import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_LIDERANCA_AJUSTE } from '@/lib
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import {
-  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
+  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarSetoresDoRetrato,
   buscarTotalOrfaosPorSetor, buscarTotalPorSetor,
   mapaSetorDaEquipe, operadoresDoSetor, operadoresDaEquipe,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
@@ -378,6 +378,18 @@ export default function PainelLider() {
       setSetoresLista(aplicarOrdemSetores(lista, empresa.id));
       setAnaliticoSetoresAlt(alt);
       setLoadingAnalitico(false);
+
+      // Mês fechado: o seletor mostra o NOME daquele mês, igual ao card.
+      // Sem isto o filtro dizia "Marília Digital" e o card dizia "Amauri
+      // Digital" — o mesmo setor com dois nomes na mesma tela.
+      if (!ehMesAtualRef(mesStr)) {
+        void buscarSetoresDoRetrato(empresa.id, mesStr).then(doMes => {
+          if (cancel || !doMes) return;
+          setSetoresLista(aplicarOrdemSetores(
+            lista.map(s => ({ ...s, nome: doMes[s.id] ?? s.nome })), empresa.id,
+          ));
+        });
+      }
     });
     return () => { cancel = true; };
   }, [mostrarAbasAnaliticas, empresa?.id, mesStr, diarioReloadKey]);
