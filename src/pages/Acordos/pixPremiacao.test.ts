@@ -142,20 +142,35 @@ describe('premiacaoDoOperador — o que já saiu', () => {
   });
 });
 
+/*
+ * ── O painel lista SÓ quem dobrou ─────────────────────────────────────────
+ *
+ * O critério mudou em 02/09/2026, a pedido: era «tem premiação ou pagamento no
+ * mês», e isso fazia o painel repetir a tabela do Pix automático com outro
+ * desenho. O pagamento de quem não dobrou já é controlado linha a linha lá; a
+ * dobra é a única coisa que não tem onde ser carimbada, e é ela que fica aqui.
+ */
 describe('painelPremiacoes', () => {
-  it('lista quem tem a receber e ordena por quem falta mais', () => {
+  it('lista quem dobrou e ordena por quem falta mais', () => {
     const itens = [
-      acordo({ id: 'a-1', operador_id: 'ana',   operador_nome: 'Ana',   valor: 4000 }),
-      acordo({ id: 'a-2', operador_id: 'bruno', operador_nome: 'Bruno', valor: 9000 }),
+      ...Array.from({ length: 20 }, (_, i) =>
+        acordo({ id: `ana-${i}`, operador_id: 'ana', operador_nome: 'Ana', valor: 4000 })),
+      ...Array.from({ length: 20 }, (_, i) =>
+        acordo({ id: `bru-${i}`, operador_id: 'bruno', operador_nome: 'Bruno', valor: 9000 })),
     ];
-    const linhas = painelPremiacoes({ itens, pctPorSetor: PCT, mes: MES });
+    const linhas = painelPremiacoes({
+      itens, pctPorSetor: PCT, mes: MES,
+      metaPorOperador: { ana: META_BATIDA, bruno: META_BATIDA },
+    });
 
     expect(linhas.map(l => l.nome)).toEqual(['Bruno', 'Ana']);
-    expect(linhas[0].falta).toBe(90);
-    expect(linhas[1].falta).toBe(40);
+    // 20 × R$ 90,00 de comissão = R$ 1.800,00, dobrados.
+    expect(linhas[0].falta).toBe(3600);
+    // 20 × R$ 40,00 = R$ 800,00, dobrados.
+    expect(linhas[1].falta).toBe(1600);
   });
 
-  it('a meta por operador chega a quem é dela, e só a ela', () => {
+  it('quem não dobrou fica de fora, mesmo com muito a receber', () => {
     const itens = [
       ...Array.from({ length: 20 }, (_, i) =>
         acordo({ id: `ana-${i}`, operador_id: 'ana', operador_nome: 'Ana', valor: 5000 })),
@@ -167,26 +182,23 @@ describe('painelPremiacoes', () => {
       metaPorOperador: { ana: META_BATIDA },
     });
 
-    const ana   = linhas.find(l => l.nome === 'Ana')!;
-    const bruno = linhas.find(l => l.nome === 'Bruno')!;
-    expect(ana.dobrou).toBe(true);
-    expect(ana.premiacao).toBe(2000);
-    // Bruno fez os mesmos acordos e não tem meta cadastrada: não dobra.
-    expect(bruno.dobrou).toBe(false);
-    expect(bruno.premiacao).toBe(1000);
+    // Bruno fez os mesmos acordos e não tem meta cadastrada: não dobra, e por
+    // isso não aparece. Os R$ 1.000,00 dele saem pela lista de acordos.
+    expect(linhas.map(l => l.nome)).toEqual(['Ana']);
+    expect(linhas[0].dobrou).toBe(true);
+    expect(linhas[0].premiacao).toBe(2000);
   });
 
-  it('quem não tem premiação nem pagamento fica fora da lista', () => {
-    // A lista é de pagamento. Uma linha de R$ 0,00 não pede ação nenhuma e só
-    // aumenta o que precisa ser lido.
-    const itens = [acordo({ id: 'a-1', valor: 4000, status: 'pendente' })];
+  it('sem ninguém dobrando, a lista é vazia', () => {
+    const itens = [acordo({ id: 'a-1', valor: 4000 })];
     expect(painelPremiacoes({ itens, pctPorSetor: PCT, mes: MES })).toEqual([]);
   });
 
-  it('o total do painel soma as parcelas e conta quem dobrou', () => {
+  it('o total do painel soma as parcelas de quem dobrou', () => {
     const itens = [
       ...Array.from({ length: 20 }, (_, i) =>
         acordo({ id: `ana-${i}`, operador_id: 'ana', operador_nome: 'Ana', valor: 5000, pago: i < 10 })),
+      // Bruno não dobra: não entra em nenhuma das somas abaixo.
       acordo({ id: 'b-1', operador_id: 'bruno', operador_nome: 'Bruno', valor: 9000 }),
     ];
     const t = totalDoPainel(painelPremiacoes({
@@ -195,9 +207,9 @@ describe('painelPremiacoes', () => {
 
     expect(t.comDobra).toBe(1);
     expect(t.bonus).toBe(1000);
-    expect(t.premiacao).toBe(2090);
+    expect(t.premiacao).toBe(2000);
     expect(t.jaPago).toBe(500);
-    expect(t.falta).toBe(1590);
+    expect(t.falta).toBe(1500);
   });
 });
 
@@ -269,19 +281,25 @@ describe('premiacaoDoOperador — pagamento mensal da premiação', () => {
   });
 
   it('painelPremiacoes repassa o carimbo de cada pessoa', () => {
+    // Os dois dobram, que é o critério para entrar no painel — sem isso não há
+    // linha nenhuma a que repassar carimbo. Ver `painelPremiacoes`.
     const itens = [
-      ...dezAcordos,
-      acordo({ id: 'b1', valor: 2000, operador_id: 'bruno', operador_nome: 'Bruno' }),
+      ...Array.from({ length: 20 }, (_, i) =>
+        acordo({ id: `ana-${i}`, valor: 1000 })),           // 20 × R$ 10 = R$ 200 → R$ 400
+      ...Array.from({ length: 20 }, (_, i) =>
+        acordo({ id: `bru-${i}`, valor: 2000,               // 20 × R$ 20 = R$ 400 → R$ 800
+          operador_id: 'bruno', operador_nome: 'Bruno' })),
     ];
     const linhas = painelPremiacoes({
       itens, pctPorSetor: PCT, mes: MES,
-      pagamentoPorOperador: { ana: { pago: true, valorPago: 100 } },
+      metaPorOperador: { ana: META_BATIDA, bruno: META_BATIDA },
+      pagamentoPorOperador: { ana: { pago: true, valorPago: 400 } },
     });
     const ana   = linhas.find(l => l.operadorId === 'ana');
     const bruno = linhas.find(l => l.operadorId === 'bruno');
     expect(ana?.falta).toBe(0);
-    expect(bruno?.falta).toBe(20);
-    expect(totalDoPainel(linhas).falta).toBe(20);
-    expect(totalDoPainel(linhas).pagoNaPremiacao).toBe(100);
+    expect(bruno?.falta).toBe(800);
+    expect(totalDoPainel(linhas).falta).toBe(800);
+    expect(totalDoPainel(linhas).pagoNaPremiacao).toBe(400);
   });
 });

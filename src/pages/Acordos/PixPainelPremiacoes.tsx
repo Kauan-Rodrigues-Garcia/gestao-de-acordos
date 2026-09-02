@@ -1,45 +1,65 @@
 /**
- * PixPainelPremiacoes — quanto ainda sai para cada pessoa.
+ * PixPainelPremiacoes — a premiação da DOBRA, e quanto dela ainda sai.
  *
- * ## A pergunta que a tela não respondia
+ * ## O que este painel responde, e o que ele deixou de responder
  *
- * Havia «comissão aprovada» e havia «pago». Faltava o que se pergunta na hora
- * de mandar os Pix: *quanto ainda falta para esta pessoa?* Quem precisava disso
- * abria a lista, filtrava por operador, somava as linhas pagas de cabeça e
- * subtraía. Toda semana, para cada nome.
+ * Ele nasceu respondendo «quanto ainda falta para cada pessoa?» e listava todo
+ * mundo com comissão no mês. Isso fazia dele uma segunda tabela do Pix
+ * automático: as mesmas pessoas, os mesmos valores, e o mesmo controle de
+ * pagamento que a lista de acordos já tem linha a linha.
  *
- * E errava no caso que mais custa: a **dobra** aparecia como o total do mês e
- * não como o resto. «R$ 2.000,00» com R$ 1.000,00 já pagos, e quem lesse
- * pagaria duas vezes.
+ * Agora só entra quem **dobrou**. A dobra é mensal, cruza dois requisitos (a
+ * quantidade de acordos Pix e a meta de recebimento) e não pertence a nenhum
+ * acordo — não existe linha onde carimbá-la, e era só ela que precisava de um
+ * lugar próprio. Quem não dobrou continua sendo pago pela lista de acordos.
+ *
+ * O recorte mora em `painelPremiacoes`; aqui fica o desenho.
+ *
+ * ## Por que o desenho mudou
+ *
+ * A versão anterior era um `<Card>` neutro com uma grade de 720 px de largura
+ * mínima, cabeçalho de colunas e um `<Switch>` de «Foi pago?». No meio de uma
+ * tela feita de cartões com gradiente, ícone e número em fonte mono, ele parecia
+ * outro sistema — e o interruptor não parecia um pagamento, parecia uma
+ * preferência.
+ *
+ * O painel passa a falar a língua do resto da aba (a mesma de
+ * `PixComissaoDobrada`): moldura âmbar com gradiente, troféu, valores em mono, e
+ * uma linha por pessoa que se empilha no celular em vez de rolar de lado.
+ *
+ * **Pagar virou botão.** «Pagar R$ 412,30» diz o que vai acontecer e quanto —
+ * um interruptor não dizia nem uma coisa nem outra. Pago, a linha mostra o
+ * carimbo verde com quem pagou e quando, e o desfazer fica ao lado, discreto,
+ * porque desfazer é a exceção.
  *
  * ## Marcar como pago QUITA — não é só um carimbo
  *
- * O switch «Foi pago?» gravava um booleano e nada mais: a linha continuava
- * dizendo «Falta pagar R$ 412,30» ao lado de «Pago». Agora o clique registra
- * o valor que saiu (o próprio «falta» daquele instante), e ele entra no «já
- * pago» — a mesma mecânica do pagamento por linha do Pix. Um fato, um número.
+ * O clique registra o valor que saiu (o próprio «falta» daquele instante), e ele
+ * entra no «já pago» — a mesma mecânica do pagamento por linha do Pix. Um fato,
+ * um número.
  *
  * Premiação marcada antes desta mudança não tem valor gravado; ela é lida como
  * quitação total do que faltava. Ver `PagamentoMensalPremiacao`.
  *
  * ## As três parcelas ficam à vista
  *
- * Premiação, já pago e falta, lado a lado, sempre. O resultado sozinho seria
- * mais limpo e seria pior: um número que encolheu sem explicação é o tipo de
- * coisa que ninguém confere, porque não se sabe o que conferir.
- *
- * Quando a premiação dobrou, a linha de baixo mostra a conta — «R$ 1.039,18 ×
- * 2» —, senão o valor cheio pareceria erro para quem sabe de cor quanto a
- * pessoa fez.
+ * Premiação, já pago e falta, sempre as três. O resultado sozinho seria mais
+ * limpo e seria pior: um número que encolheu sem explicação é o tipo de coisa
+ * que ninguém confere, porque não se sabe o que conferir. E como a premiação
+ * aqui é sempre dobrada, a conta «R$ 1.039,18 × 2» fica escrita embaixo — senão
+ * o valor cheio pareceria erro para quem sabe de cor quanto a pessoa fez.
  *
  * ## A divergência NÃO tem coluna aqui
  *
  * Ela teve uma, por um dia, e saiu a pedido do Cleber em 02/09/2026. O acerto
  * já acontece do outro lado — a liderança carimba o saldo num acordo pela ação
- * «Corrigir valor», e ele entra no pagamento por ali. Uma segunda coluna
- * dizendo a mesma coisa confundia mais do que informava, e uma linha de
- * «−R$ 17,50» para quem tinha R$ 0,00 de premiação parecia dívida nova em vez
- * de acerto pendente.
+ * «Corrigir valor», e ele entra no pagamento por ali.
+ *
+ * ## O que fica escolhido, fica
+ *
+ * Aberto/fechado, busca e «só quem falta» passam por `useEstadoLembrado`: sair
+ * da aba para conferir um NR e voltar não pode desmontar a conferência que
+ * estava em andamento.
  *
  * ## Quem vê
  *
@@ -47,15 +67,14 @@
  * na tela — ele não busca nada por conta própria, recebe a mesma lista que a
  * tabela usa. Filtrou por equipe? O painel fala daquela equipe.
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import {
-  Wallet, ChevronDown, TrendingUp, AlertTriangle, Check, Search, Clock3, Loader2,
+  Trophy, ChevronDown, Check, Search, Loader2, Wallet, Undo2, X,
 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
+import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 import type { MetaRecebimentoDobra } from './pixAutomaticoView';
 import { painelPremiacoes, totalDoPainel, type Premiacao } from './pixPremiacao';
@@ -73,24 +92,38 @@ interface Props {
   pagamentos?: readonly PixPremiacaoPagamento[];
   podeMarcarPago?: boolean;
   alterandoOperadorId?: string | null;
+  /**
+   * Prefixo da chave de memória do painel (aberto, busca, filtro).
+   *
+   * Vem de fora porque só quem chama conhece empresa, perfil e mês — sem eles a
+   * escolha de uma pessoa reapareceria para a próxima que abrisse a aba.
+   */
+  chaveEstado?: string;
   /** `valorPago` é o que sai agora: o «falta pagar» da linha no clique. */
   onMarcarPago?: (
     operadorId: string, pago: boolean, valorPago: number,
   ) => void | Promise<void>;
 }
 
-/** Uma parcela da conta, com o rótulo em cima e o número embaixo. */
+/** Uma parcela da conta: rótulo pequeno em cima, número em mono embaixo. */
 function Parcela({
-  rotulo, valor, cls, titulo,
-}: { rotulo: string; valor: number; cls?: string; titulo?: string }) {
+  rotulo, valor, cls, titulo, nota,
+}: {
+  rotulo: string; valor: number; cls?: string; titulo?: string; nota?: string;
+}) {
   return (
     <div className="min-w-0" title={titulo}>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">
+      <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">
         {rotulo}
       </p>
-      <p className={cn('text-sm font-semibold tabular-nums leading-tight mt-0.5', cls)}>
+      <p className={cn('text-sm font-mono font-bold tabular-nums leading-tight mt-1', cls)}>
         {formatCurrency(valor)}
       </p>
+      {nota && (
+        <p className="text-[10px] leading-tight text-muted-foreground tabular-nums mt-0.5">
+          {nota}
+        </p>
+      )}
     </div>
   );
 }
@@ -111,119 +144,137 @@ function LinhaPremiacao({
   // O estado vem da conta, não do carimbo cru: é ela que já sabe ler a linha
   // antiga sem valor gravado.
   const pago    = l.premiacaoPaga;
-  const tituloPagamento = pago
-    ? [
-        `Pago${l.pagoNaPremiacao > 0 ? ` — ${formatCurrency(l.pagoNaPremiacao)}` : ''}`,
-        pagamento?.pago_por_nome ? `por ${pagamento.pago_por_nome}` : '',
-        pagamento?.pago_em ? `em ${new Date(pagamento.pago_em).toLocaleString('pt-BR')}` : '',
-      ].filter(Boolean).join(' ')
-    : 'Premiação ainda não marcada como paga';
+  // Quanto da premiação já saiu — a barra é o que se lê de longe, antes dos
+  // três números.
+  const pctPago = l.premiacao > 0
+    ? Math.min(Math.max((l.jaPago / l.premiacao) * 100, 0), 100)
+    : 0;
+
+  const carimbo = [
+    pagamento?.pago_por_nome ? `por ${pagamento.pago_por_nome}` : '',
+    pagamento?.pago_em ? `em ${new Date(pagamento.pago_em).toLocaleString('pt-BR')}` : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div className={cn(
-      'grid min-w-[720px] grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,1fr))_minmax(105px,0.8fr)_minmax(0,1fr)] items-center gap-3',
-      'border-t border-border/60 px-3 py-2.5 transition-colors hover:bg-muted/30',
-      quitado && 'opacity-60',
-      pago && !quitado && 'bg-emerald-500/[0.035]',
+      'rounded-lg border px-3 py-2.5 space-y-2.5 transition-colors',
+      pago
+        ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+        : 'border-border bg-background/40 hover:bg-background/70',
     )}>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{l.nome}</p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          {l.dobrou && (
-            <Badge
-              variant="outline"
-              className="h-4 gap-0.5 border-amber-500/40 px-1 text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400"
-              title="Bateu os dois requisitos: a quantidade de acordos e a meta de recebimento"
-            >
-              <TrendingUp className="h-2.5 w-2.5" /> dobrada
-            </Badge>
-          )}
-          {quitado && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Check className="h-3 w-3" /> quitado
-            </span>
-          )}
+      {/* ── Nome, estado e a barra do que já saiu ── */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-foreground truncate">{l.nome}</p>
+          <p className="text-[10.5px] text-muted-foreground">
+            {quitado
+              ? 'Premiação quitada'
+              : deve
+                ? 'Já saiu mais do que era devido'
+                : `${formatCurrency(l.falta)} ainda por sair`}
+          </p>
         </div>
-      </div>
 
-      <div className="min-w-0">
-        <Parcela
-          rotulo="Premiação" valor={l.premiacao}
-          cls={l.dobrou ? 'text-amber-600 dark:text-amber-400' : undefined}
-          titulo={l.dobrou
-            ? `Comissão de ${formatCurrency(l.comissao)} dobrada por bater os dois requisitos`
-            : 'Comissão aprovada do mês'}
-        />
-        {/* A conta embaixo do valor dobrado: sem ela, quem sabe de cor quanto a
-            pessoa fez acha que o número está errado. */}
-        {l.dobrou && (
-          <p className="text-[10px] leading-tight text-muted-foreground tabular-nums">
-            {formatCurrency(l.comissao)} × 2
-          </p>
-        )}
-      </div>
-      <div className="min-w-0">
-        <Parcela rotulo="Já pago" valor={l.jaPago} cls="text-muted-foreground" />
-        {/* Quanto veio do carimbo mensal: sem isto o «já pago» sobe sozinho
-            depois do clique e parece número que apareceu do nada. */}
-        {l.pagoNaPremiacao > 0 && (
-          <p className="text-[10px] leading-tight text-muted-foreground tabular-nums">
-            {formatCurrency(l.pagoNaPremiacao)} na premiação
-          </p>
-        )}
-      </div>
-      <div className="flex min-w-0 items-center gap-2" title={tituloPagamento}>
+        {/* ── O botão de pagar ──────────────────────────────────────────────
+            Diz o valor porque é ele que vai sair. Um rótulo genérico obrigaria
+            a olhar outra coluna antes de clicar. */}
         {podeMarcarPago ? (
-          <>
-            <Switch
-              checked={pago}
+          pago ? (
+            <div className="flex items-center gap-1.5 shrink-0" title={carimbo || undefined}>
+              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-500">
+                <Check className="w-3 h-3" /> Pago
+              </span>
+              <button
+                type="button"
+                disabled={alterando}
+                onClick={() => void onMarcarPago?.(l.operadorId, false, 0)}
+                title="Desfazer o pagamento desta premiação"
+                aria-label={`Desfazer o pagamento da premiação de ${l.nome}`}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                {alterando
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Undo2 className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
               disabled={alterando}
               /* Marcar quita o que falta AGORA; negativo (pagou demais) vira
                  zero — esse acerto é do saldo de divergência, não daqui. */
-              onCheckedChange={marcado => void onMarcarPago?.(
-                l.operadorId, marcado, Math.max(l.falta, 0),
-              )}
-              aria-label={`${pago ? 'Desmarcar' : 'Marcar'} premiação de ${l.nome} como paga`}
-            />
-            {alterando
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              : (
-                <span className={cn(
-                  'truncate text-[11px] font-medium',
-                  pago ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
-                )}>
-                  {pago ? 'Pago' : 'Não pago'}
-                </span>
-              )}
-          </>
+              onClick={() => void onMarcarPago?.(l.operadorId, true, Math.max(l.falta, 0))}
+              aria-label={`Marcar a premiação de ${l.nome} como paga`}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 h-8 text-[11px] font-bold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+            >
+              {alterando
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Wallet className="w-3.5 h-3.5" />}
+              Pagar {formatCurrency(Math.max(l.falta, 0))}
+            </button>
+          )
         ) : (
-          <span className={cn(
-            'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold',
-            pago
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              : 'border-border bg-muted/30 text-muted-foreground',
-          )}>
-            {pago ? <Check className="h-3 w-3" /> : <Clock3 className="h-3 w-3" />}
+          <span
+            title={carimbo || undefined}
+            className={cn(
+              'shrink-0 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wider',
+              pago
+                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-500'
+                : 'border-border bg-muted/40 text-muted-foreground',
+            )}
+          >
+            {pago ? <Check className="w-3 h-3" /> : null}
             {pago ? 'Pago' : 'Não pago'}
           </span>
         )}
       </div>
-      <Parcela
-        rotulo="Falta pagar" valor={l.falta}
-        cls={deve ? 'text-destructive' : quitado || pago ? 'text-muted-foreground' : 'text-primary'}
-        titulo={deve ? 'Negativo: já saiu mais do que era devido' : undefined}
-      />
+
+      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className={cn('h-full rounded-full transition-all duration-500',
+            quitado || pago ? 'bg-emerald-400' : 'bg-amber-400')}
+          style={{ width: `${pctPago}%` }}
+        />
+      </div>
+
+      {/* ── As três parcelas ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <Parcela
+          rotulo="Premiação"
+          valor={l.premiacao}
+          cls="text-amber-500"
+          titulo={`Comissão de ${formatCurrency(l.comissao)} dobrada por bater os dois requisitos`}
+          nota={`${formatCurrency(l.comissao)} × 2`}
+        />
+        <Parcela
+          rotulo="Já pago"
+          valor={l.jaPago}
+          cls="text-muted-foreground"
+          /* Quanto veio do carimbo mensal: sem isto o «já pago» sobe sozinho
+             depois do clique e parece número que apareceu do nada. */
+          nota={l.pagoNaPremiacao > 0
+            ? `${formatCurrency(l.pagoNaPremiacao)} na premiação`
+            : undefined}
+        />
+        <Parcela
+          rotulo="Falta pagar"
+          valor={l.falta}
+          cls={deve ? 'text-destructive' : quitado || pago ? 'text-muted-foreground' : 'text-foreground'}
+          titulo={deve ? 'Negativo: já saiu mais do que era devido' : undefined}
+        />
+      </div>
     </div>
   );
 }
 
 export function PixPainelPremiacoes({
   itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
-  pagamentos = [], podeMarcarPago = false, alterandoOperadorId, onMarcarPago,
+  pagamentos = [], podeMarcarPago = false, alterandoOperadorId,
+  chaveEstado = 'pix-premiacoes', onMarcarPago,
 }: Props) {
-  const [aberto, setAberto] = useState(true);
-  const [busca, setBusca] = useState('');
-  const [soPendentes, setSoPendentes] = useState(false);
+  const [aberto, setAberto] = useEstadoLembrado(`${chaveEstado}|aberto`, true);
+  const [busca, setBusca] = useEstadoLembrado(`${chaveEstado}|busca`, '');
+  const [soPendentes, setSoPendentes] = useEstadoLembrado(`${chaveEstado}|pendentes`, false);
 
   const pagamentoPorOperador = useMemo(
     () => new Map(pagamentos.map(p => [p.operador_id, p])),
@@ -263,33 +314,39 @@ export function PixPainelPremiacoes({
       .filter(l => (soPendentes ? Math.abs(l.falta) >= 0.005 : true));
   }, [linhas, busca, soPendentes]);
 
+  // Ninguém dobrou, nada na tela. O painel É a dobra — uma moldura vazia
+  // dizendo "0 pessoas" ocuparia a aba para nunca dizer nada.
   if (linhas.length === 0) return null;
 
   return (
-    <Card className="border-border/60">
-      <CardContent className="p-0">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-500/20 to-orange-600/5 overflow-hidden">
+        {/* ── Cabeçalho ────────────────────────────────────────────────────── */}
         <button
           type="button"
-          onClick={() => setAberto(a => !a)}
+          onClick={() => setAberto(!aberto)}
           aria-expanded={aberto}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-amber-500/10"
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10">
-            <Wallet className="h-4 w-4 text-primary" />
-          </div>
+          <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-tight">Premiação a pagar</p>
+            <p className="text-sm font-bold text-foreground leading-tight">
+              Premiação dobrada a pagar
+            </p>
             <p className="text-[11px] leading-tight text-muted-foreground">
-              {linhas.length} {linhas.length === 1 ? 'pessoa' : 'pessoas'}
-              {total.comDobra > 0
-                && ` · ${total.comDobra} com premiação dobrada (+${formatCurrency(total.bonus)})`}
+              {linhas.length} {linhas.length === 1 ? 'pessoa dobrou' : 'pessoas dobraram'} a
+              comissão neste mês · bônus de {formatCurrency(total.bonus)}
             </p>
           </div>
           <div className="hidden shrink-0 text-right sm:block">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">
+            <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">
               Falta pagar
             </p>
-            <p className="mt-0.5 text-base font-bold tabular-nums text-primary leading-tight">
+            <p className="mt-1 text-base font-mono font-bold tabular-nums text-amber-400 leading-tight">
               {formatCurrency(faltaPagar)}
             </p>
           </div>
@@ -300,72 +357,62 @@ export function PixPainelPremiacoes({
         </button>
 
         {aberto && (
-          <>
-            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 px-3 py-2">
+          <div className="border-t border-amber-500/25 p-3 space-y-2.5">
+            {/* ── Busca e recorte ── */}
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[160px] flex-1">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Procurar pessoa"
-                  className="w-full rounded-lg bg-muted/60 py-1.5 pl-8 pr-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full rounded-lg border border-border bg-background/60 py-1.5 pl-8 pr-7 text-xs outline-none focus:ring-1 focus:ring-amber-400"
                 />
+                {busca && (
+                  <button
+                    type="button" onClick={() => setBusca('')}
+                    aria-label="Limpar a busca"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                <input
-                  type="checkbox" checked={soPendentes}
-                  onChange={e => setSoPendentes(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
-                />
+              {/* Pílula, e não caixinha: é o mesmo controle de recorte que o
+                  resto da aba usa, e ele liga e desliga um estado só. */}
+              <button
+                type="button"
+                onClick={() => setSoPendentes(!soPendentes)}
+                aria-pressed={soPendentes}
+                className={cn(
+                  'shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
+                  soPendentes
+                    ? 'border-amber-500/50 bg-amber-500/20 text-amber-400'
+                    : 'border-border bg-background/40 text-muted-foreground hover:text-foreground',
+                )}
+              >
                 Só quem falta
-              </label>
+              </button>
             </div>
 
-            {/* Cabeçalho das colunas: sem ele as quatro parcelas viram quatro
-                números soltos, e o leitor tem de adivinhar qual é qual. */}
-            <div className="overflow-x-auto">
-              <div className="grid min-w-[720px] grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,1fr))_minmax(105px,0.8fr)_minmax(0,1fr)] gap-3 border-t border-border/60 bg-muted/30 px-3 py-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pessoa</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Premiação</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Já pago</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Foi pago?</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Falta pagar</span>
-              </div>
-
-              {visiveis.length === 0 ? (
-                <p className="min-w-[720px] border-t border-border/60 px-4 py-6 text-center text-xs text-muted-foreground">
-                  {busca.trim() ? 'Ninguém com esse nome.' : 'Tudo quitado por aqui.'}
-                </p>
-              ) : (
-                visiveis.map(l => (
-                  <LinhaPremiacao
-                    key={l.operadorId}
-                    l={l}
-                    pagamento={pagamentoPorOperador.get(l.operadorId)}
-                    podeMarcarPago={podeMarcarPago}
-                    alterando={alterandoOperadorId === l.operadorId}
-                    onMarcarPago={onMarcarPago}
-                  />
-                ))
-              )}
-            </div>
-
-            {/* A dobra nao acontece sem os DOIS requisitos, e o segundo depende
-                de a meta do mes estar cadastrada. Sem esta nota, quem esperava
-                o dobro e nao viu ficaria procurando defeito no lugar errado. */}
-            {total.comDobra === 0 && (
-              <p className="flex items-start gap-1.5 border-t border-border/60 bg-muted/20 px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
-                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span>
-                  Ninguém com premiação dobrada aqui. A dobra exige os dois
-                  requisitos — a quantidade de acordos Pix do mês <strong>e</strong> a
-                  meta de recebimento batida. Sem meta cadastrada em Metas, o
-                  segundo requisito não fecha.
-                </span>
+            {visiveis.length === 0 ? (
+              <p className="rounded-lg border border-border bg-background/40 px-4 py-6 text-center text-xs text-muted-foreground">
+                {busca.trim() ? 'Ninguém com esse nome.' : 'Tudo quitado por aqui.'}
               </p>
+            ) : (
+              visiveis.map(l => (
+                <LinhaPremiacao
+                  key={l.operadorId}
+                  l={l}
+                  pagamento={pagamentoPorOperador.get(l.operadorId)}
+                  podeMarcarPago={podeMarcarPago}
+                  alterando={alterandoOperadorId === l.operadorId}
+                  onMarcarPago={onMarcarPago}
+                />
+              ))
             )}
-          </>
+          </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </motion.div>
   );
 }

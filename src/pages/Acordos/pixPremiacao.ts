@@ -1,5 +1,5 @@
 /**
- * pixPremiacao.ts — quanto cada pessoa TEM A RECEBER, de verdade.
+ * pixPremiacao.ts — quanto ainda sai para quem DOBROU a comissão.
  *
  * ## A pergunta que faltava
  *
@@ -11,6 +11,13 @@
  * E errava para mais no caso que mais custa: a **dobra** aparecia como o total
  * do mês, não como o resto. «R$ 2.000,00» com R$ 1.000,00 já pagos, e quem
  * lesse pagaria duas vezes.
+ *
+ * ## Só a dobra entra
+ *
+ * `painelPremiacoes` lista exclusivamente quem cumpriu os dois requisitos. O
+ * pagamento de quem não dobrou já é controlado linha a linha na própria lista
+ * do Pix automático, e repeti-lo aqui era um segundo lugar dizendo a mesma
+ * coisa. Ver o cabeçalho daquela função.
  *
  * ## A dobra precisa da meta de RECEBIMENTO, não só dos acordos
  *
@@ -170,12 +177,27 @@ export function premiacaoDoOperador(p: {
 }
 
 /**
- * A premiação de TODO MUNDO que aparece na lista — o painel do líder.
+ * A premiação de quem DOBROU — o painel do líder.
  *
- * Uma linha por pessoa com registro no mês, ordenada por quem tem mais a
- * receber. Quem já está quitado cai para o fim: o painel existe para dizer o
- * que ainda falta pagar, e uma lista que começa pelos zerados obriga a rolar
- * para achar o trabalho.
+ * ## O critério é a dobra, e não «tem saldo a pagar»
+ *
+ * A primeira versão listava todo mundo com premiação ou pagamento no mês
+ * (`premiacao > 0 || jaPago > 0`), e isso fazia o painel repetir a tabela do Pix
+ * automático com outro desenho: as mesmas pessoas, os mesmos valores, o mesmo
+ * «falta pagar» que a lista de acordos já controla linha a linha.
+ *
+ * O que a lista de acordos NÃO sabe dizer é a dobra. Ela é mensal, cruza dois
+ * requisitos (a quantidade de acordos Pix e a meta de recebimento) e nasce fora
+ * de qualquer acordo individual — não existe linha onde carimbá-la. É esse o
+ * pagamento que precisava de um lugar próprio, e é só ele que fica aqui.
+ *
+ * Quem não dobrou continua sendo pago pela lista de acordos, com o controle que
+ * já existe lá. Mostrá-lo aqui de novo era um segundo lugar dizendo a mesma
+ * coisa — o mesmo motivo pelo qual a coluna de divergência saiu em 02/09/2026.
+ *
+ * Ordenada por quem tem mais a receber; quem já está quitado cai para o fim: o
+ * painel existe para dizer o que ainda falta pagar, e uma lista que começa pelos
+ * zerados obriga a rolar para achar o trabalho.
  */
 export function painelPremiacoes(p: {
   itens: readonly PixAutoAcordo[];
@@ -204,7 +226,8 @@ export function painelPremiacoes(p: {
       metaPorSetor: p.metaPorSetor,
       pagamentoMensal: p.pagamentoPorOperador?.[operadorId],
     }))
-    .filter(l => l.premiacao > 0 || l.jaPago > 0)
+    // Só a dobra. Ver o cabeçalho desta função.
+    .filter(l => l.dobrou)
     .sort((a, b) => b.falta - a.falta || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
