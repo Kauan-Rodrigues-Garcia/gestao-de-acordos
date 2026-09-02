@@ -397,6 +397,23 @@ export default function MetasConfig() {
   const [contarDiaAtual, setContarDiaAtual] = useState(false);
   const [configDbAtiva, setConfigDbAtiva] = useState(true);
   const [configCarregada, setConfigCarregada] = useState(false);
+  /*
+   * O retrato do que veio do banco — e a razão de ele existir.
+   *
+   * `metas_config_mes` é UMA linha por empresa/mês, mas quem salva é cada
+   * líder, do próprio setor, mandando junto o que estava na tela dele. Um
+   * feriado cadastrado às 11h ia embora às 11h47, quando o líder seguinte —
+   * que abrira a página antes, com a lista ainda vazia — salvava as metas do
+   * setor dele e reescrevia o feriado como `[]`. Sem erro nenhum: o UPDATE
+   * acontecia, só levava o valor velho de volta. Em agosto foram 18 dessas
+   * escritas, de doze pessoas diferentes, na mesma linha.
+   *
+   * Com o retrato, só escrevemos a config quando a tela DIVERGE dele: quem
+   * mexeu apenas em meta não encosta mais no calendário do mês.
+   */
+  const [configOriginal, setConfigOriginal] = useState<{
+    feriados: string[]; quartis: QuartilConfig[]; contarDiaAtual: boolean;
+  }>({ feriados: [], quartis: QUARTIS_PADRAO, contarDiaAtual: false });
 
   // Configs de Direto/Extra da empresa — a base do "quem pode ter meta indireta"
   const [diretoExtraConfigs, setDiretoExtraConfigs] = useState<DiretoExtraConfig[]>([]);
@@ -480,6 +497,15 @@ export default function MetasConfig() {
       : null),
     [ano, mes, feriados, hojeISO, mesAtualVisivel, contarDiaAtual],
   );
+
+  // A tela diverge do que veio do banco? (ver `configOriginal`)
+  const configAlterada = useMemo(() => {
+    const chaveQuartis = (qs: QuartilConfig[]) =>
+      ordenarQuartis(qs).map(q => `${q.quartil}:${q.min_pct}`).join("|");
+    return contarDiaAtual !== configOriginal.contarDiaAtual
+      || [...feriados].sort().join(",") !== [...configOriginal.feriados].sort().join(",")
+      || chaveQuartis(quartis) !== chaveQuartis(configOriginal.quartis);
+  }, [feriados, quartis, contarDiaAtual, configOriginal]);
 
   const fetchSetores = useCallback(async () => {
     if (!empresa?.id) return;
@@ -610,10 +636,16 @@ export default function MetasConfig() {
   const fetchConfig = useCallback(async () => {
     if (!empresa?.id || !temConfigMes) { setConfigCarregada(true); return; }
     const { data, dbAtiva } = await getMetasConfig(empresa.id, mes, ano);
+    const doBanco = {
+      feriados:       data?.feriados ?? [],
+      quartis:        data?.quartis ?? QUARTIS_PADRAO,
+      contarDiaAtual: data?.contar_dia_atual === true,
+    };
     setConfigDbAtiva(dbAtiva);
-    setFeriados(data?.feriados ?? []);
-    setQuartis(data?.quartis ?? QUARTIS_PADRAO);
-    setContarDiaAtual(data?.contar_dia_atual === true);
+    setFeriados(doBanco.feriados);
+    setQuartis(doBanco.quartis);
+    setContarDiaAtual(doBanco.contarDiaAtual);
+    setConfigOriginal(doBanco);
     setConfigCarregada(true);
   }, [empresa?.id, temConfigMes, mes, ano]);
 
@@ -721,14 +753,29 @@ export default function MetasConfig() {
   // Tres interruptores, tres coisas diferentes: a meta em si, a configuracao
   // do mes (dias uteis, feriados, quartis) e as exclusoes.
   async function handleSalvarTudo() {
+    if (!empresa?.id) return;
     if (!podeGerenciarMetas && !podeEditarDiasUteis) return;
-    if (!empresa?.id || !setorSelecionado) return;
-    if (!podeGerenciarMetas) { toast.error("Sem permissão para editar metas."); return; }
-    if (metaTravada) { toast.error("Meta deste setor está validada — peça a um admin para reabrir."); return; }
+
+    /*
+     * Duas escritas, duas tabelas, duas permissões — e no banco duas policies
+     * distintas (`metas_editar` para `metas`, `metas_editar_dias_uteis` para
+     * `metas_config_mes`). O feriado é do MÊS, não do setor: não pode depender
+     * de ter setor escolhido, nem da trava de validação do setor, nem de o
+     * salvamento das metas ter dado certo.
+     */
+    const salvaConfig = temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis;
+    const salvaMetas  = podeGerenciarMetas && !!setorSelecionado && !metaTravada;
+
+    if (!salvaConfig && !salvaMetas) {
+      if (!podeGerenciarMetas)   toast.error("Sem permissão para editar metas.");
+      else if (metaTravada)      toast.error("Meta deste setor está validada — peça a um admin para reabrir.");
+      else if (!setorSelecionado) toast.warning("Selecione um setor.");
+      return;
+    }
     setSalvandoTudo(true);
 
     // Montar lista de todos os itens que têm valor preenchido
-    const itens: { tipo: TipoMeta; referenciaId: string }[] = [
+    const itens: { tipo: TipoMeta; referenciaId: string }[] = !salvaMetas ? [] : [
       { tipo: "setor",    referenciaId: setorSelecionado },
       ...equipes.map(eq => ({ tipo: "equipe" as TipoMeta,    referenciaId: eq.id })),
       ...operadores.map(op => ({ tipo: "operador" as TipoMeta, referenciaId: op.id })),
@@ -762,7 +809,6 @@ export default function MetasConfig() {
       // aqui: seria o único caso em que salvar não salva e a tela não avisa.
       .filter(p => p.meta_valor > 0 || Number(p.meta_indireta_valor) > 0)
 
-    const salvaConfig = temConfigMes && configDbAtiva;
     if (payloads.length === 0 && !salvaConfig) {
       toast.warning("Preencha ao menos uma meta antes de salvar.");
       setSalvandoTudo(false);
@@ -807,28 +853,41 @@ export default function MetasConfig() {
         if (salvos > 0) {
           toast.success(`${salvos} meta(s) salva(s) com sucesso!`, { description: `${MESES[mes - 1]}/${ano}` });
         }
-      } else if (salvaConfig) {
-        toast.success("Configuração do mês salva!", { description: `${MESES[mes - 1]}/${ano}` });
+        await fetchMetas();
       }
-      // Config mensal (feriados + quartis) — PP
-      if (salvaConfig && perfil?.id) {
-        const { error: cfgErr } = await upsertMetasConfig({
-          empresaId: empresa.id, mes, ano,
-          feriados, quartis, contarDiaAtual, atualizadoPor: perfil.id,
-        });
-        if (cfgErr) throw new Error(cfgErr);
-      }
-      await fetchMetas();
     } catch (err: unknown) {
       toast.error("Erro ao salvar metas", { description: err instanceof Error ? err.message : String(err) });
-    } finally {
-      setSalvandoTudo(false);
     }
+
+    /*
+     * Config mensal (feriados, quartis, contar o dia de hoje) — FORA do try das
+     * metas de propósito: uma meta que o banco recusou não pode levar junto o
+     * feriado que a pessoa acabou de cadastrar. E o erro daqui é o daqui, com
+     * nome próprio: "Erro ao salvar metas" mandava procurar no lugar errado.
+     */
+    if (salvaConfig && perfil?.id) {
+      const { error: cfgErr } = await upsertMetasConfig({
+        empresaId: empresa.id, mes, ano,
+        feriados, quartis, contarDiaAtual, atualizadoPor: perfil.id,
+      });
+      if (cfgErr) {
+        toast.error("Erro ao salvar os dias úteis do mês", { description: cfgErr });
+      } else {
+        // O novo retrato: daqui para a frente, salvar meta não reescreve isto.
+        setConfigOriginal({ feriados, quartis, contarDiaAtual });
+        toast.success("Dias úteis e quartis salvos!", { description: `${MESES[mes - 1]}/${ano}` });
+      }
+    }
+    setSalvandoTudo(false);
   }
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
   const temMetas = Object.values(inputMetas).some(v => v.meta_valor.trim() !== "");
-  const podeSalvar = temMetas || (temConfigMes && configDbAtiva);
+  // O que o botão do rodapé tem, de fato, para salvar agora — as duas frentes
+  // são independentes (ver `handleSalvarTudo`).
+  const salvaConfigAgora = temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis;
+  const salvaMetasAgora  = podeGerenciarMetas && !!setorSelecionado && !metaTravada && temMetas;
+  const podeSalvar = salvaConfigAgora || salvaMetasAgora;
   const operadoresVisiveis = operadores
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
@@ -885,7 +944,7 @@ export default function MetasConfig() {
                 <input
                   type="checkbox"
                   checked={contarDiaAtual}
-                  disabled={!podeGerenciarMetas}
+                  disabled={!podeEditarDiasUteis}
                   onChange={e => setContarDiaAtual(e.target.checked)}
                   className="mt-0.5 h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
                 />
@@ -905,11 +964,11 @@ export default function MetasConfig() {
                     type="date"
                     className="h-8 text-sm max-w-[170px]"
                     value={feriadoNovo}
-                    disabled={!podeGerenciarMetas}
+                    disabled={!podeEditarDiasUteis}
                     onChange={(e) => setFeriadoNovo(e.target.value)}
                   />
                   <Button size="sm" variant="outline" className="h-8 gap-1 text-xs"
-                    onClick={adicionarFeriado} disabled={!feriadoNovo || !podeGerenciarMetas}>
+                    onClick={adicionarFeriado} disabled={!feriadoNovo || !podeEditarDiasUteis}>
                     <Plus className="h-3.5 w-3.5" /> Adicionar
                   </Button>
                 </div>
@@ -918,7 +977,7 @@ export default function MetasConfig() {
                     {feriados.map(f => (
                       <Badge key={f} variant="secondary" className="gap-1 text-xs font-normal">
                         {f.split("-").reverse().join("/")}
-                        {podeGerenciarMetas && (
+                        {podeEditarDiasUteis && (
                           <button type="button" className="hover:text-destructive"
                             onClick={() => setFeriados(prev => prev.filter(x => x !== f))}>
                             <X className="h-3 w-3" />
@@ -950,7 +1009,7 @@ export default function MetasConfig() {
                       <Input
                         className="h-8 w-20 text-sm text-center"
                         value={String(q.min_pct)}
-                        disabled={!podeGerenciarMetas}
+                        disabled={!podeEditarDiasUteis}
                         onChange={(e) => setQuartilPct(q.quartil, e.target.value)}
                       />
                       <span className="text-xs text-muted-foreground">%</span>
@@ -1219,19 +1278,21 @@ export default function MetasConfig() {
           {/* ── ÚNICO BOTÃO SALVAR ── */}
           <div className="flex items-center justify-end gap-3 pt-2 pb-6 sticky bottom-0 bg-background/80 backdrop-blur-sm border-t border-border -mx-4 px-4 mt-2">
             <p className="text-xs text-muted-foreground flex-1">
-              {metaTravada
+              {metaTravada && !salvaConfigAgora
                 ? "Meta deste setor está validada — peça a um admin para reabrir antes de editar."
-                : temMetas
+                : salvaConfigAgora && !salvaMetasAgora
+                ? "Salva os dias úteis e quartis alterados acima."
+                : salvaMetasAgora && salvaConfigAgora
+                ? "Salva as metas preenchidas e os dias úteis alterados acima."
+                : salvaMetasAgora
                 ? "Metas preenchidas serão salvas para todos os itens acima."
-                : temConfigMes && configDbAtiva
-                ? "Salva também os feriados e quartis configurados acima."
                 : "Preencha os campos de meta antes de salvar."}
             </p>
             <Button
               size="default"
               className="gap-2 min-w-[140px]"
               onClick={handleSalvarTudo}
-              disabled={salvandoTudo || !podeSalvar || !podeGerenciarMetas || metaTravada}
+              disabled={salvandoTudo || !podeSalvar}
             >
               {salvandoTudo ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</>
