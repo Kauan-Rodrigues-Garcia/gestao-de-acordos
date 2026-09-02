@@ -26,7 +26,7 @@
  * automático sem ler.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldQuestion, X, Check, Ban, Loader2, Clock, AlertTriangle,
@@ -38,6 +38,8 @@ import { formatBRL } from '@/lib/money';
 import { useAuth } from '@/hooks/useAuth';
 import { useAutorizacaoPedidos } from '@/hooks/useAutorizacaoPedidos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
+import { chaveDeCache } from '@/lib/cacheInstantaneo';
 import {
   decidirAutorizacao, cancelarAutorizacao, type PedidoAutorizacao,
 } from '@/services/autorizacaoPedidos.service';
@@ -300,7 +302,20 @@ export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
   const { pedidos, pendentes, recarregar } = useAutorizacaoPedidos(
     souAutorizador && !!perfil?.id,
   );
-  const [aberta, setAberta] = useState(false);
+  /*
+   * Fechada por padrão, e do jeito que a pessoa deixou.
+   *
+   * A gaveta abria sozinha a cada montagem: como ela vive no `Layout`, isso
+   * significava toda navegação entre telas. Quem tinha acabado de fechá-la para
+   * ler a tabela por baixo a via reaparecer no clique seguinte, tela após tela.
+   *
+   * Agora ela obedece a um clique só — o da pessoa —, e o estado atravessa a
+   * navegação por `useEstadoLembrado`. O aviso de que há algo esperando não se
+   * perde: continua no contador da etiqueta e no ponto pulsando ao lado dele.
+   */
+  const [aberta, setAberta] = useEstadoLembrado(
+    chaveDeCache('autorizacao-dock', perfil?.id), false,
+  );
 
   /**
    * Pendentes primeiro; dentro de cada grupo, o mais novo no topo.
@@ -321,13 +336,18 @@ export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
   // faria o número subir a cada decisão, que é o oposto do que ele significa.
   const qtd = pendentes.length;
 
-  // Chegou pedido novo com a gaveta fechada: abre sozinha. É uma interrupção
-  // que o operador do outro lado está esperando — deixá-la só piscando no canto
-  // seria devolver a espera que este fluxo existe para eliminar.
-  useEffect(() => {
-    if (souAutorizador && qtd > 0) setAberta(true);
-  }, [souAutorizador, qtd]);
-
+  /*
+   * A gaveta NÃO abre sozinha — retirado a pedido em 02/09/2026.
+   *
+   * O efeito que morava aqui abria a gaveta sempre que houvesse pendência, e
+   * como ele dependia de `qtd` (não de «chegou algo novo»), ele disparava de
+   * novo em toda montagem do componente. O componente vive no `Layout`: era uma
+   * abertura por navegação, com a gaveta cobrindo o canto da tela de quem tinha
+   * acabado de fechá-la.
+   *
+   * O aviso continua existindo, e sem tapar nada: o contador na etiqueta e o
+   * ponto pulsando ao lado dele. Quem decide quando abrir é quem vai decidir.
+   */
   // Nada para mostrar, nada na tela. Ver o cabeçalho.
   if (ordenados.length === 0) return null;
 
