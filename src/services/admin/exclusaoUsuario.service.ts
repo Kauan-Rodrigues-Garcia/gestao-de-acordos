@@ -259,9 +259,27 @@ export async function limparAcordosDaEmpresaAnterior(params: {
 
 /** Texto cru do Postgres → frase que diz o que fazer. */
 export function traduzirErro(mensagem: string): string {
+  // `fn_admin_delete_user` já explica em português o que travou e onde (a
+  // tabela, a chave, e o que fazer). Não vale trocar isso por uma frase
+  // genérica: era justamente a frase genérica que mandava recarregar a página
+  // — o que nunca resolveu nada, porque o problema nunca esteve no navegador.
+  if (/lançamento\(s\) de RH|A exclusão parou numa tabela/i.test(mensagem)) {
+    return mensagem;
+  }
   if (/violates foreign key constraint/i.test(mensagem)) {
-    return 'O usuário ainda está referenciado em outro lugar do sistema. '
-      + 'Recarregue a página e tente de novo; se persistir, avise o suporte.';
+    // Sobrou o texto cru do Postgres: pelo menos entrega o nome da tabela, que
+    // é o que o suporte precisa para consertar. A frase do banco é
+    //   on table "perfis" violates … constraint "X" on table "rh_lancamentos"
+    // e quem interessa é a SEGUNDA tabela — a que aponta. Pegar a primeira dá
+    // sempre "perfis", que não diz nada.
+    const culpada =
+      /violates foreign key constraint "[^"]*" on table "([^"]+)"/i.exec(mensagem)?.[1]
+      ?? /violates foreign key constraint "([^"]+)"/i.exec(mensagem)?.[1];
+    return culpada
+      ? `A exclusão parou: "${culpada}" ainda aponta para este usuário. `
+        + 'Avise o suporte com este nome — falta soltar essa referência na exclusão.'
+      : 'O usuário ainda está referenciado em outro lugar do sistema, e o banco não '
+        + 'disse onde. Avise o suporte.';
   }
   if (/could not find the function|does not exist/i.test(mensagem)) {
     return 'Migration 20260805c pendente — aplique-a no Supabase para excluir usuários com tabulações.';

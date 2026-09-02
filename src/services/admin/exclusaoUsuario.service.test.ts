@@ -197,10 +197,32 @@ describe('limparAcordosDaEmpresaAnterior', () => {
 });
 
 describe('traduzirErro', () => {
-  it('FK vira instrução, não jargão', () => {
-    const t = traduzirErro('violates foreign key constraint "acordos_operador_id_fkey"');
+  it('FK vira instrução, não jargão, e entrega o nome da tabela', () => {
+    const t = traduzirErro(
+      'update or delete on table "perfis" violates foreign key constraint '
+      + '"rh_lancamentos_operador_id_fkey" on table "rh_lancamentos"',
+    );
     expect(t).not.toContain('foreign key');
-    expect(t).toContain('Recarregue');
+    // O nome da tabela é o que o suporte precisa — sem ele a frase é inútil.
+    expect(t).toContain('rh_lancamentos');
+  });
+
+  it('não manda mais recarregar a página: o problema nunca esteve no navegador', () => {
+    const t = traduzirErro('violates foreign key constraint "qualquer_fkey"');
+    expect(t).not.toContain('Recarregue');
+  });
+
+  it('mensagem que a própria função já explicou passa inteira', () => {
+    const doBanco = 'Este usuário tem 3 lançamento(s) de RH no nome dele. '
+      + 'Lançamento é registro financeiro e não sai junto com a exclusão: '
+      + 'remova ou transfira os lançamentos na aba RH e exclua o usuário depois.';
+    expect(traduzirErro(doBanco)).toBe(doBanco);
+  });
+
+  it('a rede de segurança do banco chega ao usuário sem ser reescrita', () => {
+    const doBanco = 'A exclusão parou numa tabela que ainda aponta para este '
+      + 'usuário: tabela_nova (chave tabela_nova_perfil_id_fkey).';
+    expect(traduzirErro(doBanco)).toBe(doBanco);
   });
 
   it('função ausente aponta a migration', () => {
