@@ -61,7 +61,7 @@
  */
 
 import { Fragment, useState, useEffect, useMemo, useId } from 'react';
-import { ChevronDown, Target, CalendarClock, BarChart3, Copy } from 'lucide-react';
+import { ChevronDown, Target, CalendarClock, BarChart3, Copy, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
@@ -556,6 +556,13 @@ export function QuartisOperadores({
   // equipe_id → data de início do treinamento (só as `treinamento = true`).
   const [treinoMap, setTreinoMap]   = useState<Record<string, string | null>>({});
   // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
+  /**
+   * Quartil em foco, escolhido clicando no gráfico de distribuição.
+   *
+   * `null` = todos, que é como a tela abre. Mora aqui, e não dentro do gráfico,
+   * porque quem obedece a ele é a TABELA — o gráfico só oferece o gesto.
+   */
+  const [quartilFoco, setQuartilFoco] = useState<number | null>(null);
   const [contarHoje, setContarHoje] = useState(false);
   const [carregado, setCarregado]   = useState(false);
 
@@ -831,6 +838,27 @@ export function QuartisOperadores({
     };
   }, [grupos, quartis]);
 
+  /**
+   * A tabela recortada pela fatia clicada no gráfico.
+   *
+   * Sai de `grupos`, e a distribuição acima continua saindo de `grupos` também
+   * — o gráfico é o UNIVERSO, e recalculá-lo sobre o próprio recorte o deixaria
+   * com uma fatia só de 100%, sem a proporção que é a razão de ele existir.
+   *
+   * Setor que fica sem ninguém no quartil escolhido sai da tela: um cabeçalho
+   * de setor seguido de tabela vazia não informa nada e empurra para baixo o
+   * que informa.
+   */
+  const gruposVisiveis = useMemo(() => {
+    if (quartilFoco === null) return grupos;
+    const recortado = new Map<string, LinhaQuartil[]>();
+    for (const [sid, lista] of grupos.entries()) {
+      const doQuartil = lista.filter(l => l.quartil?.quartil === quartilFoco);
+      if (doQuartil.length > 0) recortado.set(sid, doQuartil);
+    }
+    return recortado;
+  }, [grupos, quartilFoco]);
+
   if (loading || !carregado) {
     return (
       <div className="space-y-2 animate-pulse">
@@ -863,11 +891,40 @@ export function QuartisOperadores({
         <div className="flex flex-col xl:flex-row gap-4 items-start">
           {/* Tabela */}
           <div className="flex-1 min-w-0 space-y-4">
-            {[...grupos.entries()].map(([sid, lista]) => {
+            {/* ── O recorte ligado, e como desligá-lo ──────────────────────
+                Uma tabela que encolheu sem aviso parece dado faltando. A
+                etiqueta diz o que sumiu e devolve tudo num clique. */}
+            {quartilFoco !== null && (
+              <button
+                type="button"
+                onClick={() => setQuartilFoco(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors hover:brightness-110"
+                style={{
+                  borderColor: (COR_QUARTIL[quartilFoco] ?? '#6366f1') + '66',
+                  background: (COR_QUARTIL[quartilFoco] ?? '#6366f1') + '1f',
+                  color: COR_QUARTIL[quartilFoco] ?? '#6366f1',
+                }}
+              >
+                Só o {quartilFoco}º quartil
+                <X className="w-3 h-3" />
+              </button>
+            )}
+
+            {gruposVisiveis.size === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-10">
+                Ninguém no {quartilFoco}º quartil com os filtros atuais.
+              </p>
+            )}
+
+            {[...gruposVisiveis.entries()].map(([sid, lista]) => {
               // Base da posição e da participação da linha expandida: o grupo é
               // o que está NA TELA, não o setor inteiro do banco. Quem filtrou
               // por equipe compara com a equipe, que é o que ele está lendo.
-              const recebidosDoGrupo = lista.map(l => l.recebido);
+              //
+              // O recorte por quartil NÃO entra nessa base: ele é um destaque
+              // dentro do mesmo grupo, não outro grupo. Se entrasse, a posição
+              // de alguém mudaria só por eu ter clicado numa fatia.
+              const recebidosDoGrupo = (grupos.get(sid) ?? lista).map(l => l.recebido);
               const nomeDoGrupo = setores[sid] ?? 'Sem setor';
               return (
               <div key={sid} className="space-y-1">
@@ -1043,16 +1100,44 @@ export function QuartisOperadores({
             </p>
             <div className="rounded-xl border border-border bg-card p-3">
               <div className="flex justify-center">
-                <PizzaQuartis3D fatias={distribuicao.fatias} total={distribuicao.total} />
+                <PizzaQuartis3D
+                  fatias={distribuicao.fatias}
+                  total={distribuicao.total}
+                  selecionado={quartilFoco}
+                  onSelecionar={setQuartilFoco}
+                />
               </div>
+              {/* A legenda clica igual à fatia: são o mesmo alvo com dois
+                  tamanhos, e o da tabela é o que o dedo acerta no celular —
+                  onde a pizza tem 240 px e uma fatia estreita não tem alvo. */}
               <table className="w-full text-[11px] mt-2">
                 <tbody>
                   {distribuicao.fatias.map(f => {
                     const cor = COR_QUARTIL[f.quartil] ?? '#6366f1';
                     const pct = distribuicao.total > 0
                       ? Math.round((f.qtd / distribuicao.total) * 100) : 0;
+                    const escolhido = quartilFoco === f.quartil;
+                    const alterna = () => setQuartilFoco(escolhido ? null : f.quartil);
                     return (
-                      <tr key={f.quartil} className="border-t border-border/40">
+                      <tr
+                        key={f.quartil}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={escolhido}
+                        aria-label={`${f.quartil}º quartil, ${f.qtd} ${f.qtd === 1 ? 'operador' : 'operadores'}${
+                          escolhido ? ' — clique para voltar a mostrar todos' : ' — clique para ver só este quartil'}`}
+                        onClick={alterna}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alterna(); }
+                        }}
+                        className={cn(
+                          'border-t border-border/40 cursor-pointer transition-colors',
+                          'focus:outline-none focus-visible:ring-1 focus-visible:ring-primary',
+                          !escolhido && 'hover:bg-muted/40',
+                          quartilFoco !== null && !escolhido && 'opacity-50',
+                        )}
+                        style={escolhido ? { background: cor + '1f' } : undefined}
+                      >
                         <td className="py-1 pr-1 w-3">
                           <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: cor }} />
                         </td>
@@ -1072,6 +1157,10 @@ export function QuartisOperadores({
                   </tr>
                 </tbody>
               </table>
+              <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
+                Clique numa faixa para ver só ela na tabela; clique de novo para
+                voltar a mostrar todos.
+              </p>
             </div>
           </div>
         </div>
