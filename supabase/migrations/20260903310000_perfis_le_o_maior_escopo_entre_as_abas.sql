@@ -52,34 +52,44 @@ BEGIN;
 SET LOCAL lock_timeout = '15s';
 SET LOCAL statement_timeout = '120s';
 
--- ── Equipes em que a pessoa aparece ─────────────────────────────────────────
--- Espelha `fn_setores_do_operador`, um degrau abaixo: a equipe do cadastro,
--- as equipes em que foi clonada como operador, e as que ela lidera.
-CREATE OR REPLACE FUNCTION public.fn_equipes_do_operador(p_operador uuid)
-RETURNS SETOF uuid
+-- ── Equipes em que a pessoa aparece, liderança incluída ─────────────────────
+--
+-- Função NOVA, de propósito. `fn_equipes_do_operador` já existe e representa
+-- só a associação OPERACIONAL (perfil + clones de operador), e a migration
+-- 20260826180803 registrou por escrito que a liderança de `equipe_lideres`
+-- «não pode ser misturada globalmente nessa função, porque relatórios têm
+-- regras diferentes» — o analítico usa aquela função para decidir QUAIS
+-- OPERADORES CONTAM num total, e liderar uma equipe não pode passar o
+-- recebimento dela para o líder. A decisão continua valendo; nada aqui a toca.
+--
+-- Esta responde outra pergunta: em que equipes a pessoa ESTÁ PRESENTE, para
+-- efeito de alcance de leitura. Aí liderar conta.
+--
+-- O chat já tinha resolvido isso para si em `fn_chat_equipes_do_perfil`, com o
+-- mesmo corpo. Duas cópias é o preço de não mexer no chat no meio de uma
+-- mudança de permissões; quando o chat for revisto, ele pode passar a chamar
+-- esta e a dele vira um apelido.
+CREATE OR REPLACE FUNCTION public.fn_equipes_com_lideranca(p_perfil uuid)
+RETURNS TABLE (equipe_id uuid, setor_id uuid)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
-  SELECT p.equipe_id
-    FROM public.perfis p
-   WHERE p.id = p_operador AND p.equipe_id IS NOT NULL
+  SELECT q.equipe_id, q.setor_id
+    FROM public.fn_equipes_do_operador(p_perfil) q
   UNION
-  SELECT c.equipe_id
-    FROM public.equipe_operadores_clones c
-   WHERE c.operador_id = p_operador AND c.equipe_id IS NOT NULL
-  UNION
-  SELECT l.equipe_id
-    FROM public.equipe_lideres l
-   WHERE l.lider_id = p_operador AND l.equipe_id IS NOT NULL;
+  SELECT el.equipe_id, e.setor_id
+    FROM public.equipe_lideres el
+    JOIN public.equipes e ON e.id = el.equipe_id
+   WHERE el.lider_id = p_perfil;
 $function$;
 
-COMMENT ON FUNCTION public.fn_equipes_do_operador(uuid) IS
-  'Equipes em que a pessoa aparece: a do cadastro, as em que foi clonada como operador e as que ela lidera.';
+COMMENT ON FUNCTION public.fn_equipes_com_lideranca(uuid) IS
+  'Equipes em que a pessoa esta presente PARA EFEITO DE ALCANCE: associacao operacional (fn_equipes_do_operador) mais as equipes que ela lidera. NAO usar para atribuir recebimento — para totais vale fn_equipes_do_operador, que exclui lideranca de proposito.';
 
-REVOKE ALL ON FUNCTION public.fn_equipes_do_operador(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.fn_equipes_do_operador(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_equipes_com_lideranca(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fn_equipes_com_lideranca(uuid) TO authenticated;
 
 -- ── O maior escopo entre as abas que leem perfis ────────────────────────────
 -- Todas as abas do catálogo mostram gente de alguma forma — nome no card, no
@@ -130,10 +140,10 @@ USING (
         (SELECT public.fn_user_escopo_perfis()) = 1
         AND EXISTS (
           SELECT 1
-            FROM public.fn_equipes_do_operador(id) AS alvo(equipe_id)
+            FROM public.fn_equipes_com_lideranca(id) AS alvo
            WHERE alvo.equipe_id IN (
              SELECT eu.equipe_id
-               FROM public.fn_equipes_do_operador((SELECT auth.uid())) AS eu(equipe_id)
+               FROM public.fn_equipes_com_lideranca((SELECT auth.uid())) AS eu
            )
         )
       )
