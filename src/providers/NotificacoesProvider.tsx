@@ -50,6 +50,20 @@ export interface NotificacoesContextValue {
    */
   naoLidas: number;
   loading: boolean;
+  /**
+   * A primeira leitura do banco já voltou (para o usuário logado ATUAL).
+   *
+   * Quem avisa na tela precisa separar "isto acabou de acontecer" de "isto já
+   * estava aqui quando entrei". `loading` não serve: ele nasce `false`, vira
+   * `true` dentro de um efeito e volta a `false` — quem observa de fora vê
+   * `false` no primeiro quadro e conclui, errado, que a lista vazia é
+   * definitiva. Aí as 200 notificações que chegam logo depois parecem todas
+   * novas, e é exatamente esse o desfile que enche a tela ao entrar.
+   *
+   * Volta a `false` quando troca de usuário: a lista em memória é da pessoa
+   * anterior.
+   */
+  cargaInicialConcluida: boolean;
   /** Pulso do badge do header quando chega notificação nova. */
   animarBadge: boolean;
   marcarLida: (id: string) => Promise<void>;
@@ -65,6 +79,7 @@ const NotificacoesContext = createContext<NotificacoesContextValue>({
   notificacoes: VAZIO,
   naoLidas:     0,
   loading:      false,
+  cargaInicialConcluida: false,
   animarBadge:  false,
   marcarLida:       async () => {},
   marcarTodasLidas: async () => {},
@@ -85,6 +100,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>(VAZIO);
   const [loading, setLoading]           = useState(false);
   const [animarBadge, setAnimarBadge]   = useState(false);
+  const [cargaInicialConcluida, setCargaInicialConcluida] = useState(false);
 
   const montadoRef = useRef(true);
   const pulsoRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,7 +142,12 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   const jaCarregou = useRef(false);
 
   const refresh = useCallback(async () => {
-    if (!userId) { setNotificacoes(VAZIO); jaCarregou.current = false; return; }
+    if (!userId) {
+      setNotificacoes(VAZIO);
+      jaCarregou.current = false;
+      setCargaInicialConcluida(false);
+      return;
+    }
     const comEsqueleto = !jaCarregou.current;
     if (comEsqueleto) setLoading(true);
     try {
@@ -136,13 +157,23 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
         jaCarregou.current = true;
       }
     } finally {
-      if (montadoRef.current && comEsqueleto) setLoading(false);
+      if (montadoRef.current) {
+        if (comEsqueleto) setLoading(false);
+        // Depois desta linha, o que aparecer na lista é novidade de verdade.
+        // Marcado no `finally` de propósito: uma leitura que falhou também
+        // encerra a carga inicial — do contrário um erro de rede deixaria o
+        // aviso da barra mudo até o próximo F5.
+        setCargaInicialConcluida(true);
+      }
     }
   }, [userId]);
 
   // Outra pessoa entrou: a lista em memória é dela, não desta. Volta a merecer
-  // esqueleto.
-  useEffect(() => { jaCarregou.current = false; }, [userId]);
+  // esqueleto — e volta a ser histórico, não novidade.
+  useEffect(() => {
+    jaCarregou.current = false;
+    setCargaInicialConcluida(false);
+  }, [userId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -236,10 +267,10 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   );
 
   const valor = useMemo<NotificacoesContextValue>(() => ({
-    notificacoes, naoLidas, loading, animarBadge,
+    notificacoes, naoLidas, loading, cargaInicialConcluida, animarBadge,
     marcarLida, marcarTodasLidas, excluir, limparTodas, refresh,
   }), [
-    notificacoes, naoLidas, loading, animarBadge,
+    notificacoes, naoLidas, loading, cargaInicialConcluida, animarBadge,
     marcarLida, marcarTodasLidas, excluir, limparTodas, refresh,
   ]);
 

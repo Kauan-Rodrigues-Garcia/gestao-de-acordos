@@ -137,7 +137,7 @@ export function useMinhasEquipes(
  * A comemoração que deve estar na tela agora, ou null.
  *
  * **Uma de cada vez.** Duas sobrepostas no topo-centro seriam ilegíveis, então
- * a segunda espera a primeira acabar — mesmo padrão do `NotificacaoToast`.
+ * a segunda espera a primeira acabar — mesmo padrão do `AvisoNotificacaoHeader`.
  */
 export function useComemoracaoNoAr(params: {
   comemoracoes:   Comemoracao[];

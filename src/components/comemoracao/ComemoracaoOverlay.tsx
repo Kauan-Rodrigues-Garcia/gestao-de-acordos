@@ -1,7 +1,7 @@
 /**
  * ComemoracaoOverlay — a comemoração explodindo na tela.
  *
- * Montado no `Layout`, vizinho do `NotificacaoToast`: assim aparece em qualquer
+ * Montado no `Layout`, vizinho do `AvisoNotificacaoHeader`: aparece em qualquer
  * página, que é o ponto — a meta é batida enquanto as pessoas trabalham, não
  * enquanto olham uma aba específica.
  *

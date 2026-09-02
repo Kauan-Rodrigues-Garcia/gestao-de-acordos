@@ -53,7 +53,7 @@ import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
-import { NotificacaoToast } from './NotificacaoToast';
+import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
@@ -553,7 +553,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3 flex-shrink-0">
-          <Button variant="ghost" size="icon" className="w-8 h-8"
+          <Button variant="ghost" size="icon" className="w-8 h-8 shrink-0"
             onClick={() => {
               if (window.innerWidth >= 768) {
                 clearAutoTimers();
@@ -565,9 +565,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </Button>
 
-          <div className="flex-1" />
+          {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
+              entre o menu e o bloco de ações — e é ele mesmo que faz o papel do
+              antigo `flex-1`. Assim o aviso não pode cobrir botão nenhum: ele é
+              um item de flex, não um card flutuante. Ver o cabeçalho do
+              arquivo para o que isso substituiu. */}
+          <AvisoNotificacaoHeader />
 
-          <div className="flex items-center gap-2">
+          {/* `shrink-0`: o bloco de ações tem tamanho próprio e não cede espaço
+              para o aviso. Quem aperta quando a janela encolhe é o aviso, que
+              trunca o texto — nunca os botões. */}
+          <div className="flex items-center gap-2 shrink-0">
             {/* Troca de empresa — só super_admin, e o componente some sozinho
                 para os demais e durante impersonação. */}
             <SeletorEmpresa />
@@ -767,9 +775,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           onConfirmed={() => setChatplayOnboardingOpen(false)}
         />
       )}
-
-      {/* Aviso rápido de notificação nova — um card por vez, canto superior */}
-      <NotificacaoToast />
 
       {/* Gaveta de autorizações — canto inferior direito, em QUALQUER tela.
           Fica aqui, e não numa rota, porque autorizar é uma interrupção: do
