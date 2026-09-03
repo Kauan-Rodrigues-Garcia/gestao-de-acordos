@@ -1451,3 +1451,137 @@ export async function cancelarPedidoNr(pedidoId: string): Promise<{ ok: boolean;
   if (error) return { ok: false, error: mensagemPedidoNr(error.message) };
   return { ok: true };
 }
+
+// ── O retrato do mês fechado ───────────────────────────────────────────────
+
+/**
+ * Quem estava em qual equipe e setor NAQUELE mês, para o Pix Automático.
+ *
+ * ## Por que o Pix precisa disto
+ *
+ * Cada linha de `pix_automatico_acordos` já nasce com `operador_nome` e
+ * `setor_id` carimbados, então o VALOR é histórico. O AGRUPAMENTO não era: a
+ * aba lia `perfis`, `equipes` e `setores` ao vivo, sem filtro de mês. Filtrar
+ * agosto em setembro mostrava os números de agosto distribuídos pela
+ * configuração de HOJE — operador na equipe para a qual ele mudou depois,
+ * equipe com o nome novo, setor renomeado, e o ranking somando gente que em
+ * agosto estava noutro lugar.
+ *
+ * É o mesmo defeito que o Desempenho Equipes já tinha corrigido em 02/09/2026,
+ * e a fonte da verdade é a mesma: `composicao_mes` e companhia, o retrato que
+ * `fn_composicao_mes_snapshot` congela e que `20260903330000` impede de ser
+ * reescrito depois da virada.
+ *
+ * ## O que devolve, e o que NÃO devolve
+ *
+ * Devolve o vínculo (quem, em qual equipe, em qual setor) e os RÓTULOS de
+ * equipe e setor daquele mês. Não devolve nome nem cargo de pessoa: o retrato
+ * não os guarda, e para o Pix eles têm fonte melhor — `operador_nome` está na
+ * própria linha do acordo, congelado no instante em que ela nasceu.
+ *
+ * `null` = não há retrato para o mês (mês corrente, mês antigo sem foto, ou
+ * migration pendente). Quem chama segue no caminho ao vivo, que é o
+ * comportamento anterior e é melhor que uma aba vazia.
+ */
+export interface RetratoPixDoMes {
+  /** operador_id → onde ele estava naquele mês. */
+  porOperador: Record<string, { equipe_id: string | null; setor_id: string | null }>;
+  equipes: { id: string; nome: string; setor_id: string | null }[];
+  setores: { id: string; nome: string }[];
+}
+
+export async function fetchRetratoPixDoMes(
+  empresaId: string,
+  mes: MesRef,
+): Promise<RetratoPixDoMes | null> {
+  const [pessoas, equipes, setores] = await Promise.all([
+    tabelaSemTipo<{ operador_id: string; equipe_id: string | null; setor_id: string | null }>(
+      'composicao_mes',
+    ).select('operador_id, equipe_id, setor_id').eq('empresa_id', empresaId).eq('mes', mes),
+    tabelaSemTipo<{ equipe_id: string; nome: string; setor_id: string | null }>(
+      'composicao_mes_equipe',
+    ).select('equipe_id, nome, setor_id').eq('empresa_id', empresaId).eq('mes', mes),
+    tabelaSemTipo<{ setor_id: string; nome: string }>(
+      'composicao_mes_setor',
+    ).select('setor_id, nome').eq('empresa_id', empresaId).eq('mes', mes),
+  ]);
+
+  // Sem pessoas não há retrato — e um retrato pela metade seria pior que
+  // nenhum: mostraria parte do mês na composição certa e o resto sumido.
+  if (pessoas.error || !pessoas.data?.length) return null;
+
+  const porOperador: RetratoPixDoMes['porOperador'] = {};
+  for (const p of pessoas.data) {
+    porOperador[p.operador_id] = {
+      equipe_id: p.equipe_id ?? null,
+      setor_id:  p.setor_id ?? null,
+    };
+  }
+
+  /*
+   * As equipes vêm TODAS, e não só as que tinham gente.
+   *
+   * O painel de metas do Pix desenha uma linha por equipe com meta, e uma
+   * equipe pode ter passado o mês sem ninguém e com meta lançada. Recortar
+   * pelas que têm gente faria essa meta desaparecer da tela em vez de aparecer
+   * zerada, que é a informação que o líder foi ver.
+   */
+  return {
+    porOperador,
+    equipes: (equipes.data ?? [])
+      .map(e => ({ id: e.equipe_id, nome: e.nome, setor_id: e.setor_id ?? null }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    setores: (setores.data ?? [])
+      .map(s => ({ id: s.setor_id, nome: s.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+  };
+}
+
+/**
+ * Aplica o retrato sobre as listas que a aba leu ao vivo.
+ *
+ * Puro, e por isso testável: recebe o que veio do banco e devolve o que a tela
+ * deve usar. Três correções, nesta ordem:
+ *
+ *   1. cada operador volta para a equipe e o setor DAQUELE mês;
+ *   2. quem estava no mês e já não está em `perfis` (saiu da empresa, foi
+ *      excluído) volta para a lista — sem isso ele some do filtro de operador e
+ *      dos totais por equipe, levando junto o dinheiro que produziu;
+ *   3. equipe e setor passam a se chamar como se chamavam.
+ *
+ * `nomesCongelados` é `operador_id → operador_nome` tirado das próprias linhas
+ * do Pix. É a fonte certa para o nome de quem não está mais em `perfis`: foi
+ * carimbado no instante do registro.
+ */
+export function aplicarRetratoPix<T extends {
+  id: string; nome: string; equipe_id: string | null; setor_id: string | null; perfil: string;
+}>(
+  aoVivo: T[],
+  retrato: RetratoPixDoMes,
+  nomesCongelados: Record<string, string>,
+): { operadores: T[]; equipes: RetratoPixDoMes['equipes']; setores: RetratoPixDoMes['setores'] } {
+  const vistos = new Set<string>();
+
+  const corrigidos = aoVivo.map(o => {
+    vistos.add(o.id);
+    const onde = retrato.porOperador[o.id];
+    if (!onde) return o;
+    return { ...o, equipe_id: onde.equipe_id, setor_id: onde.setor_id };
+  });
+
+  for (const [id, onde] of Object.entries(retrato.porOperador)) {
+    if (vistos.has(id)) continue;
+    corrigidos.push({
+      id,
+      nome: nomesCongelados[id] ?? 'Operador do mês',
+      equipe_id: onde.equipe_id,
+      setor_id:  onde.setor_id,
+      // O retrato não guarda cargo. `operador` é o que a lista de filtro
+      // espera, e é o que essa pessoa era para efeito de produzir Pix.
+      perfil: 'operador',
+    } as T);
+  }
+
+  corrigidos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return { operadores: corrigidos, equipes: retrato.equipes, setores: retrato.setores };
+}

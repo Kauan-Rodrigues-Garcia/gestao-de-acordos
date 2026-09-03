@@ -103,6 +103,7 @@ import {
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
   fetchPedidosNr, pedirAutorizacaoNr, type PixNrPedido,
   fetchPremiacoesPagamento, marcarPremiacaoPaga,
+  fetchRetratoPixDoMes, aplicarRetratoPix,
   type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo, type PixPremiacaoPagamento,
 } from '@/services/pix_automatico.service';
 import { PixSaldoPainel } from './PixSaldoPainel';
@@ -302,6 +303,14 @@ export function PixAutomatico() {
    */
   const [equipes, setEquipes]       = useState<EquipeComSetor[]>(() => guardado?.equipes ?? []);
   const [setores, setSetores]       = useState<{ id: string; nome: string }[]>(() => guardado?.setores ?? []);
+  /*
+   * A composição desta tela veio da FOTO do mês, e não das tabelas de hoje?
+   *
+   * Serve ao aviso do topo. Sem dizer isso, quem abre agosto e vê uma equipe
+   * com o nome antigo (ou alguém numa equipe de que já saiu) conclui que a tela
+   * está errada — quando é justamente o contrário.
+   */
+  const [doRetrato, setDoRetrato]   = useState(false);
   const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
   const [saldos, setSaldos]         = useState<PixAutoSaldo[]>(() => guardado?.saldos ?? []);
   const [pagamentosPremiacao, setPagamentosPremiacao] = useState<PixPremiacaoPagamento[]>(
@@ -602,12 +611,46 @@ export function PixAutomatico() {
           qEqs  = qEqs.eq('setor_id', setorEscopo);
           qSets = qSets.eq('id', setorEscopo);
         }
-        const [{ data: ops }, { data: eqs }, { data: sets }] = await Promise.all([
+        const [{ data: ops }, { data: eqs }, { data: sets }, retrato] = await Promise.all([
           qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
+          // Mês fechado tem foto. Ver `fetchRetratoPixDoMes`.
+          ehMesAtual(mes) ? Promise.resolve(null) : fetchRetratoPixDoMes(empresa.id, mes),
         ]);
         listaOps  = (ops  ?? []) as OperadorInfo[];
         listaEqs  = (eqs  ?? []) as EquipeComSetor[];
         listaSets = (sets ?? []) as { id: string; nome: string }[];
+
+        /*
+         * Mês fechado: o AGRUPAMENTO vem do retrato, não das tabelas de hoje.
+         *
+         * As três listas acima são a configuração de AGORA. Usá-las para
+         * desenhar agosto espalha os números de agosto pela estrutura de
+         * setembro — operador na equipe para a qual mudou depois, equipe com o
+         * nome novo, setor renomeado, e o ranking somando gente que naquele mês
+         * estava noutro lugar. É o mesmo defeito que o Desempenho Equipes
+         * corrigiu em 02/09/2026, e a foto é a mesma.
+         *
+         * Sem retrato (mês antigo sem foto), segue ao vivo: é o comportamento
+         * anterior, e é melhor que uma aba vazia.
+         */
+        setDoRetrato(!!retrato);
+        if (retrato) {
+          const nomesCongelados: Record<string, string> = {};
+          for (const i of lista) {
+            if (i.operador_nome) nomesCongelados[i.operador_id] = i.operador_nome;
+          }
+          const corrigido = aplicarRetratoPix(listaOps, retrato, nomesCongelados);
+          listaOps = corrigido.operadores;
+          // O escopo do líder continua valendo — ele é permissão, não recorte
+          // de mês. Aplicado sobre o setor DAQUELE mês, que é o que a foto diz.
+          listaEqs = (setorEscopo
+            ? corrigido.equipes.filter(e => e.setor_id === setorEscopo)
+            : corrigido.equipes) as EquipeComSetor[];
+          listaSets = setorEscopo
+            ? corrigido.setores.filter(s => s.id === setorEscopo)
+            : corrigido.setores;
+        }
+
         setOperadores(atual => reconciliarLista(atual, listaOps, { chave: o => o.id }));
         setEquipes(atual => reconciliarLista(atual, listaEqs, { chave: e => e.id }));
         setSetores(atual => reconciliarLista(atual, listaSets, { chave: x => x.id }));
@@ -1747,6 +1790,16 @@ export function PixAutomatico() {
                 Registrar e avaliar continua liberado — o acordo novo entra com a
                 data escolhida no formulário, dentro de {rotuloDoMes(mes)}.
               </p>
+              {/* Sem esta frase, quem vê uma equipe com o nome antigo — ou
+                  alguém numa equipe de que já saiu — conclui que a tela está
+                  errada, quando é exatamente o contrário. */}
+              {doRetrato && (
+                <p className="text-[11px] text-muted-foreground">
+                  Equipes, setores e quem estava em cada um são os de{' '}
+                  {rotuloDoMes(mes)}, congelados no fim daquele mês — não os de
+                  hoje. Quem mudou de equipe depois aparece onde estava.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
