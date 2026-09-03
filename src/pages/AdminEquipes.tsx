@@ -69,6 +69,10 @@ import {
 import {
   listarLideresEquipes, adicionarLiderEquipe, removerLiderEquipe, type LiderEquipe,
 } from '@/services/equipes/equipesLideres.service';
+import {
+  listarSubgrupos, criarSubgrupo, renomearSubgrupo, excluirSubgrupo,
+  moverParaSubgrupo, type SubgrupoEquipe,
+} from '@/services/equipes/equipesSubgrupos.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,6 +99,8 @@ interface Operador {
   setor_id: string | null;
   equipe_id: string | null;
   empresa_id: string;
+  /** Subgrupo dentro da equipe. `null`/ausente = conta direto na equipe. */
+  subgrupo_id?: string | null;
 }
 
 /** Catálogo enxuto da empresa inteira, só para o clone entre setores.
@@ -225,12 +231,17 @@ function OperadorChip({
 
 interface DropZoneProps {
   equipeId: string | null;
-  onDrop: (equipeId: string | null) => void;
+  /**
+   * Subgrupo de destino. `undefined` = a zona é da equipe inteira e o subgrupo
+   * some (a pessoa passa a contar direto na equipe).
+   */
+  subgrupoId?: string | null;
+  onDrop: (equipeId: string | null, subgrupoId: string | null) => void;
   children: React.ReactNode;
   className?: string;
 }
 
-function DropZone({ equipeId, onDrop, children, className = '' }: DropZoneProps) {
+function DropZone({ equipeId, subgrupoId = null, onDrop, children, className = '' }: DropZoneProps) {
   const [isOver, setIsOver] = useState(false);
 
   return (
@@ -238,9 +249,13 @@ function DropZone({ equipeId, onDrop, children, className = '' }: DropZoneProps)
       onDragOver={e => { e.preventDefault(); setIsOver(true); }}
       onDragLeave={() => setIsOver(false)}
       onDrop={e => {
+        // A zona do subgrupo fica DENTRO da zona da equipe. Sem parar a
+        // propagação, o mesmo largar dispara as duas e a segunda — a de fora,
+        // sem subgrupo — desfaz o que a de dentro acabou de fazer.
         e.preventDefault();
+        e.stopPropagation();
         setIsOver(false);
-        onDrop(equipeId);
+        onDrop(equipeId, subgrupoId);
       }}
       className={`transition-all rounded-xl ${
         isOver ? 'ring-2 ring-primary/60 bg-primary/5 scale-[1.01]' : ''
@@ -316,6 +331,25 @@ export default function AdminEquipes() {
   // Líder por equipe vale para os dois tenants (BookPlay e PaguePlay). A tabela
   // ausente (migration pendente) → null → recurso escondido, modelo antigo.
   const lideresHabilitados = lideresEq !== null;
+
+  /*
+   * ── Subgrupos dentro da equipe (migration 20260903420000) ────────────────
+   *
+   * `null` = tabela ausente. A tela volta a ser a de antes: equipe com uma
+   * lista só de membros, sem seções e sem botão de criar subgrupo.
+   *
+   * O subgrupo divide a LEITURA (Destaques do Dia, ranking por equipe) sem
+   * mexer em quem soma onde: o recebimento continua carimbado pela equipe.
+   */
+  const [subgrupos, setSubgrupos] = useState<SubgrupoEquipe[] | null>(null);
+  const subgruposHabilitados = subgrupos !== null;
+  /** Equipe com o campo de "novo subgrupo" aberto. */
+  const [criandoSubgrupoEm, setCriandoSubgrupoEm] = useState<string | null>(null);
+  const [novoSubgrupoNome, setNovoSubgrupoNome] = useState('');
+  const [salvandoSubgrupo, setSalvandoSubgrupo] = useState(false);
+  /** Subgrupo em edição de nome, e o rascunho dele. */
+  const [editandoSubgrupoId, setEditandoSubgrupoId] = useState<string | null>(null);
+  const [editSubgrupoNome, setEditSubgrupoNome] = useState('');
 
   const empresaId = empresa?.id;
 
@@ -423,12 +457,35 @@ export default function AdminEquipes() {
       // `ferias_ate` ainda nao esta em database.types.ts (migration 20260901100000
       // pendente): o PostgREST devolve a coluna, o tipo gerado nao a conhece.
       setOperadores((operadoresRes.data ?? []) as unknown as Operador[]);
-      const [clonesData, lideresData] = await Promise.all([
+      const [clonesData, lideresData, subgruposData] = await Promise.all([
         listarClonesEquipes(empresaId),
         listarLideresEquipes(empresaId),
+        listarSubgrupos(empresaId),
       ]);
       setClones(clonesData);
       setLideresEq(lideresData);
+      setSubgrupos(subgruposData);
+
+      /*
+       * O vínculo pessoa→subgrupo vem numa consulta À PARTE, e não junto da
+       * lista de operadores acima.
+       *
+       * `subgrupo_id` é coluna nova, e nomear uma coluna inexistente derruba a
+       * consulta INTEIRA no PostgREST. Se ela estivesse no `select` principal,
+       * um banco sem a migration mostraria a aba Equipes VAZIA em vez de
+       * mostrá-la sem subgrupos.
+       */
+      if (subgruposData !== null) {
+        const { data: vinculos } = await supabase
+          .from('perfis')
+          .select('id, subgrupo_id')
+          .eq('empresa_id', empresaId);
+        const mapa = new Map(
+          ((vinculos as { id: string; subgrupo_id: string | null }[]) ?? [])
+            .map(v => [v.id, v.subgrupo_id] as const),
+        );
+        setOperadores(prev => prev.map(o => ({ ...o, subgrupo_id: mapa.get(o.id) ?? null })));
+      }
 
       // Auto-selecionar: líder vai para seu setor, admin para o primeiro da lista
       setSetorSelecionado(prev => {
@@ -542,6 +599,35 @@ export default function AdminEquipes() {
         empresa_id: empresaId ?? '',
       }));
     return [...reais, ...fantasmasAqui];
+  };
+
+  /** Subgrupos de uma equipe, em ordem alfabética. */
+  const subgruposDaEquipe = (equipeId: string): SubgrupoEquipe[] =>
+    (subgrupos ?? [])
+      .filter(s => s.equipe_id === equipeId)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  /**
+   * Os membros da equipe repartidos: uma lista por subgrupo, mais os que não
+   * estão em nenhum.
+   *
+   * Um subgrupo cujo id não existe mais (apagado em outra aba) cai em "sem
+   * subgrupo" em vez de sumir — a pessoa continua na equipe, e escondê-la da
+   * tela faria o contador do topo discordar do que está listado embaixo.
+   */
+  const repartirPorSubgrupo = (membros: Operador[], grupos: SubgrupoEquipe[]) => {
+    const idsValidos = new Set(grupos.map(g => g.id));
+    const porGrupo = new Map<string, Operador[]>(
+      grupos.map((g): [string, Operador[]] => [g.id, []]),
+    );
+    const soltos: Operador[] = [];
+
+    for (const m of membros) {
+      const sg = m.subgrupo_id;
+      if (sg && idsValidos.has(sg)) porGrupo.get(sg)!.push(m);
+      else soltos.push(m);
+    }
+    return { porGrupo, soltos };
   };
 
   /** Este id é um fantasma nesta tela? Decide o visual e o que o X faz. */
@@ -864,14 +950,26 @@ export default function AdminEquipes() {
     draggedOperadorId = operadorId;
   }
 
-  async function handleDrop(equipeId: string | null) {
+  async function handleDrop(equipeId: string | null, subgrupoId: string | null = null) {
     const operadorId = draggedOperadorId;
     draggedOperadorId = null;
     if (!operadorId) return;
 
     const operador = operadores.find(o => o.id === operadorId);
     if (!operador) return;
-    if (operador.equipe_id === equipeId) return;
+
+    /*
+     * Mesma equipe: o que mudou foi só o subgrupo.
+     *
+     * Este caminho existe porque arrastar dentro do próprio card é o gesto
+     * natural para trocar de subgrupo, e o `return` de antes — "já está nesta
+     * equipe, nada a fazer" — engolia esse gesto sem sinal nenhum.
+     */
+    if (operador.equipe_id === equipeId) {
+      if ((operador.subgrupo_id ?? null) === subgrupoId) return;
+      void aplicarSubgrupo(operador, subgrupoId);
+      return;
+    }
 
     if (!isAdmin) {
       if (equipeId !== null) {
@@ -889,13 +987,27 @@ export default function AdminEquipes() {
 
     // Atualização otimista
     setOperadores(prev =>
-      prev.map(o => o.id === operadorId ? { ...o, equipe_id: equipeId } : o)
+      prev.map(o => o.id === operadorId ? { ...o, equipe_id: equipeId, subgrupo_id: subgrupoId } : o)
     );
 
     try {
+      /*
+       * Equipe e subgrupo na MESMA escrita.
+       *
+       * Duas escritas em sequência deixariam uma janela em que a pessoa está na
+       * equipe nova com o subgrupo velho — e o trigger de coerência zeraria o
+       * subgrupo na primeira, fazendo a segunda parecer não ter funcionado.
+       *
+       * `subgrupo_id` só entra quando a coluna existe: nomeá-la num banco sem
+       * a migration faz o PostgREST recusar o UPDATE inteiro, e mover alguém
+       * de equipe pararia de funcionar.
+       */
+      const patch: { equipe_id: string | null; subgrupo_id?: string | null } = { equipe_id: equipeId };
+      if (subgruposHabilitados) patch.subgrupo_id = subgrupoId;
+
       const { error } = await supabase
         .from('perfis')
-        .update({ equipe_id: equipeId })
+        .update(patch)
         .eq('id', operadorId);
       if (error) throw error;
 
@@ -911,9 +1023,99 @@ export default function AdminEquipes() {
     } catch (err: any) {
       toast.error('Erro ao mover membro: ' + (err?.message ?? 'Erro desconhecido'));
       setOperadores(prev =>
-        prev.map(o => o.id === operadorId ? { ...o, equipe_id: operador.equipe_id } : o)
+        prev.map(o => o.id === operadorId
+          ? { ...o, equipe_id: operador.equipe_id, subgrupo_id: operador.subgrupo_id ?? null }
+          : o)
       );
     }
+  }
+
+  /**
+   * Troca só o subgrupo de quem já está na equipe.
+   *
+   * O toast nomeia o destino porque a diferença visual entre duas seções do
+   * mesmo card é pequena: sem a frase, quem soltou no subgrupo errado só
+   * descobre no Destaques do Dia da semana seguinte.
+   */
+  async function aplicarSubgrupo(operador: Operador, subgrupoId: string | null) {
+    const anterior = operador.subgrupo_id ?? null;
+
+    setOperadores(prev =>
+      prev.map(o => o.id === operador.id ? { ...o, subgrupo_id: subgrupoId } : o)
+    );
+
+    const ok = await moverParaSubgrupo(operador.id, subgrupoId);
+    if (!ok) {
+      setOperadores(prev =>
+        prev.map(o => o.id === operador.id ? { ...o, subgrupo_id: anterior } : o)
+      );
+      toast.error('Não foi possível mover para o subgrupo.');
+      return;
+    }
+
+    const nome = subgrupoId
+      ? (subgrupos ?? []).find(s => s.id === subgrupoId)?.nome ?? 'subgrupo'
+      : null;
+    toast.success(nome
+      ? `${operador.nome} → "${nome}"`
+      : `${operador.nome} saiu do subgrupo (segue na equipe).`);
+  }
+
+  // ─── Subgrupos ─────────────────────────────────────────────────────────────
+
+  async function handleCriarSubgrupo(equipe: Equipe) {
+    const nome = novoSubgrupoNome.trim();
+    if (!empresaId || !nome) return;
+
+    setSalvandoSubgrupo(true);
+    const criado = await criarSubgrupo(empresaId, equipe.id, nome, perfil?.id ?? null);
+    setSalvandoSubgrupo(false);
+
+    if (!criado) {
+      // Nome repetido e RLS negada chegam iguais aqui — o índice único é por
+      // equipe, e é de longe o caso mais provável de quem acabou de digitar.
+      toast.error('Não foi possível criar. Já existe um subgrupo com esse nome nesta equipe?');
+      return;
+    }
+
+    setSubgrupos(prev => [...(prev ?? []), criado]);
+    setNovoSubgrupoNome('');
+    setCriandoSubgrupoEm(null);
+    toast.success(`Subgrupo "${criado.nome}" criado em "${equipe.nome}".`);
+  }
+
+  async function handleRenomearSubgrupo(sg: SubgrupoEquipe) {
+    const nome = editSubgrupoNome.trim();
+    if (!nome || nome === sg.nome) { setEditandoSubgrupoId(null); return; }
+
+    setSalvandoSubgrupo(true);
+    const ok = await renomearSubgrupo(sg.id, nome);
+    setSalvandoSubgrupo(false);
+
+    if (!ok) {
+      toast.error('Não foi possível renomear o subgrupo.');
+      return;
+    }
+    setSubgrupos(prev => (prev ?? []).map(s => s.id === sg.id ? { ...s, nome } : s));
+    setEditandoSubgrupoId(null);
+  }
+
+  /**
+   * Apaga o subgrupo. Ninguém sai da equipe — só deixa de estar dividido.
+   *
+   * Sem diálogo de confirmação de propósito: nada se perde. Quem estava no
+   * subgrupo volta a contar direto na equipe, que é onde o recebimento sempre
+   * esteve, e recriar o subgrupo é um campo de texto.
+   */
+  async function handleExcluirSubgrupo(sg: SubgrupoEquipe) {
+    const ok = await excluirSubgrupo(sg.id);
+    if (!ok) {
+      toast.error('Não foi possível excluir o subgrupo.');
+      return;
+    }
+    setSubgrupos(prev => (prev ?? []).filter(s => s.id !== sg.id));
+    setOperadores(prev => prev.map(o => o.subgrupo_id === sg.id ? { ...o, subgrupo_id: null } : o));
+    toast.success(`Subgrupo "${sg.nome}" removido. Os membros seguem na equipe.`);
   }
 
   async function handleRemoverDaEquipe(operadorId: string) {
@@ -925,8 +1127,10 @@ export default function AdminEquipes() {
       return;
     }
 
+    // Sem equipe não há subgrupo: o trigger do banco zera a coluna, e o estado
+    // local acompanha para a tela não mostrar um subgrupo que já não vale.
     setOperadores(prev =>
-      prev.map(o => o.id === operadorId ? { ...o, equipe_id: null } : o)
+      prev.map(o => o.id === operadorId ? { ...o, equipe_id: null, subgrupo_id: null } : o)
     );
 
     try {
@@ -939,7 +1143,9 @@ export default function AdminEquipes() {
     } catch (err: any) {
       toast.error('Erro ao remover membro: ' + (err?.message ?? 'Erro desconhecido'));
       setOperadores(prev =>
-        prev.map(o => o.id === operadorId ? { ...o, equipe_id: operador.equipe_id } : o)
+        prev.map(o => o.id === operadorId
+          ? { ...o, equipe_id: operador.equipe_id, subgrupo_id: operador.subgrupo_id ?? null }
+          : o)
       );
     }
   }
@@ -1220,6 +1426,8 @@ export default function AdminEquipes() {
                   {equipesDoSetor.map((equipe, idx) => {
                     const membros = operadoresDaEquipe(equipe.id);
                     const podeGerenciarEquipe = podeEditarEquipes && (isAdmin || equipe.setor_id === perfil?.setor_id);
+                    const gruposDaEquipe = subgruposHabilitados ? subgruposDaEquipe(equipe.id) : [];
+                    const { porGrupo, soltos } = repartirPorSubgrupo(membros, gruposDaEquipe);
                     return (
                       <motion.div
                         key={equipe.id}
@@ -1296,6 +1504,26 @@ export default function AdminEquipes() {
                                       >
                                         <GraduationCap className="w-3.5 h-3.5" />
                                       </button>
+                                      {/* Criar subgrupo — mesma chave que
+                                          governa líderes e clones, porque as
+                                          três dividem a composição da equipe. */}
+                                      {subgruposHabilitados && podeGerenciarComposicao && (
+                                        <button
+                                          type="button"
+                                          title="Criar um subgrupo dentro desta equipe (divide a leitura; o recebimento continua da equipe)"
+                                          onClick={() => {
+                                            setCriandoSubgrupoEm(prev => (prev === equipe.id ? null : equipe.id));
+                                            setNovoSubgrupoNome('');
+                                          }}
+                                          className={`p-1 rounded transition-colors ${
+                                            criandoSubgrupoEm === equipe.id
+                                              ? 'text-primary bg-primary/10'
+                                              : 'text-muted-foreground/50 hover:text-primary hover:bg-primary/10'
+                                          }`}
+                                        >
+                                          <Layers className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
                                       {/* Sem a chave, todas as ações do clone
                                           param num `if (!podeGerenciarComposicao) return;`
                                           — e um botão cujo clique não faz nada
@@ -1479,14 +1707,148 @@ export default function AdminEquipes() {
                                 );
                               })()}
 
+                              {/* Campo de novo subgrupo */}
+                              {criandoSubgrupoEm === equipe.id && (
+                                <div className="mb-2 flex items-center gap-1.5">
+                                  <Input
+                                    autoFocus
+                                    value={novoSubgrupoNome}
+                                    onChange={e => setNovoSubgrupoNome(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') void handleCriarSubgrupo(equipe);
+                                      if (e.key === 'Escape') { setCriandoSubgrupoEm(null); setNovoSubgrupoNome(''); }
+                                    }}
+                                    placeholder="Nome do subgrupo…"
+                                    disabled={salvandoSubgrupo}
+                                    className="h-7 text-xs"
+                                  />
+                                  <Button
+                                    size="sm" className="h-7 px-3 text-xs"
+                                    onClick={() => void handleCriarSubgrupo(equipe)}
+                                    disabled={salvandoSubgrupo || !novoSubgrupoNome.trim()}
+                                  >
+                                    Criar
+                                  </Button>
+                                </div>
+                              )}
+
                               <div className="flex flex-col gap-1.5 min-h-[60px]">
+                                {/* Uma seção por subgrupo. Cada uma é a própria
+                                    zona de soltar: arrastar de uma para outra
+                                    dentro do mesmo card troca o subgrupo. */}
+                                {gruposDaEquipe.map(sg => {
+                                  const doGrupo = porGrupo.get(sg.id) ?? [];
+                                  return (
+                                    <DropZone
+                                      key={sg.id}
+                                      equipeId={equipe.id}
+                                      subgrupoId={sg.id}
+                                      onDrop={handleDrop}
+                                      className="border border-dashed border-border rounded-lg p-1.5"
+                                    >
+                                      <div className="flex items-center justify-between gap-1 px-1 pb-1">
+                                        {editandoSubgrupoId === sg.id ? (
+                                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                                            <Input
+                                              autoFocus
+                                              value={editSubgrupoNome}
+                                              onChange={e => setEditSubgrupoNome(e.target.value)}
+                                              onKeyDown={e => {
+                                                if (e.key === 'Enter') void handleRenomearSubgrupo(sg);
+                                                if (e.key === 'Escape') setEditandoSubgrupoId(null);
+                                              }}
+                                              disabled={salvandoSubgrupo}
+                                              className="h-6 text-xs"
+                                            />
+                                            <button
+                                              type="button" title="Salvar nome"
+                                              onClick={() => void handleRenomearSubgrupo(sg)}
+                                              className="p-0.5 rounded text-muted-foreground/60 hover:text-primary shrink-0"
+                                            >
+                                              <Check className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground truncate">
+                                              {sg.nome}
+                                              <span className="ml-1.5 font-normal normal-case">({doGrupo.length})</span>
+                                            </span>
+                                            {podeGerenciarComposicao && (
+                                              <span className="flex items-center gap-0.5 shrink-0">
+                                                <button
+                                                  type="button" title="Renomear subgrupo"
+                                                  onClick={() => { setEditandoSubgrupoId(sg.id); setEditSubgrupoNome(sg.nome); }}
+                                                  className="p-0.5 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10"
+                                                >
+                                                  <Pencil className="w-3 h-3" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  title="Excluir subgrupo (os membros continuam na equipe)"
+                                                  onClick={() => void handleExcluirSubgrupo(sg)}
+                                                  className="p-0.5 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </button>
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+
+                                      <div className="flex flex-col gap-1.5">
+                                        {doGrupo.length === 0 ? (
+                                          <p className="text-[11px] italic text-muted-foreground/40 px-1 py-1.5">
+                                            Arraste membros da equipe para cá
+                                          </p>
+                                        ) : doGrupo.map(op => (
+                                          <OperadorChip
+                                            key={op.id}
+                                            operador={op}
+                                            transferido={ehFantasma(op.id)}
+                                            onRemove={
+                                              !podeGerenciarEquipe
+                                                ? undefined
+                                                : ehFantasma(op.id)
+                                                  ? () => setConfirmandoFantasma({
+                                                      perfilId:   op.id,
+                                                      nome:       op.nome,
+                                                      equipeNome: equipe.nome,
+                                                    })
+                                                  : handleRemoverDaEquipe
+                                            }
+                                            onDragStart={handleDragStart}
+                                            compact
+                                            setoresEmprestado={
+                                              clonesHabilitados && !ehFantasma(op.id)
+                                                ? setoresEmprestadoDoOperador(op.id, op.setor_id)
+                                                : []
+                                            }
+                                          />
+                                        ))}
+                                      </div>
+                                    </DropZone>
+                                  );
+                                })}
+
+                                {/* Quem não está em subgrupo nenhum. Com
+                                    subgrupos na equipe ganha um rótulo, para a
+                                    lista não parecer a continuação do último
+                                    subgrupo desenhado. */}
+                                {gruposDaEquipe.length > 0 && soltos.length > 0 && (
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground px-1 pt-1">
+                                    Sem subgrupo <span className="font-normal normal-case">({soltos.length})</span>
+                                  </p>
+                                )}
+
                                 <AnimatePresence>
                                   {membros.length === 0 && clonesDaEquipe(equipe.id).length === 0 ? (
                                     <div className="flex items-center justify-center h-12 text-muted-foreground/40 text-[11px] italic">
                                       Arraste membros aqui
                                     </div>
                                   ) : (
-                                    membros.map(op => (
+                                    soltos.map(op => (
                                       <OperadorChip
                                         key={op.id}
                                         operador={op}

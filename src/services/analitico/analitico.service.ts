@@ -1260,6 +1260,64 @@ export async function buscarDestaquesDoMes(
   return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
 }
 
+/**
+ * O destaque do dia de CADA equipe/subgrupo, e não o único destaque do dia.
+ *
+ * O destaque único sempre premiava o mesmo punhado de gente: o maior
+ * recebimento do setor inteiro costuma vir das mesmas equipes, e quem produz
+ * muito dentro de uma equipe menor nunca aparecia. Um destaque por grupo faz a
+ * comparação acontecer entre pares.
+ *
+ * Grupo aqui é o subgrupo da pessoa; quando a equipe não tem subgrupos, é a
+ * própria equipe. A regra mora na RPC — ver
+ * `fn_analitico_destaques_dia_por_grupo`.
+ */
+export interface DestaqueGrupoDia {
+  dia: string;                 // 'yyyy-MM-dd'
+  /** Id do subgrupo, ou da equipe quando não há subgrupo. `null` = sem equipe. */
+  grupo_id: string | null;
+  grupo_nome: string | null;
+  grupo_tipo: 'subgrupo' | 'equipe';
+  equipe_id: string | null;
+  equipe_nome: string | null;
+  operador_id: string;
+  operador_usuario: string;
+  operador_nome: string | null;
+  total_recebido: number;
+  total_pagamentos: number;
+}
+
+/**
+ * Destaques do mês, um por grupo por dia.
+ *
+ * `indisponivel` separa "a RPC não existe neste banco" (migration pendente) de
+ * "deu erro" e de "não há recebimento". A tela usa isso para voltar ao destaque
+ * único em vez de mostrar um mês inteiro vazio, que é o que um `catch` genérico
+ * produziria.
+ */
+export async function buscarDestaquesPorGrupo(
+  empresaId: string,
+  mes: string,
+  equipeId?: string | null,
+  setorId?: string | null,
+): Promise<{ data: DestaqueGrupoDia[]; error: string | null; indisponivel: boolean }> {
+  const params: { p_empresa_id: string; p_mes: string; p_equipe_id?: string; p_setor_id?: string } =
+    { p_empresa_id: empresaId, p_mes: mes };
+  if (equipeId) params.p_equipe_id = equipeId;
+  if (setorId)  params.p_setor_id  = setorId;
+
+  const { data, error } = await supabase.rpc('fn_analitico_destaques_dia_por_grupo', params);
+
+  if (error) {
+    // Só a recusa do PostgREST por assinatura não encontrada conta como
+    // "ainda não instalado". Tratar qualquer erro assim esconderia falha de
+    // permissão atrás de uma tela que diz que está tudo normal.
+    const indisponivel = /PGRST202|Could not find the function/i.test(error.message);
+    return { data: [], error: error.message, indisponivel };
+  }
+  return { data: (data ?? []) as DestaqueGrupoDia[], error: null, indisponivel: false };
+}
+
 // ── Varredura única do mês (base das três agregações) ────────────────────────
 //
 // `buscarTotalOrfaosPorSetor`, `buscarTotalPorSetor` e `buscarRecebidoPorDia`

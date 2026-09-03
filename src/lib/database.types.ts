@@ -484,6 +484,58 @@ export type Database = {
           },
         ]
       }
+      analitico_ranking_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          criterio: string
+          empresa_id: string
+          grupos_incluidos: string[]
+          perfis_excluidos: string[]
+          setor_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          criterio?: string
+          empresa_id: string
+          grupos_incluidos?: string[]
+          perfis_excluidos?: string[]
+          setor_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          criterio?: string
+          empresa_id?: string
+          grupos_incluidos?: string[]
+          perfis_excluidos?: string[]
+          setor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitico_ranking_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_ranking_config_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: true
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_ranking_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analitico_resumo_mensal: {
         Row: {
           atualizado_em: string | null
@@ -1668,6 +1720,55 @@ export type Database = {
           },
         ]
       }
+      equipe_subgrupos: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          equipe_id: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          equipe_id: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          equipe_id?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipe_subgrupos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_subgrupos_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_subgrupos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       equipes: {
         Row: {
           created_at: string | null
@@ -2600,6 +2701,7 @@ export type Database = {
           senha_alterada: boolean
           setor_id: string | null
           situacao: string
+          subgrupo_id: string | null
           tampermonkey_configured: boolean | null
           usuario: string | null
           viu_notificacao_chatplay: boolean | null
@@ -2625,6 +2727,7 @@ export type Database = {
           senha_alterada?: boolean
           setor_id?: string | null
           situacao?: string
+          subgrupo_id?: string | null
           tampermonkey_configured?: boolean | null
           usuario?: string | null
           viu_notificacao_chatplay?: boolean | null
@@ -2650,6 +2753,7 @@ export type Database = {
           senha_alterada?: boolean
           setor_id?: string | null
           situacao?: string
+          subgrupo_id?: string | null
           tampermonkey_configured?: boolean | null
           usuario?: string | null
           viu_notificacao_chatplay?: boolean | null
@@ -4924,6 +5028,27 @@ export type Database = {
         }
         Returns: {
           dia: string
+          operador_id: string
+          operador_nome: string
+          operador_usuario: string
+          total_pagamentos: number
+          total_recebido: number
+        }[]
+      }
+      fn_analitico_destaques_dia_por_grupo: {
+        Args: {
+          p_empresa_id: string
+          p_equipe_id?: string
+          p_mes: string
+          p_setor_id?: string
+        }
+        Returns: {
+          dia: string
+          equipe_id: string
+          equipe_nome: string
+          grupo_id: string
+          grupo_nome: string
+          grupo_tipo: string
           operador_id: string
           operador_nome: string
           operador_usuario: string

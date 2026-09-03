@@ -97,6 +97,15 @@ export interface Perfil {
   lider_id: string | null;
   setor_id: string | null;
   equipe_id?: string | null;
+  /**
+   * Subgrupo dentro de `equipe_id` (migration 20260903420000).
+   *
+   * Opcional porque a coluna é nova e boa parte das consultas nem a pede. Quem
+   * lê isto para agrupar deve confirmar que o subgrupo pertence à equipe da
+   * pessoa — o banco zera vínculos incoerentes por trigger, mas linhas
+   * anteriores a ele não passaram por essa conferência.
+   */
+  subgrupo_id?: string | null;
   empresa_id?: string;
   usuario?: string;
   foto_url?: string | null;

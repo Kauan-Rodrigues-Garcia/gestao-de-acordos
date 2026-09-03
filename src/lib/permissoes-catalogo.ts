@@ -1153,6 +1153,24 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir a aba interna do ranking de recebimento',
     grupo: 'Analítico', padrao: TODOS,
   },
+  /*
+   * Quem decide COMO o ranking ordena — e quem entra nele.
+   *
+   * Chave separada de `analitico_sub_ranking` porque as duas respondem
+   * perguntas diferentes: uma é «você vê o placar», a outra é «você escreve a
+   * regra do placar». Juntá-las daria a todo operador que vê o ranking o poder
+   * de tirar um colega dele.
+   *
+   * Nasce na gerência e na diretoria: o pedido é explícito em dizer que a
+   * gerência do setor escolhe o critério. Líder fica de fora por padrão —
+   * quem lidera uma das equipes disputantes não é quem define quais equipes
+   * disputam. Continua liberável por pessoa no painel.
+   */
+  {
+    key: 'analitico_ranking_configurar', label: 'Analítico: configurar o ranking',
+    descricao: 'Escolher o critério do ranking (recebimento, percentual da meta ou equipes) e quem participa dele',
+    grupo: 'Analítico', padrao: { gerencia: true, diretoria: true },
+  },
   {
     key: 'analitico_sub_destaques_dia', label: 'Analítico: Destaques do dia',
     descricao: 'Abrir a aba interna dos destaques do dia',

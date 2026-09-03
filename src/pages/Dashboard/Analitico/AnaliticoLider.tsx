@@ -14,6 +14,7 @@ import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
   TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft, Wallet,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,7 @@ import {
   buscarResumoOperadoresAnalitico,
   buscarAnalitico,
   buscarDestaquesDoMes,
+  buscarDestaquesPorGrupo,
   buscarEquipesComOperadores,
   buscarTotalOrfaosPorSetor,
   buscarTotalPorSetor,
@@ -42,6 +44,7 @@ import {
   mapaSetorDaEquipe,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
+  type DestaqueGrupoDia,
   type ResumoMensalAnalitico,
   type EquipeAnalitico,
   type OperadorEquipeInfo,
@@ -75,6 +78,9 @@ import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
+import { useRankingAnalitico } from './useRankingAnalitico';
+import { ConfigurarRankingDialog } from './ConfigurarRankingDialog';
+import { LABEL_CRITERIO } from './rankingCriterio';
 import { FormasPagamento } from './FormasPagamento';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
@@ -175,6 +181,18 @@ export function AnaliticoLider({
   // ── Destaques ─────────────────────────────────────────────────────────────
   const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
   const [loadingDestaques, setLoadingDestaques] = useState(false);
+  /*
+   * Os destaques POR GRUPO — um por equipe/subgrupo, por dia.
+   *
+   * Lista separada da de cima, e não uma substituição, porque a RPC nova pode
+   * não existir no banco ainda. Quando ela falta, `destaquesPorGrupo` fica
+   * vazio e a aba desenha o destaque único de sempre — sem tela em branco e
+   * sem aviso de erro para quem não pode fazer nada a respeito.
+   */
+  const [destaquesPorGrupo, setDestaquesPorGrupo] = useState<DestaqueGrupoDia[]>([]);
+
+  // ── Configuração do ranking ───────────────────────────────────────────────
+  const [configRankingAberto, setConfigRankingAberto] = useState(false);
 
   // ── Equipes ───────────────────────────────────────────────────────────────
   const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
@@ -266,12 +284,35 @@ export function AnaliticoLider({
     setLoadingOrfaos(false);
   }, [empresaId, mes]);
 
+  /**
+   * Carrega os destaques do mês — os por grupo e o único, na mesma ida.
+   *
+   * As duas RPCs juntas em `Promise.all` porque a por grupo é a que a tela
+   * quer e a única é a rede de segurança dela: pedir a segunda só depois de a
+   * primeira falhar dobraria o tempo de abertura da aba justamente no banco
+   * onde a migration ainda não passou.
+   *
+   * `indisponivel` é o que separa "a RPC não existe" de "deu erro de verdade".
+   * Só o erro de verdade vira toast: avisar que o módulo não está instalado
+   * não ajuda quem está olhando o mês, e a tela já se vira com o destaque
+   * único.
+   */
   const carregarDestaques = useCallback(async (equipeId?: string | null, sId?: string | null) => {
     if (!empresaId || !mes) return;
     setLoadingDestaques(true);
-    const { data, error } = await buscarDestaquesDoMes(empresaId, mes, equipeId, sId);
-    if (error) toast.error(`Erro ao carregar destaques: ${error}`);
-    setDestaques(data);
+
+    const [porGrupo, unico] = await Promise.all([
+      buscarDestaquesPorGrupo(empresaId, mes, equipeId, sId),
+      buscarDestaquesDoMes(empresaId, mes, equipeId, sId),
+    ]);
+
+    if (porGrupo.error && !porGrupo.indisponivel) {
+      toast.error(`Erro ao carregar destaques por equipe: ${porGrupo.error}`);
+    }
+    if (unico.error) toast.error(`Erro ao carregar destaques: ${unico.error}`);
+
+    setDestaquesPorGrupo(porGrupo.data);
+    setDestaques(unico.data);
     setLoadingDestaques(false);
   }, [empresaId, mes]);
 
@@ -556,6 +597,24 @@ export function AnaliticoLider({
   }), [setorId, filtroEquipeId, snapshot, resumosFiltrados,
        orfaosPorSetor, totalPorSetor, setoresAlternativos, isPP]);
 
+  /*
+   * O ranking configurável.
+   *
+   * Recebe `resumosFiltrados` — o mesmo recorte de setor/equipe que a aba já
+   * aplica — para o placar concordar com o resto da tela. Quem o hook tira
+   * depois é só quem a CONFIGURAÇÃO manda tirar.
+   */
+  const rank = useRankingAnalitico({
+    empresaId, mes, setorId,
+    resumos: resumosFiltrados,
+    equipes: equipesFiltradas,
+    operadoresOcultos,
+  });
+
+  // Sem setor em foco não há regra a escrever: a configuração é por setor.
+  const podeConfigurarRanking =
+    temPermissao('analitico_ranking_configurar') && !!setorId && rank.configDisponivel;
+
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
   const diasNoMes    = diasDoMes(mes);
@@ -565,6 +624,30 @@ export function AnaliticoLider({
   // esmaecido como se ainda não tivesse chegado.
   const hojeISO      = getTodayISO();
   const destaquesMap = useMemo(() => new Map(destaques.map(d => [d.dia, d])), [destaques]);
+
+  /**
+   * Dia → os destaques daquele dia, um por equipe/subgrupo.
+   *
+   * A RPC já devolve ordenado por dia e grupo; o que falta é agrupar por dia e
+   * ordenar por valor DENTRO do dia, que é a ordem em que a tela lista os
+   * cards — o maior recebimento do dia primeiro, seja de que grupo for.
+   */
+  const destaquesGrupoMap = useMemo(() => {
+    const m = new Map<string, DestaqueGrupoDia[]>();
+    for (const d of destaquesPorGrupo) {
+      const lista = m.get(d.dia) ?? [];
+      lista.push(d);
+      m.set(d.dia, lista);
+    }
+    for (const lista of m.values()) lista.sort((a, b) => b.total_recebido - a.total_recebido);
+    return m;
+  }, [destaquesPorGrupo]);
+
+  /** Há divisão de verdade? Um grupo só por dia não justifica mudar o desenho. */
+  const temDestaquePorGrupo = useMemo(
+    () => [...destaquesGrupoMap.values()].some(l => l.length > 1),
+    [destaquesGrupoMap],
+  );
 
   // ── Seletor de equipe reutilizável ────────────────────────────────────────
   const seletorEquipe = equipesFiltradas.length > 0 && (
@@ -1009,22 +1092,76 @@ export function AnaliticoLider({
       {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}
       {abaVisivel === 'ranking' && (
         <div className="space-y-4">
-          {equipesFiltradas.length > 0 && (
-            <div className="flex items-center gap-2">{seletorEquipe}</div>
-          )}
-          {loadingResumos ? (
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            {equipesFiltradas.length > 0 ? (
+              <div className="flex items-center gap-2">{seletorEquipe}</div>
+            ) : <span />}
+
+            <div className="flex items-center gap-2">
+              {/* A régua da posição fica escrita na tela. Sem isto, "por que
+                  fulano está na frente?" vira uma pergunta sem resposta
+                  visível para quem não configurou o ranking. */}
+              <Badge variant="outline" className="text-[11px] gap-1">
+                <Trophy className="w-3 h-3" /> {LABEL_CRITERIO[rank.config.criterio]}
+              </Badge>
+              {rank.config.perfisExcluidos.length > 0 && (
+                <Badge variant="secondary" className="text-[11px]">
+                  {rank.config.perfisExcluidos.length} fora
+                </Badge>
+              )}
+              {podeConfigurarRanking && (
+                <Button
+                  size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                  onClick={() => setConfigRankingAberto(true)}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" /> Configurar
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {loadingResumos || rank.carregando ? (
             <div className="space-y-2 animate-pulse">
               {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-muted rounded-lg" />)}
             </div>
-          ) : resumosFiltrados.length === 0 ? (
+          ) : rank.linhas.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <p className="text-sm">Nenhum dado para exibir.</p>
+              <p className="text-sm">
+                {resumosFiltrados.length === 0
+                  ? 'Nenhum dado para exibir.'
+                  : 'Ninguém participa do ranking com a configuração atual.'}
+              </p>
             </div>
           ) : (
-            <RankingView resumos={resumosFiltrados} mostrarCopiar operadoresOcultos={operadoresOcultos} />
+            <RankingView
+              resumos={rank.linhas}
+              grupos={rank.grupos}
+              criterio={rank.config.criterio}
+              mostrarCopiar
+            />
           )}
         </div>
       )}
+
+      {/* A configuração vive fora da aba: fechar o diálogo não pode depender de
+          a aba continuar montada. */}
+      <ConfigurarRankingDialog
+        aberto={configRankingAberto}
+        onFechar={() => setConfigRankingAberto(false)}
+        config={rank.config}
+        grupos={rank.gruposConfiguraveis}
+        pessoas={rank.pessoasConfiguraveis}
+        salvando={rank.salvando}
+        onSalvar={async nova => {
+          const ok = await rank.salvar(nova, perfilId);
+          if (ok) {
+            toast.success('Ranking configurado.');
+            setConfigRankingAberto(false);
+          } else {
+            toast.error('Não foi possível salvar a configuração do ranking.');
+          }
+        }}
+      />
 
       {/* ── Aba: Destaques do dia ─────────────────────────────────────────── */}
       {abaVisivel === 'destaques' && (
@@ -1032,7 +1169,11 @@ export function AnaliticoLider({
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <p className="text-sm font-semibold">{MESES_PT[Number(mesNumStr) - 1]} de {mesAnoStr}</p>
-              <p className="text-xs text-muted-foreground">Destaque de recebimento por dia</p>
+              <p className="text-xs text-muted-foreground">
+                {temDestaquePorGrupo
+                  ? 'Maior recebimento de cada equipe/subgrupo, por dia'
+                  : 'Destaque de recebimento por dia'}
+              </p>
             </div>
             {equipesFiltradas.length > 0 && seletorEquipe}
           </div>
@@ -1046,19 +1187,31 @@ export function AnaliticoLider({
               {Array.from({ length: diasNoMes }, (_, i) => {
                 const d      = i + 1;
                 const diaStr = `${mes}-${String(d).padStart(2, '0')}`;
-                const dest   = destaquesMap.get(diaStr);
                 const isHoje = diaStr === hojeISO;
                 const isFut  = diaStr > hojeISO;
 
+                /*
+                 * Um destaque por equipe/subgrupo quando há divisão; o destaque
+                 * único quando não há.
+                 *
+                 * O caminho antigo continua vivo, e não por gentileza com o
+                 * código velho: enquanto a RPC nova não estiver no banco,
+                 * `destaquesGrupoMap` vem vazio e é ELE que segura a aba de pé.
+                 */
+                const doDia = temDestaquePorGrupo ? (destaquesGrupoMap.get(diaStr) ?? []) : [];
+                const unico = destaquesMap.get(diaStr);
+                const temAlgo = doDia.length > 0 || !!unico;
+
                 return (
                   <div key={diaStr} className={cn(
-                    'flex items-center gap-3 rounded-lg border px-4 py-3',
-                    isHoje  && 'border-primary/40 bg-primary/5',
-                    !isHoje && !isFut && dest && 'border-border bg-card',
-                    isFut   && 'border-border/50 bg-muted/20 opacity-50',
-                    !dest   && !isFut && 'border-border/50 bg-muted/10',
+                    'flex gap-3 rounded-lg border px-4 py-3',
+                    doDia.length > 1 ? 'items-start' : 'items-center',
+                    isHoje   && 'border-primary/40 bg-primary/5',
+                    !isHoje && !isFut && temAlgo && 'border-border bg-card',
+                    isFut    && 'border-border/50 bg-muted/20 opacity-50',
+                    !temAlgo && !isFut && 'border-border/50 bg-muted/10',
                   )}>
-                    <div className="text-center shrink-0 w-10">
+                    <div className={cn('text-center shrink-0 w-10', doDia.length > 1 && 'pt-0.5')}>
                       <p className={cn('text-lg font-bold leading-none', isHoje ? 'text-primary' : 'text-foreground')}>
                         {String(d).padStart(2, '0')}
                       </p>
@@ -1067,19 +1220,42 @@ export function AnaliticoLider({
                       </p>
                     </div>
                     <div className={cn('w-px self-stretch', isHoje ? 'bg-primary/30' : 'bg-border')} />
-                    {dest ? (
+
+                    {doDia.length > 0 ? (
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        {doDia.map(g => (
+                          <div key={`${g.grupo_id ?? 'sem'}-${g.operador_id}`} className="flex items-center gap-2">
+                            <Star className="w-3.5 h-3.5 text-amber-500 shrink-0 fill-amber-400" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold truncate">
+                                {g.operador_nome ?? g.operador_usuario}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {g.grupo_nome ?? 'sem equipe'}
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-bold text-primary font-mono">{formatBRL(g.total_recebido)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {g.total_pagamentos} pgto{g.total_pagamentos !== 1 ? 's' : ''}.
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : unico ? (
                       <>
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <Star className="w-3.5 h-3.5 text-amber-500 shrink-0 fill-amber-400" />
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate">{dest.operador_nome ?? dest.operador_usuario}</p>
+                            <p className="text-sm font-semibold truncate">{unico.operador_nome ?? unico.operador_usuario}</p>
                             <p className="text-xs text-muted-foreground">destaque do dia</p>
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-sm font-bold text-primary font-mono">{formatBRL(dest.total_recebido)}</p>
+                          <p className="text-sm font-bold text-primary font-mono">{formatBRL(unico.total_recebido)}</p>
                           <p className="text-xs text-muted-foreground">
-                            {dest.total_pagamentos} pgto{dest.total_pagamentos !== 1 ? 's' : ''}.
+                            {unico.total_pagamentos} pgto{unico.total_pagamentos !== 1 ? 's' : ''}.
                           </p>
                         </div>
                       </>
