@@ -54,6 +54,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -445,30 +446,59 @@ export default function AdminEquipes() {
   useEffect(() => { loadData(); }, [loadData]);
 
   // ─── Catálogo da empresa p/ clone entre setores ────────────────────────────
-  // Fetch separado e tolerante: o líder só carrega o próprio setor acima, mas
-  // o clone precisa alcançar operadores de outros setores (o setor misto
-  // empresta gente para play 4 / play 5). A RLS já permite — quem restringia
-  // ao setor era só o filtro do front. Não alimenta o drag & drop.
+  //
+  // Fetch separado: as listas principais ficam trancadas no setor escolhido,
+  // mas o clone precisa alcançar operadores de OUTROS setores — o setor misto
+  // empresta gente para play 4 / play 5. Não alimenta o drag & drop.
+  //
+  // `setores` e `equipes` vêm direto: as duas policies são por empresa
+  // (`fn_can_access_empresa`), então o seletor de setor sempre funcionou.
+  //
+  // Os OPERADORES vêm por RPC, e é aqui que morava o defeito. A versão anterior
+  // lia `perfis` direto com o comentário «a RLS já permite». Permitia até
+  // 20260903310000, que transformou a policy de `perfis` num TETO — o maior
+  // escopo entre as abas. Para líder e gerência esse teto é o próprio setor,
+  // então a consulta passou a responder 200 com o setor deles no lugar da
+  // empresa: escolher outro setor no seletor mostrava «lista vazia», sem erro
+  // nenhum para explicar.
+  //
+  // Subir o teto traria de volta o problema que ele resolveu (tela que esquece
+  // de recortar mostra a empresa toda). Quem autoriza aqui é a chave desta
+  // tela — `equipes_gerenciar_composicao`, cuja descrição é literalmente
+  // «clonar operadores de outros setores» —, que é a mesma condição da policy
+  // de escrita em `equipe_operadores_clones`. Ver a migration 20260903400000.
   useEffect(() => {
-    if (!empresaId || tenant.slug !== 'bookplay') { setCloneCat(CLONE_CATALOGO_VAZIO); return; }
+    if (!empresaId || tenant.slug !== 'bookplay' || !podeGerenciarComposicao) {
+      setCloneCat(CLONE_CATALOGO_VAZIO);
+      return;
+    }
     let cancel = false;
     void (async () => {
       const [s, e, o] = await Promise.all([
         supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
         supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId).order('nome'),
-        supabase.from('perfis').select('id, nome, setor_id, equipe_id, perfil')
-          .eq('empresa_id', empresaId).eq('ativo', true)
-          .in('perfil', ['operador', 'lider', 'elite']).order('nome'),
+        rpcSemTipo<CloneCatalogo['operadores']>(
+          'fn_equipes_operadores_para_clone', { p_empresa: empresaId },
+        ),
       ]);
       if (cancel) return;
+
+      // Falhar aqui em silêncio foi o defeito. Uma lista vazia por erro e uma
+      // lista vazia por não haver ninguém são coisas diferentes, e quem está
+      // com a tela aberta precisa conseguir distinguir as duas.
+      if (o.error) {
+        console.warn('[AdminEquipes] catálogo de clone:', o.error.message);
+        toast.error('Não foi possível carregar os operadores para clonar: ' + o.error.message);
+      }
+
       setCloneCat({
         setores:    aplicarOrdemSetores((s.data as CloneCatalogo['setores']) ?? [], empresaId),
         equipes:    (e.data as CloneCatalogo['equipes'])    ?? [],
-        operadores: (o.data as CloneCatalogo['operadores']) ?? [],
+        operadores: (o.data as unknown as CloneCatalogo['operadores']) ?? [],
       });
     })();
     return () => { cancel = true; };
-  }, [empresaId, tenant.slug]);
+  }, [empresaId, tenant.slug, podeGerenciarComposicao]);
 
   // ─── Derivados do setor selecionado ────────────────────────────────────────
 
@@ -536,12 +566,35 @@ export default function AdminEquipes() {
     return c ? { id: c.id, nome: c.nome, equipe_id: c.equipe_id, setor_id: c.setor_id } : null;
   }, [operadores, cloneCat.operadores]);
 
-  /** Clones alocados numa equipe (com o operador original resolvido). */
-  const clonesDaEquipe = (equipeId: string) =>
+  /**
+   * Clones alocados numa equipe (com o operador original resolvido).
+   *
+   * O vínculo em `equipe_operadores_clones` é legível pela empresa inteira, mas
+   * o PERFIL do operador passa pela RLS de `perfis`. Quem não tem
+   * `equipes_gerenciar_composicao` não recebe o catálogo da empresa, e um clone
+   * vindo de outro setor fica sem nome.
+   *
+   * Antes a linha era DESCARTADA — a equipe mostrava menos gente do que tem, e
+   * nada na tela dizia que faltava alguém. É o mesmo defeito que
+   * `lideresDaEquipe` já tinha corrigido logo abaixo, e a saída é a mesma: o
+   * vínculo aparece sempre; o que falta é só o nome, e a tela diz isso.
+   */
+  const clonesDaEquipe = (equipeId: string): {
+    clone: CloneEquipe; operador: CloneOperadorInfo; naoResolvido: boolean;
+  }[] =>
     (clones ?? [])
       .filter(c => c.equipe_id === equipeId)
-      .map(c => ({ clone: c, operador: resolverOperadorClone(c.operador_id) }))
-      .filter((x): x is { clone: CloneEquipe; operador: CloneOperadorInfo } => !!x.operador);
+      .map(c => {
+        const achado = resolverOperadorClone(c.operador_id);
+        return {
+          clone: c,
+          operador: achado ?? {
+            id: c.operador_id, nome: 'Operador de outro setor',
+            equipe_id: null, setor_id: null,
+          },
+          naoResolvido: !achado,
+        };
+      });
 
   // ── Líderes por equipe (item 10) ───────────────────────────────────────────
   /**
@@ -1243,7 +1296,11 @@ export default function AdminEquipes() {
                                       >
                                         <GraduationCap className="w-3.5 h-3.5" />
                                       </button>
-                                      {clonesHabilitados && (
+                                      {/* Sem a chave, todas as ações do clone
+                                          param num `if (!podeGerenciarComposicao) return;`
+                                          — e um botão cujo clique não faz nada
+                                          é pior que a ausência do botão. */}
+                                      {clonesHabilitados && podeGerenciarComposicao && (
                                         <button
                                           type="button"
                                           title="Clonar operador de outra equipe ou de outro setor (o recebimento conta nos dois)"
@@ -1461,27 +1518,41 @@ export default function AdminEquipes() {
                                 </AnimatePresence>
 
                                 {/* Clones — vinculados ao operador original */}
-                                {clonesHabilitados && clonesDaEquipe(equipe.id).map(({ clone, operador }) => {
+                                {clonesHabilitados && clonesDaEquipe(equipe.id).map(({ clone, operador, naoResolvido }) => {
                                   // Veio de outro setor: mostra o setor de origem, não só a equipe
                                   const deOutroSetor = !!operador.setor_id && operador.setor_id !== equipe.setor_id;
-                                  const origem = deOutroSetor
-                                    ? nomeSetorQualquer(operador.setor_id) ?? 'outro setor'
-                                    : nomeEquipeQualquer(operador.equipe_id) ?? 'equipe';
+                                  const origem = naoResolvido
+                                    ? 'outro setor'
+                                    : deOutroSetor
+                                      ? nomeSetorQualquer(operador.setor_id) ?? 'outro setor'
+                                      : nomeEquipeQualquer(operador.equipe_id) ?? 'equipe';
                                   return (
                                   <div
                                     key={clone.id}
-                                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 select-none group"
+                                    className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border border-dashed select-none group ${
+                                      naoResolvido
+                                        ? 'border-border bg-muted/50'
+                                        : 'border-primary/40 bg-primary/5'
+                                    }`}
                                     title={
-                                      deOutroSetor
-                                        ? `Clone de ${operador.nome} — original no setor "${origem}", equipe "${nomeEquipeQualquer(operador.equipe_id) ?? '?'}". O recebimento conta nos dois setores.`
-                                        : `Clone de ${operador.nome} — original na equipe "${origem}". O recebimento conta nas duas equipes.`
+                                      naoResolvido
+                                        ? 'Este clone é de outro setor e o seu acesso mostra apenas o próprio setor, então o nome dele não pode ser carregado. O recebimento continua contando aqui.'
+                                        : deOutroSetor
+                                          ? `Clone de ${operador.nome} — original no setor "${origem}", equipe "${nomeEquipeQualquer(operador.equipe_id) ?? '?'}". O recebimento conta nos dois setores.`
+                                          : `Clone de ${operador.nome} — original na equipe "${origem}". O recebimento conta nas duas equipes.`
                                     }
                                   >
-                                    <Copy className="w-3 h-3 text-primary/60 flex-shrink-0" />
-                                    <span className="font-medium text-foreground truncate text-xs max-w-[90px]">
+                                    <Copy className={`w-3 h-3 flex-shrink-0 ${naoResolvido ? 'text-muted-foreground/60' : 'text-primary/60'}`} />
+                                    <span className={`font-medium truncate text-xs max-w-[90px] ${
+                                      naoResolvido ? 'text-muted-foreground italic' : 'text-foreground'
+                                    }`}>
                                       {operador.nome}
                                     </span>
-                                    <span className="inline-flex items-center rounded-full border border-primary/30 text-primary font-medium flex-shrink-0 text-[9px] px-1 py-0 h-3.5">
+                                    <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 text-[9px] px-1 py-0 h-3.5 ${
+                                      naoResolvido
+                                        ? 'border-border text-muted-foreground'
+                                        : 'border-primary/30 text-primary'
+                                    }`}>
                                       clone de {origem}
                                     </span>
                                     {/* Item 1: caixinha de contar recebimento nesta equipe */}
