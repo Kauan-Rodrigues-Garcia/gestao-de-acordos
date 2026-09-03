@@ -15,7 +15,9 @@ import {
   metaDobraDoSetor, metasDobraPorSetor,
   PIX_META_ACORDOS_DOBRA, type PixAutoAcordo, type PixAutoConfig,
 } from '@/services/pix_automatico.service';
-import { calcularDobraComissao, rankingPixSetor } from './pixAutomaticoView';
+import {
+  calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe,
+} from './pixAutomaticoView';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -194,5 +196,82 @@ describe('rankingPixSetor — requisito por setor de cada operador', () => {
     const linhas = rankingPixSetor(itens, pct, MES, {}, { 'setor-a': 10 });
     expect(linhas[0].acordos).toBe(9);
     expect(linhas[0].requisitoAcordosOk).toBe(false);
+  });
+});
+
+/*
+ * ── A equipe que produziu e não tem meta ───────────────────────────────────
+ *
+ * Caso real de AGOSTO/2026, Receptivo. A equipe «Bryan» rodou o mês inteiro —
+ * 516 acordos, R$ 1.862.936,40 — e foi dividida em «Matheus» e «Luciana» em
+ * setembro. As metas de agosto foram lançadas depois, para as duas equipes
+ * novas; «Bryan» ficou sem meta nenhuma.
+ *
+ * Enquanto o Pix agrupava pelas equipes de HOJE, esse dinheiro caía em Matheus
+ * e Luciana e aparecia. Quando a aba passou a ler o retrato do mês (correto: em
+ * agosto aquela gente estava em Bryan), o painel de metas — que só desenhava
+ * número para equipe COM meta — deixou de mostrar o valor. R$ 1,8 milhão sumiu
+ * da tela sem nada dizer que faltava.
+ *
+ * `realizadoPorEquipe` existe para isso: o agrupamento parte dos ACORDOS, que
+ * existem independentemente de alguém ter digitado uma meta.
+ */
+describe('calcularMetaPixPorEquipe — equipe sem meta não some com o dinheiro', () => {
+  const CENARIO = {
+    itens: [
+      // «Bryan», sem meta lançada.
+      acordo({ operador_id: 'op-bryan-1', valor: 1000 }),
+      acordo({ operador_id: 'op-bryan-2', valor: 800 }),
+      // «Matheus», com meta.
+      acordo({ operador_id: 'op-matheus', valor: 500 }),
+    ],
+    metas: [
+      { equipeId: 'eq-matheus', equipeNome: 'Matheus', metaValor: 2000, metaAcordos: 10 },
+    ],
+    equipePorOperador: {
+      'op-bryan-1': 'eq-bryan',
+      'op-bryan-2': 'eq-bryan',
+      'op-matheus': 'eq-matheus',
+    },
+    configMes: null,
+    mes: '2026-08' as const,
+    hojeISO: '2026-09-03',
+  };
+
+  it('a equipe sem meta aparece em realizadoPorEquipe, com valor e quantidade', () => {
+    const r = calcularMetaPixPorEquipe(CENARIO);
+    expect(r.realizadoPorEquipe['eq-bryan']).toEqual({ realizado: 1800, acordos: 2 });
+  });
+
+  it('a equipe COM meta continua no lugar de sempre, e também no mapa', () => {
+    const r = calcularMetaPixPorEquipe(CENARIO);
+    expect(r.equipes.map(e => e.equipeId)).toEqual(['eq-matheus']);
+    expect(r.equipes[0].resumo?.realizado).toBe(500);
+    expect(r.realizadoPorEquipe['eq-matheus']).toEqual({ realizado: 500, acordos: 1 });
+  });
+
+  it('o total do setor sempre somou tudo — inclusive quem não tem meta', () => {
+    const r = calcularMetaPixPorEquipe(CENARIO);
+    // 1000 + 800 + 500. Este número nunca esteve errado; o que faltava era
+    // conseguir explicá-lo pelas linhas de equipe.
+    expect(r.setor?.realizado).toBe(2300);
+  });
+
+  it('acordo de operador sem equipe conhecida não inventa uma linha', () => {
+    const r = calcularMetaPixPorEquipe({
+      ...CENARIO,
+      itens: [...CENARIO.itens, acordo({ operador_id: 'op-solto', valor: 300 })],
+    });
+    expect(Object.keys(r.realizadoPorEquipe).sort()).toEqual(['eq-bryan', 'eq-matheus']);
+    // Mas o dinheiro dele continua no total do setor.
+    expect(r.setor?.realizado).toBe(2600);
+  });
+
+  it('acordo de outro mês não entra', () => {
+    const r = calcularMetaPixPorEquipe({
+      ...CENARIO,
+      itens: [...CENARIO.itens, acordo({ operador_id: 'op-bryan-1', valor: 9999, criado_em: '2026-07-10T12:00:00.000Z' })],
+    });
+    expect(r.realizadoPorEquipe['eq-bryan']).toEqual({ realizado: 1800, acordos: 2 });
   });
 });

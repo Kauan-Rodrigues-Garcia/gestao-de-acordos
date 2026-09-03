@@ -147,6 +147,9 @@ export function PixMetaPainel({
             )}
             {equipes.map(eq => {
               const r = porEquipe.get(eq.id) ?? null;
+              // O que a equipe produziu, tenha meta ou não. Ver
+              // `realizadoPorEquipe` em `calcularMetaPixPorEquipe`.
+              const realizadoDaEquipe = consolidado?.realizadoPorEquipe?.[eq.id] ?? null;
               const emEdicao = editandoEquipe === eq.id;
               return (
                 <div key={eq.id} className="px-3 py-2.5 flex items-center gap-3 flex-wrap">
@@ -195,7 +198,30 @@ export function PixMetaPainel({
                           <Progresso r={r} />
                         </>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground flex-1">sem meta definida</span>
+                        /*
+                          Sem meta, mas COM produção: mostra o realizado.
+
+                          Antes esta linha dizia só «sem meta definida», e o
+                          dinheiro da equipe não aparecia em lugar nenhum da
+                          tela — nem aqui, nem numa linha própria. Em agosto de
+                          2026 isso escondeu R$ 1.862.936,40 da equipe «Bryan»,
+                          que produziu o mês inteiro e foi dividida em setembro,
+                          ficando de fora das metas lançadas depois.
+                        */
+                        <span className="text-xs tabular-nums text-muted-foreground flex-1">
+                          {realizadoDaEquipe && realizadoDaEquipe.acordos > 0 ? (
+                            <>
+                              <strong className="text-foreground">
+                                {formatCurrency(realizadoDaEquipe.realizado)}
+                              </strong>
+                              {' '}realizados em {realizadoDaEquipe.acordos}{' '}
+                              {realizadoDaEquipe.acordos === 1 ? 'acordo' : 'acordos'}
+                              <span className="ml-1 text-[11px]">· sem meta definida</span>
+                            </>
+                          ) : (
+                            <span className="text-[11px]">sem meta definida</span>
+                          )}
+                        </span>
                       )}
                       {podeEditar && (
                         <button

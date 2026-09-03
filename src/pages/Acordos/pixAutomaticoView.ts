@@ -687,6 +687,19 @@ export interface ConsolidadoMetaPix {
   equipes: LinhaMetaEquipe[];
   /** Soma das equipes — é esta a meta do setor, que não é digitada. */
   setor: ResumoMetaPix | null;
+  /**
+   * O realizado de CADA equipe do recorte, inclusive as que não têm meta.
+   *
+   * Existe porque `equipes` só cobre quem tem meta, e a tela desenha uma linha
+   * por equipe do setor. Sem este mapa, a equipe sem meta aparecia com o nome e
+   * mais nada — e o dinheiro dela sumia da tela sem explicação.
+   *
+   * Foi o que aconteceu com AGOSTO/2026 no Receptivo: a equipe «Bryan» produziu
+   * R$ 1.862.936,40 em 516 acordos e foi dividida em «Matheus» e «Luciana» em
+   * setembro. As metas de agosto foram lançadas para as duas equipes novas, e
+   * «Bryan» ficou sem meta — então o grosso do mês não tinha linha onde cair.
+   */
+  realizadoPorEquipe: Record<string, { realizado: number; acordos: number }>;
 }
 
 /**
@@ -737,5 +750,24 @@ export function calcularMetaPixPorEquipe(p: {
     metaAcordos: metaAcordosSetor,
   });
 
-  return { equipes, setor };
+  /*
+   * O realizado por equipe, com meta ou sem.
+   *
+   * A soma acima só percorre `p.metas`, então uma equipe que produziu e não tem
+   * meta lançada não aparecia em lugar nenhum — nem como linha zerada. Aqui o
+   * agrupamento parte dos ACORDOS, que é o que existe independentemente de
+   * alguém ter digitado uma meta.
+   */
+  const realizadoPorEquipe: Record<string, { realizado: number; acordos: number }> = {};
+  for (const i of p.itens) {
+    if (!ehAcordoFeito(i) || !i.criado_em.startsWith(p.mes)) continue;
+    const equipeId = p.equipePorOperador[i.operador_id];
+    if (!equipeId) continue;   // sem equipe conhecida entra só no total do setor
+    const atual = realizadoPorEquipe[equipeId] ?? { realizado: 0, acordos: 0 };
+    atual.realizado += Number(i.valor);
+    atual.acordos   += 1;
+    realizadoPorEquipe[equipeId] = atual;
+  }
+
+  return { equipes, setor, realizadoPorEquipe };
 }
