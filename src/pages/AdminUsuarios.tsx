@@ -30,7 +30,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, CalendarRange } from 'lucide-react';
+// A lista de um mes FECHADO — so leitura, com as etiquetas do que mudou depois.
+import { UsuariosDoMesPainel } from '@/components/admin/UsuariosDoMesPainel';
+import { mesesComRetrato } from '@/services/admin/usuariosDoMes.service';
+import { ehMesAtual, rotuloDoMes } from '@/lib/mesReferencia';
 import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
 import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas } from '@/services/situacaoUsuario.service';
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
@@ -128,6 +132,34 @@ export default function AdminUsuarios() {
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
   const podeGerenciarSituacao = podeAdministrarContas
     || temPermissao('usuarios_editar_do_setor');
+  /*
+   * O mês que está sendo olhado. `null` = o mês corrente, que é a tela de
+   * sempre — com formulários, edição e tudo o que ela sempre teve.
+   *
+   * Um mês fechado troca a tela inteira pelo retrato daquele mês, só de
+   * leitura. Não é filtro: é outro assunto. Ver `UsuariosDoMesPainel`.
+   */
+  const [mesRetrato, setMesRetrato] = useState<string | null>(null);
+  const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([]);
+
+  useEffect(() => {
+    const empresaId = empresaAtual?.id;
+    if (!empresaId) { setMesesDisponiveis([]); return; }
+    let cancelado = false;
+    void mesesComRetrato(empresaId).then(meses => {
+      if (cancelado) return;
+      // O mês corrente sai da lista: ele é a opção «Mês atual», e oferecê-lo
+      // duas vezes faria a mesma escolha levar a duas telas diferentes.
+      setMesesDisponiveis(meses.filter(m => !ehMesAtual(m)));
+    });
+    return () => { cancelado = true; };
+  }, [empresaAtual?.id]);
+
+  // Trocar de empresa volta para o mês corrente: o retrato é por empresa, e
+  // manter o mês escolhido mostraria a foto de uma empresa com o rótulo de
+  // outra até a releitura chegar.
+  useEffect(() => { setMesRetrato(null); }, [empresaAtual?.id]);
+
   const podeVerSetores = temPermissao('ver_setores');
   const podeVerEquipes = temPermissao('ver_equipes');
   const podeVerMetas = metasComoAba && temPermissao('ver_metas');
@@ -740,17 +772,53 @@ export default function AdminUsuarios() {
     <div className="h-full flex flex-col">
       {/* Cabeçalho */}
       <div className="px-6 pt-6 pb-0">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" /> Usuários
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e equipes</p>
           </div>
+
+          {/*
+            O seletor de mês.
+            ────────────────────────────────────────────────────────────────
+            «Mês atual» é a tela de sempre, com todos os botões. Um mês
+            fechado abre o RETRATO daquele mês, só de leitura — ver
+            `UsuariosDoMesPainel`, que explica por que são duas telas e não
+            uma com filtro.
+
+            Só aparece quando existe pelo menos um mês fechado com foto: um
+            seletor de uma opção só é um seletor que não decide nada.
+          */}
+          {mesesDisponiveis.length > 0 && (
+            <div className="flex items-center gap-2">
+              <CalendarRange className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Select
+                value={mesRetrato ?? 'atual'}
+                onValueChange={v => setMesRetrato(v === 'atual' ? null : v)}
+              >
+                <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="atual">Mês atual (editável)</SelectItem>
+                  {mesesDisponiveis.map(m => (
+                    <SelectItem key={m} value={m}>{rotuloDoMes(m)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
 
-      {tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
+      {/* Mês fechado: a tela inteira muda de assunto. */}
+      {mesRetrato && empresaAtual?.id ? (
+        <div className="flex-1 overflow-y-auto p-6">
+          <UsuariosDoMesPainel empresaId={empresaAtual.id} mes={mesRetrato} />
+        </div>
+      ) : tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
             {podeVerUsuarios && <TabsTrigger
