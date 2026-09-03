@@ -33,6 +33,7 @@ const {
   mockRealtimeSubscribe,
   mockRealtimeUnsubscribe,
   mockSupabaseFromSpy,
+  mockComposicao,
 } = vi.hoisted(() => {
   const mockPerfilValue         = { current: null as unknown };
   const mockEmpresaValue        = { current: null as unknown };
@@ -40,6 +41,7 @@ const {
   const mockRealtimeSubscribe   = vi.fn();
   const mockRealtimeUnsubscribe = vi.fn();
   const mockSupabaseFromSpy     = vi.fn();
+  const mockComposicao          = vi.fn();
 
   return {
     mockPerfilValue,
@@ -48,6 +50,7 @@ const {
     mockRealtimeSubscribe,
     mockRealtimeUnsubscribe,
     mockSupabaseFromSpy,
+    mockComposicao,
   };
 });
 
@@ -138,6 +141,30 @@ vi.mock('@/lib/supabase', () => ({
     removeChannel: vi.fn(),
   },
 }));
+
+/*
+ * A composição (quem está em qual equipe e setor) é MOCKADA à parte.
+ *
+ * Desde 03/09/2026 o hook não a monta mais com consultas próprias: ele chama
+ * `buscarEquipesComOperadores`, a mesma função do Painel Líder, que decide
+ * sozinha entre o retrato do mês fechado e o estado de hoje.
+ *
+ * Mockar a função, e não as consultas que ela faz por dentro, é o ponto: a fila
+ * por tabela deste arquivo depende da ORDEM das queries, e amarrar o teste a
+ * essa ordem é amarrá-lo a um detalhe interno de outro módulo. Aqui o teste
+ * declara a composição que quer e verifica o que o hook faz com ela.
+ *
+ * `operadoresDaEquipe` fica REAL: é função pura e é justamente a regra que se
+ * quer exercitar (membros mais clonados).
+ */
+vi.mock('@/services/analitico/analitico.service', async (importarReal) => {
+  const real = await importarReal<typeof import('@/services/analitico/analitico.service')>();
+  return {
+    ...real,
+    buscarEquipesComOperadores: (...args: unknown[]) => mockComposicao(...args),
+    buscarSetoresDoRetrato: () => Promise.resolve(null),
+  };
+});
 
 // ── 3. Import do SUT (depois dos mocks) ───────────────────────────────────────
 
@@ -241,7 +268,36 @@ function setupAdminResults(opts: {
   pushResult('metas',    { data: opts.metasEquipe    ?? [], error: null });
   pushResult('metas',    { data: opts.metasOperador  ?? [], error: null });
   pushResult('perfis',   { data: opts.perfis         ?? [], error: null });
-  pushResult('equipes',  { data: opts.equipes        ?? [], error: null });
+  // A composição sai das MESMAS opções: `perfis[].equipe_id` diz onde cada um
+  // estava, `equipes` dá os nomes. Assim o cenário continua sendo descrito num
+  // lugar só, e o teste não precisa saber que existe uma segunda fonte.
+  definirComposicao(opts.perfis, opts.equipes);
+}
+
+/**
+ * Alimenta o mock de `buscarEquipesComOperadores` a partir das mesmas listas
+ * que os cenários já declaravam.
+ */
+function definirComposicao(perfis?: unknown[], equipes?: unknown[], setorId = SETOR_ID) {
+  const pessoas = (perfis ?? []) as { id: string; equipe_id?: string | null }[];
+  const eqs     = (equipes ?? []) as { id: string; nome: string; setor_id?: string | null }[];
+
+  const operadorEquipeMap: Record<string, unknown> = {};
+  for (const p of pessoas) {
+    operadorEquipeMap[p.id] = {
+      equipe_id:   p.equipe_id ?? null,
+      equipe_nome: eqs.find(e => e.id === p.equipe_id)?.nome ?? 'Sem equipe',
+      setor_id:    setorId,
+    };
+  }
+
+  mockComposicao.mockResolvedValue({
+    equipes: eqs.map(e => ({ id: e.id, nome: e.nome, setor_id: e.setor_id ?? setorId })),
+    operadorEquipeMap,
+    equipesExtrasPorOperador: {},
+    situacaoPorOperador: {},
+    doRetrato: false,
+  });
 }
 
 /**
@@ -263,13 +319,17 @@ function setupLiderResults(opts: {
   perfis?:         unknown[];
   equipes?:        unknown[];
 } = {}) {
-  pushResult('equipes', { data: opts.equipesDoSetor ?? [], error: null });
   pushResult('acordos', { data: opts.acordos        ?? [], error: null });
   pushResult('metas',   { data: opts.metaSetor       ?? null, error: null });
   pushResult('metas',   { data: opts.metasEquipe     ?? [], error: null });
   pushResult('metas',   { data: opts.metasOperador   ?? [], error: null });
   pushResult('perfis',  { data: opts.perfis          ?? [], error: null });
-  pushResult('equipes', { data: opts.equipes         ?? [], error: null });
+  // As equipes do setor deixaram de ser uma consulta e passaram a sair da
+  // composição — é ela que sabe quais equipes existiam no mês olhado.
+  definirComposicao(
+    opts.perfis,
+    (opts.equipesDoSetor ?? opts.equipes) as unknown[] | undefined,
+  );
 }
 
 // ── 5. Setup / teardown ───────────────────────────────────────────────────────
@@ -284,6 +344,11 @@ beforeEach(() => {
   defaultResult = { data: null, error: null };
 
   vi.clearAllMocks();
+
+  // Composição vazia por padrão. `clearAllMocks` apaga o `mockResolvedValue`,
+  // e sem um padrão a função devolveria `undefined` — o hook quebraria antes
+  // de chegar ao que o teste quer medir.
+  definirComposicao([], []);
 
   // Estado padrão: não logado
   mockPerfilValue.current     = null;

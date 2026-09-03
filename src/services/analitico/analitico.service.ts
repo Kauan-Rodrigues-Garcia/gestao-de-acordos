@@ -2176,8 +2176,19 @@ export function operadoresDoSetor(setorId: string, fontes: FontesDeEscopo): Set<
   return out;
 }
 
-/** Operadores da equipe — os próprios e os clonados nela. */
-export function operadoresDaEquipe(equipeId: string, fontes: FontesDeEscopo): Set<string> {
+/**
+ * Operadores da equipe — os próprios e os clonados nela.
+ *
+ * O parâmetro pede só os dois campos que a função LÊ, e não `FontesDeEscopo`
+ * inteiro. `FontesDeEscopo` continua servindo (tem os dois), mas quem só tem a
+ * composição em mãos — o Dashboard — não precisa mais inventar um
+ * `setoresAlternativos` vazio e um `setorDaEquipe` que ninguém consulta aqui.
+ * Campo falso passa no compilador e mente para quem lê.
+ */
+export function operadoresDaEquipe(
+  equipeId: string,
+  fontes: Pick<FontesDeEscopo, 'operadorEquipeMap' | 'equipesExtrasPorOperador'>,
+): Set<string> {
   const out = new Set<string>();
   for (const [id, info] of Object.entries(fontes.operadorEquipeMap)) {
     if (info.equipe_id === equipeId

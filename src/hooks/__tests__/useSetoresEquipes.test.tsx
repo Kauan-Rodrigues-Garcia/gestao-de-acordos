@@ -14,11 +14,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 
-const { perfilRef, empresaRef, chavesRef, fromSpy } = vi.hoisted(() => ({
+const { perfilRef, empresaRef, chavesRef, fromSpy, composicaoSpy } = vi.hoisted(() => ({
   perfilRef:    { current: { perfil: 'lider', setor_id: 'setor-1' } as Record<string, unknown> | null },
   empresaRef:   { current: { id: 'emp-1' } as { id: string } | null },
   chavesRef:    { current: new Set<string>() },
   fromSpy:      vi.fn(),
+  composicaoSpy: vi.fn(),
 }));
 
 // `useAuth` devolve um OBJETO NOVO a cada chamada, de propósito: é assim que o
@@ -34,6 +35,22 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
 }));
 vi.mock('@/lib/supabase', () => ({
   supabase: { from: (tabela: string) => fromSpy(tabela) },
+}));
+
+/*
+ * A lista de EQUIPES deixou de ser consulta própria em 03/09/2026.
+ *
+ * Ela sai de `buscarEquipesComOperadores` — a mesma função do Painel Líder e do
+ * `useAnalytics` —, que decide sozinha entre o retrato do mês fechado e o
+ * estado de hoje. O filtro precisa oferecer as equipes DAQUELE mês: a apagada
+ * depois tem de continuar escolhível, e a criada depois não pode aparecer.
+ *
+ * `buscarSetoresDoRetrato` devolve `null` aqui: sem retrato, valem os nomes de
+ * hoje, que é o caminho que estes casos exercitam.
+ */
+vi.mock('@/services/analitico/analitico.service', () => ({
+  buscarEquipesComOperadores: (...args: unknown[]) => composicaoSpy(...args),
+  buscarSetoresDoRetrato: () => Promise.resolve(null),
 }));
 
 const { useSetoresEquipes } = await import('@/hooks/useSetoresEquipes');
@@ -77,7 +94,24 @@ beforeEach(() => {
     construtor(tabela === 'equipes'
       ? [{ id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' }]
       : [{ id: 's-1', nome: 'Setor 1' }]));
+
+  composicaoSpy.mockReset();
+  definirEquipes([{ id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' }]);
 });
+
+/** As equipes que a composição do mês devolve. */
+function definirEquipes(
+  equipes: { id: string; nome: string; setor_id: string | null }[],
+  operadorEquipeMap: Record<string, unknown> = {},
+) {
+  composicaoSpy.mockResolvedValue({
+    equipes,
+    operadorEquipeMap,
+    equipesExtrasPorOperador: {},
+    situacaoPorOperador: {},
+    doRetrato: false,
+  });
+}
 
 describe('useSetoresEquipes — não entra em laço', () => {
   it('consulta o banco UMA vez, mesmo com `perfil` mudando de identidade', async () => {
@@ -98,12 +132,14 @@ describe('useSetoresEquipes — não entra em laço', () => {
   it('recarrega quando o setor do usuário realmente muda', async () => {
     const { result, rerender } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    const antes = fromSpy.mock.calls.length;
+    // O líder não consulta `setores` (não escolhe setor) e as equipes vêm da
+    // composição — então quem conta a recarga é ela, não o `from`.
+    const antes = composicaoSpy.mock.calls.length;
 
     perfilRef.current = { perfil: 'lider', setor_id: 'setor-2' };
     rerender();
 
-    await waitFor(() => expect(fromSpy.mock.calls.length).toBeGreaterThan(antes));
+    await waitFor(() => expect(composicaoSpy.mock.calls.length).toBeGreaterThan(antes));
   });
 });
 
@@ -177,13 +213,12 @@ describe('useSetoresEquipes — o que cada nivel enxerga', () => {
   it('as equipes seguem o setor escolhido', async () => {
     chavesRef.current.add('dashboard_escopo_setor');
     chavesRef.current.add('dashboard_escopo_todos_setores');
-    fromSpy.mockImplementation((tabela: string) =>
-      construtor(tabela === 'equipes'
-        ? [
-            { id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' },
-            { id: 'eq-2', nome: 'Equipe B', setor_id: 'setor-2' },
-          ]
-        : [{ id: 'setor-1', nome: 'Setor 1' }, { id: 'setor-2', nome: 'Setor 2' }]));
+    fromSpy.mockImplementation(() =>
+      construtor([{ id: 'setor-1', nome: 'Setor 1' }, { id: 'setor-2', nome: 'Setor 2' }]));
+    definirEquipes([
+      { id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' },
+      { id: 'eq-2', nome: 'Equipe B', setor_id: 'setor-2' },
+    ]);
 
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -204,6 +239,7 @@ describe('useSetoresEquipes — o que cada nivel enxerga', () => {
 
   it('falha no banco não quebra a tela — devolve listas vazias', async () => {
     fromSpy.mockImplementation(() => { throw new Error('banco fora'); });
+    composicaoSpy.mockRejectedValue(new Error('banco fora'));
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.setores).toEqual([]);
@@ -226,18 +262,16 @@ describe('useSetoresEquipes — só a minha equipe ou todas', () => {
   /** As três equipes do setor; a pessoa está na do meio. */
   function tresEquipes(clonesEm: string[] = []) {
     fromSpy.mockImplementation((tabela: string) => {
-      if (tabela === 'equipes') {
-        return construtor([
-          { id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' },
-          { id: 'eq-2', nome: 'Equipe B', setor_id: 'setor-1' },
-          { id: 'eq-3', nome: 'Equipe C', setor_id: 'setor-1' },
-        ]);
-      }
       if (tabela === 'equipe_operadores_clones') {
         return construtor(clonesEm.map(id => ({ equipe_id: id })));
       }
       return construtor([{ id: 's-1', nome: 'Setor 1' }]);
     });
+    definirEquipes([
+      { id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' },
+      { id: 'eq-2', nome: 'Equipe B', setor_id: 'setor-1' },
+      { id: 'eq-3', nome: 'Equipe C', setor_id: 'setor-1' },
+    ]);
   }
 
   /*

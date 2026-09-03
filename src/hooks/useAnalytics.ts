@@ -38,6 +38,30 @@ import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
 import { useTenant } from '@/lib/tenant-config';
+/*
+ * A composição sai da MESMA função que o Painel Líder usa.
+ *
+ * Até 03/09/2026 este hook resolvia sozinho quem estava em qual equipe e setor,
+ * com seis consultas soltas a `perfis`, `equipes`, `setores` e
+ * `equipe_operadores_clones` — todas ao vivo, nenhuma com filtro de mês. O
+ * Painel Líder já fazia a mesma pergunta por `buscarEquipesComOperadores`, que
+ * lê o retrato congelado quando o mês está fechado.
+ *
+ * Duas respostas para a mesma pergunta é o arranjo que produz divergência, e
+ * produziu: filtrar agosto no Dashboard somava os acordos de agosto pelas
+ * equipes de HOJE, enquanto o Painel Líder, ao lado, mostrava agosto pelas
+ * equipes de agosto.
+ *
+ * O que NÃO foi unificado, de propósito: a MEDIDA. O Painel Líder soma
+ * recebimento (`analitico_recebimentos`, `diario_recebimentos`); este hook soma
+ * acordos fechados (tabela `acordos`). São perguntas diferentes, e juntá-las
+ * mudaria o que o Dashboard responde. O que se compartilha é a composição.
+ */
+import {
+  buscarEquipesComOperadores, buscarSetoresDoRetrato,
+  operadoresDaEquipe as operadoresDaEquipeDe,
+  type ComposicaoEquipes,
+} from '@/services/analitico/analitico.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -318,6 +342,25 @@ export function useAnalytics(
     };
 
     try {
+      /*
+       * Quem estava em qual equipe e setor NO MÊS OLHADO — uma pergunta, uma
+       * resposta, a mesma do Painel Líder. Ver o comentário do import.
+       *
+       * Mês fechado devolve o retrato congelado; mês corrente devolve o estado
+       * de hoje, que é o que ele é. `doRetrato` diz de qual dos dois veio.
+       */
+      const composicao: ComposicaoEquipes =
+        await buscarEquipesComOperadores(empresa.id, mesRef ?? null);
+      const fontes = {
+        operadorEquipeMap: composicao.operadorEquipeMap,
+        equipesExtrasPorOperador: composicao.equipesExtrasPorOperador,
+      };
+      // Os RÓTULOS de setor daquele mês. `null` no mês corrente e nos meses sem
+      // foto — aí valem os nomes de hoje, que é o comportamento antigo.
+      const nomesSetorDoMes = composicao.doRetrato && mesRef
+        ? await buscarSetoresDoRetrato(empresa.id, mesRef)
+        : null;
+
       // ── Setores para o filtro ────────────────────────────────────────────────
       // Quem tem `todos_setores` NESTA aba escolhe o setor; quem não tem fica
       // travado no próprio e nem carrega a lista.
@@ -327,25 +370,40 @@ export function useAnalytics(
           .select('id, nome')
           .eq('empresa_id', empresa.id)
           .order('nome');
-        pacote.setores = (setoresData as { id: string; nome: string }[]) ?? [];
+        const vivos = (setoresData as { id: string; nome: string }[]) ?? [];
+        /*
+         * Mês fechado: o rótulo é o daquele mês, e o setor APAGADO depois volta
+         * para a lista.
+         *
+         * «Amauri Digital» virou «Marília Digital» em 01/09; sem esta correção
+         * agosto aparece com um nome que não existiu no mês inteiro que está
+         * sendo mostrado. E um setor extinto some do filtro levando junto os
+         * acordos que ele produziu — que continuam na tabela, sem como chegar.
+         */
+        if (nomesSetorDoMes) {
+          const porId = new Map(vivos.map(s => [s.id, s.nome]));
+          for (const [id, nome] of Object.entries(nomesSetorDoMes)) porId.set(id, nome);
+          pacote.setores = [...porId.entries()]
+            .map(([id, nome]) => ({ id, nome }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        } else {
+          pacote.setores = vivos;
+        }
         setSetores(pacote.setores);
       }
 
-      // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
+      // ── Equipes do setor, para o Líder/Elite ────────────────────────────────
+      // Sai da composição, e não de uma consulta própria: é a mesma lista que o
+      // Painel Líder desenha, com os nomes do mês olhado e sem a equipe que
+      // nasceu depois dele.
       let equipesDoSetorAtual: { id: string; nome: string }[] = [];
       // `!podeTodosSetores` reproduz o antigo `isLider` LINHA A LINHA: quem
       // enxerga a empresa (cupula) nao carregava esta lista, e continua nao
-      // carregando — ela so serve a quem esta preso a um setor. Sem isso o
-      // admin dispararia uma consulta a mais, cujo resultado ninguem le.
+      // carregando — ela so serve a quem esta preso a um setor.
       if (podeSetor && !podeTodosSetores && perfil.setor_id) {
-        let eqQuery = supabase
-          .from('equipes')
-          .select('id, nome')
-          .eq('empresa_id', empresa.id);
-        // Sem 'ver_todos_setores': apenas equipes do próprio setor
-        eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
-        const { data: eqData } = await eqQuery.order('nome');
-        equipesDoSetorAtual = (eqData as { id: string; nome: string }[]) ?? [];
+        equipesDoSetorAtual = composicao.equipes
+          .filter(e => e.setor_id === perfil.setor_id)
+          .map(e => ({ id: e.id, nome: e.nome }));
         pacote.equipesDoSetor = equipesDoSetorAtual;
         setEquipesDoSetor(equipesDoSetorAtual);
       }
@@ -358,12 +416,19 @@ export function useAnalytics(
       // enxerga a empresa recorta pelo filtro de SETOR. Sem isso, um admin que
       // escolhesse uma equipe dispararia uma consulta cujo resultado ninguem le.
       if (podeEquipe && !podeTodosSetores && equipeFiltro && !operadorFiltro) {
-        const { data: membros } = await supabase
-          .from('perfis')
-          .select('id')
-          .eq('empresa_id', empresa.id)
-          .eq('equipe_id', equipeFiltro);
-        operadoresDaEquipe = ((membros as { id: string }[]) ?? []).map(m => m.id);
+        /*
+         * Da composição do MÊS, não de `perfis.equipe_id` de hoje.
+         *
+         * Era este `.eq('equipe_id', ...)` que reescrevia o passado: filtrar
+         * agosto por uma equipe somava os acordos de quem está nela AGORA, e
+         * não de quem estava nela em agosto. Quem mudou de equipe em setembro
+         * levava a produção de agosto junto, e quem saiu sumia dela.
+         *
+         * `operadoresDaEquipeDe` inclui os CLONADOS na equipe, como o Painel
+         * Líder — o clone produz para as duas, e ignorá-lo zerava o card de um
+         * setor formado só por gente emprestada.
+         */
+        operadoresDaEquipe = [...operadoresDaEquipeDe(equipeFiltro, fontes)];
       }
 
       /*
@@ -387,24 +452,30 @@ export function useAnalytics(
 
         let equipesAlvo: string[];
         if (podeTodasEquipes && perfil.setor_id) {
-          const { data: eqs } = await supabase
-            .from('equipes').select('id')
-            .eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
-          equipesAlvo = ((eqs as { id: string }[]) ?? []).map(e => e.id);
+          equipesAlvo = composicao.equipes
+            .filter(e => e.setor_id === perfil.setor_id)
+            .map(e => e.id);
         } else {
           // A equipe do CADASTRO, e só ela — nem a que a pessoa foi clonada.
           // Clone é empréstimo para outro setor, e contar a equipe emprestada
           // devolveria o alcance que a chave desligada acabou de tirar.
-          equipesAlvo = minhaEquipe ? [minhaEquipe] : [];
+          //
+          // No mês fechado, a equipe do cadastro é a DAQUELE mês: quem mudou de
+          // equipe depois continua vendo, em agosto, o que agosto era.
+          equipesAlvo = (() => {
+            const noMes = composicao.operadorEquipeMap[perfil.id]?.equipe_id ?? null;
+            const alvo = noMes ?? minhaEquipe;
+            return alvo ? [alvo] : [];
+          })();
         }
 
         if (equipesAlvo.length === 0) {
           operadoresDoAlcanceEquipe = [];
         } else {
-          const { data: membros } = await supabase
-            .from('perfis').select('id')
-            .eq('empresa_id', empresa.id).in('equipe_id', [...new Set(equipesAlvo)]);
-          const ids = new Set(((membros as { id: string }[]) ?? []).map(m => m.id));
+          const ids = new Set<string>();
+          for (const eq of new Set(equipesAlvo)) {
+            for (const id of operadoresDaEquipeDe(eq, fontes)) ids.add(id);
+          }
           // Eu entro sempre: sem equipe cadastrada eu ainda vejo o meu.
           ids.add(perfil.id);
           operadoresDoAlcanceEquipe = [...ids];
@@ -416,15 +487,16 @@ export function useAnalytics(
       // setor formado só por clones (ex.: Digital) fica com o dashboard zerado.
       let cloneIdsSetor: string[] = [];
       if (isBookplay && podeSetor && !podeTodosSetores && perfil.setor_id && !operadorFiltro && !equipeFiltro) {
-        const { data: eqs } = await supabase
-          .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
-        const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
-        if (eqIds.length) {
-          const { data: cl } = await supabase
-            .from('equipe_operadores_clones').select('operador_id')
-            .eq('empresa_id', empresa.id).in('equipe_id', eqIds);
-          cloneIdsSetor = [...new Set(((cl as { operador_id: string }[]) ?? []).map(c => c.operador_id))];
+        // Os clones DAQUELE mês: `equipes_clone` vem no retrato, então em
+        // agosto conta quem estava emprestado em agosto — não quem está hoje.
+        const eqIds = new Set(
+          composicao.equipes.filter(e => e.setor_id === perfil.setor_id).map(e => e.id),
+        );
+        const ids = new Set<string>();
+        for (const [operadorId, extras] of Object.entries(composicao.equipesExtrasPorOperador)) {
+          if (extras.some(eq => eqIds.has(eq))) ids.add(operadorId);
         }
+        cloneIdsSetor = [...ids];
       }
 
       // ── Acordos conforme perfil ──────────────────────────────────────────────
@@ -608,33 +680,40 @@ export function useAnalytics(
         setMetasEquipe(pacote.metasEquipe);
         setMetasOperador(pacote.metasOperador);
 
-        // Mapas de nomes
-        const [{ data: ops }, { data: eqs }] = await Promise.all([
-          supabase
-            .from('perfis')
-            .select('id, nome, equipe_id')
-            .eq('empresa_id', empresa.id)
-            .in('perfil', ['operador', 'elite', 'gerencia']),
-          supabase
-            .from('equipes')
-            .select('id, nome')
-            .eq('empresa_id', empresa.id),
-        ]);
+        /*
+         * Mapas de nome e de equipe.
+         *
+         * O NOME da pessoa continua vindo de `perfis`: o retrato não o guarda, e
+         * um nome não viaja no tempo como um vínculo viaja.
+         *
+         * A EQUIPE de cada operador, essa vem da composição do mês. É ela que
+         * decide em qual card cada número cai, e era o segundo lugar onde
+         * agosto era desenhado com as equipes de setembro — o primeiro é o
+         * recorte da consulta, lá em cima.
+         */
+        const { data: ops } = await supabase
+          .from('perfis')
+          .select('id, nome')
+          .eq('empresa_id', empresa.id)
+          .in('perfil', ['operador', 'elite', 'gerencia']);
         if (vencida()) { encerrar?.(false); return; }
 
         const opMap: Record<string, string> = {};
+        ((ops as { id: string; nome: string }[]) || []).forEach(o => { opMap[o.id] = o.nome; });
+
         const opEqMap: Record<string, string | null> = {};
-        ((ops as { id: string; nome: string; equipe_id: string | null }[]) || []).forEach(o => {
-          opMap[o.id]   = o.nome;
-          opEqMap[o.id] = o.equipe_id ?? null;
-        });
+        for (const [id, info] of Object.entries(composicao.operadorEquipeMap)) {
+          opEqMap[id] = info.equipe_id ?? null;
+        }
         pacote.operadoresMap     = opMap;
         pacote.operadorEquipeMap = opEqMap;
         setOperadoresMap(opMap);
         setOperadorEquipeMap(opEqMap);
 
+        // Os nomes de equipe do mês olhado, inclusive os das equipes apagadas
+        // depois — «Bryan» existiu agosto inteiro e sumiu em setembro.
         const eqMap: Record<string, string> = {};
-        ((eqs as { id: string; nome: string }[]) || []).forEach(e => { eqMap[e.id] = e.nome; });
+        for (const e of composicao.equipes) eqMap[e.id] = e.nome;
         pacote.equipesMap = eqMap;
         setEquipesMap(eqMap);
       }

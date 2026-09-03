@@ -50,6 +50,15 @@ export default function Dashboard() {
   const statusLabels = tenant.statusLabels;
   const tipoLabels   = tenant.tipoLabels;
 
+  /*
+   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
+   * Dashboard e clicar em Acordos tem que continuar em agosto.
+   *
+   * Fica ANTES das listas de setor/equipe porque elas dependem dele: desde
+   * 03/09/2026 o filtro oferece as equipes DAQUELE mês, e não as de hoje.
+   */
+  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
+
   // Só as LISTAS de setor/equipe. Antes isto vinha de `useAnalytics()`, que
   // varre todos os acordos do mês — e o `AnalyticsPanel` logo abaixo monta o
   // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
@@ -57,7 +66,7 @@ export default function Dashboard() {
   const {
     setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor, niveis,
     podeTodasEquipes,
-  } = useSetoresEquipes();
+  } = useSetoresEquipes(mesFiltro);
   // Os quatro testes por cargo que moravam aqui (`isAdmin`, `isLiderOuElite`,
   // `isElite`, `isLider`) decidiam quem via cada filtro. Quem decide agora sao
   // os niveis da aba, resolvidos em `useSetoresEquipes` e lidos por
@@ -142,11 +151,6 @@ export default function Dashboard() {
 
   const [hojeMinimizado, setHojeMinimizado] = useState(false);
 
-  /*
-   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
-   * Dashboard e clicar em Acordos tem que continuar em agosto.
-   */
-  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [busca,        setBusca]        = useState(searchParams.get('busca')  || '');

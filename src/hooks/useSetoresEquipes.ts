@@ -25,6 +25,9 @@ import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { niveisLiberados, type NivelEscopo } from '@/lib/permissoes-escopo';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
+import {
+  buscarEquipesComOperadores, buscarSetoresDoRetrato,
+} from '@/services/analitico/analitico.service';
 
 export interface SetorResumo { id: string; nome: string }
 
@@ -66,7 +69,7 @@ export interface SetoresEquipes {
   loading: boolean;
 }
 
-export function useSetoresEquipes(): SetoresEquipes {
+export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -130,14 +133,41 @@ export function useSetoresEquipes(): SetoresEquipes {
     if (!cargo || !empresaId) { setLoading(false); return; }
 
     try {
+      /*
+       * O mês olhado decide de onde as listas saem.
+       *
+       * O FILTRO tem de oferecer o que existia no mês, e não o que existe hoje:
+       * a equipe «Bryan» rodou agosto inteiro e foi apagada em setembro, então
+       * sem isto ela some do seletor e os acordos dela ficam sem como chegar —
+       * enquanto uma equipe criada em setembro aparece oferecendo um recorte
+       * que não tem uma linha sequer naquele mês.
+       *
+       * A fonte é a mesma do Painel Líder e a mesma que o `useAnalytics` passou
+       * a usar. Se o filtro e o dado lessem de lugares diferentes, voltaríamos
+       * ao ponto de partida por outro caminho.
+       */
+      const composicao = await buscarEquipesComOperadores(empresaId, mes ?? null);
+      const nomesSetorDoMes = composicao.doRetrato && mes
+        ? await buscarSetoresDoRetrato(empresaId, mes)
+        : null;
+
       // A lista de setores só serve a quem pode escolher entre eles.
       if (podeTodosSetores) {
         const { data } = await supabase
           .from('setores').select('id, nome')
           .eq('empresa_id', empresaId).order('nome');
+        const vivos = (data as SetorResumo[]) ?? [];
+        // Mês fechado: rótulo daquele mês, e o setor extinto depois volta.
+        const lista: SetorResumo[] = nomesSetorDoMes
+          ? (() => {
+              const porId = new Map(vivos.map(s => [s.id, s.nome]));
+              for (const [id, nome] of Object.entries(nomesSetorDoMes)) porId.set(id, nome);
+              return [...porId.entries()].map(([id, nome]) => ({ id, nome }));
+            })()
+          : vivos;
         // Ordem escolhida na aba Setores; o `order('nome')` acima vira só o
         // desempate de quem ainda não está na ordem salva.
-        setSetores(aplicarOrdemSetores((data as SetorResumo[]) ?? [], empresaId));
+        setSetores(aplicarOrdemSetores(lista, empresaId));
       } else {
         setSetores(VAZIO);
       }
@@ -146,10 +176,14 @@ export function useSetoresEquipes(): SetoresEquipes {
       // para quem está travado nele. O recorte fino por setor em foco acontece
       // depois, sobre esta lista — ver `equipesDoSetor` no retorno.
       if (podeEquipe && (setorId || podeTodosSetores)) {
-        let q = supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId);
-        if (!podeTodosSetores && setorId) q = q.eq('setor_id', setorId);
-        const { data } = await q.order('nome');
-        setEquipes((data as EquipeResumo[]) ?? []);
+        const todas: EquipeResumo[] = composicao.equipes.map(e => ({
+          id: e.id, nome: e.nome, setor_id: e.setor_id,
+        }));
+        setEquipes(
+          !podeTodosSetores && setorId
+            ? todas.filter(e => e.setor_id === setorId)
+            : todas,
+        );
       } else {
         setEquipes(VAZIO_EQUIPES);
       }
@@ -177,7 +211,7 @@ export function useSetoresEquipes(): SetoresEquipes {
       setLoading(false);
     }
   }, [cargo, setorId, empresaId, podeTodosSetores, podeEquipe, podeTodasEquipes,
-      minhaEquipeId]);
+      minhaEquipeId, mes]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
