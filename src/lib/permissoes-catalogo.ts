@@ -1247,6 +1247,33 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'a correção é anotada em OUTRA pessoa — sem alcance de setor não há em quem anotar',
     },
   },
+  {
+    key: 'pix_marcar_premiacao_paga', label: 'Pix: marcar a premiação como paga',
+    descricao:
+      'Registrar que a premiação do mês de alguém saiu, e quanto — o valor entra '
+      + 'no «já pago» do painel de pagamento',
+    grupo: 'Pix Automático', tenants: ['bookplay'],
+    /*
+     * Era `PERFIL_NIVEL[cargo] >= PERFIL_NIVEL.gerencia`, escrito na tela E na
+     * RPC (`fn_user_has_any_role`). Hierarquia de cargo é a mesma decisão de
+     * sempre com outra roupa: promover alguém a «paga a premiação» exigia mexer
+     * em código nos dois lugares.
+     *
+     * `padrao` reproduz exatamente quem podia antes — gerência e diretoria; o
+     * acesso total de administrador e super_admin continua vindo de
+     * `fn_user_tem`, que não precisa da chave semeada.
+     */
+    padrao: { gerencia: true, diretoria: true },
+    /*
+     * A premiação marcada é de OUTRA pessoa, e o painel que traz o botão
+     * (`PixPainelPremiacoes`) só monta para quem enxerga o setor. Sem o par, a
+     * chave ligaria um botão que não existe em tela nenhuma.
+     */
+    depende: {
+      chaves: ['pix_escopo_setor', 'pix_escopo_todos_setores'],
+      motivo: 'a premiação é de OUTRA pessoa — sem alcance de setor o painel de pagamento nem aparece',
+    },
+  },
 
   // ── Ações específicas ────────────────────────────────────────────────────
   // Separadas de "abrir a aba": ver o módulo e agir dentro dele são decisões

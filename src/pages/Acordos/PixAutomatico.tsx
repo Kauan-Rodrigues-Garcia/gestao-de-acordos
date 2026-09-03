@@ -64,7 +64,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
-import { formatCurrency, parseCurrencyInput, getTodayISO, PERFIL_NIVEL } from '@/lib/index';
+import { formatCurrency, parseCurrencyInput, getTodayISO } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
@@ -495,8 +495,21 @@ export function PixAutomatico() {
   const podeRegistrar = podeAgirSobreOutros
     || meuSetor == null
     || (configs[meuSetor]?.permite_registro_operador ?? true);
+  /*
+   * Marcar a premiação como paga.
+   *
+   * Era `PERFIL_NIVEL[cargo] >= PERFIL_NIVEL.gerencia` — a última decisão por
+   * cargo deste arquivo, e hierarquia de cargo é a mesma coisa que nome de
+   * cargo com outra roupa: promover alguém a «paga a premiação» exigia mexer em
+   * código. O banco cobrava o mesmo por conta própria (`fn_user_has_any_role`),
+   * então os dois lados foram convertidos juntos — pedir menos aqui do que a
+   * RPC cobra lá faria o botão aparecer e a gravação falhar sem explicação.
+   *
+   * O par com `podeVerDeOutros` é o mesmo de `podeAjustarSaldo`, e pelo mesmo
+   * motivo: a premiação marcada é de OUTRA pessoa.
+   */
   const podeMarcarPremiacaoPaga =
-    (PERFIL_NIVEL[perfil?.perfil ?? ''] ?? 0) >= PERFIL_NIVEL.gerencia;
+    podeVerDeOutros && temPermissao('pix_marcar_premiacao_paga');
 
   /*
    * `carregar` é chamada depois de TODA ação da aba: aprovar, pagar, excluir,
