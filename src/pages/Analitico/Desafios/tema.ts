@@ -19,7 +19,7 @@
  */
 import { Coffee, Flag, Trophy, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { TemaDesafio } from '@/services/desafios/types';
+import type { AcentoDesafio, TemaDesafio, VisualDesafio } from '@/services/desafios/types';
 
 export interface EstiloTema {
   Icone: LucideIcon;
@@ -74,8 +74,84 @@ const TEMAS: Record<TemaDesafio, EstiloTema> = {
   },
 };
 
+/**
+ * As cores de acento, que a campanha escolhe por cima do tema.
+ *
+ * O tema traz ícone e personalidade (café, corrida, equipes); o acento troca
+ * só a cor. Existem separados porque «quero o tema Café mas em violeta» é um
+ * pedido legítimo, e criar um tema novo para cada cor multiplicaria os ícones
+ * sem necessidade.
+ *
+ * Nenhum hexadecimal: é a mesma paleta do Tailwind que o resto do app usa.
+ */
+const ACENTOS: Record<AcentoDesafio, Omit<EstiloTema, 'Icone'>> = {
+  ambar: {
+    gradiente: 'from-amber-500/15 via-amber-500/5 to-card',
+    destaque:  'text-amber-600 dark:text-amber-400',
+    borda:     'border-amber-500/30',
+    selo:      'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30',
+    barra:     'bg-amber-500',
+  },
+  violeta: {
+    gradiente: 'from-violet-500/15 via-violet-500/5 to-card',
+    destaque:  'text-violet-600 dark:text-violet-400',
+    borda:     'border-violet-500/30',
+    selo:      'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/30',
+    barra:     'bg-violet-500',
+  },
+  esmeralda: {
+    gradiente: 'from-emerald-500/15 via-emerald-500/5 to-card',
+    destaque:  'text-emerald-600 dark:text-emerald-400',
+    borda:     'border-emerald-500/30',
+    selo:      'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+    barra:     'bg-emerald-500',
+  },
+  rosa: {
+    gradiente: 'from-rose-500/15 via-rose-500/5 to-card',
+    destaque:  'text-rose-600 dark:text-rose-400',
+    borda:     'border-rose-500/30',
+    selo:      'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30',
+    barra:     'bg-rose-500',
+  },
+  azul: {
+    gradiente: 'from-sky-500/15 via-sky-500/5 to-card',
+    destaque:  'text-sky-600 dark:text-sky-400',
+    borda:     'border-sky-500/30',
+    selo:      'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30',
+    barra:     'bg-sky-500',
+  },
+  laranja: {
+    gradiente: 'from-orange-500/15 via-orange-500/5 to-card',
+    destaque:  'text-orange-600 dark:text-orange-400',
+    borda:     'border-orange-500/30',
+    selo:      'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30',
+    barra:     'bg-orange-500',
+  },
+};
+
+export const ACENTOS_DISPONIVEIS: { valor: AcentoDesafio; rotulo: string; amostra: string }[] = [
+  { valor: 'ambar',     rotulo: 'Âmbar',     amostra: 'bg-amber-500'   },
+  { valor: 'violeta',   rotulo: 'Violeta',   amostra: 'bg-violet-500'  },
+  { valor: 'esmeralda', rotulo: 'Esmeralda', amostra: 'bg-emerald-500' },
+  { valor: 'rosa',      rotulo: 'Rosa',      amostra: 'bg-rose-500'    },
+  { valor: 'azul',      rotulo: 'Azul',      amostra: 'bg-sky-500'     },
+  { valor: 'laranja',   rotulo: 'Laranja',   amostra: 'bg-orange-500'  },
+];
+
 export function estiloDoTema(tema: TemaDesafio): EstiloTema {
   return TEMAS[tema] ?? PADRAO;
+}
+
+/**
+ * O acabamento efetivo: o tema, com o acento por cima quando há um.
+ *
+ * O ícone é sempre do tema — o acento é cor, e trocar o ícone junto faria a
+ * escolha de cor mudar o significado da campanha.
+ */
+export function estiloDaCampanha(visual: VisualDesafio): EstiloTema {
+  const base = estiloDoTema(visual.tema);
+  if (!visual.acento) return base;
+  return { Icone: base.Icone, ...ACENTOS[visual.acento] };
 }
 
 /** `yyyy-MM-dd` → `21 ago`. Sem `new Date`: o ISO puro anda um dia com o fuso. */

@@ -130,6 +130,7 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
       'importar_analitico', 'importar_diario',
       'ajuste_recebimento_lancar', 'ajuste_recebimento_administrar',
       'desafios_configurar_setor', 'desafios_configurar',
+      'desafios_excluir', 'desafios_multiempresa',
     ],
   },
   {
@@ -236,6 +237,16 @@ const SECOES_ANALITICO: Record<string, string> = {
   ajuste_recebimento_administrar: 'Ações e importações',
   desafios_configurar_setor: 'Desafios',
   desafios_configurar: 'Desafios',
+  desafios_excluir: 'Desafios',
+  desafios_multiempresa: 'Desafios',
+  // O ALCANCE dentro da aba — quantas campanhas aparecem para o cargo. Fica
+  // numa seção própria, e não junto de «Desafios», porque configurar e
+  // enxergar são decisões diferentes: quem só acompanha o placar recebe as
+  // quatro de baixo e nenhuma das de cima.
+  desafios_escopo_individual: 'Desafios: quem enxerga',
+  desafios_escopo_equipe: 'Desafios: quem enxerga',
+  desafios_escopo_setor: 'Desafios: quem enxerga',
+  desafios_escopo_todos_setores: 'Desafios: quem enxerga',
 };
 
 const SECOES_DASHBOARD: Record<string, string> = {

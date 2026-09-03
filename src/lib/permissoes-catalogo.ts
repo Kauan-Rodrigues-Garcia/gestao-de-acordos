@@ -1023,6 +1023,39 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'A tela de configuracao vive dentro da aba Desafios, no Analitico.',
     },
   },
+  /*
+   * Apagar uma campanha.
+   *
+   * Separada de `desafios_configurar` porque encerrar e apagar são decisões
+   * diferentes: encerrar guarda o ranking final como histórico, apagar some
+   * com o resultado de uma disputa que já aconteceu. Nasce em ninguém —
+   * `administrador` e `super_admin` recebem `true` por regra do resolvedor.
+   */
+  {
+    key: 'desafios_excluir', label: 'Excluir desafios',
+    descricao: 'Apagar de vez uma gincana e o histórico dela — encerrar é outra coisa',
+    grupo: 'Ações específicas', padrao: {},
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'A acao vive dentro da aba Desafios, no Analitico.',
+    },
+  },
+  /*
+   * Montar campanha que cruza as duas operações.
+   *
+   * É o que permite pôr Play 4 e Cofen no mesmo ranking. Nominal por natureza:
+   * quem tem esta chave define meta e prêmio para gente de uma empresa que não
+   * é a dele.
+   */
+  {
+    key: 'desafios_multiempresa', label: 'Desafios entre empresas',
+    descricao: 'Montar uma gincana que junta setores das duas operações no mesmo ranking',
+    grupo: 'Ações específicas', padrao: {},
+    depende: {
+      chaves: ['desafios_configurar'],
+      motivo: 'e uma ampliacao de quem ja configura campanha.',
+    },
+  },
 
   // ── Dashboard ────────────────────────────────────────────────────────────
   // O Dashboard NÃO tem chave de aba, e isso é deliberado: ele é a rota `/`,
@@ -1128,6 +1161,58 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'analitico_sub_desafios', label: 'Analítico: Desafios',
     descricao: 'Abrir a aba interna das gincanas, com ranking individual e por equipe',
     grupo: 'Analítico', padrao: TODOS,
+  },
+  /*
+   * O ALCANCE dentro da aba de Desafios.
+   *
+   * `analitico_sub_desafios` decide se a aba existe; estas quatro decidem
+   * QUAIS campanhas aparecem nela. São um OU, do menor para o maior: quem tem
+   * setor vê o setor e, de quebra, tudo o que já veria por equipe e por
+   * participação própria.
+   *
+   * O desenho é o mesmo de `dashboard_escopo_*` e existe pelo mesmo motivo:
+   * uma régua que a operação lê como "quanto eu enxergo" precisa estar no
+   * painel de Cargos, e não escrita numa policy.
+   *
+   * Quem responde a elas é `fn_desafio_no_meu_alcance` (20260903500000), na RLS
+   * de `public.desafios` — esconder card é conveniência; quem recusa a linha é
+   * o banco.
+   */
+  {
+    key: 'desafios_escopo_individual', label: 'Desafios: as campanhas em que disputo',
+    descricao: 'Ver na aba Desafios as gincanas em que a própria pessoa está incluída',
+    grupo: 'Analítico', padrao: TODOS,
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
+    },
+  },
+  {
+    key: 'desafios_escopo_equipe', label: 'Desafios: as campanhas da equipe',
+    descricao: 'Ver as gincanas que alcançam alguma equipe da pessoa, mesmo sem ela disputar',
+    grupo: 'Analítico', padrao: LIDERANCA,
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
+    },
+  },
+  {
+    key: 'desafios_escopo_setor', label: 'Desafios: as campanhas do setor',
+    descricao: 'Ver as gincanas que alcançam o setor da pessoa — da liderança à gerência',
+    grupo: 'Analítico', padrao: LIDERANCA,
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
+    },
+  },
+  {
+    key: 'desafios_escopo_todos_setores', label: 'Desafios: todos os setores',
+    descricao: 'Ver todas as gincanas de todos os setores das empresas que a pessoa alcança',
+    grupo: 'Analítico', padrao: { diretoria: true },
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
+    },
   },
   // Abas internas secundárias — a régua de dentro da visão de setor.
   {

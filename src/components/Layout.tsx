@@ -53,6 +53,9 @@ import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
+import { DesafioMenu } from './DesafioMenu';
+import { PainelDesafio } from './DesafioMenu/PainelDesafio';
+import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
@@ -86,6 +89,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [painelDiaAberto, setPainelDiaAberto] = useState(false);
+  const [painelDesafioAberto, setPainelDesafioAberto] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
@@ -221,6 +225,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoes();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
+
+  /*
+   * A campanha que o menu anuncia.
+   *
+   * Gate por `analitico_sub_desafios`, e não por cargo: é a MESMA chave que
+   * decide se a aba de Desafios existe, e um campo no menu para quem não pode
+   * abrir a aba seria uma porta que não abre. O recorte de QUAIS campanhas
+   * continua sendo da RLS (`desafios_escopo_*`), que a RPC já aplicou.
+   */
+  const { destaque: desafioDestaque } = useDesafioEmCartaz(
+    !permLoading && temPermissao('analitico_sub_desafios'),
+  );
 
   // ── Lembrete de votação do nome do mascote — só depois de termos + tour ─────
   // (tourPronto começa true se o tour já foi concluído em sessão anterior;
@@ -435,6 +451,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </nav>
 
       <Separator className="bg-sidebar-border" />
+
+      {/*
+        A campanha em cartaz — logo ACIMA do Desempenho do Dia.
+
+        As duas são a mesma coisa em espírito: o que a pessoa quer olhar de
+        relance sem sair da tela em que está. A diferença é que esta é uma
+        imagem — o GIF que quem montou a campanha escolheu —, e uma imagem
+        convida a clicar de um jeito que um ícone não.
+
+        Some sozinho quando não há campanha no ar, quando a campanha não pediu
+        para ser fixada, ou para quem a régua de `desafios_escopo_*` não
+        alcança — a RPC já devolve vazio nesses casos, e a decisão é da RLS.
+      */}
+      {desafioDestaque && (
+        <DesafioMenu
+          desafio={desafioDestaque}
+          expandido={sidebarOpen || mobileOpen}
+          aberto={painelDesafioAberto}
+          onToggle={() => setPainelDesafioAberto(v => !v)}
+        />
+      )}
 
       {/*
         Desempenho do Dia — nas DUAS operações desde a versão 2.0.
@@ -765,6 +802,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <DesempenhoDia
         aberto={painelDiaAberto}
         onClose={() => setPainelDiaAberto(false)}
+      />
+
+      {/* O andamento da campanha, na gaveta que o campo do menu abre. */}
+      <PainelDesafio
+        desafio={desafioDestaque}
+        aberto={painelDesafioAberto}
+        onClose={() => setPainelDesafioAberto(false)}
       />
 
 

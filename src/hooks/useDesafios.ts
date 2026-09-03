@@ -37,8 +37,8 @@ import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import {
-  buscarDadosDesafio, definirSetorDoDesafio, listarDesafios,
-  listarSetoresDoDesafio, setorParticipaDoDesafio,
+  buscarDadosDesafio, buscarDesafiosEmCartaz, definirSetorDoDesafio,
+  listarDesafios, listarSetoresDoDesafio, setorParticipaDoDesafio,
 } from '@/services/desafios/desafios.service';
 import { calcularDesafio, type ResultadoDesafio } from '@/services/desafios/calcularDesafio';
 import type { DadosDesafio, Desafio } from '@/services/desafios/types';
@@ -197,6 +197,107 @@ export function useSetoresDoDesafio(ativo: boolean, autorId?: string | null): Us
     carregando: habilitado ? query.isPending : false,
     participa,
     definir,
+  };
+}
+
+// ── A campanha em cartaz, para o menu lateral ────────────────────────────────
+
+export interface UsoDesafioEmCartaz {
+  /** As campanhas ativas HOJE que a pessoa enxerga, com mídia primeiro. */
+  emCartaz: Desafio[];
+  /** A que o menu exibe: a primeira com mídia, ou a primeira que houver. */
+  destaque: Desafio | null;
+  carregando: boolean;
+}
+
+/**
+ * A campanha que o menu lateral anuncia.
+ *
+ * Vive fora de `useDesafios` porque a pergunta é outra: `useDesafios` responde
+ * «quais campanhas esta empresa tem», e o menu precisa de «o que está no ar
+ * agora, em qualquer empresa que eu alcance». A RPC `fn_desafio_em_cartaz`
+ * responde a segunda em uma ida, sem que o menu saiba de empresa nenhuma.
+ *
+ * ## O tempo real
+ *
+ * Duas escutas, e cada uma cobre uma coisa diferente:
+ *
+ *   • `desafios` — publicar, encerrar ou trocar a mídia troca o que o menu
+ *     mostra, e trocar a mídia é a razão de o campo existir;
+ *   • `analitico_recebimentos` — o painel que abre dali mostra o ranking, e o
+ *     pedido é que ele ande sozinho quando chega relatório novo.
+ *
+ * O canal do analítico é o MESMO de `useAnaliticoDashboard`, por contagem de
+ * referências — o menu entra de carona em vez de abrir um segundo.
+ */
+export function useDesafioEmCartaz(ativo: boolean): UsoDesafioEmCartaz {
+  const { empresa } = useEmpresa();
+  const queryClient = useQueryClient();
+  const empresaId   = empresa?.id ?? null;
+  const habilitado  = ativo && !!empresaId;
+
+  const chave = useMemo(() => ['desafios-em-cartaz', empresaId] as const, [empresaId]);
+
+  const query = useQuery({
+    queryKey: chave,
+    enabled:  habilitado,
+    queryFn:  buscarDesafiosEmCartaz,
+    // A campanha vira e desvira uma vez por semana; o realtime cobre a troca.
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!habilitado || !empresaId) return;
+
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
+
+    const cancelarDesafios = assinarTabela(
+      {
+        topico:  `desafios-${empresaId}`,
+        escutas: [{ tabela: 'desafios', filtro: `empresa_id=eq.${empresaId}` }],
+      },
+      { onEvento: invalidar, onReconectado: invalidar },
+    );
+
+    const cancelarAnalitico = assinarTabela(
+      {
+        topico:  `analitico-dash-${empresaId}`,
+        escutas: [{
+          tabela: 'analitico_recebimentos',
+          filtro: `empresa_id=eq.${empresaId}`,
+        }],
+      },
+      {
+        onEvento: () => {
+          if (debounce) clearTimeout(debounce);
+          debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
+        },
+        onReconectado: invalidar,
+      },
+    );
+
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      cancelarDesafios();
+      cancelarAnalitico();
+    };
+  }, [habilitado, empresaId, queryClient, chave]);
+
+  const emCartaz = query.data ?? SEM_DESAFIOS;
+
+  const destaque = useMemo(() => {
+    // Quem subiu uma mídia e pediu para fixar tem prioridade: o campo do menu
+    // é uma moldura de imagem, e uma campanha sem imagem o deixa com um ícone
+    // genérico que não convida ninguém a clicar.
+    const comMidia = emCartaz.find(d => d.midiaUrl && d.visual.fixarNoMenu);
+    return comMidia ?? emCartaz.find(d => d.visual.fixarNoMenu) ?? null;
+  }, [emCartaz]);
+
+  return {
+    emCartaz,
+    destaque,
+    carregando: habilitado ? query.isPending : false,
   };
 }
 

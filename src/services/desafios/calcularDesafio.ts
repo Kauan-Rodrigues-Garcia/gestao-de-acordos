@@ -122,7 +122,7 @@ export interface ParametrosCalculo {
 // ── Peças ────────────────────────────────────────────────────────────────────
 
 /** A soma de uma pessoa no período, na métrica da campanha. */
-interface SomaOperador { total: number; qtd: number }
+export interface SomaOperador { total: number; qtd: number }
 
 const ZERO: SomaOperador = { total: 0, qtd: 0 };
 
@@ -150,16 +150,77 @@ export function somarPorOperador(linhas: readonly LinhaDesafio[]): Map<string, S
  */
 export function participaDaCampanha(pessoa: PessoaDesafio, desafio: Desafio): boolean {
   const { participantes, metasPorOperador } = desafio.regra;
+  /*
+   * As listas ausentes viram vazias AQUI, e não só no normalizador.
+   *
+   * `normalizarParticipantes` cobre o que vem do banco, mas esta função também
+   * recebe campanha montada em memória — pré-visualização na tela de
+   * configuração, e os casos de teste. Uma lista nova no tipo não pode
+   * derrubar o ranking de quem ainda não a tem.
+   */
+  const setores    = participantes.setores    ?? [];
+  const equipes    = participantes.equipes    ?? [];
+  const operadores = participantes.operadores ?? [];
+  const cargos     = participantes.cargos     ?? [];
+  const excluidos  = participantes.excluidos  ?? [];
+
+  /*
+   * A exclusão vem PRIMEIRO, e antes até do mapa de metas.
+   *
+   * Ela é a única lista escrita para tirar alguém, e quem a preenche está
+   * dizendo «esta pessoa não, mesmo que tudo o mais a inclua». Avaliá-la
+   * depois faria uma meta nominal na planilha reviver quem a gerência acabou
+   * de remover pela tela.
+   */
+  if (excluidos.length && excluidos.includes(pessoa.id)) return false;
+
   // Mapa de metas preenchido É a convocação: quem não tem meta não disputa.
   // Sem isto, a operação inteira entraria zerada num ranking de 27 pessoas.
   if (Object.keys(metasPorOperador).length > 0 && metaNoMapa(pessoa, metasPorOperador) === null) {
     return false;
   }
-  const { setores, equipes, operadores } = participantes;
   if (operadores.length && !operadores.includes(pessoa.id)) return false;
   if (setores.length   && !pessoa.setores.some(s => setores.includes(s))) return false;
   if (equipes.length   && !pessoa.equipes.some(e => equipes.includes(e))) return false;
+  // Recorte por cargo: é o que faz «a disputa dos líderes destes cinco
+  // setores» caber em cinco cliques em vez de quarenta nomes.
+  if (cargos.length    && !cargos.includes(pessoa.perfil)) return false;
   return true;
+}
+
+/**
+ * O recebimento que conta para esta pessoa.
+ *
+ * `proprio` soma o card dela. `equipe_liderada` soma o de TODA GENTE da equipe
+ * dela — que é o número que existe quando quem disputa é o líder: ele não
+ * tabula, e o card próprio dele viria zerado num ranking em que ele deveria
+ * estar na frente.
+ *
+ * A equipe usada é `pessoa.equipeId`, a mesma que agrupa os cards de equipe. O
+ * líder chega aqui já com ela preenchida: `fn_desafio_pessoas_multi` resolve
+ * `equipe_lideres` para quem lidera uma equipe só.
+ */
+export function somaDoParticipante(
+  pessoa: PessoaDesafio,
+  desafio: Desafio,
+  somas: ReadonlyMap<string, SomaOperador>,
+  elenco: readonly PessoaDesafio[],
+): SomaOperador {
+  if (desafio.regra.fonteResultado !== 'equipe_liderada') {
+    return somas.get(pessoa.id) ?? ZERO;
+  }
+  if (!pessoa.equipeId) return ZERO;
+
+  let total = 0;
+  let qtd = 0;
+  for (const membro of elenco) {
+    if (membro.equipeId !== pessoa.equipeId) continue;
+    const s = somas.get(membro.id);
+    if (!s) continue;
+    total += s.total;
+    qtd   += s.qtd;
+  }
+  return { total, qtd };
 }
 
 /**
@@ -307,7 +368,10 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
   });
 
   const individual: ResultadoParticipante[] = elegiveis.map(pessoa => {
-    const soma = somas.get(pessoa.id) ?? ZERO;
+    // O elenco da soma é o quadro INTEIRO, e não os elegíveis: numa disputa de
+    // líderes só os líderes são elegíveis, e o número deles é a soma de uma
+    // equipe cujos integrantes não estão no ranking.
+    const soma = somaDoParticipante(pessoa, desafio, somas, dados.participantes);
     const recebido = porQuantidade ? soma.qtd : soma.total;
     // A meta é DA PESSOA quando a campanha define uma para ela; senão, a da
     // campanha. Nada de um número fixo aqui.

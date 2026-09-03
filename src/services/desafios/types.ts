@@ -41,11 +41,37 @@ export type MetricaDesafio = 'valor_recebido' | 'quantidade';
  * Lista vazia = sem recorte naquela dimensão (todo mundo que o escopo do
  * usuário já alcança). Não é "ninguém": um desafio que nasce sem participante
  * marcado é o caso comum — a campanha vale para a operação inteira.
+ *
+ * `excluidos` é a única lista que se lê ao contrário: ela TIRA gente que as
+ * outras três já colocaram. Existe porque «os líderes destes cinco setores,
+ * menos a Fulana» é uma frase comum na operação, e a alternativa seria
+ * abandonar o recorte por setor e cadastrar quarenta pessoas à mão.
  */
 export interface ParticipantesDesafio {
   setores:    string[];
   equipes:    string[];
   operadores: string[];
+  /** Cargos que disputam (`perfis.perfil`). Vazio = todos os cargos. */
+  cargos:     string[];
+  /** Tirados da campanha, mesmo estando num setor ou equipe dela. */
+  excluidos:  string[];
+}
+
+/**
+ * O prêmio de uma colocação.
+ *
+ * A lista substitui o campo `premio` (texto solto) quando está preenchida —
+ * `premio` continua existindo para a campanha que tem um prêmio só, e para as
+ * que foram criadas antes desta lista.
+ *
+ * `posicao` é 1-based e não precisa ser contígua: 1º, 2º e 5º é uma premiação
+ * válida, e inventar o 3º e o 4º para tapar o buraco seria pior.
+ */
+export interface PremioPorPosicao {
+  posicao: number;
+  premio: string;
+  /** Emoji ou ícone curto, opcional. Some quando vazio. */
+  icone?: string;
 }
 
 /**
@@ -115,10 +141,32 @@ export interface RegraDesafio {
   /** Meta única da operação inteira (modelo `meta_coletiva`). */
   metaColetiva:   number | null;
   participantes: ParticipantesDesafio;
+  /**
+   * Prêmio por colocação. Vazio = a campanha usa o texto de `Desafio.premio`.
+   */
+  premios: PremioPorPosicao[];
+  /**
+   * De onde sai o número de cada participante.
+   *
+   * `proprio` — o recebimento da própria pessoa. É o padrão e o caso de toda
+   * campanha de operação.
+   *
+   * `equipe_liderada` — o recebimento da EQUIPE que a pessoa lidera. É o que
+   * faz sentido numa disputa entre líderes: o líder não tabula, quem tabula é
+   * a equipe dele, e ranqueá-lo pelo próprio card o deixaria zerado.
+   */
+  fonteResultado: FonteResultado;
 }
+
+/** Ver `RegraDesafio.fonteResultado`. */
+export type FonteResultado = 'proprio' | 'equipe_liderada';
 
 /** Tema da campanha. Governa a gincana, não o desenho da aplicação. */
 export type TemaDesafio = 'padrao' | 'cafe' | 'corrida' | 'equipes';
+
+/** Cor de acento da campanha, por cima do tema. `null` = a cor do tema. */
+export type AcentoDesafio =
+  | 'ambar' | 'violeta' | 'esmeralda' | 'rosa' | 'azul' | 'laranja';
 
 export interface VisualDesafio {
   tema: TemaDesafio;
@@ -126,11 +174,34 @@ export interface VisualDesafio {
   mostrarFotos: boolean;
   animarUltrapassagem: boolean;
   comemorarMeta: boolean;
+  /** Cor de acento escolhida na configuração. `null` = a do tema. */
+  acento: AcentoDesafio | null;
+  /** O card do catálogo mostra a mídia de destaque como fundo. */
+  midiaNoCard: boolean;
+  /** A campanha aparece no menu lateral, com a mídia de destaque. */
+  fixarNoMenu: boolean;
 }
+
+/**
+ * Quem enxerga a campanha, por cima da régua de permissões.
+ *
+ * `alcance` — vale o escopo do cargo (`desafios_escopo_*`). É o padrão.
+ * `todos`   — mural: a empresa inteira acompanha, mesmo quem não disputa.
+ */
+export type VisibilidadeDesafio = 'alcance' | 'todos';
 
 export interface Desafio {
   id: string;
+  /** A empresa DONA da campanha — quem a criou, e onde o log a registra. */
   empresaId: string;
+  /**
+   * As empresas que a campanha ALCANÇA.
+   *
+   * Vazio = só a dona, que é como toda campanha anterior a Desafios 2.0 foi
+   * gravada. Preenchido com duas ou mais, os setores das duas operações
+   * disputam no mesmo ranking.
+   */
+  empresas: string[];
   nome: string;
   descricao: string | null;
   premio: string | null;
@@ -150,6 +221,11 @@ export interface Desafio {
   regra: RegraDesafio;
   visual: VisualDesafio;
   status: StatusDesafio;
+  /** Foto ou GIF de destaque. É o que o menu lateral exibe. */
+  midiaUrl: string | null;
+  /** O caminho no balde `desafios`, para conseguir apagar o arquivo depois. */
+  midiaCaminho: string | null;
+  visibilidade: VisibilidadeDesafio;
   criadoPor: string | null;
   criadoPorNome: string | null;
   criadoEm: string;
@@ -175,6 +251,26 @@ export interface PessoaDesafio {
   situacao: string;
   setores: string[];
   equipes: string[];
+  /**
+   * O cargo (`perfis.perfil`), para o recorte por cargo.
+   *
+   * Vazio na campanha gravada antes de Desafios 2.0 — o normalizador devolve
+   * `'operador'`, que é o que o recorte por cargo lê como «não é liderança».
+   */
+  perfil: string;
+  /** A empresa da pessoa. Distingue as duas operações na mesma tela. */
+  empresaId: string | null;
+}
+
+/** Um setor oferecido no seletor da configuração, com a empresa a que pertence. */
+export interface SetorDisponivel {
+  id: string;
+  nome: string;
+  empresaId: string;
+  empresaNome: string;
+  empresaSlug: string | null;
+  ordem: number | null;
+  equipes: { id: string; nome: string }[];
 }
 
 /**

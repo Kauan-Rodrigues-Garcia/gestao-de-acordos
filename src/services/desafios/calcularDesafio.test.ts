@@ -40,6 +40,8 @@ function pessoa(over: Partial<PessoaDesafio> & { id: string; nome: string }): Pe
     situacao: 'ativo',
     setores: ['setorA'],
     equipes: ['eq1'],
+    perfil: 'operador',
+    empresaId: 'emp1',
     ...over,
   };
 }
@@ -52,6 +54,7 @@ function desafio(over: OverDesafio = {}): Desafio {
   return {
     id: 'd1',
     empresaId: 'emp1',
+    empresas: [],
     nome: 'Campanha',
     descricao: null,
     premio: null,
@@ -60,6 +63,9 @@ function desafio(over: OverDesafio = {}): Desafio {
     tipo: 'bater_meta',
     setorId: null,
     status: 'ativo',
+    midiaUrl: null,
+    midiaCaminho: null,
+    visibilidade: 'alcance',
     criadoPor: null,
     criadoPorNome: null,
     criadoEm: '',
@@ -76,12 +82,17 @@ function desafio(over: OverDesafio = {}): Desafio {
       metasPorOperador: {},
       metaEquipe: 80000,
       metaColetiva: null,
-      participantes: { setores: [], equipes: [], operadores: [] },
+      participantes: {
+        setores: [], equipes: [], operadores: [], cargos: [], excluidos: [],
+      },
+      premios: [],
+      fonteResultado: 'proprio',
       ...(over.regra ?? {}),
     },
     visual: {
       tema: 'padrao', icone: 'trophy', mostrarFotos: true,
       animarUltrapassagem: true, comemorarMeta: true,
+      acento: null, midiaNoCard: true, fixarNoMenu: true,
       ...(over.visual ?? {}),
     },
   };
@@ -627,5 +638,162 @@ describe('chaveDeLogin', () => {
     expect(chaveDeLogin('NAYARA_CRUZ')).toBe('nayara_cruz');
     expect(chaveDeLogin('debora_portela  |')).toBe('debora_portela');
     expect(chaveDeLogin(null)).toBe('');
+  });
+});
+
+// ── Desafios 2.0 ────────────────────────────────────────────────────────────
+
+describe('recorte por cargo', () => {
+  const lider    = pessoa({ id: 'l1', nome: 'Lider Um',    perfil: 'lider'    });
+  const operador = pessoa({ id: 'o1', nome: 'Operador Um', perfil: 'operador' });
+
+  it('cargo vazio nao recorta nada — a campanha vale para todo mundo', () => {
+    const d = desafio();
+    expect(participaDaCampanha(lider, d)).toBe(true);
+    expect(participaDaCampanha(operador, d)).toBe(true);
+  });
+
+  it('marcar «lider» deixa so a lideranca no placar', () => {
+    const d = desafio({
+      regra: {
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+        },
+      },
+    });
+    expect(participaDaCampanha(lider, d)).toBe(true);
+    expect(participaDaCampanha(operador, d)).toBe(false);
+  });
+});
+
+describe('exclusao nominal', () => {
+  const p1 = pessoa({ id: 'p1', nome: 'Fulana' });
+  const p2 = pessoa({ id: 'p2', nome: 'Beltrano' });
+
+  it('quem esta em `excluidos` sai, mesmo estando no setor da campanha', () => {
+    const d = desafio({
+      regra: {
+        participantes: {
+          setores: ['setorA'], equipes: [], operadores: [], cargos: [], excluidos: ['p1'],
+        },
+      },
+    });
+    expect(participaDaCampanha(p1, d)).toBe(false);
+    expect(participaDaCampanha(p2, d)).toBe(true);
+  });
+
+  /*
+   * A ordem importa: a exclusao e avaliada ANTES do mapa de metas.
+   *
+   * Sem isso, uma meta nominal deixada na planilha reviveria quem a gerencia
+   * acabou de remover pela tela — e o defeito so apareceria no dia do premio.
+   */
+  it('a exclusao vence a meta nominal', () => {
+    const d = desafio({
+      regra: {
+        metasPorOperador: { p1: 10_000, p2: 10_000 },
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: [], excluidos: ['p1'],
+        },
+      },
+    });
+    expect(participaDaCampanha(p1, d)).toBe(false);
+    expect(participaDaCampanha(p2, d)).toBe(true);
+  });
+});
+
+describe('resultado vindo da equipe liderada', () => {
+  /*
+   * O caso do pedido: cinco setores, so os lideres disputam, e o numero de
+   * cada lider e o total da equipe dele. O lider nao tabula — pelo caminho
+   * `proprio` ele entraria zerado num ranking que deveria liderar.
+   */
+  const lider1 = pessoa({
+    id: 'l1', nome: 'Lider A', perfil: 'lider', equipeId: 'eq1', equipes: ['eq1'],
+  });
+  const lider2 = pessoa({
+    id: 'l2', nome: 'Lider B', perfil: 'lider', equipeId: 'eq2', equipes: ['eq2'],
+    equipeNome: 'PLAY 2',
+  });
+  const membro1 = pessoa({ id: 'm1', nome: 'Membro A1', equipeId: 'eq1', equipes: ['eq1'] });
+  const membro2 = pessoa({ id: 'm2', nome: 'Membro A2', equipeId: 'eq1', equipes: ['eq1'] });
+  const membro3 = pessoa({
+    id: 'm3', nome: 'Membro B1', equipeId: 'eq2', equipes: ['eq2'], equipeNome: 'PLAY 2',
+  });
+
+  const participantes = [lider1, lider2, membro1, membro2, membro3];
+  const linhas = [
+    linha('m1', 30_000), linha('m2', 20_000),  // equipe 1 = 50.000
+    linha('m3', 70_000),                        // equipe 2 = 70.000
+  ];
+
+  const campanhaDeLideres = desafio({
+    regra: {
+      criterioRanking: 'maior_recebido',
+      metaIndividual: null,
+      metaEquipe: null,
+      fonteResultado: 'equipe_liderada',
+      participantes: {
+        setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+      },
+      premios: [
+        { posicao: 1, premio: 'Tablet' },
+        { posicao: 2, premio: 'Rodizio + acompanhante' },
+      ],
+    },
+  });
+
+  it('cada lider recebe o total da equipe dele, e so os lideres disputam', () => {
+    const r = calcularDesafio({
+      desafio: campanhaDeLideres,
+      dados: { participantes, linhas },
+    });
+
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['l2', 'l1']);
+    expect(r.individual[0].recebido).toBe(70_000);
+    expect(r.individual[1].recebido).toBe(50_000);
+    expect(r.totalParticipantes).toBe(2);
+  });
+
+  it('`proprio` deixaria os dois lideres zerados — e por isso o modo existe', () => {
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: {
+          ...campanhaDeLideres.regra,
+          fonteResultado: 'proprio',
+        },
+      }),
+      dados: { participantes, linhas },
+    });
+
+    expect(r.individual.every(i => i.recebido === 0)).toBe(true);
+  });
+
+  it('lider sem equipe resolvida entra zerado, e nao com o total de ninguem', () => {
+    const solto = pessoa({
+      id: 'l3', nome: 'Lider Sem Equipe', perfil: 'lider',
+      equipeId: null, equipes: [],
+    });
+    const r = calcularDesafio({
+      desafio: campanhaDeLideres,
+      dados: { participantes: [...participantes, solto], linhas },
+    });
+    expect(r.individual.find(i => i.pessoa.id === 'l3')?.recebido).toBe(0);
+  });
+});
+
+describe('listas ausentes na regra', () => {
+  /*
+   * A campanha montada em memoria — previa da tela de configuracao, fixture de
+   * teste — pode nao ter as listas novas. Uma chave nova no tipo nao pode
+   * derrubar o ranking de quem ainda nao a tem.
+   */
+  it('participantes sem `cargos`/`excluidos` nao quebram o calculo', () => {
+    const d = desafio();
+    (d.regra.participantes as Record<string, unknown>).cargos = undefined;
+    (d.regra.participantes as Record<string, unknown>).excluidos = undefined;
+
+    expect(() => participaDaCampanha(pessoa({ id: 'p1', nome: 'Fulana' }), d)).not.toThrow();
+    expect(participaDaCampanha(pessoa({ id: 'p1', nome: 'Fulana' }), d)).toBe(true);
   });
 });
