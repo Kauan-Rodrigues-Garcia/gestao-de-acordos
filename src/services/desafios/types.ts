@@ -269,7 +269,6 @@ export interface SetorDisponivel {
   empresaId: string;
   empresaNome: string;
   empresaSlug: string | null;
-  ordem: number | null;
   equipes: { id: string; nome: string }[];
 }
 

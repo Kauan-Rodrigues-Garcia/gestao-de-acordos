@@ -516,6 +516,18 @@ GRANT EXECUTE ON FUNCTION public.fn_desafio_pessoas_empresas(UUID[]) TO authenti
  * recorta por empresa, e quem tem `acesso_multiempresa_permitido` teria que
  * fazer uma consulta por empresa e costurar o resultado no cliente.
  */
+/*
+ * A ordenação é por NOME, e não pela ordem escolhida na aba Setores.
+ *
+ * `setores` não tem coluna de ordem: quem ordena é `aplicarOrdemSetores`, no
+ * cliente, sobre uma preferência guardada fora da tabela. Reproduzi-la aqui
+ * seria a segunda cópia dessa regra — e o seletor da configuração é uma lista
+ * de caixas para marcar, onde a ordem alfabética dentro de cada empresa é o
+ * que ajuda a achar «Play mix Marília».
+ *
+ * Setor desativado fica de fora: montar campanha nova para um setor que a
+ * empresa desligou é oferecer uma porta que não leva a lugar nenhum.
+ */
 CREATE OR REPLACE FUNCTION public.fn_desafio_setores_disponiveis()
 RETURNS JSONB
 LANGUAGE sql
@@ -523,7 +535,7 @@ STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $fn$
-  SELECT COALESCE(jsonb_agg(t ORDER BY t.empresa_nome, t.ordem NULLS LAST, t.nome), '[]'::JSONB)
+  SELECT COALESCE(jsonb_agg(t ORDER BY t.empresa_nome, t.nome), '[]'::JSONB)
     FROM (
       SELECT
         s.id,
@@ -531,7 +543,6 @@ AS $fn$
         s.empresa_id,
         em.nome  AS empresa_nome,
         em.slug  AS empresa_slug,
-        s.ordem,
         COALESCE(
           (SELECT jsonb_agg(jsonb_build_object('id', eq.id, 'nome', eq.nome) ORDER BY eq.nome)
              FROM public.equipes eq WHERE eq.setor_id = s.id),
@@ -539,7 +550,8 @@ AS $fn$
         ) AS equipes
       FROM public.setores s
       JOIN public.empresas em ON em.id = s.empresa_id
-     WHERE public.fn_can_access_empresa(s.empresa_id)
+     WHERE s.ativo IS NOT FALSE
+       AND public.fn_can_access_empresa(s.empresa_id)
        AND (public.fn_user_tem('desafios_configurar')
             OR public.fn_user_tem('desafios_configurar_setor'))
     ) t;

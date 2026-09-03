@@ -372,7 +372,6 @@ export async function buscarSetoresDisponiveis(): Promise<SetorDisponivel[]> {
     empresaId:   String(s.empresa_id),
     empresaNome: String(s.empresa_nome ?? ''),
     empresaSlug: (s.empresa_slug as string | null) ?? null,
-    ordem:       s.ordem === null || s.ordem === undefined ? null : Number(s.ordem),
     equipes:     Array.isArray(s.equipes)
       ? (s.equipes as Record<string, unknown>[]).map(e => ({
           id: String(e.id), nome: String(e.nome ?? ''),
