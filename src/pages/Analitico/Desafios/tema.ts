@@ -147,8 +147,14 @@ export function estiloDoTema(tema: TemaDesafio): EstiloTema {
  *
  * O ícone é sempre do tema — o acento é cor, e trocar o ícone junto faria a
  * escolha de cor mudar o significado da campanha.
+ *
+ * Aceita `null`/`undefined` porque quem chama costuma estar desenhando ANTES
+ * de a campanha chegar (a gaveta fechada, o detalhe carregando). A alternativa
+ * era cada tela montar um `VisualDesafio` inteiro só para descartá-lo no render
+ * seguinte — e um campo novo no tipo quebrava todas elas de uma vez.
  */
-export function estiloDaCampanha(visual: VisualDesafio): EstiloTema {
+export function estiloDaCampanha(visual: VisualDesafio | null | undefined): EstiloTema {
+  if (!visual) return PADRAO;
   const base = estiloDoTema(visual.tema);
   if (!visual.acento) return base;
   return { Icone: base.Icone, ...ACENTOS[visual.acento] };

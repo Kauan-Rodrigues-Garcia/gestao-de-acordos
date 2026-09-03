@@ -54,14 +54,16 @@ import {
 } from '@/services/desafios/desafios.service';
 import { DesafiosDosOperadores } from './DesafiosDosOperadores';
 import { EditorPremios } from './EditorPremios';
-import { MidiaDestaque } from './MidiaDestaque';
+import { ConvidadosTeste } from './ConvidadosTeste';
+import { ImagensDesafio } from './ImagensDesafio';
 import { SeletorParticipacao } from './SeletorParticipacao';
 import {
   metasParaValores, valoresParaMetas, type ValoresPorPessoa,
 } from './metasDoDesafio';
 import { ACENTOS_DISPONIVEIS, hojeISO } from './tema';
 import type {
-  AcentoDesafio, CriterioRanking, Desafio, EscopoDisputa, FonteResultado,
+  AcentoDesafio, AjusteImagem, CriterioRanking, Desafio, EscopoDisputa,
+  FonteResultado,
   ParticipantesDesafio, PessoaDesafio, Premiacao, PremioPorPosicao,
   SetorDisponivel, StatusDesafio, TemaDesafio, TipoDesafio,
   VisibilidadeDesafio,
@@ -140,15 +142,20 @@ interface Formulario {
   animarUltrapassagem: boolean;
   comemorarMeta: boolean;
   midiaNoCard: boolean;
+  ajusteMidia: AjusteImagem;
+  ajusteArte: AjusteImagem;
   fixarNoMenu: boolean;
   status: StatusDesafio;
   visibilidade: VisibilidadeDesafio;
   midiaUrl: string | null;
   midiaCaminho: string | null;
+  arteUrl: string | null;
+  arteCaminho: string | null;
 }
 
 const PARTICIPACAO_VAZIA: ParticipantesDesafio = {
   setores: [], equipes: [], operadores: [], cargos: [], excluidos: [],
+  convidados: [],
 };
 
 function formularioVazio(): Formulario {
@@ -165,8 +172,10 @@ function formularioVazio(): Formulario {
     tema: 'padrao', acento: null,
     mostrarFotos: true, animarUltrapassagem: true, comemorarMeta: true,
     midiaNoCard: true, fixarNoMenu: true,
+    ajusteMidia: 'cobrir', ajusteArte: 'conter',
     status: 'rascunho', visibilidade: 'alcance',
     midiaUrl: null, midiaCaminho: null,
+    arteUrl: null, arteCaminho: null,
   };
 }
 
@@ -195,10 +204,14 @@ function formularioDe(d: Desafio): Formulario {
     comemorarMeta: d.visual.comemorarMeta,
     midiaNoCard: d.visual.midiaNoCard,
     fixarNoMenu: d.visual.fixarNoMenu,
+    ajusteMidia: d.visual.ajusteMidia,
+    ajusteArte:  d.visual.ajusteArte,
     status: d.status,
     visibilidade: d.visibilidade,
     midiaUrl: d.midiaUrl,
     midiaCaminho: d.midiaCaminho,
+    arteUrl: d.arteUrl,
+    arteCaminho: d.arteCaminho,
   };
 }
 
@@ -354,10 +367,14 @@ export function PaginaDesafio({
         acento: form.acento,
         midiaNoCard: form.midiaNoCard,
         fixarNoMenu: form.fixarNoMenu,
+        ajusteMidia: form.ajusteMidia,
+        ajusteArte:  form.ajusteArte,
       },
       status: form.status,
       midiaUrl: form.midiaUrl,
       midiaCaminho: form.midiaCaminho,
+      arteUrl: form.arteUrl,
+      arteCaminho: form.arteCaminho,
       visibilidade: form.visibilidade,
     };
   }
@@ -528,23 +545,25 @@ export function PaginaDesafio({
               </p>
             </div>
 
-            <MidiaDestaque
+            <ImagensDesafio
               empresaId={empresaId}
-              url={form.midiaUrl}
-              caminho={form.midiaCaminho}
+              midiaUrl={form.midiaUrl}
+              midiaCaminho={form.midiaCaminho}
+              ajusteMidia={form.ajusteMidia}
+              arteUrl={form.arteUrl}
+              arteCaminho={form.arteCaminho}
+              ajusteArte={form.ajusteArte}
               midiaNoCard={form.midiaNoCard}
               fixarNoMenu={form.fixarNoMenu}
-              onChange={m => setForm(f => ({
-                ...f,
-                midiaUrl: m.url, midiaCaminho: m.caminho,
-                midiaNoCard: m.midiaNoCard, fixarNoMenu: m.fixarNoMenu,
-              }))}
+              // O componente manda só o que mudou, e o `spread` faz o resto —
+              // um `onChange` por campo seriam oito prop-drills iguais.
+              onChange={m => setForm(f => ({ ...f, ...m }))}
             />
           </div>
         </TabsContent>
 
         {/* ── Participação ────────────────────────────────────────────── */}
-        <TabsContent value="participacao" className="mt-4">
+        <TabsContent value="participacao" className="mt-4 space-y-5">
           <SeletorParticipacao
             setores={setoresDisponiveis}
             pessoas={pessoas}
@@ -553,6 +572,13 @@ export function PaginaDesafio({
             onChange={setParticipacao}
             empresasPermitidas={empresasPermitidas}
             travadoNoSetor={restritoAoSetor}
+          />
+
+          {/* Some inteira para quem não é super admin: a RPC devolve `[]`. */}
+          <ConvidadosTeste
+            valor={participacao.convidados}
+            onChange={convidados => setParticipacao(p => ({ ...p, convidados }))}
+            euId={autorId}
           />
         </TabsContent>
 

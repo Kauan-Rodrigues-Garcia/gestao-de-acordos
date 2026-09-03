@@ -69,14 +69,7 @@ export function PainelDesafio({ desafio, aberto, onClose }: PainelDesafioProps) 
     return () => window.removeEventListener('keydown', aoTeclar);
   }, [aberto, onClose]);
 
-  const estilo = useMemo(
-    () => estiloDaCampanha(desafio?.visual ?? {
-      tema: 'padrao', icone: 'trophy', mostrarFotos: true,
-      animarUltrapassagem: true, comemorarMeta: true,
-      acento: null, midiaNoCard: true, fixarNoMenu: true,
-    }),
-    [desafio?.visual],
-  );
+  const estilo = useMemo(() => estiloDaCampanha(desafio?.visual), [desafio?.visual]);
 
   const eu = useMemo(
     () => resultado?.individual.find(i => i.pessoa.id === perfil?.id) ?? null,
@@ -86,6 +79,18 @@ export function PainelDesafio({ desafio, aberto, onClose }: PainelDesafioProps) 
   if (!desafio) return null;
 
   const { Icone } = estilo;
+
+  /*
+   * A arte de divulgação manda no topo, e o destaque é o plano B.
+   *
+   * A gaveta é onde o cartaz da campanha faz mais sentido — é a tela que a
+   * pessoa abre para olhar a campanha. Sem arte, o selo continua servindo:
+   * é o que a campanha tinha antes de as duas imagens existirem.
+   */
+  const usandoArte = !!desafio.arteUrl;
+  const imagemTopo = desafio.arteUrl ?? desafio.midiaUrl;
+  const ajusteTopo = usandoArte ? desafio.visual.ajusteArte : desafio.visual.ajusteMidia;
+
   const restam = diasRestantes(desafio.dataFim, hojeISO());
   const lista = resultado?.individual ?? [];
   const premios = desafio.regra.premios;
@@ -118,14 +123,31 @@ export function PainelDesafio({ desafio, aberto, onClose }: PainelDesafioProps) 
           >
             {/* ── Cabeçalho: a mídia, quando existe, é o próprio cabeçalho ── */}
             <header className="relative flex-shrink-0 overflow-hidden border-b border-border">
-              {desafio.midiaUrl ? (
-                <div className="relative h-32 w-full">
+              {imagemTopo ? (
+                <div className={cn(
+                  'relative w-full',
+                  // A arte é um cartaz e merece altura; o destaque é um selo e
+                  // uma faixa basta.
+                  usandoArte ? 'h-56' : 'h-32',
+                  ajusteTopo === 'conter' && 'bg-muted/40',
+                )}>
                   <img
-                    src={desafio.midiaUrl}
+                    src={imagemTopo}
                     alt=""
-                    className="h-full w-full object-cover"
+                    className={cn(
+                      'h-full w-full',
+                      ajusteTopo === 'conter' ? 'object-contain' : 'object-cover',
+                    )}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
+                  {/* O véu é o que deixa o nome legível por cima da arte. Com
+                      a imagem inteira ele fica só no rodapé, para não lavar o
+                      cartaz no meio. */}
+                  <div className={cn(
+                    'absolute inset-x-0 bottom-0',
+                    ajusteTopo === 'conter'
+                      ? 'h-20 bg-gradient-to-t from-card to-transparent'
+                      : 'inset-y-0 bg-gradient-to-t from-card via-card/50 to-transparent',
+                  )} />
                 </div>
               ) : (
                 <div className={cn('h-20 w-full bg-gradient-to-br', estilo.gradiente)} />

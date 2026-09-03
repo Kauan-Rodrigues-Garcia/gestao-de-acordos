@@ -101,6 +101,7 @@ function normalizarParticipantes(v: unknown): ParticipantesDesafio {
     // reproduzem exatamente o comportamento que ela tinha.
     cargos:     listaDeTextos(o.cargos),
     excluidos:  listaDeTextos(o.excluidos),
+    convidados: listaDeTextos(o.convidados),
   };
 }
 
@@ -181,6 +182,11 @@ export function normalizarVisual(bruto: unknown): VisualDesafio {
     // que ela apareça, e o campo do menu é o lugar onde ela aparece. Sem mídia
     // a chave não tem efeito nenhum.
     fixarNoMenu: o.fixarNoMenu !== false,
+    // O destaque é um selo: cortar é o comportamento certo para ele, e é o que
+    // a campanha anterior já fazia. A arte é um cartaz: cortá-la tira
+    // justamente o que ela tem a dizer, então nasce inteira.
+    ajusteMidia: o.ajusteMidia === 'conter' ? 'conter' : 'cobrir',
+    ajusteArte:  o.ajusteArte  === 'cobrir' ? 'cobrir' : 'conter',
   };
 }
 
@@ -204,6 +210,8 @@ function paraDesafio(linha: Record<string, unknown>): Desafio {
     status:        String(linha.status ?? 'rascunho') as StatusDesafio,
     midiaUrl:      (linha.midia_url as string | null) ?? null,
     midiaCaminho:  (linha.midia_caminho as string | null) ?? null,
+    arteUrl:       (linha.arte_url as string | null) ?? null,
+    arteCaminho:   (linha.arte_caminho as string | null) ?? null,
     visibilidade:  linha.visibilidade === 'todos' ? 'todos' : 'alcance',
     criadoPor:     (linha.criado_por as string | null) ?? null,
     criadoPorNome: (linha.criado_por_nome as string | null) ?? null,
@@ -303,6 +311,7 @@ function paraPessoa(p: Record<string, unknown>) {
     // quando ninguém disse o contrário.
     perfil:     String(p.perfil ?? 'operador'),
     empresaId:  (p.empresa_id as string | null) ?? null,
+    convidado:  p.convidado === true,
   };
 }
 
@@ -378,6 +387,24 @@ export async function buscarSetoresDisponiveis(): Promise<SetorDisponivel[]> {
         }))
       : [],
   }));
+}
+
+/**
+ * Os super admins que podem ser convidados para testar uma campanha.
+ *
+ * A RPC devolve `[]` para quem não é super admin — a caixa de convidados é
+ * ferramenta de quem administra o sistema, e um gerente com
+ * `desafios_configurar` não tem o que fazer com ela.
+ */
+export async function buscarSuperAdmins(): Promise<PessoaDesafio[]> {
+  const { data, error } = await rpcSemTipo<Record<string, unknown>[]>(
+    'fn_desafio_super_admins', {},
+  );
+  if (error || !Array.isArray(data)) return [];
+  // A RPC devolve o cadastro cru — sem equipe, sem setor, sem os vínculos que
+  // o quadro normal resolve. `convidado` entra ligado porque é exatamente o
+  // que estas pessoas são nesta lista.
+  return data.map(p => ({ ...paraPessoa(p), convidado: true }));
 }
 
 /**
@@ -500,6 +527,8 @@ export interface DadosGravacaoDesafio {
   status: StatusDesafio;
   midiaUrl: string | null;
   midiaCaminho: string | null;
+  arteUrl: string | null;
+  arteCaminho: string | null;
   visibilidade: VisibilidadeDesafio;
 }
 
@@ -516,7 +545,10 @@ export interface DadosGravacaoDesafio {
  * com a visibilidade padrão — que é exatamente o que ela seria antes desta
  * versão.
  */
-const COLUNAS_NOVAS = ['empresas', 'midia_url', 'midia_caminho', 'visibilidade'] as const;
+const COLUNAS_NOVAS = [
+  'empresas', 'midia_url', 'midia_caminho', 'visibilidade',
+  'arte_url', 'arte_caminho',
+] as const;
 
 /** A mensagem do Postgres para «esta coluna não existe». */
 function colunaAusente(mensagem: string): boolean {
@@ -546,6 +578,8 @@ function paraColunas(d: DadosGravacaoDesafio): Record<string, unknown> {
     status:      d.status,
     midia_url:     d.midiaUrl,
     midia_caminho: d.midiaCaminho,
+    arte_url:      d.arteUrl,
+    arte_caminho:  d.arteCaminho,
     visibilidade:  d.visibilidade,
   };
 }
@@ -681,8 +715,11 @@ export async function excluirDesafio(params: {
 }): Promise<{ error: string | null }> {
   const { desafio } = params;
 
-  if (desafio.midiaCaminho) {
-    await supabase.storage.from(BUCKET_DESAFIOS).remove([desafio.midiaCaminho]);
+  // As duas imagens saem juntas: destaque e arte de divulgação.
+  const arquivos = [desafio.midiaCaminho, desafio.arteCaminho]
+    .filter((c): c is string => !!c);
+  if (arquivos.length) {
+    await supabase.storage.from(BUCKET_DESAFIOS).remove(arquivos);
   }
 
   const { error } = await db('desafios').delete().eq('id', desafio.id);

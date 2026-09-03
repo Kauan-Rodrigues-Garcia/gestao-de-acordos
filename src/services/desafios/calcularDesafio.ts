@@ -163,9 +163,10 @@ export function participaDaCampanha(pessoa: PessoaDesafio, desafio: Desafio): bo
   const operadores = participantes.operadores ?? [];
   const cargos     = participantes.cargos     ?? [];
   const excluidos  = participantes.excluidos  ?? [];
+  const convidados = participantes.convidados ?? [];
 
   /*
-   * A exclusão vem PRIMEIRO, e antes até do mapa de metas.
+   * A exclusão vem PRIMEIRO, antes do convidado e antes do mapa de metas.
    *
    * Ela é a única lista escrita para tirar alguém, e quem a preenche está
    * dizendo «esta pessoa não, mesmo que tudo o mais a inclua». Avaliá-la
@@ -173,6 +174,16 @@ export function participaDaCampanha(pessoa: PessoaDesafio, desafio: Desafio): bo
    * de remover pela tela.
    */
   if (excluidos.length && excluidos.includes(pessoa.id)) return false;
+
+  /*
+   * O convidado de teste entra por cima de todo o resto do recorte.
+   *
+   * Ele é super admin: não tem setor de operação, não está em equipe nenhuma e
+   * o cargo dele nunca vai casar com o recorte da campanha. Passá-lo pelas
+   * mesmas peneiras seria convidá-lo e deixá-lo de fora no passo seguinte —
+   * inclusive pelo mapa de metas, que ele nunca vai ter.
+   */
+  if (convidados.length && convidados.includes(pessoa.id)) return true;
 
   // Mapa de metas preenchido É a convocação: quem não tem meta não disputa.
   // Sem isto, a operação inteira entraria zerada num ranking de 27 pessoas.

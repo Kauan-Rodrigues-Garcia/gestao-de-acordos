@@ -21,7 +21,7 @@ import {
 } from '@/services/desafios/tiposDesafio';
 import { diasRestantes, situacaoDoPeriodo } from '@/services/desafios/calcularDesafio';
 import type { Desafio } from '@/services/desafios/types';
-import { dataBR, diaCurto, estiloDoTema, hojeISO } from './tema';
+import { dataBR, diaCurto, estiloDaCampanha, hojeISO } from './tema';
 import { ProgressoDesafio } from './ProgressoDesafio';
 
 interface Props {
@@ -37,7 +37,12 @@ interface Props {
 export function DesafioHero({
   desafio, totalRecebido, totalParticipantes, totalEquipes, progressoColetivo, carregando,
 }: Props) {
-  const tema  = estiloDoTema(desafio.visual.tema);
+  //  e nao : o Hero tem que respeitar a cor de
+  // acento escolhida na configuracao, senao ela vale no card e nao aqui.
+  // `estiloDaCampanha` e não `estiloDoTema`: o Hero tem que respeitar a cor de
+  // acento escolhida na configuração, senão ela valeria no card do catálogo e
+  // não aqui, que é onde a campanha é lida de perto.
+  const tema  = estiloDaCampanha(desafio.visual);
   const Icone = tema.Icone;
   const hoje  = hojeISO();
   const fase  = situacaoDoPeriodo(desafio, hoje);

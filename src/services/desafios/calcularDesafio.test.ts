@@ -41,6 +41,7 @@ function pessoa(over: Partial<PessoaDesafio> & { id: string; nome: string }): Pe
     setores: ['setorA'],
     equipes: ['eq1'],
     perfil: 'operador',
+    convidado: false,
     empresaId: 'emp1',
     ...over,
   };
@@ -65,6 +66,8 @@ function desafio(over: OverDesafio = {}): Desafio {
     status: 'ativo',
     midiaUrl: null,
     midiaCaminho: null,
+    arteUrl: null,
+    arteCaminho: null,
     visibilidade: 'alcance',
     criadoPor: null,
     criadoPorNome: null,
@@ -84,6 +87,7 @@ function desafio(over: OverDesafio = {}): Desafio {
       metaColetiva: null,
       participantes: {
         setores: [], equipes: [], operadores: [], cargos: [], excluidos: [],
+        convidados: [],
       },
       premios: [],
       fonteResultado: 'proprio',
@@ -93,6 +97,7 @@ function desafio(over: OverDesafio = {}): Desafio {
       tema: 'padrao', icone: 'trophy', mostrarFotos: true,
       animarUltrapassagem: true, comemorarMeta: true,
       acento: null, midiaNoCard: true, fixarNoMenu: true,
+      ajusteMidia: 'cobrir', ajusteArte: 'conter',
       ...(over.visual ?? {}),
     },
   };
@@ -795,5 +800,83 @@ describe('listas ausentes na regra', () => {
 
     expect(() => participaDaCampanha(pessoa({ id: 'p1', nome: 'Fulana' }), d)).not.toThrow();
     expect(participaDaCampanha(pessoa({ id: 'p1', nome: 'Fulana' }), d)).toBe(true);
+  });
+});
+
+describe('convidado de teste', () => {
+  /*
+   * O super admin nao tem setor de operacao, nao esta em equipe nenhuma e o
+   * cargo dele nunca casa com o recorte. Se passasse pelas mesmas peneiras,
+   * seria convidado e deixado de fora no passo seguinte.
+   */
+  const admin = pessoa({
+    id: 'sa1', nome: 'Super Admin', perfil: 'super_admin',
+    equipeId: null, equipes: [], setorId: null, setores: [],
+    convidado: true,
+  });
+
+  const campanhaDeSetor = (convidados: string[]) => desafio({
+    regra: {
+      participantes: {
+        setores: ['setorA'], equipes: [], operadores: [],
+        cargos: ['lider'], excluidos: [], convidados,
+      },
+    },
+  });
+
+  it('sem convite, o super admin fica de fora do recorte', () => {
+    expect(participaDaCampanha(admin, campanhaDeSetor([]))).toBe(false);
+  });
+
+  it('convidado, entra por cima de setor, equipe e cargo', () => {
+    expect(participaDaCampanha(admin, campanhaDeSetor(['sa1']))).toBe(true);
+  });
+
+  it('entra mesmo com o mapa de metas preenchido — ele nunca teria meta', () => {
+    const d = desafio({
+      regra: {
+        metasPorOperador: { outro: 10_000 },
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: [],
+          excluidos: [], convidados: ['sa1'],
+        },
+      },
+    });
+    expect(participaDaCampanha(admin, d)).toBe(true);
+  });
+
+  it('a exclusao vence o convite — quem tira alguem quer que ele saia', () => {
+    const d = desafio({
+      regra: {
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: [],
+          excluidos: ['sa1'], convidados: ['sa1'],
+        },
+      },
+    });
+    expect(participaDaCampanha(admin, d)).toBe(false);
+  });
+
+  it('convidado disputa de verdade: entra no ranking com o recebimento dele', () => {
+    const operador = pessoa({ id: 'o1', nome: 'Operadora' });
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: {
+          criterioRanking: 'maior_recebido',
+          metaIndividual: null,
+          participantes: {
+            setores: [], equipes: [], operadores: [], cargos: [],
+            excluidos: [], convidados: ['sa1'],
+          },
+        },
+      }),
+      dados: {
+        participantes: [operador, admin],
+        linhas: [linha('o1', 5_000), linha('sa1', 9_000)],
+      },
+    });
+
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['sa1', 'o1']);
+    expect(r.totalParticipantes).toBe(2);
   });
 });

@@ -120,6 +120,9 @@ export const CardDesafio = memo(function CardDesafio({
         'relative h-32 w-full overflow-hidden border-b',
         estilo.borda,
         !comMidia && `bg-gradient-to-br ${estilo.gradiente}`,
+        // Com a imagem INTEIRA sobra margem dos lados, e ela não pode ser um
+        // buraco transparente por cima do card.
+        comMidia && desafio.visual.ajusteMidia === 'conter' && 'bg-muted/40',
       )}>
         {comMidia ? (
           <>
@@ -129,7 +132,10 @@ export const CardDesafio = memo(function CardDesafio({
               initial={false}
               whileHover={{ scale: 1.04 }}
               transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-              className="h-full w-full object-cover"
+              className={cn(
+                'h-full w-full',
+                desafio.visual.ajusteMidia === 'conter' ? 'object-contain' : 'object-cover',
+              )}
               loading="lazy"
             />
             {/* O véu existe para o nome ficar legível sobre qualquer imagem —

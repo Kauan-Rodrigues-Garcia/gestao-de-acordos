@@ -39,6 +39,7 @@ import { fetchEmpresasLiberadas } from '@/services/empresas.service';
 import { useDesafios, useResultadoDesafio, useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { estiloDaCampanha } from './tema';
 import type { Desafio } from '@/services/desafios/types';
+import { ArteDesafio } from './ArteDesafio';
 import { CatalogoDesafios } from './CatalogoDesafios';
 import { DesafioHero } from './DesafioHero';
 import { IndicadoresDesafio } from './IndicadoresDesafio';
@@ -209,14 +210,7 @@ export function AbaDesafios({
   // abas já consulta o mesmo mapa pelo seu lado, e o React Query compartilha.
   const setoresDoDesafio = useSetoresDoDesafio(podeAdministrar, operadorId);
 
-  const tema = useMemo(
-    () => estiloDaCampanha(aberta?.visual ?? {
-      tema: 'padrao', icone: 'trophy', mostrarFotos: true,
-      animarUltrapassagem: true, comemorarMeta: true,
-      acento: null, midiaNoCard: true, fixarNoMenu: true,
-    }),
-    [aberta?.visual],
-  );
+  const tema = useMemo(() => estiloDaCampanha(aberta?.visual), [aberta?.visual]);
 
   const eu = useMemo(
     () => resultado?.individual.find(i => i.pessoa.id === operadorId) ?? null,
@@ -378,6 +372,9 @@ export function AbaDesafios({
         progressoColetivo={resultado?.progressoColetivo ?? 0}
         carregando={calculando}
       />
+
+      {/* A arte de divulgação, logo abaixo do Hero. Some quando não há uma. */}
+      <ArteDesafio desafio={aberta} />
 
       {calculando && !resultado && <EsqueletoDesafio />}
 

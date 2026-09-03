@@ -68,7 +68,12 @@ export function DesafioMenu({ desafio, expandido, aberto, onToggle }: DesafioMen
             <img
               src={desafio.midiaUrl ?? ''}
               alt={desafio.nome}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className={cn(
+                'h-full w-full transition-transform duration-300 group-hover:scale-105',
+                desafio.visual.ajusteMidia === 'conter'
+                  ? 'bg-sidebar-accent/40 object-contain'
+                  : 'object-cover',
+              )}
             />
           ) : (
             <div className={cn(
