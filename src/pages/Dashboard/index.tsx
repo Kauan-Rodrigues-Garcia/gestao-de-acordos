@@ -112,9 +112,28 @@ export default function Dashboard() {
     const primeira = equipesDoSetor[0];
     if (primeira) setVisaoFiltro(`equipe:${primeira.id}`);
   }, [niveis, visaoFiltro, equipesDoSetor]);
-  const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
-  const operadorFiltroAtivo = visaoFiltro === 'individual' ? (perfil?.id ?? null) : null;
-  const eliteVisaoGeral = visaoFiltro !== 'individual';
+  const soOsMeus = visaoFiltro === 'individual';
+  const operadorFiltroAtivo = soOsMeus ? (perfil?.id ?? null) : null;
+  const eliteVisaoGeral = !soOsMeus;
+
+  /*
+   * Com «só os meus» ligado, setor e equipe param de valer.
+   *
+   * O `<FiltroEscopo />` esconde as duas linhas nesse estado, mas esconder não
+   * é o mesmo que desligar: `setorFiltro` é estado desta tela e sobrevive ao
+   * interruptor. Sem zerar aqui, escolher «Play 5», ligar o individual e ser de
+   * outro setor cruzava «só eu» com «setor Play 5» — dois recortes que não se
+   * encontram, e o painel devolvia vazio como se a pessoa não tivesse produzido
+   * nada no mês.
+   *
+   * Zerado só na LEITURA: o `setorFiltro` guardado continua lá, então desligar
+   * o interruptor devolve o setor que estava escolhido em vez de jogar a pessoa
+   * de volta em «todos os setores».
+   */
+  const setorFiltroAtivo = soOsMeus ? null : setorFiltro;
+  const equipeFiltroAtivo = !soOsMeus && visaoFiltro.startsWith('equipe:')
+    ? visaoFiltro.replace('equipe:', '')
+    : null;
 
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
   const hoje = getTodayISO();
@@ -731,7 +750,7 @@ export default function Dashboard() {
           setorDoPerfil={perfil?.setor_id ?? null}
         />
         <AnalyticsPanel
-          setorFiltro={setorFiltro}
+          setorFiltro={setorFiltroAtivo}
           equipeFiltroExterno={equipeFiltroAtivo}
           operadorFiltroExterno={operadorFiltroAtivo}
           temLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}

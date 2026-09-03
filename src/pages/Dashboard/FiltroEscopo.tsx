@@ -24,19 +24,35 @@
  *
  * ## O desenho agora
  *
- * Um controle, em cascata, e as opções saem dos NÍVEIS DA ABA — o que o cargo
- * pode escolher no Dashboard, e nada mais:
+ * O mesmo controle para TODOS os cargos — o que muda de um para outro é só até
+ * onde ele alcança, e isso sai dos níveis da aba, não de lista de cargo:
  *
- *   Setor  → aparece para quem tem `todos_setores`
- *   Equipe → aparece para quem tem `equipe`, e SÓ com um setor em foco
- *   Individual → aparece quando há algo mais amplo do que ele para contrastar
+ *   [ Só os meus números ]  ← interruptor, sempre em cima e sozinho
+ *   Setor   → só para quem enxerga mais de um setor (`todos_setores`)
+ *   Equipe  → só com UM setor em foco, e só as equipes DAQUELE setor
  *
- * Escolher "Todos os setores" esconde a linha de equipe, porque equipe de qual
- * setor não teria resposta.
+ * Duas regras de cascata, e as duas são o mesmo princípio — não oferecer um
+ * recorte que não tem resposta:
+ *
+ *   • "Todos os setores" esconde a linha de equipe, porque «equipe de qual
+ *     setor?» não tem resposta;
+ *   • o individual LIGADO esconde setor e equipe, porque o recorte já é uma
+ *     pessoa só — um filtro de setor por cima dele não teria o que fazer.
+ *
+ * ## Por que o individual virou interruptor
+ *
+ * Ele era uma terceira linha, «Pessoa», com dois chips: «Todas as pessoas» e
+ * «Só os meus». Era um filtro fingindo ter duas dimensões quando só tem uma —
+ * e «Todas as pessoas» precisava de três condições para decidir se aparecia,
+ * porque em metade dos casos ele repetia o que a linha de equipe já dizia.
+ *
+ * Sendo um interruptor a pergunta fica com a forma que ela tem: ligado ou
+ * desligado. Desligar devolve o recorte de setor/equipe que estava valendo.
  */
 
-import { Building2, Layers, Users } from 'lucide-react';
+import { Building2, Layers, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import type { SetorResumo, EquipeResumo } from '@/hooks/useSetoresEquipes';
 
@@ -94,27 +110,26 @@ export function FiltroEscopo({
    */
   const setorEmFoco = podeEscolherSetor ? setorFiltro : setorDoPerfil;
 
-  const mostrarEquipes = podeEquipe && setorEmFoco !== null && equipes.length > 0;
+  const podeVerEquipes = podeEquipe && setorEmFoco !== null && equipes.length > 0;
   // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
   const mostrarIndividual = niveis.includes('individual') && niveis.length > 1;
 
+  const soOsMeus = visao === 'individual';
+
   /*
-   * «Todas as pessoas» só existe quando há um recorte mais amplo de verdade.
+   * Ligado o individual, o recorte JÁ É uma pessoa só.
    *
-   * Para quem escolhe entre a própria equipe e os próprios números, ele não
-   * dizia nada: ficava aceso junto com a equipe selecionada — dois botões
-   * ligados ao mesmo tempo dizendo a mesma coisa — e clicar nele era o único
-   * caminho que ainda devolvia o setor inteiro a quem o painel limitou à
-   * equipe. Sem ele a escolha fica binária, que é como foi pedido: ou a equipe,
-   * ou só os meus.
-   *
-   * Quem NÃO tem alcance de equipe continua com o botão: para essa pessoa ele é
-   * a única forma de sair do individual.
+   * Setor e equipe somem inteiros em vez de ficarem visíveis sem efeito: um
+   * filtro aceso que não muda nada na tela é a forma mais rápida de fazer
+   * alguém achar que o sistema está errado. Desligar traz os dois de volta com
+   * a escolha que estava valendo — o `setorFiltro` não é apagado, só deixa de
+   * ser perguntado enquanto o individual manda.
    */
-  const mostrarTodasPessoas = mostrarTodasEquipes || !mostrarEquipes;
+  const mostrarSetores = !soOsMeus && podeEscolherSetor && setores.length > 0;
+  const mostrarEquipes = !soOsMeus && podeVerEquipes;
 
   // Nada a oferecer: o controle inteiro some em vez de virar moldura vazia.
-  if (!podeEscolherSetor && !mostrarEquipes && !mostrarIndividual) return null;
+  if (!podeEscolherSetor && !podeVerEquipes && !mostrarIndividual) return null;
 
   const equipeAtiva = visao.startsWith('equipe:') ? visao.slice('equipe:'.length) : null;
 
@@ -123,7 +138,39 @@ export function FiltroEscopo({
       className="flex flex-col gap-2 px-4 py-3 rounded-xl border border-border bg-card"
       data-tour="filtro-escopo"
     >
-      {podeEscolherSetor && setores.length > 0 && (
+      {/*
+        O interruptor vem primeiro e sozinho: é ele que decide se as outras
+        duas linhas existem, e um controle que governa os de baixo lendo-se
+        depois deles obrigaria a percorrer a caixa duas vezes para entender.
+      */}
+      {mostrarIndividual && (
+        <div className={cn(
+          'flex items-center gap-2',
+          // A divisória só faz sentido quando há algo embaixo para separar.
+          (mostrarSetores || mostrarEquipes) && 'border-b border-border pb-2',
+        )}>
+          <User className="w-4 h-4 text-muted-foreground shrink-0" />
+          <label
+            htmlFor="filtro-so-os-meus"
+            className="text-xs font-medium text-muted-foreground cursor-pointer select-none"
+          >
+            Só os meus números
+          </label>
+          <Switch
+            id="filtro-so-os-meus"
+            checked={soOsMeus}
+            onCheckedChange={ligado => onVisao(ligado ? 'individual' : 'setor')}
+            aria-label="Ver apenas os seus próprios números"
+          />
+          {soOsMeus && (
+            <span className="text-[11px] text-muted-foreground">
+              Setor e equipe não se aplicam a uma pessoa só.
+            </span>
+          )}
+        </div>
+      )}
+
+      {mostrarSetores && (
         <Linha icone={<Building2 className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Setor">
           <Chip
             ativo={setorFiltro === null}
@@ -172,26 +219,6 @@ export function FiltroEscopo({
         </Linha>
       )}
 
-      {mostrarIndividual && (
-        <Linha icone={<Users className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Pessoa">
-          {mostrarTodasPessoas && (
-            <Chip
-              ativo={visao !== 'individual'}
-              onClick={() => onVisao('setor')}
-              titulo="Ver os dados de todo mundo no recorte acima"
-            >
-              Todas as pessoas
-            </Chip>
-          )}
-          <Chip
-            ativo={visao === 'individual'}
-            onClick={() => onVisao('individual')}
-            titulo="Ver apenas os seus próprios acordos"
-          >
-            Só os meus
-          </Chip>
-        </Linha>
-      )}
     </div>
   );
 }
