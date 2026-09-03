@@ -857,7 +857,13 @@ describe('convidado de teste', () => {
     expect(participaDaCampanha(admin, d)).toBe(false);
   });
 
-  it('convidado disputa de verdade: entra no ranking com o recebimento dele', () => {
+  /*
+   * O ponto do modo teste: um convidado FECHA a campanha.
+   *
+   * Conferir a campanha com a operacao inteira no placar nao confere nada —
+   * quem se convida quer ver a tela funcionando com ele dentro, e so.
+   */
+  it('com convidado, so os convidados disputam — a operacao fica de fora', () => {
     const operador = pessoa({ id: 'o1', nome: 'Operadora' });
     const r = calcularDesafio({
       desafio: desafio({
@@ -876,7 +882,41 @@ describe('convidado de teste', () => {
       },
     });
 
-    expect(r.individual.map(i => i.pessoa.id)).toEqual(['sa1', 'o1']);
-    expect(r.totalParticipantes).toBe(2);
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['sa1']);
+    expect(r.totalParticipantes).toBe(1);
+  });
+
+  it('o recorte nao vale em modo teste — mas continua gravado', () => {
+    const doSetor = pessoa({ id: 'o1', nome: 'Operadora' });
+    const d = desafio({
+      regra: {
+        metaIndividual: null,
+        participantes: {
+          setores: ['setorA'], equipes: [], operadores: [],
+          cargos: [], excluidos: [], convidados: ['sa1'],
+        },
+      },
+    });
+
+    // A pessoa casa com o recorte e mesmo assim fica de fora.
+    expect(participaDaCampanha(doSetor, d)).toBe(false);
+    expect(participaDaCampanha(admin, d)).toBe(true);
+    // E o recorte segue na regra, para voltar a valer quando a lista esvaziar.
+    expect(d.regra.participantes.setores).toEqual(['setorA']);
+  });
+
+  it('esvaziar a lista devolve a campanha ao recorte de sempre', () => {
+    const doSetor = pessoa({ id: 'o1', nome: 'Operadora' });
+    const d = desafio({
+      regra: {
+        metaIndividual: null,
+        participantes: {
+          setores: ['setorA'], equipes: [], operadores: [],
+          cargos: [], excluidos: [], convidados: [],
+        },
+      },
+    });
+    expect(participaDaCampanha(doSetor, d)).toBe(true);
+    expect(participaDaCampanha(admin, d)).toBe(false);
   });
 });

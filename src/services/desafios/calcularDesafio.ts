@@ -176,14 +176,22 @@ export function participaDaCampanha(pessoa: PessoaDesafio, desafio: Desafio): bo
   if (excluidos.length && excluidos.includes(pessoa.id)) return false;
 
   /*
-   * O convidado de teste entra por cima de todo o resto do recorte.
+   * MODO TESTE: um convidado sequer fecha a campanha.
    *
-   * Ele é super admin: não tem setor de operação, não está em equipe nenhuma e
-   * o cargo dele nunca vai casar com o recorte da campanha. Passá-lo pelas
-   * mesmas peneiras seria convidá-lo e deixá-lo de fora no passo seguinte —
-   * inclusive pelo mapa de metas, que ele nunca vai ter.
+   * Com a lista preenchida, disputam os convidados e mais ninguém — a operação
+   * inteira fica de fora. Teste é uma coisa fechada: quem se convida para
+   * conferir a campanha antes de publicar não quer conferi-la com duzentas e
+   * trinta e seis pessoas no placar; quer ver a tela funcionando com ele
+   * dentro.
+   *
+   * O recorte de setor, equipe e cargo não é apagado — ele fica guardado na
+   * campanha e volta a valer no instante em que a lista esvaziar. Publicar é
+   * esvaziar a lista.
+   *
+   * O convidado também não passa pelo mapa de metas: ele nunca vai ter uma, e
+   * a peneira seguinte o derrubaria no passo em que acabou de ser convidado.
    */
-  if (convidados.length && convidados.includes(pessoa.id)) return true;
+  if (convidados.length) return convidados.includes(pessoa.id);
 
   // Mapa de metas preenchido É a convocação: quem não tem meta não disputa.
   // Sem isto, a operação inteira entraria zerada num ranking de 27 pessoas.

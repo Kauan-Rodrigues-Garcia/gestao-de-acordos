@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  alcancadosPeloRecorte, contarNoDesafio, temRecorte,
+  alcancadosPeloRecorte, contarNoDesafio, emModoTeste, temRecorte,
 } from './alcanceDoRecorte';
 import type { ParticipantesDesafio, PessoaDesafio } from '@/services/desafios/types';
 
@@ -97,7 +97,12 @@ describe('alcancadosPeloRecorte', () => {
     expect(r.map(p => p.id)).toContain('a');
   });
 
-  it('o convidado de teste entra por cima do recorte', () => {
+  /*
+   * Modo teste: a lista de convidados nao SOMA ao recorte, ela o SUBSTITUI.
+   * A tela de configuracao tem que mostrar exatamente quem vai aparecer no
+   * placar, e no placar so estao os convidados.
+   */
+  it('com convidado, alcanca SO os convidados', () => {
     const admin = pessoa({
       id: 'sa', nome: 'Super', perfil: 'super_admin',
       setores: [], equipes: [], equipeId: null,
@@ -106,7 +111,29 @@ describe('alcancadosPeloRecorte', () => {
       [...quadro, admin],
       recorte({ setores: ['setorA'], convidados: ['sa'] }),
     );
-    expect(r.map(p => p.id)).toContain('sa');
+    expect(r.map(p => p.id)).toEqual(['sa']);
+  });
+
+  it('o setor travado tambem perde para o modo teste', () => {
+    const admin = pessoa({
+      id: 'sa', nome: 'Super', perfil: 'super_admin',
+      setores: [], equipes: [], equipeId: null,
+    });
+    const r = alcancadosPeloRecorte(
+      [...quadro, admin], recorte({ convidados: ['sa'] }), 'setorA',
+    );
+    expect(r.map(p => p.id)).toEqual(['sa']);
+  });
+});
+
+describe('emModoTeste', () => {
+  it('um convidado sequer ja fecha a campanha', () => {
+    expect(emModoTeste(recorte())).toBe(false);
+    expect(emModoTeste(recorte({ convidados: ['sa'] }))).toBe(true);
+  });
+
+  it('modo teste conta como recorte — a lista aparece', () => {
+    expect(temRecorte(recorte({ convidados: ['sa'] }))).toBe(true);
   });
 });
 

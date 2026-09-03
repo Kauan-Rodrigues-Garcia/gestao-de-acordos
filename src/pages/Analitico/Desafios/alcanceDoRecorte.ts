@@ -23,6 +23,25 @@
 import type { ParticipantesDesafio, PessoaDesafio } from '@/services/desafios/types';
 
 /**
+ * A campanha está em MODO TESTE?
+ *
+ * Um convidado sequer põe a campanha em teste, e teste é uma coisa fechada:
+ * disputam os convidados e MAIS NINGUÉM. A operação fica inteira de fora
+ * enquanto a lista tiver alguém.
+ *
+ * A alternativa — somar os convidados ao recorte — foi o primeiro desenho e
+ * estava errada: quem convida a si mesmo para conferir a campanha não quer
+ * conferi-la com duzentas e trinta e seis pessoas junto. Quer ver a tela
+ * funcionando com ele dentro.
+ *
+ * O recorte (setores, equipes, cargos) não é apagado — fica guardado e volta a
+ * valer no instante em que a lista de convidados esvaziar. Publicar é esvaziar.
+ */
+export function emModoTeste(participantes: ParticipantesDesafio): boolean {
+  return (participantes.convidados?.length ?? 0) > 0;
+}
+
+/**
  * A campanha tem algum recorte?
  *
  * `false` significa «vale para todo mundo que a enxerga» — que é uma campanha
@@ -31,11 +50,14 @@ import type { ParticipantesDesafio, PessoaDesafio } from '@/services/desafios/ty
  *
  * A lista de operadores conta como recorte, mas as exclusões não: excluir
  * alguém de «todo mundo» continua sendo «todo mundo menos ele».
+ *
+ * O modo teste conta como recorte — e é o mais estreito de todos.
  */
 export function temRecorte(
   participantes: ParticipantesDesafio,
   travadoNoSetor?: string | null,
 ): boolean {
+  if (emModoTeste(participantes)) return true;
   if (travadoNoSetor) return true;
   return (
     (participantes.setores?.length ?? 0) > 0
@@ -60,16 +82,21 @@ export function alcancadosPeloRecorte(
   participantes: ParticipantesDesafio,
   travadoNoSetor?: string | null,
 ): PessoaDesafio[] {
+  const convidados = participantes.convidados ?? [];
+
+  // Modo teste: só os convidados, e mais ninguém. O recorte fica guardado e
+  // volta a valer quando a lista esvaziar.
+  if (convidados.length) {
+    const dentro = new Set(convidados);
+    return pessoas.filter(p => dentro.has(p.id));
+  }
+
   const setores    = travadoNoSetor ? [travadoNoSetor] : (participantes.setores ?? []);
   const equipes    = participantes.equipes    ?? [];
   const cargos     = participantes.cargos     ?? [];
   const operadores = participantes.operadores ?? [];
-  const convidados = participantes.convidados ?? [];
 
   return pessoas.filter(p => {
-    // O convidado de teste entra por cima do recorte, como no ranking: ele é
-    // super admin e nunca casaria com setor, equipe ou cargo.
-    if (convidados.includes(p.id)) return true;
     if (operadores.length && !operadores.includes(p.id)) return false;
     if (setores.length && !p.setores.some(s => setores.includes(s))) return false;
     if (equipes.length && !p.equipes.some(e => equipes.includes(e))) return false;

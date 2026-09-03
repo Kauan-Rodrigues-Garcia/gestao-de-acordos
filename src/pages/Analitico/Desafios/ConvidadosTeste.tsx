@@ -22,15 +22,18 @@
  * chega vazia — e uma caixa vazia numa tela cheia é ruído. O componente some
  * inteiro quando não há ninguém a oferecer.
  *
- * ## O convidado CONTA no placar
+ * ## Um convidado FECHA a campanha
  *
- * Ele entra como participante de verdade: com o recebimento dele, na posição
- * que esse recebimento der. Não é um modo de visualização — é uma cadeira a
- * mais na disputa, e é isso que faz o teste valer. Por isso a tela avisa, e
- * por isso a lista costuma ser esvaziada antes de publicar.
+ * Com a lista preenchida, disputam os convidados e mais ninguém: a operação
+ * inteira fica de fora, e o recorte de setores, equipes e cargos deixa de
+ * valer — sem ser apagado. É o que faz o teste ser um teste; conferir a
+ * campanha com duzentas e trinta e seis pessoas junto não confere nada.
+ *
+ * Publicar de verdade é esvaziar a lista, e aí o recorte volta exatamente como
+ * estava. Por isso o aviso em cima é grande: a caixa muda quem disputa.
  */
 import { useEffect, useState } from 'react';
-import { FlaskConical, Plus, X } from 'lucide-react';
+import { AlertTriangle, FlaskConical, Plus, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -86,12 +89,24 @@ export function ConvidadosTeste({ valor, onChange, euId }: ConvidadosTesteProps)
         </span>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        Super admins ficam de fora de todo desafio. Quem você marcar aqui entra
-        no placar como participante de verdade — com o recebimento dele e na
-        posição que esse recebimento der. Serve para conferir a campanha antes
-        de publicar; lembre de esvaziar a lista depois.
-      </p>
+      {valor.length > 0 ? (
+        <div className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-[11px] text-foreground">
+            <strong>A campanha está em modo teste.</strong> Só{' '}
+            {valor.length === 1 ? 'esta pessoa disputa' : `estas ${valor.length} pessoas disputam`};
+            a operação inteira fica de fora, e o recorte de setores, equipes e
+            cargos não vale enquanto isso. Esvazie a lista para publicar de
+            verdade — o recorte volta como está.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          Super admins ficam de fora de todo desafio. Marcar alguém aqui põe a
+          campanha em <strong>modo teste</strong>: só os marcados disputam, e a
+          operação fica de fora até a lista esvaziar.
+        </p>
+      )}
 
       {escolhidos.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

@@ -28,7 +28,7 @@
  * desmarcadas.
  */
 import { useMemo, useState } from 'react';
-import { Building2, Search, UserMinus, Users, X } from 'lucide-react';
+import { Building2, FlaskConical, Search, UserMinus, Users, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,7 +37,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { AvatarParticipante } from './AvatarParticipante';
 import {
-  alcancadosPeloRecorte, contarNoDesafio, temRecorte,
+  alcancadosPeloRecorte, contarNoDesafio, emModoTeste, temRecorte,
 } from './alcanceDoRecorte';
 import type {
   ParticipantesDesafio, PessoaDesafio, SetorDisponivel,
@@ -109,6 +109,7 @@ export function SeletorParticipacao({
   );
 
   const recortado = temRecorte(valor, travadoNoSetor);
+  const modoTeste = emModoTeste(valor);
 
   const filtrados = useMemo(() => {
     const termo = buscaPessoa.trim().toLowerCase();
@@ -162,9 +163,24 @@ export function SeletorParticipacao({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={cn('space-y-6', modoTeste && 'relative')}>
+      {/* Em modo teste os três blocos de recorte continuam editáveis — o que
+          se monta agora é o que vai valer depois — mas não estão em vigor. Sem
+          este aviso, marcar cinco setores e ver «1 no desafio» se lê como
+          defeito. */}
+      {modoTeste && (
+        <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+          <FlaskConical className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-xs text-foreground">
+            <strong>Modo teste ligado.</strong> O recorte abaixo continua sendo
+            gravado, mas não vale enquanto houver convidado: só os convidados
+            disputam. Esvazie a lista no fim desta aba para publicar de verdade.
+          </p>
+        </div>
+      )}
+
       {/* ── 1. Setores ──────────────────────────────────────────────────── */}
-      <section className="space-y-2">
+      <section className={cn('space-y-2', modoTeste && 'opacity-60')}>
         <div className="flex items-baseline justify-between gap-2">
           <Label className="text-sm font-medium">Setores</Label>
           <span className="text-[11px] text-muted-foreground">
@@ -213,7 +229,7 @@ export function SeletorParticipacao({
 
       {/* ── 2. Equipes ──────────────────────────────────────────────────── */}
       {equipesOferecidas.length > 0 && (
-        <section className="space-y-2">
+        <section className={cn('space-y-2', modoTeste && 'opacity-60')}>
           <div className="flex items-baseline justify-between gap-2">
             <Label className="text-sm font-medium">Equipes</Label>
             <span className="text-[11px] text-muted-foreground">
@@ -245,7 +261,7 @@ export function SeletorParticipacao({
       )}
 
       {/* ── 3. Cargos ───────────────────────────────────────────────────── */}
-      <section className="space-y-2">
+      <section className={cn('space-y-2', modoTeste && 'opacity-60')}>
         <div className="flex items-baseline justify-between gap-2">
           <Label className="text-sm font-medium">Cargos</Label>
           <span className="text-[11px] text-muted-foreground">
