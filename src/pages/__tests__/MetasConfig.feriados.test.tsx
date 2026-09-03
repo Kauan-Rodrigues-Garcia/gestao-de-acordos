@@ -110,9 +110,12 @@ describe('MetasConfig — feriados', () => {
     // O chip do feriado apareceu?
     await waitFor(() => expect(screen.queryByText(/Nenhum feriado neste mês/)).toBeNull());
 
-    fireEvent.click(screen.getByRole('button', { name: /Salvar Todas/ }));
-
-    await waitFor(() => expect(upsertMetasConfig).toHaveBeenCalled());
+    // Não há mais botão: o calendário do mês grava sozinho 800 ms depois da
+    // última mexida. O `timeout` cobre a espera do debounce.
+    await waitFor(
+      () => expect(upsertMetasConfig).toHaveBeenCalled(),
+      { timeout: 3000 },
+    );
     expect(upsertMetasConfig.mock.calls[0][0]).toMatchObject({ feriados: [iso] });
   });
 });
@@ -136,8 +139,10 @@ describe('MetasConfig — feriados com a tela cheia', () => {
     fireEvent.click(input.parentElement!.querySelector('button')!);
     await waitFor(() => expect(screen.queryByText(/Nenhum feriado neste mês/)).toBeNull());
 
-    fireEvent.click(screen.getByRole('button', { name: /Salvar Todas/ }));
-    await waitFor(() => expect(upsertMetasConfig).toHaveBeenCalled());
+    await waitFor(
+      () => expect(upsertMetasConfig).toHaveBeenCalled(),
+      { timeout: 3000 },
+    );
     expect(upsertMetasConfig.mock.calls[0][0]).toMatchObject({ feriados: [iso] });
   });
 });
@@ -158,12 +163,28 @@ describe('MetasConfig — salvar meta não reescreve o calendário do mês', () 
     // Uma meta de setor preenchida, e nada tocado no card de dias úteis.
     const metaInput = screen.getAllByPlaceholderText(/0,00/)[0] as HTMLInputElement;
     fireEvent.change(metaInput, { target: { value: '1.000,00' } });
-
-    fireEvent.click(screen.getByRole('button', { name: /Salvar Todas/ }));
+    // Sair do campo é o que grava agora.
+    fireEvent.blur(metaInput);
 
     // A meta foi salva de verdade — e mesmo assim a config do mês não viajou.
+    // É o incidente de agosto: doze pessoas salvando meta reescreviam o
+    // feriado que uma delas tinha acabado de cadastrar.
     await waitFor(() => expect(upsertMetas).toHaveBeenCalled());
     expect(upsertMetas.mock.calls[0][0]).toHaveLength(1);
     expect(upsertMetasConfig).not.toHaveBeenCalled();
+  });
+
+  it('sair de um campo que não mudou não escreve nada', async () => {
+    render(<MetasConfig />);
+    await waitFor(() => expect(screen.getByText(/Nenhum feriado neste mês/)).toBeTruthy());
+
+    // Passar o cursor pelo campo e sair, sem digitar. Navegar de Tab pela tela
+    // não pode virar uma escrita por parada.
+    const metaInput = screen.getAllByPlaceholderText(/0,00/)[0] as HTMLInputElement;
+    fireEvent.focus(metaInput);
+    fireEvent.blur(metaInput);
+
+    await new Promise(r => setTimeout(r, 50));
+    expect(upsertMetas).not.toHaveBeenCalled();
   });
 });

@@ -1,12 +1,41 @@
 /**
- * MetasConfig.tsx — v4
- * Um único botão "Salvar Todas" no rodapé, sem botão por linha.
+ * MetasConfig.tsx — v5
+ *
+ * ## Não há mais botão de salvar
+ *
+ * Cada linha grava sozinha quando o campo perde o foco. O botão "Salvar Todas"
+ * saiu, e com ele o estado que ninguém via: metas digitadas e não gravadas
+ * porque a pessoa trocou de mês, fechou a aba ou simplesmente não rolou até o
+ * rodapé.
+ *
+ * ## O que grava, e quando
+ *
+ *   campo de meta      → ao perder o foco (`onBlur`), a linha inteira;
+ *   caixa de seleção   → na hora, porque marcar já é a decisão;
+ *   dias úteis/quartis → 800 ms depois da última mexida.
+ *
+ * A linha é a unidade de gravação, e não o campo: meta e meta H.O. são o mesmo
+ * número em duas leituras, e as metas extras da BookPlay viajam no mesmo
+ * `upsert`. Gravar campo a campo mandaria três escritas para uma edição só.
+ *
+ * ## Nada é gravado duas vezes
+ *
+ * `assinaturasSalvas` guarda o que o banco já tem de cada linha. Passar o
+ * cursor por dez campos sem digitar nada não escreve nada — sem isso, navegar
+ * de Tab pela tela viraria uma escrita por parada.
+ *
+ * ## Linha em branco continua não virando linha no banco
+ *
+ * O comportamento é o do botão que saiu: meta zerada não é gravada. Apagar o
+ * valor de quem já tem meta NÃO apaga a meta — para tirar a meta de alguém
+ * existe a tela de exclusões, não o campo em branco.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
+  Target, Check, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
+  TriangleAlert,
   Loader2, CalendarDays, Plus, X, Layers, GraduationCap, Lock, LockOpen, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -133,6 +162,26 @@ function emptyInput(): MetaInput {
   };
 }
 
+/**
+ * O que, nesta linha, faz diferença para o banco.
+ *
+ * Compara VALOR e não texto: `5.000,00` e `5000,00` são a mesma meta, e
+ * reformatar um campo ao sair dele não pode disparar uma escrita.
+ *
+ * `meta_ho` e `meta_indireta_ho` ficam de fora porque são o mesmo número em
+ * outra leitura — quem os grava é a coluna de origem, e incluí-los aqui só
+ * criaria diferença onde não há.
+ */
+function assinaturaDaLinha(input: MetaInput): string {
+  return JSON.stringify([
+    parseBRL(input.meta_valor),
+    input.proporcional,
+    input.extras.map(parseBRL).filter(v => v > 0),
+    input.indiretaAtiva,
+    parseBRL(input.meta_indireta),
+  ]);
+}
+
 // ── MonthNavigator ────────────────────────────────────────────────────────────
 function MonthNavigator({ mes, ano, onChange }: { mes: number; ano: number; onChange: (m: number, a: number) => void }) {
   return (
@@ -150,11 +199,45 @@ function MonthNavigator({ mes, ano, onChange }: { mes: number; ano: number; onCh
   );
 }
 
+/** O que a linha está fazendo agora. Ausente = parada, sem nada a dizer. */
+type EstadoLinha = "salvando" | "salvo" | "erro";
+
+/**
+ * O selo de gravação da linha.
+ *
+ * Sem botão de salvar, é a única coisa que responde «foi?». Fica discreto de
+ * propósito: quem preenche trinta metas não quer trinta confirmações verdes
+ * piscando — quer saber quando algo NÃO foi.
+ */
+function SeloLinha({ estado }: { estado?: EstadoLinha }) {
+  if (!estado) return <span className="w-16 shrink-0" />;
+  return (
+    <span className={cn(
+      "flex w-16 shrink-0 items-center gap-1 text-[11px]",
+      estado === "erro" ? "text-destructive" : "text-muted-foreground",
+    )}>
+      {estado === "salvando" && (<><Loader2 className="h-3 w-3 animate-spin" /> …</>)}
+      {estado === "salvo"    && (<><Check className="h-3 w-3 text-emerald-500" /> salvo</>)}
+      {estado === "erro"     && (<><TriangleAlert className="h-3 w-3" /> erro</>)}
+    </span>
+  );
+}
+
 // ── MetaRow — linha de input SEM botão salvar individual ─────────────────────
 interface MetaRowProps {
   label: string;
   sublabel?: string;
   icon?: React.ReactNode;
+  /**
+   * Grava esta linha. Chamado no `onBlur` de cada campo e logo depois de
+   * qualquer caixa de seleção mudar.
+   *
+   * As caixas mandam o valor novo junto (`patch`) porque o estado do React
+   * ainda não terá sido aplicado quando o `onChange` retorna — ler o estado
+   * aqui gravaria o valor ANTERIOR da caixa.
+   */
+  onGravar: (patch?: Partial<MetaInput>) => void;
+  estado?: EstadoLinha;
   /** Etiqueta ao lado do nome — hoje só o «esteve de férias». */
   aviso?: React.ReactNode;
   input: MetaInput;
@@ -187,6 +270,7 @@ function MetaRow({
   label, sublabel, icon, aviso, input, onChangeValor, mostrarHO, onChangeHO,
   numExtras = 0, onChangeExtra, disabled, proporcional, onChangeProporcional,
   permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
+  onGravar, estado,
 }: MetaRowProps) {
   return (
     <div className="py-2.5 border-b border-border last:border-0">
@@ -198,6 +282,7 @@ function MetaRow({
           {sublabel && <p className="text-xs text-muted-foreground truncate">{sublabel}</p>}
           {aviso && <div className="mt-0.5">{aviso}</div>}
         </div>
+        <SeloLinha estado={estado} />
       </div>
       <div className="flex flex-1 flex-wrap items-center gap-2">
         <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
@@ -212,6 +297,7 @@ function MetaRow({
               value={input.meta_valor}
               disabled={disabled}
               onChange={(e) => onChangeValor(formatBRL(e.target.value))}
+              onBlur={() => onGravar()}
             />
           </div>
         </div>
@@ -228,6 +314,7 @@ function MetaRow({
                 value={input.meta_ho}
                 disabled={disabled}
                 onChange={(e) => onChangeHO?.(formatBRL(e.target.value))}
+                onBlur={() => onGravar()}
               />
             </div>
           </div>
@@ -243,6 +330,7 @@ function MetaRow({
                 value={input.extras[i] ?? ""}
                 disabled={disabled}
                 onChange={(e) => onChangeExtra?.(i, formatBRL(e.target.value))}
+                onBlur={() => onGravar()}
               />
             </div>
           </div>
@@ -254,7 +342,7 @@ function MetaRow({
               type="checkbox"
               checked={proporcional}
               disabled={disabled}
-              onChange={(e) => onChangeProporcional(e.target.checked)}
+              onChange={(e) => { onChangeProporcional(e.target.checked); onGravar({ proporcional: e.target.checked }); }}
               className="h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
             />
             <span className="text-xs text-muted-foreground whitespace-nowrap">Meta proporcional</span>
@@ -269,7 +357,7 @@ function MetaRow({
                 type="checkbox"
                 checked={input.indiretaAtiva}
                 disabled={disabled}
-                onChange={(e) => onChangeIndiretaAtiva?.(e.target.checked)}
+                onChange={(e) => { onChangeIndiretaAtiva?.(e.target.checked); onGravar({ indiretaAtiva: e.target.checked }); }}
                 className="h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
               />
               <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -295,6 +383,7 @@ function MetaRow({
                 value={input.meta_indireta}
                 disabled={disabled}
                 onChange={(e) => onChangeIndireta?.(formatBRL(e.target.value))}
+                onBlur={() => onGravar()}
               />
             </div>
           </div>
@@ -309,6 +398,7 @@ function MetaRow({
                   value={input.meta_indireta_ho}
                   disabled={disabled}
                   onChange={(e) => onChangeIndiretaHO?.(formatBRL(e.target.value))}
+                  onBlur={() => onGravar()}
                 />
               </div>
             </div>
@@ -387,6 +477,17 @@ export default function MetasConfig() {
   const [loadingOperadores, setLoadingOperadores] = useState(false);
   const [loadingMetas,      setLoadingMetas]      = useState(false);
   const [salvandoTudo,      setSalvandoTudo]      = useState(false);
+  /** referencia_id → o que a linha está fazendo. Ver `SeloLinha`. */
+  const [estadoLinhas, setEstadoLinhas] = useState<Record<string, EstadoLinha>>({});
+  /**
+   * O que o banco JÁ TEM de cada linha, como assinatura.
+   *
+   * É a trava que faz passar o cursor por dez campos sem digitar não escrever
+   * nada. Fica num `ref` e não no estado porque mudá-la não redesenha nada — e
+   * porque `salvarLinha` precisa do valor mais recente, não do que existia
+   * quando o `onBlur` foi montado.
+   */
+  const assinaturasSalvas = useRef<Record<string, string>>({});
 
   // Config mensal (PP): feriados + quartis (metas_config_mes)
   const [feriados,      setFeriados]      = useState<string[]>([]);
@@ -627,6 +728,18 @@ export default function MetasConfig() {
       }
       setInputMetas(newInputs);
       setExtraCampos(maxExtras);
+      /*
+       * A semente das assinaturas: o que o banco acabou de devolver JÁ está
+       * gravado. Sem isto, o primeiro blur em cada linha regravaria as metas
+       * do mês inteiro sem ninguém ter mudado nada — e trocar de mês
+       * carregaria o mês novo e o reescreveria em seguida.
+       */
+      const semente: Record<string, string> = {};
+      for (const id of Object.keys(newInputs)) {
+        semente[id] = assinaturaDaLinha(newInputs[id]);
+      }
+      assinaturasSalvas.current = semente;
+      setEstadoLinhas({});
     } catch (err: unknown) {
       toast.error("Erro ao carregar metas", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingMetas(false); }
@@ -749,145 +862,184 @@ export default function MetasConfig() {
   }
   const equipesTreinamento = equipes.filter(e => e.treinamento);
 
-  // ── Salvar TODAS as metas de uma vez ──────────────────────────────────────
-  // Tres interruptores, tres coisas diferentes: a meta em si, a configuracao
-  // do mes (dias uteis, feriados, quartis) e as exclusoes.
-  async function handleSalvarTudo() {
-    if (!empresa?.id) return;
-    if (!podeGerenciarMetas && !podeEditarDiasUteis) return;
+  // ── Salvamento automático ─────────────────────────────────────────────────
+  //
+  // Duas frentes independentes, como sempre foram: a META (tabela `metas`,
+  // policy `metas_editar`) e a CONFIG DO MÊS (tabela `metas_config_mes`, policy
+  // `metas_editar_dias_uteis`). O que mudou é o gatilho — antes um botão para
+  // as duas, agora cada uma no momento em que a pessoa termina de mexer nela.
+
+  /**
+   * O payload de UMA linha.
+   *
+   * `input` chega por parâmetro, e não de `getInput`, porque as caixas de
+   * seleção chamam isto no mesmo `onChange` que muda o estado: ler o estado
+   * aqui gravaria o valor anterior da caixa.
+   */
+  const montarPayload = useCallback((
+    tipo: TipoMeta, referenciaId: string, input: MetaInput,
+  ): Omit<Meta, "id"> | null => {
+    if (!empresa?.id) return null;
+    return {
+      tipo,
+      referencia_id: referenciaId,
+      empresa_id: empresa.id,
+      meta_valor: parseBRL(input.meta_valor),
+      meta_acordos: 0,
+      meta_proporcional: input.proporcional,
+      // Metas adicionais (BP): só as preenchidas contam; em branco é ignorado
+      ...(isBP ? {
+        metas_extras: input.extras.map(parseBRL).filter(v => v > 0),
+      } : {}),
+      // Meta indireta [PP]: só para OPERADOR com Direto/Extra ativo. As duas
+      // chaves só viajam quando a opção é oferecida — `fn_metas_upsert` só
+      // sobrescreve as colunas quando elas vêm no payload, então a tela da
+      // BookPlay (que nunca as manda) não zera ninguém.
+      ...(isPP && tipo === "operador" && comDiretoExtra.has(referenciaId) ? {
+        meta_indireta_ativa: input.indiretaAtiva,
+        meta_indireta_valor: parseBRL(input.meta_indireta),
+      } : {}),
+      mes,
+      ano,
+    };
+  }, [empresa?.id, isBP, isPP, comDiretoExtra, mes, ano]);
+
+  /**
+   * Grava UMA linha, se ela mudou.
+   *
+   * A linha é a unidade e não o campo: meta e meta H.O. são o mesmo número em
+   * duas leituras, e as extras da BookPlay viajam no mesmo `upsert`.
+   *
+   * Silencioso no caminho feliz — o selo verde ao lado do nome é a confirmação.
+   * O `toast` fica para o que a pessoa precisa saber: recusa da RLS, setor
+   * validado, erro de rede.
+   */
+  const salvarLinha = useCallback(async (
+    tipo: TipoMeta, referenciaId: string, patch?: Partial<MetaInput>,
+  ) => {
+    if (!empresa?.id || !podeGerenciarMetas || metaTravada) return;
+
+    const input = { ...(inputMetas[referenciaId] ?? emptyInput()), ...(patch ?? {}) };
+    const payload = montarPayload(tipo, referenciaId, input);
+    if (!payload) return;
+
+    const assinatura = assinaturaDaLinha(input);
+    // Passar o cursor sem digitar não escreve nada.
+    if (assinaturasSalvas.current[referenciaId] === assinatura) return;
 
     /*
-     * Duas escritas, duas tabelas, duas permissões — e no banco duas policies
-     * distintas (`metas_editar` para `metas`, `metas_editar_dias_uteis` para
-     * `metas_config_mes`). O feriado é do MÊS, não do setor: não pode depender
-     * de ter setor escolhido, nem da trava de validação do setor, nem de o
-     * salvamento das metas ter dado certo.
+     * Linha em branco continua não virando linha no banco — é o comportamento
+     * do botão que saiu. Apagar o valor de quem já tem meta NÃO apaga a meta:
+     * para tirar a meta de alguém existe a tela de exclusões, e um campo
+     * limpo por engano não pode zerar a meta do mês de ninguém.
      */
-    const salvaConfig = temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis;
-    const salvaMetas  = podeGerenciarMetas && !!setorSelecionado && !metaTravada;
+    const vazia = payload.meta_valor <= 0 && !(Number(payload.meta_indireta_valor) > 0);
+    if (vazia) return;
 
-    if (!salvaConfig && !salvaMetas) {
-      if (!podeGerenciarMetas)   toast.error("Sem permissão para editar metas.");
-      else if (metaTravada)      toast.error("Meta deste setor está validada — peça a um admin para reabrir.");
-      else if (!setorSelecionado) toast.warning("Selecione um setor.");
-      return;
-    }
-    setSalvandoTudo(true);
-
-    // Montar lista de todos os itens que têm valor preenchido
-    const itens: { tipo: TipoMeta; referenciaId: string }[] = !salvaMetas ? [] : [
-      { tipo: "setor",    referenciaId: setorSelecionado },
-      ...equipes.map(eq => ({ tipo: "equipe" as TipoMeta,    referenciaId: eq.id })),
-      ...operadores.map(op => ({ tipo: "operador" as TipoMeta, referenciaId: op.id })),
-    ];
-
-    const payloads: Omit<Meta, "id">[] = itens
-      .map(({ tipo, referenciaId }) => ({
-        tipo,
-        referencia_id: referenciaId,
-        empresa_id: empresa.id!,
-        meta_valor: parseBRL(getInput(referenciaId).meta_valor),
-        meta_acordos: 0,
-        meta_proporcional: getInput(referenciaId).proporcional,
-        // Metas adicionais (BP): só as preenchidas contam; em branco é ignorado
-        ...(isBP ? {
-          metas_extras: getInput(referenciaId).extras.map(parseBRL).filter(v => v > 0),
-        } : {}),
-        // Meta indireta [PP]: só para OPERADOR com Direto/Extra ativo. As duas
-        // chaves só viajam quando a opção é oferecida — `fn_metas_upsert` só
-        // sobrescreve as colunas quando elas vêm no payload, então a tela da
-        // BookPlay (que nunca as manda) não zera ninguém.
-        ...(isPP && tipo === "operador" && comDiretoExtra.has(referenciaId) ? {
-          meta_indireta_ativa: getInput(referenciaId).indiretaAtiva,
-          meta_indireta_valor: parseBRL(getInput(referenciaId).meta_indireta),
-        } : {}),
-        mes,
-        ano,
-      }))
-      // Só salva quem tem valor — em qualquer uma das duas frentes. Operador só
-      // de extra tem meta indireta e meta direta zero, e não pode ser descartado
-      // aqui: seria o único caso em que salvar não salva e a tela não avisa.
-      .filter(p => p.meta_valor > 0 || Number(p.meta_indireta_valor) > 0)
-
-    if (payloads.length === 0 && !salvaConfig) {
-      toast.warning("Preencha ao menos uma meta antes de salvar.");
-      setSalvandoTudo(false);
-      return;
-    }
+    setEstadoLinhas(e => ({ ...e, [referenciaId]: "salvando" }));
 
     try {
-      if (payloads.length > 0) {
-        const { salvos, bloqueados, error } = await upsertMetas(payloads);
-        if (error) throw new Error(error);
+      const { salvos, bloqueados, error } = await upsertMetas([payload]);
+      if (error) throw new Error(error);
 
-        /*
-         * O aviso «esteve de férias» morre aqui, e é o único lugar onde isso
-         * pode acontecer: ele existe para quem está digitando a meta, e a meta
-         * acabou de ser digitada. Só apaga de quem REALMENTE teve meta salva —
-         * um operador cuja linha foi bloqueada por setor validado continua
-         * precisando do aviso na próxima tentativa.
-         *
-         * Best-effort: falhar aqui não pode desfazer o salvamento das metas,
-         * que é o que a pessoa pediu. O pior caso é o aviso aparecer de novo.
-         */
-        const bloqueadosSet = new Set(bloqueados.map(b => b.referencia_id));
-        const comMetaSalva = payloads
-          .filter(p => p.tipo === 'operador' && !bloqueadosSet.has(p.referencia_id))
-          .map(p => p.referencia_id);
-        const paraLimpar = operadores
-          .filter(op => op.ferias_ate && comMetaSalva.includes(op.id))
-          .map(op => op.id);
-        if (paraLimpar.length > 0) {
+      if (bloqueados.length > 0) {
+        setEstadoLinhas(e => ({ ...e, [referenciaId]: "erro" }));
+        toast.warning("Meta não salva — setor já validado.", {
+          description: "Peça a um admin para reabrir antes de editar.",
+        });
+        return;
+      }
+
+      assinaturasSalvas.current[referenciaId] = assinatura;
+      setEstadoLinhas(e => ({ ...e, [referenciaId]: "salvo" }));
+      // O selo some sozinho: ele confirma, não fica de enfeite.
+      window.setTimeout(() => {
+        setEstadoLinhas(e => {
+          // Só apaga o próprio «salvo»: a linha pode ter sido editada de novo
+          // nesses 2,5 s e já estar em «salvando».
+          if (e[referenciaId] !== "salvo") return e;
+          const resto = { ...e };
+          delete resto[referenciaId];
+          return resto;
+        });
+      }, 2500);
+
+      /*
+       * O aviso «esteve de férias» morre aqui, e é o único lugar onde isso
+       * pode acontecer: ele existe para quem está digitando a meta, e a meta
+       * acabou de ser digitada.
+       *
+       * Best-effort: falhar aqui não pode desfazer o salvamento, que é o que a
+       * pessoa pediu. O pior caso é o aviso aparecer de novo.
+       */
+      if (salvos > 0 && tipo === "operador") {
+        const op = operadores.find(o => o.id === referenciaId);
+        if (op?.ferias_ate) {
           try {
-            await limparAvisoDeFerias(paraLimpar);
-            setOperadores(atual => atual.map(op =>
-              paraLimpar.includes(op.id) ? { ...op, ferias_ate: null } : op));
+            await limparAvisoDeFerias([referenciaId]);
+            setOperadores(atual => atual.map(o =>
+              o.id === referenciaId ? { ...o, ferias_ate: null } : o));
           } catch { /* o aviso reaparece na próxima abertura, e só */ }
         }
-        if (bloqueados.length > 0) {
-          toast.warning(
-            `${bloqueados.length} meta(s) não salva(s) — setor já validado.`,
-            { description: "Peça a um admin para reabrir antes de editar." },
-          );
-        }
-        if (salvos > 0) {
-          toast.success(`${salvos} meta(s) salva(s) com sucesso!`, { description: `${MESES[mes - 1]}/${ano}` });
-        }
-        await fetchMetas();
       }
     } catch (err: unknown) {
-      toast.error("Erro ao salvar metas", { description: err instanceof Error ? err.message : String(err) });
-    }
-
-    /*
-     * Config mensal (feriados, quartis, contar o dia de hoje) — FORA do try das
-     * metas de propósito: uma meta que o banco recusou não pode levar junto o
-     * feriado que a pessoa acabou de cadastrar. E o erro daqui é o daqui, com
-     * nome próprio: "Erro ao salvar metas" mandava procurar no lugar errado.
-     */
-    if (salvaConfig && perfil?.id) {
-      const { error: cfgErr } = await upsertMetasConfig({
-        empresaId: empresa.id, mes, ano,
-        feriados, quartis, contarDiaAtual, atualizadoPor: perfil.id,
+      setEstadoLinhas(e => ({ ...e, [referenciaId]: "erro" }));
+      toast.error("Erro ao salvar a meta", {
+        description: err instanceof Error ? err.message : String(err),
       });
-      if (cfgErr) {
-        toast.error("Erro ao salvar os dias úteis do mês", { description: cfgErr });
-      } else {
-        // O novo retrato: daqui para a frente, salvar meta não reescreve isto.
-        setConfigOriginal({ feriados, quartis, contarDiaAtual });
-        toast.success("Dias úteis e quartis salvos!", { description: `${MESES[mes - 1]}/${ano}` });
-      }
     }
+  }, [
+    empresa?.id, podeGerenciarMetas, metaTravada, inputMetas, montarPayload,
+    operadores,
+  ]);
+
+  /**
+   * Grava os dias úteis, feriados e quartis do mês.
+   *
+   * Separada da meta de propósito: outra tabela, outra permissão, outra policy.
+   * Uma meta que o banco recusou não pode levar junto o feriado que a pessoa
+   * acabou de cadastrar.
+   */
+  const salvarConfigMes = useCallback(async () => {
+    if (!empresa?.id || !perfil?.id) return;
+    if (!(temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis)) return;
+
+    setSalvandoTudo(true);
+    const { error } = await upsertMetasConfig({
+      empresaId: empresa.id, mes, ano,
+      feriados, quartis, contarDiaAtual, atualizadoPor: perfil.id,
+    });
     setSalvandoTudo(false);
-  }
+
+    if (error) {
+      toast.error("Erro ao salvar os dias úteis do mês", { description: error });
+      return;
+    }
+    // O novo retrato: daqui para a frente, salvar meta não reescreve isto.
+    setConfigOriginal({ feriados, quartis, contarDiaAtual });
+  }, [
+    empresa?.id, perfil?.id, temConfigMes, configDbAtiva, configAlterada,
+    podeEditarDiasUteis, mes, ano, feriados, quartis, contarDiaAtual,
+  ]);
+
+  /*
+   * O calendário do mês não tem «perder o foco».
+   *
+   * Adicionar um feriado, arrastar um quartil e marcar «contar o dia de hoje»
+   * são cliques, não campos — então o gatilho é o silêncio: 800 ms depois da
+   * última mexida. Sem a espera, arrastar um quartil de 25 para 30 mandaria
+   * uma escrita por pixel.
+   */
+  useEffect(() => {
+    if (!configAlterada) return;
+    const t = window.setTimeout(() => { void salvarConfigMes(); }, 800);
+    return () => window.clearTimeout(t);
+  }, [configAlterada, salvarConfigMes]);
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
-  const temMetas = Object.values(inputMetas).some(v => v.meta_valor.trim() !== "");
-  // O que o botão do rodapé tem, de fato, para salvar agora — as duas frentes
-  // são independentes (ver `handleSalvarTudo`).
-  const salvaConfigAgora = temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis;
-  const salvaMetasAgora  = podeGerenciarMetas && !!setorSelecionado && !metaTravada && temMetas;
-  const podeSalvar = salvaConfigAgora || salvaMetasAgora;
+  /** Alguma linha ainda no ar? É o que o rodapé anuncia. */
+  const gravando = salvandoTudo
+    || Object.values(estadoLinhas).some(e => e === "salvando");
   const operadoresVisiveis = operadores
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
@@ -1164,6 +1316,8 @@ export default function MetasConfig() {
                 <MetaRow label={setorNome || "Setor"} sublabel="Meta consolidada do setor"
                   icon={<Building2 className="h-4 w-4" />}
                   input={getInput(setorSelecionado)}
+                  onGravar={(patch) => void salvarLinha("setor", setorSelecionado, patch)}
+                  estado={estadoLinhas[setorSelecionado]}
                   disabled={!podeGerenciarMetas || metaTravada}
                   mostrarHO={isPP}
                   numExtras={isBP ? extraCampos.setor : 0}
@@ -1196,6 +1350,8 @@ export default function MetasConfig() {
                   <MetaRow key={eq.id} label={String(eq.nome ?? "")} sublabel="Equipe"
                     icon={<Users className="h-4 w-4" />}
                     input={getInput(eq.id)}
+                    onGravar={(patch) => void salvarLinha("equipe", eq.id, patch)}
+                    estado={estadoLinhas[eq.id]}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
                     numExtras={isBP ? extraCampos.equipe : 0}
@@ -1252,6 +1408,8 @@ export default function MetasConfig() {
                     icon={<User className="h-4 w-4" />}
                     aviso={<AvisoVoltouDeFerias situacao={op.situacao} feriasAte={op.ferias_ate} />}
                     input={getInput(op.id)}
+                    onGravar={(patch) => void salvarLinha("operador", op.id, patch)}
+                    estado={estadoLinhas[op.id]}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
                     numExtras={isBP ? extraCampos.operador : 0}
@@ -1275,31 +1433,26 @@ export default function MetasConfig() {
             )}
           </SectionCard>
 
-          {/* ── ÚNICO BOTÃO SALVAR ── */}
-          <div className="flex items-center justify-end gap-3 pt-2 pb-6 sticky bottom-0 bg-background/80 backdrop-blur-sm border-t border-border -mx-4 px-4 mt-2">
-            <p className="text-xs text-muted-foreground flex-1">
-              {metaTravada && !salvaConfigAgora
-                ? "Meta deste setor está validada — peça a um admin para reabrir antes de editar."
-                : salvaConfigAgora && !salvaMetasAgora
-                ? "Salva os dias úteis e quartis alterados acima."
-                : salvaMetasAgora && salvaConfigAgora
-                ? "Salva as metas preenchidas e os dias úteis alterados acima."
-                : salvaMetasAgora
-                ? "Metas preenchidas serão salvas para todos os itens acima."
-                : "Preencha os campos de meta antes de salvar."}
-            </p>
-            <Button
-              size="default"
-              className="gap-2 min-w-[140px]"
-              onClick={handleSalvarTudo}
-              disabled={salvandoTudo || !podeSalvar}
-            >
-              {salvandoTudo ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</>
+          {/* ── Rodapé: o que o botão dizia, sem o botão ──────────────────
+              Ele sobrevive porque a régua continua existindo: setor validado
+              recusa a gravação, e sem esta linha a pessoa digitaria a meta
+              inteira sem entender por que nada acontece. */}
+          <div className="flex items-center gap-3 pt-2 pb-6 sticky bottom-0 bg-background/80 backdrop-blur-sm border-t border-border -mx-4 px-4 mt-2">
+            <p className="flex flex-1 items-center gap-1.5 text-xs text-muted-foreground">
+              {gravando ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvando…</>
+              ) : metaTravada ? (
+                <><Lock className="h-3.5 w-3.5" /> Meta deste setor está validada — peça a
+                  um admin para reabrir antes de editar.</>
+              ) : !podeGerenciarMetas ? (
+                <>Você não tem permissão para editar metas.</>
+              ) : !setorSelecionado ? (
+                <>Selecione um setor para começar.</>
               ) : (
-                <><Save className="h-4 w-4" /> Salvar Todas</>
+                <><Check className="h-3.5 w-3.5 text-emerald-500" /> Cada meta é salva
+                  sozinha ao sair do campo. Campo em branco não apaga a meta de ninguém.</>
               )}
-            </Button>
+            </p>
           </div>
         </>
       )}
