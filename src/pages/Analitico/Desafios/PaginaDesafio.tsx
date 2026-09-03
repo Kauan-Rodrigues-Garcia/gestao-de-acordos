@@ -57,6 +57,7 @@ import { EditorPremios } from './EditorPremios';
 import { ConvidadosTeste } from './ConvidadosTeste';
 import { ImagensDesafio } from './ImagensDesafio';
 import { SeletorParticipacao } from './SeletorParticipacao';
+import { alcancadosPeloRecorte } from './alcanceDoRecorte';
 import {
   metasParaValores, valoresParaMetas, type ValoresPorPessoa,
 } from './metasDoDesafio';
@@ -324,6 +325,20 @@ export function PaginaDesafio({
     if (!pessoas.length) return;
     setValores(metasParaValores(desafio?.regra.metasPorOperador ?? {}, pessoas));
   }, [pessoas, desafio]);
+
+  /*
+   * Quem a campanha alcança — e é ESTA lista que a aba Metas recebe.
+   *
+   * Antes ela recebia o quadro inteiro da empresa: numa operação de trezentas
+   * pessoas, a aba abria com trezentos campos de meta, dos quais talvez doze
+   * pertencessem à campanha. Pior que incômodo, era enganoso — o mapa de metas
+   * preenchido É a convocação, e digitar um número no campo de quem não estava
+   * no recorte o colocaria na disputa sem que ninguém percebesse.
+   */
+  const naCampanha = useMemo(
+    () => alcancadosPeloRecorte(pessoas, participacao, restritoAoSetor),
+    [pessoas, participacao, restritoAoSetor],
+  );
 
   const setorDono = restritoAoSetor ?? null;
 
@@ -745,7 +760,7 @@ export function PaginaDesafio({
                     convocação: quem não tem meta aqui fica fora da campanha.
                   </p>
                   <DesafiosDosOperadores
-                    pessoas={pessoas}
+                    pessoas={naCampanha}
                     carregando={carregandoPessoas}
                     valores={valores}
                     onChange={setValores}

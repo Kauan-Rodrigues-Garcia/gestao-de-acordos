@@ -28,13 +28,17 @@
  * desmarcadas.
  */
 import { useMemo, useState } from 'react';
-import { Building2, Search, UserMinus, X } from 'lucide-react';
+import { Building2, Search, UserMinus, Users, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { AvatarParticipante } from './AvatarParticipante';
+import {
+  alcancadosPeloRecorte, contarNoDesafio, temRecorte,
+} from './alcanceDoRecorte';
 import type {
   ParticipantesDesafio, PessoaDesafio, SetorDisponivel,
 } from '@/services/desafios/types';
@@ -72,6 +76,7 @@ export function SeletorParticipacao({
   empresasPermitidas, travadoNoSetor = null,
 }: SeletorParticipacaoProps) {
   const [buscaPessoa, setBuscaPessoa] = useState('');
+  const [revelarTodos, setRevelarTodos] = useState(false);
 
   const setoresVisiveis = useMemo(
     () => setores.filter(s => empresasPermitidas.includes(s.empresaId)),
@@ -98,22 +103,12 @@ export function SeletorParticipacao({
       .flatMap(s => s.equipes.map(e => ({ ...e, setorNome: s.nome })));
   }, [setoresVisiveis, valor.setores, travadoNoSetor]);
 
-  /**
-   * Quem o recorte atual alcança.
-   *
-   * É a mesma pergunta de `participaDaCampanha`, menos as exclusões: elas são
-   * justamente o que esta lista serve para escolher, e aplicá-las aqui faria a
-   * pessoa sumir da lista no clique em que foi excluída — sem como voltar.
-   */
-  const alcancados = useMemo(() => {
-    const setoresAlvo = travadoNoSetor ? [travadoNoSetor] : valor.setores;
-    return pessoas.filter(p => {
-      if (setoresAlvo.length && !p.setores.some(s => setoresAlvo.includes(s))) return false;
-      if (valor.equipes.length && !p.equipes.some(e => valor.equipes.includes(e))) return false;
-      if (valor.cargos.length && !valor.cargos.includes(p.perfil)) return false;
-      return true;
-    });
-  }, [pessoas, valor.setores, valor.equipes, valor.cargos, travadoNoSetor]);
+  const alcancados = useMemo(
+    () => alcancadosPeloRecorte(pessoas, valor, travadoNoSetor),
+    [pessoas, valor, travadoNoSetor],
+  );
+
+  const recortado = temRecorte(valor, travadoNoSetor);
 
   const filtrados = useMemo(() => {
     const termo = buscaPessoa.trim().toLowerCase();
@@ -123,7 +118,29 @@ export function SeletorParticipacao({
       || (p.usuario ?? '').toLowerCase().includes(termo));
   }, [alcancados, buscaPessoa]);
 
-  const dentro = alcancados.filter(p => !valor.excluidos.includes(p.id)).length;
+  const dentro = contarNoDesafio(alcancados, valor.excluidos);
+
+  /*
+   * A lista só é desenhada quando há motivo para ela existir.
+   *
+   * Sem recorte nenhum, «quem participa» é a operação inteira — e despejar
+   * trezentos nomes numa caixa de rolagem não informa isso, informa o
+   * contrário: parece que alguém marcou todo mundo à mão. A tela passa a
+   * ANUNCIAR o número e a oferecer a lista para quem realmente quiser tirar
+   * uma pessoa dali.
+   */
+  const mostrarLista = recortado || revelarTodos || !!buscaPessoa.trim();
+
+  /*
+   * Teto de linhas desenhadas.
+   *
+   * Um setor grande passa de cem pessoas, e a caixa de rolagem com cem cards
+   * de avatar trava a digitação nos campos de cima. Quem procura alguém
+   * específico usa a busca — que é mais rápida que rolar de qualquer forma.
+   */
+  const TETO_VISIVEL = 40;
+  const visiveis = filtrados.slice(0, TETO_VISIVEL);
+  const ocultos  = filtrados.length - visiveis.length;
 
   /**
    * Marca ou desmarca um setor.
@@ -301,24 +318,56 @@ export function SeletorParticipacao({
           </div>
         )}
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={buscaPessoa}
-            onChange={e => setBuscaPessoa(e.target.value)}
-            placeholder="Buscar quem está no desafio…"
-            className="h-8 pl-8 text-xs"
-          />
-        </div>
-
-        <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-          {carregandoPessoas ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">Carregando…</p>
-          ) : filtrados.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">
-              O recorte acima não alcança ninguém.
+        {/* Sem recorte, a lista não é aberta: ela é ANUNCIADA. Trezentos nomes
+            numa caixa de rolagem não dizem «todo mundo participa» — dizem que
+            alguém marcou todo mundo à mão. */}
+        {!recortado && !revelarTodos && (
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
+            <p className="text-xs text-foreground">
+              Nenhum recorte marcado: a campanha vale para{' '}
+              <strong>
+                {carregandoPessoas ? '…' : `as ${alcancados.length} pessoas`}
+              </strong>{' '}
+              que a enxergam.
             </p>
-          ) : filtrados.map(p => {
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Marque setores, equipes ou cargos acima para estreitar — ou abra a
+              lista para tirar alguém em específico.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setRevelarTodos(true)}
+              className="mt-2 gap-1.5 text-xs"
+            >
+              <Users className="h-3.5 w-3.5" /> Abrir a lista mesmo assim
+            </Button>
+          </div>
+        )}
+
+        {mostrarLista && (
+          <>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={buscaPessoa}
+                onChange={e => setBuscaPessoa(e.target.value)}
+                placeholder="Buscar quem está no desafio…"
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+
+            <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+              {carregandoPessoas ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">Carregando…</p>
+              ) : filtrados.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  {buscaPessoa.trim()
+                    ? 'Ninguém com esse nome no desafio.'
+                    : 'O recorte acima não alcança ninguém.'}
+                </p>
+              ) : visiveis.map(p => {
             const fora = valor.excluidos.includes(p.id);
             return (
               <div
@@ -362,8 +411,17 @@ export function SeletorParticipacao({
                 </button>
               </div>
             );
-          })}
-        </div>
+              })}
+
+              {ocultos > 0 && (
+                <p className="py-2 text-center text-[11px] text-muted-foreground">
+                  +{ocultos} não {ocultos === 1 ? 'mostrada' : 'mostradas'}. Use a
+                  busca para achar alguém.
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
