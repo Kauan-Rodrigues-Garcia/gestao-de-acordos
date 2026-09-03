@@ -54,10 +54,18 @@ interface Props {
   onMudou:  () => void;
   /** Saí do grupo — a janela precisa fechar a conversa aberta. */
   onSai:    () => void;
+  /**
+   * Apaga o grupo da MINHA lista. Só chega aqui para quem já saiu.
+   *
+   * Diferente de `onSai`: sair marca a saída e DEIXA o histórico na lista, para
+   * ser lido. Apagar é o segundo passo, o que encerra de vez — e é o único
+   * caminho para tirar da lista um grupo de que já se saiu.
+   */
+  onApagar: () => void;
 }
 
 export function ConfigGrupoDialog({
-  aberto, conversa, meuId, onFechar, onMudou, onSai,
+  aberto, conversa, meuId, onFechar, onMudou, onSai, onApagar,
 }: Props) {
   const { temPermissao } = useCargoPermissoes();
   const [membros, setMembros] = useState<MembroGrupo[]>([]);
@@ -463,20 +471,46 @@ export function ConfigGrupoDialog({
           )}
         </div>
 
-        {/* Sair fica no rodapé, separado: é de todo mundo e é irreversível
-            sem alguém readicionar. Longe dos controles que se usa todo dia. */}
+        {/*
+          O rodapé é a saída, e ela tem DOIS estados.
+
+          Quem está dentro sai. Quem já saiu não tem de onde sair de novo — e
+          oferecer «Sair do grupo» a essa pessoa é um botão que não faz nada,
+          que foi exatamente o que ela encontrou. Para ela a ação que resta é
+          apagar: tirar da lista o histórico que ficou.
+
+          Fica no rodapé, separado, nos dois casos: é de todo mundo e não se
+          desfaz sozinho. Longe dos controles que se usa todo dia.
+        */}
         <div className="shrink-0 border-t border-border pt-3">
-          <Button
-            variant="ghost" size="sm"
-            className="h-8 w-full gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-            disabled={salvando}
-            onClick={() => void agir(
-              () => sairDoGrupo(conversa.id),
-              () => { onFechar(); onSai(); },
-            )}
-          >
-            <LogOut className="h-3.5 w-3.5" /> Sair do grupo
-          </Button>
+          {conversa.sai ? (
+            <>
+              <Button
+                variant="ghost" size="sm"
+                className="h-8 w-full gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={salvando}
+                onClick={() => { onFechar(); onApagar(); }}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Apagar grupo
+              </Button>
+              <p className="mt-1 px-1 text-center text-[10px] leading-tight text-muted-foreground">
+                Você já saiu deste grupo. Apagar tira a conversa da sua lista —
+                as mensagens de quem ficou não são afetadas.
+              </p>
+            </>
+          ) : (
+            <Button
+              variant="ghost" size="sm"
+              className="h-8 w-full gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={salvando}
+              onClick={() => void agir(
+                () => sairDoGrupo(conversa.id),
+                () => { onFechar(); onSai(); },
+              )}
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sair do grupo
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

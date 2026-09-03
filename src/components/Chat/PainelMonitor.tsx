@@ -357,6 +357,8 @@ export function PainelMonitor({ expandido, onSair }: Props) {
       // esteve no grupo para poder ter saído. Falso evita o aviso «você não
       // está mais neste grupo» aparecer numa tela que já diz o que é.
       sai: false,
+      // Fixar é da MINHA lista, e o monitor não desenha a lista de ninguém.
+      fixada: false,
     };
   }
 

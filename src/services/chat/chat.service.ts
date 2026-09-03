@@ -160,6 +160,14 @@ export interface ConversaChat {
    * A tela usa o campo para trocar o campo de escrita por um aviso.
    */
   sai:                boolean;
+  /**
+   * Fixei esta conversa no topo da MINHA lista.
+   *
+   * Por participante, não por conversa: fixar é decisão sobre a própria lista,
+   * e fixar para o outro seria mexer numa tela que não é minha. A ordenação
+   * vem do banco — `fn_chat_minhas_conversas` já devolve as fixadas primeiro.
+   */
+  fixada:             boolean;
 }
 
 export interface ContatoChat {
@@ -294,6 +302,9 @@ export async function listarConversas(): Promise<ConversaChat[]> {
     // e caem nos padrões de conversa direta lá embaixo.
     tipo?: 'direta' | 'grupo'; participantes?: number;
     sou_admin?: boolean; somente_lideranca?: boolean; sai?: boolean;
+    // Só existe depois da migration 20260903370000; até lá chega undefined e
+    // vira `false` lá embaixo — lista sem nada fixado, que é o estado anterior.
+    fixada?: boolean;
   }[]>('fn_chat_minhas_conversas', {});
 
   if (error) {
@@ -326,6 +337,7 @@ export async function listarConversas(): Promise<ConversaChat[]> {
       sou_admin:          c.sou_admin === true,
       somente_lideranca:  c.somente_lideranca === true,
       sai:                c.sai === true,
+      fixada:             c.fixada === true,
     };
   });
 }
@@ -389,6 +401,8 @@ export async function buscarConversa(
     somente_lideranca:  false,
     // Conversa direta não tem de onde sair: só grupo marca este campo.
     sai:                false,
+    // Recém-aberta não foi fixada por ninguém. A lista corrige no refresh.
+    fixada:             false,
     nao_lidas:          0,
     leitura_do_outro:   null,
     entrega_minha:      null,
@@ -452,6 +466,7 @@ async function buscarGrupo(conversaId: string): Promise<ConversaChat | null> {
     // Este caminho cobre a conversa recém-aberta, onde ninguém saiu ainda. A
     // lista corrige no primeiro refresh, com o valor que vem do banco.
     sai:                false,
+    fixada:             false,
   };
 }
 
@@ -627,6 +642,7 @@ export function esbocoDeConversa(id: string, contato: ContatoEscolhido): Convers
     sou_admin:           false,
     somente_lideranca:   false,
     sai:                 false,
+    fixada:              false,
     nao_lidas:           0,
     leitura_do_outro:    null,
     entrega_minha:       null,
@@ -739,6 +755,23 @@ export async function apagarConversa(conversaId: string, meuId: string): Promise
     .eq('conversa_id', conversaId)
     .eq('perfil_id', meuId);
   if (error) console.warn('[chat] apagarConversa:', error.message);
+}
+
+/**
+ * Prende (ou solta) a conversa no topo da MINHA lista.
+ *
+ * O erro volta, e não vai para o console: fixar é uma ação que a pessoa vê
+ * acontecer. Falhar em silêncio deixaria a linha no mesmo lugar sem explicação,
+ * e ela tentaria de novo achando que errou o clique.
+ */
+export async function fixarConversa(
+  conversaId: string, meuId: string, fixar: boolean,
+): Promise<{ erro: string | null }> {
+  const { error } = await db('chat_participantes')
+    .update({ fixada_em: fixar ? new Date().toISOString() : null })
+    .eq('conversa_id', conversaId)
+    .eq('perfil_id', meuId);
+  return { erro: error ? traduzir(error.message) : null };
 }
 
 export interface ResultadoDisparo {

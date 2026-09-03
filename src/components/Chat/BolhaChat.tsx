@@ -34,8 +34,9 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useChat } from '@/hooks/useChat';
 import { useChatPresenca } from '@/hooks/useChatPresenca';
 import {
-  apagarConversa, buscarConversa, possoUsarOChat, rotuloAnexo, quemCurtiu,
-  type MensagemChat, type ContatoEscolhido,
+  apagarConversa, buscarConversa, fixarConversa, possoUsarOChat, rotuloAnexo,
+  quemCurtiu,
+  type ConversaChat, type MensagemChat, type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
 import { ListaConversas } from './ListaConversas';
@@ -44,6 +45,7 @@ import { DisparoDialog } from './DisparoDialog';
 import { NovaConversaDialog } from './NovaConversaDialog';
 import { NovoGrupoDialog } from './NovoGrupoDialog';
 import { ConfigGrupoDialog } from './ConfigGrupoDialog';
+import { GaleriaDialog } from './GaleriaDialog';
 import { PainelMonitor } from './PainelMonitor';
 import { BoasVindasChat } from './BoasVindasChat';
 import { useToast } from '@/components/ui/use-toast';
@@ -81,6 +83,14 @@ export function BolhaChat() {
   const [novoGrupo, setNovoGrupo] = useState(false);
   /** Painel de configuracoes do grupo aberto. */
   const [configGrupo, setConfigGrupo] = useState(false);
+  /*
+   * A galeria aberta pelo menu da LISTA.
+   *
+   * Guarda id e nome, e não a conversa inteira: a linha some de `chat.conversas`
+   * assim que ela é apagada, e um diálogo que fosse buscar a conversa lá ficaria
+   * em branco no meio da própria animação de fechar.
+   */
+  const [galeria, setGaleria] = useState<{ id: string; nome: string } | null>(null);
   /*
    * A monitoria toma a JANELA INTEIRA, nao um pedaco da lista.
    *
@@ -331,6 +341,32 @@ export function BolhaChat() {
     chat.recarregar();
   }, [perfil?.id, chat]);
 
+  /*
+   * Fixar não é otimista de propósito.
+   *
+   * A ordem da lista é do BANCO — `fn_chat_minhas_conversas` devolve as fixadas
+   * primeiro. Reordenar aqui antes da resposta significaria repetir essa regra
+   * no cliente e, na falha, ver a linha pular de lugar e voltar. Um `recarregar`
+   * depois do sucesso é uma consulta pequena e diz a verdade.
+   */
+  const fixar = useCallback(async (conversaId: string, prender: boolean) => {
+    if (!perfil?.id) return;
+    const { erro } = await fixarConversa(conversaId, perfil.id, prender);
+    if (erro) {
+      toast({
+        title: prender ? 'Não deu para fixar' : 'Não deu para desafixar',
+        description: erro,
+        variant: 'destructive',
+      });
+      return;
+    }
+    chat.recarregar();
+  }, [perfil?.id, chat, toast]);
+
+  const verMidias = useCallback((conversa: ConversaChat) => {
+    setGaleria({ id: conversa.id, nome: conversa.outro_nome });
+  }, []);
+
   if (!podeVer) return null;
 
   // ── Fechado: só a bolha ────────────────────────────────────────────────────
@@ -478,6 +514,8 @@ export function BolhaChat() {
                 meuId={perfil?.id ?? ''}
                 onAbrir={pedirConversa}
                 onApagar={id => void apagar(id)}
+                onFixar={(id, prender) => void fixar(id, prender)}
+                onVerMidias={verMidias}
                 onNovaConversa={() => setNovaConversa(true)}
                 onNovoDisparo={() => setNovoDisparo(true)}
                 onNovoGrupo={podeCriarGrupo ? () => setNovoGrupo(true) : undefined}
@@ -545,8 +583,19 @@ export function BolhaChat() {
           onFechar={() => setConfigGrupo(false)}
           onMudou={() => chat.recarregar()}
           onSai={() => { chat.abrir(null); chat.recarregar(); }}
+          onApagar={() => void apagar(conversaAtual.id)}
         />
       )}
+
+      {/* «Ver mídia enviada», do menu de três pontos da lista. Vale para grupo
+          e para conversa direta — a direta não tem painel de dados de onde a
+          galeria pudesse sair. */}
+      <GaleriaDialog
+        aberto={!!galeria}
+        conversaId={galeria?.id ?? null}
+        nome={galeria?.nome ?? ''}
+        onFechar={() => setGaleria(null)}
+      />
 
       {/* Uma vez por pessoa, antes da primeira conversa. Ver o componente. */}
       <BoasVindasChat aberto={!!pendente} onAceitar={depoisDeLer} />

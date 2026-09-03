@@ -20,24 +20,21 @@
  * clicou no nome do grupo não tem como saber se abriu alguma coisa ou se a
  * conversa foi embora. A animação responde «isto veio dali e volta para lá».
  *
- * ## A galeria vem do banco, não da rolagem
+ * ## A galeria não mora aqui
  *
- * `listarMidias` lê a conversa inteira. Montar a galeria a partir das mensagens
- * já carregadas devolveria só a última página e mentiria por omissão: a foto de
- * três semanas atrás não estaria lá, e nada na tela diria que faltou.
+ * A grade de fotos é `GradeMidias`, que a lista de conversas também usa — na
+ * conversa direta, onde este painel não existe. Aqui ela é só uma das duas
+ * seções; lá é o conteúdo de um diálogo. Ver `GradeMidias` e `GaleriaDialog`.
  */
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft, Users, ShieldCheck, Images, Loader2, Play, Lock, LogOut,
+  ArrowLeft, Users, ShieldCheck, Images, Loader2, Lock, LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  listarMembros, listarMidias,
-  type MembroGrupo, type MidiaDaConversa,
-} from '@/services/chat/grupos.service';
-import type { AnexoChat, ConversaChat } from '@/services/chat/chat.service';
+import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service';
+import type { ConversaChat } from '@/services/chat/chat.service';
 import { AvatarChat, useFotoResolvida, TagAdm } from './comum';
-import { VisualizadorMidia } from './VisualizadorMidia';
+import { GradeMidias } from './GradeMidias';
 
 interface Props {
   conversa: ConversaChat;
@@ -50,16 +47,13 @@ type Secao = 'info' | 'galeria';
 
 export function InfoGrupoPainel({ conversa, meuId, aberto, onFechar }: Props) {
   const [membros, setMembros]   = useState<MembroGrupo[]>([]);
-  const [midias, setMidias]     = useState<MidiaDaConversa[] | null>(null);
   const [secao, setSecao]       = useState<Secao>('info');
   const [carregando, setCarregando] = useState(true);
-  const [midiaAberta, setMidiaAberta] = useState<number | null>(null);
   const foto = useFotoResolvida(conversa.outro_foto);
 
   useEffect(() => {
     if (!aberto) return;
     setSecao('info');
-    setMidiaAberta(null);
     setCarregando(true);
     let cancelado = false;
     void listarMembros(conversa.id).then(m => {
@@ -70,26 +64,7 @@ export function InfoGrupoPainel({ conversa, meuId, aberto, onFechar }: Props) {
     return () => { cancelado = true; };
   }, [aberto, conversa.id]);
 
-  /*
-   * As mídias só são buscadas quando alguém pede a galeria, e uma vez só.
-   *
-   * São até 120 anexos com nome e autor; carregar isso junto com o painel
-   * faria toda abertura de «dados do grupo» pagar por uma tela que a maioria
-   * das vezes ninguém abre.
-   */
-  useEffect(() => {
-    if (!aberto || secao !== 'galeria' || midias !== null) return;
-    let cancelado = false;
-    void listarMidias(conversa.id).then(m => { if (!cancelado) setMidias(m); });
-    return () => { cancelado = true; };
-  }, [aberto, secao, midias, conversa.id]);
-
-  // Trocar de conversa invalida a galeria: ela é de UM grupo.
-  useEffect(() => { setMidias(null); }, [conversa.id]);
-
   if (!aberto) return null;
-
-  const anexos: AnexoChat[] = (midias ?? []).map(m => m.anexo);
 
   return (
     <div
@@ -205,66 +180,10 @@ export function InfoGrupoPainel({ conversa, meuId, aberto, onFechar }: Props) {
           </>
         ) : (
           <section className="p-2">
-            {midias === null ? (
-              <p className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando a galeria…
-              </p>
-            ) : midias.length === 0 ? (
-              <p className="py-8 text-center text-xs text-muted-foreground">
-                Nenhuma foto, GIF ou vídeo neste grupo ainda.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
-                {midias.map((m, i) => (
-                  <BotaoMidia
-                    key={`${m.mensagem_id}-${i}`}
-                    midia={m}
-                    onAbrir={() => setMidiaAberta(i)}
-                  />
-                ))}
-              </div>
-            )}
+            <GradeMidias conversaId={conversa.id} ativo={secao === 'galeria'} />
           </section>
         )}
       </div>
-
-      {/* O mesmo visualizador dos balões: zoom, setas e teclado já resolvidos. */}
-      <VisualizadorMidia
-        midias={anexos} inicial={midiaAberta} onFechar={() => setMidiaAberta(null)}
-      />
     </div>
-  );
-}
-
-/**
- * Uma casa da grade.
- *
- * O vídeo não ganha `<video>`: um grid com vinte players carregaria vinte
- * streams para mostrar vinte quadradinhos. Ele aparece como um bloco escuro com
- * o triângulo de play, e só vira vídeo de verdade dentro do visualizador.
- */
-function BotaoMidia({ midia, onAbrir }: { midia: MidiaDaConversa; onAbrir: () => void }) {
-  const url = useFotoResolvida(midia.anexo.url);
-  const ehVideo = midia.anexo.tipo.startsWith('video/');
-
-  return (
-    <button
-      type="button"
-      onClick={onAbrir}
-      title={`${midia.autor_nome ?? 'Alguém'} · ${new Date(midia.criado_em).toLocaleDateString('pt-BR')}`}
-      className="relative aspect-square overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-85"
-    >
-      {ehVideo ? (
-        <span className="flex h-full w-full items-center justify-center bg-foreground/10">
-          <Play className="h-5 w-5 text-foreground/60" />
-        </span>
-      ) : url ? (
-        <img src={url} alt={midia.anexo.nome} loading="lazy" className="h-full w-full object-cover" />
-      ) : (
-        <span className="flex h-full w-full items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </span>
-      )}
-    </button>
   );
 }

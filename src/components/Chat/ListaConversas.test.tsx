@@ -33,6 +33,8 @@ const baseProps = {
   meuId: 'eu',
   onAbrir: vi.fn(),
   onApagar: vi.fn(),
+  onFixar: vi.fn(),
+  onVerMidias: vi.fn(),
   onNovaConversa: vi.fn(),
   onNovoDisparo: vi.fn(),
 };
@@ -193,6 +195,59 @@ describe('ListaConversas', () => {
     await user.click(screen.getByRole('button', { name: 'Histórico' }));
     expect(screen.getByText('Antiga')).toBeInTheDocument();
     expect(screen.queryByText('Hoje')).not.toBeInTheDocument();
+  });
+
+  it('esconde as três ações atrás dos três pontos, e não numa lixeira solta', async () => {
+    const user = userEvent.setup();
+    const conversa: ConversaChat = {
+      id: 'c-menu', outro_id: 'p-menu', outro_nome: 'Carla', outro_usuario: 'carla',
+      outro_foto: null, outro_empresa: null,
+      ultima_mensagem_em: '2026-09-03T12:00:00Z',
+      ultima_atividade_em: '2026-09-03T12:00:00Z', em_historico: false,
+      ultimo_texto: 'Oi', ultimo_autor_id: 'p-menu', nao_lidas: 0,
+      leitura_do_outro: null, entrega_minha: null, entrega_do_outro: null,
+      fixada: false,
+    };
+
+    render(<ListaConversas {...baseProps} conversas={[conversa]} disparos={[]} />);
+
+    // A lixeira de um clique não existe mais: nada some sem passar pelo menu.
+    expect(screen.queryByTitle('Tirar da minha lista')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Opções da conversa com Carla/i }));
+
+    await user.click(await screen.findByText('Fixar conversa'));
+    expect(baseProps.onFixar).toHaveBeenCalledWith('c-menu', true);
+
+    await user.click(screen.getByRole('button', { name: /Opções da conversa com Carla/i }));
+    await user.click(await screen.findByText('Ver mídia enviada'));
+    expect(baseProps.onVerMidias).toHaveBeenCalledWith(conversa);
+
+    await user.click(screen.getByRole('button', { name: /Opções da conversa com Carla/i }));
+    await user.click(await screen.findByText('Excluir conversa'));
+    expect(baseProps.onApagar).toHaveBeenCalledWith('c-menu');
+  });
+
+  it('a conversa fixada fica em Conversas mesmo marcada como histórico', async () => {
+    const user = userEvent.setup();
+    const fixada: ConversaChat = {
+      id: 'c-fixa', outro_id: 'p-fixa', outro_nome: 'Fixada', outro_usuario: 'fixa',
+      outro_foto: null, outro_empresa: null,
+      ultima_mensagem_em: '2026-08-20T12:00:00Z',
+      ultima_atividade_em: '2026-08-20T12:00:00Z',
+      // O banco a classificou como antiga; o pino tem a última palavra.
+      em_historico: true,
+      ultimo_texto: 'Combinado', ultimo_autor_id: 'p-fixa', nao_lidas: 0,
+      leitura_do_outro: null, entrega_minha: null, entrega_do_outro: null,
+      fixada: true,
+    };
+
+    render(<ListaConversas {...baseProps} conversas={[fixada]} disparos={[]} />);
+
+    expect(screen.getByText('Fixada')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Histórico' }));
+    expect(screen.queryByText('Fixada')).not.toBeInTheDocument();
   });
 
   it('mostra as abas na ordem Conversas, Histórico e Disparos', () => {

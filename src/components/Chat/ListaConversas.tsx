@@ -11,7 +11,8 @@
  */
 import { useCallback, useState } from 'react';
 import {
-  ChevronDown, Loader2, MessageSquarePlus, Plus, Search, Trash2, Users, Lock,
+  ChevronDown, Images, Loader2, MessageSquarePlus, MoreVertical, Pin, PinOff,
+  Plus, Search, Trash2, Users, Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,10 @@ interface Props {
   meuId:       string;
   onAbrir:     (id: string) => void;
   onApagar:    (id: string) => void;
+  /** Prende ou solta a conversa no topo da MINHA lista. */
+  onFixar:     (id: string, fixar: boolean) => void;
+  /** Abre a galeria de fotos, GIFs e vídeos daquela conversa. */
+  onVerMidias: (conversa: ConversaChat) => void;
   onNovaConversa: () => void;
   onNovoDisparo:  () => void;
   /** Abre o diálogo de criar grupo. Ausente = sem permissão de criar. */
@@ -208,7 +213,8 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
-  onAbrir, onApagar, onNovaConversa, onNovoDisparo, onNovoGrupo,
+  onAbrir, onApagar, onFixar, onVerMidias,
+  onNovaConversa, onNovoDisparo, onNovoGrupo,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -236,8 +242,19 @@ export function ListaConversas({
     conversas: 'Conversas', historico: 'Histórico', disparos: 'Disparos',
   };
 
-  const atuais = conversas.filter(c => !c.em_historico);
-  const historico = conversas.filter(c => c.em_historico);
+  /*
+   * Fixada não cai no Histórico.
+   *
+   * A classificação por dia é sobre o que ANDOU; fixar é sobre o que IMPORTA, e
+   * as duas coisas se contradizem na virada da meia-noite. Sem esta exceção, a
+   * conversa fixada some da aba Conversas de um dia para o outro e reaparece no
+   * topo do Histórico — que é o oposto exato do que quem fixou pediu.
+   *
+   * O banco já devolve as fixadas primeiro; aqui só se decide de que lado da
+   * régua elas ficam.
+   */
+  const atuais = conversas.filter(c => c.fixada || !c.em_historico);
+  const historico = conversas.filter(c => c.em_historico && !c.fixada);
   const listaDaAba = aba === 'historico' ? historico : atuais;
   const filtradas = busca.trim()
     ? listaDaAba.filter(c =>
@@ -399,6 +416,11 @@ export function ListaConversas({
                       )}
                       <TagAdm perfil={c.outro_perfil} />
                       <TagEmpresa slug={c.outro_empresa} />
+                      {c.fixada && (
+                        <span title="Fixada no topo" className="shrink-0">
+                          <Pin aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
+                        </span>
+                      )}
                     </div>
                     <p className={cn(
                       'text-xs truncate',
@@ -435,16 +457,56 @@ export function ListaConversas({
                   </span>
                 </button>
 
-                {/* Apagar some com a conversa da MINHA lista. A do outro fica,
-                    e nenhuma mensagem é destruída. */}
-                <button
-                  onClick={() => onApagar(c.id)}
-                  className="absolute right-1 top-1 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-background transition-opacity"
-                  aria-label={`Tirar ${c.tipo === 'grupo' ? 'o grupo' : 'a conversa com'} ${c.outro_nome} da lista`}
-                  title="Tirar da minha lista"
-                >
-                  <Trash2 className="w-3 h-3 text-muted-foreground" />
-                </button>
+                {/*
+                  Três pontos, e não a lixeira que morava aqui.
+
+                  A lixeira dizia que só havia UMA coisa a fazer com a linha, e
+                  hoje há três — e a destrutiva não pode ser a que fica a um
+                  clique de distância, na quina que o dedo encosta ao rolar.
+
+                  Continua sendo um irmão em `absolute`, e não um filho do
+                  botão da linha: `<button>` dentro de `<button>` é HTML
+                  inválido e o navegador desmonta a árvore por conta própria.
+                  Fica na altura da foto e do nome, cobrindo a hora enquanto o
+                  mouse está em cima — por isso o fundo sólido.
+                */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={cn(
+                        'absolute right-1 top-1 rounded p-1 transition-opacity',
+                        'bg-background shadow-sm hover:bg-muted',
+                        'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
+                        // Com o menu aberto o mouse já saiu da linha: sem isto o
+                        // gatilho some por baixo do próprio menu.
+                        'data-[state=open]:opacity-100',
+                      )}
+                      aria-label={`Opções ${c.tipo === 'grupo' ? 'do grupo' : 'da conversa com'} ${c.outro_nome}`}
+                      title="Opções"
+                    >
+                      <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem className="gap-2 text-xs"
+                                      onClick={() => onFixar(c.id, !c.fixada)}>
+                      {c.fixada
+                        ? <><PinOff className="h-3.5 w-3.5" /> Desafixar conversa</>
+                        : <><Pin className="h-3.5 w-3.5" /> Fixar conversa</>}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2 text-xs" onClick={() => onVerMidias(c)}>
+                      <Images className="h-3.5 w-3.5" /> Ver mídia enviada
+                    </DropdownMenuItem>
+                    {/* Apagar some com a conversa da MINHA lista. A do outro
+                        fica, e nenhuma mensagem é destruída. */}
+                    <DropdownMenuItem
+                      className="gap-2 text-xs text-destructive focus:text-destructive"
+                      onClick={() => onApagar(c.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Excluir conversa
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))}
           </>
