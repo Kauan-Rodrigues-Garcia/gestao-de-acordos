@@ -36,6 +36,7 @@ function pessoa(over: Partial<PessoaDesafio> & { id: string; nome: string }): Pe
     fotoUrl: null,
     equipeId: 'eq1',
     equipeNome: 'PLAY 1',
+    equipesLideradas: [],
     setorId: 'setorA',
     situacao: 'ativo',
     setores: ['setorA'],
@@ -92,6 +93,7 @@ function desafio(over: OverDesafio = {}): Desafio {
       premios: [],
       fonteResultado: 'proprio',
       fonteMeta: 'individual',
+      agregacaoLider: 'equipe_unica',
       ...(over.regra ?? {}),
     },
     visual: {
@@ -1100,5 +1102,181 @@ describe('convidado de teste', () => {
     });
     expect(participaDaCampanha(doSetor, d)).toBe(true);
     expect(participaDaCampanha(admin, d)).toBe(false);
+  });
+});
+
+/*
+ * O líder de VÁRIAS equipes — o setor montado por clones.
+ *
+ * Caso real (BookPlay, 04/09/2026): Brunno Piccolo lidera seis equipes. Três
+ * são as "reais", cada uma no seu setor — Digital Bruno no Play 4, Digital -
+ * Brunno no Play 5, Equipe Digital no Play Mix. As outras três são os espelhos
+ * delas no setor DELE, o Marília Digital, formados só por clones das mesmas
+ * pessoas e com as mesmas metas.
+ *
+ * Somar as seis contaria o mesmo dinheiro duas vezes. Somar só as reais tiraria
+ * o líder do setor dele. A regra: as equipes que ele lidera DENTRO do setor
+ * dele — que a RPC já entrega em `equipesLideradas`.
+ *
+ * E a nota é a MÉDIA das porcentagens, não a soma sobre a soma: as metas de
+ * setembro são 210.000, 50.000 e 40.000, e a maior decidiria sozinha.
+ */
+describe('líder de várias equipes: média das porcentagens', () => {
+  // Espelhos no setor do líder. Ninguém tem `equipeId` neles — as pessoas estão
+  // cadastradas no setor de origem e aparecem aqui como CLONES, em `equipes`.
+  const bru = pessoa({
+    id: 'bru', nome: 'Brunno', perfil: 'lider', setorId: 'digital',
+    equipeId: null, equipeNome: 'Sem equipe',
+    equipesLideradas: ['esp4', 'esp5', 'espmix'],
+    setores: ['digital'], equipes: [],
+  });
+  // Controle: lidera uma equipe só, no próprio setor.
+  const lay = pessoa({
+    id: 'lay', nome: 'Layane', perfil: 'lider', setorId: 'play5',
+    equipeId: 'eqLay', equipeNome: 'Layane', equipesLideradas: ['eqLay'],
+    setores: ['play5'], equipes: ['eqLay'],
+  });
+
+  // Os operadores: cadastrados na equipe real, clonados no espelho.
+  const p4  = pessoa({ id: 'p4',  nome: 'Do Play 4',   equipeId: 'real4',   equipes: ['real4', 'esp4'] });
+  const p5  = pessoa({ id: 'p5',  nome: 'Do Play 5',   equipeId: 'real5',   equipes: ['real5', 'esp5'] });
+  const pmx = pessoa({ id: 'pmx', nome: 'Do Play Mix', equipeId: 'realmix', equipes: ['realmix', 'espmix'] });
+  const play = pessoa({ id: 'plyA', nome: 'Da Layane', equipeId: 'eqLay',   equipes: ['eqLay'] });
+
+  const participantes = [bru, lay, p4, p5, pmx, play];
+
+  /** 20 dias úteis, 10 corridos: a projeção é METADE da meta. */
+  const contextoEquipe = {
+    metaPorEquipe: { esp4: 50_000, esp5: 210_000, espmix: 40_000, eqLay: 100_000 },
+    totalUteis: 20, decorridos: 10, mes: 9, ano: 2026,
+  };
+
+  // Projeções: esp4 = 25.000 · esp5 = 105.000 · espmix = 20.000 · eqLay = 50.000
+  const linhas = [
+    linha('p4',   25_000),   //  100% da projeção de esp4
+    linha('p5',   52_500),   //   50% da projeção de esp5
+    linha('pmx',  30_000),   //  150% da projeção de espmix
+    linha('plyA', 40_000),   //   80% da projeção de eqLay
+  ];
+
+  function campanha(agregacaoLider: 'equipe_unica' | 'media_das_equipes') {
+    return desafio({
+      regra: {
+        criterioRanking: 'maior_percentual',
+        metaIndividual: null, metaEquipe: null,
+        fonteResultado: 'equipe_liderada',
+        fonteMeta: 'projecao_equipe',
+        agregacaoLider,
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+          convidados: [],
+        },
+      },
+    });
+  }
+
+  it('a nota é a média das porcentagens, uma por equipe', () => {
+    const r = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    // (100 + 50 + 150) / 3
+    expect(b?.progresso).toBeCloseTo(100, 5);
+  });
+
+  it('o recebido e a meta são a SOMA — e por isso não explicam a nota', () => {
+    const r = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.recebido).toBe(107_500);          // 25.000 + 52.500 + 30.000
+    expect(b?.meta).toBe(150_000);              // 25.000 + 105.000 + 20.000
+    // 107.500 / 150.000 = 71,7% — e a nota é 100%. Os dois estão certos: a
+    // nota trata as três equipes como três responsabilidades; o caixa é caixa.
+    expect(b?.progresso).not.toBeCloseTo(71.67, 1);
+  });
+
+  it('a equipe de maior meta NÃO decide sozinha', () => {
+    // Pela soma, esp5 (210.000 de meta) responderia por 70% do resultado e
+    // arrastaria a nota para perto dos 50% dela. Pela média, não.
+    const r = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b.progresso).toBeGreaterThan(90);
+  });
+
+  it('quem lidera uma equipe só não muda de resultado', () => {
+    const um = calcularDesafio({
+      desafio: campanha('equipe_unica'),
+      dados: { participantes, linhas }, contextoEquipe,
+    }).individual.find(i => i.pessoa.id === 'lay');
+    const media = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas }, contextoEquipe,
+    }).individual.find(i => i.pessoa.id === 'lay');
+
+    expect(um?.progresso).toBeCloseTo(80, 5);
+    expect(media?.progresso).toBeCloseTo(80, 5);
+    expect(media?.recebido).toBe(um?.recebido);
+    expect(media?.meta).toBe(um?.meta);
+  });
+
+  it('com `equipe_unica` o líder de várias continua zerado — o de antes', () => {
+    // A garantia de que nenhuma campanha existente muda de número: o padrão
+    // preserva exatamente o comportamento anterior a este campo.
+    const r = calcularDesafio({
+      desafio: campanha('equipe_unica'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.recebido).toBe(0);
+    expect(b?.progresso).toBe(0);
+  });
+
+  it('conta o clone: quem está no espelho só por `equipes` entra na soma', () => {
+    // Nenhum dos três operadores tem `equipeId` de espelho — eles são clones.
+    // Se a soma olhasse só `equipeId`, as três equipes viriam zeradas.
+    const r = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    expect(r.individual.find(i => i.pessoa.id === 'bru')?.recebido).toBeGreaterThan(0);
+  });
+
+  it('equipe sem meta fica fora da média, e não a zera', () => {
+    const semMetaEmUma = {
+      ...contextoEquipe,
+      metaPorEquipe: { esp4: 50_000, espmix: 40_000, eqLay: 100_000 },
+    };
+    const r = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas },
+      contextoEquipe: semMetaEmUma,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    // Só esp4 (100%) e espmix (150%) entram: média 125.
+    expect(b?.progresso).toBeCloseTo(125, 5);
+    expect(b?.meta).toBe(45_000);      // 25.000 + 20.000, sem a esp5
+    expect(b?.recebido).toBe(55_000);  // 25.000 + 30.000, idem
+  });
+
+  it('sem nenhuma equipe com meta, é «sem meta» e não «meta zerada»', () => {
+    const r = calcularDesafio({
+      desafio: campanha('media_das_equipes'),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...contextoEquipe, metaPorEquipe: { eqLay: 100_000 } },
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.meta).toBeNull();
+    expect(b?.bateuMeta).toBe(false);
   });
 });

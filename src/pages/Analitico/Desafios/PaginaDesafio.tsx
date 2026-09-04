@@ -64,7 +64,7 @@ import {
 import { ACENTOS_DISPONIVEIS, hojeISO } from './tema';
 import type {
   AcentoDesafio, AjusteImagem, CriterioRanking, Desafio, EscopoDisputa,
-  FonteMeta, FonteResultado,
+  FonteMeta, FonteResultado, AgregacaoLider,
   ParticipantesDesafio, PessoaDesafio, Premiacao, PremioPorPosicao,
   SetorDisponivel, StatusDesafio, TemaDesafio, TipoDesafio,
   VisibilidadeDesafio,
@@ -134,6 +134,20 @@ const FONTES_META: { valor: FonteMeta; rotulo: string; ajuda: string }[] = [
   },
 ];
 
+const AGREGACOES: { valor: AgregacaoLider; rotulo: string; ajuda: string }[] = [
+  {
+    valor: 'equipe_unica', rotulo: 'Uma equipe por líder',
+    ajuda: 'Quem lidera mais de uma fica sem equipe na campanha, e entra zerado. '
+         + 'É o comportamento de todas as campanhas anteriores.',
+  },
+  {
+    valor: 'media_das_equipes', rotulo: 'Todas as equipes do setor dele · média',
+    ajuda: 'Cada equipe que ele lidera DENTRO do setor dele rende uma porcentagem, e a nota '
+         + 'é a média delas. Resolve o setor montado por clones, onde a mesma equipe existe '
+         + 'duas vezes — a média também impede que a equipe de maior meta decida sozinha.',
+  },
+];
+
 const VISIBILIDADES: { valor: VisibilidadeDesafio; rotulo: string; ajuda: string }[] = [
   {
     valor: 'alcance', rotulo: 'Quem a régua de permissões alcançar',
@@ -156,6 +170,7 @@ interface Formulario {
   premiacao: Premiacao;
   fonteResultado: FonteResultado;
   fonteMeta: FonteMeta;
+  agregacaoLider: AgregacaoLider;
   individual: boolean;
   equipe: boolean;
   metaIndividual: string;
@@ -191,7 +206,7 @@ function formularioVazio(): Formulario {
     dataInicio: hoje, dataFim: hoje,
     tipo: 'bater_meta',
     escopoDisputa: 'empresa', premiacao: 'melhor_colocado',
-    fonteResultado: 'proprio', fonteMeta: 'individual',
+    fonteResultado: 'proprio', fonteMeta: 'individual', agregacaoLider: 'equipe_unica',
     individual: true, equipe: true,
     metaIndividual: '', metaEquipe: '', metaColetiva: '',
     criterio: 'menor_falta',
@@ -218,6 +233,7 @@ function formularioDe(d: Desafio): Formulario {
     premiacao: d.regra.premiacao,
     fonteResultado: d.regra.fonteResultado,
     fonteMeta: d.regra.fonteMeta,
+    agregacaoLider: d.regra.agregacaoLider,
     individual: d.regra.modo.includes('individual'),
     equipe:     d.regra.modo.includes('equipe'),
     metaIndividual: emReais(d.regra.metaIndividual),
@@ -399,6 +415,7 @@ export function PaginaDesafio({
         premios,
         fonteResultado: form.fonteResultado,
         fonteMeta: form.fonteMeta,
+        agregacaoLider: form.agregacaoLider,
       },
       visual: {
         tema: form.tema,
@@ -710,6 +727,9 @@ export function PaginaDesafio({
                   // pessoa com o alvo de um time. O normalizador recusa esse par
                   // na leitura, e deixá-lo no formulário só adiaria a surpresa.
                   fonteMeta: v === 'equipe_liderada' ? f.fonteMeta : 'individual',
+                  // Fora da disputa entre líderes ninguém lidera nada, e um
+                  // campo ligado que não muda número é pior do que ausente.
+                  agregacaoLider: v === 'equipe_liderada' ? f.agregacaoLider : 'equipe_unica',
                 }))}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -745,6 +765,30 @@ export function PaginaDesafio({
                 </Select>
                 <p className="text-[11px] text-muted-foreground">
                   {FONTES_META.find(o => o.valor === form.fonteMeta)?.ajuda}
+                </p>
+              </div>
+            )}
+
+            {/*
+              Quem lidera mais de uma equipe. Só aparece na disputa entre
+              líderes — é a única em que a pergunta existe.
+            */}
+            {form.fonteResultado === 'equipe_liderada' && (
+              <div className="space-y-1.5">
+                <Label>Quem lidera mais de uma equipe</Label>
+                <Select
+                  value={form.agregacaoLider}
+                  onValueChange={v => setForm(f => ({ ...f, agregacaoLider: v as AgregacaoLider }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {AGREGACOES.map(o => (
+                      <SelectItem key={o.valor} value={o.valor}>{o.rotulo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  {AGREGACOES.find(o => o.valor === form.agregacaoLider)?.ajuda}
                 </p>
               </div>
             )}

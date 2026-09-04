@@ -165,6 +165,12 @@ export function normalizarRegra(bruto: unknown, tipo: TipoDesafio): RegraDesafio
     // entre líderes pede o outro.
     fonteResultado: o.fonteResultado === 'equipe_liderada' ? 'equipe_liderada' : 'proprio',
     fonteMeta: normalizarFonteMeta(o.fonteMeta, o.fonteResultado),
+    // Só a disputa entre líderes usa. O padrão é o comportamento de sempre, e
+    // a amarra com `equipe_liderada` segue a mesma lógica de `fonteMeta`: em
+    // campanha de operação ninguém lidera nada, e guardar `media_das_equipes`
+    // ali deixaria um campo ligado que não muda número nenhum.
+    agregacaoLider: o.fonteResultado === 'equipe_liderada'
+      && o.agregacaoLider === 'media_das_equipes' ? 'media_das_equipes' : 'equipe_unica',
   };
 }
 
@@ -376,6 +382,9 @@ function paraPessoa(p: Record<string, unknown>) {
     fotoUrl:    (p.foto_url as string | null) ?? null,
     equipeId:   (p.equipe_id as string | null) ?? null,
     equipeNome: String(p.equipe_nome ?? 'Sem equipe'),
+    // A RPC antiga não devolvia o campo. Lista vazia é a leitura certa: quem
+    // lê cai em `equipeId`, que é o comportamento de antes.
+    equipesLideradas: listaDeTextos(p.equipes_lideradas),
     setorId:    (p.setor_id as string | null) ?? null,
     situacao:   String(p.situacao ?? 'ativo'),
     setores:    listaDeTextos(p.setores),

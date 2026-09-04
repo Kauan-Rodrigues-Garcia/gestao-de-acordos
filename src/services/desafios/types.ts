@@ -194,6 +194,14 @@ export interface RegraDesafio {
    * coisas diferentes.
    */
   fonteMeta: FonteMeta;
+  /**
+   * O que fazer com quem lidera mais de uma equipe. Ver `AgregacaoLider`.
+   *
+   * Só tem efeito com `fonteResultado = 'equipe_liderada'`: em campanha de
+   * operação ninguém lidera nada, e o campo seria um interruptor que liga e
+   * não muda nada.
+   */
+  agregacaoLider: AgregacaoLider;
 }
 
 /** Ver `RegraDesafio.fonteResultado`. */
@@ -201,6 +209,30 @@ export type FonteResultado = 'proprio' | 'equipe_liderada';
 
 /** Ver `RegraDesafio.fonteMeta`. */
 export type FonteMeta = 'individual' | 'meta_equipe' | 'projecao_equipe';
+
+/**
+ * O que fazer quando o líder lidera MAIS DE UMA equipe.
+ *
+ * `equipe_unica` — a campanha usa uma equipe só, e quem lidera várias fica sem
+ *                  nenhuma. É o comportamento de toda campanha anterior a este
+ *                  campo, e continua sendo o padrão.
+ *
+ * `media_das_equipes` — todas as equipes que ele lidera DENTRO DO SETOR DELE
+ *                  entram. O recebido é a soma; a nota do ranking é a MÉDIA das
+ *                  porcentagens, uma por equipe.
+ *
+ * ## Por que a média, e não a soma dividida pela soma
+ *
+ * Somar recebido e somar meta faria a equipe maior decidir sozinha o resultado
+ * do líder: no setor Marília Digital as metas de setembro são R$ 210.000,
+ * R$ 50.000 e R$ 40.000 — a primeira pesa 70%. A média trata as três como três
+ * responsabilidades, que é o que elas são para quem lidera.
+ *
+ * Consequência que a tela precisa dizer: com mais de uma equipe, `progresso`
+ * deixa de ser `recebido ÷ meta`. Os dois números continuam certos, e medem
+ * coisas diferentes.
+ */
+export type AgregacaoLider = 'equipe_unica' | 'media_das_equipes';
 
 /** Tema da campanha. Governa a gincana, não o desenho da aplicação. */
 export type TemaDesafio = 'padrao' | 'cafe' | 'corrida' | 'equipes';
@@ -319,6 +351,18 @@ export interface PessoaDesafio {
   fotoUrl: string | null;
   equipeId: string | null;
   equipeNome: string;
+  /**
+   * As equipes que a pessoa LIDERA dentro do setor dela.
+   *
+   * Resolvido por `fn_desafio_pessoas_multi`. Uma só no caso normal; várias no
+   * setor montado por clones, onde a mesma equipe existe duas vezes — a do
+   * setor de origem e o espelho no setor do líder. Filtrar pelo setor DELE é o
+   * que impede contar o mesmo dinheiro nas duas.
+   *
+   * Vazio para quem não lidera. `equipeId` continua existindo e continua sendo
+   * o que `equipe_unica` usa.
+   */
+  equipesLideradas: string[];
   setorId: string | null;
   situacao: string;
   setores: string[];

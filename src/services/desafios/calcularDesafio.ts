@@ -248,18 +248,130 @@ export function somaDoParticipante(
   if (desafio.regra.fonteResultado !== 'equipe_liderada') {
     return somas.get(pessoa.id) ?? ZERO;
   }
-  if (!pessoa.equipeId) return ZERO;
+  const equipes = equipesDoLider(pessoa, desafio.regra);
+  if (equipes.length === 0) return ZERO;
 
   let total = 0;
   let qtd = 0;
+  for (const equipeId of equipes) {
+    const s = somaDaEquipe(equipeId, somas, elenco);
+    total += s.total;
+    qtd   += s.qtd;
+  }
+  return { total, qtd };
+}
+
+/**
+ * As equipes que contam para este líder.
+ *
+ * `equipe_unica` fica na equipe resolvida pela RPC — o comportamento de sempre,
+ * e o de quem lidera uma só.
+ *
+ * `media_das_equipes` usa `equipesLideradas`: as equipes que ele lidera DENTRO
+ * do setor dele. É o que desempata o setor montado por clones, onde a mesma
+ * equipe existe duas vezes — a original, no setor de origem, e o espelho no
+ * setor do líder. Somar as duas contaria o mesmo dinheiro em dobro.
+ *
+ * A reserva para `equipeId` existe porque a campanha gravada antes deste campo
+ * e a pré-visualização montada em memória chegam sem `equipesLideradas`.
+ */
+export function equipesDoLider(
+  pessoa: PessoaDesafio,
+  regra: Desafio['regra'],
+): string[] {
+  if (regra.agregacaoLider === 'media_das_equipes') {
+    const lista = pessoa.equipesLideradas ?? [];
+    if (lista.length > 0) return lista;
+  }
+  return pessoa.equipeId ? [pessoa.equipeId] : [];
+}
+
+/** O recebimento de uma equipe: a soma de quem está nela. */
+function somaDaEquipe(
+  equipeId: string,
+  somas: ReadonlyMap<string, SomaOperador>,
+  elenco: readonly PessoaDesafio[],
+): SomaOperador {
+  let total = 0;
+  let qtd = 0;
   for (const membro of elenco) {
-    if (membro.equipeId !== pessoa.equipeId) continue;
+    // `equipes` traz a do cadastro E as clonadas que contam — é assim que o
+    // espelho no setor do líder encontra as pessoas, que estão cadastradas no
+    // setor de origem e aparecem aqui como clones.
+    const pertence = membro.equipeId === equipeId
+      || (membro.equipes ?? []).includes(equipeId);
+    if (!pertence) continue;
     const s = somas.get(membro.id);
     if (!s) continue;
     total += s.total;
     qtd   += s.qtd;
   }
   return { total, qtd };
+}
+
+/** Recebido, alvo e nota de um líder que responde por várias equipes. */
+export interface NotaDoLider {
+  /** Soma do recebido das equipes que têm meta. */
+  recebido: number;
+  qtd: number;
+  /** Soma do alvo (meta cheia ou projeção) das mesmas equipes. */
+  meta: number | null;
+  /** MÉDIA das porcentagens, uma por equipe. É a nota do ranking. */
+  progresso: number;
+  /** Quantas equipes entraram na média. */
+  equipes: number;
+}
+
+/**
+ * A nota de um líder de várias equipes.
+ *
+ * Cada equipe rende uma porcentagem — recebido dela sobre o alvo dela — e a
+ * nota é a MÉDIA dessas porcentagens.
+ *
+ * ## Média, e não soma sobre soma
+ *
+ * Somar recebido e somar meta faria a equipe maior decidir sozinha. No setor
+ * Marília Digital as metas de setembro são R$ 210.000, R$ 50.000 e R$ 40.000:
+ * a primeira pesaria 70% da nota, e as outras duas viravam ruído. A média
+ * trata as três como três responsabilidades — que é o que elas são para quem
+ * lidera as três.
+ *
+ * ## Equipe sem meta fica fora
+ *
+ * Ela não rende porcentagem, e somar o dinheiro dela ao `recebido` enquanto
+ * ela não entra na média produziria um card em que nenhum número explica o
+ * outro. Sem nenhuma equipe com meta, devolve `meta: null` — «sem meta», que
+ * a tela já sabe mostrar, e não «meta zerada».
+ */
+export function notaDoLider(
+  pessoa: PessoaDesafio,
+  desafio: Desafio,
+  somas: ReadonlyMap<string, SomaOperador>,
+  elenco: readonly PessoaDesafio[],
+  contexto: ContextoEquipe | null | undefined,
+  porQuantidade: boolean,
+): NotaDoLider {
+  const equipes = equipesDoLider(pessoa, desafio.regra);
+  let recebido = 0;
+  let qtd = 0;
+  let alvo = 0;
+  let somaPct = 0;
+  let contadas = 0;
+
+  for (const equipeId of equipes) {
+    const meta = alvoDaEquipe(equipeId, desafio.regra, contexto);
+    if (meta === null || meta <= 0) continue;
+    const s = somaDaEquipe(equipeId, somas, elenco);
+    const valor = porQuantidade ? s.qtd : s.total;
+    recebido += valor;
+    qtd      += s.qtd;
+    alvo     += meta;
+    somaPct  += (valor / meta) * 100;
+    contadas += 1;
+  }
+
+  if (contadas === 0) return { recebido: 0, qtd: 0, meta: null, progresso: 0, equipes: 0 };
+  return { recebido, qtd, meta: alvo, progresso: somaPct / contadas, equipes: contadas };
 }
 
 /**
@@ -342,9 +454,40 @@ function metaVindaDaEquipe(
   regra: Desafio['regra'],
   contexto?: ContextoEquipe | null,
 ): number | null {
-  if (!contexto || !pessoa.equipeId) return null;
+  const equipes = equipesDoLider(pessoa, regra);
+  if (equipes.length === 0) return null;
 
-  const metaMensal = contexto.metaPorEquipe[pessoa.equipeId];
+  // Com várias equipes o alvo é a SOMA dos alvos — é contra ele que a falta e
+  // a barra fazem sentido. A NOTA do ranking não sai daqui: ela é a média das
+  // porcentagens, e vive em `notaDoLider`.
+  let total = 0;
+  let achou = false;
+  for (const equipeId of equipes) {
+    const alvo = alvoDaEquipe(equipeId, regra, contexto);
+    if (alvo === null) continue;
+    total += alvo;
+    achou = true;
+  }
+  return achou ? total : null;
+}
+
+/**
+ * O alvo de UMA equipe: a meta cheia do mês, ou quanto dela já deveria ter
+ * entrado até hoje.
+ *
+ * `projecao_equipe` chama `calcularProjecao` de `lib/projecaoMetas` — a mesma
+ * função que Desempenho Equipes usa, com os mesmos dias úteis. Reescrever
+ * `meta ÷ dias úteis × decorridos` aqui criaria a terceira cópia de uma conta
+ * que existe para ter uma só, e as telas passariam a divergir no primeiro
+ * ajuste.
+ */
+export function alvoDaEquipe(
+  equipeId: string,
+  regra: Desafio['regra'],
+  contexto?: ContextoEquipe | null,
+): number | null {
+  if (!contexto) return null;
+  const metaMensal = contexto.metaPorEquipe[equipeId];
   if (!metaMensal || metaMensal <= 0) return null;
 
   if (regra.fonteMeta === 'meta_equipe') return metaMensal;
@@ -469,6 +612,41 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
   });
 
   const individual: ResultadoParticipante[] = elegiveis.map(pessoa => {
+    // O elenco da soma é o quadro INTEIRO, e não os elegíveis: numa disputa de
+    // líderes só os líderes são elegíveis, e o número deles é a soma de uma
+    // equipe cujos integrantes não estão no ranking.
+    /*
+     * O líder que responde por VÁRIAS equipes tem nota própria.
+     *
+     * Cada equipe rende uma porcentagem, e a nota é a média delas — somar
+     * recebido e somar meta faria a equipe maior decidir sozinha. Ver
+     * `notaDoLider`.
+     *
+     * Consequência que a tela mostra: com mais de uma equipe, `progresso`
+     * deixa de ser `recebido ÷ meta`. Os dois números continuam certos e medem
+     * coisas diferentes — o primeiro é a média das responsabilidades, o
+     * segundo o caixa somado.
+     */
+    const media = regra.fonteResultado === 'equipe_liderada'
+      && regra.agregacaoLider === 'media_das_equipes'
+      ? notaDoLider(pessoa, desafio, somas, dados.participantes, contextoEquipe, porQuantidade)
+      : null;
+
+    if (media && media.equipes > 0) {
+      return {
+        pessoa,
+        posicao: 0,
+        recebido: media.recebido,
+        qtd: media.qtd,
+        meta: media.meta,
+        falta: faltaParaMeta(media.recebido, media.meta),
+        progresso: media.progresso,
+        bateuMeta: media.progresso >= 100,
+        paraUltrapassar: null as number | null,
+        nomeAcima: null as string | null,
+      };
+    }
+
     // O elenco da soma é o quadro INTEIRO, e não os elegíveis: numa disputa de
     // líderes só os líderes são elegíveis, e o número deles é a soma de uma
     // equipe cujos integrantes não estão no ranking.
