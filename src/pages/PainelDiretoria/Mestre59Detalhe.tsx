@@ -1,0 +1,327 @@
+/**
+ * Mestre59Detalhe — o que abre quando você clica num grupo.
+ *
+ * Responde três perguntas, nesta ordem:
+ *
+ *   1. **De onde vem esse dinheiro?** O que é do próprio setor, o que o
+ *      receptivo cobrou para ele, e — no caso do receptivo — o que saiu daqui
+ *      para outros. Cada linha separada em Integral e Extra.
+ *   2. **Quais equipes?** Só as que têm valor no mês. Vincular equipe do
+ *      relatório à equipe do sistema exige o SETOR já vinculado, porque é ele
+ *      que define quais equipes são candidatas.
+ *   3. **Quem está no lugar errado?** Depois das equipes vinculadas, quem o
+ *      relatório põe numa equipe e o cadastro põe em outra.
+ *
+ * ## A regra do zero
+ *
+ * Origem zerada e equipe zerada NÃO aparecem. A lista responde «de onde vem», e
+ * R$ 0,00 não é resposta — é ruído que empurra o que importa para baixo. Quem
+ * sumiu do relatório está no histórico, que é onde se procura por isso.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Loader2, ArrowDownLeft, ArrowUpRight, HelpCircle, Users, AlertTriangle,
+  HeartPulse, Link2, Link2Off, EyeOff,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/lib/supabase';
+import { formatBRL } from '@/lib/money';
+import { cn } from '@/lib/utils';
+import {
+  buscarOrigensDoGrupo, buscarResumoEquipes, buscarOperadoresDivergentes, vincularEquipe,
+  type GrupoDoMestre, type OrigemDoGrupo, type EquipeDoMestre, type OperadorDivergente,
+  type EstadoVinculo, type ProblemaOperador,
+} from '@/services/mestre/mestre.service';
+
+interface Props {
+  empresaId: string;
+  mes: string;
+  grupo: GrupoDoMestre;
+  /** Recarrega a lista de grupos do pai — vincular equipe não muda totais,
+   *  mas mudar o setor do grupo invalida as equipes candidatas. */
+  aoMudar?: () => void;
+}
+
+interface EquipeDoSetor { id: string; nome: string }
+
+const ROTULO_ORIGEM: Record<OrigemDoGrupo['origem'], string> = {
+  proprio:      'Do próprio setor',
+  contribuicao: 'Cobrado por outro setor para este',
+  distribuido:  'Este setor cobrou para outro',
+  sem_destino:  'Destino não reconhecido',
+};
+
+const PROBLEMA: Record<ProblemaOperador, { rotulo: string; grave: boolean }> = {
+  sem_cadastro:  { rotulo: 'não existe no cadastro',       grave: true  },
+  sem_equipe:    { rotulo: 'sem equipe no cadastro',       grave: true  },
+  equipe_errada: { rotulo: 'em outra equipe no cadastro',  grave: true  },
+  setor_errado:  { rotulo: 'em outro setor no cadastro',   grave: false },
+};
+
+export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
+  const cod = grupo.cod_grupo_filtro;
+
+  const [origens, setOrigens]         = useState<OrigemDoGrupo[] | null>(null);
+  const [equipes, setEquipes]         = useState<EquipeDoMestre[] | null>(null);
+  const [divergentes, setDivergentes] = useState<OperadorDivergente[]>([]);
+  const [doSetor, setDoSetor]         = useState<EquipeDoSetor[]>([]);
+  const [salvando, setSalvando]       = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    const [o, e, d] = await Promise.all([
+      buscarOrigensDoGrupo(empresaId, mes, cod).catch(() => [] as OrigemDoGrupo[]),
+      buscarResumoEquipes(empresaId, mes, cod).catch(() => [] as EquipeDoMestre[]),
+      buscarOperadoresDivergentes(empresaId, mes, cod).catch(() => [] as OperadorDivergente[]),
+    ]);
+    setOrigens(o); setEquipes(e); setDivergentes(d);
+  }, [empresaId, mes, cod]);
+
+  useEffect(() => { void carregar(); }, [carregar]);
+
+  // As equipes candidatas saem do SETOR vinculado ao grupo. Sem setor não há
+  // candidata — e a função do banco recusa o vínculo, então a tela não deve
+  // oferecer o que seria negado.
+  useEffect(() => {
+    if (!grupo.setor_id) { setDoSetor([]); return; }
+    let cancel = false;
+    void supabase.from('equipes').select('id, nome').eq('setor_id', grupo.setor_id).order('nome')
+      .then(({ data }) => { if (!cancel) setDoSetor((data as EquipeDoSetor[]) ?? []); });
+    return () => { cancel = true; };
+  }, [grupo.setor_id]);
+
+  const aplicar = useCallback(async (
+    subgrupo: string, estado: EstadoVinculo, equipeId: string | null,
+  ) => {
+    setSalvando(subgrupo);
+    try {
+      await vincularEquipe({ empresaId, codGrupo: cod, subgrupo, estado, equipeId });
+      await carregar();
+      aoMudar?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível vincular a equipe.');
+    } finally {
+      setSalvando(null);
+    }
+  }, [empresaId, cod, carregar, aoMudar]);
+
+  const { times, naoTimes } = useMemo(() => ({
+    times:    (equipes ?? []).filter(e => e.e_equipe),
+    naoTimes: (equipes ?? []).filter(e => !e.e_equipe),
+  }), [equipes]);
+
+  return (
+    <div className="space-y-4 py-1">
+
+      {/* ── De onde vem ───────────────────────────────────────────────────── */}
+      <section>
+        <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+          De onde vem o recebimento
+        </h4>
+        {origens === null ? (
+          <Skeleton className="h-16 rounded-lg" />
+        ) : origens.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Sem movimento neste mês.</p>
+        ) : (
+          <div className="rounded-lg border border-border/40 bg-background/60 divide-y divide-border/25">
+            {origens.map((o, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 text-xs">
+                <span className={cn('shrink-0',
+                  o.origem === 'contribuicao' ? 'text-success'
+                    : o.origem === 'distribuido' ? 'text-warning'
+                    : o.origem === 'sem_destino' ? 'text-destructive'
+                    : 'text-muted-foreground')}>
+                  {o.origem === 'contribuicao' ? <ArrowDownLeft className="w-3.5 h-3.5" />
+                    : o.origem === 'distribuido' ? <ArrowUpRight className="w-3.5 h-3.5" />
+                    : o.origem === 'sem_destino' ? <HelpCircle className="w-3.5 h-3.5" />
+                    : <span className="block w-3.5 h-3.5 rounded-sm bg-muted-foreground/30" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-foreground font-medium">{ROTULO_ORIGEM[o.origem]}</span>
+                  {o.rotulo && o.origem !== 'proprio' && (
+                    <span className="text-muted-foreground"> · {o.rotulo}</span>
+                  )}
+                  {o.cod_outro && (
+                    <span className="font-mono text-[10px] ml-1.5 px-1 rounded bg-muted text-muted-foreground">
+                      {o.cod_outro}
+                    </span>
+                  )}
+                </div>
+                <Badge variant="outline" className={cn('text-[10px] shrink-0',
+                  o.tipo === 'Extra' ? 'text-chart-4 border-chart-4/40' : 'text-muted-foreground')}>
+                  {o.tipo}
+                </Badge>
+                <span className="text-muted-foreground tabular-nums shrink-0 w-16 text-right">
+                  {o.linhas.toLocaleString('pt-BR')}
+                </span>
+                <span className={cn('tabular-nums font-semibold shrink-0 w-28 text-right',
+                  o.origem === 'distribuido' ? 'text-warning' : 'text-foreground')}>
+                  {o.origem === 'distribuido' ? '−' : ''}{formatBRL(o.valor)}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center gap-3 px-3 py-2 text-xs bg-muted/40">
+              <span className="flex-1 font-semibold text-foreground">Total do setor</span>
+              <span className="tabular-nums font-bold text-foreground w-28 text-right">
+                {formatBRL(grupo.recebido_total)}
+              </span>
+            </div>
+          </div>
+        )}
+        {grupo.distribuido > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            O que este setor cobrou para outros já está somado no total <strong>deles</strong> —
+            por isso sai daqui, e o mesmo dinheiro não é contado duas vezes.
+          </p>
+        )}
+      </section>
+
+      {/* ── Atestado ──────────────────────────────────────────────────────── */}
+      {grupo.atestado_valor > 0 && (
+        <div className="rounded-lg border border-chart-4/30 bg-chart-4/5 px-3 py-2.5 flex items-start gap-2.5">
+          <HeartPulse className="w-4 h-4 text-chart-4 shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">{formatBRL(grupo.atestado_valor)}</span>{' '}
+            vêm de <span className="font-mono text-[11px]">ATESTADOS|FERIAS</span> — recebimento de quem
+            estava afastado. <strong>Conta no total do setor</strong>; aparece aqui só para não ficar diluído.
+          </p>
+        </div>
+      )}
+
+      {/* ── Equipes ───────────────────────────────────────────────────────── */}
+      <section>
+        <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 flex items-center gap-1.5">
+          <Users className="w-3.5 h-3.5" /> Equipes com movimento no mês
+        </h4>
+
+        {!grupo.setor_id && (times.length > 0) && (
+          <p className="text-[11px] text-warning mb-2 flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            Vincule o <strong>setor</strong> deste grupo primeiro — é ele que define quais equipes
+            podem ser escolhidas.
+          </p>
+        )}
+
+        {equipes === null ? (
+          <Skeleton className="h-20 rounded-lg" />
+        ) : times.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhuma equipe com valor neste mês.</p>
+        ) : (
+          <div className="rounded-lg border border-border/40 bg-background/60 divide-y divide-border/25">
+            {times.map(e => (
+              <div key={e.nome_subgrupo} className="flex items-center gap-3 px-3 py-2 text-xs flex-wrap">
+                <span className="font-medium text-foreground min-w-[14ch] flex-1 truncate">
+                  {e.nome_subgrupo}
+                </span>
+                <span className="text-muted-foreground tabular-nums shrink-0">
+                  {e.cobradoras} pessoa{e.cobradoras !== 1 ? 's' : ''}
+                </span>
+                {e.extra_valor > 0 && (
+                  <Badge variant="outline" className="text-[10px] text-chart-4 border-chart-4/40 shrink-0">
+                    Extra {formatBRL(e.extra_valor)}
+                  </Badge>
+                )}
+                <span className="tabular-nums font-semibold text-foreground shrink-0 w-28 text-right">
+                  {formatBRL(e.recebido)}
+                </span>
+                <div className="flex items-center gap-1.5 w-[220px] shrink-0">
+                  <Select
+                    value={e.estado === 'vinculado' ? (e.equipe_id ?? '') : e.estado === 'ignorado' ? '__ignorado__' : '__novo__'}
+                    disabled={salvando === e.nome_subgrupo || !grupo.setor_id}
+                    onValueChange={v => {
+                      if (v === '__novo__')          void aplicar(e.nome_subgrupo, 'novo', null);
+                      else if (v === '__ignorado__') void aplicar(e.nome_subgrupo, 'ignorado', null);
+                      else                           void aplicar(e.nome_subgrupo, 'vinculado', v);
+                    }}
+                  >
+                    <SelectTrigger className={cn('h-7 text-[11px] rounded-lg',
+                      e.estado === 'novo' && grupo.setor_id && 'border-warning/50 text-warning')}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__novo__">
+                        <span className="flex items-center gap-1.5 text-warning">
+                          <Link2Off className="w-3 h-3" /> Sem vínculo
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="__ignorado__">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <EyeOff className="w-3 h-3" /> Ignorar
+                        </span>
+                      </SelectItem>
+                      {doSetor.length === 0
+                        ? <SelectItem value="__vazio__" disabled>Nenhuma equipe neste setor</SelectItem>
+                        : doSetor.map(q => (
+                            <SelectItem key={q.id} value={q.id}>
+                              <span className="flex items-center gap-1.5">
+                                <Link2 className="w-3 h-3" /> {q.nome}
+                              </span>
+                            </SelectItem>
+                          ))}
+                    </SelectContent>
+                  </Select>
+                  {salvando === e.nome_subgrupo && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Rótulos que não são equipe. Contam no total, mas não se vinculam a
+            time nenhum — oferecer o seletor aqui seria convidar ao erro. */}
+        {naoTimes.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {naoTimes.map(e => (
+              <span key={e.nome_subgrupo || '(vazio)'}
+                className="inline-flex items-center gap-1.5 text-[11px] rounded-md border border-border/40 bg-muted/30 px-2 py-1">
+                <span className="text-muted-foreground">
+                  {e.nome_subgrupo || <span className="italic">sem equipe informada</span>}
+                </span>
+                <span className="tabular-nums font-medium text-foreground">{formatBRL(e.recebido)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Divergências de cadastro ──────────────────────────────────────── */}
+      {divergentes.length > 0 && (
+        <section>
+          <h4 className="text-[11px] uppercase tracking-wider text-warning font-semibold mb-2 flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {divergentes.length} pessoa{divergentes.length !== 1 ? 's' : ''} fora do lugar
+          </h4>
+          <div className="rounded-lg border border-warning/30 bg-warning/5 divide-y divide-warning/15">
+            {divergentes.map((d, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 text-xs flex-wrap">
+                <span className="font-mono text-[11px] text-foreground shrink-0">{d.cobradora}</span>
+                {d.perfil_nome && <span className="text-muted-foreground truncate">{d.perfil_nome}</span>}
+                <span className={cn('shrink-0', PROBLEMA[d.problema]?.grave ? 'text-warning' : 'text-muted-foreground')}>
+                  {PROBLEMA[d.problema]?.rotulo ?? d.problema}
+                </span>
+                <span className="text-muted-foreground shrink-0">
+                  relatório: <strong className="text-foreground">{d.nome_subgrupo}</strong>
+                  {d.equipe_atual && <> · cadastro: <strong className="text-foreground">{d.equipe_atual}</strong></>}
+                </span>
+                <span className="tabular-nums text-muted-foreground ml-auto shrink-0">
+                  {formatBRL(d.recebido)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Comparação entre o que o relatório diz e o cadastro de <em>hoje</em>. Corrigir é na aba
+            Usuários — esta tela só aponta.
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+export default Mestre59Detalhe;

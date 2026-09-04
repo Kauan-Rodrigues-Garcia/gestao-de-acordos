@@ -302,8 +302,13 @@ export default function PainelDiretoria() {
    * mestre não virar fonte, o alcance não é configurável — é fechado. A chave
    * entra junto com a promoção do 59 a fonte de verdade, que é quando existir
    * decisão de produto sobre quem deve ver.
+   *
+   * `isBookplay` é a segunda metade do gate: o 59 é o relatório do ERP da
+   * BookPlay, e a PaguePlay não tem equivalente. Sem isto a aba apareceria lá
+   * vazia, com um botão de importar que não tem arquivo para receber — e uma
+   * tela vazia sem explicação é pior do que tela nenhuma.
    */
-  const podeVerMestre = perfil?.perfil === 'super_admin';
+  const podeVerMestre = perfil?.perfil === 'super_admin' && tenant.slug === 'bookplay';
   const [aba, setAba] = useState<'painel' | 'mestre'>('painel');
   // Perder a permissão com a aba aberta não pode deixar o conteúdo no ar.
   const abaVisivel = podeVerMestre ? aba : 'painel';

@@ -3,14 +3,22 @@
  *
  * ## O que ela faz, e o que ela deliberadamente NÃO faz
  *
- * Importa o relatório mestre, lista os grupos que vieram nele e deixa ligar
- * cada grupo a um setor do sistema. Só isso.
+ * Importa o relatório mestre, lista os grupos, deixa ligar cada grupo a um
+ * setor (e cada equipe do relatório a uma equipe do sistema), e compara o
+ * resultado com o que o sistema tem hoje.
  *
  * **Ela não escreve em `analitico_recebimentos`, não mexe em meta, não muda
- * nenhum número que alguém já vê.** É fase de conferência: o mestre roda em
- * paralelo até o número estar provado, e só depois vira fonte. Publicar antes
- * um total que ainda pode mudar é pior do que não publicar — número visto uma
- * vez vira referência mesmo depois de corrigido.
+ * nenhum número que alguém já vê.** A importação do 58 pela liderança segue
+ * intacta. É fase de conferência: o mestre roda em paralelo até o número estar
+ * provado, e só depois vira fonte. Publicar antes um total que ainda pode mudar
+ * é pior do que não publicar — número visto uma vez vira referência mesmo
+ * depois de corrigido.
+ *
+ * ## Só BookPlay
+ *
+ * O 59 é o relatório do ERP da BookPlay. A PaguePlay tem outra origem e não
+ * tem equivalente — a aba nem aparece lá, em vez de aparecer vazia e deixar
+ * alguém procurando o que importar.
  *
  * ## O vínculo é pelo CÓDIGO
  *
@@ -19,18 +27,26 @@
  * código sobrevive à troca de liderança — `COB PLAY 1 - PAOLA` vira outro texto
  * quando a Paola sair, o código 25 continua 25.
  *
+ * ## As três colunas de dinheiro
+ *
+ * `Próprio`, `Receptivo` e `Total` existem porque o receptivo cobra PARA outro
+ * setor, e o ERP carimba o destino na linha — mas a linha mora no grupo do
+ * receptivo. Somar a contribuição no destino sem tirá-la da origem contaria o
+ * mesmo dinheiro duas vezes. Com a separação, somar `Total` de todos os grupos
+ * devolve o total do arquivo ao centavo.
+ *
  * ## Por que "sem vínculo" fica no topo, em destaque
  *
  * A primeira carga entra com tudo `novo`, de propósito: ninguém adivinha o
  * setor por você. Sem um aviso grande, essa tela pareceria pronta enquanto o
- * dinheiro inteiro está fora de qualquer setor. O banner existe para que o
- * estado incompleto seja impossível de confundir com o estado final.
+ * dinheiro inteiro está fora de qualquer setor.
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload, RefreshCw, Loader2, Link2, Link2Off, EyeOff, History,
-  FileSpreadsheet, AlertTriangle, CheckCircle2, Package,
+  FileSpreadsheet, AlertTriangle, CheckCircle2, Package, Scale, ListTree,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -42,11 +58,12 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { parseMestre59, agruparPorGrupoFiltro, type LinhaMestre59 } from '@/services/mestre/mestre59Parser';
 import {
-  importarMestre59, buscarResumoGrupos, buscarResumoEquipes, buscarLotes, buscarEventos,
-  vincularGrupo,
-  type GrupoDoMestre, type EquipeDoMestre, type LoteDoMestre, type EventoDoMestre,
+  importarMestre59, buscarResumoGrupos, buscarLotes, buscarEventos, vincularGrupo,
+  type GrupoDoMestre, type LoteDoMestre, type EventoDoMestre,
   type ProgressoCarga, type EstadoVinculo,
 } from '@/services/mestre/mestre.service';
+import { Mestre59Detalhe } from './Mestre59Detalhe';
+import { Mestre59Comparacao } from './Mestre59Comparacao';
 
 interface Props {
   empresaId: string;
@@ -80,13 +97,16 @@ const ROTULO_EVENTO: Record<string, string> = {
   vinculo_definido: 'Vínculo definido',
   vinculo_alterado: 'Vínculo alterado',
   vinculo_removido: 'Vínculo removido',
-  grupo_ignorado:   'Grupo marcado como ignorado',
+  grupo_ignorado:   'Marcado como ignorado',
 };
 
 /** Eventos que merecem cor de atenção — mudança de rótulo mexe em número. */
 const EVENTO_ALERTA = new Set(['grupo_sumiu', 'equipe_sumiu', 'grupo_novo', 'equipe_nova']);
 
+type SubAba = 'vinculos' | 'comparacao';
+
 export function Mestre59({ empresaId, mes }: Props) {
+  const [subAba, setSubAba]     = useState<SubAba>('vinculos');
   const [setores, setSetores]   = useState<Setor[]>([]);
   const [grupos, setGrupos]     = useState<GrupoDoMestre[]>([]);
   const [lotes, setLotes]       = useState<LoteDoMestre[]>([]);
@@ -98,9 +118,7 @@ export function Mestre59({ empresaId, mes }: Props) {
   const [lendo, setLendo]       = useState(false);
   const [progresso, setProgresso] = useState<ProgressoCarga | null>(null);
   const [salvandoCod, setSalvandoCod] = useState<string | null>(null);
-
   const [expandido, setExpandido] = useState<string | null>(null);
-  const [equipes, setEquipes]     = useState<Record<string, EquipeDoMestre[]>>({});
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -131,7 +149,7 @@ export function Mestre59({ empresaId, mes }: Props) {
 
   // Trocar de mês invalida a prévia: ela foi montada para outro período, e
   // subi-la aqui gravaria o retrato no mês errado.
-  useEffect(() => { setPrevia(null); setExpandido(null); setEquipes({}); }, [mes]);
+  useEffect(() => { setPrevia(null); setExpandido(null); }, [mes]);
 
   // ── Leitura do arquivo ────────────────────────────────────────────────────
 
@@ -207,7 +225,7 @@ export function Mestre59({ empresaId, mes }: Props) {
     }
   }, [previa, empresaId, carregar]);
 
-  // ── Vínculo ───────────────────────────────────────────────────────────────
+  // ── Vínculo do grupo ──────────────────────────────────────────────────────
 
   const aplicarVinculo = useCallback(async (
     cod: string, estado: EstadoVinculo, setorId: string | null,
@@ -228,33 +246,24 @@ export function Mestre59({ empresaId, mes }: Props) {
     }
   }, [empresaId, setores]);
 
-  const abrirEquipes = useCallback(async (cod: string) => {
-    if (expandido === cod) { setExpandido(null); return; }
-    setExpandido(cod);
-    if (equipes[cod]) return;
-    try {
-      const lista = await buscarResumoEquipes(empresaId, mes, cod);
-      setEquipes(e => ({ ...e, [cod]: lista }));
-    } catch {
-      setEquipes(e => ({ ...e, [cod]: [] }));
-    }
-  }, [expandido, equipes, empresaId, mes]);
-
   // ── Somas do cabeçalho ────────────────────────────────────────────────────
 
   const resumo = useMemo(() => {
-    const totalMes    = grupos.reduce((s, g) => s + g.recebido, 0);
-    const semVinculo  = grupos.filter(g => g.estado === 'novo');
-    const ignorados   = grupos.filter(g => g.estado === 'ignorado');
-    const vinculados  = grupos.filter(g => g.estado === 'vinculado');
+    const semVinculo = grupos.filter(g => g.estado === 'novo');
+    const ignorados  = grupos.filter(g => g.estado === 'ignorado');
+    const vinculados = grupos.filter(g => g.estado === 'vinculado');
     return {
-      totalMes,
-      semVinculoValor: semVinculo.reduce((s, g) => s + g.recebido, 0),
+      // Soma dos TOTAIS: o que sai de um grupo entra no outro, então isto bate
+      // com o total do arquivo sem contar nada duas vezes.
+      totalMes:        grupos.reduce((s, g) => s + g.recebido_total, 0),
+      receptivo:       grupos.reduce((s, g) => s + g.recebido_contribuido, 0),
+      semVinculoValor: semVinculo.reduce((s, g) => s + g.recebido_total, 0),
       semVinculoQtd:   semVinculo.length,
-      ignoradoValor:   ignorados.reduce((s, g) => s + g.recebido, 0),
-      vinculadoValor:  vinculados.reduce((s, g) => s + g.recebido, 0),
+      ignoradoValor:   ignorados.reduce((s, g) => s + g.recebido_total, 0),
+      vinculadoValor:  vinculados.reduce((s, g) => s + g.recebido_total, 0),
       vinculadoQtd:    vinculados.length,
       linhas:          grupos.reduce((s, g) => s + g.linhas, 0),
+      semDestino:      grupos.reduce((s, g) => s + g.sem_destino, 0),
     };
   }, [grupos]);
 
@@ -271,11 +280,35 @@ export function Mestre59({ empresaId, mes }: Props) {
         <p className="text-xs text-muted-foreground leading-relaxed">
           <span className="font-semibold text-foreground">Fase de conferência.</span>{' '}
           O relatório 59 vive aqui em paralelo e <strong>não alimenta</strong> nenhuma tela,
-          meta ou projeção ainda. O vínculo de cada grupo com um setor é feito à mão,
-          pelo <span className="font-mono text-[11px]">CodGrupoFiltro</span> — o código
-          sobrevive à troca de liderança, o nome não.
+          meta ou projeção ainda. A importação do 58 pela liderança segue funcionando igual.
+          O vínculo é feito à mão, pelo <span className="font-mono text-[11px]">CodGrupoFiltro</span> —
+          o código sobrevive à troca de liderança, o nome não.
         </p>
       </div>
+
+      {/* ── Sub-abas ────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
+        {([
+          { key: 'vinculos'   as const, label: 'Vínculos',  Icon: ListTree },
+          { key: 'comparacao' as const, label: 'Comparação', Icon: Scale },
+        ]).map(({ key, label, Icon }) => (
+          <button key={key} type="button" onClick={() => setSubAba(key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
+              subAba === key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {subAba === 'comparacao' ? (
+        <Mestre59Comparacao empresaId={empresaId} mes={mes} />
+      ) : (
+      <>
 
       {/* ── Importar ────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
@@ -335,6 +368,7 @@ export function Mestre59({ empresaId, mes }: Props) {
                 {loteVigente && (
                   <p className="text-xs text-muted-foreground mt-1.5">
                     Isto <strong>substitui</strong> o retrato atual de {previa.mes} por completo.
+                    Nada fora do 59 é tocado.
                   </p>
                 )}
               </div>
@@ -387,7 +421,8 @@ export function Mestre59({ empresaId, mes }: Props) {
                   sub={`${resumo.vinculadoQtd} grupo(s)`} tom="ok" />
                 <Tile rotulo="Sem vínculo" valor={formatBRL(resumo.semVinculoValor)}
                   sub={`${resumo.semVinculoQtd} grupo(s)`} tom={resumo.semVinculoValor > 0 ? 'alerta' : undefined} />
-                <Tile rotulo="Ignorado" valor={formatBRL(resumo.ignoradoValor)} sub="fora da conta" />
+                <Tile rotulo="Do receptivo" valor={formatBRL(resumo.receptivo)}
+                  sub="já somado nos destinos" />
               </>
             )}
           </div>
@@ -397,6 +432,17 @@ export function Mestre59({ empresaId, mes }: Props) {
       {erro && (
         <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
           {erro}
+        </div>
+      )}
+
+      {resumo.semDestino > 0 && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-xs text-muted-foreground flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+          <span>
+            <strong className="text-foreground">{formatBRL(resumo.semDestino)}</strong> vêm carimbados
+            para um setor que não existe entre os grupos do relatório. Ficam com o grupo de origem
+            até alguém decidir — abra o grupo para ver qual destino é.
+          </span>
         </div>
       )}
 
@@ -421,13 +467,13 @@ export function Mestre59({ empresaId, mes }: Props) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[960px] text-sm">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                   <th className="text-left font-semibold px-5 py-2.5">Código · rótulo no relatório</th>
-                  <th className="text-right font-semibold px-3 py-2.5">Linhas</th>
-                  <th className="text-right font-semibold px-3 py-2.5">Recebido</th>
-                  <th className="text-right font-semibold px-3 py-2.5">Colchão</th>
+                  <th className="text-right font-semibold px-3 py-2.5">Próprio</th>
+                  <th className="text-right font-semibold px-3 py-2.5">Receptivo</th>
+                  <th className="text-right font-semibold px-3 py-2.5">Total</th>
                   <th className="text-right font-semibold px-3 py-2.5">Extra</th>
                   <th className="text-left font-semibold px-3 py-2.5 w-[280px]">Setor do sistema</th>
                 </tr>
@@ -435,7 +481,8 @@ export function Mestre59({ empresaId, mes }: Props) {
               <tbody>
                 {grupos.map(g => {
                   const aberto = expandido === g.cod_grupo_filtro;
-                  const ausente = g.linhas === 0;
+                  const ausente = g.linhas === 0 && g.recebido_contribuido === 0;
+                  const extra = g.extra_proprio + g.extra_contribuido;
                   return (
                     // A `key` fica no Fragment, não nas `<tr>`: o React exige a
                     // chave no elemento mais externo que o `map` devolve, e uma
@@ -443,11 +490,14 @@ export function Mestre59({ empresaId, mes }: Props) {
                     <Fragment key={g.cod_grupo_filtro}>
                       <tr
                         className={cn('border-b border-border/25 hover:bg-accent/20 transition-colors',
-                          ausente && 'opacity-60')}>
+                          ausente && 'opacity-60', aberto && 'bg-accent/20')}>
                         <td className="px-5 py-2.5">
-                          <button type="button" onClick={() => void abrirEquipes(g.cod_grupo_filtro)}
+                          <button type="button"
+                            onClick={() => setExpandido(aberto ? null : g.cod_grupo_filtro)}
                             className="text-left group">
                             <span className="inline-flex items-center gap-2">
+                              <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform',
+                                aberto && 'rotate-90')} />
                               <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary tabular-nums">
                                 {g.cod_grupo_filtro}
                               </span>
@@ -455,24 +505,29 @@ export function Mestre59({ empresaId, mes }: Props) {
                                 {g.nome_no_relatorio || g.nome_cadastrado || '—'}
                               </span>
                             </span>
-                            <span className="block text-[11px] text-muted-foreground mt-0.5">
+                            <span className="block text-[11px] text-muted-foreground mt-0.5 ml-[22px]">
                               {ausente
                                 ? <span className="text-warning">não veio neste mês</span>
-                                : <>{g.equipes} equipe(s) · {g.cobradoras} cobradora(s) · {g.dias} dia(s)</>}
+                                : <>
+                                    {g.equipes} equipe(s) · {g.cobradoras} pessoa(s) · {g.dias} dia(s)
+                                    {g.distribuido > 0 && <span className="text-warning"> · distribuiu {formatBRL(g.distribuido)}</span>}
+                                    {g.atestado_valor > 0 && <span className="text-chart-4"> · atestado {formatBRL(g.atestado_valor)}</span>}
+                                  </>}
                             </span>
                           </button>
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                          {g.linhas.toLocaleString('pt-BR')}
+                          {formatBRL(g.recebido_proprio)}
+                        </td>
+                        <td className={cn('px-3 py-2.5 text-right tabular-nums',
+                          g.recebido_contribuido > 0 ? 'text-success font-medium' : 'text-muted-foreground/50')}>
+                          {g.recebido_contribuido > 0 ? `+${formatBRL(g.recebido_contribuido)}` : '—'}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-foreground">
-                          {formatBRL(g.recebido)}
+                          {formatBRL(g.recebido_total)}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground text-xs">
-                          {g.colchao_valor > 0 ? formatBRL(g.colchao_valor) : '—'}
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground text-xs">
-                          {g.extra_valor > 0 ? formatBRL(g.extra_valor) : '—'}
+                          {extra > 0 ? formatBRL(extra) : '—'}
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1.5">
@@ -519,28 +574,10 @@ export function Mestre59({ empresaId, mes }: Props) {
                       {aberto && (
                         <tr className="bg-muted/25 border-b border-border/25">
                           <td colSpan={6} className="px-5 py-3">
-                            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                              SubgrupoEquipe neste grupo
-                            </p>
-                            {!equipes[g.cod_grupo_filtro] ? (
-                              <Skeleton className="h-8 rounded-lg" />
-                            ) : equipes[g.cod_grupo_filtro].length === 0 ? (
-                              <p className="text-xs text-muted-foreground">Nenhuma equipe informada nas linhas deste grupo.</p>
-                            ) : (
-                              <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                                {equipes[g.cod_grupo_filtro].map(e => (
-                                  <div key={e.nome_subgrupo || '(vazio)'}
-                                    className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-background/60 px-2.5 py-1.5">
-                                    <span className="text-xs text-foreground truncate">
-                                      {e.nome_subgrupo || <span className="italic text-muted-foreground">(sem equipe)</span>}
-                                    </span>
-                                    <span className="text-xs tabular-nums font-medium text-muted-foreground shrink-0">
-                                      {formatBRL(e.recebido)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            <Mestre59Detalhe
+                              empresaId={empresaId} mes={mes} grupo={g}
+                              aoMudar={() => { buscarEventos(empresaId).then(setEventos).catch(() => {}); }}
+                            />
                           </td>
                         </tr>
                       )}
@@ -623,6 +660,9 @@ export function Mestre59({ empresaId, mes }: Props) {
             ))}
           </ul>
         </div>
+      )}
+
+      </>
       )}
     </div>
   );
