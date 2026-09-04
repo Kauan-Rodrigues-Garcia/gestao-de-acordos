@@ -337,7 +337,13 @@ export default function AdminUsuarios() {
     // preenchimento automático é a origem do `setor_id` que a cúpula carregava
     // sem ninguém ter decidido — e que fazia a diretoria ver um setor só nas
     // abas do Painel Líder. Ver `PERFIS_ESCOPO_EMPRESA`.
-    if (setoresData.length > 0 && !form.setor_id && !ehEscopoEmpresa(form.perfil)) {
+    //
+    // `!editando` é a segunda metade da mesma ideia: isto existe para o
+    // formulário de CRIAÇÃO. Numa edição de alguém sem setor (ver
+    // `setorVazioParaPreencher`) ele escolheria sozinho o primeiro da lista, e
+    // o admin salvaria um vínculo que não decidiu — que é justamente o defeito
+    // que o parágrafo acima descreve, só que do outro lado.
+    if (!editando && setoresData.length > 0 && !form.setor_id && !ehEscopoEmpresa(form.perfil)) {
       setForm(f => ({
         ...f,
         setor_id: setoresData.find(s => s.empresa_id === (f.empresa_id || empresaAtual?.id))?.id ?? setoresData[0].id,
@@ -380,6 +386,11 @@ export default function AdminUsuarios() {
    * Setor e empresa NÃO entram aqui de propósito. Mudá-los é uma transferência,
    * e transferência apaga tabulação, libera NR e tira a pessoa de equipe — não
    * pode viajar de carona no mesmo `update` que corrige um nome mal digitado.
+   *
+   * A única exceção é `setorVazioParaPreencher`: sair de NULO para um setor não
+   * é mudar de setor, é ganhar o primeiro. Não há tabulação para apagar nem
+   * equipe de onde sair, então nenhuma das consequências acima existe — e sem
+   * isto a pessoa fica presa num estado que zera as telas analíticas dela.
    */
   async function salvarCamposBasicos(alvoId: string): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payload parcial e heterogêneo p/ update(); tipar exigiria o shape completo de Perfil.
@@ -389,6 +400,9 @@ export default function AdminUsuarios() {
     };
     if (form.usuario.trim()) {
       updatePayload.usuario = form.usuario.trim().toLowerCase();
+    }
+    if (setorVazioParaPreencher && form.setor_id) {
+      updatePayload.setor_id = form.setor_id;
     }
     const { data: linhasAtualizadas, error } = await supabase.from('perfis')
       .update(updatePayload)
@@ -404,6 +418,14 @@ export default function AdminUsuarios() {
     const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
     if (!form.nome || (!form.email && !form.usuario)) { toast.error('Preencha nome e e-mail ou nome de usuário'); return; }
     if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
+    // Sair do diálogo mantendo o vazio devolveria a pessoa ao estado que zera o
+    // Painel Líder e o Analítico dela — e a próxima pessoa a abrir a tela não
+    // teria como saber que aquilo é um defeito. `setoresDoForm.length` evita
+    // travar quem simplesmente não tem setor cadastrado na empresa.
+    if (setorVazioParaPreencher && !form.setor_id && setoresDoForm.length > 0) {
+      toast.error('Escolha o setor: este cargo pertence a um setor, e sem ele as telas analíticas ficam zeradas.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -647,6 +669,33 @@ export default function AdminUsuarios() {
    * `PERFIS_ESCOPO_EMPRESA`.
    */
   const cargoEscopoEmpresa = ehEscopoEmpresa(form.perfil);
+
+  /**
+   * Esta pessoa está sem setor num cargo que precisa de um?
+   *
+   * É o buraco que o rebaixamento da cúpula abre, e ele custou caro em
+   * setembro/2026: Fábio Lopes de Aquino era `diretoria` na PaguePlay, o
+   * gatilho `a_trg_perfis_escopo_empresa` zerou o `setor_id` dele (correto —
+   * diretoria pertence à empresa), e uma semana depois o cargo virou
+   * `gerencia`. O gatilho só zera; nunca devolve. Ficou uma gerência sem setor.
+   *
+   * O estrago não apareceu como erro. `fn_analitico_resumo_por_operador` monta
+   * `v_ops_setor` só quando `v_setor_id IS NOT NULL`, e um `= ANY('{}')` é
+   * sempre falso: a RPC passou a devolver ZERO linhas. Desempenho Equipes,
+   * Quartis e o ranking do Analítico ficaram zerados, com cara de dado real.
+   *
+   * E não havia porta para consertar pela tela. O campo Setor é somente-leitura
+   * na edição porque mudar de setor é TRANSFERÊNCIA (apaga tabulação, libera NR,
+   * tira de equipe) — e transferência pressupõe um setor de origem, que aqui não
+   * existe. Preencher o vazio não move nada de lugar; por isso, e só neste caso,
+   * o campo volta a ser editável.
+   *
+   * ⚠️ A RLS ainda manda: `perfis_admin_update` exige `usuarios_administrar` e,
+   * com `usuarios_escopo = 2`, casa `setor_id` da linha ANTIGA com o do editor —
+   * o que um `setor_id` nulo nunca satisfaz. Na prática quem consegue gravar
+   * isto tem `usuarios_escopo_todos_setores`, que é o público certo.
+   */
+  const setorVazioParaPreencher = !!editando && !cargoEscopoEmpresa && !editando.setor_id;
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
@@ -1292,6 +1341,25 @@ export default function AdminUsuarios() {
                     <Building2 className="w-3 h-3 shrink-0" />
                     {PERFIL_LABELS[form.perfil] ?? form.perfil} não pertence a um setor:
                     a visão é da empresa toda.
+                  </p>
+                </>
+              ) : setorVazioParaPreencher ? (
+                /* Sem setor num cargo que precisa de um. Não é transferência —
+                   não há de onde sair —, então o campo abre. Ver
+                   `setorVazioParaPreencher`. */
+                <>
+                  <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
+                    <SelectContent>
+                      {setoresDoForm.length === 0
+                        ? <SelectItem value="__none__" disabled>Nenhum setor nesta empresa</SelectItem>
+                        : setoresDoForm.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                    <Building2 className="w-3 h-3 shrink-0" />
+                    {PERFIL_LABELS[form.perfil] ?? form.perfil} pertence a um setor e está sem
+                    nenhum — assim o Painel Líder e o Analítico dessa pessoa ficam zerados.
                   </p>
                 </>
               ) : editando ? (
