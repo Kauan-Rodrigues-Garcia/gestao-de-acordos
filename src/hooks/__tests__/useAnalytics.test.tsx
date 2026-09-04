@@ -1064,9 +1064,16 @@ describe('useAnalytics', () => {
       setupOperadorResults(acordos, meta);
 
       const { result } = renderHook(() => useAnalyticsDoCenario());
-      await waitFor(() => expect(result.current.loading).toBe(false));
-
-      expect(result.current.percMeta).toBe(999);
+      /*
+       * Espera o VALOR, e não o `loading`.
+       *
+       * `loading` vira falso antes de a meta assentar, e a asserção pegava um
+       * render intermediário: em ~1 de cada 3 execuções este teste lia 20 e
+       * falhava sozinho, sem nada ter mudado no código. Esperar o valor não
+       * enfraquece nada — se ele nunca chegar a 999, o `waitFor` estoura e o
+       * teste falha do mesmo jeito.
+       */
+      await waitFor(() => expect(result.current.percMeta).toBe(999));
       expect(result.current.percMetaAcordos).toBe(999);
     });
 
