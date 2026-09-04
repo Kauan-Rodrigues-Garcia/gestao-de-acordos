@@ -100,13 +100,34 @@ export interface GrupoDoMestre {
   /** Equipes deste grupo movidas para fora. Saem do total dele. */
   saiu_outro_setor: number;
   saiu_somente_geral: number;
+  /**
+   * Cobrado NESTA carteira por gente de outro setor. Sai do total daqui e entra
+   * no setor da pessoa.
+   *
+   * `NomeGrupoFiltro` é a carteira, não a equipe de quem cobrou — um operador do
+   * Play 5 trabalhando a carteira do Play Mix aparece sob Play Mix. O sistema
+   * corrigia isso à mão, em `analitico_ajustes_manuais`; aqui sai do congelado
+   * `operador_setor_id`, e por isso não esquece ninguém.
+   */
+  emprestado_para: number;
+  emprestado_pessoas: number;
   recebido_total: number;
   /** Deste grupo, carimbado para outros. Informativo: continua no total daqui. */
   para_outros_integral: number;
   para_outros_extra: number;
   /** Composto cujo destino não casou com grupo nenhum. Visível, nunca some. */
   sem_destino: number;
+  /** Todo o colchão do grupo, dentro e fora da meta. */
   colchao_valor: number;
+  /**
+   * A parte do colchão que o 58 desvia para `analitico_colchao_fora_meta`.
+   *
+   * NÃO está em `recebido_proprio` nem em `recebido_total` — o 59 agora usa a
+   * mesma régua do 58 (`colchaoContaNaMeta`: só de 01 a 14/08/2026 o colchão
+   * conta). Fica aqui porque o dinheiro existe e alguém cobrou; some do total,
+   * nunca da vista.
+   */
+  colchao_fora: number;
   /** `SubgrupoEquipe = ATESTADOS|FERIAS`. Conta no total, e aparece à parte. */
   atestado_valor: number;
   equipes: number;
@@ -118,12 +139,15 @@ export interface GrupoDoMestre {
 
 /** De onde vem (ou para onde vai) o dinheiro de um grupo. Zero não aparece. */
 export interface OrigemDoGrupo {
-  origem: 'proprio' | 'contribuicao' | 'para_outro' | 'sem_destino';
+  origem: 'proprio' | 'contribuicao' | 'para_outro' | 'sem_destino' | 'colchao_fora';
   /** O outro grupo envolvido: de onde veio, ou para onde foi. */
   cod_outro: string | null;
   rotulo: string | null;
   tipo: 'Integral' | 'Extra';
-  /** Esta linha entra no total do setor? O Extra vindo de fora não entra. */
+  /**
+   * Esta linha entra no total do setor? O Extra vindo de fora não entra (o
+   * setor já o tem como direto), e o colchão fora da meta também não.
+   */
   soma: boolean;
   linhas: number;
   valor: number;
@@ -137,6 +161,8 @@ export interface EquipeDoMestre {
   recebido: number;
   integral_valor: number;
   extra_valor: number;
+  /** Colchão que ficou de fora do `recebido` acima. Ver `GrupoDoMestre`. */
+  colchao_fora: number;
   cobradoras: number;
   equipe_id: string | null;
   equipe_nome: string | null;
@@ -154,8 +180,34 @@ export interface SetorDoMestre {
   setor_nome: string;
   dos_grupos: number;
   recebido_movido: number;
+  /** Entrou porque gente DESTE setor cobrou carteira de outro. */
+  recebido_emprestado: number;
   total: number;
   grupos: number;
+}
+
+/**
+ * Uma pessoa que cobrou carteira de outro setor.
+ *
+ * É a lista que o processo manual não tinha. Em agosto/2026 a Brenda lançou
+ * seis das sete pessoas do caso Play Mix → Play 5; a sétima só apareceu porque
+ * alguém foi conferir. `ajuste_valor` diz se o lançamento já existe no destino,
+ * então a tela mostra o que falta em vez de esperar alguém lembrar.
+ */
+export interface OperadorEmprestado {
+  cobradora: string;
+  operador_id: string | null;
+  operador_nome: string | null;
+  de_cod: string;
+  de_carteira: string;
+  de_setor_id: string | null;
+  de_setor: string | null;
+  para_setor_id: string | null;
+  para_setor: string | null;
+  linhas: number;
+  valor: number;
+  /** Ajuste manual já lançado para esta pessoa neste setor. Nulo = não existe. */
+  ajuste_valor: number | null;
 }
 
 /**
@@ -173,7 +225,10 @@ export interface OperadorDaEquipe {
   recebido: number;
   integral_valor: number;
   extra_valor: number;
+  /** Todo o colchão do operador. */
   colchao_valor: number;
+  /** Quanto do colchão acima ficou de fora de `recebido`. */
+  colchao_fora: number;
   nrs: number;
   dias: number;
   perfil_id: string | null;
@@ -199,6 +254,14 @@ export interface LinhaDoOperador {
   recebido: number;
   tipo: string;
   colchao: boolean;
+  /**
+   * Esta linha entra na soma do card do operador?
+   *
+   * A lista traz TUDO — é tela de conferência, e esconder linha do relatório
+   * aqui derrotaria o propósito dela. Falso só no colchão fora da meta, e é o
+   * que explica a soma da tela não bater com o card.
+   */
+  conta_na_meta: boolean;
   setor_carimbado: string;
   linha_num: number;
 }
@@ -224,17 +287,49 @@ export interface OperadorDivergente {
   equipe_esperada: string | null;
 }
 
+/**
+ * O 59 contra o sistema, na mesma régua.
+ *
+ * São DUAS comparações, e misturá-las foi o erro que a conferência de agosto
+ * expôs:
+ *
+ *   `mestre_comparavel` × `sistema_total`            o recebimento
+ *   `mestre_contribuido` × `sistema_contrib_receptivo` o integral do receptivo
+ *
+ * O integral sai da primeira porque no sistema ele não vem de importação: é
+ * digitado à mão no card Contribuição Receptivo. Comparado junto, um erro de
+ * digitação daquele card virava buraco na importação do 59.
+ *
+ * E `sistema_total` soma `analitico_ajustes_manuais`, que toda tela do sistema
+ * já lê e só a comparação não lia — é por onde o recebimento de quem trocou de
+ * carteira no meio do mês volta ao setor certo. O 59 acerta isso sozinho, pelo
+ * grupo que cobrou a linha.
+ */
 export interface ComparacaoSetor {
   cod_grupo_filtro: string;
   rotulo: string;
   setor_id: string | null;
   setor_nome: string | null;
   estado: EstadoVinculo;
+  /** O número econômico do grupo: tudo o que recebeu, integral incluído. */
   mestre_total: number;
   mestre_proprio: number;
   mestre_contribuido: number;
+  /** Já fora de `mestre_total`. Explica quem somar o relatório bruto e estranhar. */
+  mestre_colchao_fora: number;
+  /** Cobrado nesta carteira por gente de fora. Já descontado de `mestre_total`. */
+  mestre_emprestado_para: number;
+  /** Cobrado fora por gente daqui. Já somado em `mestre_total`. */
+  mestre_emprestado_de: number;
+  /** `mestre_total` sem o integral. É o lado esquerdo da conta de `diferenca`. */
+  mestre_comparavel: number;
+  /** `sistema_analitico + sistema_ajustes`. Lado direito de `diferenca`. */
   sistema_total: number;
   sistema_linhas: number;
+  sistema_analitico: number;
+  sistema_ajustes: number;
+  /** `contribuicao_receptivo.acumulado`, para conferir com `mestre_contribuido`. */
+  sistema_contrib_receptivo: number;
   diferenca: number;
 }
 
@@ -404,11 +499,14 @@ export async function buscarResumoGrupos(empresaId: string, mes: string): Promis
     contrib_extra:        n(g.contrib_extra),
     saiu_outro_setor:     n(g.saiu_outro_setor),
     saiu_somente_geral:   n(g.saiu_somente_geral),
+    emprestado_para:      n(g.emprestado_para),
+    emprestado_pessoas:   n(g.emprestado_pessoas),
     recebido_total:       n(g.recebido_total),
     para_outros_integral: n(g.para_outros_integral),
     para_outros_extra:    n(g.para_outros_extra),
     sem_destino:          n(g.sem_destino),
     colchao_valor:        n(g.colchao_valor),
+    colchao_fora:         n(g.colchao_fora),
     atestado_valor:       n(g.atestado_valor),
     equipes:              n(g.equipes),
     cobradoras:           n(g.cobradoras),
@@ -439,6 +537,7 @@ export async function buscarResumoEquipes(
     recebido:       n(e.recebido),
     integral_valor: n(e.integral_valor),
     extra_valor:    n(e.extra_valor),
+    colchao_fora:   n(e.colchao_fora),
     cobradoras:     n(e.cobradoras),
   }));
 }
@@ -457,6 +556,7 @@ export async function buscarOperadoresDaEquipe(
     integral_valor: n(o.integral_valor),
     extra_valor:    n(o.extra_valor),
     colchao_valor:  n(o.colchao_valor),
+    colchao_fora:   n(o.colchao_fora),
     nrs:            n(o.nrs),
     dias:           n(o.dias),
   }));
@@ -523,10 +623,33 @@ export async function buscarResumoSetores(
   if (error) throw new Error(error.message);
   return (data ?? []).map(s => ({
     ...s,
-    dos_grupos:      n(s.dos_grupos),
-    recebido_movido: n(s.recebido_movido),
-    total:           n(s.total),
-    grupos:          n(s.grupos),
+    dos_grupos:          n(s.dos_grupos),
+    recebido_movido:     n(s.recebido_movido),
+    recebido_emprestado: n(s.recebido_emprestado),
+    total:               n(s.total),
+    grupos:              n(s.grupos),
+  }));
+}
+
+/**
+ * Quem cobrou carteira de outro setor neste mês, e se o ajuste já foi lançado.
+ *
+ * Só leitura. Não cria ajuste nenhum — a decisão de lançar continua sendo de
+ * quem tem a permissão para isso; o que muda é que a lista deixa de depender de
+ * alguém lembrar.
+ */
+export async function buscarEmprestados(
+  empresaId: string, mes: string,
+): Promise<OperadorEmprestado[]> {
+  const { data, error } = await rpcSemTipo<OperadorEmprestado[]>('fn_mestre_emprestados', {
+    p_empresa_id: empresaId, p_mes: mes,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(e => ({
+    ...e,
+    linhas:       n(e.linhas),
+    valor:        n(e.valor),
+    ajuste_valor: e.ajuste_valor === null ? null : n(e.ajuste_valor),
   }));
 }
 
@@ -569,8 +692,15 @@ export async function compararSetores(empresaId: string, mes: string): Promise<C
     mestre_total:       n(c.mestre_total),
     mestre_proprio:     n(c.mestre_proprio),
     mestre_contribuido: n(c.mestre_contribuido),
+    mestre_colchao_fora: n(c.mestre_colchao_fora),
+    mestre_emprestado_para: n(c.mestre_emprestado_para),
+    mestre_emprestado_de:   n(c.mestre_emprestado_de),
+    mestre_comparavel:  n(c.mestre_comparavel),
     sistema_total:      n(c.sistema_total),
     sistema_linhas:     n(c.sistema_linhas),
+    sistema_analitico:  n(c.sistema_analitico),
+    sistema_ajustes:    n(c.sistema_ajustes),
+    sistema_contrib_receptivo: n(c.sistema_contrib_receptivo),
     diferenca:          n(c.diferenca),
   }));
 }

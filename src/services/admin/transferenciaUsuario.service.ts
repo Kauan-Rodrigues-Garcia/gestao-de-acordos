@@ -149,22 +149,40 @@ async function checarColisaoDeLogin(
 ): Promise<string | null> {
   if (tipo !== 'empresa' || !alvo.usuario) return null;
 
+  /*
+   * Sem caixa: `cleber_JUNIOR` e `cleber_junior` são o MESMO login.
+   *
+   * Com `.eq` a checagem passava batido e a colisão só aparecia lá na frente,
+   * como erro de índice único no meio de uma transferência já começada. O resto
+   * do sistema sempre comparou login em minúsculo (`resolverOperadores`, e todo
+   * o casamento do relatório 59); esta era a última porta que não fazia igual.
+   *
+   * O `ilike` estreita no banco; a conferência exata acontece aqui embaixo,
+   * porque no `ilike` o `_` é curinga de um caractere — e todo login do sistema
+   * tem `_`. Sem a segunda passada, `cleber_junior` casaria com `cleberXjunior`
+   * e bloquearia uma transferência legítima.
+   */
+  const padrao = alvo.usuario.replace(/([\\%_])/g, '\\$1');
+
   const { data, error } = await supabase
     .from('perfis')
-    .select('id, nome')
-    .eq('usuario', alvo.usuario)
+    .select('id, nome, usuario')
+    .ilike('usuario', padrao)
     .eq('empresa_id', alvo.destinoEmpresaId)
-    .neq('id', alvo.perfilId)
-    .maybeSingle();
+    .neq('id', alvo.perfilId);
 
   // Sem permissão para ler a outra empresa é o caso comum de quem não é
   // super_admin. Deixar passar: o índice único barra no banco de qualquer jeito,
   // e `executarTransferencia` traduz o erro.
   if (error || !data) return null;
 
-  return `O login "${alvo.usuario}" já pertence a ${
-    (data as { nome: string }).nome
-  } na empresa de destino. Renomeie um dos dois antes de transferir.`;
+  const alvoMinusculo = alvo.usuario.toLowerCase();
+  const colisao = (data as { id: string; nome: string; usuario: string | null }[])
+    .find(p => (p.usuario ?? '').toLowerCase() === alvoMinusculo);
+  if (!colisao) return null;
+
+  return `O login "${alvo.usuario}" já pertence a ${colisao.nome} na empresa de destino. `
+    + 'Renomeie um dos dois antes de transferir.';
 }
 
 // ── Execução ─────────────────────────────────────────────────────────────────

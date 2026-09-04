@@ -8,30 +8,49 @@
  * Os dois lados são só LEITURA. `analitico_recebimentos` é lido e nunca escrito;
  * o mestre também não muda. Rodar isto não altera número nenhum.
  *
+ * ## Os dois lados usam a mesma régua
+ *
+ * A conferência de agosto/2026 mostrou que a divergência inteira dos quatro
+ * setores vinculados — R$ 190.791,11 — não era erro de importação: eram três
+ * recortes diferentes sendo somados como se fossem o mesmo número. Desde então:
+ *
+ *   colchão fora da meta   sai dos DOIS. O 58 guarda essas linhas em
+ *                          `analitico_colchao_fora_meta` e não as soma em meta
+ *                          nenhuma; o 59 agora faz igual.
+ *   integral do receptivo  sai da conta principal e ganha coluna própria. No
+ *                          sistema ele não vem de importação — é digitado no
+ *                          card Contribuição Receptivo. Comparado junto, um
+ *                          erro de digitação virava buraco de importação.
+ *   ajuste manual          entra do lado do SISTEMA. É por onde o recebimento
+ *                          de quem trocou de carteira no meio do mês volta ao
+ *                          setor certo; o 59 já acerta isso sozinho, pelo grupo
+ *                          que cobrou a linha.
+ *
  * ## Como ler a diferença
  *
- * `mestre − sistema`, e o sinal diz o que aconteceu:
+ * `mestre comparável − sistema`, e o sinal diz o que aconteceu:
  *
  *   positivo  o mestre tem MAIS. Normal enquanto o setor não importar o 58 do
- *             dia, ou quando o mestre traz a contribuição do receptivo que o
- *             sistema ainda guarda num campo digitado à mão.
- *   negativo  o sistema tem MAIS que o relatório mostra. Este merece olhar: é
- *             dinheiro no banco que o arquivo não repõe.
+ *             dia. Depois do mês fechado, merece olhar.
+ *   negativo  o sistema tem MAIS que o relatório mostra. Este merece olhar
+ *             sempre: é dinheiro no banco que o arquivo não repõe.
  *
  * Um grupo sem vínculo aparece com o sistema zerado — não é divergência, é
  * vínculo faltando, e a linha diz isso em vez de mostrar um número assustador.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Scale, AlertTriangle, Link2Off, ArrowRight, ArrowLeftRight } from 'lucide-react';
+import {
+  RefreshCw, Scale, AlertTriangle, Link2Off, ArrowRight, ArrowLeftRight, Calculator, Users,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
-  compararSetores, buscarSetoresSemGrupo, buscarResumoSetores,
-  type ComparacaoSetor, type SetorSemGrupo, type SetorDoMestre,
+  compararSetores, buscarSetoresSemGrupo, buscarResumoSetores, buscarEmprestados,
+  type ComparacaoSetor, type SetorSemGrupo, type SetorDoMestre, type OperadorEmprestado,
 } from '@/services/mestre/mestre.service';
 
 interface Props { empresaId: string; mes: string }
@@ -43,18 +62,20 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
   const [linhas, setLinhas]     = useState<ComparacaoSetor[]>([]);
   const [orfaos, setOrfaos]     = useState<SetorSemGrupo[]>([]);
   const [porSetor, setPorSetor] = useState<SetorDoMestre[]>([]);
+  const [emprestados, setEmprestados] = useState<OperadorEmprestado[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]         = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null);
     try {
-      const [c, o, s] = await Promise.all([
+      const [c, o, s, e] = await Promise.all([
         compararSetores(empresaId, mes),
         buscarSetoresSemGrupo(empresaId, mes),
         buscarResumoSetores(empresaId, mes),
+        buscarEmprestados(empresaId, mes),
       ]);
-      setLinhas(c); setOrfaos(o); setPorSetor(s);
+      setLinhas(c); setOrfaos(o); setPorSetor(s); setEmprestados(e);
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Falha ao comparar.');
     } finally {
@@ -68,14 +89,28 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
     const vinculados = linhas.filter(l => l.estado === 'vinculado');
     return {
       mestreTudo:  linhas.reduce((s, l) => s + l.mestre_total, 0),
-      mestreVinc:  vinculados.reduce((s, l) => s + l.mestre_total, 0),
+      // O comparável, não o total: o integral do receptivo tem conta separada.
+      mestreVinc:  vinculados.reduce((s, l) => s + l.mestre_comparavel, 0),
       sistemaVinc: vinculados.reduce((s, l) => s + l.sistema_total, 0),
-      semVinculo:  linhas.filter(l => l.estado === 'novo').reduce((s, l) => s + l.mestre_total, 0),
+      ajustes:     vinculados.reduce((s, l) => s + l.sistema_ajustes, 0),
+      colchaoFora: vinculados.reduce((s, l) => s + l.mestre_colchao_fora, 0),
+      integral59:  vinculados.reduce((s, l) => s + l.mestre_contribuido, 0),
+      integralSis: vinculados.reduce((s, l) => s + l.sistema_contrib_receptivo, 0),
+      semVinculo:  linhas.filter(l => l.estado === 'novo').reduce((s, l) => s + l.mestre_comparavel, 0),
       batem:       vinculados.filter(l => Math.abs(l.diferenca) < TOLERANCIA).length,
       total:       vinculados.length,
       orfaoValor:  orfaos.reduce((s, o) => s + o.sistema_total, 0),
     };
   }, [linhas, orfaos]);
+
+  /** Grupos onde o 59 e o card Contribuição Receptivo não dizem o mesmo. */
+  const integralDivergente = useMemo(
+    () => linhas.filter(l =>
+      l.estado === 'vinculado'
+      && (l.mestre_contribuido > 0 || l.sistema_contrib_receptivo > 0)
+      && Math.abs(l.mestre_contribuido - l.sistema_contrib_receptivo) >= TOLERANCIA),
+    [linhas],
+  );
 
   return (
     <div className="space-y-4">
@@ -114,10 +149,14 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Tile rotulo="Mestre (grupos vinculados)" valor={formatBRL(soma.mestreVinc)}
-              sub={`${soma.total} grupo(s)`} />
+            <Tile rotulo="Mestre comparável" valor={formatBRL(soma.mestreVinc)}
+              sub={soma.colchaoFora > 0
+                ? `${soma.total} grupo(s) · sem ${formatBRL(soma.colchaoFora)} de colchão`
+                : `${soma.total} grupo(s)`} />
             <Tile rotulo="Sistema (mesmos setores)" valor={formatBRL(soma.sistemaVinc)}
-              sub="analitico_recebimentos" />
+              sub={soma.ajustes !== 0
+                ? `analítico + ${formatBRL(soma.ajustes)} de ajuste manual`
+                : 'analitico_recebimentos'} />
             <Tile rotulo="Diferença" valor={formatBRL(soma.mestreVinc - soma.sistemaVinc)}
               sub={`${soma.batem} de ${soma.total} batem ao centavo`}
               tom={Math.abs(soma.mestreVinc - soma.sistemaVinc) < TOLERANCIA ? 'ok' : 'alerta'} />
@@ -125,12 +164,139 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
               sub="fora da comparação" tom={soma.semVinculo > 0 ? 'alerta' : undefined} />
           </div>
 
+          {/* ── O integral do receptivo, na sua própria conta ─────────────────
+              Ele não entra na comparação de cima porque no sistema não vem de
+              importação: alguém digita no card Contribuição Receptivo. Aqui as
+              duas fontes ficam lado a lado, que é o único jeito de descobrir um
+              erro de digitação sem confundi-lo com falha de importação. */}
+          {(soma.integral59 > 0 || soma.integralSis > 0) && (
+            <div className={cn('rounded-2xl border overflow-hidden',
+              integralDivergente.length > 0
+                ? 'border-warning/30 bg-warning/5' : 'border-success/25 bg-success/5')}>
+              <div className="px-5 py-3 border-b border-border/20">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Calculator className="w-4 h-4 text-muted-foreground" />
+                  Integral do receptivo: o que o 59 calcula × o que foi digitado
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Fora da comparação principal de propósito — no sistema esse valor é
+                  lançado à mão no card Contribuição Receptivo, e a diferença aqui é erro
+                  de digitação, não de importação.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-sm">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/20">
+                      <th className="text-left font-semibold px-5 py-2">Setor</th>
+                      <th className="text-right font-semibold px-3 py-2">O 59 calcula</th>
+                      <th className="text-right font-semibold px-3 py-2">Card do sistema</th>
+                      <th className="text-right font-semibold px-3 py-2">Diferença</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linhas
+                      .filter(l => l.estado === 'vinculado'
+                        && (l.mestre_contribuido > 0 || l.sistema_contrib_receptivo > 0))
+                      .map(l => {
+                        const d = l.mestre_contribuido - l.sistema_contrib_receptivo;
+                        return (
+                          <tr key={l.cod_grupo_filtro} className="border-b border-border/10 last:border-0">
+                            <td className="px-5 py-2 font-medium text-foreground">{l.setor_nome}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                              {formatBRL(l.mestre_contribuido)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                              {l.sistema_contrib_receptivo > 0
+                                ? formatBRL(l.sistema_contrib_receptivo)
+                                : <span className="text-warning">não lançado</span>}
+                            </td>
+                            <td className={cn('px-3 py-2 text-right tabular-nums font-semibold',
+                              Math.abs(d) < TOLERANCIA ? 'text-success' : 'text-warning')}>
+                              {Math.abs(d) < TOLERANCIA ? 'R$ 0,00' : `${d > 0 ? '+' : ''}${formatBRL(d)}`}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Quem cobrou carteira de outro setor ───────────────────────────
+              A lista que o processo manual não tinha. Em agosto/2026 seis das
+              sete pessoas do caso Play Mix → Play 5 foram lançadas à mão em
+              31/08; a sétima só apareceu porque alguém foi conferir. Aqui o 59
+              acha todas, e diz qual ainda não tem ajuste no destino. */}
+          {emprestados.length > 0 && (
+            <div className="rounded-2xl border border-border/40 bg-card/95 overflow-hidden">
+              <div className="px-5 py-3 border-b border-border/30">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  Cobraram carteira de outro setor
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  O <span className="font-medium">NomeGrupoFiltro</span> do 59 é a carteira, não a
+                  equipe de quem cobrou. O dinheiro conta para o setor da pessoa — o 59 já faz isso
+                  sozinho; no sistema depende de alguém lançar o ajuste manual.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/30">
+                      <th className="text-left font-semibold px-5 py-2">Pessoa</th>
+                      <th className="text-left font-semibold px-3 py-2">Carteira</th>
+                      <th className="text-left font-semibold px-3 py-2">Conta para</th>
+                      <th className="text-right font-semibold px-3 py-2">Valor</th>
+                      <th className="text-right font-semibold px-3 py-2">Ajuste no sistema</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emprestados.map(e => {
+                      const semAjuste = e.ajuste_valor === null;
+                      return (
+                        <tr key={`${e.cobradora}-${e.de_cod}`} className="border-b border-border/20 last:border-0">
+                          <td className="px-5 py-2">
+                            <span className="font-medium text-foreground">
+                              {e.operador_nome ?? e.cobradora}
+                            </span>
+                            <span className="font-mono text-[10px] ml-1.5 px-1 rounded bg-muted text-muted-foreground">
+                              {e.cobradora}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{e.de_carteira}</td>
+                          <td className="px-3 py-2 text-xs text-foreground">{e.para_setor ?? '—'}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-foreground">
+                            {formatBRL(e.valor)}
+                          </td>
+                          <td className={cn('px-3 py-2 text-right tabular-nums text-xs',
+                            semAjuste ? 'text-warning font-semibold' : 'text-success')}>
+                            {semAjuste ? 'não lançado' : formatBRL(e.ajuste_valor ?? 0)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {emprestados.some(e => e.ajuste_valor === null) && (
+                <p className="px-5 py-2.5 text-[11px] text-warning border-t border-border/20">
+                  {formatBRL(emprestados.filter(e => e.ajuste_valor === null)
+                    .reduce((s, e) => s + e.valor, 0))} sem ajuste no sistema.
+                  O 59 já conta no setor certo; o Painel Líder só vai contar quando o ajuste for lançado.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ── Total por SETOR ──────────────────────────────────────────────
               Ele existe porque o total de um setor deixou de ser a soma dos
               grupos ligados a ele: uma equipe movida sai de um e entra em
               outro, e o destino pode ser um setor sem grupo nenhum. Sem esta
               tabela, o dinheiro movido não teria onde aparecer. */}
-          {porSetor.some(s => s.recebido_movido !== 0) && (
+          {porSetor.some(s => s.recebido_movido !== 0 || s.recebido_emprestado !== 0) && (
             <div className="rounded-2xl border border-chart-4/30 bg-chart-4/5 overflow-hidden">
               <div className="px-5 py-3 border-b border-chart-4/20">
                 <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -143,12 +309,13 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-chart-4/20">
                       <th className="text-left font-semibold px-5 py-2">Setor</th>
                       <th className="text-right font-semibold px-3 py-2">Dos grupos</th>
                       <th className="text-right font-semibold px-3 py-2">Movido para cá</th>
+                      <th className="text-right font-semibold px-3 py-2">Gente daqui cobrando fora</th>
                       <th className="text-right font-semibold px-3 py-2">Total</th>
                     </tr>
                   </thead>
@@ -170,6 +337,10 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                           s.recebido_movido > 0 ? 'text-chart-4 font-medium' : 'text-muted-foreground/50')}>
                           {s.recebido_movido > 0 ? `+${formatBRL(s.recebido_movido)}` : '—'}
                         </td>
+                        <td className={cn('px-3 py-2 text-right tabular-nums',
+                          s.recebido_emprestado > 0 ? 'text-chart-4 font-medium' : 'text-muted-foreground/50')}>
+                          {s.recebido_emprestado > 0 ? `+${formatBRL(s.recebido_emprestado)}` : '—'}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold text-foreground">
                           {formatBRL(s.total)}
                         </td>
@@ -187,7 +358,7 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                 <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                   <th className="text-left font-semibold px-5 py-2.5">Grupo do relatório</th>
                   <th className="text-left font-semibold px-3 py-2.5">Setor</th>
-                  <th className="text-right font-semibold px-3 py-2.5">Mestre</th>
+                  <th className="text-right font-semibold px-3 py-2.5">Mestre comparável</th>
                   <th className="text-right font-semibold px-3 py-2.5">Sistema</th>
                   <th className="text-right font-semibold px-3 py-2.5">Diferença</th>
                 </tr>
@@ -204,9 +375,17 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                           </span>
                           <span className="font-medium text-foreground">{l.rotulo || '—'}</span>
                         </span>
-                        {l.mestre_contribuido > 0 && (
+                        {/* O que foi posto de lado para os dois lados baterem.
+                            Sem esta linha, quem somar o relatório bruto acha
+                            que o número da tela está errado. */}
+                        {(l.mestre_contribuido > 0 || l.mestre_colchao_fora > 0) && (
                           <span className="block text-[11px] text-muted-foreground mt-0.5">
-                            {formatBRL(l.mestre_proprio)} próprio + {formatBRL(l.mestre_contribuido)} do receptivo
+                            fora daqui:
+                            {l.mestre_contribuido > 0 &&
+                              ` ${formatBRL(l.mestre_contribuido)} de integral do receptivo`}
+                            {l.mestre_contribuido > 0 && l.mestre_colchao_fora > 0 && ' ·'}
+                            {l.mestre_colchao_fora > 0 &&
+                              ` ${formatBRL(l.mestre_colchao_fora)} de colchão fora da meta`}
                           </span>
                         )}
                       </td>
@@ -222,10 +401,20 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-foreground">
-                        {formatBRL(l.mestre_total)}
+                        {formatBRL(l.mestre_comparavel)}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                        {l.estado === 'vinculado' ? formatBRL(l.sistema_total) : '—'}
+                        {l.estado === 'vinculado' ? (
+                          <>
+                            {formatBRL(l.sistema_total)}
+                            {l.sistema_ajustes !== 0 && (
+                              <span className="block text-[10px] text-chart-4">
+                                {formatBRL(l.sistema_analitico)} {l.sistema_ajustes > 0 ? '+' : '−'}{' '}
+                                {formatBRL(Math.abs(l.sistema_ajustes))} de ajuste
+                              </span>
+                            )}
+                          </>
+                        ) : '—'}
                       </td>
                       <td className={cn('px-3 py-2.5 text-right tabular-nums font-semibold',
                         l.estado !== 'vinculado' ? 'text-muted-foreground'
@@ -243,10 +432,13 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
+            Os dois lados usam a mesma régua: sem o colchão fora da meta (que o 58 guarda em
+            tabela separada), sem o integral do receptivo (que tem a conta acima) e com os
+            ajustes manuais somados do lado do sistema.{' '}
             <span className="text-warning font-medium">Positivo</span> = o mestre tem mais; normal
-            enquanto o setor não importa o 58 do dia, e esperado quando o mestre já traz a
-            contribuição do receptivo. <span className="text-destructive font-medium">Negativo</span> =
-            o sistema tem mais do que o relatório mostra — esse merece olhar.
+            enquanto o setor não importa o 58 do dia.{' '}
+            <span className="text-destructive font-medium">Negativo</span> = o sistema tem mais do
+            que o relatório mostra — esse merece olhar sempre.
           </p>
 
           {orfaos.length > 0 && (

@@ -120,6 +120,15 @@ export function Mestre59Equipe({ empresaId, mes, codGrupo, subgrupo, equipeVincu
                   Extra {formatBRL(o.extra_valor)}
                 </Badge>
               )}
+              {/* Fora do valor à direita, pela mesma regra do 58. Aparece aqui
+                  porque some do total, e ninguém deve descobrir isso somando. */}
+              {o.colchao_fora > 0 && (
+                <Badge variant="outline"
+                  className="text-[10px] text-muted-foreground border-border/60 shrink-0"
+                  title="Colchão fora da janela de exceção. O 58 guarda essas linhas em tabela separada e não as soma em meta nenhuma.">
+                  + {formatBRL(o.colchao_fora)} fora da meta
+                </Badge>
+              )}
               <span className="text-muted-foreground tabular-nums shrink-0 w-20 text-right">
                 {o.nrs} NR{o.nrs !== 1 ? 's' : ''}
               </span>
@@ -153,13 +162,20 @@ export function Mestre59Equipe({ empresaId, mes, codGrupo, subgrupo, equipeVincu
                         <tbody>
                           {(linhas[o.cobradora] ?? []).map((l, i) => (
                             <tr key={`${l.nr_documento}-${l.parcela}-${l.linha_num}-${i}`}
-                              className="border-b border-border/20 last:border-0">
+                              className={cn('border-b border-border/20 last:border-0',
+                                // A lista traz TUDO — é tela de conferência. O que
+                                // não entra no total fica apagado, para a soma da
+                                // tela não parecer erro do card.
+                                !l.conta_na_meta && 'opacity-55')}>
                               <td className="px-2.5 py-1.5 whitespace-nowrap">
                                 <span className="font-mono text-foreground">{l.nr_documento}</span>
                                 <span className="text-muted-foreground">/{l.parcela}</span>
                                 {l.colchao && (
-                                  <Badge variant="outline" className="ml-1.5 text-[9px] text-muted-foreground">
-                                    colchão
+                                  <Badge variant="outline" className={cn('ml-1.5 text-[9px]',
+                                    l.conta_na_meta
+                                      ? 'text-muted-foreground'
+                                      : 'text-warning border-warning/40')}>
+                                    {l.conta_na_meta ? 'colchão' : 'colchão · fora da meta'}
                                   </Badge>
                                 )}
                                 {l.tipo.toLowerCase() === 'extra' && (

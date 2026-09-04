@@ -65,6 +65,9 @@ const ROTULO_ORIGEM: Record<OrigemDoGrupo['origem'], string> = {
   contribuicao: 'Cobrado por outro setor para este',
   para_outro:   'Deste setor, carimbado para outro',
   sem_destino:  'Destino não reconhecido',
+  // Fora do total pela mesma regra do 58, que guarda essas linhas em
+  // `analitico_colchao_fora_meta` em vez de somá-las na meta.
+  colchao_fora: 'Colchão fora da meta (não soma)',
 };
 
 const PROBLEMA: Record<ProblemaOperador, { rotulo: string; grave: boolean }> = {
@@ -305,6 +308,15 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
                 {e.extra_valor > 0 && (
                   <Badge variant="outline" className="text-[10px] text-chart-4 border-chart-4/40 shrink-0">
                     Extra {formatBRL(e.extra_valor)}
+                  </Badge>
+                )}
+                {/* Já fora do valor ao lado. Mostrado porque some do total, e a
+                    régua é a do 58 — não uma escolha desta tela. */}
+                {e.colchao_fora > 0 && (
+                  <Badge variant="outline"
+                    className="text-[10px] text-muted-foreground border-border/60 shrink-0"
+                    title="Colchão fora da janela de exceção. O 58 guarda essas linhas em tabela separada e não as soma em meta nenhuma.">
+                    + {formatBRL(e.colchao_fora)} fora da meta
                   </Badge>
                 )}
                 <span className="tabular-nums font-semibold text-foreground shrink-0 w-28 text-right">

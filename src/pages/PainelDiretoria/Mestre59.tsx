@@ -279,6 +279,9 @@ export function Mestre59({ empresaId, mes }: Props) {
       vinculadoQtd:    vinculados.length,
       linhas:          grupos.reduce((s, g) => s + g.linhas, 0),
       semDestino:      grupos.reduce((s, g) => s + g.sem_destino, 0),
+      // Fora de TODOS os números acima, pela mesma regra do 58. O arquivo tem
+      // esse dinheiro; a meta, não.
+      colchaoFora:     grupos.reduce((s, g) => s + g.colchao_fora, 0),
     };
   }, [grupos]);
 
@@ -430,8 +433,14 @@ export function Mestre59({ empresaId, mes }: Props) {
               <>{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</>
             ) : (
               <>
-                <Tile rotulo="Total do relatório" valor={formatBRL(resumo.totalArquivo)}
-                  sub={`${resumo.linhas.toLocaleString('pt-BR')} linhas · cada uma uma vez`} />
+                {/* «Que conta», e não «do relatório»: o arquivo tem mais. O
+                    colchão fora da meta está no 59 e fora deste número, pela
+                    mesma regra do 58 — e o subtítulo diz quanto, para o número
+                    do arquivo continuar reconstruível de cabeça. */}
+                <Tile rotulo="Total que conta" valor={formatBRL(resumo.totalArquivo)}
+                  sub={resumo.colchaoFora > 0
+                    ? `${resumo.linhas.toLocaleString('pt-BR')} linhas · fora, ${formatBRL(resumo.colchaoFora)} de colchão`
+                    : `${resumo.linhas.toLocaleString('pt-BR')} linhas · cada uma uma vez`} />
                 <Tile rotulo="Vinculado a setor" valor={formatBRL(resumo.vinculadoValor)}
                   sub={`${resumo.vinculadoQtd} grupo(s)`} tom="ok" />
                 <Tile rotulo="Sem vínculo" valor={formatBRL(resumo.semVinculoValor)}
@@ -537,6 +546,22 @@ export function Mestre59({ empresaId, mes }: Props) {
                                     {(g.saiu_outro_setor + g.saiu_somente_geral) > 0 && (
                                       <span className="text-chart-4">
                                         {" "}· {formatBRL(g.saiu_outro_setor + g.saiu_somente_geral)} movidos para fora
+                                      </span>
+                                    )}
+                                    {/* Já fora dos valores da linha, pela régua do
+                                        58 (`colchaoContaNaMeta`). Dito aqui para
+                                        ninguém procurar o dinheiro que sumiu. */}
+                                    {g.colchao_fora > 0 && (
+                                      <span className="text-muted-foreground/70">
+                                        {" "}· {formatBRL(g.colchao_fora)} de colchão fora da meta, que não soma
+                                      </span>
+                                    )}
+                                    {/* Cobrado nesta carteira por gente de outro
+                                        setor. Já saiu do total; conta lá. */}
+                                    {g.emprestado_para > 0 && (
+                                      <span className="text-chart-4">
+                                        {" "}· {formatBRL(g.emprestado_para)} cobrados por {g.emprestado_pessoas}{' '}
+                                        pessoa(s) de outro setor, que contam lá
                                       </span>
                                     )}
                                   </>}
