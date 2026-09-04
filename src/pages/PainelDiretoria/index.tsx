@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, DollarSign, BarChart3,
-  Building2, RefreshCw, CreditCard,
+  Building2, RefreshCw, CreditCard, Database,
   TrendingDown, Target, Activity, PieChart,
   AlertCircle, CheckCircle2, Clock, CalendarClock,
 } from 'lucide-react';
@@ -44,6 +44,13 @@ import { ReceitaDistribuicaoPP } from './ReceitaDistribuicaoPP';
 import { MetaSection } from './MetaSection';
 import { ExtrasSection } from './ExtrasSection';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
+
+/*
+ * Carregada só quando a aba é aberta. Ela traz o parser do 59 e a tabela de
+ * vínculos, e nada disso serve ao painel — que é o que 99% de quem entra aqui
+ * quer ver. Aba de conferência não paga bundle da tela principal.
+ */
+const Mestre59 = lazy(() => import('./Mestre59'));
 
 /**
  * Painel Diretoria.
@@ -286,6 +293,21 @@ export default function PainelDiretoria() {
   const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const carregando = loading || escopoPendente;
 
+  /*
+   * A aba do relatório 59 é de super_admin, e o gate é por CARGO em vez de uma
+   * chave do painel de permissões de propósito.
+   *
+   * Toda chave de permissão nasce para ser ligada por alguém, e ligá-la aqui
+   * daria acesso a uma tela que ainda mostra número em conferência. Enquanto o
+   * mestre não virar fonte, o alcance não é configurável — é fechado. A chave
+   * entra junto com a promoção do 59 a fonte de verdade, que é quando existir
+   * decisão de produto sobre quem deve ver.
+   */
+  const podeVerMestre = perfil?.perfil === 'super_admin';
+  const [aba, setAba] = useState<'painel' | 'mestre'>('painel');
+  // Perder a permissão com a aba aberta não pode deixar o conteúdo no ar.
+  const abaVisivel = podeVerMestre ? aba : 'painel';
+
   if (!perfil) return null;
 
   return (
@@ -341,6 +363,38 @@ export default function PainelDiretoria() {
           </div>
         </div>
       </motion.div>
+
+      {/* ── Abas internas ────────────────────────────────────────────────────
+          A barra só existe para quem tem mais de uma aba. Um seletor com uma
+          opção só é ruído — mesma regra do filtro de setor no Painel Líder. */}
+      {podeVerMestre && (
+        <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
+          {([
+            { key: 'painel' as const, label: 'Painel', Icon: TrendingUp },
+            { key: 'mestre' as const, label: 'Relatório 59', Icon: Database },
+          ]).map(({ key, label, Icon }) => (
+            <button key={key} type="button" onClick={() => setAba(key)}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
+                abaVisivel === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+              )}
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {abaVisivel === 'mestre' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          {/* `mesAnalise` é o mês do seletor do cabeçalho: as duas abas olham o
+              mesmo período, senão trocar de aba trocaria o mês em silêncio. */}
+          <Mestre59 empresaId={empresa?.id ?? ''} mes={mesAnalise} />
+        </Suspense>
+      ) : (
+      <>
 
       {/* ── KPIs principais ─────────────────────────────────────────────────────── */}
       <SectionLabel>Indicadores-chave do mês</SectionLabel>
@@ -703,6 +757,9 @@ export default function PainelDiretoria() {
             </div>
           </motion.div>
         </>
+      )}
+
+      </>
       )}
     </div>
   );

@@ -15,7 +15,8 @@
  * Quando os tipos forem regenerados, os usos daqui podem voltar ao
  * `supabase.from(...)` normal.
  *
- * Hoje serve `composicao_mes` e `composicao_mes_equipe` (migration 20260803c).
+ * Hoje serve `composicao_mes` e `composicao_mes_equipe` (migration 20260803c) e
+ * as tabelas do relatório mestre 59 (migration 20260904100000).
  */
 import { supabase } from '@/lib/supabase';
 
@@ -27,6 +28,12 @@ export interface RespostaTabela<T> {
 interface ConsultaSemTipo<T> extends PromiseLike<RespostaTabela<T>> {
   select(colunas: string): ConsultaSemTipo<T>;
   eq(coluna: string, valor: string): ConsultaSemTipo<T>;
+  /* `order` e `limit` entraram com o relatório 59 (migration 20260904100000):
+     lista de cargas e histórico só fazem sentido do mais recente para o mais
+     antigo, e sem teto uma tabela de eventos cresce sem fim. Continuam sendo
+     leitura — a fronteira do módulo não mudou. */
+  order(coluna: string, opcoes?: { ascending?: boolean }): ConsultaSemTipo<T>;
+  limit(n: number): ConsultaSemTipo<T>;
 }
 
 /** Consulta de leitura numa tabela que os tipos gerados ainda não conhecem. */

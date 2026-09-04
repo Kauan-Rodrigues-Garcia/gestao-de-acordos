@@ -126,6 +126,15 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'fallback do item sem chave de permissão: só o Dashboard cai nele, e super_admin sempre passa.',
   },
+  'pages/PainelDiretoria/index.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo:
+      'a aba do relatório 59 é conferência: o mestre roda em paralelo e ainda não alimenta '
+      + 'tela nenhuma. Uma chave de painel existe para ser ligada, e ligá-la daria a alguém '
+      + 'um total que ainda pode mudar — número visto uma vez vira referência mesmo depois de '
+      + 'corrigido. O alcance passa a ser configurável quando o 59 virar fonte de verdade, que '
+      + 'é quando existir decisão de produto sobre quem deve ver.',
+  },
   'pages/AdminConfiguracoes.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a aba Multiempresa só existe para super_admin — quem decide são as RPCs e o trigger em perfis.',
