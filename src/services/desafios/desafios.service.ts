@@ -27,10 +27,14 @@
  */
 import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { getTodayISO } from '@/lib';
+import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
 import { registrarLog } from '@/services/logs.service';
+import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { modeloDoTipo } from './tiposDesafio';
 import type {
-  AcentoDesafio, DadosDesafio, Desafio, MetricaDesafio, ModoDisputa,
+  AcentoDesafio, ContextoEquipe, DadosDesafio, Desafio, FonteMeta,
+  MetricaDesafio, ModoDisputa,
   ParticipantesDesafio, PessoaDesafio, PremioPorPosicao, RegraDesafio,
   SetorDisponivel, StatusDesafio, TemaDesafio, TipoDesafio,
   VisibilidadeDesafio, VisualDesafio,
@@ -160,7 +164,22 @@ export function normalizarRegra(bruto: unknown, tipo: TipoDesafio): RegraDesafio
     // `proprio` é o padrão e o que toda campanha anterior fazia. Só a disputa
     // entre líderes pede o outro.
     fonteResultado: o.fonteResultado === 'equipe_liderada' ? 'equipe_liderada' : 'proprio',
+    fonteMeta: normalizarFonteMeta(o.fonteMeta, o.fonteResultado),
   };
+}
+
+/**
+ * A fonte da meta, com a única amarra que o par tem.
+ *
+ * Meta de equipe contra recebimento próprio compararia coisas diferentes — o
+ * número de uma pessoa contra o alvo de um time inteiro. Em vez de deixar a
+ * combinação gravada e produzir um ranking sem sentido, ela cai em
+ * `individual` na leitura. Vale também para a campanha cujo `fonteResultado`
+ * foi trocado de volta para `proprio` depois de ter sido de líderes.
+ */
+function normalizarFonteMeta(bruto: unknown, fonteResultado: unknown): FonteMeta {
+  if (fonteResultado !== 'equipe_liderada') return 'individual';
+  return bruto === 'meta_equipe' || bruto === 'projecao_equipe' ? bruto : 'individual';
 }
 
 /** O visual da campanha. Tema desconhecido cai no padrão, nunca em tela branca. */
@@ -290,6 +309,61 @@ export async function buscarDadosDesafio(desafioId: string): Promise<DadosDesafi
       total_ho:    Number(l.total_ho) || 0,
       qtd:         Number(l.qtd) || 0,
     })),
+  };
+}
+
+/**
+ * As metas de equipe e a contagem de dias úteis, para a campanha que as usa.
+ *
+ * ## De onde saem os números
+ *
+ * Das MESMAS fontes de Desempenho Equipes: `metas` (tipo `equipe`) para o alvo
+ * e `metas_config_mes` para feriados e `contar_dia_atual`. Buscar de outro
+ * lugar faria a mesma equipe ter uma projeção no painel e outra no desafio —
+ * e a primeira pergunta de quem visse a diferença seria qual das duas mente.
+ *
+ * ## Qual mês
+ *
+ * O do `dataFim` da campanha. Meta e dias úteis são MENSAIS; a campanha não é
+ * — ela «pode atravessar o mês», como diz o tipo. Alguma escolha tinha de ser
+ * feita, e o fim é o mês em que a disputa se decide.
+ *
+ * A consequência é boa nos dois extremos: campanha que termina neste mês lê a
+ * mesma coisa que o painel mostra agora; campanha encerrada num mês passado lê
+ * aquele mês inteiro — `diasUteisDecorridos` filtra por «até hoje», e num mês
+ * que já passou isso é o mês todo. Ou seja, num mês fechado a projeção vira a
+ * meta cheia, que é exatamente o alvo certo para um período encerrado.
+ */
+export async function buscarContextoEquipe(
+  empresaId: string, dataFimISO: string,
+): Promise<ContextoEquipe> {
+  const [ano, mes] = dataFimISO.split('-').map(Number);
+  const vazio: ContextoEquipe = {
+    metaPorEquipe: {}, totalUteis: 0, decorridos: 0, mes, ano,
+  };
+  if (!Number.isFinite(ano) || !Number.isFinite(mes)) return vazio;
+
+  const [{ data: metas }, cfg] = await Promise.all([
+    supabase.from('metas').select('referencia_id, meta_valor')
+      .eq('empresa_id', empresaId).eq('mes', mes).eq('ano', ano)
+      .eq('tipo', 'equipe'),
+    getMetasConfig(empresaId, mes, ano),
+  ]);
+
+  const metaPorEquipe: Record<string, number> = {};
+  for (const m of (metas as { referencia_id: string; meta_valor: number }[]) ?? []) {
+    const v = Number(m.meta_valor) || 0;
+    if (v > 0) metaPorEquipe[m.referencia_id] = v;
+  }
+
+  const feriados = cfg.data?.feriados ?? [];
+  return {
+    metaPorEquipe,
+    totalUteis: diasUteisDoMes(ano, mes, feriados),
+    decorridos: diasUteisDecorridos(
+      ano, mes, feriados, getTodayISO(), undefined, cfg.data?.contar_dia_atual === true,
+    ),
+    mes, ano,
   };
 }
 

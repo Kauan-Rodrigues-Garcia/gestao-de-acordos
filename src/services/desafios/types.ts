@@ -168,10 +168,39 @@ export interface RegraDesafio {
    * a equipe dele, e ranqueá-lo pelo próprio card o deixaria zerado.
    */
   fonteResultado: FonteResultado;
+  /**
+   * De onde sai a META de quem disputa.
+   *
+   * Existe porque `fonteResultado = 'equipe_liderada'` resolvia só metade da
+   * disputa entre líderes: o número do líder passava a ser o da equipe, mas o
+   * alvo dele continuava sendo uma meta de UMA pessoa. O líder aparecia com
+   * 1200% e o ranking por falta ou por percentual perdia o sentido entre
+   * equipes de tamanhos diferentes.
+   *
+   * `individual`       — o mapa de metas da campanha, ou a meta única dela.
+   *                      É o padrão e o comportamento de toda campanha
+   *                      anterior a este campo.
+   *
+   * `meta_equipe`      — a meta MENSAL da equipe que a pessoa lidera, a mesma
+   *                      da aba Metas que Desempenho Equipes lê.
+   *
+   * `projecao_equipe`  — o quanto da meta da equipe já deveria ter entrado até
+   *                      hoje. É o `esperado` de `calcularProjecao`, a mesma
+   *                      conta que Desempenho Equipes usa para dizer se a
+   *                      equipe está no ritmo.
+   *
+   * Os dois últimos só valem com `fonteResultado = 'equipe_liderada'`: medir o
+   * recebimento de UMA pessoa contra a meta da equipe inteira compararia
+   * coisas diferentes.
+   */
+  fonteMeta: FonteMeta;
 }
 
 /** Ver `RegraDesafio.fonteResultado`. */
 export type FonteResultado = 'proprio' | 'equipe_liderada';
+
+/** Ver `RegraDesafio.fonteMeta`. */
+export type FonteMeta = 'individual' | 'meta_equipe' | 'projecao_equipe';
 
 /** Tema da campanha. Governa a gincana, não o desenho da aplicação. */
 export type TemaDesafio = 'padrao' | 'cafe' | 'corrida' | 'equipes';
@@ -340,4 +369,27 @@ export interface LinhaDesafio {
 export interface DadosDesafio {
   participantes: PessoaDesafio[];
   linhas: LinhaDesafio[];
+}
+
+/**
+ * O que a campanha precisa saber sobre as equipes para usar a meta delas.
+ *
+ * Só é buscado quando `regra.fonteMeta` não é `individual` — campanha de meta
+ * individual não paga por uma consulta que não vai ler.
+ *
+ * As três informações vêm das MESMAS fontes de Desempenho Equipes: a meta da
+ * aba Metas (`metas`, tipo `equipe`) e a contagem de dias úteis de
+ * `metas_config_mes` (feriados e `contar_dia_atual`). Se elas divergissem, a
+ * mesma equipe teria uma projeção no painel e outra no desafio.
+ */
+export interface ContextoEquipe {
+  /** Meta mensal por equipe. Sem entrada = equipe sem meta configurada. */
+  metaPorEquipe: Record<string, number>;
+  /** Dias úteis do mês inteiro. */
+  totalUteis: number;
+  /** Dias úteis já trabalhados. */
+  decorridos: number;
+  /** Mês e ano de onde as metas saíram — a tela diz isso ao usuário. */
+  mes: number;
+  ano: number;
 }

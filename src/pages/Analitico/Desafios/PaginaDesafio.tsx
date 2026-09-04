@@ -64,7 +64,7 @@ import {
 import { ACENTOS_DISPONIVEIS, hojeISO } from './tema';
 import type {
   AcentoDesafio, AjusteImagem, CriterioRanking, Desafio, EscopoDisputa,
-  FonteResultado,
+  FonteMeta, FonteResultado,
   ParticipantesDesafio, PessoaDesafio, Premiacao, PremioPorPosicao,
   SetorDisponivel, StatusDesafio, TemaDesafio, TipoDesafio,
   VisibilidadeDesafio,
@@ -110,6 +110,30 @@ const FONTES: { valor: FonteResultado; rotulo: string; ajuda: string }[] = [
   },
 ];
 
+/**
+ * A meta de quem disputa. Só aparece na disputa entre líderes.
+ *
+ * Com o resultado saindo da equipe, medir contra uma meta de uma pessoa daria
+ * percentuais de mil por cento e um ranking sem sentido entre equipes de
+ * tamanhos diferentes — ver `RegraDesafio.fonteMeta`.
+ */
+const FONTES_META: { valor: FonteMeta; rotulo: string; ajuda: string }[] = [
+  {
+    valor: 'individual', rotulo: 'A meta digitada na campanha',
+    ajuda: 'O quadro de metas por pessoa, ou a meta única desta campanha.',
+  },
+  {
+    valor: 'meta_equipe', rotulo: 'A meta mensal da equipe',
+    ajuda: 'A meta da equipe na aba Metas, cheia — a mesma que Desempenho Equipes usa.',
+  },
+  {
+    valor: 'projecao_equipe', rotulo: 'A projeção da equipe (meta até hoje)',
+    ajuda: 'Quanto da meta da equipe já deveria ter entrado até hoje, pelos dias úteis '
+         + 'corridos. É a projeção de Desempenho Equipes, e compara equipes de tamanhos '
+         + 'diferentes de forma justa.',
+  },
+];
+
 const VISIBILIDADES: { valor: VisibilidadeDesafio; rotulo: string; ajuda: string }[] = [
   {
     valor: 'alcance', rotulo: 'Quem a régua de permissões alcançar',
@@ -131,6 +155,7 @@ interface Formulario {
   escopoDisputa: EscopoDisputa;
   premiacao: Premiacao;
   fonteResultado: FonteResultado;
+  fonteMeta: FonteMeta;
   individual: boolean;
   equipe: boolean;
   metaIndividual: string;
@@ -166,7 +191,7 @@ function formularioVazio(): Formulario {
     dataInicio: hoje, dataFim: hoje,
     tipo: 'bater_meta',
     escopoDisputa: 'empresa', premiacao: 'melhor_colocado',
-    fonteResultado: 'proprio',
+    fonteResultado: 'proprio', fonteMeta: 'individual',
     individual: true, equipe: true,
     metaIndividual: '', metaEquipe: '', metaColetiva: '',
     criterio: 'menor_falta',
@@ -192,6 +217,7 @@ function formularioDe(d: Desafio): Formulario {
     escopoDisputa: d.regra.escopoDisputa,
     premiacao: d.regra.premiacao,
     fonteResultado: d.regra.fonteResultado,
+    fonteMeta: d.regra.fonteMeta,
     individual: d.regra.modo.includes('individual'),
     equipe:     d.regra.modo.includes('equipe'),
     metaIndividual: emReais(d.regra.metaIndividual),
@@ -372,6 +398,7 @@ export function PaginaDesafio({
         participantes: participacao,
         premios,
         fonteResultado: form.fonteResultado,
+        fonteMeta: form.fonteMeta,
       },
       visual: {
         tema: form.tema,
@@ -675,7 +702,15 @@ export function PaginaDesafio({
               <Label>O número de cada participante é</Label>
               <Select
                 value={form.fonteResultado}
-                onValueChange={v => setForm(f => ({ ...f, fonteResultado: v as FonteResultado }))}
+                onValueChange={v => setForm(f => ({
+                  ...f,
+                  fonteResultado: v as FonteResultado,
+                  // Sair da disputa entre líderes zera a fonte da meta: meta de
+                  // equipe contra recebimento próprio compararia o número de uma
+                  // pessoa com o alvo de um time. O normalizador recusa esse par
+                  // na leitura, e deixá-lo no formulário só adiaria a surpresa.
+                  fonteMeta: v === 'equipe_liderada' ? f.fonteMeta : 'individual',
+                }))}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -688,6 +723,31 @@ export function PaginaDesafio({
                 {FONTES.find(o => o.valor === form.fonteResultado)?.ajuda}
               </p>
             </div>
+
+            {/*
+              A meta só é escolhível na disputa entre líderes — nos outros modos
+              ela vem do quadro de metas, e um seletor com uma opção só seria
+              ruído.
+            */}
+            {form.fonteResultado === 'equipe_liderada' && (
+              <div className="space-y-1.5">
+                <Label>A meta de cada participante é</Label>
+                <Select
+                  value={form.fonteMeta}
+                  onValueChange={v => setForm(f => ({ ...f, fonteMeta: v as FonteMeta }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FONTES_META.map(o => (
+                      <SelectItem key={o.valor} value={o.valor}>{o.rotulo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  {FONTES_META.find(o => o.valor === form.fonteMeta)?.ajuda}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-6 rounded-lg border border-border p-3">
@@ -714,6 +774,23 @@ export function PaginaDesafio({
             <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
               O modelo «{modelo.nome}» não usa meta — o ranking ordena pelo
               critério escolhido em Regras.
+            </p>
+          ) : modelo.usaMeta && form.fonteMeta !== 'individual' ? (
+            /*
+              A meta vem da aba Metas, não daqui. Mostrar os campos desligados
+              seria pior que escondê-los: quem os visse preencheria, e o número
+              digitado não teria efeito nenhum sobre o ranking — que é
+              exatamente o defeito que este modo veio corrigir.
+            */
+            <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+              A meta desta campanha vem da{' '}
+              {form.fonteMeta === 'meta_equipe'
+                ? 'meta mensal de cada equipe'
+                : 'projeção de cada equipe — a meta mensal dela até o dia de hoje'}
+              , configurada na aba Metas. Nada a preencher aqui.
+              <br />
+              Equipe sem meta no mês entra no placar sem meta, mostrando só o
+              recebimento.
             </p>
           ) : (
             <>

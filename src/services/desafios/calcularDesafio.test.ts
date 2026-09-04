@@ -91,6 +91,7 @@ function desafio(over: OverDesafio = {}): Desafio {
       },
       premios: [],
       fonteResultado: 'proprio',
+      fonteMeta: 'individual',
       ...(over.regra ?? {}),
     },
     visual: {
@@ -784,6 +785,187 @@ describe('resultado vindo da equipe liderada', () => {
       dados: { participantes: [...participantes, solto], linhas },
     });
     expect(r.individual.find(i => i.pessoa.id === 'l3')?.recebido).toBe(0);
+  });
+});
+
+describe('meta vinda da equipe', () => {
+  /*
+   * A outra metade da disputa entre lideres.
+   *
+   * `equipe_liderada` ja fazia o RECEBIMENTO do lider ser o da equipe, mas a
+   * meta dele continuava sendo a de uma pessoa: equipe com 50.000 contra meta
+   * de 20.000 dava 250%, e o ranking por falta ou por percentual comparava
+   * equipes de tamanhos diferentes com reguas diferentes.
+   */
+  const lider1 = pessoa({
+    id: 'l1', nome: 'Lider A', perfil: 'lider', equipeId: 'eq1', equipes: ['eq1'],
+  });
+  const lider2 = pessoa({
+    id: 'l2', nome: 'Lider B', perfil: 'lider', equipeId: 'eq2', equipes: ['eq2'],
+    equipeNome: 'PLAY 2',
+  });
+  const membro1 = pessoa({ id: 'm1', nome: 'Membro A1', equipeId: 'eq1', equipes: ['eq1'] });
+  const membro2 = pessoa({
+    id: 'm2', nome: 'Membro B1', equipeId: 'eq2', equipes: ['eq2'], equipeNome: 'PLAY 2',
+  });
+
+  const participantes = [lider1, lider2, membro1, membro2];
+  const linhas = [
+    linha('m1', 30_000),   // equipe 1
+    linha('m2', 60_000),   // equipe 2
+  ];
+
+  /** 20 dias uteis no mes, 10 corridos: a projecao e METADE da meta. */
+  const contextoEquipe = {
+    metaPorEquipe: { eq1: 100_000, eq2: 200_000 },
+    totalUteis: 20,
+    decorridos: 10,
+    mes: 8,
+    ano: 2026,
+  };
+
+  function campanha(fonteMeta: 'meta_equipe' | 'projecao_equipe') {
+    return desafio({
+      regra: {
+        criterioRanking: 'maior_percentual',
+        metaIndividual: 20_000,       // fica para tras de proposito
+        metaEquipe: null,
+        fonteResultado: 'equipe_liderada',
+        fonteMeta,
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+          convidados: [],
+        },
+      },
+    });
+  }
+
+  it('`meta_equipe` usa a meta MENSAL da equipe, e nao a meta individual', () => {
+    const r = calcularDesafio({
+      desafio: campanha('meta_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+
+    const a = r.individual.find(i => i.pessoa.id === 'l1');
+    const b = r.individual.find(i => i.pessoa.id === 'l2');
+    expect(a?.meta).toBe(100_000);
+    expect(b?.meta).toBe(200_000);
+    // 30.000/100.000 e 60.000/200.000 — a meta individual de 20.000 nao entrou.
+    expect(a?.progresso).toBeCloseTo(30, 5);
+    expect(b?.progresso).toBeCloseTo(30, 5);
+  });
+
+  it('`projecao_equipe` cobra so a parte do mes que ja correu', () => {
+    const r = calcularDesafio({
+      desafio: campanha('projecao_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+
+    // Metade dos dias uteis corridos = metade da meta como alvo de hoje.
+    expect(r.individual.find(i => i.pessoa.id === 'l1')?.meta).toBeCloseTo(50_000, 5);
+    expect(r.individual.find(i => i.pessoa.id === 'l2')?.meta).toBeCloseTo(100_000, 5);
+  });
+
+  it('a projecao empata quem esta no mesmo ritmo, com equipes de tamanhos diferentes', () => {
+    const r = calcularDesafio({
+      desafio: campanha('projecao_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    // 30.000/50.000 e 60.000/100.000 — os dois a 60% do ritmo.
+    expect(r.individual[0].progresso).toBeCloseTo(60, 5);
+    expect(r.individual[1].progresso).toBeCloseTo(60, 5);
+  });
+
+  it('num mes ja fechado a projecao vira a meta cheia', () => {
+    // `diasUteisDecorridos` num mes passado devolve o mes inteiro.
+    const r = calcularDesafio({
+      desafio: campanha('projecao_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...contextoEquipe, decorridos: 20 },
+    });
+    expect(r.individual.find(i => i.pessoa.id === 'l1')?.meta).toBeCloseTo(100_000, 5);
+  });
+
+  it('equipe sem meta no mes fica SEM meta — e nao com meta zero', () => {
+    const r = calcularDesafio({
+      desafio: campanha('meta_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...contextoEquipe, metaPorEquipe: { eq1: 100_000 } },
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'l2');
+    expect(b?.meta).toBeNull();
+    // Sem meta nao ha meta batida: um zero aqui anunciaria conquista.
+    expect(b?.bateuMeta).toBe(false);
+    expect(b?.falta).toBe(0);
+  });
+
+  it('sem o contexto carregado ninguem ganha meta inventada', () => {
+    const r = calcularDesafio({
+      desafio: campanha('meta_equipe'),
+      dados: { participantes, linhas },
+    });
+    expect(r.individual.every(i => i.meta === null)).toBe(true);
+    expect(r.individual.every(i => i.bateuMeta === false)).toBe(true);
+  });
+
+  it('o mapa de metas deixa de ser convocacao quando a meta vem da equipe', () => {
+    /*
+     * Nenhum lider tem meta individual. Se o mapa continuasse valendo como
+     * convocacao, ele esvaziaria justamente o ranking de lideres que o modo
+     * existe para montar.
+     */
+    const comMapa = desafio({
+      regra: {
+        ...campanha('meta_equipe').regra,
+        metasPorOperador: { m1: 5_000 },
+      },
+    });
+    const r = calcularDesafio({
+      desafio: comMapa,
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    expect(r.individual.map(i => i.pessoa.id).sort()).toEqual(['l1', 'l2']);
+  });
+
+  it('com meta individual o mapa volta a convocar, como sempre convocou', () => {
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: {
+          fonteResultado: 'equipe_liderada',
+          fonteMeta: 'individual',
+          metasPorOperador: { l1: 40_000 },
+          participantes: {
+            setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+            convidados: [],
+          },
+        },
+      }),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['l1']);
+    expect(r.individual[0].meta).toBe(40_000);
+  });
+
+  it('campanha gravada antes deste campo continua na meta individual', () => {
+    /*
+     * `fonteMeta` ausente e o caso de toda campanha anterior — e tambem o da
+     * pre-visualizacao montada em memoria. `!== 'individual'` daria verdadeiro
+     * para `undefined` e mandaria todas elas para o caminho da equipe.
+     */
+    const antiga = desafio({ regra: { metaIndividual: 20_000 } });
+    delete (antiga.regra as Partial<RegraDesafio>).fonteMeta;
+
+    const r = calcularDesafio({
+      desafio: antiga,
+      dados: { participantes: [membro1], linhas: [linha('m1', 30_000)] },
+      contextoEquipe,
+    });
+    expect(r.individual[0].meta).toBe(20_000);
   });
 });
 

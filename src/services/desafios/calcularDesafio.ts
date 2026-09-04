@@ -32,8 +32,11 @@
  * com a mesma regra de `setoresDoOperador` — cadastro mais os clones com
  * `conta_recebimento` ligado.
  */
+import { calcularProjecao } from '@/lib/projecaoMetas';
+
 import type {
-  CriterioRanking, DadosDesafio, Desafio, LinhaDesafio, PessoaDesafio,
+  ContextoEquipe, CriterioRanking, DadosDesafio, Desafio, LinhaDesafio,
+  PessoaDesafio,
 } from './types';
 
 export interface ResultadoParticipante {
@@ -117,6 +120,14 @@ export interface ParametrosCalculo {
    * demais é preferível a mostrar uma tela vazia sem explicação.
    */
   setorDoUsuario?: string | null;
+  /**
+   * Metas de equipe e dias úteis, para `regra.fonteMeta` de equipe.
+   *
+   * Ausente numa campanha que pede meta de equipe, os participantes ficam sem
+   * meta — e não com meta zero. É a leitura honesta enquanto a consulta não
+   * voltou: a tela mostra "—" em vez de anunciar que todo mundo bateu.
+   */
+  contextoEquipe?: ContextoEquipe | null;
 }
 
 // ── Peças ────────────────────────────────────────────────────────────────────
@@ -193,9 +204,18 @@ export function participaDaCampanha(pessoa: PessoaDesafio, desafio: Desafio): bo
    */
   if (convidados.length) return convidados.includes(pessoa.id);
 
-  // Mapa de metas preenchido É a convocação: quem não tem meta não disputa.
-  // Sem isto, a operação inteira entraria zerada num ranking de 27 pessoas.
-  if (Object.keys(metasPorOperador).length > 0 && metaNoMapa(pessoa, metasPorOperador) === null) {
+  /*
+   * Mapa de metas preenchido É a convocação: quem não tem meta não disputa.
+   * Sem isto, a operação inteira entraria zerada num ranking de 27 pessoas.
+   *
+   * Só vale quando a meta VEM do mapa. Com a meta saindo da equipe, o mapa não
+   * tem por que decidir quem entra — e decidiria mal: nenhum líder tem meta
+   * individual, então um mapa esquecido de uma versão anterior da campanha
+   * esvaziaria justamente o ranking de líderes que o modo existe para montar.
+   */
+  if (!usaMetaDaEquipe(desafio.regra)
+      && Object.keys(metasPorOperador).length > 0
+      && metaNoMapa(pessoa, metasPorOperador) === null) {
     return false;
   }
   if (operadores.length && !operadores.includes(pessoa.id)) return false;
@@ -267,14 +287,76 @@ function metaNoMapa(
 /**
  * A meta de um participante.
  *
- * A pessoal manda; a da campanha é o padrão de quem não tem uma. É o que
- * permite uma gincana em que cada operador tem um número diferente sem que a
- * tela precise saber disso.
+ * Com `fonteMeta = 'individual'` — o padrão — a pessoal manda e a da campanha é
+ * o padrão de quem não tem uma. É o que permite uma gincana em que cada
+ * operador tem um número diferente sem que a tela precise saber disso.
+ *
+ * Os outros dois modos existem para a disputa entre líderes, e leem a meta da
+ * EQUIPE. Ver `metaVindaDaEquipe`.
  */
 export function metaDoParticipante(
-  pessoa: PessoaDesafio, regra: Desafio['regra'],
+  pessoa: PessoaDesafio,
+  regra: Desafio['regra'],
+  contexto?: ContextoEquipe | null,
 ): number | null {
+  if (usaMetaDaEquipe(regra)) return metaVindaDaEquipe(pessoa, regra, contexto);
   return metaNoMapa(pessoa, regra.metasPorOperador) ?? regra.metaIndividual;
+}
+
+/**
+ * A campanha tira a meta da equipe?
+ *
+ * Pergunta pelo que o modo É, e não pelo que ele não é. A diferença importa:
+ * campanha montada em memória — a pré-visualização da tela de configuração e
+ * os casos de teste — chega aqui sem `fonteMeta`, e `!== 'individual'` daria
+ * verdadeiro para `undefined`, mandando para o caminho da equipe toda campanha
+ * que ainda não conhece o campo. É a mesma precaução que `participaDaCampanha`
+ * toma com as listas de participantes, e pelo mesmo motivo.
+ */
+export function usaMetaDaEquipe(regra: Desafio['regra']): boolean {
+  return regra.fonteMeta === 'meta_equipe' || regra.fonteMeta === 'projecao_equipe';
+}
+
+/**
+ * A meta que vem da equipe liderada — cheia ou proporcional ao mês corrido.
+ *
+ * `meta_equipe` devolve a meta mensal da equipe como está na aba Metas.
+ *
+ * `projecao_equipe` devolve o `esperado` de `calcularProjecao`: quanto dessa
+ * meta já deveria ter entrado até hoje. É a MESMA função que Desempenho
+ * Equipes usa para dizer se a equipe está no ritmo, chamada com os mesmos dias
+ * úteis — de propósito. Reescrever `meta ÷ dias × decorridos` aqui criaria a
+ * terceira cópia de uma conta que `lib/projecaoMetas` existe para ter uma só,
+ * e as duas telas passariam a discordar no primeiro ajuste.
+ *
+ * `null` em três casos, todos legítimos: a pessoa não lidera equipe nenhuma, a
+ * equipe não tem meta no mês, ou o contexto não foi carregado. `null` é «sem
+ * meta», e a tela já sabe mostrar isso — um zero aqui viraria «meta batida».
+ *
+ * Os quartis não são passados porque nada do que se usa aqui depende deles:
+ * `esperado` sai de meta e dias. Faixa de quartil é leitura do painel, não do
+ * ranking da campanha.
+ */
+function metaVindaDaEquipe(
+  pessoa: PessoaDesafio,
+  regra: Desafio['regra'],
+  contexto?: ContextoEquipe | null,
+): number | null {
+  if (!contexto || !pessoa.equipeId) return null;
+
+  const metaMensal = contexto.metaPorEquipe[pessoa.equipeId];
+  if (!metaMensal || metaMensal <= 0) return null;
+
+  if (regra.fonteMeta === 'meta_equipe') return metaMensal;
+
+  const proj = calcularProjecao({
+    meta: metaMensal,
+    recebido: 0,            // só `esperado` interessa, e ele não depende disto
+    totalUteis: contexto.totalUteis,
+    decorridos: contexto.decorridos,
+    quartis: [],
+  });
+  return proj ? proj.esperado : null;
 }
 
 /** `MAX(meta - recebido, 0)`. Sem meta não falta nada. */
@@ -353,7 +435,7 @@ function posicionar<T extends {
 // ── A conta ──────────────────────────────────────────────────────────────────
 
 export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
-  const { desafio, dados, ocultos, filtroSetorId, setorDoUsuario } = params;
+  const { desafio, dados, ocultos, filtroSetorId, setorDoUsuario, contextoEquipe } = params;
   const { regra } = desafio;
   const criterio = regra.criterioRanking;
   const porQuantidade = regra.metrica === 'quantidade';
@@ -393,8 +475,9 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
     const soma = somaDoParticipante(pessoa, desafio, somas, dados.participantes);
     const recebido = porQuantidade ? soma.qtd : soma.total;
     // A meta é DA PESSOA quando a campanha define uma para ela; senão, a da
-    // campanha. Nada de um número fixo aqui.
-    const meta = metaDoParticipante(pessoa, regra);
+    // campanha. Nada de um número fixo aqui. Na disputa entre líderes ela sai
+    // da equipe — cheia ou proporcional ao mês corrido.
+    const meta = metaDoParticipante(pessoa, regra, contextoEquipe);
     const falta = faltaParaMeta(recebido, meta);
     return {
       pessoa,

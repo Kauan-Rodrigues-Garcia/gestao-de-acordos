@@ -37,10 +37,12 @@ import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import {
-  buscarDadosDesafio, buscarDesafiosEmCartaz, definirSetorDoDesafio,
+  buscarContextoEquipe, buscarDadosDesafio, buscarDesafiosEmCartaz, definirSetorDoDesafio,
   listarDesafios, listarSetoresDoDesafio, setorParticipaDoDesafio,
 } from '@/services/desafios/desafios.service';
-import { calcularDesafio, type ResultadoDesafio } from '@/services/desafios/calcularDesafio';
+import {
+  calcularDesafio, usaMetaDaEquipe, type ResultadoDesafio,
+} from '@/services/desafios/calcularDesafio';
 import type { DadosDesafio, Desafio } from '@/services/desafios/types';
 
 /** Uma importação insere em lote e dispara um evento por linha. */
@@ -351,6 +353,24 @@ export function useResultadoDesafio(
   });
 
   /*
+   * As metas de equipe, só para a campanha que as usa.
+   *
+   * `enabled` amarrado a `fonteMeta`: a campanha de meta individual — que é a
+   * esmagadora maioria — não paga por uma consulta cujo resultado ela ignora.
+   *
+   * Fora do canal de tempo real de propósito. Meta mensal e feriado mudam por
+   * decisão de quem administra, não por importação de recebimento; recarregá-la
+   * a cada evento de `analitico_recebimentos` seria repetir a mesma resposta
+   * centenas de vezes durante uma importação em lote.
+   */
+  const precisaDoContexto = !!desafio && usaMetaDaEquipe(desafio.regra);
+  const contextoQuery = useQuery({
+    queryKey: ['desafio-contexto-equipe', empresaId, desafio?.dataFim ?? null] as const,
+    enabled:  precisaDoContexto && !!empresaId,
+    queryFn:  () => buscarContextoEquipe(empresaId as string, desafio!.dataFim),
+  });
+
+  /*
    * O mesmo canal do Analítico, por contagem de referências.
    *
    * Tópico e escutas idênticos aos de `useAnaliticoDashboard`: `assinarTabela`
@@ -411,12 +431,16 @@ export function useResultadoDesafio(
       ocultos: idsOcultosRankingQuartil(mapa),
       filtroSetorId,
       setorDoUsuario: eu?.setorId ?? setorDeCadastro,
+      contextoEquipe: contextoQuery.data ?? null,
     });
-  }, [desafio, dados, filtroSetorId, operadorId, setorDeCadastro]);
+  }, [desafio, dados, filtroSetorId, operadorId, setorDeCadastro, contextoQuery.data]);
 
   return {
     resultado,
-    carregando: !!desafioId && query.isPending,
+    // A campanha de meta de equipe só está pronta com as duas consultas de pé:
+    // desenhar o ranking sem o contexto mostraria todo mundo sem meta por um
+    // instante, e a tela piscaria de "—" para os números.
+    carregando: (!!desafioId && query.isPending) || (precisaDoContexto && contextoQuery.isPending),
     erro: query.error instanceof Error ? query.error.message : null,
   };
 }
