@@ -38,6 +38,7 @@
  * </PublicRoute>
  * ```
  */
+import { useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -73,7 +74,26 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
 
-  if (loading || (requiredPermissao && permLoading) || (produtos && empresaLoading)) {
+  /*
+   * O esqueleto só na PRIMEIRA carga.
+   *
+   * Trocar a página inteira por um esqueleto DESMONTA tudo o que estava
+   * dentro, e todo estado local vai junto: a aba interna aberta, o filtro
+   * escolhido, a rolagem, o formulário meio preenchido. Na primeira carga isso
+   * não custa nada — não havia nada para perder. Numa recarga de fundo custa
+   * tudo.
+   *
+   * E recarga de fundo acontece o tempo todo: o supabase-js REEMITE
+   * `SIGNED_IN` quando a aba volta ao foco, e `useEmpresa` ouvia esse evento.
+   * Sair do navegador e voltar levava a pessoa de volta para a primeira aba
+   * interna da tela. A causa foi corrigida lá; esta guarda existe para que a
+   * próxima fonte de recarga não recrie o mesmo sintoma — são três flags de
+   * carregamento diferentes desembocando neste único `if`.
+   */
+  const jaMostrou = useRef(false);
+  const carregando = loading || (requiredPermissao && permLoading) || (produtos && empresaLoading);
+
+  if (carregando && !jaMostrou.current) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-3 w-64">
@@ -84,6 +104,14 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
       </div>
     );
   }
+
+  /* Marca no MESMO passo em que entrega o conteúdo: um `useEffect` rodaria
+     também nos caminhos que redirecionam, e a rota passaria a se lembrar de
+     ter mostrado uma tela que ninguém viu. */
+  const liberar = (): React.ReactElement => {
+    jaMostrou.current = true;
+    return <>{children}</> as React.ReactElement;
+  };
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
 
@@ -133,7 +161,7 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
       }
       return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
     }
-    return <>{children}</> as React.ReactElement;
+    return liberar();
   }
 
   // Sem requiredPermissao: verificação por perfil (comportamento original)
@@ -142,7 +170,7 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
 
-  return <>{children}</> as React.ReactElement;
+  return liberar();
 }
 
 export function PublicRoute({ children }: { children: React.ReactNode }) {

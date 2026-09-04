@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { Empresa, supabase } from '@/lib/supabase';
 import { fetchEmpresaBySlug, fetchEmpresaAtual } from '@/services/empresas.service';
 import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from '@/lib/tenant';
@@ -81,13 +81,41 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * De quem é a sessão que já foi carregada.
+   *
+   * `SIGNED_IN` não significa «alguém acabou de entrar». O supabase-js REEMITE
+   * esse evento quando a aba volta ao foco — ele revalida a sessão guardada e
+   * anuncia de novo a mesma pessoa. Só o `TOKEN_REFRESHED` estava filtrado
+   * aqui, então sair do navegador e voltar disparava `load()`, que começa com
+   * `setLoading(true)`, e o `ProtectedRoute` trocava a página por um esqueleto.
+   *
+   * Trocar a página DESMONTA tudo o que estava dentro: a aba interna aberta, o
+   * filtro, a rolagem, o formulário pela metade. Era esse o defeito de «voltar
+   * para a janela e cair na primeira aba».
+   *
+   * Comparar o id resolve sem perder nada: troca de pessoa (login, logout,
+   * impersonação) muda o id e recarrega; a mesma pessoa voltando para a aba
+   * não.
+   */
+  const usuarioCarregado = useRef<string | null>(null);
+
   useEffect(() => {
     load();
 
-    // Só recarrega em troca real de sessão (login/logout)
-    // TOKEN_REFRESHED (ao voltar para a aba) NÃO deve disparar reload
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, sessao) => {
+      const uid = sessao?.user?.id ?? null;
+
+      if (event === 'SIGNED_OUT') {
+        usuarioCarregado.current = null;
+        load();
+        return;
+      }
+
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        // Mesma pessoa que já está carregada: é a aba voltando, não um login.
+        if (uid !== null && uid === usuarioCarregado.current) return;
+        usuarioCarregado.current = uid;
         load();
       }
     });

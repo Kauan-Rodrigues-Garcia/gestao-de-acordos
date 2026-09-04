@@ -127,3 +127,60 @@ describe('ProtectedRoute — só por cargo (sem requiredPermissao)', () => {
     expect(passou()).toBe(true);
   });
 });
+
+/*
+ * Bug de 04/09/2026: sair da janela do navegador e voltar levava a pessoa de
+ * volta para a primeira aba interna da tela.
+ *
+ * A causa estava em `useEmpresa`, que recarregava a empresa em todo `SIGNED_IN`
+ * — e o supabase-js REEMITE esse evento quando a aba volta ao foco. `load()`
+ * começa com `setLoading(true)`, este guard trocava a página por um esqueleto,
+ * e trocar a página DESMONTA tudo o que estava dentro: aba aberta, filtro,
+ * rolagem, formulário pela metade.
+ *
+ * A causa foi corrigida lá. Isto aqui é a segunda trava: são três flags de
+ * carregamento desembocando num único `if`, e a próxima que piscar não pode
+ * recriar o mesmo sintoma.
+ */
+describe('ProtectedRoute — o esqueleto é só da primeira carga', () => {
+  it('mostra o esqueleto enquanto carrega pela primeira vez', () => {
+    permRef.current = { temPermissao: () => true, loading: true };
+    renderizar({ requiredPermissao: 'ver_analitico' });
+    expect(passou()).toBe(false);
+  });
+
+  it('NÃO desmonta o conteúdo quando o carregamento volta depois de já ter mostrado', () => {
+    permRef.current = { temPermissao: () => true, loading: false };
+    const { rerender } = renderizar({ requiredPermissao: 'ver_analitico' });
+    expect(passou()).toBe(true);
+
+    // A aba volta ao foco: alguma fonte recarrega em segundo plano.
+    permRef.current = { temPermissao: () => true, loading: true };
+    rerender(
+      <MemoryRouter initialEntries={['/alvo']}>
+        <ProtectedRoute requiredPermissao="ver_analitico">
+          <p>conteúdo protegido</p>
+        </ProtectedRoute>
+      </MemoryRouter>,
+    );
+
+    // O conteúdo continua montado — é isso que preserva a aba interna aberta.
+    expect(passou()).toBe(true);
+  });
+
+  it('a recarga de empresa também não derruba a página já mostrada', () => {
+    empresaRef.current = { empresa: { slug: 'bookplay', produto: 'cobranca' }, tenantSlug: 'bookplay', loading: false };
+    const { rerender } = renderizar({ produtos: ['cobranca'] as unknown as string[] });
+    expect(passou()).toBe(true);
+
+    empresaRef.current = { ...empresaRef.current, loading: true };
+    rerender(
+      <MemoryRouter initialEntries={['/alvo']}>
+        <ProtectedRoute produtos={['cobranca'] as unknown as string[]}>
+          <p>conteúdo protegido</p>
+        </ProtectedRoute>
+      </MemoryRouter>,
+    );
+    expect(passou()).toBe(true);
+  });
+});
