@@ -23,15 +23,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Scale, AlertTriangle, Link2Off, ArrowRight } from 'lucide-react';
+import { RefreshCw, Scale, AlertTriangle, Link2Off, ArrowRight, ArrowLeftRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
-  compararSetores, buscarSetoresSemGrupo,
-  type ComparacaoSetor, type SetorSemGrupo,
+  compararSetores, buscarSetoresSemGrupo, buscarResumoSetores,
+  type ComparacaoSetor, type SetorSemGrupo, type SetorDoMestre,
 } from '@/services/mestre/mestre.service';
 
 interface Props { empresaId: string; mes: string }
@@ -42,17 +42,19 @@ const TOLERANCIA = 0.01;
 export function Mestre59Comparacao({ empresaId, mes }: Props) {
   const [linhas, setLinhas]     = useState<ComparacaoSetor[]>([]);
   const [orfaos, setOrfaos]     = useState<SetorSemGrupo[]>([]);
+  const [porSetor, setPorSetor] = useState<SetorDoMestre[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]         = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null);
     try {
-      const [c, o] = await Promise.all([
+      const [c, o, s] = await Promise.all([
         compararSetores(empresaId, mes),
         buscarSetoresSemGrupo(empresaId, mes),
+        buscarResumoSetores(empresaId, mes),
       ]);
-      setLinhas(c); setOrfaos(o);
+      setLinhas(c); setOrfaos(o); setPorSetor(s);
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Falha ao comparar.');
     } finally {
@@ -122,6 +124,62 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
             <Tile rotulo="Mestre sem vínculo" valor={formatBRL(soma.semVinculo)}
               sub="fora da comparação" tom={soma.semVinculo > 0 ? 'alerta' : undefined} />
           </div>
+
+          {/* ── Total por SETOR ──────────────────────────────────────────────
+              Ele existe porque o total de um setor deixou de ser a soma dos
+              grupos ligados a ele: uma equipe movida sai de um e entra em
+              outro, e o destino pode ser um setor sem grupo nenhum. Sem esta
+              tabela, o dinheiro movido não teria onde aparecer. */}
+          {porSetor.some(s => s.recebido_movido !== 0) && (
+            <div className="rounded-2xl border border-chart-4/30 bg-chart-4/5 overflow-hidden">
+              <div className="px-5 py-3 border-b border-chart-4/20">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <ArrowLeftRight className="w-4 h-4 text-chart-4" />
+                  Total por setor, com as equipes movidas
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Equipe movida sai do grupo de origem e entra aqui. As linhas não mudaram
+                  de lugar no relatório — mudou onde elas contam.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-chart-4/20">
+                      <th className="text-left font-semibold px-5 py-2">Setor</th>
+                      <th className="text-right font-semibold px-3 py-2">Dos grupos</th>
+                      <th className="text-right font-semibold px-3 py-2">Movido para cá</th>
+                      <th className="text-right font-semibold px-3 py-2">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {porSetor.map(s => (
+                      <tr key={s.setor_id} className="border-b border-chart-4/10 last:border-0">
+                        <td className="px-5 py-2 font-medium text-foreground">
+                          {s.setor_nome}
+                          {s.grupos === 0 && (
+                            <span className="text-[11px] text-muted-foreground ml-1.5">
+                              (sem grupo no relatório)
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {formatBRL(s.dos_grupos)}
+                        </td>
+                        <td className={cn('px-3 py-2 text-right tabular-nums',
+                          s.recebido_movido > 0 ? 'text-chart-4 font-medium' : 'text-muted-foreground/50')}>
+                          {s.recebido_movido > 0 ? `+${formatBRL(s.recebido_movido)}` : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-foreground">
+                          {formatBRL(s.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">

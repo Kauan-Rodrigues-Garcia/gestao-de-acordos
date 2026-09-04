@@ -40,6 +40,19 @@ export type EstadoLote = 'aberto' | 'vigente' | 'substituido' | 'descartado';
 export type EstadoVinculo = 'novo' | 'vinculado' | 'ignorado';
 
 /**
+ * Onde o recebimento de uma equipe conta.
+ *
+ * O ERP põe a equipe no grupo de quem exportou o relatório, e nem sempre é ali
+ * que ela deve contar — `DIGITAL BRUNNO` chega no Play 5 sem ser Play 5.
+ *
+ *   proprio        fica no setor do grupo. Padrão; ninguém mexeu em nada.
+ *   outro_setor    SAI do grupo e conta no setor escolhido.
+ *   somente_geral  SAI do grupo e não conta em setor nenhum — só no total da
+ *                  empresa. Para o dinheiro que existe e não é de ninguém.
+ */
+export type DestinoEquipe = 'proprio' | 'outro_setor' | 'somente_geral';
+
+/**
  * Um grupo do relatório, com o dinheiro separado em direto e extra.
  *
  * ## A regra, e o erro que ela corrige
@@ -84,6 +97,9 @@ export interface GrupoDoMestre {
   contrib_integral: number;
   /** Extra vindo de outro grupo. Informativo — o setor já o tem como direto. */
   contrib_extra: number;
+  /** Equipes deste grupo movidas para fora. Saem do total dele. */
+  saiu_outro_setor: number;
+  saiu_somente_geral: number;
   recebido_total: number;
   /** Deste grupo, carimbado para outros. Informativo: continua no total daqui. */
   para_outros_integral: number;
@@ -125,8 +141,21 @@ export interface EquipeDoMestre {
   equipe_id: string | null;
   equipe_nome: string | null;
   estado: EstadoVinculo;
+  destino: DestinoEquipe;
+  destino_setor_id: string | null;
+  destino_setor_nome: string | null;
   primeira_aparicao: string | null;
   ultima_aparicao: string | null;
+}
+
+/** O número final de um setor, já com as equipes que saíram e as que vieram. */
+export interface SetorDoMestre {
+  setor_id: string;
+  setor_nome: string;
+  dos_grupos: number;
+  recebido_movido: number;
+  total: number;
+  grupos: number;
 }
 
 /**
@@ -373,6 +402,8 @@ export async function buscarResumoGrupos(empresaId: string, mes: string): Promis
     extra_proprio:        n(g.extra_proprio),
     contrib_integral:     n(g.contrib_integral),
     contrib_extra:        n(g.contrib_extra),
+    saiu_outro_setor:     n(g.saiu_outro_setor),
+    saiu_somente_geral:   n(g.saiu_somente_geral),
     recebido_total:       n(g.recebido_total),
     para_outros_integral: n(g.para_outros_integral),
     para_outros_extra:    n(g.para_outros_extra),
@@ -455,6 +486,47 @@ export async function buscarVinculoOperadores(
   if (error) throw new Error(error.message);
   return (data ?? []).map(v => ({
     ...v, operadores: n(v.operadores), vinculados: n(v.vinculados), sem_cadastro: n(v.sem_cadastro),
+  }));
+}
+
+/**
+ * Move o recebimento de uma equipe para fora do setor do grupo.
+ *
+ * É o único ponto da aba que muda como o dinheiro é atribuído — e mesmo assim
+ * não toca no relatório: a linha continua onde o ERP a pôs, e o que muda é
+ * onde ela CONTA. O histórico registra cada mudança.
+ */
+export async function moverEquipe(params: {
+  empresaId: string;
+  codGrupo: string;
+  subgrupo: string;
+  destino: DestinoEquipe;
+  setorId?: string | null;
+}): Promise<void> {
+  const { error } = await rpcSemTipo('fn_mestre_destino_equipe', {
+    p_empresa_id: params.empresaId,
+    p_cod:        params.codGrupo,
+    p_subgrupo:   params.subgrupo,
+    p_destino:    params.destino,
+    p_setor_id:   params.destino === 'outro_setor' ? (params.setorId ?? null) : null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Quanto cada setor recebeu, já com o que saiu e o que veio de outro grupo. */
+export async function buscarResumoSetores(
+  empresaId: string, mes: string,
+): Promise<SetorDoMestre[]> {
+  const { data, error } = await rpcSemTipo<SetorDoMestre[]>('fn_mestre_resumo_setores', {
+    p_empresa_id: empresaId, p_mes: mes,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(s => ({
+    ...s,
+    dos_grupos:      n(s.dos_grupos),
+    recebido_movido: n(s.recebido_movido),
+    total:           n(s.total),
+    grupos:          n(s.grupos),
   }));
 }
 

@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Loader2, ArrowDownLeft, ArrowUpRight, HelpCircle, Users, AlertTriangle, ChevronRight,
-  UserCheck, UserX,
+  UserCheck, UserX, CornerDownRight, Globe, ArrowRightLeft,
   HeartPulse, Link2, Link2Off, EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,9 +43,9 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
   buscarOrigensDoGrupo, buscarResumoEquipes, buscarOperadoresDivergentes,
-  buscarVinculoOperadores, vincularEquipe,
+  buscarVinculoOperadores, vincularEquipe, moverEquipe,
   type GrupoDoMestre, type OrigemDoGrupo, type EquipeDoMestre, type OperadorDivergente,
-  type VinculoOperadores, type EstadoVinculo, type ProblemaOperador,
+  type VinculoOperadores, type EstadoVinculo, type ProblemaOperador, type DestinoEquipe,
 } from '@/services/mestre/mestre.service';
 import { Mestre59Equipe } from './Mestre59Equipe';
 
@@ -82,7 +82,10 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
   const [divergentes, setDivergentes] = useState<OperadorDivergente[]>([]);
   const [pessoas, setPessoas]         = useState<Record<string, VinculoOperadores>>({});
   const [doSetor, setDoSetor]         = useState<EquipeDoSetor[]>([]);
+  /** Todos os setores da empresa — os destinos possíveis de uma equipe. */
+  const [todosSetores, setTodosSetores] = useState<EquipeDoSetor[]>([]);
   const [salvando, setSalvando]       = useState<string | null>(null);
+  const [movendo, setMovendo]         = useState<string | null>(null);
   /** Equipe cuja lista de operadores está aberta. Uma por vez. */
   const [equipeAberta, setEquipeAberta] = useState<string | null>(null);
 
@@ -109,6 +112,32 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
       .then(({ data }) => { if (!cancel) setDoSetor((data as EquipeDoSetor[]) ?? []); });
     return () => { cancel = true; };
   }, [grupo.setor_id]);
+
+  // Os destinos possíveis são TODOS os setores da empresa, e não só os que têm
+  // grupo no relatório: a equipe está no lugar errado justamente quando o setor
+  // certo não aparece no arquivo (o Digital, por exemplo).
+  useEffect(() => {
+    let cancel = false;
+    void supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome')
+      .then(({ data }) => { if (!cancel) setTodosSetores((data as EquipeDoSetor[]) ?? []); });
+    return () => { cancel = true; };
+  }, [empresaId]);
+
+  const mover = useCallback(async (
+    subgrupo: string, destino: DestinoEquipe, setorId: string | null,
+  ) => {
+    setMovendo(subgrupo);
+    try {
+      await moverEquipe({ empresaId, codGrupo: cod, subgrupo, destino, setorId });
+      await carregar();
+      // Mover muda o total do grupo e o de outro setor — o pai precisa recarregar.
+      aoMudar?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível mover o recebimento.');
+    } finally {
+      setMovendo(null);
+    }
+  }, [empresaId, cod, carregar, aoMudar]);
 
   const aplicar = useCallback(async (
     subgrupo: string, estado: EstadoVinculo, equipeId: string | null,
@@ -321,6 +350,50 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
                   )}
                 </div>
+
+                {/* Onde este recebimento CONTA. Separado do vínculo de equipe
+                    de propósito: uma coisa é dizer «esta equipe do relatório é
+                    aquela do sistema», outra é dizer «este dinheiro não é deste
+                    setor». A segunda muda total; a primeira, não. */}
+                <div className="flex items-center gap-1.5 w-[240px] shrink-0">
+                  <Select
+                    value={e.destino === 'outro_setor' ? (e.destino_setor_id ?? '') : e.destino}
+                    disabled={movendo === e.nome_subgrupo}
+                    onValueChange={v => {
+                      if (v === 'proprio' || v === 'somente_geral') void mover(e.nome_subgrupo, v, null);
+                      else void mover(e.nome_subgrupo, 'outro_setor', v);
+                    }}
+                  >
+                    <SelectTrigger className={cn('h-7 text-[11px] rounded-lg',
+                      e.destino !== 'proprio' && 'border-chart-4/50 text-chart-4')}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="proprio">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <CornerDownRight className="w-3 h-3" /> Conta neste setor
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="somente_geral">
+                        <span className="flex items-center gap-1.5 text-chart-4">
+                          <Globe className="w-3 h-3" /> Sai daqui · só no geral
+                        </span>
+                      </SelectItem>
+                      {todosSetores
+                        .filter(s => s.id !== grupo.setor_id)
+                        .map(s => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <span className="flex items-center gap-1.5">
+                              <ArrowRightLeft className="w-3 h-3" /> Move para {s.nome}
+                            </span>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {movendo === e.nome_subgrupo && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
+                  )}
+                </div>
               </div>
 
               {abertaAqui && (
@@ -338,20 +411,74 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
           </div>
         )}
 
-        {/* Rótulos que não são equipe. Contam no total, mas não se vinculam a
-            time nenhum — oferecer o seletor aqui seria convidar ao erro. */}
+        {/* Rótulos que não são equipe: atestado, liderança, supervisão e o
+            vazio. Não se vinculam a time nenhum — oferecer o seletor de equipe
+            aqui seria convidar ao erro —, mas o dinheiro é real e pode estar no
+            setor errado como qualquer outro. Por isso o destino vale para eles
+            também: `COBRANÇA - GERAL` tem R$ 653 mil sob rótulo vazio. */}
         {naoTimes.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 rounded-lg border border-border/40 bg-muted/20 divide-y divide-border/25">
             {naoTimes.map(e => (
-              <span key={e.nome_subgrupo || '(vazio)'}
-                className="inline-flex items-center gap-1.5 text-[11px] rounded-md border border-border/40 bg-muted/30 px-2 py-1">
-                <span className="text-muted-foreground">
+              <div key={e.nome_subgrupo || '(vazio)'}
+                className="flex items-center gap-3 px-3 py-1.5 text-xs flex-wrap">
+                <span className="text-muted-foreground flex-1 min-w-[14ch] truncate">
                   {e.nome_subgrupo || <span className="italic">sem equipe informada</span>}
                 </span>
-                <span className="tabular-nums font-medium text-foreground">{formatBRL(e.recebido)}</span>
-              </span>
+                <span className="tabular-nums font-medium text-foreground shrink-0 w-28 text-right">
+                  {formatBRL(e.recebido)}
+                </span>
+                <div className="flex items-center gap-1.5 w-[240px] shrink-0">
+                  <Select
+                    value={e.destino === 'outro_setor' ? (e.destino_setor_id ?? '') : e.destino}
+                    disabled={movendo === e.nome_subgrupo}
+                    onValueChange={v => {
+                      if (v === 'proprio' || v === 'somente_geral') void mover(e.nome_subgrupo, v, null);
+                      else void mover(e.nome_subgrupo, 'outro_setor', v);
+                    }}
+                  >
+                    <SelectTrigger className={cn('h-7 text-[11px] rounded-lg',
+                      e.destino !== 'proprio' && 'border-chart-4/50 text-chart-4')}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="proprio">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <CornerDownRight className="w-3 h-3" /> Conta neste setor
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="somente_geral">
+                        <span className="flex items-center gap-1.5 text-chart-4">
+                          <Globe className="w-3 h-3" /> Sai daqui · só no geral
+                        </span>
+                      </SelectItem>
+                      {todosSetores
+                        .filter(s => s.id !== grupo.setor_id)
+                        .map(s => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <span className="flex items-center gap-1.5">
+                              <ArrowRightLeft className="w-3 h-3" /> Move para {s.nome}
+                            </span>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {movendo === e.nome_subgrupo && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
+                  )}
+                </div>
+              </div>
             ))}
           </div>
+        )}
+
+        {(grupo.saiu_outro_setor + grupo.saiu_somente_geral) > 0 && (
+          <p className="text-[11px] text-chart-4 mt-2">
+            {formatBRL(grupo.saiu_outro_setor + grupo.saiu_somente_geral)} saíram do total deste
+            setor por decisão de destino
+            {grupo.saiu_outro_setor > 0 && <> — {formatBRL(grupo.saiu_outro_setor)} foram para outro setor</>}
+            {grupo.saiu_somente_geral > 0 && <> — {formatBRL(grupo.saiu_somente_geral)} contam só no geral</>}.
+            As linhas não mudaram de lugar no relatório; mudou onde elas contam.
+          </p>
         )}
       </section>
 

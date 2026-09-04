@@ -534,6 +534,11 @@ export function Mestre59({ empresaId, mes }: Props) {
                                       </span>
                                     )}
                                     {g.atestado_valor > 0 && <span className="text-chart-4"> · atestado {formatBRL(g.atestado_valor)}</span>}
+                                    {(g.saiu_outro_setor + g.saiu_somente_geral) > 0 && (
+                                      <span className="text-chart-4">
+                                        {" "}· {formatBRL(g.saiu_outro_setor + g.saiu_somente_geral)} movidos para fora
+                                      </span>
+                                    )}
                                   </>}
                             </span>
                           </button>
