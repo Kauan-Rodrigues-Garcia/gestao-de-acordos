@@ -430,6 +430,29 @@ export function usaMetaDaEquipe(regra: Desafio['regra']): boolean {
 }
 
 /**
+ * A campanha é uma corrida de PROJEÇÃO?
+ *
+ * `projecao_equipe` mede contra «quanto já deveria ter entrado até hoje» — um
+ * alvo que se move todo dia útil. Isso muda o que a campanha É:
+ *
+ *   • **Não existe concluir.** Passar de 100% hoje não garante nada: amanhã o
+ *     esperado sobe e a mesma equipe pode estar em 90%. Quem ganha é quem
+ *     estiver na frente no ÚLTIMO dia, e antes disso não há vencedor.
+ *
+ *   • **O número que importa é o percentual, não o dinheiro.** As equipes têm
+ *     metas de R$ 20.000 e de R$ 210.000; comparar o caixa delas não ordena
+ *     nada, e destacá-lo na tela sugere uma disputa que não é a que está
+ *     acontecendo.
+ *
+ * A tela lê isto para trocar o destaque e apagar tudo o que fala em conclusão.
+ * `bateuMeta` fica falso pelo mesmo motivo — é ele que acende o selo, o
+ * contador e a comemoração.
+ */
+export function ehCorridaDeProjecao(regra: Desafio['regra']): boolean {
+  return regra.fonteMeta === 'projecao_equipe';
+}
+
+/**
  * A meta que vem da equipe liderada — cheia ou proporcional ao mês corrido.
  *
  * `meta_equipe` devolve a meta mensal da equipe como está na aba Metas.
@@ -641,7 +664,8 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
         meta: media.meta,
         falta: faltaParaMeta(media.recebido, media.meta),
         progresso: media.progresso,
-        bateuMeta: media.progresso >= 100,
+        // Corrida de projeção não tem conclusão: o alvo se move todo dia útil.
+        bateuMeta: !ehCorridaDeProjecao(regra) && media.progresso >= 100,
         paraUltrapassar: null as number | null,
         nomeAcima: null as string | null,
       };
@@ -665,7 +689,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
       meta,
       falta,
       progresso: progressoDaMeta(recebido, meta),
-      bateuMeta: !!meta && meta > 0 && recebido >= meta,
+      bateuMeta: !ehCorridaDeProjecao(regra) && !!meta && meta > 0 && recebido >= meta,
       paraUltrapassar: null as number | null,
       nomeAcima: null as string | null,
     };

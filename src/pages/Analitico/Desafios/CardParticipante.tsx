@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio';
 import type { EstiloTema } from './tema';
-import { percentualCurto } from './tema';
+import { percentualCurto, percentualCheio } from './tema';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 
@@ -39,10 +39,22 @@ export interface CardParticipanteProps {
   subiu?: number;
   /** Some com o nome da equipe (dentro do card de uma equipe, seria redundante). */
   ocultarEquipe?: boolean;
+  /**
+   * Corrida de PROJEÇÃO: o destaque é o percentual, e não há conclusão.
+   *
+   * Muda três coisas no card. O número grande da direita passa a ser a
+   * projeção, e o dinheiro desce para uma linha discreta — as equipes têm
+   * metas de R$ 20.000 e de R$ 210.000, e o caixa delas não ordena nada. O
+   * percentual deixa de ser cortado em «100%+»: acima de 100 é justamente o
+   * que separa o primeiro do segundo. E somem o selo «concluído» e o «faltam
+   * R$ X»: o alvo se move todo dia útil, e ninguém conclui antes do último.
+   */
+  corridaDeProjecao?: boolean;
 }
 
 export function CardParticipante({
   item, tema, mostrarFotos, animar, ehVoce, subiu = 0, ocultarEquipe,
+  corridaDeProjecao,
 }: CardParticipanteProps) {
   const { pessoa } = item;
 
@@ -80,7 +92,7 @@ export function CardParticipante({
               você
             </span>
           )}
-          {item.bateuMeta && (
+          {item.bateuMeta && !corridaDeProjecao && (
             <span
               className="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
               title="Desafio concluído"
@@ -109,7 +121,9 @@ export function CardParticipante({
             className="h-1.5 max-w-[240px]"
             aria-label={`Progresso de ${pessoa.nome}`}
           />
-          {item.meta ? (
+          {/* Na corrida de projeção o percentual é o número GRANDE da direita.
+              Repeti-lo aqui, pequeno, seria dizer duas vezes a mesma coisa. */}
+          {item.meta && !corridaDeProjecao ? (
             <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
               {percentualCurto(item.progresso)}
             </span>
@@ -117,28 +131,50 @@ export function CardParticipante({
         </div>
 
         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          {!ocultarEquipe && <>{pessoa.equipeNome} · </>}
-          {item.falta > 0
-            ? <>Faltam {formatBRL(item.falta)} do desafio de {formatBRL(item.meta ?? 0)}</>
-            : item.meta ? <>Desafio concluído</> : <>Sem desafio definido</>}
-          {item.paraUltrapassar !== null && item.paraUltrapassar > 0 && (
-            <> · ↑ {formatBRL(item.paraUltrapassar)} para alcançar o {item.posicao - 1}º</>
+          {!ocultarEquipe && <>{pessoa.equipeNome}</>}
+          {corridaDeProjecao ? (
+            /* Sem «faltam» e sem «concluído»: o alvo se move todo dia útil, e
+               ninguém conclui antes do último. O dinheiro fica aqui, pequeno —
+               ele explica o percentual, não disputa com ele. */
+            item.meta ? (
+              <> · {formatBRL(item.recebido)} de {formatBRL(item.meta)} previstos até hoje</>
+            ) : <> · Equipe sem meta no mês</>
+          ) : (
+            <>
+              {!ocultarEquipe && <> · </>}
+              {item.falta > 0
+                ? <>Faltam {formatBRL(item.falta)} do desafio de {formatBRL(item.meta ?? 0)}</>
+                : item.meta ? <>Desafio concluído</> : <>Sem desafio definido</>}
+              {item.paraUltrapassar !== null && item.paraUltrapassar > 0 && (
+                <> · ↑ {formatBRL(item.paraUltrapassar)} para alcançar o {item.posicao - 1}º</>
+              )}
+            </>
           )}
         </p>
       </div>
 
-      {/* Recebido */}
-      <div className="shrink-0 text-right">
-        <ValorAnimado
-          valor={item.recebido}
-          formatar={formatBRL}
-          className="text-sm font-semibold text-foreground"
-          classeSubindo="text-emerald-500"
-        />
-        <p className="text-[10px] text-muted-foreground">
-          {item.qtd} pagamento{item.qtd === 1 ? '' : 's'}
-        </p>
-      </div>
+      {/* O número que decide a disputa. */}
+      {corridaDeProjecao ? (
+        <div className="shrink-0 text-right">
+          <span className={cn('block text-base font-bold tabular-nums',
+            item.posicao <= 3 ? tema.destaque : 'text-foreground')}>
+            {item.meta ? percentualCheio(item.progresso) : '—'}
+          </span>
+          <p className="text-[10px] text-muted-foreground">da projeção</p>
+        </div>
+      ) : (
+        <div className="shrink-0 text-right">
+          <ValorAnimado
+            valor={item.recebido}
+            formatar={formatBRL}
+            className="text-sm font-semibold text-foreground"
+            classeSubindo="text-emerald-500"
+          />
+          <p className="text-[10px] text-muted-foreground">
+            {item.qtd} pagamento{item.qtd === 1 ? '' : 's'}
+          </p>
+        </div>
+      )}
     </motion.li>
   );
 }

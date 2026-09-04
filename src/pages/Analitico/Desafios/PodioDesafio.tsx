@@ -14,7 +14,7 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio';
 import type { EstiloTema } from './tema';
-import { percentualCurto } from './tema';
+import { percentualCurto, percentualCheio } from './tema';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 
@@ -33,9 +33,11 @@ interface Props {
   mostrarFotos: boolean;
   animar: boolean;
   voceId?: string | null;
+  /** Corrida de projeção: o percentual é o destaque e ninguém conclui. */
+  corridaDeProjecao?: boolean;
 }
 
-export function PodioDesafio({ top3, tema, mostrarFotos, animar, voceId }: Props) {
+export function PodioDesafio({ top3, tema, mostrarFotos, animar, voceId, corridaDeProjecao }: Props) {
   if (!top3.length) return null;
 
   return (
@@ -76,7 +78,9 @@ export function PodioDesafio({ top3, tema, mostrarFotos, animar, voceId }: Props
             </p>
 
             <p className={cn('mt-2 font-bold tabular-nums', primeiro ? 'text-xl' : 'text-lg', estilo.texto)}>
-              {formatBRL(item.recebido)}
+              {corridaDeProjecao
+                ? (item.meta ? percentualCheio(item.progresso) : '—')
+                : formatBRL(item.recebido)}
             </p>
 
             {item.meta ? (
@@ -88,8 +92,12 @@ export function PodioDesafio({ top3, tema, mostrarFotos, animar, voceId }: Props
                   aria-label={`Progresso de ${item.pessoa.nome}`}
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  {percentualCurto(item.progresso)} do desafio
-                  {item.falta > 0 && <> · faltam {formatBRL(item.falta)}</>}
+                  {corridaDeProjecao
+                    ? <>da projeção · {formatBRL(item.recebido)} de {formatBRL(item.meta ?? 0)}</>
+                    : <>
+                        {percentualCurto(item.progresso)} do desafio
+                        {item.falta > 0 && <> · faltam {formatBRL(item.falta)}</>}
+                      </>}
                 </p>
               </>
             ) : null}

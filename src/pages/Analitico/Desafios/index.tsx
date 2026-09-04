@@ -39,6 +39,7 @@ import { fetchEmpresasLiberadas } from '@/services/empresas.service';
 import { useDesafios, useResultadoDesafio, useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { estiloDaCampanha } from './tema';
 import type { Desafio } from '@/services/desafios/types';
+import { ehCorridaDeProjecao } from '@/services/desafios/calcularDesafio';
 import { ArteDesafio } from './ArteDesafio';
 import { CatalogoDesafios } from './CatalogoDesafios';
 import { DesafioHero } from './DesafioHero';
@@ -212,6 +213,19 @@ export function AbaDesafios({
 
   const tema = useMemo(() => estiloDaCampanha(aberta?.visual), [aberta?.visual]);
 
+  /*
+   * A campanha mede PROJEÇÃO, e isso muda a tela inteira.
+   *
+   * Não é um interruptor à parte: é uma leitura da regra. `projecao_equipe`
+   * compara contra «quanto já deveria ter entrado até hoje», um alvo que sobe
+   * a cada dia útil. Não existe concluir, e o número que decide é o percentual
+   * — o dinheiro de uma equipe de meta R$ 20.000 e o de outra de R$ 210.000
+   * não se comparam.
+   *
+   * Ver `ehCorridaDeProjecao`, que é onde a regra está escrita.
+   */
+  const corridaDeProjecao = !!aberta && ehCorridaDeProjecao(aberta.regra);
+
   const eu = useMemo(
     () => resultado?.individual.find(i => i.pessoa.id === operadorId) ?? null,
     [resultado, operadorId],
@@ -343,6 +357,7 @@ export function AbaDesafios({
       tema={tema}
       mostrarFotos={aberta.visual.mostrarFotos}
       totalParticipantes={resultado.totalParticipantes}
+      corridaDeProjecao={corridaDeProjecao}
     />
   );
 
@@ -387,7 +402,10 @@ export function AbaDesafios({
 
       {resultado && !semParticipantes && (
         <>
-          <IndicadoresDesafio resultado={resultado} tema={tema} carregando={calculando} />
+          <IndicadoresDesafio
+            resultado={resultado} tema={tema} carregando={calculando}
+            corridaDeProjecao={corridaDeProjecao}
+          />
 
           {priorizarEquipes && secaoEquipes}
           {!priorizarEquipes && secaoPessoal}
@@ -404,6 +422,7 @@ export function AbaDesafios({
                   mostrarFotos={aberta.visual.mostrarFotos}
                   animar={aberta.visual.animarUltrapassagem}
                   voceId={operadorId}
+                  corridaDeProjecao={corridaDeProjecao}
                 />
               </section>
 
@@ -444,6 +463,7 @@ export function AbaDesafios({
                     mostrarFotos={aberta.visual.mostrarFotos}
                     animar={aberta.visual.animarUltrapassagem}
                     voceId={operadorId}
+                    corridaDeProjecao={corridaDeProjecao}
                   />
                 </section>
               )}

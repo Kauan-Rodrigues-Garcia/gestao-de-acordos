@@ -191,3 +191,26 @@ export function percentualCurto(progresso: number): string {
   if (progresso > 100) return '100%+';
   return `${progresso.toFixed(1).replace('.', ',')}%`;
 }
+
+/**
+ * O percentual INTEIRO, sem teto.
+ *
+ * `percentualCurto` corta em «100%+» porque num desafio de bater meta o que
+ * passa disso é bônus: quem bateu, bateu. Numa corrida de PROJEÇÃO é o
+ * contrário — o número acima de 100 é justamente o que separa o primeiro do
+ * segundo, e cortá-lo empata todo mundo que está à frente.
+ */
+export function percentualCheio(progresso: number): string {
+  return `${progresso.toFixed(1).replace('.', ',')}%`;
+}
+
+/**
+ * Diferença entre dois percentuais, em pontos.
+ *
+ * Numa corrida de projeção a distância para quem está acima não é dinheiro: as
+ * equipes têm metas diferentes, e «faltam R$ 8.000» não diz nada quando o
+ * ranking ordena por percentual.
+ */
+export function pontosCurto(pontos: number): string {
+  return `${pontos.toFixed(1).replace('.', ',')} p.p.`;
+}

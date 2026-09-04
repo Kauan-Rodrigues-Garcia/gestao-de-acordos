@@ -31,10 +31,12 @@ interface Props {
   animar: boolean;
   voceId?: string | null;
   ocultarEquipe?: boolean;
+  /** Corrida de projeção: o card destaca o percentual. Ver `CardParticipante`. */
+  corridaDeProjecao?: boolean;
 }
 
 export function RankingDesafio({
-  lista, tema, mostrarFotos, animar, voceId, ocultarEquipe,
+  lista, tema, mostrarFotos, animar, voceId, ocultarEquipe, corridaDeProjecao,
 }: Props) {
   const anterior = useRef<Map<string, number>>(new Map());
   const [subidas, setSubidas] = useState<Record<string, number>>({});
@@ -73,6 +75,7 @@ export function RankingDesafio({
             ehVoce={!!voceId && item.pessoa.id === voceId}
             subiu={subidas[item.pessoa.id] ?? 0}
             ocultarEquipe={ocultarEquipe}
+            corridaDeProjecao={corridaDeProjecao}
           />
         ))}
       </AnimatePresence>

@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio';
 import type { EstiloTema } from './tema';
-import { percentualCurto } from './tema';
+import { percentualCurto, percentualCheio } from './tema';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 
@@ -24,9 +24,11 @@ interface Props {
   tema: EstiloTema;
   mostrarFotos: boolean;
   totalParticipantes: number;
+  /** Corrida de projeção: o percentual é o destaque e ninguém conclui. */
+  corridaDeProjecao?: boolean;
 }
 
-export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes }: Props) {
+export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes, corridaDeProjecao }: Props) {
   const { pessoa } = item;
 
   return (
@@ -61,7 +63,9 @@ export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes }: Pro
             />
             {item.meta ? (
               <span className="text-sm text-muted-foreground">
-                {percentualCurto(item.progresso)} do seu desafio de {formatBRL(item.meta)}
+                {corridaDeProjecao
+                  ? <>{percentualCheio(item.progresso)} da projeção de {formatBRL(item.meta)} até hoje</>
+                  : <>{percentualCurto(item.progresso)} do seu desafio de {formatBRL(item.meta)}</>}
               </span>
             ) : null}
           </div>
