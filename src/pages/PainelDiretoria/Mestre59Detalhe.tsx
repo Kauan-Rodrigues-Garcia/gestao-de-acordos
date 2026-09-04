@@ -3,14 +3,23 @@
  *
  * Responde três perguntas, nesta ordem:
  *
- *   1. **De onde vem esse dinheiro?** O que é do próprio setor, o que o
- *      receptivo cobrou para ele, e — no caso do receptivo — o que saiu daqui
- *      para outros. Cada linha separada em Integral e Extra.
- *   2. **Quais equipes?** Só as que têm valor no mês. Vincular equipe do
- *      relatório à equipe do sistema exige o SETOR já vinculado, porque é ele
- *      que define quais equipes são candidatas.
+ *   1. **De onde vem esse dinheiro?** O que é do próprio setor e o que outro
+ *      setor cobrou para ele, separado em Integral e Extra. A coluna `soma` diz
+ *      quais entram no total — o Extra vindo de fora não entra.
+ *   2. **Quais equipes?** Só as que têm valor no mês. Cada uma abre nos
+ *      operadores, e cada operador abre nos NRs (ver `Mestre59Equipe`).
+ *      Vincular equipe do relatório à equipe do sistema exige o SETOR já
+ *      vinculado, porque é ele que define quais equipes são candidatas.
  *   3. **Quem está no lugar errado?** Depois das equipes vinculadas, quem o
  *      relatório põe numa equipe e o cadastro põe em outra.
+ *
+ * ## O Extra que vem de fora não soma
+ *
+ * Um pagamento pode ter dois operadores, um direto e um extra. Quando um deles
+ * é do receptivo, o ERP emite a mesma cobrança nas duas pernas — `Integral` em
+ * quem cobrou direto, `Extra` no receptivo. Somar o Extra no destino contaria o
+ * mesmo dinheiro duas vezes; ele aparece marcado «não soma», porque saber que
+ * ele existe importa, e contá-lo não.
  *
  * ## A regra do zero
  *
@@ -21,7 +30,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Loader2, ArrowDownLeft, ArrowUpRight, HelpCircle, Users, AlertTriangle,
+  Loader2, ArrowDownLeft, ArrowUpRight, HelpCircle, Users, AlertTriangle, ChevronRight,
+  UserCheck, UserX,
   HeartPulse, Link2, Link2Off, EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -32,10 +42,12 @@ import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
-  buscarOrigensDoGrupo, buscarResumoEquipes, buscarOperadoresDivergentes, vincularEquipe,
+  buscarOrigensDoGrupo, buscarResumoEquipes, buscarOperadoresDivergentes,
+  buscarVinculoOperadores, vincularEquipe,
   type GrupoDoMestre, type OrigemDoGrupo, type EquipeDoMestre, type OperadorDivergente,
-  type EstadoVinculo, type ProblemaOperador,
+  type VinculoOperadores, type EstadoVinculo, type ProblemaOperador,
 } from '@/services/mestre/mestre.service';
+import { Mestre59Equipe } from './Mestre59Equipe';
 
 interface Props {
   empresaId: string;
@@ -51,7 +63,7 @@ interface EquipeDoSetor { id: string; nome: string }
 const ROTULO_ORIGEM: Record<OrigemDoGrupo['origem'], string> = {
   proprio:      'Do próprio setor',
   contribuicao: 'Cobrado por outro setor para este',
-  distribuido:  'Este setor cobrou para outro',
+  para_outro:   'Deste setor, carimbado para outro',
   sem_destino:  'Destino não reconhecido',
 };
 
@@ -68,16 +80,21 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
   const [origens, setOrigens]         = useState<OrigemDoGrupo[] | null>(null);
   const [equipes, setEquipes]         = useState<EquipeDoMestre[] | null>(null);
   const [divergentes, setDivergentes] = useState<OperadorDivergente[]>([]);
+  const [pessoas, setPessoas]         = useState<Record<string, VinculoOperadores>>({});
   const [doSetor, setDoSetor]         = useState<EquipeDoSetor[]>([]);
   const [salvando, setSalvando]       = useState<string | null>(null);
+  /** Equipe cuja lista de operadores está aberta. Uma por vez. */
+  const [equipeAberta, setEquipeAberta] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
-    const [o, e, d] = await Promise.all([
+    const [o, e, d, v] = await Promise.all([
       buscarOrigensDoGrupo(empresaId, mes, cod).catch(() => [] as OrigemDoGrupo[]),
       buscarResumoEquipes(empresaId, mes, cod).catch(() => [] as EquipeDoMestre[]),
       buscarOperadoresDivergentes(empresaId, mes, cod).catch(() => [] as OperadorDivergente[]),
+      buscarVinculoOperadores(empresaId, mes, cod).catch(() => [] as VinculoOperadores[]),
     ]);
     setOrigens(o); setEquipes(e); setDivergentes(d);
+    setPessoas(Object.fromEntries(v.map(x => [x.nome_subgrupo, x])));
   }, [empresaId, mes, cod]);
 
   useEffect(() => { void carregar(); }, [carregar]);
@@ -128,19 +145,22 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
         ) : (
           <div className="rounded-lg border border-border/40 bg-background/60 divide-y divide-border/25">
             {origens.map((o, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2 text-xs">
+              <div key={i} className={cn('flex items-center gap-3 px-3 py-2 text-xs',
+                !o.soma && 'bg-muted/25')}>
                 <span className={cn('shrink-0',
-                  o.origem === 'contribuicao' ? 'text-success'
-                    : o.origem === 'distribuido' ? 'text-warning'
+                  o.origem === 'contribuicao' ? (o.soma ? 'text-success' : 'text-muted-foreground')
+                    : o.origem === 'para_outro' ? 'text-muted-foreground'
                     : o.origem === 'sem_destino' ? 'text-destructive'
                     : 'text-muted-foreground')}>
                   {o.origem === 'contribuicao' ? <ArrowDownLeft className="w-3.5 h-3.5" />
-                    : o.origem === 'distribuido' ? <ArrowUpRight className="w-3.5 h-3.5" />
+                    : o.origem === 'para_outro' ? <ArrowUpRight className="w-3.5 h-3.5" />
                     : o.origem === 'sem_destino' ? <HelpCircle className="w-3.5 h-3.5" />
                     : <span className="block w-3.5 h-3.5 rounded-sm bg-muted-foreground/30" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <span className="text-foreground font-medium">{ROTULO_ORIGEM[o.origem]}</span>
+                  <span className={cn('font-medium', o.soma ? 'text-foreground' : 'text-muted-foreground')}>
+                    {ROTULO_ORIGEM[o.origem]}
+                  </span>
                   {o.rotulo && o.origem !== 'proprio' && (
                     <span className="text-muted-foreground"> · {o.rotulo}</span>
                   )}
@@ -154,12 +174,17 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
                   o.tipo === 'Extra' ? 'text-chart-4 border-chart-4/40' : 'text-muted-foreground')}>
                   {o.tipo}
                 </Badge>
+                {!o.soma && (
+                  <Badge variant="outline" className="text-[10px] shrink-0 text-muted-foreground">
+                    não soma
+                  </Badge>
+                )}
                 <span className="text-muted-foreground tabular-nums shrink-0 w-16 text-right">
                   {o.linhas.toLocaleString('pt-BR')}
                 </span>
-                <span className={cn('tabular-nums font-semibold shrink-0 w-28 text-right',
-                  o.origem === 'distribuido' ? 'text-warning' : 'text-foreground')}>
-                  {o.origem === 'distribuido' ? '−' : ''}{formatBRL(o.valor)}
+                <span className={cn('tabular-nums shrink-0 w-28 text-right',
+                  o.soma ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+                  {formatBRL(o.valor)}
                 </span>
               </div>
             ))}
@@ -171,10 +196,18 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
             </div>
           </div>
         )}
-        {grupo.distribuido > 0 && (
+        {grupo.contrib_extra > 0 && (
           <p className="text-[11px] text-muted-foreground mt-1.5">
-            O que este setor cobrou para outros já está somado no total <strong>deles</strong> —
-            por isso sai daqui, e o mesmo dinheiro não é contado duas vezes.
+            O <strong>Extra</strong> que outro setor cobrou para este <strong>não soma</strong>:
+            é a segunda perna de um pagamento que este setor já tem como direto. O ERP emite as
+            duas — rateio de comissão, não transferência. Só o <strong>Integral</strong> entra,
+            porque esse o setor não tem.
+          </p>
+        )}
+        {grupo.para_outros_integral + grupo.para_outros_extra > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Este setor cobrou {formatBRL(grupo.para_outros_integral + grupo.para_outros_extra)} carimbado
+            para outros — e isso <strong>continua no total dele</strong>. Nada sai daqui.
           </p>
         )}
       </section>
@@ -211,11 +244,32 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
           <p className="text-xs text-muted-foreground">Nenhuma equipe com valor neste mês.</p>
         ) : (
           <div className="rounded-lg border border-border/40 bg-background/60 divide-y divide-border/25">
-            {times.map(e => (
-              <div key={e.nome_subgrupo} className="flex items-center gap-3 px-3 py-2 text-xs flex-wrap">
-                <span className="font-medium text-foreground min-w-[14ch] flex-1 truncate">
-                  {e.nome_subgrupo}
-                </span>
+            {times.map(e => {
+              const p = pessoas[e.nome_subgrupo];
+              const abertaAqui = equipeAberta === e.nome_subgrupo;
+              return (
+              <div key={e.nome_subgrupo}>
+              <div className="flex items-center gap-3 px-3 py-2 text-xs flex-wrap">
+                <button type="button"
+                  onClick={() => setEquipeAberta(abertaAqui ? null : e.nome_subgrupo)}
+                  className="flex items-center gap-1.5 min-w-[14ch] flex-1 text-left group">
+                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform',
+                    abertaAqui && 'rotate-90')} />
+                  <span className="font-medium text-foreground truncate group-hover:underline">
+                    {e.nome_subgrupo}
+                  </span>
+                </button>
+                {/* Quantos operadores da equipe casaram com o cadastro pelo
+                    login. Casamento automático, calculado — nada é gravado. */}
+                {p && (
+                  <span className={cn('tabular-nums shrink-0 inline-flex items-center gap-1',
+                    p.sem_cadastro > 0 ? 'text-warning' : 'text-success')}>
+                    {p.sem_cadastro > 0
+                      ? <UserX className="w-3 h-3" />
+                      : <UserCheck className="w-3 h-3" />}
+                    {p.vinculados}/{p.operadores} no cadastro
+                  </span>
+                )}
                 <span className="text-muted-foreground tabular-nums shrink-0">
                   {e.cobradoras} pessoa{e.cobradoras !== 1 ? 's' : ''}
                 </span>
@@ -268,7 +322,19 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
                   )}
                 </div>
               </div>
-            ))}
+
+              {abertaAqui && (
+                <div className="px-3 pb-3">
+                  <Mestre59Equipe
+                    empresaId={empresaId} mes={mes} codGrupo={cod}
+                    subgrupo={e.nome_subgrupo}
+                    equipeVinculada={e.estado === 'vinculado' ? e.equipe_nome : null}
+                  />
+                </div>
+              )}
+              </div>
+              );
+            })}
           </div>
         )}
 

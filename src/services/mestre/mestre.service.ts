@@ -40,19 +40,31 @@ export type EstadoLote = 'aberto' | 'vigente' | 'substituido' | 'descartado';
 export type EstadoVinculo = 'novo' | 'vinculado' | 'ignorado';
 
 /**
- * Um grupo do relatório, com o dinheiro separado por origem.
+ * Um grupo do relatório, com o dinheiro separado em direto e extra.
  *
- * A separação existe para não contar o mesmo dinheiro duas vezes. O receptivo
- * cobra PARA outro setor e o ERP carimba o destino no `Setor` da linha — mas a
- * linha mora no grupo do receptivo, não no do destino. Então:
+ * ## A regra, e o erro que ela corrige
  *
- *   recebido_proprio      o que é do grupo e fica com ele
- *   recebido_contribuido  o que outro grupo cobrou para este
- *   recebido_total        proprio + contribuido  ← é este o número do setor
- *   distribuido           o que ESTE grupo cobrou para outros (sai do total)
+ * Um pagamento pode ter DOIS operadores: um direto e um extra. Quando um deles
+ * é do receptivo, o ERP emite a mesma cobrança nas duas pernas — `Integral` em
+ * quem cobrou direto, `Extra` no receptivo. O dinheiro já está nos dois
+ * relatórios de propósito: é rateio de comissão, não transferência.
  *
- * Somar `recebido_total` de todos os grupos devolve o total do arquivo ao
- * centavo — conferido em agosto/2026: R$ 11.868.638,69 dos dois lados.
+ *   recebido_proprio  TUDO o que o grupo cobrou. Nada sai daqui.
+ *   contrib_integral  o Integral que outro grupo cobrou para este. SOMA — é o
+ *                     único que não está no relatório do setor.
+ *   contrib_extra     o Extra que outro grupo cobrou para este. NÃO soma: o
+ *                     setor já tem esse pagamento como direto.
+ *   recebido_total    recebido_proprio + contrib_integral
+ *
+ * Medido em agosto/2026, Play 5: das 221 linhas Integral que o receptivo
+ * carimbou para ele, ZERO estão no relatório do Play 5 — por isso somam. Das
+ * 425 Extra, 248 casam linha a linha com o relatório do Play 5 — por isso não.
+ *
+ *   Play 5 = 361.768,85 + 38.656,52 = R$ 400.425,37
+ *
+ * ⚠️ Somar `recebido_total` de todos os grupos dá MAIS que o total do arquivo,
+ * e isso está certo: o Extra é a mesma cobrança em duas pernas, e as duas
+ * contam. A diferença é exatamente o Extra carimbado.
  */
 export interface GrupoDoMestre {
   cod_grupo_filtro: string;
@@ -64,17 +76,20 @@ export interface GrupoDoMestre {
   setor_nome: string | null;
   estado: EstadoVinculo;
   linhas: number;
+  /** Tudo o que o grupo cobrou. Nada é subtraído. */
   recebido_proprio: number;
-  /** A «Contribuição Receptivo», vinda pronta do arquivo. */
-  recebido_contribuido: number;
-  recebido_total: number;
-  distribuido: number;
-  /** Composto cujo destino não casou com grupo nenhum. Visível, nunca some. */
-  sem_destino: number;
   integral_proprio: number;
   extra_proprio: number;
-  integral_contribuido: number;
-  extra_contribuido: number;
+  /** Integral vindo de outro grupo. O único que soma. */
+  contrib_integral: number;
+  /** Extra vindo de outro grupo. Informativo — o setor já o tem como direto. */
+  contrib_extra: number;
+  recebido_total: number;
+  /** Deste grupo, carimbado para outros. Informativo: continua no total daqui. */
+  para_outros_integral: number;
+  para_outros_extra: number;
+  /** Composto cujo destino não casou com grupo nenhum. Visível, nunca some. */
+  sem_destino: number;
   colchao_valor: number;
   /** `SubgrupoEquipe = ATESTADOS|FERIAS`. Conta no total, e aparece à parte. */
   atestado_valor: number;
@@ -87,11 +102,13 @@ export interface GrupoDoMestre {
 
 /** De onde vem (ou para onde vai) o dinheiro de um grupo. Zero não aparece. */
 export interface OrigemDoGrupo {
-  origem: 'proprio' | 'contribuicao' | 'distribuido' | 'sem_destino';
+  origem: 'proprio' | 'contribuicao' | 'para_outro' | 'sem_destino';
   /** O outro grupo envolvido: de onde veio, ou para onde foi. */
   cod_outro: string | null;
   rotulo: string | null;
   tipo: 'Integral' | 'Extra';
+  /** Esta linha entra no total do setor? O Extra vindo de fora não entra. */
+  soma: boolean;
   linhas: number;
   valor: number;
 }
@@ -110,6 +127,59 @@ export interface EquipeDoMestre {
   estado: EstadoVinculo;
   primeira_aparicao: string | null;
   ultima_aparicao: string | null;
+}
+
+/**
+ * Um operador de uma equipe do relatório.
+ *
+ * `perfil_id` é o casamento AUTOMÁTICO com o cadastro — `Cobradora` contra
+ * `perfis.usuario` em minúsculo, a mesma regra de `resolverOperadores`. Ele é
+ * calculado na leitura e **não grava nada**: enquanto o mestre está em
+ * conferência, vincular sozinho seria mudar cadastro de gente com base num
+ * número que ainda pode mudar.
+ */
+export interface OperadorDaEquipe {
+  cobradora: string;
+  linhas: number;
+  recebido: number;
+  integral_valor: number;
+  extra_valor: number;
+  colchao_valor: number;
+  nrs: number;
+  dias: number;
+  perfil_id: string | null;
+  perfil_nome: string | null;
+  perfil_ativo: boolean | null;
+  equipe_atual: string | null;
+  setor_atual: string | null;
+}
+
+/** Uma linha do relatório, no nível do acordo. */
+export interface LinhaDoOperador {
+  nr_documento: string;
+  parcela: string;
+  titulo: string;
+  cliente: string;
+  cod_cli: string;
+  empresa_erp: string;
+  tp_doc: string;
+  tipo_venda: string | null;
+  dt_lig: string | null;
+  dt_pgto: string;
+  dias_atraso: number | null;
+  recebido: number;
+  tipo: string;
+  colchao: boolean;
+  setor_carimbado: string;
+  linha_num: number;
+}
+
+/** Quantos operadores de cada equipe casaram com o cadastro. */
+export interface VinculoOperadores {
+  nome_subgrupo: string;
+  operadores: number;
+  vinculados: number;
+  sem_cadastro: number;
 }
 
 export type ProblemaOperador = 'sem_cadastro' | 'sem_equipe' | 'equipe_errada' | 'setor_errado';
@@ -299,14 +369,14 @@ export async function buscarResumoGrupos(empresaId: string, mes: string): Promis
     ...g,
     linhas:               n(g.linhas),
     recebido_proprio:     n(g.recebido_proprio),
-    recebido_contribuido: n(g.recebido_contribuido),
-    recebido_total:       n(g.recebido_total),
-    distribuido:          n(g.distribuido),
-    sem_destino:          n(g.sem_destino),
     integral_proprio:     n(g.integral_proprio),
     extra_proprio:        n(g.extra_proprio),
-    integral_contribuido: n(g.integral_contribuido),
-    extra_contribuido:    n(g.extra_contribuido),
+    contrib_integral:     n(g.contrib_integral),
+    contrib_extra:        n(g.contrib_extra),
+    recebido_total:       n(g.recebido_total),
+    para_outros_integral: n(g.para_outros_integral),
+    para_outros_extra:    n(g.para_outros_extra),
+    sem_destino:          n(g.sem_destino),
     colchao_valor:        n(g.colchao_valor),
     atestado_valor:       n(g.atestado_valor),
     equipes:              n(g.equipes),
@@ -339,6 +409,52 @@ export async function buscarResumoEquipes(
     integral_valor: n(e.integral_valor),
     extra_valor:    n(e.extra_valor),
     cobradoras:     n(e.cobradoras),
+  }));
+}
+
+export async function buscarOperadoresDaEquipe(
+  empresaId: string, mes: string, codGrupo: string, subgrupo: string,
+): Promise<OperadorDaEquipe[]> {
+  const { data, error } = await rpcSemTipo<OperadorDaEquipe[]>('fn_mestre_operadores_da_equipe', {
+    p_empresa_id: empresaId, p_mes: mes, p_cod: codGrupo, p_subgrupo: subgrupo,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(o => ({
+    ...o,
+    linhas:         n(o.linhas),
+    recebido:       n(o.recebido),
+    integral_valor: n(o.integral_valor),
+    extra_valor:    n(o.extra_valor),
+    colchao_valor:  n(o.colchao_valor),
+    nrs:            n(o.nrs),
+    dias:           n(o.dias),
+  }));
+}
+
+export async function buscarLinhasDoOperador(
+  empresaId: string, mes: string, codGrupo: string, cobradora: string, subgrupo?: string | null,
+): Promise<LinhaDoOperador[]> {
+  const { data, error } = await rpcSemTipo<LinhaDoOperador[]>('fn_mestre_linhas_do_operador', {
+    p_empresa_id: empresaId, p_mes: mes, p_cod: codGrupo,
+    p_cobradora: cobradora, p_subgrupo: subgrupo ?? null, p_limite: 300,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(l => ({
+    ...l, recebido: n(l.recebido),
+    dias_atraso: l.dias_atraso === null ? null : n(l.dias_atraso),
+    linha_num: n(l.linha_num),
+  }));
+}
+
+export async function buscarVinculoOperadores(
+  empresaId: string, mes: string, codGrupo: string,
+): Promise<VinculoOperadores[]> {
+  const { data, error } = await rpcSemTipo<VinculoOperadores[]>('fn_mestre_vinculo_operadores', {
+    p_empresa_id: empresaId, p_mes: mes, p_cod: codGrupo,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(v => ({
+    ...v, operadores: n(v.operadores), vinculados: n(v.vinculados), sem_cadastro: n(v.sem_cadastro),
   }));
 }
 

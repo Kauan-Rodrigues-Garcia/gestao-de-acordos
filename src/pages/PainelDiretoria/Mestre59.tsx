@@ -27,13 +27,24 @@
  * código sobrevive à troca de liderança — `COB PLAY 1 - PAOLA` vira outro texto
  * quando a Paola sair, o código 25 continua 25.
  *
- * ## As três colunas de dinheiro
+ * ## As colunas de dinheiro, e a regra do direto × extra
  *
- * `Próprio`, `Receptivo` e `Total` existem porque o receptivo cobra PARA outro
- * setor, e o ERP carimba o destino na linha — mas a linha mora no grupo do
- * receptivo. Somar a contribuição no destino sem tirá-la da origem contaria o
- * mesmo dinheiro duas vezes. Com a separação, somar `Total` de todos os grupos
- * devolve o total do arquivo ao centavo.
+ * Um pagamento pode ter DOIS operadores: um direto e um extra. Quando um deles
+ * é do receptivo, o ERP emite a mesma cobrança nas duas pernas — `Integral` em
+ * quem cobrou direto, `Extra` no receptivo. O dinheiro já está nos dois
+ * relatórios de propósito: é rateio de comissão, não transferência.
+ *
+ *   Próprio            tudo o que o grupo cobrou. Nada sai daqui.
+ *   Integral recebido  o Integral que outro grupo cobrou para este. SOMA —
+ *                      é o único que o setor ainda não tem.
+ *   Total              Próprio + Integral recebido.
+ *
+ * O `Extra` que vem de fora NÃO soma, e aparece só como informação: o setor já
+ * tem esse pagamento como direto. Somá-lo duplicaria.
+ *
+ * ⚠️ Por isso a soma dos totais dos setores é MAIOR que o total do arquivo. Não
+ * é erro: o Integral do receptivo conta nele e no destino, que é o rateio. O
+ * total do RELATÓRIO é a soma dos `Próprio`, onde cada linha conta uma vez.
  *
  * ## Por que "sem vínculo" fica no topo, em destaque
  *
@@ -253,10 +264,14 @@ export function Mestre59({ empresaId, mes }: Props) {
     const ignorados  = grupos.filter(g => g.estado === 'ignorado');
     const vinculados = grupos.filter(g => g.estado === 'vinculado');
     return {
-      // Soma dos TOTAIS: o que sai de um grupo entra no outro, então isto bate
-      // com o total do arquivo sem contar nada duas vezes.
-      totalMes:        grupos.reduce((s, g) => s + g.recebido_total, 0),
-      receptivo:       grupos.reduce((s, g) => s + g.recebido_contribuido, 0),
+      // `recebido_proprio` soma o arquivo exato — cada linha conta uma vez no
+      // grupo que a cobrou. O total do RELATÓRIO é este.
+      totalArquivo:    grupos.reduce((s, g) => s + g.recebido_proprio, 0),
+      // Já a soma dos TOTAIS dos setores é maior, e de propósito: o Integral do
+      // receptivo conta no receptivo e no destino. Não é erro, é rateio.
+      totalSetores:    grupos.reduce((s, g) => s + g.recebido_total, 0),
+      receptivoSoma:   grupos.reduce((s, g) => s + g.contrib_integral, 0),
+      receptivoExtra:  grupos.reduce((s, g) => s + g.contrib_extra, 0),
       semVinculoValor: semVinculo.reduce((s, g) => s + g.recebido_total, 0),
       semVinculoQtd:   semVinculo.length,
       ignoradoValor:   ignorados.reduce((s, g) => s + g.recebido_total, 0),
@@ -415,14 +430,14 @@ export function Mestre59({ empresaId, mes }: Props) {
               <>{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</>
             ) : (
               <>
-                <Tile rotulo="Total do relatório" valor={formatBRL(resumo.totalMes)}
-                  sub={`${resumo.linhas.toLocaleString('pt-BR')} linhas`} />
+                <Tile rotulo="Total do relatório" valor={formatBRL(resumo.totalArquivo)}
+                  sub={`${resumo.linhas.toLocaleString('pt-BR')} linhas · cada uma uma vez`} />
                 <Tile rotulo="Vinculado a setor" valor={formatBRL(resumo.vinculadoValor)}
                   sub={`${resumo.vinculadoQtd} grupo(s)`} tom="ok" />
                 <Tile rotulo="Sem vínculo" valor={formatBRL(resumo.semVinculoValor)}
                   sub={`${resumo.semVinculoQtd} grupo(s)`} tom={resumo.semVinculoValor > 0 ? 'alerta' : undefined} />
-                <Tile rotulo="Do receptivo" valor={formatBRL(resumo.receptivo)}
-                  sub="já somado nos destinos" />
+                <Tile rotulo="Integral do receptivo" valor={formatBRL(resumo.receptivoSoma)}
+                  sub={`soma nos destinos · Extra ${formatBRL(resumo.receptivoExtra)} não soma`} />
               </>
             )}
           </div>
@@ -472,7 +487,7 @@ export function Mestre59({ empresaId, mes }: Props) {
                 <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                   <th className="text-left font-semibold px-5 py-2.5">Código · rótulo no relatório</th>
                   <th className="text-right font-semibold px-3 py-2.5">Próprio</th>
-                  <th className="text-right font-semibold px-3 py-2.5">Receptivo</th>
+                  <th className="text-right font-semibold px-3 py-2.5">Integral recebido</th>
                   <th className="text-right font-semibold px-3 py-2.5">Total</th>
                   <th className="text-right font-semibold px-3 py-2.5">Extra</th>
                   <th className="text-left font-semibold px-3 py-2.5 w-[280px]">Setor do sistema</th>
@@ -481,8 +496,11 @@ export function Mestre59({ empresaId, mes }: Props) {
               <tbody>
                 {grupos.map(g => {
                   const aberto = expandido === g.cod_grupo_filtro;
-                  const ausente = g.linhas === 0 && g.recebido_contribuido === 0;
-                  const extra = g.extra_proprio + g.extra_contribuido;
+                  const ausente = g.linhas === 0 && g.contrib_integral === 0;
+                  // Extra do PRÓPRIO grupo. O que vem de fora não entra no total
+                  // e tem coluna própria no detalhe — somá-lo aqui seria repetir
+                  // exatamente o dinheiro que a regra manda não repetir.
+                  const extra = g.extra_proprio;
                   return (
                     // A `key` fica no Fragment, não nas `<tr>`: o React exige a
                     // chave no elemento mais externo que o `map` devolve, e uma
@@ -510,7 +528,11 @@ export function Mestre59({ empresaId, mes }: Props) {
                                 ? <span className="text-warning">não veio neste mês</span>
                                 : <>
                                     {g.equipes} equipe(s) · {g.cobradoras} pessoa(s) · {g.dias} dia(s)
-                                    {g.distribuido > 0 && <span className="text-warning"> · distribuiu {formatBRL(g.distribuido)}</span>}
+                                    {g.contrib_extra > 0 && (
+                                      <span className="text-muted-foreground/70">
+                                        {' '}· {formatBRL(g.contrib_extra)} de Extra vindo de fora, que não soma
+                                      </span>
+                                    )}
                                     {g.atestado_valor > 0 && <span className="text-chart-4"> · atestado {formatBRL(g.atestado_valor)}</span>}
                                   </>}
                             </span>
@@ -520,8 +542,8 @@ export function Mestre59({ empresaId, mes }: Props) {
                           {formatBRL(g.recebido_proprio)}
                         </td>
                         <td className={cn('px-3 py-2.5 text-right tabular-nums',
-                          g.recebido_contribuido > 0 ? 'text-success font-medium' : 'text-muted-foreground/50')}>
-                          {g.recebido_contribuido > 0 ? `+${formatBRL(g.recebido_contribuido)}` : '—'}
+                          g.contrib_integral > 0 ? 'text-success font-medium' : 'text-muted-foreground/50')}>
+                          {g.contrib_integral > 0 ? `+${formatBRL(g.contrib_integral)}` : '—'}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-foreground">
                           {formatBRL(g.recebido_total)}
