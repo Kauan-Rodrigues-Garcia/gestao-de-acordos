@@ -39,8 +39,14 @@ export interface EntradaMensagem {
   recebido: number;
   /** Meta individual. `null` = sem meta configurada. */
   meta: number | null;
-  /** 'H.O.' ou 'Bruto' — o painel já converteu; isto só nomeia. */
-  rotuloUnidade: string;
+  /**
+   * 'H.O.' ou 'Bruto' — o painel já converteu; isto só nomeia.
+   *
+   * `null` na BookPlay, onde não existem duas unidades: lá o recebido é o
+   * recebido, e escrever «Recebido (H.O.)» num texto que vai para o operador
+   * cita um conceito da PaguePlay que a empresa dele não usa.
+   */
+  rotuloUnidade: string | null;
   /** O detalhe já calculado — a MESMA fonte que desenha a linha expandida. */
   detalhe: DetalheOperador;
 }
@@ -75,7 +81,8 @@ export function montarMensagemOperador(entrada: EntradaMensagem): string {
   linhas.push('');
 
   // ── Onde está ──────────────────────────────────────────────────────────────
-  linhas.push(`*Recebido (${rotuloUnidade}):* ${formatBRL(recebido)}`);
+  const rotuloRecebido = rotuloUnidade ? `*Recebido (${rotuloUnidade}):*` : '*Recebido:*';
+  linhas.push(`${rotuloRecebido} ${formatBRL(recebido)}`);
   if (meta !== null && meta > 0) {
     linhas.push(`*Meta:* ${formatBRL(meta)}${d.pctMeta !== null ? ` (${d.pctMeta}% da meta)` : ''}`);
   }

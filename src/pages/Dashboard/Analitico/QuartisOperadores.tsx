@@ -268,8 +268,13 @@ function DetalheOperador({
   linha: LinhaQuartil;
   quartis: QuartilConfig[];
   recebidosDoGrupo: readonly number[];
-  /** 'H.O.' ou 'Bruto' — o painel inteiro já vem convertido; isto só rotula. */
-  rotuloUnidadeAtiva: string;
+  /**
+   * 'H.O.' ou 'Bruto' — o painel inteiro já vem convertido; isto só rotula.
+   *
+   * `null` na BookPlay: lá não há alternador de unidade nem H.O., e o rótulo
+   * caía em 'H.O.' só porque é o padrão de `UNIDADE_PADRAO`.
+   */
+  rotuloUnidadeAtiva: string | null;
   nomeDoGrupo: string;
   /** Mês em análise ('yyyy-MM') — entra no texto que o líder encaminha. */
   mes: string;
@@ -464,7 +469,10 @@ function DetalheOperador({
       </Bloco>
 
       {/* ── O que há dentro do recebimento ─────────────────────────────── */}
-      <Bloco Icone={BarChart3} titulo={`Números do mês · ${rotuloUnidadeAtiva}`}>
+      <Bloco
+        Icone={BarChart3}
+        titulo={rotuloUnidadeAtiva ? `Números do mês · ${rotuloUnidadeAtiva}` : 'Números do mês'}
+      >
         <div className="space-y-1.5">
           <LinhaValor
             label="% da meta do mês"
@@ -1073,7 +1081,7 @@ export function QuartisOperadores({
                                   linha={l}
                                   quartis={quartis}
                                   recebidosDoGrupo={recebidosDoGrupo}
-                                  rotuloUnidadeAtiva={rotuloUnidade(unidade)}
+                                  rotuloUnidadeAtiva={isPP ? rotuloUnidade(unidade) : null}
                                   nomeDoGrupo={nomeDoGrupo}
                                   mes={mes}
                                 />

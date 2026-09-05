@@ -55,6 +55,23 @@ describe('montarMensagemOperador', () => {
     expect(montar()).toMatch(/\*Recebido \(H\.O\.\):\* R\$\s?7\.000,00/);
   });
 
+  /*
+   * BookPlay: sem unidade, sem parêntese.
+   *
+   * Relatado em 05/09/2026 a partir de um texto copiado de um operador da
+   * BookPlay, que saiu com «Recebido (H.O.)». Lá não existe H.O. nem
+   * alternador de unidade — o rótulo caía em 'H.O.' porque é o valor de
+   * UNIDADE_PADRAO, e o texto acabava citando um conceito só da PaguePlay.
+   */
+  it('sem unidade (BookPlay), o recebido não ganha parêntese nenhum', () => {
+    const texto = montarMensagemOperador({
+      nome: 'Ana Paula', mes: '2026-08', recebido: 7_000, meta: 20_000,
+      rotuloUnidade: null, detalhe: detalhePadrao(),
+    });
+    expect(texto).toMatch(/\*Recebido:\* R\$\s?7\.000,00/);
+    expect(texto).not.toContain('H.O.');
+  });
+
   it('traz a meta com a porcentagem já calculada', () => {
     expect(montar()).toMatch(/\*Meta:\* R\$\s?20\.000,00 \(35% da meta\)/);
   });
