@@ -1375,17 +1375,31 @@ function mensagemPedidoNr(bruta: string): string {
 /**
  * Os pedidos da empresa. `apenasAbertos` é o que a fila do líder usa; o
  * histórico completo serve à conferência de «por que este NR tem dois».
+ *
+ * ## `setorId`
+ *
+ * Até 05/09/2026 esta consulta recortava só por empresa, com o comentário de
+ * que «a RLS já recorta». Recorta mesmo — mas por PERMISSÃO, e quem aprova Pix
+ * pode aprovar na empresa inteira. Na prática o líder do Play 3 recebia para
+ * decidir a duplicidade de um NR do Receptivo: um caso que ele não acompanhou,
+ * entre duas pessoas que ele não gerencia.
+ *
+ * O recorte agora é o mesmo de `fetchAcordosPix`: o líder preso a um setor
+ * pede o setor dele. `null`/omitido continua trazendo a empresa — é o que quem
+ * enxerga todos os setores precisa, e a tela estreita depois por setor em foco.
  */
 export async function fetchPedidosNr(
   empresaId: string,
-  apenasAbertos = true,
+  opcoes: { apenasAbertos?: boolean; setorId?: string | null } = {},
 ): Promise<PixNrPedido[]> {
+  const { apenasAbertos = true, setorId = null } = opcoes;
   // `tabelaSemTipo`: a tabela so entra em database.types.ts quando os tipos
   // forem regerados, e a migration 20260902100000 e mais nova que eles.
   let q = tabelaSemTipo<PixNrPedido>('pix_automatico_nr_pedidos')
     .select('*')
     .eq('empresa_id', empresaId);
   if (apenasAbertos) q = q.eq('status', 'pendente');
+  if (setorId) q = q.eq('setor_id', setorId);
 
   const { data, error } = await q;
   if (error) {

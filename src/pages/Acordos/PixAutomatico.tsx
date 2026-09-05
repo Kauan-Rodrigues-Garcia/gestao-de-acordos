@@ -81,10 +81,13 @@ import {
   filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
   calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe,
   textoPrazoExpurgo,
+  pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial, itensDoSetorPix,
+  setorDaLinhaPix,
   type OperadorInfo, type FiltroPagamento,
 } from './pixAutomaticoView';
 import { PixComissaoDobrada } from './PixComissaoDobrada';
-import { PixRankingSetor } from './PixRankingSetor';
+import { PixRankingSetor, type AbaRankingPix } from './PixRankingSetor';
+import { PixBarraSetores, type ResumoSetorPix } from './PixBarraSetores';
 import { PixMetaPainel } from './PixMetaPainel';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
@@ -139,6 +142,16 @@ function conjuntosIguais(a: Set<string>, b: Set<string>): boolean {
  * equipes do Play 3» depois que a lista já chegou.
  */
 interface EquipeComSetor { id: string; nome: string; setor_id: string | null }
+
+/**
+ * «Todos os setores» ESCOLHIDO, que não é o mesmo que ninguém ter escolhido.
+ *
+ * `filtroSetor` guardava `''` para os dois casos, e enquanto «todos» era o
+ * padrão isso bastava. Agora a aba abre num setor — ver `setorFoco` —, e sem
+ * separar as duas coisas quem escolhesse «todos» voltaria ao setor padrão no
+ * render seguinte, sem entender por que o clique não pegou.
+ */
+const TODOS_SETORES = '__todos__';
 
 /**
  * A última resposta da aba, guardada para a volta não custar um esqueleto.
@@ -471,23 +484,66 @@ export function PixAutomatico() {
   const [editValor, setEditValor]       = useState('');
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
-  // Setor cuja configuração (% e interruptor) está em edição: multi-setor usa o
-  // filtro de setor; líder/elite sempre o próprio setor.
-  const setorConfig = podeVerTodosSetores ? (filtroSetor || meuSetor) : meuSetor;
+  /*
+   * Equipe e setor de cada operador.
+   *
+   * Sobem para cá porque o recorte por setor passou a depender do mapa: uma
+   * linha sem carimbo de setor cai no setor ATUAL do operador, e sem isso ela
+   * sumiria do ranking e dos painéis enquanto continuava na tabela — os dois
+   * discordando sobre o que é «do setor». Ver `setorDaLinhaPix`.
+   */
+  const operadorEquipe = useMemo(() => mapaOperadorEquipe(operadores), [operadores]);
+  const operadorSetor  = useMemo(() => mapaOperadorSetor(operadores),  [operadores]);
+
+  /**
+   * Os setores que TIVERAM movimento no mês — as abas do ranking e o alvo do
+   * padrão da barra. Ver `setoresComAcordosPix`.
+   */
+  const setoresComMovimento = useMemo(
+    () => setoresComAcordosPix(itens, setores, mes, operadorSetor),
+    [itens, setores, mes, operadorSetor],
+  );
+
+  /**
+   * Em que setor a aba abre para quem enxerga mais de um.
+   *
+   * Prefere um setor COM movimento, porque abrir num setor parado mostra
+   * painéis vazios e faz a pessoa procurar o defeito onde só faltou volume. Sem
+   * nenhum com movimento, cai na lista inteira — melhor um setor quieto que
+   * nenhum.
+   */
+  const setorPadrao = useMemo(
+    () => escolherSetorInicial(setoresComMovimento, meuSetor)
+       ?? escolherSetorInicial(setores, meuSetor),
+    [setoresComMovimento, setores, meuSetor],
+  );
 
   /**
    * O setor que a tela está OLHANDO. `null` = todos.
    *
-   * Não é o mesmo que `setorConfig`, e a diferença é o defeito que esta linha
-   * conserta. `setorConfig` cai no próprio setor quando ninguém filtrou, porque
-   * editar o percentual precisa de um alvo concreto. Para o RECORTE isso mente:
-   * um super admin com «Todos os setores» escolhido, mas com setor no cadastro,
-   * teria as listas estreitadas ao setor dele sem ter pedido.
+   * Três estados, não dois: o setor escolhido, «todos» escolhido
+   * (`TODOS_SETORES`) e ninguém escolheu ainda (`''`) — este último resolve no
+   * padrão. Enquanto «todos» era o padrão, os dois últimos eram a mesma coisa;
+   * deixaram de ser quando a aba passou a abrir num setor.
    *
-   * Aqui, quem escolhe setor vê exatamente o que escolheu — inclusive «todos»,
-   * que é uma escolha e não uma ausência.
+   * ## Por que a aba deixou de abrir em «todos»
+   *
+   * Com «todos» a tela empilhava um painel de metas por setor, a fila de NRs da
+   * empresa e a lista inteira num scroll só. Era a queixa de 05/09/2026: para
+   * apresentar um número à diretoria era preciso rolar procurando. Um setor de
+   * cada vez cabe na tela; «todos» continua a um clique, para comparar.
    */
-  const setorFoco = podeVerTodosSetores ? (filtroSetor || null) : meuSetor;
+  const setorFoco = podeVerTodosSetores
+    ? (filtroSetor === TODOS_SETORES ? null : (filtroSetor || setorPadrao))
+    : meuSetor;
+
+  /**
+   * Setor cuja configuração (% e interruptor) está em edição.
+   *
+   * Segue o foco, e cai no próprio setor quando o foco é «todos»: editar o
+   * percentual precisa de um alvo concreto, e «todos os setores» não é um.
+   */
+  const setorConfig = podeVerTodosSetores ? (setorFoco ?? meuSetor) : meuSetor;
 
   /**
    * As equipes do setor em foco.
@@ -612,9 +668,11 @@ export function PixAutomatico() {
         fetchSaldosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
-        // A RLS ja recorta: o operador so ve os proprios pedidos, quem aprova
-        // Pix ve os da empresa. Nao ha filtro a repetir aqui.
-        fetchPedidosNr(empresa.id),
+        // A RLS recorta por PERMISSÃO, e quem aprova Pix aprova na empresa
+        // inteira — por isso o líder preso a um setor pede o setor dele aqui.
+        // Sem isto ele recebia para decidir NR de setor que não acompanha.
+        // O foco fino (a barra de setores) recorta depois, sem ir ao banco.
+        fetchPedidosNr(empresa.id, { setorId: setorEscopo }),
         podeVerDeOutros
           ? fetchPremiacoesPagamento(empresa.id, mes)
           : Promise.resolve([]),
@@ -824,9 +882,6 @@ export function PixAutomatico() {
   useEffect(() => { void carregarMetaPix(); }, [carregarMetaPix]);
 
   // ── Derivados ───────────────────────────────────────────────────────────
-  const operadorEquipe = useMemo(() => mapaOperadorEquipe(operadores), [operadores]);
-  const operadorSetor  = useMemo(() => mapaOperadorSetor(operadores),  [operadores]);
-
   // Filtro de operador só lista OPERADORES (sem líder/gerência/diretoria etc.)
   const operadoresFiltro = useMemo(() => apenasOperadores(operadores), [operadores]);
 
@@ -840,11 +895,11 @@ export function PixAutomatico() {
     () => filtrarItensPix(
       itens,
       { busca, status: filtroStatus, operadorId: filtroOperador,
-        equipeId: filtroEquipe, setorId: setorEscopo ?? filtroSetor,
+        equipeId: filtroEquipe, setorId: setorEscopo ?? setorFoco,
         pagamento: filtroPagamento, de: dataDe, ate: dataAte, mes },
       { porEquipe: operadorEquipe, porSetor: operadorSetor },
     ),
-    [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
+    [itens, busca, filtroStatus, filtroOperador, filtroEquipe, setorFoco,
      filtroPagamento, dataDe, dataAte, mes, setorEscopo, operadorEquipe, operadorSetor],
   );
 
@@ -979,9 +1034,77 @@ export function PixAutomatico() {
     return m;
   }, [operadores]);
 
-  const ranking = useMemo(
-    () => rankingPixSetor(itens, pctPorSetor, mes, nomePorOperador, metaPorSetor),
-    [itens, pctPorSetor, nomePorOperador, metaPorSetor, mes],
+  /**
+   * Um ranking por setor — nunca um que os misture.
+   *
+   * Comparar operadores de setores diferentes não responde pergunta nenhuma: a
+   * meta de acordos é por setor, o percentual de comissão é por setor, e o
+   * volume que chega a cada um não se parece. Até 05/09/2026 o super admin sem
+   * filtro via a empresa inteira num pódio só, com o nome de UM setor no
+   * cabeçalho — um número errado apresentado como certo.
+   *
+   * O líder preso a um setor tem UMA aba, e ela recebe `itens` sem recorte
+   * extra: a consulta dele já veio por `setorEscopo`, e filtrar de novo tiraria
+   * as linhas de carimbo vazio. Mesmo cuidado de `blocosMetaPix`.
+   */
+  const abasRanking = useMemo<AbaRankingPix[]>(() => {
+    const linhasDe = (lista: PixAutoAcordo[]) =>
+      rankingPixSetor(lista, pctPorSetor, mes, nomePorOperador, metaPorSetor);
+
+    if (setorEscopo) {
+      return [{
+        setorId: setorEscopo,
+        nome: setores.find(s => s.id === setorEscopo)?.nome ?? 'Meu setor',
+        linhas: linhasDe(itens),
+      }];
+    }
+    return setoresComMovimento.map(s => ({
+      setorId: s.id,
+      nome: s.nome,
+      linhas: linhasDe(itensDoSetorPix(itens, s.id, operadorSetor)),
+    }));
+  }, [itens, pctPorSetor, nomePorOperador, metaPorSetor, mes,
+      setorEscopo, setores, setoresComMovimento, operadorSetor]);
+
+  /**
+   * A fila de NRs que a pessoa vê.
+   *
+   * A consulta já recortou pelo escopo de PERMISSÃO (`setorEscopo`); aqui vem o
+   * recorte de FOCO, que é escolha de quem está olhando e por isso não vale uma
+   * ida ao banco a cada clique na barra. Ver `pedidosDoSetor`.
+   */
+  const pedidosDoFoco = useMemo(
+    () => pedidosDoSetor(pedidosNr, setorFoco),
+    [pedidosNr, setorFoco],
+  );
+
+  const nomePorSetor = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const s of setores) m[s.id] = s.nome;
+    return m;
+  }, [setores]);
+
+  /** Acordos e fila parada de cada setor — os números dos chips da barra. */
+  const resumoPorSetor = useMemo(() => {
+    const m: Record<string, ResumoSetorPix> = {};
+    for (const s of setores) m[s.id] = { acordos: 0, pedidos: 0 };
+    for (const i of itens) {
+      if (!i.criado_em.startsWith(mes)) continue;
+      if (i.status === 'desaprovado') continue;
+      const setor = i.setor_id ?? operadorSetor[i.operador_id] ?? null;
+      if (setor && m[setor]) m[setor].acordos += 1;
+    }
+    for (const pedido of pedidosNr) {
+      if (pedido.setor_id && m[pedido.setor_id]) m[pedido.setor_id].pedidos += 1;
+    }
+    return m;
+  }, [setores, itens, mes, operadorSetor, pedidosNr]);
+
+  /* Pedido sem setor não cabe em chip nenhum, e some da soma se ninguém contar:
+     «Todos os setores» é quem o carrega. Ver `pedidosDoSetor`. */
+  const pedidosSemSetor = useMemo(
+    () => pedidosNr.filter(x => !x.setor_id).length,
+    [pedidosNr],
   );
 
   // ── Meta de Pix do setor ────────────────────────────────────────────────
@@ -1034,7 +1157,12 @@ export function PixAutomatico() {
           ]),
       ),
       consolidado: calcularMetaPixPorEquipe({
-        itens: recortarPorSetor ? itens.filter(i => i.setor_id === sid) : itens,
+        // `setorDaLinhaPix` e não `i.setor_id`: a linha sem carimbo cai no setor
+        // atual do operador, como na tabela e no ranking. Comparando o carimbo
+        // cru, o «Total do setor» deste painel não fechava com a lista embaixo.
+        itens: recortarPorSetor
+          ? itens.filter(i => setorDaLinhaPix(i, operadorSetor) === sid)
+          : itens,
         metas: metasPix
           .filter(m => m.setor_id === sid && m.equipe_id)
           .map(m => ({
@@ -1049,7 +1177,7 @@ export function PixAutomatico() {
       }),
     }));
   }, [podeVerDeOutros, itens, metasPix, equipes, setores, setorFoco, setorEscopo,
-      operadorEquipe, configMes, mes]);
+      operadorEquipe, operadorSetor, configMes, mes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
@@ -1815,6 +1943,20 @@ export function PixAutomatico() {
         </div>
       </div>
 
+      {/* ── O setor em foco ──
+          Governa painéis, fila de NRs e tabela de uma vez. Fica no TOPO porque
+          é navegação, não refinamento — escondido na barra de filtros da tabela,
+          era invisível justamente para o que ele mais rege. */}
+      {podeVerTodosSetores && (
+        <PixBarraSetores
+          setores={setores}
+          setorFoco={setorFoco}
+          onEscolher={id => setFiltroSetor(id ?? TODOS_SETORES)}
+          resumo={resumoPorSetor}
+          pedidosSemSetor={pedidosSemSetor}
+        />
+      )}
+
       {/* ── Fora do mês corrente: a tela inteira mudou de assunto ──
           O Pix continua editável em mês passado de propósito: ele é conferência
           de comissão, e ela costuma fechar depois da virada. O que não pode é
@@ -2040,11 +2182,15 @@ export function PixAutomatico() {
           No topo da área de painéis: é fila de trabalho, e fila que fica
           embaixo não é vista. O operador enxerga só o próprio pedido — quem
           recorta é a RLS, não esta condição. */}
-      {!loading && pedidosNr.length > 0 && (
+      {!loading && pedidosDoFoco.length > 0 && (
         <PixPedidosNr
-          pedidos={pedidosNr}
+          pedidos={pedidosDoFoco}
           podeDecidir={temPermissao('aprovar_pix_automatico')}
           meuId={perfil?.id ?? null}
+          nomePorSetor={nomePorSetor}
+          /* Só em «todos»: com um setor em foco a fila já é dele, e carimbar o
+             nome em toda linha seria repetir o óbvio. */
+          mostrarSetor={setorFoco === null}
           onMudou={carregar}
         />
       )}
@@ -2119,8 +2265,10 @@ export function PixAutomatico() {
           então um "ranking" para ele seria uma lista de uma pessoa só. */}
       {!loading && podeVerDeOutros && (
         <PixRankingSetor
-          linhas={ranking}
-          nomeSetor={setorConfig ? setores.find(s => s.id === setorConfig)?.nome : undefined}
+          abas={abasRanking}
+          /* Abre no setor em foco quando há um; as abas do card seguem
+             independentes da barra depois disso — ver o cabeçalho do card. */
+          setorInicial={setorFoco ?? meuSetor}
           destacarOperadorId={perfil?.id}
         />
       )}
@@ -2213,18 +2361,9 @@ export function PixAutomatico() {
 
         {podeVerDeOutros && (
           <>
-            {podeVerTodosSetores && (
-              <Select value={filtroSetor || '__todos__'}
-                onValueChange={v => setFiltroSetor(v === '__todos__' ? '' : v)}>
-                <SelectTrigger className="h-9 w-40 text-xs rounded-lg">
-                  <Building2 className="w-3 h-3 mr-1 shrink-0" /><SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__todos__">Todos os setores</SelectItem>
-                  {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
+            {/* O setor saiu daqui e virou a barra do topo (`PixBarraSetores`):
+                ele rege painéis, fila de NRs e tabela, e dois controles para o
+                mesmo estado é pior que um mal colocado. */}
             <Select value={filtroEquipe || '__todas__'}
               onValueChange={v => setFiltroEquipe(v === '__todas__' ? '' : v)}>
               <SelectTrigger className="h-9 w-40 text-xs rounded-lg">

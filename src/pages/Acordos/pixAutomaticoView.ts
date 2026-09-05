@@ -149,8 +149,8 @@ export function filtrarItensPix(
     if (filtros.status && filtros.status !== 'todos' && i.status !== filtros.status) return false;
     if (filtros.operadorId && i.operador_id !== filtros.operadorId) return false;
     if (filtros.equipeId && mapas.porEquipe[i.operador_id] !== filtros.equipeId) return false;
-    if (filtros.setorId
-        && (i.setor_id ?? mapas.porSetor[i.operador_id] ?? null) !== filtros.setorId) return false;
+    // Mesma regra do ranking e dos painéis — ver `setorDaLinhaPix`.
+    if (filtros.setorId && setorDaLinhaPix(i, mapas.porSetor) !== filtros.setorId) return false;
     // "A pagar" é aprovado e ainda não pago: pendente não é dívida, é fila de
     // avaliação, e desaprovado não gera comissão nenhuma.
     if (filtros.pagamento === 'pago'    && !i.pago) return false;
@@ -507,6 +507,117 @@ export function rankingPixSetor(
       b.acordos - a.acordos
       || b.comissao - a.comissao
       || a.nome.localeCompare(b.nome));
+}
+
+// ── O recorte por setor ──────────────────────────────────────
+//
+// A aba inteira passou a girar em torno de UM setor de cada vez. A razao e de
+// leitura: com «Todos os setores» a tela empilhava um painel de metas por
+// setor, a fila de NRs da empresa inteira e um ranking que somava gente que
+// nunca competiu entre si — tudo num scroll so, impossivel de apresentar.
+//
+// As tres funcoes abaixo sao o recorte. Ficam aqui, puras, porque a regra
+// «pedido de outro setor nao aparece» decide quem autoriza dinheiro, e isso
+// precisa de teste sem montar a tela.
+
+/**
+ * Os pedidos de NR que a pessoa deve ver.
+ *
+ * ## O defeito que isto conserta
+ *
+ * `fetchPedidosNr` recortava so por empresa, e a fila desenhava o que viesse.
+ * Resultado: o lider do Play 3 recebia para autorizar a duplicidade de um NR
+ * do Receptivo — um caso que ele nao acompanhou, entre duas pessoas que ele
+ * nao gerencia. Decidir aquilo seria decidir no escuro, e nao decidir deixava
+ * a fila suja para todo mundo.
+ *
+ * `setorFoco = null` («Todos os setores») devolve tudo, e e o unico lugar onde
+ * o pedido SEM setor aparece. Ele existe: o operador pode estar sem setor no
+ * cadastro, e a RPC copia o setor do perfil no momento do pedido. Escondido de
+ * todos, viraria fila orfa — ninguem decide, e o segundo registro nunca entra.
+ * Quem enxerga a empresa inteira e o dono natural desse caso.
+ */
+export function pedidosDoSetor<T extends { setor_id: string | null }>(
+  pedidos: T[],
+  setorFoco: string | null,
+): T[] {
+  if (!setorFoco) return pedidos;
+  return pedidos.filter(p => p.setor_id === setorFoco);
+}
+
+/**
+ * O setor a que uma linha pertence.
+ *
+ * O carimbo da PRÓPRIA linha manda; só quando ele falta é que se olha o setor
+ * atual do operador. É exatamente a regra de `filtrarItensPix`, e repeti-la
+ * aqui é o que faz a tabela e o ranking concordarem sobre o que é «do setor»:
+ * se discordassem, o podío mostraria gente que a lista embaixo dele não mostra.
+ *
+ * Sem carimbo e sem operador conhecido, `null` — e aí a linha não entra em
+ * recorte nenhum, que é melhor que entrar no setor errado.
+ */
+export function setorDaLinhaPix(
+  item: Pick<PixAutoAcordo, 'setor_id' | 'operador_id'>,
+  porSetor: Record<string, string | null> = {},
+): string | null {
+  return item.setor_id ?? porSetor[item.operador_id] ?? null;
+}
+
+/**
+ * Os setores que TEM acordo feito no mes, na ordem da lista recebida.
+ *
+ * As abas do ranking saem daqui em vez de `setores`: uma aba «Digital» que
+ * abre num podío vazio nao informa nada, e ainda faz a pessoa procurar o erro
+ * num setor que so nao teve movimento.
+ */
+export function setoresComAcordosPix(
+  itens: PixAutoAcordo[],
+  setores: { id: string; nome: string }[],
+  mes: MesRef,
+  porSetor: Record<string, string | null> = {},
+): { id: string; nome: string }[] {
+  const comAcordo = new Set<string>();
+  for (const i of itens) {
+    if (!ehAcordoFeito(i) || !i.criado_em.startsWith(mes)) continue;
+    const setor = setorDaLinhaPix(i, porSetor);
+    if (setor) comAcordo.add(setor);
+  }
+  return setores.filter(s => comAcordo.has(s.id));
+}
+
+/**
+ * Em que setor a aba abre.
+ *
+ * O proprio setor de quem esta olhando ganha, quando ele esta entre os
+ * disponiveis: o diretor que tambem tem setor no cadastro quer o dele primeiro,
+ * e o super admin sem setor cai no primeiro da lista. `null` so quando nao ha
+ * setor nenhum — ai a tela mostra tudo, que e o estado honesto.
+ */
+export function escolherSetorInicial(
+  disponiveis: { id: string }[],
+  meuSetor: string | null,
+): string | null {
+  if (disponiveis.length === 0) return null;
+  if (meuSetor && disponiveis.some(s => s.id === meuSetor)) return meuSetor;
+  return disponiveis[0].id;
+}
+
+/**
+ * Os acordos de um setor.
+ *
+ * `setorId = null` devolve a lista inteira, e e o que o LIDER usa: a consulta
+ * dele ja veio recortada por `setorEscopo`, e filtrar de novo por `setor_id`
+ * tiraria as linhas de carimbo vazio — dinheiro que sempre contou, sumindo do
+ * ranking por causa de um recorte que nao era sobre ele. Mesmo cuidado que
+ * `blocosMetaPix` toma em `PixAutomatico.tsx`.
+ */
+export function itensDoSetorPix(
+  itens: PixAutoAcordo[],
+  setorId: string | null,
+  porSetor: Record<string, string | null> = {},
+): PixAutoAcordo[] {
+  if (!setorId) return itens;
+  return itens.filter(i => setorDaLinhaPix(i, porSetor) === setorId);
 }
 
 // ── Meta de Pix do setor ────────────────────────────────────────────────────

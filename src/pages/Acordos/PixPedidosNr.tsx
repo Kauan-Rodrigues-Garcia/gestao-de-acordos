@@ -12,6 +12,18 @@
  *
  * Agora o segundo vira pedido, e a decisão fica com quem já decide Pix.
  *
+ * ## A fila é do SETOR
+ *
+ * Até 05/09/2026 ela era da empresa: quem podia aprovar Pix recebia a
+ * duplicidade de qualquer setor. Na prática o líder do Play 3 abria a aba e
+ * encontrava um NR do Receptivo para autorizar — um caso que ele não
+ * acompanhou, entre duas pessoas que ele não gerencia. Decidir aquilo era
+ * decidir no escuro; não decidir deixava a fila suja para todo mundo.
+ *
+ * Agora o recorte segue o setor em foco da aba (ver `pedidosDoSetor`). Em
+ * «Todos os setores» a fila volta a ser inteira, e aí cada cartão carimba de
+ * qual setor é — sem isso, a lista misturada mentiria por omissão.
+ *
  * ## O cartão mostra os DOIS lados
  *
  * Quem registrou primeiro e quem está pedindo, com valor e data de cada um.
@@ -32,7 +44,7 @@
  */
 import { useState } from 'react';
 import {
-  ShieldQuestion, Check, X, ArrowRight, Loader2, Sparkles, ChevronDown,
+  ShieldQuestion, Check, X, ArrowRight, Loader2, Sparkles, ChevronDown, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -48,6 +60,16 @@ interface Props {
   podeDecidir: boolean;
   /** Para o dono poder desistir do próprio pedido. */
   meuId: string | null;
+  /**
+   * Nome de cada setor, por id — só preenchido em «Todos os setores».
+   *
+   * Com um setor em foco a fila já é daquele setor, e carimbar o nome em toda
+   * linha seria repetir o óbvio. Em «Todos» ele é o que separa dois casos que
+   * só por acaso estão na mesma lista.
+   */
+  nomePorSetor?: Record<string, string>;
+  /** Mostra o setor em cada cartão. Ligado apenas em «Todos os setores». */
+  mostrarSetor?: boolean;
   onMudou: () => void;
 }
 
@@ -101,8 +123,9 @@ function Lado({
   );
 }
 
-function CartaoPedido({ p, podeDecidir, meuId, onMudou }: {
-  p: PixNrPedido; podeDecidir: boolean; meuId: string | null; onMudou: () => void;
+function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
+  p: PixNrPedido; podeDecidir: boolean; meuId: string | null;
+  nomeSetor: string | null; onMudou: () => void;
 }) {
   const [ocupado, setOcupado] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -138,6 +161,14 @@ function CartaoPedido({ p, podeDecidir, meuId, onMudou }: {
         <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold">
           NR {p.nr_cliente}
         </span>
+        {nomeSetor && (
+          <Badge
+            variant="outline"
+            className="h-5 shrink-0 gap-1 border-violet-500/40 px-1.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400"
+          >
+            <Building2 className="h-2.5 w-2.5" /> {nomeSetor}
+          </Badge>
+        )}
         <span className="text-[11px] text-muted-foreground">
           pedido em {quando(p.criado_em)}
         </span>
@@ -230,7 +261,9 @@ function CartaoPedido({ p, podeDecidir, meuId, onMudou }: {
   );
 }
 
-export function PixPedidosNr({ pedidos, podeDecidir, meuId, onMudou }: Props) {
+export function PixPedidosNr({
+  pedidos, podeDecidir, meuId, nomePorSetor, mostrarSetor = false, onMudou,
+}: Props) {
   const [aberto, setAberto] = useState(true);
   if (pedidos.length === 0) return null;
 
@@ -264,7 +297,14 @@ export function PixPedidosNr({ pedidos, podeDecidir, meuId, onMudou }: Props) {
 
         {aberto && pedidos.map(p => (
           <CartaoPedido
-            key={p.id} p={p} podeDecidir={podeDecidir} meuId={meuId} onMudou={onMudou}
+            key={p.id} p={p} podeDecidir={podeDecidir} meuId={meuId}
+            /* Pedido sem setor só chega aqui em «Todos» (ver `pedidosDoSetor`), e
+               ali ele precisa dizer que é sem setor — calado, pareceria do setor
+               do cartão de cima. */
+            nomeSetor={mostrarSetor
+              ? (p.setor_id ? (nomePorSetor?.[p.setor_id] ?? 'Setor desconhecido') : 'Sem setor')
+              : null}
+            onMudou={onMudou}
           />
         ))}
       </CardContent>

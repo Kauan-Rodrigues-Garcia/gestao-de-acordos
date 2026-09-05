@@ -19,6 +19,8 @@ import {
   filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
   calcularDobraComissao, rankingPixSetor, calcularMetaPix, calcularMetaPixPorEquipe,
   prazoExpurgoDesaprovado, textoPrazoExpurgo, dataLocalDaLinha,
+  setorDaLinhaPix, pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial,
+  itensDoSetorPix,
   MAX_SUGESTOES_VINCULO, type OperadorInfo,
 } from './pixAutomaticoView';
 
@@ -767,5 +769,164 @@ describe('calcularMetaPixPorEquipe', () => {
       ],
     });
     expect(r.equipes.find(e => e.equipeId === 'eq-bryan')!.resumo!.realizado).toBe(30000);
+  });
+});
+
+// ── O recorte por setor ─────────────────────────────────────────
+
+/** Um pedido de NR duplicado, reduzido ao que o recorte olha. */
+function pedido(id: string, setorId: string | null) {
+  return { id, setor_id: setorId };
+}
+
+describe('setorDaLinhaPix', () => {
+  it('o carimbo da linha manda sobre o setor atual do operador', () => {
+    // Quem mudou de setor não leva embora a comissão do setor anterior: a linha
+    // continua contando onde ela nasceu.
+    const linha = item({ operador_id: 'maria', setor_id: 'setor-A' });
+    expect(setorDaLinhaPix(linha, { maria: 'setor-B' })).toBe('setor-A');
+  });
+
+  it('sem carimbo, cai no setor atual do operador', () => {
+    const linha = item({ operador_id: 'maria', setor_id: null });
+    expect(setorDaLinhaPix(linha, { maria: 'setor-B' })).toBe('setor-B');
+  });
+
+  it('sem carimbo e sem operador conhecido, null', () => {
+    // Entrar no setor errado seria pior que ficar de fora de todo recorte.
+    const linha = item({ operador_id: 'fantasma', setor_id: null });
+    expect(setorDaLinhaPix(linha, {})).toBeNull();
+  });
+});
+
+describe('pedidosDoSetor', () => {
+  const fila = [
+    pedido('do-A', 'setor-A'),
+    pedido('do-B', 'setor-B'),
+    pedido('sem-setor', null),
+  ];
+
+  /**
+   * O defeito relatado em 05/09/2026: o líder do Play 3 recebia para autorizar
+   * a duplicidade de um NR do Receptivo — caso que ele não acompanhou, entre
+   * duas pessoas que ele não gerencia.
+   */
+  it('pedido de outro setor não aparece', () => {
+    expect(pedidosDoSetor(fila, 'setor-A').map(p => p.id)).toEqual(['do-A']);
+  });
+
+  it('pedido sem setor só aparece em «todos os setores»', () => {
+    // Escondido de todos, ele viraria fila órfã: ninguém decide, e o segundo
+    // registro nunca entra. Quem enxerga a empresa inteira é o dono do caso.
+    expect(pedidosDoSetor(fila, 'setor-A').map(p => p.id)).not.toContain('sem-setor');
+    expect(pedidosDoSetor(fila, null).map(p => p.id)).toContain('sem-setor');
+  });
+
+  it('sem foco devolve a fila inteira', () => {
+    expect(pedidosDoSetor(fila, null)).toHaveLength(3);
+  });
+});
+
+describe('setoresComAcordosPix', () => {
+  const setores = [
+    { id: 'setor-A', nome: 'Receptivo' },
+    { id: 'setor-B', nome: 'Play 1' },
+    { id: 'setor-C', nome: 'Digital' },
+  ];
+
+  it('setor parado não vira aba', () => {
+    // Uma aba que abre num pódio vazio faz procurar defeito onde só faltou
+    // volume.
+    const itens = [
+      ...feitos(2, { operador_id: 'maria', setor_id: 'setor-A' }),
+      ...feitos(1, { operador_id: 'joao',  setor_id: 'setor-B' }),
+    ];
+    expect(setoresComAcordosPix(itens, setores, '2026-07').map(s => s.id))
+      .toEqual(['setor-A', 'setor-B']);
+  });
+
+  it('acordo sem carimbo conta pelo setor atual do operador', () => {
+    const itens = feitos(2, { operador_id: 'joao', setor_id: null });
+    expect(setoresComAcordosPix(itens, setores, '2026-07', { joao: 'setor-C' }).map(s => s.id))
+      .toEqual(['setor-C']);
+  });
+
+  it('desaprovado e mês de fora não abrem aba', () => {
+    const itens = [
+      ...feitos(3, { operador_id: 'maria', setor_id: 'setor-A', status: 'desaprovado' }),
+      ...feitos(3, { operador_id: 'joao',  setor_id: 'setor-B', criado_em: '2026-06-10T10:00:00Z' }),
+    ];
+    expect(setoresComAcordosPix(itens, setores, '2026-07')).toEqual([]);
+  });
+});
+
+describe('escolherSetorInicial', () => {
+  const disponiveis = [{ id: 'setor-A' }, { id: 'setor-B' }];
+
+  it('o próprio setor ganha quando está disponível', () => {
+    expect(escolherSetorInicial(disponiveis, 'setor-B')).toBe('setor-B');
+  });
+
+  it('sem setor próprio, cai no primeiro', () => {
+    expect(escolherSetorInicial(disponiveis, null)).toBe('setor-A');
+  });
+
+  it('setor próprio fora da lista não é escolhido', () => {
+    // O super admin cujo setor não teve movimento abriria num painel vazio.
+    expect(escolherSetorInicial(disponiveis, 'setor-Z')).toBe('setor-A');
+  });
+
+  it('sem setor nenhum, null', () => {
+    expect(escolherSetorInicial([], 'setor-A')).toBeNull();
+  });
+});
+
+describe('itensDoSetorPix', () => {
+  it('recorta pelo setor da linha', () => {
+    const itens = [
+      ...feitos(2, { operador_id: 'maria', setor_id: 'setor-A' }),
+      ...feitos(3, { operador_id: 'joao',  setor_id: 'setor-B' }),
+    ];
+    expect(itensDoSetorPix(itens, 'setor-B')).toHaveLength(3);
+  });
+
+  /**
+   * O líder preso a um setor passa `null`: a consulta dele JÁ veio recortada, e
+   * filtrar de novo por `setor_id` tiraria as linhas de carimbo vazio —
+   * dinheiro que sempre contou, sumindo do ranking por um recorte que não era
+   * sobre ele. Mesmo cuidado de `blocosMetaPix`.
+   */
+  it('sem setor devolve tudo, inclusive linha de carimbo vazio', () => {
+    const itens = [
+      ...feitos(2, { operador_id: 'maria', setor_id: 'setor-A' }),
+      ...feitos(1, { operador_id: 'maria', setor_id: null }),
+    ];
+    expect(itensDoSetorPix(itens, null)).toHaveLength(3);
+  });
+
+  it('linha sem carimbo entra pelo setor atual do operador', () => {
+    const itens = feitos(2, { operador_id: 'joao', setor_id: null });
+    expect(itensDoSetorPix(itens, 'setor-B', { joao: 'setor-B' })).toHaveLength(2);
+    expect(itensDoSetorPix(itens, 'setor-A', { joao: 'setor-B' })).toHaveLength(0);
+  });
+});
+
+describe('ranking por setor — nunca entre setores', () => {
+  /**
+   * O defeito de 05/09/2026: o super admin sem filtro via um pódio só somando
+   * a empresa inteira, com o nome de UM setor no cabeçalho. Comparar operadores
+   * de setores diferentes não responde pergunta nenhuma — a meta de acordos e o
+   * percentual de comissão são por setor.
+   */
+  it('operador de outro setor não entra no ranking do setor', () => {
+    const itens = [
+      ...feitos(3, { operador_id: 'maria', operador_nome: 'Maria Silva', setor_id: 'setor-A' }),
+      ...feitos(9, { operador_id: 'joao',  operador_nome: 'Joao Souza',  setor_id: 'setor-B' }),
+    ];
+    const doA = rankingPixSetor(
+      itensDoSetorPix(itens, 'setor-A'), { 'setor-A': 0.25 }, '2026-07',
+    );
+    expect(doA.map(l => l.operadorId)).toEqual(['maria']);
+    expect(doA[0].acordos).toBe(3);
   });
 });
