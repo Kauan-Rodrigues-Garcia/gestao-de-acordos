@@ -100,6 +100,13 @@ export interface AnalyticsData {
   totalPagosMes: number;
   totalNaoPagos: number;
   totalPendentes: number;
+  /**
+   * Acordos do mês cujo vencimento JÁ CHEGOU (`vencimento <= hoje`), e quantos
+   * deles foram pagos. É a base da taxa de conversão — ver o cálculo em
+   * `derived`.
+   */
+  totalAcordosVencidos: number;
+  totalPagosVencidos: number;
 
   // Meta
   meta: MetaInfo | null;
@@ -827,6 +834,24 @@ export function useAnalytics(
     const naoPagos    = acordosMesMetricas.filter(a => a.status === 'nao_pago');
     const pendentes   = acordosMesMetricas.filter(a => a.status === 'verificar_pendente');
 
+    /*
+     * ── Base da taxa de conversão: só o que JÁ VENCEU ──────────────────────
+     *
+     * A taxa dividia pagos por TODOS os acordos do mês, incluindo os que ainda
+     * nem venceram. Um acordo com vencimento no dia 28 é contado como não
+     * convertido desde o dia 1º — ele não teve chance de ser pago ainda. O
+     * efeito é uma taxa que começa o mês perto de zero e sobe sozinha até o
+     * dia 31, medindo o calendário em vez do trabalho.
+     *
+     * Convertido ou não só é pergunta depois do vencimento. Num mês passado
+     * `hoje` é posterior a `fim` e o recorte pega o mês inteiro, como antes.
+     *
+     * Os outros cards continuam com a base cheia: «X acordos» é o que foi
+     * negociado no mês, e recortá-lo por vencimento seria outra pergunta.
+     */
+    const vencidos      = acordosMesMetricas.filter(a => a.vencimento <= hoje);
+    const pagosVencidos = vencidos.filter(a => a.status === 'pago');
+
     const valorRecebidoMes   = pagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const valorAgendadoMes   = acordosMesMetricas.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const valorNaoPago       = naoPagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
@@ -941,6 +966,8 @@ export function useAnalytics(
       totalAcordosMes: acordosMesMetricas.length,
       totalAcordosHoje: acordosHoje.length,
       totalPagosMes: pagos.length,
+      totalAcordosVencidos: vencidos.length,
+      totalPagosVencidos: pagosVencidos.length,
       totalNaoPagos: naoPagos.length,
       totalPendentes: pendentes.length,
       percMeta,

@@ -131,6 +131,8 @@ export function AnalyticsPanel({
     totalPagosMes,
     totalNaoPagos,
     totalPendentes,
+    totalAcordosVencidos,
+    totalPagosVencidos,
     meta,
     percMeta,
     porDia,
@@ -295,8 +297,15 @@ export function AnalyticsPanel({
   // A leitura por forma agora e o breakdown do donut do PainelMetas, que sai do
   // ANALITICO e nao da tabulacao — e por isso responde ao alternador de unidade.
 
-  const taxaConversao = totalAcordosMes > 0
-    ? Math.round((totalPagosMes / totalAcordosMes) * 100)
+  /*
+   * Sobre o que JÁ VENCEU, e não sobre o mês inteiro.
+   *
+   * Com a base cheia, os acordos ainda por vencer entravam como não
+   * convertidos: no dia 5 a taxa media quase só quanto do mês já tinha
+   * passado. A base agora é `vencimento <= hoje` — ver `useAnalytics`.
+   */
+  const taxaConversao = totalAcordosVencidos > 0
+    ? Math.round((totalPagosVencidos / totalAcordosVencidos) * 100)
     : 0;
 
   /**
@@ -451,7 +460,7 @@ export function AnalyticsPanel({
             {taxaConversao}%
           </span>
         )}
-        sub={`${totalPagosMes} de ${totalAcordosMes} pagos`}
+        sub={`${totalPagosVencidos} de ${totalAcordosVencidos} já vencidos`}
       />
       <MetricCard
         label="Ticket médio"
@@ -677,7 +686,7 @@ export function AnalyticsPanel({
                       {taxaConversao}%
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">
-                      {totalPagosMes} de {totalAcordosMes} pagos
+                      {totalPagosVencidos} de {totalAcordosVencidos} já vencidos
                     </span>
                   </motion.div>
 
