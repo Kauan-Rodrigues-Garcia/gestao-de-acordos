@@ -154,6 +154,44 @@ describe('FiltroEscopo — a cascata do recorte', () => {
     expect(screen.getByText('Equipe A')).toBeInTheDocument();
   });
 
+  /*
+   * O caminho de volta de quem NÃO tem «Todas as equipes».
+   *
+   * Relatado em 05/09/2026: um operador limitado à própria equipe entrava no
+   * recorte dela e ficava preso — a visão de setor era o estado em que a tela
+   * abria, e nenhum controle a alcançava de volta. O chip de setor já
+   * desligava no segundo clique; o de equipe, não.
+   *
+   * Voltar para 'setor' não concede alcance nenhum: é o estado inicial, o
+   * mesmo que a pessoa via antes de tocar no filtro.
+   */
+  it('clicar na equipe ATIVA devolve a visão do setor', async () => {
+    const onVisao = vi.fn();
+    montar({
+      niveis: ['equipe', 'setor'],
+      setorFiltro: 's-1',
+      podeTodasEquipes: false,
+      visao: 'equipe:e-1',
+      onVisao,
+    });
+    // Sem o botão «Todas as equipes», o chip da própria equipe É a saída.
+    expect(screen.queryByText('Todas as equipes')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('Equipe A'));
+    expect(onVisao).toHaveBeenCalledWith('setor');
+  });
+
+  it('clicar numa equipe INATIVA entra no recorte dela', async () => {
+    const onVisao = vi.fn();
+    montar({
+      niveis: ['equipe', 'setor', 'todos_setores'],
+      setorFiltro: 's-1',
+      visao: 'equipe:e-1',
+      onVisao,
+    });
+    await userEvent.click(screen.getByText('Equipe B'));
+    expect(onVisao).toHaveBeenCalledWith('equipe:e-2');
+  });
+
   it('sem nada a oferecer, o controle inteiro some em vez de virar moldura vazia', () => {
     const { container } = montar({ niveis: ['individual'] });
     expect(container).toBeEmptyDOMElement();

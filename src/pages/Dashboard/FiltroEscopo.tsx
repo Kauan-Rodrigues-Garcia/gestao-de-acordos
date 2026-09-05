@@ -210,8 +210,20 @@ export function FiltroEscopo({
             <Chip
               key={eq.id}
               ativo={equipeAtiva === eq.id}
-              onClick={() => onVisao(`equipe:${eq.id}`)}
-              titulo={`Ver dados da equipe ${eq.nome}`}
+              /*
+               * Clicar na equipe ATIVA desliga o recorte e devolve a visão do
+               * setor — o mesmo que o chip de setor já fazia.
+               *
+               * Sem isto, quem não enxerga o botão «Todas as equipes» entrava
+               * na própria equipe e não tinha como sair: a visão de setor é o
+               * estado em que a tela ABRE, mas nenhum controle a alcançava de
+               * volta. Não é alcance novo — é o estado inicial, que a pessoa já
+               * via antes de tocar no filtro.
+               */
+              onClick={() => onVisao(equipeAtiva === eq.id ? 'setor' : `equipe:${eq.id}`)}
+              titulo={equipeAtiva === eq.id
+                ? `Sair do recorte da equipe ${eq.nome} e voltar ao setor`
+                : `Ver dados da equipe ${eq.nome}`}
             >
               {eq.nome}
             </Chip>
