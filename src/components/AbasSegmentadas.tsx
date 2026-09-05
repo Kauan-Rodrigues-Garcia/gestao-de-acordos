@@ -9,6 +9,20 @@
  * pareciam.
  *
  * Este é o desenho que fica. O sublinhado sai.
+ *
+ * ## Por que `role="group"` e não `role="tablist"`
+ *
+ * Porque `role="tab"` promete um contrato que este componente não cumpre. O
+ * padrão ARIA de abas não é só `aria-controls`: é seta esquerda/direita andando
+ * entre as abas, Home/End, e roving tabindex. Quem usa leitor de tela ouve
+ * "tablist" e MUDA o próprio comportamento para o que o papel promete — aperta
+ * a seta e não acontece nada. Anunciar um papel que não se honra é pior do que
+ * não anunciar papel nenhum.
+ *
+ * E metade dos usos aqui nem são abas: a lente Mês · Dia · Período é um recorte
+ * que filtra a página, e `lista`/`mapa` é um alternador de visão. `role="group"`
+ * com `aria-pressed` é honesto nos dois casos e no das abas de verdade — é o
+ * mesmo padrão de `PainelMetas/SeletorUnidade`, que já é a forma da casa.
  */
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -25,16 +39,23 @@ interface AbasSegmentadasProps<K extends string> {
   abas: readonly AbaSegmentada<K>[];
   ativa: K | null;
   onTrocar: (k: K) => void;
+  /**
+   * O que este grupo escolhe — vira o `aria-label`. Obrigatório de propósito:
+   * um componente compartilhado não sabe sozinho o que está selecionando, e um
+   * grupo anônimo não ajuda ninguém.
+   */
+  rotulo: string;
   className?: string;
 }
 
 export function AbasSegmentadas<K extends string>({
-  abas, ativa, onTrocar, className,
+  abas, ativa, onTrocar, rotulo, className,
 }: AbasSegmentadasProps<K>) {
   if (abas.length === 0) return null;
   return (
     <div
-      role="tablist"
+      role="group"
+      aria-label={rotulo}
       className={cn(
         'inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1',
         'max-w-full overflow-x-auto',
@@ -44,8 +65,8 @@ export function AbasSegmentadas<K extends string>({
       {abas.map(({ key, label, Icon, badge }) => (
         <button
           key={key}
-          role="tab"
-          aria-selected={ativa === key}
+          type="button"
+          aria-pressed={ativa === key}
           onClick={() => onTrocar(key)}
           className={cn(
             'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium',
