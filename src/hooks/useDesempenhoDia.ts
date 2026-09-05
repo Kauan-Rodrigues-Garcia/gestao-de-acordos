@@ -104,9 +104,6 @@ export interface DadosDesempenhoDia {
   refetch: () => Promise<void>;
 }
 
-const BARRA_VAZIA: BarraEstados = {
-  pago: 0, aVerificar: 0, naoPago: 0, total: 0, conversao: null,
-};
 const SEM_VARIACAO: Variacao = { pct: null, base: 0 };
 
 export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempenhoDia {
@@ -336,7 +333,17 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
     meta,
     vsOntem,
     vsMedia,
-    barra: carregando ? BARRA_VAZIA : barra,
+    /*
+     * Sem zerar durante a releitura.
+     *
+     * Isto era `carregando ? BARRA_VAZIA : barra`, e a barra era o ÚNICO campo
+     * que voltava a zero enquanto a consulta corria — todos os outros guardam
+     * o valor anterior até o novo chegar. Na primeira carga não fazia
+     * diferença (sem acordos, a barra já nasce vazia); ao trocar de dia, fazia:
+     * a faixa do meio despencava para zero e voltava, sozinha, enquanto o
+     * resto do painel continuava mostrando o dia anterior.
+     */
+    barra,
     formalizados,
     valorPagoAcordos,
     diretoExtra,

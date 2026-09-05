@@ -89,6 +89,19 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
     tags,
   });
 
+  /*
+   * Esqueleto só na PRIMEIRA carga.
+   *
+   * `carregando` sobe de novo a cada troca de dia ou de equipe, e trocar o
+   * conteúdo pelo esqueleto nessas releituras era metade do salto de altura:
+   * a caixa esvaziava e voltava a encher, duas vezes por consulta. Da segunda
+   * vez em diante o conteúdo anterior fica no lugar, apagado, até o novo
+   * chegar — o botão de atualizar já gira para dizer que há consulta em curso.
+   */
+  const [jaCarregou, setJaCarregou] = useState(false);
+  useEffect(() => { if (!dados.carregando) setJaCarregou(true); }, [dados.carregando]);
+  const mostrarEsqueleto = dados.carregando && !jaCarregou;
+
   const trocarUnidade = useCallback((u: UnidadeValor) => {
     setUnidade(u);
     gravarUnidade(perfil?.id, u);
@@ -171,8 +184,24 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
             // deslizamento.
             transition={{ type: 'spring', stiffness: 400, damping: 34, mass: 0.7 }}
             style={{ willChange: 'transform, opacity' }}
+            /*
+             * Altura FIXA, e não «a que o conteúdo pedir».
+             *
+             * O painel é ancorado embaixo (`bottom-4`), então toda mudança de
+             * altura empurra o conteúdo para cima: o esqueleto encolhia a caixa,
+             * o conteúdo a esticava de volta, e o número que a pessoa estava
+             * lendo saltava de lugar a cada consulta.
+             *
+             * Não existe altura de conteúdo que sirva sempre — as três faixas
+             * variam por natureza (meta que existe ou não, tags que são zero ou
+             * seis). Com altura fixa a caixa não se mexe nunca, e o que passar
+             * dela rola na área de conteúdo, que já é `overflow-y-auto`.
+             *
+             * O `max-h` continua: em tela baixa ele é quem manda, e aí os dois
+             * limites concordam.
+             */
             className={cn(
-              'fixed bottom-4 left-4 z-40 flex max-h-[85vh] w-[420px] max-w-[calc(100vw-2rem)]',
+              'fixed bottom-4 left-4 z-40 flex h-[620px] max-h-[85vh] w-[420px] max-w-[calc(100vw-2rem)]',
               'flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xl',
             )}
           >
@@ -283,21 +312,28 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
             {/* ── Conteúdo ── */}
             <div className="flex-1 overflow-y-auto px-4 py-3.5">
               <AnimatePresence mode="wait">
-                {dados.carregando ? (
+                {mostrarEsqueleto ? (
                   <motion.div
                     key="carregando"
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="space-y-3"
+                    className="space-y-3.5"
                   >
-                    <div className="h-16 animate-pulse rounded-xl bg-muted/30" />
-                    <div className="h-24 animate-pulse rounded-xl bg-muted/30" />
-                    <div className="h-16 animate-pulse rounded-xl bg-muted/30" />
+                    {/* Do tamanho das faixas de verdade, e com o mesmo espaço
+                        entre elas: um esqueleto menor que o conteúdo é a
+                        própria troca de altura, em miniatura. */}
+                    <div className="h-[176px] animate-pulse rounded-xl bg-muted/30" />
+                    <div className="h-[136px] animate-pulse rounded-xl bg-muted/30" />
+                    <div className="h-[112px] animate-pulse rounded-xl bg-muted/30" />
                   </motion.div>
                 ) : (
                   <motion.div
                     key="conteudo"
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="space-y-3.5"
+                    className={cn(
+                      'space-y-3.5 transition-opacity',
+                      // Releitura: o conteúdo antigo fica no lugar, apagado.
+                      dados.carregando && 'opacity-50',
+                    )}
                   >
                     <motion.div {...faixa(0)}>
                       <FaixaDinheiro
