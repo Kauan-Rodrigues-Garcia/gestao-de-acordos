@@ -145,7 +145,7 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
      * `20260815154058` preencheu todo o catálogo em todo cargo, e a trigger em
      * `empresas` faz empresa nova nascer completa. Pior, o fallback abria a
      * rota inteira quando ela não declarava `allowedProfiles` — que é o caso de
-     * `/analitico`, `/ouvidoria`, `/campanha-facil` e `/solicitacoes-whatsapp`.
+     * `/analitico`, `/campanha-facil` e `/solicitacoes-whatsapp`.
      * Ausência agora nega, como em todo o resto do sistema.
      */
     if (!temPermissao(requiredPermissao)) {

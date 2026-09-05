@@ -271,7 +271,15 @@ aquela pessoa veria.
 
 ---
 
-## 8. Lista de remoção futura
+## 8. Lista de remoção futura — ✅ FEITA em 05/09/2026
+
+O código foi para `arquivo-morto/pet/`, que traz o inventário do que saiu e do
+que continua no banco. A lista abaixo fica como registro do que foi combinado.
+
+Uma correção ao plano: o campo `pet_despedida` **permaneceu** em `Perfil`
+(`src/lib/supabase.ts`). Ele só pode sair junto com a coluna, e enquanto a
+coluna existir as telas que fazem `select('*') as Perfil[]` não compilam sem
+ele. O motivo está escrito no próprio campo.
 
 Registrada aqui para o "remover depois" não virar código órfão esquecido. Deve
 ser feita **depois** que a despedida tiver rodado para todo mundo (ou seja,

@@ -266,7 +266,7 @@ bruto equivalente. Portanto:
 
 | Módulo | Operação |
 |---|---|
-| Analítico de recebimentos, Recebimento diário, Metas/quartis, Ouvidoria | `[PP]` (origem) |
+| Analítico de recebimentos, Recebimento diário, Metas/quartis | `[PP]` (origem) |
 | Pix Automático (comissão), Campanha Fácil, Setor alternativo, Clones de equipe, Líder por equipe | `[BP]` (origem) |
 
 > Vários desses módulos foram espelhados para a outra operação depois de
@@ -285,7 +285,7 @@ Definidos em `src/lib/index.ts` (`PERFIL_NIVEL`):
 | Nível | Perfil | Alcance |
 |---:|---|---|
 | 1 | **operador** | Apenas os próprios acordos |
-| 2 | **ouvidoria** | Herda os gates de líder; foco na aba Ouvidoria `[PP]` |
+| 2 | **ouvidoria** | Herda os gates de líder. A aba própria foi removida em 05/09/2026; o cargo ficou |
 | 2 | **lider** | Setor próprio (`[BP]`) / toda a empresa (`[PP]`, legado) |
 | 3 | **elite** | Como líder, com visões adicionais |
 | 4 | **gerencia** | Como líder, escopo gerencial |
@@ -1450,22 +1450,13 @@ Nunca validado equivale a `aberto`.
 
 ## 13. Módulos auxiliares
 
-### 13.1 Ouvidoria `[PP]`
+### 13.1 Ouvidoria `[PP]` — REMOVIDA
 
-Migration `20260717b`. Demandas de suporte (`reclamacao` / `sugestao`), com
-status `pendente` / `resolvido`.
+A aba saiu do produto em 05/09/2026. O código está em `arquivo-morto/ouvidoria/`,
+com o inventário do que saiu, do que ficou de propósito (rótulos de log e de uso
+de tela) e da migration pendente que aposenta as quatro chaves de permissão.
 
-Prazo em **dias úteis**, contado a partir de `iniciado_em`:
-
-| Situação | Urgência |
-|---|---|
-| Dentro do prazo (2 dias úteis) | `no_prazo` |
-| Falta 1 dia útil | `atencao` |
-| Prazo atingido ou estourado | `urgente` |
-| Resolvido | — |
-
-Quem acessa a aba é controlado por `ouvidoria_acessos`, com nível `ver` ou
-`editar`.
+**O CARGO `ouvidoria` continua existindo** — ver §2. Só a aba foi removida.
 
 ### 13.2 Pix Automático `[BP]`
 
@@ -1555,17 +1546,10 @@ Excel) em campanhas de cobrança: aplica descontos, substitui variáveis da
 mensagem, distribui responsáveis em **rodízio** e exporta um Excel pronto.
 Mensagens e descontos são compartilhados por empresa.
 
-### 13.4 Pet
+### 13.4 Pet — REMOVIDO
 
-Economia baseada no recebimento diário.
-
-> 🔒 **Regra de ouro:** o cliente **nunca** credita moedas. O crédito é
-> calculado no servidor, a partir de `diario_recebimentos`, por funções
-> `SECURITY DEFINER`. O frontend só chama as RPCs. Qualquer atalho aqui vira
-> moeda infinita.
-
-Todas as funções toleram a ausência das tabelas/RPCs, caindo no modo
-`localStorage`.
+Desligado em 09/08/2026, arquivado em 05/09/2026. O código está em
+`arquivo-morto/pet/`, com o inventário do que saiu e do que continua no banco.
 
 ### 13.4-b Comemoração de meta
 
@@ -1760,7 +1744,7 @@ três voltarem, o que disfarçou o defeito de "card quebrado".
 o oposto, e é a metade acionável — tela que ninguém abre em 30 dias ou não serve,
 ou ninguém sabe que existe. Sai do **catálogo** (`TELA_LABEL`), não do banco,
 pelo mesmo motivo da adoção: tela sem uso não tem linha em `uso_telas`. Módulos
-exclusivos de uma operação (Ouvidoria `[PP]`, Campanha Fácil `[BP]`) ficam fora —
+exclusivos de uma operação (Campanha Fácil `[BP]`) e removidos (Ouvidoria) ficam fora —
 na outra empresa não é abandono, é módulo que o tenant não tem.
 
 **Adoção.** O seletor oferece as telas de gestão fixas **mais** as que tiveram

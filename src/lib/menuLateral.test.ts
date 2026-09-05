@@ -22,7 +22,6 @@ function ctx(over: Partial<ContextoMenu> = {}): ContextoMenu {
     isPaguePlay: false,
     isBookplay: true,
     temPermissao: () => true,
-    acessoOuvidoria: false,
     acessoTickets: true,
     ...over,
   };
@@ -55,38 +54,32 @@ describe('abasDoMenu', () => {
     expect(pp).not.toContain('Campanha Fácil');
   });
 
-  it('Ouvidoria e Solicitar Atendimento só existem na PaguePlay', () => {
+  it('Solicitar Atendimento só existe na PaguePlay', () => {
     const bp = rotulos(abasDoMenu(ctx({ cargo: 'ouvidoria' })));
-    expect(bp).not.toContain('Ouvidoria');
     expect(bp).not.toContain('Solicitar Atendimento');
 
     const pp = rotulos(abasDoMenu(ctx({
       cargo: 'ouvidoria', isPaguePlay: true, isBookplay: false,
     })));
-    expect(pp).toContain('Ouvidoria');
     expect(pp).toContain('Solicitar Atendimento');
   });
 
   /*
-   * ⚠️ Comportamento ATUAL, e provavelmente não o pretendido.
+   * A aba Ouvidoria saiu do produto em 05/09/2026 — o código foi para
+   * `arquivo-morto/ouvidoria/`. O CARGO `ouvidoria` continua existindo, e é
+   * por isso que o teste acima ainda o usa como contexto: quem tinha esse cargo
+   * continua trabalhando, só não tem mais essa aba.
    *
-   * O comentário do item promete que a concessão em `ouvidoria_acessos` vale
-   * «por cima» da permissão, como caminho extra. Não vale: a checagem genérica
-   * de `permissaoKey` roda ANTES e já descarta o item, então o `||` do caso
-   * especial só é alcançado quando `ver_ouvidoria` já é verdadeiro — o segundo
-   * operando nunca decide nada.
-   *
-   * O teste trava o que o código FAZ, e não o que o comentário diz, para a
-   * mudança ser uma decisão explícita de quem for corrigir. Comportamento
-   * herdado do `Layout`; a extração para cá não mexeu nele.
+   * Nenhum produto, nenhum cargo, nenhuma permissão traz a aba de volta.
    */
-  it('hoje a concessão individual da Ouvidoria NÃO substitui a permissão', () => {
-    const so = rotulos(abasDoMenu(ctx({
-      cargo: 'operador', isPaguePlay: true, isBookplay: false,
-      temPermissao: chave => chave !== 'ver_ouvidoria',
-      acessoOuvidoria: true,
-    })));
-    expect(so).not.toContain('Ouvidoria');
+  it('a aba Ouvidoria não existe mais para ninguém', () => {
+    for (const contexto of [
+      ctx({ cargo: 'ouvidoria' }),
+      ctx({ cargo: 'ouvidoria', isPaguePlay: true, isBookplay: false }),
+      ctx({ cargo: 'super_admin', isPaguePlay: true, isBookplay: false }),
+    ]) {
+      expect(rotulos(abasDoMenu(contexto))).not.toContain('Ouvidoria');
+    }
   });
 
   it('Tickets depende do interruptor da empresa, e não só da permissão', () => {
@@ -166,7 +159,7 @@ describe('abasDoMenu — por produto', () => {
     for (const daCobranca of [
       'Acordos', 'Novo Acordo', 'Painel Líder', 'Painel Diretoria',
       'Analítico', 'Campanha Fácil', 'Importar Excel', 'Metas',
-      'Ouvidoria', 'Tickets', 'RH Gestão', 'Solicitar Atendimento',
+      'Tickets', 'RH Gestão', 'Solicitar Atendimento',
     ]) {
       expect(abas).not.toContain(daCobranca);
     }

@@ -52,6 +52,9 @@ export const TELA_LABEL: Record<string, string> = {
   'admin/configuracoes:uso':   'Configurações · Monitoramento de uso',
   'admin/configuracoes:permissoes': 'Configurações · Permissões',
   'rh-gestao':                 'RH Gestão',
+  // Aba arquivada em 05/09/2026 (`arquivo-morto/ouvidoria/`). O rótulo fica:
+  // `uso_telas` guarda o que foi aberto enquanto ela existia, e sem ele o
+  // histórico vira uma chave crua no Monitoramento de uso.
   'ouvidoria':                 'Ouvidoria',
   'campanha-facil':            'Campanha Fácil',
   'solicitacoes-whatsapp':     'Solicitações WhatsApp',

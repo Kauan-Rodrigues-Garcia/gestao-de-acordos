@@ -5,7 +5,6 @@ import {
   FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock,
   ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus,
 } from 'lucide-react';
-import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -154,7 +153,6 @@ export function AcordoDetalheInline({
     if (error) {
       toast.error(`Erro: ${error.message}`);
     } else {
-      celebrarPetAcordoPago();
       toast.success('Parcela marcada como paga!');
       const parcelaAtualizada = { ...p, status: 'pago' as const, data_pagamento: dataPagamento, vencimento: dataPagamento };
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? parcelaAtualizada : x));
@@ -368,7 +366,6 @@ export function AcordoDetalheInline({
       });
       setModalAddParcela(false);
       onSaved?.(baseAtualizado);
-      if (novas.some(p => p.status === 'pago')) celebrarPetAcordoPago();
       // O acordo passa a DECLARAR as parcelas pedidas, mas materializa no
       // máximo a próxima. Sem dizer isso, o operador que pediu 10 e viu uma
       // linha (ou nenhuma) acha que o botão falhou.

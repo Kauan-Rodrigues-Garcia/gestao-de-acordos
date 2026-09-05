@@ -18,7 +18,6 @@ import type { PermissaoMeta, GrupoPermissao, TenantSlug } from './permissoes-cat
 
 export type ModuloPermissaoId =
   | 'dashboard'
-  | 'ouvidoria'
   | 'solicitacoes_whatsapp'
   | 'tickets'
   | 'rh'
@@ -60,11 +59,6 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     // Dashboard. As chaves continuam estáveis; só aparecem no card da tela em
     // que a pessoa realmente executa essas ações.
     gruposPorTenant: { pagueplay: ['Acordos'] },
-  },
-  {
-    id: 'ouvidoria', rotulo: 'Ouvidoria', interruptor: 'ver_ouvidoria', tenants: ['pagueplay'],
-    descricao: 'Atendimentos, responsáveis e concessões da Ouvidoria.',
-    chaves: ['editar_ouvidoria', 'gerenciar_acessos_ouvidoria', 'ouvidoria_responsavel'],
   },
   {
     id: 'solicitacoes_whatsapp', rotulo: 'Solicitar Atendimento',

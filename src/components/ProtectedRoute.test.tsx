@@ -84,12 +84,12 @@ describe('ProtectedRoute — permissão configurável', () => {
   /**
    * A outra metade do mesmo bug: a rota não declara `allowedProfiles`, e o
    * fallback antigo liberava para todo mundo quando a chave não estava no mapa
-   * do cargo. `/analitico`, `/ouvidoria`, `/campanha-facil` e
-   * `/solicitacoes-whatsapp` são exatamente assim.
+   * do cargo. `/analitico`, `/campanha-facil` e `/solicitacoes-whatsapp` são
+   * exatamente assim.
    */
   it('NEGA quando não há permissão e a rota não declara cargos', () => {
     permRef.current = { temPermissao: () => false, loading: false };
-    renderizar({ requiredPermissao: 'ver_ouvidoria' });
+    renderizar({ requiredPermissao: 'ver_campanha_facil' });
     expect(passou()).toBe(false);
   });
 

@@ -7,7 +7,7 @@
  * chaves), o banco (29) e o que o código consultava (24) — e nenhuma mandava
  * nas outras. O resultado foram toggles que ligavam, desligavam e não mudavam
  * nada (`ver_acordos_proprios`, `ver_analiticos_setor`) e chaves no banco que a
- * tela nem mostrava (as três de ouvidoria).
+ * tela nem mostrava (as de ouvidoria).
  *
  * Estes testes varrem o código de verdade. Se alguém acrescentar uma permissão
  * ao catálogo sem escrever o código que a consulta, ou fiscalizar uma chave que
@@ -201,13 +201,6 @@ describe('catálogo — integridade', () => {
 });
 
 describe('recorte por operação', () => {
-  it('BookPlay não recebe as permissões de Ouvidoria', () => {
-    const chaves = catalogoDoTenant('bookplay').map(p => p.key);
-    expect(chaves).not.toContain('ver_ouvidoria');
-    expect(chaves).not.toContain('editar_ouvidoria');
-    expect(chaves).not.toContain('gerenciar_acessos_ouvidoria');
-  });
-
   it('PaguePlay não recebe Pix automático nem Campanha Fácil', () => {
     const chaves = catalogoDoTenant('pagueplay').map(p => p.key);
     expect(chaves).not.toContain('ver_pix_automatico');
@@ -225,7 +218,7 @@ describe('recorte por operação', () => {
   });
 
   it('grupo sem permissão na operação não aparece', () => {
-    // "Ações específicas" da PaguePlay existe (ouvidoria + whatsapp), mas o
+    // "Ações específicas" da PaguePlay existe (whatsapp), mas o
     // teste garante que a função não devolve grupo vazio em nenhum caso.
     for (const slug of ['bookplay', 'pagueplay']) {
       const grupos = gruposDoTenant(slug);
@@ -285,10 +278,19 @@ describe('padrões de semeadura', () => {
     }
   });
 
-  it('ouvidoria nasce com a própria aba e sem as de gestão', () => {
+  /*
+   * A aba Ouvidoria saiu em 05/09/2026 (`arquivo-morto/ouvidoria/`) e as quatro
+   * chaves dela saíram do catálogo com ela — em TS aqui, e no SQL pela migration
+   * `20260905100000_remove_permissoes_ouvidoria`.
+   *
+   * O CARGO ficou, e continua nascendo sem as permissões de gestão. É o que
+   * este teste guarda agora: perder a aba não podia promover ninguém.
+   */
+  it('ouvidoria nasce sem as permissões de gestão', () => {
     const ouv = permissoesPadraoDoCargo('ouvidoria');
-    expect(ouv.ver_ouvidoria).toBe(true);
-    expect(ouv.editar_ouvidoria).toBe(true);
+    // A aba não existe mais para cargo nenhum.
+    expect(ouv.ver_ouvidoria).toBeFalsy();
+    expect(ouv.editar_ouvidoria).toBeFalsy();
     // Os seis casos que a tela sempre mostrou desligados e o sistema concedia.
     expect(ouv.usuarios_administrar).toBe(false);
     expect(ouv.equipes_criar_editar).toBe(false);

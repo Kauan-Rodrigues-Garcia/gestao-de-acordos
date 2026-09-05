@@ -31,7 +31,6 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { useOuvidoriaAcesso } from '@/hooks/useOuvidoriaAcesso';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -50,8 +49,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
-import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
-import { PetDespedida } from './pet/PetDespedida';
+import { OnboardingTour } from './OnboardingTour';
 import { DesempenhoDia } from './DesempenhoDia';
 import { DesafioMenu } from './DesafioMenu';
 import { PainelDesafio } from './DesafioMenu/PainelDesafio';
@@ -218,7 +216,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
   const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
-  const ouvidoriaAcesso = useOuvidoriaAcesso();
   const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
@@ -237,17 +234,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { destaque: desafioDestaque } = useDesafioEmCartaz(
     !permLoading && temPermissao('analitico_sub_desafios'),
   );
-
-  // ── Lembrete de votação do nome do mascote — só depois de termos + tour ─────
-  // (tourPronto começa true se o tour já foi concluído em sessão anterior;
-  //  senão vira true quando o OnboardingTour chamar onFinished agora)
-  const [tourPronto, setTourPronto] = useState(false);
-  useEffect(() => {
-    if (perfil?.id && localStorage.getItem(ONBOARDING_STORAGE_KEY(perfil.id))) {
-      setTourPronto(true);
-    }
-  }, [perfil?.id]);
-  const avisoPetPronto = !termoLoading && !precisaAceitar && tourPronto;
 
   // (Favicon por empresa é aplicado no root em TenantThemeApplier — vale para
   //  todas as páginas, inclusive a de login.)
@@ -279,11 +265,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     isPaguePlay: isPP,
     isBookplay: tenant.slug === 'bookplay',
     temPermissao: chave => !permLoading && temPermissao(chave),
-    acessoOuvidoria: ouvidoriaAcesso.podeVer,
     acessoTickets: acessoTickets.podeVerAba,
   }), [
     userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
-    ouvidoriaAcesso.podeVer, acessoTickets.podeVerAba,
+    acessoTickets.podeVerAba,
   ]);
 
   /*
@@ -792,10 +777,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto bg-background">
           {children}
         </main>
+        {/* `onFinished` saiu junto com o mascote: o fim do tour só servia para
+            liberar o card de despedida dele, hoje em `arquivo-morto/pet/`. */}
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
-          onFinished={() => setTourPronto(true)}
         />
       </div>
 
@@ -839,10 +825,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Comemoração de meta — explode no topo, em qualquer página, para quem
           for do setor dos homenageados. Não bloqueia cliques. */}
       <ComemoracaoOverlay />
-
-      {/* Despedida do mascote — só abre pós termos + tour, e só para quem já
-          convivia com ele (perfis.pet_despedida = 'pendente'). */}
-      <PetDespedida pronto={avisoPetPronto} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (

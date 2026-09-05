@@ -278,11 +278,6 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Abas e telas', padrao: { diretoria: true },
   },
   {
-    key: 'ver_ouvidoria', label: 'Aba Ouvidoria',
-    descricao: 'Abrir a Ouvidoria e ver os atendimentos registrados',
-    grupo: 'Abas e telas', tenants: ['pagueplay'], padrao: { ouvidoria: true },
-  },
-  {
     key: 'ver_campanha_facil', label: 'Aba Campanha Fácil',
     descricao: 'Abrir o módulo de campanhas de cobrança',
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: LIDERANCA,
@@ -1380,31 +1375,7 @@ export const PERMISSOES: PermissaoMeta[] = [
 
   // ── Ações específicas ────────────────────────────────────────────────────
   // Separadas de "abrir a aba": ver o módulo e agir dentro dele são decisões
-  // diferentes. Aprovar Pix mexe em comissão; registrar atendimento de
-  // ouvidoria mexe em reclamação de cliente.
-  {
-    key: 'editar_ouvidoria', label: 'Registrar e editar atendimentos',
-    descricao: 'Criar e alterar atendimentos na Ouvidoria, além de apenas ver',
-    grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: { ouvidoria: true },
-  },
-  {
-    key: 'gerenciar_acessos_ouvidoria', label: 'Conceder acesso à Ouvidoria',
-    descricao: 'Definir quem enxerga a Ouvidoria e em qual nível',
-    grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: {},
-  },
-  {
-    key: 'ouvidoria_responsavel', label: 'Responsável pela Ouvidoria',
-    descricao: 'Enxergar a Ouvidoria inteira sem depender de concessão individual em «Conceder acesso»',
-    /*
-     * Era `cargo === 'ouvidoria'` dentro de `useOuvidoriaAcesso`.
-     *
-     * Responsável e convidado são coisas diferentes: o responsável vê tudo por
-     * ser dono do módulo; o convidado vê no nível que alguém lhe concedeu em
-     * `ouvidoria_acessos`. Com o cargo escrito na tela, promover outra pessoa a
-     * responsável exigia mexer em código.
-     */
-    grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: { ouvidoria: true },
-  },
+  // diferentes — aprovar Pix mexe em comissão.
   {
     key: 'tickets_administrar', label: 'Tickets: administrar a fila',
     descricao: 'Atender qualquer ticket e gerenciar o cadastro de atendentes',

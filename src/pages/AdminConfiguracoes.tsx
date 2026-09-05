@@ -262,10 +262,6 @@ export default function AdminConfiguracoes() {
               <Building2 className="w-4 h-4" /> Multiempresa
             </TabsTrigger>
             )}
-            {/* Aba Pet fora do ar: o mascote saiu de cena (migration 20260809c)
-                e isto administrava uma economia congelada. O componente segue
-                no repositório — ver a lista de remoção futura na spec
-                docs/superpowers/specs/2026-08-09-despedida-do-pet-design.md */}
           </TabsList>
         </div>
 

@@ -105,6 +105,12 @@ const TELAS_ADOCAO = [
  *
  * Aparecem em "sem uso nenhum" na outra empresa e não significam nada ali — não
  * é abandono, é módulo que aquele tenant não tem. Ficam de fora do card.
+ *
+ * `ouvidoria` continua na lista por outro motivo: a aba foi arquivada em
+ * 05/09/2026 (`arquivo-morto/ouvidoria/`) e nunca mais terá uso novo. O
+ * histórico em `uso_telas` fica, e o rótulo dela em `telas-catalogo` também —
+ * senão o passado vira uma chave crua na tela. O que não pode é ela aparecer
+ * como tela abandonada: ela não foi abandonada, foi removida.
  */
 const TELAS_EXCLUSIVAS = new Set(['ouvidoria', 'campanha-facil']);
 
@@ -696,8 +702,8 @@ export default function MonitoramentoUso({ empresas }: Props) {
               <p className="text-[10px] text-muted-foreground mt-3 leading-snug">
                 Sai do catálogo de telas, não do banco: tela sem uso não tem linha
                 em <code>uso_telas</code>. Módulos exclusivos de uma operação
-                (Ouvidoria, Campanha Fácil) ficam de fora — não é abandono, é
-                módulo que o outro tenant não tem.
+                (Campanha Fácil) e módulos já removidos (Ouvidoria) ficam de
+                fora — não é abandono.
               </p>
             </Card>
           </div>

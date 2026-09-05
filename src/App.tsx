@@ -11,7 +11,6 @@ import { TermoUsoGate } from '@/components/TermoUsoGate';
 import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import Layout from '@/components/Layout';
 import { ChatNotificacoes } from '@/components/ChatNotificacoes';
-import { PetWidget } from '@/components/pet/PetWidget';
 import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -61,7 +60,6 @@ const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
-const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
@@ -101,7 +99,6 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
             </ErrorBoundary>
           </Layout>
           <ChatNotificacoes />
-          <PetWidget />
         </TermoUsoGate>
       </TermoUsoProvider>
     </ProtectedRoute>
@@ -322,17 +319,6 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_analitico">
                     <PaginaAnalitico />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
-
-              {/* Ouvidoria [PP]. Era LIVRE — qualquer cargo logado entrava, com
-                  reclamação de cliente dentro. A concessão fina por
-                  `ouvidoria_acessos` continua valendo dentro da página. */}
-              <Route path={ROUTE_PATHS.OUVIDORIA} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_ouvidoria">
-                    <Ouvidoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

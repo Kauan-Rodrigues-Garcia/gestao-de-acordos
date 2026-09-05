@@ -20,12 +20,10 @@
  * BookPlay) e as listas de cargo do próprio item. É a mesma função `abasDoMenu`
  * que pinta a barra de verdade — não há uma segunda régua aqui.
  *
- * Aproximada nas duas concessões que dependem de PESSOA, e a tela diz isso:
+ * Aproximada na concessão que depende de PESSOA, e a tela diz isso: em Tickets,
+ * alguém pode ser cadastrado como atendente.
  *
- *   • Ouvidoria — alguém pode receber acesso individual em `ouvidoria_acessos`;
- *   • Tickets — alguém pode ser cadastrado como atendente.
- *
- * Nos dois casos a prévia mostra o que o CARGO concede. Errar para menos aqui
+ * A prévia mostra o que o CARGO concede. Errar para menos aqui
  * não esconde aba de ninguém: a ordem salva só reposiciona o que a pessoa já
  * podia ver, e aba fora da lista mantém a posição que tinha.
  *
@@ -138,7 +136,6 @@ export function MenuLateralEditor({
       isBookplay,
       temPermissao: chave => valorDoCargo(cargoParaPermissao, chave),
       // Concessão individual não existe numa prévia por cargo — ver o cabeçalho.
-      acessoOuvidoria: false,
       acessoTickets: ticketsVisivelParaCargo(
         chave => valorDoCargo(cargoParaPermissao, chave),
         ticketsLiberadoParaLideranca,
@@ -279,9 +276,8 @@ export function MenuLateralEditor({
             <p className="text-[11px] leading-snug text-muted-foreground inline-flex gap-1.5">
               <Info className="w-3 h-3 shrink-0 mt-[2px]" />
               <span>
-                Ouvidoria e Tickets também abrem por concessão individual
-                (acesso na Ouvidoria, cadastro de atendente). A prévia mostra o
-                que o <em>cargo</em> concede.
+                Tickets também abre por concessão individual (cadastro de
+                atendente). A prévia mostra o que o <em>cargo</em> concede.
               </span>
             </p>
           </div>

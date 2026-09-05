@@ -79,7 +79,7 @@ describe('menu × rotas', () => {
     const menu = chavesDoMenu();
     for (const chave of [
       'ver_acordos', 'ver_analitico', 'ver_painel_lider', 'ver_painel_diretoria',
-      'ver_ouvidoria', 'ver_campanha_facil', 'ver_solicitacoes_whatsapp',
+      'ver_campanha_facil', 'ver_solicitacoes_whatsapp',
       'ver_lixeira', 'ver_configuracoes', 'importar_excel',
     ]) {
       expect(menu, `${chave} sumiu do NAV_ITEMS`).toContain(chave);

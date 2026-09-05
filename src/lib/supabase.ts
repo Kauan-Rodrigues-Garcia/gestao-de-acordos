@@ -130,11 +130,15 @@ export interface Perfil {
   acesso_multiempresa_por_id?: string | null;
   acesso_multiempresa_em?: string | null;
   /**
-   * Despedida do pet (migration 20260809c): `'pendente'` = deve ver o card,
-   * `'concluida'` = já se despediu, `null` = nunca conviveu com o pet.
+   * Resto do mascote, que foi para `arquivo-morto/pet/` em 05/09/2026.
    *
-   * `undefined` (campo ausente) é a migration ainda não aplicada, e significa
-   * algo diferente de `null` — ver `fasePet` em `components/pet/petConfig.ts`.
+   * O código do pet saiu; a COLUNA continua em `perfis`, porque apagar dado de
+   * produção é decisão à parte. E enquanto ela existir o campo precisa existir
+   * aqui: as telas fazem `select('*') as Perfil[]`, e um campo que o banco
+   * devolve e o tipo não declara derruba a conversão em AdminUsuarios e
+   * PainelLider.
+   *
+   * Ninguém lê este valor. Ele sai junto com a coluna, quando ela sair.
    */
   pet_despedida?: string | null;
   /** Situação operacional (item 5): 'ativo' | 'ferias' | 'desligado'.
@@ -444,60 +448,6 @@ export interface DiarioRecebimento {
   lote_id: string;
   /** Join opcional: nome do perfil do operador */
   perfis?: Pick<Perfil, 'id' | 'nome' | 'usuario'> | null;
-}
-
-/** Estado do pet Aura no banco — 1 linha por usuário (ver 20260709a_pet_economia.sql). */
-export interface PetEstado {
-  usuario_id: string;
-  moedas: number;
-  moedas_ganhas_total: number;
-  moedas_gastas_total: number;
-  xp: number;
-  nivel: number;
-  streak: number;
-  ultimo_dia_ativo: string | null;
-  roupa_equipada: string;
-  itens_desbloqueados: string[];
-  dormindo: boolean;
-  criado_em: string;
-  atualizado_em: string;
-}
-
-/** Item do catálogo/mercado do pet (ver 20260710b_pet_economia_estrutura.sql). */
-export interface PetItem {
-  id: string;
-  tipo: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel';
-  nome: string;
-  descricao: string | null;
-  emoji: string | null;
-  raridade: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo';
-  preco_moedas: number | null;      // null = não vendável (só concedido)
-  tenant: string | null;            // null = ambos; 'bookplay' | 'pagueplay'
-  disponivel_de: string | null;
-  disponivel_ate: string | null;
-  exclusivo: boolean;
-  ativo: boolean;
-  ordem: number;
-  criado_em: string;
-}
-
-/** Item que o usuário possui (comprou/ganhou). "Bloqueado" = não está aqui. */
-export interface PetInventarioItem {
-  usuario_id: string;
-  item_id: string;
-  origem: 'compra' | 'recompensa' | 'concessao' | 'evento' | 'inicial';
-  adquirido_em: string;
-}
-
-/** Regra de economia por cargo — o sistema de moedas difere por cargo. */
-export interface PetEconomiaRegra {
-  cargo: string;
-  moedas_por_real: number;
-  janela_dias: number;
-  base_recebimento: 'proprio' | 'empresa' | 'equipe';
-  ativo: boolean;
-  observacao: string | null;
-  atualizado_em: string;
 }
 
 /** Faixa de quartil por % mínimo de projeção (1 = melhor). Configurável na aba Metas. */

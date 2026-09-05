@@ -19,7 +19,6 @@ export const ROUTE_PATHS = {
   ADMIN_LOGS: '/admin/logs',
   ADMIN_CARGOS: '/admin/cargos',
   ANALITICO: '/analitico',
-  OUVIDORIA: '/ouvidoria',
   CAMPANHA_FACIL: '/campanha-facil',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',

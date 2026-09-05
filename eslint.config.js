@@ -6,7 +6,10 @@ import tseslint from "typescript-eslint";
 import importX from "eslint-plugin-import-x";
 
 export default tseslint.config(
-  { ignores: ["dist", "src/lib/database.types.ts"] },
+  // `arquivo-morto/` é backup legível, não código vivo: não compila, não roda e
+  // não é lintado. Ele referencia módulos que já saíram do `src/`, então lintá-lo
+  // só produziria erro sobre código que ninguém executa. Ver arquivo-morto/README.md.
+  { ignores: ["dist", "arquivo-morto", "src/lib/database.types.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

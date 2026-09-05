@@ -135,7 +135,6 @@ export const ABAS_DO_SISTEMA: { valor: string; permissao?: string }[] = [
   { valor: 'Lixeira',            permissao: 'ver_lixeira' },
   { valor: 'Campanha Fácil',     permissao: 'ver_campanha_facil' },
   { valor: 'Solicitar Atendimento', permissao: 'ver_solicitacoes_whatsapp' },
-  { valor: 'Ouvidoria',          permissao: 'ver_ouvidoria' },
   { valor: 'Configurações',      permissao: 'ver_configuracoes' },
   { valor: 'Login / entrada' },
   { valor: 'Outra' },

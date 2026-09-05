@@ -81,8 +81,6 @@ export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, permissaoKey: 'ver_dashboard' },
-  // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
-  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           produtos: SO_COBRANCA, permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
   { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, produtos: SO_COBRANCA, permissaoKey: 'ver_solicitacoes_whatsapp' },
   // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o
@@ -152,8 +150,6 @@ export interface ContextoMenu {
    * para administrador e super_admin, que têm acesso total por construção.
    */
   temPermissao: (chave: string) => boolean;
-  /** Concessão fina em `ouvidoria_acessos`. Vale POR PESSOA. */
-  acessoOuvidoria: boolean;
   /** Interruptor da empresa + cadastro de atendentes de Tickets. */
   acessoTickets: boolean;
 }
@@ -185,20 +181,9 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
 
     // A permissão configurável vem PRIMEIRO e vale para todo item que a
     // declara. Ela ficava depois dos casos especiais abaixo, que retornam cedo
-    // — então Ouvidoria e Solicitar Atendimento nunca chegavam a consultá-la, e
-    // o menu continuava mostrando a aba de quem tinha a permissão desligada.
+    // — então Solicitar Atendimento nunca chegava a consultá-la, e o menu
+    // continuava mostrando a aba de quem tinha a permissão desligada.
     if (item.permissaoKey && !ctx.temPermissao(item.permissaoKey)) return false;
-
-    // Ouvidoria: PaguePlay only; visível para cargo ouvidoria, admins e
-    // usuários com acesso concedido em ouvidoria_acessos. A concessão fina
-    // continua valendo POR CIMA da permissão já verificada acima.
-    if (item.to === ROUTE_PATHS.OUVIDORIA) {
-      // OU, e nao E: a permissao ja foi conferida acima. Como E, ligar
-      // `ver_ouvidoria` para um cargo nao fazia nada enquanto a pessoa nao
-      // tivesse linha em `ouvidoria_acessos` — o caso classico de "liberei e
-      // nao aconteceu". A concessao fina continua valendo como caminho extra.
-      return ctx.isPaguePlay && (ctx.temPermissao('ver_ouvidoria') || ctx.acessoOuvidoria);
-    }
 
     // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
     // e quem garante isso é a RLS, não este filtro.

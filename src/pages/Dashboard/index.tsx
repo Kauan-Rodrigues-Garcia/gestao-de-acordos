@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
@@ -478,7 +477,6 @@ export default function Dashboard() {
       patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
-      celebrarPetAcordoPago();
       if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
         supabase.rpc('fn_sync_par_vinculo', {
           p_acordo_id: id, p_valor: acordo.valor, p_vencimento: dataPagamento,
