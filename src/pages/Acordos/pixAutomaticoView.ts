@@ -37,6 +37,14 @@ export interface OperadorInfo {
   equipe_id: string | null;
   setor_id: string | null;
   perfil: string;
+  /**
+   * Foto do cadastro (`perfis.foto_url`) — a mesma que a barra lateral usa.
+   *
+   * Opcional porque quem volta pelo retrato do mês fechado não tem foto: o
+   * retrato guarda onde a pessoa estava, não como ela era. Sem foto, o pódio
+   * cai nas iniciais, que é o comportamento de `AvatarParticipante`.
+   */
+  foto_url?: string | null;
 }
 
 // ── Mapas de operador ───────────────────────────────────────────────────────

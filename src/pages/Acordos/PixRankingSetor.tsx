@@ -29,6 +29,11 @@
  * âmbar de laranja. Do 4º em diante vira lista densa, porque ali a pergunta
  * deixa de ser «quem ganhou» e passa a ser «onde eu estou».
  *
+ * O pódio mostra a FOTO de quem está nele — `perfis.foto_url`, o mesmo cadastro
+ * da barra lateral. Sigla identifica quem já sabe de quem é a sigla; num pódio
+ * que a equipe inteira olha, o rosto é o que faz reconhecer sem ler. Sem foto
+ * (ou com a URL morta) `AvatarParticipante` cai nas iniciais sozinho.
+ *
  * O card pode ser FECHADO: é informação de acompanhamento, não de operação, e
  * o líder que confere acordo por acordo quer a tabela na tela. A escolha — e a
  * aba — ficam guardadas no navegador para não serem refeitas a cada visita.
@@ -42,6 +47,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import type { LinhaRankingPix } from './pixAutomaticoView';
 
 const CHAVE_ABERTO = 'pix-ranking-aberto';
@@ -57,22 +63,24 @@ function grava(chave: string, valor: string): void {
 
 /** Cor de cada lugar do pódio. Do 4º em diante, tudo neutro de propósito. */
 const PODIO: Record<number, {
-  chip: string; barra: string; texto: string; cartao: string;
+  /** Aro em volta da foto — é o que diz o lugar quando o rosto ocupa o disco. */
+  anel: string;
+  barra: string; texto: string; cartao: string;
 }> = {
   1: {
-    chip:   'border-amber-500/50 bg-amber-500/20 text-amber-500 dark:text-amber-300',
+    anel:   'ring-2 ring-amber-500/70',
     barra:  'bg-gradient-to-r from-amber-500 to-amber-300',
     texto:  'text-amber-500 dark:text-amber-300',
     cartao: 'border-amber-500/45 bg-gradient-to-br from-amber-500/[0.14] to-amber-500/[0.03] shadow-[0_0_28px_-12px_rgb(245_158_11_/_0.55)]',
   },
   2: {
-    chip:   'border-slate-400/45 bg-slate-400/15 text-slate-500 dark:text-slate-300',
+    anel:   'ring-2 ring-slate-400/60',
     barra:  'bg-slate-400',
     texto:  'text-slate-500 dark:text-slate-300',
     cartao: 'border-slate-400/30 bg-slate-400/[0.06]',
   },
   3: {
-    chip:   'border-orange-600/45 bg-orange-600/15 text-orange-600 dark:text-orange-400',
+    anel:   'ring-2 ring-orange-500/60',
     barra:  'bg-orange-500',
     texto:  'text-orange-600 dark:text-orange-400',
     cartao: 'border-orange-600/30 bg-orange-600/[0.06]',
@@ -91,17 +99,16 @@ export interface PixRankingSetorProps {
   abas: AbaRankingPix[];
   /** Aba em que o card abre na primeira visita. Normalmente o próprio setor. */
   setorInicial?: string | null;
+  /**
+   * Foto de cada operador, por id (`perfis.foto_url`).
+   *
+   * Fica fora de `LinhaRankingPix` de propósito: `rankingPixSetor` calcula
+   * quem está na frente, e a foto não entra nessa conta. Ausente, o pódio
+   * desenha as iniciais.
+   */
+  fotoPorOperador?: Record<string, string | null>;
   /** Destaca a linha de quem está olhando. */
   destacarOperadorId?: string | null;
-}
-
-/** 'Ana Paula Souza' → 'AS'. Só para o disco de identidade do pódio. */
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/).filter(Boolean);
-  if (partes.length === 0) return '—';
-  const primeira = partes[0][0] ?? '';
-  const ultima   = partes.length > 1 ? (partes[partes.length - 1][0] ?? '') : '';
-  return (primeira + ultima).toUpperCase();
 }
 
 /** Selo de "cumpriu os 18 acordos" — não afirma que a comissão dobrou. */
@@ -117,7 +124,7 @@ function SeloAcordos() {
 }
 
 export function PixRankingSetor({
-  abas, setorInicial, destacarOperadorId,
+  abas, setorInicial, fotoPorOperador, destacarOperadorId,
 }: PixRankingSetorProps) {
   const [aberto, setAberto] = useState<boolean>(() => lido(CHAVE_ABERTO) !== 'nao');
 
@@ -221,9 +228,6 @@ export function PixRankingSetor({
                         )}
                       >
                         {a.nome}
-                        <span className="ml-1.5 tabular-nums text-[10px] text-muted-foreground/70">
-                          {a.linhas.length}
-                        </span>
                       </button>
                     ))}
                   </div>
@@ -249,13 +253,18 @@ export function PixRankingSetor({
                         )}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={cn(
-                            'flex shrink-0 items-center justify-center rounded-lg border font-bold tabular-nums',
-                            ehLider ? 'h-9 w-9 text-xs' : 'h-7 w-7 text-[10px]',
-                            cor.chip,
-                          )}>
-                            {iniciais(l.nome)}
-                          </span>
+                          <AvatarParticipante
+                            nome={l.nome}
+                            fotoUrl={fotoPorOperador?.[l.operadorId] ?? null}
+                            /* `border-0`: o aro colorido do lugar já contorna a
+                               foto, e a borda cinza padrão do avatar viraria um
+                               segundo contorno por dentro dele. */
+                            className={cn(
+                              'shrink-0 border-0',
+                              ehLider ? 'h-10 w-10 text-sm' : 'h-8 w-8 text-xs',
+                              cor.anel,
+                            )}
+                          />
                           <div className="min-w-0 flex-1">
                             <p className={cn(
                               'flex items-center gap-1 font-semibold text-foreground',

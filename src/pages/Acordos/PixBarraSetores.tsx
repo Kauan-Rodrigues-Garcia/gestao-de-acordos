@@ -17,10 +17,14 @@
  *
  * ## O que cada chip carrega
  *
- * O nome do setor, quantos acordos ele tem no mês e um ponto âmbar quando há
- * NR duplicado esperando decisão ali. Sem esses dois números a barra seria uma
- * lista de nomes, e escolher setor viraria tentativa e erro: o ponto âmbar é o
- * que responde «onde está o trabalho parado?» sem entrar em cada um.
+ * O nome, e um ponto âmbar quando há NR duplicado esperando decisão ali. O
+ * ponto é o que responde «onde está o trabalho parado?» sem entrar em cada
+ * setor.
+ *
+ * A CONTAGEM de acordos saiu do chip. Ela competia com o nome pela atenção num
+ * controle que só precisa responder «qual setor?», e o número que importa —
+ * o do setor escolhido — já está nos cards logo abaixo, em corpo grande. No
+ * `title` ela continua, para quem quiser conferir sem trocar de setor.
  *
  * ## «Todos os setores» continua existindo
  *
@@ -112,14 +116,8 @@ function ChipSetor({
       )}
     >
       <span className="truncate">{nome}</span>
-      <span className={cn(
-        'tabular-nums text-[10.5px]',
-        ativo ? 'text-white/75' : 'text-muted-foreground/70',
-      )}>
-        {acordos}
-      </span>
-      {/* O ponto âmbar é fila parada, e por isso não é um número dentro do
-          chip: ele tem de saltar mesmo no chip que não está ativo. */}
+      {/* O ponto âmbar é fila parada, e por isso é um ponto e não um número:
+          ele tem de saltar mesmo no chip que não está ativo. */}
       {pedidos > 0 && (
         <span
           aria-label={`${pedidos} NR duplicado aguardando`}

@@ -700,7 +700,9 @@ export function PixAutomatico() {
       if (podeVerDeOutros) {
         // Nomes/equipes/setores para filtros, vínculo e coluna Operador.
         // Presos ao setor do líder — ver `setorEscopo`.
-        let qOps = supabase.from('perfis').select('id, nome, equipe_id, setor_id, perfil')
+        // `foto_url` entra por causa do pódio do ranking — ver `PixRankingSetor`.
+        let qOps = supabase.from('perfis')
+          .select('id, nome, equipe_id, setor_id, perfil, foto_url')
           .eq('empresa_id', empresa.id);
         let qEqs = supabase.from('equipes').select('id, nome, setor_id')
           .eq('empresa_id', empresa.id);
@@ -1077,6 +1079,13 @@ export function PixAutomatico() {
     () => pedidosDoSetor(pedidosNr, setorFoco),
     [pedidosNr, setorFoco],
   );
+
+  /** Foto de cada operador, para o pódio. Sem foto, o card cai nas iniciais. */
+  const fotoPorOperador = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const o of operadores) m[o.id] = o.foto_url ?? null;
+    return m;
+  }, [operadores]);
 
   const nomePorSetor = useMemo(() => {
     const m: Record<string, string> = {};
@@ -2269,6 +2278,7 @@ export function PixAutomatico() {
           /* Abre no setor em foco quando há um; as abas do card seguem
              independentes da barra depois disso — ver o cabeçalho do card. */
           setorInicial={setorFoco ?? meuSetor}
+          fotoPorOperador={fotoPorOperador}
           destacarOperadorId={perfil?.id}
         />
       )}
