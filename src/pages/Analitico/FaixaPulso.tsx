@@ -26,8 +26,19 @@ interface FaixaPulsoProps {
 export function FaixaPulso({
   importacao, novos, valorIgnorado, qtdIgnorados, importadoEm,
 }: FaixaPulsoProps) {
+  /*
+   * O fuso é fixado, não herdado da máquina.
+   *
+   * `importado_em` é `timestamptz`, então o instante que chega está certo — mas
+   * `toLocaleTimeString` sem `timeZone` renderiza no relógio de quem olha. Um
+   * notebook com o fuso trocado leria "importação às 11h22" para uma que
+   * aconteceu às 14h22, e a faixa existe justamente para dizer quão fresco é o
+   * número. É a mesma correção de `getTodayISO` e de `instanteLegivel`.
+   */
   const hora = importadoEm
-    ? new Date(importadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    ? new Date(importadoEm).toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
+      })
     : null;
 
   return (
