@@ -31,6 +31,7 @@
  * na tela nasce COM DATA DE AGOSTO (ver `dia` em `criarAcordoPix`).
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
@@ -328,6 +329,47 @@ export function PixAutomatico() {
   // Form de registro
   const [nrNovo, setNrNovo]       = useState('');
   const [valorNovo, setValorNovo] = useState('');
+  /** O campo de valor, para receber o cursor quando o NR chega pronto. */
+  const valorNovoRef = useRef<HTMLInputElement>(null);
+
+  /*
+   * NR vindo de fora: `/acordos?tab=pix&novo_nr=123`.
+   *
+   * Quem salva um acordo de PIX Automático ou Cartão Recorrente na lista recebe
+   * um aviso de que a comissão ainda depende desta aba, com um botão que traz a
+   * pessoa para cá — ver `ModalAvisoPixAutomatico`. O NR já vem digitado; o
+   * valor não, porque lá ele é o da PARCELA e aqui é o TOTAL do acordo.
+   *
+   * O parâmetro é consumido e apagado da URL: sem isso, um F5 meia hora depois
+   * reescreveria o campo por cima do que a pessoa tivesse digitado.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  /** O NR que já foi consumido — o parâmetro volta, o preenchimento não. */
+  const nrDeForaRef = useRef<string | null>(null);
+  useEffect(() => {
+    const nrDeFora = searchParams.get('novo_nr');
+    if (!nrDeFora) return;
+
+    /*
+     * Apagar SEMPRE que ele aparecer, e preencher UMA vez só.
+     *
+     * A página Acordos reescreve a barra de endereço 400 ms depois de montar,
+     * a partir dos parâmetros que leu na montagem — e devolve o `novo_nr` que
+     * esta aba acabou de tirar. Sem o `ref`, essa volta reabria o aviso e
+     * apagava o valor que a pessoa já tivesse digitado nesses 400 ms.
+     */
+    const params = new URLSearchParams(searchParams);
+    params.delete('novo_nr');
+    setSearchParams(params, { replace: true });
+
+    if (nrDeForaRef.current === nrDeFora) return;
+    nrDeForaRef.current = nrDeFora;
+    setNrNovo(nrDeFora);
+    setValorNovo('');
+    toast.info(`NR ${nrDeFora} preenchido. Informe o valor TOTAL do acordo e registre.`);
+    // O cursor no campo que falta, depois de a aba desenhar.
+    requestAnimationFrame(() => valorNovoRef.current?.focus());
+  }, [searchParams, setSearchParams]);
   /** Etiqueta EXTRA do proximo registro. Some depois de registrar. */
   const [extraNovo, setExtraNovo] = useState(false);
   /*
@@ -1817,7 +1859,7 @@ export function PixAutomatico() {
             </div>
             <div className="space-y-1 flex-1 max-w-[220px]">
               <Label className="text-xs font-medium flex items-center gap-1"><DollarSign className="w-3 h-3" /> Valor total do acordo *</Label>
-              <Input value={valorNovo} onChange={e => setValorNovo(e.target.value)}
+              <Input ref={valorNovoRef} value={valorNovo} onChange={e => setValorNovo(e.target.value)}
                 placeholder="0,00" className="h-9 text-sm font-mono"
                 onKeyDown={e => { if (e.key === 'Enter') registrar(); }} />
             </div>

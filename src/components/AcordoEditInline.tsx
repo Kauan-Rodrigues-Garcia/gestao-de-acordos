@@ -36,8 +36,9 @@ import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo, formatarTelefonePP,
-  INSTITUICOES_OPTIONS,
+  INSTITUICOES_OPTIONS, getTodayISO,
 } from '@/lib/index';
+import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import {
@@ -207,6 +208,24 @@ export function AcordoEditInline({
         toast.error(mensagemFechamento(mesDaData(data)));
         return;
       }
+    }
+    /*
+     * Recorrente: não se REMARCA para o passado.
+     *
+     * A trava é sobre a MUDANÇA, não sobre a data que já estava gravada —
+     * `vencimento !== acordo.vencimento`. Um PIX Automático antigo, anterior à
+     * regra, continua editável em tudo o mais; recusá-lo por inteiro deixaria
+     * dado histórico sem como marcar pago. Ver `lib/formasRecorrentes.ts`.
+     */
+    if (
+      !isPaguePlay && ehFormaRecorrente(tipo)
+      && vencimento !== acordo.vencimento && vencimento < getTodayISO()
+    ) {
+      toast.error(
+        `${nomeDaFormaRecorrente(tipo)} não pode ser remarcado para uma data passada — `
+        + 'use hoje ou uma data futura.',
+      );
+      return;
     }
 
     const valorNum = parseCurrencyInput(valor);

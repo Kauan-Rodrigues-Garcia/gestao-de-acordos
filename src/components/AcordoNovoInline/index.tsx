@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase, type Acordo, type Perfil } from '@/lib/supabase';
@@ -15,7 +16,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
   buildObservacoesComEstado, formatarTelefonePP,
-  parseCurrencyInput, getTodayISO,
+  parseCurrencyInput, getTodayISO, ROUTE_PATHS,
 } from '@/lib/index';
 import { calcularParcelas, totalComEntrada, formatBRL } from '@/lib/money';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
@@ -23,7 +24,6 @@ import {
   estadoFechamentoDaData, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
-import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { registrarLog }        from '@/services/logs.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
@@ -41,6 +41,7 @@ import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -71,6 +72,7 @@ export function AcordoNovoInline({
 }: AcordoNovoInlineProps) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const navigate    = useNavigate();
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const { tags: empresaTags }  = useEmpresaTags();
@@ -205,6 +207,15 @@ export function AcordoNovoInline({
   const [autorizando, setAutorizando] = useState(false);
   const [avisoDiretoExtra, setAvisoDiretoExtra] = useState<PendingAvisoDiretoExtra | null>(null);
   const [confirmandoDiretoExtra, setConfirmandoDiretoExtra] = useState(false);
+  /*
+   * PIX Automático / Cartão Recorrente gravado → aviso de que falta a aba.
+   *
+   * Guarda o acordo inserido junto: `onSaved` sai da tela, e chamá-lo antes de
+   * mostrar a janela desmontaria a janela no mesmo quadro. Aqui ele espera a
+   * pessoa decidir — ver `ModalAvisoPixAutomatico`.
+   */
+  const [avisoPixAutomatico, setAvisoPixAutomatico] =
+    useState<{ nr: string; forma: string; inserido: Acordo } | null>(null);
   // NR já tabulado pelo PRÓPRIO operador → oferta de adicionar parcela
   const [acordoParaParcela, setAcordoParaParcela] = useState<Acordo | null>(null);
   const [salvandoParcela,   setSalvandoParcela]   = useState(false);
@@ -213,6 +224,13 @@ export function AcordoNovoInline({
   const tipoAtual = tipos.find((t) => t.value === tipo);
   const temParcelas = !!tipoAtual?.parcelado;
   const parcelas    = Math.max(1, parseInt(parcelasStr) || 1);
+  /*
+   * PIX Automático e Cartão Recorrente: parcela única, data nunca no passado, e
+   * um aviso depois de gravar. Ver `lib/formasRecorrentes.ts`.
+   *
+   * Só vale na BookPlay — a PaguePlay não tem essas formas em `TIPOS_PAGUEPLAY`.
+   */
+  const formaRecorrente = !isPaguePlay && ehFormaRecorrente(tipo);
 
   // Entrada só existe na BookPlay e só faz sentido com mais de uma parcela —
   // com uma parcela só não há "demais" para ter valor diferente.
@@ -236,6 +254,18 @@ export function AcordoNovoInline({
 
   function validar(): string | null {
     if (!vencimento)                        return 'Data de vencimento obrigatória';
+    /*
+     * PIX Automático e Cartão Recorrente não se agendam para trás.
+     *
+     * O calendário já fecha os dias anteriores, mas a data também entra pela
+     * leitura de imagem (`DropzoneImagensAcordo`), que não passa por ele. Sem
+     * esta linha, um comprovante antigo lido por foto gravava a autorização com
+     * vencimento no passado.
+     */
+    if (formaRecorrente && vencimento < getTodayISO()) {
+      return `${nomeDaFormaRecorrente(tipo)} não pode ser agendado para uma data passada — `
+        + 'use hoje ou uma data futura.';
+    }
     // O mês do acordo é o do VENCIMENTO. Cadastrar hoje com vencimento em mês
     // fechado reescreveria um fechamento já apresentado — ver `lib/fechamentoMes`.
     if (estadoFechamentoDaData({ data: vencimento, cargo: perfil?.perfil }).bloqueado) {
@@ -547,9 +577,19 @@ export function AcordoNovoInline({
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
-        if (payload.status === 'pago') celebrarPetAcordoPago();
         if (agendarProxima) await criarProximaParcela(inserido);
         limparDraft();
+        /*
+         * Recorrente: a janela primeiro, `onSaved` depois.
+         *
+         * `onSaved` navega para fora do formulário. Chamando-o aqui, o aviso
+         * de que a comissão ainda depende da aba Pix Automático apareceria e
+         * sumiria junto com a tela.
+         */
+        if (formaRecorrente) {
+          setAvisoPixAutomatico({ nr: nrCliente.trim(), forma: tipo, inserido });
+          return;
+        }
         onSaved(inserido);
         toast.success(
           agendarProxima
@@ -715,7 +755,6 @@ export function AcordoNovoInline({
       // A tela de acordos recebe a PRIMEIRA: é a que o operador acabou de
       // tabular; as demais aparecem ao abrir o detalhe do grupo.
       if (novas[0]) onSaved(novas[0]);
-      if (novas.some(p => p.status === 'pago')) celebrarPetAcordoPago();
       toast.success(
         novas.length === 1
           ? `Parcela ${novas[0]?.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`
@@ -724,6 +763,26 @@ export function AcordoNovoInline({
     } finally {
       setSalvandoParcela(false);
     }
+  }
+
+  /**
+   * «Registrar no Pix Automático» — abre a aba com o NR já digitado.
+   *
+   * O valor fica em branco de propósito: na lista de acordos ele é o valor da
+   * PARCELA, e lá é o total do acordo. Herdar um pelo outro gravaria comissão
+   * sobre o número errado, que é pior que um campo vazio.
+   */
+  function irParaPixAutomatico() {
+    const nr = avisoPixAutomatico?.nr ?? '';
+    setAvisoPixAutomatico(null);
+    navigate(`${ROUTE_PATHS.ACORDOS}?tab=pix&novo_nr=${encodeURIComponent(nr)}`);
+  }
+
+  /** «Agora não» — segue o caminho normal de quem acabou de salvar. */
+  function dispensarAvisoPixAutomatico() {
+    const inserido = avisoPixAutomatico?.inserido;
+    setAvisoPixAutomatico(null);
+    if (inserido) onSaved(inserido);
   }
 
   const formState: SharedFormState = {
@@ -763,6 +822,12 @@ export function AcordoNovoInline({
     confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
     profissionalLoading,
     profissionalEncontrado: !!profissional,
+    formaRecorrente,
+    avisoPixAutomatico: avisoPixAutomatico
+      ? { nr: avisoPixAutomatico.nr, forma: avisoPixAutomatico.forma }
+      : null,
+    irParaPixAutomatico,
+    dispensarAvisoPixAutomatico,
   };
 
   const labelCampoNr = isPaguePlay ? 'Código' : 'NR';

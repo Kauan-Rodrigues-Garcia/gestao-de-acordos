@@ -100,6 +100,15 @@ export interface SharedFormState {
   // Autocomplete profissional (PP only)
   profissionalLoading: boolean;
   profissionalEncontrado: boolean;
+  // ── PIX Automático / Cartão Recorrente (BookPlay) ────────────────────────
+  /** A forma escolhida é PIX Automático ou Cartão Recorrente? */
+  formaRecorrente: boolean;
+  /** Acordo recorrente recém-gravado, esperando o aviso. `null` = sem aviso. */
+  avisoPixAutomatico: { nr: string; forma: string } | null;
+  /** Abre a aba Pix Automático com o NR já preenchido. */
+  irParaPixAutomatico: () => void;
+  /** Fecha o aviso e segue o caminho normal de quem salvou. */
+  dispensarAvisoPixAutomatico: () => void;
 }
 
 /**

@@ -12,9 +12,11 @@ import { INSTITUICOES_OPTIONS, PARCELAS_MAX_DEFAULT } from '@/lib/index';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
 import { TagsSelector } from '@/components/TagsSelector';
+import { nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
 import { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
+import { ModalAvisoPixAutomatico } from './ModalAvisoPixAutomatico';
 import type { SharedFormState } from './types';
 
 export function FormBP({ state }: { state: SharedFormState }) {
@@ -38,6 +40,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
     conflito,
     autorizando, solicitarAutorizacaoConflito, cancelarConflito,
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
+    formaRecorrente, avisoPixAutomatico, irParaPixAutomatico, dispensarAvisoPixAutomatico,
   } = state;
 
   const { temPermissao } = useCargoPermissoes();
@@ -89,7 +92,12 @@ export function FormBP({ state }: { state: SharedFormState }) {
                   <Label className="text-xs">NR *</Label>
                   <Input value={nrCliente} onChange={(e) => setNrCliente(e.target.value)} placeholder="Código do acordo" className="h-8 text-xs font-mono" />
                 </div>
-                <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
+                <DatePickerField
+                  label="Vencimento" required
+                  value={vencimento} onChange={setVencimento}
+                  // Recorrente não se agenda para trás — ver `formasRecorrentes`.
+                  semPassado={formaRecorrente}
+                />
                 <div className="space-y-1">
                   <Label className="text-xs">{temEntradaForm ? 'Valor da entrada *' : 'Valor *'}</Label>
                   <Input value={valorStr} onChange={(e) => setValorStr(e.target.value)} placeholder="0,00" className="h-8 text-xs font-mono" />
@@ -124,6 +132,21 @@ export function FormBP({ state }: { state: SharedFormState }) {
                   <Wallet className="w-3 h-3 shrink-0" />
                   {temEntradaForm ? 'Com entrada' : '1º pagamento é entrada?'}
                 </button>
+              )}
+
+              {/* A recorrência não parcela: o que se lança é a AUTORIZAÇÃO da
+                  cobrança, e o campo "Parcelas" some com `parcelado: false`.
+                  A frase existe porque o campo sumindo, sozinho, parece defeito
+                  para quem acabou de vê-lo em outra forma de pagamento. */}
+              {formaRecorrente && (
+                <div className="mt-2 flex items-start gap-1.5 text-[11px] text-cyan-700 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-md px-2.5 py-1.5">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>{nomeDaFormaRecorrente(tipo)}</strong> entra sempre em{' '}
+                    <strong>1 vez</strong> e com vencimento de <strong>hoje em diante</strong>.
+                    {' '}A comissão sai da aba <strong>Pix Automático</strong> — lembramos disso ao salvar.
+                  </span>
+                </div>
               )}
 
               {temParcelas && !temEntradaForm && (
@@ -279,6 +302,11 @@ export function FormBP({ state }: { state: SharedFormState }) {
         conflito={conflito} autorizando={autorizando}
 
         onSolicitar={solicitarAutorizacaoConflito} onCancel={cancelarConflito}
+      />
+      <ModalAvisoPixAutomatico
+        aviso={avisoPixAutomatico}
+        onIr={irParaPixAutomatico}
+        onDepois={dispensarAvisoPixAutomatico}
       />
       <ModalAvisoDiretoExtra
         aberto={!!avisoDiretoExtra}

@@ -209,22 +209,33 @@ vi.mock('@/hooks/useEmpresaTags', () => ({
   useEmpresaTags: () => ({ tags: empresaTagsValue, loading: false, refetch: vi.fn() }),
 }));
 
+import { MemoryRouter } from 'react-router-dom';
+
 // Agora sim, o SUT.
 import { AcordoNovoInline, ModalAvisoDiretoExtra } from './AcordoNovoInline';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/*
+ * O `MemoryRouter` não é decoração: o formulário navega.
+ *
+ * Salvar um PIX Automático ou Cartão Recorrente abre um aviso com botão para a
+ * aba Pix Automático (`useNavigate`), e sem contexto de rota o componente nem
+ * monta. Na aplicação ele sempre vive dentro do roteador — ver `AcordoForm`.
+ */
 function renderInline(props: Partial<React.ComponentProps<typeof AcordoNovoInline>> = {}) {
   return render(
-    <table><tbody>
-      <AcordoNovoInline
-        isPaguePlay={props.isPaguePlay ?? false}
-        colSpan={props.colSpan ?? 10}
-        onSaved={props.onSaved ?? vi.fn()}
-        onCancel={props.onCancel ?? vi.fn()}
-        onAcordoRemovido={props.onAcordoRemovido}
-      />
-    </tbody></table>,
+    <MemoryRouter>
+      <table><tbody>
+        <AcordoNovoInline
+          isPaguePlay={props.isPaguePlay ?? false}
+          colSpan={props.colSpan ?? 10}
+          onSaved={props.onSaved ?? vi.fn()}
+          onCancel={props.onCancel ?? vi.fn()}
+          onAcordoRemovido={props.onAcordoRemovido}
+        />
+      </tbody></table>
+    </MemoryRouter>,
   );
 }
 
