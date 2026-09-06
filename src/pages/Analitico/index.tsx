@@ -1,13 +1,16 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins, Layers3, Trophy } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { BarChart2, User, Users, Building2, Layers3, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { AbasSegmentadas } from '@/components/AbasSegmentadas';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { getEstadoFromAcordo, ROUTE_PATHS } from '@/lib/index';
+import { getEstadoFromAcordo, getTodayISO, ROUTE_PATHS } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { supabase } from '@/lib/supabase';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
@@ -21,13 +24,18 @@ import {
   type DadosTabulacaoAnalitico,
   type RespostaTabulacaoAnalitico,
 } from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
-import { AbaDiario } from './Diario';
 import { AbaColchao } from './Colchao';
 import { AbaDesafios } from './Desafios';
 import { useSetoresDoDesafio } from '@/hooks/useDesafios';
-import { deslocarMes, mesAtual, rotuloDoMes } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
+import { SeletorRecorte } from './SeletorRecorte';
+import { mesDoRecorte, recorteDaQuery, type Recorte } from './recorte';
+
+/** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
+const TODOS_SETORES = '__todos__';
+
+type AbaPrincipal = 'analitico' | 'colchao' | 'desafios';
 
 export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
@@ -68,26 +76,14 @@ export default function PaginaAnalitico() {
   const [visao,         setVisao]         = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
   const [setores,       setSetores]       = useState<{ id: string; nome: string }[]>([]);
-  // `?aba=diario` abre direto no Recebimento diário. É o destino da notificação
-  // de importação do diário — sem isto ela largava o usuário na aba errada.
   const [searchParams] = useSearchParams();
-  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario' | 'colchao' | 'desafios'>(
+  const [abaPrincipal,  setAbaPrincipal]  = useState<AbaPrincipal>(
     () => {
       const aba = searchParams.get('aba');
-      if (aba === 'diario' || aba === 'colchao' || aba === 'desafios') return aba;
+      if (aba === 'colchao' || aba === 'desafios') return aba;
       return 'analitico';
     },
   );
-
-  // Clicar em outra notificação de diário já estando na página só troca a query;
-  // o estado inicial não roda de novo, então a aba precisa acompanhar.
-  const abaDaUrl = searchParams.get('aba');
-  useEffect(() => {
-    if (abaDaUrl === 'diario')    setAbaPrincipal('diario');
-    if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
-    if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
-    if (abaDaUrl === 'desafios')  setAbaPrincipal('desafios');
-  }, [abaDaUrl]);
 
   /*
    * A aba Desafios tem DUAS travas, e elas respondem perguntas diferentes: a
@@ -113,10 +109,12 @@ export default function PaginaAnalitico() {
    * duas operações; na PaguePlay ele não tem efeito.
    */
   const abasPrincipais = useMemo(() => ([
-    { key: 'analitico', label: 'Analítico',          Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
-    { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins, permissao: 'analitico_sub_recebimento_diario', extra: true },
-    { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: !tenant.isPaguePlay },
-    { key: 'desafios',  label: 'Desafios',           Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
+    { key: 'analitico', label: 'Analítico', Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
+    // A aba "Recebimento diário" virou o recorte Dia da lente, logo abaixo. A
+    // chave `analitico_sub_recebimento_diario` continua existindo e continua
+    // querendo dizer a mesma coisa — ela agora libera o recorte, não uma aba.
+    { key: 'colchao',   label: 'Colchão',   Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: !tenant.isPaguePlay },
+    { key: 'desafios',  label: 'Desafios',  Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
   ] as const).filter(a => a.extra && temPermissao(a.permissao)),
   [temPermissao, desafiosNoMeuSetor, tenant.isPaguePlay]);
 
@@ -142,6 +140,44 @@ export default function PaginaAnalitico() {
    */
   const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
 
+  /*
+   * O recorte — a "lente" desta tela.
+   *
+   * Ele nasce da URL ou do mês do provider. `?aba=diario` é o link das
+   * notificações de importação do diário já enviadas: ele não pode quebrar, e
+   * `recorteDaQuery` o traduz para o recorte de dia.
+   */
+  const [recorte, setRecorteInterno] = useState<Recorte>(
+    () => recorteDaQuery(searchParams, getTodayISO()) ?? { modo: 'mes', mes: mesFiltro },
+  );
+
+  /*
+   * Trocar de recorte devolve o mês ao provider. Sem isto, olhar agosto aqui e
+   * ir para o Painel Líder voltaria para setembro.
+   */
+  const setRecorte = useCallback((r: Recorte) => {
+    setRecorteInterno(r);
+    const m = mesDoRecorte(r);
+    if (m !== mesFiltro) setMesFiltro(m);
+  }, [mesFiltro, setMesFiltro]);
+
+  const mesDaLente = mesDoRecorte(recorte);
+
+  // Clicar noutra notificação já estando na página só troca a query; o estado
+  // inicial não roda de novo, então aba e recorte precisam acompanhar.
+  const abaDaUrl = searchParams.get('aba');
+  useEffect(() => {
+    if (abaDaUrl === 'diario') {
+      setAbaPrincipal('analitico');
+      const r = recorteDaQuery(searchParams, getTodayISO());
+      if (r) setRecorte(r);
+      return;
+    }
+    if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
+    if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
+    if (abaDaUrl === 'desafios')  setAbaPrincipal('desafios');
+  }, [abaDaUrl, searchParams, setRecorte]);
+
   // PP: janela que completa parcelamento/estado antes de abrir o Novo Acordo
   const [tabularPendente, setTabularPendente] = useState<{
     dados: DadosTabulacaoAnalitico;
@@ -161,7 +197,7 @@ export default function PaginaAnalitico() {
 
   // Somente operadores e elite-individual carregam seus próprios dados upfront
   const { dados: dadosProprios, loading: loadingProprios, novosCount, refetch: refetchProprios } = useAnalitico({
-    mes: mesFiltro,
+    mes: mesDaLente,
     operadorFiltro: perfil?.id ?? undefined,
   });
 
@@ -324,12 +360,6 @@ export default function PaginaAnalitico() {
     navigate(ROUTE_PATHS.DASHBOARD + '?' + qs.toString());
   }
 
-  // A aritmética de calendário mora em `mesReferencia` — três cópias dela
-  // viviam aqui, e a virada de ano era feita à mão em cada uma.
-  const mesAnterior = () => setMesFiltro(deslocarMes(mesFiltro, -1));
-  const mesProximo  = () => setMesFiltro(deslocarMes(mesFiltro, 1));
-  const irParaMesAtual = () => setMesFiltro(mesAtual());
-
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
 
@@ -380,21 +410,13 @@ export default function PaginaAnalitico() {
         )}
       </div>
 
-      {/* Abas internas: Analítico × Recebimento diário × Colchão */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {abasPrincipais.map(({ key, label, Icon }) => (
-          <button key={key} onClick={() => setAbaPrincipal(key)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              abaVisivel === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
-            )}
-          >
-            <Icon className="w-3.5 h-3.5" /> {label}
-          </button>
-        ))}
-      </div>
+      {/* Abas internas: Analítico × Colchão × Desafios */}
+      <AbasSegmentadas<AbaPrincipal>
+        abas={abasPrincipais.map(({ key, label, Icon }) => ({ key, label, Icon }))}
+        ativa={abaVisivel}
+        onTrocar={setAbaPrincipal}
+        rotulo="Seção do Analítico"
+      />
 
       {/* Nenhuma aba interna liberada: dizer isso é melhor do que uma página
           em branco, que se lê como defeito. */}
@@ -404,30 +426,17 @@ export default function PaginaAnalitico() {
         </div>
       )}
 
-      {/* Seletor de mês + filtro de setor (somente aba Analítico) */}
-      {abaVisivel !== 'diario' && (
+      {/* A lente + filtro de setor */}
       <div className="flex items-center gap-4 flex-wrap">
-        {/* O seletor de mês não vale para Desafios: o recorte de lá é o PERÍODO
-            da campanha, que pode atravessar a virada do mês. O filtro de setor
+        {/* A lente não vale para Desafios: o recorte de lá é o PERÍODO da
+            campanha, que pode atravessar a virada do mês. O filtro de setor
             logo abaixo continua valendo — ele é o recorte de quem olha. */}
         {abaVisivel !== 'desafios' && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesAnterior}>
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </Button>
-            <span className="text-sm font-semibold min-w-[130px] text-center">
-              {rotuloDoMes(mesFiltro)}
-            </span>
-            <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesProximo}>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={irParaMesAtual}>
-              Mês atual
-            </Button>
-          </div>
-        </div>
+          <SeletorRecorte
+            recorte={recorte}
+            onMudar={setRecorte}
+            podeVerDia={temPermissao('analitico_sub_recebimento_diario')}
+          />
         )}
 
         {/* Filtro de setor — para quem tem o nível `todos_setores` nesta aba.
@@ -435,25 +444,21 @@ export default function PaginaAnalitico() {
         {podeVerSetor && veTodosSetores && setores.length > 0 && (
           <div className="flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs text-muted-foreground font-medium shrink-0">Setor:</span>
-            <select
-              value={filtroSetorId ?? ''}
-              onChange={e => setFiltroSetorId(e.target.value || null)}
-              className="h-7 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            <Select
+              value={filtroSetorId ?? TODOS_SETORES}
+              onValueChange={v => setFiltroSetorId(v === TODOS_SETORES ? null : v)}
             >
-              <option value="">Todos os setores</option>
-              {setores.map(s => (
-                <option key={s.id} value={s.id}>{s.nome}</option>
-              ))}
-            </select>
-            {filtroSetorId && (
-              <button
-                onClick={() => setFiltroSetorId(null)}
-                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-              >
-                Limpar
-              </button>
-            )}
+              <SelectTrigger className="h-8 w-44 rounded-lg text-xs">
+                <SelectValue placeholder="Todos os setores" />
+              </SelectTrigger>
+              <SelectContent>
+                {/* O `Select` do shadcn recusa `value=""` — daí o sentinela. */}
+                <SelectItem value={TODOS_SETORES}>Todos os setores</SelectItem>
+                {setores.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
         {podeVerSetor && !veTodosSetores && setorProprio && (
@@ -463,7 +468,6 @@ export default function PaginaAnalitico() {
           </span>
         )}
       </div>
-      )}
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
       {abaVisivel === 'analitico' && podeValidarRelatorio && (
@@ -471,7 +475,7 @@ export default function PaginaAnalitico() {
           empresaId={empresa.id}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}
           setorNome={setores.find(s => s.id === (veTodosSetores ? filtroSetorId : setorProprio))?.nome ?? ''}
-          mes={mesFiltro}
+          mes={mesDaLente}
         />
       )}
 
@@ -483,7 +487,7 @@ export default function PaginaAnalitico() {
           operadorId={perfil.id}
           operadorNome={perfil.nome}
           empresaId={empresa.id}
-          mes={mesFiltro}
+          recorte={recorte}
           liderId={liderId}
           podeVerRanking={temPermissao('analitico_sub_ranking')}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
@@ -495,7 +499,7 @@ export default function PaginaAnalitico() {
       {abaVisivel === 'analitico' && mostrarVisaoGeral && (
         <AnaliticoLider
           empresaId={empresa.id}
-          mes={mesFiltro}
+          recorte={recorte}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}
           podeVerTodosSetores={veTodosSetores}
           temPermissaoImportar={temPermissao('importar_analitico')}
@@ -521,21 +525,11 @@ export default function PaginaAnalitico() {
         </div>
       )}
 
-      {/* Conteúdo por cargo — aba Recebimento diário */}
-      {abaVisivel === 'diario' && (
-        <AbaDiario
-          empresaId={empresa.id}
-          operadorId={perfil.id}
-          visaoGeral={mostrarVisaoGeral}
-          temPermissaoImportar={temPermissao('importar_diario')}
-        />
-      )}
-
       {/* Conteúdo isolado — nunca participa dos totais do Analítico */}
       {abaVisivel === 'colchao' && (
         <AbaColchao
           empresaId={empresa.id}
-          mes={mesFiltro}
+          mes={mesDaLente}
           setorId={mostrarVisaoGeral ? (veTodosSetores ? filtroSetorId : setorProprio) : null}
           operadorId={mostrarVisaoIndividual ? perfil.id : null}
         />
