@@ -239,14 +239,6 @@ export function AnaliticoLider({
     ? abaAtiva
     : (abasInternas[0]?.key ?? null);
 
-  /** A régua de cima, já tipada — ver o comentário de `ABAS_VISAO`. */
-  const abasDaRegua: AbaSegmentada<AbaInterna>[] = abasInternas.map(
-    ({ key, label, Icon }) => ({
-      key, label, Icon,
-      badge: key === 'orfaos' ? orfaos.length : undefined,
-    }),
-  );
-
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
   const [loadingResumos, setLoadingResumos] = useState(true);
@@ -271,6 +263,21 @@ export function AnaliticoLider({
   const [removendoTodos,    setRemovendoTodos]    = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const [limpando,           setLimpando]           = useState(false);
+
+  /*
+   * A régua de cima, já tipada — ver o comentário de `ABAS_VISAO`.
+   *
+   * Mora AQUI, e não junto de `abaVisivel`, porque lê `orfaos`: declarada antes
+   * do `useState` dela, a constante caía na zona morta temporal e a tela
+   * quebrava com "Cannot access 'orfaos' before initialization". O teste
+   * `AnaliticoLider.montagem.test.tsx` guarda isso.
+   */
+  const abasDaRegua: AbaSegmentada<AbaInterna>[] = abasInternas.map(
+    ({ key, label, Icon }) => ({
+      key, label, Icon,
+      badge: key === 'orfaos' ? orfaos.length : undefined,
+    }),
+  );
 
   // ── Destaques ─────────────────────────────────────────────────────────────
   const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
