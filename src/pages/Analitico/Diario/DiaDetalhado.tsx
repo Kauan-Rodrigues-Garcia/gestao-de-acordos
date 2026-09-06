@@ -50,41 +50,32 @@ import { cn } from '@/lib/utils';
 // fonte dos VALORES, não a régua do calendário.
 import { diasDoMes } from '@/services/diario/diaDetalhado';
 
-/** Referência estável para "sem linhas" — evita remontar a matriz à toa. */
-const SEM_LINHAS: readonly AnaliticoDashboardLinha[] = [];
-
-/** Fallback de nome. Constante para a identidade não mudar a cada render. */
-const SEM_NOME = (): string => '—';
-
 interface DiaDetalhadoProps {
   /**
    * Linhas do mês vindas de `useAnaliticoDashboard`, JÁ escopadas por quem
    * chama (setor, equipe, permissão). Ver o cabeçalho.
+   *
+   * Obrigatória. Como opcional, um caller que esquecesse de passá-la veria um
+   * mapa vazio em vez de um erro — e mapa vazio é indistinguível de "mês sem
+   * recebimento".
    */
-  linhas?: readonly AnaliticoDashboardLinha[];
+  linhas: readonly AnaliticoDashboardLinha[];
   /** 'yyyy-MM' — o mês da lente. `null` enquanto ela não resolveu. */
   mes: string | null;
-  /** operador_id → nome de exibição. Quem chama tem os resumos; aqui não. */
-  nomeDoOperador?: (id: string) => string;
-  /** 'yyyy-MM-dd'. Só decide onde as colunas param e qual delas é "hoje". */
-  hojeISO?: string;
-
-  /*
-   * Compatibilidade com o `DiarioLider`, que a Task 13 apaga.
+  /**
+   * operador_id → nome de exibição. Quem chama tem os resumos; aqui não.
    *
-   * Ele ainda importa este componente com as props da fonte antiga. Não são
-   * lidas — o arquivo é código órfão (nada mais monta a aba Recebimento
-   * diário) e some junto com elas. Estão aqui só para o typecheck do ramo
-   * continuar verde até lá.
+   * Obrigatória pelo mesmo motivo: sem ela o mapa desenhava uma coluna inteira
+   * de '—' e continuava parecendo funcionar.
    */
-  /** @deprecated sai com o `DiarioLider` (Task 13). */
-  empresaId?: string;
-  /** @deprecated sai com o `DiarioLider` (Task 13). */
-  escopo?: unknown;
-  /** @deprecated sai com o `DiarioLider` (Task 13). */
-  vinculos?: unknown;
-  /** @deprecated sai com o `DiarioLider` (Task 13). */
-  equipeId?: string | null;
+  nomeDoOperador: (id: string) => string;
+  /**
+   * 'yyyy-MM-dd'. Só decide onde as colunas param e qual delas é "hoje".
+   *
+   * Continua opcional — o padrão (`getTodayISO()`) está certo, e deixá-la
+   * injetável é o que permite testar o mapa sem mexer no relógio.
+   */
+  hojeISO?: string;
 }
 
 /** Dias visíveis por página. 10 cabe confortavelmente em tela de notebook. */
@@ -161,7 +152,7 @@ function pesoDaCor(valor: number, maximo: number): number {
 }
 
 export function DiaDetalhado({
-  linhas = SEM_LINHAS, mes, nomeDoOperador = SEM_NOME, hojeISO = getTodayISO(),
+  linhas, mes, nomeDoOperador, hojeISO = getTodayISO(),
 }: DiaDetalhadoProps) {
   const dias = useMemo(
     () => (mes ? diasDoMes(mes, hojeISO) : []),

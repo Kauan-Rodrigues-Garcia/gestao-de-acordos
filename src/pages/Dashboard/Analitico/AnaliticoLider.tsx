@@ -502,6 +502,14 @@ export function AnaliticoLider({
   /** Nome do setor em foco para o aviso e o toast — "o setor" se ainda não veio. */
   const setorEmFocoLabel = (setorId && nomeDoSetor.get(setorId)) || 'seu setor';
 
+  /** 'setembro de 2026' — o mês do recorte por extenso, para o aviso dos órfãos. */
+  const mesLabelDoRecorte = useMemo(
+    () => (mes
+      ? new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      : '—'),
+    [mes],
+  );
+
   /** Todos os perfis (ativos) do setor em foco — para limpar/remover escopado. */
   const idsDoSetor = useMemo(
     () => perfilIdsDoSetor(operadorEquipeMap, setorId),
@@ -1686,6 +1694,32 @@ export function AnaliticoLider({
       {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
       {abaVisivel === 'orfaos' && (
         <div className="space-y-3">
+          {/*
+           * Esta aba não segue a lente, e diz isso em voz alta.
+           *
+           * Ela é do ANALÍTICO e do MÊS inteiro: as duas ações da tela —
+           * remover a linha e remover todas — apagam de `analitico_recebimentos`
+           * pelo mês. No recorte Dia a lista de operadores lê do diário, outra
+           * tabela, com outras colunas (`cliente_codigo`/`acordo_codigo` no
+           * lugar de `codigo`, forma de pagamento em texto bruto, data que pode
+           * ser nula) e outros ids. Trocar a fonte aqui deixaria o botão de
+           * remover apontando para a tabela errada — o "Remover todos" varreria
+           * o mês do analítico enquanto a tela mostra um dia do diário.
+           *
+           * Enquanto os órfãos do diário não tiverem ação própria, a aba fica
+           * mensal e avisa. Vale para Dia e para Período: os dois carregam o mês
+           * do recorte.
+           */}
+          {recorte.modo !== 'mes' && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                Esta lista é sempre do <strong className="text-foreground">mês inteiro</strong>
+                {' '}({mesLabelDoRecorte}), não do recorte escolhido na lente — resolver
+                linha sem operador mexe no analítico do mês.
+              </p>
+            </div>
+          )}
           {loadingOrfaos && (
             <div className="space-y-2 animate-pulse">
               {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-muted rounded-lg" />)}

@@ -3,9 +3,10 @@
  * Tipos e helpers do recebimento diário que **não dependem de xlsx**.
  *
  * Mesmo motivo de `analiticoComum.ts`: `diarioParser.ts` importa `@e965/xlsx`
- * (~484 KB). As telas do diário (`DiarioLider`, `DiarioOperador`, `FormaChip`,
- * `helpers.ts`) precisavam apenas de `normDiario` / `formaKindDiario` e, por
- * importarem do parser, arrastavam a biblioteca inteira só para EXIBIR a lista.
+ * (~484 KB). Quem exibe o recebimento (`FormaChip`, `helpers.ts` e, desde que
+ * a aba virou o recorte Dia do Analítico, `AnaliticoLider`) precisa apenas de
+ * `normDiario` / `formaKindDiario` e, por importar do parser, arrastava a
+ * biblioteca inteira só para EXIBIR a lista.
  *
  * Regra:
  *   • **caminho de leitura** (services, hooks, telas) → importe DAQUI;
