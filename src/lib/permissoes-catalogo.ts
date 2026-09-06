@@ -743,6 +743,23 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'usuarios_transferir', label: 'Usuários: transferir de setor ou empresa',
     descricao: 'Abrir e concluir transferências de pessoas',
     grupo: 'Gestão de pessoas',
+    /*
+     * A chave que ficou ligada e inerte.
+     *
+     * Ela liga por padrão para líder, elite, gerência e diretoria. Mas a única
+     * porta da transferência morava dentro da aba Setores, e `ver_setores` liga
+     * só para gerência e diretoria — líder e elite tinham a permissão e NENHUM
+     * lugar onde exercê-la. Uma chave alcançável no painel que não agia em tela
+     * nenhuma; ninguém descobria porque não havia erro para ver.
+     *
+     * Em 06/09/2026 a transferência mudou de endereço: virou ação de linha na
+     * lista de pessoas, dentro da aba Usuários. Daí a dependência abaixo — é a
+     * aba onde ela agora tem onde agir.
+     */
+    depende: {
+      chaves: ['usuarios_sub_usuarios'],
+      motivo: 'A aba interna Usuários precisa estar ligada: a transferência é uma ação da lista de pessoas.',
+    },
     produtos: TODA_OPERACAO, padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
   },
   {
@@ -761,6 +778,12 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'usuarios_desfazer_transferencia', label: 'Usuários: desfazer transferência',
     descricao: 'Reverter uma transferência de setor ou empresa já concluída',
+    // O histórico com o desfazer fica ao lado do botão que transfere — mudou de
+    // aba junto com ele. Sem transferir não há o que desfazer.
+    depende: {
+      chaves: ['usuarios_transferir'],
+      motivo: 'O desfazer vive no histórico ao lado da transferência.',
+    },
     grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: {},
   },
   {

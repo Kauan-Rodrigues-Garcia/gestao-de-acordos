@@ -181,12 +181,16 @@ const SECOES_USUARIOS: Record<string, string> = {
   usuarios_editar_do_setor: 'Aba interna Usuários',
   usuarios_ver_administradores: 'Aba interna Usuários',
   acesso_multiempresa_permitido: 'Aba interna Usuários',
+  // Transferir e desfazer saíram da aba Setores em 06/09/2026, junto com a
+  // lista de pessoas que ela duplicava. Estão listadas onde agora agem — e o
+  // lugar em que a permissão aparece no painel precisa ser o lugar em que ela
+  // faz efeito, ou quem configura procura o interruptor na tela errada.
+  usuarios_transferir: 'Aba interna Usuários',
+  usuarios_desfazer_transferencia: 'Aba interna Usuários',
   ver_setores: 'Aba interna Setores',
   setores_criar_editar: 'Aba interna Setores',
   setores_ativar_desativar: 'Aba interna Setores',
   setores_reordenar: 'Aba interna Setores',
-  usuarios_transferir: 'Aba interna Setores',
-  usuarios_desfazer_transferencia: 'Aba interna Setores',
   ver_equipes: 'Aba interna Equipes',
   equipes_criar_editar: 'Aba interna Equipes',
   equipes_excluir: 'Aba interna Equipes',
