@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper, AlertTriangle, UserX } from 'lucide-react';
+import { Users, Plus, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
@@ -10,7 +10,15 @@ import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { filtrarUsuariosVisiveis } from '@/lib/usuarios-visibilidade';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
+import { KpiTile } from '@/components/KpiTile';
+// A lista de gente e a transferência: as duas saíram da aba Setores, que as
+// duplicava. Ver o cabeçalho de `AdminSetoresAba` e o de `DialogTransferencia`.
+import { ListaPessoas, ListaPessoasVazia, type GrupoDeSetor } from '@/components/admin/ListaPessoas';
+import { DialogTransferencia } from '@/components/admin/DialogTransferencia';
+import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
+import { useClonesCross } from '@/hooks/useClonesCross';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import MetasConfig from '@/pages/MetasConfig';
@@ -21,7 +29,6 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { usePresence } from '@/hooks/usePresence';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,8 +36,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ChevronDown, CalendarRange } from 'lucide-react';
+import { CalendarRange } from 'lucide-react';
 // A lista de um mes FECHADO — so leitura, com as etiquetas do que mudou depois.
 import { UsuariosDoMesPainel } from '@/components/admin/UsuariosDoMesPainel';
 import { mesesComRetrato } from '@/services/admin/usuariosDoMes.service';
@@ -40,7 +46,7 @@ import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas }
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
+import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
@@ -53,20 +59,24 @@ const Comemoracoes = lazy(() => import('@/pages/Comemoracoes'));
 /** Valor sentinela do seletor de setor — o Radix não aceita `value=""`. */
 const TODOS_SETORES_SELECT_VALUE = '__todos_setores__';
 
-// Cores dos cargos — centralizadas em PERFIL_COLORS (lib/index.ts)
-const PERFIL_BADGE = PERFIL_COLORS;
+/** Marcas de acento que o NFD separa da letra base. */
+const ACENTOS = /[\u0300-\u036f]/g;
 
-// Item 5: situação operacional — cor da bolinha e rótulo.
-const SITU_DOT: Record<SituacaoUsuario, string> = {
-  ativo:     'bg-green-500',
-  ferias:    'bg-amber-500',
-  desligado: 'bg-red-500',
-};
-const SITU_LABEL: Record<SituacaoUsuario, string> = {
-  ativo:     'Ativo',
-  ferias:    'Férias',
-  desligado: 'Desligado',
-};
+/**
+ * O termo de busca sem acento e em minúsculas.
+ *
+ * Sem isto, procurar «jose» não acharia «José» — e é assim que o nome é
+ * digitado por quem está com pressa, que é justamente quem usa a busca.
+ */
+function normalizarBusca(v: string): string {
+  return v.trim().normalize('NFD').replace(ACENTOS, '').toLowerCase();
+}
+
+/** Nome, login e e-mail — os três jeitos de alguém se referir a uma pessoa. */
+function casaComBusca(u: Perfil, termo: string): boolean {
+  const alvo = normalizarBusca(`${u.nome} ${u.usuario ?? ''} ${u.email ?? ''}`);
+  return alvo.includes(termo);
+}
 
 interface UserForm {
   nome:       string;
@@ -177,8 +187,31 @@ export default function AdminUsuarios() {
     if (!abasVisiveis.includes(aba)) return;
     const novosParametros = new URLSearchParams(searchParams);
     novosParametros.set('tab', aba);
+    // Trocar de aba pela régua descarta o recorte que veio de Setores: o
+    // `?setor=` valia para a viagem, não para a sessão inteira.
+    novosParametros.delete('setor');
     setSearchParams(novosParametros, { replace: true });
   };
+
+  /*
+   * A régua de abas, para `AbasSegmentadas`.
+   *
+   * Sai de `abasVisiveis` para que a permissão continue mandando num lugar só:
+   * quem decide o que aparece é a lista acima; isto só veste o que sobrou.
+   */
+  const ROTULO_ABA: Record<string, { label: string; Icon: typeof Users }> = {
+    usuarios:     { label: 'Usuários',     Icon: Users },
+    setores:      { label: 'Setores',      Icon: Building2 },
+    equipes:      { label: 'Equipes',      Icon: Users2 },
+    metas:        { label: 'Metas',        Icon: Target },
+    comemoracoes: { label: 'Comemorações', Icon: PartyPopper },
+    desligados:   { label: 'Desligados',   Icon: UserX },
+  };
+  const abasInternas: AbaSegmentada<string>[] = abasVisiveis.map(aba => ({
+    key: aba,
+    label: ROTULO_ABA[aba]?.label ?? aba,
+    Icon:  ROTULO_ABA[aba]?.Icon  ?? Users,
+  }));
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   /** Arquivados: saíram em meses anteriores e só existem na aba Desligados. */
   const [desligados,  setDesligados]  = useState<Perfil[]>([]);
@@ -199,11 +232,78 @@ export default function AdminUsuarios() {
   const [filtroSetor, setFiltroSetor] = useState<string>('');
   const [setoresRecolhidos, setSetoresRecolhidos] = useState<Set<string>>(new Set());
 
+  /*
+   * ── Busca por nome ────────────────────────────────────────────────────────
+   *
+   * A lista tinha filtro de setor e de empresa e NENHUMA busca: achar uma
+   * pessoa entre cento e tantas era escolher o setor certo e rolar. A aba
+   * Desligados tinha busca; a lista principal, não.
+   *
+   * Enquanto há busca os setores ficam todos abertos — esconder um resultado
+   * atrás de um grupo recolhido é o oposto de buscar.
+   */
+  const [busca, setBusca] = useState('');
+
+  /*
+   * ── Transferência ─────────────────────────────────────────────────────────
+   *
+   * Veio da aba Setores em 06/09/2026. Ver `DialogTransferencia` para o motivo:
+   * lá a chave `usuarios_transferir` ficava inerte para líder e elite, que não
+   * abrem a aba Setores.
+   */
+  const podeTransferir = temPermissao('usuarios_transferir');
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [transferindo, setTransferindo] = useState<Perfil[] | null>(null);
+
+  /*
+   * As equipes, para a coluna «Equipe».
+   *
+   * Consulta à parte em vez de embed em `perfis`: aquela consulta já tem um
+   * caminho de fallback por ambiguidade de FK (ver `EMBED_EMPRESA`), e
+   * pendurar mais um join nela é arriscar o carregamento inteiro da lista por
+   * causa de uma coluna. `equipes` é tabela pequena.
+   */
+  const [equipes, setEquipes] = useState<{ id: string; nome: string }[]>([]);
+
   const alternarSetor = (sid: string) => setSetoresRecolhidos(atual => {
     const proximo = new Set(atual);
     if (proximo.has(sid)) proximo.delete(sid); else proximo.add(sid);
     return proximo;
   });
+
+  /*
+   * `?setor=` na URL recorta a lista.
+   *
+   * É o outro lado do atalho da aba Setores: lá o contador de pessoas leva
+   * para cá já filtrado. Sem isto o clique trocaria de aba e mostraria todo
+   * mundo, que é quase o mesmo que não levar a lugar nenhum.
+   */
+  const setorDaUrl = searchParams.get('setor');
+  useEffect(() => {
+    if (setorDaUrl) setFiltroSetor(setorDaUrl);
+  }, [setorDaUrl]);
+
+  /** Trocar o filtro pela tela tira o `?setor=` — a URL não pode mentir. */
+  const escolherFiltroSetor = (sid: string) => {
+    setFiltroSetor(sid);
+    if (!setorDaUrl) return;
+    const p = new URLSearchParams(searchParams);
+    p.delete('setor');
+    setSearchParams(p, { replace: true });
+  };
+
+  const alternarSelecao = (id: string) => setSelecionados(atual => {
+    const proximo = new Set(atual);
+    if (proximo.has(id)) proximo.delete(id); else proximo.add(id);
+    return proximo;
+  });
+
+  const selecionarGrupo = (ids: string[], marcar: boolean) => setSelecionados(atual => {
+    const proximo = new Set(atual);
+    for (const id of ids) { if (marcar) proximo.add(id); else proximo.delete(id); }
+    return proximo;
+  });
+
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
@@ -700,37 +800,29 @@ export default function AdminUsuarios() {
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
 
-  // ── Clones cross-setor (BookPlay) ───────────────────────────────────────────
-  // Operador clonado numa equipe de OUTRO setor aparece TAMBÉM no setor destino,
-  // com tag "clone de <setor de origem>" — igual à aba Setores (item 12).
-  const [clonesCross, setClonesCross] = useState<{ operadorId: string; destinoSetorId: string }[]>([]);
+  /*
+   * ── Clones cross-setor (BookPlay) ─────────────────────────────────────────
+   * Operador clonado numa equipe de OUTRO setor aparece TAMBÉM no setor
+   * destino, com a tag "clone de <setor de origem>".
+   *
+   * Isto era trinta linhas escritas aqui e outras trinta iguais em
+   * `AdminSetoresAba`. Agora é um hook só — ver `useClonesCross`.
+   */
+  const clonesCross = useClonesCross(empresaAtual?.id);
+
+  // As equipes da empresa, para a coluna «Equipe» da lista. Ver `equipes`.
   useEffect(() => {
-    if (!empresaAtual?.id || tenant.slug !== 'bookplay') { setClonesCross([]); return; }
+    const empresaId = empresaAtual?.id;
+    if (!empresaId) { setEquipes([]); return; }
     let cancel = false;
-    void (async () => {
-      const [clones, equipesData] = await Promise.all([
-        supabase.from('equipe_operadores_clones').select('operador_id, equipe_id').eq('empresa_id', empresaAtual.id),
-        supabase.from('equipes').select('id, setor_id').eq('empresa_id', empresaAtual.id),
-      ]);
-      if (cancel) return;
-      const setorDaEquipe = new Map<string, string | null>();
-      for (const e of (equipesData.data as { id: string; setor_id: string | null }[]) ?? []) {
-        setorDaEquipe.set(e.id, e.setor_id ?? null);
-      }
-      const out: { operadorId: string; destinoSetorId: string }[] = [];
-      const seen = new Set<string>();
-      for (const c of (clones.data as { operador_id: string; equipe_id: string }[]) ?? []) {
-        const destino = setorDaEquipe.get(c.equipe_id);
-        if (!destino) continue;
-        const key = `${c.operador_id}::${destino}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ operadorId: c.operador_id, destinoSetorId: destino });
-      }
-      setClonesCross(out);
-    })();
+    void supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId)
+      .then(({ data, error }) => {
+        if (cancel) return;
+        if (error) { console.warn('[AdminUsuarios] equipes:', error.message); setEquipes([]); return; }
+        setEquipes((data as { id: string; nome: string }[]) ?? []);
+      });
     return () => { cancel = true; };
-  }, [empresaAtual?.id, tenant.slug]);
+  }, [empresaAtual?.id]);
 
   /*
    * ── Filtro de acesso ──────────────────────────────────────────────────────
@@ -798,7 +890,26 @@ export default function AdminUsuarios() {
   const setoresParaFiltro = Object.entries(usuariosPorSetor)
     .sort((a, b) => a[1].nomeSetor.localeCompare(b[1].nomeSetor, 'pt-BR'));
 
-  const setoresOrdenados = (() => {
+  /*
+   * ── Os números do topo ────────────────────────────────────────────────────
+   *
+   * Saem de `usuariosFiltrados` — o que ESTA pessoa enxerga —, e não da lista
+   * já recortada por busca ou setor: um contador que muda quando se digita não
+   * conta nada, só ecoa o filtro.
+   *
+   * «Sem setor» é o que mais rende. Quem está sem setor num cargo que precisa
+   * de um fica invisível para o Analítico e para o Painel Líder, com cara de
+   * dado real — o caso do `setorVazioParaPreencher`. Antes só se descobria
+   * rolando até o fim da lista; agora o número aparece e o clique leva até lá.
+   */
+  const totalPessoas = usuariosFiltrados.length;
+  const totalOnline  = usuariosFiltrados.filter(u => onlineIds.has(u.id)).length;
+  const totalFerias  = usuariosFiltrados.filter(u => (u.situacao ?? 'ativo') === 'ferias').length;
+  const totalSemSetor = usuariosFiltrados.filter(u => !u.setor_id && !ehEscopoEmpresa(u.perfil)).length;
+
+  const buscaNormalizada = normalizarBusca(busca);
+
+  const setoresOrdenados: GrupoDeSetor[] = (() => {
     // O filtro entra DEPOIS do agrupamento, e nao antes: o grupo de um setor
     // pode existir so por causa de um clone de outro setor (o bloco acima), e
     // filtrar as pessoas antes o faria sumir.
@@ -813,9 +924,29 @@ export default function AdminUsuarios() {
     );
     const byId = new Map(entries);
     return ordenados
-      .map(({ id }) => [id, byId.get(id)!] as [string, typeof entries[number][1]])
-      .filter(([, g]) => !!g);
+      .map(({ id }) => {
+        const g = byId.get(id);
+        if (!g) return null;
+        // A busca recorta PESSOAS; o setor que ficar sem nenhuma some da tela,
+        // em vez de virar um cabeçalho vazio que o olho ainda precisa checar.
+        const lista = buscaNormalizada
+          ? g.lista.filter(u => casaComBusca(u, buscaNormalizada))
+          : g.lista;
+        if (lista.length === 0) return null;
+        return {
+          id,
+          nomeSetor: g.nomeSetor === '—' ? 'Sem setor' : g.nomeSetor,
+          lista,
+        } satisfies GrupoDeSetor;
+      })
+      .filter((g): g is GrupoDeSetor => g !== null);
   })();
+
+  /** Os perfis por trás dos ids marcados — o que vai para a transferência. */
+  const perfisSelecionados = usuariosFiltrados.filter(u => selecionados.has(u.id));
+
+  const nomeEquipe = (u: Perfil) =>
+    (u.equipe_id ? equipes.find(e => e.id === u.equipe_id)?.nome : null) ?? null;
 
   return (
     <div className="h-full flex flex-col">
@@ -868,296 +999,255 @@ export default function AdminUsuarios() {
           <UsuariosDoMesPainel empresaId={empresaAtual.id} mes={mesRetrato} />
         </div>
       ) : tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
-        <div className="px-6 border-b border-border">
-          <TabsList className="h-10 bg-transparent p-0 gap-0">
-            {podeVerUsuarios && <TabsTrigger
-              value="usuarios"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Users className="w-4 h-4" /> Usuários
-            </TabsTrigger>}
-            {podeVerSetores && (
-              <TabsTrigger
-                value="setores"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-              >
-                <Building2 className="w-4 h-4" /> Setores
-              </TabsTrigger>
-            )}
-            {podeVerEquipes && (
-            <TabsTrigger
-              value="equipes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Users2 className="w-4 h-4" /> Equipes
-            </TabsTrigger>
-            )}
-            {podeVerMetas && (
-            <TabsTrigger
-              value="metas"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Target className="w-4 h-4" /> Metas
-            </TabsTrigger>
-            )}
-            {podeAdministrarContas && (
-            <TabsTrigger
-              value="desligados"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <UserX className="w-4 h-4" /> Desligados
-            </TabsTrigger>
-            )}
-            {podeVerComemoracoes && (
-            <TabsTrigger
-              value="comemoracoes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <PartyPopper className="w-4 h-4" /> Comemorações
-            </TabsTrigger>
-            )}
-          </TabsList>
+        {/* ── A régua de abas ──────────────────────────────────────────────
+            Era `border-b-2` sublinhado, escrito à mão seis vezes com a mesma
+            classe de 140 caracteres. O desenho da casa passou a ser o grupo
+            segmentado quando o Analítico migrou; aqui ele fecha a fila.
+
+            O `<Tabs>` continua embaixo: é ele que monta e desmonta os painéis
+            (a aba Comemorações é `lazy`, e só deve baixar quando abrem ela).
+            Trocamos só o gatilho visual. */}
+        <div className="px-6 pb-3">
+          <AbasSegmentadas
+            abas={abasInternas}
+            ativa={tabAtiva ?? null}
+            onTrocar={selecionarAba}
+            rotulo="Seção de Usuários"
+          />
         </div>
 
         {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
-        {podeVerUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
-        <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-end mb-4 gap-2">
-          {isSuperAdmin && empresas.length > 1 && (
-            <Select
-              value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
-              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
-            >
-              <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODAS_EMPRESAS_SELECT_VALUE}>Todas Empresas</SelectItem>
-                {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          {!isSuperAdmin && empresaAtual && (
-            <Badge variant="outline" className="h-8 px-3 text-xs">{empresaAtual.nome}</Badge>
-          )}
-          {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
-          {setoresParaFiltro.length > 1 && (
-            <Select
-              value={filtroSetor || TODOS_SETORES_SELECT_VALUE}
-              onValueChange={v => setFiltroSetor(v === TODOS_SETORES_SELECT_VALUE ? '' : v)}
-            >
-              <SelectTrigger className="w-44 h-8 text-sm" aria-label="Filtrar por setor">
-                <SelectValue placeholder="Setor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODOS_SETORES_SELECT_VALUE}>Todos os setores</SelectItem>
-                {setoresParaFiltro.map(([sid, g]) => (
-                  <SelectItem key={sid} value={sid}>
-                    {g.nomeSetor === '—' ? 'Sem Setor' : g.nomeSetor} ({g.lista.length})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {setoresParaFiltro.length > 1 && (
-            <Button
-              variant="ghost" size="sm" className="h-8 text-xs"
-              onClick={() => setSetoresRecolhidos(
-                atual => atual.size ? new Set() : new Set(setoresParaFiltro.map(([sid]) => sid)),
+        {podeVerUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
+        <div className="max-w-[1400px] mx-auto space-y-4">
+
+          {/* ── Os quatro números ────────────────────────────────────────
+              Contam sobre TODA a gente que este cargo enxerga, não sobre o
+              recorte da tela: um número que muda quando se digita na busca
+              não informa nada que a própria lista já não mostre. */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiTile
+              rotulo="Pessoas"
+              valor={totalPessoas}
+              sub={setoresParaFiltro.length === 1
+                ? '1 setor'
+                : `${setoresParaFiltro.length} setores`}
+              Icon={Users}
+              tom="primario"
+            />
+            <KpiTile
+              rotulo="Online agora"
+              valor={totalOnline}
+              sub={totalPessoas > 0 ? `${Math.round((totalOnline / totalPessoas) * 100)}% da equipe` : undefined}
+              Icon={Wifi}
+              tom="sucesso"
+            />
+            <KpiTile
+              rotulo="De férias"
+              valor={totalFerias}
+              sub={totalFerias > 0 ? 'voltam sozinhos na data' : 'ninguém fora'}
+              Icon={Palmtree}
+              tom="neutro"
+            />
+            {/* Clicável porque é o único dos quatro que pede ação: quem está
+                sem setor num cargo que precisa de um some do Analítico e do
+                Painel Líder sem acusar erro. Ver `setorVazioParaPreencher`. */}
+            <button
+              type="button"
+              disabled={totalSemSetor === 0}
+              onClick={() => escolherFiltroSetor('__sem_setor__')}
+              title={totalSemSetor > 0 ? 'Ver quem está sem setor' : undefined}
+              className={cn(
+                'text-left rounded-xl transition-transform',
+                totalSemSetor > 0
+                  ? 'hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary cursor-pointer'
+                  : 'cursor-default',
               )}
             >
-              {setoresRecolhidos.size ? 'Expandir todos' : 'Minimizar todos'}
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
-          {temPermissao('usuarios_administrar') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
-        </div>
+              <KpiTile
+                rotulo="Sem setor"
+                valor={totalSemSetor}
+                sub={totalSemSetor > 0 ? 'zeram o analítico — clique' : 'todos vinculados'}
+                Icon={UserMinus}
+                tom={totalSemSetor > 0 ? 'alerta' : 'neutro'}
+              />
+            </button>
+          </div>
 
-      {/* ── Tabela agrupada por setor ── */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Carregando...</div>
-      ) : setoresOrdenados.length === 0 ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Nenhum usuário encontrado.</div>
-      ) : (
-        <div className="space-y-4">
-          {setoresOrdenados.map(([sid, grupo]) => (
-            <div key={sid}>
-              {/* Cabeçalho do setor — clicar recolhe. O contador fica visível
-                  fechado de propósito: é o que permite achar o setor certo sem
-                  abrir os nove. */}
-              <button
-                type="button"
-                onClick={() => alternarSetor(sid)}
-                aria-expanded={!setoresRecolhidos.has(sid)}
-                className="flex items-center gap-2 mb-1.5 px-1 w-full text-left group/setor"
-              >
-                <ChevronDown className={cn(
-                  'w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform',
-                  setoresRecolhidos.has(sid) && '-rotate-90',
-                )} />
-                <Building2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wide group-hover/setor:text-primary transition-colors">
-                  {grupo.nomeSetor === '—' ? 'Sem Setor' : grupo.nomeSetor}
-                </span>
-                <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0">
-                  {grupo.lista.length} {grupo.lista.length === 1 ? 'usuário' : 'usuários'}
-                </span>
-              </button>
-              {!setoresRecolhidos.has(sid) && (
-              <Card className="border-border">
-                <CardContent className="p-0">
-                  <div className="w-full overflow-x-auto">
-                    <table className="w-full text-sm table-fixed min-w-[700px]">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/30">
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[26%]">USUÁRIO</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[22%]">E-MAIL</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[14%]">CARGO</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[13%]">EMPRESA</th>
-                          <th className="text-center px-3 py-2 font-semibold text-muted-foreground text-xs w-[9%]">ATIVO</th>
-                          <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-xs w-[16%]">AÇÕES</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {grupo.lista.map((u, i) => (
-                          <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                            className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center gap-2">
-                                <div className="relative flex-shrink-0">
-                                  <button
-                                    type="button"
-                                    className="relative"
-                                    onClick={() => { if (u.foto_url) setFotoExpandida({ url: u.foto_url, nome: u.nome }); }}
-                                    title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
-                                  >
-                                    <Avatar className="w-8 h-8">
-                                      {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
-                                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                                        {u.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  </button>
-                                  <span className={cn(
-                                    'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background',
-                                    onlineIds.has(u.id) ? 'bg-success' : 'bg-muted-foreground/40'
-                                  )} title={onlineIds.has(u.id) ? 'Online' : 'Offline'} />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1">
-                                    <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
-                                    {u.id === perfilAtual?.id && (
-                                      <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1 py-0 font-bold">Você</span>
-                                    )}
-                                    {u._cloneDe && (
-                                      <span className="text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded px-1 py-0 font-semibold whitespace-nowrap"
-                                        title={`Operador clonado do setor ${u._cloneDe}`}>
-                                        clone de {u._cloneDe}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
-                                    <span className={cn('text-[9px] font-medium', onlineIds.has(u.id) ? 'text-success' : 'text-muted-foreground/50')}>
-                                      {onlineIds.has(u.id) ? '● Online' : '○ Offline'}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 text-muted-foreground text-xs font-mono truncate max-w-0">
-                              <span className="block truncate" title={u.email}>{u.email}</span>
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium border', PERFIL_BADGE[u.perfil] ?? 'bg-muted/10 text-muted-foreground border-border')}>
-                                <Shield className="w-2.5 h-2.5" /> {PERFIL_LABELS[u.perfil] ?? u.perfil}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1 truncate">
-                                <Building2 className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{nomeEmpresa(u)}</span>
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              {podeGerenciarSituacao && !u._cloneDe ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium transition-colors hover:bg-accent">
-                                      <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[u.situacao ?? 'ativo'])} />
-                                      {SITU_LABEL[u.situacao ?? 'ativo']}
-                                      {/* A data faz o botão responder "até quando",
-                                          que é o que se pergunta em seguida. */}
-                                      {u.situacao === 'ferias' && u.ferias_ate && (
-                                        <span className="tabular-nums text-muted-foreground">
-                                          até {u.ferias_ate.slice(8, 10)}/{u.ferias_ate.slice(5, 7)}
-                                        </span>
-                                      )}
-                                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    {(['ativo', 'ferias', 'desligado'] as SituacaoUsuario[]).map(sit => (
-                                      <DropdownMenuItem key={sit} className="gap-2 text-xs" onClick={() => handleSituacao(u, sit)}>
-                                        <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[sit])} />
-                                        {SITU_LABEL[sit]}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : (
-                                <span
-                                  title={SITU_LABEL[u.situacao ?? 'ativo']}
-                                  className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[u.situacao ?? 'ativo'])}
-                                />
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center justify-end gap-1">
-                                {u._cloneDe && (
-                                  <span className="text-[10px] text-muted-foreground italic">gerido no setor de origem</span>
-                                )}
-                                {!u._cloneDe && isSuperAdmin && u.id !== perfilAtual?.id && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
-                                    title="Entrar como este usuário (impersonação — super admin)"
-                                    disabled={impersonando === u.id}
-                                    onClick={() => entrarComo(u)}
-                                  >
-                                    {impersonando === u.id
-                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      : <LogIn className="w-3.5 h-3.5" />}
-                                    <span className="text-xs">Entrar como</span>
-                                  </Button>
-                                )}
-                                {!u._cloneDe && (temPermissao('usuarios_administrar')
-                                  || (temPermissao('usuarios_editar_do_setor') && u.id !== perfilAtual?.id)) ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 gap-1.5 px-2"
-                                    title="Editar usuário (dados, foto e senha)"
-                                    onClick={() => abrirEditar(u)}
-                                  >
-                                    <Edit className="w-3.5 h-3.5" />
-                                    <span className="text-xs">Editar</span>
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* ── Barra de ferramentas ─────────────────────────────────────
+              A busca vem primeiro e ocupa o espaço que sobra: é a ação mais
+              usada da tela e antes ela simplesmente não existia. */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar por nome, login ou e-mail…"
+                aria-label="Buscar pessoa"
+                className="h-9 pl-9 pr-8 text-sm"
+              />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={() => setBusca('')}
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
-          ))}
-        </div>
-      )}
+
+            {isSuperAdmin && empresas.length > 1 && (
+              <Select
+                value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
+                onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
+              >
+                <SelectTrigger className="w-40 h-9 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TODAS_EMPRESAS_SELECT_VALUE}>Todas Empresas</SelectItem>
+                  {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            {!isSuperAdmin && empresaAtual && (
+              <Badge variant="outline" className="h-9 px-3 text-xs font-normal">{empresaAtual.nome}</Badge>
+            )}
+            {isSuperAdmin && filtroEmpresa && (
+              <Button variant="ghost" size="sm" className="h-9" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>
+                Limpar
+              </Button>
+            )}
+
+            {setoresParaFiltro.length > 1 && (
+              <Select
+                value={filtroSetor || TODOS_SETORES_SELECT_VALUE}
+                onValueChange={v => escolherFiltroSetor(v === TODOS_SETORES_SELECT_VALUE ? '' : v)}
+              >
+                <SelectTrigger className="w-44 h-9 text-sm" aria-label="Filtrar por setor">
+                  <SelectValue placeholder="Setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TODOS_SETORES_SELECT_VALUE}>Todos os setores</SelectItem>
+                  {setoresParaFiltro.map(([sid, g]) => (
+                    <SelectItem key={sid} value={sid}>
+                      {g.nomeSetor === '—' ? 'Sem setor' : g.nomeSetor} ({g.lista.length})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Recolher some durante a busca: lá os grupos ficam abertos à
+                força, e um botão que não faz nada é pior que um botão a menos. */}
+            {setoresParaFiltro.length > 1 && !busca && (
+              <Button
+                variant="ghost" size="sm" className="h-9 text-xs"
+                onClick={() => setSetoresRecolhidos(
+                  atual => atual.size ? new Set() : new Set(setoresParaFiltro.map(([sid]) => sid)),
+                )}
+              >
+                {setoresRecolhidos.size ? 'Expandir todos' : 'Minimizar todos'}
+              </Button>
+            )}
+
+            <Button variant="outline" size="icon" className="h-9 w-9" title="Recarregar" onClick={fetchDados}>
+              <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+            </Button>
+            {temPermissao('usuarios_administrar') && (
+              <Button size="sm" className="h-9" onClick={abrirCriar}>
+                <Plus className="w-4 h-4 mr-2" /> Novo Usuário
+              </Button>
+            )}
+          </div>
+
+          {/* ── O que está selecionado, e o que dá para fazer com isso ────
+              Veio da aba Setores junto com a transferência. Lá os checkboxes
+              ficavam dentro da lista de cada setor, que era a lista que esta
+              reforma tirou. */}
+          {podeTransferir && selecionados.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2"
+            >
+              <p className="text-xs text-foreground flex-1">
+                <strong>{selecionados.size}</strong> pessoa{selecionados.size !== 1 && 's'} selecionada{selecionados.size !== 1 && 's'}
+              </p>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelecionados(new Set())}>
+                <X className="w-3 h-3 mr-1" /> Limpar
+              </Button>
+              <Button
+                size="sm" className="h-7 text-xs gap-1.5"
+                onClick={() => { if (perfisSelecionados.length) setTransferindo(perfisSelecionados); }}
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" /> Transferir selecionadas
+              </Button>
+            </motion.div>
+          )}
+
+          {/* ── A lista ── */}
+          {loading ? (
+            <div className="space-y-2">
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} className="h-14 rounded-xl border border-border bg-muted/30 animate-pulse" />
+              ))}
+            </div>
+          ) : setoresOrdenados.length === 0 ? (
+            <ListaPessoasVazia busca={busca} />
+          ) : (
+            <ListaPessoas
+              grupos={setoresOrdenados}
+              recolhidos={setoresRecolhidos}
+              onAlternarSetor={alternarSetor}
+              buscaAtiva={!!buscaNormalizada}
+              selecionados={selecionados}
+              onAlternarSelecao={alternarSelecao}
+              onSelecionarGrupo={selecionarGrupo}
+              onlineIds={onlineIds}
+              perfilAtualId={perfilAtual?.id}
+              impersonando={impersonando}
+              podeTransferir={podeTransferir}
+              podeGerenciarSituacao={podeGerenciarSituacao}
+              podeImpersonar={isSuperAdmin}
+              podeEditar={u => !u._cloneDe && (
+                temPermissao('usuarios_administrar')
+                || (temPermissao('usuarios_editar_do_setor') && u.id !== perfilAtual?.id)
+              )}
+              mostrarEmpresa={isSuperAdmin && !filtroEmpresa}
+              nomeEmpresa={nomeEmpresa}
+              nomeEquipe={nomeEquipe}
+              onEditar={abrirEditar}
+              onTransferir={u => setTransferindo([u])}
+              onSituacao={handleSituacao}
+              onEntrarComo={entrarComo}
+              onVerFoto={setFotoExpandida}
+            />
+          )}
+
+          {/* ── Transferências recentes, com o desfazer ───────────────────
+              Fica ao lado do botão que transfere — quem errou volta ao lugar
+              de onde transferiu, não a uma tela de auditoria noutro canto.
+              Mudou de aba junto com a transferência. */}
+          {podeTransferir && (
+            <div className="pt-2">
+              <HistoricoTransferencias
+                empresaId={empresaAtual?.id}
+                podeDesfazer={temPermissao('usuarios_desfazer_transferencia')}
+                nomeDoSetor={id => (id ? setores.find(s => s.id === id)?.nome ?? 'outro setor' : 'sem setor')}
+                nomeDaEmpresa={id => {
+                  if (!id) return 'empresa';
+                  if (id === empresaAtual?.id) return empresaAtual?.nome ?? 'esta empresa';
+                  return empresas.find(e => e.id === id)?.nome ?? 'outra empresa';
+                }}
+                nomeDoPerfil={id => usuarios.find(p => p.id === id)?.nome}
+                onDesfeita={fetchDados}
+              />
+            </div>
+          )}
         </div>
         </TabsContent>}
+
 
         {/* ─── Aba: Setores ──────────────────────────────────────────── */}
         {podeVerSetores && (
@@ -1370,7 +1460,8 @@ export default function AdminUsuarios() {
                   />
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <ArrowRightLeft className="w-3 h-3 shrink-0" />
-                    Para mover de setor ou de empresa, use <strong>Transferir</strong> na aba Setores.
+                    Para mover de setor ou de empresa, use <strong>Transferir</strong> na
+                    linha da pessoa, aqui mesmo na lista.
                   </p>
                 </>
               ) : (
@@ -1520,6 +1611,21 @@ export default function AdminUsuarios() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Transferir de setor ou empresa ───────────────────────────────────
+          A porta única. Ver `DialogTransferencia` para o que a operação faz de
+          verdade e por que ela deixou de morar na aba Setores. */}
+      <DialogTransferencia
+        alvos={transferindo}
+        setores={setores}
+        empresaId={empresaAtual?.id}
+        onFechar={() => setTransferindo(null)}
+        onConcluida={() => {
+          setTransferindo(null);
+          setSelecionados(new Set());
+          fetchDados();
+        }}
+      />
 
       {/* Input file oculto para upload de foto (usado pelo Dialog unificado) */}
       <input

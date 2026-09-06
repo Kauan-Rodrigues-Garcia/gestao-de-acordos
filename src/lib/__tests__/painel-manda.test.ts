@@ -139,9 +139,18 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a aba Multiempresa só existe para super_admin — quem decide são as RPCs e o trigger em perfis.',
   },
-  'pages/AdminSetoresAba.tsx': {
+  /*
+   * Era `pages/AdminSetoresAba.tsx`. A transferência saiu daquela aba em
+   * 06/09/2026 — junto com a lista de pessoas que duplicava a aba Usuários — e
+   * virou este componente. A exceção viajou com ela; não é dívida nova.
+   */
+  'components/admin/DialogTransferencia.tsx': {
     linhas: 1, familia: 'chave-mestra',
-    motivo: 'trocar a empresa em foco no cadastro de setores é privilégio de super_admin.',
+    motivo:
+      'escolher a empresa de DESTINO da transferência é privilégio de super_admin: '
+      + '`setores_select` usa `fn_can_access_empresa`, que só abre a outra empresa para ele. '
+      + 'Um administrador comum veria a lista de setores vazia e o UPDATE seria barrado pela '
+      + 'RLS de `perfis` — oferecer o campo a quem não pode usar é pior que não oferecer.',
   },
   'pages/AdminUsuarios.tsx': {
     linhas: 1, familia: 'chave-mestra',
