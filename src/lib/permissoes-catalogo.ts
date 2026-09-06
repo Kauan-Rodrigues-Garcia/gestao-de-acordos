@@ -739,6 +739,113 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Alterar dados das pessoas do próprio setor, sem alcançar administradores',
     grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: { lider: true, elite: true, gerencia: true },
   },
+
+  /*
+   * ── O que se pode editar, campo a campo ───────────────────────────────────
+   *
+   * As duas chaves acima respondem QUEM eu alcanço — qualquer um
+   * (`usuarios_administrar`) ou só a minha gente (`usuarios_editar_do_setor`).
+   * Nenhuma das duas responde O QUE eu posso mexer nessa pessoa.
+   *
+   * Até 06/09/2026 isso estava decidido no código: nome, login e foto abriam
+   * para quem conseguisse abrir a janela; cargo e senha exigiam
+   * `usuarios_administrar`; e excluir não checava nada. Quem quisesse um líder
+   * que corrige nome mas não troca login não tinha como pedir isso.
+   *
+   * Cada campo passa a ter a própria chave. Todas dependem de haver edição —
+   * `depende` aceita OR, e a lista é «alcanço qualquer um OU alcanço o meu
+   * setor»: sem nenhuma das duas a janela nem abre, e a chave ficaria ligada
+   * sem onde agir.
+   *
+   * Estas chaves são a autoridade sobre o que a janela deixa mexer. Onde o
+   * servidor ainda confere CARGO em vez de chave — `api/alterar-senha.ts` e
+   * `fn_admin_delete_user` — isso é dívida a converter, não a regra: ver a
+   * auditoria de 06/09/2026 e a migration `20260906120000`, que semeia estas
+   * chaves a partir do comportamento anterior. Sem a migration, todo cargo
+   * não-administrador abriria a janela sem campo nenhum.
+   */
+  {
+    key: 'usuarios_editar_nome', label: 'Usuários: editar o nome',
+    descricao: 'Corrigir o nome da pessoa na janela de edição',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    depende: {
+      chaves: ['usuarios_administrar', 'usuarios_editar_do_setor'],
+      motivo: 'É preciso poder editar alguém para poder editar um campo dele.',
+    },
+    padrao: LIDERANCA,
+  },
+  {
+    key: 'usuarios_editar_login', label: 'Usuários: editar o login',
+    descricao: 'Alterar o nome de usuário com que a pessoa entra no sistema',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    depende: {
+      chaves: ['usuarios_administrar', 'usuarios_editar_do_setor'],
+      motivo: 'É preciso poder editar alguém para poder editar um campo dele.',
+    },
+    padrao: LIDERANCA,
+  },
+  {
+    key: 'usuarios_editar_foto', label: 'Usuários: trocar a foto',
+    descricao: 'Enviar, recortar e remover a foto de perfil de outra pessoa',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    depende: {
+      chaves: ['usuarios_administrar', 'usuarios_editar_do_setor'],
+      motivo: 'É preciso poder editar alguém para poder trocar a foto dele.',
+    },
+    padrao: LIDERANCA,
+  },
+  {
+    key: 'usuarios_editar_cargo', label: 'Usuários: mudar o cargo',
+    descricao: 'Escolher o cargo de outra pessoa — o que ela passa a poder fazer',
+    /*
+     * Mudar cargo é dar ou tirar poder, e por isso nasce só para quem
+     * administra contas. A RLS do líder (`perfis_lider_update`) NÃO barra a
+     * coluna `perfil` — ela só proíbe virar administrador —, então esta chave é
+     * hoje a única coisa entre um líder e promover a própria gente. Ligue com
+     * intenção.
+     */
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    depende: {
+      chaves: ['usuarios_administrar', 'usuarios_editar_do_setor'],
+      motivo: 'É preciso poder editar alguém para poder mudar o cargo dele.',
+    },
+    padrao: {},
+  },
+  {
+    key: 'usuarios_redefinir_senha', label: 'Usuários: redefinir a senha',
+    descricao: 'Definir uma nova senha para outra pessoa (a atual nunca é exibida)',
+    /*
+     * ⚠️ `api/alterar-senha.ts` confere o CARGO no servidor, não esta chave:
+     * hoje só `administrador` e `super_admin` passam. Ligar isto para gerência
+     * abre o campo na tela e o servidor devolve 403. A migration
+     * `20260906120000` não alcança esse arquivo — é código, não banco.
+     */
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    depende: {
+      chaves: ['usuarios_administrar', 'usuarios_editar_do_setor'],
+      motivo: 'É preciso poder editar alguém para poder redefinir a senha dele.',
+    },
+    padrao: {},
+  },
+  {
+    key: 'usuarios_excluir', label: 'Usuários: excluir a conta',
+    descricao: 'Apagar a conta e as tabulações da pessoa — sem desfazer',
+    /*
+     * Não existia chave nenhuma: o botão aparecia para qualquer um que
+     * conseguisse abrir a janela, inclusive um líder — que então tomava um
+     * 42501 do banco. Oferecer o que não se pode fazer é o mesmo defeito da
+     * chave ligada sem onde agir, só que pelo avesso.
+     *
+     * ⚠️ `fn_admin_delete_user` também confere lista de cargo fixa
+     * (`administrador`/`super_admin`) em vez desta chave. Ver a auditoria.
+     */
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    depende: {
+      chaves: ['usuarios_administrar', 'usuarios_editar_do_setor'],
+      motivo: 'É preciso poder editar alguém para poder excluir a conta dele.',
+    },
+    padrao: {},
+  },
   {
     key: 'usuarios_transferir', label: 'Usuários: transferir de setor ou empresa',
     descricao: 'Abrir e concluir transferências de pessoas',

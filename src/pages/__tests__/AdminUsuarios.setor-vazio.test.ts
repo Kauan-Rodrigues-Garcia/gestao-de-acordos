@@ -33,6 +33,22 @@ import { resolve } from 'node:path';
 const FILE = resolve(__dirname, '../AdminUsuarios.tsx');
 const src = readFileSync(FILE, 'utf-8');
 
+/*
+ * A REGRA mora em dois arquivos desde 06/09/2026, e cada asserção segue
+ * inteira — só passou a mirar onde a coisa está.
+ *
+ *   AdminUsuarios.tsx ... decide (`setorVazioParaPreencher`) e grava
+ *                         (`salvarCamposBasicos`, `salvar`, `fetchDados`)
+ *   DialogUsuario.tsx ... desenha o campo, e é onde a ORDEM dos ramos importa
+ *
+ * A janela virou componente quando ganhou seções e uma chave de permissão por
+ * campo; deixá-la de 330 linhas dentro de uma página de 1.700 era o que estava
+ * ficando insustentável.
+ */
+const JANELA = readFileSync(
+  resolve(__dirname, '../../components/admin/DialogUsuario.tsx'), 'utf-8',
+);
+
 describe('AdminUsuarios — preencher o setor de quem ficou sem', () => {
   it('declara `setorVazioParaPreencher` com as três condições', () => {
     // As três importam:
@@ -48,11 +64,24 @@ describe('AdminUsuarios — preencher o setor de quem ficou sem', () => {
     // Ordem é a regra inteira: o ternário resolve no primeiro ramo verdadeiro, e
     // `editando ?` é verdadeiro também neste caso. Invertido, o campo voltaria a
     // ser somente-leitura e a pessoa continuaria presa.
-    const iVazio  = src.indexOf('setorVazioParaPreencher ? (');
-    const iLeitura = src.indexOf(") : editando ? (");
+    const iVazio  = JANELA.indexOf('setorVazioParaPreencher ? (');
+    const iLeitura = JANELA.indexOf(') : editando ? (');
     expect(iVazio).toBeGreaterThan(-1);
     expect(iLeitura).toBeGreaterThan(-1);
     expect(iVazio).toBeLessThan(iLeitura);
+  });
+
+  it('o campo do setor não é fechado pela permissão de editar campos', () => {
+    // Guarda nova, da mesma familia: as chaves por campo (`usuarios_editar_*`)
+    // chegaram em 06/09/2026 e trancam nome, login, foto e cargo. O setor NAO
+    // pode entrar nessa lista — ele ja tem regra propria, e amarra-lo a uma
+    // chave de campo devolveria a pessoa ao estado preso que este arquivo
+    // inteiro existe para evitar.
+    const trecho = JANELA.slice(
+      JANELA.indexOf('setorVazioParaPreencher ? ('),
+      JANELA.indexOf(') : editando ? ('),
+    );
+    expect(trecho).not.toMatch(/pode\.(nome|login|foto|cargo)/);
   });
 
   it('`salvarCamposBasicos` só manda `setor_id` neste caso', () => {

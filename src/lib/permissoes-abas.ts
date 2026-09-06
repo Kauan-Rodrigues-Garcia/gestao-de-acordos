@@ -181,6 +181,14 @@ const SECOES_USUARIOS: Record<string, string> = {
   usuarios_editar_do_setor: 'Aba interna Usuários',
   usuarios_ver_administradores: 'Aba interna Usuários',
   acesso_multiempresa_permitido: 'Aba interna Usuários',
+  // O que se pode mexer na janela de edição, campo a campo. Ficam ao lado das
+  // duas chaves de alcance porque a pergunta é a mesma — «editar quem, e o quê».
+  usuarios_editar_nome: 'Aba interna Usuários',
+  usuarios_editar_login: 'Aba interna Usuários',
+  usuarios_editar_foto: 'Aba interna Usuários',
+  usuarios_editar_cargo: 'Aba interna Usuários',
+  usuarios_redefinir_senha: 'Aba interna Usuários',
+  usuarios_excluir: 'Aba interna Usuários',
   // Transferir e desfazer saíram da aba Setores em 06/09/2026, junto com a
   // lista de pessoas que ela duplicava. Estão listadas onde agora agem — e o
   // lugar em que a permissão aparece no painel precisa ser o lugar em que ela

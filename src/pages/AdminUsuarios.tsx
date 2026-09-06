@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus } from 'lucide-react';
+import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
@@ -17,6 +17,7 @@ import { KpiTile } from '@/components/KpiTile';
 // duplicava. Ver o cabeçalho de `AdminSetoresAba` e o de `DialogTransferencia`.
 import { ListaPessoas, ListaPessoasVazia, type GrupoDeSetor } from '@/components/admin/ListaPessoas';
 import { DialogTransferencia } from '@/components/admin/DialogTransferencia';
+import { DialogUsuario, type UserForm, type PodeNoUsuario } from '@/components/admin/DialogUsuario';
 import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
 import { useClonesCross } from '@/hooks/useClonesCross';
 import AdminEquipes from '@/pages/AdminEquipes';
@@ -35,18 +36,17 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CalendarRange } from 'lucide-react';
 // A lista de um mes FECHADO — so leitura, com as etiquetas do que mudou depois.
 import { UsuariosDoMesPainel } from '@/components/admin/UsuariosDoMesPainel';
 import { mesesComRetrato } from '@/services/admin/usuariosDoMes.service';
 import { ehMesAtual, rotuloDoMes } from '@/lib/mesReferencia';
-import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
+import { supabase, createIsolatedAuthClient, Perfil, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
 import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas } from '@/services/situacaoUsuario.service';
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa } from '@/lib/index';
+import { TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
@@ -78,15 +78,7 @@ function casaComBusca(u: Perfil, termo: string): boolean {
   return alvo.includes(termo);
 }
 
-interface UserForm {
-  nome:       string;
-  email:      string;
-  usuario:    string;
-  senha:      string;
-  perfil:     PerfilUsuario;
-  setor_id:   string;
-  empresa_id: string;
-}
+/* `UserForm` mora em `DialogUsuario`, junto da janela que o preenche. */
 
 /** Perfil exibido na lista; `_cloneDe` marca um clone de OUTRO setor (tag). */
 type PerfilComClone = Perfil & { _cloneDe?: string | null };
@@ -137,6 +129,37 @@ export default function AdminUsuarios() {
    */
   const podeVerAdministradores = temPermissao('usuarios_ver_administradores');
   const podeAdministrarContas  = temPermissao('usuarios_administrar');
+
+  /*
+   * ── O que se pode mexer na janela de edição ───────────────────────────────
+   *
+   * As duas chaves acima respondem QUEM eu alcanço. Estas respondem O QUÊ.
+   *
+   * Antes de 06/09/2026 a resposta estava no código: nome, login e foto abriam
+   * para quem conseguisse abrir a janela, cargo e senha pediam
+   * `usuarios_administrar`, e excluir não pedia nada — o botão aparecia até
+   * para um líder, que então tomava um 42501 do banco. Quem quisesse um líder
+   * que corrige nome mas não troca login não tinha como pedir isso.
+   *
+   * Agora é uma chave por campo, e o painel decide. Nenhuma delas cria teto: a
+   * RLS continua sendo quem manda no dado.
+   */
+  const podeNoUsuario: PodeNoUsuario = {
+    nome:    temPermissao('usuarios_editar_nome'),
+    login:   temPermissao('usuarios_editar_login'),
+    foto:    temPermissao('usuarios_editar_foto'),
+    cargo:   temPermissao('usuarios_editar_cargo'),
+    senha:   temPermissao('usuarios_redefinir_senha'),
+    excluir: temPermissao('usuarios_excluir'),
+  };
+  /*
+   * Alcançar alguém sem poder mexer em nada não é edição.
+   *
+   * Sem isto o lápis abriria uma janela com todos os campos de cadeado — a
+   * tela prometendo uma ação que ela não tem como cumprir, que é o mesmo
+   * defeito do botão de excluir oferecido a quem o banco recusa.
+   */
+  const podeAlgoNoUsuario = Object.values(podeNoUsuario).some(Boolean);
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
@@ -493,17 +516,29 @@ export default function AdminUsuarios() {
    * isto a pessoa fica presa num estado que zera as telas analíticas dela.
    */
   async function salvarCamposBasicos(alvoId: string): Promise<void> {
+    /*
+     * O payload carrega só o que este cargo PODE mudar.
+     *
+     * Não basta o campo estar trancado na tela: um estado antigo em memória, ou
+     * a mesma função chamada de outro lugar, mandaria o valor assim mesmo. Quem
+     * não pode editar o nome não manda `nome` — e aí não há o que dar errado.
+     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payload parcial e heterogêneo p/ update(); tipar exigiria o shape completo de Perfil.
-    const updatePayload: Record<string, any> = {
-      nome:   form.nome,
-      perfil: form.perfil,
-    };
-    if (form.usuario.trim()) {
+    const updatePayload: Record<string, any> = {};
+    if (podeNoUsuario.nome)  updatePayload.nome   = form.nome;
+    if (podeNoUsuario.cargo) updatePayload.perfil = form.perfil;
+    if (podeNoUsuario.login && form.usuario.trim()) {
       updatePayload.usuario = form.usuario.trim().toLowerCase();
     }
     if (setorVazioParaPreencher && form.setor_id) {
       updatePayload.setor_id = form.setor_id;
     }
+    /*
+     * Nada a gravar não é erro. Acontece quando o cargo só podia redefinir a
+     * senha — que tem botão próprio e já gravou. Um `update({})` seria SQL
+     * inválido, e um toast de falha aqui mentiria sobre o que aconteceu.
+     */
+    if (Object.keys(updatePayload).length === 0) return;
     const { data: linhasAtualizadas, error } = await supabase.from('perfis')
       .update(updatePayload)
       .eq('id', alvoId)
@@ -717,6 +752,15 @@ export default function AdminUsuarios() {
 
   async function excluirUsuarioEditado() {
     if (!editando) return;
+    /*
+     * A chave também é conferida aqui, e não só onde o botão é desenhado.
+     * `fn_admin_delete_user` recusaria de qualquer jeito, mas errar cedo dá
+     * uma mensagem que diz o que houve em vez de um 42501 traduzido.
+     */
+    if (!podeNoUsuario.excluir) {
+      toast.error('Seu cargo não tem permissão para excluir usuários.');
+      return;
+    }
     if (editando.id === perfilAtual?.id) {
       toast.error('Você não pode excluir a si mesmo.');
       return;
@@ -1210,7 +1254,7 @@ export default function AdminUsuarios() {
               podeTransferir={podeTransferir}
               podeGerenciarSituacao={podeGerenciarSituacao}
               podeImpersonar={isSuperAdmin}
-              podeEditar={u => !u._cloneDe && (
+              podeEditar={u => !u._cloneDe && podeAlgoNoUsuario && (
                 temPermissao('usuarios_administrar')
                 || (temPermissao('usuarios_editar_do_setor') && u.id !== perfilAtual?.id)
               )}
@@ -1307,260 +1351,39 @@ export default function AdminUsuarios() {
         </div>
       )}
 
-      {/* ── Dialog unificado: editar/criar usuário (dados + foto + senha) ── */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" aria-describedby="modal-usuario-desc">
-          <DialogHeader>
-            <DialogTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
-            <DialogDescription id="modal-usuario-desc" className="sr-only">
-              {editando ? 'Editar dados, foto e senha do usuário' : 'Criar novo usuário'}
-            </DialogDescription>
-          </DialogHeader>
+      {/* ── Criar/editar usuário ─────────────────────────────────────────────
+          A janela saiu daqui em 06/09/2026 e virou `DialogUsuario`: ganhou
+          seções com assunto próprio, cabeçalho com a ficha de quem está sendo
+          editado, e uma chave de permissão por campo. Ver o cabeçalho de lá. */}
+      <DialogUsuario
+        aberto={dialogOpen}
+        onFechar={() => setDialogOpen(false)}
+        editando={editando}
+        form={form}
+        setForm={setForm}
+        pode={podeNoUsuario}
+        isSuperAdmin={isSuperAdmin}
+        souEu={!!editando && editando.id === perfilAtual?.id}
+        online={!!editando && onlineIds.has(editando.id)}
+        setoresDoForm={setoresDoForm}
+        setores={setores}
+        empresas={empresas}
+        empresaAtualNome={empresaAtual?.nome}
+        cargoEscopoEmpresa={cargoEscopoEmpresa}
+        setorVazioParaPreencher={setorVazioParaPreencher}
+        salvando={saving}
+        onSalvar={salvar}
+        uploadando={uploadando}
+        onEscolherFoto={() => { if (editando) { setUploadTarget(editando); fileInputRef.current?.click(); } }}
+        onRemoverFoto={() => { if (editando) void excluirFotoDeUsuario(editando); }}
+        novaSenha={novaSenha}
+        setNovaSenha={setNovaSenha}
+        salvandoSenha={salvandoSenha}
+        onSalvarSenha={() => void alterarSenhaOperador()}
+        onPedirExclusao={() => { void abrirConfirmacaoExclusao(); }}
+        excluindo={excluindoUsuario}
+      />
 
-          {/* ── Seção: Foto de perfil (só em modo edição) ─────────────── */}
-          {editando && (
-            <div className="space-y-2 py-1 border-b border-border pb-4">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Foto de perfil
-              </Label>
-              <div className="flex items-center gap-3">
-                <Avatar className="w-14 h-14">
-                  {editando.foto_url && <AvatarImage src={editando.foto_url} alt={editando.nome} />}
-                  <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                    {editando.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5"
-                    disabled={uploadando}
-                    onClick={() => { setUploadTarget(editando); fileInputRef.current?.click(); }}
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    {uploadando ? 'Enviando...' : (editando.foto_url ? 'Trocar foto' : 'Adicionar foto')}
-                  </Button>
-                  {editando.foto_url && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => excluirFotoDeUsuario(editando)}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Remover foto
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Seção: Dados cadastrais ───────────────────────────────── */}
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Nome *</Label>
-              <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome completo" className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Login (usuário)</Label>
-              <Input value={form.usuario} onChange={e => setForm(f => ({ ...f, usuario: e.target.value }))} placeholder="kauan_teixeira" className="h-9 text-sm font-mono" />
-              <p className="text-xs text-muted-foreground">Usado para login sem e-mail. Opcional se usar e-mail.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">E-mail {!editando && <span className="text-muted-foreground font-normal">(opcional se definir usuário)</span>}</Label>
-              <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@empresa.com" className="h-9 text-sm font-mono" disabled={!!editando} />
-            </div>
-            {!editando && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Senha *</Label>
-                <Input type="password" value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} placeholder="••••••••" className="h-9 text-sm" />
-              </div>
-            )}
-            {/* Cargo: só admin/super_admin definem. Para os demais o campo é
-                somente leitura — impede líder de escolher/criar admin. (O banco
-                também bloqueia via RLS; isto remove a opção enganosa da tela.) */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Perfil *</Label>
-              {podeAdministrarContas ? (
-                <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="operador">Operador</SelectItem>
-                    <SelectItem value="lider">Líder</SelectItem>
-                    <SelectItem value="elite">Elite</SelectItem>
-                    <SelectItem value="gerencia">Gerência</SelectItem>
-                    <SelectItem value="diretoria">Diretoria</SelectItem>
-                    <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
-                    <SelectItem value="rh">RH</SelectItem>
-                    <SelectItem value="administrador">Administrador</SelectItem>
-                    {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="h-9 flex items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
-                  {PERFIL_LABELS[form.perfil] ?? form.perfil}
-                  <span className="ml-auto text-[10px] uppercase tracking-wide">só admin altera</span>
-                </div>
-              )}
-            </div>
-            {/* Setor e empresa: escolhidos ao CRIAR, somente leitura ao editar.
-                ─────────────────────────────────────────────────────────────
-                Mudá-los depois é uma TRANSFERÊNCIA: apaga tabulação ou muda o
-                setor dela, libera NR, tira de equipe e clones, deixa fantasma
-                na equipe de origem e precisa poder ser desfeita.
-
-                Enquanto isso morava aqui, havia três portas para a mesma coisa
-                — este campo, o mesmo campo de empresa e o botão "Transferir" da
-                aba Setores, que fazia um `update` cru sem nada disso. Agora a
-                porta é uma só, na aba Setores. */}
-            {/* Cúpula (diretoria/administrador/super_admin) pertence à EMPRESA,
-                não a um setor — o campo sai da tela em vez de ficar desabilitado
-                com um valor que o banco vai descartar. O gatilho
-                `a_trg_perfis_escopo_empresa` zera setor_id/equipe_id na
-                gravação, então mesmo um payload antigo não recria o vínculo. */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Setor</Label>
-              {cargoEscopoEmpresa ? (
-                <>
-                  <Input value="Empresa inteira" readOnly className="h-9 text-sm bg-muted/40" />
-                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Building2 className="w-3 h-3 shrink-0" />
-                    {PERFIL_LABELS[form.perfil] ?? form.perfil} não pertence a um setor:
-                    a visão é da empresa toda.
-                  </p>
-                </>
-              ) : setorVazioParaPreencher ? (
-                /* Sem setor num cargo que precisa de um. Não é transferência —
-                   não há de onde sair —, então o campo abre. Ver
-                   `setorVazioParaPreencher`. */
-                <>
-                  <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
-                    <SelectContent>
-                      {setoresDoForm.length === 0
-                        ? <SelectItem value="__none__" disabled>Nenhum setor nesta empresa</SelectItem>
-                        : setoresDoForm.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-amber-600 dark:text-amber-500 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 shrink-0" />
-                    {PERFIL_LABELS[form.perfil] ?? form.perfil} pertence a um setor e está sem
-                    nenhum — assim o Painel Líder e o Analítico dessa pessoa ficam zerados.
-                  </p>
-                </>
-              ) : editando ? (
-                <>
-                  <Input
-                    value={setores.find(s => s.id === editando.setor_id)?.nome ?? 'Sem setor'}
-                    readOnly className="h-9 text-sm bg-muted/40"
-                  />
-                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <ArrowRightLeft className="w-3 h-3 shrink-0" />
-                    Para mover de setor ou de empresa, use <strong>Transferir</strong> na
-                    linha da pessoa, aqui mesmo na lista.
-                  </p>
-                </>
-              ) : (
-                <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
-                  <SelectContent>
-                    {setoresDoForm.length === 0
-                      ? <SelectItem value="__none__" disabled>Nenhum setor nesta empresa</SelectItem>
-                      : setoresDoForm.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-             <div className="space-y-1.5">
-               <Label className="text-xs">Empresa</Label>
-               {isSuperAdmin && !editando ? (
-                 <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v, setor_id: setores.find(s => s.empresa_id === v)?.id ?? '' }))}>
-                   <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
-                   <SelectContent>
-                     {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
-                   </SelectContent>
-                 </Select>
-               ) : (
-                 <Input
-                   value={
-                     (editando && empresas.find(e => e.id === editando.empresa_id)?.nome)
-                     ?? empresaAtual?.nome ?? 'Tenant atual'
-                   }
-                   readOnly className="h-9 text-sm bg-muted/40"
-                 />
-               )}
-             </div>
-          </div>
-
-          {/* ── Seção: Redefinir senha (edição, só admin/super_admin) ───
-              A senha atual não é exibida porque não existe para ser exibida: o
-              Supabase guarda o hash bcrypt dela, que não volta a texto. O que
-              o admin pode fazer é definir uma nova. */}
-          {editando && podeAdministrarContas && (
-            <div className="space-y-2 py-2 border-t border-border pt-4">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Redefinir senha
-              </Label>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Nova senha</Label>
-                <Input
-                  type="text"
-                  value={novaSenha}
-                  onChange={e => setNovaSenha(e.target.value)}
-                  placeholder="Deixe em branco para manter a senha atual"
-                  className="h-9 text-sm font-mono"
-                  autoComplete="off"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Mínimo {MIN_SENHA} caracteres. Deixe em branco para não alterar.
-                  A senha atual não pode ser consultada — só substituída. Informe
-                  a nova a {editando.nome.split(' ')[0]}; o botão de chave vai
-                  aparecer para ela definir uma senha própria.
-                </p>
-              </div>
-              {novaSenha.length > 0 && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 gap-1.5 w-full"
-                  disabled={salvandoSenha || novaSenha.length < MIN_SENHA}
-                  onClick={alterarSenhaOperador}
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  {salvandoSenha ? 'Salvando senha...' : 'Salvar nova senha'}
-                </Button>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="sm:justify-between">
-            {/* #6: excluir usuário — só no modo Editar e não permite auto-exclusão */}
-            {editando && editando.id !== perfilAtual?.id ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
-                onClick={() => { void abrirConfirmacaoExclusao(); }}
-                disabled={excluindoUsuario}
-              >
-                <Trash2 className="w-4 h-4" />
-                Excluir usuário
-              </Button>
-            ) : <div />}
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-              <Button size="sm" onClick={salvar} disabled={saving} className="gap-2">
-                <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* #6: diálogo de confirmação de exclusão de usuário */}
       <Dialog open={confirmExclusaoUser} onOpenChange={setConfirmExclusaoUser}>
