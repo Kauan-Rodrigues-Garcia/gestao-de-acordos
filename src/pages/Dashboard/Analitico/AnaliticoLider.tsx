@@ -11,14 +11,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
+  Upload, Users, Trophy, AlertCircle,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
   TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft, Wallet,
   SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -85,15 +85,32 @@ import { FormasPagamento } from './FormasPagamento';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
+import { KpiTile } from '@/components/KpiTile';
+import { AbasSegmentadas } from '@/components/AbasSegmentadas';
+import { DatePickerField } from '@/components/DatePickerField';
+import { ListaOperadores, type GrupoOperadores } from '@/pages/Analitico/ListaOperadores';
+import { deResumoAnalitico, type LinhaOperadorPainel } from '@/pages/Analitico/linhaOperador';
+import { intervaloDoRecorte, mesDoRecorte, type Recorte } from '@/pages/Analitico/recorte';
+import { useAnaliticoDashboard } from '@/hooks/useAnaliticoDashboard';
 
 const ORFAOS_PAGE = 100;
 const DIAS_PT     = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
+/*
+ * As chaves das abas de dentro, nomeadas uma vez.
+ *
+ * Existe porque `AbasSegmentadas` é genérico e o `.map` de `abasInternas`
+ * alargaria a chave para `string`, e aí `setAbaAtiva` não encaixaria em
+ * `onTrocar`. Com o tipo declarado, a instanciação explícita fecha a conta.
+ */
+type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques' | 'orfaos';
+
 interface AnaliticoLiderProps {
   empresaId: string;
-  mes: string;
+  /** O recorte da lente. O mês sai dele; o intervalo limita o filtro de data. */
+  recorte: Recorte;
   setorId?: string | null;
   /** true = diretoria/admin (enxerga e limpa a empresa toda). false = líder/
    *  gerência restritos ao próprio setor (setorId vem travado no setor deles). */
@@ -111,7 +128,7 @@ interface AnaliticoLiderProps {
 }
 
 export function AnaliticoLider({
-  empresaId, mes, setorId, podeVerTodosSetores = true,
+  empresaId, recorte, setorId, podeVerTodosSetores = true,
   temPermissaoImportar, operadorId, operadorNome, liderId,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
@@ -125,9 +142,13 @@ export function AnaliticoLider({
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const mostrarHO = isPP;                 // HO só existe no relatório PaguePlay
+  // A lente decide a janela. O mês continua sendo a fonte desta tela; o
+  // intervalo é o que prende o filtro de data de dentro de cada operador.
+  const mes = mesDoRecorte(recorte);
+  const { inicio: pisoDoRecorte, fim: tetoDoRecorte } = intervaloDoRecorte(recorte);
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'formas' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<AbaInterna>('operadores');
 
   /*
    * As cinco abas de dentro, cada uma com a própria chave — desligar uma não
@@ -168,6 +189,8 @@ export function AnaliticoLider({
   const [linhasMap,     setLinhasMap]     = useState<Map<string, AnaliticoRecebimento[]>>(new Map());
   const [loadingLinhas, setLoadingLinhas] = useState<Set<string>>(new Set());
   const [filtrosDatas,  setFiltrosDatas]  = useState<Map<string, FiltroData>>(new Map());
+  // operador_id → foto_url, para o avatar da linha. Ausente = iniciais.
+  const [fotos,         setFotos]         = useState<Record<string, string | null>>({});
 
   // ── Órfãos ────────────────────────────────────────────────────────────────
   const [orfaos,         setOrfaos]         = useState<AnaliticoRecebimento[]>([]);
@@ -320,6 +343,30 @@ export function AnaliticoLider({
     void carregarResumos();
     void carregarSnapshot();
   }, [carregarResumos, carregarSnapshot]);
+
+  /*
+   * Fotos dos operadores visíveis. A RPC do resumo não devolve `foto_url` e a
+   * regra do projeto proíbe mexer no banco, então vem numa consulta só, com
+   * `.in()` — não uma por linha.
+   */
+  useEffect(() => {
+    const ids = resumos.map(r => r.operador_id).filter(Boolean);
+    if (ids.length === 0) { setFotos({}); return; }
+    let vivo = true;
+    void supabase
+      .from('perfis')
+      .select('id, foto_url')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (!vivo) return;
+        const m: Record<string, string | null> = {};
+        for (const p of ((data ?? []) as { id: string; foto_url: string | null }[])) {
+          m[p.id] = p.foto_url;
+        }
+        setFotos(m);
+      });
+    return () => { vivo = false; };
+  }, [resumos]);
 
   useEffect(() => {
     if (abaVisivel === 'orfaos')    void carregarOrfaos();
@@ -649,6 +696,209 @@ export function AnaliticoLider({
     [destaquesGrupoMap],
   );
 
+  /*
+   * Quebra por forma de cada operador. Mesma fonte da aba Formas de pagamento —
+   * a RPC do resumo não traz forma, e não vamos criar uma que traga.
+   *
+   * O hook resolve empresa e escopo por conta própria; o que ele pede aqui é
+   * "está ligado?" e o mês.
+   */
+  const { linhas: linhasDashboard } = useAnaliticoDashboard(abaVisivel === 'operadores', mes);
+
+  /*
+   * Os grupos que a lista desenha, já no contrato único.
+   *
+   * `agruparPorEquipe` continua sendo quem decide QUEM aparece em qual equipe —
+   * é ela que sabe de clone, de setor e de "sem equipe", e tem teste próprio.
+   * Aqui só se converte o resultado dela para `LinhaOperadorPainel`.
+   *
+   * A equipe da LINHA é a do grupo em que ela está desenhada, e não a de
+   * origem: um clone aparece sob a equipe em que foi clonado, e é esse nome que
+   * o aviso de "tirar da equipe" precisa dizer.
+   */
+  const gruposDoPainel = useMemo<GrupoOperadores[]>(() => {
+    const equipeDe = (id: string) => operadorEquipeMap[id];
+    return resumosPorEquipe.map(g => ({
+      equipeId:   g.equipeId,
+      equipeNome: g.equipeNome,
+      itens:      deResumoAnalitico(g.items, linhasDashboard, equipeDe)
+        .map((it): LinhaOperadorPainel => ({
+          ...it, equipeId: g.equipeId, equipeNome: g.equipeNome,
+        })),
+    }));
+  }, [resumosPorEquipe, linhasDashboard, operadorEquipeMap]);
+
+  /** O conteúdo de dentro do operador aberto: filtro de data e a lista. */
+  function detalheDoOperador(l: LinhaOperadorPainel) {
+    const carregando  = loadingLinhas.has(l.operador_id);
+    const linhas      = getLinhasOp(l.operador_id);
+    const todasLinhas = linhasMap.get(l.operador_id) ?? [];
+    const filtro      = filtrosDatas.get(l.operador_id);
+    const temFiltro   = !!(filtro?.inicio || filtro?.fim);
+
+    if (carregando) {
+      return (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+        </div>
+      );
+    }
+    return (
+      <>
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-muted/20 px-3 py-2">
+          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Filtrar:</span>
+          <DatePickerField
+            value={filtro?.inicio ?? ''}
+            onChange={v => setFiltroData(l.operador_id, 'inicio', v)}
+            placeholder="Início" triggerClassName="w-28 rounded-lg"
+            minDate={pisoDoRecorte} maxDate={filtro?.fim || tetoDoRecorte}
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <DatePickerField
+            value={filtro?.fim ?? ''}
+            onChange={v => setFiltroData(l.operador_id, 'fim', v)}
+            placeholder="Fim" triggerClassName="w-28 rounded-lg"
+            minDate={filtro?.inicio || pisoDoRecorte} maxDate={tetoDoRecorte}
+          />
+          {temFiltro && (
+            <>
+              <Button size="sm" variant="ghost"
+                className="h-8 gap-1 rounded-lg px-2 text-xs text-muted-foreground"
+                onClick={() => limparFiltroData(l.operador_id)}>
+                <X className="h-3 w-3" /> Limpar
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {linhas.length}/{todasLinhas.length}
+              </span>
+            </>
+          )}
+          <Button size="sm" variant="outline"
+            className="ml-auto h-8 gap-1 rounded-lg px-2 text-xs"
+            disabled={linhas.length === 0}
+            onClick={() => void copiarTexto(
+              montarTextoListaAnalitico(l.nome ?? l.usuario, linhas),
+              'Lista de acordos copiada',
+            )}>
+            <Copy className="h-3 w-3" /> Copiar lista
+          </Button>
+        </div>
+        {tabelaDeLinhas(l, linhas, temFiltro)}
+      </>
+    );
+  }
+
+  /**
+   * A lista de acordos do operador — a mesma tabela de sempre, agora numa
+   * função própria porque quem a desenha passou a ser `ListaOperadores`.
+   */
+  function tabelaDeLinhas(
+    l: LinhaOperadorPainel, linhas: AnaliticoRecebimento[], temFiltro: boolean,
+  ) {
+    return (
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
+            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
+            <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>
+            {mostrarHO && <th className="text-right px-3 py-2 font-semibold text-muted-foreground">HO</th>}
+            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
+            <th className="text-right px-3 py-2 font-semibold text-muted-foreground">AÇÃO</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {linhas.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-xs">
+                {temFiltro ? 'Nenhum registro no período.' : 'Sem registros.'}
+              </td>
+            </tr>
+          ) : linhas.flatMap(linha => {
+            const pagamentos = linha.pagamentos_detalhados;
+            const formaBadge = (
+              <Badge variant="outline" className={
+                linha.forma_pagamento === 'cartao'
+                  ? 'text-xs border-purple-300 text-purple-700'
+                  : 'text-xs border-blue-300 text-blue-700'
+              }>
+                {linha.forma_detalhe || (linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix')}
+              </Badge>
+            );
+
+            if (!pagamentos || pagamentos.length <= 1) {
+              return [
+                <tr key={linha.id} className="hover:bg-muted/20">
+                  <td className="px-3 py-2">
+                    <span className="font-semibold">{linha.codigo}</span>
+                    {linha.nome_cliente && (
+                      <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
+                    )}
+                    {linha.instituicao && (
+                      <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{formaBadge}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
+                  {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
+                  <td className="px-3 py-2 tabular-nums">
+                    {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <TabulacaoCell
+                      linha={linha} empresaId={empresaId}
+                      operadorId={l.operador_id}
+                      operadorNome={l.nome ?? l.usuario}
+                      liderId={liderId}
+                      onAbrirNovoAcordo={onAbrirNovoAcordo}
+                      onVerAcordo={onVerAcordo}
+                      onRefetch={onRefetch}
+                    />
+                  </td>
+                </tr>,
+              ];
+            }
+
+            return pagamentos.map((p, idx) => (
+              <tr key={`${linha.id}::${idx}`} className="hover:bg-muted/20">
+                {idx === 0 && (
+                  <td rowSpan={pagamentos.length} className="px-3 py-2 align-top">
+                    <span className="font-semibold">{linha.codigo}</span>
+                    {linha.nome_cliente && (
+                      <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
+                    )}
+                    {linha.instituicao && (
+                      <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
+                    )}
+                  </td>
+                )}
+                <td className="px-3 py-2">{formaBadge}</td>
+                <td className="px-3 py-2 text-right font-mono">{formatBRL(p.valor)}</td>
+                {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
+                <td className="px-3 py-2 tabular-nums">
+                  {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                </td>
+                {idx === 0 && (
+                  <td rowSpan={pagamentos.length} className="px-3 py-2 text-right align-top">
+                    <TabulacaoCell
+                      linha={linha} empresaId={empresaId}
+                      operadorId={l.operador_id}
+                      operadorNome={l.nome ?? l.usuario}
+                      liderId={liderId}
+                      onAbrirNovoAcordo={onAbrirNovoAcordo}
+                      onVerAcordo={onVerAcordo}
+                      onRefetch={onRefetch}
+                    />
+                  </td>
+                )}
+              </tr>
+            ));
+          })}
+        </tbody>
+      </table>
+    );
+  }
+
   // ── Seletor de equipe reutilizável ────────────────────────────────────────
   const seletorEquipe = equipesFiltradas.length > 0 && (
     <div className="flex items-center gap-2">
@@ -676,87 +926,36 @@ export function AnaliticoLider({
     <div className="space-y-4">
 
       {/* ── Cards de resumo mensal ─────────────────────────────────────────── */}
-      <div className={cn('grid grid-cols-2 sm:grid-cols-3 gap-3', mostrarHO ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
+      <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', mostrarHO ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
         {loadingSnapshot ? (
           Array.from({ length: mostrarHO ? 5 : 4 }).map((_, i) => (
-            <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
+            <div key={i} className="h-[88px] animate-pulse rounded-xl bg-muted" />
           ))
         ) : metricas ? (
           <>
-            <Card className="border-border">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total recebido</p>
-                    <p className="text-base font-bold text-primary font-mono leading-tight mt-1 truncate">
-                      {formatBRL(metricas.totalRecebido)}
-                    </p>
-                  </div>
-                  <TrendingUp className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
-                </div>
-              </CardContent>
-            </Card>
+            <KpiTile rotulo="Total recebido" Icon={TrendingUp} tom="primario"
+              valor={formatBRL(metricas.totalRecebido)}
+              valorNumerico={metricas.totalRecebido} formatar={formatBRL} />
             {mostrarHO && (
-              <Card className="border-border">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-1">
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total HO</p>
-                      <p className="text-base font-bold font-mono leading-tight mt-1 truncate">
-                        {formatBRL(metricas.totalHo)}
-                      </p>
-                    </div>
-                    <CreditCard className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
-                  </div>
-                </CardContent>
-              </Card>
+              <KpiTile rotulo="Total HO" Icon={CreditCard} tom="neutro"
+                valor={formatBRL(metricas.totalHo)}
+                valorNumerico={metricas.totalHo} formatar={formatBRL} />
             )}
-            <Card className="border-border">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Operadores</p>
-                    <p className="text-xl font-bold leading-tight mt-1">{metricas.totalOperadores}</p>
-                  </div>
-                  <Users className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Acordos pagos</p>
-                    <p className="text-xl font-bold leading-tight mt-1">
-                      {metricas.totalPagamentos.toLocaleString('pt-BR')}
-                    </p>
-                  </div>
-                  <BarChart3 className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Período</p>
-                    {metricas.periodoInicio && metricas.periodoFim ? (
-                      <p className="text-xs font-semibold leading-tight mt-1">
-                        {new Date(metricas.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')}
-                        <span className="text-muted-foreground"> a </span>
-                        {new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}
-                      </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mt-1">—</p>
-                    )}
-                  </div>
-                  <Calendar className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
-                </div>
-              </CardContent>
-            </Card>
+            <KpiTile rotulo="Operadores" Icon={Users} tom="neutro"
+              valor={metricas.totalOperadores} />
+            <KpiTile rotulo="Acordos pagos" Icon={BarChart3} tom="neutro"
+              valor={metricas.totalPagamentos.toLocaleString('pt-BR')} />
+            <KpiTile rotulo="Período" Icon={Calendar} tom="neutro"
+              valor={
+                metricas.periodoInicio && metricas.periodoFim
+                  ? `${new Date(metricas.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')}`
+                    + ` – ${new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}`
+                  : '—'
+              }
+              className="[&_p:nth-child(2)]:text-sm" />
           </>
         ) : (
-          <div className="col-span-full text-center py-4 text-xs text-muted-foreground">
+          <div className="col-span-full py-4 text-center text-xs text-muted-foreground">
             Nenhum dado importado para este mês.
           </div>
         )}
@@ -777,32 +976,25 @@ export function AnaliticoLider({
 
       {/* Tabs + botão importar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        {/* Com cinco abas a régua não cabe em tela estreita: rola na horizontal
-            em vez de quebrar linha — a borda inferior do strip é uma só. */}
-        <div className="flex items-center gap-1 border-b border-border max-w-full overflow-x-auto">
-          {abasInternas.map(({ key, label, Icon }) => (
-            <button key={key} onClick={() => setAbaAtiva(key)}
-              className={cn(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
-                abaVisivel === key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
-              )}
-            >
-              <Icon className="w-3.5 h-3.5" /> {label}
-            </button>
-          ))}
-        </div>
+        <AbasSegmentadas<AbaInterna>
+          abas={abasInternas.map(({ key, label, Icon }) => ({
+            key, label, Icon,
+            badge: key === 'orfaos' ? orfaos.length : undefined,
+          }))}
+          ativa={abaVisivel}
+          onTrocar={setAbaAtiva}
+          rotulo="Detalhamento do Analítico"
+        />
         {temPermissaoImportar && (
           <div className="flex items-center gap-2">
             <Button
               size="sm" variant="outline"
-              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              className="gap-1.5 rounded-lg text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
               onClick={() => setConfirmandoLimpeza(true)}
             >
               <Trash2 className="w-4 h-4" /> Limpar mês
             </Button>
-            <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
+            <Button size="sm" className="gap-1.5 rounded-lg" onClick={() => setModalImportar(true)}>
               <Upload className="w-4 h-4" /> Importar relatório
             </Button>
           </div>
@@ -821,253 +1013,58 @@ export function AnaliticoLider({
       {abaVisivel === 'operadores' && (
         <div className="space-y-5">
           {loadingResumos && (
-            <div className="space-y-2 animate-pulse">
-              {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 bg-muted rounded-lg" />)}
+            <div className="animate-pulse space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-16 rounded-xl bg-muted" />
+              ))}
             </div>
           )}
-          {!loadingResumos && resumosPorEquipe.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-sm">Nenhum dado para este mês.</p>
+          {!loadingResumos && gruposDoPainel.length === 0 && (
+            <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+              Nenhum dado para este recorte.
             </div>
           )}
-          {!loadingResumos && resumosPorEquipe.map(grupo => (
-            <div key={grupo.equipeId ?? '__sem__'} className="space-y-2">
-              <div className="flex items-center gap-2 px-1">
-                <div className="h-px flex-1 bg-border" />
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
-                  {grupo.equipeNome}
-                </span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-
-              {grupo.items.map(r => {
-                const aberto      = expandidos.has(r.operador_id);
-                const carregando  = loadingLinhas.has(r.operador_id);
-                const linhas      = getLinhasOp(r.operador_id);
-                const todasLinhas = linhasMap.get(r.operador_id) ?? [];
-                const filtro      = filtrosDatas.get(r.operador_id);
-                const temFiltro   = !!(filtro?.inicio || filtro?.fim);
-
-                return (
-                  <Card key={r.operador_id} className="border-border">
-                    <CardHeader className="p-3 cursor-pointer select-none"
-                      onClick={() => void toggleExpandido(r.operador_id)}>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          {carregando
-                            ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-                            : aberto
-                              ? <ChevronDown  className="w-4 h-4 text-muted-foreground" />
-                              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                          <div>
-                            <CardTitle className="text-sm flex items-center gap-1.5 flex-wrap">
-                              {r.operador_nome ?? r.operador_usuario}
-                              {transferidos[r.operador_id] && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] font-normal gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
-                                  title={
-                                    'Transferido neste mês. O recebimento continua aqui até a '
-                                    + 'liderança decidir tirar.'
-                                  }
-                                >
-                                  <ArrowRightLeft className="w-3 h-3" />
-                                  transferido
-                                </Badge>
-                              )}
-                            </CardTitle>
-                            <p className="text-xs text-muted-foreground font-mono">{r.operador_usuario}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 text-right">
-                          <div>
-                            <p className="text-sm font-bold text-primary">{formatBRL(r.total_recebido)}</p>
-                            <p className="text-xs text-muted-foreground">recebido</p>
-                          </div>
-                          {mostrarHO && (
-                            <div>
-                              <p className="text-sm font-semibold">{formatBRL(r.total_ho)}</p>
-                              <p className="text-xs text-muted-foreground">HO</p>
-                            </div>
-                          )}
-                          <Badge variant="outline" className="shrink-0">{r.total_pagamentos} pgto.</Badge>
-                          {/* Tirar da equipe o recebimento de quem foi
-                              transferido. Não apaga nada: o valor continua no
-                              total da empresa e no do setor — só deixa de
-                              aparecer aqui, que é a pergunta do líder. */}
-                          {transferidos[r.operador_id] && temPermissaoImportar && (
-                            <Button
-                              size="sm" variant="ghost"
-                              className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive shrink-0"
-                              disabled={fantasmasTirados.has(r.operador_id)}
-                              onClick={e => {
-                                e.stopPropagation();
-                                setConfirmandoFantasma({
-                                  perfilId:   r.operador_id,
-                                  nome:       r.operador_nome ?? r.operador_usuario,
-                                  equipeNome: grupo.equipeNome,
-                                });
-                              }}
-                            >
-                              Tirar da equipe
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-
-                    {aberto && (
-                      <CardContent className="p-0 border-t">
-                        {carregando ? (
-                          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-sm">
-                            <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20 flex-wrap">
-                              <CalendarDays className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="text-xs text-muted-foreground">Filtrar:</span>
-                              <input type="date" value={filtro?.inicio ?? ''}
-                                onChange={e => setFiltroData(r.operador_id, 'inicio', e.target.value)}
-                                className="h-6 px-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-                              />
-                              <span className="text-xs text-muted-foreground">até</span>
-                              <input type="date" value={filtro?.fim ?? ''}
-                                onChange={e => setFiltroData(r.operador_id, 'fim', e.target.value)}
-                                className="h-6 px-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-                              />
-                              {temFiltro && (
-                                <>
-                                  <Button size="sm" variant="ghost"
-                                    className="h-6 px-1.5 gap-1 text-xs text-muted-foreground"
-                                    onClick={() => limparFiltroData(r.operador_id)}>
-                                    <X className="w-3 h-3" /> Limpar
-                                  </Button>
-                                  <span className="text-xs text-muted-foreground">
-                                    {linhas.length}/{todasLinhas.length}
-                                  </span>
-                                </>
-                              )}
-                              <Button size="sm" variant="outline"
-                                className="h-6 px-2 gap-1 text-xs ml-auto"
-                                disabled={linhas.length === 0}
-                                onClick={() => void copiarTexto(
-                                  montarTextoListaAnalitico(r.operador_nome ?? r.operador_usuario, linhas),
-                                  'Lista de acordos copiada',
-                                )}>
-                                <Copy className="w-3 h-3" /> Copiar lista
-                              </Button>
-                            </div>
-
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="bg-muted/30">
-                                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
-                                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
-                                  <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>
-                                  {mostrarHO && <th className="text-right px-3 py-2 font-semibold text-muted-foreground">HO</th>}
-                                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
-                                  <th className="text-right px-3 py-2 font-semibold text-muted-foreground">AÇÃO</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border">
-                                {linhas.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-xs">
-                                      {temFiltro ? 'Nenhum registro no período.' : 'Sem registros.'}
-                                    </td>
-                                  </tr>
-                                ) : linhas.flatMap(linha => {
-                                  const pagamentos = linha.pagamentos_detalhados;
-                                  const formaBadge = (
-                                    <Badge variant="outline" className={
-                                      linha.forma_pagamento === 'cartao'
-                                        ? 'text-xs border-purple-300 text-purple-700'
-                                        : 'text-xs border-blue-300 text-blue-700'
-                                    }>
-                                      {linha.forma_detalhe || (linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix')}
-                                    </Badge>
-                                  );
-
-                                  if (!pagamentos || pagamentos.length <= 1) {
-                                    return [
-                                      <tr key={linha.id} className="hover:bg-muted/20">
-                                        <td className="px-3 py-2">
-                                          <span className="font-semibold">{linha.codigo}</span>
-                                          {linha.nome_cliente && (
-                                            <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
-                                          )}
-                                          {linha.instituicao && (
-                                            <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
-                                          )}
-                                        </td>
-                                        <td className="px-3 py-2">{formaBadge}</td>
-                                        <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
-                                        {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
-                                        <td className="px-3 py-2 tabular-nums">
-                                          {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                        </td>
-                                        <td className="px-3 py-2 text-right">
-                                          <TabulacaoCell
-                                            linha={linha} empresaId={empresaId}
-                                            operadorId={r.operador_id}
-                                            operadorNome={r.operador_nome ?? r.operador_usuario}
-                                            liderId={liderId}
-                                            onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                            onVerAcordo={onVerAcordo}
-                                            onRefetch={onRefetch}
-                                          />
-                                        </td>
-                                      </tr>,
-                                    ];
-                                  }
-
-                                  return pagamentos.map((p, idx) => (
-                                    <tr key={`${linha.id}::${idx}`} className="hover:bg-muted/20">
-                                      {idx === 0 && (
-                                        <td rowSpan={pagamentos.length} className="px-3 py-2 align-top">
-                                          <span className="font-semibold">{linha.codigo}</span>
-                                          {linha.nome_cliente && (
-                                            <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
-                                          )}
-                                          {linha.instituicao && (
-                                            <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
-                                          )}
-                                        </td>
-                                      )}
-                                      <td className="px-3 py-2">{formaBadge}</td>
-                                      <td className="px-3 py-2 text-right font-mono">{formatBRL(p.valor)}</td>
-                                      {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
-                                      <td className="px-3 py-2 tabular-nums">
-                                        {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                      </td>
-                                      {idx === 0 && (
-                                        <td rowSpan={pagamentos.length} className="px-3 py-2 text-right align-top">
-                                          <TabulacaoCell
-                                            linha={linha} empresaId={empresaId}
-                                            operadorId={r.operador_id}
-                                            operadorNome={r.operador_nome ?? r.operador_usuario}
-                                            liderId={liderId}
-                                            onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                            onVerAcordo={onVerAcordo}
-                                            onRefetch={onRefetch}
-                                          />
-                                        </td>
-                                      )}
-                                    </tr>
-                                  ));
-                                })}
-                              </tbody>
-                            </table>
-                          </>
-                        )}
-                      </CardContent>
+          {!loadingResumos && gruposDoPainel.length > 0 && (
+            <ListaOperadores
+              grupos={gruposDoPainel}
+              mostrarHO={mostrarHO}
+              fotos={fotos}
+              expandidos={expandidos}
+              onToggle={id => void toggleExpandido(id)}
+              renderExpandido={detalheDoOperador}
+              acoesDaLinha={l => (
+                /* Transferido neste mês: o recebimento continua aqui até a
+                   liderança decidir tirar. O selo diz por quê; o botão age. */
+                transferidos[l.operador_id] ? (
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-normal gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
+                      title={
+                        'Transferido neste mês. O recebimento continua aqui até a '
+                        + 'liderança decidir tirar.'
+                      }
+                    >
+                      <ArrowRightLeft className="w-3 h-3" />
+                      transferido
+                    </Badge>
+                    {temPermissaoImportar && (
+                      <Button size="sm" variant="ghost"
+                        className="h-7 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                        disabled={fantasmasTirados.has(l.operador_id)}
+                        onClick={() => setConfirmandoFantasma({
+                          perfilId: l.operador_id,
+                          nome: l.nome ?? l.usuario,
+                          equipeNome: l.equipeNome,
+                        })}>
+                        Tirar da equipe
+                      </Button>
                     )}
-                  </Card>
-                );
-              })}
-            </div>
-          ))}
+                  </div>
+                ) : null
+              )}
+            />
+          )}
         </div>
       )}
 
