@@ -1,8 +1,8 @@
 /**
- * DiaDetalhado — sub-aba do Recebimento diário (as DUAS empresas).
+ * DiaDetalhado — o mapa de calor operador × dia do mês.
  *
- * Tabela operador × dia do mês. A conta toda vive em
- * `services/diario/diaDetalhado.ts` (pura e testada); aqui é só apresentação.
+ * Tabela operador × dia. Vive dentro da aba "Por operador" do Analítico, como o
+ * outro formato da MESMA lista: Lista × Mapa do mês.
  *
  * ## Por que ela virou um mapa de calor
  *
@@ -23,31 +23,82 @@
  * significa "muito para este mês", não "bom" — dois meses diferentes não se
  * comparam pela cor, e por isso a legenda mostra o valor do topo da escala.
  *
- * NAVEGAÇÃO, em dois níveis, para não haver barra de rolagem horizontal:
- *  • no cabeçalho, ‹ › trocam o MÊS exibido;
- *  • sobre a tabela, ‹ › avançam e voltam os DIAS, uma página por vez.
+ * ## De onde vêm os números
+ *
+ * Das linhas do ANALÍTICO (`fn_analitico_dashboard_mes`), as mesmas que
+ * alimentam a aba Formas de pagamento e o card «Total recebido» do topo. Antes
+ * vinham do resumo mensal do DIÁRIO: duas somas do mesmo dinheiro, na mesma
+ * tela, livres para discordar sem avisar. A regra da tela é curta — o analítico
+ * responde pelo mês, o diário responde pelo dia —, e o mapa é mensal.
+ *
+ * As linhas chegam JÁ dentro do escopo de quem chama; este componente não
+ * decide quem enxerga o quê.
+ *
+ * NAVEGAÇÃO: sobre a tabela, ‹ › avançam e voltam os DIAS, uma página por vez —
+ * é o que evita a barra de rolagem horizontal. O MÊS não se troca aqui: quem
+ * manda nele é a lente da página, e dois controles de mês na mesma tela, um
+ * dentro do outro, discordariam sem que ninguém percebesse.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Flame } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
+import type { AnaliticoDashboardLinha } from '@/lib/supabase';
+import { getTodayISO } from '@/lib/index';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
-import { buscarResumoMensalDiario } from '@/services/diario/diario.service';
-import { montarDiaDetalhado } from '@/services/diario/diaDetalhado';
-import type { EscopoDiario, VinculosDiario } from '@/services/diario/escopoDiario';
+// As colunas do mês continuam saindo daqui: a função é pura, tem teste próprio
+// e já sabe parar no dia de hoje quando o mês é o corrente. O que mudou foi a
+// fonte dos VALORES, não a régua do calendário.
+import { diasDoMes } from '@/services/diario/diaDetalhado';
+
+/** Referência estável para "sem linhas" — evita remontar a matriz à toa. */
+const SEM_LINHAS: readonly AnaliticoDashboardLinha[] = [];
+
+/** Fallback de nome. Constante para a identidade não mudar a cada render. */
+const SEM_NOME = (): string => '—';
 
 interface DiaDetalhadoProps {
-  empresaId: string;
-  /** 'yyyy-MM' — mês do dia que a aba está exibindo. */
-  mes:      string | null;
-  hojeISO:  string;
-  escopo:   EscopoDiario | null;
-  vinculos: VinculosDiario | null;
-  /** Filtro de equipe da tela; null = todas as do escopo. */
+  /**
+   * Linhas do mês vindas de `useAnaliticoDashboard`, JÁ escopadas por quem
+   * chama (setor, equipe, permissão). Ver o cabeçalho.
+   */
+  linhas?: readonly AnaliticoDashboardLinha[];
+  /** 'yyyy-MM' — o mês da lente. `null` enquanto ela não resolveu. */
+  mes: string | null;
+  /** operador_id → nome de exibição. Quem chama tem os resumos; aqui não. */
+  nomeDoOperador?: (id: string) => string;
+  /** 'yyyy-MM-dd'. Só decide onde as colunas param e qual delas é "hoje". */
+  hojeISO?: string;
+
+  /*
+   * Compatibilidade com o `DiarioLider`, que a Task 13 apaga.
+   *
+   * Ele ainda importa este componente com as props da fonte antiga. Não são
+   * lidas — o arquivo é código órfão (nada mais monta a aba Recebimento
+   * diário) e some junto com elas. Estão aqui só para o typecheck do ramo
+   * continuar verde até lá.
+   */
+  /** @deprecated sai com o `DiarioLider` (Task 13). */
+  empresaId?: string;
+  /** @deprecated sai com o `DiarioLider` (Task 13). */
+  escopo?: unknown;
+  /** @deprecated sai com o `DiarioLider` (Task 13). */
+  vinculos?: unknown;
+  /** @deprecated sai com o `DiarioLider` (Task 13). */
   equipeId?: string | null;
 }
 
 /** Dias visíveis por página. 10 cabe confortavelmente em tela de notebook. */
 const DIAS_POR_PAGINA = 10;
+
+/** Uma linha do mapa: um operador e o que ele recebeu em cada dia. */
+interface LinhaDoMapa {
+  operadorId: string;
+  nome: string;
+  /** Um valor por dia, na mesma ordem das colunas. 0 = nada recebido. */
+  valores: number[];
+  /** Soma da linha — o mês do operador. */
+  total: number;
+}
 
 /** '2026-08-05' → '05'. O cabeçalho já diz o mês. */
 function rotuloDoDia(dia: string): string {
@@ -71,13 +122,6 @@ function rotuloDoMes(mes: string): string {
   const [a, m] = mes.split('-').map(Number);
   return new Date(a, m - 1, 1)
     .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-}
-
-/** '2026-08' + n meses. */
-function somarMeses(mes: string, n: number): string {
-  const [a, m] = mes.split('-').map(Number);
-  const d = new Date(a, m - 1 + n, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /** 'Ana Paula Souza' → 'AS'. Duas letras é o que cabe no círculo. */
@@ -117,49 +161,68 @@ function pesoDaCor(valor: number, maximo: number): number {
 }
 
 export function DiaDetalhado({
-  empresaId, mes, hojeISO, escopo, vinculos, equipeId = null,
+  linhas = SEM_LINHAS, mes, nomeDoOperador = SEM_NOME, hojeISO = getTodayISO(),
 }: DiaDetalhadoProps) {
-  // Mês próprio da aba, semeado pelo dia selecionado lá em cima. Ter estado
-  // próprio é o que permite navegar meses aqui sem mexer no seletor de dia da
-  // tela toda — trocar aquele recarregaria o dia e as outras sub-abas junto.
-  const [mesVisto, setMesVisto] = useState<string | null>(mes);
-  useEffect(() => { setMesVisto(mes); }, [mes]);
+  const dias = useMemo(
+    () => (mes ? diasDoMes(mes, hojeISO) : []),
+    [mes, hojeISO],
+  );
 
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [bruto, setBruto] = useState<Awaited<ReturnType<typeof buscarResumoMensalDiario>> | null>(null);
-
-  useEffect(() => {
-    let cancelado = false;
-    if (!empresaId || !mesVisto) { setBruto(null); setCarregando(false); return; }
-    setCarregando(true);
-    setErro(null);
-    void buscarResumoMensalDiario(empresaId, mesVisto).then(r => {
-      if (cancelado) return;
-      if (r.error) setErro(r.error);
-      setBruto(r);
-      setCarregando(false);
-    });
-    return () => { cancelado = true; };
-  }, [empresaId, mesVisto]);
-
+  /*
+   * A matriz sai das linhas recebidas.
+   *
+   * Linha SEM operador (órfão, "sem vínculo", fora do vínculo) não pertence a
+   * ninguém e fica de fora da tabela — mas conta no total da empresa, então é
+   * somada à parte e informada no rodapé. Sem isso o total do mapa pareceria
+   * divergir do card do topo, e a diferença é justamente essa.
+   */
   const matriz = useMemo(() => {
-    if (!bruto || !mesVisto) return null;
-    return montarDiaDetalhado({
-      linhasDia: bruto.linhasDia,
-      resumos:   bruto.resumos,
-      mes: mesVisto, hojeISO, escopo, vinculos, equipeId,
-    });
-  }, [bruto, mesVisto, hojeISO, escopo, vinculos, equipeId]);
+    const indiceDoDia = new Map(dias.map((d, i) => [d, i] as const));
+    const porOperador = new Map<string, LinhaDoMapa>();
+    let totalForaDaMatriz = 0;
 
-  const totalDias = matriz?.dias.length ?? 0;
+    for (const l of linhas) {
+      const i = indiceDoDia.get(l.dia);
+      if (i === undefined) continue;          // dia fora das colunas do mês
+      const v = Number(l.total) || 0;
+      if (!l.operador_id) { totalForaDaMatriz += v; continue; }
+
+      let linha = porOperador.get(l.operador_id);
+      if (!linha) {
+        linha = {
+          operadorId: l.operador_id,
+          nome:       nomeDoOperador(l.operador_id),
+          valores:    dias.map(() => 0),
+          total:      0,
+        };
+        porOperador.set(l.operador_id, linha);
+      }
+      linha.valores[i] += v;
+      linha.total      += v;
+    }
+
+    // Maior mês primeiro, como o resto do analítico. Empate pelo nome, para a
+    // ordem não dançar entre renders quando dois zeram.
+    const ordenadas = [...porOperador.values()].sort(
+      (a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR'),
+    );
+
+    return {
+      linhas:       ordenadas,
+      totaisPorDia: dias.map((_, i) => ordenadas.reduce((s, l) => s + l.valores[i], 0)),
+      totalGeral:   ordenadas.reduce((s, l) => s + l.total, 0),
+      totalForaDaMatriz,
+    };
+  }, [linhas, dias, nomeDoOperador]);
+
+  const totalDias = dias.length;
   const [inicio, setInicio] = useState(0);
 
-  // Ao trocar de mês (ou de filtro) abre na ÚLTIMA página: o que interessa
+  // Ao trocar de mês (ou de escopo) abre na ÚLTIMA página: o que interessa
   // primeiro é o fim do período, não o dia 1º.
   useEffect(() => {
     setInicio(Math.max(0, totalDias - DIAS_POR_PAGINA));
-  }, [totalDias, mesVisto, equipeId]);
+  }, [totalDias, mes]);
 
   // Lado para onde a pessoa navegou — define de que direção as colunas entram.
   const [direcao, setDirecao] = useState<'esq' | 'dir'>('dir');
@@ -181,80 +244,25 @@ export function DiaDetalhado({
     } as React.CSSProperties,
   });
 
-  const mesAtualLabel = mesVisto ? rotuloDoMes(mesVisto) : '';
-  const mesDeHoje = hojeISO.slice(0, 7);
-
-  const cabecalhoMes = (
-    <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 shadow-sm">
-      <button
-        type="button"
-        onClick={() => setMesVisto(m => (m ? somarMeses(m, -1) : m))}
-        className="h-7 w-7 rounded-md hover:bg-accent flex items-center justify-center transition-colors"
-        title="Mês anterior"
-      >
-        <ChevronLeft className="w-3.5 h-3.5" />
-      </button>
-      <span className="px-2 text-xs font-semibold capitalize min-w-[132px] text-center tabular-nums">
-        {mesAtualLabel}
-      </span>
-      <button
-        type="button"
-        onClick={() => setMesVisto(m => (m ? somarMeses(m, 1) : m))}
-        // Não deixa passar do mês corrente: mês futuro não tem coluna nenhuma
-        // e a tabela ficaria vazia sem explicar por quê.
-        disabled={!mesVisto || mesVisto >= mesDeHoje}
-        className="h-7 w-7 rounded-md hover:bg-accent flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        title="Próximo mês"
-      >
-        <ChevronRight className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-
-  if (carregando || !vinculos || !escopo) {
-    return (
-      <div className="space-y-3">
-        <div className="flex justify-end">{cabecalhoMes}</div>
-        <div className="flex items-center justify-center py-16 text-muted-foreground gap-2 text-sm">
-          <Loader2 className="w-4 h-4 animate-spin" /> Carregando o mês...
-        </div>
-      </div>
-    );
-  }
-
-  if (erro) {
-    return (
-      <div className="space-y-3">
-        <div className="flex justify-end">{cabecalhoMes}</div>
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          Não foi possível carregar o mês: {erro}
-        </div>
-      </div>
-    );
-  }
-
   const m = matriz;
-  const vazio = !m || m.dias.length === 0 || m.linhas.length === 0;
+  const vazio = totalDias === 0 || m.linhas.length === 0;
 
   if (vazio) {
     return (
-      <div className="space-y-3">
-        <div className="flex justify-end">{cabecalhoMes}</div>
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-14 text-center text-sm text-muted-foreground">
-          {m && m.dias.length === 0
-            ? 'Nenhum dia para exibir neste mês ainda.'
-            : 'Nenhum recebimento vinculado a operador neste mês.'}
-          {m && m.totalForaDaMatriz > 0 && (
-            <span className="block mt-1 text-xs">
-              Há {formatBRL(m.totalForaDaMatriz)} sem operador vinculado — veja a aba “Sem operador”.
-            </span>
-          )}
-        </div>
+      <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-14 text-center text-sm text-muted-foreground">
+        {totalDias === 0
+          ? 'Nenhum dia para exibir neste mês ainda.'
+          : 'Nenhum recebimento vinculado a operador neste mês.'}
+        {m.totalForaDaMatriz > 0 && (
+          <span className="block mt-1 text-xs">
+            Há {formatBRL(m.totalForaDaMatriz)} sem operador vinculado — veja a aba “Sem operador”.
+          </span>
+        )}
       </div>
     );
   }
 
-  const diasVisiveis = m.dias.slice(inicio, inicio + DIAS_POR_PAGINA);
+  const diasVisiveis = dias.slice(inicio, inicio + DIAS_POR_PAGINA);
   const primeiro = inicio + 1;
   const ultimo   = Math.min(inicio + DIAS_POR_PAGINA, totalDias);
 
@@ -325,9 +333,17 @@ export function DiaDetalhado({
   return (
     <div className="space-y-3">
       {/* ── Barra de contexto ─────────────────────────────────────────────── */}
+      {/* O mês aparece por ESCRITO, e não como controle: as colunas mostram só
+          o número do dia, e sem esta linha "05" não diria de que mês é. */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <CalendarRange className="w-3.5 h-3.5 shrink-0" />
+          {mes && (
+            <>
+              <span className="font-semibold capitalize text-foreground">{rotuloDoMes(mes)}</span>
+              <span className="text-border">·</span>
+            </>
+          )}
           <span>
             {m.linhas.length} {m.linhas.length === 1 ? 'operador' : 'operadores'}
           </span>
@@ -336,12 +352,9 @@ export function DiaDetalhado({
             dias <strong className="text-foreground tabular-nums">{primeiro}–{ultimo}</strong> de {totalDias}
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 leading-tight">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total do mês</p>
-            <p className="text-sm font-bold tabular-nums text-primary">{formatBRL(m.totalGeral)}</p>
-          </div>
-          {cabecalhoMes}
+        <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 leading-tight">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total do mês</p>
+          <p className="text-sm font-bold tabular-nums text-primary">{formatBRL(m.totalGeral)}</p>
         </div>
       </div>
 
@@ -515,12 +528,13 @@ export function DiaDetalhado({
         </div>
       </div>
 
-      {/* Sem esta nota o total da aba parece divergir do total do mês. */}
+      {/* Sem esta nota o total do mapa parece divergir do card «Total recebido»
+          do topo — e a diferença é exatamente este valor. */}
       {m.totalForaDaMatriz > 0 && (
         <p className="text-[11px] text-muted-foreground">
           Fora da tabela: <strong>{formatBRL(m.totalForaDaMatriz)}</strong> sem operador
-          vinculado (órfãos, “sem vínculo” e fora do vínculo). Conta no total da empresa,
-          mas não pertence a nenhuma pessoa.
+          vinculado (órfãos e “sem vínculo”). Conta no total da empresa, mas não
+          pertence a nenhuma pessoa.
         </p>
       )}
     </div>

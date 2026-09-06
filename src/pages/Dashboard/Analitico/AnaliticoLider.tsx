@@ -14,7 +14,7 @@ import {
   Upload, Users, Trophy, AlertCircle,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
   TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft, Wallet,
-  SlidersHorizontal,
+  SlidersHorizontal, CalendarRange,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -105,6 +105,9 @@ import {
   linhasVivas, agregarPorOperador, consolidarIgnorados, fmtDataISO,
 } from '@/pages/Analitico/Diario/helpers';
 import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
+// O mapa de calor operador × dia — o outro formato da MESMA lista, agora
+// somando do analítico. Continua no diretório do diário; a fonte é que mudou.
+import { DiaDetalhado } from '@/pages/Analitico/Diario/DiaDetalhado';
 import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
 import { limparDadosDoDia } from '@/services/diario/diario.service';
 import {
@@ -124,6 +127,16 @@ const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
  * `onTrocar`. Com o tipo declarado, a instanciação explícita fecha a conta.
  */
 type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques' | 'orfaos';
+
+/**
+ * Os dois formatos da MESMA lista de operadores.
+ *
+ * `lista` responde "quanto cada um fez no recorte"; `mapa` responde "quando" —
+ * é o mapa de calor operador × dia, que era uma sub-aba do Recebimento diário.
+ * Declarado à parte pelo mesmo motivo de `AbaInterna`: `AbasSegmentadas` é
+ * genérico e precisa da instanciação explícita.
+ */
+type VisaoOperadores = 'lista' | 'mapa';
 
 interface AnaliticoLiderProps {
   empresaId: string;
@@ -167,6 +180,9 @@ export function AnaliticoLider({
 
   const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<AbaInterna>('operadores');
+  // Lista × Mapa do mês. Estado da tela, não da URL: é escolha de leitura, não
+  // de recorte — o que o link precisa carregar é o recorte, e ele já carrega.
+  const [visaoOperadores, setVisaoOperadores] = useState<VisaoOperadores>('lista');
 
   /*
    * O que era da aba Recebimento diário e passou a viver aqui.
@@ -765,7 +781,9 @@ export function AnaliticoLider({
    * O hook resolve empresa e escopo por conta própria; o que ele pede aqui é
    * "está ligado?" e o mês.
    */
-  const { linhas: linhasDashboard } = useAnaliticoDashboard(abaVisivel === 'operadores', mes);
+  const {
+    linhas: linhasDashboard, carregado: dashboardCarregado,
+  } = useAnaliticoDashboard(abaVisivel === 'operadores', mes);
 
   // ── O recorte Dia ─────────────────────────────────────────────────────────
   /*
@@ -953,6 +971,71 @@ export function AnaliticoLider({
         })),
     }));
   }, [recorte.modo, pulsoDoDia, resumosPorEquipe, linhasDashboard, operadorEquipeMap]);
+
+  /*
+   * ── O mapa do mês ────────────────────────────────────────────────────────
+   *
+   * Ele lê as MESMAS linhas do analítico que a quebra por forma — mas elas
+   * chegam do hook SEM escopo de setor: `fn_analitico_dashboard_mes` resolve
+   * apenas "operador vê o próprio, líder+ vê a empresa". Quem recorta por setor
+   * no analítico é `agruparPorEquipe`, e é o resultado dela que a lista
+   * desenha. Entregar `linhasDashboard` cru ao mapa reabriria, no mês, o
+   * vazamento que a Task 11 fechou no dia: o líder do Play 4 lendo o Receptivo.
+   *
+   * Então o mapa recebe só as linhas de quem já está na lista. De quebra, mapa
+   * e lista passam a mostrar exatamente as mesmas pessoas, e nenhum nome cai
+   * em "—".
+   *
+   * As linhas SEM operador passam de propósito: não têm dono para escopar,
+   * contam no total da empresa e o mapa as informa à parte, no rodapé — a
+   * mesma decisão que `montarDiaDetalhado` já tomava.
+   */
+  const operadoresNaLista = useMemo(
+    () => new Set(resumosPorEquipe.flatMap(g => g.items.map(r => r.operador_id))),
+    [resumosPorEquipe],
+  );
+
+  const linhasDoMapa = useMemo(
+    () => linhasDashboard.filter(l => !l.operador_id || operadoresNaLista.has(l.operador_id)),
+    [linhasDashboard, operadoresNaLista],
+  );
+
+  /*
+   * Nome de quem aparece no mapa, pelo mesmo resumo que nomeia a lista.
+   *
+   * Mapa, e não `find`: a busca linear rodaria uma vez por operador do mês.
+   * `||` e não `??`: o resumo de quem só tem ajuste manual chega com
+   * `operador_nome` nulo E `operador_usuario` vazio, e "" no lugar do nome
+   * desenharia uma linha anônima em vez do traço.
+   */
+  const nomesDoAnalitico = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of resumos) m.set(r.operador_id, r.operador_nome || r.operador_usuario || '—');
+    return m;
+  }, [resumos]);
+
+  const nomeDoOperadorNoMapa = useCallback(
+    (id: string) => nomesDoAnalitico.get(id) ?? '—',
+    [nomesDoAnalitico],
+  );
+
+  /*
+   * O mapa é um objeto do MÊS, e no recorte Dia a lista responde pelo dia (e
+   * vem do diário). Deixar os dois na mesma tela seria duas janelas de tempo
+   * discordando — exatamente o que a lente veio desfazer. Então no Dia a régua
+   * some e a visão volta para a lista, sem apagar a escolha de quem já estava
+   * no mapa: ao voltar para Mês, ela continua lá.
+   */
+  const visaoEfetiva: VisaoOperadores = recorte.modo === 'dia' ? 'lista' : visaoOperadores;
+
+  /*
+   * O mapa espera as linhas do analítico, e elas NÃO passam por
+   * `carregandoLista` — esse responde pela lista, que no mês sai dos resumos.
+   * Sem esta conta, o mapa piscaria "nenhum recebimento vinculado a operador"
+   * durante a busca do mês, que é a leitura oposta da verdadeira.
+   */
+  const carregandoConteudo =
+    carregandoLista || (visaoEfetiva === 'mapa' && !dashboardCarregado);
 
   /** O conteúdo de dentro do operador aberto: filtro de data e a lista. */
   function detalheDoOperador(l: LinhaOperadorPainel) {
@@ -1314,19 +1397,45 @@ export function AnaliticoLider({
               importadoEm={pulsoDoDia.importadoEm}
             />
           )}
-          {carregandoLista && (
+          {/* Dois formatos da MESMA lista — não duas fontes: desde a Task 12 o
+              mapa soma do analítico, como a lista. Some no recorte Dia; ver
+              `visaoEfetiva`. */}
+          {recorte.modo !== 'dia' && (
+            <div className="flex items-center justify-end">
+              <AbasSegmentadas<VisaoOperadores>
+                abas={[
+                  { key: 'lista', label: 'Lista',       Icon: Users },
+                  { key: 'mapa',  label: 'Mapa do mês', Icon: CalendarRange },
+                ]}
+                ativa={visaoEfetiva}
+                onTrocar={setVisaoOperadores}
+                rotulo="Formato da lista"
+              />
+            </div>
+          )}
+          {carregandoConteudo && (
             <div className="animate-pulse space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-16 rounded-xl bg-muted" />
               ))}
             </div>
           )}
-          {!carregandoLista && gruposDoPainel.length === 0 && (
+          {/* O mapa desenha o próprio vazio (e a nota do que ficou sem
+              operador), então não passa pelo bloco de "nenhum dado" abaixo. */}
+          {!carregandoConteudo && visaoEfetiva === 'mapa' && (
+            <DiaDetalhado
+              linhas={linhasDoMapa}
+              mes={mes}
+              nomeDoOperador={nomeDoOperadorNoMapa}
+              hojeISO={hojeISO}
+            />
+          )}
+          {!carregandoConteudo && visaoEfetiva === 'lista' && gruposDoPainel.length === 0 && (
             <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
               Nenhum dado para este recorte.
             </div>
           )}
-          {!carregandoLista && gruposDoPainel.length > 0 && (
+          {!carregandoConteudo && visaoEfetiva === 'lista' && gruposDoPainel.length > 0 && (
             <ListaOperadores
               grupos={gruposDoPainel}
               mostrarHO={mostrarHO}
