@@ -52,6 +52,14 @@ function enderecoCliente(req: ReqLike): string | null {
 
 const MIN_SENHA = 6;
 
+/**
+ * A chave que libera redefinir a senha de outra pessoa.
+ *
+ * Escrita literal, e não importada de `@/lib/permissoes-catalogo`: este arquivo
+ * roda como função serverless, fora do bundle do app e sem o alias `@`.
+ */
+const CHAVE_SENHA = 'usuarios_redefinir_senha';
+
 export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -93,7 +101,31 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       return;
     }
 
-    // 2) Confirma administrador ou super_admin
+    /*
+     * 2) Quem chamou pode redefinir senha?
+     *
+     * ── O que havia aqui, e por que saiu ─────────────────────────────────
+     *
+     * Uma lista de cargo escrita no código: `administrador` ou `super_admin`,
+     * e ninguém mais. O painel de permissões não alcançava esta linha — uma
+     * gerência com tudo ligado via o campo de senha na tela e tomava 403, sem
+     * que houvesse interruptor nenhum capaz de mudar isso.
+     *
+     * Agora a pergunta é a chave `usuarios_redefinir_senha`, resolvida com a
+     * mesma precedência do cliente (`useCargoPermissoes`):
+     *
+     *   1. acesso total (administrador/super_admin) ...... sim, sempre
+     *   2. exceção da pessoa tem a chave ................. vale o valor dela
+     *   3. permissão do cargo tem a chave ................ vale o valor dela
+     *   4. nenhuma das duas .............................. NÃO
+     *
+     * O passo 1 continua porque ele é a doutrina, não um atalho: é o mesmo
+     * passo 1 de `temPermissao`. E manter administrador passando garante que
+     * este deploy não tire de ninguém o que já tinha, mesmo antes de a
+     * migration `20260906120000` semear a chave nos demais cargos.
+     *
+     * Falha de leitura das permissões é NÃO: fechado por omissão.
+     */
     const perfilResp = await fetch(
       `${url}/rest/v1/perfis?id=eq.${caller.id}&select=perfil,nome,empresa_id`,
       { headers: admin },
@@ -101,8 +133,48 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     const perfilArr = (await perfilResp.json()) as Array<{ perfil?: string; nome?: string; empresa_id?: string }>;
     const callerPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
     const callerRole = callerPerfil?.perfil;
-    if (!callerPerfil || (callerRole !== 'administrador' && callerRole !== 'super_admin')) {
-      res.status(403).json({ error: 'Apenas administradores podem redefinir senhas.' });
+    if (!callerPerfil) {
+      res.status(403).json({ error: 'Não foi possível identificar o seu perfil.' });
+      return;
+    }
+
+    const acessoTotal = callerRole === 'administrador' || callerRole === 'super_admin';
+    let podeRedefinir = acessoTotal;
+
+    if (!podeRedefinir && callerPerfil.empresa_id && callerRole) {
+      try {
+        const [excResp, cargoResp] = await Promise.all([
+          fetch(
+            `${url}/rest/v1/perfis_permissoes?usuario_id=eq.${caller.id}`
+            + `&empresa_id=eq.${callerPerfil.empresa_id}&select=permissoes`,
+            { headers: admin },
+          ),
+          fetch(
+            `${url}/rest/v1/cargos_permissoes?cargo=eq.${encodeURIComponent(callerRole)}`
+            + `&empresa_id=eq.${callerPerfil.empresa_id}&select=permissoes`,
+            { headers: admin },
+          ),
+        ]);
+        const leMapa = async (r: Response): Promise<Record<string, boolean>> => {
+          if (!r.ok) return {};
+          const linhas = (await r.json()) as Array<{ permissoes?: Record<string, boolean> }>;
+          return (Array.isArray(linhas) ? linhas[0]?.permissoes : undefined) ?? {};
+        };
+        const [excecoes, doCargo] = await Promise.all([leMapa(excResp), leMapa(cargoResp)]);
+        // Exceção da pessoa vence o cargo — chave PRESENTE, mesmo que `false`.
+        podeRedefinir = CHAVE_SENHA in excecoes
+          ? excecoes[CHAVE_SENHA] === true
+          : doCargo[CHAVE_SENHA] === true;
+      } catch {
+        podeRedefinir = false;
+      }
+    }
+
+    if (!podeRedefinir) {
+      res.status(403).json({
+        error: 'Seu cargo não tem permissão para redefinir senhas. '
+          + 'Peça para ligarem «Usuários: redefinir a senha» no painel de Permissões.',
+      });
       return;
     }
 
