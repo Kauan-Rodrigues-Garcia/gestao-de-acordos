@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { AbasSegmentadas } from '@/components/AbasSegmentadas';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -131,6 +131,19 @@ export default function PaginaAnalitico() {
   const abaVisivel = abasPrincipais.some(a => a.key === abaPrincipal)
     ? abaPrincipal
     : (abasPrincipais[0]?.key ?? null);
+
+  /*
+   * A régua, já tipada.
+   *
+   * O tipo vem daqui e NÃO de `<AbasSegmentadas<AbaPrincipal>>`: o
+   * `lovable-tagger`, que só roda em dev, injeta atributos logo depois do nome
+   * do componente e não entende genérico em JSX — vira
+   * `<AbasSegmentadas data-lov-id="…"<AbaPrincipal>` e o SWC recusa. O
+   * typecheck e o build passam; só o servidor de dev quebra.
+   */
+  const abasDaRegua: AbaSegmentada<AbaPrincipal>[] = abasPrincipais.map(
+    ({ key, label, Icon }) => ({ key, label, Icon }),
+  );
 
   /*
    * O mês do sistema inteiro (`MesProvider`). Era um estado local montado com
@@ -411,10 +424,10 @@ export default function PaginaAnalitico() {
       </div>
 
       {/* Abas internas: Analítico × Colchão × Desafios */}
-      <AbasSegmentadas<AbaPrincipal>
-        abas={abasPrincipais.map(({ key, label, Icon }) => ({ key, label, Icon }))}
+      <AbasSegmentadas
+        abas={abasDaRegua}
         ativa={abaVisivel}
-        onTrocar={setAbaPrincipal}
+        onTrocar={(k: AbaPrincipal) => setAbaPrincipal(k)}
         rotulo="Seção do Analítico"
       />
 

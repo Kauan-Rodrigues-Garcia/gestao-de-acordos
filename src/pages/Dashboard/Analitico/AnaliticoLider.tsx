@@ -86,7 +86,7 @@ import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 import { KpiTile } from '@/components/KpiTile';
-import { AbasSegmentadas } from '@/components/AbasSegmentadas';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { DatePickerField } from '@/components/DatePickerField';
 import { ListaOperadores, type GrupoOperadores } from '@/pages/Analitico/ListaOperadores';
 import {
@@ -137,6 +137,18 @@ type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques' | 'orfaos';
  * genérico e precisa da instanciação explícita.
  */
 type VisaoOperadores = 'lista' | 'mapa';
+
+/*
+ * As duas réguas nascem TIPADAS aqui, e não com genérico no JSX
+ * (`<AbasSegmentadas<T>>`). O `lovable-tagger`, que só roda no servidor de
+ * desenvolvimento, injeta atributos logo depois do nome do componente e não
+ * entende genérico em JSX: o arquivo vira `<AbasSegmentadas data-lov-id="…"<T>`
+ * e o SWC recusa. Typecheck e build de produção passam — só o dev quebra.
+ */
+const ABAS_VISAO: AbaSegmentada<VisaoOperadores>[] = [
+  { key: 'lista', label: 'Lista',       Icon: Users },
+  { key: 'mapa',  label: 'Mapa do mês', Icon: CalendarRange },
+];
 
 interface AnaliticoLiderProps {
   empresaId: string;
@@ -226,6 +238,14 @@ export function AnaliticoLider({
   const abaVisivel = abasInternas.some(a => a.key === abaAtiva)
     ? abaAtiva
     : (abasInternas[0]?.key ?? null);
+
+  /** A régua de cima, já tipada — ver o comentário de `ABAS_VISAO`. */
+  const abasDaRegua: AbaSegmentada<AbaInterna>[] = abasInternas.map(
+    ({ key, label, Icon }) => ({
+      key, label, Icon,
+      badge: key === 'orfaos' ? orfaos.length : undefined,
+    }),
+  );
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -1334,13 +1354,10 @@ export function AnaliticoLider({
 
       {/* Tabs + botão importar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <AbasSegmentadas<AbaInterna>
-          abas={abasInternas.map(({ key, label, Icon }) => ({
-            key, label, Icon,
-            badge: key === 'orfaos' ? orfaos.length : undefined,
-          }))}
+        <AbasSegmentadas
+          abas={abasDaRegua}
           ativa={abaVisivel}
-          onTrocar={setAbaAtiva}
+          onTrocar={(k: AbaInterna) => setAbaAtiva(k)}
           rotulo="Detalhamento do Analítico"
         />
         {temPermissaoImportar && recorte.modo !== 'dia' && (
@@ -1410,13 +1427,10 @@ export function AnaliticoLider({
               `visaoEfetiva`. */}
           {recorte.modo !== 'dia' && (
             <div className="flex items-center justify-end">
-              <AbasSegmentadas<VisaoOperadores>
-                abas={[
-                  { key: 'lista', label: 'Lista',       Icon: Users },
-                  { key: 'mapa',  label: 'Mapa do mês', Icon: CalendarRange },
-                ]}
+              <AbasSegmentadas
+                abas={ABAS_VISAO}
                 ativa={visaoEfetiva}
-                onTrocar={setVisaoOperadores}
+                onTrocar={(k: VisaoOperadores) => setVisaoOperadores(k)}
                 rotulo="Formato da lista"
               />
             </div>

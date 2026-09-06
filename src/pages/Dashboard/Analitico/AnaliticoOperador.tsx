@@ -11,7 +11,7 @@ import { CalendarDays, X, ListChecks, Trophy, TrendingUp, CreditCard } from 'luc
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KpiTile } from '@/components/KpiTile';
-import { AbasSegmentadas } from '@/components/AbasSegmentadas';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { DatePickerField } from '@/components/DatePickerField';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
@@ -150,16 +150,20 @@ export function AnaliticoOperador({
   const totalHO       = dadosFiltrados.reduce((s, d) => s + d.total_ho, 0);
   const tabulados     = dadosFiltrados.filter(d => d.status_tabulacao === 'tabulado').length;
 
+  // Tipado aqui, e não com genérico no JSX: o `lovable-tagger` (só em dev) não
+  // entende `<Componente<T>` e o SWC recusa o arquivo.
+  const abasDoOperador: AbaSegmentada<AbaOperador>[] = [
+    { key: 'meus', label: 'Meus recebimentos', Icon: ListChecks },
+    ...(podeVerRanking ? [{ key: 'ranking' as const, label: 'Ranking', Icon: Trophy }] : []),
+  ];
+
   return (
     <div className="space-y-4">
       {/* Abas internas: Meus recebimentos × Ranking */}
-      <AbasSegmentadas<AbaOperador>
-        abas={[
-          { key: 'meus', label: 'Meus recebimentos', Icon: ListChecks },
-          ...(podeVerRanking ? [{ key: 'ranking' as const, label: 'Ranking', Icon: Trophy }] : []),
-        ]}
+      <AbasSegmentadas
+        abas={abasDoOperador}
         ativa={abaOp}
-        onTrocar={setAbaOp}
+        onTrocar={(k: AbaOperador) => setAbaOp(k)}
         rotulo="Visão do operador"
       />
 

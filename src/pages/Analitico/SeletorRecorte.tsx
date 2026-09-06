@@ -11,7 +11,7 @@
  */
 import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AbasSegmentadas } from '@/components/AbasSegmentadas';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { DatePickerField } from '@/components/DatePickerField';
 import { getTodayISO } from '@/lib/index';
 import {
@@ -33,15 +33,15 @@ export function SeletorRecorte({ recorte, onMudar, podeVerDia }: SeletorRecorteP
   const hoje = getTodayISO();
   const mes  = mesDoRecorte(recorte);
 
-  const modos = ([
-    { key: 'mes' as const,     label: 'Mês',     Icon: Calendar },
+  const modos: AbaSegmentada<ModoRecorte>[] = [
+    { key: 'mes',     label: 'Mês',     Icon: Calendar },
     ...(podeVerDia ? [{ key: 'dia' as const, label: 'Dia', Icon: CalendarDays }] : []),
-    { key: 'periodo' as const, label: 'Período', Icon: CalendarRange },
-  ]);
+    { key: 'periodo', label: 'Período', Icon: CalendarRange },
+  ];
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <AbasSegmentadas<ModoRecorte>
+      <AbasSegmentadas
         abas={modos}
         ativa={recorte.modo}
         rotulo="Recorte de tempo"
