@@ -538,8 +538,22 @@ export function AnaliticoLider({
     }
   }
 
+  /*
+   * O detalhe expandido obedece à lente.
+   *
+   * As linhas vêm sempre do mês (`buscarAnalitico`), porque é lá que moram o
+   * código do cliente, o HO e o estado da tabulação. Mas no recorte Dia a linha
+   * de cima diz "R$ 900 no dia" — abrir e ver o mês inteiro faria a soma da
+   * tabela contradizer o número que acabou de ser clicado.
+   *
+   * O filtro escolhido à mão manda; a lente é só o padrão.
+   */
   function getLinhasOp(opId: string): AnaliticoRecebimento[] {
-    return filtrarLinhasPorData(linhasMap.get(opId) ?? [], filtrosDatas.get(opId));
+    const escolhido = filtrosDatas.get(opId);
+    const filtro = (escolhido?.inicio || escolhido?.fim)
+      ? escolhido
+      : (recorte.modo === 'mes' ? undefined : { inicio: pisoDoRecorte, fim: tetoDoRecorte });
+    return filtrarLinhasPorData(linhasMap.get(opId) ?? [], filtro);
   }
 
   function setFiltroData(opId: string, campo: 'inicio' | 'fim', valor: string) {
