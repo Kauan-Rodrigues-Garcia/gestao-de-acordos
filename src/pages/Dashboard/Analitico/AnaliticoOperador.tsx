@@ -7,10 +7,12 @@
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { CalendarDays, X, ListChecks, Trophy } from 'lucide-react';
+import { CalendarDays, X, ListChecks, Trophy, TrendingUp, CreditCard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { KpiTile } from '@/components/KpiTile';
+import { AbasSegmentadas } from '@/components/AbasSegmentadas';
+import { DatePickerField } from '@/components/DatePickerField';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -23,6 +25,11 @@ import {
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
 import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
+import {
+  intervaloDoRecorte, mesDoRecorte, type Recorte,
+} from '@/pages/Analitico/recorte';
+
+type AbaOperador = 'meus' | 'ranking';
 
 interface AnaliticoOperadorProps {
   dados: AnaliticoRecebimento[];
@@ -30,8 +37,8 @@ interface AnaliticoOperadorProps {
   operadorId: string;
   operadorNome: string;
   empresaId: string;
-  /** Mês exibido ('yyyy-MM') — usado para carregar o ranking */
-  mes: string;
+  /** O recorte da lente. O mês sai dele; o intervalo limita o filtro de data. */
+  recorte: Recorte;
   liderId?: string | null;
   podeVerRanking: boolean;
   onAbrirNovoAcordo: (dados: {
@@ -62,15 +69,17 @@ function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: str
 }
 
 export function AnaliticoOperador({
-  dados, loading, operadorId, operadorNome, empresaId, mes, liderId, podeVerRanking,
+  dados, loading, operadorId, operadorNome, empresaId, recorte, liderId, podeVerRanking,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
+  const mes = mesDoRecorte(recorte);
+  const { inicio: pisoDoRecorte, fim: tetoDoRecorte } = intervaloDoRecorte(recorte);
   const [, setForceRender] = useState(0);
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
-  const [abaOp, setAbaOp] = useState<'meus' | 'ranking'>('meus');
+  const [abaOp, setAbaOp] = useState<AbaOperador>('meus');
 
   // ── Ranking (carregado sob demanda ao abrir a aba / trocar de mês) ──────────
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);
@@ -100,6 +109,29 @@ export function AnaliticoOperador({
     if (podeVerRanking && abaOp === 'ranking') void carregarRanking();
   }, [abaOp, carregarRanking, podeVerRanking]);
 
+  /*
+   * A posição já é sabida por quem tem o ranking liberado. Mostrá-la no topo
+   * custa nada e evita a viagem à outra aba só para responder "onde eu estou?".
+   */
+  useEffect(() => {
+    if (podeVerRanking && ranking.length === 0) void carregarRanking();
+  }, [podeVerRanking, ranking.length, carregarRanking]);
+
+  const minhaPosicao = useMemo(() => {
+    if (!podeVerRanking || ranking.length === 0) return null;
+    const visiveis = ranking
+      .filter(r => !operadoresOcultos.has(r.operador_id))
+      .sort((a, b) => b.total_recebido - a.total_recebido);
+    const i = visiveis.findIndex(r => r.operador_id === operadorId);
+    if (i < 0) return null;
+    return {
+      posicao: i + 1,
+      de:      visiveis.length,
+      // Quanto falta para o degrau de cima. `null` no primeiro lugar.
+      faltam:  i === 0 ? null : visiveis[i - 1].total_recebido - visiveis[i].total_recebido,
+    };
+  }, [podeVerRanking, ranking, operadoresOcultos, operadorId]);
+
   const dadosFiltrados = useMemo(() => {
     if (!filtroInicio && !filtroFim) return dados;
     return dados.filter(d => {
@@ -121,23 +153,15 @@ export function AnaliticoOperador({
   return (
     <div className="space-y-4">
       {/* Abas internas: Meus recebimentos × Ranking */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {([
-          { key: 'meus',    label: 'Meus recebimentos', Icon: ListChecks },
+      <AbasSegmentadas<AbaOperador>
+        abas={[
+          { key: 'meus', label: 'Meus recebimentos', Icon: ListChecks },
           ...(podeVerRanking ? [{ key: 'ranking' as const, label: 'Ranking', Icon: Trophy }] : []),
-        ] as const).map(({ key, label, Icon }) => (
-          <button key={key} onClick={() => setAbaOp(key)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              abaOp === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
-            )}
-          >
-            <Icon className="w-3.5 h-3.5" /> {label}
-          </button>
-        ))}
-      </div>
+        ]}
+        ativa={abaOp}
+        onTrocar={setAbaOp}
+        rotulo="Visão do operador"
+      />
 
       {/* ── Aba: Meus recebimentos ────────────────────────────────────────── */}
       {abaOp === 'meus' && (
@@ -155,59 +179,91 @@ export function AnaliticoOperador({
         ) : (
           <div className="space-y-4">
             {/* Filtro de data */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground font-medium">Período:</span>
-              <input
-                type="date"
-                value={filtroInicio}
-                onChange={e => setFiltroInicio(e.target.value)}
-                className="h-7 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <CalendarDays className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Período:</span>
+              <DatePickerField
+                value={filtroInicio} onChange={setFiltroInicio}
+                placeholder="Data início" triggerClassName="w-32 rounded-lg"
+                minDate={pisoDoRecorte} maxDate={filtroFim || tetoDoRecorte}
               />
               <span className="text-xs text-muted-foreground">até</span>
-              <input
-                type="date"
-                value={filtroFim}
-                onChange={e => setFiltroFim(e.target.value)}
-                className="h-7 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              <DatePickerField
+                value={filtroFim} onChange={setFiltroFim}
+                placeholder="Data fim" triggerClassName="w-32 rounded-lg"
+                minDate={filtroInicio || pisoDoRecorte} maxDate={tetoDoRecorte}
               />
               {(filtroInicio || filtroFim) && (
-                <Button size="sm" variant="ghost" className="h-7 px-2 gap-1 text-xs text-muted-foreground" onClick={limparFiltro}>
-                  <X className="w-3 h-3" /> Limpar
-                </Button>
-              )}
-              {(filtroInicio || filtroFim) && (
-                <span className="text-xs text-muted-foreground ml-1">
-                  ({dadosFiltrados.length} de {dados.length} registros)
-                </span>
+                <>
+                  <Button size="sm" variant="ghost"
+                    className="h-8 gap-1 rounded-lg px-2 text-xs text-muted-foreground"
+                    onClick={limparFiltro}>
+                    <X className="w-3 h-3" /> Limpar
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {dadosFiltrados.length} de {dados.length} registros
+                  </span>
+                </>
               )}
             </div>
 
             {/* Resumo */}
-            <div className={cn('grid gap-3', mostrarHO ? 'grid-cols-3' : 'grid-cols-2')}>
-              <Card className="border-border">
-                <CardContent className="p-3 text-center">
-                  <p className="text-lg font-bold text-primary">{formatBRL(totalRecebido)}</p>
-                  <p className="text-xs text-muted-foreground">Total recebido</p>
-                </CardContent>
-              </Card>
+            <div className={cn('grid gap-3', mostrarHO ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2')}>
+              <KpiTile
+                rotulo={recorte.modo === 'dia' ? 'Recebido no dia' : 'Total recebido'}
+                Icon={TrendingUp} tom="primario"
+                valor={formatBRL(totalRecebido)}
+                valorNumerico={totalRecebido} formatar={formatBRL}
+                sub={recorte.modo === 'dia' ? 'Recebimento vivo' : undefined}
+              />
               {mostrarHO && (
-                <Card className="border-border">
-                  <CardContent className="p-3 text-center">
-                    <p className="text-lg font-bold">{formatBRL(totalHO)}</p>
-                    <p className="text-xs text-muted-foreground">Total HO</p>
-                  </CardContent>
-                </Card>
+                <KpiTile
+                  rotulo="Total HO" Icon={CreditCard} tom="neutro"
+                  valor={formatBRL(totalHO)}
+                  valorNumerico={totalHO} formatar={formatBRL}
+                />
               )}
-              <Card className="border-border">
-                <CardContent className="p-3 text-center">
-                  <p className="text-lg font-bold text-emerald-600">
-                    {tabulados}/{dadosFiltrados.length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Tabulados</p>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border border-success/20 bg-gradient-to-br from-success/[0.06] to-transparent p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Tabulados
+                    </p>
+                    <p className="mt-1 font-mono text-lg font-bold leading-tight text-success">
+                      {tabulados}<span className="text-muted-foreground">/{dadosFiltrados.length}</span>
+                    </p>
+                  </div>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/12 text-success ring-1 ring-success/20">
+                    <ListChecks className="h-4 w-4" />
+                  </div>
+                </div>
+                {/* A fração exige conta de cabeça; a barra, não. */}
+                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success transition-[width]"
+                    style={{
+                      width: dadosFiltrados.length
+                        ? `${((tabulados / dadosFiltrados.length) * 100).toFixed(0)}%`
+                        : '0%',
+                    }} />
+                </div>
+              </div>
             </div>
+
+            {minhaPosicao && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-gradient-to-br from-muted/40 to-transparent px-3 py-2">
+                <Trophy className="w-4 h-4 shrink-0 text-warning" />
+                <span className="text-xs text-muted-foreground">Sua posição no mês:</span>
+                <strong className="font-mono text-sm text-foreground">{minhaPosicao.posicao}º</strong>
+                <span className="text-xs text-muted-foreground">de {minhaPosicao.de}</span>
+                {minhaPosicao.faltam !== null && (
+                  <span className="text-xs text-muted-foreground">
+                    · faltam{' '}
+                    <strong className="font-mono text-foreground">{formatBRL(minhaPosicao.faltam)}</strong>{' '}
+                    para o {minhaPosicao.posicao - 1}º
+                  </span>
+                )}
+              </div>
+            )}
 
             {dadosFiltrados.length === 0 && (filtroInicio || filtroFim) && (
               <div className="text-center py-8 text-muted-foreground">
@@ -217,12 +273,11 @@ export function AnaliticoOperador({
 
             {/* Tabela */}
             {dadosFiltrados.length > 0 && (
-              <Card className="border-border">
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/30">
+              <div className="overflow-hidden rounded-xl border border-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="sticky top-0 z-10 border-b border-border bg-muted/60 backdrop-blur">
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CÓDIGO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">FORMA</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">RECEBIDO</th>
@@ -325,11 +380,10 @@ export function AnaliticoOperador({
                             </tr>
                           ));
                         })}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
         )
