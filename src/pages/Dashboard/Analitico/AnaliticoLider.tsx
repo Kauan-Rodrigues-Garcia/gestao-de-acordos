@@ -89,9 +89,27 @@ import { KpiTile } from '@/components/KpiTile';
 import { AbasSegmentadas } from '@/components/AbasSegmentadas';
 import { DatePickerField } from '@/components/DatePickerField';
 import { ListaOperadores, type GrupoOperadores } from '@/pages/Analitico/ListaOperadores';
-import { deResumoAnalitico, type LinhaOperadorPainel } from '@/pages/Analitico/linhaOperador';
+import {
+  deResumoAnalitico, deResumoDiario, type LinhaOperadorPainel,
+} from '@/pages/Analitico/linhaOperador';
 import { intervaloDoRecorte, mesDoRecorte, type Recorte } from '@/pages/Analitico/recorte';
 import { useAnaliticoDashboard } from '@/hooks/useAnaliticoDashboard';
+// ── O recorte Dia: tudo abaixo vem do diário, não do analítico ──────────────
+import { useDiario } from '@/hooks/useDiario';
+import { useDiarioImport } from '@/hooks/useDiarioImport';
+import {
+  escopoDoDiario, linhasVisiveis, contarSetores,
+  type EscopoDiario, type VinculosDiario,
+} from '@/services/diario/escopoDiario';
+import {
+  linhasVivas, agregarPorOperador, consolidarIgnorados, fmtDataISO,
+} from '@/pages/Analitico/Diario/helpers';
+import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
+import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
+import { limparDadosDoDia } from '@/services/diario/diario.service';
+import {
+  mensalJaImportadoHoje, limparMarcaMensal,
+} from '@/services/diario/diarioMensalGuard';
 
 const ORFAOS_PAGE = 100;
 const DIAS_PT     = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -149,6 +167,23 @@ export function AnaliticoLider({
 
   const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<AbaInterna>('operadores');
+
+  /*
+   * O que era da aba Recebimento diário e passou a viver aqui.
+   *
+   * Importar e limpar o DIA são ações do diário, e continuam atrás da chave
+   * `importar_diario` — a mesma de antes. `temPermissaoImportar` (a prop) é
+   * `importar_analitico` e responde pelo MÊS; ler uma como se fosse a outra
+   * daria a alguém um poder que ninguém lhe deu.
+   */
+  const podeImportarDiario = temPermissao('importar_diario');
+  const importDiarioHook = useDiarioImport();
+  const [modalImportarDiario,   setModalImportarDiario]   = useState(false);
+  const [confirmandoLimpezaDia, setConfirmandoLimpezaDia] = useState(false);
+  const [limpandoDia,           setLimpandoDia]           = useState(false);
+  // PP: o primeiro relatório do dia deve ser o MENSAL — aviso até o mensal de
+  // hoje entrar; limpar o dia derruba a marca e ele volta.
+  const [mensalOkHoje, setMensalOkHoje] = useState(() => mensalJaImportadoHoje(empresaId));
 
   /*
    * As cinco abas de dentro, cada uma com a própria chave — desligar uma não
@@ -229,6 +264,17 @@ export function AnaliticoLider({
     useState<{ perfilId: string; nome: string; equipeNome: string } | null>(null);
   const [tirandoFantasma, setTirandoFantasma] = useState(false);
   const [equipesExtras,     setEquipesExtras]     = useState<Record<string, string[]>>({});
+  /*
+   * A composição já chegou?
+   *
+   * Não é detalhe de carregamento: o escopo do DIA é calculado a partir dela, e
+   * `contarSetores` de um mapa vazio devolve 0 — o que faz `escopoDoDiario`
+   * responder "tudo" (a regra de empresa com um setor só). Sem esta trava, o
+   * líder do Play 4 veria o dia da empresa inteira durante o instante entre
+   * abrir a tela e a composição chegar. É a mesma guarda que o `DiarioLider`
+   * faz com `vinculos === null`.
+   */
+  const [composicaoCarregada, setComposicaoCarregada] = useState(false);
   const [filtroEquipeId,    setFiltroEquipeId]    = useState<string | null>(null);
   // Item 5: ids que somem do ranking/quartil (férias/desligado). Só exibição —
   // o recebimento deles continua nos totais de setor/equipe.
@@ -377,6 +423,7 @@ export function AnaliticoLider({
   useEffect(() => {
     // Passa o mês: fechado usa o retrato congelado da composição, senão mover
     // alguém de equipe hoje reescreveria a lista do mês passado (20260803c).
+    setComposicaoCarregada(false);
     buscarEquipesComOperadores(empresaId, mes).then(
       ({ equipes: eq, operadorEquipeMap: oem, equipesExtrasPorOperador, situacaoPorOperador,
          transferidos }) => {
@@ -389,6 +436,7 @@ export function AnaliticoLider({
         // Situação daquele mês — férias/desligamento de hoje não apagam alguém
         // do ranking de um mês que ele trabalhou inteiro.
         setOperadoresOcultos(idsOcultosRankingQuartil(situacaoPorOperador as Record<string, SituacaoUsuario>));
+        setComposicaoCarregada(true);
       });
     // Setores alternativos (coluna pode não existir → todos normais). O nome vem
     // junto porque o aviso de "Limpar mês" precisa DIZER qual setor vai embora.
@@ -705,6 +753,154 @@ export function AnaliticoLider({
    */
   const { linhas: linhasDashboard } = useAnaliticoDashboard(abaVisivel === 'operadores', mes);
 
+  // ── O recorte Dia ─────────────────────────────────────────────────────────
+  /*
+   * O recorte Dia lê do diário, não do analítico — é o único que sabe o que
+   * entrou na última importação e o que foi ignorado. A regra da tela é curta:
+   * o analítico responde pelo mês, o diário responde pelo dia.
+   */
+  const diaEmFoco = recorte.modo === 'dia' ? recorte.dia : null;
+  const {
+    dados: linhasDoDia, loading: carregandoDia, refetch: recarregarDia,
+  } = useDiario({ dia: diaEmFoco });
+
+  // A marca do mensal é por dia e por empresa; revalida na virada de um ou de outro.
+  useEffect(() => {
+    setMensalOkHoje(mensalJaImportadoHoje(empresaId));
+  }, [empresaId, hojeISO]);
+
+  /*
+   * O escopo do diário tem a própria régua (`escopoDoDiario`), diferente da do
+   * analítico (`filtrarResumos`). Ela NÃO é fundida aqui: cada fonte continua
+   * decidindo quem enxerga o quê pelo módulo testado dela. O que muda é o
+   * número de telas que chamam — de duas para uma.
+   */
+  const vinculosDiario: VinculosDiario = useMemo(() => ({
+    equipes,
+    operadorEquipeMap,
+    equipesExtrasPorOperador: equipesExtras,
+  }), [equipes, operadorEquipeMap, equipesExtras]);
+
+  /*
+   * O escopo de PERMISSÃO — o que a pessoa pode ver, e não é escolha dela.
+   *
+   * `podeVerTodosSetores` é o mesmo valor que o `DiarioLider` lia como
+   * `escopoEfetivo('analitico', …) === 'todos_setores'`, e `setorId`, para quem
+   * NÃO enxerga todos, é o próprio setor do perfil — a página o trava assim. Nos
+   * dois casos o resultado é o mesmo da tela que este bloco substitui.
+   */
+  const escopoDiaPermissao = useMemo<EscopoDiario | null>(
+    () => (diaEmFoco && composicaoCarregada ? escopoDoDiario({
+      veTodosOsSetores: podeVerTodosSetores,
+      setorDoUsuario:   setorId ?? null,
+      totalDeSetores:   contarSetores(vinculosDiario),
+    }) : null),
+    [diaEmFoco, composicaoCarregada, setorId, podeVerTodosSetores, vinculosDiario],
+  );
+
+  /*
+   * O setor ESCOLHIDO no filtro do topo — só existe para quem enxerga todos.
+   * Para os demais, `setorId` é a permissão, e ela já entrou acima; contá-la
+   * duas vezes escaparia da regra de "empresa com um setor só vê tudo" e
+   * poderia zerar a tela de quem tem o perfil sem setor.
+   */
+  const filtroSetorDia = podeVerTodosSetores ? (setorId ?? null) : null;
+
+  /*
+   * O filtro entra TRANSFORMANDO o escopo, nunca como uma segunda peneira: é
+   * impossível um recorte de tela ampliar o que a permissão restringiu. Mesma
+   * construção do `DiarioLider`.
+   */
+  const escopoDia = useMemo<EscopoDiario | null>(
+    () => (escopoDiaPermissao?.tipo === 'tudo' && filtroSetorDia
+      ? { tipo: 'setor', setorId: filtroSetorDia }
+      : escopoDiaPermissao),
+    [escopoDiaPermissao, filtroSetorDia],
+  );
+
+  /** Há um setor em foco no dia? Quem enxerga um setor só não limpa os outros. */
+  const setorEscopoDia = escopoDia?.tipo === 'setor' ? escopoDia.setorId : null;
+
+  const pulsoDoDia = useMemo(() => {
+    if (!diaEmFoco || !escopoDia) return null;
+    const visiveis = linhasVisiveis(linhasDoDia, escopoDia, vinculosDiario);
+    // Dia sem nada no escopo não tem pulso. Sem isto a faixa apareceria dizendo
+    // "importação nº 1" para um dia em que ninguém importou coisa alguma.
+    if (visiveis.length === 0) return null;
+    const vivas    = linhasVivas(visiveis, diaEmFoco);
+    const maxIdx   = visiveis.reduce((m, r) => Math.max(m, r.import_index), 1);
+    const ignor    = consolidarIgnorados(visiveis, diaEmFoco);
+    const resumos  = agregarPorOperador(vivas, maxIdx);
+    const valorIgnorado = ignor.reduce((s, i) => s + i.valor, 0);
+    return {
+      resumos,
+      importacao:    maxIdx,
+      novos:         resumos.reduce((s, r) => s + r.novos, 0),
+      valorIgnorado,
+      qtdIgnorados:  ignor.length,
+      // Comparação por INSTANTE, não por string: a ordem lexicográfica só
+      // coincide com a cronológica enquanto o PostgREST devolver todas as
+      // linhas com o mesmo offset e a mesma largura. Não é contrato.
+      importadoEm: visiveis.reduce<string | null>(
+        (m, r) => (!m || Date.parse(r.importado_em) > Date.parse(m) ? r.importado_em : m),
+        null,
+      ),
+      // O ignorado SOMA no total do dia e sai das listas — regra herdada do
+      // diário, e o motivo de a faixa de pulso dizer o valor em voz alta.
+      total: vivas.reduce((s, r) => s + r.valor_recebido, 0) + valorIgnorado,
+      pagamentos: vivas.length,
+    };
+  }, [diaEmFoco, linhasDoDia, escopoDia, vinculosDiario]);
+
+  /*
+   * O esqueleto da lista.
+   *
+   * No dia, esperar também a composição: enquanto ela não chega o escopo não
+   * existe, a lista sai vazia e "Nenhum dado para este recorte" apareceria
+   * durante a carga de todo dia que tem dados.
+   */
+  const carregandoLista = recorte.modo === 'dia'
+    ? (carregandoDia || !composicaoCarregada)
+    : loadingResumos;
+
+  /*
+   * Os tiles do topo trocam de fonte com a lente.
+   *
+   * HO só existe no relatório mensal da PaguePlay — o diário não tem a coluna,
+   * e um tile zerado seria lido como "não houve HO".
+   */
+  const mostrarTileHO   = mostrarHO && recorte.modo !== 'dia';
+  const carregandoTiles = recorte.modo === 'dia' ? carregandoLista : loadingSnapshot;
+  const temTiles        = recorte.modo === 'dia' ? !!pulsoDoDia : !!metricas;
+
+  /** Limpar o dia apaga o dia INTEIRO da empresa — não há versão por setor. */
+  async function limparDia() {
+    if (!diaEmFoco) return;
+    setLimpandoDia(true);
+    const { error } = await limparDadosDoDia(empresaId, diaEmFoco);
+    if (error) {
+      toast.error(`Erro ao limpar: ${error}`);
+    } else {
+      // Derruba a marca do mensal: a próxima importação exige o mês inteiro
+      limparMarcaMensal(empresaId);
+      setMensalOkHoje(false);
+      toast.success(
+        `Dados de ${fmtDataISO(diaEmFoco)} excluídos. `
+        + 'A próxima importação deve ser o relatório MENSAL, para realinhar os valores.',
+      );
+      setConfirmandoLimpezaDia(false);
+      void recarregarDia();
+    }
+    setLimpandoDia(false);
+  }
+
+  function handlePosImportDiario() {
+    setModalImportarDiario(false);
+    // Reflete a marca gravada pelo useDiarioImport (mensal importado hoje)
+    setMensalOkHoje(mensalJaImportadoHoje(empresaId));
+    if (importDiarioHook.estado === 'done') void recarregarDia();
+  }
+
   /*
    * Os grupos que a lista desenha, já no contrato único.
    *
@@ -718,6 +914,22 @@ export function AnaliticoLider({
    */
   const gruposDoPainel = useMemo<GrupoOperadores[]>(() => {
     const equipeDe = (id: string) => operadorEquipeMap[id];
+
+    if (recorte.modo === 'dia') {
+      if (!pulsoDoDia) return [];
+      const linhas = deResumoDiario(pulsoDoDia.resumos, equipeDe);
+      // Mesmo agrupamento por equipe do mês, aplicado às linhas do dia.
+      const porEquipe = new Map<string, GrupoOperadores>();
+      for (const l of linhas) {
+        const chave = l.equipeId ?? '__sem__';
+        let g = porEquipe.get(chave);
+        if (!g) { g = { equipeId: l.equipeId, equipeNome: l.equipeNome, itens: [] }; porEquipe.set(chave, g); }
+        g.itens.push(l);
+      }
+      for (const g of porEquipe.values()) g.itens.sort((a, b) => b.valor - a.valor);
+      return [...porEquipe.values()];
+    }
+
     return resumosPorEquipe.map(g => ({
       equipeId:   g.equipeId,
       equipeNome: g.equipeNome,
@@ -726,7 +938,7 @@ export function AnaliticoLider({
           ...it, equipeId: g.equipeId, equipeNome: g.equipeNome,
         })),
     }));
-  }, [resumosPorEquipe, linhasDashboard, operadorEquipeMap]);
+  }, [recorte.modo, pulsoDoDia, resumosPorEquipe, linhasDashboard, operadorEquipeMap]);
 
   /** O conteúdo de dentro do operador aberto: filtro de data e a lista. */
   function detalheDoOperador(l: LinhaOperadorPainel) {
@@ -925,38 +1137,79 @@ export function AnaliticoLider({
   return (
     <div className="space-y-4">
 
-      {/* ── Cards de resumo mensal ─────────────────────────────────────────── */}
-      <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', mostrarHO ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
-        {loadingSnapshot ? (
-          Array.from({ length: mostrarHO ? 5 : 4 }).map((_, i) => (
+      {/* Aviso diário (PP): o primeiro relatório do dia deve ser o MENSAL */}
+      {isPP && recorte.modo === 'dia' && !mensalOkHoje && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-amber-700 dark:text-amber-400">
+              Primeiro relatório do dia: importe o MENSAL (mês inteiro)
+            </p>
+            <p className="text-muted-foreground mt-0.5">
+              O primeiro relatório importado hoje deve conter o mês inteiro — ele
+              realinha os dias anteriores e evita que algum valor quebrado passe
+              despercebido. Relatórios de apenas 1 dia ficam bloqueados até o
+              mensal de hoje ser importado. Limpar o dia volta a exigir o mensal.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cards de resumo do recorte ─────────────────────────────────────── */}
+      <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', mostrarTileHO ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
+        {carregandoTiles ? (
+          Array.from({ length: mostrarTileHO ? 5 : 4 }).map((_, i) => (
             <div key={i} className="h-[88px] animate-pulse rounded-xl bg-muted" />
           ))
-        ) : metricas ? (
+        ) : temTiles ? (
           <>
-            <KpiTile rotulo="Total recebido" Icon={TrendingUp} tom="primario"
-              valor={formatBRL(metricas.totalRecebido)}
-              valorNumerico={metricas.totalRecebido} formatar={formatBRL} />
-            {mostrarHO && (
+            <KpiTile
+              rotulo={recorte.modo === 'dia' ? 'Total do dia' : 'Total recebido'}
+              Icon={TrendingUp} tom="primario"
+              valor={formatBRL(recorte.modo === 'dia' ? (pulsoDoDia?.total ?? 0) : metricas.totalRecebido)}
+              valorNumerico={recorte.modo === 'dia' ? (pulsoDoDia?.total ?? 0) : metricas.totalRecebido}
+              formatar={formatBRL}
+              sub={recorte.modo === 'dia'
+                ? 'Recebimento vivo'
+                : `Relatório mensal · ${metricas.periodoFim
+                    ? new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')
+                    : '—'}`}
+            />
+            {/* O diário não tem a coluna de HO: no dia o tile some, em vez de
+                dizer R$ 0,00 e passar por "não houve HO". */}
+            {mostrarTileHO && (
               <KpiTile rotulo="Total HO" Icon={CreditCard} tom="neutro"
                 valor={formatBRL(metricas.totalHo)}
                 valorNumerico={metricas.totalHo} formatar={formatBRL} />
             )}
             <KpiTile rotulo="Operadores" Icon={Users} tom="neutro"
-              valor={metricas.totalOperadores} />
-            <KpiTile rotulo="Acordos pagos" Icon={BarChart3} tom="neutro"
-              valor={metricas.totalPagamentos.toLocaleString('pt-BR')} />
-            <KpiTile rotulo="Período" Icon={Calendar} tom="neutro"
+              valor={recorte.modo === 'dia'
+                ? (pulsoDoDia?.resumos.length ?? 0)
+                : metricas.totalOperadores} />
+            <KpiTile
+              rotulo={recorte.modo === 'dia' ? 'Pagamentos' : 'Acordos pagos'}
+              Icon={BarChart3} tom="neutro"
+              valor={(recorte.modo === 'dia'
+                ? (pulsoDoDia?.pagamentos ?? 0)
+                : metricas.totalPagamentos).toLocaleString('pt-BR')} />
+            <KpiTile
+              rotulo={recorte.modo === 'dia' ? 'Dia' : 'Período'}
+              Icon={Calendar} tom="neutro"
               valor={
-                metricas.periodoInicio && metricas.periodoFim
-                  ? `${new Date(metricas.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')}`
-                    + ` – ${new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}`
-                  : '—'
+                recorte.modo === 'dia'
+                  ? new Date(recorte.dia + 'T12:00:00').toLocaleDateString('pt-BR')
+                  : metricas.periodoInicio && metricas.periodoFim
+                    ? `${new Date(metricas.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')}`
+                      + ` – ${new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}`
+                    : '—'
               }
               className="[&_p:nth-child(2)]:text-sm" />
           </>
         ) : (
           <div className="col-span-full py-4 text-center text-xs text-muted-foreground">
-            Nenhum dado importado para este mês.
+            {recorte.modo === 'dia'
+              ? 'Nenhum relatório importado para este dia.'
+              : 'Nenhum dado importado para este mês.'}
           </div>
         )}
       </div>
@@ -985,7 +1238,7 @@ export function AnaliticoLider({
           onTrocar={setAbaAtiva}
           rotulo="Detalhamento do Analítico"
         />
-        {temPermissaoImportar && (
+        {temPermissaoImportar && recorte.modo !== 'dia' && (
           <div className="flex items-center gap-2">
             <Button
               size="sm" variant="outline"
@@ -997,6 +1250,29 @@ export function AnaliticoLider({
             <Button size="sm" className="gap-1.5 rounded-lg" onClick={() => setModalImportar(true)}>
               <Upload className="w-4 h-4" /> Importar relatório
             </Button>
+          </div>
+        )}
+        {/* Limpar e importar mexem no dia INTEIRO da empresa — não existe
+            versão "só do meu setor". Quem enxerga um setor só não pode apagar
+            o recebimento dos outros, ainda que tenha a permissão de importar. */}
+        {podeImportarDiario && recorte.modo === 'dia' && !setorEscopoDia && (
+          <div className="flex items-center gap-2">
+            {pulsoDoDia && (
+              <Button size="sm" variant="outline"
+                className="gap-1.5 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setConfirmandoLimpezaDia(true)}>
+                <Trash2 className="h-4 w-4" /> Limpar dia
+              </Button>
+            )}
+            {/* Na BookPlay a importação é feita pelo relatório mensal (mesmo
+                arquivo atualiza os dois); por isso não há botão de importar o
+                dia lá. */}
+            {isPP && (
+              <Button size="sm" className="gap-1.5 rounded-lg"
+                onClick={() => setModalImportarDiario(true)}>
+                <Upload className="h-4 w-4" /> Importar relatório
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -1012,19 +1288,31 @@ export function AnaliticoLider({
       {/* ── Aba: Por operador ─────────────────────────────────────────────── */}
       {abaVisivel === 'operadores' && (
         <div className="space-y-5">
-          {loadingResumos && (
+          {/* O pulso do dia: o que entrou na última importação e o que ficou de
+              fora das listas. É a razão de a aba Recebimento diário ter
+              existido — a aba morreu, a faixa não. */}
+          {recorte.modo === 'dia' && pulsoDoDia && (
+            <FaixaPulso
+              importacao={pulsoDoDia.importacao}
+              novos={pulsoDoDia.novos}
+              valorIgnorado={pulsoDoDia.valorIgnorado}
+              qtdIgnorados={pulsoDoDia.qtdIgnorados}
+              importadoEm={pulsoDoDia.importadoEm}
+            />
+          )}
+          {carregandoLista && (
             <div className="animate-pulse space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-16 rounded-xl bg-muted" />
               ))}
             </div>
           )}
-          {!loadingResumos && gruposDoPainel.length === 0 && (
+          {!carregandoLista && gruposDoPainel.length === 0 && (
             <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
               Nenhum dado para este recorte.
             </div>
           )}
-          {!loadingResumos && gruposDoPainel.length > 0 && (
+          {!carregandoLista && gruposDoPainel.length > 0 && (
             <ListaOperadores
               grupos={gruposDoPainel}
               mostrarHO={mostrarHO}
@@ -1416,7 +1704,45 @@ export function AnaliticoLider({
         onConfirmar={() => void tirarDaEquipe()}
       />
 
+      {/* Confirmação de limpeza do dia — trazida da aba Recebimento diário sem
+          mudança de regra: apaga o dia inteiro de `diario_recebimentos`. */}
+      <AlertDialog open={confirmandoLimpezaDia} onOpenChange={setConfirmandoLimpezaDia}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" /> Limpar dados do dia
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <p>
+                Todos os pagamentos importados de{' '}
+                <strong>{diaEmFoco ? fmtDataISO(diaEmFoco) : '—'}</strong>{' '}
+                serão excluídos permanentemente.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Esta ação não pode ser desfeita. Após a exclusão, reimporte o relatório para restaurar os dados.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={limpandoDia}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void limparDia()}
+              disabled={limpandoDia}
+              className="bg-destructive hover:bg-destructive/90 text-white gap-1.5"
+            >
+              {limpandoDia && <Loader2 className="w-4 h-4 animate-spin" />}
+              {limpandoDia ? 'Excluindo…' : 'Confirmar exclusão'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <ImportarModal aberto={modalImportar} onFechar={handlePosImport} hook={importHook} />
+      <ImportarDiarioModal
+        aberto={modalImportarDiario}
+        onFechar={handlePosImportDiario}
+        hook={importDiarioHook}
+      />
     </div>
   );
 }
