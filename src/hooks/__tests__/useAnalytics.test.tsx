@@ -345,29 +345,14 @@ beforeEach(() => {
   defaultResult = { data: null, error: null };
 
   /*
-   * O CACHE INSTANTÂNEO, que era o que fazia esta suíte piscar.
+   * O cache instantâneo, que era o que fazia esta suíte piscar: este arquivo
+   * monta a MESMA chave em casos vizinhos, e o caso seguinte lia o pacote do
+   * anterior com `loading` já falso. O diagnóstico inteiro está em
+   * `src/test/setup.ts`, que hoje limpa o cache depois de CADA teste do
+   * repositório.
    *
-   * `useAnalytics` grava um instantâneo do pacote ao fim de cada carga bem
-   * sucedida e, na montagem seguinte, se `lerInstantaneo` acerta, ele preenche
-   * TUDO com o valor cacheado e chama `setLoading(false)` na hora — só depois
-   * relendo em segundo plano.
-   *
-   * A chave é montada de empresa, perfil, mês, filtros e permissões. Em casos
-   * vizinhos que usam `makePerfilOperador()` e `makeEmpresa()` com a data
-   * fixada, ela é a MESMA — então o teste seguinte montava com os dados do
-   * anterior já na mão e com `loading` já falso.
-   *
-   * O `waitFor(loading === false)` então voltava IMEDIATAMENTE, e a asserção
-   * corria contra a releitura: máquina livre, a releitura chegava primeiro e o
-   * teste passava; máquina disputada pelos outros 273 arquivos, a asserção
-   * chegava primeiro e lia o valor do teste anterior. Daí `valorHOAgendado`
-   * ter medido 124,8 (= 500 × 0,2496, o acordo do caso de cima) em vez de
-   * 99,84, e daí a falha mudar de linha a cada execução.
-   *
-   * A memória é de módulo e o disco é o `localStorage` do ambiente — nenhum
-   * dos dois é tocado por `clearAllMocks`. `__resetCacheParaTestes` existe
-   * para isto, e o comentário dela já avisava: «o registro é de módulo e
-   * vazaria de um caso para o outro».
+   * A chamada fica aqui de propósito: é o arquivo onde a armadilha mordeu, e
+   * ela não deve depender de alguém lembrar do que o setup global faz.
    */
   __resetCacheParaTestes();
 

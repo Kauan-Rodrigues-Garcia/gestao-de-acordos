@@ -12,6 +12,7 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { __resetCacheParaTestes } from '@/lib/cacheInstantaneo';
 
 // ── tesseract.js: stub global ────────────────────────────────────────────────
 // Exceção consciente à regra acima. O OCR já é carregado por `import()`
@@ -35,8 +36,27 @@ vi.mock('tesseract.js', () => ({
 }));
 
 // Limpeza automática do DOM entre testes (evita vazamento de renderizações).
+//
+// E o mesmo para o CACHE INSTANTÂNEO, pelo mesmo motivo: ele é um `Map` de
+// módulo mais o `localStorage`, e nenhum dos dois é tocado por
+// `vi.clearAllMocks()` nem pelo `cleanup()` do DOM.
+//
+// Sem isto ele vaza de um caso para o outro, e o vazamento é silencioso e
+// intermitente: hooks como `useAnalytics` leem o instantâneo na montagem,
+// preenchem tudo com o valor cacheado e chamam `setLoading(false)` NA HORA.
+// Um `waitFor(loading === false)` volta no ato, com o dado do caso anterior, e
+// a asserção corre contra a releitura em segundo plano — passa na máquina
+// livre, falha quando os 274 arquivos disputam a CPU. Foi assim que
+// `valorHOAgendado` mediu 124,8 (o acordo do caso de cima) em vez de 99,84, e
+// foi por isso que a falha mudava de linha a cada execução.
+//
+// Aqui e não em cada arquivo porque a armadilha não é de nenhum teste em
+// particular: é de qualquer um que monte um hook que use o cache, e hoje já
+// são seis módulos. Os arquivos que semeiam cache de propósito não são
+// afetados — todos semeiam DENTRO do caso, depois deste `afterEach`.
 afterEach(() => {
   cleanup();
+  __resetCacheParaTestes();
 });
 
 // Polyfill de window.matchMedia — alguns componentes do Radix/Tailwind consultam
