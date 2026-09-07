@@ -88,6 +88,59 @@ vi.mock('@/services/analitico/analitico.service', () => ({
   mapaSetorDaEquipe:         () => new Map(),
 }));
 
+/*
+ * O CLIENTE, e não só os serviços.
+ *
+ * A tela usa `supabase` direto: `AnaliticoLider.tsx:487` faz
+ * `await supabase.from('setores').select(...)` dentro do `useEffect` de
+ * montagem, para descobrir os setores alternativos. Mockar os hooks e o
+ * `analitico.service` não alcança essa chamada.
+ *
+ * Sem este mock o teste saía para a rede de verdade, na URL de fachada do
+ * `vitest.config.ts` (`http://localhost:54321`). No Windows a tentativa vai a
+ * `::1` e a `127.0.0.1` antes de recusar, e o dump do `ECONNREFUSED` aparecia
+ * na saída da suíte. O teste não espera pela resposta, mas o processo carrega
+ * a pendência — e sob a carga da suíte cheia era este arquivo que estourava os
+ * 5s, de forma intermitente: verde sozinho, vermelho junto com os outros 273.
+ *
+ * `importarOriginal` aqui é seguro (ao contrário do que vale para o serviço):
+ * `lib/supabase.ts` só CONSTRÓI o cliente no topo, não conecta. Preservar os
+ * outros exports evita quebrar quem importa `createIsolatedAuthClient`.
+ */
+vi.mock('@/lib/supabase', async (importarOriginal) => {
+  const original = await importarOriginal<typeof import('@/lib/supabase')>();
+
+  const construtor = () => {
+    const b: Record<string, unknown> = {};
+    const encadeia = () => b;
+    for (const metodo of [
+      'select', 'insert', 'update', 'delete', 'eq', 'neq', 'in',
+      'gte', 'lte', 'is', 'or', 'order', 'limit', 'range',
+    ]) b[metodo] = encadeia;
+
+    const vazio = { data: [], error: null };
+    b.maybeSingle = () => Promise.resolve({ data: null, error: null });
+    b.single      = () => Promise.resolve({ data: null, error: null });
+    b.then = (ok: (v: unknown) => unknown) => Promise.resolve(vazio).then(ok);
+    return b;
+  };
+
+  const canal: Record<string, unknown> = {};
+  canal.on        = () => canal;
+  canal.subscribe = () => canal;
+  canal.unsubscribe = () => Promise.resolve('ok');
+
+  return {
+    ...original,
+    supabase: {
+      from:          construtor,
+      rpc:           () => Promise.resolve({ data: null, error: null }),
+      channel:       () => canal,
+      removeChannel: () => Promise.resolve('ok'),
+    },
+  };
+});
+
 describe('AnaliticoLider monta', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
@@ -110,19 +163,34 @@ describe('AnaliticoLider monta', () => {
     { modo: 'periodo', mes: '2026-09', inicio: '2026-09-01', fim: '2026-09-10' },
   ];
 
+  /*
+   * 20s em vez dos 5s padrão.
+   *
+   * Não é para esconder lentidão: é o custo real do que este arquivo faz.
+   * Cada caso importa `AnaliticoLider` (1.926 linhas, seis hooks, duas fontes
+   * de dados) e RENDERIZA a árvore inteira — sozinho já leva ~3,5s dos 5, e
+   * quando os 273 outros arquivos disputam a CPU o primeiro caso passava do
+   * teto. Era daí que vinha o vermelho intermitente da suíte.
+   *
+   * O teto continua existindo e continua baixo o bastante para pegar laço
+   * infinito ou promessa que nunca resolve, que é o que um timeout deve pegar.
+   */
+  const TEMPO = 20_000;
+
   it.each(recortes.map(r => [r.modo, r] as const))(
     'monta sem lançar no recorte %s',
     async (_modo, recorte) => {
       const { AnaliticoLider } = await import('./AnaliticoLider');
       expect(() => render(<AnaliticoLider {...props} recorte={recorte} />)).not.toThrow();
     },
+    TEMPO,
   );
 
   it('desenha a régua de abas com "Por operador"', async () => {
     const { AnaliticoLider } = await import('./AnaliticoLider');
     render(<AnaliticoLider {...props} recorte={{ modo: 'mes', mes: '2026-09' }} />);
     expect(screen.getByRole('button', { name: /Por operador/ })).toBeInTheDocument();
-  });
+  }, TEMPO);
 
   it('monta para quem enxerga um setor só — o caminho do escopo', async () => {
     const { AnaliticoLider } = await import('./AnaliticoLider');
@@ -131,5 +199,5 @@ describe('AnaliticoLider monta', () => {
         setorId="setor-1" podeVerTodosSetores={false}
         recorte={{ modo: 'dia', dia: '2026-09-05' }} />,
     )).not.toThrow();
-  });
+  }, TEMPO);
 });

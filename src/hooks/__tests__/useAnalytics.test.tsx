@@ -169,6 +169,7 @@ vi.mock('@/services/analitico/analitico.service', async (importarReal) => {
 // ── 3. Import do SUT (depois dos mocks) ───────────────────────────────────────
 
 import { useAnalytics } from '../useAnalytics';
+import { __resetCacheParaTestes } from '@/lib/cacheInstantaneo';
 import { NIVEIS_ESCOPO, type NivelEscopo } from '@/lib/permissoes-escopo';
 
 /*
@@ -342,6 +343,33 @@ beforeEach(() => {
   // Limpar filas entre testes
   Object.keys(resultsByTable).forEach(k => { delete resultsByTable[k]; });
   defaultResult = { data: null, error: null };
+
+  /*
+   * O CACHE INSTANTÂNEO, que era o que fazia esta suíte piscar.
+   *
+   * `useAnalytics` grava um instantâneo do pacote ao fim de cada carga bem
+   * sucedida e, na montagem seguinte, se `lerInstantaneo` acerta, ele preenche
+   * TUDO com o valor cacheado e chama `setLoading(false)` na hora — só depois
+   * relendo em segundo plano.
+   *
+   * A chave é montada de empresa, perfil, mês, filtros e permissões. Em casos
+   * vizinhos que usam `makePerfilOperador()` e `makeEmpresa()` com a data
+   * fixada, ela é a MESMA — então o teste seguinte montava com os dados do
+   * anterior já na mão e com `loading` já falso.
+   *
+   * O `waitFor(loading === false)` então voltava IMEDIATAMENTE, e a asserção
+   * corria contra a releitura: máquina livre, a releitura chegava primeiro e o
+   * teste passava; máquina disputada pelos outros 273 arquivos, a asserção
+   * chegava primeiro e lia o valor do teste anterior. Daí `valorHOAgendado`
+   * ter medido 124,8 (= 500 × 0,2496, o acordo do caso de cima) em vez de
+   * 99,84, e daí a falha mudar de linha a cada execução.
+   *
+   * A memória é de módulo e o disco é o `localStorage` do ambiente — nenhum
+   * dos dois é tocado por `clearAllMocks`. `__resetCacheParaTestes` existe
+   * para isto, e o comentário dela já avisava: «o registro é de módulo e
+   * vazaria de um caso para o outro».
+   */
+  __resetCacheParaTestes();
 
   vi.clearAllMocks();
 
@@ -1032,10 +1060,16 @@ describe('useAnalytics', () => {
       );
 
       act(() => { result.current.refetch(); });
-      await waitFor(() => expect(result.current.loading).toBe(false));
-
+      /*
+       * Espera o VALOR, pelo mesmo motivo do cap em 999 logo abaixo — e aqui é
+       * pior: `refetch` NÃO levanta `loading` de novo. Quem sobe na releitura é
+       * `atualizando`; `loading` só é mexido na primeira carga (`if (primeira)`
+       * em `useAnalytics`). Ou seja, este `waitFor` voltava no ato, com o dado
+       * de ANTES do refetch ainda na mão, e o teste só passava porque a segunda
+       * carga costumava assentar antes da asserção.
+       */
+      await waitFor(() => expect(result.current.valorRecebidoMes).toBe(777));
       expect(result.current.totalPagosMes).toBe(1);
-      expect(result.current.valorRecebidoMes).toBe(777);
     });
   });
 
