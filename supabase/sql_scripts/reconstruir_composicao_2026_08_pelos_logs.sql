@@ -69,6 +69,26 @@ CREATE TABLE public.composicao_mes_backup_2026_08 AS
 CREATE TABLE public.composicao_mes_equipe_backup_2026_08 AS
   SELECT * FROM public.composicao_mes_equipe WHERE mes = '2026-08';
 
+-- Fechar as duas na MESMA passagem em que nascem.
+--
+-- `CREATE TABLE ... AS` em `public` cria uma tabela SEM RLS e, pelas default
+-- privileges do Supabase, já concedida a `anon` e `authenticated` — ou seja,
+-- exposta pelo PostgREST no instante em que existe. Não foi hipótese: estas
+-- duas ficaram assim de 01/09 a 07/09/2026, lidas e truncáveis por quem
+-- tivesse a chave anônima, que vai no bundle do front. A `20260907223118`
+-- fechou depois do fato; estas quatro linhas evitam o intervalo.
+--
+-- Sem política, de propósito: RLS ligada e sem política nega tudo, e é o que
+-- se quer de um backup. `postgres` (dono) e `service_role` têm concessão
+-- própria e continuam alcançando.
+ALTER TABLE public.composicao_mes_backup_2026_08 ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.composicao_mes_backup_2026_08
+  FROM PUBLIC, anon, authenticated;
+
+ALTER TABLE public.composicao_mes_equipe_backup_2026_08 ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.composicao_mes_equipe_backup_2026_08
+  FROM PUBLIC, anon, authenticated;
+
 -- ── A reconstrução ──────────────────────────────────────────────────────────
 CREATE TABLE public.recon_2026_08_pessoas AS
 WITH t AS (SELECT TIMESTAMPTZ '2026-09-01 03:00:00+00' AS quando),
