@@ -346,3 +346,125 @@ export async function excluirMidia(midia: MidiaComemoracao): Promise<Resultado> 
   await supabase.storage.from(BUCKET).remove([midia.caminho]);
   return { ok: true, erro: null, dados: null };
 }
+
+// ── Fila de expurgo ──────────────────────────────────────────────────────────
+//
+// A faxina noturna (`fn_comemoracao_faxina`, pg_cron) apaga a LINHA da mídia
+// vencida, mas não o arquivo: o Supabase recusa `DELETE FROM storage.objects`
+// desde agosto/2026, e a exceção derrubava a função inteira em silêncio — foi o
+// que a migration 20260831120000 consertou, trocando a tentativa por uma fila.
+//
+// Só que quem drena a fila é o app, e o dreno nunca foi escrito. Resultado: de
+// 01/09 até aqui os caminhos entram em `comemoracao_midias_expurgo` e ficam,
+// com o arquivo ocupando o bucket para sempre. É o que estas funções fecham.
+//
+// A RLS da tabela já exige `comemoracoes_gerenciar` e a empresa da pessoa
+// (20260831120000). Não há chave nova: quem administra comemorações drena a
+// fila da empresa dele ao abrir a tela, e mais ninguém.
+
+/**
+ * Quantos arquivos saem do bucket por passada.
+ *
+ * O teto existe para o dia em que a fila estiver grande: `remove()` manda todos
+ * os caminhos numa requisição só, e uma lista de milhares vira um payload que o
+ * Storage recusa. O que sobrar sai na próxima abertura da tela.
+ */
+export const LOTE_EXPURGO = 100;
+
+export interface ResultadoExpurgo {
+  /** Caminhos que saíram do bucket nesta passada. */
+  removidos: number;
+  /** Ficaram para a próxima: lote cheio, ou a Storage API recusou. */
+  pendentes: number;
+}
+
+interface LinhaExpurgo {
+  id:      string;
+  bucket:  string;
+  caminho: string;
+}
+
+/**
+ * Tira do bucket os arquivos que a faxina deixou enfileirados.
+ *
+ * Melhor esforço, de propósito: é manutenção de fundo, e a biblioteca de mídias
+ * tem que abrir mesmo que o Storage esteja fora do ar. Nada aqui lança.
+ */
+export async function drenarExpurgo(empresaId: string): Promise<ResultadoExpurgo> {
+  const vazio: ResultadoExpurgo = { removidos: 0, pendentes: 0 };
+
+  // Um a mais que o lote: é como se sabe que sobrou fila sem uma segunda
+  // consulta só para contar.
+  const { data, error } = await supabase
+    .from('comemoracao_midias_expurgo')
+    .select('id, bucket, caminho')
+    .eq('empresa_id', empresaId)
+    .is('removido_em', null)
+    .order('criado_em', { ascending: true })
+    .limit(LOTE_EXPURGO + 1);
+
+  if (error) {
+    // 42P01 = a 20260831120000 ainda não chegou neste banco. A tela funciona
+    // sem a fila; só o arquivo é que fica no bucket.
+    if (error.code !== '42P01') {
+      logger.warn('[comemoracaoMidias] erro ao ler a fila de expurgo:', error.message);
+    }
+    return vazio;
+  }
+
+  const linhas = (data ?? []) as LinhaExpurgo[];
+  if (linhas.length === 0) return vazio;
+
+  const daVez = linhas.slice(0, LOTE_EXPURGO);
+  let sobra = linhas.length > LOTE_EXPURGO ? linhas.length - LOTE_EXPURGO : 0;
+  let removidos = 0;
+
+  // Agrupado por bucket porque a coluna existe e tem padrão, não constante: o
+  // dia em que uma mídia vier de outro bucket, `remove()` tem que ser chamado
+  // no bucket certo, e não no que estava escrito aqui.
+  for (const [bucket, doBucket] of agruparPorBucket(daVez)) {
+    const caminhos = doBucket.map((l) => l.caminho);
+
+    const { error: erroStorage } = await supabase.storage.from(bucket).remove(caminhos);
+    if (erroStorage) {
+      logger.warn(`[comemoracaoMidias] expurgo em "${bucket}" recusado:`, erroStorage.message);
+      // Sem carimbo: a linha continua pendente e a próxima passada tenta de
+      // novo. Reenfileirar não duplica — o índice único é (bucket, caminho).
+      sobra += doBucket.length;
+      continue;
+    }
+
+    // Carimba TODOS os caminhos da chamada, não só os que o Storage relatou
+    // como apagados. O que se quer é "o arquivo não está mais no bucket", e um
+    // arquivo que já não existia satisfaz isso. Carimbar só os relatados
+    // deixaria os sumidos pendentes para sempre, retentando toda abertura.
+    const { error: erroCarimbo } = await supabase
+      .from('comemoracao_midias_expurgo')
+      .update({ removido_em: new Date().toISOString() })
+      .in('id', doBucket.map((l) => l.id));
+
+    if (erroCarimbo) {
+      // O arquivo já saiu; sem o carimbo a linha volta na próxima passada e
+      // `remove()` roda de novo sobre um caminho que não existe mais — o que é
+      // inofensivo. Fica pendente porque é o que ela é.
+      logger.warn('[comemoracaoMidias] arquivo removido, carimbo falhou:', erroCarimbo.message);
+      sobra += doBucket.length;
+      continue;
+    }
+
+    removidos += doBucket.length;
+  }
+
+  return { removidos, pendentes: sobra };
+}
+
+function agruparPorBucket(linhas: LinhaExpurgo[]): Map<string, LinhaExpurgo[]> {
+  const mapa = new Map<string, LinhaExpurgo[]>();
+  for (const linha of linhas) {
+    const chave = linha.bucket || BUCKET;
+    const lista = mapa.get(chave);
+    if (lista) lista.push(linha);
+    else mapa.set(chave, [linha]);
+  }
+  return mapa;
+}

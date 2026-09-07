@@ -37,18 +37,17 @@ export type RhEventoRow      = Tabelas['rh_eventos']['Row'];
 /**
  * Um lançamento como a tela consome, com o status já estreitado.
  *
- * As quatro colunas de dispensa vêm da migration `20260823200000` e ainda não
- * estão em `database.types.ts`, que é gerado do banco. Opcionais de propósito:
- * enquanto a migration não é aplicada, o campo chega `undefined` e a tela lê
- * isso como «não dispensado», que é o comportamento de antes.
+ * As quatro colunas de dispensa (`dispensado`, `motivo_dispensa`,
+ * `dispensado_por`, `dispensado_por_nome`) vêm da migration `20260823200000`.
+ * Elas eram redeclaradas aqui como opcionais porque `database.types.ts` ainda
+ * não as conhecia; ao regenerar os tipos (07/09/2026) elas apareceram, e o
+ * `dispensado` do banco é NOT NULL — a redeclaração passou a CONTRADIZER a
+ * linha em vez de completá-la, e o `extends Omit<...>` deixou de fechar.
+ *
+ * Agora saem da `Row` gerada, que é a fonte certa.
  */
 export interface RhLancamento extends Omit<Tabelas['rh_lancamentos']['Row'], 'status'> {
   status: StatusLancamento;
-  /** Fora da folha desta competência. Diferente de `valor = 0`. */
-  dispensado?: boolean | null;
-  motivo_dispensa?: string | null;
-  dispensado_por?: string | null;
-  dispensado_por_nome?: string | null;
 }
 
 export interface RhResultado<T> {

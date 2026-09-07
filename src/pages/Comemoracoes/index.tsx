@@ -32,6 +32,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useComemoracoes } from '@/hooks/useComemoracoes';
 import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { tocarSomComemoracao } from '@/lib/som-comemoracao';
 import {
@@ -39,7 +40,9 @@ import {
   DURACAO_MIN_S, DURACAO_MAX_S, MAX_HOMENAGEADOS,
   type Comemoracao, type PessoaComemoracao, type AlvoTipo,
 } from '@/services/comemoracoes.service';
-import { listarMidias, type MidiaComemoracao } from '@/services/comemoracaoMidias.service';
+import {
+  listarMidias, drenarExpurgo, type MidiaComemoracao,
+} from '@/services/comemoracaoMidias.service';
 import { EFEITOS, SONS, type EfeitoId, type SomId } from './catalogo';
 import { ANIMACOES_TEXTO, type AnimTextoId } from './animacoesTexto';
 import { MODELOS, layoutDoModelo, modeloDoLayout, type ModeloId } from './modelos';
@@ -141,6 +144,31 @@ export default function Comemoracoes() {
   }, [empresaId, podeCriar]);
 
   useEffect(() => { void recarregarMidias(); }, [recarregarMidias]);
+
+  /**
+   * Dreno da fila de expurgo — uma passada por abertura da tela.
+   *
+   * A faxina noturna não consegue apagar o arquivo do bucket (SQL não fala com
+   * o Storage; ver `drenarExpurgo`), então ela enfileira o caminho e alguém com
+   * a Storage API na mão tem que tirar. Esse alguém é esta tela: quem tem
+   * `comemoracoes_gerenciar` é exatamente quem a RLS da fila deixa drenar.
+   *
+   * Fora do `recarregarMidias` de propósito: aquele roda a cada mudança na
+   * biblioteca, e a fila só engorda uma vez por noite. Silencioso porque não é
+   * tarefa de quem abriu a tela — nada aqui muda o que aparece nela.
+   */
+  useEffect(() => {
+    if (!empresaId || !podeCriar) return;
+    void (async () => {
+      const { removidos, pendentes } = await drenarExpurgo(empresaId);
+      if (removidos > 0) {
+        logger.info(
+          `[Comemoracoes] expurgo: ${removidos} arquivo(s) fora do bucket` +
+          (pendentes > 0 ? `, ${pendentes} para a próxima` : ''),
+        );
+      }
+    })();
+  }, [empresaId, podeCriar]);
 
   useEffect(() => {
     if (!empresaId || !podeCriar) return;

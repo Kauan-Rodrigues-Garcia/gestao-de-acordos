@@ -157,8 +157,26 @@ export interface Perfil {
   ferias_ate?: string | null;
   criado_em: string;
   atualizado_em: string;
-  setores?: Setor;
-  empresas?: Empresa;
+  /**
+   * Join parcial, pelo mesmo motivo de `Acordo.setores`: toda consulta que
+   * traz o setor junto pede `setores(id, nome)` e mais nada — `useAuth`,
+   * `AcordoForm`, `AdminUsuarios` e `PainelLider`, sem exceção.
+   *
+   * Já foi declarado como `Setor` inteiro, e o tipo mentia: `descricao`,
+   * `ativo`, `criado_em` e `atualizado_em` chegavam `undefined` em runtime com
+   * o TypeScript jurando que estavam lá. O erro só não aparecia porque
+   * `database.types.ts` estava defasado e o `as Perfil` passava batido; ao
+   * regenerar os tipos (07/09/2026), os quatro pontos de conversão acusaram.
+   */
+  setores?: (Pick<Setor, 'id' | 'nome'> & Partial<Setor>) | null;
+  /**
+   * Join parcial, como `setores` acima — e aqui as consultas realmente
+   * divergem: `useAuth` pede a empresa inteira (precisa de `slug` e `config`
+   * para resolver o tenant), `AdminUsuarios` pede só `(id, nome)` para a
+   * coluna da lista. `Pick & Partial` é o que descreve as duas sem mentir
+   * para nenhuma.
+   */
+  empresas?: (Pick<Empresa, 'id' | 'nome'> & Partial<Empresa>) | null;
 }
 
 export type SituacaoUsuario = 'ativo' | 'ferias' | 'desligado';
