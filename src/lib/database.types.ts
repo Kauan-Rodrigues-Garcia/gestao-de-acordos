@@ -7366,7 +7366,12 @@ export type Database = {
         }[]
       }
       fn_analitico_resumo_por_operador: {
-        Args: { p_empresa_id: string; p_mes: string }
+        Args: {
+          p_empresa_id: string
+          p_mes: string
+          p_inicio?: string | null
+          p_fim?: string | null
+        }
         Returns: {
           operador_id: string
           operador_nome: string

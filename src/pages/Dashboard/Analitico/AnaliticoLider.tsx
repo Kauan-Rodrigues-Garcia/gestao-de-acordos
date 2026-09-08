@@ -109,7 +109,9 @@ import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
 // somando do analítico. Continua no diretório do diário; a fonte é que mudou.
 import { DiaDetalhado, type CelulaDoMapa } from '@/pages/Analitico/Diario/DiaDetalhado';
 import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
-import { limparDadosDoDia, buscarResumoMensalDiario } from '@/services/diario/diario.service';
+import {
+  limparDadosDoDia, limparMesDiario, buscarResumoMensalDiario,
+} from '@/services/diario/diario.service';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 import { celulasDoMapa } from './fonteDoMapa';
 import {
@@ -211,6 +213,9 @@ export function AnaliticoLider({
   const [modalImportarDiario,   setModalImportarDiario]   = useState(false);
   const [confirmandoLimpezaDia, setConfirmandoLimpezaDia] = useState(false);
   const [limpandoDia,           setLimpandoDia]           = useState(false);
+  // Limpar o MÊS do recebimento diário — só PP. Ver `limparMesDoDiario`.
+  const [confirmandoLimpezaMesDiario, setConfirmandoLimpezaMesDiario] = useState(false);
+  const [limpandoMesDiario,           setLimpandoMesDiario]           = useState(false);
   // PP: o primeiro relatório do dia deve ser o MENSAL — aviso até o mensal de
   // hoje entrar; limpar o dia derruba a marca e ele volta.
   const [mensalOkHoje, setMensalOkHoje] = useState(() => mensalJaImportadoHoje(empresaId));
@@ -351,7 +356,12 @@ export function AnaliticoLider({
     // delas, para que nenhuma tela precise lembrar de aplicá-las depois.
     const { porSetor: exclusoesDoMes, dbAtiva } = await buscarExclusoesSetor(empresaId, mes);
     const [{ data, error }, orfaosSetor, totSetor] = await Promise.all([
-      buscarResumoOperadoresAnalitico(empresaId, mes),
+      // A lente Período recorta de verdade: sem estas duas pontas a RPC
+      // devolvia o mês inteiro e o filtro não fazia nada.
+      buscarResumoOperadoresAnalitico(
+        empresaId, mes,
+        recorte.modo === 'periodo' ? { inicio: pisoDoRecorte, fim: tetoDoRecorte } : null,
+      ),
       buscarTotalOrfaosPorSetor(empresaId, mes),
       buscarTotalPorSetor(empresaId, mes, exclusoesDoMes),
     ]);
@@ -361,7 +371,11 @@ export function AnaliticoLider({
     setTotalPorSetor(totSetor);
     setExclusoesAtivas(dbAtiva);
     setLoadingResumos(false);
-  }, [empresaId, mes]);
+    // As pontas do recorte entram nas dependências: sem elas, mudar as datas
+    // da lente Período não recarregava nada — a função ficava presa ao
+    // intervalo da primeira montagem, que é a outra metade do filtro não
+    // funcionar.
+  }, [empresaId, mes, recorte.modo, pisoDoRecorte, tetoDoRecorte]);
 
   /**
    * Grava a composição do setor em foco e recarrega os totais.
@@ -756,8 +770,12 @@ export function AnaliticoLider({
   const metricas = useMemo(() => calcularMetricas({
     setorId, equipeId: filtroEquipeId, snapshot, resumosFiltrados,
     orfaosPorSetor, totalPorSetor, setoresAlternativos, isPaguePlay: isPP,
+    recorteParcial: recorte.modo === 'periodo'
+      ? { inicio: pisoDoRecorte, fim: tetoDoRecorte }
+      : null,
   }), [setorId, filtroEquipeId, snapshot, resumosFiltrados,
-       orfaosPorSetor, totalPorSetor, setoresAlternativos, isPP]);
+       orfaosPorSetor, totalPorSetor, setoresAlternativos, isPP,
+       recorte.modo, pisoDoRecorte, tetoDoRecorte]);
 
   /*
    * O ranking configurável.
@@ -979,6 +997,46 @@ export function AnaliticoLider({
       void recarregarDia();
     }
     setLimpandoDia(false);
+  }
+
+  /**
+   * Limpar o MÊS inteiro do recebimento diário — só na PaguePlay.
+   *
+   * Existe porque lá o diário é um relatório PRÓPRIO (o `mes.xlsx` do ERP), e
+   * o "Limpar mês" da lente Mês passa `incluirDiario: !isPP` — ou seja, na PP
+   * ele derruba o analítico e deixa o diário de pé. Quem importou o arquivo
+   * errado e quer refazer o mês não tinha por onde: só "Limpar dia", um dia de
+   * cada vez. No BookPlay o botão da lente Mês já apaga os dois, porque os
+   * dois saem do mesmo arquivo — por isso este aqui não aparece lá.
+   *
+   * Sem escopo: apaga o mês da EMPRESA. É o mesmo critério do "Limpar dia" ao
+   * lado, que também não tem versão por setor — e o botão só aparece quando
+   * `!setorEscopoDia`, isto é, para quem enxerga a empresa toda.
+   */
+  async function limparMesDoDiario() {
+    setLimpandoMesDiario(true);
+    const { error } = await limparMesDiario(empresaId, mes, null);
+    if (error) {
+      toast.error(`Erro ao limpar: ${error}`);
+    } else {
+      // A próxima importação tem de ser o mensal outra vez — a marca de hoje
+      // não vale mais para um mês que ficou vazio.
+      limparMarcaMensal(empresaId);
+      setMensalOkHoje(false);
+      // O Mapa do mês lê desta lista na PP; deixá-la em memória mostraria
+      // dados que não existem mais no banco.
+      setLinhasDiarioMes([]);
+      const mesLabel = new Date(mes + '-15')
+        .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      toast.success(
+        `Recebimento diário de ${mesLabel} excluído. `
+        + 'Reimporte o relatório mensal para restaurar os dados.',
+      );
+      setConfirmandoLimpezaMesDiario(false);
+      void recarregarDia();
+      onRefetch();
+    }
+    setLimpandoMesDiario(false);
   }
 
   function handlePosImportDiario() {
@@ -1375,9 +1433,14 @@ export function AnaliticoLider({
               formatar={formatBRL}
               sub={recorte.modo === 'dia'
                 ? 'Recebimento vivo'
-                : `Relatório mensal · ${metricas.periodoFim
-                    ? new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')
-                    : '—'}`}
+                // No recorte de período o rodapé não pode dizer "Relatório
+                // mensal": o número não é o do mês, e a data ao lado é a ponta
+                // escolhida na tela, não a do relatório importado.
+                : recorte.modo === 'periodo'
+                  ? 'Somente o período selecionado'
+                  : `Relatório mensal · ${metricas.periodoFim
+                      ? new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')
+                      : '—'}`}
             />
             {/* O diário não tem a coluna de HO: no dia o tile some, em vez de
                 dizer R$ 0,00 e passar por "não houve HO". */}
@@ -1463,6 +1526,18 @@ export function AnaliticoLider({
                 className="gap-1.5 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => setConfirmandoLimpezaDia(true)}>
                 <Trash2 className="h-4 w-4" /> Limpar dia
+              </Button>
+            )}
+            {/* "Limpar mês" volta ao recorte Dia, só na PaguePlay.
+                Lá o recebimento diário é um relatório PRÓPRIO (`mes.xlsx`), e
+                quem precisa refazer o mês inteiro está justamente aqui — não
+                na lente Mês, que limpa o analítico. No BookPlay o botão da
+                lente Mês já derruba os dois, porque saem do mesmo arquivo. */}
+            {isPP && (
+              <Button size="sm" variant="outline"
+                className="gap-1.5 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setConfirmandoLimpezaMesDiario(true)}>
+                <Trash2 className="h-4 w-4" /> Limpar mês
               </Button>
             )}
             {/* Na BookPlay a importação é feita pelo relatório mensal (mesmo
@@ -1982,6 +2057,48 @@ export function AnaliticoLider({
             >
               {limpandoDia && <Loader2 className="w-4 h-4 animate-spin" />}
               {limpandoDia ? 'Excluindo…' : 'Confirmar exclusão'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmação de limpeza do MÊS do recebimento diário (só PP). O texto
+          diz o que sai e o que FICA: o analítico não é tocado aqui, e quem
+          quiser derrubá-lo também tem o botão da lente Mês. */}
+      <AlertDialog
+        open={confirmandoLimpezaMesDiario}
+        onOpenChange={setConfirmandoLimpezaMesDiario}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" /> Limpar o mês do recebimento diário
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <p>
+                Todos os pagamentos importados de{' '}
+                <strong>
+                  {new Date(mes + '-15')
+                    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </strong>{' '}
+                serão excluídos permanentemente — o mês inteiro da empresa, não
+                só o dia em foco.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                O relatório analítico não é afetado. Esta ação não pode ser
+                desfeita; depois, reimporte o relatório mensal.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={limpandoMesDiario}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void limparMesDoDiario()}
+              disabled={limpandoMesDiario}
+              className="bg-destructive hover:bg-destructive/90 text-white gap-1.5"
+            >
+              {limpandoMesDiario && <Loader2 className="w-4 h-4 animate-spin" />}
+              {limpandoMesDiario ? 'Excluindo…' : 'Confirmar exclusão'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

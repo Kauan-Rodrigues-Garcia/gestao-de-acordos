@@ -276,6 +276,65 @@ describe('calcularMetricas — de onde vem cada número do card', () => {
     expect(m.totalRecebido).toBe(700);
     expect(m.periodoInicio).toBeNull();
   });
+
+  /*
+   * A lente Período mostrava o mês. A lista já vinha recortada pela RPC, mas o
+   * card continuava lendo o snapshot mensal — o total não batia com a soma do
+   * que estava embaixo dele, e o filtro parecia inerte.
+   */
+  describe('lente Período', () => {
+    const RECORTE = { inicio: '2026-07-03', fim: '2026-07-07' };
+
+    it('o card soma a LISTA do recorte, não o snapshot do mês', () => {
+      const m = calcularMetricas({
+        ...BASE,
+        recorteParcial: RECORTE,
+        resumosFiltrados: [resumo('maria'), resumo('ana')],
+      })!;
+      expect(m.totalRecebido).toBe(200);   // e não os 9000 do snapshot
+      expect(m.totalOperadores).toBe(2);
+      expect(m.totalPagamentos).toBe(4);
+    });
+
+    it('as pontas do card são as do recorte, não as do relatório', () => {
+      const m = calcularMetricas({
+        ...BASE, recorteParcial: RECORTE, resumosFiltrados: [resumo('maria')],
+      })!;
+      expect(m.periodoInicio).toBe('2026-07-03');
+      expect(m.periodoFim).toBe('2026-07-07');
+    });
+
+    it('o recorte vence o carimbo do setor — aquele total também é mensal', () => {
+      const m = calcularMetricas({
+        ...BASE,
+        recorteParcial: RECORTE,
+        setorId: 'setor-A',
+        totalPorSetor: { 'setor-A': { total: 999999, ho: 999, qtd: 999 } },
+        resumosFiltrados: [resumo('maria')],
+      })!;
+      expect(m.totalRecebido).toBe(100);
+    });
+
+    it('órfãos do mês ficam de fora: eles inflariam a janela de dias', () => {
+      const m = calcularMetricas({
+        ...BASE,
+        recorteParcial: RECORTE,
+        setorId: 'setor-B',
+        setoresAlternativos: new Set(['setor-B']),
+        resumosFiltrados: [resumo('joao')],
+        orfaosPorSetor: { 'setor-B': { total: 50, qtd: 1 } },
+      })!;
+      expect(m.totalRecebido).toBe(100);   // sem os 50 do mês inteiro
+    });
+
+    it('recorte sem nenhuma linha devolve zero, e não o mês', () => {
+      // Zero é a resposta certa: o card diz que naqueles dias não entrou nada.
+      // Cair no snapshot ali mostraria o mês fechado sobre uma lista vazia.
+      const m = calcularMetricas({ ...BASE, recorteParcial: RECORTE })!;
+      expect(m.totalRecebido).toBe(0);
+      expect(m.totalOperadores).toBe(0);
+    });
+  });
 });
 
 // ── Escopo de exclusão e órfãos ────────────────────────────────────────────

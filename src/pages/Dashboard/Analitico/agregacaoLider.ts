@@ -159,6 +159,15 @@ export interface EntradaMetricas {
   totalPorSetor: Record<string, { total: number; ho: number; qtd: number }>;
   setoresAlternativos: ReadonlySet<string>;
   isPaguePlay: boolean;
+  /**
+   * As pontas da lente Período, quando ela está ativa. Ausente = o mês.
+   *
+   * Sem isto os cards ficavam no mês mesmo com um recorte de cinco dias: o
+   * snapshot e o total por setor são gravados por MÊS, e nenhum dos dois sabe
+   * de intervalo. A lista abaixo já vinha recortada, então a tela mostrava um
+   * total que não era a soma do que estava nela.
+   */
+  recorteParcial?: { inicio: string; fim: string } | null;
 }
 
 /**
@@ -183,6 +192,29 @@ export interface EntradaMetricas {
  */
 export function calcularMetricas(e: EntradaMetricas): MetricasLider | null {
   const { setorId, equipeId, snapshot } = e;
+
+  /*
+   * Lente Período: a única origem possível é a lista, porque é a única que foi
+   * pedida ao banco com as pontas do recorte. Snapshot e total por setor são
+   * do MÊS — usá-los aqui mostraria setembro inteiro sobre uma lista de cinco
+   * dias, que é o filtro parecendo não funcionar.
+   *
+   * Os órfãos ficam de fora de propósito: `orfaosPorSetor` também é mensal, e
+   * jogar o mês inteiro deles numa janela de dias inflaria o card exatamente
+   * como o snapshot inflava. Fora que a soma do card passa a ser a soma do que
+   * está na lista — dá para conferir com os olhos.
+   */
+  if (e.recorteParcial) {
+    const r = e.resumosFiltrados;
+    return {
+      totalRecebido:   r.reduce((s, x) => s + x.total_recebido, 0),
+      totalHo:         r.reduce((s, x) => s + x.total_ho, 0),
+      totalOperadores: r.length,
+      totalPagamentos: r.reduce((s, x) => s + x.total_pagamentos, 0),
+      periodoInicio:   e.recorteParcial.inicio,
+      periodoFim:      e.recorteParcial.fim,
+    };
+  }
 
   if (!setorId && !equipeId) {
     if (!snapshot) return null;

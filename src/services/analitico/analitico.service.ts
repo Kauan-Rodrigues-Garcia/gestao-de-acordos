@@ -787,16 +787,36 @@ function ehPaguePlay(): boolean {
 export async function buscarResumoOperadoresAnalitico(
   empresaId: string,
   mes: string,
+  /**
+   * As pontas da lente Período, inclusivas. Ausente = o mês inteiro.
+   *
+   * Sem isto a lente não recortava NADA: escolher 01 a 05 devolvia o mês
+   * fechado, sem erro à vista. A RPC ganhou `p_inicio`/`p_fim` opcionais na
+   * 20260908114014.
+   */
+  periodo?: { inicio: string; fim: string } | null,
 ): Promise<{ data: ResumoOperadorAnalitico[]; error: string | null }> {
   const { data, error } = await supabase
     .rpc('fn_analitico_resumo_por_operador', {
       p_empresa_id: empresaId,
       p_mes:        mes,
+      p_inicio:     periodo?.inicio ?? null,
+      p_fim:        periodo?.fim ?? null,
     })
     .order('total_recebido', { ascending: false });
 
   const linhas = (data ?? []) as ResumoOperadorAnalitico[];
   if (error) return { data: linhas, error: error.message };
+
+  /*
+   * O ajuste manual é por COMPETÊNCIA — `mes_referencia`, sem dia. Somá-lo
+   * inteiro num recorte de cinco dias inflaria o número sem que nada avisasse,
+   * e não há como reparti-lo: a informação do dia não existe na linha.
+   *
+   * Então ele entra só quando a janela é o mês. É a leitura conservadora: o
+   * período mostra o que o relatório traz, e o mês continua mostrando tudo.
+   */
+  if (periodo) return { data: linhas, error: null };
 
   const ajustes = await somasPorOperador(empresaId, mes);
   if (ajustes.size === 0) return { data: linhas, error: null };
