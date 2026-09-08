@@ -30,7 +30,6 @@ import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { getTodayISO } from '@/lib';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
 import { registrarLog } from '@/services/logs.service';
-import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { modeloDoTipo } from './tiposDesafio';
 import type {
   AcentoDesafio, ContextoEquipe, DadosDesafio, Desafio, FonteMeta,
@@ -339,9 +338,29 @@ export async function buscarDadosDesafio(desafioId: string): Promise<DadosDesafi
  * aquele mês inteiro — `diasUteisDecorridos` filtra por «até hoje», e num mês
  * que já passou isso é o mês todo. Ou seja, num mês fechado a projeção vira a
  * meta cheia, que é exatamente o alvo certo para um período encerrado.
+ *
+ * ## Por que passa pelo banco, e não por `metas` direto
+ *
+ * A campanha pode juntar DUAS empresas — é o caso do ranking entre líderes. A
+ * consulta do cliente lia `metas` com a empresa de quem olha, e não adiantaria
+ * pedir as duas: `metas_select` é `fn_can_access_empresa(empresa_id)`, e
+ * `metas_config_select` é igual. Quem é de uma empresa não alcança a meta da
+ * outra, por mais que peça.
+ *
+ * `fn_desafio_contexto_equipe` resolve isso repetindo os TRÊS portões de
+ * `fn_desafio_dados` — alcance de empresa, rascunho e `no_meu_alcance`. Quem
+ * não vê o quadro não vê o contexto; quem vê, vê inteiro. Fora do desafio,
+ * `metas` continua fechada pela RLS de sempre.
+ *
+ * ## Dias úteis por empresa
+ *
+ * Feriado e `contar_dia_atual` são por empresa, então a conta é feita uma vez
+ * para cada uma. Continua aqui, e não em SQL, porque `diasUteisDoMes` e
+ * `diasUteisDecorridos` são as MESMAS de Desempenho Equipes — reescrevê-las no
+ * banco criaria a segunda cópia de uma conta que existe para ter uma só.
  */
 export async function buscarContextoEquipe(
-  empresaId: string, dataFimISO: string,
+  desafioId: string, dataFimISO: string,
 ): Promise<ContextoEquipe> {
   const [ano, mes] = dataFimISO.split('-').map(Number);
   const vazio: ContextoEquipe = {
@@ -349,26 +368,51 @@ export async function buscarContextoEquipe(
   };
   if (!Number.isFinite(ano) || !Number.isFinite(mes)) return vazio;
 
-  const [{ data: metas }, cfg] = await Promise.all([
-    supabase.from('metas').select('referencia_id, meta_valor')
-      .eq('empresa_id', empresaId).eq('mes', mes).eq('ano', ano)
-      .eq('tipo', 'equipe'),
-    getMetasConfig(empresaId, mes, ano),
-  ]);
+  const { data, error } = await rpcSemTipo<{
+    mes: number;
+    ano: number;
+    metas: Record<string, number | string>;
+    equipe_empresa: Record<string, string>;
+    config: Record<string, { feriados?: string[]; contar_dia_atual?: boolean }>;
+  }>('fn_desafio_contexto_equipe', { p_desafio_id: desafioId });
+
+  // NULL = não passou nos portões. Contexto vazio é a leitura certa: a tela
+  // mostra o quadro sem projeção, em vez de números de um desafio que a
+  // pessoa não deveria estar vendo.
+  if (error || !data) return vazio;
 
   const metaPorEquipe: Record<string, number> = {};
-  for (const m of (metas as { referencia_id: string; meta_valor: number }[]) ?? []) {
-    const v = Number(m.meta_valor) || 0;
-    if (v > 0) metaPorEquipe[m.referencia_id] = v;
+  for (const [equipeId, valor] of Object.entries(data.metas ?? {})) {
+    const v = Number(valor) || 0;
+    if (v > 0) metaPorEquipe[equipeId] = v;
   }
 
-  const feriados = cfg.data?.feriados ?? [];
+  const hoje = getTodayISO();
+  const uteisPorEmpresa: Record<string, { totalUteis: number; decorridos: number }> = {};
+  for (const [empresaId, cfg] of Object.entries(data.config ?? {})) {
+    const feriados = cfg?.feriados ?? [];
+    uteisPorEmpresa[empresaId] = {
+      totalUteis: diasUteisDoMes(ano, mes, feriados),
+      decorridos: diasUteisDecorridos(
+        ano, mes, feriados, hoje, undefined, cfg?.contar_dia_atual === true,
+      ),
+    };
+  }
+
+  /*
+   * O par de cima continua existindo como reserva.
+   *
+   * Ele é lido quando a equipe não tem empresa mapeada — campanha de uma
+   * empresa só, ou empresa sem linha de config. Vem SEM feriado, que é o
+   * mesmo padrão de `getMetasConfig` quando não acha configuração.
+   */
+  const semFeriado: string[] = [];
   return {
     metaPorEquipe,
-    totalUteis: diasUteisDoMes(ano, mes, feriados),
-    decorridos: diasUteisDecorridos(
-      ano, mes, feriados, getTodayISO(), undefined, cfg.data?.contar_dia_atual === true,
-    ),
+    empresaPorEquipe: data.equipe_empresa ?? {},
+    uteisPorEmpresa,
+    totalUteis: diasUteisDoMes(ano, mes, semFeriado),
+    decorridos: diasUteisDecorridos(ano, mes, semFeriado, hoje, undefined, false),
     mes, ano,
   };
 }

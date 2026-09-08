@@ -1280,3 +1280,144 @@ describe('líder de várias equipes: média das porcentagens', () => {
     expect(b?.bateuMeta).toBe(false);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// Campanha ENTRE EMPRESAS: a projeção atravessa, e cada uma com a régua dela
+// ══════════════════════════════════════════════════════════════════════════
+
+/*
+ * O caso é o «DESAFIO DOS LÍDERES — RUMO AO PÓDIO»: líderes das duas empresas
+ * disputando por percentual da projeção da equipe.
+ *
+ * Antes, `buscarContextoEquipe` lia `metas` com a empresa de QUEM OLHA, e a
+ * RLS (`metas_select` = `fn_can_access_empresa`) impedia o resto. Metade do
+ * ranking aparecia sem meta — logo sem nota — para cada lado.
+ *
+ * O que estes testes seguram é o contrato do cálculo depois da correção: com
+ * as metas das duas empresas em mãos, os dois lados pontuam; e a projeção de
+ * cada equipe usa os dias úteis DA EMPRESA DELA.
+ */
+describe('desafio entre empresas', () => {
+  const liderA = pessoa({
+    id: 'lidA', nome: 'Líder A', perfil: 'lider',
+    equipeId: 'eqA', equipesLideradas: ['eqA'], setorId: 'setorA', setores: ['setorA'],
+    empresaId: 'empA',
+  });
+  const liderB = pessoa({
+    id: 'lidB', nome: 'Líder B', perfil: 'lider',
+    equipeId: 'eqB', equipesLideradas: ['eqB'], setorId: 'setorB', setores: ['setorB'],
+    empresaId: 'empB',
+  });
+  const opA = pessoa({
+    id: 'opA', nome: 'Op A', equipeId: 'eqA', equipes: ['eqA'],
+    setorId: 'setorA', setores: ['setorA'], empresaId: 'empA',
+  });
+  const opB = pessoa({
+    id: 'opB', nome: 'Op B', equipeId: 'eqB', equipes: ['eqB'],
+    setorId: 'setorB', setores: ['setorB'], empresaId: 'empB',
+  });
+
+  const participantes = [liderA, liderB, opA, opB];
+  const linhas = [
+    linha('opA', 50_000, 1, 'setorA'),
+    linha('opB', 50_000, 1, 'setorB'),
+  ];
+
+  function campanhaEntreEmpresas() {
+    return desafio({
+      regra: {
+        criterioRanking: 'maior_percentual',
+        fonteResultado:  'equipe_liderada',
+        fonteMeta:       'projecao_equipe',
+        agregacaoLider:  'media_das_equipes',
+        escopoDisputa:   'empresa',
+        participantes: {
+          setores: [], equipes: [], operadores: [],
+          cargos: ['lider'], excluidos: [], convidados: [],
+        },
+      },
+    });
+  }
+
+  it('os dois lados pontuam quando as metas das duas empresas chegam', () => {
+    // 20 dias úteis, 10 corridos nas DUAS: projeção = metade da meta.
+    const r = calcularDesafio({
+      desafio: campanhaEntreEmpresas(),
+      dados: { participantes, linhas },
+      contextoEquipe: {
+        metaPorEquipe: { eqA: 100_000, eqB: 100_000 },
+        totalUteis: 20, decorridos: 10, mes: 9, ano: 2026,
+      },
+    });
+
+    const a = r.individual.find(i => i.pessoa.id === 'lidA');
+    const b = r.individual.find(i => i.pessoa.id === 'lidB');
+    // Projeção de cada uma = 50.000; recebido = 50.000 → 100%.
+    expect(a?.progresso).toBeCloseTo(100, 5);
+    expect(b?.progresso).toBeCloseTo(100, 5);
+    // O ponto da correção: NENHUM dos dois fica sem meta.
+    expect(a?.meta).toBe(50_000);
+    expect(b?.meta).toBe(50_000);
+  });
+
+  it('sem a meta da outra empresa, o líder de lá fica sem nota — o defeito antigo', () => {
+    // Reproduz o que acontecia: o contexto só trazia a empresa de quem olha.
+    const r = calcularDesafio({
+      desafio: campanhaEntreEmpresas(),
+      dados: { participantes, linhas },
+      contextoEquipe: {
+        metaPorEquipe: { eqA: 100_000 },   // eqB ausente
+        totalUteis: 20, decorridos: 10, mes: 9, ano: 2026,
+      },
+    });
+
+    expect(r.individual.find(i => i.pessoa.id === 'lidA')?.meta).toBe(50_000);
+    expect(r.individual.find(i => i.pessoa.id === 'lidB')?.meta).toBeNull();
+  });
+
+  it('cada equipe usa os dias úteis DA EMPRESA DELA', () => {
+    /*
+     * Mesma meta nas duas (100.000), mesmo recebido (50.000), e calendários
+     * diferentes: empA tem 20 dias úteis com 10 corridos (projeção 50.000, ou
+     * seja 100%); empB tem 20 com 5 corridos (projeção 25.000, ou seja 200%).
+     *
+     * Se a régua fosse uma só, os dois dariam a mesma nota — que é justamente
+     * o erro silencioso que `uteisPorEmpresa` evita.
+     */
+    const r = calcularDesafio({
+      desafio: campanhaEntreEmpresas(),
+      dados: { participantes, linhas },
+      contextoEquipe: {
+        metaPorEquipe: { eqA: 100_000, eqB: 100_000 },
+        empresaPorEquipe: { eqA: 'empA', eqB: 'empB' },
+        uteisPorEmpresa: {
+          empA: { totalUteis: 20, decorridos: 10 },
+          empB: { totalUteis: 20, decorridos: 5  },
+        },
+        totalUteis: 20, decorridos: 10, mes: 9, ano: 2026,
+      },
+    });
+
+    expect(r.individual.find(i => i.pessoa.id === 'lidA')?.meta).toBe(50_000);
+    expect(r.individual.find(i => i.pessoa.id === 'lidB')?.meta).toBe(25_000);
+    expect(r.individual.find(i => i.pessoa.id === 'lidB')?.progresso).toBeCloseTo(200, 5);
+  });
+
+  it('equipe sem empresa mapeada cai no par do topo — o comportamento de antes', () => {
+    const r = calcularDesafio({
+      desafio: campanhaEntreEmpresas(),
+      dados: { participantes, linhas },
+      contextoEquipe: {
+        metaPorEquipe: { eqA: 100_000, eqB: 100_000 },
+        // eqB fora do mapa de propósito: campanha de empresa só, ou empresa
+        // sem linha em `metas_config_mes`.
+        empresaPorEquipe: { eqA: 'empA' },
+        uteisPorEmpresa: { empA: { totalUteis: 20, decorridos: 5 } },
+        totalUteis: 20, decorridos: 10, mes: 9, ano: 2026,
+      },
+    });
+
+    expect(r.individual.find(i => i.pessoa.id === 'lidA')?.meta).toBe(25_000); // régua de empA
+    expect(r.individual.find(i => i.pessoa.id === 'lidB')?.meta).toBe(50_000); // reserva do topo
+  });
+});

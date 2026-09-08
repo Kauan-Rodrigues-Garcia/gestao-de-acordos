@@ -436,4 +436,23 @@ export interface ContextoEquipe {
   /** Mês e ano de onde as metas saíram — a tela diz isso ao usuário. */
   mes: number;
   ano: number;
+  /**
+   * De qual empresa é cada equipe que tem meta.
+   *
+   * Só importa na campanha entre empresas: é o que liga a equipe à régua de
+   * dias úteis DELA. Ausente numa campanha de empresa só — aí `totalUteis` e
+   * `decorridos` acima servem a todas.
+   */
+  empresaPorEquipe?: Record<string, string>;
+  /**
+   * Dias úteis por empresa, quando a campanha junta mais de uma.
+   *
+   * Feriado e `contar_dia_atual` são por empresa. Duas empresas com
+   * calendários diferentes medem projeções diferentes no mesmo mês, e usar um
+   * par só faria a de fora ser medida pela régua da de dentro — sem erro
+   * nenhum, e com o número errado.
+   *
+   * Empresa ausente aqui cai no par de cima, que é o comportamento de antes.
+   */
+  uteisPorEmpresa?: Record<string, { totalUteis: number; decorridos: number }>;
 }

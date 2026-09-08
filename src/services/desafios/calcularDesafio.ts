@@ -515,11 +515,26 @@ export function alvoDaEquipe(
 
   if (regra.fonteMeta === 'meta_equipe') return metaMensal;
 
+  /*
+   * A régua de dias úteis é a DA EMPRESA DESTA EQUIPE.
+   *
+   * Numa campanha entre duas empresas, feriado e `contar_dia_atual` podem
+   * divergir — e medir a equipe de fora pela régua da de dentro daria um
+   * número errado sem nenhum erro à vista. `uteisPorEmpresa` vem de
+   * `fn_desafio_contexto_equipe`, uma entrada por empresa do desafio.
+   *
+   * A reserva é o par do topo, que é o comportamento de antes: campanha de
+   * uma empresa só, ou empresa sem linha de `metas_config_mes`.
+   */
+  const empresaDaEquipe = contexto.empresaPorEquipe?.[equipeId];
+  const uteis = (empresaDaEquipe && contexto.uteisPorEmpresa?.[empresaDaEquipe])
+    ?? { totalUteis: contexto.totalUteis, decorridos: contexto.decorridos };
+
   const proj = calcularProjecao({
     meta: metaMensal,
     recebido: 0,            // só `esperado` interessa, e ele não depende disto
-    totalUteis: contexto.totalUteis,
-    decorridos: contexto.decorridos,
+    totalUteis: uteis.totalUteis,
+    decorridos: uteis.decorridos,
     quartis: [],
   });
   return proj ? proj.esperado : null;

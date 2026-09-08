@@ -364,10 +364,18 @@ export function useResultadoDesafio(
    * centenas de vezes durante uma importação em lote.
    */
   const precisaDoContexto = !!desafio && usaMetaDaEquipe(desafio.regra);
+  /*
+   * A chave é do DESAFIO, e não mais da empresa de quem olha.
+   *
+   * O contexto agora vem de `fn_desafio_contexto_equipe`, que resolve as
+   * empresas a partir do próprio desafio — numa campanha entre duas, a
+   * resposta é a mesma para quem olha de qualquer uma delas. Guardar por
+   * empresa faria dois caches do mesmo conteúdo.
+   */
   const contextoQuery = useQuery({
-    queryKey: ['desafio-contexto-equipe', empresaId, desafio?.dataFim ?? null] as const,
-    enabled:  precisaDoContexto && !!empresaId,
-    queryFn:  () => buscarContextoEquipe(empresaId as string, desafio!.dataFim),
+    queryKey: ['desafio-contexto-equipe', desafioId, desafio?.dataFim ?? null] as const,
+    enabled:  precisaDoContexto && !!desafioId,
+    queryFn:  () => buscarContextoEquipe(desafioId as string, desafio!.dataFim),
   });
 
   /*
