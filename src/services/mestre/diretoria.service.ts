@@ -1,0 +1,203 @@
+/**
+ * diretoria.service.ts — o Painel Diretoria lendo o relatório 59.
+ *
+ * O painel da BookPlay deixou de somar o que o sistema tabulou e passou a ler o
+ * relatório mestre. A diferença não é de fonte, é de escopo: o 58 é a fatia de
+ * um setor, o 59 é a cobrança INTEIRA — inclusive a carteira que não pertence a
+ * setor nenhum e a equipe que conta só para o geral. Um diretor precisa do
+ * total da empresa, e o total da empresa é o 59.
+ *
+ * ## Uma chamada por aba, e o porquê
+ *
+ * `fn_mestre_diretoria_visao_geral` devolve total, mês anterior, série diária,
+ * formas de pagamento e carteiras num `jsonb` só. Este arquivo não parte isso
+ * em várias chamadas nem recalcula nada: os blocos têm que sair do mesmo corte
+ * de dia e do mesmo lote, e é exatamente aí que uma tela começa a mostrar dois
+ * totais que não fecham.
+ *
+ * ## Tudo que vem do banco passa por `n()`
+ *
+ * `numeric` do Postgres chega como STRING no supabase-js. Somar sem converter
+ * concatena — `"100" + "50"` vira `"10050"` num total, silenciosamente, e passa
+ * por qualquer teste que não olhe o número. Mesma regra do `mestre.service`.
+ *
+ * ## O que este arquivo NÃO faz
+ *
+ * Não sincroniza nada. Ler o 59 aqui não altera `analitico_recebimentos`, meta,
+ * quartil nem qualquer número das outras abas — vincular uma carteira a um setor
+ * muda o que ESTE painel mostra, e só. A sincronização é outra etapa, e mantê-la
+ * fora daqui é o que permite mexer no painel sem risco para o resto.
+ */
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+
+/** `numeric` do Postgres chega como string. Ver o cabeçalho. */
+const n = (v: unknown): number => Number(v) || 0;
+
+/** Um dia da série. `valor_anterior` é o MESMO dia do mês passado. */
+export interface DiaDaSerie {
+  dia: number;
+  valor: number;
+  valorAnterior: number;
+  /** Falso nos dias depois do corte — o gráfico para o traço aqui. */
+  dentroDoCorte: boolean;
+}
+
+export interface FormaDePagamento {
+  forma: string;
+  valor: number;
+  qtd: number;
+  valorAnterior: number;
+}
+
+/**
+ * Uma carteira do 59 (`NomeGrupoFiltro`).
+ *
+ * `setorId` nulo = a carteira não foi vinculada a nenhum setor do sistema. Não
+ * é erro: há carteiras que são da cobrança geral e não pertencem a setor
+ * nenhum. O painel mostra assim mesmo, porque o total da empresa as inclui.
+ */
+export interface CarteiraDoMes {
+  cod: string;
+  nome: string;
+  valor: number;
+  qtd: number;
+  valorAnterior: number;
+  setorId: string | null;
+  setorNome: string | null;
+}
+
+export interface VisaoGeralDiretoria {
+  mes: string;
+  mesAnterior: string;
+  diaCorte: number;
+  diasNoMes: number;
+  /** Falso = nenhum 59 promovido para este mês. A tela desenha «sem dados». */
+  temLote: boolean;
+  /** Falso = sem mês anterior para comparar. As variações somem, o resto fica. */
+  temLoteAnterior: boolean;
+  recebido: number;
+  linhas: number;
+  operadores: number;
+  carteirasQtd: number;
+  recebidoAnterior: number;
+  linhasAnterior: number;
+  serie: DiaDaSerie[];
+  formas: FormaDePagamento[];
+  carteiras: CarteiraDoMes[];
+}
+
+/** O formato cru do `jsonb`. Existe para o `as` ficar num lugar só. */
+interface RespostaCrua {
+  mes: string;
+  mes_anterior: string;
+  dia_corte: number | string;
+  dias_no_mes: number | string;
+  tem_lote: boolean;
+  tem_lote_anterior: boolean;
+  total: { recebido: unknown; linhas: unknown; operadores: unknown; carteiras: unknown };
+  total_anterior: { recebido: unknown; linhas: unknown };
+  serie: { dia: unknown; valor: unknown; valor_anterior: unknown; dentro_do_corte: boolean }[];
+  formas: { forma: string; valor: unknown; qtd: unknown; valor_anterior: unknown }[];
+  carteiras: {
+    cod: string; nome: string; valor: unknown; qtd: unknown; valor_anterior: unknown;
+    setor_id: string | null; setor_nome: string | null;
+  }[];
+}
+
+/**
+ * A visão geral do mês.
+ *
+ * `diaCorte` nulo deixa o banco decidir: hoje, no mês corrente; o último dia,
+ * num mês fechado. Quem chama não precisa saber a diferença — e não deve, senão
+ * a mesma regra passa a existir em dois lugares.
+ */
+export async function buscarVisaoGeralDiretoria(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): Promise<VisaoGeralDiretoria> {
+  const { data, error } = await rpcSemTipo<RespostaCrua>(
+    'fn_mestre_diretoria_visao_geral',
+    { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null },
+  );
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('A visão geral não devolveu resultado.');
+
+  return {
+    mes:             data.mes,
+    mesAnterior:     data.mes_anterior,
+    diaCorte:        n(data.dia_corte),
+    diasNoMes:       n(data.dias_no_mes),
+    temLote:         data.tem_lote === true,
+    temLoteAnterior: data.tem_lote_anterior === true,
+    recebido:        n(data.total?.recebido),
+    linhas:          n(data.total?.linhas),
+    operadores:      n(data.total?.operadores),
+    carteirasQtd:    n(data.total?.carteiras),
+    recebidoAnterior: n(data.total_anterior?.recebido),
+    linhasAnterior:   n(data.total_anterior?.linhas),
+    serie: (data.serie ?? []).map(d => ({
+      dia:           n(d.dia),
+      valor:         n(d.valor),
+      valorAnterior: n(d.valor_anterior),
+      dentroDoCorte: d.dentro_do_corte === true,
+    })),
+    formas: (data.formas ?? []).map(f => ({
+      forma:         f.forma,
+      valor:         n(f.valor),
+      qtd:           n(f.qtd),
+      valorAnterior: n(f.valor_anterior),
+    })),
+    carteiras: (data.carteiras ?? []).map(c => ({
+      cod:           c.cod,
+      nome:          c.nome,
+      valor:         n(c.valor),
+      qtd:           n(c.qtd),
+      valorAnterior: n(c.valor_anterior),
+      setorId:       c.setor_id,
+      setorNome:     c.setor_nome,
+    })),
+  };
+}
+
+// ── Contas que a TELA precisa, e que não são do banco ───────────────────────
+//
+// Ficam aqui, puras e testáveis, em vez de espalhadas pelo JSX. A regra é uma
+// só: nada que dependa de React entra neste arquivo.
+
+/**
+ * Variação percentual entre dois valores.
+ *
+ * `null` quando não há base de comparação — e `null` NÃO é zero. Um mês sem
+ * anterior não cresceu 0%: ele não tem com o que ser comparado, e a tela precisa
+ * poder omitir o selo em vez de mostrar um «0%» que parece estagnação.
+ */
+export function variacao(atual: number, anterior: number): number | null {
+  if (!Number.isFinite(atual) || !Number.isFinite(anterior)) return null;
+  if (anterior === 0) return null;
+  return ((atual - anterior) / Math.abs(anterior)) * 100;
+}
+
+/** A série, acumulada dia a dia. Depois do corte o acumulado congela. */
+export function acumular(serie: DiaDaSerie[]): DiaDaSerie[] {
+  let a = 0, b = 0;
+  return serie.map(d => {
+    if (d.dentroDoCorte) { a += d.valor; b += d.valorAnterior; }
+    return { ...d, valor: a, valorAnterior: b };
+  });
+}
+
+/**
+ * Onde o mês fecha mantendo o ritmo até aqui.
+ *
+ * Regra de três sobre DIAS CORRIDOS, não úteis, de propósito: o corte da tela é
+ * um dia do calendário, e o 59 traz recebimento em fim de semana. Trocar por
+ * dias úteis aqui faria a estimativa discordar do gráfico que está ao lado dela.
+ *
+ * `null` sem corte ou sem recebimento — projetar de zero é inventar.
+ */
+export function estimativaDeFechamento(
+  recebido: number, diaCorte: number, diasNoMes: number,
+): number | null {
+  if (diaCorte <= 0 || diasNoMes <= 0 || recebido <= 0) return null;
+  if (diaCorte >= diasNoMes) return recebido;
+  return (recebido / diaCorte) * diasNoMes;
+}

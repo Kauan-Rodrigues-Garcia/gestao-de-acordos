@@ -43,6 +43,7 @@ import { useSetoresExtras } from './useSetoresExtras';
 import { ReceitaDistribuicaoPP } from './ReceitaDistribuicaoPP';
 import { MetaSection } from './MetaSection';
 import { ExtrasSection } from './ExtrasSection';
+import { DiretoriaVisaoGeral } from './DiretoriaVisaoGeral';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
 
 /*
@@ -309,9 +310,34 @@ export default function PainelDiretoria() {
    * tela vazia sem explicação é pior do que tela nenhuma.
    */
   const podeVerMestre = perfil?.perfil === 'super_admin' && tenant.slug === 'bookplay';
-  const [aba, setAba] = useState<'painel' | 'mestre'>('painel');
-  // Perder a permissão com a aba aberta não pode deixar o conteúdo no ar.
-  const abaVisivel = podeVerMestre ? aba : 'painel';
+
+  /*
+   * ── A BookPlay passou a ler o 59 ─────────────────────────────────────────
+   *
+   * O painel antigo somava o que o SISTEMA tabulou. O novo lê o relatório
+   * mestre, que traz a cobrança inteira — inclusive a carteira que não pertence
+   * a setor nenhum. Para um diretor, é a diferença entre o número de uma parte
+   * da empresa e o número da empresa.
+   *
+   * Só a BookPlay: o 59 é o relatório do ERP dela, e a PaguePlay ainda não tem
+   * equivalente. Lá o painel continua exatamente como era — nenhuma linha do
+   * caminho antigo foi tocada, e é isso que permite trazer a PaguePlay depois
+   * virando esta chave, sem reescrever nada.
+   */
+  const usaPainel59 = tenant.slug === 'bookplay';
+  const [aba, setAba] = useState<'visao' | 'painel' | 'mestre'>(
+    usaPainel59 ? 'visao' : 'painel',
+  );
+
+  /*
+   * Perder a permissão com a aba aberta não pode deixar o conteúdo no ar, e
+   * cair numa aba que não existe naquele tenant também não.
+   */
+  const abaVisivel: 'visao' | 'painel' | 'mestre' =
+    !usaPainel59            ? 'painel'
+    : aba === 'mestre'      ? (podeVerMestre ? 'mestre' : 'visao')
+    : aba === 'painel'      ? 'visao'   // o painel antigo saiu do ar na BookPlay
+    : 'visao';
 
   if (!perfil) return null;
 
@@ -372,10 +398,10 @@ export default function PainelDiretoria() {
       {/* ── Abas internas ────────────────────────────────────────────────────
           A barra só existe para quem tem mais de uma aba. Um seletor com uma
           opção só é ruído — mesma regra do filtro de setor no Painel Líder. */}
-      {podeVerMestre && (
+      {usaPainel59 && podeVerMestre && (
         <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
           {([
-            { key: 'painel' as const, label: 'Painel', Icon: TrendingUp },
+            { key: 'visao' as const,  label: 'Visão geral',  Icon: TrendingUp },
             { key: 'mestre' as const, label: 'Relatório 59', Icon: Database },
           ]).map(({ key, label, Icon }) => (
             <button key={key} type="button" onClick={() => setAba(key)}
@@ -398,6 +424,12 @@ export default function PainelDiretoria() {
               mesmo período, senão trocar de aba trocaria o mês em silêncio. */}
           <Mestre59 empresaId={empresa?.id ?? ''} mes={mesAnalise} />
         </Suspense>
+      ) : abaVisivel === 'visao' ? (
+        <DiretoriaVisaoGeral
+          empresaId={empresa?.id ?? ''}
+          mes={mesAnalise}
+          onAbrirSetores={podeVerMestre ? () => setAba('mestre') : undefined}
+        />
       ) : (
       <>
 
