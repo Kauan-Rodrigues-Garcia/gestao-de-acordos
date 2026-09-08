@@ -19,6 +19,27 @@
  * mostrava um. O seletor subiu para o cabeçalho do painel, onde vale para as três
  * abas de uma vez.
  *
+ * ## Quem NÃO entra na tabela
+ *
+ * A aba classifica gente por ritmo contra a meta do mês. Três casos não têm
+ * classificação possível, e desde 08/09/2026 os três saem da tabela e do
+ * gráfico — o recebimento deles continua somando no setor e na equipe, que
+ * somam pelo relatório e não por esta tela:
+ *
+ *   • **férias** — já saía;
+ *   • **desligado** — saía com etiqueta até 31/08/2026, quando a regra era não
+ *     encolher o número da equipe no meio do mês. Só que aqui não se soma nada:
+ *     quem trabalhou até o dia 20 é medido contra os 22 dias úteis do mês e cai
+ *     de faixa por ter saído, não por ter produzido menos;
+ *   • **sem meta** — sem meta não há projeção, e sem projeção não há quartil. A
+ *     linha existia com «—» em todas as colunas, ocupando espaço e, pior,
+ *     fazendo a tabela e o gráfico mostrarem populações diferentes em silêncio
+ *     (a distribuição sempre ignorou quem não tem meta).
+ *
+ * Quem está sem meta não some do painel: vai para a barra do topo, que lista
+ * essas pessoas e deixa gravar a meta ali mesmo, pela MESMA `fn_metas_upsert`
+ * da aba Metas. Não é uma segunda gravação — é a mesma, chamada de outro lugar.
+ *
  * ## Os dias úteis podem ser menos que o mês
  *
  * Operador de equipe em TREINAMENTO é projetado contra os dias a partir do início
@@ -60,18 +81,19 @@
  * unidades, e o mesmo que o Dashboard mostra.
  */
 
-import { Fragment, useState, useEffect, useMemo, useId } from 'react';
-import { ChevronDown, Target, CalendarClock, BarChart3, Copy, X } from 'lucide-react';
+import { Fragment, useState, useEffect, useMemo, useId, useCallback } from 'react';
+import { ChevronDown, Target, CalendarClock, BarChart3, Copy, X, TriangleAlert } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
-import { formatBRL } from '@/lib/money';
+import { formatBRL, parseBRL } from '@/lib/money';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { upsertMetas } from '@/services/metas/metasValidacao.service';
 import {
   metaNaUnidade, rotuloUnidade, UNIDADE_PADRAO, type UnidadeValor,
 } from '@/lib/unidadeValor';
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { cn } from '@/lib/utils';
-import { TagDesligado } from '@/components/TagDesligado';
-import { TagFerias } from '@/components/TagFerias';
 import {
   getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PP_HO_PERCENTUAL,
 } from '@/lib/index';
@@ -574,6 +596,73 @@ export function QuartisOperadores({
   const [contarHoje, setContarHoje] = useState(false);
   const [carregado, setCarregado]   = useState(false);
 
+  /*
+   * ── Quem está sem meta ───────────────────────────────────────────────────
+   *
+   * A barra abre fechada: ela é um aviso, não uma seção. Quem só quer ler os
+   * quartis não deveria rolar um painel de cadastro antes de chegar na tabela.
+   *
+   * `rascunhos` guarda o que está digitado, por operador. Some ao salvar, que
+   * é quando o valor passa a existir em `metasOp` e a pessoa muda de lista.
+   */
+  const { temPermissao } = useCargoPermissoes();
+  const podeEditarMetas = temPermissao('metas_editar');
+  const [semMetaAberto, setSemMetaAberto] = useState(false);
+  const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
+  const [salvandoMeta, setSalvandoMeta] = useState<string | null>(null);
+
+  /**
+   * Grava a meta de um operador — a MESMA `fn_metas_upsert` da aba Metas.
+   *
+   * Duas escolhas que fazem a sincronia ser real, e não uma segunda gravação:
+   *
+   *   • o payload leva só `meta_valor`, `meta_acordos` e `meta_proporcional`.
+   *     `fn_metas_upsert` só sobrescreve as colunas que chegam, então as metas
+   *     extras da BookPlay e a meta indireta da PaguePlay ficam intactas — esta
+   *     barra não sabe delas, e o que ela não sabe ela não apaga;
+   *   • o valor vai em BRUTO. `metasOp` é bruto, a coluna é bruta, e o campo diz
+   *     isso ao lado. Converter aqui gravaria 24,96% da meta de quem estivesse
+   *     com o alternador em H.O.
+   *
+   * A trava de setor validado continua valendo: a RPC devolve o operador em
+   * `bloqueados` e nada é gravado — a mensagem diz por quê em vez de fingir que
+   * salvou.
+   */
+  const salvarMetaDoOperador = useCallback(async (op: PerfilOp) => {
+    if (!podeEditarMetas) return;
+    const bruto = parseBRL(rascunhos[op.id] ?? '');
+    if (!(bruto > 0)) { toast.error('Digite um valor maior que zero.'); return; }
+
+    setSalvandoMeta(op.id);
+    try {
+      const { salvos, bloqueados, error } = await upsertMetas([{
+        tipo: 'operador',
+        referencia_id: op.id,
+        empresa_id: empresaId,
+        meta_valor: bruto,
+        meta_acordos: 0,
+        meta_proporcional: false,
+        mes: mesNum,
+        ano: anoNum,
+      }]);
+      if (error) { toast.error('Não foi possível salvar', { description: error }); return; }
+      if (bloqueados.some(b => b.referencia_id === op.id)) {
+        toast.error(`A meta de ${op.nome} não foi gravada`, {
+          description: 'O setor já está validado neste mês. Reabra a validação na aba Metas.',
+        });
+        return;
+      }
+      if (salvos === 0) { toast.error('Nada foi gravado. Confira a permissão de metas.'); return; }
+
+      // Move a pessoa para a tabela na hora: `grupos` depende de `metasOp`.
+      setMetasOp(m => ({ ...m, [op.id]: bruto }));
+      setRascunhos(r => { const { [op.id]: _, ...resto } = r; return resto; });
+      toast.success(`Meta de ${op.nome} salva: ${formatBRL(bruto)}`);
+    } finally {
+      setSalvandoMeta(null);
+    }
+  }, [podeEditarMetas, rascunhos, empresaId, mesNum, anoNum]);
+
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
@@ -674,7 +763,7 @@ export function QuartisOperadores({
     return m;
   }, [equipes]);
 
-  const grupos = useMemo(() => {
+  const gruposEsemMeta = useMemo(() => {
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
     const decorridos = Math.max(
       diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), undefined, contarHoje), 1,
@@ -715,15 +804,20 @@ export function QuartisOperadores({
     // Mesma fonte usada pelo Total recebido e por Desempenho Equipes.
     const visiveis = operadores
       /*
-       * FÉRIAS some do quartil; o recebimento segue nos totais.
+       * FÉRIAS e DESLIGADO saem do quartil; o recebimento das duas segue nos
+       * totais do setor e da equipe, que somam pelo relatório.
        *
-       * DESLIGADO continua aqui desde 31/08/2026, com etiqueta. Quem saiu no
-       * dia 20 produziu até o dia 20, e sumir no ato fazia o número da equipe
-       * encolher no meio do mês sem que nada tivesse mudado no relatório. Na
-       * virada a pessoa é ARQUIVADA e nem chega nesta lista — some antes, na
-       * consulta de perfis. Ver a migration 20260831160000.
+       * O desligado ficava aqui, com etiqueta, desde 31/08/2026 — a ideia era
+       * não encolher o número da equipe no meio do mês. Só que este quadro não
+       * soma nada: ele CLASSIFICA gente por ritmo contra a meta do mês inteiro.
+       * Quem trabalhou até o dia 20 é medido contra 22 dias úteis e desce de
+       * faixa por ter saído, não por ter produzido menos. Some da distribuição
+       * e some da tabela — o dinheiro, esse, continua contado onde é somado.
        */
-      .filter(o => (o.situacao ?? 'ativo') !== 'ferias')
+      .filter(o => {
+        const s = o.situacao ?? 'ativo';
+        return s !== 'ferias' && s !== 'desligado';
+      })
       /*
        * Arquivado sai — mas so dos meses POSTERIORES a saida. Filtrar sempre
        * reescrevia o passado: no dia 1 de setembro, abrir AGOSTO mostrava um
@@ -739,8 +833,25 @@ export function QuartisOperadores({
         || (equipesExtrasPorOperador[o.id] ?? []).includes(filtroEquipe));
 
     const porSetor = new Map<string, LinhaQuartil[]>();
+    const semMeta: PerfilOp[] = [];
 
     for (const op of visiveis) {
+      /*
+       * Sem meta não há quartil, e sem quartil não há linha nesta tabela.
+       *
+       * A pessoa aparecia com «—» em todas as colunas e «sem meta» em itálico,
+       * ocupando espaço numa tela cujo assunto é a faixa de cada um. Pior: como
+       * ela não entra na base do gráfico, a tabela e a distribuição mostravam
+       * populações diferentes sem dizer isso.
+       *
+       * Ela não some do painel — vai para a barra do topo, que é onde dá para
+       * resolver a causa em vez de conviver com o sintoma.
+       *
+       * O corte usa a meta DIRETA bruta. A indireta [PP] é um complemento de
+       * quem já tem meta; ninguém tem só ela.
+       */
+      if (!(metasOp[op.id] > 0)) { semMeta.push(op); continue; }
+
       // Agrupa pelo setor em exibição quando há um; senão, pelo setor de origem
       const sid = setorEfetivo ?? op.setor_id ?? 'sem_setor';
       const dias = diasDoOperador(op);
@@ -815,11 +926,13 @@ export function QuartisOperadores({
       });
     }
 
-    // Melhor projeção primeiro; sem meta vai para o fim
+    // Melhor projeção primeiro. Todo mundo aqui tem meta — quem não tem saiu
+    // antes do laço —, então o `?? -1` é só uma guarda contra projeção nula.
     for (const lista of porSetor.values()) {
       lista.sort((a, b) => (b.projecao ?? -1) - (a.projecao ?? -1));
     }
-    return porSetor;
+    semMeta.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    return { porSetor, semMeta };
   // `emHO` é dependência de verdade: sem ele, trocar a unidade no alternador
   // não recalcularia linha nenhuma — a tabela ficaria na unidade anterior e só
   // o rótulo mudaria.
@@ -827,6 +940,15 @@ export function QuartisOperadores({
       metasIndiretas, indiretoMap, emHO,
       setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
       setorDaEquipe, nomeDaEquipe, treinoMap]);
+
+  /*
+   * As duas metades do mesmo recorte: quem tem meta cai na tabela de quartis,
+   * quem não tem cai na barra do topo. Saem do MESMO `useMemo` de propósito —
+   * são a mesma lista de pessoas partida em duas, e calculá-las separado abriria
+   * a porta para os filtros divergirem entre a tabela e a barra.
+   */
+  const grupos  = gruposEsemMeta.porSetor;
+  const semMeta = gruposEsemMeta.semMeta;
 
   // Distribuição por quartil — só quem tem meta entra na base do 100%
   const distribuicao = useMemo(() => {
@@ -877,6 +999,77 @@ export function QuartisOperadores({
 
   return (
     <div className="space-y-4">
+      {/* ── Sem meta: o aviso vem ANTES de tudo ─────────────────────────────
+          Acima do alternador e da tabela de propósito. Quem está sem meta não
+          aparece em faixa nenhuma, e a tabela abaixo não tem como contar isso
+          — uma pessoa ausente não deixa buraco visível. A barra é o buraco. */}
+      {semMeta.length > 0 && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setSemMetaAberto(v => !v)}
+            aria-expanded={semMetaAberto}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-amber-500/10"
+          >
+            <TriangleAlert className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <span className="text-[12px] font-semibold text-foreground">
+              {semMeta.length === 1
+                ? '1 operador sem meta neste mês'
+                : `${semMeta.length} operadores sem meta neste mês`}
+            </span>
+            <span className="hidden sm:inline text-[11px] text-muted-foreground">
+              — fora da tabela de quartis até a meta ser definida
+            </span>
+            <ChevronDown className={cn('ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+              semMetaAberto && 'rotate-180')} />
+          </button>
+
+          {semMetaAberto && (
+            <div className="border-t border-amber-500/30 divide-y divide-border/60">
+              <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                {podeEditarMetas
+                  ? <>Salvar aqui é o mesmo que salvar na aba <strong>Metas</strong> — é a mesma
+                      gravação. Valor sempre em <strong>bruto</strong>, como a aba Metas guarda.</>
+                  : <>Você não tem permissão para editar metas. A lista está aqui para
+                      quem puder resolver saber de quem se trata.</>}
+              </p>
+              {semMeta.map(op => (
+                <div key={op.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
+                    {op.nome}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {(op.equipe_id ? nomeDaEquipe.get(op.equipe_id) : null)
+                      ?? operadorEquipeMap[op.id]?.equipe_nome ?? 'Sem equipe'}
+                  </span>
+                  {podeEditarMetas && (
+                    <>
+                      <input
+                        inputMode="decimal"
+                        placeholder="Meta (bruto)"
+                        aria-label={`Meta de ${op.nome}`}
+                        value={rascunhos[op.id] ?? ''}
+                        onChange={e => setRascunhos(r => ({ ...r, [op.id]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') void salvarMetaDoOperador(op); }}
+                        className="h-7 w-[130px] shrink-0 rounded-md border border-border bg-background px-2 text-[12px] tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void salvarMetaDoOperador(op)}
+                        disabled={salvandoMeta === op.id || !(rascunhos[op.id] ?? '').trim()}
+                        className="h-7 shrink-0 rounded-md bg-primary px-3 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        {salvandoMeta === op.id ? 'Salvando…' : 'Salvar'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Alternador de unidade [PP] ──────────────────────────────────────
           No topo, e não numa coluna: a unidade vale para a tabela inteira,
           inclusive para o que aparece ao expandir uma linha. */}
@@ -891,7 +1084,11 @@ export function QuartisOperadores({
 
       {grupos.size === 0 && (
         <p className="text-sm text-muted-foreground text-center py-10">
-          Nenhum operador encontrado com os filtros atuais.
+          {semMeta.length > 0
+            /* Diferença que importa: não é "não achei ninguém", é "achei e
+               ninguém tem meta". A barra acima já lista quem são. */
+            ? 'Nenhum operador com meta definida neste recorte.'
+            : 'Nenhum operador encontrado com os filtros atuais.'}
         </p>
       )}
 
@@ -1007,8 +1204,6 @@ export function QuartisOperadores({
                                 <span className="font-medium truncate max-w-[150px]" title={l.op.nome}>
                                   {l.op.nome}
                                 </span>
-                                <TagDesligado situacao={l.op.situacao} />
-                                <TagFerias situacao={l.op.situacao} feriasAte={l.op.ferias_ate} />
                                 {/* Sem este selo, a META e o RECEBIMENTO desta
                                     linha pareceriam errados para quem sabe a
                                     meta direta de cabeça. */}
