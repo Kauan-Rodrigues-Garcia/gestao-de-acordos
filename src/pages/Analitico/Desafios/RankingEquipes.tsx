@@ -37,6 +37,7 @@ import { ValorAnimado } from '@/components/ValorAnimado';
 import type { ResultadoEquipe } from '@/services/desafios/calcularDesafio';
 import type { EstiloTema } from './tema';
 import { percentualCurto, percentualCheio } from './tema';
+import { corProjecao } from '@/lib/diasUteis';
 import { RankingDesafio } from './RankingDesafio';
 
 interface Props {
@@ -123,7 +124,16 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId, co
 
                 <div className="shrink-0 text-right">
                   {corridaDeProjecao ? (
-                    <span className="text-sm font-semibold tabular-nums text-foreground">{eq.meta ? percentualCheio(eq.progresso) : '—'}</span>
+                    /* Cor do quartil da equipe, igual ao card dela em
+                       Desempenho Equipes. Sem meta não há projeção, e aí o
+                       traço fica na cor neutra. */
+                    <span
+                      className={cn('text-sm font-semibold tabular-nums',
+                        !eq.meta && 'text-muted-foreground')}
+                      style={eq.meta ? { color: corProjecao(eq.progresso) } : undefined}
+                    >
+                      {eq.meta ? percentualCheio(eq.progresso) : '—'}
+                    </span>
                   ) : <ValorAnimado
                     valor={eq.recebido}
                     formatar={formatBRL}

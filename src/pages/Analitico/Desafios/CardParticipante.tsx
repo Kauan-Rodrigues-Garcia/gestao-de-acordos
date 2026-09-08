@@ -26,6 +26,7 @@ import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio'
 import type { PremioPorPosicao } from '@/services/desafios/types';
 import type { EstiloTema } from './tema';
 import { percentualCurto, percentualCheio } from './tema';
+import { corProjecao } from '@/lib/diasUteis';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 import { PremioParticipante } from './PremioParticipante';
@@ -152,8 +153,16 @@ export function CardParticipante({
       {/* O número que decide a disputa. */}
       {corridaDeProjecao ? (
         <div className="shrink-0 text-right">
-          <span className={cn('block text-base font-bold tabular-nums',
-            item.posicao <= 3 ? tema.destaque : 'text-foreground')}>
+          {/* A cor é a do QUARTIL da pessoa, a mesma régua de Desempenho
+              Equipes — não a do pódio. Quem está em 1º com 62% de projeção
+              está atrasado, e pintar isso de cor de campeão esconde o único
+              dado que a corrida existe para mostrar. A classe do tema fica
+              para quem não tem meta: sem projeção não há quartil. */}
+          <span
+            className={cn('block text-base font-bold tabular-nums',
+              !item.meta && 'text-muted-foreground')}
+            style={item.meta ? { color: corProjecao(item.progresso) } : undefined}
+          >
             {item.meta ? percentualCheio(item.progresso) : '—'}
           </span>
         </div>

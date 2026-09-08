@@ -16,6 +16,7 @@ import { ValorAnimado } from '@/components/ValorAnimado';
 import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio';
 import type { EstiloTema } from './tema';
 import { percentualCurto, percentualCheio } from './tema';
+import { corProjecao } from '@/lib/diasUteis';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 
@@ -64,7 +65,15 @@ export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes, corri
             {item.meta ? (
               <span className="text-sm text-muted-foreground">
                 {corridaDeProjecao
-                  ? <>{percentualCheio(item.progresso)} da projeção de {formatBRL(item.meta)} até hoje</>
+                  ? <>
+                      {/* Mesmo quartil, mesma cor de Desempenho Equipes. Só o
+                          número é pintado: o resto da frase é contexto. */}
+                      <span className="font-semibold tabular-nums"
+                            style={{ color: corProjecao(item.progresso) }}>
+                        {percentualCheio(item.progresso)}
+                      </span>
+                      {' '}da projeção de {formatBRL(item.meta)} até hoje
+                    </>
                   : <>{percentualCurto(item.progresso)} do seu desafio de {formatBRL(item.meta)}</>}
               </span>
             ) : null}
