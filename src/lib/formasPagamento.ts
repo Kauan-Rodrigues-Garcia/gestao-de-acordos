@@ -63,3 +63,89 @@ export function rotuloDaForma(
   if (d) return d;
   return forma === 'cartao' ? ROTULO_CARTAO : ROTULO_BOLETO_PIX;
 }
+
+// ── Famílias: o que o painel mostra antes de alguém abrir ───────────────────
+
+/**
+ * A família de uma forma de pagamento, ou `null` se ela não pertence a nenhuma.
+ *
+ * O ERP escreve a variação no rótulo: «Boleto Bancário», «Boleto Negociação»,
+ * «Cartão de Crédito», «Cartão Site Parcial + Boleto», «Recorrente». Para quem
+ * lê o painel são três meios — boleto, cartão e cartão recorrente — e a
+ * variação só interessa a quem abrir o grupo para investigar.
+ *
+ * A ORDEM dos testes é a regra, não detalhe de implementação:
+ *
+ * 1. «recorrente» ANTES de «cart», senão «Cartão Recorrente» cairia em Cartão
+ *    e o recorrente — que é a assinatura, dinheiro de comportamento diferente —
+ *    desapareceria dentro do meio avulso.
+ * 2. «cart» ANTES de «boleto», senão «Cartão Site Parcial + Boleto» viraria
+ *    boleto. O dinheiro entrou por cartão; o boleto ali é a outra metade da
+ *    negociação, não o meio da linha.
+ *
+ * Rótulo que não casa fica SOZINHO, com o nome que o ERP deu. Um grupo
+ * «Outros» esconderia a forma nova exatamente no mês em que ela apareceu.
+ */
+export function familiaDaForma(rotulo: string): { chave: string; rotulo: string } | null {
+  const n = rotulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (n.includes('recorrente')) return { chave: 'cartao_recorrente', rotulo: 'Cartão recorrente' };
+  if (n.includes('cart'))       return { chave: 'cartao',            rotulo: 'Cartão' };
+  if (n.includes('boleto'))     return { chave: 'boleto',            rotulo: 'Boleto' };
+  return null;
+}
+
+/** O mínimo que uma linha precisa ter para ser agrupada. */
+export interface LinhaDeForma {
+  forma: string;
+  valor: number;
+  qtd: number;
+  valorAnterior: number;
+}
+
+export interface GrupoDeFormas<T extends LinhaDeForma = LinhaDeForma> {
+  chave: string;
+  rotulo: string;
+  valor: number;
+  qtd: number;
+  valorAnterior: number;
+  /** As formas cruas, da maior para a menor. Uma só = o grupo não abre. */
+  itens: T[];
+}
+
+/**
+ * As formas do relatório, agrupadas por família e ordenadas por valor.
+ *
+ * Genérica no tipo da linha de propósito: a quebra por setor vai trazer os
+ * mesmos rótulos com colunas a mais, e reagrupá-los com outra regra é como as
+ * duas telas passariam a discordar sobre quanto entrou por cartão.
+ *
+ * Não muta a lista recebida nem as linhas dela — os totais do grupo são
+ * calculados em objeto novo, e `itens` guarda as referências originais.
+ */
+export function agruparFormas<T extends LinhaDeForma>(formas: T[]): GrupoDeFormas<T>[] {
+  const porChave = new Map<string, GrupoDeFormas<T>>();
+
+  for (const f of formas) {
+    const familia = familiaDaForma(f.forma);
+    // Prefixo `cru:` para a forma solta nunca colidir com uma chave de família.
+    const chave = familia?.chave ?? `cru:${f.forma}`;
+    let g = porChave.get(chave);
+    if (!g) {
+      g = {
+        chave,
+        rotulo: familia?.rotulo ?? f.forma,
+        valor: 0, qtd: 0, valorAnterior: 0,
+        itens: [],
+      };
+      porChave.set(chave, g);
+    }
+    g.valor         += f.valor;
+    g.qtd           += f.qtd;
+    g.valorAnterior += f.valorAnterior;
+    g.itens.push(f);
+  }
+
+  const grupos = [...porChave.values()];
+  for (const g of grupos) g.itens.sort((a, b) => b.valor - a.valor);
+  return grupos.sort((a, b) => b.valor - a.valor);
+}

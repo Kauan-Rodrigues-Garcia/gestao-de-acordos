@@ -201,3 +201,29 @@ export function estimativaDeFechamento(
   if (diaCorte >= diasNoMes) return recebido;
   return (recebido / diaCorte) * diasNoMes;
 }
+
+/**
+ * A força da cor de uma barra de carteira, entre 0 e 1.
+ *
+ * As barras deixaram de ser coloridas por categoria e passaram a ser um degradê
+ * da cor da empresa: quanto maior o recebimento, mais forte o tom. A cor deixou
+ * de ser rótulo e virou GRANDEZA, e por isso vira função — proporção crua não
+ * serve.
+ *
+ * A raiz quadrada é o motivo de existir esta função. A distribuição do 59 é
+ * torta: uma carteira leva metade do mês e a cauda fica abaixo de 5% da maior.
+ * Com proporção direta, essa cauda inteira sai no mesmo cinza-quase-invisível e
+ * a ordem some da tela. A raiz levanta o pé da escala mantendo a ordem intacta
+ * — é monotônica, então barra maior NUNCA fica mais clara que barra menor.
+ *
+ * O piso 0,18 é para a menor carteira ainda ser vista; o teto 0,80 é para a
+ * maior não virar bloco chapado ao lado do texto.
+ *
+ * Sem base (`maior` zero ou negativo) devolve o piso, e não `NaN`: `NaN` numa
+ * opacidade de CSS é valor inválido, e valor inválido apaga a barra inteira.
+ */
+export function intensidadeDaBarra(valor: number, maior: number): number {
+  if (!Number.isFinite(valor) || !Number.isFinite(maior) || maior <= 0) return 0.18;
+  const p = Math.min(1, Math.max(0, valor / maior));
+  return 0.18 + 0.62 * Math.sqrt(p);
+}

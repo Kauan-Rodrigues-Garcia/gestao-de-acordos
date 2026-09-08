@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  variacao, acumular, estimativaDeFechamento, type DiaDaSerie,
+  variacao, acumular, estimativaDeFechamento, intensidadeDaBarra, type DiaDaSerie,
 } from './diretoria.service';
 
 const dia = (d: number, valor: number, valorAnterior: number, dentroDoCorte = true): DiaDaSerie =>
@@ -81,5 +81,32 @@ describe('estimativaDeFechamento', () => {
     expect(estimativaDeFechamento(1000, 0, 30)).toBeNull();
     expect(estimativaDeFechamento(1000, 10, 0)).toBeNull();
     expect(estimativaDeFechamento(0, 10, 30)).toBeNull();
+  });
+});
+
+describe('intensidadeDaBarra', () => {
+  it('a maior carteira chega no teto e a escala respeita a ordem', () => {
+    expect(intensidadeDaBarra(100, 100)).toBeCloseTo(0.80, 6);
+    const [a, b, c] = [90, 40, 5].map(v => intensidadeDaBarra(v, 100));
+    expect(a).toBeGreaterThan(b);
+    expect(b).toBeGreaterThan(c);
+  });
+
+  it('levanta a cauda em vez de deixá-la invisível', () => {
+    // Com proporção direta 1% viraria 0,006 de opacidade — barra apagada. A
+    // raiz põe a mesma carteira em ~0,24, visível e ainda claramente a menor.
+    expect(intensidadeDaBarra(1, 100)).toBeGreaterThan(0.2);
+    expect(intensidadeDaBarra(1, 100)).toBeLessThan(0.3);
+  });
+
+  it('sem base devolve o piso, nunca NaN', () => {
+    // `NaN` em `opacity` é valor inválido de CSS: a barra some da tela.
+    expect(intensidadeDaBarra(10, 0)).toBe(0.18);
+    expect(intensidadeDaBarra(10, Number.NaN)).toBe(0.18);
+    expect(intensidadeDaBarra(Number.NaN, 100)).toBe(0.18);
+  });
+
+  it('valor acima da base satura no teto em vez de estourar', () => {
+    expect(intensidadeDaBarra(500, 100)).toBeCloseTo(0.80, 6);
   });
 });

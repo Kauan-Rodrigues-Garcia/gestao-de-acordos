@@ -19,9 +19,17 @@
  * nada — e é o erro que uma tela de diretoria não pode cometer, porque ninguém
  * confere a régua de um número que já veio pronto.
  *
- * O corte sai do banco quando ninguém escolhe: hoje, no mês corrente; o último
- * dia, num mês fechado. O slider existe para investigar («como estávamos no dia
- * 20?»), não para configurar.
+ * O padrão é o dia de HOJE e ele não pede confirmação de ninguém: quem abre a
+ * aba quer o mês até agora. Mudar o corte é investigação («como estávamos no
+ * dia 20?»), e por isso mora atrás de um botão, não numa barra sempre aberta.
+ *
+ * ## Cor de gráfico não pode vir de `hsl(var(--x))`
+ *
+ * As variáveis de tema deste projeto são `oklch(...)`. Envelopar isso em `hsl()`
+ * produz cor inválida, e atributo SVG inválido não avisa: o recharts desenha a
+ * linha com `stroke` nenhum e o gráfico aparece VAZIO, com eixo e grade no
+ * lugar. É por isso que as cores saem de `useChartColors`/`useAxisColors`, que
+ * resolvem a variável para `rgb()` e reagem à troca de tema.
  *
  * ## Tudo vem de UMA chamada
  *
@@ -36,51 +44,34 @@ import { motion } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Minus, Activity, Wallet, Users, Layers,
   ArrowUpRight, ArrowDownRight, AlertCircle, CheckCircle2, FileSpreadsheet,
+  CalendarRange, ChevronRight, RotateCcw,
 } from 'lucide-react';
 import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useAxisColors, useChartColors } from '@/hooks/useChartColors';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
+import { rotuloDoMes } from '@/lib/mesReferencia';
+import { corDaForma, agruparFormas } from '@/lib/formasPagamento';
 import {
   buscarVisaoGeralDiretoria, variacao, acumular, estimativaDeFechamento,
-  type VisaoGeralDiretoria,
+  intensidadeDaBarra, type VisaoGeralDiretoria,
 } from '@/services/mestre/diretoria.service';
 
-/**
- * Cores das formas de pagamento.
- *
- * Por PREFIXO, e não por igualdade: o ERP escreve «CARTÃO», «CARTÃO DE
- * CRÉDITO» e «CARTÃO SITE PARCIAL + BOLETO», e as três são cartão. Uma lista
- * fechada obrigaria a mexer no código toda vez que o ERP inventasse um rótulo
- * — e, pior, a forma nova cairia no cinza sem ninguém perceber.
- */
-const CORES_FORMA: { prefixo: string; cor: string }[] = [
-  { prefixo: 'PIX AUTOM', cor: '#0ea5e9' },
-  { prefixo: 'PIX',       cor: '#06b6d4' },
-  { prefixo: 'CARTÃO',    cor: '#8b5cf6' },
-  { prefixo: 'RECORRENTE', cor: '#a855f7' },
-  { prefixo: 'BOLETO',    cor: '#f59e0b' },
-];
-const COR_OUTROS = '#64748b';
+/** Enquanto o tema não resolveu (primeiro quadro), a linha usa isto. */
+const FALLBACK_PRIMARIA = '#3b82f6';
+const FALLBACK_ANTERIOR = '#94a3b8';
 
-function corDaForma(forma: string): string {
-  const f = forma.toUpperCase();
-  return CORES_FORMA.find(c => f.startsWith(c.prefixo))?.cor ?? COR_OUTROS;
-}
-
-/** Paleta das barras de carteira. Cicla — 20 setores não precisam de 20 cores. */
-const CORES_CARTEIRA = [
-  '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444',
-  '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
-];
+const pct = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
 // ── Peças pequenas ──────────────────────────────────────────────────────────
 
 /** Selo de variação. `null` não vira 0% — vira nada. Ver `variacao`. */
-function Selo({ pct, className }: { pct: number | null; className?: string }) {
-  if (pct === null) return null;
-  const positivo = pct >= 0;
-  const Icone = Math.abs(pct) < 0.05 ? Minus : positivo ? ArrowUpRight : ArrowDownRight;
+function Selo({ pct: p, className }: { pct: number | null; className?: string }) {
+  if (p === null) return null;
+  const positivo = p >= 0;
+  const Icone = Math.abs(p) < 0.05 ? Minus : positivo ? ArrowUpRight : ArrowDownRight;
   return (
     <span className={cn(
       'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
@@ -89,7 +80,7 @@ function Selo({ pct, className }: { pct: number | null; className?: string }) {
       className,
     )}>
       <Icone className="h-3 w-3" />
-      {Math.abs(pct).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+      {pct(Math.abs(p))}%
     </span>
   );
 }
@@ -158,13 +149,123 @@ function TooltipRitmo({ active, payload, label }: PropsTooltipGrafico) {
   );
 }
 
+/**
+ * O botão de período e o que ele abre.
+ *
+ * Duas maneiras de dizer a mesma coisa porque são dois gestos diferentes:
+ * arrastar responde «e se fosse outro dia?» varrendo o mês; digitar a data
+ * responde «quero exatamente o dia 12». Uma barra sozinha obriga a mirar o
+ * pixel, e um campo de data sozinho não deixa varrer.
+ *
+ * `corte` é sempre o corte EFETIVO (o que o banco devolveu), não a escolha —
+ * assim o botão mostra o dia real mesmo antes de alguém mexer em qualquer
+ * coisa, que é o estado em que a tela quase sempre está.
+ */
+function FiltroDePeriodo({
+  mes, corte, diasNoMes, escolhido, onEscolher,
+}: {
+  mes: string; corte: number; diasNoMes: number;
+  escolhido: number | null; onEscolher: (dia: number | null) => void;
+}) {
+  const dataIso = `${mes}-${String(corte).padStart(2, '0')}`;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors',
+            escolhido !== null
+              ? 'border-primary/50 bg-primary/10 text-primary'
+              : 'border-border/70 bg-card text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <CalendarRange className="h-3.5 w-3.5" />
+          <span>
+            {corte >= diasNoMes ? 'Mês inteiro' : `Até o dia ${corte}`}
+          </span>
+          {escolhido !== null && (
+            <span className="rounded bg-primary/20 px-1 text-[9px] uppercase tracking-wide">
+              filtrado
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent align="end" className="w-[300px] space-y-3">
+        <div>
+          <p className="text-xs font-semibold text-foreground">Período analisado</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            Do dia 1 até o dia escolhido — e o mês anterior é medido até esse
+            mesmo dia.
+          </p>
+        </div>
+
+        <label className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Analisar até
+          </span>
+          <input
+            type="date"
+            value={dataIso}
+            min={`${mes}-01`}
+            max={`${mes}-${String(diasNoMes).padStart(2, '0')}`}
+            onChange={e => {
+              const v = e.target.value;
+              // Fora do mês em foco não é corte: o seletor de mês do cabeçalho
+              // é quem troca de mês, e aceitar aqui deixaria a tela mostrando
+              // um mês no título e outro nos números.
+              if (!v.startsWith(`${mes}-`)) return;
+              const dia = Number(v.slice(8, 10));
+              if (Number.isFinite(dia) && dia >= 1) onEscolher(Math.min(dia, diasNoMes));
+            }}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+          />
+        </label>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Ou arraste pelo mês
+            </span>
+            <span className="font-mono text-xs font-bold tabular-nums text-foreground">
+              dia {corte}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={diasNoMes}
+            value={corte}
+            onChange={e => onEscolher(Number(e.target.value))}
+            aria-label="Comparar os dois meses até este dia"
+            className="mt-1.5 h-1 w-full cursor-pointer accent-primary"
+          />
+        </div>
+
+        {escolhido !== null && (
+          <button
+            type="button"
+            onClick={() => onEscolher(null)}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <RotateCcw className="h-3 w-3" /> Voltar para o dia de hoje
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ── A aba ───────────────────────────────────────────────────────────────────
 
 export function DiretoriaVisaoGeral({
-  empresaId, mes, onAbrirSetores,
+  empresaId, mes, versao = 0, onAbrirSetores,
 }: {
   empresaId: string;
   mes: string;
+  /** Muda quando o «Atualizar» do cabeçalho é clicado. Só isso força a recarga. */
+  versao?: number;
   /** Leva para a aba de setores. Opcional: a aba funciona sozinha. */
   onAbrirSetores?: () => void;
 }) {
@@ -172,8 +273,17 @@ export function DiretoriaVisaoGeral({
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]         = useState<string | null>(null);
   const [modo, setModo]         = useState<'acumulado' | 'dia'>('acumulado');
-  /** `null` = o corte que o banco escolheu. Só vira número quando alguém mexe. */
+  /** `null` = o corte que o banco escolheu (hoje). Só vira número se alguém mexe. */
   const [corteEscolhido, setCorteEscolhido] = useState<number | null>(null);
+  /** Grupo de forma de pagamento aberto pelo clique. Um por vez: a lista é curta. */
+  const [formaAberta, setFormaAberta] = useState<string | null>(null);
+  /** Grupo sob o cursor. Separado do aberto — realçar não é abrir. */
+  const [formaSobre, setFormaSobre] = useState<string | null>(null);
+
+  const { tickColor, gridColor } = useAxisColors();
+  const cores = useChartColors(['--primary', '--muted-foreground']);
+  const corAtual    = cores['--primary']          ?? FALLBACK_PRIMARIA;
+  const corAnterior = cores['--muted-foreground'] ?? FALLBACK_ANTERIOR;
 
   const carregar = useCallback(async (corte: number | null) => {
     if (!empresaId) return;
@@ -191,7 +301,9 @@ export function DiretoriaVisaoGeral({
   // pontos diferentes do mês, e herdar o corte anterior mostraria um recorte
   // que ninguém pediu.
   useEffect(() => { setCorteEscolhido(null); setCarregando(true); }, [mes]);
-  useEffect(() => { void carregar(corteEscolhido); }, [carregar, corteEscolhido]);
+  // `versao` entra nas dependências só para o «Atualizar» do cabeçalho poder
+  // disparar a mesma busca sem esta aba precisar expor nada para cima.
+  useEffect(() => { void carregar(corteEscolhido); }, [carregar, corteEscolhido, versao]);
 
   const serieGrafico = useMemo(() => {
     if (!dados) return [];
@@ -204,6 +316,9 @@ export function DiretoriaVisaoGeral({
       valorAnterior: d.valorAnterior,
     }));
   }, [dados, modo]);
+
+  /** As formas em famílias — «Boleto», «Cartão», «Cartão recorrente». */
+  const grupos = useMemo(() => agruparFormas(dados?.formas ?? []), [dados]);
 
   if (carregando) {
     return (
@@ -248,8 +363,8 @@ export function DiretoriaVisaoGeral({
   const mesFechado = dados.diaCorte >= dados.diasNoMes;
   const diferenca  = dados.recebido - dados.recebidoAnterior;
 
-  const totalFormas = dados.formas.reduce((s, f) => s + f.valor, 0);
-  const maiorForma  = dados.formas[0];
+  const totalFormas = grupos.reduce((s, g) => s + g.valor, 0);
+  const maiorGrupo  = grupos[0];
   const maiorCarteira = dados.carteiras[0];
 
   // Quem cresceu mais e quem caiu mais, para a leitura do período. Só com mês
@@ -267,8 +382,29 @@ export function DiretoriaVisaoGeral({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className="space-y-4"
+      className="space-y-4 pb-16"
     >
+      {/* ── Barra de contexto: o que está sendo medido, e o filtro ───────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">
+            {mesFechado
+              ? `${rotuloDoMes(mes)} inteiro`
+              : `1 a ${dados.diaCorte} de ${rotuloDoMes(mes)}`}
+          </span>
+          {dados.temLoteAnterior
+            ? <> · comparado com o mesmo trecho de {rotuloDoMes(dados.mesAnterior)}</>
+            : <> · sem mês anterior importado para comparar</>}
+        </p>
+        <FiltroDePeriodo
+          mes={mes}
+          corte={dados.diaCorte}
+          diasNoMes={dados.diasNoMes}
+          escolhido={corteEscolhido}
+          onEscolher={setCorteEscolhido}
+        />
+      </div>
+
       {/* ── Os quatro números ────────────────────────────────────────────── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Numero
@@ -321,7 +457,7 @@ export function DiretoriaVisaoGeral({
             <div>
               <h3 className="text-sm font-semibold text-foreground">O ritmo do recebimento</h3>
               <p className="text-[11px] text-muted-foreground">
-                Realizado e comparação com {dados.mesAnterior}, no mesmo dia de corte.
+                Realizado e comparação com {rotuloDoMes(dados.mesAnterior)}, no mesmo dia de corte.
               </p>
             </div>
             {/* Acumulado responde «vamos fechar bem?»; por dia responde «o que
@@ -344,27 +480,34 @@ export function DiretoriaVisaoGeral({
             </div>
           </div>
 
-          <div className="h-[260px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={serieGrafico} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
-                <XAxis dataKey="dia" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickLine={false} />
+              <LineChart data={serieGrafico} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis
+                  dataKey="dia" tick={{ fontSize: 10, fill: tickColor }}
+                  stroke={gridColor} tickLine={false}
+                />
                 <YAxis
-                  tick={{ fontSize: 10 }}
-                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 10, fill: tickColor }}
+                  stroke={gridColor}
                   tickLine={false}
                   axisLine={false}
+                  width={52}
                   tickFormatter={v => `${Math.round(Number(v) / 1000)}k`}
                 />
-                <Tooltip content={<TooltipRitmo />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Tooltip
+                  content={<TooltipRitmo />}
+                  cursor={{ stroke: corAtual, strokeWidth: 1, strokeDasharray: '4 4' }}
+                />
                 <Line
                   type="monotone" dataKey="valorAnterior" name="Mês anterior"
-                  stroke="hsl(var(--muted-foreground))" strokeWidth={1.5}
+                  stroke={corAnterior} strokeWidth={1.5} strokeOpacity={0.7}
                   strokeDasharray="5 4" dot={false} isAnimationActive={false}
                 />
                 <Line
                   type="monotone" dataKey="valor" name="Este mês"
-                  stroke="hsl(var(--primary))" strokeWidth={2.5}
+                  stroke={corAtual} strokeWidth={2.5}
                   dot={false} isAnimationActive={false}
                   /* Sem isto o recharts pula o buraco e liga o último dia com
                      dado ao primeiro depois dele, inventando um trecho. */
@@ -374,30 +517,18 @@ export function DiretoriaVisaoGeral({
             </ResponsiveContainer>
           </div>
 
-          {/* O corte é investigação, não configuração: mexer aqui responde
-              «como estávamos no dia 20?» sem mudar nada para ninguém. */}
-          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border/50 pt-3">
-            <span className="text-[11px] font-medium text-muted-foreground">Comparar até o dia</span>
-            <input
-              type="range"
-              min={1}
-              max={dados.diasNoMes}
-              value={dados.diaCorte}
-              onChange={e => setCorteEscolhido(Number(e.target.value))}
-              aria-label="Comparar os dois meses até este dia"
-              className="h-1 min-w-[160px] flex-1 cursor-pointer accent-primary"
-            />
-            <span className="min-w-[2ch] font-mono text-sm font-bold tabular-nums text-foreground">
-              {dados.diaCorte}
+          <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-border/50 pt-2.5 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <i className="h-0.5 w-4 rounded-full" style={{ background: corAtual }} />
+              Este mês
             </span>
-            {corteEscolhido !== null && (
-              <button
-                onClick={() => setCorteEscolhido(null)}
-                className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Voltar ao padrão
-              </button>
-            )}
+            <span className="inline-flex items-center gap-1.5">
+              <i
+                className="h-0.5 w-4 rounded-full opacity-70"
+                style={{ background: `repeating-linear-gradient(90deg, ${corAnterior} 0 4px, transparent 4px 7px)` }}
+              />
+              {rotuloDoMes(dados.mesAnterior)}
+            </span>
           </div>
         </section>
 
@@ -420,7 +551,7 @@ export function DiretoriaVisaoGeral({
                 <strong className={varTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
                   {formatBRL(Math.abs(diferenca))} {varTotal >= 0 ? 'acima' : 'abaixo'}
                 </strong>{' '}
-                do mesmo período de {dados.mesAnterior}.
+                do mesmo período de {rotuloDoMes(dados.mesAnterior)}.
               </p>
             </>
           )}
@@ -431,8 +562,7 @@ export function DiretoriaVisaoGeral({
               <div className="text-xs">
                 <p className="font-semibold text-foreground">{destaque.nome}</p>
                 <p className="text-muted-foreground">
-                  {destaque.v >= 0 ? 'cresceu' : 'caiu'}{' '}
-                  {Math.abs(destaque.v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                  {destaque.v >= 0 ? 'cresceu' : 'caiu'} {pct(Math.abs(destaque.v))}%
                   {' '}contra o mês anterior.
                 </p>
               </div>
@@ -448,7 +578,7 @@ export function DiretoriaVisaoGeral({
                 <p className="font-semibold text-foreground">{atencao.nome}</p>
                 <p className="text-muted-foreground">
                   {atencao.v < 0 ? 'merece atenção: ' : 'segue no ritmo: '}
-                  {Math.abs(atencao.v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                  {pct(Math.abs(atencao.v))}%
                   {atencao.v < 0 ? ' abaixo' : ' acima'} do mês anterior.
                 </p>
               </div>
@@ -475,15 +605,21 @@ export function DiretoriaVisaoGeral({
               Recebimento por carteira do 59{dados.temLoteAnterior && ' · variação contra o mês anterior'}.
             </p>
           </div>
-          <div className="space-y-1.5">
-            {dados.carteiras.map((c, i) => {
+          {/* A barra é um DEGRADÊ da cor da empresa, não uma paleta por
+              categoria: aqui a cor é grandeza, não rótulo. Quanto maior o
+              recebimento, mais forte o tom — ver `intensidadeDaBarra` para o
+              porquê da raiz quadrada. */}
+          <div className="space-y-0.5">
+            {dados.carteiras.map(c => {
               const largura = maiorCarteira?.valor
                 ? Math.max(2, (c.valor / maiorCarteira.valor) * 100) : 0;
-              const cor = CORES_CARTEIRA[i % CORES_CARTEIRA.length];
+              const forca = intensidadeDaBarra(c.valor, maiorCarteira?.valor ?? 0);
               return (
-                <div key={c.cod} className="flex items-center gap-3 rounded-lg px-1 py-1">
+                <div
+                  key={c.cod}
+                  className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40"
+                >
                   <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: cor }} />
                     <span className="truncate text-xs text-foreground" title={c.nome}>{c.nome}</span>
                     {/* Carteira sem setor não é defeito: parte da cobrança não
                         pertence a setor nenhum, e o total da empresa a inclui. */}
@@ -493,10 +629,13 @@ export function DiretoriaVisaoGeral({
                       </span>
                     )}
                   </span>
-                  <span className="hidden h-1.5 w-[26%] shrink-0 overflow-hidden rounded-full bg-muted sm:block">
-                    <span className="block h-full rounded-full" style={{ width: `${largura}%`, background: cor }} />
+                  <span className="hidden h-2 w-[26%] shrink-0 overflow-hidden rounded-full bg-muted/60 sm:block">
+                    <span
+                      className="block h-full rounded-full bg-primary"
+                      style={{ width: `${largura}%`, opacity: forca }}
+                    />
                   </span>
-                  <span className="w-[100px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+                  <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
                     {formatBRL(c.valor)}
                   </span>
                   <span className="w-[62px] shrink-0 text-right">
@@ -508,50 +647,114 @@ export function DiretoriaVisaoGeral({
           </div>
         </section>
 
-        <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-          <div className="mb-3">
+        {/* `self-start`: a lista de carteiras ao lado é muito mais alta, e um
+            card esticado até lá teria o rodapé boiando sobre um vão vazio. */}
+        <section className="self-start rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <div>
             <h3 className="text-sm font-semibold text-foreground">Como o dinheiro chega</h3>
-            <p className="text-[11px] text-muted-foreground">Participação no total recebido.</p>
+            <p className="text-[11px] text-muted-foreground">
+              Participação no total recebido · clique para abrir as variações.
+            </p>
           </div>
 
-          {/* Barra empilhada em vez de rosca: com 8 formas e três variações de
-              «CARTÃO», as fatias de rosca viram lascas ilegíveis. A barra
-              mantém a proporção e sobra espaço para o rótulo. */}
-          <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
-            {dados.formas.map(f => (
+          {/* Barra empilhada em vez de rosca: com as variações do ERP as fatias
+              de rosca viram lascas ilegíveis. A barra mantém a proporção e
+              sobra espaço para o rótulo. */}
+          {/* O realce é do HOVER, e abrir é do CLIQUE. Se passar o mouse já
+              abrisse o grupo, a lista embaixo mudaria de altura ao varrer a
+              barra e o alvo fugiria do cursor. */}
+          <div
+            className="mt-3 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full"
+            onMouseLeave={() => setFormaSobre(null)}
+          >
+            {grupos.map(g => (
               <span
-                key={f.forma}
-                title={`${f.forma}: ${formatBRL(f.valor)}`}
+                key={g.chave}
+                title={`${g.rotulo}: ${formatBRL(g.valor)}`}
+                onMouseEnter={() => setFormaSobre(g.chave)}
                 style={{
-                  width: `${totalFormas ? (f.valor / totalFormas) * 100 : 0}%`,
-                  background: corDaForma(f.forma),
+                  width: `${totalFormas ? (g.valor / totalFormas) * 100 : 0}%`,
+                  background: corDaForma(g.rotulo),
+                  opacity: formaSobre === null || formaSobre === g.chave ? 1 : 0.3,
                 }}
+                className="transition-opacity"
               />
             ))}
           </div>
 
-          <div className="mt-3 space-y-1.5">
-            {dados.formas.map(f => (
-              <div key={f.forma} className="flex items-center gap-2 text-xs">
-                <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: corDaForma(f.forma) }} />
-                <span className="min-w-0 flex-1 truncate text-foreground" title={f.forma}>{f.forma}</span>
-                <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
-                  {totalFormas
-                    ? ((f.valor / totalFormas) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })
-                    : '0'}%
-                </span>
-                <span className="w-[92px] shrink-0 text-right font-mono tabular-nums text-foreground">
-                  {formatBRL(f.valor)}
-                </span>
-              </div>
-            ))}
-          </div>
+          <ul className="mt-3 divide-y divide-border/40">
+            {grupos.map(g => {
+              const abre  = g.itens.length > 1;
+              const aberto = formaAberta === g.chave;
+              const parte = totalFormas ? (g.valor / totalFormas) * 100 : 0;
+              const cor   = corDaForma(g.rotulo);
+              return (
+                <li key={g.chave}>
+                  <button
+                    type="button"
+                    /* `aria-disabled` e não `disabled`: botão desabilitado não
+                       recebe evento de mouse em todo navegador, e o grupo de um
+                       item só perderia o realce na barra ao passar o cursor. */
+                    aria-disabled={!abre}
+                    tabIndex={abre ? undefined : -1}
+                    onClick={() => { if (abre) setFormaAberta(aberto ? null : g.chave); }}
+                    onMouseEnter={() => setFormaSobre(g.chave)}
+                    onMouseLeave={() => setFormaSobre(null)}
+                    aria-expanded={abre ? aberto : undefined}
+                    className={cn(
+                      'flex w-full items-center gap-2 py-2 text-left text-xs transition-colors',
+                      abre ? 'cursor-pointer hover:text-primary' : 'cursor-default',
+                    )}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        'h-3 w-3 shrink-0 text-muted-foreground transition-transform',
+                        !abre && 'invisible',
+                        aberto && 'rotate-90',
+                      )}
+                    />
+                    <i className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: cor }} />
+                    <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={g.rotulo}>
+                      {g.rotulo}
+                    </span>
+                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {pct(parte)}%
+                    </span>
+                    <span className="w-[92px] shrink-0 text-right font-mono tabular-nums text-foreground">
+                      {formatBRL(g.valor)}
+                    </span>
+                  </button>
 
-          {maiorForma && totalFormas > 0 && (
+                  {abre && aberto && (
+                    <ul className="mb-1.5 space-y-1 rounded-lg bg-muted/40 px-2 py-2">
+                      {g.itens.map(f => (
+                        <li key={f.forma} className="flex items-center gap-2 text-[11px]">
+                          <span
+                            className="ml-3.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ background: cor, opacity: 0.6 }}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={f.forma}>
+                            {f.forma}
+                          </span>
+                          <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
+                            {f.qtd.toLocaleString('pt-BR')}
+                          </span>
+                          <span className="w-[92px] shrink-0 text-right font-mono tabular-nums text-foreground">
+                            {formatBRL(f.valor)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {maiorGrupo && totalFormas > 0 && (
             <p className="mt-3 border-t border-border/50 pt-3 text-[11px] leading-relaxed text-muted-foreground">
               <strong className="text-foreground">
-                {maiorForma.forma} representa{' '}
-                {((maiorForma.valor / totalFormas) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                {maiorGrupo.rotulo} representa {pct((maiorGrupo.valor / totalFormas) * 100)}%
               </strong>{' '}
               do recebimento do período.
             </p>

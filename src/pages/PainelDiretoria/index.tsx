@@ -328,6 +328,12 @@ export default function PainelDiretoria() {
   const [aba, setAba] = useState<'visao' | 'painel' | 'mestre'>(
     usaPainel59 ? 'visao' : 'painel',
   );
+  /*
+   * O botão «Atualizar» do cabeçalho para a Visão Geral. Um contador em vez de
+   * uma função de recarga vinda de baixo: a aba busca dentro dela mesma, e
+   * expor o `refetch` para cá acoplaria o cabeçalho ao ciclo de vida dela.
+   */
+  const [versaoVisao, setVersaoVisao] = useState(0);
 
   /*
    * Perder a permissão com a aba aberta não pode deixar o conteúdo no ar, e
@@ -371,7 +377,10 @@ export default function PainelDiretoria() {
             <div className="rounded-xl border border-border/50 bg-background/60 px-1.5 h-9 flex items-center">
               <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
             </div>
-            {setores.length > 0 && (
+            {/* Só no painel antigo: este filtro alimenta `useAnalytics`, e a
+                Visão Geral lê o 59 inteiro de propósito. Deixá-lo visível ali
+                seria um controle que não faz nada — pior que não ter. */}
+            {abaVisivel === 'painel' && setores.length > 0 && (
               <Select value={setorFiltro ?? 'all'} onValueChange={v => setSetorFiltro(v === 'all' ? null : v)}>
                 <SelectTrigger className="w-44 h-9 text-xs rounded-xl border-border/50 bg-background/60">
                   <Building2 className="w-3 h-3 mr-1 text-muted-foreground" />
@@ -384,11 +393,17 @@ export default function PainelDiretoria() {
               </Select>
             )}
             <Button variant="outline" size="sm"
-              onClick={() => { refetch(); reloadSetoresExtras(); void analiticoDash.refetch(); }}
-              disabled={carregando || loadingSetores || loadingExtras}
+              /* Cada aba recarrega a SUA fonte. A Visão Geral não passa por
+                 `useAnalytics`, então `refetch()` ali não traria nada — o botão
+                 girava e a tela continuava igual. */
+              onClick={() => {
+                if (abaVisivel === 'visao') { setVersaoVisao(v => v + 1); return; }
+                refetch(); reloadSetoresExtras(); void analiticoDash.refetch();
+              }}
+              disabled={abaVisivel === 'painel' && (carregando || loadingSetores || loadingExtras)}
               className="rounded-xl h-9 border-border/50 bg-background/60 hover:bg-accent/40"
             >
-              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', (carregando || loadingSetores || loadingExtras) && 'animate-spin')} />
+              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', abaVisivel === 'painel' && (carregando || loadingSetores || loadingExtras) && 'animate-spin')} />
               Atualizar
             </Button>
           </div>
@@ -428,6 +443,7 @@ export default function PainelDiretoria() {
         <DiretoriaVisaoGeral
           empresaId={empresa?.id ?? ''}
           mes={mesAnalise}
+          versao={versaoVisao}
           onAbrirSetores={podeVerMestre ? () => setAba('mestre') : undefined}
         />
       ) : (
