@@ -92,7 +92,9 @@ import { ListaOperadores, type GrupoOperadores } from '@/pages/Analitico/ListaOp
 import {
   deResumoAnalitico, deResumoDiario, type LinhaOperadorPainel,
 } from '@/pages/Analitico/linhaOperador';
-import { intervaloDoRecorte, mesDoRecorte, type Recorte } from '@/pages/Analitico/recorte';
+import {
+  intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
+} from '@/pages/Analitico/recorte';
 import { useAnaliticoDashboard } from '@/hooks/useAnaliticoDashboard';
 // ── O recorte Dia: tudo abaixo vem do diário, não do analítico ──────────────
 import { useDiario } from '@/hooks/useDiario';
@@ -103,7 +105,10 @@ import {
 } from '@/services/diario/escopoDiario';
 import {
   linhasVivas, agregarPorOperador, consolidarIgnorados, fmtDataISO,
+  consolidarItens, dataLabel, montarTextoListaDiario, type ItemDiario,
 } from '@/pages/Analitico/Diario/helpers';
+import { FormaChip } from '@/pages/Analitico/Diario/FormaChip';
+import { normDiario } from '@/services/diario/diarioComum';
 import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
 // O mapa de calor operador × dia — o outro formato da MESMA lista, agora
 // somando do analítico. Continua no diretório do diário; a fonte é que mudou.
@@ -189,6 +194,7 @@ export function AnaliticoLider({
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const mostrarHO = isPP;                 // HO só existe no relatório PaguePlay
+  const mostrarNR = !isPP;                // BookPlay usa NR no lugar do Cód.Cliente
   // A lente decide a janela. O mês continua sendo a fonte desta tela; o
   // intervalo é o que prende o filtro de data de dentro de cada operador.
   const mes = mesDoRecorte(recorte);
@@ -597,7 +603,9 @@ export function AnaliticoLider({
       else next.add(opId);
       return next;
     });
-    if (!jaAberto && !linhasMap.has(opId)) {
+    // No recorte Dia o detalhe sai do diário, que já está em memória — buscar o
+    // analítico aqui seria uma ida ao banco cujo resultado ninguém desenha.
+    if (!jaAberto && recorte.modo !== 'dia' && !linhasMap.has(opId)) {
       setLoadingLinhas(prev => new Set(prev).add(opId));
       const { data } = await buscarAnalitico({ empresaId, mes, operadorId: opId });
       setLinhasMap(prev => new Map(prev).set(opId, data));
@@ -616,11 +624,31 @@ export function AnaliticoLider({
    * O filtro escolhido à mão manda; a lente é só o padrão.
    */
   function getLinhasOp(opId: string): AnaliticoRecebimento[] {
-    const escolhido = filtrosDatas.get(opId);
-    const filtro = (escolhido?.inicio || escolhido?.fim)
-      ? escolhido
-      : (recorte.modo === 'mes' ? undefined : { inicio: pisoDoRecorte, fim: tetoDoRecorte });
-    return filtrarLinhasPorData(linhasMap.get(opId) ?? [], filtro);
+    return filtrarLinhasPorData(
+      linhasMap.get(opId) ?? [],
+      janelaDoDetalhe(recorte, filtrosDatas.get(opId)),
+    );
+  }
+
+  /**
+   * Os acordos do operador NO DIA — do diário, que é a fonte do recorte Dia.
+   *
+   * Abrir um card no recorte Dia ia buscar no ANALÍTICO. Na PaguePlay são dois
+   * relatórios diferentes (em setembro/2026, R$ 504 mil contra R$ 1,52 milhão),
+   * então a linha de cima dizia o valor do diário e a lista abaixo abria vazia
+   * — o operador não tem linha de analítico naquele dia. Aqui o detalhe lê da
+   * mesma origem que o número que acabou de ser clicado.
+   *
+   * `pulsoDoDia.vivas` já passou pelo escopo de permissão e pelo corte dos
+   * ignorados (próximo contato ≤ data do pagamento), que é a regra do diário e
+   * some das listas por definição.
+   */
+  function itensDoDia(opId: string): ItemDiario[] {
+    if (!pulsoDoDia) return [];
+    return consolidarItens(
+      pulsoDoDia.vivas.filter(r => r.operador_id === opId),
+      pulsoDoDia.importacao,
+    );
   }
 
   function setFiltroData(opId: string, campo: 'inicio' | 'fim', valor: string) {
@@ -939,6 +967,13 @@ export function AnaliticoLider({
     const valorIgnorado = ignor.reduce((s, i) => s + i.valor, 0);
     return {
       resumos,
+      /*
+       * As linhas do dia, já vivas e no escopo. Ficam aqui porque o DETALHE
+       * expandido precisa delas: abrir um operador no recorte Dia lia do
+       * analítico (`buscarAnalitico`), uma fonte que na PaguePlay é outro
+       * relatório — o card dizia "R$ 12 mil" e a lista abria vazia.
+       */
+      vivas,
       importacao:    maxIdx,
       novos:         resumos.reduce((s, r) => s + r.novos, 0),
       valorIgnorado,
@@ -1202,8 +1237,128 @@ export function AnaliticoLider({
   const carregandoConteudo =
     carregandoLista || (visaoEfetiva === 'mapa' && !dashboardCarregado);
 
+  /**
+   * O detalhe do operador NO RECORTE DIA — a tabela do recebimento diário.
+   *
+   * Não é a mesma tabela do analítico, e nunca foi: o diário fala de CÓDIGO do
+   * cliente (NR na BookPlay), forma de pagamento crua do relatório e data de
+   * pagamento, sem HO e sem a coluna de ação — tabular ali não faz sentido,
+   * porque a linha do diário não é o registro do acordo.
+   *
+   * E traz o aviso que só existe aqui: na PaguePlay, um pagamento que entrou
+   * com tabulação diferente de "Acordo Fechado" ganha a tarja âmbar. É o que
+   * diz ao líder o que precisa ser arrumado no sistema de origem — o mesmo
+   * aviso que o "Copiar lista" já mandava no texto.
+   */
+  function detalheDoDia(l: LinhaOperadorPainel) {
+    const itens = itensDoDia(l.operador_id);
+    const total = itens.reduce((s, i) => s + i.valor, 0);
+
+    return (
+      <>
+        {/* Sem filtro de datas: a janela já é UM dia, e dois controles de data
+            sobre o mesmo dia só teriam como resultado esvaziar a lista. */}
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/20 px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            {itens.length} {itens.length === 1 ? 'acordo' : 'acordos'}
+            {diaEmFoco && ` · ${fmtDataISO(diaEmFoco)}`}
+          </span>
+          <Button size="sm" variant="outline"
+            className="h-8 gap-1 rounded-lg px-2 text-xs"
+            disabled={itens.length === 0}
+            onClick={() => void copiarTexto(
+              montarTextoListaDiario(
+                l.nome ?? l.usuario, diaEmFoco, itens, pulsoDoDia?.importacao ?? 1,
+              ),
+              'Lista de recebimentos copiada',
+            )}>
+            <Copy className="h-3 w-3" /> Copiar lista
+          </Button>
+        </div>
+
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+              <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
+                {mostrarNR ? 'NR / NOME' : 'CÓDIGO / NOME'}
+              </th>
+              <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
+              <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
+              <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA PGT.</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {itens.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  Sem recebimentos deste operador no dia.
+                </td>
+              </tr>
+            ) : itens.map(item => (
+              <tr key={item.key} className={cn('hover:bg-muted/20', item.novo && 'bg-primary/5')}>
+                <td className="px-3 py-2">
+                  <span className="font-semibold tabular-nums inline-flex items-center gap-1.5">
+                    {item.novo && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0"
+                        title="Novo (último relatório)" />
+                    )}
+                    <span>
+                      {mostrarNR ? (item.acordo_codigo || '—') : (item.cliente_codigo || '—')}
+                      {item.n > 1 && (
+                        <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">
+                          {item.n}x
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  {item.nome_cliente && (
+                    <span className="block text-muted-foreground truncate max-w-[200px]">
+                      {item.nome_cliente}
+                    </span>
+                  )}
+                  {item.instituicao && (
+                    <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[200px]">
+                      {item.instituicao}
+                    </span>
+                  )}
+                  {/* PaguePlay: o pagamento entrou sem estar tabulado como
+                      "Acordo Fechado". Só lá — na BookPlay o relatório é por NR
+                      e não carrega essa tabulação. */}
+                  {!mostrarNR && normDiario(item.tabulacao) !== 'acordofechado' && (
+                    <span
+                      className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                      title="Este acordo não está tabulado como Acordo Fechado">
+                      <AlertCircle className="w-2.5 h-2.5" /> Tabular Acordo Fechado
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2"><FormaChip forma={item.forma_pagamento} /></td>
+                <td className="px-3 py-2 text-right font-mono">{formatBRL(item.valor)}</td>
+                <td className="px-3 py-2 tabular-nums">{dataLabel(item)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {itens.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-border bg-muted/30 font-semibold">
+                <td colSpan={2} className="px-3 py-2.5">Total</td>
+                <td className="px-3 py-2.5 text-right font-mono text-primary">{formatBRL(total)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </>
+    );
+  }
+
   /** O conteúdo de dentro do operador aberto: filtro de data e a lista. */
   function detalheDoOperador(l: LinhaOperadorPainel) {
+    // No recorte Dia a fonte é o diário, e ele tem tabela própria. Nada aqui
+    // embaixo se aplica: as linhas já estão em memória (não há busca a esperar)
+    // e o filtro de datas não existe numa janela de um dia.
+    if (recorte.modo === 'dia') return detalheDoDia(l);
+
     const carregando  = loadingLinhas.has(l.operador_id);
     const linhas      = getLinhasOp(l.operador_id);
     const todasLinhas = linhasMap.get(l.operador_id) ?? [];

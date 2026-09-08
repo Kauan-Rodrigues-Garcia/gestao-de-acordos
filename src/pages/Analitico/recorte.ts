@@ -43,6 +43,28 @@ export function intervaloDoRecorte(r: Recorte): { inicio: string; fim: string } 
 }
 
 /**
+ * A janela que um DETALHE deve mostrar: a lente é o padrão, o filtro escolhido
+ * à mão manda.
+ *
+ * Existe porque a regra estava escrita duas vezes — uma no detalhe expandido do
+ * líder, outra na lista do operador — e só a primeira estava certa. Na visão
+ * individual a lente não recortava nada: trocar para Dia mudava o rótulo do
+ * card para "Recebido no dia" e continuava somando o mês inteiro embaixo dele.
+ *
+ * `undefined` quer dizer "não filtre" — é o mês, e a lista já veio dele.
+ */
+export function janelaDoDetalhe(
+  r: Recorte,
+  manual?: { inicio: string; fim: string } | null,
+): { inicio: string; fim: string } | undefined {
+  // Uma ponta basta: quem escolheu 'de 15' quer de 15 em diante, e a lente não
+  // pode fechar o outro lado por conta própria.
+  if (manual && (manual.inicio || manual.fim)) return manual;
+  if (r.modo === 'mes') return undefined;
+  return intervaloDoRecorte(r);
+}
+
+/**
  * Troca de modo preservando a janela.
  *
  * Ao ir para o dia, escolhe HOJE se hoje cai no mês em foco; senão o último dia

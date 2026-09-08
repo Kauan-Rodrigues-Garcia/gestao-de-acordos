@@ -26,7 +26,7 @@ import {
 } from '@/services/analitico/analitico.service';
 import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import {
-  intervaloDoRecorte, mesDoRecorte, type Recorte,
+  intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
 } from '@/pages/Analitico/recorte';
 
 type AbaOperador = 'meus' | 'ranking';
@@ -132,14 +132,26 @@ export function AnaliticoOperador({
     };
   }, [podeVerRanking, ranking, operadoresOcultos, operadorId]);
 
+  /*
+   * A lente recorta de verdade aqui também.
+   *
+   * `dados` vem sempre do MÊS — é uma busca por mês, e as datas de pagamento
+   * estão todas nele. Antes as pontas do recorte só serviam de limite para o
+   * date picker, então trocar para Dia ou Período não mudava uma linha: o card
+   * passava a se chamar "Recebido no dia" e continuava somando setembro
+   * inteiro. Quem tem visão individual via a lente inteira sem efeito.
+   *
+   * Quem manda continua sendo o filtro escolhido à mão; a lente é o padrão.
+   */
   const dadosFiltrados = useMemo(() => {
-    if (!filtroInicio && !filtroFim) return dados;
+    const janela = janelaDoDetalhe(recorte, { inicio: filtroInicio, fim: filtroFim });
+    if (!janela) return dados;
     return dados.filter(d => {
-      if (filtroInicio && d.data_pagamento < filtroInicio) return false;
-      if (filtroFim   && d.data_pagamento > filtroFim)    return false;
+      if (janela.inicio && d.data_pagamento < janela.inicio) return false;
+      if (janela.fim    && d.data_pagamento > janela.fim)    return false;
       return true;
     });
-  }, [dados, filtroInicio, filtroFim]);
+  }, [dados, filtroInicio, filtroFim, recorte]);
 
   function limparFiltro() {
     setFiltroInicio('');
@@ -269,9 +281,16 @@ export function AnaliticoOperador({
               </div>
             )}
 
-            {dadosFiltrados.length === 0 && (filtroInicio || filtroFim) && (
+            {/* Também quando quem esvaziou a lista foi a LENTE: no recorte Dia
+                sem filtro à mão, a condição antiga não cobria nada e a tela
+                ficava com os cards zerados e um vão branco no lugar da tabela. */}
+            {dadosFiltrados.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">Nenhum recebimento no período selecionado.</p>
+                <p className="text-sm">
+                  {recorte.modo === 'dia'
+                    ? 'Nenhum recebimento seu neste dia.'
+                    : 'Nenhum recebimento no período selecionado.'}
+                </p>
               </div>
             )}
 

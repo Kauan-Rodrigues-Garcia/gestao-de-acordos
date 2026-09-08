@@ -1,7 +1,7 @@
 // src/pages/Analitico/recorte.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  mesDoRecorte, intervaloDoRecorte, trocarModo, somarDias,
+  mesDoRecorte, intervaloDoRecorte, janelaDoDetalhe, trocarModo, somarDias,
   recorteDaQuery, queryDoRecorte, type Recorte,
 } from './recorte';
 
@@ -75,5 +75,45 @@ describe('query', () => {
   });
   it('query sem recorte devolve null', () => {
     expect(recorteDaQuery(new URLSearchParams({ aba: 'analitico' }), HOJE)).toBeNull();
+  });
+});
+
+/*
+ * A regra estava escrita duas vezes — no detalhe expandido do líder e na lista
+ * de quem tem visão individual — e só a primeira estava certa. Na individual a
+ * lente não recortava nada: trocar para Dia mudava o rótulo do card para
+ * "Recebido no dia" e continuava somando o mês inteiro embaixo dele.
+ */
+describe('janelaDoDetalhe — a lente é o padrão, a mão manda', () => {
+  const MES: Recorte = { modo: 'mes', mes: '2026-09' };
+  const DIA: Recorte = { modo: 'dia', dia: '2026-09-05' };
+  const PER: Recorte = { modo: 'periodo', mes: '2026-09', inicio: '2026-09-03', fim: '2026-09-07' };
+
+  it('no mês, sem filtro, não filtra nada — a lista já veio do mês', () => {
+    expect(janelaDoDetalhe(MES)).toBeUndefined();
+    expect(janelaDoDetalhe(MES, { inicio: '', fim: '' })).toBeUndefined();
+  });
+
+  it('no dia, a janela é aquele dia nas duas pontas', () => {
+    expect(janelaDoDetalhe(DIA)).toEqual({ inicio: '2026-09-05', fim: '2026-09-05' });
+  });
+
+  it('no período, a janela é o intervalo escolhido', () => {
+    expect(janelaDoDetalhe(PER)).toEqual({ inicio: '2026-09-03', fim: '2026-09-07' });
+  });
+
+  it('o filtro à mão vence a lente — inclusive dentro do dia', () => {
+    // Quem digitou uma data quer aquela data, mesmo que a lente diga outra.
+    expect(janelaDoDetalhe(DIA, { inicio: '2026-09-01', fim: '2026-09-30' }))
+      .toEqual({ inicio: '2026-09-01', fim: '2026-09-30' });
+  });
+
+  it('uma ponta só já é filtro à mão: a lente não fecha o outro lado', () => {
+    // 'de 15' quer dizer de 15 em diante. Completar com o fim do mês seria a
+    // tela decidindo por quem escolheu.
+    expect(janelaDoDetalhe(MES, { inicio: '2026-09-15', fim: '' }))
+      .toEqual({ inicio: '2026-09-15', fim: '' });
+    expect(janelaDoDetalhe(PER, { inicio: '', fim: '2026-09-04' }))
+      .toEqual({ inicio: '', fim: '2026-09-04' });
   });
 });
