@@ -31,7 +31,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { useEmpresa } from '@/hooks/useEmpresa';
 
 /** Depois disso a marca de atividade é considerada velha e some. */
 const VALIDADE_ATIVIDADE = 3000;
@@ -58,7 +57,6 @@ interface Marca { quando: number; atividade: AtividadeChat }
 
 export function useChatPresenca(ativo: boolean): UseChatPresenca {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
   const meuId = perfil?.id ?? null;
 
   const [online, setOnline] = useState<Set<string>>(new Set());
@@ -75,7 +73,7 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
    * primeiro aviso de «gravando» — e o outro lado seguia vendo "digitando…"
    * até o áudio ser enviado.
    */
-  const ultimoAviso = useRef<Record<AtividadeChat, number>>({ digitando: 0, gravando: 0 });
+  const ultimoAviso = useRef(new Map<string, number>());
 
   /** Reprojeta os dois `Set` a partir do mapa. Fonte única, sem divergir. */
   const publicar = useCallback(() => {
@@ -87,66 +85,119 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
   }, []);
 
   useEffect(() => {
-    if (!ativo || !empresa?.id || !meuId) return;
-
-    // Copiada aqui de propósito: a limpeza roda depois, e ler `marcas.current`
-    // lá dentro pegaria o Map de outro ciclo caso a empresa mudasse no meio.
+    if (!ativo || !meuId) return;
+    let vivo = true;
+    let conectado = false;
+    let tentativa = 0;
+    let repetir: ReturnType<typeof setTimeout> | undefined;
+    let repetirTrack: ReturnType<typeof setTimeout> | undefined;
     const marcasDoCiclo = marcas.current;
+    const avisosDoCiclo = ultimoAviso.current;
 
-    const ch = supabase.channel(`presenca-chat-${empresa.id}`, {
-      config: { presence: { key: meuId } },
-    });
-    canal.current = ch;
-
-    ch.on('presence', { event: 'sync' }, () => {
-      const estado = ch.presenceState<EstadoPresenca>();
-      setOnline(new Set(Object.keys(estado)));
-    });
-
-    ch.on('broadcast', { event: 'digitando' }, ({ payload }) => {
-      const p = payload as { de?: string; para?: string; atividade?: AtividadeChat };
-      // Só me interessa quem está falando comigo: o canal é da empresa inteira,
-      // e sem este recorte a tela mostraria pontinhos de conversa alheia.
-      if (!p?.de || p.para !== meuId) return;
-      // `atividade` ausente = versão antiga do app em outra aba. Digitando é a
-      // leitura conservadora: é o que aquele cliente sabia mandar.
-      const atividade: AtividadeChat = p.atividade === 'gravando' ? 'gravando' : 'digitando';
-      marcas.current.set(p.de, { quando: Date.now(), atividade });
+    const limpar = () => {
+      conectado = false;
+      setOnline(new Set());
+      marcasDoCiclo.clear();
       publicar();
-    });
-
-    void ch.subscribe((status) => {
-      if (status === 'SUBSCRIBED') void ch.track({ perfil_id: meuId });
-    });
-
-    // Varre as marcas velhas. É o que apaga a atividade de quem fechou a aba
-    // sem avisar — não existe evento para isso.
+    };
+    const rastrear = async (ch: ReturnType<typeof supabase.channel>) => {
+      if (!vivo || canal.current !== ch || !conectado) return;
+      const resultado = await ch.track({ perfil_id: meuId }).catch(() => 'error');
+      if (!vivo || canal.current !== ch || !conectado) return;
+      if (resultado !== 'ok') {
+        clearTimeout(repetirTrack);
+        repetirTrack = setTimeout((): void => { void rastrear(ch); }, 3000);
+      }
+    };
+    const conectar = () => {
+      if (!vivo || !navigator.onLine) return;
+      clearTimeout(repetir);
+      clearTimeout(repetirTrack);
+      const anterior = canal.current;
+      canal.current = null;
+      if (anterior) void supabase.removeChannel(anterior);
+      // O chat já permite conversar entre empresas. O tópico acompanha essa
+      // identidade única; a RLS autoriza somente perfis com acesso ao chat.
+      const ch = supabase.channel('presenca-chat', {
+        config: { private: true, presence: { key: meuId } },
+      });
+      canal.current = ch;
+      ch.on('presence', { event: 'sync' }, () => {
+        if (!vivo || canal.current !== ch || !conectado) return;
+        const estado = ch.presenceState<EstadoPresenca>();
+        // Substituir o conjunto também remove quem saiu; várias abas do
+        // mesmo perfil continuam contando como uma única pessoa online.
+        setOnline(new Set(Object.keys(estado).filter(id => estado[id].length > 0)));
+      });
+      ch.on('broadcast', { event: 'digitando' }, ({ payload }) => {
+        if (!vivo || canal.current !== ch || !conectado) return;
+        const p = payload as { de?: string; para?: string; atividade?: AtividadeChat };
+        if (!p?.de || p.para !== meuId || p.de === meuId) return;
+        marcasDoCiclo.set(p.de, { quando: Date.now(), atividade: p.atividade === 'gravando' ? 'gravando' : 'digitando' });
+        publicar();
+      });
+      ch.subscribe(status => {
+        if (!vivo || canal.current !== ch) return;
+        if (status === 'SUBSCRIBED') {
+          conectado = true;
+          tentativa = 0;
+          clearTimeout(repetir);
+          void rastrear(ch);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          limpar();
+          clearTimeout(repetir);
+          repetir = setTimeout(conectar, Math.min(30_000, 1000 * 2 ** tentativa++) + Math.random() * 500);
+        }
+      });
+    };
+    const offline = () => {
+      limpar();
+      clearTimeout(repetir);
+      clearTimeout(repetirTrack);
+      const ch = canal.current;
+      canal.current = null;
+      if (ch) void supabase.removeChannel(ch);
+    };
+    const retomar = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (conectado && canal.current) void rastrear(canal.current);
+      else conectar();
+    };
+    conectar();
+    window.addEventListener('online', retomar);
+    window.addEventListener('offline', offline);
+    document.addEventListener('visibilitychange', retomar);
     const faxina = setInterval(() => {
       const corte = Date.now() - VALIDADE_ATIVIDADE;
       let mudou = false;
-      for (const [id, m] of marcas.current) {
-        if (m.quando < corte) { marcas.current.delete(id); mudou = true; }
+      for (const [id, m] of marcasDoCiclo) {
+        if (m.quando < corte) { marcasDoCiclo.delete(id); mudou = true; }
       }
       if (mudou) publicar();
     }, 1000);
-
     return () => {
+      vivo = false;
       clearInterval(faxina);
-      void ch.unsubscribe();
+      clearTimeout(repetir);
+      clearTimeout(repetirTrack);
+      window.removeEventListener('online', retomar);
+      window.removeEventListener('offline', offline);
+      document.removeEventListener('visibilitychange', retomar);
+      const ch = canal.current;
       canal.current = null;
-      marcasDoCiclo.clear();
-      setOnline(new Set());
-      setDigitando(new Set());
-      setGravando(new Set());
+      if (ch) void supabase.removeChannel(ch);
+      avisosDoCiclo.clear();
+      limpar();
     };
-  }, [ativo, empresa?.id, meuId, publicar]);
+  }, [ativo, meuId, publicar]);
 
   const avisarAtividade = useCallback((paraId: string, atividade: AtividadeChat) => {
     const agora = Date.now();
     // Estrangula: uma tecla por milissegundo não pode virar um evento por
     // milissegundo. Reavisar mais rápido que a validade já mantém aceso.
-    if (agora - ultimoAviso.current[atividade] < RITMO_AVISO) return;
-    ultimoAviso.current[atividade] = agora;
+    const chave = `${paraId}:${atividade}`;
+    if (agora - (ultimoAviso.current.get(chave) ?? 0) < RITMO_AVISO) return;
+    ultimoAviso.current.set(chave, agora);
     void canal.current?.send({
       type: 'broadcast', event: 'digitando',
       payload: { de: meuId, para: paraId, atividade },

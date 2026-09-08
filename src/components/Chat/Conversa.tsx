@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, Paperclip, Send, Smile, X, Loader2, Mic, Trash2, Check,
+  ArrowLeft, Paperclip, Send, Smile, X, Mic, Trash2, Check,
   Heart, CornerUpLeft, Settings2, Lock, Eye, LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,9 +23,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { toast } from 'sonner';
 import {
-  subirAnexo, curtirMensagem, curtidasDasMensagens, quemCurtiu, LIMITE_ANEXO,
+  curtirMensagem, curtidasDasMensagens, quemCurtiu, LIMITE_ANEXO,
   type MensagemChat, type ConversaChat, type AnexoChat,
   type CurtidasDaMensagem, type QuemCurtiu,
 } from '@/services/chat/chat.service';
@@ -52,7 +51,11 @@ interface Props {
   gravando:   boolean;
   expandido:  boolean;
   onVoltar?:  () => void;
-  onEnviar:   (texto: string, anexos: AnexoChat[], respondendoId?: string | null) => Promise<string | null>;
+  onEnviar:   (texto: string, anexos: AnexoChat[], respondendoId?: string | null, arquivos?: File[]) => Promise<string | null>;
+  onReenviar?: (id: string) => Promise<string | null>;
+  carregandoMensagens?: boolean;
+  erroMensagens?: string | null;
+  onRecarregarMensagens?: () => void;
   onDigitando: () => void;
   /** Avisa o outro lado que estou gravando. Chamado em ritmo — ver o efeito. */
   onGravando: () => void;
@@ -91,6 +94,7 @@ export function Conversa({
   conversa, mensagens, online, digitando, gravando, expandido, onVoltar, onEnviar,
   onDigitando, onGravando, temMais, carregandoMais, onVerAnteriores,
   somenteLeitura = false, perspectivaDe, onConfigurarGrupo,
+  onReenviar, carregandoMensagens = false, erroMensagens, onRecarregarMensagens,
 }: Props) {
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
@@ -124,7 +128,6 @@ export function Conversa({
 
   const [texto, setTexto] = useState('');
   const [pendentes, setPendentes] = useState<File[]>([]);
-  const [subindo, setSubindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
   /** Mensagem que a próxima vai citar. Null = mensagem solta. */
@@ -151,7 +154,9 @@ export function Conversa({
    * A animação de entrada vale só para o que CHEGA depois. Sem esta conta,
    * abrir uma conversa animaria as sessenta de uma vez — festa, não informação.
    */
-  const jaVistas = useRef<Set<string>>(new Set());
+  const jaVistas = useRef<Set<string>>(new Set(mensagens.map(m => m.id)));
+  const ultimaRolada = useRef<string | null>(null);
+  const historicoCarregado = useRef(mensagens.length > 0);
 
   /** Altura da rolagem antes de inserir a página anterior, para não pular. */
   const alturaAntes = useRef<number | null>(null);
@@ -199,9 +204,19 @@ export function Conversa({
     }
 
     const ultima = mensagens[mensagens.length - 1];
-    if (!ultima) return;
-    descer(mensagens.length > 1);
+    if (!ultima || ultimaRolada.current === ultima.id) return;
+    const primeiraCarga = ultimaRolada.current === null;
+    ultimaRolada.current = ultima.id;
+    descer(!primeiraCarga);
   }, [mensagens, descer]);
+
+  useLayoutEffect(() => {
+    if (!carregandoMais) alturaAntes.current = null;
+  }, [carregandoMais]);
+
+  useEffect(() => {
+    if (mensagens.length > 0 && !carregandoMensagens) historicoCarregado.current = true;
+  }, [mensagens.length, carregandoMensagens]);
 
   // O balão nasce no fim da lista. Descer depois de ele montar evita que os
   // três pontos fiquem escondidos logo abaixo da área visível.
@@ -278,29 +293,20 @@ export function Conversa({
 
   // ── Envio ──────────────────────────────────────────────────────────────────
   const enviar = useCallback(async () => {
-    if (subindo) return;
     const corpo = texto.trim();
     if (!corpo && !pendentes.length) return;
-
-    setSubindo(true);
+    const arquivos = pendentes;
+    const resposta = respondendo?.id ?? null;
     setErro(null);
-
-    const anexos: AnexoChat[] = [];
-    for (const arquivo of pendentes) {
-      const { anexo, erro: falha } = await subirAnexo(arquivo, conversa.id);
-      if (falha) { setErro(falha); setSubindo(false); return; }
-      if (anexo) anexos.push(anexo);
-    }
-
-    const falha = await onEnviar(corpo, anexos, respondendo?.id ?? null);
-    setSubindo(false);
-    if (falha) { setErro(falha); return; }
-
     setTexto('');
     setPendentes([]);
     setRespondendo(null);
     campo.current?.focus();
-  }, [texto, pendentes, subindo, conversa.id, onEnviar, respondendo]);
+    // O hook insere o balão antes de qualquer upload ou chamada de rede.
+    // A confirmação não altera o texto que a pessoa já está escrevendo depois.
+    const falha = await onEnviar(corpo, [], resposta, arquivos);
+    if (falha) setErro(falha);
+  }, [texto, pendentes, onEnviar, respondendo]);
 
 
 
@@ -334,46 +340,17 @@ export function Conversa({
    * recriado a cada evento de realtime, e depender dele relançaria a consulta
    * a cada tecla digitada do outro lado.
    */
-  const chaveDaPagina = mensagens.map(m => m.id).join(',');
+  const chaveDasCurtidas = mensagens.filter(m => !m.status_envio)
+    .map(m => `${m.id}:${m.curtida_em ?? ''}`).join(',');
   useEffect(() => {
-    const ids = chaveDaPagina ? chaveDaPagina.split(',') : [];
+    const ids = chaveDasCurtidas ? chaveDasCurtidas.split(',').map(m => m.split(':')[0]) : [];
     if (!ids.length || !meuId) { setCurtidas(new Map()); return; }
     let cancelado = false;
     void curtidasDasMensagens(ids, meuId).then(mapa => {
       if (!cancelado) setCurtidas(mapa);
     });
     return () => { cancelado = true; };
-  }, [chaveDaPagina, meuId]);
-
-  /*
-   * Recarrega quando alguém curte do outro lado.
-   *
-   * `curtida_em` é o carimbo de qualquer mudança de curtida, e viaja como
-   * UPDATE de `chat_mensagens` pelo realtime que `useChat` já escuta. É ele
-   * que dispara este efeito — `chat_curtidas` não está na publicação, e
-   * publicá-la dobraria o tráfego para dizer a mesma coisa.
-   */
-  const carimboDasCurtidas = mensagens.map(m => m.curtida_em ?? '').join(',');
-  useEffect(() => {
-    const ids = mensagens.filter(m => m.curtida_em).map(m => m.id);
-    if (!ids.length || !meuId) return;
-    let cancelado = false;
-    void curtidasDasMensagens(ids, meuId).then(mapa => {
-      if (cancelado) return;
-      // Mescla em vez de substituir: as mensagens sem `curtida_em` nunca
-      // tiveram curtida, e não estão no resultado desta consulta.
-      setCurtidas(atual => {
-        const copia = new Map(atual);
-        for (const id of ids) {
-          const novo = mapa.get(id);
-          if (novo) copia.set(id, novo); else copia.delete(id);
-        }
-        return copia;
-      });
-    });
-    return () => { cancelado = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- o carimbo É a dependência; `mensagens` muda a cada evento.
-  }, [carimboDasCurtidas, meuId]);
+  }, [chaveDasCurtidas, meuId]);
 
   /** Índice por id: a citação precisa achar a mensagem original para desenhar. */
   const porId = useMemo(
@@ -511,49 +488,11 @@ export function Conversa({
     try { window.getSelection()?.collapseToEnd(); } catch { /* sem seleção */ }
 
     void curtir(m);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [curtir]);
 
 
-  /*
-   * Aviso de curtida.
-   *
-   * Não é notificação de banco: a curtida já viaja como UPDATE no realtime que
-   * `useChat` escuta, e criar uma linha em `notificacoes` para um coração
-   * encheria o sino de ruído. O aviso aparece para quem está com a conversa
-   * aberta, que é quem pode reagir a ele.
-   *
-   * `curtidasVistas` começa preenchido com o que já estava na tela — sem isso,
-   * abrir uma conversa antiga dispararia um toast para cada coração antigo.
-   */
-  const curtidasVistas = useRef<Map<string, number> | null>(null);
-  useEffect(() => {
-    // Só as MINHAS mensagens: o aviso é «curtiram o que você escreveu».
-    const minhas = new Map<string, number>();
-    for (const m of mensagens) {
-      if (m.autor_id !== meuId) continue;
-      const c = curtidas.get(m.id);
-      if (c && c.total > 0) minhas.set(m.id, c.total);
-    }
-
-    if (curtidasVistas.current === null) { curtidasVistas.current = minhas; return; }
-    for (const [id, total] of minhas) {
-      const antes = curtidasVistas.current.get(id) ?? 0;
-      if (total <= antes) continue;                     // não subiu: nada a avisar
-      if (curtidas.get(id)?.euCurti && total === 1) continue;  // curtir a própria não avisa
-      const m = mensagens.find(x => x.id === id);
-      toast(
-        conversa.tipo === 'grupo'
-          ? `Sua mensagem tem ${total} ${total === 1 ? 'curtida' : 'curtidas'}`
-          : `${conversa.outro_nome} curtiu sua mensagem`,
-        { description: m?.texto ? m.texto.slice(0, 80) : 'Anexo' },
-      );
-    }
-    curtidasVistas.current = minhas;
-  }, [mensagens, curtidas, meuId, conversa.outro_nome, conversa.tipo]);
-
-  // Conversa trocada: o conjunto de curtidas já vistas é de outra conversa.
-  useEffect(() => { curtidasVistas.current = null; }, [conversa.id]);
+  // Avisos de curtida vêm exclusivamente do Realtime em useChat.
+  // Ler os corações históricos ao abrir a conversa nunca é um evento novo.
 
   /*
    * ESC fecha a conversa.
@@ -788,10 +727,16 @@ export function Conversa({
 
         {mensagens.length === 0 && (
           <p className="text-center text-xs text-muted-foreground py-8">
-            Nenhuma mensagem ainda. Escreva a primeira.
+            {carregandoMensagens ? 'Carregando mensagens…' : erroMensagens ? 'Mensagens indisponíveis.' : 'Nenhuma mensagem ainda. Escreva a primeira.'}
           </p>
         )}
 
+        {erroMensagens && (
+          <div role="alert" className="text-center text-xs text-destructive py-2">
+            {erroMensagens}
+            {onRecarregarMensagens && <button className="ml-2 underline" onClick={onRecarregarMensagens}>Tentar novamente</button>}
+          </div>
+        )}
         {mensagens.map(m => {
           const meu = m.autor_id === euNaTela;
           const dia = diaDaMensagem(m.criado_em);
@@ -825,11 +770,11 @@ export function Conversa({
           }
 
           const estado = meu
-            ? estadoMensagem(m.criado_em, conversa.entrega_do_outro, conversa.leitura_do_outro)
+            ? estadoMensagem(m.criado_em, conversa.entrega_do_outro, conversa.leitura_do_outro, m.status_envio)
             : null;
           // Só anima o que chegou depois de a tela montar.
-          const nova = !jaVistas.current.has(m.id);
-          if (nova) jaVistas.current.add(m.id);
+          const nova = !carregandoMensagens && historicoCarregado.current && !jaVistas.current.has(m.id);
+          jaVistas.current.add(m.id);
 
           return (
             <div key={m.id} className={cn(nova && ANIMACAO_ENTRADA)}>
@@ -847,7 +792,7 @@ export function Conversa({
                 `focus-within` mantém as duas alcançáveis por teclado.
               */}
               <div className={cn('group flex items-center gap-1', meu ? 'justify-end' : 'justify-start')}>
-                {meu && !somenteLeitura && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
+                {meu && !somenteLeitura && !m.status_envio && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
                 {/*
                   Duplo clique no balão curte, como no Instagram.
                   O balão é `select-text`: dá para arrastar e copiar o texto,
@@ -863,7 +808,7 @@ export function Conversa({
                   o alvo explícito (e para o teclado, que não dá duplo clique).
                 */}
                 <div
-                  onDoubleClick={e => { if (!m.expurgado_em) curtirPorToque(m, e); }}
+                  onDoubleClick={e => { if (!m.expurgado_em && !m.status_envio) curtirPorToque(m, e); }}
                   className={cn(
                     'relative max-w-[78%] select-text rounded-2xl px-3 py-1.5 space-y-1.5',
                     meu ? 'bg-primary text-primary-foreground rounded-br-md'
@@ -915,6 +860,12 @@ export function Conversa({
                     {estado && <StatusMensagem estado={estado} noBalao className="ml-1" />}
                   </p>
 
+                  {m.status_envio === 'erro' && onReenviar && (
+                    <button onClick={() => { setErro(null); void onReenviar(m.id); }} title={m.erro_envio}
+                      className="block text-xs font-medium underline underline-offset-2 text-primary-foreground">
+                      Não enviada · Tentar novamente
+                    </button>
+                  )}
                   {/* O coração encosta na quina de baixo do balão, meio para
                       fora, como no Instagram: pertence à mensagem sem ocupar
                       uma linha dela. */}
@@ -924,7 +875,7 @@ export function Conversa({
                     ladoEsquerdo={meu}
                   />
                 </div>
-                {!meu && !somenteLeitura && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
+                {!meu && !somenteLeitura && !m.status_envio && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
               </div>
             </div>
           );
@@ -1110,8 +1061,8 @@ export function Conversa({
           */}
           {temAlgoParaEnviar ? (
             <Button size="icon" className="h-8 w-8 shrink-0 rounded-full"
-                    onClick={() => void enviar()} disabled={subindo} aria-label="Enviar">
-              {subindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    onClick={() => void enviar()} aria-label="Enviar">
+              <Send className="w-4 h-4" />
             </Button>
           ) : (
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full"

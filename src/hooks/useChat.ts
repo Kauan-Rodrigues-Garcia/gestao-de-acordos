@@ -30,7 +30,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   listarConversas, listarMensagens, listarDisparos, buscarConversa,
   marcarEntregue, marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
-  esbocoDeConversa, souParte,
+  esbocoDeConversa, souParte, subirAnexo,
   type ConversaChat, type MensagemChat, type DisparoChat, type AnexoChat,
   type ContatoEscolhido,
 } from '@/services/chat/chat.service';
@@ -63,6 +63,9 @@ export interface UseChat {
   /** Existe página anterior para carregar? */
   temMais:        boolean;
   carregandoMais: boolean;
+  carregandoMensagens: boolean;
+  erroMensagens: string | null;
+  reenviar: (id: string) => Promise<string | null>;
   verAnteriores:  () => void;
   abrir:          (conversaId: string | null) => void;
   /**
@@ -70,7 +73,7 @@ export interface UseChat {
    * com ele a conversa nova pinta na hora, sem depender de uma segunda leitura.
    */
   abrirCom:       (pessoaId: string, contato?: ContatoEscolhido) => Promise<string | null>;
-  enviar: (texto: string, anexos?: AnexoChat[], respondendoId?: string | null) => Promise<string | null>;
+  enviar: (texto: string, anexos?: AnexoChat[], respondendoId?: string | null, arquivos?: File[]) => Promise<string | null>;
   recarregar:     () => void;
 }
 
@@ -97,7 +100,7 @@ export function useChat(
   // A conversa aberta lida de dentro do ouvinte do realtime, que é criado uma
   // vez: sem a ref, ele veria para sempre o valor da primeira renderização.
   const abertaRef = useRef<string | null>(null);
-  abertaRef.current = conversaAberta;
+
   const visivelRef = useRef(conversaVisivel);
   visivelRef.current = conversaVisivel;
   const aoReceberRef = useRef(aoMensagemRecebida);
@@ -116,9 +119,89 @@ export function useChat(
    */
   const curtidasAvisadas = useRef(new Set<string>());
 
+  const cache = useRef(new Map<string, { mensagens: MensagemChat[]; temMais: boolean }>());
+  const [carregandoMensagens, setCarregandoMensagens] = useState(false);
+  const [erroMensagens, setErroMensagens] = useState<string | null>(null);
+  const pedido = useRef(0);
+  const sessao = useRef(0);
+  const fila = useRef(new Map<string, {
+    mensagem: MensagemChat; empresaId: string; arquivos: File[];
+    anexos: AnexoChat[]; enviados: Map<number, AnexoChat>; emCurso: boolean;
+  }>());
+  const previasLocais = useRef(new Set<string>());
+
+  const publicarMensagens = useCallback((id: string, atualizar: (atuais: MensagemChat[]) => MensagemChat[]) => {
+    const anterior = cache.current.get(id);
+    const novas = atualizar(anterior?.mensagens ?? []);
+    cache.current.set(id, { mensagens: novas, temMais: anterior?.temMais ?? false });
+    if (abertaRef.current === id) setMensagens(novas);
+  }, []);
+
+  // Cache e anexos locais pertencem à sessão, nunca à próxima conta.
+  useEffect(() => {
+    sessao.current++;
+    pedido.current++;
+    cache.current.clear();
+    fila.current.clear();
+    curtidasAvisadas.current.clear();
+    abertaRef.current = null;
+    setConversaAberta(null);
+    setMensagens([]);
+    setConversas([]);
+    setDisparos([]);
+    setAvulsa(null);
+    setTemMais(false);
+    setCarregandoMais(false);
+    setCarregandoMensagens(false);
+    setErroMensagens(null);
+    const urls = previasLocais.current;
+    const geracao = sessao;
+    return () => {
+      geracao.current++;
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, [meuId, ativo]);
+
+  const carregarMensagens = useCallback(async (id: string) => {
+    const numero = ++pedido.current;
+    const ciclo = sessao.current;
+    const inicio = new Map((cache.current.get(id)?.mensagens ?? []).map(m => [m.id, m]));
+    setCarregandoMais(false);
+    setCarregandoMensagens(true);
+    setErroMensagens(null);
+    try {
+      const r = await listarMensagens(id);
+      if (ciclo !== sessao.current || numero !== pedido.current) return;
+      if (r.erro) { setErroMensagens(r.erro); return; }
+      for (const m of r.mensagens) {
+        if (m.curtida_em) curtidasAvisadas.current.add(`${m.id}:${m.curtida_em}`);
+      }
+      publicarMensagens(id, atuais => {
+        const unicas = new Map(atuais.map(m => [m.id, m]));
+        for (const m of r.mensagens) {
+          const atual = unicas.get(m.id);
+          // Realtime/envio que chegou durante a leitura é mais recente.
+          if (!atual || atual === inicio.get(m.id)) unicas.set(m.id, m);
+        }
+        return [...unicas.values()].sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+      });
+      const anterior = cache.current.get(id)!;
+      const temMaisAtual = inicio.size > r.mensagens.length ? anterior.temMais : r.temMais;
+      cache.current.set(id, { ...anterior, temMais: temMaisAtual });
+      setTemMais(temMaisAtual);
+    } catch {
+      if (ciclo === sessao.current && numero === pedido.current) setErroMensagens('Não foi possível carregar as mensagens. Tente novamente.');
+    } finally {
+      if (ciclo === sessao.current && numero === pedido.current) setCarregandoMensagens(false);
+    }
+  }, [publicarMensagens]);
+
   const recarregar = useCallback(async () => {
     if (!meuId || !ativo) return;
+    const ciclo = sessao.current;
     const [c, d] = await Promise.all([listarConversas(), listarDisparos()]);
+    if (ciclo !== sessao.current) return;
     setConversas(c);
     setDisparos(d);
     setCarregando(false);
@@ -164,7 +247,7 @@ export function useChat(
     timer.current = setTimeout(() => { void recarregar(); }, ESPERA_REFAZER);
   }, [recarregar]);
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, [meuId, ativo]);
 
   /*
    * Marcar lido, agrupado.
@@ -184,11 +267,12 @@ export function useChat(
     }, 400);
   }, [meuId, agendarRefazer]);
 
-  useEffect(() => () => { if (timerLido.current) clearTimeout(timerLido.current); }, []);
+  useEffect(() => () => { if (timerLido.current) clearTimeout(timerLido.current); }, [meuId, ativo]);
 
   // ── Tempo real ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!ativo || !empresa?.id || !meuId) return;
+    const ciclo = sessao.current;
 
     return assinarTabela(
       {
@@ -215,6 +299,7 @@ export function useChat(
       },
       {
         onEvento: (payload) => {
+          if (ciclo !== sessao.current) return;
           const linha = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
 
           if (payload.table === 'chat_mensagens') {
@@ -241,24 +326,29 @@ export function useChat(
              */
             if (payload.eventType === 'INSERT' && msg.autor_id !== meuId) {
               void souParte(msg.conversa_id).then(sou => {
-                if (!sou) return;
+                if (!sou || ciclo !== sessao.current) return;
                 void marcarEntregue(msg.conversa_id, meuId);
                 aoReceberRef.current?.(normalizada);
               });
             }
             // Mensagem da conversa aberta entra direto: aqui o evento é o dado.
-            if (msg.conversa_id === abertaRef.current && payload.eventType === 'INSERT') {
-              setMensagens(atual => atual.some(m => m.id === msg.id)
-                ? atual
-                : [...atual, normalizada]);
+            if (payload.eventType === 'INSERT') {
+              if (cache.current.has(msg.conversa_id) || msg.conversa_id === abertaRef.current) {
+                publicarMensagens(msg.conversa_id, atual => {
+                  const confirmada: MensagemChat = { ...normalizada, status_envio: undefined, erro_envio: undefined };
+                  return atual.some(m => m.id === msg.id)
+                    ? atual.map(m => m.id === msg.id ? confirmada : m)
+                    : [...atual, confirmada];
+                });
+              }
               // Selecionada não significa visível: ao minimizar a janela ela
               // continua selecionada, mas mensagem nova não pode virar lida.
-              if (msg.autor_id !== meuId && visivelRef.current) agendarLido(msg.conversa_id);
+              if (msg.conversa_id === abertaRef.current && msg.autor_id !== meuId && visivelRef.current) agendarLido(msg.conversa_id);
             }
             // O expurgo de CPF reescreve o texto: sem isto a mensagem
             // continuaria legível na tela de quem está com ela aberta.
-            if (msg.conversa_id === abertaRef.current && payload.eventType === 'UPDATE') {
-              setMensagens(atual => atual.map(m => (m.id === msg.id ? { ...m, ...msg } : m)));
+            if (cache.current.has(msg.conversa_id) && payload.eventType === 'UPDATE') {
+              publicarMensagens(msg.conversa_id, atual => atual.map(m => (m.id === msg.id ? { ...m, ...msg, status_envio: undefined, erro_envio: undefined } : m)));
             }
             /*
              * Curtiram a MINHA mensagem.
@@ -277,7 +367,9 @@ export function useChat(
             if (payload.eventType === 'UPDATE'
                 && msg.autor_id === meuId
                 && msg.curtida_por
-                && msg.curtida_por !== meuId) {
+                && msg.curtida_por !== meuId
+                && msg.curtida_em
+                && (payload.old as Partial<MensagemChat>)?.curtida_em !== msg.curtida_em) {
               const marca = `${msg.id}:${msg.curtida_em ?? ''}`;
               if (!curtidasAvisadas.current.has(marca)) {
                 curtidasAvisadas.current.add(marca);
@@ -292,61 +384,62 @@ export function useChat(
           agendarRefazer();
         },
         onReconectado: () => {
+          if (ciclo !== sessao.current) return;
           void recarregar();
           const aberta = abertaRef.current;
-          if (aberta) {
-            void listarMensagens(aberta).then(r => {
-              setMensagens(r.mensagens);
-              setTemMais(r.temMais);
-            });
-          }
+          if (aberta) void carregarMensagens(aberta);
         },
       },
     );
-  }, [ativo, empresa?.id, meuId, agendarRefazer, agendarLido, recarregar]);
+  }, [ativo, empresa?.id, meuId, agendarRefazer, agendarLido, recarregar, carregarMensagens, publicarMensagens]);
 
   // ── Abrir / fechar ─────────────────────────────────────────────────────────
   const abrir = useCallback((conversaId: string | null, esboco?: ConversaChat) => {
+    pedido.current++;
+    abertaRef.current = conversaId;
     setConversaAberta(conversaId);
-    if (!conversaId) { setMensagens([]); setAvulsa(null); setTemMais(false); return; }
-    // O esboço primeiro: a conversa nova aparece no mesmo quadro do clique.
-    if (esboco) setAvulsa(esboco);
-    void listarMensagens(conversaId).then(r => {
-      setMensagens(r.mensagens);
-      setTemMais(r.temMais);
-    });
+    setAvulsa(esboco ?? null);
+    setCarregandoMais(false);
+    setErroMensagens(null);
+    const guardada = conversaId ? cache.current.get(conversaId) : undefined;
+    setMensagens(guardada?.mensagens ?? []);
+    setTemMais(guardada?.temMais ?? false);
+    setCarregandoMensagens(!!conversaId);
+    if (!conversaId) return;
+    void carregarMensagens(conversaId);
+    const numero = pedido.current;
     if (meuId) {
       void marcarLido(conversaId, meuId).then(() => agendarRefazer());
-      // Busca sempre, e não só quando falta na lista: no clique a lista pode
-      // estar de uma leitura anterior, e decidir por ela erraria justamente no
-      // caso que este código existe para cobrir.
-      //
-      // `if (c)`, e não `.then(setAvulsa)`: a versão anterior gravava o `null`
-      // de uma leitura que falhou POR CIMA do que a tela tinha, e a janela
-      // ficava sem conversa nenhuma — o «a conversa nova não abre». Resposta
-      // que não veio não é resposta vazia; é resposta que não veio.
-      void buscarConversa(conversaId).then(c => { if (c) setAvulsa(c); });
+      void buscarConversa(conversaId).then(c => {
+        if (c && abertaRef.current === conversaId && pedido.current === numero) setAvulsa(c);
+      });
     }
-  }, [meuId, agendarRefazer]);
+  }, [meuId, agendarRefazer, carregarMensagens]);
 
-  /**
-   * Carrega a página anterior, para cima.
-   *
-   * A tela guarda a altura antes e depois para a rolagem não pular — sem isso,
-   * inserir 60 mensagens acima empurraria o que a pessoa está lendo para fora
-   * do campo de visão, que é o oposto do que ela pediu ao clicar.
-   */
   const verAnteriores = useCallback(async () => {
-    const aberta = abertaRef.current;
-    const maisAntiga = mensagens[0]?.criado_em;
-    if (!aberta || !maisAntiga || carregandoMais) return;
-
+    const id = abertaRef.current;
+    const maisAntiga = mensagens.find(m => !m.status_envio)?.criado_em;
+    if (!id || !maisAntiga || carregandoMais) return;
+    const numero = pedido.current;
+    const ciclo = sessao.current;
     setCarregandoMais(true);
-    const r = await listarMensagens(aberta, maisAntiga);
-    setCarregandoMais(false);
-    setTemMais(r.temMais);
-    if (r.mensagens.length) setMensagens(atual => [...r.mensagens, ...atual]);
-  }, [mensagens, carregandoMais]);
+    try {
+      const r = await listarMensagens(id, maisAntiga);
+      if (numero !== pedido.current || ciclo !== sessao.current) return;
+      if (r.erro) { setErroMensagens(r.erro); return; }
+      publicarMensagens(id, atuais => {
+        const unicas = new Map(r.mensagens.map(m => [m.id, m]));
+        for (const m of atuais) unicas.set(m.id, m);
+        return [...unicas.values()];
+      });
+      cache.current.set(id, { mensagens: cache.current.get(id)!.mensagens, temMais: r.temMais });
+      setTemMais(r.temMais);
+    } catch {
+      if (numero === pedido.current && ciclo === sessao.current) setErroMensagens('Não foi possível carregar as mensagens anteriores.');
+    } finally {
+      if (numero === pedido.current && ciclo === sessao.current) setCarregandoMais(false);
+    }
+  }, [mensagens, carregandoMais, publicarMensagens]);
 
   const abrirCom = useCallback(async (pessoaId: string, contato?: ContatoEscolhido) => {
     const { id, erro } = await abrirConversa(pessoaId);
@@ -355,29 +448,86 @@ export function useChat(
     return id;
   }, [abrir]);
 
+  const reenviar = useCallback(async (id: string): Promise<string | null> => {
+    const item = fila.current.get(id);
+    if (!item || item.emCurso) return null;
+    const ciclo = sessao.current;
+    item.emCurso = true;
+    const conversaId = item.mensagem.conversa_id;
+    const liberarPrevias = () => {
+      for (const anexo of item.mensagem.anexos) {
+        if (previasLocais.current.delete(anexo.url)) URL.revokeObjectURL(anexo.url);
+      }
+    };
+    publicarMensagens(conversaId, atuais => atuais.map(m => m.id === id ? { ...m, status_envio: 'pendente', erro_envio: undefined } : m));
+    try {
+      // Os arquivos são preparados em paralelo; a prévia já está no balão.
+      const uploads = await Promise.allSettled(item.arquivos.map(async (arquivo, i) => {
+        if (item.enviados.has(i)) return;
+        const r = await subirAnexo(arquivo, conversaId);
+        if (r.erro || !r.anexo) throw new Error(r.erro || 'Não foi possível enviar o anexo.');
+        item.enviados.set(i, r.anexo);
+      }));
+      const falhaUpload = uploads.find(r => r.status === 'rejected');
+      if (falhaUpload?.status === 'rejected') throw falhaUpload.reason;
+      if (ciclo !== sessao.current) return null;
+      const anexos = [...item.anexos, ...item.arquivos.map((_, i) => item.enviados.get(i)!)];
+      const r = await enviarNoBanco({ id, conversaId, empresaId: item.empresaId,
+        autorId: item.mensagem.autor_id!, texto: item.mensagem.texto ?? '', anexos,
+        respondendoId: item.mensagem.respondendo_id });
+      if (ciclo !== sessao.current) return null;
+      if (r.erro) throw new Error(r.erro);
+      publicarMensagens(conversaId, atuais => atuais.map(m => m.id === id && m.status_envio
+        ? { ...m, ...r.mensagem, anexos, status_envio: undefined, erro_envio: undefined } : m));
+      fila.current.delete(id);
+      liberarPrevias();
+      agendarRefazer();
+      return null;
+    } catch (e) {
+      if (ciclo !== sessao.current) return null;
+      const confirmada = cache.current.get(conversaId)?.mensagens.find(m => m.id === id && !m.status_envio);
+      if (confirmada) { fila.current.delete(id); liberarPrevias(); return null; }
+      const erro = e instanceof Error ? e.message : 'Não foi possível enviar. Tente novamente.';
+      publicarMensagens(conversaId, atuais => atuais.map(m => m.id === id ? { ...m, status_envio: 'erro', erro_envio: erro } : m));
+      return erro;
+    } finally {
+      item.emCurso = false;
+    }
+  }, [publicarMensagens, agendarRefazer]);
+
   const enviar = useCallback(async (
-    texto: string, anexos: AnexoChat[] = [], respondendoId?: string | null,
+    texto: string, anexos: AnexoChat[] = [], respondendoId?: string | null, arquivos: File[] = [],
   ) => {
-    if (!conversaAberta || !empresa?.id || !meuId) return 'Conversa não está aberta.';
-    const { erro } = await enviarNoBanco({
-      conversaId: conversaAberta, empresaId: empresa.id, autorId: meuId, texto, anexos,
-      respondendoId,
+    const conversaId = abertaRef.current;
+    if (!conversaId || !empresa?.id || !meuId || !ativo) return 'Conversa não está aberta.';
+    if (!texto.trim() && !anexos.length && !arquivos.length) return 'Escreva alguma coisa.';
+    const locais = arquivos.map(arquivo => {
+      const url = URL.createObjectURL(arquivo);
+      previasLocais.current.add(url);
+      return { url, nome: arquivo.name, tipo: arquivo.type, tamanho: arquivo.size };
     });
-    if (!erro) agendarRefazer();
-    return erro;
-  }, [conversaAberta, empresa?.id, meuId, agendarRefazer]);
+    const mensagem: MensagemChat = {
+      id: crypto.randomUUID(), conversa_id: conversaId, autor_id: meuId,
+      texto: texto.trim() || null, anexos: [...anexos, ...locais], criado_em: new Date().toISOString(),
+      disparo_id: null, expurgado_em: null, respondendo_id: respondendoId ?? null,
+      curtida_em: null, curtida_por: null, sistema: null, sistema_dados: null, status_envio: 'pendente',
+    };
+    fila.current.set(mensagem.id, { mensagem, empresaId: empresa.id, arquivos, anexos, enviados: new Map(), emCurso: false });
+    publicarMensagens(conversaId, atuais => [...atuais, mensagem]);
+    return reenviar(mensagem.id);
+  }, [empresa?.id, meuId, ativo, publicarMensagens, reenviar]);
 
   const naoLidasTotal = conversas.reduce((s, c) => s + c.nao_lidas, 0);
 
   // A da lista manda: ela traz não lidas e leitura do outro, que a avulsa não
   // tem. A avulsa só cobre o intervalo em que a conversa ainda não existe lá.
   const aberta = conversaAberta
-    ? (conversas.find(c => c.id === conversaAberta) ?? avulsa)
+    ? (conversas.find(c => c.id === conversaAberta) ?? (avulsa?.id === conversaAberta ? avulsa : null))
     : null;
 
   return {
     conversas, disparos, mensagens, conversaAberta, aberta, carregando,
-    temMais, carregandoMais, verAnteriores,
+    temMais, carregandoMais, verAnteriores, carregandoMensagens, erroMensagens, reenviar,
     naoLidasTotal, abrir, abrirCom, enviar, recarregar,
   };
 }

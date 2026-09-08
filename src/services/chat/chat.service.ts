@@ -36,6 +36,7 @@ interface Consulta extends PromiseLike<{ data: unknown[] | null; error: { messag
   order(coluna: string, opcoes?: { ascending?: boolean; nullsFirst?: boolean }): Consulta;
   limit(n: number): Consulta;
   maybeSingle(): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  single(): PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
 }
 
 function db(tabela: string): Consulta {
@@ -52,6 +53,9 @@ export interface AnexoChat {
 }
 
 export interface MensagemChat {
+  /** Estado local: nunca é gravado no banco. Ausente após confirmação. */
+  status_envio?: 'pendente' | 'erro';
+  erro_envio?: string;
   id:           string;
   conversa_id:  string;
   autor_id:     string | null;
@@ -485,7 +489,7 @@ export const PAGINA_MENSAGENS = 60;
  */
 export async function listarMensagens(
   conversaId: string, antesDe?: string,
-): Promise<{ mensagens: MensagemChat[]; temMais: boolean }> {
+): Promise<{ mensagens: MensagemChat[]; temMais: boolean; erro?: string }> {
   let q = db('chat_mensagens')
     .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_em, curtida_por, sistema, sistema_dados')
     .eq('conversa_id', conversaId);
@@ -500,7 +504,7 @@ export async function listarMensagens(
 
   if (error) {
     console.warn('[chat] listarMensagens:', error.message);
-    return { mensagens: [], temMais: false };
+    return { mensagens: [], temMais: false, erro: 'Não foi possível carregar as mensagens.' };
   }
 
   const linhas = (data ?? []) as MensagemChat[];
@@ -706,6 +710,7 @@ export async function abrirConversa(alvoId: string): Promise<{ id: string | null
 }
 
 export async function enviarMensagem(params: {
+  id?: string;
   conversaId: string;
   empresaId:  string;
   autorId:    string;
@@ -713,20 +718,31 @@ export async function enviarMensagem(params: {
   anexos?:    AnexoChat[];
   /** Id da mensagem citada, quando for resposta. */
   respondendoId?: string | null;
-}): Promise<{ erro: string | null }> {
+}): Promise<{ erro: string | null; mensagem?: MensagemChat }> {
   const anexos = params.anexos ?? [];
   const texto  = params.texto.trim();
   if (!texto && !anexos.length) return { erro: 'Escreva alguma coisa.' };
 
-  const { error } = await db('chat_mensagens').insert({
+  const { data, error } = await db('chat_mensagens').insert({
+    ...(params.id ? { id: params.id } : {}),
     conversa_id: params.conversaId,
     empresa_id:  params.empresaId,
     autor_id:    params.autorId,
     texto:       texto || null,
     anexos,
     respondendo_id: params.respondendoId ?? null,
-  });
-  return { erro: error ? traduzir(error.message) : null };
+  }).select('*').single();
+  // Uma resposta perdida pode esconder um INSERT bem-sucedido. Repetir o
+  // mesmo UUID recupera a confirmação sem duplicar nem reescrever a mensagem.
+  if (error?.code === '23505' && params.id) {
+    const existente = await db('chat_mensagens').select('*')
+      .eq('id', params.id).eq('conversa_id', params.conversaId)
+      .eq('autor_id', params.autorId).single();
+    if (!existente.error && existente.data) {
+      return { erro: null, mensagem: existente.data as MensagemChat };
+    }
+  }
+  return { erro: error ? traduzir(error.message) : null, mensagem: data as MensagemChat | undefined };
 }
 
 /** Confirma que este cliente recebeu as mensagens da conversa. */
@@ -878,22 +894,48 @@ const VALIDADE_URL = 3600;
  * expira enquanto o vídeo toca quebra no meio, e renovar cedo custa nada.
  */
 const assinaturas = new Map<string, { url: string; ate: number }>();
+const assinaturasEmCurso = new Map<string, Promise<string | null>>();
+const loteAssinaturas = new Map<string, (url: string | null) => void>();
+
+export function urlDoAnexoEmCache(caminho: string): string | null {
+  if (caminho.startsWith('blob:')) return caminho;
+  const guardada = assinaturas.get(caminho);
+  return guardada && guardada.ate > Date.now() ? guardada.url : null;
+}
 
 export async function urlDoAnexo(caminho: string): Promise<string | null> {
-  const guardada = assinaturas.get(caminho);
-  if (guardada && guardada.ate > Date.now()) return guardada.url;
+  const guardada = urlDoAnexoEmCache(caminho);
+  if (guardada) return guardada;
+  const emCurso = assinaturasEmCurso.get(caminho);
+  if (emCurso) return emCurso;
+  const pedido = new Promise<string | null>(resolve => {
+    const primeiro = loteAssinaturas.size === 0;
+    loteAssinaturas.set(caminho, resolve);
+    if (primeiro) queueMicrotask(() => { void assinarLote(); });
+  }).finally(() => {
+    assinaturasEmCurso.delete(caminho);
+  });
+  assinaturasEmCurso.set(caminho, pedido);
+  return pedido;
+}
 
-  const { data, error } = await supabase.storage
-    .from('chat').createSignedUrl(caminho, VALIDADE_URL);
-  if (error) {
-    console.warn('[chat] urlDoAnexo:', error.message);
-    return null;
+async function assinarLote(): Promise<void> {
+  const lote = new Map(loteAssinaturas);
+  loteAssinaturas.clear();
+  try {
+    // Uma ida ao Storage para as miniaturas montadas no mesmo quadro.
+    const { data, error } = await supabase.storage.from('chat')
+      .createSignedUrls([...lote.keys()], VALIDADE_URL);
+    if (error) throw error;
+    const urls = new Map((data ?? []).map(item => [item.path, item.error ? null : item.signedUrl]));
+    for (const [caminho, resolver] of lote) {
+      const url = urls.get(caminho) ?? null;
+      if (url) assinaturas.set(caminho, { url, ate: Date.now() + (VALIDADE_URL - 300) * 1000 });
+      resolver(url);
+    }
+  } catch {
+    for (const resolver of lote.values()) resolver(null);
   }
-  const url = data?.signedUrl ?? null;
-  if (url) {
-    assinaturas.set(caminho, { url, ate: Date.now() + (VALIDADE_URL - 300) * 1000 });
-  }
-  return url;
 }
 
 // ── Erros ────────────────────────────────────────────────────────────────────

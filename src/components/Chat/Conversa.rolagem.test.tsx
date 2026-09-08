@@ -1,5 +1,6 @@
-import { render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('sonner', () => ({ toast: vi.fn() }));
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ perfil: { id: 'eu' } }),
@@ -22,6 +23,7 @@ vi.mock('@/services/chat/chat.service', () => ({
   LIMITE_ANEXO: 10 * 1024 * 1024,
   subirAnexo: vi.fn(),
   urlDoAnexo: vi.fn(),
+  urlDoAnexoEmCache: vi.fn(() => null),
   curtirMensagem: vi.fn(async () => ({ total: 0, erro: null })),
   // A conversa carrega as curtidas da pagina inteira ao montar. Sem o dublê o
   // efeito estoura e o teste falha por um motivo que nao e a rolagem.
@@ -35,6 +37,8 @@ vi.mock('@/services/chat/grupos.service', () => ({
 }));
 
 import { Conversa } from './Conversa';
+import { toast } from 'sonner';
+import { curtidasDasMensagens } from '@/services/chat/chat.service';
 import type { ConversaChat, MensagemChat } from '@/services/chat/chat.service';
 
 const conversa: ConversaChat = {
@@ -85,5 +89,32 @@ describe('rolagem viva da conversa', () => {
     };
     tela.rerender(<Conversa {...base} mensagens={[mensagem]} digitando={false} />);
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: 'auto' });
+  });
+
+  it('carregar curtidas históricas não notifica nem provoca nova rolagem', async () => {
+    const m = { id: 'm-antiga', conversa_id: 'c-1', autor_id: 'eu', texto: 'Ontem', anexos: [],
+      criado_em: '2026-08-26T16:00:00Z', curtida_em: '2026-08-26T17:00:00Z', curtida_por: 'ana' } as MensagemChat;
+    let resolver!: (m: Map<string, unknown>) => void;
+    vi.mocked(curtidasDasMensagens).mockReturnValueOnce(new Promise(r => { resolver = r; }));
+    const tela = render(<Conversa {...base} mensagens={[m]} digitando={false} />);
+    scrollTo.mockClear();
+    await act(async () => { resolver(new Map([[m.id, { total: 1, euCurti: false }]])); });
+    expect(toast).not.toHaveBeenCalled();
+    tela.rerender(<Conversa {...base} mensagens={[{ ...m, curtida_por: 'bia' }]} digitando={false} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('libera o campo imediatamente e não apaga a próxima mensagem quando o envio termina', async () => {
+    let confirmar!: (erro: string | null) => void;
+    const enviar = vi.fn(() => new Promise<string | null>(r => { confirmar = r; }));
+    render(<Conversa {...base} onEnviar={enviar} mensagens={[]} digitando={false} />);
+    const campo = screen.getByRole('textbox');
+    fireEvent.change(campo, { target: { value: 'Primeira' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar', exact: true }));
+    expect(enviar).toHaveBeenCalledWith('Primeira', [], null, []);
+    expect(campo).toHaveValue('');
+    fireEvent.change(campo, { target: { value: 'Segunda' } });
+    await act(async () => confirmar(null));
+    expect(campo).toHaveValue('Segunda');
   });
 });

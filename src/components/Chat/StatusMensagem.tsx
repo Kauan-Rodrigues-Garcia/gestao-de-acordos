@@ -1,4 +1,4 @@
-import { Check, CheckCheck } from 'lucide-react';
+import { Check, CheckCheck, Clock3, CircleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EstadoMensagem } from './estadoMensagem';
 
@@ -10,13 +10,15 @@ interface Props {
 }
 
 const ROTULOS: Record<EstadoMensagem, string> = {
+  pendente: 'Enviando',
+  erro: 'Não enviada',
   enviada: 'Enviada',
   entregue: 'Entregue',
   lida: 'Visualizada',
 };
 
 export function StatusMensagem({ estado, noBalao = false, className }: Props) {
-  const Icone = estado === 'enviada' ? Check : CheckCheck;
+  const Icone = estado === 'pendente' ? Clock3 : estado === 'erro' ? CircleAlert : estado === 'enviada' ? Check : CheckCheck;
   const rotulo = ROTULOS[estado];
 
   return (

@@ -528,6 +528,11 @@ export function BolhaChat() {
                 dez exigiria saber QUEM, e a presença atual guarda um par.
               */}
               <Conversa
+                key={conversaAtual.id}
+                carregandoMensagens={chat.carregandoMensagens}
+                erroMensagens={chat.erroMensagens}
+                onRecarregarMensagens={() => chat.abrir(conversaAtual.id)}
+                onReenviar={chat.reenviar}
                 conversa={conversaAtual}
                 mensagens={chat.mensagens}
                 online={!!conversaAtual.outro_id && online.has(conversaAtual.outro_id)}

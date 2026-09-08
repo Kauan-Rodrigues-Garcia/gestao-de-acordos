@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { FileText, ImageIcon, Music, Video, Download, Play, Pause, Mic } from 'lucide-react';
-import { urlDoAnexo, type AnexoChat } from '@/services/chat/chat.service';
+import { urlDoAnexo, urlDoAnexoEmCache, type AnexoChat } from '@/services/chat/chat.service';
 import { cn } from '@/lib/utils';
 
 // ── Avatar ───────────────────────────────────────────────────────────────────
@@ -26,19 +26,16 @@ import { cn } from '@/lib/utils';
  * passa a ser assinado aqui, com o mesmo cache de `urlDoAnexo`.
  */
 export function useFotoResolvida(foto: string | null): string | null {
-  const [url, setUrl] = useState<string | null>(
-    foto && /^(https?:|data:|blob:)/i.test(foto) ? foto : null,
-  );
-
+  const [resolvida, setResolvida] = useState<{ caminho: string; url: string | null } | null>(null);
+  const publica = foto && /^(https?:|data:|blob:)/i.test(foto) ? foto : null;
   useEffect(() => {
-    if (!foto) { setUrl(null); return; }
-    if (/^(https?:|data:|blob:)/i.test(foto)) { setUrl(foto); return; }
+    if (!foto || publica) return;
     let vivo = true;
-    void urlDoAnexo(foto).then(u => { if (vivo) setUrl(u); });
+    void urlDoAnexo(foto).then(url => { if (vivo) setResolvida({ caminho: foto, url }); });
     return () => { vivo = false; };
-  }, [foto]);
-
-  return url;
+  }, [foto, publica]);
+  if (!foto) return null;
+  return publica ?? urlDoAnexoEmCache(foto) ?? (resolvida?.caminho === foto ? resolvida.url : null);
 }
 
 export function AvatarChat({
@@ -221,14 +218,15 @@ export function AnexoNoBalao({
   /** Foto e vídeo abrem no visualizador da própria aba. Ver `VisualizadorMidia`. */
   onAbrir?: () => void;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [resolvida, setResolvida] = useState<{ caminho: string; url: string | null } | null>(null);
+  const url = urlDoAnexoEmCache(anexo.url) ?? (resolvida?.caminho === anexo.url ? resolvida.url : null);
   const ehImagem = anexo.tipo?.startsWith('image/');
   const ehAudio  = anexo.tipo?.startsWith('audio/');
   const ehVideo  = anexo.tipo?.startsWith('video/');
 
   useEffect(() => {
     let vivo = true;
-    void urlDoAnexo(anexo.url).then(u => { if (vivo) setUrl(u); });
+    void urlDoAnexo(anexo.url).then(u => { if (vivo) setResolvida({ caminho: anexo.url, url: u }); });
     return () => { vivo = false; };
   }, [anexo.url]);
 
@@ -238,7 +236,7 @@ export function AnexoNoBalao({
     return (
       <button
         onClick={onAbrir}
-        className="block rounded-lg overflow-hidden bg-muted/40 max-w-[240px] relative group"
+        className="block rounded-lg overflow-hidden bg-muted/40 w-[240px] max-w-full h-40 relative group"
         aria-label={`Abrir ${anexo.nome}`}
       >
         {url ? (
@@ -246,12 +244,12 @@ export function AnexoNoBalao({
             // Só o primeiro quadro: carregar o vídeo inteiro para desenhar uma
             // miniatura gastaria a banda de todos os vídeos da conversa.
             <video src={url} preload="metadata" muted
-                   className="w-full h-auto max-h-64 object-cover pointer-events-none" />
+                   className="w-full h-full object-contain pointer-events-none" />
           ) : (
-            <img src={url} alt={anexo.nome} className="w-full h-auto max-h-64 object-cover" />
+            <img src={url} alt={anexo.nome} decoding="async" className="w-full h-full object-contain" />
           )
         ) : (
-          <div className="w-[240px] h-32 animate-pulse" />
+          <div className="w-full h-full animate-pulse" />
         )}
 
         {ehVideo && (
