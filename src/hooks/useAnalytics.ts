@@ -935,7 +935,7 @@ export function useAnalytics(
     const porOperador = Object.entries(
       acordosMesMetricas.reduce<Record<string, { acordos: number; valor: number }>>(
         (acc, a) => {
-          const oid = (a as any).operador_id ?? 'desconhecido';
+          const oid = a.operador_id ?? 'desconhecido';
           if (!acc[oid]) acc[oid] = { acordos: 0, valor: 0 };
           if (a.status === 'pago') { acc[oid].acordos++; acc[oid].valor += Number(a.valor) || 0; }
           return acc;

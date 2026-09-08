@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { safeNum } from '@/lib/money';
 import { deslocarMes, normalizarMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
-import type { MesAnteriorData } from './types';
+import type { MesAnteriorData, AcordoExtra } from './types';
 
 /**
  * Agregado do mês por setor, o mês anterior para o comparativo e os
@@ -72,7 +72,7 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
   const [loadingSetores, setLoadingSetores] = useState(false);
   const [mesAnterior, setMesAnterior] = useState<MesAnteriorData | null>(null);
 
-  const [extrasAcordos, setExtrasAcordos] = useState<any[]>([]);
+  const [extrasAcordos, setExtrasAcordos] = useState<AcordoExtra[]>([]);
   const [extrasOperadoresMap, setExtrasOperadoresMap] = useState<Map<string, string>>(new Map());
   const [extrasOpEquipeMap, setExtrasOpEquipeMap] = useState<Map<string, string>>(new Map());
   const [extrasEquipesMap, setExtrasEquipesMap] = useState<Map<string, string>>(new Map());
@@ -130,10 +130,10 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
         .gte('vencimento', inicio).lte('vencimento', fim);
 
       if (extrasData) {
-        const acordos = extrasData as any[];
+        const acordos = extrasData as AcordoExtra[];
         setExtrasAcordos(acordos);
 
-        const opIds = [...new Set(acordos.map((a: any) => a.operador_id).filter(Boolean))];
+        const opIds = [...new Set(acordos.map(a => a.operador_id).filter(Boolean))];
         if (opIds.length > 0) {
           const { data: perfisData } = await supabase.from('perfis').select('id, nome, equipe_id').in('id', opIds);
           if (perfisData) {

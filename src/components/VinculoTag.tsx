@@ -19,7 +19,7 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
   const sizeClasses = size === 'sm' ? 'text-[10px]' : 'text-[9px]';
   const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-2.5 h-2.5';
   
-  const a = acordo as any;
+  const a = acordo as AcordoComVinculo;
   
   // 1. Lógica de Vínculo (Direto + Extra)
   // Aparece se:

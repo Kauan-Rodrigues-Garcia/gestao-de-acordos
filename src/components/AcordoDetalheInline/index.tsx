@@ -19,7 +19,7 @@ import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
 import { autenticarLider } from '@/services/autorizacao_lider.service';
-import { temVisaoAmpla } from '@/lib/deduplicarVinculados';
+import { temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
   formatCurrency, formatDate,
@@ -647,19 +647,19 @@ export function AcordoDetalheInline({
                   <div className="flex-1 min-w-0 text-xs">
                     <p className="font-semibold text-primary leading-tight">Acordo Extra</p>
                     <p className="text-foreground/80 leading-tight">
-                      Vínculo com operador: <strong className="text-foreground">{acordoLocal.vinculo_operador_nome || (acordoLocal as any)._vinculoExtraOperadorNome}</strong>
+                      Vínculo com operador: <strong className="text-foreground">{acordoLocal.vinculo_operador_nome || (acordoLocal as AcordoComVinculo)._vinculoExtraOperadorNome}</strong>
                     </p>
                   </div>
                 </div>
               )}
-              {( (acordoLocal.tipo_vinculo === 'direto' || !acordoLocal.tipo_vinculo) && (acordoLocal.vinculo_operador_id || (acordoLocal as any)._vinculoExtraOperadorId) ) && (
+              {( (acordoLocal.tipo_vinculo === 'direto' || !acordoLocal.tipo_vinculo) && (acordoLocal.vinculo_operador_id || (acordoLocal as AcordoComVinculo)._vinculoExtraOperadorId) ) && (
                 <div className="mb-4 px-3 py-2 rounded-lg bg-success/8 border border-success/25 flex items-start gap-2">
                   <LinkIcon className="w-4 h-4 text-success shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0 text-xs">
                     <p className="font-semibold text-success leading-tight">Acordo Direto (com Extra vinculado)</p>
                     <p className="text-foreground/80 leading-tight">
                       Existe um acordo EXTRA vinculado com o operador:{' '}
-                      <strong className="text-foreground">{acordoLocal.vinculo_operador_nome || (acordoLocal as any)._vinculoExtraOperadorNome}</strong>
+                      <strong className="text-foreground">{acordoLocal.vinculo_operador_nome || (acordoLocal as AcordoComVinculo)._vinculoExtraOperadorNome}</strong>
                     </p>
                   </div>
                 </div>

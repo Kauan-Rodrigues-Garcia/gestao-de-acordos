@@ -492,8 +492,8 @@ export default function AdminEquipes() {
         if (!isAdmin && perfil?.setor_id) return perfil.setor_id;
         return setoresList[0]?.id ?? '';
       });
-    } catch (err: any) {
-      toast.error('Erro ao carregar dados: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao carregar dados: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
     } finally {
       setLoading(false);
     }
@@ -842,8 +842,8 @@ export default function AdminEquipes() {
       setNovaEquipeNome('');
       setShowNovaEquipe(false);
       await loadData();
-    } catch (err: any) {
-      toast.error('Erro ao criar equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao criar equipe: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
     } finally {
       setCriandoEquipe(false);
     }
@@ -878,8 +878,8 @@ export default function AdminEquipes() {
       toast.success(`Equipe "${equipe.nome}" excluída.`);
       setEquipeParaExcluir(null);
       await loadData();
-    } catch (err: any) {
-      toast.error('Erro ao excluir equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao excluir equipe: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
     } finally {
       setExcluindoEquipe(false);
     }
@@ -912,8 +912,8 @@ export default function AdminEquipes() {
       toast.success('Nome da equipe atualizado.');
       cancelarEdicaoNome();
       await loadData();
-    } catch (err: any) {
-      toast.error('Erro ao renomear equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao renomear equipe: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
     } finally {
       setSalvandoNome(false);
     }
@@ -937,8 +937,8 @@ export default function AdminEquipes() {
           ? `"${equipe.nome}" marcada como treinamento. Configure a data de início e os dias úteis na aba Metas.`
           : `"${equipe.nome}" não é mais equipe de treinamento.`,
       );
-    } catch (err: any) {
-      toast.error('Erro ao atualizar equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao atualizar equipe: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
       setEquipes(prev => prev.map(e => e.id === equipe.id ? { ...e, treinamento: equipe.treinamento } : e));
     }
   }
@@ -1019,8 +1019,8 @@ export default function AdminEquipes() {
           ? `${operador.nome} → "${equipeNome}"`
           : `${operador.nome} removido de equipe`
       );
-    } catch (err: any) {
-      toast.error('Erro ao mover membro: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao mover membro: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
       setOperadores(prev =>
         prev.map(o => o.id === operadorId
           ? { ...o, equipe_id: operador.equipe_id, subgrupo_id: operador.subgrupo_id ?? null }
@@ -1139,8 +1139,8 @@ export default function AdminEquipes() {
         .eq('id', operadorId);
       if (error) throw error;
       toast.success(`${operador.nome} removido da equipe.`);
-    } catch (err: any) {
-      toast.error('Erro ao remover membro: ' + (err?.message ?? 'Erro desconhecido'));
+    } catch (err: unknown) {
+      toast.error('Erro ao remover membro: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));
       setOperadores(prev =>
         prev.map(o => o.id === operadorId
           ? { ...o, equipe_id: operador.equipe_id, subgrupo_id: operador.subgrupo_id ?? null }

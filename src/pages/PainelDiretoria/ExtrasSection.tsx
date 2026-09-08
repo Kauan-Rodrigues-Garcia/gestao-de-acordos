@@ -1,3 +1,4 @@
+import type { AcordoExtra } from './types';
 import { memo, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Building2, Users2, User, ArrowUpRight, X } from 'lucide-react';
@@ -10,7 +11,7 @@ import { formatBRL, safeNum, sumSafe } from '@/lib/money';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
 
 interface ExtrasSectionProps {
-  extrasAcordos: any[];
+  extrasAcordos: AcordoExtra[];
   extrasOperadoresMap: Map<string, string>;
   extrasOpEquipeMap: Map<string, string>;
   extrasEquipesMap: Map<string, string>;
@@ -38,7 +39,7 @@ export const ExtrasSection = memo(function ExtrasSection({
     const setMap = new Map<string, string>();
     extrasAcordos.forEach(a => {
       if (a.setor_id) {
-        const s = setores.find((x: any) => x.id === a.setor_id);
+        const s = setores.find(x => x.id === a.setor_id);
         if (s) setMap.set(s.id, s.nome);
       }
     });

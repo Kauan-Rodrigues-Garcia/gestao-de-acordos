@@ -1,3 +1,4 @@
+import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, ArrowDownRight, Minus, AlertTriangle } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -7,13 +8,13 @@ import { itemVariants } from './constants';
 
 // ── CustomTooltip ─────────────────────────────────────────────────────────────
 
-export function CustomTooltip({ active, payload, label }: any) {
+export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-border/80 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs text-popover-foreground">
       <p className="font-semibold mb-1.5 text-foreground">Dia {label}</p>
       <div className="space-y-1">
-        {payload.map((entry: any, i: number) => (
+        {payload.map((entry, i) => (
           <div key={i} className="flex items-center gap-2">
             <span
               className="inline-block w-2 h-2 rounded-full shrink-0"
@@ -21,7 +22,7 @@ export function CustomTooltip({ active, payload, label }: any) {
             />
             <span className="text-muted-foreground">{entry.name}:</span>
             <span className="font-semibold tabular-nums font-mono" style={{ color: entry.color }}>
-              {formatCurrency(entry.value)}
+              {formatCurrency(entry.value ?? 0)}
             </span>
           </div>
         ))}

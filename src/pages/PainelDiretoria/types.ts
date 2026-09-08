@@ -64,3 +64,24 @@ export const PIE_COLORS = [
 // formas, e duas telas escolhendo cores por conta própria é como o mesmo "Pix"
 // aparecia em dois verdes. Reexportado para não mudar quem já importava daqui.
 export { corDaForma, iconeDaForma, rotuloDaForma } from '@/lib/formasPagamento';
+
+/**
+ * Um acordo EXTRA, com os campos que a seção de extras de fato pede.
+ *
+ * Não é o `Acordo` inteiro de propósito: a consulta em `useSetoresExtras` faz
+ * um `select` explícito de oito colunas, e tipar pelo `Acordo` completo diria
+ * que existem campos que a linha não traz — o que é pior que não tipar, porque
+ * mente com a confiança do compilador.
+ *
+ * Se a consulta ganhar coluna, é aqui que a coluna entra.
+ */
+export interface AcordoExtra {
+  id:            string;
+  valor:         number | null;
+  status:        string | null;
+  tipo:          string | null;
+  setor_id:      string | null;
+  operador_id:   string | null;
+  tipo_vinculo:  string | null;
+  vencimento:    string | null;
+}

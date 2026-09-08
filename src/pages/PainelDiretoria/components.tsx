@@ -1,3 +1,4 @@
+import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
 import { memo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -13,29 +14,29 @@ import { TIPO_ICONS, TIPO_CORES, TIPO_LABELS_DISPLAY } from './types';
 
 // ─── Tooltips ─────────────────────────────────────────────────────────────────
 
-export function CustomTooltip({ active, payload, label }: any) {
+export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-3 shadow-xl text-xs text-popover-foreground min-w-[170px]">
       <p className="font-semibold mb-2 text-foreground border-b border-border/40 pb-1.5">Dia {label}</p>
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <p key={i} style={{ color: entry.color }} className="flex justify-between gap-4 mt-1">
           <span className="text-muted-foreground">{entry.name}:</span>
-          <span className="font-mono font-bold">{formatBRL(entry.value)}</span>
+          <span className="font-mono font-bold">{formatBRL(entry.value ?? 0)}</span>
         </p>
       ))}
     </div>
   );
 }
 
-export function CustomPieTooltip({ active, payload }: any) {
+export function CustomPieTooltip({ active, payload }: PropsTooltipGrafico) {
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
     <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-3 shadow-xl text-xs text-popover-foreground">
-      <p className="font-bold mb-1" style={{ color: d.payload.fill }}>{d.name}</p>
-      <p className="font-mono text-sm font-semibold">{formatBRL(d.value)}</p>
-      <p className="text-muted-foreground mt-0.5">{d.payload.qtd} acordos</p>
+      <p className="font-bold mb-1" style={{ color: d.payload?.fill }}>{d.name}</p>
+      <p className="font-mono text-sm font-semibold">{formatBRL(d.value ?? 0)}</p>
+      <p className="text-muted-foreground mt-0.5">{d.payload?.qtd} acordos</p>
     </div>
   );
 }

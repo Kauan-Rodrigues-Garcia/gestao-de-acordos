@@ -187,7 +187,7 @@ export async function fetchIsDiretoExtraAtivo(params: {
   return resolverDiretoExtraAtivo({
     userId,
     userSetorId: perfil.setor_id,
-    userEquipeId: (perfil as any).equipe_id,
+    userEquipeId: perfil.equipe_id,
     configs,
   });
 }
