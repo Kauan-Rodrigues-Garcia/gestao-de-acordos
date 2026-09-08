@@ -1,5 +1,5 @@
 /**
- * RankingDesafio — a lista completa, do 4º em diante.
+ * RankingDesafio — as linhas do ranking, a partir da posição recebida.
  *
  * ## Onde a ultrapassagem é detectada
  *
@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio';
+import type { PremioPorPosicao } from '@/services/desafios/types';
 import type { EstiloTema } from './tema';
 import { CardParticipante } from './CardParticipante';
 
@@ -33,10 +34,11 @@ interface Props {
   ocultarEquipe?: boolean;
   /** Corrida de projeção: o card destaca o percentual. Ver `CardParticipante`. */
   corridaDeProjecao?: boolean;
+  premios?: PremioPorPosicao[];
 }
 
 export function RankingDesafio({
-  lista, tema, mostrarFotos, animar, voceId, ocultarEquipe, corridaDeProjecao,
+  lista, tema, mostrarFotos, animar, voceId, ocultarEquipe, corridaDeProjecao, premios,
 }: Props) {
   const anterior = useRef<Map<string, number>>(new Map());
   const [subidas, setSubidas] = useState<Record<string, number>>({});
@@ -76,6 +78,7 @@ export function RankingDesafio({
             subiu={subidas[item.pessoa.id] ?? 0}
             ocultarEquipe={ocultarEquipe}
             corridaDeProjecao={corridaDeProjecao}
+            premio={premios?.find(p => p.posicao === item.posicao)}
           />
         ))}
       </AnimatePresence>

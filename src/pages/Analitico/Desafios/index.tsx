@@ -47,8 +47,7 @@ import { IndicadoresDesafio } from './IndicadoresDesafio';
 import { MeuDesafio } from './MeuDesafio';
 import { MetaConquistada } from './MetaConquistada';
 import { PaginaDesafio } from './PaginaDesafio';
-import { PodioDesafio } from './PodioDesafio';
-import { RankingDesafio } from './RankingDesafio';
+import { ClassificacaoDesafio } from './ClassificacaoDesafio';
 import { RankingEquipes } from './RankingEquipes';
 import { SetoresDoDesafio, type SetorSimples } from './SetoresDoDesafio';
 
@@ -334,8 +333,6 @@ export function AbaDesafios({
   if (!aberta) return <EsqueletoDesafio />;
 
   const semParticipantes = !!resultado && resultado.totalParticipantes === 0;
-  const top3  = resultado?.individual.slice(0, 3) ?? [];
-  const resto = resultado?.individual.slice(3)   ?? [];
 
   const secaoEquipes = aberta.regra.modo.includes('equipe') && resultado
     && resultado.equipes.length > 0 && (
@@ -411,63 +408,15 @@ export function AbaDesafios({
           {!priorizarEquipes && secaoPessoal}
 
           {aberta.regra.modo.includes('individual') && (
-            <>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {aberta.regra.premios.length ? 'Quem está levando' : 'Top 3'}
-                </h3>
-                <PodioDesafio
-                  top3={top3}
-                  tema={tema}
-                  mostrarFotos={aberta.visual.mostrarFotos}
-                  animar={aberta.visual.animarUltrapassagem}
-                  voceId={operadorId}
-                  corridaDeProjecao={corridaDeProjecao}
-                />
-              </section>
-
-              {/* A premiação por colocação, casada com quem está nela agora. */}
-              {aberta.regra.premios.length > 0 && (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Premiação</h3>
-                  <ul className="space-y-1">
-                    {aberta.regra.premios.map(p => {
-                      const dono = resultado.individual.find(i => i.posicao === p.posicao);
-                      return (
-                        <li
-                          key={p.posicao}
-                          className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-xs"
-                        >
-                          <span className="w-8 flex-shrink-0 font-semibold text-muted-foreground">
-                            {p.posicao}º
-                          </span>
-                          <span className="flex-1 truncate text-foreground">
-                            {p.icone ? `${p.icone} ` : ''}{p.premio}
-                          </span>
-                          <span className="max-w-[12rem] truncate text-muted-foreground">
-                            {dono?.pessoa.nome ?? 'em aberto'}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
-
-              {resto.length > 0 && (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Ranking completo</h3>
-                  <RankingDesafio
-                    lista={resto}
-                    tema={tema}
-                    mostrarFotos={aberta.visual.mostrarFotos}
-                    animar={aberta.visual.animarUltrapassagem}
-                    voceId={operadorId}
-                    corridaDeProjecao={corridaDeProjecao}
-                  />
-                </section>
-              )}
-            </>
+            <ClassificacaoDesafio
+              lista={resultado.individual}
+              premios={aberta.regra.premios}
+              tema={tema}
+              mostrarFotos={aberta.visual.mostrarFotos}
+              animar={aberta.visual.animarUltrapassagem}
+              voceId={operadorId}
+              corridaDeProjecao={corridaDeProjecao}
+            />
           )}
 
           {priorizarEquipes && secaoPessoal}

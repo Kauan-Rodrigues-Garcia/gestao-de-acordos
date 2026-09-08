@@ -1,0 +1,34 @@
+/* O brilho percorre apenas a premiação; a leitura do placar fica estável. */
+.desafio-premio {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.desafio-premio::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 25%, rgb(251 191 36 / 20%) 45%, rgb(255 255 255 / 38%) 50%, transparent 70%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+
+.desafio-premio:hover,
+.desafio-premio:focus-within {
+  border-color: rgb(245 158 11 / 65%);
+  box-shadow: 0 0 20px -8px rgb(245 158 11 / 45%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .desafio-premio::before { animation: desafio-premio-brilho 5.5s ease-in-out infinite; }
+  .desafio-destaque { transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+  .desafio-destaque:hover { transform: translateY(-2px); }
+}
+
+@keyframes desafio-premio-brilho {
+  0%, 65% { transform: translateX(-130%); }
+  90%, 100% { transform: translateX(130%); }
+}

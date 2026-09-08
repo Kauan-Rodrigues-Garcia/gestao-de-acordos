@@ -6,11 +6,10 @@
  * animado para que uma atualização discreta do Analítico seja percebida — o
  * mesmo motivo pelo qual `ValorAnimado` existe.
  *
- * `prefers-reduced-motion` desliga o movimento, e a barra vai direto ao valor
- * certo. Framer Motion respeita a preferência sozinho quando a transição é
- * declarada assim.
+ * `useReducedMotion` desliga a transição quando a pessoa prefere movimento
+ * reduzido, e a barra vai direto ao valor certo.
  */
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -23,6 +22,7 @@ interface Props {
 }
 
 export function ProgressoDesafio({ progresso, cor, className, ...resto }: Props) {
+  const reduzirMovimento = useReducedMotion();
   const largura = Math.max(0, Math.min(100, progresso));
   return (
     <div
@@ -37,7 +37,7 @@ export function ProgressoDesafio({ progresso, cor, className, ...resto }: Props)
         className={cn('h-full rounded-full', cor)}
         initial={false}
         animate={{ width: `${largura}%` }}
-        transition={{ type: 'spring', stiffness: 160, damping: 26 }}
+        transition={reduzirMovimento ? { duration: 0 } : { type: 'spring', stiffness: 160, damping: 26 }}
       />
     </div>
   );
