@@ -43,7 +43,6 @@ interface BuilderCall {
 }
 
 const calls: BuilderCall[] = [];
-let currentCall: BuilderCall | null = null;
 
 // Resultado único (fallback) ou por tabela (FIFO).
 let defaultResult: MockResult = { data: null, error: null, count: 0 };
@@ -63,7 +62,6 @@ function createBuilder(table: string) {
   // depois continua chamando .in() no builder de `acordos_deduplicados`).
   const call: BuilderCall = { table, operation: null, filters: [] };
   calls.push(call);
-  currentCall = call;
 
   const builder = {
     select: vi.fn((arg?: unknown, opts?: unknown) => {
@@ -112,7 +110,6 @@ import {
 
 beforeEach(() => {
   calls.length = 0;
-  currentCall = null;
   defaultResult = { data: null, error: null, count: 0 };
   for (const k of Object.keys(resultsByTable)) delete resultsByTable[k];
 });

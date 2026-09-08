@@ -41,7 +41,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { chaveDeCache } from '@/lib/cacheInstantaneo';
 import {
-  decidirAutorizacao, cancelarAutorizacao, type PedidoAutorizacao,
+  decidirAutorizacao, type PedidoAutorizacao,
 } from '@/services/autorizacaoPedidos.service';
 
 /** "há 3 min", "há 2 h" — a idade do pedido importa mais que a hora exata. */
@@ -105,15 +105,6 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
     onDecidido();
   }
 
-  async function cancelar() {
-    setOcupado(true);
-    const ok = await cancelarAutorizacao(pedido.id);
-    setOcupado(false);
-    toast[ok ? 'success' : 'error'](
-      ok ? 'Pedido cancelado.' : 'Não foi possível cancelar — talvez já tenha sido decidido.',
-    );
-    onDecidido();
-  }
 
   return (
     <div className={cn(

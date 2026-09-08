@@ -89,7 +89,7 @@ function queueResultFor(table: string, ...results: MockResult[]) {
   resultsByTable[table] = [...(resultsByTable[table] ?? []), ...results];
 }
 
-function setDefaultResult(r: MockResult) { defaultResult = r; }
+function _setDefaultResult(r: MockResult) { defaultResult = r; }
 
 function createBuilder(table: string) {
   const builder: Record<string, unknown> = {};

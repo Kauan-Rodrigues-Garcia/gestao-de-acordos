@@ -163,9 +163,9 @@ vi.mock('@/components/OperadorCell', () => ({
 // framer-motion stub
 vi.mock('framer-motion', () => {
   const handler = {
-    get: (_: unknown, tag: string) =>
+    get: (_: unknown, _tag: string) =>
       (props: Record<string, unknown>) => {
-        const { children, layout, initial, animate, exit, transition, ...rest } = props ?? {};
+        const { children, layout: _l, initial: _i, animate: _a, exit: _e, transition: _t, ...rest } = props ?? {};
         return React.createElement('div', rest as React.HTMLAttributes<HTMLDivElement>, children as React.ReactNode);
       },
   };

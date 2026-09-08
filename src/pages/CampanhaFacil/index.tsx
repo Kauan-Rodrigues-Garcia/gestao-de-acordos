@@ -17,7 +17,6 @@ import {
   AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -91,7 +90,6 @@ function VariableChips({ onInsert }: { onInsert: (variable: string) => void }) {
 
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
-  const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   const cf = useCampanhaFacil();
 

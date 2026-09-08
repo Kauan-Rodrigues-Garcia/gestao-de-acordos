@@ -8,7 +8,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
-  ROUTE_PATHS, formatCurrency, formatDate, getTodayISO, contaNoRecebimento,
+  ROUTE_PATHS, formatDate, getTodayISO, contaNoRecebimento,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -122,7 +122,6 @@ export default function Dashboard() {
   }, [niveis, visaoFiltro, equipesDoSetor]);
   const soOsMeus = visaoFiltro === 'individual';
   const operadorFiltroAtivo = soOsMeus ? (perfil?.id ?? null) : null;
-  const eliteVisaoGeral = !soOsMeus;
 
   /*
    * Com «só os meus» ligado, setor e equipe param de valer.
@@ -143,12 +142,11 @@ export default function Dashboard() {
     ? visaoFiltro.replace('equipe:', '')
     : null;
 
-  const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
+  const { acordos: acordosHoje } = useAcordos({ apenas_hoje: true });
   const hoje = getTodayISO();
   const diaSemana    = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-  const [hojeMinimizado, setHojeMinimizado] = useState(false);
 
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -189,7 +187,6 @@ export default function Dashboard() {
   const [confirmarPgtoAcordo,     setConfirmarPgtoAcordo]     = useState<AcordoComVinculo | null>(null);
   const [salvandoConfirmarPgto,   setSalvandoConfirmarPgto]   = useState(false);
   const [gruposReagendadosBD, setGruposReagendadosBD] = useState<Set<string>>(new Set());
-  const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
   const [detalheInlineIdTabela,   setDetalheInlineIdTabela]   = useState<string | null>(null);
   const [novoInlineAbertoTabela,  setNovoInlineAbertoTabela]  = useState(false);

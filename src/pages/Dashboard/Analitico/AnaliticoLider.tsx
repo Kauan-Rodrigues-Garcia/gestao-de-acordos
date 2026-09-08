@@ -172,7 +172,7 @@ interface AnaliticoLiderProps {
 
 export function AnaliticoLider({
   empresaId, recorte, setorId, podeVerTodosSetores = true,
-  temPermissaoImportar, operadorId, operadorNome, liderId,
+  temPermissaoImportar, liderId,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();

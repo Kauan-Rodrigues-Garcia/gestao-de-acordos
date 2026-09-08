@@ -137,7 +137,7 @@ export function AcordoEditInline({
   const initialObservacoes = isPaguePlay ? initialLink : (acordo.observacoes || '');
 
   const [nomeCliente, setNomeCliente] = useState(acordo.nome_cliente);
-  const [nrCliente,   setNrCliente]   = useState(acordo.nr_cliente);
+  const [nrCliente] = useState(acordo.nr_cliente);
   const [vencimento,  setVencimento]  = useState(acordo.vencimento);
   const [valor,       setValor]       = useState(Number(acordo.valor).toFixed(2).replace('.', ','));
   const [tipo,        setTipo]        = useState<Acordo['tipo']>(acordo.tipo);

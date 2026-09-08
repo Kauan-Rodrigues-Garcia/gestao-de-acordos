@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import {
-  Plus, MessageSquare, RefreshCw, X,
+  Plus, MessageSquare, RefreshCw,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { CadeadoMes } from '@/components/CadeadoMes';
@@ -20,7 +20,7 @@ import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagenda
 import { valorDemaisParcelas } from '@/lib/money';
 import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 import { toast } from 'sonner';
-import { ROUTE_PATHS, formatCurrency, formatDate, getTodayISO } from '@/lib/index';
+import { formatDate, getTodayISO } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';

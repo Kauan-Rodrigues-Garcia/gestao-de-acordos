@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { ArrowLeft, Edit, MessageSquare, CheckCircle2, Clock, Hash, User, Calendar, DollarSign, Smartphone, FileText, AlertCircle, Building2, MapPin, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +13,7 @@ import { toast } from 'sonner';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, isAtrasado,
-  STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
+  TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';

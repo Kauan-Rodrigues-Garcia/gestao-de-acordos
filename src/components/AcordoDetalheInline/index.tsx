@@ -85,7 +85,11 @@ export function AcordoDetalheInline({
 
   const [registrosReais,        setRegistrosReais]        = useState<Acordo[]>([]);
   const [loadingParc,           setLoadingParc]            = useState(false);
-  const [marcandoPago,          setMarcandoPago]           = useState<string | null>(null);
+  // O VALOR não é lido por ninguém — só o setter roda, em volta de
+  // `executarMarcarPago`. Ficou de um indicador de carregamento que a tela não
+  // desenha mais. Mantido como escrita pura para não mudar o ritmo de render;
+  // se um dia voltar o spinner, é este estado que ele lê.
+  const [, setMarcandoPago] = useState<string | null>(null);
   const [confirmarPgtoParc,     setConfirmarPgtoParc]      = useState<Acordo | null>(null);
   const [salvandoConfirmarPgto, setSalvandoConfirmarPgto]  = useState(false);
   const [modalExtraDiretoOpen,  setModalExtraDiretoOpen]   = useState(false);
@@ -131,15 +135,11 @@ export function AcordoDetalheInline({
   }, [deveExibirParcelas, acordoLocal.acordo_grupo_id]);
 
   // ── Marcar como pago ──────────────────────────────────────────────────────
-  function marcarPago(p: Acordo) {
-    if (p.status === 'nao_pago') {
-      setConfirmarPgtoParc(p);
-    } else {
-      // Pendente → pago sem caixa: mantém o vencimento tabulado do acordo
-      void executarMarcarPago(p, p.vencimento);
-    }
-  }
-
+  //
+  // O despachante `marcarPago` saiu: ninguém o chamava. A única porta hoje é o
+  // diálogo de confirmação, que chama `executarMarcarPago` direto com a data
+  // escolhida — o caminho "pendente → pago sem caixa", que era o outro ramo
+  // dele, não tem mais gatilho na tela.
   async function executarMarcarPago(p: Acordo, dataPagamento: string) {
     setMarcandoPago(p.id);
     // Recebimento é atribuído ao vencimento → grava a data escolhida no vencimento

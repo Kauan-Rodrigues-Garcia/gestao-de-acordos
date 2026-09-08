@@ -150,7 +150,7 @@ export interface DonutChartProps {
   size?: number;
 }
 
-export function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 180 }: DonutChartProps) {
+export function DonutChart({ percent, sublabel, color = '#6366f1', size = 180 }: DonutChartProps) {
   const clampedPerc = Math.min(percent, 100);
   const data = [
     { value: clampedPerc },

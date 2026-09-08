@@ -12,7 +12,12 @@ export default tseslint.config(
   // `coverage` entrou junto com `dist`: os dois são gerados e ignorados pelo
   // git, e o relatório do v8 traz JS de terceiros (prettify, sorter) que o
   // lint reclamava — seis avisos sobre arquivos que nem estão no repositório.
-  { ignores: ["dist", "coverage", "arquivo-morto", "src/lib/database.types.ts"] },
+  // `examples/` entra pelo mesmo motivo de `arquivo-morto`: é material de
+  // referência, não código vivo. O README dele diz, com todas as letras,
+  // «refer to the relevant logic rather than using directly» — não está em
+  // tsconfig nenhum, ninguém o importa, e não vai para o bundle. Lintar ali
+  // rendia 13 avisos sobre código de exemplo da Stripe.
+  { ignores: ["dist", "coverage", "arquivo-morto", "examples", "src/lib/database.types.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -31,7 +36,17 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
-      "@typescript-eslint/no-unused-vars": "warn",
+      // `_` na frente = «existe por obrigação de assinatura, não vou usar».
+      // O código já seguia a convenção em ~25 lugares (`_req`, `_perfis`,
+      // `_modo`), mas a regra estava sem os padrões e reclamava deles do mesmo
+      // jeito — o que ensina a ignorar o aviso, que é o oposto do que ele
+      // serve. Sem `_`, continua sendo aviso.
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+      }],
       "@typescript-eslint/no-empty-object-type": "warn",
       "@typescript-eslint/no-explicit-any": "warn",
       // Permite console.warn/error/info (usados em logging de auth/realtime),
@@ -49,6 +64,14 @@ export default tseslint.config(
     rules: {
       "import-x/first": "off",
     },
+  },
+  // `logger.ts` é a ÚNICA porta sancionada para o console — é ele que decide o
+  // que sai em dev e o que sai sempre. A regra global proíbe `console.debug`
+  // justamente para que ninguém o chame direto; aqui dentro ele é a
+  // implementação, não um resto de depuração esquecido.
+  {
+    files: ["src/lib/logger.ts"],
+    rules: { "no-console": "off" },
   },
   // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.
   // Este override foi adicionado após o sweep de remoção de `any`;

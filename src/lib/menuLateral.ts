@@ -23,7 +23,7 @@
  */
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
-  BarChart3, Upload, Target, BarChart2, LifeBuoy, Megaphone, MessageSquarePlus,
+  BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, Tv,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';

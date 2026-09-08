@@ -5,7 +5,7 @@
  * Centraliza queries, filtros, cálculos e validações.
  */
 import { supabase, Acordo } from '@/lib/supabase';
-import { safeNum, sumSafe } from '@/lib/money';
+import { sumSafe } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 

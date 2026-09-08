@@ -25,14 +25,11 @@ import {
 } from '@/lib/fechamentoMes';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { criarNotificacao }    from '@/services/notificacoes.service';
-import { registrarLog }        from '@/services/logs.service';
-import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { solicitarAutorizacao } from '@/services/autorizacaoPedidos.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   operadorEstaDesligado, transferirAcordoDeDesligado,
-  transferirAcordoNoServidor, mensagemErroTransferencia,
 } from '@/services/desligamento.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
@@ -188,10 +185,6 @@ export function AcordoNovoInline({
   }
 
   function cancelar() { limparDraft(); onCancel(); }
-
-  function buildSyncPayload(p: Record<string, unknown>): Record<string, unknown> {
-    return { valor: p.valor, vencimento: p.vencimento, nome_cliente: p.nome_cliente, tipo: p.tipo, whatsapp: p.whatsapp ?? null, parcelas: p.parcelas };
-  }
 
   function fmtValor(valor: unknown): string {
     return typeof valor === 'number' ? `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';

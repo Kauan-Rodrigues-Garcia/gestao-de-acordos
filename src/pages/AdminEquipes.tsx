@@ -21,7 +21,6 @@ import {
   Trash2,
   Pencil,
   Check,
-  ChevronDown,
   UserCheck,
   Layers,
   Search,
@@ -38,7 +37,7 @@ import {
 import type { FantasmaTransferencia } from '@/services/analitico/fantasmaTransferencia';
 import { removerFantasma } from '@/services/admin/transferenciaUsuario.service';
 import { ConfirmarTirarFantasma } from '@/components/admin/ConfirmarTirarFantasma';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';

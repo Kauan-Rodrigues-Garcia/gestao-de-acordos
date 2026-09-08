@@ -94,7 +94,7 @@ function nextResultFor(table: string): MockResult {
   return defaultResult;
 }
 
-function setDefaultResult(r: MockResult) { defaultResult = r; }
+function _setDefaultResult(r: MockResult) { defaultResult = r; }
 
 function queueResultFor(table: string, ...results: MockResult[]) {
   resultsByTable[table] = [...(resultsByTable[table] ?? []), ...results];
