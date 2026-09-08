@@ -107,9 +107,11 @@ import {
 import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
 // O mapa de calor operador × dia — o outro formato da MESMA lista, agora
 // somando do analítico. Continua no diretório do diário; a fonte é que mudou.
-import { DiaDetalhado } from '@/pages/Analitico/Diario/DiaDetalhado';
+import { DiaDetalhado, type CelulaDoMapa } from '@/pages/Analitico/Diario/DiaDetalhado';
 import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
-import { limparDadosDoDia } from '@/services/diario/diario.service';
+import { limparDadosDoDia, buscarResumoMensalDiario } from '@/services/diario/diario.service';
+import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
+import { celulasDoMapa } from './fonteDoMapa';
 import {
   mensalJaImportadoHoje, limparMarcaMensal,
 } from '@/services/diario/diarioMensalGuard';
@@ -856,13 +858,23 @@ export function AnaliticoLider({
    * NÃO enxerga todos, é o próprio setor do perfil — a página o trava assim. Nos
    * dois casos o resultado é o mesmo da tela que este bloco substitui.
    */
-  const escopoDiaPermissao = useMemo<EscopoDiario | null>(
-    () => (diaEmFoco && composicaoCarregada ? escopoDoDiario({
+  /*
+   * Sem a amarra do `diaEmFoco`: o MAPA DO MÊS também precisa deste escopo, e
+   * ele vive fora do recorte Dia. A amarra volta logo abaixo, em
+   * `escopoDiaPermissao`, para o dia continuar exatamente como estava.
+   */
+  const escopoDiarioPermissao = useMemo<EscopoDiario | null>(
+    () => (composicaoCarregada ? escopoDoDiario({
       veTodosOsSetores: podeVerTodosSetores,
       setorDoUsuario:   setorId ?? null,
       totalDeSetores:   contarSetores(vinculosDiario),
     }) : null),
-    [diaEmFoco, composicaoCarregada, setorId, podeVerTodosSetores, vinculosDiario],
+    [composicaoCarregada, setorId, podeVerTodosSetores, vinculosDiario],
+  );
+
+  const escopoDiaPermissao = useMemo<EscopoDiario | null>(
+    () => (diaEmFoco ? escopoDiarioPermissao : null),
+    [diaEmFoco, escopoDiarioPermissao],
   );
 
   /*
@@ -883,6 +895,14 @@ export function AnaliticoLider({
       ? { tipo: 'setor', setorId: filtroSetorDia }
       : escopoDiaPermissao),
     [escopoDiaPermissao, filtroSetorDia],
+  );
+
+  /** A mesma transformação, valendo no mês — é o que o mapa usa. */
+  const escopoDiarioMes = useMemo<EscopoDiario | null>(
+    () => (escopoDiarioPermissao?.tipo === 'tudo' && filtroSetorDia
+      ? { tipo: 'setor', setorId: filtroSetorDia }
+      : escopoDiarioPermissao),
+    [escopoDiarioPermissao, filtroSetorDia],
   );
 
   /** Há um setor em foco no dia? Quem enxerga um setor só não limpa os outros. */
@@ -1030,10 +1050,52 @@ export function AnaliticoLider({
     [resumosPorEquipe],
   );
 
-  const linhasDoMapa = useMemo(
-    () => linhasDashboard.filter(l => !l.operador_id || operadoresNaLista.has(l.operador_id)),
-    [linhasDashboard, operadoresNaLista],
-  );
+  /*
+   * O MAPA DO MÊS soma do analítico no BookPlay e do DIÁRIO na PaguePlay.
+   *
+   * O mapa passou a somar do analítico com o argumento de que eram «duas somas
+   * do mesmo dinheiro». No BookPlay é verdade: o analítico e o recebimento
+   * diário saem do MESMO arquivo — em setembro/2026, 3.665 linhas contra
+   * 3.684, R$ 1.370.714 contra R$ 1.376.017.
+   *
+   * Na PaguePlay é falso. São relatórios DIFERENTES: 1.031 linhas e R$ 504.665
+   * no analítico, contra 6.122 e R$ 1.519.751 no diário (o `mes.xlsx` do ERP).
+   * O mapa mostrava um terço do que entrou, e o dia 08/09 — com R$ 266.787 no
+   * diário e nada no analítico — aparecia zerado.
+   *
+   * Por isso a fonte é escolhida por empresa, e não uma só para as duas.
+   */
+  const [linhasDiarioMes, setLinhasDiarioMes] = useState<LinhaRecebidaDia[]>([]);
+  const [nomesDoDiario, setNomesDoDiario] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    // Só a PaguePlay precisa, e só quando o mapa está à vista: é uma leitura
+    // do mês inteiro, e a aba Lista não usa nada dela.
+    if (!isPP || !empresaId || abaVisivel !== 'operadores' || visaoOperadores !== 'mapa') return;
+    let vivo = true;
+    void buscarResumoMensalDiario(empresaId, mes).then(r => {
+      if (!vivo) return;
+      setLinhasDiarioMes(r.linhasDia);
+      const nomes = new Map<string, string>();
+      for (const s of r.resumos) {
+        if (s.operador_id) nomes.set(s.operador_id, s.operador_nome || s.operador_usuario || '—');
+      }
+      setNomesDoDiario(nomes);
+    });
+    return () => { vivo = false; };
+  }, [isPP, empresaId, mes, abaVisivel, visaoOperadores]);
+
+  const linhasDoMapa = useMemo<CelulaDoMapa[]>(() => celulasDoMapa({
+    isPaguePlay: isPP,
+    // `linhasVisiveis` é o MESMO filtro de permissão do recorte Dia: a fonte
+    // muda, a régua de quem enxerga o quê não. Sem escopo resolvido ainda,
+    // lista vazia — nunca «tudo».
+    diario: escopoDiarioMes
+      ? linhasVisiveis(linhasDiarioMes, escopoDiarioMes, vinculosDiario)
+      : [],
+    analitico: linhasDashboard,
+    operadoresNaLista,
+  }), [isPP, escopoDiarioMes, linhasDiarioMes, vinculosDiario, linhasDashboard, operadoresNaLista]);
 
   /*
    * Nome de quem aparece no mapa, pelo mesmo resumo que nomeia a lista.
@@ -1049,9 +1111,19 @@ export function AnaliticoLider({
     return m;
   }, [resumos]);
 
+  /*
+   * O nome vem da MESMA fonte do número.
+   *
+   * Na PaguePlay o mapa soma do diário, e há operador no diário que não está
+   * no resumo do analítico — ele apareceria como «—» no meio da lista, com
+   * valor e sem identidade. O resumo do analítico fica como reserva: o diário
+   * não traz nome de quem só tem ajuste manual.
+   */
   const nomeDoOperadorNoMapa = useCallback(
-    (id: string) => nomesDoAnalitico.get(id) ?? '—',
-    [nomesDoAnalitico],
+    (id: string) => (isPP ? nomesDoDiario.get(id) : undefined)
+      ?? nomesDoAnalitico.get(id)
+      ?? '—',
+    [isPP, nomesDoDiario, nomesDoAnalitico],
   );
 
   /*

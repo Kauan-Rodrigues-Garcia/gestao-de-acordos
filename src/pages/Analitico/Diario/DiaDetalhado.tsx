@@ -25,11 +25,19 @@
  *
  * ## De onde vêm os números
  *
- * Das linhas do ANALÍTICO (`fn_analitico_dashboard_mes`), as mesmas que
- * alimentam a aba Formas de pagamento e o card «Total recebido» do topo. Antes
- * vinham do resumo mensal do DIÁRIO: duas somas do mesmo dinheiro, na mesma
- * tela, livres para discordar sem avisar. A regra da tela é curta — o analítico
- * responde pelo mês, o diário responde pelo dia —, e o mapa é mensal.
+ * Depende da empresa, e QUEM DECIDE É O CHAMADOR — este componente só desenha
+ * o que recebe.
+ *
+ * No BookPlay, das linhas do ANALÍTICO (`fn_analitico_dashboard_mes`), as
+ * mesmas da aba Formas de pagamento e do card «Total recebido». Ali analítico
+ * e recebimento diário saem do MESMO arquivo, então são de fato duas somas do
+ * mesmo dinheiro e tanto faz de qual delas ler.
+ *
+ * Na PaguePlay, do resumo mensal do DIÁRIO. Lá os dois relatórios são
+ * DIFERENTES — em setembro/2026, R$ 504.665 no analítico contra R$ 1.519.751
+ * no diário. O mapa chegou a somar do analítico para as duas empresas, e na
+ * PaguePlay passou a mostrar um terço do que entrou, com o dia mais recente
+ * zerado. Foi o defeito que trouxe esta divisão de fonte.
  *
  * As linhas chegam JÁ dentro do escopo de quem chama; este componente não
  * decide quem enxerga o quê.
@@ -41,7 +49,6 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarRange, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
-import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import { getTodayISO } from '@/lib/index';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -50,16 +57,40 @@ import { cn } from '@/lib/utils';
 // fonte dos VALORES, não a régua do calendário.
 import { diasDoMes } from '@/services/diario/diaDetalhado';
 
+/**
+ * Uma célula do mapa, antes de virar matriz.
+ *
+ * Tanto a linha do analítico quanto a do resumo mensal do diário satisfazem
+ * este formato — é o que permite ao chamador escolher a fonte por empresa.
+ */
+export interface CelulaDoMapa {
+  /** 'yyyy-MM-dd' */
+  dia: string;
+  operador_id: string | null;
+  total: number;
+}
+
 interface DiaDetalhadoProps {
   /**
-   * Linhas do mês vindas de `useAnaliticoDashboard`, JÁ escopadas por quem
-   * chama (setor, equipe, permissão). Ver o cabeçalho.
+   * Linhas do mês, JÁ escopadas por quem chama (setor, equipe, permissão).
    *
    * Obrigatória. Como opcional, um caller que esquecesse de passá-la veria um
    * mapa vazio em vez de um erro — e mapa vazio é indistinguível de "mês sem
    * recebimento".
+   *
+   * As três colunas que o mapa lê, e só elas.
+   *
+   * Era `AnaliticoDashboardLinha[]`, o que amarrava o componente a UMA fonte —
+   * e as duas empresas não têm a mesma. No BookPlay o analítico e o
+   * recebimento diário saem do MESMO arquivo, e somar de qualquer um dá no
+   * mesmo. Na PaguePlay são relatórios diferentes: em setembro/2026 o
+   * analítico tinha R$ 504 mil contra R$ 1,52 milhão do diário — o mapa
+   * mostrava um terço, e o dia de hoje aparecia zerado.
+   *
+   * Declarar o consumido deixa o chamador escolher a fonte certa para cada
+   * empresa, que é o que `AnaliticoLider` faz agora.
    */
-  linhas: readonly AnaliticoDashboardLinha[];
+  linhas: readonly CelulaDoMapa[];
   /** 'yyyy-MM' — o mês da lente. `null` enquanto ela não resolveu. */
   mes: string | null;
   /**
