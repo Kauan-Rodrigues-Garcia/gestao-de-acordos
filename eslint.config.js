@@ -9,7 +9,10 @@ export default tseslint.config(
   // `arquivo-morto/` é backup legível, não código vivo: não compila, não roda e
   // não é lintado. Ele referencia módulos que já saíram do `src/`, então lintá-lo
   // só produziria erro sobre código que ninguém executa. Ver arquivo-morto/README.md.
-  { ignores: ["dist", "arquivo-morto", "src/lib/database.types.ts"] },
+  // `coverage` entrou junto com `dist`: os dois são gerados e ignorados pelo
+  // git, e o relatório do v8 traz JS de terceiros (prettify, sorter) que o
+  // lint reclamava — seis avisos sobre arquivos que nem estão no repositório.
+  { ignores: ["dist", "coverage", "arquivo-morto", "src/lib/database.types.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
