@@ -340,6 +340,7 @@ export function AbaDesafios({
       <h3 className="text-sm font-semibold text-foreground">Disputa entre equipes</h3>
       <RankingEquipes
         equipes={resultado.equipes}
+        corridaDeProjecao={corridaDeProjecao}
         tema={tema}
         mostrarFotos={aberta.visual.mostrarFotos}
         animar={aberta.visual.animarUltrapassagem}

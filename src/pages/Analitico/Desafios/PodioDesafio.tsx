@@ -24,10 +24,11 @@ interface Props {
   animar: boolean;
   voceId?: string | null;
   corridaDeProjecao?: boolean;
+  compacto?: boolean;
 }
 
 /** Ordem de leitura 1–3 na primeira linha, 4–5 na segunda; coluna única no celular. */
-export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId, corridaDeProjecao }: Props) {
+export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId, corridaDeProjecao, compacto: painel = false }: Props) {
   const reduzirMovimento = useReducedMotion();
   if (!top5.length) return null;
 
@@ -46,7 +47,8 @@ export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId
             layout={animar && !reduzirMovimento}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
             className={cn(
-              'desafio-destaque relative flex min-w-0 flex-col rounded-2xl border bg-gradient-to-b to-card p-4',
+              'desafio-destaque relative flex min-w-0 flex-col rounded-2xl border bg-gradient-to-b to-card',
+              painel ? 'p-3' : 'p-4',
               compacto ? 'from-muted/30 md:col-span-3' : 'md:col-span-2',
               estilo?.borda ?? 'border-border', estilo?.fundo,
               primeiro && 'shadow-[0_4px_24px_-16px_rgba(245,158,11,0.5)]',
@@ -64,15 +66,15 @@ export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId
               <div className={cn('shrink-0 rounded-full border p-1', estilo?.borda ?? 'border-border', !compacto && 'mb-3')}>
                 <AvatarParticipante
                   nome={item.pessoa.nome} fotoUrl={item.pessoa.fotoUrl} mostrarFoto={mostrarFotos}
-                  className={cn('shrink-0', compacto ? 'h-11 w-11' : 'h-16 w-16 lg:h-20 lg:w-20')}
+                  className={cn('shrink-0', painel ? 'h-10 w-10' : compacto ? 'h-11 w-11' : 'h-16 w-16 lg:h-20 lg:w-20')}
                 />
               </div>
               <div className={cn('min-w-0', compacto ? 'flex-1' : 'w-full')}>
-                <p className="break-words text-sm font-semibold leading-snug text-foreground">{item.pessoa.nome}</p>
+                <p className={cn('break-words font-semibold leading-snug text-foreground', painel ? 'text-xs' : 'text-sm')}>{item.pessoa.nome}</p>
                 {item.pessoa.equipeNome && <p className="mt-1 break-words text-[11px] text-muted-foreground">{item.pessoa.equipeNome}</p>}
               </div>
               <div className={cn('shrink-0', compacto ? 'text-right' : 'mt-auto pt-4 pb-1')}>
-                <p className={cn('font-bold tracking-tight tabular-nums', compacto ? 'text-xl' : 'text-3xl', estilo?.texto ?? tema.destaque)}>
+                <p className={cn('font-bold tracking-tight tabular-nums', painel ? (corridaDeProjecao ? 'text-xl' : 'text-sm') : compacto ? 'text-xl' : 'text-3xl', estilo?.texto ?? tema.destaque)}>
                   {corridaDeProjecao ? (item.meta ? percentualCheio(item.progresso) : '—') : formatBRL(item.recebido)}
                 </p>
                 {!corridaDeProjecao && <p className="mt-0.5 text-[10px] text-muted-foreground">recebidos</p>}
@@ -85,7 +87,7 @@ export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId
                 {!corridaDeProjecao && !premio && <p className="mt-2 text-center text-[11px] text-muted-foreground">{percentualCurto(item.progresso)} do desafio</p>}
               </div>
             ) : null}
-            {premio && <div className="mt-4"><PremioParticipante key={premio.posicao} premio={premio} /></div>}
+            {premio && <div className="mt-4"><PremioParticipante key={premio.posicao} premio={premio} compacto={painel} /></div>}
           </motion.li>
         );
       })}

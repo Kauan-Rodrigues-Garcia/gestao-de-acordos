@@ -5,7 +5,7 @@ import type { PremioPorPosicao } from '@/services/desafios/types';
 import './ranking-desafio.css';
 
 /** O prêmio pertence à posição e acompanha quem chega nela. */
-export function PremioParticipante({ premio }: { premio: PremioPorPosicao }) {
+export function PremioParticipante({ premio, compacto = false }: { premio: PremioPorPosicao; compacto?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const id = useId();
 
@@ -17,14 +17,14 @@ export function PremioParticipante({ premio }: { premio: PremioPorPosicao }) {
         aria-controls={id}
         aria-label={`Prêmio do ${premio.posicao}º lugar: ${premio.premio}`}
         onClick={() => setAberto(v => !v)}
-        className="relative flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        className={cn('relative flex w-full items-center rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card', compacto ? 'min-h-[68px] gap-1.5 px-2 py-2.5' : 'gap-3 px-3.5 py-3')}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-400/15 text-lg" aria-hidden="true">
+        <span className={cn('flex shrink-0 items-center justify-center rounded-lg bg-amber-400/15', compacto ? 'h-6 w-6 text-sm' : 'h-9 w-9 text-lg')} aria-hidden="true">
           {premio.icone || <Gift className="h-4 w-4" />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[9px] font-semibold uppercase tracking-[0.16em] text-amber-800 dark:text-amber-300">Prêmio da posição</span>
-          <span className="mt-0.5 block break-words text-sm font-semibold leading-snug">{premio.premio}</span>
+          <span className={cn('block font-semibold uppercase text-amber-800 dark:text-amber-300', compacto ? 'text-[8px] tracking-wider' : 'text-[9px] tracking-[0.16em]')}>Prêmio da posição</span>
+          <span className={cn('mt-0.5 block break-words font-semibold leading-snug', compacto ? 'text-xs' : 'text-sm')}>{premio.premio}</span>
         </span>
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 opacity-60 motion-safe:transition-transform', aberto && 'rotate-180')} aria-hidden="true" />
       </button>

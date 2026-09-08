@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import type { ResultadoEquipe } from '@/services/desafios/calcularDesafio';
 import type { EstiloTema } from './tema';
-import { percentualCurto } from './tema';
+import { percentualCurto, percentualCheio } from './tema';
 import { RankingDesafio } from './RankingDesafio';
 
 interface Props {
@@ -45,9 +45,10 @@ interface Props {
   mostrarFotos: boolean;
   animar: boolean;
   voceId?: string | null;
+  corridaDeProjecao?: boolean;
 }
 
-export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId }: Props) {
+export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId, corridaDeProjecao }: Props) {
   const [aberta, setAberta] = useState<string | null>(null);
 
   if (!equipes.length) return null;
@@ -96,14 +97,14 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId }: 
                         transition={{ type: 'spring', stiffness: 160, damping: 26 }}
                       />
                     </div>
-                    {eq.meta ? (
+                    {eq.meta && !corridaDeProjecao ? (
                       <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                         {percentualCurto(eq.progresso)}
                       </span>
                     ) : null}
                   </div>
 
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {!corridaDeProjecao && <p className="mt-0.5 text-[11px] text-muted-foreground">
                     <span className="font-medium text-foreground">
                       {eq.concluiram} de {eq.integrantes.length} concluíram o desafio
                     </span>
@@ -117,16 +118,18 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId }: 
                     {eq.paraUltrapassar !== null && eq.paraUltrapassar > 0 && (
                       <> · ↑ {formatBRL(eq.paraUltrapassar)} para alcançar o {eq.posicao - 1}º</>
                     )}
-                  </p>
+                  </p>}
                 </div>
 
                 <div className="shrink-0 text-right">
-                  <ValorAnimado
+                  {corridaDeProjecao ? (
+                    <span className="text-sm font-semibold tabular-nums text-foreground">{eq.meta ? percentualCheio(eq.progresso) : '—'}</span>
+                  ) : <ValorAnimado
                     valor={eq.recebido}
                     formatar={formatBRL}
                     className="text-sm font-semibold text-foreground"
                     classeSubindo="text-emerald-500"
-                  />
+                  />}
                 </div>
 
                 <ChevronDown className={cn(
@@ -154,6 +157,7 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId }: 
                         animar={false}
                         voceId={voceId}
                         ocultarEquipe
+                        corridaDeProjecao={corridaDeProjecao}
                       />
                     </div>
                   </motion.div>
