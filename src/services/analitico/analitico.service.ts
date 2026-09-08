@@ -188,11 +188,34 @@ export async function resolverOperadores(
    * Quem decide o que aparece na tela sao as consultas de composicao, que
    * conhecem o mes em foco. Esta aqui so precisa acertar a pessoa.
    */
-  const { data } = await supabase
-    .from('perfis')
-    .select('id, usuario, nome, arquivado')
-    .eq('empresa_id', empresaId)
-    .order('nome');
+  const [{ data }, { data: transferidos }] = await Promise.all([
+    supabase
+      .from('perfis')
+      .select('id, usuario, nome, arquivado')
+      .eq('empresa_id', empresaId)
+      .order('nome'),
+    /*
+     * Quem trocou de EMPRESA no meio do mês — 08/09/2026, mesma decisão do
+     * desligado e do arquivado logo acima, pelo mesmo motivo.
+     *
+     * O transferido continua cobrando a carteira da origem o mês inteiro e
+     * continua saindo no relatório dela. Mas `perfis` filtra por empresa, então
+     * o login dele parava de casar e as linhas viravam órfãs — sem operador,
+     * sem equipe, e o líder da origem perdia o número da pessoa de vista.
+     *
+     * Não dá para pedir os dois pelo cliente: a policy `perfis_select` exige
+     * `fn_can_access_empresa`, e quem importa na origem não alcança o perfil na
+     * empresa nova. Daí a RPC (migration 20260908150000), que devolve só id,
+     * usuario e nome, e só de quem esta empresa já registrou em
+     * `perfis_transferencias` com fantasma de pé.
+     *
+     * Falha da RPC (migration pendente) devolve lista vazia: a importação volta
+     * ao comportamento anterior em vez de quebrar.
+     */
+    rpcSemTipo<{ id: string; usuario: string | null; nome: string | null }[]>(
+      'fn_operadores_transferidos', { p_empresa_id: empresaId },
+    ),
+  ]);
 
   const todosPerfis: PerfilResumido[] = (data ?? [])
     .map(p => ({
@@ -205,6 +228,23 @@ export async function resolverOperadores(
   const dbIndex: Record<string, PerfilResumido> = {};
   for (const p of todosPerfis) {
     if (p.usuario) dbIndex[p.usuario.toLowerCase()] = p;
+  }
+
+  /*
+   * Os transferidos entram como ÚLTIMO recurso, nunca por cima.
+   *
+   * Um login reaproveitado por outra pessoa na empresa atual tem que continuar
+   * casando com quem está aqui hoje — a origem é a exceção, não a regra.
+   *
+   * Eles ficam de fora de `todosPerfis` de propósito: aquela lista alimenta o
+   * seletor manual de "operador não encontrado", e quem já casa sozinho não
+   * precisa aparecer ali. Pôr gente de outra empresa naquele menu mudaria o que
+   * a tela oferece, sem ninguém ter pedido.
+   */
+  for (const p of (transferidos ?? [])) {
+    const login = (p.usuario ?? '').toLowerCase();
+    if (!login || dbIndex[login]) continue;
+    dbIndex[login] = { id: p.id, usuario: p.usuario ?? '', nome: p.nome ?? '' };
   }
 
   const map: OperadorResolvidoMap = {};
