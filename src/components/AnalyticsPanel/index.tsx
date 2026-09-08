@@ -485,32 +485,49 @@ export function AnalyticsPanel({
         transition={{ duration: 0.3 }}
         className="flex items-center justify-between px-4 py-3 rounded-xl border border-border/70 bg-card shadow-sm"
       >
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 shrink-0">
-              <BarChart2 className="w-3.5 h-3.5 text-primary" />
-            </div>
-            <div>
-              <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
-              <div className="mt-0.5 -ml-1.5 flex items-center gap-2 flex-wrap">
-                <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
-                {/* Ao lado do mês porque os dois recortam o MESMO painel logo
-                    abaixo. PaguePlay só: a BookPlay não tem H.O. */}
-                {isPP && (
+        {/*
+          Na BookPlay esta faixa é só a barra de controles.
+
+          O título «Dados Analíticos», o ritmo, o Recebido e o Agendado saíram
+          em 08/09/2026: o painel de metas logo abaixo já é o assunto da tela e
+          já mostra recebido, projeção e meta com muito mais contexto. Repetir
+          dois desses números numa faixa acima obrigava a ler a mesma coisa
+          duas vezes, e o título anunciava uma seção que ocupa a página inteira.
+
+          O seletor de mês FICA — ele recorta tudo o que vem abaixo — e passa a
+          morar junto dos outros controles, à direita, onde já estão o
+          fechamento e o atualizar. Na PaguePlay a faixa continua como era: lá
+          o alternador H.O./Bruto depende dela e os números do topo são a
+          leitura em bruto que o painel não repete.
+        */}
+        {isPP ? (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 shrink-0">
+                <BarChart2 className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
+                <div className="mt-0.5 -ml-1.5 flex items-center gap-2 flex-wrap">
+                  <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
+                  {/* Ao lado do mês porque os dois recortam o MESMO painel logo
+                      abaixo. PaguePlay só: a BookPlay não tem H.O. */}
                   <SeletorUnidade valor={unidade} onChange={trocarUnidade} />
-                )}
+                </div>
               </div>
             </div>
+            {!carregando && sparklineData.length > 0 && (
+              <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
+                <MiniSparkline data={sparklineData} color={CHART_RECEBIDO} />
+                <span className="text-[11px] text-muted-foreground">ritmo</span>
+              </div>
+            )}
           </div>
-          {!carregando && sparklineData.length > 0 && (
-            <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
-              <MiniSparkline data={sparklineData} color={CHART_RECEBIDO} />
-              <span className="text-[11px] text-muted-foreground">ritmo</span>
-            </div>
-          )}
-        </div>
+        ) : (
+          <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
+        )}
 
-        {!carregando && (
+        {!carregando && isPP && (
           <div className="hidden md:flex items-center gap-5 text-xs">
             <div className="flex flex-col items-end">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide">

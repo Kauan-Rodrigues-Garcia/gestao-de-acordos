@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { FormaSaudacao } from '@/components/FormaSaudacao';
 import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -711,8 +712,12 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {saudacao()}, {nome}! 👋
+          {/* O 👋 virou o sólido do CreatorsLab, com as cores do tema e da
+              empresa. Ver `FormaSaudacao` para o porquê das cores saírem de
+              `--primary` em vez de constante. */}
+          <h1 className="flex items-center gap-1.5 text-2xl font-bold text-foreground">
+            <span>{saudacao()}, {nome}!</span>
+            <FormaSaudacao />
           </h1>
           <p className="text-sm text-muted-foreground capitalize mt-0.5">{diaSemana}, {dataFormatada}</p>
           {empresa && (

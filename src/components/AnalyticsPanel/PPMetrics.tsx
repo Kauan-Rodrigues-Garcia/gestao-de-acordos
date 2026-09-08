@@ -1,5 +1,5 @@
 import { DollarSign, BarChart2, Calendar, Clock, XCircle, CreditCard, QrCode } from 'lucide-react';
-import { MetricCard, BannerNaoTabulado } from './SubComponents';
+import { MetricCard } from './SubComponents';
 import { formatCurrency, calcHO } from '@/lib/index';
 import { ValorAnimado } from '@/components/ValorAnimado';
 
@@ -52,15 +52,6 @@ export function PPMetrics({
 }: PPMetricsProps) {
   return (
     <div className="space-y-3">
-      {/* Aviso: recebimento do analítico ainda não tabulado */}
-      {usarAnalitico && (
-        <BannerNaoTabulado
-          valor={naoTabuladoBruto}
-          qtd={naoTabuladoQtd}
-          totalAnalitico={analiticoBruto}
-        />
-      )}
-
       {/* Pix/Boleto × Cartão — direto do relatório analítico */}
       {usarAnalitico && (
         <div className="grid grid-cols-2 gap-3">

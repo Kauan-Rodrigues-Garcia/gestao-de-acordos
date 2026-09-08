@@ -17,6 +17,14 @@ export interface AcordosFiltersProps {
   /** Níveis que este cargo pode escolher na aba Acordos. */
   niveis: readonly NivelEscopo[];
   equipesDoSetor: { id: string; nome: string }[];
+  /**
+   * Setores da empresa. Só chega preenchido para quem tem `todos_setores` —
+   * quem enxerga um setor só não tem escolha a fazer e não ganha o seletor.
+   */
+  setoresDisponiveis: { id: string; nome: string }[];
+  /** Setor em foco. `null` = todos. Recorta a lista de equipes E os acordos. */
+  filtroSetor: string | null;
+  setFiltroSetor: (v: string | null) => void;
   visaoFiltroAcordos: VisaoFiltroAcordos;
   setVisaoFiltroAcordos: (v: VisaoFiltroAcordos) => void;
   busca: string;
@@ -53,7 +61,8 @@ export interface AcordosFiltersProps {
 
 export function AcordosFilters({
   activeTab, setActiveTab,
-  niveis, equipesDoSetor, visaoFiltroAcordos, setVisaoFiltroAcordos,
+  niveis, equipesDoSetor, setoresDisponiveis, filtroSetor, setFiltroSetor,
+  visaoFiltroAcordos, setVisaoFiltroAcordos,
   busca, setBusca, filtroStatus, setFiltroStatus, filtroTipo, setFiltroTipo,
   filtroData, setFiltroData, filtroOperador, setFiltroOperador,
   filtroVinculo, setFiltroVinculo,
@@ -115,49 +124,89 @@ export function AcordosFilters({
           Antes era `isLider || isElite` para os atalhos de equipe e `isElite`
           para o "Individual", duas listas de cargo escritas à mão que
           discordavam das permissões configuradas. */}
+      {/*
+        Setor e equipe em CASCATA, como no Dashboard e no Desempenho do Dia.
+
+        Antes cada equipe era um botão. Para quem enxerga um setor só isso
+        cabia; para quem tem `todos_setores` a consulta traz as equipes da
+        empresa inteira e a barra virava um tapete de dezenas de botões, sem
+        ordem e sem dizer de que setor cada uma é. Dois `Select` resolvem as
+        duas coisas: cabem em qualquer largura e o setor dá o contexto que o
+        nome da equipe sozinho não dá.
+
+        «Individual» continua botão porque não é item de lista — é outro MODO
+        de ver a tela, e o único que troca a pergunta de "de quem são estes
+        acordos" para "quais são os meus".
+      */}
       {(mostrarEquipes || mostrarIndividual) && (
-        <div className="flex items-center gap-2 px-4 py-2.5 mb-3 rounded-xl border border-border bg-card">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 mb-3 rounded-xl border border-border bg-card">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Visualizar acordos de:</span>
-          <div className="flex flex-wrap gap-1.5">
+
+          {setoresDisponiveis.length > 0 && (
+            <Select
+              value={filtroSetor ?? '__todos'}
+              onValueChange={v => {
+                setFiltroSetor(v === '__todos' ? null : v);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="h-8 w-[190px] rounded-lg text-xs">
+                <Building2 className="w-3 h-3 shrink-0 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__todos">Todos os setores</SelectItem>
+                {setoresDisponiveis.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {mostrarEquipes && (
+            <Select
+              value={visaoFiltroAcordos.startsWith('equipe:') ? visaoFiltroAcordos : '__setor'}
+              onValueChange={v => {
+                setVisaoFiltroAcordos((v === '__setor' ? 'setor' : v) as VisaoFiltroAcordos);
+                setCurrentPage(1);
+              }}
+              /* Sem equipe no recorte não há escolha a fazer, e um seletor de
+                 opção única promete recorte sem entregar. */
+              disabled={equipesDoSetor.length === 0}
+            >
+              <SelectTrigger className="h-8 w-[210px] rounded-lg text-xs">
+                <Layers className="w-3 h-3 shrink-0 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__setor">
+                  {filtroSetor ? 'Todas as equipes do setor' : 'Todas as equipes'}
+                </SelectItem>
+                {equipesDoSetor.map(eq => (
+                  <SelectItem key={eq.id} value={`equipe:${eq.id}`}>{eq.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {mostrarIndividual && (
             <button
-              onClick={() => setVisaoFiltroAcordos('setor')}
+              onClick={() => {
+                setVisaoFiltroAcordos(
+                  visaoFiltroAcordos === 'individual' ? 'setor' : 'individual',
+                );
+                setCurrentPage(1);
+              }}
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                visaoFiltroAcordos === 'setor'
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background text-muted-foreground border-border hover:border-primary/40',
+                'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all',
+                visaoFiltroAcordos === 'individual'
+                  ? 'bg-role-elite text-white border-role-elite'
+                  : 'bg-background text-muted-foreground border-border hover:border-role-elite/40',
               )}
             >
-              <Building2 className="w-3 h-3" /> Setor geral
+              Individual
             </button>
-            {mostrarEquipes && equipesDoSetor.map(eq => (
-              <button
-                key={eq.id}
-                onClick={() => setVisaoFiltroAcordos(`equipe:${eq.id}` as VisaoFiltroAcordos)}
-                className={cn(
-                  'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                  visaoFiltroAcordos === `equipe:${eq.id}`
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background text-muted-foreground border-border hover:border-primary/40',
-                )}
-              >
-                <Layers className="w-3 h-3" /> {eq.nome}
-              </button>
-            ))}
-            {mostrarIndividual && (
-              <button
-                onClick={() => setVisaoFiltroAcordos('individual')}
-                className={cn(
-                  'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                  visaoFiltroAcordos === 'individual'
-                    ? 'bg-role-elite text-white border-role-elite'
-                    : 'bg-background text-muted-foreground border-border hover:border-role-elite/40',
-                )}
-              >
-                Individual
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
 

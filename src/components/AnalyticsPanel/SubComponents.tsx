@@ -1,6 +1,6 @@
 import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
 import { motion } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, Minus, AlertTriangle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
@@ -31,30 +31,6 @@ export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
   );
 }
 
-// ── BannerNaoTabulado ─────────────────────────────────────────────────────────
-// Aviso de recebimento do analítico ainda sem acordo tabulado (PP e BookPlay).
-
-export function BannerNaoTabulado({
-  valor, qtd, totalAnalitico,
-}: { valor: number; qtd: number; totalAnalitico: number }) {
-  if (valor <= 0) return null;
-  return (
-    <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10">
-      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-      <div className="text-xs leading-relaxed">
-        <p className="font-semibold text-foreground">
-          {formatCurrency(valor)} do recebimento ainda não estão tabulados
-        </p>
-        <p className="text-muted-foreground">
-          O relatório analítico registrou {formatCurrency(totalAnalitico)} no mês, mas{' '}
-          {qtd} pagamento{qtd !== 1 ? 's' : ''} não{' '}
-          {qtd !== 1 ? 'têm' : 'tem'} acordo tabulado. Acesse a aba{' '}
-          <strong className="text-foreground">Analítico</strong> para tabular.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // ── SkeletonCard ──────────────────────────────────────────────────────────────
 

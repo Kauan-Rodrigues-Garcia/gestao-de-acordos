@@ -70,6 +70,14 @@ export default function Acordos() {
 
   const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
+  /**
+   * Setor em foco no filtro. `null` = todos.
+   *
+   * Só existe para quem tem `todos_setores`: quem enxerga um setor só já está
+   * preso a ele pela própria consulta, e o seletor não teria o que oferecer.
+   */
+  const [filtroSetor, setFiltroSetor] = useState<string | null>(null);
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState<{ id: string; nome: string }[]>([]);
 
   /*
    * Alcance DESTA aba, e de nenhuma outra.
@@ -81,8 +89,12 @@ export default function Acordos() {
    * equipe apareciam. As mesmas duas chaves mandavam no Dashboard e na
    * Lixeira — mexer no alcance daqui mexia lá.
    *
-   * Cuidado: `todos_setores` NÃO acrescenta filtro de setor. Esta tela nunca
-   * teve um; o nível amplia as listas dos seletores, e só.
+   * `todos_setores` passou a ACRESCENTAR um filtro de setor (08/09/2026). Antes
+   * o nível só ampliava as listas dos seletores: quem enxergava tudo recebia as
+   * equipes da empresa inteira numa fileira de botões, sem contexto de setor e
+   * sem caber na tela. Agora é setor → equipe em cascata, como no Dashboard, e
+   * o setor escolhido recorta também a consulta. Quem NÃO tem o nível continua
+   * sem seletor de setor, preso ao próprio, exatamente como antes.
    */
   // Memoizado porque desce como prop: `niveisLiberados` devolve um array novo
   // a cada chamada, e um array novo por render remontaria o filtro à toa.
@@ -91,21 +103,55 @@ export default function Acordos() {
   const podeVerEquipe  = niveis.includes('equipe');
   const verTodosSetores = niveis.includes('todos_setores');
 
+  /*
+   * A lista de setores do seletor. Só para quem tem `todos_setores`; para os
+   * demais fica vazia, e o seletor nem é desenhado.
+   */
+  useEffect(() => {
+    if (!verTodosSetores || !empresa?.id) { setSetoresDisponiveis([]); return; }
+    supabase.from('setores').select('id, nome')
+      .eq('empresa_id', empresa.id).order('nome')
+      .then(({ data }) => {
+        setSetoresDisponiveis((data as { id: string; nome: string }[]) ?? []);
+      });
+  }, [verTodosSetores, empresa?.id]);
+
+  /*
+   * As equipes seguem o setor em foco — é a cascata do Dashboard.
+   *
+   * Sem ela, quem tem `todos_setores` recebia as equipes da empresa inteira
+   * numa lista só, sem dizer de que setor era cada uma. Com o setor escolhido,
+   * a lista é a daquele setor; com «Todos os setores», continua sendo tudo.
+   */
   useEffect(() => {
     if (!podeVerEquipe || !empresa?.id) return;
-    if (!perfil?.setor_id && !verTodosSetores) return;
+    const setorDaVez = verTodosSetores ? filtroSetor : (perfil?.setor_id ?? null);
+    if (!setorDaVez && !verTodosSetores) return;
     let q = supabase
       .from('equipes')
       .select('id, nome')
       .eq('empresa_id', empresa.id);
-    if (!verTodosSetores && perfil?.setor_id) {
-      q = q.eq('setor_id', perfil.setor_id);
-    }
+    if (setorDaVez) q = q.eq('setor_id', setorDaVez);
     q.order('nome')
       .then(({ data }) => {
         setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
       });
-  }, [podeVerEquipe, perfil?.setor_id, empresa?.id, verTodosSetores]);
+  }, [podeVerEquipe, perfil?.setor_id, empresa?.id, verTodosSetores, filtroSetor]);
+
+  /*
+   * Trocar de setor solta a equipe escolhida.
+   *
+   * Sem isto, escolher «Play 3» com a equipe «Tauana» (do Play 5) marcada
+   * deixava a lista vazia e o seletor mostrando uma equipe que não está mais
+   * entre as opções — a tela dizendo que filtra por algo que ela não oferece.
+   */
+  useEffect(() => {
+    if (!visaoFiltroAcordos.startsWith('equipe:')) return;
+    const id = visaoFiltroAcordos.replace('equipe:', '');
+    if (equipesDoSetor.length > 0 && !equipesDoSetor.some(e => e.id === id)) {
+      setVisaoFiltroAcordos('setor');
+    }
+  }, [equipesDoSetor, visaoFiltroAcordos]);
 
   const equipeFiltroAtivo  = visaoFiltroAcordos.startsWith('equipe:')
     ? visaoFiltroAcordos.replace('equipe:', '')
@@ -241,6 +287,7 @@ export default function Acordos() {
     operador_id:  (!podeVerSetor || isVisaoIndividual)
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
+    setor_id:     filtroSetor ?? undefined,
     equipe_id:    equipeFiltroAtivo ?? undefined,
     // Garante que os acordos que vencem HOJE venham sempre na página 1 (mesmo
     // com o filtro de mês do BookPlay empurrando-os para páginas tardias na
@@ -269,6 +316,7 @@ export default function Acordos() {
     operador_id: (!podeVerSetor || isVisaoIndividual)
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
+    setor_id:    filtroSetor ?? undefined,
     equipe_id:   equipeFiltroAtivo ?? undefined,
     data_inicio: filtroData ? undefined : bpMesInicio,
     data_fim:    filtroData ? undefined : bpMesFim,
@@ -803,6 +851,9 @@ export default function Acordos() {
           activeTab={activeTab} setActiveTab={setActiveTab}
           niveis={niveis}
           equipesDoSetor={equipesDoSetor}
+          setoresDisponiveis={setoresDisponiveis}
+          filtroSetor={filtroSetor}
+          setFiltroSetor={setFiltroSetor}
           visaoFiltroAcordos={visaoFiltroAcordos} setVisaoFiltroAcordos={setVisaoFiltroAcordos}
           busca={busca} setBusca={setBusca}
           filtroStatus={filtroStatus} setFiltroStatus={setFiltroStatus}

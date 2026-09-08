@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileSpreadsheet, ChevronDown, ChevronUp, CalendarClock } from 'lucide-react';
 import { getTodayISO } from '@/lib/index';
-import { SkeletonCard, BannerNaoTabulado } from '@/components/AnalyticsPanel/SubComponents';
+import { SkeletonCard } from '@/components/AnalyticsPanel/SubComponents';
 import { usePainelMetas } from '@/hooks/usePainelMetas';
 import type { UnidadeValor } from '@/lib/unidadeValor';
 import { FaixaDiasUteis } from './FaixaDiasUteis';
@@ -110,12 +110,11 @@ export function PainelMetas({
         </div>
       ) : (
         <>
-          <BannerNaoTabulado
-            valor={dados.naoTabulado}
-            qtd={dados.naoTabuladoQtd}
-            totalAnalitico={dados.totalRecebido}
-          />
-
+          {/* O aviso de «recebimento ainda não tabulado» saiu em 08/09/2026.
+              O número que ele mostrava não era acionável a partir daqui — a
+              tabulação acontece na aba Analítico, que já lista pagamento por
+              pagamento o que falta. Aqui ele só ocupava a primeira dobra do
+              painel de metas com uma pendência de outra tela. */}
           <CardsMetas dados={dados} mes={mes} />
 
           {/* Só para quem tem meta indireta ligada. O card grande acima já
