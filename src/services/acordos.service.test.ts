@@ -107,6 +107,26 @@ import {
   calcularMetricasMes,
   calcularMetricasDashboard,
 } from './acordos.service';
+import type { Acordo } from '@/lib/supabase';
+
+/**
+ * Uma linha de acordo com só os campos que a função sob teste lê.
+ *
+ * `calcularMetricas` e `calcularMetricasMes` olham `status`, `vencimento` e
+ * `valor` — montar o `Acordo` inteiro, com mais de trinta colunas, só para
+ * chamar uma delas esconderia o que o caso exercita no meio do preenchimento.
+ *
+ * A conversão fica AQUI, num lugar só e com o motivo escrito, em vez de um
+ * `as any` repetido em cada linha de cada fixture. O `Pick` garante que os
+ * três campos que importam continuem sendo os do tipo de verdade: errar o
+ * nome de um deles passa a ser erro, e não silêncio.
+ */
+type LinhaFixtura =
+  Pick<Acordo, 'id' | 'status' | 'vencimento'> & { valor: string | number };
+
+function fixtura(linhas: LinhaFixtura[]): Acordo[] {
+  return linhas as unknown as Acordo[];
+}
 
 beforeEach(() => {
   calls.length = 0;
@@ -545,14 +565,14 @@ describe('calcularMetricas (pura)', () => {
   afterEach(() => vi.useRealTimers());
 
   it('conta status e soma valores com segurança (string BR + number)', () => {
-    const r = calcularMetricas([
-      { id: '1', status: 'pago',                vencimento: '2026-04-10', valor: '100,50' } as any,
-      { id: '2', status: 'pago',                vencimento: '2026-04-20', valor: 200      } as any,
-      { id: '3', status: 'verificar_pendente',  vencimento: '2026-04-22', valor: '50'     } as any,
-      { id: '4', status: 'nao_pago',            vencimento: '2026-04-01', valor: '9999'   } as any,
+    const r = calcularMetricas(fixtura([
+      { id: '1', status: 'pago',                vencimento: '2026-04-10', valor: '100,50' },
+      { id: '2', status: 'pago',                vencimento: '2026-04-20', valor: 200      },
+      { id: '3', status: 'verificar_pendente',  vencimento: '2026-04-22', valor: '50'     },
+      { id: '4', status: 'nao_pago',            vencimento: '2026-04-01', valor: '9999'   },
       // Vencido (vencimento < hoje e status aberto)
-      { id: '5', status: 'verificar_pendente',  vencimento: '2026-04-01', valor: 25       } as any,
-    ]);
+      { id: '5', status: 'verificar_pendente',  vencimento: '2026-04-01', valor: 25       },
+    ]));
 
     expect(r.total).toBe(5);
     expect(r.pagos).toBe(2);
@@ -586,13 +606,13 @@ describe('calcularMetricasMes (pura)', () => {
   afterEach(() => vi.useRealTimers());
 
   it('filtra só o mês corrente e calcula pagos/abertos/vencidos', () => {
-    const r = calcularMetricasMes([
-      { id: '1', status: 'pago',               vencimento: '2026-04-05', valor: 100 } as any,
-      { id: '2', status: 'verificar_pendente', vencimento: '2026-04-30', valor: 50  } as any,
-      { id: '3', status: 'verificar_pendente', vencimento: '2026-04-01', valor: 25  } as any, // vencido
-      { id: '4', status: 'pago',               vencimento: '2026-03-15', valor: 999 } as any, // fora do mês
-      { id: '5', status: 'nao_pago',           vencimento: '2026-04-20', valor: 77  } as any, // no mês, cancelado
-    ]);
+    const r = calcularMetricasMes(fixtura([
+      { id: '1', status: 'pago',               vencimento: '2026-04-05', valor: 100 },
+      { id: '2', status: 'verificar_pendente', vencimento: '2026-04-30', valor: 50  },
+      { id: '3', status: 'verificar_pendente', vencimento: '2026-04-01', valor: 25  }, // vencido
+      { id: '4', status: 'pago',               vencimento: '2026-03-15', valor: 999 }, // fora do mês
+      { id: '5', status: 'nao_pago',           vencimento: '2026-04-20', valor: 77  }, // no mês, cancelado
+    ]));
 
     expect(r.inicioMes).toBe('2026-04-01');
     expect(r.fimMes).toBe('2026-04-30');

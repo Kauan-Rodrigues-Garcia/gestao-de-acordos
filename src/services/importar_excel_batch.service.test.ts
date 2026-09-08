@@ -1,15 +1,51 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // SUT
-import { processarImportacaoEmLote } from './importar_excel_batch.service';
+import { processarImportacaoEmLote, type ProcessarBatchParams } from './importar_excel_batch.service';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
 import { registrarLog } from './logs.service';
 
 // ── Mock do Supabase (estilo builder thenable) ──────────────────────────
-const calls: any[] = [];
-let defaultResult: any = { data: null, error: null };
-const resultsByTable: Record<string, any[]> = {};
+/** O que o `insert`/`update` recebe: uma linha, ou um lote delas. */
+type PayloadMock = Record<string, unknown> | Record<string, unknown>[];
+
+/** Uma resposta que o builder devolve no lugar da do Supabase. */
+interface ResultadoMock { data: unknown; error: { message: string; code?: string } | null }
+
+/** O registro de uma chamada, para as asserções lerem depois. */
+interface ChamadaMock {
+  table:      string;
+  operation:  'select' | 'insert' | 'update' | 'delete' | null;
+  selectArg?: string;
+  payload?:   PayloadMock;
+  filters:    [string, string, unknown][];
+}
+
+/** O encadeamento do supabase-js, no pedaço que este teste usa. */
+interface BuilderMock {
+  select:      (arg?: string) => BuilderMock;
+  insert:      (p: PayloadMock) => BuilderMock;
+  update:      (p: PayloadMock) => BuilderMock;
+  delete:      () => BuilderMock;
+  eq:          (col: string, val: unknown) => BuilderMock;
+  maybeSingle: () => BuilderMock;
+  then:        (ok: (v: ResultadoMock) => unknown, erro?: (e: unknown) => unknown) => Promise<unknown>;
+}
+
+/**
+ * Lê o payload como objeto único.
+ *
+ * `PayloadMock` é união (linha ou lote) porque o serviço manda os dois casos.
+ * As asserções que olham UM campo sabem qual delas estão vendo; esta função é
+ * onde esse conhecimento fica escrito, em vez de espalhar asserção de tipo.
+ */
+const comoObjeto = (p: PayloadMock | undefined): Record<string, unknown> =>
+  (p ?? {}) as Record<string, unknown>;
+
+const calls: ChamadaMock[] = [];
+let defaultResult: ResultadoMock = { data: null, error: null };
+const resultsByTable: Record<string, ResultadoMock[]> = {};
 
 function nextResultFor(table: string) {
   const queue = resultsByTable[table];
@@ -18,16 +54,16 @@ function nextResultFor(table: string) {
 }
 
 function createBuilder(table: string) {
-  const call: any = { table, operation: null, filters: [] };
+  const call: ChamadaMock = { table, operation: null, filters: [] };
   calls.push(call);
-  const builder: any = {
-    select: vi.fn((arg?: any) => { call.operation = 'select'; call.selectArg = arg; return builder; }),
-    insert: vi.fn((p: any) => { call.operation = 'insert'; call.payload = p; return builder; }),
-    update: vi.fn((p: any) => { call.operation = 'update'; call.payload = p; return builder; }),
+  const builder: BuilderMock = {
+    select: vi.fn((arg?: string) => { call.operation = 'select'; call.selectArg = arg; return builder; }),
+    insert: vi.fn((p: PayloadMock) => { call.operation = 'insert'; call.payload = p; return builder; }),
+    update: vi.fn((p: PayloadMock) => { call.operation = 'update'; call.payload = p; return builder; }),
     delete: vi.fn(() => { call.operation = 'delete'; return builder; }),
-    eq:     vi.fn((col: string, val: any) => { call.filters.push(['eq', col, val]); return builder; }),
+    eq:     vi.fn((col: string, val: unknown) => { call.filters.push(['eq', col, val]); return builder; }),
     maybeSingle: vi.fn(() => builder),
-    then: (resolve: any, reject: any) => {
+    then: (resolve: (v: ResultadoMock) => unknown, reject?: (e: unknown) => unknown) => {
       try {
         return Promise.resolve(nextResultFor(table)).then(resolve, reject);
       } catch (e) {
@@ -69,7 +105,7 @@ describe('processarImportacaoEmLote', () => {
   it('apenas novos: classificação com apenas "novo" → chama insert uma vez', async () => {
     resultsByTable['acordos'] = [{ data: [{ id: 'a1' }], error: null }];
 
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ linhaOriginal: 1, nr: 'NR1', categoria: 'novo' }],
       linhasAutorizadas: new Set(),
@@ -94,7 +130,7 @@ describe('processarImportacaoEmLote', () => {
       { data: null, error: null }, // update antigo
     ];
 
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ 
         linhaOriginal: 1, nr: 'NR1', categoria: 'extra', 
@@ -113,13 +149,13 @@ describe('processarImportacaoEmLote', () => {
     
     // Insert do novo acordo como EXTRA
     const callInsert = calls.find(c => c.operation === 'insert' && c.table === 'acordos');
-    expect(callInsert.payload.tipo_vinculo).toBe('extra');
-    expect(callInsert.payload.vinculo_operador_id).toBe('op-old');
+    expect(comoObjeto(callInsert?.payload).tipo_vinculo).toBe('extra');
+    expect(comoObjeto(callInsert?.payload).vinculo_operador_id).toBe('op-old');
 
     // Update do acordo original
     const callUpdate = calls.find(c => c.operation === 'update' && c.table === 'acordos');
-    expect(callUpdate.filters).toContainEqual(['eq', 'id', 'old-a']);
-    expect(callUpdate.payload.vinculo_operador_id).toBe(opAtual.id);
+    expect(callUpdate?.filters).toContainEqual(['eq', 'id', 'old-a']);
+    expect(comoObjeto(callUpdate?.payload).vinculo_operador_id).toBe(opAtual.id);
 
     expect(criarNotificacao).toHaveBeenCalled();
   });
@@ -129,7 +165,7 @@ describe('processarImportacaoEmLote', () => {
       { data: null, error: null }, // insert novo (extra órfão)
     ];
 
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1000001, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ linhaOriginal: 1000001, nr: 'NR1', categoria: 'extra' }], // sem donoAtual
       linhasAutorizadas: new Set(),
@@ -144,9 +180,9 @@ describe('processarImportacaoEmLote', () => {
     expect(res.inseridos).toBe(1);
 
     const callInsert = calls.find(c => c.operation === 'insert' && c.table === 'acordos');
-    expect(callInsert.payload.tipo_vinculo).toBe('extra');
-    expect(callInsert.payload.vinculo_operador_id).toBeNull();
-    expect(callInsert.payload.vinculo_operador_nome).toBeNull();
+    expect(comoObjeto(callInsert?.payload).tipo_vinculo).toBe('extra');
+    expect(comoObjeto(callInsert?.payload).vinculo_operador_id).toBeNull();
+    expect(comoObjeto(callInsert?.payload).vinculo_operador_nome).toBeNull();
 
     // Não deve haver update (nada a vincular) nem notificação.
     expect(calls.find(c => c.operation === 'update')).toBeUndefined();
@@ -160,7 +196,7 @@ describe('processarImportacaoEmLote', () => {
     ];
     resultsByTable['nr_registros'] = [{ data: null, error: null }];
 
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ 
         linhaOriginal: 1, nr: 'NR1', categoria: 'direto', 
@@ -179,7 +215,7 @@ describe('processarImportacaoEmLote', () => {
 
     // Rebaixar antigo
     const callUpdate = calls.find(c => c.operation === 'update' && c.table === 'acordos');
-    expect(callUpdate.payload.tipo_vinculo).toBe('extra');
+    expect(comoObjeto(callUpdate?.payload).tipo_vinculo).toBe('extra');
 
     // Deletar NR
     const callDelete = calls.find(c => c.operation === 'delete' && c.table === 'nr_registros');
@@ -187,13 +223,13 @@ describe('processarImportacaoEmLote', () => {
 
     // Inserir novo DIRETO
     const callInsert = calls.find(c => c.operation === 'insert' && c.table === 'acordos');
-    expect(callInsert.payload.tipo_vinculo).toBe('direto');
+    expect(comoObjeto(callInsert?.payload).tipo_vinculo).toBe('direto');
 
     expect(criarNotificacao).toHaveBeenCalled();
   });
 
   it('duplicado não autorizado: categoria "duplicado" sem autorização → fica em bloqueados', async () => {
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ 
         linhaOriginal: 1, nr: 'NR1', categoria: 'duplicado', 
@@ -221,7 +257,7 @@ describe('processarImportacaoEmLote', () => {
       { data: null, error: null }, // insert novo
     ];
 
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ 
         linhaOriginal: 1, nr: 'NR1', categoria: 'duplicado', 
@@ -268,7 +304,7 @@ describe('processarImportacaoEmLote', () => {
   });
 
   it('duplicado do próprio operador: pula e adiciona aos bloqueados', async () => {
-    const params: any = {
+    const params: ProcessarBatchParams = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
       classificacao: [{ 
         linhaOriginal: 1, nr: 'NR1', categoria: 'duplicado', 

@@ -41,7 +41,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { chaveDeCache } from '@/lib/cacheInstantaneo';
 import {
-  decidirAutorizacao, type PedidoAutorizacao,
+  decidirAutorizacao, cancelarAutorizacao, type PedidoAutorizacao,
 } from '@/services/autorizacaoPedidos.service';
 
 /** "há 3 min", "há 2 h" — a idade do pedido importa mais que a hora exata. */
@@ -102,6 +102,29 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         : 'Pedido recusado. O operador foi avisado.',
     );
     setFase('normal'); setMotivo('');
+    onDecidido();
+  }
+
+  /**
+   * O solicitante desiste do próprio pedido.
+   *
+   * Cancelar NÃO é decidir — é retirar o pedido da fila antes que alguém gaste
+   * tempo com ele. Por isso aparece justamente onde «ninguém decide o próprio
+   * pedido» continua valendo: o botão some assim que o status sai de
+   * `pendente`.
+   *
+   * A tela esconder é conveniência. A garantia é da RPC
+   * `fn_autorizacao_cancelar`, que exige sessão e filtra por
+   * `solicitante_id = auth.uid() AND status = 'pendente'` — pedido de outra
+   * pessoa, ou já decidido, não muda nada e volta `ok: false`.
+   */
+  async function cancelar() {
+    setOcupado(true);
+    const ok = await cancelarAutorizacao(pedido.id);
+    setOcupado(false);
+    toast[ok ? 'success' : 'error'](
+      ok ? 'Pedido cancelado.' : 'Não foi possível cancelar — talvez já tenha sido decidido.',
+    );
     onDecidido();
   }
 
@@ -249,13 +272,28 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         </>
       )}
 
-      {/* Um pedido PRÓPRIO aparece aqui só quando quem olha também autoriza —
-          e sem botão nenhum: ninguém decide o próprio pedido. Para o operador
-          comum a gaveta não existe; ele acompanha por notificação. */}
+      {/* Um pedido PRÓPRIO aparece aqui só quando quem olha também autoriza.
+          Decidir continua fora: ninguém aprova nem recusa o próprio pedido.
+          Cancelar é outra coisa — é retirar o pedido da fila, e só o dono
+          pode. Para o operador comum a gaveta não existe; ele acompanha por
+          notificação. */}
       {souSolicitante && (
-        <p className="text-[11px] text-muted-foreground">
-          Seu pedido. A decisão é de outro autorizador.
-        </p>
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Seu pedido. A decisão é de outro autorizador.
+          </p>
+          {pedido.status === 'pendente' && (
+            <button
+              onClick={() => void cancelar()} disabled={ocupado}
+              className="w-full h-8 rounded-lg border border-border text-[11px] font-medium hover:bg-muted transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+            >
+              {ocupado
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Ban className="w-3.5 h-3.5" />}
+              Cancelar pedido
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

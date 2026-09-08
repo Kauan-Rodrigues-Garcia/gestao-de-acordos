@@ -309,7 +309,12 @@ export default function Dashboard() {
       if (!aHoje && bHoje) return 1;
       return 0;
     });
-  }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje]);
+  // `isPP` é dependência de VERDADE, e faltava: ele escolhe a chave com que
+  // `deduplicarVinculados` agrupa — `instituicao` na PaguePlay, `nr_cliente`
+  // no BookPlay. Sem ele na lista, trocar de empresa sem que `acordos` mude
+  // devolvia a lista deduplicada pela chave da empresa anterior. Não é
+  // hipótese: o efeito da linha 235, neste mesmo arquivo, já o declarava.
+  }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje, isPP]);
 
   useEffect(() => {
     if (!isPP) return;

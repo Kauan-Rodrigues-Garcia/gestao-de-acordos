@@ -36,8 +36,15 @@ function join(base: string, child?: string) {
 function flattenRoutes(node: AnyEl, base = "", acc = new Set<string>()) {
   React.Children.forEach(node, (child) => {
     if (!React.isValidElement(child)) return;
-    const isRoute = child.type === (RRD as any).Route ||
-      (typeof child.type === "function" && (child.type as any).name === "Route");
+    // Duas formas de reconhecer um `<Route>`, porque uma sozinha falha:
+    //  • identidade com o componente real — some quando o bundler duplica o
+    //    módulo (dev vs. dependência pré-otimizada);
+    //  • nome da função — some quando o build minifica.
+    // `unknown` em vez de `any`: aqui só se compara e se lê `.name`, e é isso
+    // que os dois tipos abaixo declaram.
+    const rrd = RRD as { Route?: unknown };
+    const isRoute = child.type === rrd.Route ||
+      (typeof child.type === "function" && (child.type as { name?: string }).name === "Route");
     if (isRoute) {
       const { path, index, children } = (child.props ?? {}) as { 
         path?: string; 
@@ -48,7 +55,7 @@ function flattenRoutes(node: AnyEl, base = "", acc = new Set<string>()) {
       if (index || path) acc.add(cur || "/");
       if (children) flattenRoutes(children, cur, acc);
     } else {
-      const kids = (child.props as any)?.children;
+      const kids = (child.props as { children?: AnyEl } | undefined)?.children;
       if (kids) flattenRoutes(kids, base, acc);
     }
   });
@@ -134,6 +141,31 @@ type IframeCmd =
   | { type: "ROUTE_CONTROL"; action: "replace"; path: string; }
   | { type: "RELOAD"; };
 
+/**
+ * A mensagem como ela CHEGA, antes de qualquer validação.
+ *
+ * Campos soltos e todos opcionais de propósito: quem manda é uma janela de
+ * fora, e `postMessage` não valida nada. O `IframeCmd` acima descreve o que o
+ * editor deveria enviar; este descreve o que o handler lê sem confiar.
+ */
+type MensagemCrua = {
+  /**
+   * Deriva do contrato acima: um `type` novo em `IframeCmd` passa a ser
+   * aceito aqui sem edição, e um `type` removido de lá quebra o `===` que o
+   * comparava — que é como as duas declarações se mantêm em acordo.
+   */
+  type?:    IframeCmd['type'];
+  /**
+   * `string`, e não a união do contrato: o `switch` abaixo tem um `default`
+   * que avisa sobre ação desconhecida, e mensagem vinda de fora pode mandar
+   * qualquer coisa. Estreitar aqui apagaria justamente o caso que o `default`
+   * existe para tratar.
+   */
+  action?:  string;
+  path?:    string;
+  replace?: boolean;
+};
+
 /** A component that lives inside the router context and bridges both ways */
 function RouterBridge(): null {
   const location = RRD.useLocation();
@@ -150,7 +182,16 @@ function RouterBridge(): null {
 
   React.useEffect(() => {
     function onMessage(e: MessageEvent) {
-      const data = e.data as IframeCmd | any;
+      /*
+       * A mensagem vem de FORA — o editor que embute o app num iframe. Nada
+       * aqui é garantia de tipo, é leitura de campo solto, e o `switch` abaixo
+       * já trata o que não reconhece.
+       *
+       * `IframeCmd | any` colapsava para `any` e a união não descrevia nada.
+       * `MensagemCrua` diz o que este handler LÊ; `IframeCmd` continua acima
+       * como o contrato que o editor deveria mandar.
+       */
+      const data = e.data as MensagemCrua | null | undefined;
       if (!data) return;
       
       // Check if route messaging is enabled

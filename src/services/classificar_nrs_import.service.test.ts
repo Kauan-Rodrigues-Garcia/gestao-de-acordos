@@ -5,7 +5,9 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import { classificarNrsImportados, agruparPorCategoria } from './classificar_nrs_import.service';
-import type { DuplicadoInfo, ClassificarParams } from './classificar_nrs_import.service';
+import type {
+  DuplicadoInfo, ClassificarParams, ClassificacaoNR,
+} from './classificar_nrs_import.service';
 import type { DiretoExtraConfig } from './direto_extra.service';
 
 describe('classificarNrsImportados', () => {
@@ -56,7 +58,7 @@ describe('classificarNrsImportados', () => {
   });
 
   it('extra (Caso A): operador atual TEM lógica + duplicado com outro operador → categoria "extra", donoAtual preenchido', async () => {
-    const configAtiva: any = {
+    const configAtiva: DiretoExtraConfig = {
       id: 'c1', escopo: 'usuario', referencia_id: opAtualId, ativo: true, empresa_id: 'e1', criado_em: ''
     };
     const dupInfo: DuplicadoInfo = { acordoId: 'a1', operadorId: opOutroId, operadorNome: 'Outro' };
@@ -73,7 +75,7 @@ describe('classificarNrsImportados', () => {
   });
 
   it('direto cruzado (Caso B): operador atual NÃO tem lógica, MAS o operador dono TEM → categoria "direto", donoAtual preenchido, donoTemLogica=true', async () => {
-    const configDono: any = {
+    const configDono: DiretoExtraConfig = {
       id: 'c2', escopo: 'usuario', referencia_id: opOutroId, ativo: true, empresa_id: 'e1', criado_em: ''
     };
     const dupInfo: DuplicadoInfo = { acordoId: 'a1', operadorId: opOutroId, operadorNome: 'Outro' };
@@ -119,7 +121,7 @@ describe('classificarNrsImportados', () => {
   });
 
   it('agruparPorCategoria: soma corretamente os totais', () => {
-    const lista: any[] = [
+    const lista: ClassificacaoNR[] = [
       { categoria: 'novo' },
       { categoria: 'novo' },
       { categoria: 'extra' },

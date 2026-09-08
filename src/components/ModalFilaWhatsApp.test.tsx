@@ -69,20 +69,27 @@ vi.mock('sonner', () => ({
   },
 }));
 
+/**
+ * O que os mocks de componente abaixo consomem: só os filhos, mais o `open`
+ * do Dialog. Tipar assim em vez de `any` faz o teste quebrar se um mock
+ * deixar de receber filhos — que é o único contrato que ele precisa honrar.
+ */
+type PropsFilhos = { children?: React.ReactNode };
+
 // ── 5) framer-motion ──────────────────────────────────────────────────────
 vi.mock('framer-motion', () => ({
   motion: { div: 'div' },
-  AnimatePresence: ({ children }: any) => <>{children}</>,
+  AnimatePresence: ({ children }: PropsFilhos) => <>{children}</>,
 }));
 
 // ── 6) Radix Dialog ───────────────────────────────────────────────────────
 vi.mock('@/components/ui/dialog', () => ({
-  Dialog: ({ children, open }: any) =>
+  Dialog: ({ children, open }: PropsFilhos & { open?: boolean }) =>
     open ? <div role="dialog">{children}</div> : null,
-  DialogContent: ({ children }: any) => <div>{children}</div>,
-  DialogHeader: ({ children }: any) => <div>{children}</div>,
-  DialogTitle: ({ children }: any) => <h2>{children}</h2>,
-  DialogDescription: ({ children }: any) => <p>{children}</p>,
+  DialogContent: ({ children }: PropsFilhos) => <div>{children}</div>,
+  DialogHeader: ({ children }: PropsFilhos) => <div>{children}</div>,
+  DialogTitle: ({ children }: PropsFilhos) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: PropsFilhos) => <p>{children}</p>,
 }));
 
 // ── Helper de fila ────────────────────────────────────────────────────────
@@ -198,7 +205,7 @@ describe('ModalFilaWhatsApp', () => {
     expect(log.registroId).toBe('a1');
     // A frase pronta tem de nomear o cliente: é ela que a tela de Logs mostra.
     expect(log.descricao).toContain('Ana');
-    expect((log.detalhes as any).modo).toBe('lote');
+    expect((log.detalhes as Record<string, unknown>).modo).toBe('lote');
   });
 
   // 5. Sem usuarioId → não registra log
