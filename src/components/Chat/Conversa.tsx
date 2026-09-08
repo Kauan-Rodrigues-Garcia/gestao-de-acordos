@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import {
   subirAnexo, curtirMensagem, curtidasDasMensagens, quemCurtiu, LIMITE_ANEXO,
   type MensagemChat, type ConversaChat, type AnexoChat,
@@ -93,7 +93,6 @@ export function Conversa({
   somenteLeitura = false, perspectivaDe, onConfigurarGrupo,
 }: Props) {
   const { perfil } = useAuth();
-  const { toast } = useToast();
   const { temPermissao } = useCargoPermissoes();
   const meuId = perfil?.id ?? '';
   /*
@@ -543,15 +542,15 @@ export function Conversa({
       if (total <= antes) continue;                     // não subiu: nada a avisar
       if (curtidas.get(id)?.euCurti && total === 1) continue;  // curtir a própria não avisa
       const m = mensagens.find(x => x.id === id);
-      toast({
-        title: conversa.tipo === 'grupo'
+      toast(
+        conversa.tipo === 'grupo'
           ? `Sua mensagem tem ${total} ${total === 1 ? 'curtida' : 'curtidas'}`
           : `${conversa.outro_nome} curtiu sua mensagem`,
-        description: m?.texto ? m.texto.slice(0, 80) : 'Anexo',
-      });
+        { description: m?.texto ? m.texto.slice(0, 80) : 'Anexo' },
+      );
     }
     curtidasVistas.current = minhas;
-  }, [mensagens, curtidas, meuId, conversa.outro_nome, conversa.tipo, toast]);
+  }, [mensagens, curtidas, meuId, conversa.outro_nome, conversa.tipo]);
 
   // Conversa trocada: o conjunto de curtidas já vistas é de outra conversa.
   useEffect(() => { curtidasVistas.current = null; }, [conversa.id]);

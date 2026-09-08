@@ -20,12 +20,11 @@ import { MessageCircle, Loader2, Lock, Unlock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { lerLiberacaoChat, definirLiberacaoChat } from '@/services/chat/chat.service';
 
 export default function LiberacaoChat() {
   const { empresa } = useEmpresa();
-  const { toast } = useToast();
 
   const [liberado, setLiberado] = useState<boolean | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -49,16 +48,15 @@ export default function LiberacaoChat() {
 
     if (erro) {
       setLiberado(!novo);
-      toast({ title: 'Não foi possível salvar', description: erro, variant: 'destructive' });
+      toast.error('Não foi possível salvar', { description: erro });
       return;
     }
-    toast({
-      title: novo ? 'Chat liberado' : 'Chat fechado',
+    toast.success(novo ? 'Chat liberado' : 'Chat fechado', {
       description: novo
         ? 'Agora quem tem a permissão no painel entra. Confira os cargos antes de avisar a operação.'
         : 'Só super admins voltam a enxergar o chat. As conversas continuam guardadas.',
     });
-  }, [empresa?.id, salvando, toast]);
+  }, [empresa?.id, salvando]);
 
   return (
     <Card className="border-border">

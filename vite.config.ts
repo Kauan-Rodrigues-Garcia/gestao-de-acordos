@@ -138,6 +138,10 @@ export default defineConfig(({ mode }) => {
             // React + Router (sempre carregados)
             'vendor-react': ['react', 'react-dom', 'react-router-dom-original'],
             // Radix UI — muitos primitivos usados em shadcn/ui
+            // Esta lista tem que espelhar as dependências @radix-ui do
+            // package.json: `manualChunks` trata cada nome como ENTRADA, e um
+            // pacote desinstalado que fique aqui derruba o build com
+            // "Could not resolve entry module".
             'vendor-radix': [
               '@radix-ui/react-dialog',
               '@radix-ui/react-dropdown-menu',
@@ -145,26 +149,15 @@ export default defineConfig(({ mode }) => {
               '@radix-ui/react-select',
               '@radix-ui/react-tabs',
               '@radix-ui/react-tooltip',
-              '@radix-ui/react-toast',
               '@radix-ui/react-checkbox',
               '@radix-ui/react-switch',
               '@radix-ui/react-slider',
-              '@radix-ui/react-radio-group',
               '@radix-ui/react-scroll-area',
               '@radix-ui/react-separator',
               '@radix-ui/react-label',
               '@radix-ui/react-avatar',
-              '@radix-ui/react-accordion',
               '@radix-ui/react-alert-dialog',
-              '@radix-ui/react-context-menu',
-              '@radix-ui/react-hover-card',
-              '@radix-ui/react-menubar',
-              '@radix-ui/react-navigation-menu',
               '@radix-ui/react-progress',
-              '@radix-ui/react-collapsible',
-              '@radix-ui/react-aspect-ratio',
-              '@radix-ui/react-toggle',
-              '@radix-ui/react-toggle-group',
               '@radix-ui/react-slot',
             ],
             // Supabase client (autenticação + realtime + queries)
@@ -173,8 +166,9 @@ export default defineConfig(({ mode }) => {
             'vendor-charts': ['recharts'],
             // XLSX — só carrega na página de importação
             'vendor-xlsx': ['@e965/xlsx'],
-            // Date / form / utility libs
-            'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+            // `vendor-forms` saiu junto com `ui/form.tsx`: era o único
+            // consumidor de react-hook-form, @hookform/resolvers e zod, e os
+            // formulários do produto são todos controlados à mão.
             // Sentry — carrega apenas se VITE_SENTRY_DSN estiver definido (inicializado em main.tsx)
             'vendor-sentry': ['@sentry/react'],
           },

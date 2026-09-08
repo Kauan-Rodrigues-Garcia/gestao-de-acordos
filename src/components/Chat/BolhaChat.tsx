@@ -48,7 +48,7 @@ import { ConfigGrupoDialog } from './ConfigGrupoDialog';
 import { GaleriaDialog } from './GaleriaDialog';
 import { PainelMonitor } from './PainelMonitor';
 import { BoasVindasChat } from './BoasVindasChat';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { toast as toastFlutuante } from '@/components/ui/sonner';
 import { NotificacaoMensagem } from './NotificacaoMensagem';
 import {
@@ -61,7 +61,6 @@ const CHAVE_LARGURA = 'chat-expandido';
 export function BolhaChat() {
   const { perfil } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
-  const { toast } = useToast();
 
   const [aberto, setAberto] = useState(false);
   /*
@@ -306,12 +305,12 @@ export function BolhaChat() {
 
   const abrirCom = useCallback(async (pessoaId: string, contato?: ContatoEscolhido) => {
     const id = await chat.abrirCom(pessoaId, contato);
-    if (!id) toast({ title: 'Não foi possível abrir a conversa', variant: 'destructive' });
+    if (!id) toast.error('Não foi possível abrir a conversa');
     else {
       abertoRef.current = true;
       setAberto(true);
     }
-  }, [chat, toast]);
+  }, [chat]);
 
   // ── As duas portas para uma conversa, ambas passando pelo cartão ───────────
   const pedirConversa = useCallback((id: string) => {
@@ -353,15 +352,13 @@ export function BolhaChat() {
     if (!perfil?.id) return;
     const { erro } = await fixarConversa(conversaId, perfil.id, prender);
     if (erro) {
-      toast({
-        title: prender ? 'Não deu para fixar' : 'Não deu para desafixar',
+      toast.error(prender ? 'Não deu para fixar' : 'Não deu para desafixar', {
         description: erro,
-        variant: 'destructive',
       });
       return;
     }
     chat.recarregar();
-  }, [perfil?.id, chat, toast]);
+  }, [perfil?.id, chat]);
 
   const verMidias = useCallback((conversa: ConversaChat) => {
     setGaleria({ id: conversa.id, nome: conversa.outro_nome });
@@ -604,8 +601,7 @@ export function BolhaChat() {
         aberto={novoDisparo}
         onFechar={() => setNovoDisparo(false)}
         onPronto={enviados => {
-          toast({
-            title: `Enviado para ${enviados} ${enviados === 1 ? 'pessoa' : 'pessoas'}`,
+          toast.success(`Enviado para ${enviados} ${enviados === 1 ? 'pessoa' : 'pessoas'}`, {
             description: 'Uma resposta ou mensagem manual reativa a conversa.',
           });
           chat.recarregar();

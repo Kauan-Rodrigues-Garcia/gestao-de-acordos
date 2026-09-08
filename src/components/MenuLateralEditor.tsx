@@ -54,7 +54,7 @@ import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import {
   CARGO_GERAL, ordemDoCargo, salvarOrdemMenu, type OrdensPorCargo,
 } from '@/services/menuLateral.service';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 interface Props {
   aberto: boolean;
@@ -111,7 +111,6 @@ export function MenuLateralEditor({
   aberto, onFechar, empresaId, perfilId, ordens,
   produto, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, aoSalvar,
 }: Props) {
-  const { toast } = useToast();
   // O estado guarda o valor DO SELETOR; `cargo` é o que o banco entende.
   const [selecionado, setSelecionado] = useState<string>(VALOR_GERAL);
   const cargo = paraCargo(selecionado);
@@ -184,16 +183,14 @@ export function MenuLateralEditor({
     setSalvando(false);
 
     if (!ok) {
-      toast({
-        title: 'Não deu para salvar',
+      toast.error('Não deu para salvar', {
         description: 'A ordem do menu continua como estava. Tente de novo.',
-        variant: 'destructive',
       });
       return;
     }
 
     aoSalvar(cargo, ordem);
-    toast({ title: mensagem });
+    toast.success(mensagem);
     onFechar();
   }
 
