@@ -374,9 +374,23 @@ export async function importarMestre59(params: {
     if (error || !data) throw new Error(error?.message ?? 'Promoção do lote não devolveu resultado.');
     return data;
   } catch (e) {
-    // O lote aberto não afeta nenhuma leitura, mas deixá-lo para trás encheria
-    // a tabela de retratos pela metade a cada tentativa que falhou.
-    await rpcSemTipo('fn_mestre_descartar_lote', { p_lote_id: loteId }).catch(() => {});
+    /*
+     * O lote aberto não afeta nenhuma leitura, mas deixá-lo para trás encheria
+     * a tabela de retratos pela metade a cada tentativa que falhou.
+     *
+     * `try/catch` e NÃO `.catch()`: o que `supabase.rpc()` devolve é um
+     * `PostgrestFilterBuilder`, que é *thenable* — tem `then`, e por isso o
+     * `await` funciona — mas não é uma Promise e não tem `.catch`. Chamá-lo
+     * lançava `TypeError: .catch is not a function` DENTRO do bloco que existe
+     * para limpar, com três consequências em cadeia: o descarte nunca rodava, o
+     * `throw e` abaixo nunca era alcançado, e o TypeError substituía o erro
+     * real na tela. Em 08/09/2026 isso deixou 5 lotes presos em «aberto»
+     * (61.651 linhas) e mostrou «L(...).catch is not a function» no lugar de
+     * «canceling statement due to statement timeout», que era o problema.
+     */
+    try {
+      await rpcSemTipo('fn_mestre_descartar_lote', { p_lote_id: loteId });
+    } catch { /* o erro que importa é `e`, não a falha da faxina */ }
     throw e;
   }
 }
