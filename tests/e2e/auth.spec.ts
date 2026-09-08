@@ -21,8 +21,17 @@ test.describe('Login page', () => {
     await expect(page).not.toHaveURL(/\/#\/$|\/dashboard/);
   });
 
-  test('link para criar conta está visível', async ({ page }) => {
-    await expect(page.getByRole('link', { name: /criar conta|registr/i })).toBeVisible();
+  /*
+   * O login NÃO oferece autocadastro, e isso é decisão de produto: o commit
+   * `b64563d feat(auth): remove sign-up — access by admin invite only` tirou a
+   * porta da tela. Conta nasce por convite de administrador.
+   *
+   * Este teste afirmava o contrário e falhava desde então — como ele nunca
+   * rodou na CI, ninguém viu. Agora ele guarda a decisão em vez de brigar com
+   * ela: se o link voltar sem que alguém queira, o teste avisa.
+   */
+  test('não oferece autocadastro — conta é por convite do administrador', async ({ page }) => {
+    await expect(page.getByRole('link', { name: /criar conta|registr/i })).toHaveCount(0);
   });
 });
 
@@ -54,7 +63,10 @@ test.describe('Registro page', () => {
     await page.getByLabel(/^senha \*/i).fill('senha123');
     await page.getByLabel(/confirmar senha/i).fill('senha123');
     await page.getByRole('button', { name: /criar conta/i }).click();
-    await expect(page.getByText(/letras, números/i)).toBeVisible();
+    // "Usuário deve conter apenas..." e não só "letras, números": o texto de
+    // ajuda do campo repete a mesma regra, e o localizador curto casava com os
+    // dois — strict mode violation em vez de falha de verdade.
+    await expect(page.getByText(/Usuário deve conter apenas letras/i)).toBeVisible();
   });
 
   test('validação: senhas diferentes', async ({ page }) => {
