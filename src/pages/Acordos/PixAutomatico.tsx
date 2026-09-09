@@ -1008,7 +1008,7 @@ export function PixAutomatico() {
     mes, hojeISO: getTodayISO(),
   }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes, mes]);
 
-  // ── Comissão dobrada: 18 acordos + meta do mês ──────────────────────────
+  // ── Comissão dobrada: meta de acordos do setor + meta do mês ────────────
   // Sempre sobre os acordos do próprio usuário, mesmo quando ele é líder e a
   // lista mostra o setor inteiro: a dobra é individual. São DOIS requisitos —
   // a quantidade de acordos e a meta de recebimento —, e a meta vem do mesmo

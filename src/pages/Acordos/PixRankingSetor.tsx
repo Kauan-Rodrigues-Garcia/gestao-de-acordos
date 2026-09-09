@@ -111,7 +111,7 @@ export interface PixRankingSetorProps {
   destacarOperadorId?: string | null;
 }
 
-/** Selo de "cumpriu os 18 acordos" — não afirma que a comissão dobrou. */
+/** Selo de "cumpriu a meta de acordos do setor" — não afirma que a comissão dobrou. */
 function SeloAcordos() {
   return (
     <span

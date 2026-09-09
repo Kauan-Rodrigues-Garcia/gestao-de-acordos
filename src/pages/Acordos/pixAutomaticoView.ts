@@ -256,7 +256,7 @@ export function acordosFeitosNoMes(
                         && i.criado_em.startsWith(mes));
 }
 
-// ── Meta dos 18 acordos (comissão dobrada) ──────────────────────────────────
+// ── Meta de acordos do setor (comissão dobrada) ─────────────────────────────
 
 export interface DobraComissao {
   // ── Requisito 1: quantidade de acordos ──
@@ -264,9 +264,9 @@ export interface DobraComissao {
   feitos: number;
   /** Quantos ainda faltam para cumprir o requisito. Zero quando já cumpriu. */
   faltam: number;
-  /** Quantos acordos o requisito exige (18). */
+  /** Quantos acordos o requisito exige — do setor, com 18 de piso. */
   meta: number;
-  /** Os 18 acordos estão cumpridos? */
+  /** A meta de acordos está cumprida? */
   acordosOk: boolean;
   /** % do requisito de acordos, com teto em 100. */
   pctAcordos: number;

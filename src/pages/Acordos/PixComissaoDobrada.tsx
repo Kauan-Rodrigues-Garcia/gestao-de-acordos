@@ -3,15 +3,23 @@
  *
  * ## Por que é UM card e não dois
  *
- * Antes eram dois: `PixDobraCard` contava os 18 acordos e dizia "meta batida —
+ * Antes eram dois: `PixDobraCard` contava os acordos e dizia "meta batida —
  * comissão dobrada" ao chegar lá; logo abaixo, um bloco solto de "bônus por
  * meta" dizia que bastava bater a meta do mês para receber tudo de novo. Dois
  * desenhos diferentes, duas promessas, e nenhuma das duas era a regra.
  *
  * A regra é uma só, com DOIS requisitos que precisam fechar juntos:
  *
- *   1. 18 acordos Pix feitos no mês;
+ *   1. a meta de acordos Pix do mês — `dobra.meta`, que é do SETOR
+ *      (`meta_acordos_dobra`) e só cai nos 18 de `PIX_META_ACORDOS_DOBRA`
+ *      quando o setor não configurou a sua;
  *   2. a meta de recebimento do mês batida.
+ *
+ * O 18 já foi número fixo aqui. A conta deixou de tratá-lo assim quando a meta
+ * virou coluna por setor, mas o TÍTULO do requisito 1 continuou escrito com ele
+ * — um setor com 25 lia "Requisito 1 · 18 acordos" e, logo ao lado, o contador
+ * certo "18 / 25". Dois números para a mesma régua, e o errado em corpo maior.
+ * Por isso o título lê `dobra.meta`: um lugar só decide quantos são.
  *
  * Cumpridos os dois, o operador recebe de novo o que já fez de comissão — fez
  * R$ 100,00, leva R$ 200,00. Por isso os requisitos aparecem como uma lista de
@@ -123,7 +131,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
           <Requisito
             ok={dobra.acordosOk}
             dourado={dobrou}
-            titulo="Requisito 1 · 18 acordos Pix no mês"
+            titulo={`Requisito 1 · ${dobra.meta} acordos Pix no mês`}
             detalhe={`${dobra.feitos} / ${dobra.meta}`}
             pct={dobra.pctAcordos}
             faltando={dobra.faltam > 0
