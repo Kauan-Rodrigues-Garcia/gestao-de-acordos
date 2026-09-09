@@ -374,7 +374,7 @@ export async function buscarContextoEquipe(
     metas: Record<string, number | string>;
     equipe_empresa: Record<string, string>;
     config: Record<string, { feriados?: string[]; contar_dia_atual?: boolean }>;
-    recebido_mes?: Record<string, { total?: number | string; qtd?: number | string }>;
+    recebido_mes_equipe?: Record<string, { total?: number | string; qtd?: number | string }>;
   }>('fn_desafio_contexto_equipe', { p_desafio_id: desafioId });
 
   // NULL = não passou nos portões. Contexto vazio é a leitura certa: a tela
@@ -410,22 +410,23 @@ export async function buscarContextoEquipe(
   const semFeriado: string[] = [];
 
   /*
-   * O recebido do mês, quando a função já o devolve.
+   * O recebido do mês por equipe, quando a função já o devolve.
    *
-   * Ausente = migration 20260909120000 ainda não aplicada nesta base. Deixar o
-   * campo `undefined` é a leitura certa: o cálculo cai no recorte da campanha,
-   * que é exatamente o comportamento de antes dela. Um objeto vazio aqui diria
-   * outra coisa — «ninguém recebeu nada no mês» — e zeraria o ranking inteiro.
+   * Ausente = migration 20260909160000 ainda não aplicada nesta base. Deixar o
+   * campo `undefined` é a leitura certa: o cálculo cai no elenco sobre o
+   * recorte da campanha, que é exatamente o comportamento de antes dela. Um
+   * objeto vazio aqui diria outra coisa — «nenhuma equipe recebeu nada no
+   * mês» — e zeraria o ranking inteiro.
    */
-  const recebidoMes = data.recebido_mes
-    ? Object.fromEntries(Object.entries(data.recebido_mes).map(([id, v]) => [
+  const recebidoMesPorEquipe = data.recebido_mes_equipe
+    ? Object.fromEntries(Object.entries(data.recebido_mes_equipe).map(([id, v]) => [
         id, { total: Number(v?.total) || 0, qtd: Number(v?.qtd) || 0 },
       ]))
     : undefined;
 
   return {
     metaPorEquipe,
-    recebidoMes,
+    recebidoMesPorEquipe,
     empresaPorEquipe: data.equipe_empresa ?? {},
     uteisPorEmpresa,
     totalUteis: diasUteisDoMes(ano, mes, semFeriado),

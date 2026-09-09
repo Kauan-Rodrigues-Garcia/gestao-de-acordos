@@ -456,21 +456,19 @@ export interface ContextoEquipe {
    */
   uteisPorEmpresa?: Record<string, { totalUteis: number; decorridos: number }>;
   /**
-   * Recebido do MÊS por operador — o par do `esperado` que sai daqui.
+   * Recebido do MÊS por EQUIPE — o par do `esperado` que sai daqui.
    *
-   * A meta desta estrutura é MENSAL. O recorte de `fn_desafio_dados` é o da
-   * CAMPANHA (`data_pagamento BETWEEN data_inicio AND data_fim`), e medir um
-   * contra o outro compara janelas diferentes: campanha aberta no dia 8 conta
-   * o caixa a partir do dia 8 contra a meta acumulada desde o dia 1º. A
-   * projeção cai para todo mundo, sempre para baixo, e não bate com Desempenho
-   * Equipes — que é a tela de onde a meta veio.
+   * Por equipe, e não por operador, porque a pergunta «de quem é este
+   * dinheiro» tem três regras que o elenco do desafio não conhece: cargo
+   * `lider` credita a equipe que LIDERA, transferido no mês credita a de
+   * ORIGEM, e clone com `conta_recebimento` credita também a clonada. São as
+   * mesmas de Desempenho Equipes, e é por elas que os dois números batem.
    *
-   * Por operador, e não por equipe, porque quem resolve a que equipe alguém
-   * pertence é o elenco (`pessoa.equipes`, com os clones) — a mesma regra de
-   * `somaDaEquipe`.
+   * A meta desta estrutura é MENSAL; o recorte de `fn_desafio_dados` é o da
+   * CAMPANHA. Medir um contra o outro compara janelas diferentes.
    *
-   * Ausente quando a migration 20260909120000 ainda não foi aplicada: o cálculo
-   * cai no recorte da campanha, que é o comportamento de antes dela.
+   * Ausente quando a migration 20260909160000 ainda não foi aplicada: o
+   * cálculo cai no elenco sobre o recorte da campanha, o comportamento de antes.
    */
-  recebidoMes?: Record<string, { total: number; qtd: number }>;
+  recebidoMesPorEquipe?: Record<string, { total: number; qtd: number }>;
 }

@@ -152,39 +152,37 @@ export function somarPorOperador(linhas: readonly LinhaDesafio[]): Map<string, S
 }
 
 /**
- * O recebido que a META desta campanha pede.
+ * O recebido do MÊS daquela equipe, quando o contexto o traz.
  *
- * Campanha de operação mede o recorte da campanha contra a meta da campanha, e
- * as duas coisas têm a mesma janela — nada a fazer, e é o caso da esmagadora
- * maioria.
+ * ## Por que não dá para somar o elenco
  *
- * Campanha cuja meta sai da EQUIPE (`meta_equipe` e `projecao_equipe`) mede
- * contra um alvo MENSAL: a meta do mês, cheia ou proporcional ao que já
- * decorreu dele. O recorte de `fn_desafio_dados` é o da campanha
- * (`data_pagamento BETWEEN data_inicio AND data_fim`), e comparar os dois
- * mede janelas diferentes: campanha aberta no dia 8 conta o caixa a partir do
- * dia 8 contra a meta acumulada desde o dia 1º. O erro é sempre para baixo, e
- * o número deixa de bater com Desempenho Equipes — a tela de onde a meta veio.
+ * Campanha cuja meta sai da equipe mede contra um alvo MENSAL, e o recebido
+ * tem de ser o mesmo que Desempenho Equipes mostra. Não basta trocar a janela:
+ * o painel aplica três regras de «quem credita nesta equipe» que o elenco do
+ * desafio não conhece, porque ele responde outra pergunta — «quem disputa».
  *
- * Então nesses dois modos o recebido é o do MÊS, que `fn_desafio_contexto_equipe`
- * devolve junto com as metas. Sem ele — base sem a migration 20260909120000 —
- * cai no recorte da campanha, que é o comportamento de antes.
+ *   1. cargo `lider` credita a equipe que LIDERA, e não a do cadastro;
+ *   2. transferido no mês continua creditando a equipe de ORIGEM;
+ *   3. clone com `conta_recebimento` credita também a equipe clonada.
+ *
+ * Medido em 09/09/2026 na equipe Digital da PaguePlay, as três valiam
+ * 17,5 pontos de projeção: 109,5% pelo elenco contra os 127% do painel.
+ *
+ * Então a equipe chega somada de `fn_desafio_contexto_equipe`, que aplica as
+ * três. Equipe fora do mapa recebeu zero no mês — o mapa é a resposta inteira,
+ * e cair no elenco para ela misturaria as duas definições.
+ *
+ * `null` = o contexto não tem o mapa (base sem a migration 20260909160000), e
+ * aí vale o elenco sobre o recorte da campanha — o comportamento de antes.
  */
-export function somasDoAlvo(
-  regra: Desafio['regra'],
-  somasDaCampanha: ReadonlyMap<string, SomaOperador>,
-  contexto?: ContextoEquipe | null,
-): ReadonlyMap<string, SomaOperador> {
-  if (!usaMetaDaEquipe(regra) || !contexto?.recebidoMes) return somasDaCampanha;
-
-  const mapa = new Map<string, SomaOperador>();
-  for (const [operadorId, soma] of Object.entries(contexto.recebidoMes)) {
-    mapa.set(operadorId, {
-      total: Number(soma?.total) || 0,
-      qtd:   Number(soma?.qtd)   || 0,
-    });
-  }
-  return mapa;
+function recebidoDaEquipe(
+  equipeId: string, contexto?: ContextoEquipe | null,
+): SomaOperador | null {
+  const mapa = contexto?.recebidoMesPorEquipe;
+  if (!mapa) return null;
+  const soma = mapa[equipeId];
+  if (!soma) return ZERO;
+  return { total: Number(soma.total) || 0, qtd: Number(soma.qtd) || 0 };
 }
 
 /**
@@ -280,6 +278,7 @@ export function somaDoParticipante(
   desafio: Desafio,
   somas: ReadonlyMap<string, SomaOperador>,
   elenco: readonly PessoaDesafio[],
+  contexto?: ContextoEquipe | null,
 ): SomaOperador {
   if (desafio.regra.fonteResultado !== 'equipe_liderada') {
     return somas.get(pessoa.id) ?? ZERO;
@@ -290,7 +289,7 @@ export function somaDoParticipante(
   let total = 0;
   let qtd = 0;
   for (const equipeId of equipes) {
-    const s = somaDaEquipe(equipeId, somas, elenco);
+    const s = somaDaEquipe(equipeId, somas, elenco, contexto);
     total += s.total;
     qtd   += s.qtd;
   }
@@ -327,7 +326,13 @@ function somaDaEquipe(
   equipeId: string,
   somas: ReadonlyMap<string, SomaOperador>,
   elenco: readonly PessoaDesafio[],
+  contexto?: ContextoEquipe | null,
 ): SomaOperador {
+  // O mapa do contexto manda quando existe: ele é a régua de Desempenho
+  // Equipes, e o elenco não sabe reproduzi-la. Ver `recebidoDaEquipe`.
+  const doMes = recebidoDaEquipe(equipeId, contexto);
+  if (doMes) return doMes;
+
   let total = 0;
   let qtd = 0;
   for (const membro of elenco) {
@@ -397,7 +402,7 @@ export function notaDoLider(
   for (const equipeId of equipes) {
     const meta = alvoDaEquipe(equipeId, desafio.regra, contexto);
     if (meta === null || meta <= 0) continue;
-    const s = somaDaEquipe(equipeId, somas, elenco);
+    const s = somaDaEquipe(equipeId, somas, elenco, contexto);
     const valor = porQuantidade ? s.qtd : s.total;
     recebido += valor;
     qtd      += s.qtd;
@@ -658,9 +663,6 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
   const porQuantidade = regra.metrica === 'quantidade';
 
   const somas = somarPorOperador(dados.linhas);
-  // Meta de equipe é meta MENSAL, e o recorte da campanha não a mede. Ver
-  // `somasDoAlvo`.
-  const somasDaDisputa = somasDoAlvo(regra, somas, contextoEquipe);
 
   /*
    * O setor que recorta o placar.
@@ -706,7 +708,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
      */
     const media = regra.fonteResultado === 'equipe_liderada'
       && regra.agregacaoLider === 'media_das_equipes'
-      ? notaDoLider(pessoa, desafio, somasDaDisputa, dados.participantes, contextoEquipe, porQuantidade)
+      ? notaDoLider(pessoa, desafio, somas, dados.participantes, contextoEquipe, porQuantidade)
       : null;
 
     if (media && media.equipes > 0) {
@@ -728,7 +730,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
     // O elenco da soma é o quadro INTEIRO, e não os elegíveis: numa disputa de
     // líderes só os líderes são elegíveis, e o número deles é a soma de uma
     // equipe cujos integrantes não estão no ranking.
-    const soma = somaDoParticipante(pessoa, desafio, somasDaDisputa, dados.participantes);
+    const soma = somaDoParticipante(pessoa, desafio, somas, dados.participantes, contextoEquipe);
     const recebido = porQuantidade ? soma.qtd : soma.total;
     // A meta é DA PESSOA quando a campanha define uma para ela; senão, a da
     // campanha. Nada de um número fixo aqui. Na disputa entre líderes ela sai

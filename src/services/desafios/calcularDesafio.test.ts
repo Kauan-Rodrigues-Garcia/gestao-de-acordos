@@ -1423,19 +1423,23 @@ describe('desafio entre empresas', () => {
 });
 
 /**
- * O recebido de uma meta MENSAL é o do MÊS.
+ * O recebido de uma meta MENSAL é o do MÊS, e vem somado POR EQUIPE.
  *
- * A campanha recorta `analitico_recebimentos` pelo período dela
- * (`data_inicio..data_fim`), mas `meta_equipe` e `projecao_equipe` medem contra
- * a meta do MÊS. Campanha aberta no dia 8 comparava o caixa do dia 8 em diante
- * com a meta acumulada desde o dia 1º: a projeção caía para todo mundo, sempre
- * para baixo, e não batia com Desempenho Equipes — que é a tela de onde a meta
- * veio.
+ * Duas coisas estavam erradas, e a segunda só apareceu depois da primeira:
  *
- * `fn_desafio_contexto_equipe` passou a devolver `recebido_mes`, e é ele que
- * entra nesses dois modos.
+ *   1. a campanha recorta `analitico_recebimentos` pelo período dela, mas
+ *      `meta_equipe` e `projecao_equipe` medem contra a meta do MÊS;
+ *
+ *   2. somar o elenco do desafio não reproduz o card de Desempenho Equipes:
+ *      lá o cargo `lider` credita a equipe que LIDERA, o transferido credita a
+ *      de ORIGEM no mês, e o clone que conta credita também a clonada. Medido
+ *      em 09/09/2026 na equipe Digital da PaguePlay, as três valiam 17,5
+ *      pontos — 109,5% contra 127%.
+ *
+ * `fn_desafio_contexto_equipe` devolve `recebido_mes_equipe` já com as três
+ * regras aplicadas, e é ele que manda.
  */
-describe('a meta mensal é medida contra o recebido do mês', () => {
+describe('a meta mensal é medida contra o recebido do mês da equipe', () => {
   const lider1 = pessoa({
     id: 'l1', nome: 'Lider A', perfil: 'lider', equipeId: 'eq1', equipes: ['eq1'],
   });
@@ -1452,8 +1456,11 @@ describe('a meta mensal é medida contra o recebido do mês', () => {
     decorridos: 10,
     mes: 9,
     ano: 2026,
-    /** O mês inteiro — inclui os R$ 20.000 que entraram antes da campanha. */
-    recebidoMes: { m1: { total: 50_000, qtd: 3 } },
+    /**
+     * O mês inteiro da equipe, com a régua do painel: inclui o que entrou
+     * antes da campanha e o de quem o elenco do desafio credita noutra equipe.
+     */
+    recebidoMesPorEquipe: { eq1: { total: 50_000, qtd: 3 } },
   };
 
   function campanha(fonteMeta: 'individual' | 'meta_equipe' | 'projecao_equipe') {
@@ -1472,7 +1479,7 @@ describe('a meta mensal é medida contra o recebido do mês', () => {
     });
   }
 
-  it('a corrida de projecao mede o mes inteiro, e nao o recorte da campanha', () => {
+  it('a corrida de projecao usa o total do mes da equipe, e nao a soma do elenco', () => {
     const r = calcularDesafio({
       desafio: campanha('projecao_equipe'),
       dados: { participantes, linhas },
@@ -1480,8 +1487,8 @@ describe('a meta mensal é medida contra o recebido do mês', () => {
     });
 
     const a = r.individual.find(i => i.pessoa.id === 'l1');
-    // Alvo: metade de 100.000. Recebido: os 50.000 do MÊS, e não os 30.000 do
-    // recorte — 100% de projeção, o mesmo que Desempenho Equipes mostra.
+    // Alvo: metade de 100.000. Recebido: os 50.000 do mapa, e não os 30.000
+    // que o elenco soma — 100% de projeção, o mesmo que Desempenho Equipes.
     expect(a?.meta).toBeCloseTo(50_000, 5);
     expect(a?.recebido).toBe(50_000);
     expect(a?.progresso).toBeCloseTo(100, 5);
@@ -1499,11 +1506,21 @@ describe('a meta mensal é medida contra o recebido do mês', () => {
     expect(a?.recebido).toBe(50_000);
   });
 
-  it('sem recebidoMes cai no recorte da campanha — a base sem a migration', () => {
+  it('equipe fora do mapa recebeu zero no mes — o mapa e a resposta inteira', () => {
     const r = calcularDesafio({
       desafio: campanha('projecao_equipe'),
       dados: { participantes, linhas },
-      contextoEquipe: { ...contextoEquipe, recebidoMes: undefined },
+      contextoEquipe: { ...contextoEquipe, recebidoMesPorEquipe: { outra: { total: 9, qtd: 1 } } },
+    });
+
+    expect(r.individual.find(i => i.pessoa.id === 'l1')?.recebido).toBe(0);
+  });
+
+  it('sem o mapa cai no elenco sobre o recorte da campanha — a base sem a migration', () => {
+    const r = calcularDesafio({
+      desafio: campanha('projecao_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...contextoEquipe, recebidoMesPorEquipe: undefined },
     });
 
     expect(r.individual.find(i => i.pessoa.id === 'l1')?.recebido).toBe(30_000);
