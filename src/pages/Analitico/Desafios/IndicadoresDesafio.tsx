@@ -136,11 +136,14 @@ function IndicadoresProjecao({ resultado, tema }: { resultado: ResultadoDesafio;
 
       <div className="rounded-xl border border-border bg-card p-3">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Recebido no período
+          Recebido no mês
         </p>
         <p className="mt-1 text-lg font-bold tabular-nums text-foreground">
           {formatBRL(resultado.totalRecebido)}
         </p>
+        {/* Do MÊS, e não do recorte da campanha: a meta que a corrida mede é
+            mensal, e o caixa que a acompanha tem de ser o mesmo. Ver
+            `somasDoAlvo`. */}
         <p className="text-[11px] text-muted-foreground">não decide a disputa</p>
       </div>
     </div>

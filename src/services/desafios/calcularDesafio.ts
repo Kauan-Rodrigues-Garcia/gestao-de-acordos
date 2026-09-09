@@ -152,6 +152,42 @@ export function somarPorOperador(linhas: readonly LinhaDesafio[]): Map<string, S
 }
 
 /**
+ * O recebido que a META desta campanha pede.
+ *
+ * Campanha de operação mede o recorte da campanha contra a meta da campanha, e
+ * as duas coisas têm a mesma janela — nada a fazer, e é o caso da esmagadora
+ * maioria.
+ *
+ * Campanha cuja meta sai da EQUIPE (`meta_equipe` e `projecao_equipe`) mede
+ * contra um alvo MENSAL: a meta do mês, cheia ou proporcional ao que já
+ * decorreu dele. O recorte de `fn_desafio_dados` é o da campanha
+ * (`data_pagamento BETWEEN data_inicio AND data_fim`), e comparar os dois
+ * mede janelas diferentes: campanha aberta no dia 8 conta o caixa a partir do
+ * dia 8 contra a meta acumulada desde o dia 1º. O erro é sempre para baixo, e
+ * o número deixa de bater com Desempenho Equipes — a tela de onde a meta veio.
+ *
+ * Então nesses dois modos o recebido é o do MÊS, que `fn_desafio_contexto_equipe`
+ * devolve junto com as metas. Sem ele — base sem a migration 20260909120000 —
+ * cai no recorte da campanha, que é o comportamento de antes.
+ */
+export function somasDoAlvo(
+  regra: Desafio['regra'],
+  somasDaCampanha: ReadonlyMap<string, SomaOperador>,
+  contexto?: ContextoEquipe | null,
+): ReadonlyMap<string, SomaOperador> {
+  if (!usaMetaDaEquipe(regra) || !contexto?.recebidoMes) return somasDaCampanha;
+
+  const mapa = new Map<string, SomaOperador>();
+  for (const [operadorId, soma] of Object.entries(contexto.recebidoMes)) {
+    mapa.set(operadorId, {
+      total: Number(soma?.total) || 0,
+      qtd:   Number(soma?.qtd)   || 0,
+    });
+  }
+  return mapa;
+}
+
+/**
  * A pessoa disputa esta campanha?
  *
  * Lista vazia em `regra.participantes` não é "ninguém": é "sem recorte nessa
@@ -622,6 +658,9 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
   const porQuantidade = regra.metrica === 'quantidade';
 
   const somas = somarPorOperador(dados.linhas);
+  // Meta de equipe é meta MENSAL, e o recorte da campanha não a mede. Ver
+  // `somasDoAlvo`.
+  const somasDaDisputa = somasDoAlvo(regra, somas, contextoEquipe);
 
   /*
    * O setor que recorta o placar.
@@ -667,7 +706,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
      */
     const media = regra.fonteResultado === 'equipe_liderada'
       && regra.agregacaoLider === 'media_das_equipes'
-      ? notaDoLider(pessoa, desafio, somas, dados.participantes, contextoEquipe, porQuantidade)
+      ? notaDoLider(pessoa, desafio, somasDaDisputa, dados.participantes, contextoEquipe, porQuantidade)
       : null;
 
     if (media && media.equipes > 0) {
@@ -689,7 +728,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
     // O elenco da soma é o quadro INTEIRO, e não os elegíveis: numa disputa de
     // líderes só os líderes são elegíveis, e o número deles é a soma de uma
     // equipe cujos integrantes não estão no ranking.
-    const soma = somaDoParticipante(pessoa, desafio, somas, dados.participantes);
+    const soma = somaDoParticipante(pessoa, desafio, somasDaDisputa, dados.participantes);
     const recebido = porQuantidade ? soma.qtd : soma.total;
     // A meta é DA PESSOA quando a campanha define uma para ela; senão, a da
     // campanha. Nada de um número fixo aqui. Na disputa entre líderes ela sai

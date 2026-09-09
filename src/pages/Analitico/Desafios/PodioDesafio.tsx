@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Medal } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
+import { corProjecao } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 import type { ResultadoParticipante } from '@/services/desafios/calcularDesafio';
 import type { PremioPorPosicao } from '@/services/desafios/types';
@@ -74,7 +75,20 @@ export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId
                 {item.pessoa.equipeNome && <p className="mt-1 break-words text-[11px] text-muted-foreground">{item.pessoa.equipeNome}</p>}
               </div>
               <div className={cn('shrink-0', compacto ? 'text-right' : 'mt-auto pt-4 pb-1')}>
-                <p className={cn('font-bold tracking-tight tabular-nums', painel ? (corridaDeProjecao ? 'text-xl' : 'text-sm') : compacto ? 'text-xl' : 'text-3xl', estilo?.texto ?? tema.destaque)}>
+                {/* Na corrida de projeção a cor é a do QUARTIL, e não a da
+                    medalha — a mesma régua de Desempenho Equipes e do card de
+                    cada participante. O 1º lugar com 62% de projeção está
+                    atrasado, e o dourado do pódio diria que está ganhando.
+                    Sem meta não há projeção, logo não há quartil: o traço fica
+                    neutro em vez de herdar o vermelho do 4º. */}
+                <p
+                  className={cn('font-bold tracking-tight tabular-nums',
+                    painel ? (corridaDeProjecao ? 'text-xl' : 'text-sm') : compacto ? 'text-xl' : 'text-3xl',
+                    corridaDeProjecao
+                      ? (!item.meta && 'text-muted-foreground')
+                      : estilo?.texto ?? tema.destaque)}
+                  style={corridaDeProjecao && item.meta ? { color: corProjecao(item.progresso) } : undefined}
+                >
                   {corridaDeProjecao ? (item.meta ? percentualCheio(item.progresso) : '—') : formatBRL(item.recebido)}
                 </p>
                 {!corridaDeProjecao && <p className="mt-0.5 text-[10px] text-muted-foreground">recebidos</p>}

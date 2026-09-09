@@ -455,4 +455,22 @@ export interface ContextoEquipe {
    * Empresa ausente aqui cai no par de cima, que é o comportamento de antes.
    */
   uteisPorEmpresa?: Record<string, { totalUteis: number; decorridos: number }>;
+  /**
+   * Recebido do MÊS por operador — o par do `esperado` que sai daqui.
+   *
+   * A meta desta estrutura é MENSAL. O recorte de `fn_desafio_dados` é o da
+   * CAMPANHA (`data_pagamento BETWEEN data_inicio AND data_fim`), e medir um
+   * contra o outro compara janelas diferentes: campanha aberta no dia 8 conta
+   * o caixa a partir do dia 8 contra a meta acumulada desde o dia 1º. A
+   * projeção cai para todo mundo, sempre para baixo, e não bate com Desempenho
+   * Equipes — que é a tela de onde a meta veio.
+   *
+   * Por operador, e não por equipe, porque quem resolve a que equipe alguém
+   * pertence é o elenco (`pessoa.equipes`, com os clones) — a mesma regra de
+   * `somaDaEquipe`.
+   *
+   * Ausente quando a migration 20260909120000 ainda não foi aplicada: o cálculo
+   * cai no recorte da campanha, que é o comportamento de antes dela.
+   */
+  recebidoMes?: Record<string, { total: number; qtd: number }>;
 }

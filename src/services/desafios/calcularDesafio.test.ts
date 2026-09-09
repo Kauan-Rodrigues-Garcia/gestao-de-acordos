@@ -1421,3 +1421,128 @@ describe('desafio entre empresas', () => {
     expect(r.individual.find(i => i.pessoa.id === 'lidB')?.meta).toBe(50_000); // reserva do topo
   });
 });
+
+/**
+ * O recebido de uma meta MENSAL é o do MÊS.
+ *
+ * A campanha recorta `analitico_recebimentos` pelo período dela
+ * (`data_inicio..data_fim`), mas `meta_equipe` e `projecao_equipe` medem contra
+ * a meta do MÊS. Campanha aberta no dia 8 comparava o caixa do dia 8 em diante
+ * com a meta acumulada desde o dia 1º: a projeção caía para todo mundo, sempre
+ * para baixo, e não batia com Desempenho Equipes — que é a tela de onde a meta
+ * veio.
+ *
+ * `fn_desafio_contexto_equipe` passou a devolver `recebido_mes`, e é ele que
+ * entra nesses dois modos.
+ */
+describe('a meta mensal é medida contra o recebido do mês', () => {
+  const lider1 = pessoa({
+    id: 'l1', nome: 'Lider A', perfil: 'lider', equipeId: 'eq1', equipes: ['eq1'],
+  });
+  const membro1 = pessoa({ id: 'm1', nome: 'Membro A1', equipeId: 'eq1', equipes: ['eq1'] });
+  const participantes = [lider1, membro1];
+
+  /** O recorte da campanha: só o que entrou depois que ela abriu. */
+  const linhas = [linha('m1', 30_000)];
+
+  /** 20 dias úteis, 10 corridos: a projeção cobra metade da meta. */
+  const contextoEquipe = {
+    metaPorEquipe: { eq1: 100_000 },
+    totalUteis: 20,
+    decorridos: 10,
+    mes: 9,
+    ano: 2026,
+    /** O mês inteiro — inclui os R$ 20.000 que entraram antes da campanha. */
+    recebidoMes: { m1: { total: 50_000, qtd: 3 } },
+  };
+
+  function campanha(fonteMeta: 'individual' | 'meta_equipe' | 'projecao_equipe') {
+    return desafio({
+      regra: {
+        criterioRanking: 'maior_percentual',
+        metaIndividual: 20_000,
+        metaEquipe: null,
+        fonteResultado: fonteMeta === 'individual' ? 'proprio' : 'equipe_liderada',
+        fonteMeta,
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: [], excluidos: [],
+          convidados: [],
+        },
+      },
+    });
+  }
+
+  it('a corrida de projecao mede o mes inteiro, e nao o recorte da campanha', () => {
+    const r = calcularDesafio({
+      desafio: campanha('projecao_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+
+    const a = r.individual.find(i => i.pessoa.id === 'l1');
+    // Alvo: metade de 100.000. Recebido: os 50.000 do MÊS, e não os 30.000 do
+    // recorte — 100% de projeção, o mesmo que Desempenho Equipes mostra.
+    expect(a?.meta).toBeCloseTo(50_000, 5);
+    expect(a?.recebido).toBe(50_000);
+    expect(a?.progresso).toBeCloseTo(100, 5);
+  });
+
+  it('meta_equipe tambem: a meta e mensal, o caixa tambem', () => {
+    const r = calcularDesafio({
+      desafio: campanha('meta_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+
+    const a = r.individual.find(i => i.pessoa.id === 'l1');
+    expect(a?.meta).toBe(100_000);
+    expect(a?.recebido).toBe(50_000);
+  });
+
+  it('sem recebidoMes cai no recorte da campanha — a base sem a migration', () => {
+    const r = calcularDesafio({
+      desafio: campanha('projecao_equipe'),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...contextoEquipe, recebidoMes: undefined },
+    });
+
+    expect(r.individual.find(i => i.pessoa.id === 'l1')?.recebido).toBe(30_000);
+  });
+
+  it('campanha de operacao nao e tocada: ela mede o periodo dela', () => {
+    const r = calcularDesafio({
+      desafio: campanha('individual'),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+
+    // O operador continua com os 30.000 do recorte, contra a meta da campanha.
+    const m = r.individual.find(i => i.pessoa.id === 'm1');
+    expect(m?.recebido).toBe(30_000);
+    expect(m?.meta).toBe(20_000);
+  });
+
+  it('a quantidade segue a mesma regua do valor', () => {
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: {
+          criterioRanking: 'maior_percentual',
+          metrica: 'quantidade',
+          metaIndividual: 20_000,
+          metaEquipe: null,
+          fonteResultado: 'equipe_liderada',
+          fonteMeta: 'projecao_equipe',
+          participantes: {
+            setores: [], equipes: [], operadores: [], cargos: [], excluidos: [],
+            convidados: [],
+          },
+        },
+      }),
+      dados: { participantes, linhas },
+      contextoEquipe,
+    });
+
+    // 3 pagamentos no mês, e não 1 no recorte.
+    expect(r.individual.find(i => i.pessoa.id === 'l1')?.qtd).toBe(3);
+  });
+});
