@@ -9,7 +9,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
-  ROUTE_PATHS, formatDate, getTodayISO, contaNoRecebimento,
+  ROUTE_PATHS, formatDate, getTodayISO,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -73,22 +73,41 @@ export default function Dashboard() {
   // <FiltroEscopo />.
 
   /*
-   * Onde o Dashboard ABRE.
+   * A equipe do cadastro — o destino do degrau «Minha equipe» da régua.
    *
-   * Era sempre 'setor'. Enquanto só a liderança tinha alcance de setor isso
-   * estava certo — é a pergunta dela. Com o setor e a equipe liberados também
-   * para operador (03/09/2026), o mesmo padrão faria o operador abrir a tela
-   * no total do setor e ter de clicar em «Só os meus» toda vez para ver o
-   * próprio número, que é o que ele veio ver.
+   * `equipe_id` não está no tipo `Perfil` mas vem no `select('*')` do
+   * `useAuth`; é a mesma leitura que `useSetoresEquipes` faz para montar «as
+   * minhas equipes», e a mesma que o bloco de Direto/Extra faz mais abaixo.
+   * Uma pessoa tem uma equipe: clone é empréstimo para outro setor, não uma
+   * segunda casa.
    *
-   * Quem PRODUZ recebimento abre no próprio (`contaNoRecebimento` — a mesma
-   * lista do ranking, dos quartis e do Pix); quem supervisiona abre no setor.
-   * Não é uma decisão de acesso: os dois continuam podendo escolher os dois
-   * lados no `<FiltroEscopo />` logo acima. É só por onde a tela começa.
+   * Declarado AQUI, e não junto do resto dos filtros: o efeito logo abaixo o lê
+   * na lista de dependências, que é avaliada durante o render.
    */
-  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>(
-    () => (contaNoRecebimento(perfil?.perfil) ? 'individual' : 'setor'),
-  );
+  const equipeDoPerfil =
+    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null;
+
+  /*
+   * Onde o Dashboard ABRE: no degrau mais BAIXO que a pessoa alcança.
+   *
+   * Era sempre 'setor', depois passou a depender do cargo — `contaNoRecebimento`
+   * abria no próprio para quem produz recebimento e no setor para quem
+   * supervisiona. Duas regras diferentes para a mesma pergunta, e a do cargo
+   * discordava do painel: quem configurasse `dashboard_escopo_individual` para
+   * um cargo «de supervisão» via a chave ligada e a tela abrindo em outro
+   * lugar.
+   *
+   * Com a régua «Minha visão → Minha equipe → Meu setor» (09/09/2026) a regra
+   * fica uma só e sai do próprio desenho: a tela abre no primeiro degrau da
+   * escada que a pessoa pode pisar. Quem tem individual abre em Minha visão —
+   * o padrão pedido; quem não tem cai para Minha equipe, e só então para Meu
+   * setor. Sempre o mais estreito, nunca o mais amplo: abrir no total do setor
+   * quem só queria o próprio número é ruído; o contrário é um clique.
+   *
+   * Não é decisão de acesso. É por onde a tela começa — a régua acima continua
+   * oferecendo todos os degraus que o painel liberou.
+   */
+  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('individual');
 
   /*
    * A tela não pode ABRIR fora do que o painel liberou.
@@ -105,22 +124,30 @@ export default function Dashboard() {
    * amplo que a pessoa TEM. Quem tem o nível continua abrindo nele — não é uma
    * decisão de acesso, é só por onde a tela começa.
    *
-   * Sem alcance de setor, o mais amplo é a primeira equipe da lista, e não
-   * «setor»: é a mesma escolha que o botão «Todas as pessoas» já faz desde
-   * 513fda9, e mandar para «setor» quem foi limitado à equipe seria oferecer
-   * pelo estado inicial o recorte que o filtro se recusa a oferecer no clique.
+   * A descida segue a ordem da régua, de baixo para cima: sem `individual`,
+   * tenta «Minha equipe»; sem equipe, «Meu setor». A versão anterior tentava o
+   * setor ANTES da equipe, o que dava pelo estado inicial o recorte mais amplo
+   * a quem a régua oferece o mais estreito — e mandava para «setor» quem tinha
+   * equipe própria, sem motivo.
+   *
+   * A equipe do cadastro vem primeiro; a primeira da lista é o último recurso,
+   * para quem tem alcance de equipe sem equipe própria.
    */
   useEffect(() => {
     if (niveis.length === 0) return;               // aba fechada: outro guard trata
     if (visaoFiltro !== 'individual') return;
     if (niveis.includes('individual')) return;
+    if (niveis.includes('equipe')) {
+      const alvo = equipeDoPerfil ?? equipesDoSetor[0]?.id ?? null;
+      if (alvo) {
+        setVisaoFiltro(`equipe:${alvo}`);
+        return;
+      }
+    }
     if (niveis.includes('setor') || niveis.includes('todos_setores')) {
       setVisaoFiltro('setor');
-      return;
     }
-    const primeira = equipesDoSetor[0];
-    if (primeira) setVisaoFiltro(`equipe:${primeira.id}`);
-  }, [niveis, visaoFiltro, equipesDoSetor]);
+  }, [niveis, visaoFiltro, equipesDoSetor, equipeDoPerfil]);
   const soOsMeus = visaoFiltro === 'individual';
   const operadorFiltroAtivo = soOsMeus ? (perfil?.id ?? null) : null;
 
@@ -757,6 +784,7 @@ export default function Dashboard() {
           visao={visaoFiltro}
           onVisao={setVisaoFiltro}
           setorDoPerfil={perfil?.setor_id ?? null}
+          equipeDoPerfil={equipeDoPerfil}
         />
         <AnalyticsPanel
           setorFiltro={setorFiltroAtivo}

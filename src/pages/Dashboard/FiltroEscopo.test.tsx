@@ -11,14 +11,18 @@
  *   1. filtro de SETOR só para quem enxerga mais de um setor;
  *   2. filtro de EQUIPE só com UM setor em foco — «todos os setores» o esconde,
  *      porque «equipe de qual setor?» não tem resposta;
- *   3. o INDIVIDUAL é um interruptor à parte, e ligado ele esconde os outros
- *      dois: o recorte já é uma pessoa só.
+ *   3. a RÉGUA «Minha visão · Minha equipe · Meu setor» manda nos dois, e em
+ *      «Minha visão» os dois somem: o recorte já é uma pessoa só.
+ *
+ * A régua substituiu o interruptor «Só os meus números» em 09/09/2026. O
+ * interruptor dizia se o individual estava ligado e calava sobre o que se via
+ * quando desligado; a régua nomeia os três degraus e mostra em qual se está.
  *
  * O teste é por CARGO no sentido de «conjunto de níveis liberados» — nunca pelo
  * nome do cargo. Quem decide é o painel de permissões; aqui só se confere que a
  * tela obedece ao que ele liberou.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -34,12 +38,17 @@ const EQUIPES = [
   { id: 'e-2', nome: 'Equipe B' },
 ];
 
+/** Todos os níveis — o ponto de partida de quem testa a régua cheia. */
+const TUDO: NivelEscopo[] = ['individual', 'equipe', 'setor', 'todos_setores'];
+
 function montar(over: {
   niveis: NivelEscopo[];
   visao?: VisaoEscopo;
   setorFiltro?: string | null;
   podeTodasEquipes?: boolean;
   setorDoPerfil?: string | null;
+  equipeDoPerfil?: string | null;
+  equipes?: { id: string; nome: string }[];
   onVisao?: (v: VisaoEscopo) => void;
   onSetor?: (id: string | null) => void;
 }) {
@@ -48,14 +57,93 @@ function montar(over: {
     setores: SETORES,
     setorFiltro: over.setorFiltro ?? null,
     onSetor: over.onSetor ?? vi.fn(),
-    equipes: EQUIPES,
+    equipes: over.equipes ?? EQUIPES,
     podeTodasEquipes: over.podeTodasEquipes ?? true,
     visao: over.visao ?? ('setor' as VisaoEscopo),
     onVisao: over.onVisao ?? vi.fn(),
     setorDoPerfil: over.setorDoPerfil ?? 's-1',
+    equipeDoPerfil: over.equipeDoPerfil === undefined ? 'e-1' : over.equipeDoPerfil,
   };
   return render(<FiltroEscopo {...props} />);
 }
+
+/** Os rótulos da régua, na ordem em que a tela os desenha. */
+function degraus(): string[] {
+  const grupo = screen.getByRole('group', { name: 'Nível de visualização' });
+  return within(grupo).getAllByRole('button').map(b => b.textContent?.trim() ?? '');
+}
+
+describe('FiltroEscopo — a régua de visões', () => {
+  it('sobe na ordem pedida: Minha visão → Minha equipe → Meu setor', () => {
+    montar({ niveis: TUDO, setorFiltro: 's-1' });
+    expect(degraus()).toEqual(['Minha visão', 'Minha equipe', 'Meu setor']);
+  });
+
+  it('cada degrau exige o seu nível', () => {
+    const { unmount } = montar({ niveis: ['equipe', 'setor'], setorFiltro: 's-1' });
+    expect(degraus()).toEqual(['Minha equipe', 'Meu setor']);
+    unmount();
+
+    montar({ niveis: ['individual', 'setor'], setorFiltro: 's-1' });
+    expect(degraus()).toEqual(['Minha visão', 'Meu setor']);
+  });
+
+  it('sem equipe no cadastro, «Minha equipe» não aparece nem com o nível', () => {
+    // O nível está liberado; o degrau não teria para onde apontar.
+    montar({ niveis: TUDO, setorFiltro: 's-1', equipeDoPerfil: null });
+    expect(degraus()).toEqual(['Minha visão', 'Meu setor']);
+  });
+
+  it('«todos_setores» sozinho já habilita «Meu setor»', () => {
+    montar({ niveis: ['individual', 'todos_setores'] });
+    expect(degraus()).toEqual(['Minha visão', 'Meu setor']);
+  });
+
+  it('marca como ativo o degrau em que a tela está', () => {
+    const primeira = montar({ niveis: TUDO, setorFiltro: 's-1', visao: 'individual' });
+    expect(screen.getByRole('button', { name: /Minha visão/ }))
+      .toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Meu setor/ }))
+      .toHaveAttribute('aria-pressed', 'false');
+    primeira.unmount();
+
+    // «Minha equipe» é o `equipe:<id>` da equipe do cadastro, e não outra.
+    const segunda = montar({ niveis: TUDO, setorFiltro: 's-1', visao: 'equipe:e-1' });
+    expect(screen.getByRole('button', { name: /Minha equipe/ }))
+      .toHaveAttribute('aria-pressed', 'true');
+    segunda.unmount();
+
+    montar({ niveis: TUDO, setorFiltro: 's-1', visao: 'equipe:e-2', equipeDoPerfil: 'e-1' });
+    expect(screen.getByRole('button', { name: /Minha equipe/ }))
+      .toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('cada degrau leva ao seu recorte', async () => {
+    const onVisao = vi.fn();
+    montar({ niveis: TUDO, setorFiltro: 's-1', visao: 'setor', onVisao });
+
+    await userEvent.click(screen.getByRole('button', { name: /Minha visão/ }));
+    expect(onVisao).toHaveBeenCalledWith('individual');
+
+    await userEvent.click(screen.getByRole('button', { name: /Minha equipe/ }));
+    expect(onVisao).toHaveBeenCalledWith('equipe:e-1');
+
+    await userEvent.click(screen.getByRole('button', { name: /Meu setor/ }));
+    expect(onVisao).toHaveBeenCalledWith('setor');
+  });
+
+  it('o interruptor «Só os meus números» não existe mais', () => {
+    montar({ niveis: TUDO, setorFiltro: 's-1' });
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByText('Só os meus números')).not.toBeInTheDocument();
+  });
+
+  it('um degrau sozinho não é escada — a régua some', () => {
+    // Só `individual`: nada a escolher, e nada mais na caixa.
+    const { container } = montar({ niveis: ['individual'] });
+    expect(container).toBeEmptyDOMElement();
+  });
+});
 
 describe('FiltroEscopo — a cascata do recorte', () => {
   it('o filtro de setor só existe para quem enxerga mais de um setor', () => {
@@ -93,51 +181,21 @@ describe('FiltroEscopo — a cascata do recorte', () => {
     expect(screen.getByText('Equipe A')).toBeInTheDocument();
   });
 
-  it('individual ligado esconde setor e equipe', async () => {
-    const onVisao = vi.fn();
-    const { unmount } = montar({
-      niveis: ['individual', 'equipe', 'setor', 'todos_setores'],
-      setorFiltro: 's-1',
-      visao: 'setor',
-      onVisao,
-    });
-
-    // Desligado: os três controles convivem.
-    expect(screen.getByText('Todos os setores')).toBeInTheDocument();
-    expect(screen.getByText('Equipe A')).toBeInTheDocument();
-    const chave = screen.getByRole('switch', { name: /apenas os seus próprios números/i });
-    expect(chave).toBeInTheDocument();
-
-    await userEvent.click(chave);
-    expect(onVisao).toHaveBeenCalledWith('individual');
-    unmount();
-
-    // Ligado: sobra o interruptor, e nada que não se aplique a uma pessoa só.
+  it('«Minha visão» esconde setor e equipe', () => {
     montar({
-      niveis: ['individual', 'equipe', 'setor', 'todos_setores'],
+      niveis: TUDO,
       setorFiltro: 's-1',
       visao: 'individual',
     });
     expect(screen.queryByText('Todos os setores')).not.toBeInTheDocument();
     expect(screen.queryByText('Play 5')).not.toBeInTheDocument();
     expect(screen.queryByText('Equipe A')).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: /apenas os seus próprios números/i }))
-      .toBeInTheDocument();
-  });
-
-  it('desligar o individual devolve o recorte de setor', async () => {
-    const onVisao = vi.fn();
-    montar({
-      niveis: ['individual', 'setor', 'todos_setores'],
-      visao: 'individual',
-      onVisao,
-    });
-    await userEvent.click(screen.getByRole('switch', { name: /apenas os seus próprios números/i }));
-    expect(onVisao).toHaveBeenCalledWith('setor');
+    // A régua continua — é ela que traz a pessoa de volta.
+    expect(degraus()).toEqual(['Minha visão', 'Minha equipe', 'Meu setor']);
   });
 
   it('a linha «Pessoa» com dois chips não existe mais', () => {
-    montar({ niveis: ['individual', 'equipe', 'setor', 'todos_setores'], setorFiltro: 's-1' });
+    montar({ niveis: TUDO, setorFiltro: 's-1' });
     // Era um filtro fingindo ter duas dimensões quando só tem uma.
     expect(screen.queryByText('Todas as pessoas')).not.toBeInTheDocument();
     expect(screen.queryByText('Só os meus')).not.toBeInTheDocument();
@@ -152,6 +210,36 @@ describe('FiltroEscopo — a cascata do recorte', () => {
     });
     expect(screen.queryByText('Todas as equipes')).not.toBeInTheDocument();
     expect(screen.getByText('Equipe A')).toBeInTheDocument();
+  });
+
+  /*
+   * A linha de equipe que só repetiria a régua.
+   *
+   * Quem foi limitado à própria equipe recebe `equipes` recortado a ela. Sem
+   * «Todas as equipes», isso é UM chip que leva exatamente aonde «Minha
+   * equipe» acabou de levar — dois caminhos para o mesmo clique, um deles
+   * escondido numa segunda linha.
+   */
+  it('a linha de equipe some quando só ofereceria a própria equipe', () => {
+    const { unmount } = montar({
+      niveis: ['individual', 'equipe', 'setor'],
+      setorFiltro: 's-1',
+      podeTodasEquipes: false,
+      equipes: [EQUIPES[0]],
+      equipeDoPerfil: 'e-1',
+    });
+    expect(screen.queryByText('Equipe A')).not.toBeInTheDocument();
+    expect(degraus()).toContain('Minha equipe');
+    unmount();
+
+    // Com uma equipe a MAIS para escolher, a linha volta.
+    montar({
+      niveis: ['individual', 'equipe', 'setor'],
+      setorFiltro: 's-1',
+      podeTodasEquipes: false,
+      equipeDoPerfil: 'e-1',
+    });
+    expect(screen.getByText('Equipe B')).toBeInTheDocument();
   });
 
   /*

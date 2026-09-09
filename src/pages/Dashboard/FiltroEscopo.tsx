@@ -27,7 +27,7 @@
  * O mesmo controle para TODOS os cargos — o que muda de um para outro é só até
  * onde ele alcança, e isso sai dos níveis da aba, não de lista de cargo:
  *
- *   [ Só os meus números ]  ← interruptor, sempre em cima e sozinho
+ *   Minha visão · Minha equipe · Meu setor   ← a régua, sempre em cima
  *   Setor   → só para quem enxerga mais de um setor (`todos_setores`)
  *   Equipe  → só com UM setor em foco, e só as equipes DAQUELE setor
  *
@@ -36,23 +36,37 @@
  *
  *   • "Todos os setores" esconde a linha de equipe, porque «equipe de qual
  *     setor?» não tem resposta;
- *   • o individual LIGADO esconde setor e equipe, porque o recorte já é uma
- *     pessoa só — um filtro de setor por cima dele não teria o que fazer.
+ *   • «Minha visão» esconde setor e equipe, porque o recorte já é uma pessoa
+ *     só — um filtro de setor por cima dele não teria o que fazer.
  *
- * ## Por que o individual virou interruptor
+ * ## Por que a régua de três, e não o interruptor
  *
- * Ele era uma terceira linha, «Pessoa», com dois chips: «Todas as pessoas» e
- * «Só os meus». Era um filtro fingindo ter duas dimensões quando só tem uma —
- * e «Todas as pessoas» precisava de três condições para decidir se aparecia,
- * porque em metade dos casos ele repetia o que a linha de equipe já dizia.
+ * O individual já foi uma linha «Pessoa» com dois chips, e depois um
+ * interruptor «Só os meus números». O interruptor respondia bem a UMA pergunta
+ * — ligado ou desligado — e escondia a que importa: *desligado mostra o quê?*
+ * A resposta era «o que estiver valendo em setor/equipe», que a pessoa tinha de
+ * ir conferir nas linhas de baixo. Quem olhava a tela de longe não sabia dizer
+ * em que altura estava.
  *
- * Sendo um interruptor a pergunta fica com a forma que ela tem: ligado ou
- * desligado. Desligar devolve o recorte de setor/equipe que estava valendo.
+ * Agora a altura é o próprio controle, e ela é uma escada de três degraus na
+ * ordem em que se sobe:
+ *
+ *   Minha visão  → só o próprio (`individual`)
+ *   Minha equipe → a equipe do cadastro (`equipe:<id>`)
+ *   Meu setor    → o setor inteiro (`setor`)
+ *
+ * Cada degrau exige o nível correspondente, e «Minha equipe» exige também que
+ * a pessoa TENHA equipe no cadastro — um degrau que não leva a lugar nenhum é
+ * pior que degrau nenhum. Sobrando um só, a régua inteira some: uma opção não
+ * é escolha, é a descrição do que a pessoa já está vendo.
+ *
+ * O tipo `VisaoEscopo` não mudou. «Minha equipe» é o mesmo `equipe:<id>` que os
+ * chips de baixo produzem, e por isso nada a jusante — `useAnalytics`,
+ * `useAcordos`, o `AnalyticsPanel` — precisou saber que esta régua existe.
  */
 
 import { Building2, Layers, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Switch } from '@/components/ui/switch';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import type { SetorResumo, EquipeResumo } from '@/hooks/useSetoresEquipes';
 
@@ -80,11 +94,18 @@ interface Props {
   onVisao: (v: VisaoEscopo) => void;
   /** Setor do próprio perfil, para quem não escolhe. */
   setorDoPerfil: string | null;
+  /**
+   * Equipe do próprio perfil — o destino do degrau «Minha equipe».
+   *
+   * `null` esconde o degrau. Não é um caso de erro: gente sem equipe no
+   * cadastro existe, e para ela o degrau não teria para onde apontar.
+   */
+  equipeDoPerfil: string | null;
 }
 
 export function FiltroEscopo({
   niveis, setores, setorFiltro, onSetor, equipes, podeTodasEquipes,
-  visao, onVisao, setorDoPerfil,
+  visao, onVisao, setorDoPerfil, equipeDoPerfil,
 }: Props) {
   const podeEscolherSetor = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
@@ -111,8 +132,48 @@ export function FiltroEscopo({
   const setorEmFoco = podeEscolherSetor ? setorFiltro : setorDoPerfil;
 
   const podeVerEquipes = podeEquipe && setorEmFoco !== null && equipes.length > 0;
-  // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
-  const mostrarIndividual = niveis.includes('individual') && niveis.length > 1;
+
+  /*
+   * Os três degraus, na ordem em que se sobe. Cada um só existe com o nível
+   * que o autoriza — e «Minha equipe» também precisa de uma equipe para onde
+   * apontar.
+   */
+  const minhaVisaoDisponivel = niveis.includes('individual');
+  const minhaEquipeDisponivel = podeEquipe && equipeDoPerfil !== null;
+  const meuSetorDisponivel = niveis.includes('setor') || podeEscolherSetor;
+
+  const degraus = [
+    minhaVisaoDisponivel && {
+      key: 'individual' as const,
+      rotulo: 'Minha visão',
+      titulo: 'Ver somente os seus números',
+      Icone: User,
+      alvo: 'individual' as VisaoEscopo,
+      ativo: visao === 'individual',
+    },
+    minhaEquipeDisponivel && {
+      key: 'minha_equipe' as const,
+      rotulo: 'Minha equipe',
+      titulo: 'Ver os números da sua equipe',
+      Icone: Layers,
+      alvo: `equipe:${equipeDoPerfil}` as VisaoEscopo,
+      ativo: visao === `equipe:${equipeDoPerfil}`,
+    },
+    meuSetorDisponivel && {
+      key: 'setor' as const,
+      rotulo: 'Meu setor',
+      titulo: 'Ver os números consolidados do setor',
+      Icone: Building2,
+      alvo: 'setor' as VisaoEscopo,
+      ativo: visao === 'setor',
+    },
+  ].filter(Boolean) as {
+    key: string; rotulo: string; titulo: string;
+    Icone: typeof User; alvo: VisaoEscopo; ativo: boolean;
+  }[];
+
+  // Um degrau sozinho não é escada — é a legenda do que a pessoa já vê.
+  const mostrarRegua = degraus.length > 1;
 
   const soOsMeus = visao === 'individual';
 
@@ -126,10 +187,24 @@ export function FiltroEscopo({
    * ser perguntado enquanto o individual manda.
    */
   const mostrarSetores = !soOsMeus && podeEscolherSetor && setores.length > 0;
-  const mostrarEquipes = !soOsMeus && podeVerEquipes;
+
+  /*
+   * A linha de equipe repetiria a régua?
+   *
+   * Quem foi limitado à própria equipe recebe `equipes` já recortado a ela — e
+   * sem «Todas as equipes» isso é UM chip, que leva exatamente aonde «Minha
+   * equipe» acabou de levar. Duas formas de dar o mesmo clique, uma delas
+   * escondida numa segunda linha, é a moldura vazia que o resto deste arquivo
+   * evita. A linha volta assim que houver uma equipe a mais para escolher.
+   */
+  const linhaEquipeRepetiria =
+    minhaEquipeDisponivel && !mostrarTodasEquipes
+    && equipes.length === 1 && equipes[0].id === equipeDoPerfil;
+
+  const mostrarEquipes = !soOsMeus && podeVerEquipes && !linhaEquipeRepetiria;
 
   // Nada a oferecer: o controle inteiro some em vez de virar moldura vazia.
-  if (!podeEscolherSetor && !podeVerEquipes && !mostrarIndividual) return null;
+  if (!podeEscolherSetor && !podeVerEquipes && !mostrarRegua) return null;
 
   const equipeAtiva = visao.startsWith('equipe:') ? visao.slice('equipe:'.length) : null;
 
@@ -139,30 +214,40 @@ export function FiltroEscopo({
       data-tour="filtro-escopo"
     >
       {/*
-        O interruptor vem primeiro e sozinho: é ele que decide se as outras
-        duas linhas existem, e um controle que governa os de baixo lendo-se
-        depois deles obrigaria a percorrer a caixa duas vezes para entender.
+        A régua vem primeiro e sozinha: é ela que decide se as outras duas
+        linhas existem, e um controle que governa os de baixo lendo-se depois
+        deles obrigaria a percorrer a caixa duas vezes para entender.
       */}
-      {mostrarIndividual && (
+      {mostrarRegua && (
         <div className={cn(
-          'flex items-center gap-2',
+          'flex items-center gap-2 flex-wrap',
           // A divisória só faz sentido quando há algo embaixo para separar.
           (mostrarSetores || mostrarEquipes) && 'border-b border-border pb-2',
         )}>
-          <User className="w-4 h-4 text-muted-foreground shrink-0" />
-          <label
-            htmlFor="filtro-so-os-meus"
-            className="text-xs font-medium text-muted-foreground cursor-pointer select-none"
+          <div
+            className="flex items-center gap-1 border border-border rounded-lg p-0.5 bg-muted/30"
+            role="group"
+            aria-label="Nível de visualização"
           >
-            Só os meus números
-          </label>
-          <Switch
-            id="filtro-so-os-meus"
-            checked={soOsMeus}
-            onCheckedChange={ligado => onVisao(ligado ? 'individual' : 'setor')}
-            aria-label="Ver apenas os seus próprios números"
-          />
-          {soOsMeus && (
+            {degraus.map(({ key, rotulo, titulo, Icone, alvo, ativo }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onVisao(alvo)}
+                title={titulo}
+                aria-pressed={ativo}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  ativo
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icone className="w-3.5 h-3.5 shrink-0" /> {rotulo}
+              </button>
+            ))}
+          </div>
+          {soOsMeus && (mostrarSetores || mostrarEquipes || podeEscolherSetor) && (
             <span className="text-[11px] text-muted-foreground">
               Setor e equipe não se aplicam a uma pessoa só.
             </span>
