@@ -410,8 +410,15 @@ begin
   /* As equipes NÃO comparam com o mês anterior, de propósito: subgrupo do ERP
      muda de nome entre um mês e outro, e casar por nome produziria «equipe
      nova» e «equipe que sumiu» onde houve só renomeação. Comparação de equipe
-     só depois que o vínculo com `equipes` estiver fechado. */
-  equipes as (
+     só depois que o vínculo com `equipes` estiver fechado.
+
+     O nome é `equipes_do_59` e NÃO `equipes` porque existe uma TABELA com esse
+     nome. Um CTE sombreia a tabela homônima em toda referência não qualificada
+     do mesmo comando: com o CTE chamado `equipes`, o `left join equipes eq`
+     logo abaixo pegava o CTE em vez da tabela e estourava com «column eq.id
+     does not exist» — e só em execução, porque o corpo de uma função plpgsql
+     não é planejado na criação. */
+  equipes_do_59 as (
     select a.subgrupo_equipe nome,
            a.cod_grupo_filtro cod,
            max(a.nome_grupo_filtro) carteira,
@@ -430,7 +437,7 @@ begin
   equipes_completas as (
     select e.*, me.equipe_id, eq.nome equipe_nome,
            lp.id lider_id, lp.nome lider_nome, lp.foto_url lider_foto
-      from equipes e
+      from equipes_do_59 e
       left join mestre_equipes me
         on me.empresa_id = p_empresa_id
        and me.cod_grupo_filtro = e.cod
