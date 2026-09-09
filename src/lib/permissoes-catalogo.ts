@@ -1349,14 +1349,27 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
     },
   },
+  /*
+   * A aba de formas vale nos DOIS alcances, e por isso não depende de nenhum.
+   *
+   * Ela dependia de `analitico_escopo_setor`/`analitico_escopo_todos_setores`,
+   * com o motivo de que «vive na visao de setor». Era verdade sobre a tela e
+   * falso sobre a pergunta: quem quisesse mostrar ao operador por onde entrou o
+   * dinheiro DELE tinha de lhe entregar o setor inteiro junto, porque a aba só
+   * existia na régua de `AnaliticoLider`. Uma chave que só se liga pagando um
+   * alcance que não se queria dar não é uma chave — é um pedágio.
+   *
+   * `AnaliticoOperador` passou a montar a mesma aba em modo individual
+   * (09/09/2026), e o alcance dos dados nunca esteve aqui: quem recorta é
+   * `fn_user_escopo_analitico()` no servidor, com piso «só as minhas linhas».
+   * Ligada sozinha, esta chave mostra ao operador as formas dele. Ligada junto
+   * com o escopo de setor, mostra as do setor. A chave responde «você vê esta
+   * aba»; o escopo responde «sobre quem» — duas perguntas, dois controles.
+   */
   {
     key: 'analitico_sub_formas_pagamento', label: 'Analítico: Formas de pagamento',
-    descricao: 'Abrir a aba interna de Pix, boleto e cartão por período',
+    descricao: 'Abrir a aba de Pix, boleto e cartão por período — no alcance que a pessoa já tem',
     grupo: 'Analítico', padrao: TODOS,
-    depende: {
-      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
-      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
-    },
   },
   {
     key: 'analitico_sub_ranking', label: 'Analítico: Ranking',

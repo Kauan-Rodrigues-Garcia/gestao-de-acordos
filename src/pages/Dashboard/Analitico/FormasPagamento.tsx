@@ -1,5 +1,24 @@
 /**
- * FormasPagamento — aba "Formas de pagamento" do Analítico (visão líder+).
+ * FormasPagamento — aba "Formas de pagamento" do Analítico.
+ *
+ * ## Dois modos, um componente
+ *
+ * Nasceu só para a visão de líder. Desde 09/09/2026 o OPERADOR também abre esta
+ * aba, com `individual` ligado — a mesma pergunta ("por onde entrou o meu
+ * dinheiro?") feita sobre uma pessoa só.
+ *
+ * O modo individual não é um recorte a mais: é a ausência dos controles que
+ * cruzam PESSOAS. Some o seletor de operador (uma opção só não é escolha) e
+ * some a tabela «Por operador × forma» (uma linha, que o total logo acima já
+ * diz). Fica tudo que responde sobre o período: os cards por forma, a evolução
+ * no tempo, a comparação com o mês anterior e o filtro de tabulação.
+ *
+ * O recorte dos DADOS não é feito aqui e não depende desta prop: o servidor
+ * entrega a `fn_analitico_dashboard_mes_json` já recortada por
+ * `fn_user_escopo_analitico()`, que devolve só as próprias linhas a quem não
+ * tem alcance de equipe ou setor. `individual` governa o que a tela OFERECE,
+ * nunca o que ela pode alcançar — errar esta prop esconde ou mostra controles,
+ * jamais vaza o setor.
  *
  * Responde, sobre o MESMO dinheiro que os cards do topo da aba já mostram, uma
  * pergunta que só existia no ERP: **por onde ele entrou** — Pix, Pix Automático,
@@ -89,11 +108,18 @@ interface FormasPagamentoProps {
   /** Filtro de equipe compartilhado com Ranking/Destaques. */
   equipeId: string | null;
   onEquipeChange: (equipeId: string | null) => void;
+  /**
+   * A tela é de UMA pessoa — a visão do próprio operador.
+   *
+   * Esconde os controles que só fazem sentido comparando gente: o seletor de
+   * operador e a tabela cruzada. Não recorta dado nenhum; ver o cabeçalho.
+   */
+  individual?: boolean;
 }
 
 export function FormasPagamento({
   empresaId, mes, setorId, setorNome, isPaguePlay, mostrarHO,
-  equipes, resumos, vinculos, equipeId, onEquipeChange,
+  equipes, resumos, vinculos, equipeId, onEquipeChange, individual = false,
 }: FormasPagamentoProps) {
   const { tickColor, gridColor } = useAxisColors();
 
@@ -350,21 +376,24 @@ export function FormasPagamento({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <select
-              value={operadorId ?? ''}
-              onChange={e => setOperadorId(e.target.value || null)}
-              className="h-8 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary max-w-[200px]"
-            >
-              <option value="">Todos os operadores</option>
-              {operadoresDoRecorte.map(r => (
-                <option key={r.operador_id} value={r.operador_id}>
-                  {r.operador_nome ?? r.operador_usuario}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* «Todos os operadores» + uma pessoa é um menu de uma opção. */}
+          {!individual && (
+            <div className="flex items-center gap-2">
+              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <select
+                value={operadorId ?? ''}
+                onChange={e => setOperadorId(e.target.value || null)}
+                className="h-8 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary max-w-[200px]"
+              >
+                <option value="">Todos os operadores</option>
+                {operadoresDoRecorte.map(r => (
+                  <option key={r.operador_id} value={r.operador_id}>
+                    {r.operador_nome ?? r.operador_usuario}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <ListFilter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -616,7 +645,10 @@ export function FormasPagamento({
             </Card>
           )}
 
-          {/* ── Quem recebeu por qual forma ─────────────────────────────── */}
+          {/* ── Quem recebeu por qual forma ───────────────────────────────
+              Cruza PESSOAS por forma. Na visão individual seria uma linha só,
+              repetindo o total que os cards já deram. */}
+          {!individual && (
           <Card className="border-border">
             <CardHeader className="pb-2 pt-3.5 px-4">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -742,6 +774,7 @@ export function FormasPagamento({
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* ── De onde vem cada número ─────────────────────────────────── */}
           <div className="flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed px-1">
@@ -751,8 +784,11 @@ export function FormasPagamento({
               recorte <span className="text-foreground">{escopoLabel}</span>. Cada linha do
               analítico consolida as parcelas do mesmo cliente/NR e carrega a forma do primeiro
               pagamento — para o pagamento a pagamento, veja a aba{' '}
-              <span className="text-foreground">Recebimento diário</span>. Operador clonado
-              aparece na equipe de origem; use o filtro de equipe para ver o que conta em cada uma.
+              <span className="text-foreground">Recebimento diário</span>.
+              {individual
+                ? ' São os seus recebimentos: o relatório entrega só as suas linhas.'
+                : ' Operador clonado aparece na equipe de origem; use o filtro de equipe'
+                  + ' para ver o que conta em cada uma.'}
               {compararAtivo
                 ? ' A variação compara meses inteiros.'
                 : ' A variação contra o mês anterior aparece quando o período é o mês todo.'}

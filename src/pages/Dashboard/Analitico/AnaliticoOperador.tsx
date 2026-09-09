@@ -1,13 +1,29 @@
 /**
  * AnaliticoOperador — visão do operador (cargo 1)
+ *
  * Aba "Meus recebimentos": lista os próprios acordos pagos no ERP com status
  * de tabulação. Aba "Ranking": pódio de recebimento de todos os operadores da
  * empresa no mês (via RPC fn_analitico_resumo_por_operador), com a posição do
- * próprio operador destacada.
+ * próprio operador destacada. Aba "Formas de pagamento": por onde o dinheiro
+ * DELE entrou — Pix, Boleto, Cartão — no período.
+ *
+ * ## A aba de formas, e por que ela não era possível antes
+ *
+ * `analitico_sub_formas_pagamento` exigia `analitico_escopo_setor` ou
+ * `analitico_escopo_todos_setores`, porque a aba só existia na régua de
+ * `AnaliticoLider`. Quem quisesse dar ao operador a visão das PRÓPRIAS formas
+ * tinha de lhe dar o setor inteiro junto — não havia como pedir uma sem a
+ * outra, e o que se ganhava de leitura se pagava em alcance.
+ *
+ * A dependência caiu em 09/09/2026. O que a torna segura é o servidor:
+ * `fn_analitico_dashboard_mes_json` recorta por `fn_user_escopo_analitico()`,
+ * cujo piso é 0 = «só as minhas linhas». Sem alcance de equipe ou setor, o
+ * operador recebe do banco apenas o que é dele — a tela não tem como mostrar o
+ * setor porque o setor não chega até ela.
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { CalendarDays, X, ListChecks, Trophy, TrendingUp, CreditCard } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
+import { CalendarDays, X, ListChecks, Trophy, TrendingUp, CreditCard, Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KpiTile } from '@/components/KpiTile';
@@ -20,6 +36,8 @@ import { useTenant } from '@/lib/tenant-config';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { TabulacaoCell } from './TabulacaoCell';
 import { RankingView } from './RankingView';
+import type { VinculosOperador } from './agregacaoLider';
+
 import {
   buscarResumoOperadoresAnalitico,
   type ResumoOperadorAnalitico,
@@ -29,7 +47,20 @@ import {
   intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
 } from '@/pages/Analitico/recorte';
 
-type AbaOperador = 'meus' | 'ranking';
+/*
+ * Carregada só quando a aba abre.
+ *
+ * `FormasPagamento` traz recharts, o React Query do analítico e o gráfico de
+ * barras junto. Importada de cima, esse peso entrava no primeiro render de
+ * TODA visão de operador — inclusive a de quem nunca abre a aba, e inclusive
+ * quem não tem a chave. O teste de fumaça desta tela mediu o custo antes da
+ * gente: 9,9 s para montar, contra menos de um segundo com o `lazy`.
+ */
+const FormasPagamento = lazy(() =>
+  import('./FormasPagamento').then(m => ({ default: m.FormasPagamento })),
+);
+
+type AbaOperador = 'meus' | 'ranking' | 'formas';
 
 interface AnaliticoOperadorProps {
   dados: AnaliticoRecebimento[];
@@ -41,6 +72,8 @@ interface AnaliticoOperadorProps {
   recorte: Recorte;
   liderId?: string | null;
   podeVerRanking: boolean;
+  /** `analitico_sub_formas_pagamento` — a aba das PRÓPRIAS formas. */
+  podeVerFormas: boolean;
   onAbrirNovoAcordo: (dados: {
     instituicao: string;
     nomeCliente: string;
@@ -70,7 +103,7 @@ function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: str
 
 export function AnaliticoOperador({
   dados, loading, operadorId, operadorNome, empresaId, recorte, liderId, podeVerRanking,
-  onAbrirNovoAcordo, onVerAcordo, onRefetch,
+  podeVerFormas, onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
@@ -106,8 +139,14 @@ export function AnaliticoOperador({
       setAbaOp('meus');
       return;
     }
+    // Mesma guarda do ranking: revogar a chave com a aba aberta deixaria a
+    // pessoa parada num painel que ela já não pode ver.
+    if (!podeVerFormas && abaOp === 'formas') {
+      setAbaOp('meus');
+      return;
+    }
     if (podeVerRanking && abaOp === 'ranking') void carregarRanking();
-  }, [abaOp, carregarRanking, podeVerRanking]);
+  }, [abaOp, carregarRanking, podeVerRanking, podeVerFormas]);
 
   /*
    * A posição já é sabida por quem tem o ranking liberado. Mostrá-la no topo
@@ -167,11 +206,43 @@ export function AnaliticoOperador({
   const abasDoOperador: AbaSegmentada<AbaOperador>[] = [
     { key: 'meus', label: 'Meus recebimentos', Icon: ListChecks },
     ...(podeVerRanking ? [{ key: 'ranking' as const, label: 'Ranking', Icon: Trophy }] : []),
+    ...(podeVerFormas
+      ? [{ key: 'formas' as const, label: 'Formas de pagamento', Icon: Wallet }]
+      : []),
   ];
+
+  /*
+   * O «resumo» de uma pessoa só.
+   *
+   * `FormasPagamento` usa esta lista para dar NOME a quem aparece na tela, e
+   * nada mais — quem decide o que entra na conta é o escopo, e o escopo aqui é
+   * o que o servidor entregou. Montar a lista a partir do próprio perfil evita
+   * uma ida a `fn_analitico_resumo_por_operador` (a do ranking) só para
+   * escrever um nome que a tela já tem em mãos.
+   *
+   * Os totais vão zerados de propósito: não são lidos no modo individual, e
+   * preenchê-los com um número aproximado criaria uma segunda fonte para um
+   * valor que o painel já calcula.
+   */
+  const resumoProprio = useMemo(() => [{
+    operador_id: operadorId,
+    operador_usuario: operadorNome,
+    operador_nome: operadorNome,
+    total_recebido: 0,
+    total_ho: 0,
+    total_pagamentos: 0,
+  }], [operadorId, operadorNome]);
+
+  /** Sem equipe e sem clone: no modo individual nada é filtrado por vínculo. */
+  const semVinculos: VinculosOperador = useMemo(() => ({
+    operadorEquipeMap: {},
+    equipesExtras: {},
+    setorDaEquipe: new Map(),
+  }), []);
 
   return (
     <div className="space-y-4">
-      {/* Abas internas: Meus recebimentos × Ranking */}
+      {/* Abas internas: Meus recebimentos × Ranking × Formas de pagamento */}
       <AbasSegmentadas
         abas={abasDoOperador}
         ativa={abaOp}
@@ -427,6 +498,35 @@ export function AnaliticoOperador({
             <RankingView resumos={ranking} destaqueOperadorId={operadorId} operadoresOcultos={operadoresOcultos} />
           )}
         </div>
+      )}
+
+      {/* ── Aba: Formas de pagamento ──────────────────────────────────────
+          O MESMO componente da visão de líder, em modo individual. Sem
+          `setorId` e sem equipes: o servidor já entregou só as linhas desta
+          pessoa, e passar um setor aqui pediria à tela um recorte que os dados
+          não têm — devolvendo vazio como se ela não tivesse recebido nada. */}
+      {podeVerFormas && abaOp === 'formas' && (
+        <Suspense fallback={(
+          <div className="space-y-2 animate-pulse">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 bg-muted rounded-lg" />
+            ))}
+          </div>
+        )}>
+        <FormasPagamento
+          empresaId={empresaId}
+          mes={mes}
+          setorId={null}
+          isPaguePlay={mostrarHO}
+          mostrarHO={mostrarHO}
+          equipes={[]}
+          resumos={resumoProprio}
+          vinculos={semVinculos}
+          equipeId={null}
+          onEquipeChange={() => {}}
+          individual
+        />
+        </Suspense>
       )}
     </div>
   );

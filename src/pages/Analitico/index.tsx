@@ -503,6 +503,7 @@ export default function PaginaAnalitico() {
           recorte={recorte}
           liderId={liderId}
           podeVerRanking={temPermissao('analitico_sub_ranking')}
+          podeVerFormas={temPermissao('analitico_sub_formas_pagamento')}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}

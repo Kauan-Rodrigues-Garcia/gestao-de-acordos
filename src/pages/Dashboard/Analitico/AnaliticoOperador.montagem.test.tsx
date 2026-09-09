@@ -7,6 +7,10 @@
  *
  * Aqui a pergunta é uma só: a tela abre, com e sem ranking liberado, nas três
  * lentes? Uma exceção no render falha o teste.
+ *
+ * A aba «Formas de pagamento» entrou em 09/09/2026 e trouxe uma regra que os
+ * casos abaixo travam: ela aparece com a chave e SÓ com a chave. Sem isso, o
+ * operador cuja permissão foi desligada continuaria com o botão na régua.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -47,6 +51,7 @@ describe('AnaliticoOperador monta', () => {
     empresaId: 'empresa-1',
     liderId: null,
     podeVerRanking: false,
+    podeVerFormas: false,
     onAbrirNovoAcordo: vi.fn(),
     onVerAcordo: vi.fn(),
     onRefetch: vi.fn(),
@@ -71,6 +76,20 @@ describe('AnaliticoOperador monta', () => {
     expect(() => render(
       <AnaliticoOperador {...props} podeVerRanking recorte={{ modo: 'mes', mes: '2026-09' }} />,
     )).not.toThrow();
+  });
+
+  it('sem a chave, a aba de formas não entra na régua', async () => {
+    const { AnaliticoOperador } = await import('./AnaliticoOperador');
+    render(<AnaliticoOperador {...props} recorte={{ modo: 'mes', mes: '2026-09' }} />);
+    expect(screen.queryByRole('button', { name: /Formas de pagamento/ })).not.toBeInTheDocument();
+  });
+
+  it('com a chave, a aba de formas aparece', async () => {
+    const { AnaliticoOperador } = await import('./AnaliticoOperador');
+    render(
+      <AnaliticoOperador {...props} podeVerFormas recorte={{ modo: 'mes', mes: '2026-09' }} />,
+    );
+    expect(screen.getByRole('button', { name: /Formas de pagamento/ })).toBeInTheDocument();
   });
 
   it('monta sem nenhum recebimento', async () => {
