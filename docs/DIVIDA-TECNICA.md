@@ -107,3 +107,77 @@ elimina a ambiguidade de vez.
 - Precisa da chave? Use `fn_nr_campo_chave` no banco e
   `isPaguePlay ? 'instituicao' : 'nr_cliente'` no frontend. Não escreva uma
   terceira versão da regra.
+
+---
+
+## 2. Consulta dentro de função `plpgsql` só é validada quando roda
+
+🟡 **Status:** aberto · **Registrado em:** 2026-09-08 · **Bugs que já causou:** 1
+
+### O problema em uma frase
+
+O corpo de uma função `plpgsql` **não é planejado na criação**: erro de coluna,
+de tabela ou de tipo dentro dela só aparece na primeira execução — em produção,
+como um 400 na cara do usuário.
+
+### O bug que isto custou
+
+`fn_mestre_diretoria_setor` (Painel Diretoria, aba Setores e equipes) subiu com
+um CTE chamado `equipes`, que **sombreia a tabela `equipes`**. Em Postgres o
+nome de um CTE tem precedência sobre a tabela homônima em qualquer referência
+não qualificada do mesmo comando, então este join:
+
+```sql
+left join equipes eq on eq.id = me.equipe_id
+```
+
+pegava o CTE — que tem `nome`, `cod`, `valor` e nenhum `id` — em vez da tabela.
+
+O `CREATE OR REPLACE` passou. A verificação da migration passou. Só quebrou
+quando alguém clicou num setor: `column eq.id does not exist`. Corrigido em
+`44f36f9` renomeando o CTE para `equipes_do_59`.
+
+### Por que a verificação da migration não pegou
+
+Duas razões somadas, e as duas continuam valendo para qualquer função nova:
+
+1. O bloco `do $$` exercitava só `fn_mestre_diretoria_setores` (a grade), nunca
+   a `_setor` (o detalhe).
+2. **Chamar a `_setor` ali também não teria pego.** A primeira coisa que ela faz
+   é o portão de acesso (`fn_user_is_super_admin() or fn_can_access_empresa()`),
+   que lê `auth.uid()`. Dentro de uma migration não há sessão, `auth.uid()` é
+   nulo, e a função levanta `Sem acesso a esta empresa` **antes** de planejar a
+   consulta principal.
+
+### Caminho de saída
+
+Mover a consulta para uma função `language sql` interna, chamada pela `plpgsql`
+depois do portão. Funções SQL **são** parseadas e validadas na criação
+(`check_function_bodies` está ligado por padrão), então o erro de coluna
+apareceria no `apply` e a migration abortaria — que é onde ele deve aparecer.
+
+A `plpgsql` externa fica com o que ela é boa: portão, validação de parâmetro e
+resolução do dia de corte. A consulta fica na SQL, validada.
+
+### Enquanto não for resolvido
+
+- **Nunca dê a um CTE o nome de uma tabela existente.** É a única proteção real
+  que sobra hoje. Para conferir de uma vez:
+
+  ```sh
+  # CTEs das migrations novas × tabelas do schema
+  sed -n 's/^[[:space:]]*\([a-z_0-9]\{1,\}\) as (.*/\1/p' supabase/migrations/SUA.sql | sort -u > /tmp/ctes
+  sed -n 's/^      \([a-z_0-9]\{1,\}\): {$/\1/p' src/lib/database.types.ts | sort -u > /tmp/tabelas
+  comm -12 /tmp/ctes /tmp/tabelas   # tem que sair vazio
+  ```
+
+  Atenção: `grep -P` falha por locale neste ambiente e devolve lista vazia, que
+  o `comm` lê como "nenhuma colisão". Use `sed`, e confira a contagem de linhas
+  antes de acreditar no resultado.
+
+- Depois de aplicar uma função `plpgsql` nova, **abra a tela que a usa** antes de
+  fechar a sessão. Migration verde não é função testada.
+
+- `CREATE OR REPLACE FUNCTION` **descarta as cláusulas `SET` ausentes da nova
+  definição**. Se a função tinha `statement_timeout` por `ALTER FUNCTION`,
+  reaplique o `ALTER` junto do replace, ou o teto some em silêncio.

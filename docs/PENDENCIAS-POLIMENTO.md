@@ -91,3 +91,16 @@ dívidas de segurança ou desempenho já existentes.
   concluída.
 - A suíte consolidada passou com 138 arquivos e 2.303 testes; lint, typecheck,
   cobertura, build e CI estavam verdes ao fechar esta rodada.
+
+## P1 — Painel Diretoria e o relatório 59 (aberto em 2026-09-08)
+
+Fases 1 e 2 do Painel Diretoria estão no ar na BookPlay. O que falta:
+
+- [ ] **Fase 3: sincronizar o 58 com o 59.** É o item grande, e tem documento
+  próprio: `SINCRONIZACAO-58-59.md`. Nada é sincronizado hoje — o 59 alimenta só
+  o Painel Diretoria, por restrição explícita de quem pediu.
+- [ ] Consulta dentro de função `plpgsql` só é validada em execução — já custou
+  um 400 em produção. Ver `DIVIDA-TECNICA.md` § 2 para o caminho de saída
+  (mover a consulta para uma função `language sql` interna).
+- [ ] Trazer a PaguePlay para o painel novo quando ela tiver um 59 equivalente.
+  A chave é `usaPainel59` em `PainelDiretoria/index.tsx`.
