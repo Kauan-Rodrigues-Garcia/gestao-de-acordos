@@ -33,6 +33,7 @@ import { COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
 import { MetricCard } from '@/components/AnalyticsPanel/SubComponents';
 import { containerVariants } from '@/components/AnalyticsPanel/constants';
 import { CardMetaDonut } from './CardMetaDonut';
+import { AnelProjecao } from './AnelProjecao';
 import type { DadosPainelMetas } from '@/hooks/usePainelMetas';
 
 /** Grade que se reacomoda sozinha conforme cards entram e saem. */
@@ -216,13 +217,21 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
             hierarquia de tipografia. */}
         {projecao && (
           <>
+            {/* O único card da grade cujo valor não é um número escrito: a
+                projeção é uma FRAÇÃO de um todo, e o anel é a forma dela. O
+                card, a célula que ocupa, o rótulo e a linha de apoio seguem os
+                mesmos — e a conta também. Ver `AnelProjecao`. */}
             <MetricCard
               label="Projeção"
               icon={<Gauge className="w-4 h-4" />}
               accentColor={corProj}
               gradientFrom={corProj}
               trend={projecao.projecaoPct >= 100 ? 'up' : 'down'}
-              value={<span style={{ color: corProj }}>{projecao.projecaoPct}%</span>}
+              value={(
+                <div className="flex justify-center py-1">
+                  <AnelProjecao pct={projecao.projecaoPct} cor={corProj} />
+                </div>
+              )}
               sub="do esperado até hoje"
             />
 
