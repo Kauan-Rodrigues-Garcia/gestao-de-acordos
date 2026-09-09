@@ -16,7 +16,8 @@
 import { supabase } from '@/lib/supabase';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { Database } from '@/lib/database.types';
-import { primeiroDiaDoMes, type MesRef } from '@/lib/mesReferencia';
+import { primeiroDiaDoMes, ultimoDiaDoMes, type MesRef } from '@/lib/mesReferencia';
+import { FORMAS_RECORRENTES } from '@/lib/formasRecorrentes';
 
 type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
 type PixAutoAcordoUpdate = Database['public']['Tables']['pix_automatico_acordos']['Update'];
@@ -118,6 +119,18 @@ export interface PixAutoAcordo {
    * vezes.
    */
   extra: boolean;
+  /**
+   * Esta linha nasceu de um pedido de NR duplicado aprovado pelos líderes.
+   *
+   * É o que a tira do índice `idx_pix_auto_nr_unico`, que desde a migration
+   * 20260909110000 é parcial. Sem a coluna, autorizar estourava com
+   * «duplicate key value violates unique constraint» — o trigger abria a porta
+   * e o índice fechava logo atrás.
+   *
+   * Opcional no tipo porque a coluna só entra no `database.types` gerado
+   * depois da migration.
+   */
+  duplicidade_autorizada?: boolean;
   criado_em: string;
   atualizado_em: string;
 }
@@ -272,30 +285,88 @@ export function formatarCopiaPix(
 // ── Acordos ────────────────────────────────────────────────────────────────
 
 /**
+ * Quantas linhas cada ida ao servidor traz.
+ *
+ * O PostgREST tem teto de linhas por resposta (`db-max-rows`, 1.000 no padrão
+ * da Supabase) e ele corta **em silêncio**: a resposta vem com 200 OK e mil
+ * linhas, sem aviso de que havia mais. Uma página menor que o teto garante que
+ * "veio página cheia" signifique "pode haver mais", e não "bateu no teto".
+ */
+const PIX_PAGINA_SERVIDOR = 1000;
+
+/**
+ * Teto de segurança: 200 mil linhas.
+ *
+ * Não é limite de negócio — é a trava contra laço infinito se o servidor
+ * passar a devolver sempre página cheia (um filtro que o PostgREST ignore, por
+ * exemplo). Melhor devolver muito e seguir do que travar a aba carregando.
+ */
+const PIX_MAX_PAGINAS = 200;
+
+/**
+ * Percorre uma consulta até o fim, página por página.
+ *
+ * `montar(de, ate)` devolve a consulta já com o `range` aplicado — cada
+ * chamador monta os próprios filtros, e aqui só se cuida do laço.
+ *
+ * Existe porque as consultas da aba não tinham `range` nenhum: acima do teto
+ * do PostgREST, meses antigos sumiam dos cards sem erro na tela, e a lista de
+ * NRs bloqueados ficava incompleta — o pior dos dois, porque a tela então
+ * PROMETIA um registro que o trigger recusaria depois.
+ */
+async function paginarTudo<T>(
+  rotulo: string,
+  montar: (de: number, ate: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+): Promise<{ linhas: T[]; ok: boolean }> {
+  const tudo: T[] = [];
+  for (let pagina = 0; pagina < PIX_MAX_PAGINAS; pagina++) {
+    const de = pagina * PIX_PAGINA_SERVIDOR;
+    const { data, error } = await montar(de, de + PIX_PAGINA_SERVIDOR - 1);
+    if (error) {
+      console.warn(`[pix_automatico.service] ${rotulo}:`, error.message);
+      // Devolve o que já veio: meia lista com aviso no console é melhor que a
+      // aba vazia, e quem chama decide o que fazer com `ok`.
+      return { linhas: tudo, ok: false };
+    }
+    const lote = (data as T[] | null) ?? [];
+    tudo.push(...lote);
+    if (lote.length < PIX_PAGINA_SERVIDOR) break;
+  }
+  return { linhas: tudo, ok: true };
+}
+
+/**
  * Acordos Pix da empresa.
  *
  * `setorId` existe porque a RLS de líder é da EMPRESA, não do setor: sem ele, o
  * líder do Receptivo puxava os acordos (e os operadores, e as equipes) de todos
  * os setores. O recorte é pelo setor CARIMBADO na linha — o mesmo critério do
  * filtro da tela —, então quem mudou de setor não leva o histórico junto.
+ *
+ * Traz o conjunto INTEIRO, paginando (ver `paginarTudo`). Os totais da aba são
+ * somas sobre tudo o que o filtro alcança; com o corte mudo do PostgREST em
+ * mil linhas, a empresa que passasse disso veria os meses mais antigos
+ * desaparecerem dos cards sem nenhum erro na tela.
  */
 export async function fetchAcordosPix(
   empresaId: string,
   opts?: { operadorId?: string; setorId?: string | null },
 ): Promise<PixAutoAcordo[]> {
-  let q = supabase
-    .from('pix_automatico_acordos')
-    .select('*')
-    .eq('empresa_id', empresaId)
-    .order('criado_em', { ascending: false });
-  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
-  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
-  const { data, error } = await q;
-  if (error) {
-    console.warn('[pix_automatico.service] fetchAcordosPix:', error.message);
-    return [];
-  }
-  return (data as unknown as PixAutoAcordo[]) ?? [];
+  const { linhas } = await paginarTudo<PixAutoAcordo>('fetchAcordosPix', (de, ate) => {
+    let q = supabase
+      .from('pix_automatico_acordos')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      // A ordem tem de ser TOTAL, senão duas páginas podem repetir ou pular
+      // uma linha: `criado_em` empata entre registros do mesmo lote, e o `id`
+      // é o desempate estável.
+      .order('criado_em', { ascending: false })
+      .order('id', { ascending: false });
+    if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+    if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
+    return q.range(de, ate);
+  });
+  return linhas;
 }
 
 /**
@@ -485,7 +556,14 @@ export async function criarAcordoPix(p: {
    * Só a tela preenche, e só quando está olhando um mês que não é o corrente.
    */
   dia?: string | null;
-}): Promise<{ ok: boolean; error?: string; nrDuplicado?: boolean }> {
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  /** O NR é de OUTRA pessoa: cabe pedido de autorização. */
+  nrDuplicado?: boolean;
+  /** O NR já é desta mesma pessoa: é engano, não pedido. */
+  nrMesmoOperador?: boolean;
+}> {
   const criadoEm = p.dia ? instanteDoDiaPix(p.dia) : null;
   const { error } = await supabase.from('pix_automatico_acordos').insert({
     empresa_id:    p.empresaId,
@@ -501,15 +579,28 @@ export async function criarAcordoPix(p: {
   });
   if (error) {
     /*
-     * O trigger `fn_pix_nr_bloqueia_duplicado` recusa com `unique_violation`.
+     * Duas recusas diferentes do trigger `fn_pix_nr_bloqueia_duplicado`, e a
+     * tela precisa separá-las (v6, migration 20260909110000):
      *
-     * A tela precisa distinguir esse caso dos outros: aqui não é erro, é o
-     * ponto onde se oferece o pedido de autorização ao líder. Sem o
-     * sinalizador, ela mostraria «erro ao registrar» e a pessoa desistiria.
+     *   • `PIX_NR_MESMO_OPERADOR` (`restrict_violation`) — a pessoa já tem esse
+     *     NR. Não há duplicidade a autorizar: é a mesma linha duas vezes, e
+     *     mandar isso para a fila do líder pediria a ele que decidisse sobre um
+     *     engano de digitação;
+     *
+     *   • `unique_violation` — o NR é de OUTRA pessoa. Aqui não é erro, é o
+     *     ponto onde se oferece o pedido de autorização aos líderes dos dois
+     *     setores. Sem o sinalizador, a tela mostraria «erro ao registrar» e a
+     *     pessoa desistiria.
      */
-    const duplicado = error.code === '23505'
-      || /já está registrado no Pix/i.test(error.message);
-    return { ok: false, error: error.message, nrDuplicado: duplicado };
+    const mesmoOperador = /PIX_NR_MESMO_OPERADOR/i.test(error.message);
+    const duplicado = !mesmoOperador
+      && (error.code === '23505' || /já está registrado no Pix/i.test(error.message));
+    return {
+      ok: false,
+      error: mesmoOperador ? MSG_NR_MESMO_OPERADOR : error.message,
+      nrDuplicado: duplicado,
+      nrMesmoOperador: mesmoOperador,
+    };
   }
   return { ok: true };
 }
@@ -545,15 +636,142 @@ export interface LinhaPixLote {
  * tela promete o que o banco recusa (ou pior: o contrário).
  */
 export async function fetchNrsBloqueados(empresaId: string): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from('pix_automatico_acordos')
-    .select('nr_cliente')
-    .eq('empresa_id', empresaId);
-  if (error) {
-    console.warn('[pix_automatico.service] fetchNrsBloqueados:', error.message);
-    return new Set();
+  return new Set((await fetchDonosDeNrPix(empresaId)).keys());
+}
+
+/** Quem está com um NR hoje: nome para a tela, id para decidir de quem é. */
+export interface DonoDeNrPix {
+  operadorId: string;
+  operadorNome: string | null;
+  setorId: string | null;
+}
+
+/**
+ * NR normalizado → quem o registrou.
+ *
+ * Existe porque a regra de duplicidade passou a depender de QUEM é o dono
+ * (09/09/2026): o mesmo NR na mão da mesma pessoa é engano — não vai para a
+ * fila de autorização —, e na mão de outra pessoa é o pedido dos dois líderes.
+ * Só com o Set de NRs a tela não saberia qual dos dois caminhos oferecer.
+ *
+ * Guarda o registro MAIS ANTIGO de cada NR, que é o que `fn_pix_nr_pedir`
+ * escolhe como conflito. Duas telas dizendo donos diferentes do mesmo NR seria
+ * pior que não dizer nada.
+ *
+ * Paginado: acima do teto do PostgREST a lista vinha cortada em silêncio, e aí
+ * a tela deixava a pessoa registrar um NR que o trigger recusaria — o caminho
+ * mais confuso possível, porque o erro só aparece no fim.
+ */
+export async function fetchDonosDeNrPix(
+  empresaId: string,
+): Promise<Map<string, DonoDeNrPix>> {
+  const { linhas } = await paginarTudo<{
+    id: string; nr_cliente: string; operador_id: string;
+    operador_nome: string | null; setor_id: string | null; criado_em: string;
+  }>(
+    'fetchDonosDeNrPix',
+    (de, ate) => supabase
+      .from('pix_automatico_acordos')
+      .select('id, nr_cliente, operador_id, operador_nome, setor_id, criado_em')
+      .eq('empresa_id', empresaId)
+      .order('id', { ascending: true })
+      .range(de, ate),
+  );
+
+  const donos = new Map<string, DonoDeNrPix & { criadoEm: string }>();
+  for (const r of linhas) {
+    const chave = normalizarNr(r.nr_cliente);
+    const atual = donos.get(chave);
+    if (atual && String(atual.criadoEm) <= String(r.criado_em)) continue;
+    donos.set(chave, {
+      operadorId: r.operador_id,
+      operadorNome: r.operador_nome,
+      setorId: r.setor_id,
+      criadoEm: r.criado_em,
+    });
   }
-  return new Set(((data ?? []) as { nr_cliente: string }[]).map(r => normalizarNr(r.nr_cliente)));
+
+  const saida = new Map<string, DonoDeNrPix>();
+  for (const [nr, d] of donos) {
+    saida.set(nr, { operadorId: d.operadorId, operadorNome: d.operadorNome, setorId: d.setorId });
+  }
+  return saida;
+}
+
+// ── O acordo que ficou só na aba Acordos ───────────────────────────────────
+//
+// PIX Automático e Cartão Recorrente são tabulados na lista de acordos como
+// qualquer outra forma de pagamento — e a comissão deles NÃO sai dali: sai
+// desta aba, que tem tabela, meta e percentual próprios
+// (ver `lib/formasRecorrentes.ts`).
+//
+// Quem tabula e não registra aqui perde a comissão e a dobra, sem nenhum sinal
+// de que perdeu. O aviso pós-gravação (`ModalAvisoPixAutomatico`) cobre quem
+// acabou de lançar; quem fechou a janela, lançou por importação ou lançou
+// ontem não tinha nada. Esta lista é esse "nada".
+//
+// O caminho contrário — registrar aqui um NR que já está na lista de acordos —
+// nunca foi duplicidade e continua não sendo: são duas tabelas que não se
+// falam, é o mesmo acordo da mesma pessoa acompanhado nos dois lugares, e é
+// exatamente assim que ele entra na premiação.
+
+/** Um acordo recorrente que ainda não tem registro nesta aba. */
+export interface AcordoSemRegistroPix {
+  id: string;
+  nr_cliente: string;
+  valor: number;
+  vencimento: string;
+  /** `pix_automatico` ou `cartao_recorrente`. */
+  tipo: string;
+  operador_id: string;
+  operador_nome: string | null;
+  setor_id: string | null;
+}
+
+/**
+ * Acordos de forma recorrente do mês que não têm registro no Pix.
+ *
+ * A comparação é com os NRs registrados **pela mesma pessoa**: um NR que outro
+ * operador registrou aqui não quita a pendência de quem tabulou o acordo — ao
+ * contrário, é justamente o caso que vira pedido de autorização.
+ *
+ * `nrsDoOperador` vem de quem chama porque a aba já carregou os registros do
+ * Pix: pedi-los de novo seria uma segunda ida ao servidor para responder o que
+ * já está na memória.
+ */
+export async function fetchAcordosRecorrentesSemPix(p: {
+  empresaId: string;
+  mes: MesRef;
+  /** Recorte de quem olha. Operador vê os seus; líder, os do setor. */
+  operadorId?: string | null;
+  setorId?: string | null;
+  /** NRs (normalizados) que a pessoa já registrou nesta aba. */
+  nrsDoOperador: ReadonlySet<string>;
+}): Promise<AcordoSemRegistroPix[]> {
+  const { linhas } = await paginarTudo<AcordoSemRegistroPix & { status: string }>(
+    'fetchAcordosRecorrentesSemPix',
+    (de, ate) => {
+      let q = supabase
+        .from('acordos')
+        .select('id, nr_cliente, valor, vencimento, tipo, operador_id, operador_nome, setor_id, status')
+        .eq('empresa_id', p.empresaId)
+        // O mês de um acordo é o do VENCIMENTO — a mesma régua do fechamento e
+        // do bloqueio de mês fechado (ver `lib/fechamentoMes`).
+        .gte('vencimento', primeiroDiaDoMes(p.mes))
+        .lte('vencimento', ultimoDiaDoMes(p.mes))
+        .in('tipo', [...FORMAS_RECORRENTES])
+        // Acordo não pago não rende comissão de Pix: cobrar o registro dele
+        // seria mandar a pessoa lançar o que não vai ser pago.
+        .neq('status', 'nao_pago');
+      if (p.operadorId) q = q.eq('operador_id', p.operadorId);
+      if (p.setorId)    q = q.eq('setor_id', p.setorId);
+      return q.order('vencimento', { ascending: true }).order('id', { ascending: true }).range(de, ate);
+    },
+  );
+
+  return linhas
+    .filter(a => !p.nrsDoOperador.has(normalizarNr(a.nr_cliente)))
+    .map(({ status: _status, ...a }) => a);
 }
 
 /** Histórico completo de NRs da empresa (para consulta/ferramentas futuras). */
@@ -902,9 +1120,13 @@ export const PIX_DIAS_UTEIS_EXPURGO = 2;
 /**
  * Apaga os desaprovados cujo prazo já venceu e devolve quantos saíram.
  *
- * Chamada ao abrir a tela: não há job agendado neste projeto, e o expurgo
- * precisa acontecer mesmo assim. É idempotente e barata (índice por status), e
- * a policy do banco garante que só líder+ da empresa consegue executar.
+ * Chamada ao abrir a tela para ADIANTAR o expurgo de quem está olhando. Desde
+ * a migration 20260909100000 quem garante que ele acontece é o trabalho diário
+ * `pix-expurga-desaprovados` no pg_cron — antes disso, um desaprovado ficava
+ * ocupando o NR enquanto ninguém abrisse a aba.
+ *
+ * É idempotente e barata (índice por status), e a policy do banco garante que
+ * só líder+ da empresa consegue executar.
  *
  * Migration ausente → devolve 0 sem barulho, no mesmo padrão de
  * `fetchNrsBloqueados`: o recurso some, o resto da tela segue.
@@ -1344,6 +1566,13 @@ export interface PixNrPedido {
    */
   conflito_acordo_id: string | null;
   conflito_operador: string | null;
+  /** Quem é o dono do registro que já existia. Ver `ladosDoPedidoNr`. */
+  conflito_operador_id?: string | null;
+  /**
+   * Setor do registro que já existia — é ele que diz QUEM é o segundo líder a
+   * assinar. `null` (ou igual ao setor de quem pede) exige uma assinatura só.
+   */
+  conflito_setor_id?: string | null;
   conflito_valor: number | null;
   conflito_status: string | null;
   conflito_em: string | null;
@@ -1360,6 +1589,18 @@ export interface PixNrPedido {
 
 /** Traduz o `RAISE EXCEPTION` do banco para a frase que a tela mostra. */
 function mensagemPedidoNr(bruta: string): string {
+  if (/PIX_NR_MESMO_OPERADOR/i.test(bruta)) {
+    return MSG_NR_MESMO_OPERADOR;
+  }
+  if (/PIX_NR_LADO_JA_DECIDIDO/i.test(bruta)) {
+    return 'O seu setor já assinou este pedido — falta a decisão do outro setor.';
+  }
+  if (/PIX_NR_SEM_LADO|PIX_NR_LADO_NAO_PERMITIDO/i.test(bruta)) {
+    return 'Você não decide por nenhum dos setores deste pedido.';
+  }
+  if (/PIX_NR_LADO_INVALIDO/i.test(bruta)) {
+    return 'Este pedido não tem esse lado — recarregue a fila.';
+  }
   if (/nao esta registrado|não está registrado/i.test(bruta)) {
     return 'Este NR não está mais registrado — faça o registro normal.';
   }
@@ -1370,6 +1611,142 @@ function mensagemPedidoNr(bruta: string): string {
     return 'Você não tem permissão para decidir autorizações do Pix.';
   }
   return bruta.replace(/^.*?:\s*/, '') || 'Não foi possível concluir.';
+}
+
+/**
+ * O NR já é desta mesma pessoa — não há duplicidade a autorizar.
+ *
+ * Fica numa constante porque três caminhos chegam nela (o INSERT recusado pelo
+ * trigger, o pedido recusado pela RPC, e a checagem antecipada da tela) e as
+ * três precisam dizer a MESMA coisa: se uma falasse em «pedir ao líder», o
+ * operador ficaria esperando uma autorização que ninguém vai dar.
+ */
+export const MSG_NR_MESMO_OPERADOR =
+  'Você já registrou este NR no Pix automático. O mesmo acordo não entra duas vezes — '
+  + 'se o valor está errado, edite o registro que já existe.';
+
+// ── Os dois lados de um pedido ──────────────────────────────────────────────
+
+/** Os lados que assinam um pedido de NR duplicado. */
+export type PixNrLado = 'solicitante' | 'conflito';
+
+export interface PixNrAprovacao {
+  id: string;
+  pedido_id: string;
+  lado: PixNrLado;
+  setor_id: string | null;
+  aprovador_id: string | null;
+  aprovador_nome: string | null;
+  aprovado: boolean;
+  motivo: string | null;
+  criado_em: string;
+}
+
+/**
+ * Quais setores precisam assinar este pedido.
+ *
+ * Regra da operação (09/09/2026): o mesmo NR em mãos de pessoas de setores
+ * diferentes só é tabulado com o «pode» dos DOIS líderes. Um lado sozinho não
+ * libera — Receptivo e Play 3 têm cada um a sua parte da história.
+ *
+ * Um lado só quando não há segundo líder a ouvir: os dois no mesmo setor, ou o
+ * registro antigo sem setor carimbado. Espelha `fn_pix_nr_pedido_decidir`; se
+ * discordassem, a tela mostraria «aguardando o outro setor» para um pedido que
+ * o banco já considera resolvido.
+ */
+export function ladosDoPedidoNr(
+  p: Pick<PixNrPedido, 'setor_id' | 'conflito_setor_id'>,
+): PixNrLado[] {
+  const meu = p.setor_id ?? null;
+  const outro = p.conflito_setor_id ?? null;
+  return meu && outro && meu !== outro
+    ? ['solicitante', 'conflito']
+    : ['solicitante'];
+}
+
+/** O setor responsável por um lado do pedido. */
+export function setorDoLadoNr(
+  p: Pick<PixNrPedido, 'setor_id' | 'conflito_setor_id'>,
+  lado: PixNrLado,
+): string | null {
+  return (lado === 'solicitante' ? p.setor_id : p.conflito_setor_id) ?? null;
+}
+
+/**
+ * Quem sou eu para assinar por este setor.
+ *
+ * Espelha `fn_pix_pode_decidir_lado`: quem enxerga todos os setores decide por
+ * qualquer um; quem enxerga o próprio decide o próprio; lado sem setor
+ * carimbado fica com quem aprova Pix — escondê-lo de todos deixaria o pedido
+ * preso para sempre.
+ *
+ * A tela usa isto só para desenhar botão. Quem recusa de verdade é o banco.
+ */
+export function podeAssinarLadoNr(p: {
+  podeAprovarPix: boolean;
+  vejoTodosOsSetores: boolean;
+  meuSetorId: string | null;
+  setorDoLado: string | null;
+}): boolean {
+  if (!p.podeAprovarPix) return false;
+  if (p.vejoTodosOsSetores) return true;
+  if (p.setorDoLado == null) return true;
+  return p.meuSetorId === p.setorDoLado;
+}
+
+/** O que falta para o pedido virar acordo, do ponto de vista de quem olha. */
+export interface EstadoDoPedidoNr {
+  lados: PixNrLado[];
+  /** Assinatura já dada, por lado. */
+  assinado: Partial<Record<PixNrLado, PixNrAprovacao>>;
+  /** Lados que ainda não assinaram. */
+  faltam: PixNrLado[];
+  /** Lados que EU posso assinar agora (ainda em aberto). */
+  meusLados: PixNrLado[];
+}
+
+export function estadoDoPedidoNr(
+  pedido: PixNrPedido,
+  aprovacoes: readonly PixNrAprovacao[],
+  quem: { podeAprovarPix: boolean; vejoTodosOsSetores: boolean; meuSetorId: string | null },
+): EstadoDoPedidoNr {
+  const lados = ladosDoPedidoNr(pedido);
+  const assinado: Partial<Record<PixNrLado, PixNrAprovacao>> = {};
+  for (const a of aprovacoes) {
+    if (a.pedido_id === pedido.id) assinado[a.lado] = a;
+  }
+  const faltam = lados.filter(l => assinado[l] == null);
+  const meusLados = faltam.filter(l => podeAssinarLadoNr({
+    ...quem,
+    setorDoLado: setorDoLadoNr(pedido, l),
+  }));
+  return { lados, assinado, faltam, meusLados };
+}
+
+/**
+ * As assinaturas já dadas nos pedidos informados.
+ *
+ * Consulta separada, e não um join: `pix_automatico_nr_pedido_aprovacoes` só
+ * entra no `database.types` depois da migration 20260909110000, e a fila de
+ * pedidos abertos é curta. Tabela ausente devolve lista vazia — o pedido
+ * aparece sem assinatura nenhuma, que é o estado correto num banco sem a
+ * migration.
+ */
+export async function fetchAprovacoesPedidosNr(
+  pedidoIds: readonly string[],
+): Promise<PixNrAprovacao[]> {
+  if (pedidoIds.length === 0) return [];
+  const { data, error } = await tabelaSemTipo<PixNrAprovacao>(
+    'pix_automatico_nr_pedido_aprovacoes',
+  ).select('*').in('pedido_id', [...pedidoIds]);
+
+  if (error) {
+    if (!/does not exist|schema cache/i.test(error.message)) {
+      console.warn('[pix_automatico.service] fetchAprovacoesPedidosNr:', error.message);
+    }
+    return [];
+  }
+  return (data as unknown as PixNrAprovacao[]) ?? [];
 }
 
 /**
@@ -1437,21 +1814,31 @@ export async function pedirAutorizacaoNr(p: {
 }
 
 /**
- * Aprova ou recusa.
+ * Assina UM lado do pedido.
  *
- * Aprovado, o acordo nasce PENDENTE — autorizar a duplicidade não é aprovar a
- * comissão. O líder ainda vai avaliar o registro como avalia qualquer outro, e
- * é o que mantém as duas decisões separadas.
+ * Aprovar não cria o acordo sozinho: quando os dois setores estão envolvidos, o
+ * pedido volta `pendente` e fica esperando a outra assinatura. Só com todas as
+ * assinaturas o acordo nasce — e nasce PENDENTE, porque autorizar a
+ * duplicidade não é aprovar a comissão. O líder ainda vai avaliar o registro
+ * como avalia qualquer outro.
+ *
+ * Recusar, de qualquer lado, encerra o pedido na hora: o registro duplicado só
+ * existe se todos concordarem, então um «não» já respondeu a pergunta.
+ *
+ * `lado` omitido = «o lado que eu puder assinar e que ainda falta», que é o
+ * caso de quem tem um lado só.
  */
 export async function decidirPedidoNr(
   pedidoId: string,
   aprovar: boolean,
   motivo?: string | null,
+  lado?: PixNrLado | null,
 ): Promise<{ ok: boolean; pedido?: PixNrPedido; error?: string }> {
   const { data, error } = await rpcSemTipo<PixNrPedido>('fn_pix_nr_pedido_decidir', {
     p_pedido_id: pedidoId,
     p_aprovar:   aprovar,
     p_motivo:    motivo ?? null,
+    p_lado:      lado ?? null,
   });
   if (error) return { ok: false, error: mensagemPedidoNr(error.message) };
   return { ok: true, pedido: (data as unknown as PixNrPedido) ?? undefined };

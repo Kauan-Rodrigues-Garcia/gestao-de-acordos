@@ -24,6 +24,7 @@ import {
   diasUteisDoMes, diasUteisDecorridos, quartilAtual,
 } from '@/lib/diasUteis';
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
+import { dataLocalPix, mesLocalPix, noMesPix } from '@/lib/mesPix';
 import { contaNoRecebimento } from '@/lib/index';
 import {
   comissaoDe, valorAPagarDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor,
@@ -106,10 +107,10 @@ export interface FiltrosPix {
   /**
    * Mês da aba (`yyyy-MM`). Omitido = todos os meses (o comportamento antigo).
    *
-   * Recorta pelo MESMO critério dos cards (`criado_em.startsWith`), e não pela
-   * data local do filtro de período: se a tabela e os cards discordassem sobre
-   * o que é "do mês", o total embaixo da lista não fecharia com o card em cima
-   * dela — que é a primeira coisa que alguém confere.
+   * Recorta pelo MESMO critério dos cards (`noMesPix`, o mês em São Paulo), e
+   * pela mesma régua do filtro de período: se a tabela e os cards discordassem
+   * sobre o que é "do mês", o total embaixo da lista não fecharia com o card em
+   * cima dela — que é a primeira coisa que alguém confere.
    */
   mes?: string | null;
 }
@@ -121,15 +122,14 @@ export interface FiltrosPix {
  * `toLocaleDateString('pt-BR')` — São Paulo. Recortar os dez primeiros
  * caracteres do ISO compararia com a data em UTC: um acordo registrado às 22h
  * de terça já é quarta em UTC e sumiria de um filtro "terça a terça".
+ *
+ * Hoje é um apelido de `dataLocalPix` (`lib/mesPix`), que é a mesma régua que
+ * o corte de MÊS passou a usar. O nome fica porque a aba inteira o chama.
  */
-export function dataLocalDaLinha(criadoEm: string): string {
-  const d = new Date(criadoEm);
-  if (isNaN(d.getTime())) return String(criadoEm).slice(0, 10);
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(d);
-}
+export const dataLocalDaLinha = dataLocalPix;
+
+/** O mês (`yyyy-MM`) de uma linha, no fuso da operação. Ver `lib/mesPix`. */
+export const mesDaLinhaPix = mesLocalPix;
 
 export interface MapasOperador {
   porEquipe: Record<string, string | null>;
@@ -153,7 +153,7 @@ export function filtrarItensPix(
   const ate = (filtros.ate ?? '').trim();
   const mes = (filtros.mes ?? '').trim();
   return itens.filter(i => {
-    if (mes && !i.criado_em.startsWith(mes)) return false;
+    if (mes && !noMesPix(i.criado_em, mes)) return false;
     if (filtros.status && filtros.status !== 'todos' && i.status !== filtros.status) return false;
     if (filtros.operadorId && i.operador_id !== filtros.operadorId) return false;
     if (filtros.equipeId && mapas.porEquipe[i.operador_id] !== filtros.equipeId) return false;
@@ -253,7 +253,7 @@ export function acordosFeitosNoMes(
   if (!operadorId) return [];
   return itens.filter(i => i.operador_id === operadorId
                         && ehAcordoFeito(i)
-                        && i.criado_em.startsWith(mes));
+                        && noMesPix(i.criado_em, mes));
 }
 
 // ── Meta de acordos do setor (comissão dobrada) ─────────────────────────────
@@ -487,7 +487,7 @@ export function rankingPixSetor(
   const metaDoOperador = new Map<string, number>();
 
   for (const i of itens) {
-    if (!ehAcordoFeito(i) || !i.criado_em.startsWith(mes)) continue;
+    if (!ehAcordoFeito(i) || !noMesPix(i.criado_em, mes)) continue;
     const linha = porOperador.get(i.operador_id) ?? {
       operadorId: i.operador_id,
       nome: nomePorOperador[i.operador_id] ?? i.operador_nome ?? '—',
@@ -586,7 +586,7 @@ export function setoresComAcordosPix(
 ): { id: string; nome: string }[] {
   const comAcordo = new Set<string>();
   for (const i of itens) {
-    if (!ehAcordoFeito(i) || !i.criado_em.startsWith(mes)) continue;
+    if (!ehAcordoFeito(i) || !noMesPix(i.criado_em, mes)) continue;
     const setor = setorDaLinhaPix(i, porSetor);
     if (setor) comAcordo.add(setor);
   }
@@ -682,7 +682,7 @@ export function calcularMetaPix(e: EntradaMetaPix): ResumoMetaPix | null {
   const metaAcordos = Number(e.metaAcordos ?? 0) || 0;
   if (metaValor <= 0 && metaAcordos <= 0) return null;
 
-  const doMes = e.itens.filter(i => ehAcordoFeito(i) && i.criado_em.startsWith(e.mes));
+  const doMes = e.itens.filter(i => ehAcordoFeito(i) && noMesPix(i.criado_em, e.mes));
   const realizado = doMes.reduce((s, i) => s + Number(i.valor), 0);
   const acordos   = doMes.length;
 
@@ -761,7 +761,7 @@ export function calcularBonusMeta(e: EntradaBonusMeta): BonusMeta | null {
   const acumulado = e.itens
     .filter(i => i.operador_id === e.operadorId
               && i.status === 'aprovado'
-              && i.criado_em.startsWith(e.mes))
+              && noMesPix(i.criado_em, e.mes))
     .reduce((s, i) => s + comissaoDe(i, e.pctPorSetor), 0);
   if (acumulado <= 0) return null;
 
@@ -879,7 +879,7 @@ export function calcularMetaPixPorEquipe(p: {
    */
   const realizadoPorEquipe: Record<string, { realizado: number; acordos: number }> = {};
   for (const i of p.itens) {
-    if (!ehAcordoFeito(i) || !i.criado_em.startsWith(p.mes)) continue;
+    if (!ehAcordoFeito(i) || !noMesPix(i.criado_em, p.mes)) continue;
     const equipeId = p.equipePorOperador[i.operador_id];
     if (!equipeId) continue;   // sem equipe conhecida entra só no total do setor
     const atual = realizadoPorEquipe[equipeId] ?? { realizado: 0, acordos: 0 };

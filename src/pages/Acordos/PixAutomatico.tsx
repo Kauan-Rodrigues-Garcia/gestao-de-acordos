@@ -72,6 +72,7 @@ import { copiarTexto } from '@/lib/clipboard';
 import {
   ehMesAtual, mesAtual, partesDoMes, primeiroDiaDoMes, rotuloDoMes, ultimoDiaDoMes,
 } from '@/lib/mesReferencia';
+import { noMesPix } from '@/lib/mesPix';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 // As contas desta tela vivem em `pixAutomaticoView`: são puras e têm teste
@@ -100,12 +101,15 @@ import {
   fetchLixeiraPix, restaurarItemLixeiraPix, excluirItemLixeiraPix,
   purgarLixeiraPixExpirada, type PixLixeiraItem,
   fetchLogPix, type PixLogItem,
-  setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
+  setPermiteRegistroOperador, normalizarNr,
   comissaoDe, valorAPagarDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
   fetchPedidosNr, pedirAutorizacaoNr, type PixNrPedido,
+  fetchAprovacoesPedidosNr, type PixNrAprovacao, MSG_NR_MESMO_OPERADOR,
+  fetchDonosDeNrPix, type DonoDeNrPix,
+  fetchAcordosRecorrentesSemPix, type AcordoSemRegistroPix,
   fetchPremiacoesPagamento, marcarPremiacaoPaga,
   fetchRetratoPixDoMes, aplicarRetratoPix,
   type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo, type PixPremiacaoPagamento,
@@ -113,6 +117,7 @@ import {
 import { PixSaldoPainel } from './PixSaldoPainel';
 import { PixPainelPremiacoes } from './PixPainelPremiacoes';
 import { PixPedidosNr } from './PixPedidosNr';
+import { PixAcordosSemRegistro } from './PixAcordosSemRegistro';
 import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
 import { chaveDeCache, gravarInstantaneo, valorInstantaneo } from '@/lib/cacheInstantaneo';
 import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
@@ -121,16 +126,25 @@ import { LinhaViva } from '@/components/LinhaViva';
 import { AnimatePresence } from 'framer-motion';
 
 /**
- * Dois conjuntos têm o mesmo conteúdo?
+ * Dois mapas de dono de NR têm o mesmo conteúdo?
  *
- * `fetchNrsBloqueados` devolve um `Set` novo a cada leitura, e a aba recarrega
+ * `fetchDonosDeNrPix` devolve um mapa novo a cada leitura, e a aba recarrega
  * depois de toda ação. Guardar o objeto novo faria re-renderizar quem depende
- * dele — o formulário de registro — com exatamente os mesmos NRs dentro.
+ * dele — o formulário de registro — com exatamente os mesmos NRs e donos
+ * dentro.
+ *
+ * Compara só o `operadorId`: é o que decide o caminho («é meu» × «é de outro»).
+ * Nome e setor mudam de lugar sem mudar a decisão.
  */
-function conjuntosIguais(a: Set<string>, b: Set<string>): boolean {
+function donosIguais(
+  a: Map<string, DonoDeNrPix>,
+  b: Map<string, DonoDeNrPix>,
+): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
-  for (const x of a) if (!b.has(x)) return false;
+  for (const [nr, dono] of a) {
+    if (b.get(nr)?.operadorId !== dono.operadorId) return false;
+  }
   return true;
 }
 
@@ -325,7 +339,17 @@ export function PixAutomatico() {
    * está errada — quando é justamente o contrário.
    */
   const [doRetrato, setDoRetrato]   = useState(false);
-  const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
+  /*
+   * NR → quem está com ele hoje.
+   *
+   * Era um `Set` de NRs bloqueados. Virou mapa quando a duplicidade passou a
+   * depender de QUEM é o dono (09/09/2026): o mesmo NR na mão da mesma pessoa
+   * é engano e não vai para a fila de autorização; na mão de outra pessoa é o
+   * pedido dos dois líderes. Com o Set, a tela não sabia qual dos dois
+   * caminhos oferecer.
+   */
+  const [donosDeNr, setDonosDeNr] = useState<Map<string, DonoDeNrPix>>(new Map());
+  const nrsBloqueados = useMemo(() => new Set(donosDeNr.keys()), [donosDeNr]);
   const [saldos, setSaldos]         = useState<PixAutoSaldo[]>(() => guardado?.saldos ?? []);
   const [pagamentosPremiacao, setPagamentosPremiacao] = useState<PixPremiacaoPagamento[]>(
     () => guardado?.pagamentos ?? [],
@@ -397,6 +421,22 @@ export function PixAutomatico() {
   useEffect(() => { setDiaNovo(ultimoDiaDoMes(mes)); }, [mes]);
   /** Fila de NRs duplicados esperando decisao do lider. */
   const [pedidosNr, setPedidosNr] = useState<PixNrPedido[]>([]);
+  /*
+   * As assinaturas dos pedidos abertos.
+   *
+   * Consulta à parte porque a tabela de aprovações só entra nos tipos gerados
+   * depois da migration 20260909110000 — e porque ela depende dos ids dos
+   * pedidos, que só existem depois da consulta anterior.
+   */
+  const [aprovacoesNr, setAprovacoesNr] = useState<PixNrAprovacao[]>([]);
+  /*
+   * Os acordos DA PESSOA que ficaram só na aba Acordos.
+   *
+   * Sempre do próprio usuário, mesmo para quem vê o Pix do setor inteiro: o
+   * aviso existe para que alguém REGISTRE, e quem registra é o dono do acordo.
+   * Uma lista com as pendências de dezoito pessoas seria relatório, não aviso.
+   */
+  const [acordosSemPix, setAcordosSemPix] = useState<AcordoSemRegistroPix[]>([]);
   const [salvando, setSalvando]   = useState(false);
   // Vínculo do acordo a um operador (líder+): busca por nome
   const [vinculoBusca, setVinculoBusca] = useState('');
@@ -662,7 +702,7 @@ export function PixAutomatico() {
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
         fetchConfigsPix(empresa.id),
-        fetchNrsBloqueados(empresa.id),
+        fetchDonosDeNrPix(empresa.id),
         // Mesmo recorte da lista: o operador vê o próprio saldo (ele precisa
         // saber que há um acerto no nome dele), o líder vê os do setor.
         fetchSaldosPix(empresa.id, podeVerDeOutros
@@ -683,6 +723,9 @@ export function PixAutomatico() {
       setItens(atual => reconciliarLista(atual, lista, { chave: i => i.id }));
       setSaldos(atual => reconciliarLista(atual, saldosDoEscopo, { chave: s => s.id }));
       setPedidosNr(atual => reconciliarLista(atual, pedidos, { chave: x => x.id }));
+      // As assinaturas de quem já decidiu um lado. Fila vazia não vai ao banco.
+      const assinaturas = await fetchAprovacoesPedidosNr(pedidos.map(x => x.id));
+      setAprovacoesNr(atual => reconciliarLista(atual, assinaturas, { chave: a => a.id }));
       setPagamentosPremiacao(atual => reconciliarLista(
         atual, pagamentos, { chave: x => x.id },
       ));
@@ -691,7 +734,7 @@ export function PixAutomatico() {
       setConfigs(atual => reconciliarMapa(atual, mapa));
       // O Set é reconstruído a cada leitura; sem esta comparação todo consumidor
       // dele re-renderizaria a cada ação, com o mesmo conteúdo dentro.
-      setNrsBloqueados(atual => conjuntosIguais(atual, bloqueados) ? atual : bloqueados);
+      setDonosDeNr(atual => donosIguais(atual, bloqueados) ? atual : bloqueados);
 
       let listaOps: OperadorInfo[] = [];
       let listaEqs: EquipeComSetor[] = [];
@@ -862,6 +905,68 @@ export function PixAutomatico() {
     return () => { cancelado = true; };
   }, [empresa?.id, perfil?.id, mes]);
 
+  /*
+   * O que a pessoa tabulou como PIX Automático / Cartão Recorrente na aba
+   * Acordos e ainda não registrou aqui.
+   *
+   * Depende de `itens` porque a comparação é com os NRs que ELA já registrou:
+   * o mesmo NR na mão de outra pessoa não quita pendência nenhuma — ao
+   * contrário, é o caso que vira pedido de autorização.
+   *
+   * Falha em silêncio: é um aviso, e um aviso que derruba a aba é pior que a
+   * ausência dele.
+   */
+  useEffect(() => {
+    let cancelado = false;
+    if (!empresa?.id || !perfil?.id) { setAcordosSemPix([]); return; }
+
+    const meusNrs = new Set(
+      itens.filter(i => i.operador_id === perfil.id).map(i => normalizarNr(i.nr_cliente)),
+    );
+
+    void (async () => {
+      try {
+        const pendentes = await fetchAcordosRecorrentesSemPix({
+          empresaId: empresa.id,
+          mes,
+          operadorId: perfil.id,
+          nrsDoOperador: meusNrs,
+        });
+        if (cancelado) return;
+        setAcordosSemPix(atual => reconciliarLista(atual, pendentes, { chave: a => a.id }));
+      } catch (e) {
+        console.warn('[PixAutomatico] acordos sem registro no Pix:', e);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [empresa?.id, perfil?.id, mes, itens]);
+
+  /**
+   * Registrar aqui um acordo que já está na lista de acordos.
+   *
+   * Mesma pessoa, mesmo NR, mesmo valor — não é duplicidade, é o registro que
+   * faltava. O `dia` acompanha o mês em foco pela mesma razão do formulário:
+   * um acordo de agosto registrado em setembro tem de nascer em agosto.
+   */
+  async function registrarDaListaDeAcordos(a: AcordoSemRegistroPix) {
+    if (!empresa?.id || !perfil?.id) return;
+    const { ok, error, nrMesmoOperador } = await criarAcordoPix({
+      empresaId:    empresa.id,
+      operadorId:   perfil.id,
+      operadorNome: perfil.nome ?? perfil.email ?? '—',
+      setorId:      perfil.setor_id ?? null,
+      nrCliente:    a.nr_cliente,
+      valor:        Number(a.valor),
+      dia:          noMesAtual ? null : diaNovo,
+    });
+    if (!ok) {
+      toast.error(nrMesmoOperador ? MSG_NR_MESMO_OPERADOR : `Erro ao registrar: ${error}`);
+      return;
+    }
+    toast.success(`NR ${a.nr_cliente} registrado no Pix — aguardando verificação do líder.`);
+    await carregar();
+  }
+
   // Metas de Pix das EQUIPES do setor em foco. A meta do setor é a soma
   // delas — não existe uma linha "do setor" para carregar.
   const carregarMetaPix = useCallback(async () => {
@@ -937,7 +1042,7 @@ export function PixAutomatico() {
   const meusDesaprovados = itens.filter(i =>
     i.operador_id === perfil?.id
     && i.status === 'desaprovado'
-    && i.criado_em.startsWith(mes)).length;
+    && noMesPix(i.criado_em, mes)).length;
 
   /** Quanto falta para este desaprovado ser excluído. `null` = sem prazo. */
   function prazoDesaprovado(item: PixAutoAcordo): string | null {
@@ -1098,7 +1203,7 @@ export function PixAutomatico() {
     const m: Record<string, ResumoSetorPix> = {};
     for (const s of setores) m[s.id] = { acordos: 0, pedidos: 0 };
     for (const i of itens) {
-      if (!i.criado_em.startsWith(mes)) continue;
+      if (!noMesPix(i.criado_em, mes)) continue;
       if (i.status === 'desaprovado') continue;
       const setor = i.setor_id ?? operadorSetor[i.operador_id] ?? null;
       if (setor && m[setor]) m[setor].acordos += 1;
@@ -1195,14 +1300,25 @@ export function PixAutomatico() {
     const valor = parseCurrencyInput(valorNovo);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
     if (isNaN(valor) || valor <= 0) { toast.error('Valor inválido'); return; }
-    if (nrsBloqueados.has(normalizarNr(nr))) {
+    const donoAtual = donosDeNr.get(normalizarNr(nr));
+    if (donoAtual) {
       /*
-       * NR ja registrado deixou de ser beco sem saida.
+       * NR já registrado: dois caminhos, e a diferença é de QUEM ele é.
        *
-       * A mensagem antiga mandava «exclua o registro existente», e quem teria
-       * de excluir era o operador do OUTRO setor. Agora o caminho e pedir
-       * autorizacao ao lider, que ve os dois lados e decide.
+       * Do próprio dono do registro que se está tentando criar, é engano — a
+       * mesma linha duas vezes. Não vai para a fila: o líder não tem o que
+       * decidir, e aprovar contaria o mesmo dinheiro duas vezes na comissão e
+       * na dobra.
+       *
+       * De outra pessoa, é o pedido. A mensagem antiga mandava «exclua o
+       * registro existente», e quem teria de excluir era o operador do OUTRO
+       * setor; agora os líderes dos dois setores decidem.
        */
+      const donoPretendido = podeAgirSobreOutros && vinculoOp ? vinculoOp.id : perfil.id;
+      if (donoAtual.operadorId === donoPretendido) {
+        toast.error(MSG_NR_MESMO_OPERADOR, { duration: 7000 });
+        return;
+      }
       await pedirAutorizacao(nr, valor);
       return;
     }
@@ -1214,7 +1330,7 @@ export function PixAutomatico() {
     const dono = podeAgirSobreOutros && vinculoOp ? vinculoOp : null;
     setSalvando(true);
     try {
-      const { ok, error, nrDuplicado } = await criarAcordoPix({
+      const { ok, error, nrDuplicado, nrMesmoOperador } = await criarAcordoPix({
         empresaId:    empresa.id,
         operadorId:   dono ? dono.id : perfil.id,
         operadorNome: dono ? dono.nome : (perfil.nome ?? perfil.email ?? '—'),
@@ -1233,6 +1349,7 @@ export function PixAutomatico() {
          * tem a verdade, e quando ele recusa por duplicidade o caminho é o
          * mesmo do bloqueio antecipado: pedir autorização.
          */
+        if (nrMesmoOperador) { toast.error(MSG_NR_MESMO_OPERADOR, { duration: 7000 }); return; }
         if (nrDuplicado) { await pedirAutorizacao(nr, valor); return; }
         toast.error('Erro ao registrar: ' + error);
         return;
@@ -2187,6 +2304,17 @@ export function PixAutomatico() {
         />
       ))}
 
+      {/* ── O acordo que ficou só na aba Acordos ──
+          Antes da fila de duplicidade: é trabalho da PRÓPRIA pessoa, e ela é
+          quem abre esta aba com mais frequência. */}
+      {!loading && acordosSemPix.length > 0 && (
+        <PixAcordosSemRegistro
+          acordos={acordosSemPix}
+          onRegistrar={registrarDaListaDeAcordos}
+          podeRegistrar={podeRegistrar}
+        />
+      )}
+
       {/* ── NRs duplicados esperando decisão ──
           No topo da área de painéis: é fila de trabalho, e fila que fica
           embaixo não é vista. O operador enxerga só o próprio pedido — quem
@@ -2194,8 +2322,14 @@ export function PixAutomatico() {
       {!loading && pedidosDoFoco.length > 0 && (
         <PixPedidosNr
           pedidos={pedidosDoFoco}
+          aprovacoes={aprovacoesNr}
           podeDecidir={temPermissao('aprovar_pix_automatico')}
           meuId={perfil?.id ?? null}
+          /* Por qual setor eu assino. `podeVerTodosOsSetores` é o mesmo
+             `escopo >= todos_setores` que `fn_pix_pode_decidir_lado` consulta
+             do lado do banco — as duas pontas têm de dizer a mesma coisa. */
+          meuSetorId={perfil?.setor_id ?? null}
+          vejoTodosOsSetores={podeVerTodosSetores}
           nomePorSetor={nomePorSetor}
           /* Só em «todos»: com um setor em foco a fila já é dele, e carimbar o
              nome em toda linha seria repetir o óbvio. */

@@ -46,12 +46,24 @@
  * dizendo a mesma coisa — e uma linha de «−R$ 17,50» para quem tinha R$ 0,00
  * de premiação parecia dívida nova, não acerto pendente.
  *
- * O que já foi carimbado continua contando: está dentro de `jaPago`.
+ * ## O acerto sai de `jaPago` (09/09/2026)
+ *
+ * Até aqui `jaPago` somava as linhas pagas por `valorAPagarDe`, que já traz o
+ * acerto dentro. Como `falta = premiacao − jaPago`, o acerto era **descontado
+ * da premiação do mês**: quem recebeu R$ 50,00 de correção de agosto passava a
+ * receber R$ 50,00 a menos de premiação de setembro — o mesmo acerto cobrado
+ * duas vezes, e no lugar onde ninguém procuraria por ele.
+ *
+ * Agora `jaPago` conta só COMISSÃO (`comissaoDe`) e o carimbo mensal, e o
+ * acerto aparece separado em `ajustesPagos`. A premiação passa a fechar com a
+ * regra que a operação enuncia: comissão do mês, dobrada quando dobra, menos o
+ * que já saiu por ela.
  */
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
-import { comissaoDe, valorAPagarDe } from '@/services/pix_automatico.service';
+import { comissaoDe } from '@/services/pix_automatico.service';
 import { calcularDobraComissao, type MetaRecebimentoDobra } from './pixAutomaticoView';
 import type { MesRef } from '@/lib/mesReferencia';
+import { noMesPix } from '@/lib/mesPix';
 
 /** Duas casas, sempre — somar centavos em ponto flutuante escorrega. */
 function centavos(v: number): number {
@@ -86,10 +98,27 @@ export interface Premiacao {
   premiacao: number;
 
   /**
-   * O que já saiu: as linhas marcadas como pagas MAIS o pagamento mensal da
-   * premiação. Os dois são dinheiro que saiu do caixa pelo mesmo mês.
+   * O que já saiu POR CONTA DESTE MÊS: a comissão das linhas marcadas como
+   * pagas MAIS o pagamento mensal da premiação.
+   *
+   * NÃO inclui o acerto de divergência carimbado nas linhas — ver
+   * `ajustesPagos` e o cabeçalho deste arquivo.
    */
   jaPago: number;
+
+  /**
+   * O acerto de divergência que saiu junto dos pagamentos do mês.
+   *
+   * Informativo, e fora de `jaPago` de propósito: é dívida de OUTRO mês sendo
+   * quitada (ou desconto de um pagamento a maior), não premiação deste. Somado
+   * a `jaPago`, ele reduzia o «falta pagar» — quem recebeu +R$ 50,00 de
+   * correção passava a receber R$ 50,00 a menos de premiação, que é cobrar
+   * duas vezes o mesmo acerto.
+   *
+   * Positivo: saiu a mais neste mês para quitar o que a empresa devia.
+   * Negativo: saiu a menos, descontando o que a empresa tinha pago a mais.
+   */
+  ajustesPagos: number;
 
   /** Só a parte paga pelo carimbo mensal da premiação. */
   pagoNaPremiacao: number;
@@ -124,7 +153,7 @@ export function premiacaoDoOperador(p: {
   pagamentoMensal?: PagamentoMensalPremiacao;
 }): Premiacao {
   const doMes = p.itens.filter(
-    i => i.operador_id === p.operadorId && i.criado_em.startsWith(p.mes),
+    i => i.operador_id === p.operadorId && noMesPix(i.criado_em, p.mes),
   );
 
   const dobra = calcularDobraComissao(
@@ -139,11 +168,20 @@ export function premiacaoDoOperador(p: {
   /*
    * O que já saiu conta o MÊS TODO, inclusive linha desaprovada que chegou a
    * ser paga: dinheiro que saiu do caixa saiu, e a régua aqui não é mérito, é
-   * extrato. `valorAPagarDe` já inclui o acerto de divergência carimbado
-   * naquela linha — é por ali que a divergência entra nesta conta.
+   * extrato.
+   *
+   * `comissaoDe`, e não `valorAPagarDe`: aqui a pergunta é quanto da PREMIAÇÃO
+   * DESTE MÊS já foi pago, e o acerto de divergência não é premiação deste mês
+   * — é dívida de outro. Com ele dentro, `falta` descontava o acerto da
+   * premiação, e quem recebeu R$ 50,00 de correção recebia R$ 50,00 a menos do
+   * que tinha direito. O acerto continua visível, em `ajustesPagos`.
    */
+  const pagas = doMes.filter(i => i.pago);
   const pagoNasLinhas = centavos(
-    doMes.filter(i => i.pago).reduce((s, i) => s + valorAPagarDe(i, p.pctPorSetor), 0),
+    pagas.reduce((s, i) => s + comissaoDe(i, p.pctPorSetor), 0),
+  );
+  const ajustesPagos = centavos(
+    pagas.reduce((s, i) => s + (Number(i.ajuste_valor) || 0), 0),
   );
 
   /*
@@ -170,6 +208,7 @@ export function premiacaoDoOperador(p: {
     bonus,
     premiacao,
     jaPago,
+    ajustesPagos,
     pagoNaPremiacao,
     premiacaoPaga,
     falta: centavos(premiacao - jaPago),
@@ -212,7 +251,7 @@ export function painelPremiacoes(p: {
 }): Premiacao[] {
   const ids = new Map<string, string>();
   for (const i of p.itens) {
-    if (!i.criado_em.startsWith(p.mes)) continue;
+    if (!noMesPix(i.criado_em, p.mes)) continue;
     if (!ids.has(i.operador_id)) {
       ids.set(i.operador_id, p.nomePorOperador?.[i.operador_id] ?? i.operador_nome ?? '—');
     }
@@ -233,12 +272,13 @@ export function painelPremiacoes(p: {
 
 /** O total do painel, para o cabeçalho não obrigar a somar de cabeça. */
 export function totalDoPainel(linhas: readonly Premiacao[]): {
-  premiacao: number; jaPago: number; pagoNaPremiacao: number;
+  premiacao: number; jaPago: number; pagoNaPremiacao: number; ajustesPagos: number;
   falta: number; bonus: number; comDobra: number;
 } {
   return {
     premiacao: centavos(linhas.reduce((s, l) => s + l.premiacao, 0)),
     jaPago:    centavos(linhas.reduce((s, l) => s + l.jaPago, 0)),
+    ajustesPagos: centavos(linhas.reduce((s, l) => s + l.ajustesPagos, 0)),
     pagoNaPremiacao: centavos(linhas.reduce((s, l) => s + l.pagoNaPremiacao, 0)),
     falta:     centavos(linhas.reduce((s, l) => s + l.falta, 0)),
     bonus:     centavos(linhas.reduce((s, l) => s + l.bonus, 0)),
@@ -257,6 +297,6 @@ export function comissaoAprovadaNoMes(
   return centavos(itens
     .filter(i => i.operador_id === operadorId
               && i.status === 'aprovado'
-              && i.criado_em.startsWith(mes))
+              && noMesPix(i.criado_em, mes))
     .reduce((s, i) => s + comissaoDe(i, pctPorSetor), 0));
 }

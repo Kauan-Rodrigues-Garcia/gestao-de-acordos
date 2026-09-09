@@ -41,6 +41,22 @@
  * lançamento pode existir»; se ele merece comissão é a avaliação de sempre, na
  * lista. Duas perguntas, duas decisões — juntá-las faria o líder aprovar
  * comissão sem olhar o valor.
+ *
+ * ## Os DOIS setores assinam (09/09/2026)
+ *
+ * O NR 23323 é do Receptivo e a Nicole, do Play 3, quer registrá-lo. Quem
+ * conhece o caso são os dois líderes, cada um o seu lado — e até 09/09 qualquer
+ * um deles decidia sozinho pelo outro, inclusive autorizando a saída de um NR
+ * de um setor que ele não acompanha.
+ *
+ * Agora cada lado assina o seu. Enquanto faltar assinatura, o cartão mostra
+ * quem já assinou e quem falta — «pendente» sem explicação parece esquecimento,
+ * e o operador voltava a perguntar ao líder que já tinha decidido. Uma recusa,
+ * de qualquer lado, encerra: o registro duplicado só existe se todos
+ * concordarem.
+ *
+ * Um lado só quando não há segundo líder a ouvir: os dois no mesmo setor, ou o
+ * registro antigo sem setor carimbado.
  */
 import { useState } from 'react';
 import {
@@ -52,12 +68,21 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
-import { decidirPedidoNr, cancelarPedidoNr, type PixNrPedido } from '@/services/pix_automatico.service';
+import {
+  decidirPedidoNr, cancelarPedidoNr, estadoDoPedidoNr, setorDoLadoNr,
+  type PixNrPedido, type PixNrAprovacao, type PixNrLado,
+} from '@/services/pix_automatico.service';
 
 interface Props {
   pedidos: PixNrPedido[];
+  /** As assinaturas já dadas, de todos os pedidos da fila. */
+  aprovacoes: PixNrAprovacao[];
   /** Quem pode aprovar ou recusar. Sem isto, o cartão é só informativo. */
   podeDecidir: boolean;
+  /** Setor de quem está olhando — decide por qual lado ele pode assinar. */
+  meuSetorId: string | null;
+  /** Enxerga todos os setores na aba Pix? Então assina por qualquer lado. */
+  vejoTodosOsSetores: boolean;
   /** Para o dono poder desistir do próprio pedido. */
   meuId: string | null;
   /**
@@ -123,9 +148,19 @@ function Lado({
   );
 }
 
-function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
-  p: PixNrPedido; podeDecidir: boolean; meuId: string | null;
-  nomeSetor: string | null; onMudou: () => void;
+function CartaoPedido({
+  p, aprovacoes, podeDecidir, meuId, meuSetorId, vejoTodosOsSetores, nomeSetor,
+  nomePorSetor, onMudou,
+}: {
+  p: PixNrPedido;
+  aprovacoes: PixNrAprovacao[];
+  podeDecidir: boolean;
+  meuId: string | null;
+  meuSetorId: string | null;
+  vejoTodosOsSetores: boolean;
+  nomeSetor: string | null;
+  nomePorSetor: Record<string, string>;
+  onMudou: () => void;
 }) {
   const [ocupado, setOcupado] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -133,14 +168,45 @@ function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
 
   const meu = meuId != null && (p.operador_id === meuId || p.criado_por === meuId);
 
-  async function decidir(aprovar: boolean) {
+  // Quem assina o quê. A regra mora no serviço (`estadoDoPedidoNr`), junto da
+  // que o banco aplica — aqui só se desenha o que ela responde.
+  const estado = estadoDoPedidoNr(p, aprovacoes, {
+    podeAprovarPix: podeDecidir,
+    vejoTodosOsSetores,
+    meuSetorId,
+  });
+  const doisLados = estado.lados.length > 1;
+
+  /** «Play 3», «Receptivo» — ou uma frase que não mente quando falta o setor. */
+  function rotuloDoLado(lado: PixNrLado): string {
+    const setor = setorDoLadoNr(p, lado);
+    if (setor && nomePorSetor[setor]) return nomePorSetor[setor];
+    return lado === 'solicitante' ? 'quem está pedindo' : 'quem registrou primeiro';
+  }
+
+  async function decidir(aprovar: boolean, lado?: PixNrLado) {
     setOcupado(true);
     try {
-      const { ok, error } = await decidirPedidoNr(p.id, aprovar, motivo || null);
+      const { ok, error, pedido } = await decidirPedidoNr(p.id, aprovar, motivo || null, lado);
       if (!ok) { toast.error(error ?? 'Não foi possível decidir.'); return; }
-      toast.success(aprovar
-        ? `NR ${p.nr_cliente} autorizado — o registro entrou como pendente de avaliação.`
-        : `NR ${p.nr_cliente} recusado.`);
+
+      if (!aprovar) {
+        toast.success(`NR ${p.nr_cliente} recusado.`);
+      } else if (pedido?.status === 'aprovado') {
+        toast.success(
+          `NR ${p.nr_cliente} autorizado pelos dois setores — o registro entrou como pendente de avaliação.`,
+        );
+      } else {
+        /*
+         * Assinou, e o acordo não nasceu: falta o outro setor. Sem esta frase o
+         * líder clica em «Autorizar», nada muda na fila e ele clica de novo —
+         * foi o que a versão de um lado só nunca precisou dizer.
+         */
+        toast.success(
+          `Você autorizou pelo seu setor. O NR ${p.nr_cliente} só será registrado quando o outro setor também autorizar.`,
+          { duration: 7000 },
+        );
+      }
       onMudou();
     } finally { setOcupado(false); }
   }
@@ -205,8 +271,37 @@ function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
         </p>
       )}
 
+      {/* ── Quem já assinou, e quem falta ──
+          Só aparece quando há dois setores envolvidos: com um lado só, «falta
+          o líder» é o que a própria fila já diz. */}
+      {doisLados && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {estado.lados.map(lado => {
+            const assinatura = estado.assinado[lado];
+            return (
+              <Badge
+                key={lado}
+                variant="outline"
+                className={cn(
+                  'h-5 gap-1 px-1.5 text-[10px] font-medium',
+                  assinatura
+                    ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                    : 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+                )}
+                title={assinatura
+                  ? `${assinatura.aprovador_nome ?? 'Líder'} autorizou em ${quando(assinatura.criado_em)}`
+                  : 'Este setor ainda não decidiu'}
+              >
+                {assinatura ? <Check className="h-2.5 w-2.5" /> : <Loader2 className="h-2.5 w-2.5" />}
+                {rotuloDoLado(lado)}: {assinatura ? 'autorizou' : 'aguardando'}
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        {podeDecidir ? (
+        {podeDecidir && estado.meusLados.length > 0 ? (
           <>
             {recusando && (
               <input
@@ -217,19 +312,28 @@ function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
                 className="min-w-[180px] flex-1 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
               />
             )}
-            <Button
-              size="sm" className="h-7 gap-1.5 text-xs"
-              disabled={ocupado}
-              onClick={() => void decidir(true)}
-            >
-              {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              Autorizar
-            </Button>
+            {/* Um botão por lado que EU posso assinar. Quem acumula os dois
+                setores (ou enxerga todos) assina em dois cliques, cada um com o
+                seu registro — é o que mantém a auditoria dizendo quem decidiu
+                pelo quê. */}
+            {estado.meusLados.map(lado => (
+              <Button
+                key={lado}
+                size="sm" className="h-7 gap-1.5 text-xs"
+                disabled={ocupado}
+                onClick={() => void decidir(true, lado)}
+              >
+                {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                {doisLados ? `Autorizar por ${rotuloDoLado(lado)}` : 'Autorizar'}
+              </Button>
+            ))}
             <Button
               size="sm" variant="outline"
               className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
               disabled={ocupado}
-              onClick={() => (recusando ? void decidir(false) : setRecusando(true))}
+              onClick={() => (recusando
+                ? void decidir(false, estado.meusLados[0])
+                : setRecusando(true))}
             >
               <X className="h-3.5 w-3.5" />
               {recusando ? 'Confirmar recusa' : 'Recusar'}
@@ -241,6 +345,16 @@ function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
               </Button>
             )}
           </>
+        ) : podeDecidir && estado.faltam.length > 0 ? (
+          /* Aprova Pix, mas não por nenhum dos lados abertos: ou já assinou o
+             seu, ou o que falta é de outro setor. Dizer isso é melhor que
+             mostrar um botão que o banco vai recusar. */
+          <span className="text-[11px] text-muted-foreground">
+            {estado.lados.some(l => estado.assinado[l] && estado.meusLados.length === 0
+                                    && setorDoLadoNr(p, l) === meuSetorId)
+              ? 'Você já autorizou pelo seu setor — falta o outro.'
+              : `Aguardando ${estado.faltam.map(rotuloDoLado).join(' e ')}.`}
+          </span>
         ) : meu ? (
           <>
             <span className="text-[11px] text-muted-foreground">
@@ -262,7 +376,8 @@ function CartaoPedido({ p, podeDecidir, meuId, nomeSetor, onMudou }: {
 }
 
 export function PixPedidosNr({
-  pedidos, podeDecidir, meuId, nomePorSetor, mostrarSetor = false, onMudou,
+  pedidos, aprovacoes, podeDecidir, meuId, meuSetorId, vejoTodosOsSetores,
+  nomePorSetor, mostrarSetor = false, onMudou,
 }: Props) {
   const [aberto, setAberto] = useState(true);
   if (pedidos.length === 0) return null;
@@ -297,7 +412,13 @@ export function PixPedidosNr({
 
         {aberto && pedidos.map(p => (
           <CartaoPedido
-            key={p.id} p={p} podeDecidir={podeDecidir} meuId={meuId}
+            key={p.id} p={p}
+            aprovacoes={aprovacoes}
+            podeDecidir={podeDecidir}
+            meuId={meuId}
+            meuSetorId={meuSetorId}
+            vejoTodosOsSetores={vejoTodosOsSetores}
+            nomePorSetor={nomePorSetor ?? {}}
             /* Pedido sem setor só chega aqui em «Todos» (ver `pedidosDoSetor`), e
                ali ele precisa dizer que é sem setor — calado, pareceria do setor
                do cartão de cima. */

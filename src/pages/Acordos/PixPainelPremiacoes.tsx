@@ -251,10 +251,17 @@ function LinhaPremiacao({
           valor={l.jaPago}
           cls="text-muted-foreground"
           /* Quanto veio do carimbo mensal: sem isto o «já pago» sobe sozinho
-             depois do clique e parece número que apareceu do nada. */
-          nota={l.pagoNaPremiacao > 0
-            ? `${formatCurrency(l.pagoNaPremiacao)} na premiação`
-            : undefined}
+             depois do clique e parece número que apareceu do nada.
+             O acerto de divergência entra na nota, e NÃO no valor: ele é dívida
+             de outro mês, e somá-lo aqui descontaria da premiação deste. */
+          nota={[
+            l.pagoNaPremiacao > 0
+              ? `${formatCurrency(l.pagoNaPremiacao)} na premiação`
+              : null,
+            Math.abs(l.ajustesPagos) >= 0.005
+              ? `${l.ajustesPagos > 0 ? '+' : '−'}${formatCurrency(Math.abs(l.ajustesPagos))} de acerto, à parte`
+              : null,
+          ].filter(Boolean).join(' · ') || undefined}
         />
         <Parcela
           rotulo="Falta pagar"

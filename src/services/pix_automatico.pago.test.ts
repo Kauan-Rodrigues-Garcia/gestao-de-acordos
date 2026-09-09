@@ -27,6 +27,8 @@ interface BuilderCall {
   operation: 'select' | 'insert' | 'update' | 'delete' | null;
   payload?: unknown;
   filters: Array<[string, string, unknown]>;
+  /** Faixas pedidas ao servidor, uma por página. Ver `range` no builder. */
+  paginas: Array<[number, number]>;
 }
 
 const calls: BuilderCall[] = [];
@@ -42,7 +44,7 @@ function proxima(): MockResult {
 }
 
 function createBuilder(table: string) {
-  const call: BuilderCall = { table, operation: null, filters: [] };
+  const call: BuilderCall = { table, operation: null, filters: [], paginas: [] };
   calls.push(call);
 
   const builder = {
@@ -53,6 +55,13 @@ function createBuilder(table: string) {
     eq:     vi.fn((c: string, v: unknown) => { call.filters.push(['eq', c, v]); return builder; }),
     neq:    vi.fn((c: string, v: unknown) => { call.filters.push(['neq', c, v]); return builder; }),
     in:     vi.fn((c: string, v: unknown) => { call.filters.push(['in', c, v]); return builder; }),
+    // `order` e `range` entraram quando as leituras da aba passaram a paginar
+    // (o PostgREST corta em 1.000 linhas sem avisar). Ficam FORA de `filters`
+    // de propósito: o que os testes daqui protegem é o RECORTE da consulta, e
+    // misturar paginação ali faria cada asserção de filtro carregar detalhe de
+    // transporte.
+    order:  vi.fn(() => builder),
+    range:  vi.fn((de: number, ate: number) => { call.paginas.push([de, ate]); return builder; }),
     maybeSingle: vi.fn(() => Promise.resolve(proxima())),
     then: (resolve: (v: MockResult) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve(proxima()).then(resolve, reject),
@@ -126,6 +135,35 @@ describe('fetchNrsBloqueados', () => {
   it('erro na consulta devolve conjunto vazio, não exceção', async () => {
     fila = [{ data: null, error: { message: 'timeout' } }];
     await expect(fetchNrsBloqueados('emp-1')).resolves.toEqual(new Set());
+  });
+
+  /*
+   * O PostgREST tem teto de linhas por resposta (1.000 no padrão da Supabase)
+   * e corta EM SILÊNCIO: 200 OK, mil linhas, nenhum aviso de que havia mais.
+   *
+   * Numa lista de NRs bloqueados incompleta, a tela deixa a pessoa registrar um
+   * NR que o trigger vai recusar — o pior caminho possível, porque o erro só
+   * aparece depois de tudo digitado.
+   */
+  it('pagina até o fim: página cheia manda pedir a próxima', async () => {
+    const cheia = Array.from({ length: 1000 }, (_, i) => ({ id: `a-${i}`, nr_cliente: `NR-${i}` }));
+    fila = [
+      { data: cheia, error: null },
+      { data: [{ id: 'a-1000', nr_cliente: 'NR-1000' }], error: null },
+    ];
+
+    const set = await fetchNrsBloqueados('emp-1');
+
+    expect(set.size).toBe(1001);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].paginas).toEqual([[0, 999]]);
+    expect(calls[1].paginas).toEqual([[1000, 1999]]);
+  });
+
+  it('página incompleta encerra o laço — uma ida só', async () => {
+    fila = [{ data: [{ id: 'a-1', nr_cliente: 'NR-1' }], error: null }];
+    await fetchNrsBloqueados('emp-1');
+    expect(calls).toHaveLength(1);
   });
 });
 

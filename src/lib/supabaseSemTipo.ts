@@ -34,6 +34,11 @@ interface ConsultaSemTipo<T> extends PromiseLike<RespostaTabela<T>> {
      leitura — a fronteira do módulo não mudou. */
   order(coluna: string, opcoes?: { ascending?: boolean }): ConsultaSemTipo<T>;
   limit(n: number): ConsultaSemTipo<T>;
+  /* `in` entrou com as assinaturas do NR duplicado (migration 20260909110000):
+     as aprovações de uma fila de pedidos são lidas de uma vez, e uma consulta
+     por pedido seria uma ida ao servidor por cartão desenhado. Continua sendo
+     leitura. */
+  in(coluna: string, valores: readonly string[]): ConsultaSemTipo<T>;
 }
 
 /** Consulta de leitura numa tabela que os tipos gerados ainda não conhecem. */

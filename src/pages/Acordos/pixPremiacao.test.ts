@@ -103,11 +103,16 @@ describe('premiacaoDoOperador — a dobra', () => {
 });
 
 describe('premiacaoDoOperador — o que já saiu', () => {
-  it('o acerto de divergência carimbado entra pelo já pago', () => {
+  it('o acerto de divergência fica FORA do já pago, em `ajustesPagos`', () => {
     /*
      * A divergência não tem coluna neste painel: quem a aplica é a ação
-     * «Corrigir valor», que a carimba em `ajuste_valor`. `valorAPagarDe` já a
-     * soma, então o que saiu foi 40 − 20 = 20, e é isso que `jaPago` mostra.
+     * «Corrigir valor», que a carimba em `ajuste_valor`. Ela saiu no mesmo
+     * pagamento, mas é dívida de OUTRO mês — dentro de `jaPago` ela descontava
+     * a premiação deste, cobrando o mesmo acerto duas vezes (ver o cabeçalho
+     * de `pixPremiacao.ts`).
+     *
+     * A comissão paga foi 40; o caixa levou 20 por causa do desconto de 20.
+     * A premiação deste mês continua devendo 0, e o −20 aparece à parte.
      */
     const itens = [acordo({ id: 'a-1', valor: 4000, pago: true, ajuste_valor: -20 })];
     const r = premiacaoDoOperador({
@@ -115,8 +120,9 @@ describe('premiacaoDoOperador — o que já saiu', () => {
     });
 
     expect(r.premiacao).toBe(40);
-    expect(r.jaPago).toBe(20);
-    expect(r.falta).toBe(20);
+    expect(r.jaPago).toBe(40);
+    expect(r.ajustesPagos).toBe(-20);
+    expect(r.falta).toBe(0);
   });
 
   it('mês anterior não entra na conta deste mês', () => {
@@ -131,11 +137,30 @@ describe('premiacaoDoOperador — o que já saiu', () => {
     expect(r.jaPago).toBe(0);
   });
 
-  it('falta negativo quando saiu mais do que era devido', () => {
-    // Não é zerado de propósito: é o caso que precisa de decisão de gente.
+  it('o acerto positivo também fica de fora — ele não paga premiação', () => {
+    /*
+     * R$ 30,00 devolvidos junto do pagamento da comissão de R$ 40,00. O caixa
+     * levou 70, mas 30 eram dívida velha: a premiação do mês foi quitada com
+     * 40, e nem sobra nem falta.
+     *
+     * Antes desta correção `falta` dava −30, e o painel sugeria que a pessoa
+     * tinha recebido premiação a mais.
+     */
     const itens = [acordo({ id: 'a-1', valor: 4000, pago: true, ajuste_valor: 30 })];
     const r = premiacaoDoOperador({
       operadorId: 'ana', nome: 'Ana', itens, pctPorSetor: PCT, mes: MES,
+    });
+    expect(r.jaPago).toBe(40);
+    expect(r.ajustesPagos).toBe(30);
+    expect(r.falta).toBe(0);
+  });
+
+  it('falta negativo quando o carimbo mensal pagou mais que a premiação', () => {
+    // Não é zerado de propósito: é o caso que precisa de decisão de gente.
+    const itens = [acordo({ id: 'a-1', valor: 4000, pago: true })];
+    const r = premiacaoDoOperador({
+      operadorId: 'ana', nome: 'Ana', itens, pctPorSetor: PCT, mes: MES,
+      pagamentoMensal: { pago: true, valorPago: 30 },
     });
     expect(r.jaPago).toBe(70);
     expect(r.falta).toBe(-30);

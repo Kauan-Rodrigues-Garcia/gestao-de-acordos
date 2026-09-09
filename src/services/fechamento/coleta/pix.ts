@@ -22,7 +22,8 @@ import {
   PIX_AUTO_PCT_PADRAO,
   type PixAutoAcordo, type PixAutoConfig,
 } from '@/services/pix_automatico.service';
-import { primeiroDiaDoMes, ultimoDiaDoMes, partesDoMes } from '@/lib/mesReferencia';
+import { partesDoMes } from '@/lib/mesReferencia';
+import { mesLocalPix } from '@/lib/mesPix';
 import { pctLimitado } from '@/lib/projecaoMetas';
 import type { BlocoPixFechamento, MetaPixEquipe, LinhaPixOperador, NivelFechamento } from '../tipos';
 
@@ -52,10 +53,18 @@ export interface ParametrosPix {
   diasUteis: { total: number; decorridos: number };
 }
 
-/** O acordo de Pix caiu dentro do mês? A data que vale é a de criação. */
+/**
+ * O acordo de Pix caiu dentro do mês? A data que vale é a de criação, lida no
+ * fuso da OPERAÇÃO.
+ *
+ * Era `criado_em.slice(0, 10)`, que é a data em UTC. Um acordo registrado em
+ * 31/08 às 21h30 grava `2026-09-01T00:30:00Z` e caía em setembro no relatório
+ * enquanto a aba do Pix o mostrava em 31/08. Agora as duas pontas usam
+ * `mesLocalPix` — ver `lib/mesPix`.
+ */
 function noMes(a: PixAutoAcordo, mes: string): boolean {
-  const dia = String((a as unknown as { criado_em?: string }).criado_em ?? '').slice(0, 10);
-  return dia >= primeiroDiaDoMes(mes) && dia <= ultimoDiaDoMes(mes);
+  const criadoEm = String((a as unknown as { criado_em?: string }).criado_em ?? '');
+  return mesLocalPix(criadoEm) === mes.slice(0, 7);
 }
 
 /**
