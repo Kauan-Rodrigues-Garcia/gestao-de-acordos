@@ -44,6 +44,7 @@ import { ReceitaDistribuicaoPP } from './ReceitaDistribuicaoPP';
 import { MetaSection } from './MetaSection';
 import { ExtrasSection } from './ExtrasSection';
 import { DiretoriaVisaoGeral } from './DiretoriaVisaoGeral';
+import { DiretoriaSetores } from './DiretoriaSetores';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
 
 /*
@@ -52,6 +53,15 @@ import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types'
  * quer ver. Aba de conferência não paga bundle da tela principal.
  */
 const Mestre59 = lazy(() => import('./Mestre59'));
+
+/**
+ * As abas do painel.
+ *
+ * `painel` é o antigo, que na BookPlay saiu do ar — ele continua no tipo porque
+ * a PaguePlay ainda vive nele. `visao` e `setores` leem o 59; `mestre` é a
+ * conferência de super_admin.
+ */
+type AbaDoPainel = 'visao' | 'setores' | 'painel' | 'mestre';
 
 /**
  * Painel Diretoria.
@@ -325,13 +335,11 @@ export default function PainelDiretoria() {
    * virando esta chave, sem reescrever nada.
    */
   const usaPainel59 = tenant.slug === 'bookplay';
-  const [aba, setAba] = useState<'visao' | 'painel' | 'mestre'>(
-    usaPainel59 ? 'visao' : 'painel',
-  );
+  const [aba, setAba] = useState<AbaDoPainel>(usaPainel59 ? 'visao' : 'painel');
   /*
-   * O botão «Atualizar» do cabeçalho para a Visão Geral. Um contador em vez de
-   * uma função de recarga vinda de baixo: a aba busca dentro dela mesma, e
-   * expor o `refetch` para cá acoplaria o cabeçalho ao ciclo de vida dela.
+   * O botão «Atualizar» do cabeçalho para as abas do 59. Um contador em vez de
+   * uma função de recarga vinda de baixo: cada aba busca dentro dela mesma, e
+   * expor o `refetch` para cá acoplaria o cabeçalho ao ciclo de vida delas.
    */
   const [versaoVisao, setVersaoVisao] = useState(0);
 
@@ -339,11 +347,14 @@ export default function PainelDiretoria() {
    * Perder a permissão com a aba aberta não pode deixar o conteúdo no ar, e
    * cair numa aba que não existe naquele tenant também não.
    */
-  const abaVisivel: 'visao' | 'painel' | 'mestre' =
+  const abaVisivel: AbaDoPainel =
     !usaPainel59            ? 'painel'
     : aba === 'mestre'      ? (podeVerMestre ? 'mestre' : 'visao')
     : aba === 'painel'      ? 'visao'   // o painel antigo saiu do ar na BookPlay
+    : aba === 'setores'     ? 'setores'
     : 'visao';
+  /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
+  const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores';
 
   if (!perfil) return null;
 
@@ -397,7 +408,7 @@ export default function PainelDiretoria() {
                  `useAnalytics`, então `refetch()` ali não traria nada — o botão
                  girava e a tela continuava igual. */
               onClick={() => {
-                if (abaVisivel === 'visao') { setVersaoVisao(v => v + 1); return; }
+                if (abaDo59) { setVersaoVisao(v => v + 1); return; }
                 refetch(); reloadSetoresExtras(); void analiticoDash.refetch();
               }}
               disabled={abaVisivel === 'painel' && (carregando || loadingSetores || loadingExtras)}
@@ -413,11 +424,16 @@ export default function PainelDiretoria() {
       {/* ── Abas internas ────────────────────────────────────────────────────
           A barra só existe para quem tem mais de uma aba. Um seletor com uma
           opção só é ruído — mesma regra do filtro de setor no Painel Líder. */}
-      {usaPainel59 && podeVerMestre && (
+      {usaPainel59 && (
         <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
           {([
-            { key: 'visao' as const,  label: 'Visão geral',  Icon: TrendingUp },
-            { key: 'mestre' as const, label: 'Relatório 59', Icon: Database },
+            { key: 'visao'   as const, label: 'Visão geral',        Icon: TrendingUp },
+            { key: 'setores' as const, label: 'Setores e equipes',  Icon: Building2 },
+            // A conferência do 59 é de super_admin: ela mostra a linha crua e
+            // deixa vincular grupo a setor, que é escrita, não leitura.
+            ...(podeVerMestre
+              ? [{ key: 'mestre' as const, label: 'Relatório 59', Icon: Database }]
+              : []),
           ]).map(({ key, label, Icon }) => (
             <button key={key} type="button" onClick={() => setAba(key)}
               className={cn(
@@ -444,7 +460,17 @@ export default function PainelDiretoria() {
           empresaId={empresa?.id ?? ''}
           mes={mesAnalise}
           versao={versaoVisao}
-          onAbrirSetores={podeVerMestre ? () => setAba('mestre') : undefined}
+          onAbrirSetores={() => setAba('setores')}
+        />
+      ) : abaVisivel === 'setores' ? (
+        <DiretoriaSetores
+          empresaId={empresa?.id ?? ''}
+          mes={mesAnalise}
+          versao={versaoVisao}
+          /* O agendado sai da MESMA consulta que alimenta o painel antigo
+             (`fn_diretoria_setores_do_mes`). Buscá-lo de novo aqui, com outra
+             régua, faria esta aba discordar do resto do sistema. */
+          agendadoPorSetor={setoresDetalhes}
         />
       ) : (
       <>
