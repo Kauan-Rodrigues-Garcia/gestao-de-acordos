@@ -617,6 +617,75 @@ export async function vincularGrupo(params: {
   if (error) throw new Error(error.message);
 }
 
+// ── O código do setor ────────────────────────────────────────────────────────
+
+/** Um setor da empresa e o código do 59 que ele reivindica. */
+export interface CodigoDeSetor {
+  setor_id:   string;
+  setor_nome: string;
+  ativo:      boolean;
+  /** `CodGrupoFiltro`. `null` = ainda não configurado. */
+  codigo_erp: string | null;
+  /** A carteira que esse código encontra no 59 importado, se encontra. */
+  carteira:   string | null;
+  /**
+   * O código está preenchido E existe no 59.
+   *
+   * `false` com código preenchido é o caso que interessa: alguém digitou um
+   * número que o relatório não tem, e sem este aviso isso viraria dinheiro que
+   * simplesmente não aparece — o defeito mais caro que este trabalho veio
+   * impedir.
+   */
+  carteira_ok: boolean;
+}
+
+export async function buscarCodigosDeSetor(empresaId: string): Promise<CodigoDeSetor[]> {
+  const { data, error } = await rpcSemTipo<CodigoDeSetor[]>('fn_setores_codigos_erp', {
+    p_empresa_id: empresaId,
+  });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/**
+ * Grava o código do 59 num setor.
+ *
+ * Devolve a carteira que o código encontrou — é o que a tela mostra de volta,
+ * e é a confirmação de que o número digitado é o certo. Só `super_admin`: o
+ * banco recusa o resto, e a tela não é a única guarda.
+ */
+export async function definirCodigoDeSetor(params: {
+  setorId: string;
+  codigo:  string | null;
+}): Promise<{ codigo: string | null; carteira: string | null; vinculou: boolean }> {
+  const { data, error } = await rpcSemTipo<{
+    codigo_erp: string | null; carteira: string | null; vinculou: boolean;
+  }[]>('fn_setor_definir_codigo_erp', {
+    p_setor_id: params.setorId,
+    p_codigo:   params.codigo,
+  });
+  if (error) throw new Error(traduzirCodigo(error.message));
+  const linha = (data ?? [])[0];
+  return {
+    codigo:   linha?.codigo_erp ?? null,
+    carteira: linha?.carteira ?? null,
+    vinculou: linha?.vinculou ?? false,
+  };
+}
+
+/** As exceções do banco viram frase. O texto cru nunca chega à tela. */
+function traduzirCodigo(mensagem: string): string {
+  if (/CODIGO_ERP_SO_SUPER_ADMIN/i.test(mensagem)) {
+    return 'Só o super_admin pode alterar o código do relatório 59.';
+  }
+  const emUso = /CODIGO_ERP_EM_USO: o codigo (\S+) ja e do setor "([^"]+)"/i.exec(mensagem);
+  if (emUso) {
+    return `O código ${emUso[1]} já é do setor "${emUso[2]}". Um código pertence a um setor só.`;
+  }
+  if (/SETOR_NAO_ENCONTRADO/i.test(mensagem)) return 'Este setor não existe mais. Recarregue a página.';
+  return mensagem;
+}
+
 /** As cargas de um mês, da mais recente para a mais antiga. */
 export async function buscarLotes(empresaId: string, mes: string): Promise<LoteDoMestre[]> {
   const { data, error } = await tabelaSemTipo<LoteDoMestre>('mestre_lotes')

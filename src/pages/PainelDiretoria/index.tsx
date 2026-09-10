@@ -3,7 +3,7 @@ import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, DollarSign, BarChart3,
-  Building2, RefreshCw, CreditCard, Database,
+  Building2, RefreshCw, CreditCard, Database, Link2,
   TrendingDown, Target, Activity, PieChart,
   AlertCircle, CheckCircle2, Clock, CalendarClock,
 } from 'lucide-react';
@@ -53,15 +53,17 @@ import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types'
  * quer ver. Aba de conferência não paga bundle da tela principal.
  */
 const Mestre59 = lazy(() => import('./Mestre59'));
+const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
 
 /**
  * As abas do painel.
  *
  * `painel` é o antigo, que na BookPlay saiu do ar — ele continua no tipo porque
  * a PaguePlay ainda vive nele. `visao` e `setores` leem o 59; `mestre` é a
- * conferência de super_admin.
+ * conferência de super_admin, e `codigos` é onde o código do ERP amarra cada
+ * setor à sua carteira do 59.
  */
-type AbaDoPainel = 'visao' | 'setores' | 'painel' | 'mestre';
+type AbaDoPainel = 'visao' | 'setores' | 'painel' | 'mestre' | 'codigos';
 
 /**
  * Painel Diretoria.
@@ -350,6 +352,7 @@ export default function PainelDiretoria() {
   const abaVisivel: AbaDoPainel =
     !usaPainel59            ? 'painel'
     : aba === 'mestre'      ? (podeVerMestre ? 'mestre' : 'visao')
+    : aba === 'codigos'     ? (podeVerMestre ? 'codigos' : 'visao')
     : aba === 'painel'      ? 'visao'   // o painel antigo saiu do ar na BookPlay
     : aba === 'setores'     ? 'setores'
     : 'visao';
@@ -431,8 +434,12 @@ export default function PainelDiretoria() {
             { key: 'setores' as const, label: 'Setores e equipes',  Icon: Building2 },
             // A conferência do 59 é de super_admin: ela mostra a linha crua e
             // deixa vincular grupo a setor, que é escrita, não leitura.
+            //
+            // «Códigos» é da mesma família e pelo mesmo motivo: trocar o código
+            // de um setor redireciona o dinheiro de uma carteira inteira.
             ...(podeVerMestre
-              ? [{ key: 'mestre' as const, label: 'Relatório 59', Icon: Database }]
+              ? [{ key: 'mestre'  as const, label: 'Relatório 59', Icon: Database },
+                 { key: 'codigos' as const, label: 'Códigos',      Icon: Link2 }]
               : []),
           ]).map(({ key, label, Icon }) => (
             <button key={key} type="button" onClick={() => setAba(key)}
@@ -454,6 +461,10 @@ export default function PainelDiretoria() {
           {/* `mesAnalise` é o mês do seletor do cabeçalho: as duas abas olham o
               mesmo período, senão trocar de aba trocaria o mês em silêncio. */}
           <Mestre59 empresaId={empresa?.id ?? ''} mes={mesAnalise} />
+        </Suspense>
+      ) : abaVisivel === 'codigos' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          <CodigosDeSetor empresaId={empresa?.id ?? ''} mes={mesAnalise} versao={versaoVisao} />
         </Suspense>
       ) : abaVisivel === 'visao' ? (
         <DiretoriaVisaoGeral
