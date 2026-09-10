@@ -649,6 +649,21 @@ export interface ParcelaEstrutural {
   valor: number;
   /** Por que essa parcela existe. Vai para a tela, não é comentário. */
   nota: string;
+  /**
+   * Quem compõe a parcela, quando dá para dizer.
+   *
+   * Hoje só as duas de empréstimo trazem. Vazio nas demais — e vazio é
+   * resposta, não ausência: «Integral recebido» e «ajuste manual» não se
+   * decompõem em pessoas.
+   */
+  detalhe: EmprestimoDetalhe[];
+}
+
+/** A linha de NR como a RPC devolve, antes de virar `NrDivergente`. */
+interface NrCru {
+  nr: string; mestre: unknown; sistema: unknown; delta: unknown;
+  situacao: string; cobradora: string | null; carteira: string | null;
+  operador: string | null; onde: string | null;
 }
 
 /** Onde um NR está, quando os dois lados discordam sobre ele. */
@@ -674,6 +689,46 @@ export interface NrDivergente {
   onde: string | null;
 }
 
+/**
+ * Uma pessoa que cobrou fora do próprio setor.
+ *
+ * O rótulo da parcela diz «equipe», e a marcação no banco é por PESSOA: ela
+ * pega a linha em que `operador_setor_id` difere do setor da carteira. Mostrar
+ * o nome é o que torna a parcela conferível — antes era um valor solto que
+ * ninguém conseguia checar, e que por isso ninguém acreditava.
+ */
+export interface EmprestimoDetalhe {
+  cobradora: string;
+  carteira: string;
+  /** O setor do outro lado: de onde a pessoa veio, ou para onde o valor foi. */
+  outroSetor: string;
+  valor: number;
+}
+
+/**
+ * O que os dois lados conhecem, cada um no seu lugar certo.
+ *
+ * O Receptivo cobra para a carteira do Play 3: o 59 registra a cobrança no
+ * Receptivo, o analítico registra o acordo no Play 3. Nenhum dos dois está
+ * errado — é o desenho da operação.
+ *
+ * Isto ficava dentro de «NRs que divergem», e era a esmagadora maioria da
+ * lista: 674 dos 957 do Receptivo em 2026-09. Quem abria via 957 linhas para
+ * uma diferença de alguns milhares e concluía, com razão, que a tela estava
+ * quebrada.
+ *
+ * O valor continua entrando na reconciliação — só saiu da lista que pede ação.
+ */
+export interface ForaDaComparacao {
+  /** Cobrado aqui no 59; o acordo está lançado no setor dono da carteira. */
+  no59LancadoEmOutroSetor: { valor: number; qtd: number; nota: string };
+  /** Lançado aqui no analítico; no 59 a cobrança está em outra carteira. */
+  lancadoAquiNo59DeOutro:  { valor: number; qtd: number; nota: string };
+  /** Os NRs, para quem quiser conferir. Não aparecem na lista de divergências. */
+  nrs: NrDivergente[];
+  nrsTruncado: number;
+}
+
 export interface DiferencaDetalhe {
   setorId: string;
   setorNome: string;
@@ -687,12 +742,16 @@ export interface DiferencaDetalhe {
   sistemaTotal: number;
   diferenca: number;
   estrutura: ParcelaEstrutural[];
+  /** O estrutural, separado do que exige ação. Ver `ForaDaComparacao`. */
+  foraDaComparacao: ForaDaComparacao;
   resumo: { so59: number; soSistema: number; difere: number; qtd: number };
   /**
    * O que a soma das parcelas NÃO explica.
    *
-   * Zero em 9 dos 10 setores vinculados. Onde não for, é dinheiro que merece
-   * alguém olhar — e por isso a tela mostra em vez de esconder.
+   * Separar o estrutural NÃO mexe neste número: as duas parcelas que saíram da
+   * lista de divergências entram na conta explicitamente, do mesmo jeito que
+   * entravam quando estavam lá dentro. Mover de lugar sem mexer na soma é o
+   * ponto da mudança.
    */
   naoExplicado: number;
   nrs: NrDivergente[];
@@ -707,13 +766,18 @@ export async function buscarDetalheDaDiferenca(
     mestre_total: unknown; contrib_integral: unknown; comparavel: unknown;
     sistema_analitico: unknown; sistema_ajustes: unknown; sistema_total: unknown;
     diferenca: unknown; nao_explicado: unknown; nrs_truncado: unknown;
-    estrutura: { chave: string; rotulo: string; valor: unknown; nota: string }[];
-    resumo_nrs: { so_59: unknown; so_sistema: unknown; difere: unknown; qtd: unknown };
-    nrs: {
-      nr: string; mestre: unknown; sistema: unknown; delta: unknown;
-      situacao: string; cobradora: string | null; carteira: string | null;
-      operador: string | null; onde: string | null;
+    estrutura: {
+      chave: string; rotulo: string; valor: unknown; nota: string;
+      detalhe?: { cobradora: string; carteira: string; outro_setor: string; valor: unknown }[];
     }[];
+    resumo_nrs: { so_59: unknown; so_sistema: unknown; difere: unknown; qtd: unknown };
+    fora_da_comparacao?: {
+      no_59_lancado_em_outro_setor: { valor: unknown; qtd: unknown; nota: string };
+      lancado_aqui_no_59_de_outro:  { valor: unknown; qtd: unknown; nota: string };
+      nrs: NrCru[];
+      nrs_truncado: unknown;
+    };
+    nrs: NrCru[];
   }>('fn_mestre_diferenca_detalhe', {
     p_empresa_id: empresaId, p_mes: mes, p_setor_id: setorId, p_limite: limite,
   });
@@ -739,24 +803,55 @@ export async function buscarDetalheDaDiferenca(
       rotulo: e.rotulo,
       valor:  n(e.valor),
       nota:   e.nota,
+      detalhe: (e.detalhe ?? []).map(x => ({
+        cobradora:  x.cobradora,
+        carteira:   x.carteira,
+        outroSetor: x.outro_setor,
+        valor:      n(x.valor),
+      })),
     })),
+    /*
+     * `?? { ... }` porque a migration que criou o bloco pode não ter rodado
+     * ainda no ambiente de quem está lendo. Sem o padrão, a tela quebraria com
+     * `undefined.valor` num deploy à frente do banco — e o resto do detalhe,
+     * que continua correto, sumiria junto.
+     */
+    foraDaComparacao: {
+      no59LancadoEmOutroSetor: {
+        valor: n(data.fora_da_comparacao?.no_59_lancado_em_outro_setor?.valor),
+        qtd:   n(data.fora_da_comparacao?.no_59_lancado_em_outro_setor?.qtd),
+        nota:  data.fora_da_comparacao?.no_59_lancado_em_outro_setor?.nota ?? '',
+      },
+      lancadoAquiNo59DeOutro: {
+        valor: n(data.fora_da_comparacao?.lancado_aqui_no_59_de_outro?.valor),
+        qtd:   n(data.fora_da_comparacao?.lancado_aqui_no_59_de_outro?.qtd),
+        nota:  data.fora_da_comparacao?.lancado_aqui_no_59_de_outro?.nota ?? '',
+      },
+      nrs: (data.fora_da_comparacao?.nrs ?? []).map(mapearNr),
+      nrsTruncado: n(data.fora_da_comparacao?.nrs_truncado),
+    },
     resumo: {
       so59:      n(data.resumo_nrs?.so_59),
       soSistema: n(data.resumo_nrs?.so_sistema),
       difere:    n(data.resumo_nrs?.difere),
       qtd:       n(data.resumo_nrs?.qtd),
     },
-    nrs: (data.nrs ?? []).map(x => ({
-      nr:        x.nr,
-      mestre:    n(x.mestre),
-      sistema:   n(x.sistema),
-      delta:     n(x.delta),
-      situacao:  x.situacao as SituacaoNr,
-      cobradora: x.cobradora,
-      carteira:  x.carteira,
-      operador:  x.operador,
-      onde:      x.onde,
-    })),
+    nrs: (data.nrs ?? []).map(mapearNr),
+  };
+}
+
+/** Uma linha de NR, das duas listas. Uma função só para as duas não divergirem. */
+function mapearNr(x: NrCru): NrDivergente {
+  return {
+    nr:        x.nr,
+    mestre:    n(x.mestre),
+    sistema:   n(x.sistema),
+    delta:     n(x.delta),
+    situacao:  x.situacao as SituacaoNr,
+    cobradora: x.cobradora,
+    carteira:  x.carteira,
+    operador:  x.operador,
+    onde:      x.onde,
   };
 }
 

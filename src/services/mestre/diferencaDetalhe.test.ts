@@ -84,8 +84,24 @@ const DETALHE_CRU = {
     { chave: 'contrib_integral', rotulo: 'Integral recebido de outra carteira',
       valor: '27127.89', nota: 'Conta no 59 dos dois lados.' },
     { chave: 'colchao_fora', rotulo: 'Colchao fora da meta', valor: '0', nota: '...' },
+    { chave: 'emprestado_de', rotulo: 'Emprestado para ca', valor: '614.16',
+      nota: 'Gente deste setor que cobrou na carteira de outro.',
+      detalhe: [
+        { cobradora: 'TIAGO_ALMADA', carteira: 'PLAYMIX - VANESSA',
+          outro_setor: 'Playmix', valor: '614.16' },
+      ] },
   ],
   resumo_nrs: { so_59: '99571.88', so_sistema: '0', difere: '0', qtd: '12' },
+  fora_da_comparacao: {
+    no_59_lancado_em_outro_setor: { valor: '0', qtd: '0', nota: 'a' },
+    lancado_aqui_no_59_de_outro:  { valor: '306273.63', qtd: '674', nota: 'b' },
+    nrs: [
+      { nr: '900999', mestre: '0', sistema: '120.5', delta: '-120.5',
+        situacao: 'sistema_em_outro_setor', cobradora: null, carteira: null,
+        operador: 'CICRANO', onde: 'Play 3' },
+    ],
+    nrs_truncado: '474',
+  },
   nrs: [
     { nr: '900123', mestre: '5000.5', sistema: '0', delta: '5000.5',
       situacao: 'outro_setor', cobradora: 'FULANO', carteira: 'CARTEIRA X',
@@ -149,7 +165,9 @@ describe('buscarDetalheDaDiferenca', () => {
     expect(d.naoExplicado).toBe(0);
     expect(d.nrsTruncado).toBe(3);
 
-    expect(d.estrutura).toHaveLength(2);
+    // Tres desde 2026-09-10: a fixture ganhou a parcela de emprestimo, que e
+    // a que carrega `detalhe`.
+    expect(d.estrutura).toHaveLength(3);
     expect(d.estrutura[0].chave).toBe('contrib_integral');
     expect(d.estrutura[0].valor).toBeCloseTo(27127.89, 2);
 
@@ -222,5 +240,93 @@ describe('buscarDetalheDaDiferenca', () => {
     mock.porRpc = { fn_mestre_diferenca_detalhe: { data: null, error: null } };
     await expect(buscarDetalheDaDiferenca('emp-1', '2026-09', 'setor-1'))
       .rejects.toThrow('não devolveu resultado');
+  });
+});
+
+/**
+ * A separação entre o que é estrutura e o que é divergência.
+ *
+ * O bug que ela conserta: 674 dos 957 NRs do Receptivo em 2026-09 eram NR que
+ * os DOIS lados conhecem, cada um no seu lugar certo — e apareciam numa lista
+ * chamada «NRs que divergem», para uma diferença de alguns milhares. A tela
+ * parecia quebrada e não estava.
+ */
+describe('buscarDetalheDaDiferenca — o estrutural sai da lista de divergências', () => {
+  it('mapeia o bloco fora_da_comparacao, com valores numéricos', async () => {
+    mock.porRpc = { fn_mestre_diferenca_detalhe: { data: DETALHE_CRU, error: null } };
+
+    const d = await buscarDetalheDaDiferenca('emp-1', '2026-09', 'setor-1');
+
+    expect(d.foraDaComparacao.lancadoAquiNo59DeOutro.valor).toBeCloseTo(306273.63, 2);
+    expect(d.foraDaComparacao.lancadoAquiNo59DeOutro.qtd).toBe(674);
+    expect(d.foraDaComparacao.no59LancadoEmOutroSetor.qtd).toBe(0);
+    expect(d.foraDaComparacao.nrsTruncado).toBe(474);
+    // `numeric` vem como string do PostgREST. Sem a coerção, somar concatena.
+    expect(typeof d.foraDaComparacao.lancadoAquiNo59DeOutro.valor).toBe('number');
+  });
+
+  it('os NRs do bloco estrutural são mapeados como os outros', async () => {
+    mock.porRpc = { fn_mestre_diferenca_detalhe: { data: DETALHE_CRU, error: null } };
+
+    const d = await buscarDetalheDaDiferenca('emp-1', '2026-09', 'setor-1');
+
+    const [nr] = d.foraDaComparacao.nrs;
+    expect(nr.nr).toBe('900999');
+    expect(nr.sistema).toBeCloseTo(120.5, 2);
+    expect(nr.delta).toBeCloseTo(-120.5, 2);
+    expect(nr.situacao).toBe('sistema_em_outro_setor');
+    expect(nr.onde).toBe('Play 3');
+  });
+
+  /*
+   * O deploy pode chegar antes da migration. Sem o padrão, `undefined.valor`
+   * derrubaria o detalhe inteiro — inclusive as partes que continuam certas.
+   */
+  it('banco sem a migration devolve o bloco zerado, e não quebra', async () => {
+    const semBloco = { ...DETALHE_CRU };
+    delete (semBloco as Record<string, unknown>).fora_da_comparacao;
+    mock.porRpc = { fn_mestre_diferenca_detalhe: { data: semBloco, error: null } };
+
+    const d = await buscarDetalheDaDiferenca('emp-1', '2026-09', 'setor-1');
+
+    expect(d.foraDaComparacao.no59LancadoEmOutroSetor.valor).toBe(0);
+    expect(d.foraDaComparacao.lancadoAquiNo59DeOutro.qtd).toBe(0);
+    expect(d.foraDaComparacao.nrs).toEqual([]);
+    // O resto do detalhe continua de pé.
+    expect(d.diferenca).toBeCloseTo(99571.88, 2);
+  });
+});
+
+/**
+ * «Equipe emprestada» dizia um valor e nada mais.
+ *
+ * R$ 614,16 sem nome de pessoa, sem carteira, sem setor: um número que ninguém
+ * consegue conferir e que, por isso, ninguém acredita.
+ */
+describe('buscarDetalheDaDiferenca — o empréstimo diz QUEM', () => {
+  it('mapeia o detalhe da parcela, com o valor como número', async () => {
+    mock.porRpc = { fn_mestre_diferenca_detalhe: { data: DETALHE_CRU, error: null } };
+
+    const d = await buscarDetalheDaDiferenca('emp-1', '2026-09', 'setor-1');
+
+    const emp = d.estrutura.find(e => e.chave === 'emprestado_de');
+    expect(emp?.valor).toBeCloseTo(614.16, 2);
+    expect(emp?.detalhe).toHaveLength(1);
+    expect(emp?.detalhe[0]).toEqual({
+      cobradora: 'TIAGO_ALMADA',
+      carteira: 'PLAYMIX - VANESSA',
+      outroSetor: 'Playmix',
+      valor: 614.16,
+    });
+  });
+
+  it('parcela que não se decompõe vem com detalhe vazio, e não undefined', async () => {
+    mock.porRpc = { fn_mestre_diferenca_detalhe: { data: DETALHE_CRU, error: null } };
+
+    const d = await buscarDetalheDaDiferenca('emp-1', '2026-09', 'setor-1');
+
+    // A tela faz `e.detalhe.length > 0`. `undefined` ali estoura a renderização.
+    for (const e of d.estrutura) expect(Array.isArray(e.detalhe)).toBe(true);
+    expect(d.estrutura.find(e => e.chave === 'contrib_integral')?.detalhe).toEqual([]);
   });
 });
