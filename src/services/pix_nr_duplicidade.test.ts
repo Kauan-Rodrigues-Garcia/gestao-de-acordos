@@ -227,7 +227,7 @@ describe('fetchDonosDeNrPix', () => {
 describe('fetchAcordosRecorrentesSemPix', () => {
   const ACORDO = {
     id: 'ac-1', nr_cliente: '5555', valor: 1200, vencimento: '2026-09-12',
-    tipo: 'pix_automatico', operador_id: 'ana', operador_nome: 'Ana',
+    tipo: 'pix_automatico', operador_id: 'ana',
     setor_id: 'receptivo', status: 'pendente',
   };
 

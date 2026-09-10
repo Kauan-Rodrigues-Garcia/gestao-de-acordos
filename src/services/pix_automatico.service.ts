@@ -724,7 +724,6 @@ export interface AcordoSemRegistroPix {
   /** `pix_automatico` ou `cartao_recorrente`. */
   tipo: string;
   operador_id: string;
-  operador_nome: string | null;
   setor_id: string | null;
 }
 
@@ -753,7 +752,7 @@ export async function fetchAcordosRecorrentesSemPix(p: {
     (de, ate) => {
       let q = supabase
         .from('acordos')
-        .select('id, nr_cliente, valor, vencimento, tipo, operador_id, operador_nome, setor_id, status')
+        .select('id, nr_cliente, valor, vencimento, tipo, operador_id, setor_id, status')
         .eq('empresa_id', p.empresaId)
         // O mês de um acordo é o do VENCIMENTO — a mesma régua do fechamento e
         // do bloqueio de mês fechado (ver `lib/fechamentoMes`).
