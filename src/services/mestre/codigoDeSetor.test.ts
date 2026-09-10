@@ -32,26 +32,55 @@ describe('definirCodigoDeSetor', () => {
 
   it('devolve a carteira que o código encontrou', async () => {
     mock.resposta = {
-      data: [{ codigo_erp: '25', carteira: 'COB PLAY 1 - PAOLA', vinculou: true }],
+      data: [{ codigo_erp: '25', carteira: 'COB PLAY 1 - PAOLA', vinculou: true, desvinculou: null }],
       error: null,
     };
 
     const r = await definirCodigoDeSetor({ setorId: 'setor-1', codigo: '25' });
 
-    expect(r).toEqual({ codigo: '25', carteira: 'COB PLAY 1 - PAOLA', vinculou: true });
+    expect(r).toEqual({
+      codigo: '25', carteira: 'COB PLAY 1 - PAOLA', vinculou: true, desvinculou: null,
+    });
     expect(mock.ultimaChamada?.nome).toBe('fn_setor_definir_codigo_erp');
     expect(mock.ultimaChamada?.args).toEqual({ p_setor_id: 'setor-1', p_codigo: '25' });
+  });
+
+  /*
+   * Trocar o código faz DUAS coisas, e a tela precisa das duas para contar o
+   * que houve. Sem `desvinculou`, a carteira antiga sairia do setor em
+   * silêncio — e é o tipo de silêncio que só aparece semanas depois, num
+   * total que não fecha.
+   */
+  it('trocar o código conta o que soltou e o que amarrou', async () => {
+    mock.resposta = {
+      data: [{
+        codigo_erp: '28', carteira: 'COB PLAY 2 - EDERLANDIA',
+        vinculou: true, desvinculou: 'COB PLAY 1 - PAOLA',
+      }],
+      error: null,
+    };
+
+    const r = await definirCodigoDeSetor({ setorId: 'setor-1', codigo: '28' });
+
+    expect(r.carteira).toBe('COB PLAY 2 - EDERLANDIA');
+    expect(r.desvinculou).toBe('COB PLAY 1 - PAOLA');
   });
 
   it('apagar o código manda null, não string vazia', async () => {
     // String vazia entraria no índice único do banco, e o SEGUNDO setor sem
     // código seria recusado sem motivo visível na tela.
-    mock.resposta = { data: [{ codigo_erp: null, carteira: null, vinculou: false }], error: null };
+    mock.resposta = {
+      data: [{ codigo_erp: null, carteira: null, vinculou: false, desvinculou: 'COB PLAY 1 - PAOLA' }],
+      error: null,
+    };
 
     const r = await definirCodigoDeSetor({ setorId: 'setor-1', codigo: null });
 
     expect(mock.ultimaChamada?.args.p_codigo).toBeNull();
     expect(r.codigo).toBeNull();
+    // Apagar o código SOLTA a carteira: desde que o vínculo manual saiu, não
+    // soltar deixaria carteira presa a um setor sem nada justificando.
+    expect(r.desvinculou).toBe('COB PLAY 1 - PAOLA');
   });
 
   /*
@@ -92,7 +121,7 @@ describe('definirCodigoDeSetor', () => {
 
     const r = await definirCodigoDeSetor({ setorId: 'setor-1', codigo: '25' });
 
-    expect(r).toEqual({ codigo: null, carteira: null, vinculou: false });
+    expect(r).toEqual({ codigo: null, carteira: null, vinculou: false, desvinculou: null });
   });
 });
 

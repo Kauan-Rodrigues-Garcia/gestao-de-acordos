@@ -14,6 +14,26 @@
  * Guardando esse código NO SETOR, o vínculo deixa de ser um ato e vira uma
  * consequência.
  *
+ * ## Esta é a ÚNICA via
+ *
+ * O vínculo manual de carteira foi REMOVIDO junto com a criação desta aba.
+ * Dois caminhos para o mesmo fato não se sincronizam: um setor com código 25
+ * e a mesma carteira ligada à mão a outro setor seriam duas verdades sobre o
+ * mesmo dinheiro, e nada diria qual vale.
+ *
+ * O vínculo manual de EQUIPE continua, porque equipe não tem código no
+ * relatório — para onde ela vai segue sendo decisão de gente.
+ *
+ * ## Apagar o código desfaz o vínculo
+ *
+ * E tem de desfazer. Enquanto existia o vínculo manual, deixar a carteira
+ * amarrada era defensável: havia outra porta para soltá-la. Não há mais, e
+ * uma carteira presa a um setor sem código que a justifique seria a mesma
+ * «duas verdades» invertida — um vínculo sem dono.
+ *
+ * Trocar o código faz as duas coisas na mesma ação: solta a carteira do
+ * código antigo e amarra a do novo. A tela conta as duas na mesma mensagem.
+ *
  * ## Por que digitar, e não escolher numa lista
  *
  * A lista de carteiras vem do 59 já importado. Se a pessoa só pudesse escolher
@@ -98,10 +118,15 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
       // e a linha precisa voltar do banco para dizer a verdade sobre a carteira.
       await carregar();
       if (r.codigo === null) {
-        toast.success(`Código removido de ${s.setor_nome}.`);
+        toast.success(`Código removido de ${s.setor_nome}.`, {
+          description: r.desvinculou ? `${r.desvinculou} ficou sem setor.` : undefined,
+        });
       } else if (r.carteira) {
         toast.success(`${s.setor_nome} → ${r.carteira}`, {
-          description: r.vinculou ? 'Carteira vinculada agora.' : 'Já estava vinculada.',
+          description: [
+            r.vinculou ? 'Carteira vinculada agora.' : 'Já estava vinculada.',
+            r.desvinculou ? `${r.desvinculou} ficou sem setor.` : null,
+          ].filter(Boolean).join(' '),
         });
       } else {
         toast.warning(`Código ${r.codigo} salvo, mas o 59 deste mês não tem essa carteira.`, {

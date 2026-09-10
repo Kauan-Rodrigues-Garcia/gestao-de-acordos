@@ -55,7 +55,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Upload, RefreshCw, Loader2, Link2, Link2Off, EyeOff, History,
+  Upload, RefreshCw, Loader2, Link2, Link2Off, History,
   FileSpreadsheet, AlertTriangle, CheckCircle2, Package, Scale, ListTree,
   ChevronRight,
 } from 'lucide-react';
@@ -63,15 +63,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { parseMestre59, agruparPorGrupoFiltro, type LinhaMestre59 } from '@/services/mestre/mestre59Parser';
 import {
-  importarMestre59, buscarResumoGrupos, buscarLotes, buscarEventos, vincularGrupo,
+  importarMestre59, buscarResumoGrupos, buscarLotes, buscarEventos,
   type GrupoDoMestre, type LoteDoMestre, type EventoDoMestre,
-  type ProgressoCarga, type EstadoVinculo,
+  type ProgressoCarga,
 } from '@/services/mestre/mestre.service';
 import { Mestre59Detalhe } from './Mestre59Detalhe';
 import { Mestre59Comparacao } from './Mestre59Comparacao';
@@ -81,8 +79,6 @@ interface Props {
   /** 'yyyy-MM'. Vem do seletor de mês do painel. */
   mes: string;
 }
-
-interface Setor { id: string; nome: string }
 
 /** Prévia do arquivo, antes de subir. Nada foi gravado ainda. */
 interface Previa {
@@ -118,7 +114,6 @@ type SubAba = 'vinculos' | 'comparacao';
 
 export function Mestre59({ empresaId, mes }: Props) {
   const [subAba, setSubAba]     = useState<SubAba>('vinculos');
-  const [setores, setSetores]   = useState<Setor[]>([]);
   const [grupos, setGrupos]     = useState<GrupoDoMestre[]>([]);
   const [lotes, setLotes]       = useState<LoteDoMestre[]>([]);
   const [eventos, setEventos]   = useState<EventoDoMestre[]>([]);
@@ -128,7 +123,6 @@ export function Mestre59({ empresaId, mes }: Props) {
   const [previa, setPrevia]     = useState<Previa | null>(null);
   const [lendo, setLendo]       = useState(false);
   const [progresso, setProgresso] = useState<ProgressoCarga | null>(null);
-  const [salvandoCod, setSalvandoCod] = useState<string | null>(null);
   const [expandido, setExpandido] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -139,16 +133,16 @@ export function Mestre59({ empresaId, mes }: Props) {
     setCarregando(true);
     setErro(null);
     try {
-      const [g, l, e, s] = await Promise.all([
+      // A lista de setores saiu junto com o seletor de vínculo: esta tela não
+      // escolhe setor mais, só relata o que o código amarrou.
+      const [g, l, e] = await Promise.all([
         buscarResumoGrupos(empresaId, mes),
         buscarLotes(empresaId, mes),
         buscarEventos(empresaId),
-        supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
       ]);
       setGrupos(g);
       setLotes(l);
       setEventos(e);
-      setSetores((s.data as Setor[]) ?? []);
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Falha ao carregar.');
     } finally {
@@ -236,32 +230,11 @@ export function Mestre59({ empresaId, mes }: Props) {
     }
   }, [previa, empresaId, carregar]);
 
-  // ── Vínculo do grupo ──────────────────────────────────────────────────────
-
-  const aplicarVinculo = useCallback(async (
-    cod: string, estado: EstadoVinculo, setorId: string | null,
-  ) => {
-    setSalvandoCod(cod);
-    try {
-      await vincularGrupo({ empresaId, codGrupo: cod, estado, setorId });
-      // Atualiza só a linha mexida: recarregar a tela inteira aqui perderia a
-      // posição de rolagem no meio de dezesseis decisões seguidas.
-      setGrupos(gs => gs.map(g => g.cod_grupo_filtro === cod
-        ? { ...g, estado, setor_id: setorId, setor_nome: setores.find(s => s.id === setorId)?.nome ?? null }
-        : g));
-      buscarEventos(empresaId).then(setEventos).catch(() => {});
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Não foi possível salvar o vínculo.');
-    } finally {
-      setSalvandoCod(null);
-    }
-  }, [empresaId, setores]);
 
   // ── Somas do cabeçalho ────────────────────────────────────────────────────
 
   const resumo = useMemo(() => {
     const semVinculo = grupos.filter(g => g.estado === 'novo');
-    const ignorados  = grupos.filter(g => g.estado === 'ignorado');
     const vinculados = grupos.filter(g => g.estado === 'vinculado');
     return {
       // `recebido_proprio` soma o arquivo exato — cada linha conta uma vez no
@@ -274,7 +247,6 @@ export function Mestre59({ empresaId, mes }: Props) {
       receptivoExtra:  grupos.reduce((s, g) => s + g.contrib_extra, 0),
       semVinculoValor: semVinculo.reduce((s, g) => s + g.recebido_total, 0),
       semVinculoQtd:   semVinculo.length,
-      ignoradoValor:   ignorados.reduce((s, g) => s + g.recebido_total, 0),
       vinculadoValor:  vinculados.reduce((s, g) => s + g.recebido_total, 0),
       vinculadoQtd:    vinculados.length,
       linhas:          grupos.reduce((s, g) => s + g.linhas, 0),
@@ -556,45 +528,37 @@ export function Mestre59({ empresaId, mes }: Props) {
                         <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground text-xs">
                           {extra > 0 ? formatBRL(extra) : '—'}
                         </td>
+                        {/*
+                          Leitura, não escolha.
+
+                          Aqui havia um seletor de setor. Ele saiu porque dois
+                          caminhos para o mesmo fato não se sincronizam: um setor
+                          com código 25 e esta carteira ligada à mão a outro setor
+                          seriam duas verdades sobre o mesmo dinheiro, e nada diria
+                          qual vale.
+
+                          Agora o vínculo é consequência do código, e esta coluna
+                          só relata o que ele produziu. Para mudar, é na aba
+                          Códigos.
+                        */}
                         <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <Select
-                              value={g.estado === 'vinculado' ? (g.setor_id ?? '') : g.estado === 'ignorado' ? '__ignorado__' : '__novo__'}
-                              disabled={salvandoCod === g.cod_grupo_filtro}
-                              onValueChange={v => {
-                                if (v === '__novo__')     void aplicarVinculo(g.cod_grupo_filtro, 'novo', null);
-                                else if (v === '__ignorado__') void aplicarVinculo(g.cod_grupo_filtro, 'ignorado', null);
-                                else                      void aplicarVinculo(g.cod_grupo_filtro, 'vinculado', v);
-                              }}
-                            >
-                              <SelectTrigger className={cn('h-8 text-xs rounded-lg',
-                                g.estado === 'novo' && 'border-warning/50 text-warning')}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__novo__">
-                                  <span className="flex items-center gap-1.5 text-warning">
-                                    <Link2Off className="w-3 h-3" /> Sem vínculo
-                                  </span>
-                                </SelectItem>
-                                <SelectItem value="__ignorado__">
-                                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                                    <EyeOff className="w-3 h-3" /> Ignorar
-                                  </span>
-                                </SelectItem>
-                                {setores.map(s => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    <span className="flex items-center gap-1.5">
-                                      <Link2 className="w-3 h-3" /> {s.nome}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {salvandoCod === g.cod_grupo_filtro && (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
-                            )}
-                          </div>
+                          {g.setor_id ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs"
+                                  title={`Vinculado pelo código ${g.cod_grupo_filtro}`}>
+                              <Link2 className="w-3 h-3 text-success shrink-0" />
+                              <span className="text-foreground">{g.setor_nome}</span>
+                              <span className="font-mono text-[10px] text-muted-foreground
+                                               border border-border rounded px-1 py-px">
+                                {g.cod_grupo_filtro}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-warning"
+                                  title={`Nenhum setor usa o código ${g.cod_grupo_filtro}. Configure na aba Códigos.`}>
+                              <Link2Off className="w-3 h-3 shrink-0" />
+                              sem vínculo
+                            </span>
+                          )}
                         </td>
                       </tr>
 

@@ -600,22 +600,19 @@ export async function buscarSetoresSemGrupo(empresaId: string, mes: string): Pro
   }));
 }
 
-export async function vincularGrupo(params: {
-  empresaId: string;
-  codGrupo: string;
-  setorId: string | null;
-  estado: EstadoVinculo;
-  observacao?: string | null;
-}): Promise<void> {
-  const { error } = await rpcSemTipo('fn_mestre_vincular_grupo', {
-    p_empresa_id: params.empresaId,
-    p_cod:        params.codGrupo,
-    p_setor_id:   params.estado === 'vinculado' ? params.setorId : null,
-    p_estado:     params.estado,
-    p_observacao: params.observacao ?? null,
-  });
-  if (error) throw new Error(error.message);
-}
+/*
+ * `vincularGrupo` foi removida em 10/09/2026, junto com a RPC
+ * `fn_mestre_vincular_grupo`.
+ *
+ * A carteira do 59 encontra o setor pelo código (`setores.codigo_erp`), e essa
+ * é a ÚNICA via. Dois caminhos para o mesmo fato não se sincronizam: um setor
+ * com código 25 e a mesma carteira ligada à mão a outro setor seriam duas
+ * verdades sobre o mesmo dinheiro, sem nada dizendo qual vale.
+ *
+ * O vínculo manual de EQUIPE (`vincularEquipe`, logo acima) continua: equipe
+ * não tem código no relatório, e para onde ela vai segue sendo decisão de
+ * gente.
+ */
 
 // ── O código do setor ────────────────────────────────────────────────────────
 
@@ -653,13 +650,24 @@ export async function buscarCodigosDeSetor(empresaId: string): Promise<CodigoDeS
  * Devolve a carteira que o código encontrou — é o que a tela mostra de volta,
  * e é a confirmação de que o número digitado é o certo. Só `super_admin`: o
  * banco recusa o resto, e a tela não é a única guarda.
+ *
+ * `desvinculou` é a carteira que o código ANTERIOR amarrava e que ficou
+ * solta. Desde que o vínculo manual saiu, o código é a única via — e trocar
+ * ou apagar precisa desfazer o que ele mesmo fez, senão sobra carteira presa
+ * a um setor sem nada justificando.
  */
 export async function definirCodigoDeSetor(params: {
   setorId: string;
   codigo:  string | null;
-}): Promise<{ codigo: string | null; carteira: string | null; vinculou: boolean }> {
+}): Promise<{
+  codigo: string | null;
+  carteira: string | null;
+  vinculou: boolean;
+  desvinculou: string | null;
+}> {
   const { data, error } = await rpcSemTipo<{
-    codigo_erp: string | null; carteira: string | null; vinculou: boolean;
+    codigo_erp: string | null; carteira: string | null;
+    vinculou: boolean; desvinculou: string | null;
   }[]>('fn_setor_definir_codigo_erp', {
     p_setor_id: params.setorId,
     p_codigo:   params.codigo,
@@ -667,9 +675,10 @@ export async function definirCodigoDeSetor(params: {
   if (error) throw new Error(traduzirCodigo(error.message));
   const linha = (data ?? [])[0];
   return {
-    codigo:   linha?.codigo_erp ?? null,
-    carteira: linha?.carteira ?? null,
-    vinculou: linha?.vinculou ?? false,
+    codigo:      linha?.codigo_erp ?? null,
+    carteira:    linha?.carteira ?? null,
+    vinculou:    linha?.vinculou ?? false,
+    desvinculou: linha?.desvinculou ?? null,
   };
 }
 
