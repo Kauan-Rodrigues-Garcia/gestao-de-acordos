@@ -9,9 +9,25 @@
  * banco seriam milhares de escritas por hora para mostrar três pontinhos, e
  * ainda deixaria lixo quando o navegador fechasse sem avisar.
  *
- * Aqui o canal é do Supabase Realtime puro: `presence` para quem está de olho,
- * `broadcast` para a atividade. Nada disso sobrevive a um F5, e é essa a
- * intenção — informação que só vale agora não deve durar mais que agora.
+ * Aqui o canal é do Supabase Realtime puro, e só de `broadcast`: a atividade
+ * («digitando», «gravando») nasce e morre no ar. Nada disso sobrevive a um F5,
+ * e é essa a intenção — informação que só vale agora não deve durar mais que
+ * agora.
+ *
+ * ## Quem está online NÃO é medido aqui
+ *
+ * Já foi. Este hook mantinha um `track()` próprio no canal `presenca-chat`, e
+ * o `PresenceProvider` mantinha outro no canal da empresa — dois eventos de
+ * presence por pessoa logada para responder a mesma pergunta.
+ *
+ * O orçamento de eventos de presence do Realtime é do TENANT, não do canal:
+ * os dois canais dividiam o mesmo teto, e o log acusava 903
+ * `PresenceRateLimitReached` por dia. Agora o `track` é um só, no
+ * `PresenceProvider`, e aqui se lê o resultado.
+ *
+ * O conjunto lido é o GLOBAL, não o da empresa: o chat cruza empresas — 319
+ * das 920 conversas têm participantes de empresas diferentes —, e o recorte
+ * por empresa deixaria um terço dos contatos eternamente «offline».
  *
  * ## Duas atividades, uma marca por pessoa
  *
@@ -31,6 +47,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useOnlineUsers } from '@/providers/PresenceProvider';
 
 /** Depois disso a marca de atividade é considerada velha e some. */
 const VALIDADE_ATIVIDADE = 3000;
@@ -52,14 +69,15 @@ export interface UseChatPresenca {
   avisarDigitando: (paraId: string) => void;
 }
 
-interface EstadoPresenca { perfil_id?: string }
 interface Marca { quando: number; atividade: AtividadeChat }
 
 export function useChatPresenca(ativo: boolean): UseChatPresenca {
   const { perfil } = useAuth();
   const meuId = perfil?.id ?? null;
 
-  const [online, setOnline] = useState<Set<string>>(new Set());
+  // Vem do canal único da aplicação, não de um `track()` daqui — ver o
+  // cabeçalho. O conjunto é o global: o chat cruza empresas.
+  const { onlineIdsGlobal: online } = useOnlineUsers();
   const [digitando, setDigitando] = useState<Set<string>>(new Set());
   const [gravando, setGravando] = useState<Set<string>>(new Set());
 
@@ -90,45 +108,30 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
     let conectado = false;
     let tentativa = 0;
     let repetir: ReturnType<typeof setTimeout> | undefined;
-    let repetirTrack: ReturnType<typeof setTimeout> | undefined;
     const marcasDoCiclo = marcas.current;
     const avisosDoCiclo = ultimoAviso.current;
 
     const limpar = () => {
       conectado = false;
-      setOnline(new Set());
       marcasDoCiclo.clear();
       publicar();
-    };
-    const rastrear = async (ch: ReturnType<typeof supabase.channel>) => {
-      if (!vivo || canal.current !== ch || !conectado) return;
-      const resultado = await ch.track({ perfil_id: meuId }).catch(() => 'error');
-      if (!vivo || canal.current !== ch || !conectado) return;
-      if (resultado !== 'ok') {
-        clearTimeout(repetirTrack);
-        repetirTrack = setTimeout((): void => { void rastrear(ch); }, 3000);
-      }
     };
     const conectar = () => {
       if (!vivo || !navigator.onLine) return;
       clearTimeout(repetir);
-      clearTimeout(repetirTrack);
       const anterior = canal.current;
       canal.current = null;
       if (anterior) void supabase.removeChannel(anterior);
-      // O chat já permite conversar entre empresas. O tópico acompanha essa
-      // identidade única; a RLS autoriza somente perfis com acesso ao chat.
+      // Canal de BROADCAST, não de presence: aqui trafega só «digitando» e
+      // «gravando». Quem está online saiu daqui para o canal único da
+      // aplicação (`presence-global`, no PresenceProvider) — ver o cabeçalho.
+      //
+      // O tópico segue o mesmo, e privado: a RLS de `realtime.messages`
+      // autoriza somente perfis com acesso ao chat.
       const ch = supabase.channel('presenca-chat', {
-        config: { private: true, presence: { key: meuId } },
+        config: { private: true },
       });
       canal.current = ch;
-      ch.on('presence', { event: 'sync' }, () => {
-        if (!vivo || canal.current !== ch || !conectado) return;
-        const estado = ch.presenceState<EstadoPresenca>();
-        // Substituir o conjunto também remove quem saiu; várias abas do
-        // mesmo perfil continuam contando como uma única pessoa online.
-        setOnline(new Set(Object.keys(estado).filter(id => estado[id].length > 0)));
-      });
       ch.on('broadcast', { event: 'digitando' }, ({ payload }) => {
         if (!vivo || canal.current !== ch || !conectado) return;
         const p = payload as { de?: string; para?: string; atividade?: AtividadeChat };
@@ -142,7 +145,6 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
           conectado = true;
           tentativa = 0;
           clearTimeout(repetir);
-          void rastrear(ch);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           limpar();
           clearTimeout(repetir);
@@ -153,7 +155,6 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
     const offline = () => {
       limpar();
       clearTimeout(repetir);
-      clearTimeout(repetirTrack);
       const ch = canal.current;
       canal.current = null;
       if (ch) void supabase.removeChannel(ch);
@@ -191,7 +192,6 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
       vivo = false;
       clearInterval(faxina);
       clearTimeout(repetir);
-      clearTimeout(repetirTrack);
       window.removeEventListener('online', retomar);
       window.removeEventListener('offline', offline);
       document.removeEventListener('visibilitychange', retomar);

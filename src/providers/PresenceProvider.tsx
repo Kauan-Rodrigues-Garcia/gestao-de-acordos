@@ -14,10 +14,39 @@
  * Solução: um único canal criado aqui no Provider. Todos os componentes lêem
  * `onlineIds` via Context — sem duplicar canais.
  *
+ * ── Um canal para a aplicação inteira, e não um por empresa ──────────────────
+ * Foi `presence-empresa-{id}` até 10/09/2026, e o chat mantinha um segundo
+ * canal de presence só para ele (`presenca-chat`). Como o orçamento de eventos
+ * de presence do Realtime é do TENANT, e não do canal, os dois dividiam o mesmo
+ * teto: cada pessoa logada gastava DOIS eventos para responder uma única
+ * pergunta — quem está online. O log acusava 903 `PresenceRateLimitReached`
+ * por dia, em ritmo constante durante toda a operação.
+ *
+ * Agora o `track` é um só, no tópico `presence-global`, e o recorte por empresa
+ * saiu do NOME DO CANAL e virou um campo do payload:
+ *
+ *   `onlineIds`       — a empresa de quem olha (as quatro, para super_admin).
+ *                       É o que o contador de `UsuariosOnline` mostra e o que
+ *                       as telas de admin consultam.
+ *   `onlineIdsGlobal` — a aplicação inteira. É o que o chat lê, porque o chat
+ *                       cruza empresas: 319 das 920 conversas têm participantes
+ *                       de empresas diferentes, e o conjunto recortado deixaria
+ *                       um terço dos contatos eternamente "offline".
+ *
+ * Os dois saem do MESMO `presenceState`, numa passada sobre o objeto que já
+ * está na memória: filtrar é de graça, abrir canal não é. Foi assim que o
+ * super_admin deixou de precisar de três canais extras só para enxergar as
+ * outras operações.
+ *
+ * O tópico é adivinhável, ao contrário do antigo `presence-empresa-{uuid}`,
+ * então o canal nasce `private`: a RLS de `realtime.messages` exige sessão para
+ * publicar e para receber (migration 20260910143000). Na prática a postura
+ * melhorou — o canal de presença saiu de aberto para fechado por RLS.
+ *
  * ── Ciclo de vida ─────────────────────────────────────────────────────────────
- * 1. Provider monta → cria canal `presence-empresa-{empresaId}`
- * 2. Após SUBSCRIBED → `channel.track({ user_id, nome, perfil_tipo })`, UMA vez
- * 3. Eventos sync/join/leave → atualiza `onlineIds` via setState
+ * 1. Provider monta → cria canal `presence-global` (privado)
+ * 2. Após SUBSCRIBED → `track({ user_id, nome, perfil_tipo, empresa_id })`, UMA vez
+ * 3. Eventos sync/join/leave → recalcula os dois conjuntos via setState
  * 4. Provider desmonta (logout) → `supabase.removeChannel(channel)`
  *
  * ── Por que NÃO existe heartbeat de re-track ─────────────────────────────────
@@ -42,8 +71,8 @@
  * O mesmo erro voltou ao log em 04/08/2026, em ondas: vários estouros por minuto
  * na volta do intervalo, quando a operação inteira reabre o notebook junto.
  *
- * O canal de presence é UM só por empresa, então todo mundo divide o mesmo
- * orçamento de eventos por segundo. Quando ele satura, os clientes caem
+ * O orçamento de eventos de presence é do tenant, então todo mundo divide o
+ * mesmo teto por segundo. Quando ele satura, os clientes caem
  * JUNTOS — e o backoff, sendo idêntico e determinístico para todos (3 s, 6 s,
  * 12 s…), fazia todos voltarem juntos e saturarem de novo. Uma manada
  * sincronizada, batendo na mesma porta em uníssono.
@@ -59,7 +88,6 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { fetchEmpresas } from '@/services/empresas.service';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -67,11 +95,24 @@ interface PresencePayload {
   user_id: string;
   nome?: string;
   perfil_tipo?: string;
+  /** Recorta o contador por empresa sem precisar de um canal por empresa. */
+  empresa_id?: string;
 }
 
 interface PresenceContextValue {
-  /** IDs de todos os usuários online no canal da empresa */
+  /**
+   * Quem está online DENTRO do recorte de quem olha: a própria empresa, ou
+   * as quatro para o super_admin. É o que o contador de `UsuariosOnline`
+   * mostra e o que as telas de admin consultam.
+   */
   onlineIds: Set<string>;
+  /**
+   * Quem está online na aplicação INTEIRA, sem recorte. Existe para o chat,
+   * que cruza empresas: 319 das 920 conversas têm gente de empresas
+   * diferentes, e ler o conjunto recortado deixaria um terço dos contatos
+   * eternamente "offline".
+   */
+  onlineIdsGlobal: Set<string>;
   /** true enquanto não recebeu o primeiro sync do canal */
   loading: boolean;
 }
@@ -80,6 +121,7 @@ interface PresenceContextValue {
 
 const PresenceContext = createContext<PresenceContextValue>({
   onlineIds: new Set(),
+  onlineIdsGlobal: new Set(),
   loading: true,
 });
 
@@ -133,9 +175,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const [onlineIds, setOnlineIds]           = useState<Set<string>>(new Set());
-  // Presença de OUTRAS empresas — só populado para super_admin (ver efeito abaixo).
-  const [outrasEmpresasIds, setOutrasEmpresasIds] = useState<Set<string>>(new Set());
+  const [onlineIds, setOnlineIds]             = useState<Set<string>>(new Set());
+  const [onlineIdsGlobal, setOnlineIdsGlobal] = useState<Set<string>>(new Set());
   const [loading, setLoading]     = useState(true);
 
   const [reconnectKey, setReconnectKey] = useState(0);
@@ -146,21 +187,38 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const reconnectAttemptsRef = useRef(0);
   const mountedRef          = useRef(true);
 
-  // ── Extrai IDs do presenceState ────────────────────────────────────────────
-  // Object.keys(state) retorna a `key` configurada no canal — que definimos
-  // como o userId. Lemos também o campo user_id do payload como fallback.
-  const extractIds = useCallback(
-    (state: Record<string, PresencePayload[]>): Set<string> => {
-      const ids = new Set<string>();
+  // ── Extrai os DOIS conjuntos do mesmo presenceState ───────────────────────
+  // `Object.keys(state)` devolve a `key` do canal — que definimos como o
+  // userId; o `user_id` do payload fica como reserva.
+  //
+  // O recorte por empresa saiu do TÓPICO e veio para cá. Antes existia um
+  // canal por empresa, e o super_admin precisava abrir mais três só para
+  // enxergar as outras. Agora o canal é um só, o `track` carrega o
+  // `empresa_id`, e o recorte é uma passada no objeto que já está na memória
+  // — de graça, e sem gastar evento de presence, que é o recurso escasso.
+  const extrairConjuntos = useCallback(
+    (state: Record<string, PresencePayload[]>) => {
+      const todos     = new Set<string>();
+      const daEmpresa = new Set<string>();
+      const souSuperAdmin = perfil?.perfil === 'super_admin';
+      const minhaEmpresa  = empresa?.id;
+
       Object.entries(state).forEach(([key, presences]) => {
-        if (key) ids.add(key);
-        (presences ?? []).forEach(p => {
-          if (p?.user_id) ids.add(p.user_id);
-        });
+        const lista = presences ?? [];
+        // O super_admin atravessa as quatro operações, então para ele os dois
+        // conjuntos são o mesmo — que é o comportamento que ele já tinha.
+        const minha = souSuperAdmin || lista.some(p => p?.empresa_id === minhaEmpresa);
+        const registrar = (id: string) => {
+          todos.add(id);
+          if (minha) daEmpresa.add(id);
+        };
+        if (key) registrar(key);
+        lista.forEach(p => { if (p?.user_id) registrar(p.user_id); });
       });
-      return ids;
+
+      return { todos, daEmpresa };
     },
-    [],
+    [perfil?.perfil, empresa?.id],
   );
 
   // ── Recuperação ao voltar para a aba / a rede voltar ──────────────────────
@@ -197,11 +255,16 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     if (!userId || !empresaId) return;
 
-    // ── Canal único da empresa ─────────────────────────────────────────────
-    // A key é o userId → cada usuário ocupa uma "slot" no presenceState
-    const channelName = `presence-empresa-${empresaId}`;
-    const channel = supabase.channel(channelName, {
+    // ── Canal único da APLICAÇÃO ───────────────────────────────────────────
+    // A key é o userId → cada usuário ocupa uma "slot" no presenceState.
+    //
+    // Um só, global, em vez de um por empresa: ver o cabeçalho. O tópico é
+    // adivinhável, ao contrário do antigo `presence-empresa-{uuid}`, então
+    // nasce `private` — a RLS de `realtime.messages` exige sessão para
+    // publicar e para receber (migration 20260910143000).
+    const channel = supabase.channel('presence-global', {
       config: {
+        private: true,
         presence: { key: userId },
       },
     });
@@ -228,6 +291,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           user_id:     userId,
           nome:        perfil?.nome        ?? '',
           perfil_tipo: perfil?.perfil      ?? '',
+          // Sem isto o contador nao teria como recortar por empresa.
+          empresa_id:  empresaId,
         });
         // 'ok' | 'timed out' | 'error' — só o primeiro colocou a pessoa no ar.
         if (resposta !== 'ok') repetir();
@@ -243,8 +308,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // — e sync/join/leave chegam bastante numa empresa com muita gente online.
     const aplicarEstado = () => {
       if (!mountedRef.current) return;
-      const novos = extractIds(channel.presenceState<PresencePayload>());
-      setOnlineIds(prev => (mesmosIds(prev, novos) ? prev : novos));
+      const { todos, daEmpresa } = extrairConjuntos(channel.presenceState<PresencePayload>());
+      setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
+      setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
     };
 
     channel
@@ -318,61 +384,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil?.id, empresa?.id, reconnectKey]);
 
-  // ── Super admin: enxerga presença de TODAS as empresas ─────────────────────
-  // O canal acima é escopado por empresa (`presence-empresa-{id}`), então um
-  // super_admin olhando o BookPlay via seu próprio canal nunca via usuários do
-  // PagueiPlay online (e vice-versa). Aqui abrimos um canal extra (só leitura,
-  // sem track) para cada OUTRA empresa e mesclamos os IDs no set exposto.
-  useEffect(() => {
-    if (perfil?.perfil !== 'super_admin') {
-      setOutrasEmpresasIds(new Set());
-      return;
-    }
-    // Esperar a empresa resolver. Sem esta guarda, `filter(e => e.id !== undefined)`
-    // não excluía nada e abríamos um SEGUNDO canal com o tópico
-    // `presence-empresa-{própria}` — exatamente a duplicação que o cabeçalho
-    // deste arquivo descreve, e que fazia o super_admin ver a si mesmo sozinho.
-    if (!empresa?.id) return;
-    const empresaAtualId = empresa.id;
-
-    let ativo = true;
-    const canaisExtras: ReturnType<typeof supabase.channel>[] = [];
-
-    fetchEmpresas()
-      .then((empresas) => {
-        if (!ativo) return;
-        const outras = empresas.filter((e) => e.id !== empresaAtualId);
-        const acumulado = new Set<string>();
-
-        outras.forEach((emp) => {
-          const canal = supabase.channel(`presence-empresa-${emp.id}`);
-          canaisExtras.push(canal);
-          canal
-            .on('presence', { event: 'sync' }, () => {
-              if (!ativo) return;
-              const state = canal.presenceState<PresencePayload>();
-              Object.keys(state).forEach((id) => acumulado.add(id));
-              setOutrasEmpresasIds(new Set(acumulado));
-            })
-            .subscribe();
-        });
-      })
-      // Sem o catch, uma falha de rede aqui virava unhandled rejection —
-      // presença de outras empresas é enfeite, não deve quebrar nada.
-      .catch((e) => { console.warn('[PresenceProvider] fetchEmpresas falhou:', e); });
-
-    return () => {
-      ativo = false;
-      canaisExtras.forEach((c) => supabase.removeChannel(c));
-    };
-  }, [perfil?.perfil, empresa?.id]);
-
-  const onlineIdsTotal = outrasEmpresasIds.size
-    ? new Set([...onlineIds, ...outrasEmpresasIds])
-    : onlineIds;
-
   return (
-    <PresenceContext.Provider value={{ onlineIds: onlineIdsTotal, loading }}>
+    <PresenceContext.Provider value={{ onlineIds, onlineIdsGlobal, loading }}>
       {children}
     </PresenceContext.Provider>
   );

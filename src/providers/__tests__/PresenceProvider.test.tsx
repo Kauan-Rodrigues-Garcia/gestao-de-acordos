@@ -225,16 +225,20 @@ describe('PresenceProvider + useOnlineUsers', () => {
 
   // ─── Canal criado com nome correto ────────────────────────────────────
 
-  it('cria canal com nome presence-empresa-{empresaId}', () => {
+  // O canal é UM para a aplicação inteira, não um por empresa: os dois canais
+  // de presence que existiam gastavam dois eventos por pessoa logada do mesmo
+  // orçamento do tenant. O recorte por empresa mudou de lugar — saiu do tópico
+  // e virou filtro sobre o payload, aqui no cliente.
+  it('cria UM canal global e privado, não um por empresa', () => {
     mockPerfilRef.current  = { id: USER_ID };
     mockEmpresaRef.current = { id: EMPRESA_ID };
 
     renderHook(() => useOnlineUsers(), { wrapper });
 
     expect(mockChannelSpy).toHaveBeenCalledWith(
-      `presence-empresa-${EMPRESA_ID}`,
+      'presence-global',
       expect.objectContaining({
-        config: { presence: { key: USER_ID } },
+        config: { private: true, presence: { key: USER_ID } },
       }),
     );
   });
@@ -256,6 +260,8 @@ describe('PresenceProvider + useOnlineUsers', () => {
       user_id:     USER_ID,
       nome:        'João',
       perfil_tipo: 'operador',
+      // Sem isto o contador de UsuariosOnline não teria como recortar.
+      empresa_id:  EMPRESA_ID,
     });
   });
 
@@ -274,6 +280,7 @@ describe('PresenceProvider + useOnlineUsers', () => {
       user_id:     USER_ID,
       nome:        '',
       perfil_tipo: '',
+      empresa_id:  EMPRESA_ID,
     });
   });
 
@@ -287,8 +294,8 @@ describe('PresenceProvider + useOnlineUsers', () => {
 
     act(() => {
       simulatePresenceEvent('sync', {
-        [USER_ID]: [{ user_id: USER_ID }],
-        'user-2':  [{ user_id: 'user-2' }],
+        [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }],
+        'user-2':  [{ user_id: 'user-2', empresa_id: EMPRESA_ID }],
       });
     });
 
@@ -311,7 +318,7 @@ describe('PresenceProvider + useOnlineUsers', () => {
 
     // Primeiro sync com 1 usuário
     act(() => {
-      simulatePresenceEvent('sync', { [USER_ID]: [{ user_id: USER_ID }] });
+      simulatePresenceEvent('sync', { [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }] });
     });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -319,8 +326,8 @@ describe('PresenceProvider + useOnlineUsers', () => {
     // Join: novo usuário entra
     act(() => {
       simulatePresenceEvent('join', {
-        [USER_ID]: [{ user_id: USER_ID }],
-        'user-new': [{ user_id: 'user-new' }],
+        [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }],
+        'user-new': [{ user_id: 'user-new', empresa_id: EMPRESA_ID }],
       });
     });
 
@@ -339,8 +346,8 @@ describe('PresenceProvider + useOnlineUsers', () => {
     // Dois usuários conectados
     act(() => {
       simulatePresenceEvent('sync', {
-        [USER_ID]: [{ user_id: USER_ID }],
-        'user-2':  [{ user_id: 'user-2' }],
+        [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }],
+        'user-2':  [{ user_id: 'user-2', empresa_id: EMPRESA_ID }],
       });
     });
 
@@ -348,7 +355,7 @@ describe('PresenceProvider + useOnlineUsers', () => {
 
     // user-2 sai
     act(() => {
-      simulatePresenceEvent('leave', { [USER_ID]: [{ user_id: USER_ID }] });
+      simulatePresenceEvent('leave', { [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }] });
     });
 
     expect(result.current.onlineIds.has(USER_ID)).toBe(true);
@@ -367,7 +374,7 @@ describe('PresenceProvider + useOnlineUsers', () => {
     // key='slot-key', mas user_id='payload-uid' → ambos devem aparecer
     act(() => {
       simulatePresenceEvent('sync', {
-        'slot-key': [{ user_id: 'payload-uid' }],
+        'slot-key': [{ user_id: 'payload-uid', empresa_id: EMPRESA_ID }],
       });
     });
 
@@ -385,7 +392,7 @@ describe('PresenceProvider + useOnlineUsers', () => {
 
     act(() => {
       // @ts-expect-error — testando payload sem user_id
-      simulatePresenceEvent('sync', { 'slot-key': [{}] });
+      simulatePresenceEvent('sync', { 'slot-key': [{ empresa_id: EMPRESA_ID }] });
     });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -575,10 +582,60 @@ describe('PresenceProvider + useOnlineUsers', () => {
       await new Promise(r => setTimeout(r, 0));
     });
 
+    // O canal é recriado (o `track` precisa sair com a empresa nova), mas o
+    // TÓPICO é sempre o mesmo: quem separa as empresas agora é o payload.
     expect((mockChannelSpy as Mock).mock.calls.length).toBeGreaterThan(callsV1);
     expect(mockChannelSpy).toHaveBeenLastCalledWith(
-      'presence-empresa-empresa-nova-123',
+      'presence-global',
       expect.any(Object),
     );
+  });
+
+  // ─── Recorte por empresa sobre o canal único ──────────────────────────
+
+  it('separa onlineIds (minha empresa) de onlineIdsGlobal (todas)', async () => {
+    mockPerfilRef.current  = { id: USER_ID };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
+
+    act(() => {
+      simulatePresenceEvent('sync', {
+        [USER_ID]:  [{ user_id: USER_ID,  empresa_id: EMPRESA_ID }],
+        'de-fora':  [{ user_id: 'de-fora', empresa_id: 'outra-empresa' }],
+      });
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // O contador da barra lateral mostra só a própria operação…
+    expect(result.current.onlineIds.has(USER_ID)).toBe(true);
+    expect(result.current.onlineIds.has('de-fora')).toBe(false);
+    expect(result.current.onlineIds.size).toBe(1);
+
+    // …e o chat, que cruza empresas, enxerga os dois.
+    expect(result.current.onlineIdsGlobal.has('de-fora')).toBe(true);
+    expect(result.current.onlineIdsGlobal.size).toBe(2);
+  });
+
+  // O super_admin atravessa as quatro operações — para ele os dois conjuntos
+  // são o mesmo, que é o comportamento que ele já tinha pelos canais extras.
+  it('para super_admin os dois conjuntos são iguais', async () => {
+    mockPerfilRef.current  = { id: USER_ID, perfil: 'super_admin' };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
+
+    act(() => {
+      simulatePresenceEvent('sync', {
+        [USER_ID]:  [{ user_id: USER_ID,  empresa_id: EMPRESA_ID }],
+        'de-fora':  [{ user_id: 'de-fora', empresa_id: 'outra-empresa' }],
+      });
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.onlineIds.has('de-fora')).toBe(true);
+    expect(result.current.onlineIds.size).toBe(result.current.onlineIdsGlobal.size);
   });
 });
