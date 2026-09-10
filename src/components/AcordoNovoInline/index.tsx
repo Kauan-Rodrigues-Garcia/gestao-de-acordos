@@ -16,7 +16,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
   buildObservacoesComEstado, formatarTelefonePP,
-  parseCurrencyInput, getTodayISO, ROUTE_PATHS, INSTITUICOES_OPTIONS,
+  parseCurrencyInput, getTodayISO, ROUTE_PATHS,
 } from '@/lib/index';
 import { calcularParcelas, totalComEntrada, formatBRL } from '@/lib/money';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
@@ -128,21 +128,14 @@ export function AcordoNovoInline({
   const [veioDoAnalitico] = useState(draftInicial.analitico === '1');
 
   const { profissional, loading: profissionalLoading } = useProfissional(
-    isPaguePlay ? instituicao : nrCliente,
+    isPaguePlay ? instituicao : '',
     empresa?.id,
   );
 
   useEffect(() => {
     if (!profissional) return;
     setNomeCliente(profissional.nome);
-    if (isPaguePlay) {
-      if (!estadoSel.trim()) setEstadoSel(profissional.estado_uf ?? '');
-    } else {
-      const inst = (profissional.instituicao ?? '').trim();
-      if (!instituicao.trim() && (INSTITUICOES_OPTIONS as readonly string[]).includes(inst)) {
-        setInstituicao(inst);
-      }
-    }
+    if (!estadoSel.trim())   setEstadoSel(profissional.estado_uf ?? '');
     if (!whatsapp.trim()) {
       const tel = formatarTelefonePP(profissional.telefone ?? '');
       if (tel) setWhatsapp(tel);
