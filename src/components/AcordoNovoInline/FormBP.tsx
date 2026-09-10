@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { FileText, Hash, Link2, Save, Tag, User, X, Info, Wallet } from 'lucide-react';
+import { CheckCircle2, FileText, Hash, Link2, Loader2, Save, Tag, User, X, Info, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL, parseBRL } from '@/lib/money';
 import { INSTITUICOES_OPTIONS, PARCELAS_MAX_DEFAULT } from '@/lib/index';
@@ -41,6 +41,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
     autorizando, solicitarAutorizacaoConflito, cancelarConflito,
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
     formaRecorrente, avisoPixAutomatico, irParaPixAutomatico, dispensarAvisoPixAutomatico,
+    profissionalLoading, profissionalEncontrado,
   } = state;
 
   const { temPermissao } = useCargoPermissoes();
@@ -90,7 +91,15 @@ export function FormBP({ state }: { state: SharedFormState }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">NR *</Label>
-                  <Input value={nrCliente} onChange={(e) => setNrCliente(e.target.value)} placeholder="Código do acordo" className="h-8 text-xs font-mono" />
+                  <div className="relative">
+                    <Input value={nrCliente} onChange={(e) => setNrCliente(e.target.value)} placeholder="Código do acordo" className="h-8 text-xs font-mono pr-7" />
+                    {profissionalLoading && (
+                      <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                    )}
+                    {!profissionalLoading && profissionalEncontrado && (
+                      <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-500" />
+                    )}
+                  </div>
                 </div>
                 <DatePickerField
                   label="Vencimento" required

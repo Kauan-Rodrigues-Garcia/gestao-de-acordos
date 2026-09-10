@@ -392,6 +392,7 @@ export interface Profissional {
   nome: string;
   telefone: string | null;
   estado_uf: string | null;
+  instituicao: string | null;
   criado_em: string;
   atualizado_em: string;
 }

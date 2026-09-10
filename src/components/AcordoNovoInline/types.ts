@@ -97,7 +97,7 @@ export interface SharedFormState {
   confirmandoDiretoExtra: boolean;
   confirmarDiretoExtra: () => Promise<void>;
   cancelarAvisoDiretoExtra: () => void;
-  // Autocomplete profissional (PP only)
+  // Autocomplete profissional: Código (PP) ou NR (BookPlay)
   profissionalLoading: boolean;
   profissionalEncontrado: boolean;
   // ── PIX Automático / Cartão Recorrente (BookPlay) ────────────────────────

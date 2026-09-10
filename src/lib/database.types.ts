@@ -5543,6 +5543,7 @@ export type Database = {
           empresa_id: string
           estado_uf: string | null
           id: string
+          instituicao: string | null
           nome: string
           telefone: string | null
         }
@@ -5553,6 +5554,7 @@ export type Database = {
           empresa_id: string
           estado_uf?: string | null
           id?: string
+          instituicao?: string | null
           nome: string
           telefone?: string | null
         }
@@ -5563,6 +5565,7 @@ export type Database = {
           empresa_id?: string
           estado_uf?: string | null
           id?: string
+          instituicao?: string | null
           nome?: string
           telefone?: string | null
         }
