@@ -35,6 +35,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { normalizarNumero, erroDoNumero } from './numerosFormato';
 import type { Situacao, Posse, MotivoRetorno } from './numerosRegras';
+import { LIMITE_POR_CELULAR } from './numerosRegras';
 
 /**
  * O mesmo cliente, sem o schema gerado.
@@ -340,11 +341,54 @@ export interface NovoNumero {
   autorNome?: string | null;
 }
 
+/**
+ * As duas recusas do banco que o cadastro pode encontrar, perguntadas ANTES.
+ *
+ * Não é desconfiança do banco: o índice único e a trigger do limite seguem
+ * sendo a verdade, e são eles que aguentam duas pessoas cadastrando o mesmo
+ * número no mesmo instante. Isto aqui é para o caminho NORMAL não precisar
+ * deles.
+ *
+ * Uma recusa do banco é uma exceção, e exceção vira linha de ERROR no log do
+ * Postgres. Ver «este celular já tem 6 números» no painel de erros do projeto
+ * confunde: parece defeito, e é a regra funcionando. Em 24 h de operação eram
+ * nove linhas vermelhas que descreviam o sistema fazendo exatamente o que
+ * devia.
+ *
+ * Uma consulta só responde as duas perguntas: os números daquele celular, e
+ * se este número já existe na empresa.
+ */
+async function recusaConhecida(n: NovoNumero, numero: string): Promise<string | null> {
+  const { data, error } = await db
+    .from('numeros_whatsapp')
+    .select('id, celular_id, numero')
+    .eq('empresa_id', n.empresaId)
+    .or(`celular_id.eq.${n.celularId},numero.eq.${numero}`);
+
+  // Sem resposta, segue para o insert: o banco decide. Recusar aqui por causa
+  // de uma falha de rede seria inventar um impedimento que não existe.
+  if (error || !data) return null;
+
+  const linhas = data as { celular_id: string; numero: string }[];
+  if (linhas.some(l => l.numero === numero)) {
+    return 'Este número já possui cadastro no sistema.';
+  }
+  if (linhas.filter(l => l.celular_id === n.celularId).length >= LIMITE_POR_CELULAR) {
+    return `Este celular já tem ${LIMITE_POR_CELULAR} números, que é o limite.`;
+  }
+  return null;
+}
+
 export async function criarNumero(n: NovoNumero): Promise<Resultado<NumeroRow>> {
   // Valida antes de gastar uma ida ao banco. O `CHECK` lá continua valendo:
   // esta conferência é para a mensagem ser boa, não para ser a única.
   const problema = erroDoNumero(n.numero);
   if (problema) return { ok: false, erro: problema };
+
+  const numero = normalizarNumero(n.numero);
+
+  const recusa = await recusaConhecida(n, numero);
+  if (recusa) return { ok: false, erro: recusa };
 
   const { data, error } = await db
     .from('numeros_whatsapp')
@@ -352,7 +396,7 @@ export async function criarNumero(n: NovoNumero): Promise<Resultado<NumeroRow>> 
       empresa_id: n.empresaId,
       celular_id: n.celularId,
       setor_id: n.setorId,
-      numero: normalizarNumero(n.numero),
+      numero,
       criado_por: n.autorId ?? null,
       criado_por_nome: n.autorNome ?? null,
     })
