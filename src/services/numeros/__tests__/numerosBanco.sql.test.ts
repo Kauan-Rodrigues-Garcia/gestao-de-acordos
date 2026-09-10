@@ -20,8 +20,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const MIGRATIONS = path.resolve(__dirname, '../../../../supabase/migrations');
-const SCHEMA = fs.readFileSync(
-  path.join(MIGRATIONS, '20260910190000_numeros_whatsapp.sql'), 'utf8');
+
+/**
+ * Acha a migration pelo NOME, ignorando o carimbo de versão.
+ *
+ * O prefixo muda: o arquivo nasce com um carimbo escolhido à mão e depois é
+ * renomeado para o que o banco registrou em
+ * `supabase_migrations.schema_migrations` — sem isso, `supabase db push`
+ * reaplicaria migration que já rodou. Aconteceu com estas três em 10/09/2026,
+ * e o caminho fixo aqui derrubou o arquivo de teste inteiro.
+ *
+ * Casar pelo sufixo deixa a reconciliação ser o que ela é — renomear arquivo —
+ * sem levar o teste junto.
+ */
+function migration(sufixo: string): string {
+  const arquivo = fs.readdirSync(MIGRATIONS).find(f => f.endsWith(sufixo));
+  expect(arquivo, `migration *${sufixo} não encontrada`).toBeTruthy();
+  return fs.readFileSync(path.join(MIGRATIONS, arquivo as string), 'utf8');
+}
+
+const SCHEMA = migration('_numeros_whatsapp.sql');
 
 /** Corpo de uma função, do CREATE até o `$function$;` que a fecha. */
 function corpoDaFuncao(sql: string, nome: string): string {
@@ -235,8 +253,7 @@ describe('as funções não vazam privilégio', () => {
 // A migration do fluxo: as cinco transições e as policies.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const FLUXO = fs.readFileSync(
-  path.join(MIGRATIONS, '20260910191000_numeros_whatsapp_fluxo.sql'), 'utf8');
+const FLUXO = migration('_numeros_whatsapp_fluxo.sql');
 const FLUXO_CODIGO = semComentarios(FLUXO);
 
 const RPCS = [
