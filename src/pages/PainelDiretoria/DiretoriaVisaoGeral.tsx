@@ -596,6 +596,46 @@ export function DiretoriaVisaoGeral({
         </aside>
       </div>
 
+      {/* ── Setores alternativos ─────────────────────────────────────────
+          Ficam ANTES do bloco de carteiras e depois dos números do mês, que é
+          onde a pergunta «e o Treinamento?» aparece. A frase de que não somam
+          não é enfeite: sem ela, quem lê tenta fechar o total de cabeça e abre
+          chamado quando não fecha. */}
+      {dados.alternativos.length > 0 && (
+        <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Setores alternativos</h3>
+            <p className="text-[11px] text-muted-foreground">
+              Clonam o recebimento de quem é de outros setores —{' '}
+              <strong className="text-foreground">não somam</strong> no total acima.
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            {dados.alternativos.map(a => (
+              <div
+                key={a.setorId}
+                className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40"
+              >
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="truncate text-xs text-foreground" title={a.setorNome}>
+                    {a.setorNome}
+                  </span>
+                  <span className="shrink-0 rounded border border-border px-1 text-[9px] uppercase text-muted-foreground">
+                    {a.pessoas} {a.pessoas === 1 ? 'pessoa' : 'pessoas'}
+                  </span>
+                </span>
+                <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+                  {formatBRL(a.valor)}
+                </span>
+                <span className="w-[62px] shrink-0 text-right">
+                  <Selo pct={dados.temLoteAnterior ? variacao(a.valor, a.valorAnterior) : null} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Onde acontece + como o dinheiro chega ────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">

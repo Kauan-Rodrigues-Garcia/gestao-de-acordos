@@ -38,7 +38,7 @@ import {
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, AlertCircle, FileSpreadsheet, Users, Layers,
-  Link2Off, CalendarClock, Target, ChevronRight, Wallet,
+  Link2Off, CalendarClock, Target, ChevronRight, Wallet, CopyPlus,
 } from 'lucide-react';
 import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -106,13 +106,24 @@ function CardSetor({
   operadores: number;
   sub?: string;
   aviso?: string;
-  onClick: () => void;
+  /**
+   * Ausente = card de leitura, sem clique.
+   *
+   * O setor alternativo é assim hoje: `fn_mestre_diretoria_setor` monta o
+   * detalhe a partir das CARTEIRAS do setor, e o alternativo não tem nenhuma
+   * — abrir mostraria um painel vazio. Card que não abre é melhor que clique
+   * que leva a lugar nenhum.
+   */
+  onClick?: () => void;
 }) {
+  const Caixa = onClick ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-col gap-2.5 rounded-xl border border-border/70 bg-card p-3.5 text-left shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/30"
+    <Caixa
+      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      className={cn(
+        'group flex flex-col gap-2.5 rounded-xl border border-border/70 bg-card p-3.5 text-left shadow-sm transition-colors',
+        onClick && 'hover:border-primary/50 hover:bg-muted/30',
+      )}
     >
       <div className="flex items-start gap-2">
         <Avatar className="h-8 w-8 shrink-0 border border-border/60">
@@ -175,7 +186,7 @@ function CardSetor({
           </span>
         </span>
       </div>
-    </button>
+    </Caixa>
   );
 }
 
@@ -320,7 +331,9 @@ export function DiretoriaSetores({
   /** A projeção de cada setor, na régua do painel. */
   const projecoes = useMemo(() => {
     const r: Record<string, ReturnType<typeof projecaoDoSetor>> = {};
-    for (const s of grade?.setores ?? []) {
+    // O alternativo entra: ele TEM meta configurada, e sem isto o card dele
+    // mostraria «sem meta» ao lado de uma meta que existe.
+    for (const s of [...(grade?.setores ?? []), ...(grade?.alternativos ?? [])]) {
       r[s.setorId] = projecaoDoSetor({
         meta: metas[s.setorId],
         recebido: s.valor,
@@ -778,6 +791,45 @@ export function DiretoriaSetores({
                 onClick={() => setAlvo({ tipo: 'carteira', cod: c.cod })}
               />
             ))}
+          </div>
+        </section>
+      )}
+
+      {grade.alternativos.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-4">
+            <CopyPlus className="h-3.5 w-3.5 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Setores alternativos</h3>
+            {/*
+              A frase não é enfeite. Estes números espelham dinheiro que outro
+              setor já cobrou, e quem lê a tela precisa saber disso antes de
+              somar de cabeça — senão o total «não fecha» e vira chamado.
+            */}
+            <span className="text-[11px] text-muted-foreground">
+              clonam o recebimento de quem é de outros setores —{' '}
+              <strong className="text-foreground">não somam</strong> no total da empresa
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {grade.alternativos.map((s: SetorDoPainel) => {
+              const p = projecoes[s.setorId];
+              const pessoas = s.pessoas ?? s.operadores;
+              return (
+                <CardSetor
+                  key={s.setorId}
+                  nome={s.setorNome}
+                  fotoUrl={s.fotoUrl}
+                  valor={s.valor}
+                  /* `null` de propósito: participação num total do qual ele não
+                     faz parte seria um número inventado. */
+                  parte={null}
+                  projecao={p ? p.projecaoPct : null}
+                  quartil={p?.quartil?.quartil ?? null}
+                  operadores={s.operadores}
+                  sub={`${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}`}
+                />
+              );
+            })}
           </div>
         </section>
       )}

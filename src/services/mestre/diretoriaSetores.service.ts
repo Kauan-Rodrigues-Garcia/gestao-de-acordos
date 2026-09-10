@@ -63,6 +63,14 @@ export interface SetorDoPainel {
   temAnterior: boolean;
   /** Tem ao menos uma carteira vinculada. Falso = só recebeu equipe movida. */
   temGrupo: boolean;
+  /**
+   * Quantas pessoas o setor tem, tenham elas recebido ou não.
+   *
+   * Só o alternativo preenche. `operadores` conta quem apareceu no 59, e um
+   * setor de treinamento com cinco pessoas e nenhum recebimento no mês
+   * pareceria vazio se este número não existisse.
+   */
+  pessoas?: number;
 }
 
 /** Carteira que ainda não foi vinculada a setor nenhum. Vira card também. */
@@ -87,6 +95,18 @@ export interface GradeDeSetores {
   semSetor: { valor: number; linhas: number };
   setores: SetorDoPainel[];
   carteirasSemSetor: CarteiraSemSetor[];
+  /**
+   * Os setores que CLONAM recebimento de gente de outros setores.
+   *
+   * Vêm de uma consulta separada, e ficam num campo separado, porque o valor
+   * deles NÃO entra em `totalEmpresa` nem em `totalSetores` — somar contaria
+   * o mesmo dinheiro duas vezes: uma no setor que cobrou, outra no
+   * alternativo que espelha.
+   *
+   * A separação é a garantia. Se entrassem em `setores`, bastaria alguém
+   * somar a lista para o total inchar em silêncio.
+   */
+  alternativos: SetorDoPainel[];
 }
 
 export interface EquipeDoSetor {
@@ -148,6 +168,8 @@ interface GradeCrua {
   }[];
 }
 
+type AlternativoCru = GradeCrua['setores'][number] & { pessoas: unknown };
+
 interface DetalheCru {
   setor_id: string | null; cod_grupo: string | null; setor_nome: string;
   vinculado: boolean; mes: string; mes_anterior: string;
@@ -171,10 +193,24 @@ interface DetalheCru {
 export async function buscarGradeDeSetores(
   empresaId: string, mes: string, diaCorte?: number | null,
 ): Promise<GradeDeSetores> {
-  const { data, error } = await rpcSemTipo<GradeCrua>(
-    'fn_mestre_diretoria_setores',
-    { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null },
-  );
+  const args = { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null };
+  /*
+   * Duas chamadas, e não uma com um campo a mais.
+   *
+   * O alternativo espelha dinheiro que outro setor já cobrou, então ele não
+   * pode entrar em `total_setores` — que o banco calcula somando os cards da
+   * grade. Mantê-lo fora daquela consulta faz do total algo que NÃO TEM COMO
+   * inchar, em vez de algo que depende de ninguém errar.
+   *
+   * Falha na segunda não derruba a primeira: a grade é o principal, e uma
+   * seção a menos é melhor que a tela inteira em branco.
+   */
+  const [res, alt] = await Promise.all([
+    rpcSemTipo<GradeCrua>('fn_mestre_diretoria_setores', args),
+    rpcSemTipo<AlternativoCru[]>('fn_mestre_diretoria_alternativos', args)
+      .catch(() => ({ data: null as AlternativoCru[] | null, error: null as { message: string } | null })),
+  ]);
+  const { data, error } = res;
   if (error) throw new Error(error.message);
   if (!data) throw new Error('A grade de setores não devolveu resultado.');
 
@@ -211,6 +247,29 @@ export async function buscarGradeDeSetores(
       operadores:    n(c.operadores),
       valorAnterior: n(c.valor_anterior),
     })),
+    // `Array.isArray`: a RPC devolve jsonb, e um formato inesperado viraria
+    // `.map is not a function` — a tela inteira em branco por causa de uma
+    // seção secundária.
+    alternativos: Array.isArray(alt.data) ? alt.data.map(paraCard) : [],
+  };
+}
+
+/** O card de um setor, do jsonb cru. Igual para grade e alternativo. */
+function paraCard(s: AlternativoCru): SetorDoPainel {
+  return {
+    setorId:          s.setor_id,
+    setorNome:        s.setor_nome,
+    fotoUrl:          s.foto_url,
+    valor:            n(s.valor),
+    linhas:           n(s.linhas),
+    operadores:       n(s.operadores),
+    carteiras:        n(s.carteiras),
+    integralRecebido: n(s.integral_recebido),
+    movidoParaCa:     n(s.movido_para_ca),
+    valorAnterior:    n(s.valor_anterior),
+    temAnterior:      s.tem_anterior === true,
+    temGrupo:         s.tem_grupo === true,
+    pessoas:          n(s.pessoas),
   };
 }
 
