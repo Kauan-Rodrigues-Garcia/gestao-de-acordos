@@ -108,7 +108,14 @@ vi.mock('@/hooks/useSetoresEquipes', () => ({
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: () => ({
-      select: () => ({ eq: () => ({ eq: () => ({ data: [], error: null }) }) }),
+      /* `limit` entrou com `useLideroEquipe`, que pergunta se eu lidero alguma
+         equipe (`equipe_lideres`) para decidir em que degrau o Dashboard abre. */
+      select: () => ({
+        eq: () => ({
+          eq: () => ({ data: [], error: null }),
+          limit: () => ({ data: [], error: null }),
+        }),
+      }),
       update: () => ({ eq: () => ({ data: null, error: null }) }),
     }),
     channel: () => ({ on: () => ({ subscribe: vi.fn() }) }),

@@ -31,6 +31,7 @@ import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog } from '@/services/logs.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
+import { useLideroEquipe } from '@/hooks/useLideroEquipe';
 import { FiltroEscopo } from './FiltroEscopo';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
@@ -88,6 +89,18 @@ export default function Dashboard() {
     (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null;
 
   /*
+   * Eu respondo por um GRUPO, ou só por mim?
+   *
+   * Duas fontes, e nenhuma delas é o cargo: lidero alguma equipe
+   * (`equipe_lideres`), ou enxergo todos os setores. Quem cai numa das duas
+   * não tem meta individual — a meta é do time —, e por isso «Minha visão»
+   * é o pior lugar para essa pessoa começar: mostra o pouco que passou pelas
+   * mãos dela, e não o que ela veio ver.
+   */
+  const { lidero, carregando: carregandoLideranca } = useLideroEquipe();
+  const respondoPorGrupo = lidero || niveis.includes('todos_setores');
+
+  /*
    * Onde o Dashboard ABRE: no degrau mais BAIXO que a pessoa alcança.
    *
    * Era sempre 'setor', depois passou a depender do cargo — `contaNoRecebimento`
@@ -136,6 +149,43 @@ export default function Dashboard() {
   useEffect(() => {
     if (niveis.length === 0) return;               // aba fechada: outro guard trata
     if (visaoFiltro !== 'individual') return;
+    /*
+     * Esperar a resposta sobre liderança.
+     *
+     * Sem esta linha a tela abriria em «Minha visão», receberia o `lidero` um
+     * instante depois e saltaria sozinha para outro degrau. O salto é pior
+     * que a espera: quem estava lendo o número vê ele trocar embaixo do dedo.
+     */
+    if (carregandoLideranca) return;
+
+    /*
+     * Quem responde por um grupo abre no degrau mais AMPLO que alcança.
+     *
+     * O contrário da regra de quem produz, e de propósito. Um líder não tem
+     * meta individual — a dele é a do time —, então «Minha visão» lhe mostra
+     * ou nada, ou um número muito abaixo do que ele responde. Foi a queixa de
+     * 10/09/2026.
+     *
+     * Setor antes de equipe aqui: há líder com seis equipes espalhadas por
+     * quatro setores, e para ele «Minha equipe» — que é a UMA equipe do
+     * cadastro — seria um recorte mais estreito que o próprio alcance.
+     *
+     * O degrau «Minha visão» continua na régua. Isto é por onde a tela ABRE,
+     * não o que ela permite: um clique devolve o número próprio a quem quiser.
+     */
+    if (respondoPorGrupo) {
+      if (niveis.includes('setor') || niveis.includes('todos_setores')) {
+        setVisaoFiltro('setor');
+        return;
+      }
+      if (niveis.includes('equipe')) {
+        const alvo = equipeDoPerfil ?? equipesDoSetor[0]?.id ?? null;
+        if (alvo) setVisaoFiltro(`equipe:${alvo}`);
+      }
+      // Só tem `individual`: é o único degrau que existe, e ele fica.
+      return;
+    }
+
     if (niveis.includes('individual')) return;
     if (niveis.includes('equipe')) {
       const alvo = equipeDoPerfil ?? equipesDoSetor[0]?.id ?? null;
@@ -147,7 +197,8 @@ export default function Dashboard() {
     if (niveis.includes('setor') || niveis.includes('todos_setores')) {
       setVisaoFiltro('setor');
     }
-  }, [niveis, visaoFiltro, equipesDoSetor, equipeDoPerfil]);
+  }, [niveis, visaoFiltro, equipesDoSetor, equipeDoPerfil,
+      respondoPorGrupo, carregandoLideranca]);
   const soOsMeus = visaoFiltro === 'individual';
   const operadorFiltroAtivo = soOsMeus ? (perfil?.id ?? null) : null;
 
