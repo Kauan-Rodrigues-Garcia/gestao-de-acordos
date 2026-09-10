@@ -58,7 +58,20 @@ export function rpcSemTipo<T = never>(
   nome: string,
   args: Record<string, unknown>,
 ): Promise<{ data: T | null; error: { message: string } | null }> {
-  return (supabase.rpc as unknown as
-    (n: string, a: Record<string, unknown>) => Promise<{ data: T | null; error: { message: string } | null }>
-  )(nome, args);
+  /*
+   * `Promise.resolve` em volta, e não o retorno cru.
+   *
+   * `supabase.rpc()` devolve o CONSTRUTOR do PostgREST, que é *thenable* —
+   * tem `.then`, não tem `.catch` nem `.finally`. A assinatura acima sempre
+   * disse `Promise`, e o TypeScript acreditou: chamar `.catch` compilava e
+   * estourava em produção com «.catch is not a function».
+   *
+   * Aconteceu em 10/09/2026, e derrubou as duas abas do Painel Diretoria de
+   * uma vez. Consertar só o ponto da chamada deixaria a armadilha armada
+   * para o próximo; aqui a função passa a entregar o que a assinatura
+   * promete, e o problema deixa de existir.
+   */
+  return Promise.resolve((supabase.rpc as unknown as
+    (n: string, a: Record<string, unknown>) => PromiseLike<{ data: T | null; error: { message: string } | null }>
+  )(nome, args));
 }

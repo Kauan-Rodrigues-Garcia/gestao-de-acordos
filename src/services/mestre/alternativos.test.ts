@@ -8,6 +8,18 @@
  * Por isso ele vem de uma consulta própria e mora num campo próprio: `total`,
  * `totalEmpresa` e `totalSetores` não podem mudar por causa dele. Um teste que
  * garante isso é barato; descobrir na conferência de fechamento não é.
+ *
+ * ## O dublê é THENABLE, e não `Promise`
+ *
+ * Este arquivo já existiu com o dublê devolvendo `Promise.resolve(...)`, e foi
+ * assim que ele deixou passar o defeito que derrubou as duas abas do Painel
+ * Diretoria em produção: `supabase.rpc()` devolve o CONSTRUTOR do PostgREST,
+ * que tem `.then` e não tem `.catch`. O teste passava porque o dublê era mais
+ * capaz que a coisa real.
+ *
+ * Agora o dublê fica na camada de BAIXO (`@/lib/supabase`) e imita o original:
+ * um thenable pelado. O `rpcSemTipo` de verdade roda no teste, então a correção
+ * dele — devolver `Promise` de fato — está sob teste, e não mascarada.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,14 +29,17 @@ const mock = vi.hoisted(() => ({
   chamadas: [] as string[],
 }));
 
-vi.mock('@/lib/supabaseSemTipo', () => ({
-  rpcSemTipo: (nome: string) => {
-    mock.chamadas.push(nome);
-    return Promise.resolve(mock.porRpc[nome] ?? { data: null, error: null });
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    rpc: (nome: string) => {
+      mock.chamadas.push(nome);
+      const r = mock.porRpc[nome] ?? { data: null, error: null };
+      // Thenable pelado: sem `.catch`, sem `.finally` — como o construtor do
+      // supabase-js. Trocar isto por `Promise.resolve` reabre a armadilha.
+      return { then: (ok: (v: unknown) => unknown) => ok(r) };
+    },
   },
-  tabelaSemTipo: () => ({ select: () => ({ eq: () => ({ order: () => ({ limit: () => [] }) }) }) }),
 }));
-vi.mock('@/lib/supabase', () => ({ supabase: { rpc: () => Promise.resolve({ error: null }) } }));
 
 import { buscarGradeDeSetores } from './diretoriaSetores.service';
 import { buscarVisaoGeralDiretoria } from './diretoria.service';
