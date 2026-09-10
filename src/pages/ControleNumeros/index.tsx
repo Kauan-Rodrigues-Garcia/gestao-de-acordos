@@ -3,11 +3,12 @@
  *
  * ## As três abas, e por que são três
  *
- *   Celulares    o aparelho e os números dentro dele. É a visão de quem está
- *                com o celular na mão cadastrando chip.
- *   Números      a lista plana, com filtro por situação e por onde o número
- *                está. É a visão de quem vai liberar, ou de quem procura um
- *                número específico.
+ *   Celulares    o aparelho e os números dentro dele, com o cadastro e as
+ *                correções. É a visão de quem está com o celular na mão.
+ *   Números      os mesmos números, agrupados pelo aparelho, com filtro por
+ *                celular, situação e posse, e com as ações do fluxo — tratar,
+ *                encerrar, etiquetar, liberar. É a visão de quem trabalha o
+ *                acervo.
  *   Configuração qual setor é o Núcleo. Só aparece com `numeros_configurar`.
  *
  * As duas primeiras mostram o MESMO dado por recortes diferentes — não são
@@ -18,6 +19,12 @@
  * Número que voltou de um setor é a única coisa aqui que alguém está esperando.
  * Ele aparece no topo, antes das abas, porque enterrá-lo numa lista de duzentos
  * faria o Núcleo descobrir o banimento pelo líder cobrando, não pela tela.
+ *
+ * O aviso conta só o que ninguém pegou ainda. Tratar e liberar são passos
+ * SEPARADOS desde a migration 20260910210000: o Núcleo mexe na situação quantas
+ * vezes precisar, encerra o tratamento quando terminou, e libera depois — antes,
+ * lançar de volta ao setor era a única forma de tirar o «Voltou: Banido» da
+ * tela, e o tratamento acontecia com o número já fora das mãos.
  *
  * ## O que esta tela NÃO decide
  *
@@ -34,11 +41,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
 import { useControleNumeros, type CelularComNumeros } from '@/hooks/useControleNumeros';
 import { HistoricoNumero } from '@/components/numeros/HistoricoNumero';
+import { DialogoExcluirNumero } from '@/components/numeros/DialogoExcluirNumero';
+import { EtiquetaTratamento } from '@/components/numeros/EtiquetasNumero';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
-import { MOTIVO_LABELS } from '@/services/numeros/numerosRegras';
+import { MOTIVO_LABELS, esperaTratamento } from '@/services/numeros/numerosRegras';
+import type { NumeroRow } from '@/services/numeros/numeros.service';
 import { ListaCelulares } from './ListaCelulares';
 import { ListaNumeros } from './ListaNumeros';
 import { DialogoCelular } from './DialogoCelular';
@@ -49,16 +58,26 @@ export default function ControleNumeros() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao, temPermissaoExplicita } = useCargoPermissoes();
-  const { setores } = useSetoresEquipes();
 
   const {
-    config, aparelhos, numeros, relancados, celulares, loading, erro, recarregar,
+    config, setores, nomeDoSetor, aparelhos, relancados, loading, erro, recarregar,
   } = useControleNumeros();
 
   const [celularEmEdicao, setCelularEmEdicao] = useState<CelularComNumeros | null>(null);
   const [celularAberto, setCelularAberto]     = useState(false);
-  const [aparelhoDoNumero, setAparelhoDoNumero] = useState<CelularComNumeros | null>(null);
   const [historico, setHistorico] = useState<{ id: string; numero: string } | null>(null);
+
+  /*
+   * Cadastrar e corrigir usam o MESMO diálogo, e por isso um estado só.
+   *
+   * `numero: null` = cadastro novo naquele aparelho; `numero` preenchido =
+   * correção. Dois estados separados abririam a porta para os dois estarem
+   * abertos ao mesmo tempo, com dois diálogos empilhados.
+   */
+  const [dialogoNumero, setDialogoNumero] =
+    useState<{ aparelho: CelularComNumeros; numero: NumeroRow | null } | null>(null);
+  const [numeroParaExcluir, setNumeroParaExcluir] =
+    useState<{ aparelho: CelularComNumeros; numero: NumeroRow } | null>(null);
 
   const podeAdministrar = temPermissao('numeros_administrar');
   const podeLiberar     = temPermissao('numeros_liberar_ao_setor');
@@ -68,15 +87,22 @@ export default function ControleNumeros() {
   const autor = perfil ? { id: perfil.id, nome: perfil.nome } : null;
   const empresaId = empresa?.id ?? '';
 
-  const nomeDoSetor = useMemo(() => {
-    const mapa = new Map(setores.map(s => [s.id, s.nome]));
-    return (id: string) => mapa.get(id) ?? 'Setor removido';
-  }, [setores]);
-
-  const nomeDoCelular = useMemo(() => {
-    const mapa = new Map(celulares.map(c => [c.id, c.identificacao]));
-    return (id: string) => mapa.get(id) ?? '—';
-  }, [celulares]);
+  /*
+   * O aviso do topo mostra só o que ninguém pegou ainda.
+   *
+   * `relancados` (do hook) traz tudo o que voltou de um setor, inclusive o que
+   * já está sendo tratado. Um número em que alguém está trabalhando não é mais
+   * uma pendência — deixá-lo no aviso faria a contagem nunca baixar enquanto o
+   * tratamento durasse, e o aviso perderia a serventia de ser uma fila.
+   */
+  const aguardando = useMemo(
+    () => relancados.filter(n => esperaTratamento({
+      situacao: n.situacao, posse: n.posse,
+      operadorId: n.operador_id, tratamento: n.tratamento,
+    })),
+    [relancados],
+  );
+  const emTratamento = relancados.length - aguardando.length;
 
   if (loading) {
     return (
@@ -105,12 +131,23 @@ export default function ControleNumeros() {
       {relancados.length > 0 && (
         <Card className="border-warning/40 bg-warning/5">
           <CardContent className="space-y-2 py-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
               <AlertTriangle className="h-4 w-4 text-warning" />
-              {relancados.length}{' '}
-              {relancados.length === 1
-                ? 'número voltou de um setor e espera tratamento'
-                : 'números voltaram dos setores e esperam tratamento'}
+              {aguardando.length > 0 ? (
+                <>
+                  {aguardando.length}{' '}
+                  {aguardando.length === 1
+                    ? 'número voltou de um setor e espera tratamento'
+                    : 'números voltaram dos setores e esperam tratamento'}
+                </>
+              ) : (
+                <>Nada esperando — o que voltou já está sendo tratado</>
+              )}
+              {emTratamento > 0 && (
+                <span className="font-normal text-muted-foreground">
+                  · {emTratamento} em tratamento
+                </span>
+              )}
             </div>
             <ul className="space-y-1 text-sm">
               {relancados.map(n => (
@@ -122,6 +159,7 @@ export default function ControleNumeros() {
                   >
                     {mascararNumero(n.numero)}
                   </button>
+                  <EtiquetaTratamento tratamento={n.tratamento} />
                   <span className="text-muted-foreground">
                     {nomeDoSetor(n.setor_id)}
                     {n.motivo_retorno ? ` · ${MOTIVO_LABELS[n.motivo_retorno]}` : ''}
@@ -130,6 +168,15 @@ export default function ControleNumeros() {
                 </li>
               ))}
             </ul>
+            {/* A frase existe porque a mudança inverteu um hábito: antes, tirar
+                o «Voltou: Banido» da tela obrigava a lançar o número de volta ao
+                setor. Agora tratar e lançar são passos separados, e quem usava o
+                fluxo antigo precisa saber disso sem ter de descobrir. */}
+            <p className="text-xs text-muted-foreground">
+              Trate cada número na aba <strong>Números</strong> — a situação muda
+              a qualquer momento. Só depois de encerrar o tratamento é que ele
+              pode ser liberado de volta ao setor.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -156,20 +203,23 @@ export default function ControleNumeros() {
             podeAdministrar={podeAdministrar}
             onNovoCelular={() => { setCelularEmEdicao(null); setCelularAberto(true); }}
             onEditarCelular={a => { setCelularEmEdicao(a); setCelularAberto(true); }}
-            onNovoNumero={setAparelhoDoNumero}
+            onNovoNumero={a => setDialogoNumero({ aparelho: a, numero: null })}
             onVerHistorico={(id, numero) => setHistorico({ id, numero })}
+            onCorrigirNumero={(a, n) => setDialogoNumero({ aparelho: a, numero: n })}
+            onExcluirNumero={(a, n) => setNumeroParaExcluir({ aparelho: a, numero: n })}
           />
         </TabsContent>
 
         <TabsContent value="numeros" className="mt-4">
           <ListaNumeros
-            numeros={numeros}
+            aparelhos={aparelhos}
             nomeDoSetor={nomeDoSetor}
-            nomeDoCelular={nomeDoCelular}
             podeAdministrar={podeAdministrar}
             podeLiberar={podeLiberar}
             onMudou={() => void recarregar()}
             onVerHistorico={(id, numero) => setHistorico({ id, numero })}
+            onCorrigir={(a, n) => setDialogoNumero({ aparelho: a, numero: n })}
+            onExcluir={(a, n) => setNumeroParaExcluir({ aparelho: a, numero: n })}
           />
         </TabsContent>
 
@@ -198,13 +248,23 @@ export default function ControleNumeros() {
       />
 
       <DialogoNumero
-        aberto={aparelhoDoNumero !== null}
+        aberto={dialogoNumero !== null}
         empresaId={empresaId}
-        aparelho={aparelhoDoNumero}
-        setorNome={aparelhoDoNumero ? nomeDoSetor(aparelhoDoNumero.celular.setor_id) : undefined}
+        aparelho={dialogoNumero?.aparelho ?? null}
+        numeroEmEdicao={dialogoNumero?.numero ?? null}
+        setorNome={
+          dialogoNumero ? nomeDoSetor(dialogoNumero.aparelho.celular.setor_id) : undefined
+        }
         autor={autor}
-        onFechar={() => setAparelhoDoNumero(null)}
+        onFechar={() => setDialogoNumero(null)}
         onSalvo={() => void recarregar()}
+      />
+
+      <DialogoExcluirNumero
+        numero={numeroParaExcluir?.numero ?? null}
+        nomeDoCelular={numeroParaExcluir?.aparelho.celular.identificacao}
+        onFechar={() => setNumeroParaExcluir(null)}
+        onExcluido={() => void recarregar()}
       />
 
       <HistoricoNumero

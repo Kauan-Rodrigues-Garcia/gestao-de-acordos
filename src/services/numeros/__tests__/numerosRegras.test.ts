@@ -23,6 +23,19 @@ import {
   podeDevolverALideranca,
   podeRelancarAoNucleo,
   motivoValido,
+  ETIQUETAS,
+  ETIQUETA_LABELS,
+  ETIQUETA_DESCRICOES,
+  TRATAMENTOS,
+  TRATAMENTO_LABELS,
+  etiquetaValida,
+  etiquetasConhecidas,
+  esperaTratamento,
+  emTratamento,
+  podeConcluirTratamento,
+  foiLancadoAoSetor,
+  podeCorrigirNumero,
+  podeExcluirNumero,
   type EstadoNumero,
 } from '../numerosRegras';
 
@@ -152,5 +165,153 @@ describe('motivoValido', () => {
 
   it('recusa motivo inventado', () => {
     expect(motivoValido('sumiu')).toBe(false);
+  });
+});
+
+// ── O que a migration 20260910210000 acrescentou ────────────────────────────
+
+/**
+ * O número que voltou de um setor e ainda não foi tratado.
+ *
+ * Este é o estado que motivou a mudança inteira. Antes dela, `situacao` ficava
+ * `ativo` mesmo com o setor dizendo «banido», e `podeLiberarAoSetor` respondia
+ * SIM — o número podia ser remandado no mesmo minuto, sem ninguém tratar nada.
+ */
+const voltouPendente = numero({
+  situacao: 'ativo', posse: 'nucleo', tratamento: 'pendente',
+});
+const voltouEmAndamento = numero({
+  situacao: 'ativo', posse: 'nucleo', tratamento: 'em_andamento',
+});
+
+describe('as etiquetas operacionais', () => {
+  it('a lista e os rótulos não se descolam', () => {
+    for (const e of ETIQUETAS) {
+      expect(ETIQUETA_LABELS[e], `rótulo de ${e}`).toBeTruthy();
+      expect(ETIQUETA_DESCRICOES[e], `descrição de ${e}`).toBeTruthy();
+    }
+    expect(Object.keys(ETIQUETA_LABELS).sort()).toEqual([...ETIQUETAS].sort());
+  });
+
+  it('«Não chegou SMS» existe — é a que o pedido nomeou', () => {
+    expect(ETIQUETAS).toContain('nao_chegou_sms');
+  });
+
+  it('não nasceram etiquetas que ninguém pediu', () => {
+    expect(ETIQUETAS).toHaveLength(1);
+  });
+
+  it('nenhuma etiqueta duplica situação ou motivo de retorno', () => {
+    // Duas colunas para o mesmo fato voltam a discordar — é o defeito que a
+    // migration foi corrigir, e criar «etiqueta: banido» o traria de volta.
+    const proibidos = [...SITUACOES, ...MOTIVOS_RETORNO] as readonly string[];
+    for (const e of ETIQUETAS) expect(proibidos).not.toContain(e);
+  });
+
+  it('etiquetaValida recusa o que não está na lista', () => {
+    expect(etiquetaValida('nao_chegou_sms')).toBe(true);
+    expect(etiquetaValida('inventada')).toBe(false);
+    expect(etiquetaValida(null)).toBe(false);
+    expect(etiquetaValida(42)).toBe(false);
+  });
+
+  it('etiquetasConhecidas descarta o que esta versão não sabe nomear', () => {
+    // Um deploy antigo lendo uma etiqueta nova pintaria um badge em branco.
+    expect(etiquetasConhecidas(['nao_chegou_sms', 'etiqueta_do_futuro']))
+      .toEqual(['nao_chegou_sms']);
+  });
+
+  it('etiquetasConhecidas não repete — o CHECK da coluna não cobre duplicata', () => {
+    // «sem repetido» exige `unnest`, e subconsulta em CHECK o Postgres recusa.
+    // A RPC normaliza antes de gravar; isto cobre o UPDATE direto.
+    expect(etiquetasConhecidas(['nao_chegou_sms', 'nao_chegou_sms']))
+      .toEqual(['nao_chegou_sms']);
+  });
+
+  it('etiquetasConhecidas aguenta o que vier do banco', () => {
+    expect(etiquetasConhecidas(null)).toEqual([]);
+    expect(etiquetasConhecidas(undefined)).toEqual([]);
+    expect(etiquetasConhecidas([])).toEqual([]);
+    expect(etiquetasConhecidas('nao_chegou_sms')).toEqual([]);
+  });
+});
+
+describe('o tratamento do retorno', () => {
+  it('a lista e os rótulos não se descolam', () => {
+    expect(Object.keys(TRATAMENTO_LABELS).sort()).toEqual([...TRATAMENTOS].sort());
+  });
+
+  it('ausência de tratamento é o estado normal', () => {
+    expect(esperaTratamento(noNucleoAtivo)).toBe(false);
+    expect(emTratamento(noNucleoAtivo)).toBe(false);
+    expect(podeConcluirTratamento(noNucleoAtivo)).toBe(false);
+  });
+
+  it('«pendente» é a fila: espera, e ainda não começou', () => {
+    expect(esperaTratamento(voltouPendente)).toBe(true);
+    expect(emTratamento(voltouPendente)).toBe(false);
+  });
+
+  it('«em andamento» saiu da fila', () => {
+    expect(esperaTratamento(voltouEmAndamento)).toBe(false);
+    expect(emTratamento(voltouEmAndamento)).toBe(true);
+  });
+
+  it('encerrar vale nos dois pés, sem obrigar a passar por «comecei»', () => {
+    expect(podeConcluirTratamento(voltouPendente)).toBe(true);
+    expect(podeConcluirTratamento(voltouEmAndamento)).toBe(true);
+  });
+});
+
+describe('podeLiberarAoSetor — a trava que o tratamento acrescentou', () => {
+  it('o número ativo e sem pendência continua liberável', () => {
+    expect(podeLiberarAoSetor(noNucleoAtivo)).toBe(true);
+  });
+
+  it('NÃO libera o que voltou de um setor e não foi tratado', () => {
+    // O caso do pedido: volta como «banido», a situação ainda diz `ativo`, e
+    // sem esta trava o número ia de volta sem ninguém ter feito nada.
+    expect(podeLiberarAoSetor(voltouPendente)).toBe(false);
+    expect(podeLiberarAoSetor(voltouEmAndamento)).toBe(false);
+  });
+
+  it('tratamento ausente e tratamento nulo valem o mesmo', () => {
+    expect(podeLiberarAoSetor(numero({ situacao: 'ativo' }))).toBe(true);
+    expect(podeLiberarAoSetor(numero({ situacao: 'ativo', tratamento: null }))).toBe(true);
+  });
+});
+
+describe('foiLancadoAoSetor — a base da diferença visual', () => {
+  it('responde pela posse, e por nada mais', () => {
+    expect(foiLancadoAoSetor(noNucleoAtivo)).toBe(false);
+    expect(foiLancadoAoSetor(noSetorLivre)).toBe(true);
+    expect(foiLancadoAoSetor(comOperador)).toBe(true);
+  });
+});
+
+describe('corrigir e excluir um cadastro', () => {
+  it('corrige o que está no Núcleo e sem dono', () => {
+    expect(podeCorrigirNumero(noNucleoAtivo)).toBe(true);
+    expect(podeCorrigirNumero(voltouPendente)).toBe(true);
+  });
+
+  it('não corrige o que já está com um setor', () => {
+    // Trocar o número de um chip em uso mudaria, em silêncio, o que aparece na
+    // tela de quem o está usando.
+    expect(podeCorrigirNumero(noSetorLivre)).toBe(false);
+    expect(podeCorrigirNumero(comOperador)).toBe(false);
+  });
+
+  it('exclui o que nunca saiu do Núcleo', () => {
+    expect(podeExcluirNumero(noNucleoAtivo)).toBe(true);
+  });
+
+  it('não exclui o que está com um setor', () => {
+    expect(podeExcluirNumero(noSetorLivre)).toBe(false);
+    expect(podeExcluirNumero(comOperador)).toBe(false);
+  });
+
+  it('não exclui o que já circulou — apagar levaria a trilha junto', () => {
+    expect(podeExcluirNumero(noNucleoAtivo, true)).toBe(false);
   });
 });

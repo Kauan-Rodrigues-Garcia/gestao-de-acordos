@@ -34,7 +34,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { normalizarNumero, erroDoNumero } from './numerosFormato';
-import type { Situacao, Posse, MotivoRetorno } from './numerosRegras';
+import type {
+  Situacao, Posse, MotivoRetorno, Etiqueta, Tratamento,
+} from './numerosRegras';
 import { LIMITE_POR_CELULAR } from './numerosRegras';
 
 /**
@@ -90,6 +92,13 @@ export interface NumeroRow {
   operador_id: string | null;
   motivo_retorno: MotivoRetorno | null;
   observacao_retorno: string | null;
+  /**
+   * As marcas operacionais do momento. Sempre um array — a coluna é
+   * `NOT NULL DEFAULT '{}'`, e o vazio é o estado da grande maioria.
+   */
+  etiquetas: Etiqueta[];
+  /** Em que pé está o retorno. `null` quando não há nada pendente. */
+  tratamento: Tratamento | null;
   criado_por: string | null;
   criado_por_nome: string | null;
   criado_em: string;
@@ -165,6 +174,12 @@ export function mensagemDeErro(erro: unknown): string {
   if (e.code === '23514' && texto.includes('numeros_whatsapp_formato')) {
     return 'Número inválido. Use DDD entre 11 e 99 e 10 ou 11 dígitos.';
   }
+  if (texto.includes('numeros_whatsapp_etiquetas_conhecidas')) {
+    return 'Etiqueta desconhecida. Atualize a página e tente de novo.';
+  }
+  if (texto.includes('numeros_whatsapp_tratamento')) {
+    return 'Só um número que está no Núcleo pode estar em tratamento.';
+  }
 
   // As RPCs levantam frases já prontas — devolvê-las é melhor do que traduzir.
   if (e.code === '42501' || e.code === '22023' || e.code === 'P0002') {
@@ -188,6 +203,44 @@ export async function buscarConfig(empresaId: string): Promise<NumerosConfigRow 
     .eq('empresa_id', empresaId)
     .maybeSingle();
   return (data as NumerosConfigRow | null) ?? null;
+}
+
+export interface SetorNome {
+  id: string;
+  nome: string;
+}
+
+/**
+ * Os setores da empresa, só para dar nome ao que o módulo mostra.
+ *
+ * ## Por que uma consulta própria, e não `useSetoresEquipes`
+ *
+ * Aquele hook responde a outra pergunta: «entre quais setores esta pessoa pode
+ * FILTRAR no Dashboard». Ele devolve lista vazia para quem não tem
+ * `dashboard_escopo_todos_setores` — que é o caso do operador e do líder do
+ * Núcleo, os dois cargos que mais usam estas telas.
+ *
+ * O efeito era visível: cada número aparecia como «Setor removido», porque o
+ * mapa de nomes chegava vazio. A informação não estava protegida — estava
+ * ausente por engano, e o número em si a tela mostrava do mesmo jeito.
+ *
+ * A pergunta daqui é outra: «como se chama o setor deste celular?». `setores`
+ * tem RLS própria (`setores_select`, com `fn_can_access_empresa`), e ela já
+ * responde por empresa — quem enxerga a empresa enxerga os nomes dos setores
+ * dela, e é assim desde o schema base.
+ *
+ * Serve também aos dois seletores de setor do módulo: o do cadastro de celular
+ * e o que aponta qual setor é o Núcleo. Os dois ofereciam uma lista vazia pelo
+ * mesmo motivo.
+ */
+export async function listarSetores(empresaId: string): Promise<SetorNome[]> {
+  const { data, error } = await supabase
+    .from('setores')
+    .select('id, nome')
+    .eq('empresa_id', empresaId)
+    .order('nome');
+  if (error) throw error;
+  return (data as SetorNome[]) ?? [];
 }
 
 export async function listarCelulares(empresaId: string): Promise<CelularRow[]> {
@@ -226,6 +279,17 @@ export interface OperadorDoSetor {
   id: string;
   nome: string;
   perfil: string;
+  /**
+   * A foto do perfil, quando a pessoa cadastrou uma.
+   *
+   * Vem daqui e não de uma segunda consulta: a liderança agrupa os números por
+   * operador e mostra o rosto de cada um, e buscar a foto separado faria uma ida
+   * ao banco por pessoa numa tela que já tem a lista inteira em mãos.
+   *
+   * `null` é comum e não é falta de dado — a tela cai nas iniciais, que é o
+   * padrão do resto do sistema para quem não tem foto.
+   */
+  foto_url: string | null;
 }
 
 /**
@@ -241,7 +305,7 @@ export async function listarOperadoresDoSetor(
 ): Promise<OperadorDoSetor[]> {
   const { data, error } = await supabase
     .from('perfis')
-    .select('id, nome, perfil')
+    .select('id, nome, perfil, foto_url')
     .eq('empresa_id', empresaId)
     .eq('setor_id', setorId)
     .eq('ativo', true)
@@ -407,7 +471,59 @@ export async function criarNumero(n: NovoNumero): Promise<Resultado<NumeroRow>> 
   return { ok: true, dados: data as NumeroRow };
 }
 
-// ── As cinco transições ──────────────────────────────────────────────────────
+// ── Corrigir e apagar um cadastro ────────────────────────────────────────────
+//
+// São `update` e `delete` comuns, e não RPC, porque pertencem à mesma classe do
+// cadastro: a pergunta é «você pode?», e a policy responde. As TRANSIÇÕES é que
+// precisam de RPC — elas mexem em três colunas juntas e gravam movimentação.
+//
+// As travas ficam no banco, em trigger:
+//
+//   `fn_numeros_whatsapp_valida` .. recusa trocar o número de um chip que está
+//                                   com um setor ou com um operador;
+//   `fn_numeros_pode_excluir` .... recusa apagar o que já circulou (apagar leva
+//                                   a trilha junto, por `ON DELETE CASCADE`);
+//   `trg_numeros_registra_correcao` grava a correção no histórico — inclusive
+//                                   se o UPDATE vier do SQL Editor.
+
+/**
+ * Corrige a digitação de um número já cadastrado.
+ *
+ * Aceita mascarado e normaliza, exatamente como o cadastro: sem isso
+ * `(18) 99999-9999` entraria como uma string diferente de `18999999999` e o
+ * `UNIQUE` deixaria o mesmo chip existir duas vezes.
+ */
+export async function corrigirNumero(
+  id: string, numero: string,
+): Promise<Resultado<NumeroRow>> {
+  const problema = erroDoNumero(numero);
+  if (problema) return { ok: false, erro: problema };
+
+  const { data, error } = await db
+    .from('numeros_whatsapp')
+    .update({ numero: normalizarNumero(numero) })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return falha(error);
+  return { ok: true, dados: data as NumeroRow };
+}
+
+/**
+ * Apaga um número cadastrado por engano.
+ *
+ * Só vale para o que nunca saiu do Núcleo. Um número que circulou tem trilha, e
+ * a trilha morre junto com ele — para esse caso a saída é marcar `banido`, que
+ * preserva tudo. Quem recusa é o banco, e a mensagem dele já diz isso.
+ */
+export async function excluirNumero(id: string): Promise<Resultado> {
+  const { error } = await db.from('numeros_whatsapp').delete().eq('id', id);
+  if (error) return falha(error);
+  return { ok: true };
+}
+
+// ── As transições ────────────────────────────────────────────────────────────
 
 type ChamadaRpc = (nome: string, args: Record<string, unknown>) =>
   Promise<{ error: unknown }>;
@@ -451,10 +567,52 @@ export function relancarAoNucleo(
   });
 }
 
-/** Só o Núcleo. A liderança marca banimento relançando, não aqui. */
+/**
+ * Só o Núcleo. A liderança marca banimento relançando, não aqui.
+ *
+ * Vale a qualquer momento, inclusive com o número em tratamento — é o ponto do
+ * pedido: **alterar o estado e lançar ao setor são ações diferentes**, e o
+ * Núcleo não precisa lançar nada para conseguir mexer na situação.
+ */
 export function alterarSituacao(numeroId: string, situacao: Situacao): Promise<Resultado> {
   return chamar('fn_numeros_alterar_situacao', {
     p_numero_id: numeroId, p_situacao: situacao,
+  });
+}
+
+/**
+ * Substitui as etiquetas operacionais do número.
+ *
+ * Recebe o conjunto INTEIRO, e não «adicione esta» / «tire aquela»: com dois
+ * verbos, duas pessoas mexendo ao mesmo tempo produzem um resultado que depende
+ * da ordem de chegada. Mandando o conjunto, a última escrita ganha e é a que
+ * está na tela de quem clicou.
+ */
+export function etiquetarNumero(
+  numeroId: string, etiquetas: Etiqueta[],
+): Promise<Resultado> {
+  return chamar('fn_numeros_etiquetar', {
+    p_numero_id: numeroId, p_etiquetas: etiquetas,
+  });
+}
+
+/** O Núcleo pega para si um número que voltou de um setor. */
+export function iniciarTratamento(numeroId: string): Promise<Resultado> {
+  return chamar('fn_numeros_iniciar_tratamento', { p_numero_id: numeroId });
+}
+
+/**
+ * O Núcleo encerra o tratamento. O número **não** volta ao setor por isso.
+ *
+ * É aqui que o «Voltou: Banido» sai da tela — e não mais dentro de
+ * `liberarAoSetor`. Encerrado o tratamento, o número vira um número comum do
+ * Núcleo; liberá-lo ao setor é a decisão seguinte, e separada.
+ */
+export function concluirTratamento(
+  numeroId: string, observacao?: string,
+): Promise<Resultado> {
+  return chamar('fn_numeros_concluir_tratamento', {
+    p_numero_id: numeroId, p_observacao: observacao ?? null,
   });
 }
 

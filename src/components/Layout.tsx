@@ -38,6 +38,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import { abasDoMenu } from '@/lib/menuLateral';
+import { useNucleo } from '@/hooks/useNucleo';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { MenuLateralEditor } from '@/components/MenuLateralEditor';
@@ -217,6 +218,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
   const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const acessoTickets   = useTicketsAcesso();
+  // O terceiro eixo do menu, ao lado de produto e permissão: o SETOR. Ver
+  // `useNucleo` e o campo `nucleo` de `NavItem`.
+  const { souDoNucleo, loading: nucleoLoading } = useNucleo();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
@@ -264,11 +268,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     produto,
     isPaguePlay: isPP,
     isBookplay: tenant.slug === 'bookplay',
-    temPermissao: chave => !permLoading && temPermissao(chave),
+    /*
+     * `nucleoLoading` entra junto com `permLoading` pela mesma razão: enquanto a
+     * resposta não chega, nenhuma aba é desenhada.
+     *
+     * Sem isso, quem é do Núcleo veria Acordos, Analítico e Lixeira aparecerem e
+     * sumirem meio segundo depois — e é justamente o piscar que a rota já não
+     * deixa acontecer. Aqui não é o cargo que falta: é saber o setor.
+     */
+    temPermissao: chave => !permLoading && !nucleoLoading && temPermissao(chave),
     acessoTickets: acessoTickets.podeVerAba,
+    souDoNucleo,
   }), [
     userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
-    acessoTickets.podeVerAba,
+    acessoTickets.podeVerAba, souDoNucleo, nucleoLoading,
   ]);
 
   /*

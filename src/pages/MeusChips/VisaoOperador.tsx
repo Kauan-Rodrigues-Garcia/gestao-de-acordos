@@ -22,7 +22,9 @@ import { toast } from 'sonner';
 import { Undo2, Hash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { EtiquetaSituacao } from '@/components/numeros/EtiquetasNumero';
+import {
+  EtiquetaSituacao, EtiquetasOperacionais,
+} from '@/components/numeros/EtiquetasNumero';
 import { DialogoMotivoRetorno } from '@/components/numeros/DialogoMotivoRetorno';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import { podeDevolverALideranca, type MotivoRetorno } from '@/services/numeros/numerosRegras';
@@ -86,10 +88,19 @@ export function VisaoOperador({
               <p className="text-xs text-muted-foreground">
                 {nomeDoCelular(n.celular_id)}
               </p>
-              <EtiquetaSituacao situacao={n.situacao} />
+              {/* As etiquetas aparecem para o operador também: «Não chegou SMS»
+                  é justamente o aviso de que aquele número não vai funcionar
+                  agora, e escondê-lo faria a pessoa descobrir tentando. */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <EtiquetaSituacao situacao={n.situacao} />
+                <EtiquetasOperacionais etiquetas={n.etiquetas} />
+              </div>
 
               {podeDevolver && meuId && podeDevolverALideranca(
-                { situacao: n.situacao, posse: n.posse, operadorId: n.operador_id },
+                {
+                  situacao: n.situacao, posse: n.posse,
+                  operadorId: n.operador_id, tratamento: n.tratamento,
+                },
                 meuId,
               ) && (
                 <Button

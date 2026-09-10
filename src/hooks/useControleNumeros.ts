@@ -25,8 +25,8 @@ import { assinarTabela } from '@/lib/realtime';
 import { reconciliarLista, reconciliarItem } from '@/lib/dadosVivos';
 import { LIMITE_POR_CELULAR, vagasNoCelular } from '@/services/numeros/numerosRegras';
 import {
-  buscarConfig, listarCelulares, listarNumeros,
-  type NumerosConfigRow, type CelularRow, type NumeroRow,
+  buscarConfig, listarCelulares, listarNumeros, listarSetores,
+  type NumerosConfigRow, type CelularRow, type NumeroRow, type SetorNome,
 } from '@/services/numeros/numeros.service';
 
 /** Um celular com o que a tela mostra ao lado dele. */
@@ -40,6 +40,19 @@ export interface CelularComNumeros {
 
 interface Retorno {
   config: NumerosConfigRow | null;
+  /**
+   * Os setores da empresa, para nomear o que as telas mostram e para os dois
+   * seletores do módulo.
+   *
+   * Sai daqui e não de `useSetoresEquipes`: aquele hook responde «entre quais
+   * setores esta pessoa pode filtrar no Dashboard» e devolve lista vazia para
+   * quem não tem `dashboard_escopo_todos_setores` — o operador e o líder do
+   * Núcleo, justamente. O resultado era cada número aparecer como «Setor
+   * removido». Ver `listarSetores`.
+   */
+  setores: SetorNome[];
+  /** O nome de um setor pelo id, já resolvido. */
+  nomeDoSetor: (setorId: string) => string;
   celulares: CelularRow[];
   numeros: NumeroRow[];
   /** Celulares já cruzados com os números de cada um. */
@@ -56,6 +69,7 @@ export function useControleNumeros(): Retorno {
   const empresaId = empresa?.id ?? null;
 
   const [config, setConfig]       = useState<NumerosConfigRow | null>(null);
+  const [setores, setSetores]     = useState<SetorNome[]>([]);
   const [celulares, setCelulares] = useState<CelularRow[]>([]);
   const [numeros, setNumeros]     = useState<NumeroRow[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -65,16 +79,19 @@ export function useControleNumeros(): Retorno {
 
   const carregar = useCallback(async () => {
     if (!empresaId) {
-      setConfig(null); setCelulares([]); setNumeros([]); setLoading(false);
+      setConfig(null); setSetores([]); setCelulares([]); setNumeros([]);
+      setLoading(false);
       return;
     }
     try {
-      const [cfg, cels, nums] = await Promise.all([
+      const [cfg, sets, cels, nums] = await Promise.all([
         buscarConfig(empresaId),
+        listarSetores(empresaId),
         listarCelulares(empresaId),
         listarNumeros(empresaId),
       ]);
       setConfig(anterior => reconciliarItem(anterior, cfg));
+      setSetores(anterior => reconciliarLista(anterior, sets, { chave: s => s.id }));
       setCelulares(anterior => reconciliarLista(anterior, cels, { chave: c => c.id }));
       setNumeros(anterior => reconciliarLista(anterior, nums, { chave: n => n.id }));
       setErro(null);
@@ -138,8 +155,16 @@ export function useControleNumeros(): Retorno {
     [numeros],
   );
 
+  const nomeDoSetor = useMemo(() => {
+    const mapa = new Map(setores.map(s => [s.id, s.nome]));
+    // «Setor removido» e não «—»: o número continua carregando um `setor_id`
+    // que não bate com nenhum setor vivo, e dizer isso é mais útil do que um
+    // travessão que parece campo vazio.
+    return (id: string) => mapa.get(id) ?? 'Setor removido';
+  }, [setores]);
+
   return {
-    config, celulares, numeros, aparelhos, relancados,
+    config, setores, nomeDoSetor, celulares, numeros, aparelhos, relancados,
     loading, erro, recarregar: carregar,
   };
 }

@@ -84,6 +84,85 @@ export const MOTIVO_LABELS: Record<MotivoRetorno, string> = {
   outro:            'Outro',
 };
 
+// ── Etiquetas operacionais ──────────────────────────────────────────────────
+
+/**
+ * As marcas que não são `situacao` nem `motivo_retorno`.
+ *
+ * `situacao` responde «o número serve?». Há estados que não respondem isso: o
+ * SMS de verificação não chegou, e a pessoa tem que tentar de novo mais tarde.
+ * O número não mudou de qualidade — mudou o que falta fazer com ele hoje.
+ *
+ * Uma só, porque uma só foi pedida. A lista é `as const` e o tipo sai dela, de
+ * modo que acrescentar a segunda é uma linha aqui, uma no `Record` abaixo e uma
+ * no `CHECK` da migration — e o TypeScript aponta as três se faltar alguma.
+ *
+ * O que NÃO entra aqui: etiqueta que duplique `situacao` («ativo», «morto») ou
+ * `motivo_retorno` («banido»). Duas colunas para o mesmo fato voltam a
+ * discordar, que é o defeito que a migration 20260910210000 foi corrigir.
+ */
+export const ETIQUETAS = ['nao_chegou_sms'] as const;
+export type Etiqueta = typeof ETIQUETAS[number];
+
+export const ETIQUETA_LABELS: Record<Etiqueta, string> = {
+  nao_chegou_sms: 'Não chegou SMS',
+};
+
+/** O que a etiqueta significa para quem vai agir. Vira `title` na tela. */
+export const ETIQUETA_DESCRICOES: Record<Etiqueta, string> = {
+  nao_chegou_sms:
+    'O SMS de verificação não chegou. Tentar de novo em outro horário.',
+};
+
+/** Veio do banco uma etiqueta que esta versão da tela conhece? */
+export function etiquetaValida(valor: unknown): valor is Etiqueta {
+  return typeof valor === 'string' && (ETIQUETAS as readonly string[]).includes(valor);
+}
+
+/**
+ * As etiquetas de uma linha: só as conhecidas, e cada uma uma vez.
+ *
+ * Duas limpezas, por dois motivos diferentes:
+ *
+ *   **desconhecida sai** — um deploy antigo lendo uma etiqueta nova receberia
+ *   `undefined` no `Record` de rótulos e pintaria um badge em branco. Uma
+ *   etiqueta a menos até a página atualizar é melhor do que um badge vazio.
+ *
+ *   **repetida sai** — o `CHECK` da coluna confere que a etiqueta existe, e não
+ *   que ela aparece uma vez só: «sem repetido» precisa de `unnest`, e
+ *   subconsulta em CHECK o Postgres recusa. `fn_numeros_etiquetar` normaliza
+ *   antes de gravar, então na prática não há repetição — esta linha cobre o
+ *   UPDATE direto, feito fora da RPC, cujo pior efeito seria a mesma etiqueta
+ *   desenhada duas vezes.
+ */
+export function etiquetasConhecidas(valor: unknown): Etiqueta[] {
+  if (!Array.isArray(valor)) return [];
+  return [...new Set(valor.filter(etiquetaValida))];
+}
+
+// ── Tratamento do retorno ───────────────────────────────────────────────────
+
+/**
+ * Em que pé está o número que voltou de um setor.
+ *
+ * `null` é o estado normal — a grande maioria dos números nunca voltou de
+ * lugar nenhum, e não há nada pendente sobre eles.
+ *
+ * Esta coluna existe porque **alterar o estado do número e devolvê-lo ao setor
+ * são ações diferentes**. Antes elas eram a mesma: limpar o «Voltou: Banido» da
+ * tela só acontecia dentro de `liberarAoSetor`, então o Núcleo era obrigado a
+ * lançar o número para conseguir encerrar o assunto. Agora ele trata quanto
+ * precisar, encerra quando terminou, e libera depois — se e quando fizer
+ * sentido.
+ */
+export const TRATAMENTOS = ['pendente', 'em_andamento'] as const;
+export type Tratamento = typeof TRATAMENTOS[number];
+
+export const TRATAMENTO_LABELS: Record<Tratamento, string> = {
+  pendente:     'Aguardando tratamento',
+  em_andamento: 'Em tratamento',
+};
+
 // ── O limite do celular ─────────────────────────────────────────────────────
 
 /**
@@ -108,22 +187,104 @@ export function vagasNoCelular(quantidadeAtual: number): number {
 
 // ── As transições ───────────────────────────────────────────────────────────
 
-/** O que basta saber de um número para decidir o que pode ser feito com ele. */
+/**
+ * O que basta saber de um número para decidir o que pode ser feito com ele.
+ *
+ * `tratamento` é opcional para as chamadas que não o conhecem continuarem
+ * compilando, e ausente significa `null` — nada pendente. É o padrão certo: o
+ * campo só passa a valer alguma coisa depois que um setor devolve.
+ */
 export interface EstadoNumero {
   situacao: Situacao;
   posse: Posse;
   operadorId: string | null;
+  tratamento?: Tratamento | null;
 }
 
 /**
  * O Núcleo pode disponibilizar este número ao setor dono?
  *
- * Só número ATIVO sai do Núcleo. Liberar um que ainda aquece entregaria ao
- * setor um número que não funciona, e o setor devolveria — movimentação a mais
- * no histórico para nada.
+ * Três condições, e cada uma fecha um buraco visto na operação:
+ *
+ *   `posse === 'nucleo'`  .. não se libera o que já está lá fora;
+ *   `tratamento == null`  .. o que voltou de um setor passa pelo tratamento
+ *                            antes de voltar. Sem isto, um número devolvido
+ *                            como banido ainda constava `ativo` e podia ser
+ *                            remandado no mesmo minuto — o setor devolvia de
+ *                            novo, e ninguém tinha tratado nada;
+ *   `situacao === 'ativo'`.. só número pronto sai do Núcleo.
+ *
+ * As três se repetem em `fn_numeros_liberar_ao_setor`, no banco. Quem manda é
+ * lá; isto aqui existe para o botão não aparecer quando a resposta será não.
  */
 export function podeLiberarAoSetor(n: EstadoNumero): boolean {
-  return n.posse === 'nucleo' && n.situacao === 'ativo';
+  return n.posse === 'nucleo'
+    && (n.tratamento ?? null) === null
+    && n.situacao === 'ativo';
+}
+
+/**
+ * Este número voltou de um setor e ninguém pegou ainda?
+ *
+ * É a fila de trabalho do Núcleo — o que o painel mostra em primeiro lugar.
+ */
+export function esperaTratamento(n: EstadoNumero): boolean {
+  return n.tratamento === 'pendente';
+}
+
+/** O Núcleo já pegou este número para tratar? */
+export function emTratamento(n: EstadoNumero): boolean {
+  return n.tratamento === 'em_andamento';
+}
+
+/**
+ * Dá para encerrar o tratamento deste número?
+ *
+ * Vale nos dois pés — «pendente» e «em andamento». Obrigar a passar por
+ * «comecei» antes de «terminei» seria burocracia para o caso comum: o número
+ * volta como `sem_uso`, o Núcleo olha, está inteiro, e encerra em um clique.
+ */
+export function podeConcluirTratamento(n: EstadoNumero): boolean {
+  return (n.tratamento ?? null) !== null;
+}
+
+/**
+ * Este número já saiu da operação interna do Núcleo?
+ *
+ * A tela pinta os dois estados de forma diferente. O predicado mora aqui, e
+ * não no componente, porque as duas telas do módulo fazem a mesma pergunta.
+ */
+export function foiLancadoAoSetor(n: EstadoNumero): boolean {
+  return n.posse === 'setor';
+}
+
+/**
+ * O Núcleo pode corrigir a digitação deste número?
+ *
+ * Só enquanto ele está em casa e sem dono. Trocar o número de um chip que
+ * alguém está usando mudaria, em silêncio, o que aparece na tela dessa pessoa —
+ * e a conversa de ontem passaria a constar de outro número.
+ *
+ * A trava de verdade é a trigger `fn_numeros_whatsapp_valida`, que recusa o
+ * UPDATE. Isto é o espelho.
+ */
+export function podeCorrigirNumero(n: EstadoNumero): boolean {
+  return n.posse === 'nucleo' && n.operadorId === null;
+}
+
+/**
+ * Dá para apagar este número do cadastro?
+ *
+ * Apagar leva a trilha junto (`ON DELETE CASCADE`), então só vale para o que
+ * nunca circulou: erro de digitação percebido logo depois. O que já passou por
+ * um setor tem história, e a saída para ele é `banido`.
+ *
+ * A tela não sabe se houve movimentação além do cadastro — quem sabe é o banco,
+ * e é ele quem recusa. `jaCirculou` deixa quem chama informar isso quando tiver
+ * a resposta em mãos; sem ela, o predicado responde pelo que dá para ver.
+ */
+export function podeExcluirNumero(n: EstadoNumero, jaCirculou = false): boolean {
+  return n.posse === 'nucleo' && n.operadorId === null && !jaCirculou;
 }
 
 /**

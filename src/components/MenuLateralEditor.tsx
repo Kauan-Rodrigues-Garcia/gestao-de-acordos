@@ -139,6 +139,18 @@ export function MenuLateralEditor({
         chave => valorDoCargo(cargoParaPermissao, chave),
         ticketsLiberadoParaLideranca,
       ),
+      /*
+       * `null` = não filtre pelo setor, mostre os dois lados.
+       *
+       * Pertencer ao Núcleo é coisa de PESSOA, e aqui se escolhe um CARGO — não
+       * há resposta verdadeira a dar. Responder `false` tiraria Controle de
+       * Números do editor, e o que não aparece aqui não pode ser reordenado;
+       * responder `true` tiraria Acordos e o resto da cobrança, que é pior.
+       *
+       * Mostrar tudo erra para mais num desenho, e desenho não concede acesso —
+       * a mesma aproximação já assumida para Tickets.
+       */
+      souDoNucleo: null,
     });
     return ordenarMenu(visiveis, ordemDoCargo(ordens, cargo));
   }, [cargo, produto, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, ordens]);

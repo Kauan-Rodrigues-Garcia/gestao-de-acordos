@@ -23,6 +23,9 @@ function ctx(over: Partial<ContextoMenu> = {}): ContextoMenu {
     isBookplay: true,
     temPermissao: () => true,
     acessoTickets: true,
+    // O padrao e alguem de FORA do Nucleo: e a esmagadora maioria, e e o
+    // comportamento que os testes anteriores a 10/09/2026 assumiam.
+    souDoNucleo: false,
     ...over,
   };
 }
@@ -199,6 +202,80 @@ describe('abasDoMenu — por produto', () => {
     for (const item of NAV_ITEMS) {
       expect(item.produtos, `«${item.label}» não declara produtos`).toBeDefined();
       expect(item.produtos!.length, `«${item.label}» declara lista vazia`).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * O terceiro eixo do menu: o SETOR.
+ *
+ * O Núcleo de Inteligência e Gestão é `cobranca` — mesma empresa, mesmo deploy —
+ * e tem os mesmos cargos do Play 3. Nem o eixo de produto nem o de permissão o
+ * separavam, e o resultado era ele abrindo a operação de cobrança inteira.
+ *
+ * Os testes abaixo travam os três estados de `souDoNucleo`, inclusive o `null`
+ * da prévia por cargo — que não é um detalhe: sem ele, Controle de Números
+ * sumiria do editor de ordem, e o que não aparece lá não pode ser reordenado.
+ */
+describe('abasDoMenu — o recorte por setor (Núcleo)', () => {
+  const doNucleo   = () => rotulos(abasDoMenu(ctx({ souDoNucleo: true })));
+  const daCobranca = () => rotulos(abasDoMenu(ctx({ souDoNucleo: false })));
+
+  it('o Núcleo não recebe a operação de acordos', () => {
+    const abas = doNucleo();
+    for (const proibida of [
+      'Acordos', 'Novo Acordo', 'Analítico', 'Lixeira',
+      'Importar Excel', 'Campanha Fácil', 'Painel Líder', 'Painel Diretoria',
+    ]) {
+      expect(abas, `${proibida} não é do Núcleo`).not.toContain(proibida);
+    }
+  });
+
+  it('o Núcleo recebe a aba dele', () => {
+    expect(doNucleo()).toContain('Controle de Números');
+  });
+
+  it('Meus Chips é de quem RECEBE número, e não do Núcleo', () => {
+    expect(doNucleo()).not.toContain('Meus Chips');
+    expect(daCobranca()).toContain('Meus Chips');
+  });
+
+  it('a cobrança não perde nada, e não ganha a aba do Núcleo', () => {
+    const abas = daCobranca();
+    expect(abas).toContain('Acordos');
+    expect(abas).toContain('Novo Acordo');
+    expect(abas).toContain('Analítico');
+    expect(abas).toContain('Lixeira');
+    expect(abas).not.toContain('Controle de Números');
+  });
+
+  it('as abas de todo mundo ficam nos dois lados', () => {
+    for (const comum of ['Dashboard', 'Usuários', 'Configurações']) {
+      expect(doNucleo(), `${comum} existe para o Núcleo`).toContain(comum);
+      expect(daCobranca(), `${comum} existe para a cobrança`).toContain(comum);
+    }
+  });
+
+  it('`null` não filtra por setor — é a prévia por cargo do editor', () => {
+    const previa = rotulos(abasDoMenu(ctx({ souDoNucleo: null })));
+    expect(previa).toContain('Controle de Números');
+    expect(previa).toContain('Acordos');
+    expect(previa).toContain('Meus Chips');
+  });
+
+  it('o eixo do setor não é permissão: a chave desligada continua mandando', () => {
+    const semAba = rotulos(abasDoMenu(ctx({
+      souDoNucleo: true,
+      temPermissao: chave => chave !== 'ver_controle_numeros',
+    })));
+    expect(semAba).not.toContain('Controle de Números');
+  });
+
+  it('a marca `nucleo` só aparece com um dos dois valores previstos', () => {
+    for (const item of NAV_ITEMS) {
+      if (item.nucleo !== undefined) {
+        expect(['so', 'fora'], `${item.label} tem nucleo inválido`).toContain(item.nucleo);
+      }
     }
   });
 });

@@ -46,6 +46,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa, produtoPermite, type Produto } from '@/lib/produto';
+import { useNucleo } from '@/hooks/useNucleo';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -65,14 +66,31 @@ interface ProtectedRouteProps {
    * rota é a porta.
    */
   produtos?: readonly Produto[];
+  /**
+   * Em qual lado da divisão por SETOR esta rota existe.
+   *
+   *   `'so'`   .. só para quem é do Núcleo de Inteligência e Gestão;
+   *   `'fora'` .. para todo mundo MENOS o Núcleo;
+   *   ausente  .. os dois lados, que é o certo para as rotas genéricas.
+   *
+   * Espelha o campo `nucleo` de `NavItem`, e pela mesma razão que `produtos`
+   * existe nos dois lugares: **esconder o item do menu não fecha porta
+   * nenhuma**. Sem esta prop, alguém do Núcleo digitava `/acordos` na barra de
+   * endereço e a tela de cobrança abria inteira, com `ver_acordos` herdado da
+   * semeadura do cargo `operador`.
+   *
+   * Menu é conforto; rota é a porta.
+   */
+  nucleo?: 'so' | 'fora';
   /** Mantém o layout aberto e mostra uma mensagem em vez de redirecionar. */
   mostrarSemAcesso?: boolean;
 }
 
-export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, produtos, mostrarSemAcesso = false }: ProtectedRouteProps): React.ReactElement | null {
+export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, produtos, nucleo, mostrarSemAcesso = false }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
+  const { souDoNucleo, loading: nucleoLoading } = useNucleo();
 
   /*
    * O esqueleto só na PRIMEIRA carga.
@@ -91,7 +109,18 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
    * carregamento diferentes desembocando neste único `if`.
    */
   const jaMostrou = useRef(false);
-  const carregando = loading || (requiredPermissao && permLoading) || (produtos && empresaLoading);
+  /*
+   * `nucleo && nucleoLoading` entra na conta pelo mesmo motivo dos outros dois:
+   * decidir antes da resposta seria decidir por palpite. E o palpite aqui é o
+   * pior possível — `useNucleo` responde `false` enquanto carrega, então uma
+   * rota `'fora'` abriria por um instante para quem é do Núcleo. Justamente o
+   * buraco que esta prop existe para fechar.
+   *
+   * O esqueleto só aparece na PRIMEIRA carga (ver `jaMostrou` abaixo), então
+   * isto não faz a tela piscar em cada navegação.
+   */
+  const carregando = loading || (requiredPermissao && permLoading)
+    || (produtos && empresaLoading) || (nucleo && nucleoLoading);
 
   if (carregando && !jaMostrou.current) {
     return (
@@ -124,6 +153,26 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
    * nenhuma permissão faz virar.
    */
   if (produtos && !produtoPermite(produtos, produtoDaEmpresa(empresa, tenantSlug))) {
+    return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+  }
+
+  /*
+   * O SETOR, logo depois do produto — e antes de cargo e permissão, porque é a
+   * mesma ordem de pergunta: «isto existe para este setor?» vem antes de «esta
+   * pessoa pode ver?».
+   *
+   * Um operador do Núcleo tem `ver_acordos` ligado, e está certo que tenha: a
+   * chave é do CARGO `operador`, e desligá-la tiraria acordo de todo operador da
+   * empresa. O que não é dele é a aba.
+   *
+   * O destino é sempre `/`, e `/` funciona para os dois lados: ela desenha o
+   * painel do Núcleo para quem é do Núcleo, e o Dashboard da cobrança para o
+   * resto. Ver `PainelDeEntrada`, em App.tsx.
+   */
+  if (nucleo === 'fora' && souDoNucleo) {
+    return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+  }
+  if (nucleo === 'so' && !souDoNucleo) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
 

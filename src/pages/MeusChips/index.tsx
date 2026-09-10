@@ -22,6 +22,7 @@
 import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useMeusChips } from '@/hooks/useMeusChips';
@@ -32,6 +33,7 @@ import { VisaoOperador } from './VisaoOperador';
 import { useEffect } from 'react';
 
 export default function MeusChips() {
+  const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const {
@@ -43,30 +45,35 @@ export default function MeusChips() {
   const [pessoas, setPessoas] = useState<OperadorDoSetor[]>([]);
 
   const empresaId = empresa?.id ?? '';
-  const setorDosNumeros = numeros[0]?.setor_id ?? null;
+  /*
+   * O setor de quem está olhando — e não o do primeiro número da lista.
+   *
+   * `numeros[0]?.setor_id` funcionava enquanto houvesse número, e falhava
+   * justamente no setor que ainda não recebeu nenhum: a lista de pessoas vinha
+   * vazia, e o seletor de «Lançar» abria sem ninguém para escolher — no
+   * primeiro dia de uso do módulo, que é quando ele mais precisa funcionar.
+   *
+   * A liderança enxerga o PRÓPRIO setor (`fn_numeros_visivel`, nível 2), então o
+   * setor dela é o setor dos números que ela vê.
+   */
+  const meuSetor = perfil?.setor_id ?? null;
 
-  // Os nomes de quem está com cada número. Só a liderança precisa — o operador
-  // vê apenas os próprios, e o nome dele não acrescenta nada à tela.
+  // Quem pode receber um número neste setor, com nome e foto. Só a liderança
+  // precisa — o operador vê apenas os próprios, e o nome dele não acrescenta
+  // nada à tela.
   useEffect(() => {
-    if (visao !== 'setor' || !empresaId || !setorDosNumeros) { setPessoas([]); return; }
+    if (visao !== 'setor' || !empresaId || !meuSetor) { setPessoas([]); return; }
     let cancelado = false;
-    listarOperadoresDoSetor(empresaId, setorDosNumeros)
+    listarOperadoresDoSetor(empresaId, meuSetor)
       .then(l => { if (!cancelado) setPessoas(l); })
       .catch(() => { if (!cancelado) setPessoas([]); });
     return () => { cancelado = true; };
-  }, [visao, empresaId, setorDosNumeros]);
+  }, [visao, empresaId, meuSetor]);
 
   const nomeDoCelular = useMemo(() => {
     const mapa = new Map(celulares.map(c => [c.id, c.identificacao]));
     return (id: string) => mapa.get(id) ?? '—';
   }, [celulares]);
-
-  const nomeDoOperador = useMemo(() => {
-    const mapa = new Map(pessoas.map(p => [p.id, p.nome]));
-    // Alguém transferido de setor continua no número até a liderança agir — e
-    // some desta lista. Dizer isso é melhor do que mostrar um espaço em branco.
-    return (id: string | null) => (id ? mapa.get(id) ?? 'Fora do setor' : '—');
-  }, [pessoas]);
 
   if (loading) {
     return (
@@ -100,7 +107,7 @@ export default function MeusChips() {
           semOperador={semOperador}
           comOperador={comOperador}
           nomeDoCelular={nomeDoCelular}
-          nomeDoOperador={nomeDoOperador}
+          pessoas={pessoas}
           podeLancar={temPermissao('chips_lancar_ao_operador')}
           podeRelancar={temPermissao('chips_relancar_ao_nucleo')}
           onMudou={() => void recarregar()}
