@@ -450,6 +450,24 @@ export function DiretoriaVisaoGeral({
         />
       </div>
 
+      {/*
+        O recorte, dito em voz alta.
+
+        «Recebido no período» é o arquivo 59 INTEIRO: toda carteira do lote
+        vigente, tenha ela setor vinculado ou não. A aba Mestre × sistema parte
+        de outro recorte — só as carteiras com setor, e já sem o Integral, que
+        conta nos dois lados por rateio.
+
+        Os dois números são certos e vão diferir. Quem compara sem saber disso
+        conclui que um dos dois está quebrado; por isso a linha existe.
+      */}
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        <strong className="font-medium text-foreground">Recebido no período</strong> é o relatório 59
+        inteiro — todas as carteiras do lote vigente, com setor vinculado ou sem. A aba{' '}
+        <em>Mestre × sistema</em> usa outro recorte (só as vinculadas, e já sem o Integral), então os
+        dois totais diferem de propósito.
+      </p>
+
       {/* ── Ritmo + leitura do período ───────────────────────────────────── */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">

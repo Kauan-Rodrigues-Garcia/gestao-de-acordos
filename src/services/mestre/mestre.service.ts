@@ -233,8 +233,28 @@ export interface ComparacaoSetor {
   mestre_total: number;
   mestre_proprio: number;
   mestre_contribuido: number;
+  mestre_colchao_fora: number;
+  mestre_emprestado_para: number;
+  mestre_emprestado_de: number;
+  /**
+   * `mestre_total` menos o Integral que outra carteira cobrou para cá.
+   *
+   * É contra ISTO que `diferenca` é medida — e não contra `mestre_total`. A 2ª
+   * perna do Integral conta no 59 dos dois lados por rateio, e o analítico não
+   * a tem; comparar com `mestre_total` acusaria divergência falsa do tamanho
+   * exato da contribuição.
+   *
+   * A coluna já vinha na resposta e a tela não mostrava. Daí a leitura de que
+   * a conta não fechava: 126.699,77 no Mestre, 0 no Sistema, e +99.571,88 na
+   * Diferença — que é 126.699,77 − 27.127,89 de Integral.
+   */
+  mestre_comparavel: number;
   sistema_total: number;
   sistema_linhas: number;
+  /** A parte de `sistema_total` que veio de `analitico_recebimentos`. */
+  sistema_analitico: number;
+  /** A parte lançada à mão (`analitico_ajustes_manuais`). Não existe no 59. */
+  sistema_ajustes: number;
   diferenca: number;
 }
 
@@ -580,12 +600,18 @@ export async function compararSetores(empresaId: string, mes: string): Promise<C
   if (error) throw new Error(error.message);
   return (data ?? []).map(c => ({
     ...c,
-    mestre_total:       n(c.mestre_total),
-    mestre_proprio:     n(c.mestre_proprio),
-    mestre_contribuido: n(c.mestre_contribuido),
-    sistema_total:      n(c.sistema_total),
-    sistema_linhas:     n(c.sistema_linhas),
-    diferenca:          n(c.diferenca),
+    mestre_total:           n(c.mestre_total),
+    mestre_proprio:         n(c.mestre_proprio),
+    mestre_contribuido:     n(c.mestre_contribuido),
+    mestre_colchao_fora:    n(c.mestre_colchao_fora),
+    mestre_emprestado_para: n(c.mestre_emprestado_para),
+    mestre_emprestado_de:   n(c.mestre_emprestado_de),
+    mestre_comparavel:      n(c.mestre_comparavel),
+    sistema_total:          n(c.sistema_total),
+    sistema_linhas:         n(c.sistema_linhas),
+    sistema_analitico:      n(c.sistema_analitico),
+    sistema_ajustes:        n(c.sistema_ajustes),
+    diferenca:              n(c.diferenca),
   }));
 }
 
@@ -613,6 +639,126 @@ export async function buscarSetoresSemGrupo(empresaId: string, mes: string): Pro
  * não tem código no relatório, e para onde ela vai segue sendo decisão de
  * gente.
  */
+
+// ── Onde está cada centavo da diferença ──────────────────────────────────────
+
+/** Uma parcela que separa os dois lados POR CONSTRUÇÃO. */
+export interface ParcelaEstrutural {
+  chave: 'contrib_integral' | 'colchao_fora' | 'emprestado_de' | 'emprestado_para' | 'ajustes';
+  rotulo: string;
+  valor: number;
+  /** Por que essa parcela existe. Vai para a tela, não é comentário. */
+  nota: string;
+}
+
+/** Onde um NR está, quando os dois lados discordam sobre ele. */
+export type SituacaoNr =
+  | 'so_no_59'               // não existe no analítico de lugar nenhum
+  | 'outro_setor'            // existe no analítico, mas em outro setor
+  | 'so_no_sistema'          // o analítico tem e nenhuma carteira do 59 traz
+  | 'sistema_em_outro_setor' // o 59 tem, em carteira de outro setor
+  | 'valor_difere';          // os dois têm, com valores diferentes
+
+export interface NrDivergente {
+  nr: string;
+  mestre: number;
+  sistema: number;
+  delta: number;
+  situacao: SituacaoNr;
+  /** Quem cobrou, no 59. */
+  cobradora: string | null;
+  carteira: string | null;
+  /** Quem lançou, no sistema. */
+  operador: string | null;
+  /** O setor onde o NR aparece do outro lado, quando aparece. */
+  onde: string | null;
+}
+
+export interface DiferencaDetalhe {
+  setorId: string;
+  setorNome: string;
+  carteira: string;
+  mes: string;
+  mestreTotal: number;
+  contribIntegral: number;
+  comparavel: number;
+  sistemaAnalitico: number;
+  sistemaAjustes: number;
+  sistemaTotal: number;
+  diferenca: number;
+  estrutura: ParcelaEstrutural[];
+  resumo: { so59: number; soSistema: number; difere: number; qtd: number };
+  /**
+   * O que a soma das parcelas NÃO explica.
+   *
+   * Zero em 9 dos 10 setores vinculados. Onde não for, é dinheiro que merece
+   * alguém olhar — e por isso a tela mostra em vez de esconder.
+   */
+  naoExplicado: number;
+  nrs: NrDivergente[];
+  nrsTruncado: number;
+}
+
+export async function buscarDetalheDaDiferenca(
+  empresaId: string, mes: string, setorId: string, limite = 200,
+): Promise<DiferencaDetalhe> {
+  const { data, error } = await rpcSemTipo<{
+    setor_id: string; setor_nome: string; carteira: string; mes: string;
+    mestre_total: unknown; contrib_integral: unknown; comparavel: unknown;
+    sistema_analitico: unknown; sistema_ajustes: unknown; sistema_total: unknown;
+    diferenca: unknown; nao_explicado: unknown; nrs_truncado: unknown;
+    estrutura: { chave: string; rotulo: string; valor: unknown; nota: string }[];
+    resumo_nrs: { so_59: unknown; so_sistema: unknown; difere: unknown; qtd: unknown };
+    nrs: {
+      nr: string; mestre: unknown; sistema: unknown; delta: unknown;
+      situacao: string; cobradora: string | null; carteira: string | null;
+      operador: string | null; onde: string | null;
+    }[];
+  }>('fn_mestre_diferenca_detalhe', {
+    p_empresa_id: empresaId, p_mes: mes, p_setor_id: setorId, p_limite: limite,
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('O detalhe da diferença não devolveu resultado.');
+
+  return {
+    setorId:   data.setor_id,
+    setorNome: data.setor_nome,
+    carteira:  data.carteira,
+    mes:       data.mes,
+    mestreTotal:      n(data.mestre_total),
+    contribIntegral:  n(data.contrib_integral),
+    comparavel:       n(data.comparavel),
+    sistemaAnalitico: n(data.sistema_analitico),
+    sistemaAjustes:   n(data.sistema_ajustes),
+    sistemaTotal:     n(data.sistema_total),
+    diferenca:        n(data.diferenca),
+    naoExplicado:     n(data.nao_explicado),
+    nrsTruncado:      n(data.nrs_truncado),
+    estrutura: (data.estrutura ?? []).map(e => ({
+      chave:  e.chave as ParcelaEstrutural['chave'],
+      rotulo: e.rotulo,
+      valor:  n(e.valor),
+      nota:   e.nota,
+    })),
+    resumo: {
+      so59:      n(data.resumo_nrs?.so_59),
+      soSistema: n(data.resumo_nrs?.so_sistema),
+      difere:    n(data.resumo_nrs?.difere),
+      qtd:       n(data.resumo_nrs?.qtd),
+    },
+    nrs: (data.nrs ?? []).map(x => ({
+      nr:        x.nr,
+      mestre:    n(x.mestre),
+      sistema:   n(x.sistema),
+      delta:     n(x.delta),
+      situacao:  x.situacao as SituacaoNr,
+      cobradora: x.cobradora,
+      carteira:  x.carteira,
+      operador:  x.operador,
+      onde:      x.onde,
+    })),
+  };
+}
 
 // ── O código do setor ────────────────────────────────────────────────────────
 
