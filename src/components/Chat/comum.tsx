@@ -246,7 +246,21 @@ export function AnexoNoBalao({
             <video src={url} preload="metadata" muted
                    className="w-full h-full object-contain pointer-events-none" />
           ) : (
-            <img src={url} alt={anexo.nome} decoding="async" className="w-full h-full object-contain" />
+            /*
+             * `loading="lazy"`, pelo mesmo motivo do `preload="metadata"` do vídeo
+             * logo acima — e a imagem tinha ficado de fora.
+             *
+             * A miniatura tem 240×160, mas o `src` é o arquivo ORIGINAL: uma foto
+             * de celular são centenas de kB, e o balde do chat tem média de 589 kB
+             * por imagem, com casos de 4,3 MB. Sem isto, abrir uma conversa com
+             * vinte fotos dispara vinte downloads inteiros no mesmo instante, e a
+             * conversa fica se montando por segundos.
+             *
+             * Com `lazy`, o navegador só busca o que está perto da tela. Quem rola
+             * para cima paga pelo que olha, e não pela conversa toda.
+             */
+            <img src={url} alt={anexo.nome} decoding="async" loading="lazy"
+                 className="w-full h-full object-contain" />
           )
         ) : (
           <div className="w-full h-full animate-pulse" />
