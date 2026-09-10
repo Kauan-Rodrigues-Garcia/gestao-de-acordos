@@ -110,6 +110,7 @@ import {
   fetchAprovacoesPedidosNr, type PixNrAprovacao, MSG_NR_MESMO_OPERADOR,
   fetchDonosDeNrPix, type DonoDeNrPix,
   fetchAcordosRecorrentesSemPix, type AcordoSemRegistroPix,
+  fetchMeusSetores,
   fetchPremiacoesPagamento, marcarPremiacaoPaga,
   fetchRetratoPixDoMes, aplicarRetratoPix,
   type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo, type PixPremiacaoPagamento,
@@ -430,6 +431,15 @@ export function PixAutomatico() {
    */
   const [aprovacoesNr, setAprovacoesNr] = useState<PixNrAprovacao[]>([]);
   /*
+   * Os setores por onde EU respondo — cadastro, clones e as equipes que lidero.
+   *
+   * Vem do banco (`fn_meus_setores`) em vez de sair de `perfil.setor_id`. Líder
+   * não se define pelo cadastro: um líder com 6 equipes em 4 setores tem um
+   * `setor_id` só, e a tela desenhava botão de assinatura para 1 dos 4 — daí a
+   * queixa de que a autorização de dois setores «só aparece para super_admin».
+   */
+  const [meusSetores, setMeusSetores] = useState<readonly string[]>([]);
+  /*
    * Os acordos DA PESSOA que ficaram só na aba Acordos.
    *
    * Sempre do próprio usuário, mesmo para quem vê o Pix do setor inteiro: o
@@ -725,6 +735,7 @@ export function PixAutomatico() {
       setPedidosNr(atual => reconciliarLista(atual, pedidos, { chave: x => x.id }));
       // As assinaturas de quem já decidiu um lado. Fila vazia não vai ao banco.
       const assinaturas = await fetchAprovacoesPedidosNr(pedidos.map(x => x.id));
+      setMeusSetores(await fetchMeusSetores());
       setAprovacoesNr(atual => reconciliarLista(atual, assinaturas, { chave: a => a.id }));
       setPagamentosPremiacao(atual => reconciliarLista(
         atual, pagamentos, { chave: x => x.id },
@@ -2325,10 +2336,11 @@ export function PixAutomatico() {
           aprovacoes={aprovacoesNr}
           podeDecidir={temPermissao('aprovar_pix_automatico')}
           meuId={perfil?.id ?? null}
-          /* Por qual setor eu assino. `podeVerTodosOsSetores` é o mesmo
-             `escopo >= todos_setores` que `fn_pix_pode_decidir_lado` consulta
-             do lado do banco — as duas pontas têm de dizer a mesma coisa. */
-          meuSetorId={perfil?.setor_id ?? null}
+          /* Por quais setores eu assino. Os dois valores saem da MESMA fonte que
+             `fn_pix_pode_decidir_lado` consulta do lado do banco: o escopo da aba
+             e `fn_setores_do_operador`. As duas pontas têm de dizer a mesma
+             coisa, e já disseram coisas diferentes — ver `podeAssinarLadoNr`. */
+          meusSetores={meusSetores}
           vejoTodosOsSetores={podeVerTodosSetores}
           nomePorSetor={nomePorSetor}
           /* Só em «todos»: com um setor em foco a fila já é dele, e carimbar o

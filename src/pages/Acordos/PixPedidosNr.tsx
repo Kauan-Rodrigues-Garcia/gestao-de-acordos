@@ -79,8 +79,12 @@ interface Props {
   aprovacoes: PixNrAprovacao[];
   /** Quem pode aprovar ou recusar. Sem isto, o cartão é só informativo. */
   podeDecidir: boolean;
-  /** Setor de quem está olhando — decide por qual lado ele pode assinar. */
-  meuSetorId: string | null;
+  /**
+   * Setores por onde quem olha responde — cadastro, clones e as equipes que
+   * lidera. Decidem por quais lados ele pode assinar. Vem de
+   * `fetchMeusSetores`, a mesma fonte que o banco consulta.
+   */
+  meusSetores: readonly string[];
   /** Enxerga todos os setores na aba Pix? Então assina por qualquer lado. */
   vejoTodosOsSetores: boolean;
   /** Para o dono poder desistir do próprio pedido. */
@@ -149,14 +153,14 @@ function Lado({
 }
 
 function CartaoPedido({
-  p, aprovacoes, podeDecidir, meuId, meuSetorId, vejoTodosOsSetores, nomeSetor,
+  p, aprovacoes, podeDecidir, meuId, meusSetores, vejoTodosOsSetores, nomeSetor,
   nomePorSetor, onMudou,
 }: {
   p: PixNrPedido;
   aprovacoes: PixNrAprovacao[];
   podeDecidir: boolean;
   meuId: string | null;
-  meuSetorId: string | null;
+  meusSetores: readonly string[];
   vejoTodosOsSetores: boolean;
   nomeSetor: string | null;
   nomePorSetor: Record<string, string>;
@@ -173,7 +177,7 @@ function CartaoPedido({
   const estado = estadoDoPedidoNr(p, aprovacoes, {
     podeAprovarPix: podeDecidir,
     vejoTodosOsSetores,
-    meuSetorId,
+    meusSetores,
   });
   const doisLados = estado.lados.length > 1;
 
@@ -351,7 +355,7 @@ function CartaoPedido({
              mostrar um botão que o banco vai recusar. */
           <span className="text-[11px] text-muted-foreground">
             {estado.lados.some(l => estado.assinado[l] && estado.meusLados.length === 0
-                                    && setorDoLadoNr(p, l) === meuSetorId)
+                                    && meusSetores.includes(setorDoLadoNr(p, l) ?? ''))
               ? 'Você já autorizou pelo seu setor — falta o outro.'
               : `Aguardando ${estado.faltam.map(rotuloDoLado).join(' e ')}.`}
           </span>
@@ -376,7 +380,7 @@ function CartaoPedido({
 }
 
 export function PixPedidosNr({
-  pedidos, aprovacoes, podeDecidir, meuId, meuSetorId, vejoTodosOsSetores,
+  pedidos, aprovacoes, podeDecidir, meuId, meusSetores, vejoTodosOsSetores,
   nomePorSetor, mostrarSetor = false, onMudou,
 }: Props) {
   const [aberto, setAberto] = useState(true);
@@ -416,7 +420,7 @@ export function PixPedidosNr({
             aprovacoes={aprovacoes}
             podeDecidir={podeDecidir}
             meuId={meuId}
-            meuSetorId={meuSetorId}
+            meusSetores={meusSetores}
             vejoTodosOsSetores={vejoTodosOsSetores}
             nomePorSetor={nomePorSetor ?? {}}
             /* Pedido sem setor só chega aqui em «Todos» (ver `pedidosDoSetor`), e

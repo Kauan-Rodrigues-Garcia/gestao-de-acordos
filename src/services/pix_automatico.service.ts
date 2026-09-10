@@ -1675,22 +1675,62 @@ export function setorDoLadoNr(
  * Quem sou eu para assinar por este setor.
  *
  * Espelha `fn_pix_pode_decidir_lado`: quem enxerga todos os setores decide por
- * qualquer um; quem enxerga o próprio decide o próprio; lado sem setor
+ * qualquer um; quem responde por um setor decide por ele; lado sem setor
  * carimbado fica com quem aprova Pix — escondê-lo de todos deixaria o pedido
  * preso para sempre.
+ *
+ * ## Por que uma LISTA de setores, e não o setor do cadastro
+ *
+ * Porque líder não se define pelo cadastro: define-se pelas equipes que
+ * lidera, e o `perfis.setor_id` dele é resíduo. Havia um líder com 6 equipes
+ * espalhadas por 4 setores e um `setor_id` só — pela comparação antiga ele
+ * desenhava botão para 1 dos 4, e os outros três lados pareciam não ter dono.
+ * A queixa chegou como «a autorização de dois setores só aparece para
+ * super_admin», porque só quem tem `todos_setores` escapava da comparação.
+ *
+ * A lista vem de `fetchMeusSetores` → `fn_meus_setores()`, a MESMA fonte que
+ * o banco consulta. Antes a tela derivava a resposta do perfil por conta
+ * própria, e foi assim que os dois lados divergiram.
  *
  * A tela usa isto só para desenhar botão. Quem recusa de verdade é o banco.
  */
 export function podeAssinarLadoNr(p: {
   podeAprovarPix: boolean;
   vejoTodosOsSetores: boolean;
-  meuSetorId: string | null;
+  /** Setores por onde eu respondo: cadastro, clones e equipes que lidero. */
+  meusSetores: readonly string[];
   setorDoLado: string | null;
 }): boolean {
   if (!p.podeAprovarPix) return false;
   if (p.vejoTodosOsSetores) return true;
   if (p.setorDoLado == null) return true;
-  return p.meuSetorId === p.setorDoLado;
+  return p.meusSetores.includes(p.setorDoLado);
+}
+
+/**
+ * Os setores por onde EU respondo, direto do banco.
+ *
+ * `fn_meus_setores()` é cadastro ∪ clones ∪ setores das equipes que lidero —
+ * a mesma `fn_setores_do_operador` que governa a RLS de `perfis` e que
+ * `fn_pix_pode_decidir_lado` passou a consultar. Perguntar ao banco em vez de
+ * deduzir do perfil é o que impede a tela de discordar dele de novo.
+ *
+ * Falha devolve lista vazia: sem setor conhecido a tela some com os botões, e
+ * o pior caso é um clique a mais para quem tem `todos_setores`. Inventar
+ * alcance seria o contrário — botão que o banco recusa.
+ */
+export async function fetchMeusSetores(): Promise<string[]> {
+  const { data, error } = await rpcSemTipo<unknown>('fn_meus_setores', {});
+  if (error) {
+    console.warn('[pix_automatico.service] fetchMeusSetores:', error.message);
+    return [];
+  }
+  // SETOF uuid chega como lista de escalares; um objeto por linha também é
+  // resposta válida do PostgREST, dependendo da versão.
+  const linhas = Array.isArray(data) ? data : [];
+  return linhas
+    .map(l => (typeof l === 'string' ? l : (l as { fn_meus_setores?: string })?.fn_meus_setores))
+    .filter((s): s is string => Boolean(s));
 }
 
 /** O que falta para o pedido virar acordo, do ponto de vista de quem olha. */
@@ -1707,7 +1747,7 @@ export interface EstadoDoPedidoNr {
 export function estadoDoPedidoNr(
   pedido: PixNrPedido,
   aprovacoes: readonly PixNrAprovacao[],
-  quem: { podeAprovarPix: boolean; vejoTodosOsSetores: boolean; meuSetorId: string | null },
+  quem: { podeAprovarPix: boolean; vejoTodosOsSetores: boolean; meusSetores: readonly string[] },
 ): EstadoDoPedidoNr {
   const lados = ladosDoPedidoNr(pedido);
   const assinado: Partial<Record<PixNrLado, PixNrAprovacao>> = {};

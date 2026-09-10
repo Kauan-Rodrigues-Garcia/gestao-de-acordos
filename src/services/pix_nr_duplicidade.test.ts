@@ -115,10 +115,30 @@ describe('ladosDoPedidoNr', () => {
 // ── Quem pode assinar cada lado ─────────────────────────────────────────────
 
 describe('podeAssinarLadoNr', () => {
-  const base = { podeAprovarPix: true, vejoTodosOsSetores: false, meuSetorId: 'play3' };
+  const base = { podeAprovarPix: true, vejoTodosOsSetores: false, meusSetores: ['play3'] };
 
   it('assino pelo MEU setor', () => {
     expect(podeAssinarLadoNr({ ...base, setorDoLado: 'play3' })).toBe(true);
+  });
+
+  /*
+   * O caso que a comparação com o setor do CADASTRO errava.
+   *
+   * Líder se define pelas equipes que lidera, não pelo cadastro. Havia um com
+   * 6 equipes em 4 setores e um `setor_id` só: assinava por 1 dos 4, e os
+   * outros três lados pareciam não ter dono. Chegou como «a autorização de
+   * dois setores só aparece para super_admin», porque só `todos_setores`
+   * escapava da comparação.
+   */
+  it('assino por QUALQUER setor que eu lidere, não só o do cadastro', () => {
+    const lidera4 = { ...base, meusSetores: ['play3', 'play5', 'receptivo', 'coren'] };
+    expect(podeAssinarLadoNr({ ...lidera4, setorDoLado: 'receptivo' })).toBe(true);
+    expect(podeAssinarLadoNr({ ...lidera4, setorDoLado: 'coren' })).toBe(true);
+    expect(podeAssinarLadoNr({ ...lidera4, setorDoLado: 'de-fora' })).toBe(false);
+  });
+
+  it('sem setor nenhum conhecido, não desenho botão de setor', () => {
+    expect(podeAssinarLadoNr({ ...base, meusSetores: [], setorDoLado: 'play3' })).toBe(false);
   });
 
   it('não assino pelo setor do outro', () => {
@@ -145,7 +165,7 @@ describe('podeAssinarLadoNr', () => {
 // ── O que a tela mostra enquanto falta assinatura ───────────────────────────
 
 describe('estadoDoPedidoNr', () => {
-  const lider3 = { podeAprovarPix: true, vejoTodosOsSetores: false, meuSetorId: 'play3' };
+  const lider3 = { podeAprovarPix: true, vejoTodosOsSetores: false, meusSetores: ['play3'] };
 
   it('sem ninguém: faltam os dois, e eu só posso o meu', () => {
     const e = estadoDoPedidoNr(pedido(), [], lider3);
@@ -162,7 +182,7 @@ describe('estadoDoPedidoNr', () => {
 
   it('a diretoria assina os dois lados, um clique cada', () => {
     const e = estadoDoPedidoNr(pedido(), [], {
-      podeAprovarPix: true, vejoTodosOsSetores: true, meuSetorId: null,
+      podeAprovarPix: true, vejoTodosOsSetores: true, meusSetores: [],
     });
     expect(e.meusLados).toEqual(['solicitante', 'conflito']);
   });
