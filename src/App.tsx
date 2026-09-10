@@ -64,6 +64,8 @@ const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
+const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
+const MeusChips         = lazy(() => import('@/pages/MeusChips'));
 const ModoTV            = lazy(() => import('@/pages/ModoTV'));
 // O palco. Lazy como o resto, e aqui isso importa por um motivo extra: o PC da
 // TV baixa SÓ este pedaço, e não a mesa nem o Gestão inteiro.
@@ -361,6 +363,32 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_rh_gestao">
                     <RhGestao />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Controle de Números — o Núcleo de Inteligência e Gestão.
+
+                  Sem `allowedProfiles`: quem abre é a chave, como nas abas já
+                  convertidas. E a chave sozinha não basta — `fn_numeros_visivel`
+                  ainda exige que a pessoa esteja no setor apontado por
+                  `numeros_config`, então um cargo com a chave ligada num setor
+                  qualquer abre a tela e não recebe uma linha. */}
+              <Route path={ROUTE_PATHS.CONTROLE_NUMEROS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_controle_numeros">
+                    <ControleNumeros />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Meus Chips — a outra ponta. O que a pessoa enxerga aqui sai do
+                  escopo da aba `chips`: individual (o operador vê o que foi
+                  lançado para ele) ou setor (a liderança vê tudo). */}
+              <Route path={ROUTE_PATHS.MEUS_CHIPS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_meus_chips">
+                    <MeusChips />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

@@ -119,6 +119,18 @@ export const PERMISSOES_EXPLICITAS = [
    * sozinho. Alguém precisa ligar, e a decisão fica registrada.
    */
   'rh_reabrir_fechamento',
+  /*
+   * Definir qual setor é o Núcleo de Inteligência e Gestão.
+   *
+   * Mesma família das duas acima. `numeros_config` decide quem administra o
+   * Controle de Números inteiro: apontá-la para outro setor entregaria a esse
+   * setor todos os números de todos os setores, de uma vez e sem movimentação
+   * nenhuma registrada.
+   *
+   * É o único caminho de escalonamento de privilégio do módulo, e por isso não
+   * chega por herança de acesso total. Alguém precisa ligar.
+   */
+  'numeros_configurar',
 ] as const;
 
 /** A chave precisa de concessão nominal, mesmo para quem tem acesso total? */
@@ -164,6 +176,10 @@ export const GRUPOS_PERMISSAO = [
   'Chat',
   // Modo TV, 01/09/2026. A apresentação que roda no PC ligado à TV por HDMI.
   'Modo TV',
+  // Controle de Números, 10/09/2026. O módulo do setor Núcleo de Inteligência
+  // e Gestão. Guarda as chaves das DUAS pontas — a do Núcleo e a dos setores —
+  // porque elas descrevem o mesmo caminho de um número, visto dos dois lados.
+  'Controle de Números',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -1741,6 +1757,133 @@ export const PERMISSOES: PermissaoMeta[] = [
     depende: {
       chaves: ['ver_modo_tv'],
       motivo: 'A biblioteca vive dentro da mesa.',
+    },
+  },
+
+  // ── Controle de Números ──────────────────────────────────────────────────
+  //
+  // O módulo do setor Núcleo de Inteligência e Gestão: cadastrar os celulares,
+  // aquecer os números de WhatsApp e distribuí-los aos setores de cobrança.
+  //
+  // As chaves têm DUAS metades, e a divisão é o que faz o módulo funcionar:
+  //
+  //   `numeros_*` e `ver_controle_numeros` .. o Núcleo. Nascem em ninguém.
+  //   `chips_*`   e `ver_meus_chips` ........ os setores. Nascem no padrão.
+  //
+  // Por que as do Núcleo nascem desligadas: o acesso ali é do SETOR, e cargo
+  // não distingue setor. Semear `numeros_administrar` em `operador` daria a
+  // chave a todo operador da empresa. O administrador concede nominalmente a
+  // quem é do Núcleo.
+  //
+  // Ligar a chave não basta: a RLS confere também se a pessoa está no setor
+  // apontado por `numeros_config`. São duas fechaduras, e as duas precisam
+  // abrir. Ver `fn_numeros_visivel` (migration 20260910190000).
+  {
+    key: 'ver_controle_numeros', label: 'Aba Controle de Números',
+    descricao:
+      'Abrir a área do Núcleo: cadastrar celulares e números, acompanhar o '
+      + 'aquecimento e receber o que os setores relançarem',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    key: 'numeros_administrar', label: 'Números: cadastrar e alterar situação',
+    descricao:
+      'Cadastrar celular e número, corrigir cadastro, e mover a situação entre '
+      + 'Em aquecimento, Ativo e Banido',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['ver_controle_numeros'],
+      motivo: 'Só se administra o que se enxerga — sem a aba não há o que cadastrar.',
+    },
+  },
+  {
+    key: 'numeros_liberar_ao_setor', label: 'Números: liberar ao setor',
+    descricao:
+      'Disponibilizar ao setor dono um número que já está ativo. Só número '
+      + 'ativo sai do Núcleo',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['ver_controle_numeros'],
+      motivo: 'Liberar é uma ação sobre a lista do Núcleo, que a aba abre.',
+    },
+  },
+  {
+    /*
+     * Concessão nominal, como `ignorar_fechamento_mes` e
+     * `rh_reabrir_fechamento`.
+     *
+     * Quem muda `numeros_config` decide qual setor manda no módulo inteiro.
+     * Apontar para outro setor entregaria a ele todos os números de todos os
+     * setores de uma vez — é escalonamento de privilégio, e o acesso total do
+     * administrador não deve concedê-lo por herança.
+     */
+    key: 'numeros_configurar', label: 'Números: definir o setor do Núcleo',
+    descricao:
+      'Apontar qual setor é o Núcleo de Inteligência e Gestão. Decide quem '
+      + 'administra o módulo inteiro',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    key: 'ver_meus_chips', label: 'Aba Meus Chips',
+    descricao:
+      'Abrir a área do próprio setor e consultar os números que o Núcleo já '
+      + 'liberou para ele',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: TODOS,
+  },
+  {
+    key: 'chips_escopo_individual', label: 'Meus Chips: os números lançados para mim',
+    descricao:
+      'Ver em Meus Chips apenas os números que a liderança lançou para a '
+      + 'própria pessoa',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: TODOS,
+  },
+  {
+    key: 'chips_escopo_setor', label: 'Meus Chips: o setor inteiro',
+    descricao:
+      'Ver em Meus Chips todos os números do próprio setor, inclusive os que '
+      + 'ainda não foram lançados a ninguém — a visão da liderança',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: LIDERANCA,
+  },
+  {
+    key: 'chips_lancar_ao_operador', label: 'Meus Chips: lançar a um operador',
+    descricao:
+      'Entregar um número do setor a um operador do mesmo setor, ou passá-lo '
+      + 'de uma pessoa para outra',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: LIDERANCA,
+    depende: {
+      chaves: ['chips_escopo_setor'],
+      motivo: 'Só se lança o que se enxerga, e lançar é sobre o setor inteiro.',
+    },
+  },
+  {
+    key: 'chips_relancar_ao_nucleo', label: 'Meus Chips: relançar ao Núcleo',
+    descricao:
+      'Devolver um número ao Núcleo com o motivo, preservando o registro e o '
+      + 'histórico',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: LIDERANCA,
+    depende: {
+      chaves: ['chips_escopo_setor'],
+      motivo: 'Relançar tira o número do setor — é decisão de quem responde pelo setor.',
+    },
+  },
+  {
+    /*
+     * O passo curto do operador, e ele é separado de `chips_relancar_ao_nucleo`
+     * de propósito: devolver à liderança NÃO tira o número do setor. O líder
+     * continua com ele e decide se vale relançar.
+     *
+     * Sem essa separação, o operador que teve um número banido teria de
+     * escolher entre avisar alguém por fora do sistema ou mandar o número
+     * embora do setor sem o líder saber.
+     */
+    key: 'chips_devolver_a_lideranca', label: 'Meus Chips: devolver à liderança',
+    descricao:
+      'Soltar um número lançado para a própria pessoa, informando o motivo. O '
+      + 'número continua no setor',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: TODOS,
+    depende: {
+      chaves: ['chips_escopo_individual'],
+      motivo: 'Só se devolve o número que se recebeu, e é o alcance individual que o mostra.',
     },
   },
 ];

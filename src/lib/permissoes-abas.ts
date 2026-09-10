@@ -32,7 +32,9 @@ export type ModuloPermissaoId =
   | 'campanha_facil'
   | 'importar_excel'
   | 'chat'
-  | 'modo_tv';
+  | 'modo_tv'
+  | 'controle_numeros'
+  | 'meus_chips';
 
 interface DefinicaoModulo {
   id: ModuloPermissaoId;
@@ -149,6 +151,46 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     id: 'modo_tv', rotulo: 'Modo TV', interruptor: 'ver_modo_tv',
     descricao: 'A apresentação na TV do setor: cenas, quem monta e quem manda ao ar.',
     grupos: ['Modo TV'], tenants: ['bookplay'],
+  },
+  {
+    /*
+     * O Controle de Números é UM grupo de catálogo e DOIS cards, e a divisão
+     * não é cosmética: são as duas pontas do mesmo caminho, e quem configura
+     * uma quase nunca configura a outra.
+     *
+     * Este card é o do Núcleo. Sem `escopo`: quem é do Núcleo enxerga a
+     * empresa inteira por estar no setor apontado em `numeros_config`, e não
+     * por um nível de alcance. A regra mora em `fn_numeros_visivel`.
+     *
+     * As chaves vêm nomeadas em vez de por grupo, justamente porque o grupo
+     * tem as duas metades — declarar `grupos` aqui engoliria as chaves de
+     * Meus Chips antes de o card seguinte existir.
+     */
+    id: 'controle_numeros', rotulo: 'Controle de Números',
+    interruptor: 'ver_controle_numeros',
+    descricao:
+      'A área do Núcleo de Inteligência e Gestão: celulares, números de '
+      + 'WhatsApp, aquecimento e liberação aos setores.',
+    chaves: ['numeros_administrar', 'numeros_liberar_ao_setor', 'numeros_configurar'],
+    tenants: ['bookplay'],
+  },
+  {
+    /*
+     * A outra ponta: o setor que recebe. Tem `escopo`, e ele é o que separa
+     * o operador (vê o que foi lançado para ele) da liderança (vê o setor
+     * inteiro, distribuído ou não).
+     */
+    id: 'meus_chips', rotulo: 'Meus Chips', interruptor: 'ver_meus_chips',
+    escopo: 'chips',
+    descricao:
+      'Os números de WhatsApp do próprio setor: consultar, lançar a um '
+      + 'operador e devolver ao Núcleo.',
+    chaves: [
+      'chips_lancar_ao_operador',
+      'chips_relancar_ao_nucleo',
+      'chips_devolver_a_lideranca',
+    ],
+    tenants: ['bookplay'],
   },
 ] as const;
 

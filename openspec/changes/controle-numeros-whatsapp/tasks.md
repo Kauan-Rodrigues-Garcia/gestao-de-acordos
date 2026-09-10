@@ -85,19 +85,44 @@
 
 ## 4. Migration 3 — permissões e ponto de partida
 
-- [ ] 4.1 Criar `supabase/migrations/<ts>_numeros_whatsapp_permissoes.sql`
-- [ ] 4.2 `CREATE OR REPLACE FUNCTION fn_permissoes_catalogo()` acrescentando as
+> **Descoberta que muda a ordem do plano.** Os dois catálogos são amarrados por
+> dois testes de contrato, e eles se contradizem enquanto o módulo está pela
+> metade:
+>
+> - `permissoes-catalogo.sql.test.ts` exige que SQL e TypeScript tenham
+>   **exatamente** as mesmas chaves, tenants, padrões e marcação de explícita;
+> - `permissoes-catalogo.test.ts` exige que **toda** chave do catálogo seja
+>   consultada por código real (`temPermissao`, `requiredPermissao`,
+>   `permissao:`, ou via `escopoEfetivo('chips')`).
+>
+> Não existe ordem em que estes três — migration 3, catálogo TS e as telas —
+> possam entrar separados com a suíte verde. Os blocos **4 e 9 fecham junto com
+> 5–8**, num commit só. A migration 3 também não é aplicada antes disso: aplicar
+> abriria 10 toggles no painel para telas que ainda não existem.
+
+- [x] 4.1 Criar `supabase/migrations/<ts>_numeros_whatsapp_permissoes.sql`
+- [x] 4.2 `CREATE OR REPLACE FUNCTION fn_permissoes_catalogo()` acrescentando as
       10 chaves com `tenants = ARRAY['bookplay']`, mantendo **todas** as
       existentes intactas; `numeros_configurar` com `explicita = true`
-- [ ] 4.3 `CREATE OR REPLACE FUNCTION fn_abas_escopo()` acrescentando
+- [x] 4.3 `CREATE OR REPLACE FUNCTION fn_abas_escopo()` acrescentando
       `('chips', 'ver_meus_chips')` às nove entradas atuais
-- [ ] 4.4 Laço `DO $semear$` acrescentando as chaves novas a `cargos_permissoes`
+- [x] 4.4 Laço `DO $semear$` acrescentando as chaves novas a `cargos_permissoes`
       de cargo existente, no molde de `20260823092000`
-- [ ] 4.5 Semear `numeros_config` da BOOKPLAY apontando o setor
+- [x] 4.5 Semear `numeros_config` da BOOKPLAY apontando o setor
       `Núcleo de Inteligência e Gestão`, **por nome e só se existir**; `RAISE
       NOTICE` quando não existir, sem criar setor
-- [ ] 4.6 Bloco de verificação no fim: as 10 chaves existem no catálogo e a aba
-      `chips` aponta para chave que existe
+- [x] 4.6 Bloco de verificação no fim: as 10 chaves existem no catálogo, a aba
+      `chips` aponta para chave que existe, e a acumulação não perdeu o
+      catálogo anterior
+- [x] 4.7 Lado TypeScript, adiantado de 9.4 porque o contrato SQL↔TS não aceita
+      um lado só: as 10 chaves em `permissoes-catalogo.ts`, o grupo
+      `'Controle de Números'`, `numeros_configurar` em `PERMISSOES_EXPLICITAS`
+- [x] 4.8 `ABAS_COM_ESCOPO.chips` em `permissoes-escopo.ts`, níveis
+      `['individual', 'setor']`
+- [x] 4.9 Dois cards em `MODULOS_PERMISSAO` (`permissoes-abas.ts`): um grupo de
+      catálogo vira DOIS cards, porque são as duas pontas do mesmo caminho —
+      senão `permissoes-abas.test.ts` acusa permissão fora de card
+- [ ] 4.10 **Pendente até as telas existirem:** aplicar a migration 3 e commitar
 
 ## 5. Camada de serviço
 

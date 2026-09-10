@@ -239,6 +239,26 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'rh',
     niveis: ['equipe', 'setor', 'todos_setores'],
   },
+  /*
+   * Meus Chips: dois níveis, e a distância entre eles é a regra do módulo.
+   *
+   * `individual` é o operador vendo apenas os números que a liderança lançou
+   * PARA ELE. `setor` é a liderança vendo o setor inteiro, inclusive o que
+   * ainda não distribuiu. Não há nada entre os dois: um número está com uma
+   * pessoa ou está livre no setor.
+   *
+   * `equipe` não entra porque o número pertence ao SETOR, nunca a uma equipe —
+   * o celular é que define o setor, e celular não tem equipe. `todos_setores`
+   * não entra porque quem enxerga além do próprio setor é o Núcleo, e o Núcleo
+   * não usa esta aba: ele tem a dele, sem escada, reconhecido pelo setor em
+   * `numeros_config`. Registrar o nível aqui criaria um interruptor que
+   * duplicaria a autoridade do Núcleo por um caminho que a RLS não confere.
+   */
+  chips: {
+    chaveAba: 'ver_meus_chips',
+    prefixo: 'chips',
+    niveis: ['individual', 'setor'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

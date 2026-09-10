@@ -24,7 +24,7 @@
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
-  Ticket, ClipboardList, Tv,
+  Ticket, ClipboardList, Tv, Smartphone, MessageCircle,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -100,6 +100,14 @@ export const NAV_ITEMS: NavItem[] = [
   // quem tem acesso total — que é o pedido enquanto a fase 1 está sendo provada
   // na parede. O palco (`/tv/:slug`) não entra em menu nenhum: ele é endereço
   // de TV, não tela de gente.
+  // Controle de Números — o Núcleo. `hiddenForPaguePay` porque o setor existe
+  // só na BookPlay, e a chave nasce desligada para todo cargo configurável:
+  // hoje o item aparece só para quem recebeu a concessão nominal.
+  { label: 'Controle de Números', icon: Smartphone,     to: ROUTE_PATHS.CONTROLE_NUMEROS,  produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_controle_numeros' },
+  // Meus Chips — a outra ponta, e esta nasce LIGADA: todo cargo enxerga a aba,
+  // e o escopo de dentro decide se ela mostra o setor ou só o que foi lançado
+  // para a pessoa. Operador sem número nenhum vê a tela vazia, com a explicação.
+  { label: 'Meus Chips',       icon: MessageCircle,  to: ROUTE_PATHS.MEUS_CHIPS,        produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_meus_chips' },
   { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, permissaoKey: 'ver_modo_tv' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.

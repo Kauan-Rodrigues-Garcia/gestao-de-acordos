@@ -23,6 +23,15 @@ export const ROUTE_PATHS = {
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',
+  /**
+   * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
+   *
+   * Duas rotas, e não uma que muda de cara: são telas com finalidades
+   * diferentes — uma cadastra e prepara, a outra consulta e distribui — e
+   * dividir uma URL entre as duas faria um componente carregar dois modos.
+   */
+  CONTROLE_NUMEROS: '/controle-numeros',
+  MEUS_CHIPS: '/meus-chips',
   COMEMORACOES: '/comemoracoes',
   /** A mesa do Modo TV: prévia, no ar e o corte. Atrás do painel. */
   MODO_TV: '/modo-tv',
