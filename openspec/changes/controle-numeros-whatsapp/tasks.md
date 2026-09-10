@@ -122,93 +122,100 @@
 - [x] 4.9 Dois cards em `MODULOS_PERMISSAO` (`permissoes-abas.ts`): um grupo de
       catálogo vira DOIS cards, porque são as duas pontas do mesmo caminho —
       senão `permissoes-abas.test.ts` acusa permissão fora de card
-- [ ] 4.10 **Pendente até as telas existirem:** aplicar a migration 3 e commitar
+- [x] 4.10 Migration 3 aplicada em produção junto com as telas, em commit único
 
 ## 5. Camada de serviço
 
-- [ ] 5.1 Criar `src/services/numeros/numeros.service.ts` com as leituras:
+- [x] 5.1 Criar `src/services/numeros/numeros.service.ts` com as leituras:
       `listarCelulares`, `listarNumeros` (filtros setor/situação/posse),
       `listarNumerosDoOperador`, `listarMovimentacoes`, `buscarConfig`
-- [ ] 5.2 Escritas de cadastro: `criarCelular`, `editarCelular`,
+- [x] 5.2 Escritas de cadastro: `criarCelular`, `editarCelular`,
       `desativarCelular`, `criarNumero` — traduzindo erro de unicidade do
       Postgres (`23505`) e as exceções das triggers em mensagem legível
-- [ ] 5.3 Chamadas às 5 RPCs via `supabase.rpc(...)`
-- [ ] 5.4 `salvarConfigNucleo(setorId)`
-- [ ] 5.5 Testes do serviço com mock do cliente Supabase, no padrão de
+- [x] 5.3 Chamadas às 5 RPCs via `supabase.rpc(...)`
+- [x] 5.4 `salvarConfigNucleo(setorId)`
+- [x] 5.5 Testes do serviço com mock do cliente Supabase, no padrão de
       `src/services/__tests__/`: duplicado vira mensagem de "já possui
       cadastro"; limite vira mensagem de 6 números
 
 ## 6. Hooks
 
-- [ ] 6.1 `src/hooks/useControleNumeros.ts` — celulares, números, config,
+- [x] 6.1 `src/hooks/useControleNumeros.ts` — celulares, números, config,
       movimentações; realtime nas 3 tabelas seguindo o padrão dos hooks atuais;
       reconciliação com `reconciliarLista`/`dadosVivos` para a tela não piscar
-- [ ] 6.2 `src/hooks/useMeusChips.ts` — resolve a visão (liderança ou operador)
+- [x] 6.2 `src/hooks/useMeusChips.ts` — resolve a visão (liderança ou operador)
       a partir de `temPermissao('chips_escopo_setor')` e carrega só o que
       aquela visão precisa
-- [ ] 6.3 Ambos com `loading` só na primeira carga, não em releitura (a lição
+- [x] 6.3 Ambos com `loading` só na primeira carga, não em releitura (a lição
       documentada em `useCargoPermissoes`)
 
 ## 7. Páginas — Núcleo
 
-- [ ] 7.1 `src/pages/ControleNumeros/index.tsx` com as abas Celulares, Números e
+- [x] 7.1 `src/pages/ControleNumeros/index.tsx` com as abas Celulares, Números e
       Configuração, seguindo o padrão de abas de `RhGestao/index.tsx`
-- [ ] 7.2 `ListaCelulares.tsx` — cartão por celular com setor, modelo e contador
+- [x] 7.2 `ListaCelulares.tsx` — cartão por celular com setor, modelo e contador
       `n/6`; ação de cadastrar número desabilitada em 6/6
-- [ ] 7.3 `DialogoCelular.tsx` — campo de setor desabilitado com explicação
+- [x] 7.3 `DialogoCelular.tsx` — campo de setor desabilitado com explicação
       quando o celular já tem número
-- [ ] 7.4 `DialogoNumero.tsx` — máscara na digitação, validação antes de enviar,
+- [x] 7.4 `DialogoNumero.tsx` — máscara na digitação, validação antes de enviar,
       e mensagem de duplicado apontando onde o número já está
-- [ ] 7.5 `ListaNumeros.tsx` — filtros por setor, situação e posse; ação
+- [x] 7.5 `ListaNumeros.tsx` — filtros por setor, situação e posse; ação
       "Liberar ao setor" visível só quando a regra pura permite
-- [ ] 7.6 `DialogoSituacao.tsx` — troca de situação com confirmação
-- [ ] 7.7 `HistoricoNumero.tsx` — linha do tempo lendo `descricao` do banco
-- [ ] 7.8 `PainelConfiguracao.tsx` — escolhe o setor do Núcleo; só aparece com
+- [x] 7.6 `DialogoSituacao.tsx` — troca de situação com confirmação
+- [x] 7.7 `HistoricoNumero.tsx` — linha do tempo lendo `descricao` do banco
+- [x] 7.8 `PainelConfiguracao.tsx` — escolhe o setor do Núcleo; só aparece com
       `numeros_configurar`, e avisa o efeito antes de salvar
 
 ## 8. Páginas — Meus Chips
 
-- [ ] 8.1 `src/pages/MeusChips/index.tsx` — escolhe a visão pelo escopo
-- [ ] 8.2 `VisaoLideranca.tsx` — números do setor separados entre "disponíveis
+- [x] 8.1 `src/pages/MeusChips/index.tsx` — escolhe a visão pelo escopo
+- [x] 8.2 `VisaoLideranca.tsx` — números do setor separados entre "disponíveis
       para lançar" e "com operador"; ações de lançar e relançar
-- [ ] 8.3 `VisaoOperador.tsx` — só os números lançados para a pessoa; ação de
+- [x] 8.3 `VisaoOperador.tsx` — só os números lançados para a pessoa; ação de
       devolver
-- [ ] 8.4 `DialogoLancar.tsx` — lista só operadores do mesmo setor
-- [ ] 8.5 `DialogoRelancar.tsx` — motivo obrigatório (lista) + observação
-- [ ] 8.6 `DialogoDevolver.tsx` — motivo + observação
-- [ ] 8.7 Histórico reusando `HistoricoNumero`
+- [x] 8.4 `DialogoLancar.tsx` — lista só operadores do mesmo setor
+- [x] 8.5 `DialogoRelancar.tsx` — motivo obrigatório (lista) + observação
+- [x] 8.6 `DialogoDevolver.tsx` — motivo + observação
+- [x] 8.7 Histórico reusando `HistoricoNumero`
 
 ## 9. Ligação com o sistema existente (só acréscimos)
 
-- [ ] 9.1 `src/lib/index.ts`: `CONTROLE_NUMEROS: '/controle-numeros'` e
+- [x] 9.1 `src/lib/index.ts`: `CONTROLE_NUMEROS: '/controle-numeros'` e
       `MEUS_CHIPS: '/meus-chips'` em `ROUTE_PATHS`
-- [ ] 9.2 `src/App.tsx`: duas rotas com `lazy` + `ProtectedRoute`, cada uma com
+- [x] 9.2 `src/App.tsx`: duas rotas com `lazy` + `ProtectedRoute`, cada uma com
       `produtos={SO_COBRANCA}` e sua `requiredPermissao`. **Sem
       `allowedProfiles`** — quem abre é a chave, como nas abas já convertidas
-- [ ] 9.3 `src/lib/menuLateral.ts`: dois itens em `NAV_ITEMS` com
+- [x] 9.3 `src/lib/menuLateral.ts`: dois itens em `NAV_ITEMS` com
       `produtos: SO_COBRANCA`, `hiddenForPaguePay: true`, `permissaoKey`, e
       ícone do `lucide-react` (`Smartphone` e `MessageCircle`)
-- [ ] 9.4 `src/lib/permissoes-catalogo.ts`: as 10 chaves com `grupo`, `label`,
+- [x] 9.4 `src/lib/permissoes-catalogo.ts`: as 10 chaves com `grupo`, `label`,
       `descricao`, `tenants: ['bookplay']` e `padrao` no formato de objeto que o
       arquivo usa (`TODOS`, `LIDERANCA` ou `{}`); `numeros_configurar` também em
       `PERMISSOES_EXPLICITAS`; grupo novo `'Controle de Números'` em
       `GRUPOS_PERMISSAO`
-- [ ] 9.5 Conferir que `src/services/menuLateral.service.ts` (ordem salva do
+- [x] 9.5 Conferir que `src/services/menuLateral.service.ts` (ordem salva do
       menu) aceita os itens novos sem quebrar a ordenação de quem já usa
 
 ## 10. Verificação
 
-- [ ] 10.1 `npx tsc --noEmit`
-- [ ] 10.2 `npx eslint --max-warnings=0` nos arquivos novos e alterados
-- [ ] 10.3 `npm test` — com atenção ao teste de contrato do catálogo de
-      permissões, que só passa com os dois lados espelhados
-- [ ] 10.4 `npm run build`
-- [ ] 10.5 Revisar o diff completo antes de propor qualquer aplicação de
-      migration
-- [ ] 10.6 Apresentar as 3 migrations ao Kauan: o que cada uma altera e quantas
-      linhas deve atingir. **Esperar o "pode" de cada uma.**
+- [x] 10.1 `npx tsc --noEmit` — exit 0
+- [x] 10.2 `npx eslint --max-warnings=0` nos arquivos novos e alterados — exit 0
+- [x] 10.3 `npx vitest run` — 295 arquivos, 4912 testes, tudo verde
+- [x] 10.4 `npm run build` — construído em 14,64 s
+- [x] 10.5 Diff revisado; o trabalho em andamento do Kauan (Analítico e RH)
+      ficou fora dos dois commits, de propósito
+- [x] 10.6 As 3 migrations foram apresentadas com o efeito e a contagem de
+      linhas antes de cada aplicação:
+      - `20260910190000` — 4 tabelas, 12 índices, 9 funções, 3 triggers, 0 linhas
+      - `20260910191000` — 9 funções, 1 trigger, 7 policies, 0 linhas
+      - `20260910192000` — catálogo de 164 → 174 chaves, 36 linhas de
+        `cargos_permissoes` semeadas, 1 linha em `numeros_config`
 
-## 11. Depois de aplicado (só com autorização)
+## 11. Depois de aplicado — PENDENTE, e precisa de você
+
+> As três migrations estão em produção e o código está na `main`. O que falta
+> não dá para eu fazer sozinho: exige conceder chaves a pessoas reais e
+> percorrer o caminho com um número de verdade.
 
 - [ ] 11.1 Conferir no painel de permissões que as 10 chaves apareceram
 - [ ] 11.2 Conceder as chaves do Núcleo às pessoas do setor
