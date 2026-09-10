@@ -160,8 +160,20 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
     };
     const retomar = () => {
       if (document.visibilityState === 'hidden') return;
-      if (conectado && canal.current) void rastrear(canal.current);
-      else conectar();
+      // Canal vivo NÃO é re-rastreado.
+      //
+      // `track()` é difundido para TODOS os membros do canal, e `presenca-chat`
+      // é um só para a aplicação inteira. Re-rastrear a cada volta de foco fazia
+      // cada alt-tab de cada pessoa virar um evento de presence para todo mundo,
+      // e o Realtime respondia com
+      //
+      //     PresenceRateLimitReached: Too many presence events per second
+      //
+      // 865 vezes em 24 h no log de produção. A presença vive enquanto o socket
+      // viver; quem cobre queda de rede é o `subscribe` abaixo, que reconecta em
+      // CLOSED/CHANNEL_ERROR. É a mesma régua do `PresenceProvider`.
+      if (conectado && canal.current) return;
+      conectar();
     };
     conectar();
     window.addEventListener('online', retomar);
