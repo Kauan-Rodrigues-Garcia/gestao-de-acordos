@@ -71,3 +71,23 @@ O teste visual usa dados sintéticos e respostas de banco simuladas em todas as 
 Foram verificadas as duas tabelas com RLS ativa, a negação de execução anônima e de escrita direta, e a leitura das duas modalidades com o papel autenticado de diretoria. Um teste de importação com valores sintéticos conferiu os centavos, a confirmação idempotente e o isolamento entre modalidades dentro de uma transação revertida com ROLLBACK. Os dois históricos permaneceram vazios, prontos para a primeira importação real. O verificador de segurança não apontou ocorrências relacionadas aos novos objetos `pp_relatorio`.
 
 A versão do arquivo local corresponde à registrada no histórico de migrações remoto. Nenhuma outra migração pendente foi aplicada.
+# Acumulado do setor no Painel Líder
+
+No Painel Líder da PaguePlay, em Desempenho Equipes, somente o card consolidado
+do setor usa a conciliação. O mês selecionado filtra `data` (competência), como
+no acumulado da diretoria. O bruto soma `total` (Valor Recebido); H.O. soma `pp`
+(Pague Play), em centavos no banco, sem percentual nem ajuste do analítico.
+Equipes, outras abas e Comissão preservam suas fontes anteriores.
+
+A RPC `fn_pp_conciliacao_setor` permite somente o resumo a quem possui acesso
+à empresa, à aba/subaba do Painel Líder e alcance de setor ou empresa. Não
+libera linhas individuais nem a edição/importação da diretoria. A PaguePlay
+possui um único setor de origem, Conecta Play. Como o relatório não identifica
+setor, a consulta recusa uma futura configuração com vários setores de origem
+até existir um mapeamento explícito; não repete o total em cada setor.
+
+O card diferencia mês sem importação de falha na consulta; não substitui
+falhas por valores do analítico. Reconsulta ao trocar o mês, recarregar pelo
+botão do painel, voltar à janela e a cada minuto com a janela ativa. A lista
+de operadores do analítico não é apresentada como decomposição desse total,
+pois o relatório de conciliação não identifica os operadores.

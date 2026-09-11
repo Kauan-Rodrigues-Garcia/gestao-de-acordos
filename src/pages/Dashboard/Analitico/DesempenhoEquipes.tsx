@@ -20,6 +20,8 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { carregarConciliacaoSetor } from '@/services/relatorioPaguePlay/conciliacaoSetor';
 import { Building2, Headset, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -80,6 +82,9 @@ interface DesempenhoEquipesProps {
   /** PaguePlay: card do setor = soma dos operadores (analítico), não o total
    *  do relatório carimbado por setor_id. Vale para TODOS os setores. */
   setorSomaMembros?: boolean;
+  /** Apenas o card consolidado do Painel Líder PaguePlay usa conciliação. */
+  setorConciliacao?: boolean;
+  conciliacaoVersao?: number;
   loading: boolean;
   /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
   fonteLabel?: string;
@@ -281,11 +286,21 @@ function CardContribuicaoReceptivo({
 export function DesempenhoEquipes({
   empresaId, mes, setorId, equipeId = null, equipes, resumos, operadorEquipeMap,
   equipesExtrasPorOperador = {}, orfaosPorSetor = {},
-  totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, loading,
+  totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, setorConciliacao = false, loading,
   fonteLabel = 'relatório analítico',
+  conciliacaoVersao = 0,
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
   const isPP = useTenant().isPaguePlay;
+  const usarConciliacao = isPP && setorConciliacao;
+  const conciliacao = useQuery({
+    queryKey: ['pp-conciliacao-setor', empresaId, mes, perfil?.id, conciliacaoVersao],
+    queryFn: () => carregarConciliacaoSetor(empresaId, mes),
+    enabled: usarConciliacao && !equipeId,
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 60_000,
+  });
   // `setorId` vem do pai e vale como está — `null` é "todos os setores". Não há
   // fallback para `perfil.setor_id`: era ele que desfazia a decisão do pai e
   // mostrava um setor só à diretoria. Ver o cabeçalho do arquivo.
@@ -709,12 +724,13 @@ export function DesempenhoEquipes({
         onChange={onArquivoFotoSetor}
       />
       {gruposOrdenados.map(([sid, eqs]) => {
-        // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam;
-        // PaguePlay e setor alternativo → soma dos usuários. A escolha, o
-        // Receptivo e a origem do ajuste moram em `acumuladoDoSetor` — a mesma
-        // função que a aba Comissão da tela de Metas usa para a confirmação.
+        // A conciliação substitui apenas este consolidado. Equipes, Comissão
+        // e os demais relatórios continuam usando suas fontes anteriores.
         const ehAlternativo = setoresAlternativos.has(sid);
-        const acumuladoSetor = acumuladoDoSetor({
+        const resumoConciliacao = conciliacao.data?.setorId === sid ? conciliacao.data : undefined;
+        const acumuladoSetor = usarConciliacao
+          ? { bruto: resumoConciliacao?.bruto ?? 0, ho: resumoConciliacao?.ho ?? 0, ajuste: 0 }
+          : acumuladoDoSetor({
           setorId: sid,
           isPaguePlay: setorSomaMembros,
           alternativo: ehAlternativo,
@@ -735,9 +751,19 @@ export function DesempenhoEquipes({
           {/* Consolidado do setor. Sai de cena quando há filtro de equipe: o
               número dele é do setor inteiro e contradiria o recorte pedido. */}
           {!equipeId && (
-            <CardEquipe
+            usarConciliacao && (conciliacao.isPending || conciliacao.isError || !resumoConciliacao) ? (
+              <div role="status" className="rounded-lg border p-5 text-sm text-muted-foreground">
+                {conciliacao.isPending ? 'Carregando conciliação do setor…' : (
+                  <>Não foi possível carregar a conciliação deste setor.
+                    <Button variant="link" size="sm" onClick={() => void conciliacao.refetch()}>Tentar novamente</Button>
+                  </>
+                )}
+              </div>
+            ) : <CardEquipe
               titulo={setores[sid] ?? 'Setor'}
-              subtitulo={ehAlternativo
+              subtitulo={usarConciliacao
+                ? `Setor · conciliação do mês${resumoConciliacao?.quantidade === 0 ? ' · sem dados importados' : ''}`
+                : ehAlternativo
                 ? 'Setor alternativo · soma dos usuários'
                 : setorSomaMembros ? 'Setor · soma dos operadores' : 'Setor geral · total do relatório'}
               ehSetor
@@ -760,7 +786,7 @@ export function DesempenhoEquipes({
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
               quartis={quartis}
-              operadores={sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid })}
+              operadores={usarConciliacao || sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid })}
               mes={mes}
             />
           )}
@@ -837,7 +863,9 @@ export function DesempenhoEquipes({
         );
       })}
       <p className="text-[11px] text-muted-foreground">
-        Acumulado e diário vêm do {fonteLabel} · meta, dias úteis e feriados
+        {usarConciliacao
+          ? `O acumulado do setor vem da conciliação; as equipes vêm do ${fonteLabel}`
+          : `Acumulado e diário vêm do ${fonteLabel}`} · meta, dias úteis e feriados
         vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis
         trabalhados) · clique num card para ver os degraus de quartil, o ritmo
         necessário e a distribuição das pessoas, e para copiar o resumo que vai

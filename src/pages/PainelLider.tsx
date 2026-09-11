@@ -624,7 +624,7 @@ export default function PainelLider() {
           trocar de aba é instantâneo — nada é refeito, só reexibido. */}
 
       {/* ── Aba: Desempenho Equipes (relatório analítico, os dois tenants) ── */}
-      {/* PaguePlay: card do setor = soma dos operadores (setorSomaMembros).    */}
+      {/* PaguePlay: só o card do setor usa o acumulado mensal da conciliação. */}
       {/* BookPlay: card do setor = total do relatório carimbado por setor_id.  */}
       {mostrarAbasAnaliticas && (abasVisitadas.has('desempenho') || abaVisivel === 'desempenho') && (
         <div className={cn(abaVisivel !== 'desempenho' && 'hidden')}>
@@ -641,6 +641,8 @@ export default function PainelLider() {
             totalPorSetor={isPP ? undefined : analiticoTotalPorSetor}
             setoresAlternativos={isPP ? undefined : analiticoSetoresAlt}
             setorSomaMembros={isPP}
+            setorConciliacao={isPP}
+            conciliacaoVersao={diarioReloadKey}
             loading={loadingAnalitico}
             fonteLabel="relatório analítico"
           />
