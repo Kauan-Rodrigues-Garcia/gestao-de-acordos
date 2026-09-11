@@ -1455,15 +1455,25 @@ Migration `20260911190000`, tabelas `comissao_config` e `comissao_faixas`. Desen
 - **Faixas:** 1ª Meta = `metas.meta_valor` do operador; da 2ª em diante,
   `metas.metas_extras` — nas duas empresas. A configuração do mês guarda só o
   percentual de cada posição.
-- **Comissão da faixa** = valor da meta × % ÷ 100, em centavos. Vale a **maior**
-  faixa atingida que tem percentual; as faixas **não somam**. Faixa sem % no mês
-  não paga.
+- **Comissão** = valor **realizado** × % da **maior** faixa atingida ÷ 100, em
+  centavos (desde 11/09/2026; antes era o valor da meta). Meta de R$ 40.000,00 a
+  3,30% com R$ 42.000,00 realizados: R$ 1.386,00. O % só muda quando a próxima meta
+  é atingida; as faixas **não somam**. Faixa sem % no mês não paga.
+- **Mínimo da faixa** = valor da meta × % — o «a partir de» das faixas em que a
+  pessoa não está.
 - **Unidade:** PaguePlay em H.O. (meta × 24,96% contra `total_ho`); BookPlay em bruto.
+- **Realizado:** `fn_analitico_resumo_por_operador` com o ajuste manual do mês —
+  a mesma fonte na aba Comissão, no painel do operador e no RH Gestão.
 - **Configuração:** padrão do setor (`equipe_id` nulo) e exceção por equipe. A
   regra de quando o setor bate a meta mora só na linha do setor.
-- **Direta + indireta `[PP]`:** `junto` — 1ª Meta = direta + indireta, contra o
-  recebido total; `separado` — as faixas medem a direta, e a indireta soma
-  `meta indireta × % indireta` quando atingida.
+- **Direta + indireta `[PP]`:** `junto` — 1ª Meta = direta + indireta, e o % vale
+  sobre o realizado total; `separado` — as faixas medem a direta, e a indireta soma
+  `realizado indireto × % indireta` quando atingida.
+- **Onde aparece:** o operador vê a própria no botão **Comissão** do menu lateral
+  (`dashboard_comissao`); a liderança consulta na aba Comissão da tela de Metas. No
+  RH Gestão, as linhas de setores do tipo Comissão mostram a comissão do mês de
+  apuração, e **Preencher com a comissão** escreve o valor nas linhas ainda
+  editáveis — nunca zero, nunca em linha fora da folha.
 - **Benefício do setor:** `percentual_especial` (o % especial da faixa) ou
   `multiplicador` (% × fator), na direta e na indireta. Só vale com a
   **confirmação** da liderança (`fn_comissao_confirmar_meta_setor`), feita olhando o

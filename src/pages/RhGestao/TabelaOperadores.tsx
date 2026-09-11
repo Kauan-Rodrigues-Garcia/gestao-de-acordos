@@ -26,6 +26,8 @@ import { ESTADO_META, editavel, rotuloValor, type StatusLancamento } from '@/ser
 import { formatarPercentual, corPercentual } from '@/services/rh/rhPercentual';
 import type { LancamentoComPercentual } from '@/hooks/useRhGestao';
 import type { PermissoesRh } from '@/hooks/useRhGestao';
+import type { SugestaoComissao } from '@/services/rh/rhComissao';
+import LinhaSugestaoComissao from './LinhaSugestaoComissao';
 
 export interface TabelaOperadoresProps {
   linhas: LancamentoComPercentual[];
@@ -55,12 +57,18 @@ export interface TabelaOperadoresProps {
   destacarId?: string | null;
   /** Nada animado na primeira pintura — só quem chega depois se move. */
   jaPintou: boolean;
+  /**
+   * `operador_id` → a comissão por meta do mês de apuração, nas linhas de
+   * setores do tipo Comissão. Aparece embaixo do valor; quem escreve é
+   * «Preencher com a comissão», no cabeçalho da equipe.
+   */
+  comissoes?: Readonly<Record<string, SugestaoComissao>>;
 }
 
 export function TabelaOperadores({
   linhas, permissoes, competenciaAberta,
   onSalvarValor, onAprovar, onDevolver, onDispensar, onEditarCracha,
-  destacarId, jaPintou,
+  destacarId, jaPintou, comissoes,
 }: TabelaOperadoresProps) {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [rascunho, setRascunho]     = useState('');
@@ -214,6 +222,9 @@ export function TabelaOperadores({
                       />
                     ) : (
                       <span className="text-muted-foreground">—</span>
+                    )}
+                    {!emEdicao && l.tipo_remuneracao_snapshot === 'comissao' && (
+                      <LinhaSugestaoComissao sugestao={comissoes?.[l.operador_id]} valor={l.valor} />
                     )}
                   </td>
 

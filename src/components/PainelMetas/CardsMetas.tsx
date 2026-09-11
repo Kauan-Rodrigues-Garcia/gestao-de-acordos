@@ -58,14 +58,9 @@ function formatarPct(v: number): string {
 interface CardsMetasProps {
   dados: DadosPainelMetas;
   mes: string;
-  /**
-   * O card de comissão, quando há. Entra na MESMA grade dos cards de projeção,
-   * logo depois do quartil — quem decide se ele existe é o `PainelMetas`.
-   */
-  slotComissao?: React.ReactNode;
 }
 
-export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
+export function CardsMetas({ dados, mes }: CardsMetasProps) {
   const {
     totalRecebido, totalRecebidoOposto, diretoExtra, extraTabulado, meta, metaOposta,
     projecao, escopoRotulo, modoAgregado,
@@ -284,8 +279,6 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
             )}
           </>
         )}
-
-        {slotComissao}
         </div>
 
         {/* O donut fecha a grade pela DIREITA: os números correm da esquerda

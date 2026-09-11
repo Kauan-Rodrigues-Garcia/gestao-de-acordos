@@ -2,10 +2,23 @@
 import { describe, it, expect } from 'vitest';
 import {
   mesDoRecorte, intervaloDoRecorte, janelaDoDetalhe, trocarModo, somarDias,
-  recorteDaQuery, queryDoRecorte, type Recorte,
+  recorteDaQuery, queryDoRecorte, diaDestacado, type Recorte,
 } from './recorte';
 
 const HOJE = '2026-09-05';
+
+describe('diaDestacado', () => {
+  it('a lente Dia destaca o dia escolhido', () => {
+    expect(diaDestacado({ modo: 'dia', dia: '2026-09-03' })).toBe('2026-09-03');
+  });
+  it('a lente Mês não destaca dia nenhum — nem hoje', () => {
+    expect(diaDestacado({ modo: 'mes', mes: '2026-09' })).toBeNull();
+  });
+  it('a lente Período também não', () => {
+    expect(diaDestacado({ modo: 'periodo', mes: '2026-09', inicio: '2026-09-01', fim: '2026-09-05' }))
+      .toBeNull();
+  });
+});
 
 describe('mesDoRecorte', () => {
   it('devolve o mês do modo mes', () => {

@@ -34,6 +34,10 @@ import {
   Users, ChevronLeft, CheckCircle2, Send, ShieldCheck, Undo2, Loader2,
   ClipboardList, AlertTriangle,
 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,7 +47,9 @@ import { formatCurrency } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useRhGestao, comPercentual, type LancamentoComPercentual } from '@/hooks/useRhGestao';
+import { useComissaoRh } from '@/hooks/useComissaoRh';
 import { montarArvore } from '@/services/rh/rhAgregacao';
+import type { PlanoPreenchimento } from '@/services/rh/rhComissao';
 import { GRUPO_META } from '@/services/rh/rhEstados';
 import { gerarPlanilhaRh } from '@/services/rh/rhExportacao';
 import {
@@ -54,6 +60,7 @@ import {
 } from '@/services/rh/rhGestao.service';
 import { registrarLog } from '@/services/logs.service';
 import TabelaOperadores from './TabelaOperadores';
+import BotaoPreencherComissao from './BotaoPreencherComissao';
 import VisaoConsolidada from './VisaoConsolidada';
 import CabecalhoCompetencia from './CabecalhoCompetencia';
 import DialogoMotivo from './DialogoMotivo';
@@ -206,6 +213,65 @@ export default function RhGestao() {
     await recarregar();
     return true;
   }, [recarregar]);
+
+  /*
+   * Comissão por meta — só nas linhas de setores do tipo Comissão.
+   *
+   * O botão escreve a comissão calculada do mês de apuração nas linhas ainda
+   * editáveis; concluir, validar e enviar continuam como eram. Linha que já
+   * tinha um valor diferente só é substituída depois de confirmar.
+   */
+  const comissoes = useComissaoRh({
+    empresaId: empresa?.id ?? null,
+    mesApuracao: fechamento ? String(fechamento.mes_apuracao) : null,
+    lancamentos,
+  });
+  const [preenchimento, setPreenchimento] = useState<{
+    equipeId: string | null; equipeNome: string; plano: PlanoPreenchimento;
+  } | null>(null);
+
+  const preencherComComissao = useCallback(async (
+    equipeId: string | null, plano: PlanoPreenchimento,
+  ) => {
+    setOcupado(chaveDaEquipe(equipeId));
+    const observacaoDe = new Map(lancamentos.map(l => [l.id, l.observacao ?? null]));
+    let falhas = 0;
+    let primeiroErro: string | undefined;
+    try {
+      for (const p of plano.preencher) {
+        // A observação vai junto: a RPC grava as duas colunas, e mandar nula
+        // apagaria o que o líder escreveu na linha.
+        const r = await salvarLancamento({
+          lancamentoId: p.id, valor: p.valor, observacao: observacaoDe.get(p.id) ?? null,
+        });
+        if (!r.ok) {
+          falhas++;
+          if (!primeiroErro) primeiroErro = r.erro;
+        }
+      }
+      await recarregar();
+    } finally {
+      setOcupado(null);
+    }
+
+    const feitos = plano.preencher.length - falhas;
+    const plural = feitos !== 1 ? 's' : '';
+    if (falhas === 0) {
+      toast.success(`${feitos} lançamento${plural} preenchido${plural} com a comissão.`);
+    } else {
+      toast.error(`${feitos} preenchido${plural} e ${falhas} com erro: ${primeiroErro ?? 'não foi possível salvar.'}`);
+    }
+  }, [lancamentos, recarregar]);
+
+  const pedirPreenchimento = useCallback((
+    equipeId: string | null, equipeNome: string, plano: PlanoPreenchimento,
+  ) => {
+    if (plano.substituem > 0) {
+      setPreenchimento({ equipeId, equipeNome, plano });
+      return;
+    }
+    void preencherComComissao(equipeId, plano);
+  }, [preencherComComissao]);
 
   /**
    * Concluir a equipe: congela a fotografia e muda o estado.
@@ -543,6 +609,16 @@ export default function RhGestao() {
 
                       {emAcao && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
 
+                      {/* Antes de concluir: preencher é o passo que vem primeiro. */}
+                      {permissoes.podePreencher && competenciaAberta && (
+                        <BotaoPreencherComissao
+                          linhas={eq.linhas}
+                          comissoes={comissoes}
+                          disabled={emAcao}
+                          onPreencher={plano => pedirPreenchimento(eq.equipeId, eq.equipeNome, plano)}
+                        />
+                      )}
+
                       {/* Concluir: só quando falta a conclusão, e nunca em
                           silêncio — a RPC recusa com a lista de quem falta.
 
@@ -614,6 +690,7 @@ export default function RhGestao() {
                       onDispensar={(l, d) => { void alternarDispensa(l, d); }}
                       onDevolver={l => setMotivoAlvo({ tipo: 'operador', lancamento: l })}
                       onEditarCracha={setCrachaAlvo}
+                      comissoes={comissoes}
                     />
                   </CardContent>
                 </Card>
@@ -625,6 +702,33 @@ export default function RhGestao() {
       )}
 
       {/* ── Diálogos ── */}
+      {/* Substituir um valor lançado pede confirmação: pode ser um ajuste do líder. */}
+      <AlertDialog open={!!preenchimento} onOpenChange={abrir => { if (!abrir) setPreenchimento(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {`Preencher ${preenchimento?.equipeNome ?? 'a equipe'} com a comissão`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {preenchimento
+                && `Linhas a preencher: ${preenchimento.plano.preencher.length}. `
+                  + `Com valor diferente, que será substituído: ${preenchimento.plano.substituem}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const alvo = preenchimento;
+                setPreenchimento(null);
+                if (alvo) void preencherComComissao(alvo.equipeId, alvo.plano);
+              }}
+            >
+              Substituir e preencher
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <DialogoMotivo
         aberto={!!motivoAlvo}
         titulo={

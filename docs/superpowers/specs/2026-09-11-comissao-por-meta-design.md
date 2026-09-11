@@ -26,6 +26,14 @@ vezes o percentual:
 Vale a **maior faixa atingida**; as faixas não somam. Alguns setores aumentam o
 percentual quando o próprio setor bate a meta.
 
+> **Correção de 11/09/2026.** O percentual da maior faixa atingida incide sobre o
+> **valor realizado**, e não sobre o valor da meta: meta de R$ 40.000,00 a 3,30% com
+> R$ 42.000,00 realizados paga R$ 1.386,00. A coluna «Comissão» da tabela acima passou
+> a ser o mínimo de cada faixa. A indireta separada segue a mesma regra, sobre o
+> realizado indireto. O card do Dashboard saiu: o operador abre a comissão pelo botão
+> Comissão do menu lateral, e o RH Gestão sugere e preenche a comissão nas linhas de
+> setores do tipo Comissão.
+
 Três exigências moldam o desenho:
 
 1. **A comissão é mensal.** Valores e percentuais mudam todo mês. Setembro nasce

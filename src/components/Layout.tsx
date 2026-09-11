@@ -51,6 +51,8 @@ import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
 import { DesempenhoDia } from './DesempenhoDia';
+import { BotaoComissao } from './Comissao/BotaoComissao';
+import { PainelComissao } from './Comissao/PainelComissao';
 import { DesafioMenu } from './DesafioMenu';
 import { PainelDesafio } from './DesafioMenu/PainelDesafio';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
@@ -87,6 +89,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [painelDiaAberto, setPainelDiaAberto] = useState(false);
+  const [painelComissaoAberto, setPainelComissaoAberto] = useState(false);
   const [painelDesafioAberto, setPainelDesafioAberto] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -470,7 +473,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {temPermissao('ver_analitico') && (
         <div className="px-2 pt-2">
           <button
-            onClick={() => setPainelDiaAberto(v => !v)}
+            onClick={() => { setPainelDiaAberto(v => !v); setPainelComissaoAberto(false); }}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
               painelDiaAberto
@@ -494,6 +497,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </AnimatePresence>
           </button>
         </div>
+      )}
+
+      {/*
+        Comissão — logo abaixo do Desempenho do Dia, e pelo mesmo motivo: é painel
+        por cima da página, não rota. Os dois ocupam o mesmo canto, então abrir um
+        fecha o outro.
+
+        A chave é a da própria comissão. A liderança consulta a dos operadores na
+        aba Comissão da tela de Metas.
+      */}
+      {temPermissao('dashboard_comissao') && (
+        <BotaoComissao
+          aberto={painelComissaoAberto}
+          comRotulo={sidebarOpen || mobileOpen}
+          onClick={() => { setPainelComissaoAberto(v => !v); setPainelDiaAberto(false); }}
+        />
       )}
 
       {/* Recolhimento automático do sidebar (desktop) — discreto */}
@@ -788,6 +807,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <DesempenhoDia
         aberto={painelDiaAberto}
         onClose={() => setPainelDiaAberto(false)}
+      />
+
+      <PainelComissao
+        aberto={painelComissaoAberto}
+        onClose={() => setPainelComissaoAberto(false)}
       />
 
       {/* O andamento da campanha, na gaveta que o campo do menu abre. */}

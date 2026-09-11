@@ -98,7 +98,7 @@ import {
   deResumoAnalitico, deResumoDiario, type LinhaOperadorPainel,
 } from '@/pages/Analitico/linhaOperador';
 import {
-  intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
+  diaDestacado, intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
 } from '@/pages/Analitico/recorte';
 import { useAnaliticoDashboard } from '@/hooks/useAnaliticoDashboard';
 // ── O recorte Dia: tudo abaixo vem do diário, não do analítico ──────────────
@@ -2018,7 +2018,9 @@ export function AnaliticoLider({
               {Array.from({ length: diasNoMes }, (_, i) => {
                 const d      = i + 1;
                 const diaStr = `${mes}-${String(d).padStart(2, '0')}`;
-                const isHoje = diaStr === hojeISO;
+                // Só a lente Dia destaca, e destaca o dia escolhido. No Mês,
+                // hoje pintado parecia um filtro de dia aplicado.
+                const isDestacado = diaStr === diaDestacado(recorte);
                 const isFut  = diaStr > hojeISO;
 
                 /*
@@ -2037,20 +2039,20 @@ export function AnaliticoLider({
                   <div key={diaStr} className={cn(
                     'flex gap-3 rounded-lg border px-4 py-3',
                     doDia.length > 1 ? 'items-start' : 'items-center',
-                    isHoje   && 'border-primary/40 bg-primary/5',
-                    !isHoje && !isFut && temAlgo && 'border-border bg-card',
+                    isDestacado   && 'border-primary/40 bg-primary/5',
+                    !isDestacado && !isFut && temAlgo && 'border-border bg-card',
                     isFut    && 'border-border/50 bg-muted/20 opacity-50',
                     !temAlgo && !isFut && 'border-border/50 bg-muted/10',
                   )}>
                     <div className={cn('text-center shrink-0 w-10', doDia.length > 1 && 'pt-0.5')}>
-                      <p className={cn('text-lg font-bold leading-none', isHoje ? 'text-primary' : 'text-foreground')}>
+                      <p className={cn('text-lg font-bold leading-none', isDestacado ? 'text-primary' : 'text-foreground')}>
                         {String(d).padStart(2, '0')}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {DIAS_PT[new Date(diaStr + 'T12:00:00').getDay()]}
                       </p>
                     </div>
-                    <div className={cn('w-px self-stretch', isHoje ? 'bg-primary/30' : 'bg-border')} />
+                    <div className={cn('w-px self-stretch', isDestacado ? 'bg-primary/30' : 'bg-border')} />
 
                     {doDia.length > 0 ? (
                       <div className="flex-1 min-w-0 space-y-1.5">

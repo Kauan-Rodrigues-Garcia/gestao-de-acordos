@@ -1,11 +1,15 @@
 /**
  * comissao.test.ts — a comissão por faixa de meta.
  *
- * O número vai para o Dashboard do operador e para a consulta da liderança, e é
- * dinheiro. Estes casos seguram o que o pedido deixou explícito:
+ * O número vai para o painel de comissão do operador e para a consulta da
+ * liderança, e é dinheiro. Estes casos seguram o que o pedido deixou explícito:
  *
- *   • comissão = valor da meta × percentual, em centavos;
  *   • vale a MAIOR faixa atingida — as faixas não somam;
+ *   • o % da faixa atual vale sobre o VALOR REALIZADO, e não sobre o valor da
+ *     meta (correção de 11/09/2026): meta de R$ 40.000, fez R$ 42.000, a
+ *     comissão é sobre os R$ 42.000;
+ *   • o % só muda quando a próxima meta é atingida;
+ *   • faixa ainda não atingida mostra o mínimo ao chegar lá: meta × %;
  *   • o benefício do setor só existe com regra configurada E confirmação;
  *   • na PaguePlay tudo é medido em H.O.
  */
@@ -31,7 +35,7 @@ function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   };
 }
 
-/** Operador com as quatro faixas do pedido e R$ 38.450,00 recebidos. */
+/** Operador com as quatro faixas do pedido e R$ 38.450,00 realizados. */
 function entrada(over: Partial<EntradaComissao> = {}): EntradaComissao {
   const cfg = over.config === undefined ? config() : over.config;
   return {
@@ -50,17 +54,48 @@ function entrada(over: Partial<EntradaComissao> = {}): EntradaComissao {
 const CONFIRMADA = '2026-09-28T14:32:00Z';
 
 describe('as faixas', () => {
-  it('comissão de cada faixa = meta × %, como na tabela do pedido', () => {
+  it('o mínimo de cada faixa = meta × %, como na tabela do pedido', () => {
     const r = calcularComissao(entrada({ recebidoDireto: 50_000 }));
-    expect(r.faixas.map(f => f.comissao)).toEqual([595, 780.7, 1_320, 1_732.9]);
+    expect(r.faixas.map(f => f.minimo)).toEqual([595, 780.7, 1_320, 1_732.9]);
+  });
+
+  it('a comissão atual vale sobre o realizado, não sobre a meta', () => {
+    // O exemplo do pedido: meta de R$ 40.000 (3ª), fez R$ 42.000.
+    const r = calcularComissao(entrada({ recebidoDireto: 42_000 }));
+    expect(r.atual?.ordem).toBe(3);
+    expect(r.atual?.comissao).toBe(1_386);
+    expect(r.total).toBe(1_386);
+  });
+
+  it('o % só muda quando a próxima meta é atingida', () => {
+    const quase = calcularComissao(entrada({ recebidoDireto: 42_999.99 }));
+    expect(quase.atual?.ordem).toBe(3);
+    expect(quase.atual?.pctEfetivo).toBe(3.3);
+    expect(quase.total).toBe(1_419);
+
+    const chegou = calcularComissao(entrada({ recebidoDireto: 43_000 }));
+    expect(chegou.atual?.ordem).toBe(4);
+    expect(chegou.total).toBe(1_732.9);
   });
 
   it('vale a maior faixa atingida, sem somar as anteriores', () => {
     const r = calcularComissao(entrada());
     expect(r.motivo).toBeNull();
     expect(r.atual?.ordem).toBe(2);
-    expect(r.total).toBe(780.7);
     expect(r.faixas.map(f => f.situacao)).toEqual(['atingida', 'atual', 'proxima', 'nao_atingida']);
+  });
+
+  it('meio centavo arredonda para cima', () => {
+    // 38.450 × 2,11% = 811,295.
+    expect(calcularComissao(entrada()).total).toBe(811.3);
+  });
+
+  it('só a faixa atual tem comissão sobre o realizado', () => {
+    const r = calcularComissao(entrada());
+    expect(r.faixas[1].comissao).toBe(811.3);
+    expect(r.faixas[0].comissao).toBeNull();
+    expect(r.faixas[2].comissao).toBeNull();
+    expect(r.faixas[2].minimo).toBe(1_320);
   });
 
   it('diz quanto falta para a próxima e para as seguintes', () => {
@@ -72,7 +107,9 @@ describe('as faixas', () => {
   });
 
   it('bater exatamente o valor da meta já conta', () => {
-    expect(calcularComissao(entrada({ recebidoDireto: 34_000 })).atual?.ordem).toBe(1);
+    const r = calcularComissao(entrada({ recebidoDireto: 34_000 }));
+    expect(r.atual?.ordem).toBe(1);
+    expect(r.total).toBe(595);
   });
 
   it('sem a 1ª meta atingida, diz o motivo e ainda mostra a próxima', () => {
@@ -81,6 +118,7 @@ describe('as faixas', () => {
     expect(r.atual).toBeNull();
     expect(r.proxima?.ordem).toBe(1);
     expect(r.proxima?.falta).toBe(4_000);
+    expect(r.proxima?.minimo).toBe(595);
     expect(r.total).toBe(0);
   });
 
@@ -97,18 +135,11 @@ describe('as faixas', () => {
     const r = calcularComissao(entrada({ config: cfg, doSetor: cfg, recebidoDireto: 41_000 }));
     expect(r.faixas[2].atingida).toBe(true);
     expect(r.faixas[2].pctNormal).toBeNull();
-    expect(r.faixas[2].comissao).toBeNull();
+    expect(r.faixas[2].minimo).toBeNull();
     expect(r.atual?.ordem).toBe(2);
+    expect(r.atual?.comissao).toBe(865.1);
     expect(r.proxima?.ordem).toBe(4);
     expect(r.proxima?.falta).toBe(2_000);
-  });
-
-  it('arredonda a comissão em centavos', () => {
-    const cfg = config({ faixas: [{ ordem: 1, pct: 1.75, pctEspecial: null }] });
-    const r = calcularComissao(entrada({
-      metaBruta: 33_333.33, metasExtrasBrutas: [], recebidoDireto: 40_000, config: cfg, doSetor: cfg,
-    }));
-    expect(r.atual?.comissao).toBe(583.33);
   });
 });
 
@@ -130,12 +161,11 @@ describe('sem comissão', () => {
 
 describe('benefício quando o setor bate a meta', () => {
   const faixaEspecial = [{ ordem: 1, pct: 2, pctEspecial: 2.24 }];
+  const setorDe32Mil = { metaBruta: 32_000, metasExtrasBrutas: [], recebidoDireto: 32_000 };
 
   it('% especial confirmado: 2,00% → 2,24%, R$ 640,00 → R$ 716,80', () => {
     const cfg = config({ faixas: faixaEspecial, regraSetor: 'percentual_especial', setorMetaConfirmadaEm: CONFIRMADA });
-    const r = calcularComissao(entrada({
-      metaBruta: 32_000, metasExtrasBrutas: [], recebidoDireto: 33_000, config: cfg, doSetor: cfg,
-    }));
+    const r = calcularComissao(entrada({ ...setorDe32Mil, config: cfg, doSetor: cfg }));
     expect(r.beneficioAtivo).toBe(true);
     expect(r.atual?.pctNormal).toBe(2);
     expect(r.atual?.pctEfetivo).toBe(2.24);
@@ -145,34 +175,13 @@ describe('benefício quando o setor bate a meta', () => {
     expect(r.totalNormal).toBe(640);
   });
 
-  it('regra configurada sem confirmação não liga nada', () => {
+  it('sem confirmação, não liga nada — mas diz o que o benefício faria', () => {
     const cfg = config({ faixas: faixaEspecial, regraSetor: 'percentual_especial' });
-    const r = calcularComissao(entrada({
-      metaBruta: 32_000, metasExtrasBrutas: [], recebidoDireto: 33_000, config: cfg, doSetor: cfg,
-    }));
+    const r = calcularComissao(entrada({ ...setorDe32Mil, config: cfg, doSetor: cfg }));
     expect(r.temRegraSetor).toBe(true);
     expect(r.beneficioAtivo).toBe(false);
     expect(r.atual?.pctEfetivo).toBe(2);
     expect(r.total).toBe(640);
-  });
-
-  it('% especial em branco cai no % normal', () => {
-    const cfg = config({
-      faixas: [{ ordem: 1, pct: 2, pctEspecial: null }],
-      regraSetor: 'percentual_especial', setorMetaConfirmadaEm: CONFIRMADA,
-    });
-    const r = calcularComissao(entrada({
-      metaBruta: 32_000, metasExtrasBrutas: [], recebidoDireto: 33_000, config: cfg, doSetor: cfg,
-    }));
-    expect(r.atual?.pctEfetivo).toBe(2);
-  });
-
-  it('sem confirmação, diz o que o benefício faria — a tela avisa «se o setor bater a meta»', () => {
-    const cfg = config({ faixas: faixaEspecial, regraSetor: 'percentual_especial' });
-    const r = calcularComissao(entrada({
-      metaBruta: 32_000, metasExtrasBrutas: [], recebidoDireto: 33_000, config: cfg, doSetor: cfg,
-    }));
-    expect(r.atual?.pctEfetivo).toBe(2);
     expect(r.atual?.pctComBeneficio).toBe(2.24);
     expect(r.atual?.comissaoComBeneficio).toBe(716.8);
   });
@@ -181,6 +190,29 @@ describe('benefício quando o setor bate a meta', () => {
     const r = calcularComissao(entrada());
     expect(r.atual?.pctComBeneficio).toBeNull();
     expect(r.atual?.comissaoComBeneficio).toBeNull();
+  });
+
+  it('% especial em branco cai no % normal', () => {
+    const cfg = config({
+      faixas: [{ ordem: 1, pct: 2, pctEspecial: null }],
+      regraSetor: 'percentual_especial', setorMetaConfirmadaEm: CONFIRMADA,
+    });
+    const r = calcularComissao(entrada({ ...setorDe32Mil, config: cfg, doSetor: cfg }));
+    expect(r.atual?.pctEfetivo).toBe(2);
+  });
+
+  it('multiplicador 2x vale na direta e na indireta, sobre o realizado', () => {
+    const cfg = config({
+      modoIndireta: 'separado', pctIndireta: 1.5,
+      regraSetor: 'multiplicador', multiplicador: 2, setorMetaConfirmadaEm: CONFIRMADA,
+    });
+    const r = calcularComissao(entrada({
+      metaIndiretaBruta: 5_000, recebidoIndiretoBruto: 5_200, config: cfg, doSetor: cfg,
+    }));
+    expect(r.atual?.comissao).toBe(1_622.59);   // 38.450 × 4,22%
+    expect(r.indireta?.comissao).toBe(156);     //  5.200 × 3,00%
+    expect(r.total).toBe(1_778.59);
+    expect(r.totalNormal).toBe(889.3);          // 811,30 + 78,00
   });
 
   it('a indireta também diz o que o benefício faria', () => {
@@ -192,21 +224,7 @@ describe('benefício quando o setor bate a meta', () => {
     }));
     expect(r.indireta?.comissao).toBe(75);
     expect(r.indireta?.pctComBeneficio).toBe(3);
-    expect(r.indireta?.valorComBeneficio).toBe(150);
-  });
-
-  it('multiplicador 2x vale na direta e na indireta', () => {
-    const cfg = config({
-      modoIndireta: 'separado', pctIndireta: 1.5,
-      regraSetor: 'multiplicador', multiplicador: 2, setorMetaConfirmadaEm: CONFIRMADA,
-    });
-    const r = calcularComissao(entrada({
-      metaIndiretaBruta: 5_000, recebidoIndiretoBruto: 5_200, config: cfg, doSetor: cfg,
-    }));
-    expect(r.atual?.comissao).toBe(1_561.4);
-    expect(r.indireta?.comissao).toBe(150);
-    expect(r.total).toBe(1_711.4);
-    expect(r.totalNormal).toBe(855.7);
+    expect(r.indireta?.comissaoComBeneficio).toBe(150);
   });
 
   it('a regra e a confirmação vêm da linha do setor, mesmo com exceção de equipe', () => {
@@ -216,7 +234,7 @@ describe('benefício quando o setor bate a meta', () => {
       metaBruta: 30_000, metasExtrasBrutas: [], recebidoDireto: 31_000, config: excecao, doSetor,
     }));
     expect(r.atual?.pctEfetivo).toBe(2);
-    expect(r.atual?.comissao).toBe(600);
+    expect(r.atual?.comissao).toBe(620);
   });
 });
 
@@ -225,7 +243,7 @@ describe('direta e indireta', () => {
     expect(calcularComissao(entrada()).modoIndireta).toBeNull();
   });
 
-  it('junto: a 1ª meta é direta + indireta, contra o recebido total', () => {
+  it('junto: a 1ª meta é direta + indireta, e o % vale sobre o realizado total', () => {
     const cfg = config({ faixas: [{ ordem: 1, pct: 2, pctEspecial: null }] });
     const r = calcularComissao(entrada({
       metaBruta: 30_000, metasExtrasBrutas: [], metaIndiretaBruta: 5_000,
@@ -234,7 +252,7 @@ describe('direta e indireta', () => {
     expect(r.modoIndireta).toBe('junto');
     expect(r.recebido).toBe(35_500);
     expect(r.faixas[0].meta).toBe(35_000);
-    expect(r.atual?.comissao).toBe(700);
+    expect(r.atual?.comissao).toBe(710);
     expect(r.indireta).toBeNull();
   });
 
@@ -255,7 +273,16 @@ describe('direta e indireta', () => {
     expect(r.modoIndireta).toBe('separado');
     expect(r.indireta?.atingida).toBe(true);
     expect(r.indireta?.comissao).toBe(75);
-    expect(r.total).toBe(855.7);
+    expect(r.total).toBe(886.3);
+  });
+
+  it('separado: acima da meta indireta, o % vale sobre o realizado indireto', () => {
+    const cfg = config({ modoIndireta: 'separado', pctIndireta: 1.5 });
+    const r = calcularComissao(entrada({
+      metaIndiretaBruta: 5_000, recebidoIndiretoBruto: 5_600, config: cfg, doSetor: cfg,
+    }));
+    expect(r.indireta?.comissao).toBe(84);
+    expect(r.indireta?.minimo).toBe(75);
   });
 
   it('separado: indireta não atingida não soma, e diz quanto falta', () => {
@@ -266,13 +293,13 @@ describe('direta e indireta', () => {
     expect(r.indireta?.atingida).toBe(false);
     expect(r.indireta?.comissao).toBe(0);
     expect(r.indireta?.falta).toBe(1_000);
-    expect(r.indireta?.valor).toBe(75);
-    expect(r.total).toBe(780.7);
+    expect(r.indireta?.minimo).toBe(75);
+    expect(r.total).toBe(811.3);
   });
 });
 
 describe('PaguePlay em H.O.', () => {
-  it('converte a meta bruta e compara com o recebido H.O.', () => {
+  it('converte a meta bruta e aplica o % sobre o realizado H.O.', () => {
     const cfg = config({ faixas: [{ ordem: 1, pct: 1.75, pctEspecial: null }] });
     const r = calcularComissao(entrada({
       metaBruta: 136_217.95, metasExtrasBrutas: [], fatorUnidade: 0.2496,

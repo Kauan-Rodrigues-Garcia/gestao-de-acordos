@@ -101,7 +101,11 @@ interface DiaDetalhadoProps {
    */
   nomeDoOperador: (id: string) => string;
   /**
-   * 'yyyy-MM-dd'. Só decide onde as colunas param e qual delas é "hoje".
+   * 'yyyy-MM-dd'. Só decide onde as colunas param no mês corrente.
+   *
+   * Hoje NÃO é destacado. O mapa vive nas lentes Mês e Período, e uma coluna
+   * pintada ali parecia um filtro de dia aplicado — destacar dia é da lente Dia
+   * (`diaDestacado`, em `recorte.ts`).
    *
    * Continua opcional — o padrão (`getTodayISO()`) está certo, e deixá-la
    * injetável é o que permite testar o mapa sem mexer no relógio.
@@ -389,34 +393,27 @@ export function DiaDetalhado({
               <th className="sticky left-0 z-20 bg-muted/60 backdrop-blur px-3 py-2 text-left font-semibold border-b border-r border-border w-[210px]">
                 Operador
               </th>
-              {diasVisiveis.map((d, i) => {
-                const hoje = d === hojeISO;
-                return (
-                  <th
-                    // A `key` inclui `inicio`: a célula é recriada a cada página,
-                    // e é isso que faz a animação CSS tocar de novo.
-                    key={`${inicio}-${d}`}
-                    className={cn(
-                      'px-1 py-1.5 text-center font-semibold tabular-nums border-b border-border',
-                      ehFimDeSemana(d) && 'bg-muted/50',
-                      hoje && 'bg-primary/15',
-                    )}
-                    title={d.split('-').reverse().join('/')}
-                  >
-                    <span className="block leading-tight" {...animacaoDaColuna(i)}>
-                      <span className={cn(
-                        'block text-[9px] font-medium uppercase',
-                        hoje ? 'text-primary' : 'text-muted-foreground/70',
-                      )}>
-                        {siglaDoDia(d)}
-                      </span>
-                      <span className={cn('block text-[13px]', hoje && 'text-primary')}>
-                        {rotuloDoDia(d)}
-                      </span>
+              {diasVisiveis.map((d, i) => (
+                <th
+                  // A `key` inclui `inicio`: a célula é recriada a cada página,
+                  // e é isso que faz a animação CSS tocar de novo.
+                  key={`${inicio}-${d}`}
+                  className={cn(
+                    'px-1 py-1.5 text-center font-semibold tabular-nums border-b border-border',
+                    ehFimDeSemana(d) && 'bg-muted/50',
+                  )}
+                  title={d.split('-').reverse().join('/')}
+                >
+                  <span className="block leading-tight" {...animacaoDaColuna(i)}>
+                    <span className="block text-[9px] font-medium uppercase text-muted-foreground/70">
+                      {siglaDoDia(d)}
                     </span>
-                  </th>
-                );
-              })}
+                    <span className="block text-[13px]">
+                      {rotuloDoDia(d)}
+                    </span>
+                  </span>
+                </th>
+              ))}
               <th className="px-3 py-2 text-right font-semibold border-b border-l border-border w-[128px]">
                 Total
               </th>
@@ -461,7 +458,6 @@ export function DiaDetalhado({
                         'transition-colors',
                         v === 0 && ehFimDeSemana(dia) && 'bg-muted/40',
                         v === 0 ? 'text-muted-foreground/25' : 'font-medium',
-                        dia === hojeISO && v === 0 && 'bg-primary/5',
                       )}
                       // O exato fica aqui: a célula mostra o abreviado para caber.
                       title={`${l.nome} · ${dia.split('-').reverse().join('/')} · ${formatBRL(v)}`}

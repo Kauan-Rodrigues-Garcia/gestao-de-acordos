@@ -35,6 +35,17 @@ export function mesDoRecorte(r: Recorte): string {
   return r.modo === 'dia' ? r.dia.slice(0, 7) : r.mes;
 }
 
+/**
+ * O dia que a tela destaca. Só a lente Dia tem um: o dia escolhido.
+ *
+ * Mês e Período não destacam dia nenhum — nem hoje. Um dia pintado dentro do mês
+ * parecia um filtro de dia aplicado, e quem olhava o mês inteiro lia aquele dia
+ * como o escolhido.
+ */
+export function diaDestacado(r: Recorte): string | null {
+  return r.modo === 'dia' ? r.dia : null;
+}
+
 /** As duas pontas da janela, inclusivas, em 'yyyy-MM-dd'. */
 export function intervaloDoRecorte(r: Recorte): { inicio: string; fim: string } {
   if (r.modo === 'dia')     return { inicio: r.dia, fim: r.dia };

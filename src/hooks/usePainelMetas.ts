@@ -68,7 +68,6 @@ import {
 import {
   metaNaUnidade, UNIDADE_PADRAO, type UnidadeValor,
 } from '@/lib/unidadeValor';
-import type { MetaLinhaBruta } from '@/services/comissao/entradaDoOperador';
 
 export interface ParametrosPainelMetas {
   /** Mês em análise ('yyyy-MM'). */
@@ -96,22 +95,6 @@ export interface ParametrosPainelMetas {
    * traduz. Ver `lib/unidadeValor.ts` para o porquê.
    */
   unidade?: UnidadeValor;
-}
-
-/**
- * O que a comissão por meta precisa de UMA pessoa, tirado do mesmo painel.
- *
- * O card de comissão mora ao lado dos cards de projeção; se buscasse o recebido
- * por conta própria, poderia mostrar um número diferente do total logo ao lado.
- */
-export interface BaseComissaoOperador {
-  operadorId: string;
-  /** A linha de `metas` desta pessoa no mês — meta, metas extras e indireta. */
-  metaLinha: MetaLinhaBruta | null;
-  recebidoBruto: number;
-  recebidoHO: number;
-  /** Acordos extra pagos, em bruto. Zero sem meta indireta ligada. */
-  recebidoIndiretoBruto: number;
 }
 
 export interface DadosPainelMetas {
@@ -167,12 +150,6 @@ export interface DadosPainelMetas {
   /** Agendado por dia, NO MESMO ESCOPO do recebimento — ver o serviço. */
   agendadoPorDia: PontoAgendadoDia[];
   baixaAnterior: DiaComRecebimento | null;
-
-  /**
-   * A base da comissão por meta. `null` fora do modo individual: comissão é de
-   * uma pessoa, não de equipe nem de setor.
-   */
-  comissaoBase: BaseComissaoOperador | null;
 
   /** Rótulo do escopo em exibição: "individual", "da equipe Matheus", "do setor". */
   escopoRotulo: string;
@@ -393,8 +370,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const [metaIndireta, setMetaIndireta] = useState<number | null>(null);
   /** Recebimento indireto do mês, em BRUTO — acordos extra pagos. */
   const [recebidoIndiretoBruto, setRecebidoIndiretoBruto] = useState(0);
-  /** A linha de meta da pessoa no modo "eu" — base da comissão. */
-  const [metaLinhaEu, setMetaLinhaEu] = useState<MetaLinhaBruta | null>(null);
   const [metaCarregada, setMetaCarregada] = useState(false);
   const membrosChave = operadoresDoEscopo ? operadoresDoEscopo.join(',') : '';
 
@@ -422,9 +397,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
           } | null;
           if (!cancelado) {
             setMeta(Number(linha?.meta_valor) || null);
-            // A linha inteira fica para a comissão: metas extras e meta indireta
-            // saem desta mesma resposta, sem uma segunda consulta.
-            setMetaLinhaEu((data as MetaLinhaBruta | null) ?? null);
             // Meta indireta é INDIVIDUAL: só existe no escopo "eu". Nos escopos
             // de equipe e setor ela é zerada de propósito — somar ali contaria o
             // mesmo dinheiro duas vezes, porque o extra já entra no recebimento
@@ -433,7 +405,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
           }
           return;
         }
-        if (!cancelado) { setMetaIndireta(null); setMetaLinhaEu(null); }
+        if (!cancelado) setMetaIndireta(null);
 
         // Escopo agregado: a meta própria do grupo manda, quando existir.
         // 'setor' procura meta de setor; equipe procura meta de equipe.
@@ -679,22 +651,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
    * dependem das fontes (equipe e setor) e `false` no escopo de operador, que
    * não depende delas.
    */
-  // ── Base da comissão por meta ──────────────────────────────────────────────
-  // Só no modo "eu". O recebido é o MESMO agregado dos cards ao lado: bruto e
-  // H.O. já agregados do relatório, sem conversão.
-  const operadorDaComissao = modo === 'eu' ? (operadorEfetivo ?? perfil?.id ?? null) : null;
-  const comissaoBase = useMemo<BaseComissaoOperador | null>(() => (
-    operadorDaComissao
-      ? {
-          operadorId: operadorDaComissao,
-          metaLinha: metaLinhaEu,
-          recebidoBruto: agregado.bruto,
-          recebidoHO: agregado.ho,
-          recebidoIndiretoBruto,
-        }
-      : null
-  ), [operadorDaComissao, metaLinhaEu, agregado.bruto, agregado.ho, recebidoIndiretoBruto]);
-
   const faltaAlgumaPeca = !analitico.carregado || escopoPendente || !configCarregada
     || !metaCarregada || !dxCarregado || !extraCarregado || !equipesCarregadas
     || !agendadoCarregado;
@@ -767,8 +723,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     porDia: agregado.porDia,
     agendadoPorDia,
     baixaAnterior,
-
-    comissaoBase,
 
     escopoRotulo,
     modoAgregado: modo !== 'eu',
