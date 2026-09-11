@@ -73,7 +73,7 @@ describe('o recorte aplicado ao menu', () => {
   it('o operador do Núcleo continua sem a cobrança', () => {
     const lista = abas({ souDoNucleo: true, acessoTotal: false, configuraNucleo: false });
     expect(lista).not.toContain('Acordos');
-    expect(lista).not.toContain('Meus Chips');
+    expect(lista).toContain('Meus Chips');
     expect(lista).toContain('Controle de Números');
   });
 

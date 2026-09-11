@@ -35,9 +35,9 @@ import { useEffect } from 'react';
 export default function MeusChips() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
+  const { temPermissao, isAdmin } = useCargoPermissoes();
   const {
-    visao, numeros, celulares, semOperador, comOperador, meuId,
+    visao, numeros, celulares, semOperador, comOperador, comigo, meuId,
     loading, erro, recarregar,
   } = useMeusChips();
 
@@ -123,12 +123,15 @@ export default function MeusChips() {
           pessoas={pessoas}
           podeLancar={temPermissao('chips_lancar_ao_operador')}
           podeRelancar={temPermissao('chips_relancar_ao_nucleo')}
+          // Espelho de `fn_numeros_manda_no_setor`: o próprio setor, com o
+          // acesso total atravessando. Quem recusa de verdade segue sendo o banco.
+          podeAgirNoSetor={setorId => isAdmin || setorId === meuSetor}
           onMudou={() => void recarregar()}
           onVerHistorico={(id, numero) => setHistorico({ id, numero })}
         />
       ) : (
         <VisaoOperador
-          numeros={numeros}
+          numeros={comigo}
           meuId={meuId}
           nomeDoCelular={nomeDoCelular}
           podeDevolver={temPermissao('chips_devolver_a_lideranca')}

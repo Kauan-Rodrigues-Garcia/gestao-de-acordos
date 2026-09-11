@@ -14,6 +14,17 @@
  *
  * A tela nunca filtra o que o banco mandou. Ela só decide a forma.
  *
+ * ## A exceção: `comigo`
+ *
+ * A visão individual mostra «os números lançados para você», e para o operador
+ * de um setor de cobrança isso é a lista inteira — a RLS já recortou. Para quem
+ * é do Núcleo, não: `fn_numeros_visivel` entrega ao Núcleo TODOS os números da
+ * empresa, e desde 11/09/2026 o Núcleo também abre esta aba. Sem o filtro, o
+ * acervo inteiro apareceria sob aquele título.
+ *
+ * `comigo` não esconde nada que a pessoa não possa ver em outra tela; ele só faz
+ * o título dizer a verdade.
+ *
  * ## `visao` é derivada, não escolhida
  *
  * `escopoEfetivo` devolve o nível MAIS AMPLO que a pessoa alcança. Quem tem
@@ -47,6 +58,8 @@ interface Retorno {
   semOperador: NumeroRow[];
   /** Lançados a alguém — na visão individual, os da própria pessoa. */
   comOperador: NumeroRow[];
+  /** Só os que estão lançados para a própria pessoa. Ver o cabeçalho. */
+  comigo: NumeroRow[];
   /** O id de quem está logado, para a tela saber o que é dela. */
   meuId: string | null;
   loading: boolean;
@@ -131,9 +144,13 @@ export function useMeusChips(): Retorno {
     () => numeros.filter(n => n.posse === 'setor' && n.operador_id !== null),
     [numeros],
   );
+  const comigo = useMemo(
+    () => (meuId ? numeros.filter(n => n.operador_id === meuId) : []),
+    [numeros, meuId],
+  );
 
   return {
-    visao, numeros, celulares, semOperador, comOperador, meuId,
+    visao, numeros, celulares, semOperador, comOperador, comigo, meuId,
     loading: loading || permLoading, erro, recarregar: carregar,
   };
 }

@@ -92,13 +92,23 @@ export interface VisaoLiderancaProps {
   pessoas: OperadorDoSetor[];
   podeLancar: boolean;
   podeRelancar: boolean;
+  /**
+   * Os botões valem para o setor deste número?
+   *
+   * Lançar e relançar só funcionam no setor de quem age
+   * (`fn_numeros_manda_no_setor`), com o super_admin atravessando. Para o líder
+   * de um setor de cobrança isso é todo número da tela. Para quem é do Núcleo,
+   * não: a RLS entrega a ele os números de todos os setores, e cada botão levaria
+   * a uma recusa do banco. Ausente, vale para todos — o comportamento de antes.
+   */
+  podeAgirNoSetor?: (setorId: string) => boolean;
   onMudou: () => void;
   onVerHistorico: (numeroId: string, numero: string) => void;
 }
 
 export function VisaoLideranca({
   empresaId, semOperador, comOperador, nomeDoCelular, pessoas,
-  podeLancar, podeRelancar, onMudou, onVerHistorico,
+  podeLancar, podeRelancar, podeAgirNoSetor = () => true, onMudou, onVerHistorico,
 }: VisaoLiderancaProps) {
   const [paraLancar, setParaLancar]     = useState<NumeroRow | null>(null);
   const [paraRelancar, setParaRelancar] = useState<NumeroRow | null>(null);
@@ -159,6 +169,7 @@ export function VisaoLideranca({
 
   /** Os dois botões de ação, iguais nas duas leituras. */
   function acoes(n: NumeroRow, comDono: boolean) {
+    if (!podeAgirNoSetor(n.setor_id)) return null;
     return (
       <div className="flex justify-end gap-1">
         {podeLancar && podeLancarAoOperador({

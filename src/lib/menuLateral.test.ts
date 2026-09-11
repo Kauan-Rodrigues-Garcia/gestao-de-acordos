@@ -235,8 +235,8 @@ describe('abasDoMenu — o recorte por setor (Núcleo)', () => {
     expect(doNucleo()).toContain('Controle de Números');
   });
 
-  it('Meus Chips é de quem RECEBE número, e não do Núcleo', () => {
-    expect(doNucleo()).not.toContain('Meus Chips');
+  it('Meus Chips existe nos dois lados — o Núcleo acompanha a distribuição por ela', () => {
+    expect(doNucleo()).toContain('Meus Chips');
     expect(daCobranca()).toContain('Meus Chips');
   });
 

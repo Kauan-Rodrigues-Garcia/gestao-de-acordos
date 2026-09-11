@@ -120,23 +120,26 @@ export const NAV_ITEMS: NavItem[] = [
   // na parede. O palco (`/tv/:slug`) não entra em menu nenhum: ele é endereço
   // de TV, não tela de gente.
   // Controle de Números — o Núcleo. `hiddenForPaguePay` porque o setor existe
-  // só na BookPlay, e a chave nasce desligada para todo cargo configurável:
-  // hoje o item aparece só para quem recebeu a concessão nominal.
+  // só na BookPlay. A chave nasce desligada para todo cargo configurável, e é
+  // ela que decide quem do Núcleo abre a aba: sem ligá-la no painel, a pessoa
+  // do Núcleo vê só o Dashboard.
   //
   // `nucleo: 'so'` acrescenta o que a chave não sabe dizer. Ela é do CARGO, e
   // cargo não distingue setor: um líder do Play 3 com a chave ligada por engano
   // via o item, abria a tela e recebia zero linhas da RLS — uma porta que não
-  // leva a lugar nenhum. Agora ela nem aparece.
+  // leva a lugar nenhum. Agora ela nem aparece. É isso que torna seguro ligar a
+  // chave no cargo inteiro: fora do Núcleo o item some, e a RLS
+  // (`fn_numeros_sou_do_nucleo`) não entrega linha.
   { label: 'Controle de Números', icon: Smartphone,     to: ROUTE_PATHS.CONTROLE_NUMEROS,  produtos: SO_COBRANCA, hiddenForPaguePay: true, nucleo: 'so', permissaoKey: 'ver_controle_numeros' },
   // Meus Chips — a outra ponta, e esta nasce LIGADA: todo cargo enxerga a aba,
   // e o escopo de dentro decide se ela mostra o setor ou só o que foi lançado
   // para a pessoa. Operador sem número nenhum vê a tela vazia, com a explicação.
   //
-  // `nucleo: 'fora'` porque esta é a aba de QUEM RECEBE. O Núcleo distribui, e o
-  // que ele precisa está em Controle de Números; a chave nasce ligada para todo
-  // cargo, então sem esta marca a pessoa do Núcleo abriria uma tela vazia
-  // sugerindo que alguém deveria ter lançado números para ela.
-  { label: 'Meus Chips',       icon: MessageCircle,  to: ROUTE_PATHS.MEUS_CHIPS,        produtos: SO_COBRANCA, hiddenForPaguePay: true, nucleo: 'fora', permissaoKey: 'ver_meus_chips' },
+  // Sem marca de setor. Ela nasceu com `nucleo: 'fora'` (10/09/2026), pelo
+  // argumento de que o Núcleo distribui e não recebe; a operação pediu o
+  // contrário no dia seguinte — o Núcleo acompanha por ela onde cada número
+  // está. Os dois lados enxergam.
+  { label: 'Meus Chips',       icon: MessageCircle,  to: ROUTE_PATHS.MEUS_CHIPS,        produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_meus_chips' },
   { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, permissaoKey: 'ver_modo_tv' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.

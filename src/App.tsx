@@ -449,10 +449,14 @@ export default function App() {
 
               {/* Meus Chips — a outra ponta. O que a pessoa enxerga aqui sai do
                   escopo da aba `chips`: individual (o operador vê o que foi
-                  lançado para ele) ou setor (a liderança vê tudo). */}
+                  lançado para ele) ou setor (a liderança vê tudo).
+
+                  Sem marca de setor desde 11/09/2026: o Núcleo também abre,
+                  para acompanhar a distribuição. O menu repete isso — ver o
+                  item em `NAV_ITEMS`. */}
               <Route path={ROUTE_PATHS.MEUS_CHIPS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" requiredPermissao="ver_meus_chips">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_meus_chips">
                     <MeusChips />
                   </ProtectedRoute>
                 </LayoutWrapper>

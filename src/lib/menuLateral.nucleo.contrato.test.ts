@@ -99,6 +99,18 @@ describe('o recorte por setor: o menu e a rota dizem a mesma coisa', () => {
     expect(soDoNucleo).toEqual(['Controle de Números']);
   });
 
+  it('item SEM marca tem rota sem marca — a divergência no sentido oposto', () => {
+    // Tirar a marca do menu e esquecer a da rota deixa a aba aparecendo e a porta
+    // fechada: o clique leva de volta à entrada sem dizer por quê. Foi o risco
+    // da mudança de Meus Chips para os dois lados (11/09/2026).
+    const semMarca = NAV_ITEMS.filter(i => i.nucleo === undefined && CONSTANTE_DA_ROTA[i.to]);
+    expect(semMarca.map(i => i.label)).toContain('Meus Chips');
+    for (const item of semMarca) {
+      expect(blocoDaRota(CONSTANTE_DA_ROTA[item.to]), `${item.label} sem marca no menu`)
+        .not.toContain('nucleo=');
+    }
+  });
+
   it('as sub-rotas de acordo, que não têm item de menu, também estão fechadas', () => {
     // `/acordos/:id` e `/acordos/:id/editar` são alcançadas por link e por URL
     // colada, e nunca aparecem na barra lateral. Sem elas na lista, o Núcleo
