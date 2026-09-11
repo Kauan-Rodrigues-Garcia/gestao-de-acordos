@@ -91,14 +91,21 @@ export default function Dashboard() {
   /*
    * Eu respondo por um GRUPO, ou só por mim?
    *
-   * Duas fontes, e nenhuma delas é o cargo: lidero alguma equipe
-   * (`equipe_lideres`), ou enxergo todos os setores. Quem cai numa das duas
-   * não tem meta individual — a meta é do time —, e por isso «Minha visão»
-   * é o pior lugar para essa pessoa começar: mostra o pouco que passou pelas
-   * mãos dela, e não o que ela veio ver.
+   * Três fontes, e nenhuma delas é o cargo: lidero alguma equipe
+   * (`equipe_lideres`), enxergo todos os setores, ou não tenho meta individual.
+   * Quem cai numa delas tem a meta do time, e não uma própria — e por isso
+   * «Minha visão» é o pior lugar para essa pessoa começar: mostra o pouco que
+   * passou pelas mãos dela, e não o que ela veio ver.
+   *
+   * A terceira é a da gerência: responde pelo setor, não lidera equipe, e o
+   * painel pode limitá-la ao próprio setor. Com só as duas primeiras, ela
+   * seguia abrindo em «Minha visão». Ver `useLideroEquipe`.
    */
-  const { lidero, carregando: carregandoLideranca } = useLideroEquipe();
-  const respondoPorGrupo = lidero || niveis.includes('todos_setores');
+  const {
+    lidero, temMetaIndividual, carregando: carregandoLideranca,
+  } = useLideroEquipe();
+  const respondoPorGrupo =
+    lidero || niveis.includes('todos_setores') || !temMetaIndividual;
 
   /*
    * Onde o Dashboard ABRE: no degrau mais BAIXO que a pessoa alcança.
@@ -145,10 +152,26 @@ export default function Dashboard() {
    *
    * A equipe do cadastro vem primeiro; a primeira da lista é o último recurso,
    * para quem tem alcance de equipe sem equipe própria.
+   *
+   * ## A abertura é decidida UMA vez — para quem tem «Minha visão» na régua
+   *
+   * O efeito abaixo roda de novo toda vez que `visaoFiltro` volta a
+   * 'individual', e é exatamente o que acontece quando quem responde por um
+   * grupo clica em «Minha visão». Sem esta marca, o clique era desfeito no mesmo
+   * instante e a pessoa voltava para «Meu setor»: o degrau estava na régua e não
+   * levava a lugar nenhum.
+   *
+   * Para quem NÃO tem o nível individual a marca não vale. Ali 'individual' não
+   * é escolha — é o estado inicial que o painel não permite —, e a descida da
+   * queixa de 02/09 continua acontecendo sempre.
    */
+  const aberturaDecidida = useRef(false);
+
   useEffect(() => {
     if (niveis.length === 0) return;               // aba fechada: outro guard trata
     if (visaoFiltro !== 'individual') return;
+    const temIndividual = niveis.includes('individual');
+    if (temIndividual && aberturaDecidida.current) return;
     /*
      * Esperar a resposta sobre liderança.
      *
@@ -175,18 +198,28 @@ export default function Dashboard() {
      */
     if (respondoPorGrupo) {
       if (niveis.includes('setor') || niveis.includes('todos_setores')) {
+        aberturaDecidida.current = true;
         setVisaoFiltro('setor');
         return;
       }
       if (niveis.includes('equipe')) {
         const alvo = equipeDoPerfil ?? equipesDoSetor[0]?.id ?? null;
-        if (alvo) setVisaoFiltro(`equipe:${alvo}`);
+        // Sem alvo, a lista de equipes pode ainda estar chegando: não marca, e
+        // o efeito tenta de novo quando ela chegar.
+        if (!alvo) return;
+        aberturaDecidida.current = true;
+        setVisaoFiltro(`equipe:${alvo}`);
+        return;
       }
       // Só tem `individual`: é o único degrau que existe, e ele fica.
+      aberturaDecidida.current = true;
       return;
     }
 
-    if (niveis.includes('individual')) return;
+    if (temIndividual) {
+      aberturaDecidida.current = true;
+      return;
+    }
     if (niveis.includes('equipe')) {
       const alvo = equipeDoPerfil ?? equipesDoSetor[0]?.id ?? null;
       if (alvo) {
