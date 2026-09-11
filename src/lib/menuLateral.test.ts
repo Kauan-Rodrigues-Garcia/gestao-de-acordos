@@ -23,9 +23,6 @@ function ctx(over: Partial<ContextoMenu> = {}): ContextoMenu {
     isBookplay: true,
     temPermissao: () => true,
     acessoTickets: true,
-    // O padrao e alguem de FORA do Nucleo: e a esmagadora maioria, e e o
-    // comportamento que os testes anteriores a 10/09/2026 assumiam.
-    souDoNucleo: false,
     ...over,
   };
 }
@@ -207,22 +204,24 @@ describe('abasDoMenu — por produto', () => {
 });
 
 /**
- * O terceiro eixo do menu: o SETOR.
+ * O Núcleo de Inteligência e Gestão, depois do cargo próprio.
  *
- * O Núcleo de Inteligência e Gestão é `cobranca` — mesma empresa, mesmo deploy —
- * e tem os mesmos cargos do Play 3. Nem o eixo de produto nem o de permissão o
- * separavam, e o resultado era ele abrindo a operação de cobrança inteira.
- *
- * Os testes abaixo travam os três estados de `souDoNucleo`, inclusive o `null`
- * da prévia por cargo — que não é um detalhe: sem ele, Controle de Números
- * sumiria do editor de ordem, e o que não aparece lá não pode ser reordenado.
+ * Não há mais eixo de setor no menu: o Assistente ADM enxerga o que o cargo dele
+ * libera, como qualquer outro. Estes testes travam o que o padrão do catálogo
+ * produz para ele — e o que continua valendo para a cobrança.
  */
-describe('abasDoMenu — o recorte por setor (Núcleo)', () => {
-  const doNucleo   = () => rotulos(abasDoMenu(ctx({ souDoNucleo: true })));
-  const daCobranca = () => rotulos(abasDoMenu(ctx({ souDoNucleo: false })));
+describe('abasDoMenu — o cargo do Núcleo', () => {
+  /** O que o Assistente ADM nasce podendo, direto do catálogo. */
+  const doAssistenteAdm = (chave: string) => [
+    'ver_dashboard', 'ver_controle_numeros', 'numeros_administrar',
+    'numeros_liberar_ao_setor', 'ver_meus_chips', 'chips_escopo_setor',
+  ].includes(chave);
 
-  it('o Núcleo não recebe a operação de acordos', () => {
-    const abas = doNucleo();
+  it('o Assistente ADM recebe o Núcleo, e não a cobrança', () => {
+    const abas = rotulos(abasDoMenu(ctx({ cargo: 'assistente_adm', temPermissao: doAssistenteAdm })));
+    expect(abas).toContain('Dashboard');
+    expect(abas).toContain('Controle de Números');
+    expect(abas).toContain('Meus Chips');
     for (const proibida of [
       'Acordos', 'Novo Acordo', 'Analítico', 'Lixeira',
       'Importar Excel', 'Campanha Fácil', 'Painel Líder', 'Painel Diretoria',
@@ -231,51 +230,8 @@ describe('abasDoMenu — o recorte por setor (Núcleo)', () => {
     }
   });
 
-  it('o Núcleo recebe a aba dele', () => {
-    expect(doNucleo()).toContain('Controle de Números');
-  });
-
-  it('Meus Chips existe nos dois lados — o Núcleo acompanha a distribuição por ela', () => {
-    expect(doNucleo()).toContain('Meus Chips');
-    expect(daCobranca()).toContain('Meus Chips');
-  });
-
-  it('a cobrança não perde nada, e não ganha a aba do Núcleo', () => {
-    const abas = daCobranca();
-    expect(abas).toContain('Acordos');
-    expect(abas).toContain('Novo Acordo');
-    expect(abas).toContain('Analítico');
-    expect(abas).toContain('Lixeira');
-    expect(abas).not.toContain('Controle de Números');
-  });
-
-  it('as abas de todo mundo ficam nos dois lados', () => {
-    for (const comum of ['Dashboard', 'Usuários', 'Configurações']) {
-      expect(doNucleo(), `${comum} existe para o Núcleo`).toContain(comum);
-      expect(daCobranca(), `${comum} existe para a cobrança`).toContain(comum);
-    }
-  });
-
-  it('`null` não filtra por setor — é a prévia por cargo do editor', () => {
-    const previa = rotulos(abasDoMenu(ctx({ souDoNucleo: null })));
-    expect(previa).toContain('Controle de Números');
-    expect(previa).toContain('Acordos');
-    expect(previa).toContain('Meus Chips');
-  });
-
-  it('o eixo do setor não é permissão: a chave desligada continua mandando', () => {
-    const semAba = rotulos(abasDoMenu(ctx({
-      souDoNucleo: true,
-      temPermissao: chave => chave !== 'ver_controle_numeros',
-    })));
+  it('a chave desligada continua mandando', () => {
+    const semAba = rotulos(abasDoMenu(ctx({ temPermissao: chave => chave !== 'ver_controle_numeros' })));
     expect(semAba).not.toContain('Controle de Números');
-  });
-
-  it('a marca `nucleo` só aparece com um dos dois valores previstos', () => {
-    for (const item of NAV_ITEMS) {
-      if (item.nucleo !== undefined) {
-        expect(['so', 'fora'], `${item.label} tem nucleo inválido`).toContain(item.nucleo);
-      }
-    }
   });
 });

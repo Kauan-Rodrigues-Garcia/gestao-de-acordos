@@ -29,10 +29,6 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
 // provider real, o hook lança — e o que estes testes medem é cargo e permissão.
 const empresaRef = { current: { empresa: { slug: 'bookplay', produto: 'cobranca' }, tenantSlug: 'bookplay', loading: false } };
 vi.mock('@/hooks/useEmpresa', () => ({ useEmpresa: () => empresaRef.current }));
-// O recorte por setor (10/09). `recorte: false` é a pessoa da cobrança, que é o
-// que os testes anteriores a ele assumiam.
-const nucleoRef = { current: { recorte: false as boolean | null, loading: false } };
-vi.mock('@/hooks/useNucleo', () => ({ useNucleo: () => nucleoRef.current }));
 
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -186,59 +182,5 @@ describe('ProtectedRoute — o esqueleto é só da primeira carga', () => {
       </MemoryRouter>,
     );
     expect(passou()).toBe(true);
-  });
-});
-
-/*
- * O recorte por setor (10/09/2026) e as travessias que faltavam nele.
- *
- * O guarda lê `recorte`, que chega resolvido por `recorteDoNucleo`. O que estes
- * testes travam é a leitura do `null`: tratá-lo como «não é do Núcleo» fechava
- * Controle de Números para o super_admin — que a RLS libera por inteiro — e era
- * exatamente o defeito relatado.
- */
-describe('ProtectedRoute — o recorte por setor', () => {
-  beforeEach(() => {
-    nucleoRef.current = { recorte: false, loading: false };
-  });
-
-  it('quem é da cobrança não abre a rota do Núcleo', () => {
-    renderizar({ nucleo: 'so' });
-    expect(passou()).toBe(false);
-  });
-
-  it('quem é da cobrança abre a rota da cobrança', () => {
-    renderizar({ nucleo: 'fora' });
-    expect(passou()).toBe(true);
-  });
-
-  it('quem é do Núcleo abre a rota do Núcleo', () => {
-    nucleoRef.current = { recorte: true, loading: false };
-    renderizar({ nucleo: 'so' });
-    expect(passou()).toBe(true);
-  });
-
-  it('quem é do Núcleo não abre a rota da cobrança', () => {
-    nucleoRef.current = { recorte: true, loading: false };
-    renderizar({ nucleo: 'fora' });
-    expect(passou()).toBe(false);
-  });
-
-  it('`null` abre a rota do Núcleo — acesso total, ou quem configura o módulo', () => {
-    nucleoRef.current = { recorte: null, loading: false };
-    renderizar({ nucleo: 'so' });
-    expect(passou()).toBe(true);
-  });
-
-  it('`null` abre a rota da cobrança — acesso total cadastrado no Núcleo', () => {
-    nucleoRef.current = { recorte: null, loading: false };
-    renderizar({ nucleo: 'fora' });
-    expect(passou()).toBe(true);
-  });
-
-  it('não decide o lado antes da resposta', () => {
-    nucleoRef.current = { recorte: false, loading: true };
-    renderizar({ nucleo: 'fora' });
-    expect(passou()).toBe(false);
   });
 });

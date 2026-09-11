@@ -1,53 +1,25 @@
 /**
  * useNucleo — esta pessoa pertence ao Núcleo de Inteligência e Gestão?
  *
- * ## Por que a pergunta existe
+ * ## Para que serve hoje
  *
- * O Núcleo é um setor **especial** dentro da mesma empresa e do mesmo produto.
- * Ele não cobra: compra números de WhatsApp, aquece, e distribui aos setores de
- * cobrança. Acordo, recebimento, meta e lixeira não são vocabulário dele.
+ * Para UMA decisão: a porta de entrada. `/` desenha o painel do Núcleo para quem
+ * é do setor, e o Dashboard da cobrança para o resto (`PainelDeEntrada`, em
+ * App.tsx).
  *
- * Até aqui o sistema só sabia recortar por PRODUTO (`lib/produto.ts`) e por
- * PERMISSÃO (`useCargoPermissoes`). Nenhum dos dois resolve este caso:
- *
- *   - produto não resolve porque o Núcleo é `cobranca`. Ele é da BookPlay, no
- *     mesmo banco e no mesmo deploy — inventar um quarto produto para um setor
- *     criaria uma empresa que não existe;
- *   - cargo não resolve porque cargo não distingue setor. Quem trabalha no
- *     Núcleo é operador, líder, gerência — os mesmos cargos do Play 3. Ligar ou
- *     desligar `ver_acordos` no cargo `operador` mexeria em todo operador da
- *     empresa.
- *
- * Falta o terceiro eixo, e é este: **o setor**.
+ * Já serviu para mais. Entre 10 e 11/09/2026 o menu e as rotas recortavam as
+ * abas pelo SETOR (`nucleo: 'so' | 'fora'`), porque quem trabalhava no Núcleo
+ * tinha cargo da cobrança — operador, líder — e herdava a cobrança inteira. O
+ * Núcleo ganhou cargo próprio, `assistente_adm` (migrations 20260911120000 e
+ * 20260911121000), e o recorte saiu: o que cada pessoa enxerga voltou a sair só
+ * do painel de permissões, e o cargo do Núcleo não tem as chaves da cobrança.
  *
  * ## O identificador é o ID, nunca o nome
  *
  * `numeros_config.setor_nucleo_id` diz qual setor é o Núcleo naquela empresa. É
  * a mesma linha que a RLS consulta em `fn_numeros_sou_do_nucleo`, então a tela e
- * o banco não têm como discordar.
- *
- * Comparar `setor.nome === 'Núcleo de Inteligência e Gestão'` seria mais curto e
- * está proibido: renomear o setor na tela de administração — coisa de dois
- * cliques — desligaria a diferenciação inteira em silêncio, e a pessoa do Núcleo
- * voltaria a ver Acordos sem ninguém entender por quê. Este projeto já gastou
- * uma migration removendo condicional por nome de setor (20260823092000), e a
- * migration `..._numeros_whatsapp` criou `numeros_config` justamente para não
- * repetir o erro.
- *
- * ## `souDoNucleo` é o fato; `recorte` é o que as telas aplicam
- *
- * `souDoNucleo` responde só «o setor da pessoa bate com o apontado?». O menu, o
- * guarda de rota e a porta de entrada leem `recorte`: o mesmo fato depois das
- * duas travessias de `recorteDoNucleo` — acesso total não tem lado, e quem
- * configura o módulo sem ser do Núcleo alcança a tela da configuração. Calculado
- * aqui, uma vez, para os três não decidirem cada um por conta própria.
- *
- * ## Uma leitura por sessão, não uma por componente
- *
- * Provider, e não hook solto. Três lugares fazem a pergunta — a barra lateral
- * (`Layout`), o guarda de rota (`ProtectedRoute`) e a porta de entrada
- * (`PainelDeEntrada`) —, e um hook com `useEffect` próprio dispararia três
- * consultas iguais a cada navegação.
+ * o banco não têm como discordar. Comparar pelo nome do setor desligaria tudo em
+ * silêncio no dia em que alguém o renomeasse na tela de administração.
  *
  * ## Sem configuração, ninguém é do Núcleo
  *
@@ -55,51 +27,35 @@
  * `numeros_configurar`, e para o super_admin. Para todos os outros vem vazio — e
  * vazio responde `false`, que é a resposta certa para quem não é.
  *
- * O mesmo vale para a empresa que não tem o setor configurado: sem linha,
- * ninguém é do Núcleo ali, e o sistema inteiro se comporta como se comportava
- * antes deste arquivo existir. É a direção certa para falhar — a diferenciação
- * some, e não a cobrança.
+ * ## Acesso total abre no Dashboard
  *
- * ## `loading` importa, e quem usa precisa respeitá-lo
- *
- * Enquanto a resposta não chega, `souDoNucleo` e `recorte` são `false`. Não é um
- * palpite: é o valor que mantém a cobrança — a esmagadora maioria — sem piscar.
- *
- * Quem NÃO pode se contentar com isso é o guarda de rota: deixar uma tela de
- * cobrança abrir por meio segundo para alguém do Núcleo é justamente o buraco
- * que se está fechando. Por isso `loading` é exportado, e `ProtectedRoute`
- * espera por ele antes de decidir. Menu é conforto; rota é a porta.
- *
- * As permissões entram na espera junto com a configuração: as duas travessias
- * perguntam ao painel, e decidir antes dele fecharia Controle de Números para o
- * super_admin até a primeira resposta chegar.
+ * Administrador e super_admin cadastrados no setor do Núcleo continuam abrindo
+ * no Dashboard da cobrança: acesso total não tem lado. É o mesmo critério de
+ * `useCargoPermissoes().isAdmin`, lido do perfil para não abrir uma segunda
+ * consulta de permissões só para esta pergunta.
  */
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
 } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { assinarTabela } from '@/lib/realtime';
-import { recorteDoNucleo } from '@/lib/menuLateral';
+import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
 import { buscarConfig } from '@/services/numeros/numeros.service';
 
 export interface EstadoNucleo {
   /** A pessoa logada está no setor apontado como Núcleo desta empresa. */
   souDoNucleo: boolean;
-  /**
-   * O lado do recorte que vale para esta pessoa — `souDoNucleo` depois das
-   * travessias. `null` = os dois lados. Ver `recorteDoNucleo`.
-   */
-  recorte: boolean | null;
+  /** `/` desenha o painel do Núcleo para esta pessoa? `souDoNucleo`, menos o acesso total. */
+  abrePainelDoNucleo: boolean;
   /** O setor apontado como Núcleo, quando a pessoa tem permissão de vê-lo. */
   setorNucleoId: string | null;
-  /** A primeira resposta ainda não chegou. Ver o cabeçalho. */
+  /** A primeira resposta ainda não chegou. */
   loading: boolean;
 }
 
 const FORA: EstadoNucleo = {
-  souDoNucleo: false, recorte: false, setorNucleoId: null, loading: false,
+  souDoNucleo: false, abrePainelDoNucleo: false, setorNucleoId: null, loading: false,
 };
 
 const NucleoContext = createContext<EstadoNucleo>(FORA);
@@ -107,19 +63,18 @@ const NucleoContext = createContext<EstadoNucleo>(FORA);
 export function NucleoProvider({ children }: { children: React.ReactNode }) {
   const { perfil, loading: authLoading } = useAuth();
   const { empresa, loading: empresaLoading } = useEmpresa();
-  const { isAdmin, temPermissaoExplicita, loading: permLoading } = useCargoPermissoes();
 
-  const empresaId = empresa?.id ?? null;
-  const meuSetor  = perfil?.setor_id ?? null;
+  const empresaId   = empresa?.id ?? null;
+  const meuSetor    = perfil?.setor_id ?? null;
+  const acessoTotal = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(perfil?.perfil ?? '');
 
   const [setorNucleoId, setSetorNucleoId] = useState<string | null>(null);
   /*
    * `carregou` só volta a `false` quando a EMPRESA muda.
    *
    * A releitura de realtime não pode devolver a tela ao estado de carregamento:
-   * `ProtectedRoute` mostra esqueleto enquanto `loading`, e a página inteira
-   * seria desmontada — com filtro, rolagem e formulário meio preenchido — toda
-   * vez que alguém salvasse a configuração do Núcleo.
+   * a porta de entrada trocaria o painel por um esqueleto toda vez que alguém
+   * salvasse a configuração do Núcleo.
    */
   const [carregou, setCarregou] = useState(false);
 
@@ -136,7 +91,7 @@ export function NucleoProvider({ children }: { children: React.ReactNode }) {
       /*
        * Erro aqui é «não deu para saber», e «não deu para saber» vira «não é do
        * Núcleo» — a empresa sem o módulo aplicado cai neste caminho, e o certo é
-       * ela seguir funcionando como a cobrança de sempre.
+       * ela seguir abrindo no Dashboard de sempre.
        *
        * Sem `toast`: esta consulta roda para toda pessoa logada, em toda
        * empresa, e um aviso vermelho no login de quem não tem nada a ver com o
@@ -152,9 +107,8 @@ export function NucleoProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
-  // Trocar o setor do Núcleo muda quem enxerga o quê no sistema inteiro. Quem
-  // estiver com a tela aberta precisa acompanhar — sem isso, a pessoa que
-  // acabou de sair do Núcleo continuaria sem Acordos até dar F5.
+  // Trocar o setor do Núcleo muda a porta de entrada de quem estiver com a tela
+  // aberta — sem isso, só depois de um F5.
   useEffect(() => {
     if (!empresaId) return;
     return assinarTabela(
@@ -171,8 +125,6 @@ export function NucleoProvider({ children }: { children: React.ReactNode }) {
 
   const valor = useMemo<EstadoNucleo>(() => {
     /*
-     * As duas metades da resposta.
-     *
      * Ter a linha em mãos não faz ninguém ser do Núcleo: o administrador com
      * `numeros_configurar` e o super_admin também a leem, e nenhum dos dois
      * trabalha lá. O que decide é o setor da pessoa bater com o apontado.
@@ -181,20 +133,11 @@ export function NucleoProvider({ children }: { children: React.ReactNode }) {
       setorNucleoId !== null && meuSetor !== null && meuSetor === setorNucleoId;
     return {
       souDoNucleo,
-      recorte: recorteDoNucleo({
-        souDoNucleo,
-        acessoTotal: isAdmin,
-        // Explícita: `numeros_configurar` é concessão nominal. O acesso total
-        // já atravessou pela linha de cima, e não por herança desta chave.
-        configuraNucleo: temPermissaoExplicita('numeros_configurar'),
-      }),
+      abrePainelDoNucleo: souDoNucleo && !acessoTotal,
       setorNucleoId,
-      loading: authLoading || empresaLoading || permLoading || !carregou,
+      loading: authLoading || empresaLoading || !carregou,
     };
-  }, [
-    setorNucleoId, meuSetor, isAdmin, temPermissaoExplicita,
-    authLoading, empresaLoading, permLoading, carregou,
-  ]);
+  }, [setorNucleoId, meuSetor, acessoTotal, authLoading, empresaLoading, carregou]);
 
   return <NucleoContext.Provider value={valor}>{children}</NucleoContext.Provider>;
 }

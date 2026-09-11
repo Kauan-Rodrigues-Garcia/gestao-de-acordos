@@ -20,6 +20,14 @@
  * duas concessões que dependem de PESSOA (ver `ContextoMenu` abaixo) sem que
  * isso vire um risco: errar a prévia mostra uma aba a mais num desenho, nunca
  * concede acesso a coisa nenhuma.
+ *
+ * ## O recorte por setor que existiu aqui
+ *
+ * Entre 10 e 11/09/2026 houve um terceiro eixo, o SETOR (`nucleo: 'so' |
+ * 'fora'`), para o Núcleo de Inteligência e Gestão não herdar a cobrança
+ * inteira pelo cargo `operador`. O Núcleo ganhou cargo próprio,
+ * `assistente_adm`, sem as chaves da cobrança, e o eixo saiu:
+ * `menuLateral.nucleo.contrato.test.ts` trava que ele não volta.
  */
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
@@ -58,25 +66,6 @@ export interface NavItem {
   hiddenForBookplay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
-  /**
-   * O terceiro eixo de recorte: o SETOR de quem está olhando.
-   *
-   *   `'so'`   .. só o Núcleo de Inteligência e Gestão enxerga;
-   *   `'fora'` .. todo mundo MENOS o Núcleo;
-   *   ausente  .. os dois.
-   *
-   * Existe porque produto e cargo não davam conta. O Núcleo é `cobranca` (mesma
-   * empresa, mesmo deploy), então o eixo de produto o deixa passar; e cargo não
-   * distingue setor — quem trabalha lá é operador, líder e gerência, os mesmos
-   * cargos do Play 3, e mexer na chave do cargo mexeria em todo mundo.
-   *
-   * O resultado, antes disto, era o Núcleo abrindo Acordos, Novo Acordo,
-   * Analítico e Lixeira — a operação de cobrança inteira, que não é a dele.
-   *
-   * Como em `produtos`, isto **não é barreira de segurança**: quem fecha a porta
-   * é o `ProtectedRoute` da rota correspondente, que faz a mesma pergunta.
-   */
-  nucleo?: 'so' | 'fora';
 }
 
 /**
@@ -119,66 +108,41 @@ export const NAV_ITEMS: NavItem[] = [
   // quem tem acesso total — que é o pedido enquanto a fase 1 está sendo provada
   // na parede. O palco (`/tv/:slug`) não entra em menu nenhum: ele é endereço
   // de TV, não tela de gente.
-  // Controle de Números — o Núcleo. `hiddenForPaguePay` porque o setor existe
-  // só na BookPlay. A chave nasce desligada para todo cargo configurável, e é
-  // ela que decide quem do Núcleo abre a aba: sem ligá-la no painel, a pessoa
-  // do Núcleo vê só o Dashboard.
-  //
-  // `nucleo: 'so'` acrescenta o que a chave não sabe dizer. Ela é do CARGO, e
-  // cargo não distingue setor: um líder do Play 3 com a chave ligada por engano
-  // via o item, abria a tela e recebia zero linhas da RLS — uma porta que não
-  // leva a lugar nenhum. Agora ela nem aparece. É isso que torna seguro ligar a
-  // chave no cargo inteiro: fora do Núcleo o item some, e a RLS
-  // (`fn_numeros_sou_do_nucleo`) não entrega linha.
-  { label: 'Controle de Números', icon: Smartphone,     to: ROUTE_PATHS.CONTROLE_NUMEROS,  produtos: SO_COBRANCA, hiddenForPaguePay: true, nucleo: 'so', permissaoKey: 'ver_controle_numeros' },
-  // Meus Chips — a outra ponta, e esta nasce LIGADA: todo cargo enxerga a aba,
-  // e o escopo de dentro decide se ela mostra o setor ou só o que foi lançado
-  // para a pessoa. Operador sem número nenhum vê a tela vazia, com a explicação.
-  //
-  // Sem marca de setor. Ela nasceu com `nucleo: 'fora'` (10/09/2026), pelo
-  // argumento de que o Núcleo distribui e não recebe; a operação pediu o
-  // contrário no dia seguinte — o Núcleo acompanha por ela onde cada número
-  // está. Os dois lados enxergam.
+  // Controle de Números — a área do Núcleo de Inteligência e Gestão.
+  // `hiddenForPaguePay` porque o setor existe só na BookPlay. Quem abre é a
+  // chave, e ela nasce só no cargo do Núcleo, `assistente_adm` (11/09/2026). A
+  // RLS ainda exige o setor apontado em `numeros_config`, então a chave ligada
+  // por engano em outro cargo abre uma tela vazia, e não o módulo.
+  { label: 'Controle de Números', icon: Smartphone,     to: ROUTE_PATHS.CONTROLE_NUMEROS,  produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_controle_numeros' },
+  // Meus Chips — a outra ponta, e esta nasce LIGADA: todo cargo de setor
+  // enxerga a aba, e o escopo de dentro decide se ela mostra o setor ou só o que
+  // foi lançado para a pessoa. Operador sem número nenhum vê a tela vazia, com a
+  // explicação. O Assistente ADM também a recebe, com a visão do setor, para
+  // acompanhar a distribuição.
   { label: 'Meus Chips',       icon: MessageCircle,  to: ROUTE_PATHS.MEUS_CHIPS,        produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_meus_chips' },
   { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, permissaoKey: 'ver_modo_tv' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
   // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  //
-  // ── As abas da operação de COBRANÇA ──────────────────────────────────────
-  //
-  // Daqui até «Importar Excel», tudo leva `nucleo: 'fora'`. Elas falam de
-  // acordo — criar, listar, medir, recuperar da lixeira —, e o Núcleo não
-  // cobra: ele prepara números de WhatsApp e distribui aos setores que cobram.
-  //
-  // Sem a marca, a pessoa do Núcleo herdava a operação inteira só porque o
-  // produto da empresa é cobrança e o cargo dela é `operador`. Era exatamente o
-  // que se via na tela: Acordos, Novo Acordo, Analítico e Lixeira num setor que
-  // não tem um acordo sequer.
-  //
-  // O que NÃO recebeu a marca, e por quê: Dashboard (existe para todo mundo, e
-  // é o CONTEÚDO dele que muda — ver `PainelDeEntrada`), Usuários e
-  // Configurações (cadastro de gente e da empresa, que todo setor usa), RH
-  // Gestão e Tickets (atravessam a empresa e ninguém pediu para fechar).
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, nucleo: 'fora', roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, nucleo: 'fora', roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, nucleo: 'fora', roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, nucleo: 'fora', roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre
   // pessoa, setor e equipe — vocabulário que Vendas e RH também usam.
   { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: TODOS_OS_PRODUTOS, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
   // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  produtos: SO_COBRANCA, nucleo: 'fora', roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
+  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  produtos: SO_COBRANCA, roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
   { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, produtos: TODOS_OS_PRODUTOS, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: SO_COBRANCA, nucleo: 'fora', roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: SO_COBRANCA, roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
   // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
   // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
   // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
   // no menu. Dentro da lista, todo item passa pelo mesmo filtro.
-  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           produtos: SO_COBRANCA, nucleo: 'fora', permissaoKey: 'ver_analitico' },
-  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, nucleo: 'fora', hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
-  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             produtos: SO_COBRANCA, nucleo: 'fora', permissaoKey: 'importar_excel' },
+  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           produtos: SO_COBRANCA, permissaoKey: 'ver_analitico' },
+  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
+  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             produtos: SO_COBRANCA, permissaoKey: 'importar_excel' },
 ];
 
 /**
@@ -208,69 +172,6 @@ export interface ContextoMenu {
   temPermissao: (chave: string) => boolean;
   /** Interruptor da empresa + cadastro de atendentes de Tickets. */
   acessoTickets: boolean;
-  /**
-   * A pessoa pertence ao setor Núcleo de Inteligência e Gestão?
-   *
-   *   `true`  .. é do Núcleo. Vê as abas `nucleo: 'so'` e nenhuma `'fora'`;
-   *   `false` .. não é. O contrário;
-   *   `null`  .. **não se sabe** — e aí o eixo do setor não filtra nada, e os
-   *              dois lados aparecem.
-   *
-   * `null` existe para a prévia por cargo do editor de ordem. Lá o super_admin
-   * escolhe um CARGO, e pertencer ao Núcleo é coisa de PESSOA — não há resposta
-   * verdadeira a dar. Esconder os dois lados deixaria abas fora do editor, e
-   * quem não aparece no editor não pode ser reordenado. Mostrar os dois é a
-   * aproximação certa: erra para mais num desenho, e desenho não concede acesso.
-   *
-   * No menu de verdade ele também chega `null` para quem atravessa o recorte —
-   * acesso total, ou quem configura o módulo sem ser do Núcleo. Ver
-   * `recorteDoNucleo`, logo abaixo.
-   */
-  souDoNucleo: boolean | null;
-}
-
-/**
- * O recorte por setor que vale para UMA PESSOA: `souDoNucleo` depois das duas
- * travessias.
- *
- * O menu (`Layout`), o guarda de rota (`ProtectedRoute`) e a porta de entrada
- * (`PainelDeEntrada`) leem este mesmo valor, calculado uma vez em `useNucleo`.
- * Os três decidindo cada um por conta própria é como menu e rota passam a
- * divergir.
- *
- *   `true`  .. só o lado do Núcleo;
- *   `false` .. só o lado da cobrança;
- *   `null`  .. os dois — o mesmo `null` da prévia por cargo.
- *
- * ## Acesso total não tem lado
- *
- * O recorte entrou em 10/09/2026 antes da permissão e sem atalho nenhum, e tirou
- * Controle de Números de quem sempre o via — inclusive do super_admin, que a RLS
- * do módulo libera por inteiro (`fn_numeros_visivel`,
- * `fn_numeros_nucleo_administra`). A tela negava o que o banco entregava. Do
- * outro lado, quem tinha acesso total e estava cadastrado no setor do Núcleo
- * perdia Acordos, Analítico e os painéis.
- *
- * O recorte arruma a tela de quem trabalha num lado só. O administrador fora do
- * Núcleo volta a abrir Controle de Números, e a RLS decide o que ele recebe —
- * como era antes do recorte existir.
- *
- * ## Quem configura o módulo sem ser do Núcleo
- *
- * O painel que aponta QUAL setor é o Núcleo mora dentro de Controle de Números.
- * Fechar a tela para quem tem `numeros_configurar` trancava a única porta para
- * trocar o apontamento — inclusive para consertar um apontamento errado. Essa
- * pessoa continua sendo da cobrança, então os dois lados ficam abertos: `null`,
- * e não `true`. Quem configura E é do Núcleo segue a regra do Núcleo.
- */
-export function recorteDoNucleo(p: {
-  souDoNucleo: boolean;
-  acessoTotal: boolean;
-  configuraNucleo: boolean;
-}): boolean | null {
-  if (p.acessoTotal) return null;
-  if (p.configuraNucleo && !p.souDoNucleo) return null;
-  return p.souDoNucleo;
 }
 
 /**
@@ -297,24 +198,6 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
     // dela a aba já saiu na linha acima.
     if (item.hiddenForPaguePay && ctx.isPaguePlay) return false;
     if (item.hiddenForBookplay && ctx.isBookplay) return false;
-
-    /*
-     * O SETOR, logo depois do produto e antes da permissão.
-     *
-     * A ordem repete o raciocínio do produto: «isto existe para este setor?» é
-     * pergunta anterior a «esta pessoa pode ver?». Um operador do Núcleo tem
-     * `ver_acordos` ligado — todo operador tem, e mexer nisso mexeria em todo
-     * operador da empresa. A chave dele está certa; a aba é que não é dele.
-     *
-     * Só `true` e `false` decidem. `null` é a prévia por cargo, que mostra os
-     * dois lados — e o `typeof` cobre junto o `undefined` de quem montar o
-     * contexto sem o campo: «não informado» é a mesma coisa que «não se sabe»,
-     * e as duas precisam cair no lado que não esconde nada.
-     */
-    if (item.nucleo && typeof ctx.souDoNucleo === 'boolean') {
-      if (item.nucleo === 'so'   && !ctx.souDoNucleo) return false;
-      if (item.nucleo === 'fora' &&  ctx.souDoNucleo) return false;
-    }
 
     // A permissão configurável vem PRIMEIRO e vale para todo item que a
     // declara. Ela ficava depois dos casos especiais abaixo, que retornam cedo

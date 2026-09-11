@@ -34,38 +34,6 @@ import { NucleoProvider, useNucleo } from '@/hooks/useNucleo';
  */
 const SO_COBRANCA: readonly Produto[] = ['cobranca'];
 
-/**
- * ## `nucleo="fora"` e `nucleo="so"` — o recorte por SETOR
- *
- * Um eixo a mais, ao lado de `produtos` e `requiredPermissao`, e ele existe
- * porque nenhum dos dois dava conta do Núcleo de Inteligência e Gestão:
- *
- *   - `produtos` não recorta: o Núcleo é `cobranca`. Mesma empresa (BookPlay),
- *     mesmo banco, mesmo deploy. Inventar um quarto produto para um setor
- *     criaria uma empresa que não existe;
- *   - `requiredPermissao` não recorta: cargo não distingue setor. Quem trabalha
- *     no Núcleo é operador, líder, gerência — os mesmos cargos do Play 3. Tirar
- *     `ver_acordos` do cargo `operador` tiraria acordo de todo operador da
- *     empresa.
- *
- * Sem o eixo, quem é do Núcleo herdava a operação de cobrança inteira só porque
- * o produto da empresa é cobrança: Acordos, Novo Acordo, Analítico e Lixeira
- * abriam para um setor que não tem um acordo sequer.
- *
- * Levam `nucleo="fora"` as rotas que falam de ACORDO — criar, editar, listar,
- * medir, recuperar da lixeira, importar planilha, e os painéis que somam tudo
- * isso. `nucleo="so"` fica com o Controle de Números, que é a tela do Núcleo.
- *
- * NÃO levam marca, e é decisão e não esquecimento: `/` (existe para todo mundo,
- * e é o CONTEÚDO dela que muda — ver `PainelDeEntrada`), Usuários e
- * Configurações (cadastro de gente e da empresa, que todo setor usa), RH Gestão
- * e Tickets (atravessam a empresa, e ninguém pediu para fechar).
- *
- * A mesma marca existe em `NAV_ITEMS` (`lib/menuLateral.ts`), e as duas listas
- * têm de concordar — há teste de contrato para isso. Esconder o item do menu
- * não fecha porta nenhuma: menu é conforto, rota é a porta.
- */
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -173,21 +141,21 @@ function VersionWatcher(): null {
  * mudança na cobrança arriscar quebrar o Núcleo, e vice-versa. Aqui os dois só
  * dividem a URL.
  *
- * Enquanto `useNucleo` carrega, `souDoNucleo` é `false` e o Dashboard da
- * cobrança aparece. Não é vazamento: o painel do Núcleo não mostra nada que a
- * pessoa não pudesse ver, e o Dashboard mostra o que a RLS dela entregar — que,
- * para quem é do Núcleo, é praticamente nada.
+ * É a única decisão que ainda olha o SETOR. O que cada pessoa enxerga no menu e
+ * nas rotas sai do painel de permissões, e o cargo do Núcleo (`assistente_adm`)
+ * não tem as chaves da cobrança. Administrador e super_admin cadastrados no
+ * setor continuam abrindo no Dashboard — ver `abrePainelDoNucleo`.
  *
- * Lê `recorte`, e não `souDoNucleo`: quem tem acesso total e está cadastrado no
- * setor do Núcleo continua abrindo no Dashboard da cobrança, como abria antes
- * do recorte. Ver `recorteDoNucleo`.
+ * Enquanto `useNucleo` carrega, a resposta é `false` e o Dashboard da cobrança
+ * aparece. Não é vazamento: o Dashboard mostra o que a RLS da pessoa entregar —
+ * que, para quem é do Núcleo, é praticamente nada.
  */
 function PainelDeEntrada(): React.ReactElement {
   const { empresa, tenantSlug, loading } = useEmpresa();
-  const { recorte } = useNucleo();
+  const { abrePainelDoNucleo } = useNucleo();
   const produto = produtoDaEmpresa(empresa, tenantSlug);
 
-  if (recorte === true) return <DashboardNucleo />;
+  if (abrePainelDoNucleo) return <DashboardNucleo />;
 
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
@@ -240,10 +208,10 @@ export default function App() {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
-          {/* Dentro de EmpresaProvider porque precisa da empresa, e ACIMA do
-              Router porque três consumidores fazem a mesma pergunta — a barra
-              lateral, o guarda de rota e a porta de entrada. Um hook solto em
-              cada um consultaria `numeros_config` três vezes por navegação. */}
+          {/* Dentro de EmpresaProvider porque precisa da empresa. Serve à porta
+              de entrada (`PainelDeEntrada`), e fica acima do Router para a
+              consulta a `numeros_config` acontecer uma vez por sessão, e não a
+              cada navegação. */}
           <NucleoProvider>
           {/* Acima de tudo que desenha número: o mês escolhido vale para o
               sistema inteiro, e não pode se perder ao trocar de página. */}
@@ -282,21 +250,21 @@ export default function App() {
               {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" requiredPermissao="ver_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">
                     <Acordos />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -308,14 +276,14 @@ export default function App() {
                   parte, e merece ser tomada em separado. */}
               <Route path={ROUTE_PATHS.ACORDO_DETALHE} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora"><AcordoDetalhe /></ProtectedRoute>
+                  <ProtectedRoute produtos={SO_COBRANCA}><AcordoDetalhe /></ProtectedRoute>
                 </LayoutWrapper>
               } />
 
               {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
                     <ImportarExcel />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -323,14 +291,14 @@ export default function App() {
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -357,14 +325,14 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_METAS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -373,7 +341,7 @@ export default function App() {
               {/* Painel Diretoria */}
               <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" allowedProfiles={['diretoria','administrador']}
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['diretoria','administrador']}
                                   requiredPermissao="ver_painel_diretoria">
                     <PainelDiretoria />
                   </ProtectedRoute>
@@ -384,7 +352,7 @@ export default function App() {
                   dentro da página; a permissão decide QUEM abre) */}
               <Route path={ROUTE_PATHS.ANALITICO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" requiredPermissao="ver_analitico">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_analitico">
                     <PaginaAnalitico />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -393,7 +361,7 @@ export default function App() {
               {/* Campanha Fácil [BP] — o gate por slug segue dentro da página. */}
               <Route path={ROUTE_PATHS.CAMPANHA_FACIL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="fora" requiredPermissao="ver_campanha_facil">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanha_facil">
                     <CampanhaFacil />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -435,13 +403,14 @@ export default function App() {
               {/* Controle de Números — o Núcleo de Inteligência e Gestão.
 
                   Sem `allowedProfiles`: quem abre é a chave, como nas abas já
-                  convertidas. E a chave sozinha não basta — `fn_numeros_visivel`
-                  ainda exige que a pessoa esteja no setor apontado por
-                  `numeros_config`, então um cargo com a chave ligada num setor
-                  qualquer abre a tela e não recebe uma linha. */}
+                  convertidas, e ela nasce só no cargo do Núcleo, Assistente ADM.
+                  A chave sozinha não basta — `fn_numeros_visivel` ainda exige que
+                  a pessoa esteja no setor apontado por `numeros_config`, então
+                  um cargo com a chave ligada num setor qualquer abre a tela e
+                  não recebe uma linha. */}
               <Route path={ROUTE_PATHS.CONTROLE_NUMEROS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} nucleo="so" requiredPermissao="ver_controle_numeros">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_controle_numeros">
                     <ControleNumeros />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -449,11 +418,8 @@ export default function App() {
 
               {/* Meus Chips — a outra ponta. O que a pessoa enxerga aqui sai do
                   escopo da aba `chips`: individual (o operador vê o que foi
-                  lançado para ele) ou setor (a liderança vê tudo).
-
-                  Sem marca de setor desde 11/09/2026: o Núcleo também abre,
-                  para acompanhar a distribuição. O menu repete isso — ver o
-                  item em `NAV_ITEMS`. */}
+                  lançado para ele) ou setor (a liderança vê o setor, e o
+                  Assistente ADM acompanha a distribuição). */}
               <Route path={ROUTE_PATHS.MEUS_CHIPS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_meus_chips">
