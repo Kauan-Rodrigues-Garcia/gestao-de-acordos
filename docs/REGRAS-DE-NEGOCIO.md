@@ -1446,6 +1446,44 @@ Migration `20260721a`, tabela `metas_validacoes`. Um setor/mês fica `aberto` ou
 
 Nunca validado equivale a `aberto`.
 
+### 12.4 Comissão por meta
+
+Migration `20260911190000`, tabelas `comissao_config` e `comissao_faixas`. Desenho em
+`docs/superpowers/specs/2026-09-11-comissao-por-meta-design.md`; conta em
+`services/comissao/comissao.ts`.
+
+- **Faixas:** 1ª Meta = `metas.meta_valor` do operador; da 2ª em diante,
+  `metas.metas_extras` — nas duas empresas. A configuração do mês guarda só o
+  percentual de cada posição.
+- **Comissão da faixa** = valor da meta × % ÷ 100, em centavos. Vale a **maior**
+  faixa atingida que tem percentual; as faixas **não somam**. Faixa sem % no mês
+  não paga.
+- **Unidade:** PaguePlay em H.O. (meta × 24,96% contra `total_ho`); BookPlay em bruto.
+- **Configuração:** padrão do setor (`equipe_id` nulo) e exceção por equipe. A
+  regra de quando o setor bate a meta mora só na linha do setor.
+- **Direta + indireta `[PP]`:** `junto` — 1ª Meta = direta + indireta, contra o
+  recebido total; `separado` — as faixas medem a direta, e a indireta soma
+  `meta indireta × % indireta` quando atingida.
+- **Benefício do setor:** `percentual_especial` (o % especial da faixa) ou
+  `multiplicador` (% × fator), na direta e na indireta. Só vale com a
+  **confirmação** da liderança (`fn_comissao_confirmar_meta_setor`), feita olhando o
+  mesmo acumulado do card de setor (`acumuladoDoSetor`). O banco não recalcula esse
+  acumulado.
+- **Competência própria:** mês novo nasce vazio. `fn_comissao_importar_mes_anterior`
+  copia padrão e exceções como linhas novas, sem a confirmação; depois disso os
+  meses não têm vínculo.
+- **Trava:** salvar, importar e excluir exceção respeitam `fn_metas_esta_validada`;
+  confirmar a meta do setor não — a meta é validada no começo do mês e o setor
+  bate a meta no fim dele.
+- **Clone:** setor, equipe, meta e configuração do usuário original.
+- **Leitura e escrita:** leitura para quem acessa a empresa (a régua de `metas`);
+  escrita só pelas quatro RPCs.
+- **Permissões:** `metas_comissao_ver`, `metas_comissao_editar`,
+  `metas_comissao_confirmar_setor` e `dashboard_comissao`.
+- **Nada é congelado:** a comissão de um mês é sempre calculada com a configuração,
+  as metas e o recebido daquele mês. Reabrir a validação e mudar a meta muda a
+  comissão daquele mês.
+
 ---
 
 ## 13. Módulos auxiliares
