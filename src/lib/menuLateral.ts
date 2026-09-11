@@ -219,9 +219,55 @@ export interface ContextoMenu {
    * quem não aparece no editor não pode ser reordenado. Mostrar os dois é a
    * aproximação certa: erra para mais num desenho, e desenho não concede acesso.
    *
-   * No menu de verdade este campo nunca é `null`. Ver `Layout`.
+   * No menu de verdade ele também chega `null` para quem atravessa o recorte —
+   * acesso total, ou quem configura o módulo sem ser do Núcleo. Ver
+   * `recorteDoNucleo`, logo abaixo.
    */
   souDoNucleo: boolean | null;
+}
+
+/**
+ * O recorte por setor que vale para UMA PESSOA: `souDoNucleo` depois das duas
+ * travessias.
+ *
+ * O menu (`Layout`), o guarda de rota (`ProtectedRoute`) e a porta de entrada
+ * (`PainelDeEntrada`) leem este mesmo valor, calculado uma vez em `useNucleo`.
+ * Os três decidindo cada um por conta própria é como menu e rota passam a
+ * divergir.
+ *
+ *   `true`  .. só o lado do Núcleo;
+ *   `false` .. só o lado da cobrança;
+ *   `null`  .. os dois — o mesmo `null` da prévia por cargo.
+ *
+ * ## Acesso total não tem lado
+ *
+ * O recorte entrou em 10/09/2026 antes da permissão e sem atalho nenhum, e tirou
+ * Controle de Números de quem sempre o via — inclusive do super_admin, que a RLS
+ * do módulo libera por inteiro (`fn_numeros_visivel`,
+ * `fn_numeros_nucleo_administra`). A tela negava o que o banco entregava. Do
+ * outro lado, quem tinha acesso total e estava cadastrado no setor do Núcleo
+ * perdia Acordos, Analítico e os painéis.
+ *
+ * O recorte arruma a tela de quem trabalha num lado só. O administrador fora do
+ * Núcleo volta a abrir Controle de Números, e a RLS decide o que ele recebe —
+ * como era antes do recorte existir.
+ *
+ * ## Quem configura o módulo sem ser do Núcleo
+ *
+ * O painel que aponta QUAL setor é o Núcleo mora dentro de Controle de Números.
+ * Fechar a tela para quem tem `numeros_configurar` trancava a única porta para
+ * trocar o apontamento — inclusive para consertar um apontamento errado. Essa
+ * pessoa continua sendo da cobrança, então os dois lados ficam abertos: `null`,
+ * e não `true`. Quem configura E é do Núcleo segue a regra do Núcleo.
+ */
+export function recorteDoNucleo(p: {
+  souDoNucleo: boolean;
+  acessoTotal: boolean;
+  configuraNucleo: boolean;
+}): boolean | null {
+  if (p.acessoTotal) return null;
+  if (p.configuraNucleo && !p.souDoNucleo) return null;
+  return p.souDoNucleo;
 }
 
 /**

@@ -90,7 +90,7 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
   const { user, perfil, loading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
-  const { souDoNucleo, loading: nucleoLoading } = useNucleo();
+  const { recorte, loading: nucleoLoading } = useNucleo();
 
   /*
    * O esqueleto só na PRIMEIRA carga.
@@ -169,10 +169,20 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
    * painel do Núcleo para quem é do Núcleo, e o Dashboard da cobrança para o
    * resto. Ver `PainelDeEntrada`, em App.tsx.
    */
-  if (nucleo === 'fora' && souDoNucleo) {
+  /*
+   * `recorte`, e não `souDoNucleo`: é o mesmo lado que o menu desenha, já com as
+   * travessias de `recorteDoNucleo`. `null` não fecha nenhuma das duas marcas —
+   * acesso total não tem lado, e quem configura o módulo sem ser do Núcleo
+   * precisa alcançar a tela onde a configuração mora.
+   *
+   * Comparação com `true` e `false`, e não por verdade: `!recorte` trataria o
+   * `null` como «não é do Núcleo» e fecharia Controle de Números justamente para
+   * quem a travessia existe.
+   */
+  if (nucleo === 'fora' && recorte === true) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
-  if (nucleo === 'so' && !souDoNucleo) {
+  if (nucleo === 'so' && recorte === false) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
 

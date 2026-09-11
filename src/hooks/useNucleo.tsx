@@ -34,6 +34,14 @@
  * migration `..._numeros_whatsapp` criou `numeros_config` justamente para não
  * repetir o erro.
  *
+ * ## `souDoNucleo` é o fato; `recorte` é o que as telas aplicam
+ *
+ * `souDoNucleo` responde só «o setor da pessoa bate com o apontado?». O menu, o
+ * guarda de rota e a porta de entrada leem `recorte`: o mesmo fato depois das
+ * duas travessias de `recorteDoNucleo` — acesso total não tem lado, e quem
+ * configura o módulo sem ser do Núcleo alcança a tela da configuração. Calculado
+ * aqui, uma vez, para os três não decidirem cada um por conta própria.
+ *
  * ## Uma leitura por sessão, não uma por componente
  *
  * Provider, e não hook solto. Três lugares fazem a pergunta — a barra lateral
@@ -54,38 +62,52 @@
  *
  * ## `loading` importa, e quem usa precisa respeitá-lo
  *
- * Enquanto a resposta não chega, `souDoNucleo` é `false`. Não é um palpite: é o
- * valor que mantém a cobrança — a esmagadora maioria — sem piscar.
+ * Enquanto a resposta não chega, `souDoNucleo` e `recorte` são `false`. Não é um
+ * palpite: é o valor que mantém a cobrança — a esmagadora maioria — sem piscar.
  *
  * Quem NÃO pode se contentar com isso é o guarda de rota: deixar uma tela de
  * cobrança abrir por meio segundo para alguém do Núcleo é justamente o buraco
  * que se está fechando. Por isso `loading` é exportado, e `ProtectedRoute`
  * espera por ele antes de decidir. Menu é conforto; rota é a porta.
+ *
+ * As permissões entram na espera junto com a configuração: as duas travessias
+ * perguntam ao painel, e decidir antes dele fecharia Controle de Números para o
+ * super_admin até a primeira resposta chegar.
  */
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
 } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { assinarTabela } from '@/lib/realtime';
+import { recorteDoNucleo } from '@/lib/menuLateral';
 import { buscarConfig } from '@/services/numeros/numeros.service';
 
 export interface EstadoNucleo {
   /** A pessoa logada está no setor apontado como Núcleo desta empresa. */
   souDoNucleo: boolean;
+  /**
+   * O lado do recorte que vale para esta pessoa — `souDoNucleo` depois das
+   * travessias. `null` = os dois lados. Ver `recorteDoNucleo`.
+   */
+  recorte: boolean | null;
   /** O setor apontado como Núcleo, quando a pessoa tem permissão de vê-lo. */
   setorNucleoId: string | null;
   /** A primeira resposta ainda não chegou. Ver o cabeçalho. */
   loading: boolean;
 }
 
-const FORA: EstadoNucleo = { souDoNucleo: false, setorNucleoId: null, loading: false };
+const FORA: EstadoNucleo = {
+  souDoNucleo: false, recorte: false, setorNucleoId: null, loading: false,
+};
 
 const NucleoContext = createContext<EstadoNucleo>(FORA);
 
 export function NucleoProvider({ children }: { children: React.ReactNode }) {
   const { perfil, loading: authLoading } = useAuth();
   const { empresa, loading: empresaLoading } = useEmpresa();
+  const { isAdmin, temPermissaoExplicita, loading: permLoading } = useCargoPermissoes();
 
   const empresaId = empresa?.id ?? null;
   const meuSetor  = perfil?.setor_id ?? null;
@@ -147,7 +169,7 @@ export function NucleoProvider({ children }: { children: React.ReactNode }) {
     );
   }, [empresaId, carregar]);
 
-  const valor = useMemo<EstadoNucleo>(() => ({
+  const valor = useMemo<EstadoNucleo>(() => {
     /*
      * As duas metades da resposta.
      *
@@ -155,10 +177,24 @@ export function NucleoProvider({ children }: { children: React.ReactNode }) {
      * `numeros_configurar` e o super_admin também a leem, e nenhum dos dois
      * trabalha lá. O que decide é o setor da pessoa bater com o apontado.
      */
-    souDoNucleo: setorNucleoId !== null && meuSetor !== null && meuSetor === setorNucleoId,
-    setorNucleoId,
-    loading: authLoading || empresaLoading || !carregou,
-  }), [setorNucleoId, meuSetor, authLoading, empresaLoading, carregou]);
+    const souDoNucleo =
+      setorNucleoId !== null && meuSetor !== null && meuSetor === setorNucleoId;
+    return {
+      souDoNucleo,
+      recorte: recorteDoNucleo({
+        souDoNucleo,
+        acessoTotal: isAdmin,
+        // Explícita: `numeros_configurar` é concessão nominal. O acesso total
+        // já atravessou pela linha de cima, e não por herança desta chave.
+        configuraNucleo: temPermissaoExplicita('numeros_configurar'),
+      }),
+      setorNucleoId,
+      loading: authLoading || empresaLoading || permLoading || !carregou,
+    };
+  }, [
+    setorNucleoId, meuSetor, isAdmin, temPermissaoExplicita,
+    authLoading, empresaLoading, permLoading, carregou,
+  ]);
 
   return <NucleoContext.Provider value={valor}>{children}</NucleoContext.Provider>;
 }

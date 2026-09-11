@@ -27,7 +27,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useMeusChips } from '@/hooks/useMeusChips';
 import { HistoricoNumero } from '@/components/numeros/HistoricoNumero';
-import { listarOperadoresDoSetor, type OperadorDoSetor } from '@/services/numeros/numeros.service';
+import { listarOperadoresDosSetores, type OperadorDoSetor } from '@/services/numeros/numeros.service';
 import { VisaoLideranca } from './VisaoLideranca';
 import { VisaoOperador } from './VisaoOperador';
 import { useEffect } from 'react';
@@ -46,29 +46,42 @@ export default function MeusChips() {
 
   const empresaId = empresa?.id ?? '';
   /*
-   * O setor de quem está olhando — e não o do primeiro número da lista.
+   * Os setores cujas pessoas a tela precisa nomear: o de quem está olhando, e o
+   * de cada número que chegou.
    *
-   * `numeros[0]?.setor_id` funcionava enquanto houvesse número, e falhava
-   * justamente no setor que ainda não recebeu nenhum: a lista de pessoas vinha
-   * vazia, e o seletor de «Lançar» abria sem ninguém para escolher — no
-   * primeiro dia de uso do módulo, que é quando ele mais precisa funcionar.
+   * O próprio setor entra sempre. `numeros[0]?.setor_id` sozinho falhava no
+   * setor que ainda não recebeu nenhum número: a lista de pessoas vinha vazia
+   * no primeiro dia de uso do módulo, que é quando ele mais precisa funcionar.
    *
-   * A liderança enxerga o PRÓPRIO setor (`fn_numeros_visivel`, nível 2), então o
-   * setor dela é o setor dos números que ela vê.
+   * Os setores dos números entram também. Só o próprio setor serve ao líder,
+   * que enxerga o setor dele (`fn_numeros_visivel`, nível 2), e erra com o
+   * super_admin: a RLS entrega os números de TODOS os setores, e cada pessoa de
+   * outro setor virava «Fora do setor» nos cartões. Para o líder o conjunto é o
+   * mesmo de antes — os números dele são todos do setor dele.
+   *
+   * Uma string ordenada, e não o array: `numeros` troca de referência a cada
+   * evento de realtime, e a lista de pessoas só precisa ser relida quando o
+   * CONJUNTO de setores muda.
    */
   const meuSetor = perfil?.setor_id ?? null;
+  const setoresDasPessoas = useMemo(() => {
+    const ids = new Set<string>();
+    if (meuSetor) ids.add(meuSetor);
+    for (const n of numeros) if (n.setor_id) ids.add(n.setor_id);
+    return [...ids].sort().join(',');
+  }, [numeros, meuSetor]);
 
-  // Quem pode receber um número neste setor, com nome e foto. Só a liderança
-  // precisa — o operador vê apenas os próprios, e o nome dele não acrescenta
-  // nada à tela.
+  // Quem pode estar com um número nestes setores, com nome e foto. Só a
+  // liderança precisa — o operador vê apenas os próprios, e o nome dele não
+  // acrescenta nada à tela.
   useEffect(() => {
-    if (visao !== 'setor' || !empresaId || !meuSetor) { setPessoas([]); return; }
+    if (visao !== 'setor' || !empresaId || !setoresDasPessoas) { setPessoas([]); return; }
     let cancelado = false;
-    listarOperadoresDoSetor(empresaId, meuSetor)
+    listarOperadoresDosSetores(empresaId, setoresDasPessoas.split(','))
       .then(l => { if (!cancelado) setPessoas(l); })
       .catch(() => { if (!cancelado) setPessoas([]); });
     return () => { cancelado = true; };
-  }, [visao, empresaId, meuSetor]);
+  }, [visao, empresaId, setoresDasPessoas]);
 
   const nomeDoCelular = useMemo(() => {
     const mapa = new Map(celulares.map(c => [c.id, c.identificacao]));

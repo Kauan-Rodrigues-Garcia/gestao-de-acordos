@@ -177,13 +177,17 @@ function VersionWatcher(): null {
  * cobrança aparece. Não é vazamento: o painel do Núcleo não mostra nada que a
  * pessoa não pudesse ver, e o Dashboard mostra o que a RLS dela entregar — que,
  * para quem é do Núcleo, é praticamente nada.
+ *
+ * Lê `recorte`, e não `souDoNucleo`: quem tem acesso total e está cadastrado no
+ * setor do Núcleo continua abrindo no Dashboard da cobrança, como abria antes
+ * do recorte. Ver `recorteDoNucleo`.
  */
 function PainelDeEntrada(): React.ReactElement {
   const { empresa, tenantSlug, loading } = useEmpresa();
-  const { souDoNucleo } = useNucleo();
+  const { recorte } = useNucleo();
   const produto = produtoDaEmpresa(empresa, tenantSlug);
 
-  if (souDoNucleo) return <DashboardNucleo />;
+  if (recorte === true) return <DashboardNucleo />;
 
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.

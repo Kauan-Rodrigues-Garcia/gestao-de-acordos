@@ -220,7 +220,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const acessoTickets   = useTicketsAcesso();
   // O terceiro eixo do menu, ao lado de produto e permissão: o SETOR. Ver
   // `useNucleo` e o campo `nucleo` de `NavItem`.
-  const { souDoNucleo, loading: nucleoLoading } = useNucleo();
+  //
+  // `recorte`, e não o fato cru: chega com as travessias de `recorteDoNucleo`
+  // aplicadas, e o `null` de quem atravessa é o mesmo `null` que
+  // `ContextoMenu.souDoNucleo` já lê como «mostre os dois lados».
+  const { recorte: souDoNucleo, loading: nucleoLoading } = useNucleo();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();

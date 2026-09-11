@@ -303,11 +303,26 @@ export interface OperadorDoSetor {
 export async function listarOperadoresDoSetor(
   empresaId: string, setorId: string,
 ): Promise<OperadorDoSetor[]> {
+  return listarOperadoresDosSetores(empresaId, [setorId]);
+}
+
+/**
+ * O mesmo, para mais de um setor numa ida só.
+ *
+ * A visão da liderança nomeia quem está com cada número, e os números chegam de
+ * tantos setores quantos a RLS entregar: um para o líder, todos para o
+ * super_admin. Uma consulta por setor seria uma ida ao banco por setor numa
+ * tela que já tem a lista inteira em mãos.
+ */
+export async function listarOperadoresDosSetores(
+  empresaId: string, setorIds: readonly string[],
+): Promise<OperadorDoSetor[]> {
+  if (setorIds.length === 0) return [];
   const { data, error } = await supabase
     .from('perfis')
     .select('id, nome, perfil, foto_url')
     .eq('empresa_id', empresaId)
-    .eq('setor_id', setorId)
+    .in('setor_id', [...setorIds])
     .eq('ativo', true)
     .order('nome');
   if (error) throw error;
