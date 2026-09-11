@@ -4,12 +4,20 @@
  * ## De onde vem cada peça
  *
  *   • meta, metas extras e meta indireta: a linha de `metas` da pessoa no mês;
- *   • realizado: `buscarResumoOperadoresAnalitico`, a MESMA fonte da aba Comissão
- *     da tela de Metas e do RH Gestão — as três telas contam o mesmo número;
+ *   • realizado: as próprias linhas do agregado do Dashboard
+ *     (`useAnaliticoDashboard` + `agregarAnalitico`), já com o ajuste manual — a
+ *     mesma base dos cards de meta e do card de comissão que existia lá;
  *   • indireta: `buscarRecebimentoIndireto`, só da pessoa;
  *   • configuração e confirmação do setor: `useConfigsComissao`, com tempo real —
  *     a confirmação do líder chega sem recarregar;
  *   • setor e equipe de origem: o perfil.
+ *
+ * ## Por que não o resumo por operador
+ *
+ * A aba Comissão e o RH leem `fn_analitico_resumo_por_operador`. Ela devolve
+ * VAZIO, sem erro, para quem não tem `ver_analitico`, `analitico_sub_analitico`
+ * e `analitico_sub_ranking` — e operador comum não tem o Ranking. Lendo dela, o
+ * painel mostrava R$ 0,00 e «Nenhuma faixa ainda» para quem tinha comissão.
  *
  * Só busca com o painel aberto. O Desempenho do Dia já pagou caro por consultar
  * com a gaveta fechada, em toda página.
@@ -19,9 +27,9 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { normalizarMes, partesDoMes } from '@/lib/mesReferencia';
 import { useTenant } from '@/lib/tenant-config';
-import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import { calcularComissao, type ResultadoComissao } from './comissao';
 import { montarEntradaComissao, type MetaLinhaBruta } from './entradaDoOperador';
@@ -45,8 +53,6 @@ interface Pecas {
   chave: string;
   erro: boolean;
   meta: MetaLinhaBruta | null;
-  recebidoBruto: number;
-  recebidoHO: number;
   recebidoIndiretoBruto: number;
 }
 
@@ -70,13 +76,22 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
   const configs = useConfigsComissao({ empresaId, ano, mes: mesNum, ativo });
   const recarregarConfigs = configs.recarregar;
 
+  // O mesmo cache do Dashboard: com ele aberto, o painel não busca de novo.
+  const analitico = useAnaliticoDashboard(ativo, mes);
+  const refetchAnalitico = analitico.refetch;
+  const realizado = useMemo(
+    () => (operadorId ? agregarAnalitico(analitico.linhas, { tipo: 'operador', operadorId }) : null),
+    [analitico.linhas, operadorId],
+  );
+
   const [pecas, setPecas] = useState<Pecas | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [versao, setVersao] = useState(0);
   const recarregar = useCallback(() => {
     setVersao(v => v + 1);
     recarregarConfigs();
-  }, [recarregarConfigs]);
+    void refetchAnalitico();
+  }, [recarregarConfigs, refetchAnalitico]);
 
   useEffect(() => {
     if (!ativo || !empresaId || !operadorId) return;
@@ -85,7 +100,7 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
 
     void (async () => {
       try {
-        const [metaRes, resumoRes, indiretos] = await Promise.all([
+        const [metaRes, indiretos] = await Promise.all([
           // `*` e não a lista: as colunas da meta indireta chegaram numa
           // migration própria, e nomear coluna ausente derruba a consulta.
           supabase.from('metas')
@@ -94,25 +109,20 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
             .eq('referencia_id', operadorId)
             .eq('mes', mesNum).eq('ano', ano)
             .maybeSingle(),
-          buscarResumoOperadoresAnalitico(empresaId, mes),
           buscarRecebimentoIndireto({ empresaId, mes, operadores: [operadorId] }),
         ]);
         if (!vivo) return;
 
-        const erro = !!metaRes.error || !!resumoRes.error;
-        if (erro) console.warn('[comissao] leitura do mês:', metaRes.error?.message ?? resumoRes.error);
-        const minha = resumoRes.data.find(r => r.operador_id === operadorId);
+        if (metaRes.error) console.warn('[comissao] meta do mês:', metaRes.error.message);
         setPecas({
           chave,
-          erro,
+          erro: !!metaRes.error,
           meta: (metaRes.data as MetaLinhaBruta | null) ?? null,
-          recebidoBruto: Number(minha?.total_recebido) || 0,
-          recebidoHO: Number(minha?.total_ho) || 0,
           recebidoIndiretoBruto: indiretos[operadorId]?.bruto ?? 0,
         });
       } catch (e) {
         console.warn('[comissao] leitura do mês:', e);
-        if (vivo) setPecas({ chave, erro: true, meta: null, recebidoBruto: 0, recebidoHO: 0, recebidoIndiretoBruto: 0 });
+        if (vivo) setPecas({ chave, erro: true, meta: null, recebidoIndiretoBruto: 0 });
       } finally {
         if (vivo) setBuscando(false);
       }
@@ -122,27 +132,35 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
   }, [ativo, empresaId, operadorId, mes, mesNum, ano, chave, versao]);
 
   const pecasDoMes = pecas && pecas.chave === chave ? pecas : null;
+  // Sem o analítico no banco, o realizado seria zero — e zero parece resultado.
+  const erro = !!pecasDoMes?.erro || !analitico.dbAtiva;
 
   const resultado = useMemo<ResultadoComissao | null>(() => {
-    if (!ativo || !pecasDoMes || pecasDoMes.erro || !configs.carregado || !configs.dbAtiva) return null;
+    if (!ativo || !pecasDoMes || erro || !realizado || !analitico.carregado) return null;
+    if (!configs.carregado || !configs.dbAtiva) return null;
     return calcularComissao(montarEntradaComissao({
       meta: pecasDoMes.meta,
-      recebidoBruto: pecasDoMes.recebidoBruto,
-      recebidoHO: pecasDoMes.recebidoHO,
+      recebidoBruto: realizado.bruto,
+      recebidoHO: realizado.ho,
       recebidoIndiretoBruto: pecasDoMes.recebidoIndiretoBruto,
       isPaguePlay,
       configs: configs.configs,
       setorOrigemId: setorId,
       equipeOrigemId: equipeId,
     }));
-  }, [ativo, pecasDoMes, configs.carregado, configs.dbAtiva, configs.configs, isPaguePlay, setorId, equipeId]);
+  }, [
+    ativo, pecasDoMes, erro, realizado, analitico.carregado,
+    configs.carregado, configs.dbAtiva, configs.configs, isPaguePlay, setorId, equipeId,
+  ]);
 
   return {
     podeVer,
-    carregando: ativo && (buscando || !configs.carregado || (configs.dbAtiva && !pecasDoMes)),
+    carregando: ativo && (
+      buscando || !analitico.carregado || !configs.carregado || (configs.dbAtiva && !pecasDoMes)
+    ),
     dbAtiva: configs.dbAtiva,
     resultado,
-    erro: !!pecasDoMes?.erro,
+    erro,
     isPaguePlay,
     recarregar,
   };

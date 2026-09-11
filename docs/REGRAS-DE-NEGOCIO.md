@@ -1462,8 +1462,12 @@ Migration `20260911190000`, tabelas `comissao_config` e `comissao_faixas`. Desen
 - **Mínimo da faixa** = valor da meta × % — o «a partir de» das faixas em que a
   pessoa não está.
 - **Unidade:** PaguePlay em H.O. (meta × 24,96% contra `total_ho`); BookPlay em bruto.
-- **Realizado:** `fn_analitico_resumo_por_operador` com o ajuste manual do mês —
-  a mesma fonte na aba Comissão, no painel do operador e no RH Gestão.
+- **Realizado:** o relatório analítico do mês, com o ajuste manual. O painel do
+  operador soma as próprias linhas do agregado do Dashboard
+  (`fn_analitico_dashboard_mes_json`), a mesma base dos cards de meta. A aba Comissão
+  e o RH Gestão leem `fn_analitico_resumo_por_operador`, que devolve **vazio, sem
+  erro,** para quem não tem `ver_analitico`, `analitico_sub_analitico` e
+  `analitico_sub_ranking` — por isso o painel do operador não usa essa fonte.
 - **Configuração:** padrão do setor (`equipe_id` nulo) e exceção por equipe. A
   regra de quando o setor bate a meta mora só na linha do setor.
 - **Direta + indireta `[PP]`:** `junto` — 1ª Meta = direta + indireta, e o % vale
