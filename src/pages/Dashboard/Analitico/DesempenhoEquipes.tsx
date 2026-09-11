@@ -39,11 +39,13 @@ import {
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
-  mapaSetorDaEquipe, setoresDoOperador, operadoresDaEquipe, operadoresDoSetor,
+  mapaSetorDaEquipe, operadoresDaEquipe, operadoresDoSetor,
   buscarLideresDoRetrato, buscarSetoresDoRetrato,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
-import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
+import {
+  acumuladoDoSetor, somarAnaliticoPorSetor, type SomaDoSetor,
+} from '@/services/analitico/acumuladoDoSetor';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { CardEquipe, type LiderInfo } from './CardEquipe';
 import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
@@ -565,40 +567,31 @@ export function DesempenhoEquipes({
     // está DENTRO de `total_recebido` e a pergunta que responde é «quanto deste
     // número foi lançado à mão». Somá-lo por fora daria duas travessias da
     // mesma lista com a mesma regra de clone — e a segunda envelheceria.
-    const porEquipe: Record<string, { bruto: number; ho: number; ajuste: number }> = {};
-    const porSetor:  Record<string, { bruto: number; ho: number; ajuste: number }> = {};
-    const somar = (map: typeof porEquipe, id: string, r: ResumoOperadorAnalitico) => {
-      if (!map[id]) map[id] = { bruto: 0, ho: 0, ajuste: 0 };
-      map[id].bruto  += r.total_recebido;
-      map[id].ho     += Number(r.total_ho) || 0;
-      map[id].ajuste += Number(r.ajuste_manual) || 0;
+    const porEquipe: Record<string, SomaDoSetor> = {};
+    const somar = (id: string, r: ResumoOperadorAnalitico) => {
+      if (!porEquipe[id]) porEquipe[id] = { bruto: 0, ho: 0, ajuste: 0 };
+      porEquipe[id].bruto  += r.total_recebido;
+      porEquipe[id].ho     += Number(r.total_ho) || 0;
+      porEquipe[id].ajuste += Number(r.ajuste_manual) || 0;
     };
     // Setor de cada equipe — o clone credita o setor DONO da equipe clonada
     const setorDaEquipe = mapaSetorDaEquipe(equipes);
 
     for (const r of resumos) {
       const info = operadorEquipeMap[r.operador_id];
-      if (info?.equipe_id) somar(porEquipe, info.equipe_id, r);
+      if (info?.equipe_id) somar(info.equipe_id, r);
       // Clones: o recebimento conta TAMBÉM nas equipes clonadas
       for (const eqId of equipesExtrasPorOperador[r.operador_id] ?? []) {
-        if (eqId !== info?.equipe_id) somar(porEquipe, eqId, r);
-      }
-      // Setores: o próprio + os das equipes clonadas (setor misto emprestando
-      // para play 4 / play 5). O Set já deduplica, então clone dentro do
-      // próprio setor não conta duas vezes. Mesma regra do "Total recebido"
-      // no AnaliticoLider — as duas telas TÊM que concordar.
-      for (const sid of setoresDoOperador(
-        r.operador_id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
-      )) {
-        somar(porSetor, sid, r);
+        if (eqId !== info?.equipe_id) somar(eqId, r);
       }
     }
 
-    // Órfãos (sem operador) pertencem ao setor da importação
-    for (const [sid, o] of Object.entries(orfaosPorSetor)) {
-      if (!porSetor[sid]) porSetor[sid] = { bruto: 0, ho: 0, ajuste: 0 };
-      porSetor[sid].bruto += o.total;
-    }
+    // Setores: o próprio + os das equipes clonadas, e os órfãos da importação.
+    // A regra mora em `acumuladoDoSetor.ts` desde a comissão por meta — a aba
+    // Comissão da tela de Metas confirma «o setor bateu» com este MESMO número.
+    const porSetor = somarAnaliticoPorSetor({
+      resumos, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe, orfaosPorSetor,
+    });
 
     const metaDe = (tipo: string, id: string): number | null => {
       const m = metas.find(x => x.tipo === tipo && x.referencia_id === id);
@@ -716,26 +709,19 @@ export function DesempenhoEquipes({
         onChange={onArquivoFotoSetor}
       />
       {gruposOrdenados.map(([sid, eqs]) => {
-        // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam.
-        // Quando NÃO é assim, quem decide é `setorSomaPorUsuarios` — a mesma
-        // função que o dashboard e a aba Analítico consultam.
+        // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam;
+        // PaguePlay e setor alternativo → soma dos usuários. A escolha, o
+        // Receptivo e a origem do ajuste moram em `acumuladoDoSetor` — a mesma
+        // função que a aba Comissão da tela de Metas usa para a confirmação.
         const ehAlternativo = setoresAlternativos.has(sid);
-        const usarSoma = setorSomaPorUsuarios({
-          isPaguePlay: setorSomaMembros, alternativo: ehAlternativo,
+        const acumuladoSetor = acumuladoDoSetor({
+          setorId: sid,
+          isPaguePlay: setorSomaMembros,
+          alternativo: ehAlternativo,
+          somaPorSetor: dados.porSetor,
+          totalPorSetor,
+          receptivoPorSetor: contrib,
         });
-        const baseSetor = usarSoma
-          ? (dados.porSetor[sid]?.bruto ?? 0)
-          : (totalPorSetor[sid]?.total ?? 0);
-        const baseSetorHO = usarSoma
-          ? (dados.porSetor[sid]?.ho ?? 0)
-          : (totalPorSetor[sid]?.ho ?? 0);
-        /*
-         * O ajuste do setor sai sempre da soma dos operadores, mesmo quando o
-         * card usa o total carimbado do relatório: nos dois caminhos o ajuste
-         * já está dentro do acumulado, e o número é o mesmo. O que muda entre
-         * eles é de onde vem o TOTAL, não de onde vem esta parcela.
-         */
-        const ajusteDoSetor = dados.porSetor[sid]?.ajuste ?? 0;
         const metaSetor = dados.metaDe('setor', sid);
         return (
         <div key={sid} className="space-y-3">
@@ -764,11 +750,12 @@ export function DesempenhoEquipes({
               }}
               mostrarHO={isPP}
               metaHO={metaSetor !== null ? metaSetor * PP_HO_PERCENTUAL : null}
-              // Só o ACUMULADO do Receptivo soma aqui; a meta do setor segue
-              // sendo a da aba Metas (decisão do usuário em 30/07/2026).
-              acumulado={baseSetor + (contrib[sid]?.acumulado ?? 0)}
-              acumuladoHO={baseSetorHO}
-              ajusteManual={ajusteDoSetor}
+              // Só o ACUMULADO do Receptivo soma aqui (dentro de
+              // `acumuladoDoSetor`); a meta do setor segue sendo a da aba Metas
+              // (decisão do usuário em 30/07/2026).
+              acumulado={acumuladoSetor.bruto}
+              acumuladoHO={acumuladoSetor.ho}
+              ajusteManual={acumuladoSetor.ajuste}
               meta={metaSetor}
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
