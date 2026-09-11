@@ -15,7 +15,7 @@
  *   dias úteis/quartis → 800 ms depois da última mexida.
  *
  * A linha é a unidade de gravação, e não o campo: meta e meta H.O. são o mesmo
- * número em duas leituras, e as metas extras da BookPlay viajam no mesmo
+ * número em duas leituras, e as metas extras (2ª, 3ª…) viajam no mesmo
  * `upsert`. Gravar campo a campo mandaria três escritas para uma edição só.
  *
  * ## Nada é gravado duas vezes
@@ -31,7 +31,7 @@
  * existe a tela de exclusões, não o campo em branco.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Target, Check, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
@@ -126,6 +126,11 @@ interface Operador {
 interface MetaInput {
   meta_valor: string; meta_ho: string; extras: string[]; proporcional: boolean;
   /**
+   * As metas extras em H.O. `[PP]` — o mesmo par da meta principal. Quem grava é
+   * `extras`, em bruto; esta é a outra leitura do mesmo número.
+   */
+  extras_ho: string[];
+  /**
    * Meta direta e indireta `[PP]` — só para operador com Direto/Extra ativo.
    *
    * Desligada, `meta_valor` é a meta cheia e nada muda. Ligada, `meta_valor`
@@ -157,7 +162,7 @@ function fmtNum(num: number): string {
 
 function emptyInput(): MetaInput {
   return {
-    meta_valor: "", meta_ho: "", extras: [], proporcional: false,
+    meta_valor: "", meta_ho: "", extras: [], extras_ho: [], proporcional: false,
     indiretaAtiva: false, meta_indireta: "", meta_indireta_ho: "",
   };
 }
@@ -245,9 +250,11 @@ interface MetaRowProps {
   /** PaguePlay: campo Meta H.O. (24,96% do total, conversão bidirecional). */
   mostrarHO?: boolean;
   onChangeHO?: (v: string) => void;
-  /** BookPlay: quantidade de campos de metas extras (2ª, 3ª…). */
+  /** Quantidade de campos de metas extras (2ª, 3ª…) — as duas empresas. */
   numExtras?: number;
   onChangeExtra?: (idx: number, v: string) => void;
+  /** PaguePlay: a mesma meta extra em H.O. (24,96%, conversão bidirecional). */
+  onChangeExtraHO?: (idx: number, v: string) => void;
   disabled?: boolean;
   /** Meta proporcional: operador recém-chegado/retorno de férias, meta menor
    *  que a cheia — quem consome a marca não deve tratar igual quem tem meta cheia. */
@@ -268,7 +275,7 @@ interface MetaRowProps {
 
 function MetaRow({
   label, sublabel, icon, aviso, input, onChangeValor, mostrarHO, onChangeHO,
-  numExtras = 0, onChangeExtra, disabled, proporcional, onChangeProporcional,
+  numExtras = 0, onChangeExtra, onChangeExtraHO, disabled, proporcional, onChangeProporcional,
   permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
   onGravar, estado,
 }: MetaRowProps) {
@@ -320,20 +327,39 @@ function MetaRow({
           </div>
         )}
         {Array.from({ length: numExtras }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-1 min-w-[130px] max-w-[180px]">
-            <Label className="text-xs text-muted-foreground">{i + 2}ª meta (opcional)</Label>
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
-              <Input
-                className="pl-8 h-8 text-sm"
-                placeholder="0,00"
-                value={input.extras[i] ?? ""}
-                disabled={disabled}
-                onChange={(e) => onChangeExtra?.(i, formatBRL(e.target.value))}
-                onBlur={() => onGravar()}
-              />
+          <Fragment key={i}>
+            <div className="flex flex-col gap-1 min-w-[130px] max-w-[180px]">
+              <Label className="text-xs text-muted-foreground">{i + 2}ª meta (opcional)</Label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
+                <Input
+                  className="pl-8 h-8 text-sm"
+                  placeholder="0,00"
+                  value={input.extras[i] ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => onChangeExtra?.(i, formatBRL(e.target.value))}
+                  onBlur={() => onGravar()}
+                />
+              </div>
             </div>
-          </div>
+            {/* PaguePlay: a meta é pensada em H.O., e a meta extra também. */}
+            {mostrarHO && (
+              <div className="flex flex-col gap-1 min-w-[130px] max-w-[180px]">
+                <Label className="text-xs text-muted-foreground">{i + 2}ª meta H.O. (24,96%)</Label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
+                  <Input
+                    className="pl-8 h-8 text-sm"
+                    placeholder="0,00"
+                    value={input.extras_ho?.[i] ?? ""}
+                    disabled={disabled}
+                    onChange={(e) => onChangeExtraHO?.(i, formatBRL(e.target.value))}
+                    onBlur={() => onGravar()}
+                  />
+                </div>
+              </div>
+            )}
+          </Fragment>
         ))}
         <div className="flex flex-col gap-1 shrink-0">
           <Label className="text-xs text-muted-foreground">&nbsp;</Label>
@@ -458,8 +484,6 @@ export default function MetasConfig() {
   const isPP = tenant.isPaguePlay;
   // Dias úteis/feriados + quartis valem para os dois tenants (H.O. só na PP)
   const temConfigMes = isPP || tenant.slug === "bookplay";
-  // Metas adicionais (2ª, 3ª…) — BookPlay
-  const isBP = tenant.slug === "bookplay";
 
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
@@ -539,10 +563,24 @@ export default function MetasConfig() {
     const ho = parseBRL(v);
     setInput(id, { meta_ho: v, meta_valor: fmtNum(ho / PP_HO_PERCENTUAL) });
   }
+  // Metas extras: na PaguePlay cada uma tem o par H.O., com a mesma conversão
+  // bidirecional da meta principal. Quem vai ao banco é sempre o bruto.
   function onChangeExtra(id: string, idx: number, v: string) {
-    const atuais = [...getInput(id).extras];
-    atuais[idx] = v;
-    setInput(id, { extras: atuais });
+    const atual = getInput(id);
+    const extras = [...atual.extras];
+    extras[idx] = v;
+    if (!isPP) { setInput(id, { extras }); return; }
+    const extrasHO = [...(atual.extras_ho ?? [])];
+    extrasHO[idx] = fmtNum(parseBRL(v) * PP_HO_PERCENTUAL);
+    setInput(id, { extras, extras_ho: extrasHO });
+  }
+  function onChangeExtraHO(id: string, idx: number, v: string) {
+    const atual = getInput(id);
+    const extrasHO = [...(atual.extras_ho ?? [])];
+    extrasHO[idx] = v;
+    const extras = [...atual.extras];
+    extras[idx] = fmtNum(parseBRL(v) / PP_HO_PERCENTUAL);
+    setInput(id, { extras, extras_ho: extrasHO });
   }
   function onChangeProporcional(id: string, v: boolean) {
     setInput(id, { proporcional: v });
@@ -716,6 +754,7 @@ export default function MetasConfig() {
           meta_valor: fmtNum(v),
           meta_ho:    fmtNum(v * PP_HO_PERCENTUAL),
           extras:     extras.map(fmtNum),
+          extras_ho:  extras.map(e => fmtNum(e * PP_HO_PERCENTUAL)),
           proporcional: m.meta_proporcional === true,
           // `ativa && valor > 0` e não só a flag: a constraint do banco garante
           // o par, mas uma linha gravada antes da migration vem com a coluna no
@@ -887,10 +926,9 @@ export default function MetasConfig() {
       meta_valor: parseBRL(input.meta_valor),
       meta_acordos: 0,
       meta_proporcional: input.proporcional,
-      // Metas adicionais (BP): só as preenchidas contam; em branco é ignorado
-      ...(isBP ? {
-        metas_extras: input.extras.map(parseBRL).filter(v => v > 0),
-      } : {}),
+      // Metas extras (2ª, 3ª…), nas duas empresas desde a comissão por meta: só
+      // as preenchidas contam; em branco é ignorado.
+      metas_extras: input.extras.map(parseBRL).filter(v => v > 0),
       // Meta indireta [PP]: só para OPERADOR com Direto/Extra ativo. As duas
       // chaves só viajam quando a opção é oferecida — `fn_metas_upsert` só
       // sobrescreve as colunas quando elas vêm no payload, então a tela da
@@ -902,7 +940,7 @@ export default function MetasConfig() {
       mes,
       ano,
     };
-  }, [empresa?.id, isBP, isPP, comDiretoExtra, mes, ano]);
+  }, [empresa?.id, isPP, comDiretoExtra, mes, ano]);
 
   /**
    * Grava UMA linha, se ela mudou.
@@ -1320,13 +1358,14 @@ export default function MetasConfig() {
                   estado={estadoLinhas[setorSelecionado]}
                   disabled={!podeGerenciarMetas || metaTravada}
                   mostrarHO={isPP}
-                  numExtras={isBP ? extraCampos.setor : 0}
+                  numExtras={extraCampos.setor}
                   onChangeExtra={(i, v) => onChangeExtra(setorSelecionado, i, v)}
+                  onChangeExtraHO={(i, v) => onChangeExtraHO(setorSelecionado, i, v)}
                   onChangeValor={v => onChangeValor(setorSelecionado, v)}
                   onChangeHO={v => onChangeHO(setorSelecionado, v)}
                   proporcional={getInput(setorSelecionado).proporcional}
                   onChangeProporcional={v => onChangeProporcional(setorSelecionado, v)} />
-                {isBP && podeGerenciarMetas && (
+                {podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
                     onClick={() => setExtraCampos(p => ({ ...p, setor: p.setor + 1 }))}>
                     <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.setor + 2}ª meta
@@ -1354,14 +1393,15 @@ export default function MetasConfig() {
                     estado={estadoLinhas[eq.id]}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
-                    numExtras={isBP ? extraCampos.equipe : 0}
+                    numExtras={extraCampos.equipe}
                     onChangeExtra={(i, v) => onChangeExtra(eq.id, i, v)}
+                    onChangeExtraHO={(i, v) => onChangeExtraHO(eq.id, i, v)}
                     onChangeValor={v => onChangeValor(eq.id, v)}
                     onChangeHO={v => onChangeHO(eq.id, v)}
                     proporcional={getInput(eq.id).proporcional}
                     onChangeProporcional={v => onChangeProporcional(eq.id, v)} />
                 ))}
-                {isBP && podeGerenciarMetas && (
+                {podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
                     onClick={() => setExtraCampos(p => ({ ...p, equipe: p.equipe + 1 }))}>
                     <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.equipe + 2}ª meta (todas as equipes)
@@ -1375,6 +1415,10 @@ export default function MetasConfig() {
           <SectionCard title="Meta por Operador"
             description={`Metas individuais por operador do setor ${setorNome}`}
             icon={<User className="h-4 w-4" />} badge={operadoresVisiveis.length}>
+            <p className="text-[11px] text-muted-foreground pb-2">
+              1ª Meta = meta do operador; da 2ª em diante, as metas extras. A comissão
+              por meta usa estas faixas.
+            </p>
             {/* Filtro por equipe */}
             {equipes.length > 0 && (
               <div className="flex items-center gap-2 pb-2 mb-1 border-b border-border">
@@ -1412,8 +1456,9 @@ export default function MetasConfig() {
                     estado={estadoLinhas[op.id]}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
-                    numExtras={isBP ? extraCampos.operador : 0}
+                    numExtras={extraCampos.operador}
                     onChangeExtra={(i, v) => onChangeExtra(op.id, i, v)}
+                    onChangeExtraHO={(i, v) => onChangeExtraHO(op.id, i, v)}
                     onChangeValor={v => onChangeValor(op.id, v)}
                     onChangeHO={v => onChangeHO(op.id, v)}
                     proporcional={getInput(op.id).proporcional}
@@ -1423,7 +1468,7 @@ export default function MetasConfig() {
                     onChangeIndireta={v => onChangeIndireta(op.id, v)}
                     onChangeIndiretaHO={v => onChangeIndiretaHO(op.id, v)} />
                 ))}
-                {isBP && podeGerenciarMetas && (
+                {podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
                     onClick={() => setExtraCampos(p => ({ ...p, operador: p.operador + 1 }))}>
                     <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.operador + 2}ª meta (todos os operadores)
