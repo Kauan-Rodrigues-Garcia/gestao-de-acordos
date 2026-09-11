@@ -44,6 +44,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useControleNumeros, type CelularComNumeros } from '@/hooks/useControleNumeros';
 import { HistoricoNumero } from '@/components/numeros/HistoricoNumero';
 import { DialogoExcluirNumero } from '@/components/numeros/DialogoExcluirNumero';
+import { DialogoExcluirCelular } from '@/components/numeros/DialogoExcluirCelular';
 import { EtiquetaTratamento } from '@/components/numeros/EtiquetasNumero';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import { MOTIVO_LABELS, esperaTratamento } from '@/services/numeros/numerosRegras';
@@ -65,6 +66,7 @@ export default function ControleNumeros() {
 
   const [celularEmEdicao, setCelularEmEdicao] = useState<CelularComNumeros | null>(null);
   const [celularAberto, setCelularAberto]     = useState(false);
+  const [celularParaExcluir, setCelularParaExcluir] = useState<CelularComNumeros | null>(null);
   const [historico, setHistorico] = useState<{ id: string; numero: string } | null>(null);
 
   /*
@@ -203,6 +205,7 @@ export default function ControleNumeros() {
             podeAdministrar={podeAdministrar}
             onNovoCelular={() => { setCelularEmEdicao(null); setCelularAberto(true); }}
             onEditarCelular={a => { setCelularEmEdicao(a); setCelularAberto(true); }}
+            onExcluirCelular={setCelularParaExcluir}
             onNovoNumero={a => setDialogoNumero({ aparelho: a, numero: null })}
             onVerHistorico={(id, numero) => setHistorico({ id, numero })}
             onCorrigirNumero={(a, n) => setDialogoNumero({ aparelho: a, numero: n })}
@@ -245,6 +248,12 @@ export default function ControleNumeros() {
         autor={autor}
         onFechar={() => setCelularAberto(false)}
         onSalvo={() => void recarregar()}
+      />
+
+      <DialogoExcluirCelular
+        aparelho={celularParaExcluir}
+        onFechar={() => setCelularParaExcluir(null)}
+        onExcluido={() => void recarregar()}
       />
 
       <DialogoNumero

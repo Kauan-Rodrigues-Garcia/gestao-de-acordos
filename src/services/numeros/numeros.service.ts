@@ -538,6 +538,47 @@ export async function excluirNumero(id: string): Promise<Resultado> {
   return { ok: true };
 }
 
+/**
+ * Apaga um aparelho cadastrado por engano — e os números dele junto.
+ *
+ * Os números apontam para o aparelho com `ON DELETE RESTRICT`: com número
+ * dentro, o banco recusa apagar o aparelho. Por isso os números saem primeiro.
+ *
+ * A exclusão dos números é UMA instrução. `fn_numeros_pode_excluir` recusa o que
+ * já circulou por um setor, e uma recusa derruba a instrução inteira — ou saem
+ * todos, ou nenhum, e a frase do banco chega na tela. O aparelho vai na segunda
+ * ida; se ela falhar, sobra o aparelho vazio, e tentar de novo termina o
+ * trabalho.
+ *
+ * `select` depois do `delete`: a RLS não dá erro para a linha que a pessoa não
+ * pode apagar — simplesmente não apaga. Sem conferir, a tela diria «excluído»
+ * de um aparelho que continua lá.
+ */
+export async function excluirCelular(celularId: string): Promise<Resultado> {
+  const { error: erroNumeros } = await db
+    .from('numeros_whatsapp').delete().eq('celular_id', celularId);
+  if (erroNumeros) return falha(erroNumeros);
+
+  const { data, error } = await db
+    .from('numeros_celulares').delete().eq('id', celularId).select('id');
+  if (error) {
+    if ((error as ErroPostgres).code === '23503') {
+      return {
+        ok: false,
+        erro: 'Este celular ainda tem números. Atualize a página e tente de novo.',
+      };
+    }
+    return falha(error);
+  }
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      erro: 'O celular não foi excluído: ele não existe mais, ou você não tem permissão.',
+    };
+  }
+  return { ok: true };
+}
+
 // ── As transições ────────────────────────────────────────────────────────────
 
 type ChamadaRpc = (nome: string, args: Record<string, unknown>) =>

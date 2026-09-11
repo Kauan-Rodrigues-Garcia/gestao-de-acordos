@@ -16,6 +16,13 @@
  * As duas ações só existem enquanto o número está no Núcleo e sem operador —
  * ver `podeCorrigirNumero` e `podeExcluirNumero`. Quem recusa de verdade são as
  * triggers `fn_numeros_whatsapp_valida` e `fn_numeros_pode_excluir`.
+ *
+ * ## Excluir o aparelho
+ *
+ * A lixeira do cabeçalho abre `DialogoExcluirCelular`, que leva os números junto
+ * quando todos eles ainda podem sair do cadastro. Ela fica visível mesmo quando
+ * não pode: o diálogo diz o que impede, em vez de a pessoa procurar um botão que
+ * sumiu sem explicação.
  */
 import { Plus, Pencil, Smartphone, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +45,7 @@ export interface ListaCelularesProps {
   podeAdministrar: boolean;
   onNovoCelular: () => void;
   onEditarCelular: (a: CelularComNumeros) => void;
+  onExcluirCelular: (a: CelularComNumeros) => void;
   onNovoNumero: (a: CelularComNumeros) => void;
   onVerHistorico: (numeroId: string, numero: string) => void;
   onCorrigirNumero: (a: CelularComNumeros, n: NumeroRow) => void;
@@ -46,7 +54,7 @@ export interface ListaCelularesProps {
 
 export function ListaCelulares({
   aparelhos, nomeDoSetor, podeAdministrar,
-  onNovoCelular, onEditarCelular, onNovoNumero, onVerHistorico,
+  onNovoCelular, onEditarCelular, onExcluirCelular, onNovoNumero, onVerHistorico,
   onCorrigirNumero, onExcluirNumero,
 }: ListaCelularesProps) {
   return (
@@ -90,13 +98,24 @@ export function ListaCelulares({
                       {a.numeros.length}/{LIMITE_POR_CELULAR}
                     </Badge>
                     {podeAdministrar && (
-                      <Button
-                        size="icon" variant="ghost" className="h-7 w-7"
-                        onClick={() => onEditarCelular(a)}
-                        aria-label={`Editar ${a.celular.identificacao}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <>
+                        <Button
+                          size="icon" variant="ghost" className="h-7 w-7"
+                          onClick={() => onEditarCelular(a)}
+                          aria-label={`Editar ${a.celular.identificacao}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon" variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => onExcluirCelular(a)}
+                          aria-label={`Excluir ${a.celular.identificacao}`}
+                          title="Excluir celular"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

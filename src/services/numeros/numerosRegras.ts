@@ -288,6 +288,20 @@ export function podeExcluirNumero(n: EstadoNumero, jaCirculou = false): boolean 
 }
 
 /**
+ * Dá para apagar este APARELHO do cadastro?
+ *
+ * Os números apontam para o aparelho com `ON DELETE RESTRICT`, então apagar o
+ * aparelho é apagar os números dele junto — e isso só vale quando cada um pode
+ * sair (`podeExcluirNumero`). Aparelho vazio sai sempre.
+ *
+ * A mesma limitação do predicado de número: a tela não sabe se algum já
+ * circulou e voltou. O banco sabe, e recusa a exclusão inteira.
+ */
+export function podeExcluirCelular(numeros: readonly EstadoNumero[]): boolean {
+  return numeros.every(n => podeExcluirNumero(n));
+}
+
+/**
  * A liderança pode lançar este número a um operador?
  *
  * Vale também para TROCAR o operador de um número já lançado — é a mesma ação,
