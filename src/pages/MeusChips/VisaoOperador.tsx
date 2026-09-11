@@ -16,15 +16,20 @@
  * A diferença importa no dia em que um número for banido: o operador avisa em
  * dois cliques, com motivo, e o líder decide se vale devolver ao Núcleo ou
  * passar para outra pessoa.
+ *
+ * ## O tempo da situação aparece para ele também
+ *
+ * Quem marca «Aguardando 12 horas» ou «Em restrição» é o Núcleo, mas quem vai
+ * usar o número é o operador: a contagem regressiva diz a ele quando o número
+ * volta a servir, sem precisar perguntar a ninguém.
  */
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Undo2, Hash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  EtiquetaSituacao, EtiquetasOperacionais,
-} from '@/components/numeros/EtiquetasNumero';
+import { EtiquetasOperacionais } from '@/components/numeros/EtiquetasNumero';
+import { SituacaoDoNumero } from '@/components/numeros/SituacaoDoNumero';
 import { DialogoMotivoRetorno } from '@/components/numeros/DialogoMotivoRetorno';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import { podeDevolverALideranca, type MotivoRetorno } from '@/services/numeros/numerosRegras';
@@ -92,7 +97,7 @@ export function VisaoOperador({
                   é justamente o aviso de que aquele número não vai funcionar
                   agora, e escondê-lo faria a pessoa descobrir tentando. */}
               <div className="flex flex-wrap items-center gap-1.5">
-                <EtiquetaSituacao situacao={n.situacao} />
+                <SituacaoDoNumero numero={n} />
                 <EtiquetasOperacionais etiquetas={n.etiquetas} />
               </div>
 

@@ -39,20 +39,128 @@
 // ── Situação ────────────────────────────────────────────────────────────────
 
 /**
- * As três situações, e a lista é curta porque o pedido manda ser.
+ * As situações de um número.
  *
  * Cada uma responde a uma pergunta que alguém faz de verdade: «já dá para
- * usar?», «está em uso?», «morreu?». Um quarto status só entra aqui quando
- * houver uma quarta pergunta.
+ * usar?», «está em uso?», «morreu?». As quatro de 11/09/2026 respondem a mais
+ * uma — «quanto falta?» —, e por isso carregam tempo:
+ *
+ *   aguardando_12h / _24h .. o WhatsApp pede espera; o prazo é fixo, e quem o
+ *                            calcula é o banco, na hora em que a situação muda;
+ *   em_restricao ........... restrição temporária; quem marca informa o tempo;
+ *   movimentando_proxy ..... sem prazo — conta há quanto tempo está no proxy.
+ *
+ * Quem marca é o Núcleo (`numeros_administrar`), no Controle de Números e em
+ * Meus Chips. O fim do prazo NÃO troca a situação: ela ganha o selo «Pronto»
+ * e segue como está até alguém mudar — decisão de 11/09/2026.
  */
-export const SITUACOES = ['em_aquecimento', 'ativo', 'banido'] as const;
+export const SITUACOES = [
+  'em_aquecimento', 'ativo', 'banido',
+  'aguardando_12h', 'aguardando_24h', 'movimentando_proxy', 'em_restricao',
+] as const;
 export type Situacao = typeof SITUACOES[number];
 
 export const SITUACAO_LABELS: Record<Situacao, string> = {
-  em_aquecimento: 'Em aquecimento',
-  ativo:          'Ativo',
-  banido:         'Banido',
+  em_aquecimento:     'Em aquecimento',
+  ativo:              'Ativo',
+  banido:             'Banido',
+  aguardando_12h:     'Aguardando 12 horas',
+  aguardando_24h:     'Aguardando 24 horas',
+  movimentando_proxy: 'Movimentando no Proxy',
+  em_restricao:       'Em restrição',
 };
+
+// ── O tempo das situações ───────────────────────────────────────────────────
+
+/** As situações com prazo. O banco exige `prazo_ate` exatamente nelas. */
+export const SITUACOES_COM_PRAZO: readonly Situacao[] = [
+  'aguardando_12h', 'aguardando_24h', 'em_restricao',
+];
+
+/** As de espera: no fim do prazo o número fica «Pronto», e o banco notifica. */
+export const SITUACOES_DE_ESPERA: readonly Situacao[] = ['aguardando_12h', 'aguardando_24h'];
+
+export function temPrazo(situacao: Situacao): boolean {
+  return SITUACOES_COM_PRAZO.includes(situacao);
+}
+
+export function eEspera(situacao: Situacao): boolean {
+  return SITUACOES_DE_ESPERA.includes(situacao);
+}
+
+/** A restrição é a única em que quem marca informa o tempo. */
+export function exigeTempoInformado(situacao: Situacao): boolean {
+  return situacao === 'em_restricao';
+}
+
+/** O proxy não tem prazo: a tela conta há quanto tempo ele começou. */
+export function contaTempoDecorrido(situacao: Situacao): boolean {
+  return situacao === 'movimentando_proxy';
+}
+
+/** O maior tempo de restrição que o banco aceita: 90 dias, em minutos. */
+export const RESTRICAO_MAX_MINUTOS = 60 * 24 * 90;
+
+const UMA_HORA_MS = 3_600_000;
+const UM_DIA_MS   = 24 * UMA_HORA_MS;
+
+/**
+ * Quanto falta para o prazo, ou `null` quando não há prazo que valha.
+ *
+ * `acabou` no instante exato do prazo: a contagem em `00:00:00` e o selo ainda
+ * dizendo «aguardando» seriam duas respostas para a mesma pergunta.
+ */
+export function estadoDoPrazo(
+  prazoAte: string | null | undefined, agora: number,
+): { restanteMs: number; acabou: boolean } | null {
+  if (!prazoAte) return null;
+  const fim = new Date(prazoAte).getTime();
+  if (Number.isNaN(fim)) return null;
+  const restanteMs = Math.max(0, fim - agora);
+  return { restanteMs, acabou: restanteMs === 0 };
+}
+
+function doisDigitos(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * `11:42:05`, e `2d 03:12:44` quando passa de um dia — a restrição vai a 90.
+ *
+ * Arredonda os segundos PARA CIMA: com meio segundo restando a tela mostra
+ * `00:00:01`, e o `00:00:00` só aparece junto com o «Pronto».
+ */
+export function formatarRestante(ms: number): string {
+  const total    = Math.max(0, Math.ceil(ms / 1000));
+  const dias     = Math.floor(total / 86_400);
+  const horas    = Math.floor((total % 86_400) / 3600);
+  const minutos  = Math.floor((total % 3600) / 60);
+  const segundos = total % 60;
+  const relogio  = `${doisDigitos(horas)}:${doisDigitos(minutos)}:${doisDigitos(segundos)}`;
+  return dias > 0 ? `${dias}d ${relogio}` : relogio;
+}
+
+/**
+ * Há quanto tempo, em palavras: «menos de 1 hora», «5 horas», «1 dia», «3 dias».
+ *
+ * O pedido é «Movimentando no Proxy — 1 dia»: a unidade de quem opera é o dia.
+ * Antes de completar um, as horas dizem mais do que «0 dias».
+ */
+export function formatarDecorrido(
+  desde: string | null | undefined, agora: number,
+): string | null {
+  if (!desde) return null;
+  const inicio = new Date(desde).getTime();
+  if (Number.isNaN(inicio)) return null;
+  const ms = Math.max(0, agora - inicio);
+  if (ms < UMA_HORA_MS) return 'menos de 1 hora';
+  if (ms < UM_DIA_MS) {
+    const horas = Math.floor(ms / UMA_HORA_MS);
+    return `${horas} ${horas === 1 ? 'hora' : 'horas'}`;
+  }
+  const dias = Math.floor(ms / UM_DIA_MS);
+  return `${dias} ${dias === 1 ? 'dia' : 'dias'}`;
+}
 
 // ── Posse ───────────────────────────────────────────────────────────────────
 
@@ -93,25 +201,31 @@ export const MOTIVO_LABELS: Record<MotivoRetorno, string> = {
  * SMS de verificação não chegou, e a pessoa tem que tentar de novo mais tarde.
  * O número não mudou de qualidade — mudou o que falta fazer com ele hoje.
  *
- * Uma só, porque uma só foi pedida. A lista é `as const` e o tipo sai dela, de
- * modo que acrescentar a segunda é uma linha aqui, uma no `Record` abaixo e uma
- * no `CHECK` da migration — e o TypeScript aponta as três se faltar alguma.
+ * Duas. A segunda, «Retirada do banimento solicitada», entrou em 11/09/2026
+ * (migration 20260911170000): o banimento continua sendo `situacao`; o que a
+ * etiqueta diz é que alguém já pediu ao WhatsApp para retirá-lo — o que falta
+ * fazer é esperar, e não pedir de novo. A lista é `as const` e o tipo sai dela:
+ * a próxima é uma linha aqui, uma em cada `Record` abaixo e uma no `CHECK` da
+ * migration, e o TypeScript aponta se faltar alguma.
  *
  * O que NÃO entra aqui: etiqueta que duplique `situacao` («ativo», «morto») ou
  * `motivo_retorno` («banido»). Duas colunas para o mesmo fato voltam a
  * discordar, que é o defeito que a migration 20260910210000 foi corrigir.
  */
-export const ETIQUETAS = ['nao_chegou_sms'] as const;
+export const ETIQUETAS = ['nao_chegou_sms', 'retirada_banimento_solicitada'] as const;
 export type Etiqueta = typeof ETIQUETAS[number];
 
 export const ETIQUETA_LABELS: Record<Etiqueta, string> = {
-  nao_chegou_sms: 'Não chegou SMS',
+  nao_chegou_sms:                'Não chegou SMS',
+  retirada_banimento_solicitada: 'Retirada do banimento solicitada',
 };
 
 /** O que a etiqueta significa para quem vai agir. Vira `title` na tela. */
 export const ETIQUETA_DESCRICOES: Record<Etiqueta, string> = {
   nao_chegou_sms:
     'O SMS de verificação não chegou. Tentar de novo em outro horário.',
+  retirada_banimento_solicitada:
+    'Já foi pedido ao WhatsApp que retire o banimento. Aguardar a resposta antes de pedir de novo.',
 };
 
 /** Veio do banco uma etiqueta que esta versão da tela conhece? */

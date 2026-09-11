@@ -24,10 +24,15 @@ import {
 } from '@/services/numeros/numerosRegras';
 import type { CelularComNumeros } from '@/hooks/useControleNumeros';
 
+/** Os mesmos tons das etiquetas de situação (`CORES_SITUACAO`), em cheio. */
 const COR_DA_CASA: Record<Situacao, string> = {
-  em_aquecimento: 'bg-warning',
-  ativo:          'bg-success',
-  banido:         'bg-destructive',
+  em_aquecimento:     'bg-warning',
+  ativo:              'bg-success',
+  banido:             'bg-destructive',
+  aguardando_12h:     'bg-sky-400',
+  aguardando_24h:     'bg-sky-600',
+  movimentando_proxy: 'bg-violet-500',
+  em_restricao:       'bg-orange-500',
 };
 
 export interface ParedeDeAparelhosProps {

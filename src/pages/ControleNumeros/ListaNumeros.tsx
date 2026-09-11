@@ -68,12 +68,14 @@ import {
   SITUACOES, SITUACAO_LABELS, LIMITE_POR_CELULAR,
   podeLiberarAoSetor, podeCorrigirNumero, podeExcluirNumero,
   podeConcluirTratamento, esperaTratamento, foiLancadoAoSetor,
-  type Situacao, type Posse,
+  type Posse,
 } from '@/services/numeros/numerosRegras';
 import {
-  alterarSituacao, liberarAoSetor, iniciarTratamento, concluirTratamento,
+  liberarAoSetor, iniciarTratamento, concluirTratamento,
   type NumeroRow,
 } from '@/services/numeros/numeros.service';
+import { SeletorSituacao } from '@/components/numeros/SeletorSituacao';
+import { SituacaoDoNumero } from '@/components/numeros/SituacaoDoNumero';
 import type { CelularComNumeros } from '@/hooks/useControleNumeros';
 
 const TODOS = '__todos__';
@@ -172,25 +174,14 @@ export function ListaNumeros({
         </TableCell>
 
         <TableCell>
+          {/* O seletor traz o cronômetro junto: esperas e restrição contam o
+              prazo, o proxy conta há quanto tempo. Ver `SeletorSituacao`. */}
           {podeAdministrar ? (
-            <Select
-              value={n.situacao}
-              onValueChange={v => void executar(
-                n, () => alterarSituacao(n.id, v as Situacao),
-                `${mascararNumero(n.numero)} agora está ${SITUACAO_LABELS[v as Situacao].toLowerCase()}.`,
-                'Não foi possível alterar.',
-              )}
-              disabled={ocupadoAgora}
-            >
-              <SelectTrigger className="h-8 w-[160px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {SITUACOES.map(s => (
-                  <SelectItem key={s} value={s}>{SITUACAO_LABELS[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SeletorSituacao numero={n} onMudou={onMudou} />
           ) : (
-            <span className="text-sm">{SITUACAO_LABELS[n.situacao]}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <SituacaoDoNumero numero={n} />
+            </div>
           )}
         </TableCell>
 

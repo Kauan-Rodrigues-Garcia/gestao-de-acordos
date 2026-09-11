@@ -123,6 +123,9 @@ export default function MeusChips() {
           pessoas={pessoas}
           podeLancar={temPermissao('chips_lancar_ao_operador')}
           podeRelancar={temPermissao('chips_relancar_ao_nucleo')}
+          // A situação e as etiquetas são do Núcleo (o Assistente ADM), aqui e
+          // no Controle de Números. Quem recusa de verdade são as RPCs.
+          podeAlterarSituacao={temPermissao('numeros_administrar')}
           // Espelho de `fn_numeros_manda_no_setor`: o próprio setor, com o
           // acesso total atravessando. Quem recusa de verdade segue sendo o banco.
           podeAgirNoSetor={setorId => isAdmin || setorId === meuSetor}

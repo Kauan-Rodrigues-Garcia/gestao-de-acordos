@@ -99,6 +99,18 @@ export interface NumeroRow {
   etiquetas: Etiqueta[];
   /** Em que pé está o retorno. `null` quando não há nada pendente. */
   tratamento: Tratamento | null;
+  /*
+   * O tempo da situação (migration 20260911170000), mantido por gatilho no banco.
+   * Opcionais porque, antes da migration, as colunas não existem e não chegam.
+   */
+  /** Desde quando a situação atual vale — o proxy conta daqui. */
+  situacao_desde?: string | null;
+  /** Fim do prazo das esperas e da restrição; `null` nas outras situações. */
+  prazo_ate?: string | null;
+  /** Quando o banco avisou que o prazo acabou. `null` enquanto não avisou. */
+  prazo_notificado_em?: string | null;
+  /** Quem marcou a situação atual. Recebe o aviso de «Pronto». */
+  situacao_por?: string | null;
   criado_por: string | null;
   criado_por_nome: string | null;
   criado_em: string;
@@ -805,10 +817,17 @@ export function relancarAoNucleo(
  * Vale a qualquer momento, inclusive com o número em tratamento — é o ponto do
  * pedido: **alterar o estado e lançar ao setor são ações diferentes**, e o
  * Núcleo não precisa lançar nada para conseguir mexer na situação.
+ *
+ * `prazoMinutos` é o tempo da restrição, e só ela o manda: as esperas de 12 e
+ * 24 horas têm prazo fixo, calculado no banco. Omitido nas outras situações, a
+ * chamada casa também com a assinatura de antes da migration 20260911170000.
  */
-export function alterarSituacao(numeroId: string, situacao: Situacao): Promise<Resultado> {
+export function alterarSituacao(
+  numeroId: string, situacao: Situacao, prazoMinutos?: number,
+): Promise<Resultado> {
   return chamar('fn_numeros_alterar_situacao', {
     p_numero_id: numeroId, p_situacao: situacao,
+    ...(prazoMinutos !== undefined ? { p_prazo_minutos: prazoMinutos } : {}),
   });
 }
 

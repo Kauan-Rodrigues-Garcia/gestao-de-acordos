@@ -34,7 +34,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowRight, Ban, CheckCircle2, Flame, Hash, Send, Timer, Trash2, Wrench,
+  AlertTriangle, ArrowRight, Ban, CheckCircle2, Flame, Hash, Send, Timer, Trash2, Waypoints, Wrench,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -273,10 +273,7 @@ export default function DashboardAdm() {
       {/* ── 2. O acervo, hoje ────────────────────────────────────────────── */}
       <section className="space-y-3" aria-label="O acervo hoje">
         <TituloDeSecao detalhe="o acervo agora">Hoje</TituloDeSecao>
-        <div className={cn(
-          'grid grid-cols-2 gap-3 sm:grid-cols-3',
-          podeVerLixeira ? 'lg:grid-cols-6' : 'lg:grid-cols-5',
-        )}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Indicador icone={Hash} rotulo="Números" valor={acervo.total}
             detalhe={`${acervo.noNucleo.toLocaleString('pt-BR')} no Núcleo`} />
           <Indicador icone={Flame} tom="aquecendo" rotulo="Em aquecimento" valor={acervo.aquecendo}
@@ -287,6 +284,12 @@ export default function DashboardAdm() {
             detalhe={`${distribuicao.reduce((s, d) => s + d.comOperador, 0).toLocaleString('pt-BR')} em uso`} />
           <Indicador icone={Ban} tom={acervo.banidos > 0 ? 'grave' : 'neutro'} rotulo="Banidos" valor={acervo.banidos}
             detalhe="Não voltam a circular" />
+          {/* As situações com tempo (11/09/2026). A contagem de cada número está
+              em Meus Chips e no Controle de Números; aqui, quantos há. */}
+          <Indicador icone={Timer} rotulo="Esperando prazo" valor={acervo.aguardando + acervo.emRestricao}
+            detalhe={`${acervo.aguardando} aguardando · ${acervo.emRestricao} em restrição`} />
+          <Indicador icone={Waypoints} rotulo="No proxy" valor={acervo.noProxy}
+            detalhe="Movimentando no Proxy" />
           {podeVerLixeira && (
             <Indicador icone={Trash2} rotulo="Na lixeira" valor={lixeira.itens.length}
               detalhe="Excluídos que ainda dá para restaurar" />

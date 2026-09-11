@@ -49,8 +49,12 @@ const noSetorLivre    = numero({ situacao: 'ativo', posse: 'setor' });
 const comOperador     = numero({ situacao: 'ativo', posse: 'setor', operadorId: 'op-1' });
 
 describe('o catálogo de estados', () => {
-  it('tem só as três situações que a operação usa hoje', () => {
-    expect(SITUACOES).toEqual(['em_aquecimento', 'ativo', 'banido']);
+  it('tem as três situações de sempre e as quatro com tempo', () => {
+    // As quatro de 11/09/2026 — ver `numerosPrazo.test.ts` para o tempo delas.
+    expect(SITUACOES).toEqual([
+      'em_aquecimento', 'ativo', 'banido',
+      'aguardando_12h', 'aguardando_24h', 'movimentando_proxy', 'em_restricao',
+    ]);
   });
 
   it('tem só os dois lugares onde um número pode estar', () => {
@@ -193,12 +197,14 @@ describe('as etiquetas operacionais', () => {
     expect(Object.keys(ETIQUETA_LABELS).sort()).toEqual([...ETIQUETAS].sort());
   });
 
-  it('«Não chegou SMS» existe — é a que o pedido nomeou', () => {
+  it('as duas que os pedidos nomearam existem', () => {
     expect(ETIQUETAS).toContain('nao_chegou_sms');
+    // 11/09/2026: o pedido de retirada do banimento já foi feito ao WhatsApp.
+    expect(ETIQUETAS).toContain('retirada_banimento_solicitada');
   });
 
   it('não nasceram etiquetas que ninguém pediu', () => {
-    expect(ETIQUETAS).toHaveLength(1);
+    expect(ETIQUETAS).toHaveLength(2);
   });
 
   it('nenhuma etiqueta duplica situação ou motivo de retorno', () => {

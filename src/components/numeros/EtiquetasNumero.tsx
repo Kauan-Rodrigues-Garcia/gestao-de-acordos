@@ -8,17 +8,12 @@
  */
 import { Send, Tag, Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { CORES_SITUACAO } from './coresSituacao';
 import {
   SITUACAO_LABELS, POSSE_LABELS, MOTIVO_LABELS,
   ETIQUETA_LABELS, ETIQUETA_DESCRICOES, TRATAMENTO_LABELS, etiquetasConhecidas,
   type Situacao, type Posse, type MotivoRetorno, type Tratamento,
 } from '@/services/numeros/numerosRegras';
-
-const CORES_SITUACAO: Record<Situacao, string> = {
-  em_aquecimento: 'bg-warning/15 text-warning border-warning/30',
-  ativo:          'bg-success/15 text-success border-success/30',
-  banido:         'bg-destructive/15 text-destructive border-destructive/30',
-};
 
 export function EtiquetaSituacao({ situacao }: { situacao: Situacao }) {
   return (

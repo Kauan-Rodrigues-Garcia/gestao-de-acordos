@@ -157,6 +157,18 @@ describe('o acervo, hoje', () => {
     expect(retratoDoAcervo(acervo)).toEqual({
       total: 7, ativos: 5, aquecendo: 1, banidos: 1,
       noNucleo: 3, nosSetores: 4, prontos: 1, esperando: 1, tratando: 1,
+      aguardando: 0, emRestricao: 0, noProxy: 0,
+    });
+  });
+
+  it('as situações com tempo têm contagem própria, e não passam por «pronto para liberar»', () => {
+    expect(retratoDoAcervo([
+      numero({ id: 'a', situacao: 'aguardando_12h' }),
+      numero({ id: 'b', situacao: 'aguardando_24h' }),
+      numero({ id: 'c', situacao: 'em_restricao' }),
+      numero({ id: 'd', situacao: 'movimentando_proxy' }),
+    ])).toMatchObject({
+      total: 4, aguardando: 2, emRestricao: 1, noProxy: 1, ativos: 0, prontos: 0,
     });
   });
 

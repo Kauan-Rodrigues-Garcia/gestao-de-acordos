@@ -10,7 +10,7 @@
  * não consegue provar quais são usados.
  */
 import {
-  MessageSquare, Headset, Zap, Link2, FileText, Upload, Info,
+  MessageSquare, Headset, Zap, Link2, FileText, Upload, Smartphone, Info,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -19,7 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const ICONES: Record<string, LucideIcon> = {
-  MessageSquare, Headset, Zap, Link2, FileText, Upload, Info,
+  MessageSquare, Headset, Zap, Link2, FileText, Upload, Smartphone, Info,
 };
 
 /** O componente do ícone de uma categoria. `Info` cobre o que faltar. */

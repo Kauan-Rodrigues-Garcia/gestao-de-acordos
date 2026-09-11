@@ -40,6 +40,7 @@ export type CategoriaNotificacao =
   | 'vinculo'     // direto/extra, NR, transferência de titularidade
   | 'acordo'      // o acordo em si: status, atraso, transferência
   | 'importacao'  // planilha, analítico, recebimento diário
+  | 'numeros'     // Controle de Números e Meus Chips: prazo de espera vencido
   | 'sistema';    // o que não se encaixa — ver o cabeçalho
 
 /**
@@ -67,6 +68,7 @@ export const CATEGORIA_LABEL: Record<CategoriaNotificacao, string> = {
   vinculo:     'Vínculos',
   acordo:      'Acordos',
   importacao:  'Importações',
+  numeros:     'Números',
   sistema:     'Sistema',
 };
 
@@ -84,6 +86,7 @@ export const CATEGORIA_ICONE: Record<CategoriaNotificacao, string> = {
   vinculo:     'Link2',
   acordo:      'FileText',
   importacao:  'Upload',
+  numeros:     'Smartphone',
   sistema:     'Info',
 };
 
@@ -101,6 +104,7 @@ export const CATEGORIA_COR: Record<CategoriaNotificacao, string> = {
   vinculo:     'bg-fuchsia-500/12 text-fuchsia-500 ring-fuchsia-500/25',
   acordo:      'bg-emerald-500/12 text-emerald-500 ring-emerald-500/25',
   importacao:  'bg-teal-500/12 text-teal-500 ring-teal-500/25',
+  numeros:     'bg-indigo-500/12 text-indigo-500 ring-indigo-500/25',
   sistema:     'bg-muted text-muted-foreground ring-border',
 };
 
@@ -165,6 +169,14 @@ interface Regra {
  * o esquecimento aparece na suíte.
  */
 const REGRAS: readonly Regra[] = [
+  // ── Números (BookPlay) — fn_numeros_avisar_prazos, 20260911170000 ────────
+  // O prazo de espera acabou e o número está pronto para voltar a ser usado.
+  // Pede olho, mas ninguém perdeu nada: atenção, e não crítica.
+  {
+    casa: t => t.startsWith('numero pronto'),
+    tipo: { categoria: 'numeros', urgencia: 'atencao' },
+  },
+
   // ── Conversa (PaguePlay) — trigger fn_wpp_notificar_mensagem, 20260731a ──
   {
     casa: t => t.startsWith('nova mensagem'),

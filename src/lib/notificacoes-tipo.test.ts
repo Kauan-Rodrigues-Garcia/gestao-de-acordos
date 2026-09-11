@@ -35,6 +35,8 @@ const INVENTARIO: Caso[] = [
   ['Acordo Pix desaprovado — NR 12345', '/acordos?tab=pix', 'pix', 'critica'],
   // 20260811c — fn_pix_registrar_exclusao
   ['Pix automático — registro excluído', '/acordos?tab=pix', 'pix', 'critica'],
+  // 20260911170000 — fn_numeros_avisar_prazos
+  ['Número pronto — (18) 99999-9999', '/meus-chips', 'numeros', 'atencao'],
 
   // ── Produtores em TypeScript ──────────────────────────────────────────────
   // tratarExclusaoVinculo.ts / desligamento.service.ts

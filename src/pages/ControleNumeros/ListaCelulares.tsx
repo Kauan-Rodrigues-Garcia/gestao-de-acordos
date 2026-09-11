@@ -30,9 +30,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  EtiquetaSituacao, EtiquetaPosse, EtiquetaMotivo,
+  EtiquetaPosse, EtiquetaMotivo,
   EtiquetaTratamento, EtiquetasOperacionais,
 } from '@/components/numeros/EtiquetasNumero';
+import { SituacaoDoNumero } from '@/components/numeros/SituacaoDoNumero';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import {
   LIMITE_POR_CELULAR, podeCorrigirNumero, podeExcluirNumero,
@@ -143,7 +144,7 @@ export function ListaCelulares({
                           >
                             {mascararNumero(n.numero)}
                           </button>
-                          <EtiquetaSituacao situacao={n.situacao} />
+                          <SituacaoDoNumero numero={n} />
                           <EtiquetaPosse posse={n.posse} />
                           <EtiquetaTratamento tratamento={n.tratamento} />
                           <EtiquetaMotivo motivo={n.motivo_retorno} />

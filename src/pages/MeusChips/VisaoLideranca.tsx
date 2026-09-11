@@ -43,9 +43,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  EtiquetaSituacao, EtiquetaMotivo, EtiquetasOperacionais,
+  EtiquetaMotivo, EtiquetasOperacionais,
 } from '@/components/numeros/EtiquetasNumero';
 import { DialogoMotivoRetorno } from '@/components/numeros/DialogoMotivoRetorno';
+import { SeletorEtiquetas } from '@/components/numeros/SeletorEtiquetas';
+import { SeletorSituacao } from '@/components/numeros/SeletorSituacao';
+import { SituacaoDoNumero } from '@/components/numeros/SituacaoDoNumero';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import { podeLancarAoOperador, type MotivoRetorno } from '@/services/numeros/numerosRegras';
 import {
@@ -102,13 +105,21 @@ export interface VisaoLiderancaProps {
    * a uma recusa do banco. Ausente, vale para todos — o comportamento de antes.
    */
   podeAgirNoSetor?: (setorId: string) => boolean;
+  /**
+   * Situação e etiquetas de cada número. São do Núcleo (`numeros_administrar`)
+   * — o Assistente ADM acompanha aqui os números que estão com os setores — e
+   * valem em qualquer setor: `fn_numeros_alterar_situacao` confere o Núcleo, e
+   * não o setor de quem age. Ausente, a tela só mostra a situação e o tempo.
+   */
+  podeAlterarSituacao?: boolean;
   onMudou: () => void;
   onVerHistorico: (numeroId: string, numero: string) => void;
 }
 
 export function VisaoLideranca({
   empresaId, semOperador, comOperador, nomeDoCelular, pessoas,
-  podeLancar, podeRelancar, podeAgirNoSetor = () => true, onMudou, onVerHistorico,
+  podeLancar, podeRelancar, podeAgirNoSetor = () => true, podeAlterarSituacao = false,
+  onMudou, onVerHistorico,
 }: VisaoLiderancaProps) {
   const [paraLancar, setParaLancar]     = useState<NumeroRow | null>(null);
   const [paraRelancar, setParaRelancar] = useState<NumeroRow | null>(null);
@@ -195,9 +206,15 @@ export function VisaoLideranca({
     return (
       <>
         <div className="flex flex-wrap items-center gap-1.5">
-          <EtiquetaSituacao situacao={n.situacao} />
+          {/* O Núcleo troca a situação e as etiquetas daqui mesmo; o resto vê a
+              situação com o tempo dela — a contagem das esperas e da restrição,
+              ou há quanto tempo o número está no proxy. */}
+          {podeAlterarSituacao
+            ? <SeletorSituacao numero={n} onMudou={onMudou} />
+            : <SituacaoDoNumero numero={n} />}
           <EtiquetaMotivo motivo={n.motivo_retorno} />
           <EtiquetasOperacionais etiquetas={n.etiquetas} />
+          {podeAlterarSituacao && <SeletorEtiquetas numero={n} onMudou={onMudou} />}
         </div>
         {n.observacao_retorno && (
           <p className="mt-1 max-w-[28ch] truncate text-xs text-muted-foreground"

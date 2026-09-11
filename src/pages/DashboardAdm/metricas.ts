@@ -223,17 +223,27 @@ export interface RetratoDoAcervo {
   esperando: number;
   /** Voltou e o Núcleo está tratando. */
   tratando: number;
+  /** Aguardando 12 ou 24 horas. */
+  aguardando: number;
+  /** Em restrição temporária. */
+  emRestricao: number;
+  /** Movimentando no proxy. */
+  noProxy: number;
 }
 
 export function retratoDoAcervo(numeros: readonly NumeroRow[]): RetratoDoAcervo {
   const r: RetratoDoAcervo = {
     total: numeros.length, ativos: 0, aquecendo: 0, banidos: 0,
     noNucleo: 0, nosSetores: 0, prontos: 0, esperando: 0, tratando: 0,
+    aguardando: 0, emRestricao: 0, noProxy: 0,
   };
   for (const n of numeros) {
     if (n.situacao === 'ativo') r.ativos++;
     if (n.situacao === 'em_aquecimento') r.aquecendo++;
     if (n.situacao === 'banido') r.banidos++;
+    if (n.situacao === 'aguardando_12h' || n.situacao === 'aguardando_24h') r.aguardando++;
+    if (n.situacao === 'em_restricao') r.emRestricao++;
+    if (n.situacao === 'movimentando_proxy') r.noProxy++;
     if (n.posse === 'nucleo') {
       r.noNucleo++;
       if (n.situacao === 'ativo' && n.tratamento === null) r.prontos++;
