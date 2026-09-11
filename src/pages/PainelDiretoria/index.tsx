@@ -54,6 +54,7 @@ import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types'
  */
 const Mestre59 = lazy(() => import('./Mestre59'));
 const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
+const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
 
 /**
  * As abas do painel.
@@ -63,7 +64,7 @@ const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
  * conferência de super_admin, e `codigos` é onde o código do ERP amarra cada
  * setor à sua carteira do 59.
  */
-type AbaDoPainel = 'visao' | 'setores' | 'painel' | 'mestre' | 'codigos';
+type AbaDoPainel = 'visao' | 'setores' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
 
 /**
  * Painel Diretoria.
@@ -337,6 +338,7 @@ export default function PainelDiretoria() {
    * virando esta chave, sem reescrever nada.
    */
   const usaPainel59 = tenant.slug === 'bookplay';
+  const podeVerRelatorioPP = isPP && temPermissao('ver_painel_diretoria') && temPermissao('painel_diretoria_escopo_todos_setores');
   const [aba, setAba] = useState<AbaDoPainel>(usaPainel59 ? 'visao' : 'painel');
   /*
    * O botão «Atualizar» do cabeçalho para as abas do 59. Um contador em vez de
@@ -350,7 +352,7 @@ export default function PainelDiretoria() {
    * cair numa aba que não existe naquele tenant também não.
    */
   const abaVisivel: AbaDoPainel =
-    !usaPainel59            ? 'painel'
+    !usaPainel59            ? (aba === 'relatorioPP' && podeVerRelatorioPP ? 'relatorioPP' : 'painel')
     : aba === 'mestre'      ? (podeVerMestre ? 'mestre' : 'visao')
     : aba === 'codigos'     ? (podeVerMestre ? 'codigos' : 'visao')
     : aba === 'painel'      ? 'visao'   // o painel antigo saiu do ar na BookPlay
@@ -388,9 +390,9 @@ export default function PainelDiretoria() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="rounded-xl border border-border/50 bg-background/60 px-1.5 h-9 flex items-center">
+            {abaVisivel !== 'relatorioPP' && <div className="rounded-xl border border-border/50 bg-background/60 px-1.5 h-9 flex items-center">
               <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
-            </div>
+            </div>}
             {/* Só no painel antigo: este filtro alimenta `useAnalytics`, e a
                 Visão Geral lê o 59 inteiro de propósito. Deixá-lo visível ali
                 seria um controle que não faz nada — pior que não ter. */}
@@ -411,7 +413,7 @@ export default function PainelDiretoria() {
                  `useAnalytics`, então `refetch()` ali não traria nada — o botão
                  girava e a tela continuava igual. */
               onClick={() => {
-                if (abaDo59) { setVersaoVisao(v => v + 1); return; }
+                if (abaDo59 || abaVisivel === 'relatorioPP') { setVersaoVisao(v => v + 1); return; }
                 refetch(); reloadSetoresExtras(); void analiticoDash.refetch();
               }}
               disabled={abaVisivel === 'painel' && (carregando || loadingSetores || loadingExtras)}
@@ -427,9 +429,12 @@ export default function PainelDiretoria() {
       {/* ── Abas internas ────────────────────────────────────────────────────
           A barra só existe para quem tem mais de uma aba. Um seletor com uma
           opção só é ruído — mesma regra do filtro de setor no Painel Líder. */}
-      {usaPainel59 && (
+      {(usaPainel59 || podeVerRelatorioPP) && (
         <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
-          {([
+          {(podeVerRelatorioPP ? [
+            { key: 'painel' as const, label: 'Painel', Icon: TrendingUp },
+            { key: 'relatorioPP' as const, label: 'Relatórios PaguePlay', Icon: Database },
+          ] : [
             { key: 'visao'   as const, label: 'Visão geral',        Icon: TrendingUp },
             { key: 'setores' as const, label: 'Setores e equipes',  Icon: Building2 },
             // A conferência do 59 é de super_admin: ela mostra a linha crua e
@@ -456,7 +461,11 @@ export default function PainelDiretoria() {
         </div>
       )}
 
-      {abaVisivel === 'mestre' ? (
+      {abaVisivel === 'relatorioPP' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          <RelatorioPaguePlay key={empresa?.id} empresaId={empresa?.id ?? ''} versao={versaoVisao} />
+        </Suspense>
+      ) : abaVisivel === 'mestre' ? (
         <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
           {/* `mesAnalise` é o mês do seletor do cabeçalho: as duas abas olham o
               mesmo período, senão trocar de aba trocaria o mês em silêncio. */}
