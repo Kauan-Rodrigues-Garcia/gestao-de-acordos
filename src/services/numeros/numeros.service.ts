@@ -205,6 +205,26 @@ export async function buscarConfig(empresaId: string): Promise<NumerosConfigRow 
   return (data as NumerosConfigRow | null) ?? null;
 }
 
+/**
+ * Só o id do setor apontado como Núcleo — para o cadastro de pessoas.
+ *
+ * `numeros_config` tem RLS, e quem cadastra gente nem sempre a lê. A função
+ * `fn_numeros_setor_nucleo` (migration 20260911120000) devolve só o id. Qualquer
+ * falha — inclusive a função ainda não existir no banco — vira `null`: sem saber
+ * qual setor é o Núcleo, a tela não barra ninguém, como antes do cargo existir.
+ */
+export async function buscarSetorNucleo(empresaId: string): Promise<string | null> {
+  const chamar = supabase.rpc.bind(supabase) as unknown as (
+    nome: string, args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
+  try {
+    const { data, error } = await chamar('fn_numeros_setor_nucleo', { p_empresa_id: empresaId });
+    return !error && typeof data === 'string' ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface SetorNome {
   id: string;
   nome: string;

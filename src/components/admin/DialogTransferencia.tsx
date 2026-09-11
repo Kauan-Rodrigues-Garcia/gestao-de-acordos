@@ -22,8 +22,22 @@
  * tira de equipe e de clone, deixa fantasma na equipe de origem e grava
  * registro para poder ser desfeita. Tudo isso vive em `executarTransferencia`;
  * aqui é só a escolha do destino e o aviso honesto do que vai acontecer.
+ *
+ * ## Entrar ou sair do Núcleo troca o cargo
+ *
+ * O Núcleo de Inteligência e Gestão só aceita o cargo Assistente ADM, e o
+ * Assistente ADM só existe no Núcleo (`cargoDoNucleo.ts`). Transferir alguém
+ * para lá sem trocar o cargo seria recusado pelo banco — e trocar o cargo antes,
+ * também. Os dois mudam juntos, no mesmo update:
+ *
+ *   - quem ENTRA vira Assistente ADM, e o diálogo avisa;
+ *   - quem SAI precisa de um cargo de setor, e o diálogo pede.
+ *
+ * Trocar cargo exige `usuarios_editar_cargo`: transferir não pode virar o
+ * atalho para mudar o cargo de alguém. E troca de empresa não troca cargo — a
+ * RPC que atravessa a empresa não conhece essa coluna.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowRightLeft, X, Loader2 } from 'lucide-react';
 import {
@@ -34,9 +48,15 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { supabase, type Perfil, type Setor } from '@/lib/supabase';
+import { supabase, type Perfil, type PerfilUsuario, type Setor } from '@/lib/supabase';
 import { executarTransferencia } from '@/services/admin/transferenciaUsuario.service';
 import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useSetorNucleo } from '@/hooks/useSetorNucleo';
+import {
+  CARGO_DO_NUCLEO, CARGOS_FORA_DO_NUCLEO, ajusteDeCargoNaTransferencia,
+} from '@/lib/cargoDoNucleo';
+import { PERFIL_LABELS } from '@/lib/index';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -54,12 +74,14 @@ export function DialogTransferencia({
   alvos, setores, empresaId, onFechar, onConcluida,
 }: Props) {
   const { perfil: perfilAtual } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
 
   const [destinoSetor,   setDestinoSetor]   = useState('');
   const [destinoEmpresa, setDestinoEmpresa] = useState('');
   const [setoresDestino, setSetoresDestino] = useState<Setor[]>([]);
   const [carregandoDestino, setCarregandoDestino] = useState(false);
   const [levarAcordos,   setLevarAcordos]   = useState(false);
+  const [novoCargo,      setNovoCargo]      = useState<PerfilUsuario | ''>('');
   const [empresas,       setEmpresas]       = useState<{ id: string; nome: string }[]>([]);
   const [salvando,       setSalvando]       = useState(false);
 
@@ -82,6 +104,7 @@ export function DialogTransferencia({
     setDestinoEmpresa(empresaId ?? '');
     setSetoresDestino(setores);
     setLevarAcordos(false);
+    setNovoCargo('');
   }, [alvos, empresaId, setores]);
 
   useEffect(() => {
@@ -115,6 +138,36 @@ export function DialogTransferencia({
     return () => { cancel = true; };
   }, [alvos, destinoEmpresa, empresaId, setores]);
 
+  /*
+   * O cargo de cada pessoa no destino. Ver o cabeçalho, «Entrar ou sair do
+   * Núcleo troca o cargo».
+   *
+   * O Núcleo que vale é o da empresa de DESTINO: é nela que o cargo vai ser
+   * gravado.
+   */
+  const nucleoDestino = useSetorNucleo(destinoEmpresa || empresaId);
+
+  const ajustes = useMemo(
+    () => (alvos ?? []).map(p => (destinoSetor
+      ? ajusteDeCargoNaTransferencia(p.perfil, destinoSetor, nucleoDestino)
+      : 'manter' as const)),
+    [alvos, destinoSetor, nucleoDestino],
+  );
+  const entramNoNucleo = ajustes.filter(a => a === CARGO_DO_NUCLEO).length;
+  const saemDoNucleo   = ajustes.filter(a => a === 'escolher').length;
+  const trocaCargo     = entramNoNucleo + saemDoNucleo > 0;
+
+  const bloqueioDeCargo = !trocaCargo
+    ? null
+    : trocaDeEmpresa
+      ? 'Transferência entre empresas não troca cargo. Para entrar ou sair do Núcleo, '
+        + 'transfira de setor dentro da mesma empresa.'
+      : !temPermissao('usuarios_editar_cargo')
+        ? 'Entrar ou sair do Núcleo troca o cargo, e o seu cargo não tem permissão '
+          + 'para trocar o cargo de ninguém.'
+        : null;
+  const faltaNovoCargo = saemDoNucleo > 0 && !novoCargo;
+
   /**
    * Executa a transferência de todo mundo que está selecionado.
    *
@@ -127,13 +180,20 @@ export function DialogTransferencia({
    */
   const transferir = useCallback(async () => {
     if (!alvos?.length || !destinoSetor || !empresaId) return;
+    if (bloqueioDeCargo || faltaNovoCargo) return;
     setSalvando(true);
 
     const empresaDestino = destinoEmpresa || empresaId;
-    let ok = 0, apagados = 0, movidos = 0;
+    let ok = 0, apagados = 0, movidos = 0, cargosTrocados = 0;
     const falhas: string[] = [];
 
     for (const p of alvos) {
+      const ajuste = ajusteDeCargoNaTransferencia(p.perfil, destinoSetor, nucleoDestino);
+      // `manter` não manda cargo: a transferência comum continua tocando só o setor.
+      const cargoNovo = ajuste === 'manter'
+        ? null
+        : ajuste === 'escolher' ? (novoCargo || null) : CARGO_DO_NUCLEO;
+
       const r = await executarTransferencia({
         alvo: {
           perfilId:         p.id,
@@ -147,9 +207,11 @@ export function DialogTransferencia({
         },
         levarAcordos,
         executadoPorId: perfilAtual?.id ?? null,
+        novoCargo: cargoNovo,
       });
       if (r.status === 'falha') { falhas.push(`${p.nome}: ${r.mensagem}`); continue; }
       ok++;
+      if (cargoNovo) cargosTrocados++;
       apagados += r.acordosApagados;
       movidos  += r.acordosMovidos;
       if (r.avisoRegistro) toast.warning(`${p.nome} — ${r.avisoRegistro}`, { duration: 12000 });
@@ -157,6 +219,9 @@ export function DialogTransferencia({
 
     if (ok > 0) {
       const partes = [ok === 1 ? '1 usuário transferido.' : `${ok} usuários transferidos.`];
+      if (cargosTrocados > 0) {
+        partes.push(cargosTrocados === 1 ? '1 trocou de cargo.' : `${cargosTrocados} trocaram de cargo.`);
+      }
       if (apagados > 0) {
         partes.push(`${apagados.toLocaleString('pt-BR')} tabulações apagadas (relatórios baixados).`);
       }
@@ -169,7 +234,10 @@ export function DialogTransferencia({
 
     setSalvando(false);
     if (ok > 0) onConcluida();
-  }, [alvos, destinoSetor, destinoEmpresa, empresaId, levarAcordos, perfilAtual?.id, onConcluida]);
+  }, [
+    alvos, destinoSetor, destinoEmpresa, empresaId, levarAcordos, perfilAtual?.id, onConcluida,
+    nucleoDestino, novoCargo, bloqueioDeCargo, faltaNovoCargo,
+  ]);
 
   return (
     <Dialog open={!!alvos} onOpenChange={o => { if (!o && !salvando) onFechar(); }}>
@@ -250,6 +318,41 @@ export function DialogTransferencia({
             )}
           </div>
 
+          {/* Entrar ou sair do Núcleo troca o cargo junto. Ver o cabeçalho. */}
+          {trocaCargo && (
+            <div className="space-y-1.5 rounded-md border border-primary/30 bg-primary/5 p-2.5">
+              {entramNoNucleo > 0 && (
+                <p className="text-[11px] leading-snug">
+                  {entramNoNucleo === 1
+                    ? <>Quem entra no Núcleo de Inteligência e Gestão passa a ser <strong>Assistente ADM</strong></>
+                    : <>Os {entramNoNucleo} que entram no Núcleo de Inteligência e Gestão passam a ser <strong>Assistente ADM</strong></>}
+                  {' '}— é o único cargo do setor.
+                </p>
+              )}
+              {saemDoNucleo > 0 && (
+                <>
+                  <Label className="text-xs">
+                    Novo cargo de quem sai do Núcleo <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={novoCargo} onValueChange={v => setNovoCargo(v as PerfilUsuario)}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione o cargo..." /></SelectTrigger>
+                    <SelectContent>
+                      {CARGOS_FORA_DO_NUCLEO.map(c => (
+                        <SelectItem key={c} value={c}>{PERFIL_LABELS[c] ?? c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    Assistente ADM só existe no Núcleo.
+                  </p>
+                </>
+              )}
+              {bloqueioDeCargo && (
+                <p className="text-[11px] text-destructive leading-snug">{bloqueioDeCargo}</p>
+              )}
+            </div>
+          )}
+
           {/* A escolha do destino das tabulações. Só troca de setor a tem. */}
           {!trocaDeEmpresa ? (
             <div className="space-y-1.5">
@@ -306,7 +409,12 @@ export function DialogTransferencia({
           <Button variant="outline" size="sm" onClick={onFechar} disabled={salvando}>
             <X className="w-3.5 h-3.5 mr-1" /> Cancelar
           </Button>
-          <Button size="sm" onClick={() => void transferir()} disabled={salvando || !destinoSetor} className="gap-2">
+          <Button
+            size="sm"
+            onClick={() => void transferir()}
+            disabled={salvando || !destinoSetor || !!bloqueioDeCargo || faltaNovoCargo}
+            className="gap-2"
+          >
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
             {salvando
               ? 'Transferindo...'

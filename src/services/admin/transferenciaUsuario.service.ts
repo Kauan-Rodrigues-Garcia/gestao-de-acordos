@@ -191,9 +191,20 @@ export async function executarTransferencia(params: {
   /** Só vale para troca de setor. Empresa é sempre limpa. */
   levarAcordos: boolean;
   executadoPorId: string | null;
+  /**
+   * O cargo que a pessoa passa a ter, quando a transferência atravessa a
+   * fronteira do Núcleo de Inteligência e Gestão: entrar é virar Assistente ADM,
+   * sair pede um cargo de setor. Ver `cargoDoNucleo.ts`.
+   *
+   * Vai no MESMO update do setor. `fn_perfis_cargo_do_nucleo` recusa cargo e
+   * setor fora da regra, então trocar um e depois o outro seria recusado nos
+   * dois passos. Ausente, a transferência toca só o setor, como sempre.
+   */
+  novoCargo?: string | null;
 }): Promise<ResultadoTransferencia> {
   const { alvo, executadoPorId } = params;
   const tipo = tipoDaTransferencia(alvo);
+  const novoCargo = params.novoCargo ?? null;
   // Empresa nunca leva: mover acordo entre CNPJs não é uma opção deste produto.
   const levarAcordos = tipo === 'setor' && params.levarAcordos;
 
@@ -206,6 +217,17 @@ export async function executarTransferencia(params: {
       status: 'falha',
       mensagem: 'Escolha o setor de destino. Transferir sem setor deixaria o usuário '
         + 'fora de todos os painéis por setor.',
+    };
+  }
+
+  // A RPC que atravessa a empresa não conhece cargo. Recusar AQUI, antes do
+  // relatório e de qualquer DELETE: descobrir no passo 2 deixaria o relatório
+  // baixado de uma transferência que não aconteceu.
+  if (novoCargo && tipo === 'empresa') {
+    return {
+      status: 'falha',
+      mensagem: 'Transferência entre empresas não troca cargo. Para entrar ou sair do '
+        + 'Núcleo, transfira de setor dentro da mesma empresa.',
     };
   }
 
@@ -229,7 +251,7 @@ export async function executarTransferencia(params: {
   }
 
   // ── 2. O perfil muda de lugar ─────────────────────────────────────────────
-  const moveu = await moverPerfil(alvo, tipo);
+  const moveu = await moverPerfil(alvo, tipo, novoCargo);
   if (moveu.erro) return { status: 'falha', mensagem: moveu.erro };
 
   // ── 3. Clones ─────────────────────────────────────────────────────────────
@@ -301,7 +323,7 @@ export async function executarTransferencia(params: {
  *     escrita com a empresa NOVA seria recusada mesmo com o trigger liberado.
  */
 async function moverPerfil(
-  alvo: AlvoTransferencia, tipo: 'setor' | 'empresa',
+  alvo: AlvoTransferencia, tipo: 'setor' | 'empresa', novoCargo: string | null = null,
 ): Promise<{ erro: string | null; acordosApagados: number }> {
   if (tipo === 'empresa') {
     const cliente = supabase as unknown as {
@@ -334,7 +356,12 @@ async function moverPerfil(
   // a pessoa ao card daquela equipe no mês corrente é o fantasma, não este campo.
   const { data, error } = await supabase
     .from('perfis')
-    .update({ setor_id: alvo.destinoSetorId, equipe_id: null })
+    // O cargo vai junto quando a transferência atravessa o Núcleo — ver
+    // `novoCargo` em `executarTransferencia`.
+    .update({
+      setor_id: alvo.destinoSetorId, equipe_id: null,
+      ...(novoCargo ? { perfil: novoCargo } : {}),
+    })
     .eq('id', alvo.perfilId)
     .select('id');
 
@@ -679,5 +706,8 @@ export function traduzirTransferencia(mensagem: string): string {
     return 'O setor escolhido não pertence à empresa de destino. Recarregue a tela '
       + 'e escolha de novo.';
   }
+  // A trava do cargo do Núcleo (20260911121000) já levanta a frase pronta — o
+  // prefixo genérico só a esconderia.
+  if (/Assistente ADM|N[úu]cleo de Intelig/i.test(mensagem)) return mensagem;
   return `Erro ao transferir: ${mensagem}`;
 }

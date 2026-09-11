@@ -139,3 +139,30 @@ describe('setor e empresa continuam sendo transferência', () => {
     expect(screen.getByText('Empresa inteira')).toBeInTheDocument();
   });
 });
+
+/*
+ * O Núcleo de Inteligência e Gestão tem cargo próprio (11/09/2026). Criando um
+ * Assistente ADM, o setor não é escolha: é o Núcleo, e a janela diz isso em vez
+ * de oferecer um seletor cuja outra opção o banco recusaria.
+ */
+describe('o cargo do Núcleo', () => {
+  const NUCLEO = {
+    id: 'setor-nucleo', nome: 'Núcleo de Inteligência e Gestão', ativo: true, empresa_id: 'emp-1',
+  } as Setor;
+  const COM_NUCLEO = [...SETORES, NUCLEO];
+
+  it('criando um Assistente ADM, o setor trava no Núcleo e diz por quê', () => {
+    montar({
+      editando: null,
+      form: { ...FORM, nome: '', perfil: 'assistente_adm', setor_id: NUCLEO.id },
+      setoresDoForm: COM_NUCLEO, setores: COM_NUCLEO, setorNucleoId: NUCLEO.id,
+    });
+    expect(screen.getAllByText(NUCLEO.nome).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Assistente ADM é o cargo do Núcleo/)).toBeInTheDocument();
+  });
+
+  it('sem saber qual setor é o Núcleo, o setor não trava', () => {
+    montar({ editando: null, form: { ...FORM, perfil: 'assistente_adm' }, setorNucleoId: null });
+    expect(screen.queryByText(/Assistente ADM é o cargo do Núcleo/)).not.toBeInTheDocument();
+  });
+});

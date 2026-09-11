@@ -83,7 +83,7 @@ const PERIODOS = [
 /** Cargos que o painel separa. Ordem de hierarquia, não alfabética. */
 const CARGOS = [
   'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria',
-  'rh', 'administrador', 'super_admin',
+  'rh', 'assistente_adm', 'administrador', 'super_admin',
 ] as const;
 
 /**

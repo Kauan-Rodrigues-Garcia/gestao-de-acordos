@@ -146,6 +146,49 @@ beforeEach(() => {
   perfilAtualizavel();
 });
 
+// ── Núcleo ───────────────────────────────────────────────────────────────────
+//
+// O Núcleo de Inteligência e Gestão só aceita Assistente ADM, e o Assistente ADM
+// só existe no Núcleo. Entrar ou sair troca o cargo — e os dois têm de ir no
+// mesmo update, porque a trigger recusaria cada passo separado.
+
+describe('executarTransferencia — atravessar o Núcleo troca o cargo junto', () => {
+  it('o cargo novo vai no MESMO update do setor', async () => {
+    await executarTransferencia({
+      alvo: ALVO_SETOR, levarAcordos: false, executadoPorId: 'admin-1',
+      novoCargo: 'assistente_adm',
+    });
+    const updates = ops.filter(o => o.tabela === 'perfis' && o.verbo === 'update');
+    expect(updates).toHaveLength(1);
+    expect(updates[0].payload).toEqual({
+      setor_id: PLAY_5, equipe_id: null, perfil: 'assistente_adm',
+    });
+  });
+
+  it('sem cargo novo, o update continua tocando só o setor', async () => {
+    await executarTransferencia({ alvo: ALVO_SETOR, levarAcordos: false, executadoPorId: 'admin-1' });
+    const up = ops.find(o => o.tabela === 'perfis' && o.verbo === 'update');
+    expect(up?.payload).toEqual({ setor_id: PLAY_5, equipe_id: null });
+  });
+
+  it('troca de empresa com cargo novo é recusada ANTES do relatório e de qualquer escrita', async () => {
+    comAcordos(3);
+    const r = await executarTransferencia({
+      alvo: ALVO_EMPRESA, levarAcordos: false, executadoPorId: 'admin-1', novoCargo: 'operador',
+    });
+    expect(r.status).toBe('falha');
+    expect(buscarAcordosMock).not.toHaveBeenCalled();
+    expect(baixarRelatorioMock).not.toHaveBeenCalled();
+    expect(rpcCalls).toHaveLength(0);
+    expect(ops.some(o => o.tabela === 'perfis')).toBe(false);
+  });
+
+  it('a recusa da trava chega inteira, sem o prefixo genérico', () => {
+    const frase = 'O setor Núcleo de Inteligência e Gestão só aceita o cargo Assistente ADM.';
+    expect(traduzirTransferencia(frase)).toBe(frase);
+  });
+});
+
 // ── Tipo ─────────────────────────────────────────────────────────────────────
 
 describe('tipoDaTransferencia', () => {

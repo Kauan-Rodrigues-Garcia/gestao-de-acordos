@@ -18,6 +18,8 @@ import { KpiTile } from '@/components/KpiTile';
 import { ListaPessoas, ListaPessoasVazia, type GrupoDeSetor } from '@/components/admin/ListaPessoas';
 import { DialogTransferencia } from '@/components/admin/DialogTransferencia';
 import { DialogUsuario, type UserForm, type PodeNoUsuario } from '@/components/admin/DialogUsuario';
+import { useSetorNucleo } from '@/hooks/useSetorNucleo';
+import { motivoCargoForaDoSetor } from '@/lib/cargoDoNucleo';
 import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
 import { useClonesCross } from '@/hooks/useClonesCross';
 import AdminEquipes from '@/pages/AdminEquipes';
@@ -329,6 +331,12 @@ export default function AdminUsuarios() {
 
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
+  /*
+   * Qual setor é o Núcleo na empresa do FORMULÁRIO — o super_admin cadastra
+   * gente em outra empresa, e o Núcleo dela é outro. Decide onde o cargo
+   * Assistente ADM pode ser gravado; ver `cargoDoNucleo.ts`.
+   */
+  const setorNucleoId = useSetorNucleo(form.empresa_id || empresaAtual?.id);
 
   // Online/Offline — lê do PresenceProvider (canal singleton global)
   const { onlineIds } = usePresence();
@@ -560,6 +568,21 @@ export default function AdminUsuarios() {
     if (setorVazioParaPreencher && !form.setor_id && setoresDoForm.length > 0) {
       toast.error('Escolha o setor: este cargo pertence a um setor, e sem ele as telas analíticas ficam zeradas.');
       return;
+    }
+    /*
+     * O Núcleo tem cargo próprio (`cargoDoNucleo.ts`). No cadastro a recusa do
+     * banco chega como «Database error», e a pessoa precisa saber o motivo antes.
+     * Só confere quando cargo ou setor vão mesmo ser gravados: quem só corrige um
+     * nome, sem a chave de cargo, não manda nenhum dos dois.
+     */
+    if (!editando || podeNoUsuario.cargo || setorVazioParaPreencher) {
+      const setorGravado = cargoEscopoEmpresa
+        ? null
+        : editando && !setorVazioParaPreencher
+          ? (editando.setor_id ?? null)
+          : (form.setor_id || null);
+      const motivoNucleo = motivoCargoForaDoSetor(form.perfil, setorGravado, setorNucleoId);
+      if (motivoNucleo) { toast.error(motivoNucleo); return; }
     }
 
     setSaving(true);
@@ -1371,6 +1394,7 @@ export default function AdminUsuarios() {
         empresaAtualNome={empresaAtual?.nome}
         cargoEscopoEmpresa={cargoEscopoEmpresa}
         setorVazioParaPreencher={setorVazioParaPreencher}
+        setorNucleoId={setorNucleoId}
         salvando={saving}
         onSalvar={salvar}
         uploadando={uploadando}

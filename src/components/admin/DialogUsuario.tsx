@@ -50,7 +50,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { MIN_SENHA } from '@/services/senha.service';
-import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
+import { PERFIL_LABELS, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
+import {
+  CARGO_DO_NUCLEO, aoTrocarCargo, aoTrocarSetor, cargoCabeNoSetor,
+} from '@/lib/cargoDoNucleo';
 import type { Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -96,6 +99,12 @@ interface Props {
   cargoEscopoEmpresa: boolean;
   /** Sem setor num cargo que precisa de um: aqui, e só aqui, o campo abre. */
   setorVazioParaPreencher: boolean;
+  /**
+   * O setor apontado como Núcleo de Inteligência e Gestão nesta empresa, ou
+   * `null` quando não se sabe. Decide onde o cargo Assistente ADM pode ser
+   * gravado — ver `cargoDoNucleo.ts`.
+   */
+  setorNucleoId?: string | null;
 
   salvando: boolean;
   onSalvar: () => void;
@@ -154,11 +163,31 @@ function Secao({
 
 const SEM_PERMISSAO = 'Seu cargo não tem permissão para alterar este campo.';
 
+/**
+ * Os cargos do seletor, na ordem de sempre.
+ *
+ * Lista, e não os itens escritos um a um no JSX, porque ela passou a ser
+ * RECORTADA: o Assistente ADM só cabe no Núcleo, e o Núcleo só aceita ele. Ver
+ * `opcoesDeCargo` e `cargoDoNucleo.ts`.
+ */
+const OPCOES_DE_CARGO: readonly { valor: PerfilUsuario; rotulo: string; soSuperAdmin?: boolean }[] = [
+  { valor: 'operador',       rotulo: 'Operador' },
+  { valor: 'lider',          rotulo: 'Líder' },
+  { valor: 'elite',          rotulo: 'Elite' },
+  { valor: 'gerencia',       rotulo: 'Gerência' },
+  { valor: 'diretoria',      rotulo: 'Diretoria' },
+  { valor: 'ouvidoria',      rotulo: 'Ouvidoria' },
+  { valor: 'rh',             rotulo: 'RH' },
+  { valor: 'assistente_adm', rotulo: 'Assistente ADM' },
+  { valor: 'administrador',  rotulo: 'Administrador' },
+  { valor: 'super_admin',    rotulo: 'Super Admin', soSuperAdmin: true },
+];
+
 export function DialogUsuario({
   aberto, onFechar, editando, form, setForm,
   pode, isSuperAdmin, souEu, online,
   setoresDoForm, setores, empresas, empresaAtualNome,
-  cargoEscopoEmpresa, setorVazioParaPreencher,
+  cargoEscopoEmpresa, setorVazioParaPreencher, setorNucleoId = null,
   salvando, onSalvar,
   uploadando, onEscolherFoto, onRemoverFoto,
   novaSenha, setNovaSenha, salvandoSenha, onSalvarSenha,
@@ -169,6 +198,43 @@ export function DialogUsuario({
     () => (form.nome || editando?.nome || '?').split(' ').map(n => n[0]).slice(0, 2).join(''),
     [form.nome, editando?.nome],
   );
+
+  /*
+   * Os cargos oferecidos, recortados pelo Núcleo (`cargoDoNucleo.ts`).
+   *
+   *   - criando, ou preenchendo o setor de quem ficou sem: o setor ainda está em
+   *     aberto, então todo cargo aparece — escolher Assistente ADM leva o setor
+   *     para o Núcleo, e escolher o Núcleo leva o cargo para Assistente ADM. Só
+   *     some o Assistente ADM quando não se sabe qual setor é o Núcleo;
+   *   - editando: o setor não muda aqui (é transferência), então aparece só o
+   *     que pode ser gravado no setor ATUAL da pessoa.
+   *
+   * O cargo atual fica sempre na lista: um cadastro anterior à trava, fora da
+   * regra, apareceria com o seletor em branco.
+   */
+  const opcoesDeCargo = useMemo(() => {
+    const setorEmAberto = criando || setorVazioParaPreencher;
+    const setorAtual = editando?.setor_id ?? null;
+    return OPCOES_DE_CARGO.filter(o => {
+      if (o.soSuperAdmin && !isSuperAdmin) return false;
+      if (o.valor === form.perfil) return true;
+      if (setorEmAberto) return o.valor !== CARGO_DO_NUCLEO || setorNucleoId !== null;
+      return cargoCabeNoSetor(o.valor, ehEscopoEmpresa(o.valor) ? null : setorAtual, setorNucleoId);
+    });
+  }, [criando, setorVazioParaPreencher, editando?.setor_id, isSuperAdmin, form.perfil, setorNucleoId]);
+
+  /** Trocar cargo ou setor mantém os dois coerentes — ver `aoTrocarCargo`. */
+  const trocarCargo = (cargo: PerfilUsuario) =>
+    setForm(f => aoTrocarCargo(f, cargo, { setorNucleoId, setores: setoresDoForm }));
+  const trocarSetor = (setorId: string) =>
+    setForm(f => aoTrocarSetor(f, setorId, { setorNucleoId }));
+
+  /*
+   * Criando um Assistente ADM, o setor não é escolha: é o Núcleo. Vale também
+   * para quem está sem setor e ganha o primeiro como Assistente ADM.
+   */
+  const setorTravadoNoNucleo =
+    form.perfil === CARGO_DO_NUCLEO && setorNucleoId !== null && (criando || setorVazioParaPreencher);
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
@@ -332,18 +398,12 @@ export function DialogUsuario({
               <Label className="text-xs">Cargo {criando && '*'}</Label>
               {pode.cargo ? (
                 <>
-                  <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
+                  <Select value={form.perfil} onValueChange={v => trocarCargo(v as PerfilUsuario)}>
                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="operador">Operador</SelectItem>
-                      <SelectItem value="lider">Líder</SelectItem>
-                      <SelectItem value="elite">Elite</SelectItem>
-                      <SelectItem value="gerencia">Gerência</SelectItem>
-                      <SelectItem value="diretoria">Diretoria</SelectItem>
-                      <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
-                      <SelectItem value="rh">RH</SelectItem>
-                      <SelectItem value="administrador">Administrador</SelectItem>
-                      {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
+                      {opcoesDeCargo.map(o => (
+                        <SelectItem key={o.valor} value={o.valor}>{o.rotulo}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] text-muted-foreground leading-snug">
@@ -379,12 +439,20 @@ export function DialogUsuario({
                   Icone={Building2}
                   motivo={`${PERFIL_LABELS[form.perfil] ?? form.perfil} não pertence a um setor: a visão é da empresa toda.`}
                 />
+              ) : setorTravadoNoNucleo ? (
+                /* Assistente ADM só existe no Núcleo (`cargoDoNucleo.ts`): o setor
+                   vem com o cargo, e oferecer outro seria oferecer uma recusa. */
+                <CampoTrancado
+                  valor={setoresDoForm.find(s => s.id === setorNucleoId)?.nome ?? 'Núcleo de Inteligência e Gestão'}
+                  Icone={Building2}
+                  motivo="Assistente ADM é o cargo do Núcleo de Inteligência e Gestão: o setor é sempre ele."
+                />
               ) : setorVazioParaPreencher ? (
                 /* Sem setor num cargo que precisa de um. Não é transferência —
                    não há de onde sair —, então o campo abre. Ver
                    `setorVazioParaPreencher`. */
                 <>
-                  <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
+                  <Select value={form.setor_id} onValueChange={trocarSetor}>
                     <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
                     <SelectContent>
                       {setoresDoForm.length === 0
@@ -407,7 +475,7 @@ export function DialogUsuario({
                   motivo="Mover de setor é uma transferência — use Transferir na linha da pessoa, na lista."
                 />
               ) : (
-                <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
+                <Select value={form.setor_id} onValueChange={trocarSetor}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
                   <SelectContent>
                     {setoresDoForm.length === 0
