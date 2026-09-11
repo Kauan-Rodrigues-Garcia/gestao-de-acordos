@@ -35,6 +35,13 @@ interface ListaOperadoresProps {
   renderExpandido: (l: LinhaOperadorPainel) => ReactNode;
   /** Botões à direita da linha (ex.: "Tirar da equipe"). */
   acoesDaLinha?: (l: LinhaOperadorPainel) => ReactNode;
+  /**
+   * Selo ao lado do nome (ex.: ⭐ EM DIA). `null` = nada.
+   *
+   * Ao lado do NOME, e não nas ações da direita: é uma marca para bater o olho
+   * descendo a lista, e em tela larga a coluna das ações fica longe do nome.
+   */
+  seloDoNome?: (l: LinhaOperadorPainel) => ReactNode;
 }
 
 function iniciais(nome: string | null, usuario: string): string {
@@ -47,6 +54,7 @@ function iniciais(nome: string | null, usuario: string): string {
 
 export function ListaOperadores({
   grupos, mostrarHO, fotos, expandidos, onToggle, renderExpandido, acoesDaLinha,
+  seloDoNome,
 }: ListaOperadoresProps) {
   return (
     <div className="space-y-5">
@@ -92,9 +100,12 @@ export function ListaOperadores({
                     </Avatar>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold leading-tight">
-                        {l.nome ?? l.usuario}
-                      </p>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="truncate text-sm font-semibold leading-tight">
+                          {l.nome ?? l.usuario}
+                        </p>
+                        {seloDoNome?.(l)}
+                      </div>
                       <div className="mt-0.5 flex items-center gap-1.5">
                         <span className="truncate font-mono text-[11px] text-muted-foreground">
                           {l.usuario}

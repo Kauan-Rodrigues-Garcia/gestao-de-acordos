@@ -72,6 +72,11 @@ import {
   type VinculosOperador, type FiltroData,
 } from './agregacaoLider';
 import { montarTextoListaAnalitico } from './textoListaAnalitico';
+// A estrela EM DIA da lista «Por operador»: a régua vem da aba Metas, a conta de
+// `emDiaOperador` e o parabéns de `mensagemEmDia` — as duas testadas à parte.
+import { useMetaDiariaOperadores } from './useMetaDiariaOperadores';
+import { operadoresEmDia, type AvaliacaoEmDia, type LenteEmDia } from './emDiaOperador';
+import { montarMensagemEmDia } from './mensagemEmDia';
 import { getTodayISO } from '@/lib/index';
 import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
@@ -1121,6 +1126,49 @@ export function AnaliticoLider({
   }, [recorte.modo, pulsoDoDia, resumosPorEquipe, linhasDashboard, operadorEquipeMap]);
 
   /*
+   * ── Quem está EM DIA com a média diária ──────────────────────────────────
+   *
+   * A liderança pediu para bater o olho na lista e ver quem mantém a média
+   * diária — e mandar um parabéns pronto a essa pessoa. A régua é a meta do mês
+   * ÷ dias úteis, a mesma «Meta diária» da linha aberta dos Quartis:
+   *
+   *   • Mês — a média do operador no mês contra a régua;
+   *   • Dia — o recebido naquele dia contra a mesma régua;
+   *   • Período — sem estrela: a janela é escolhida à mão, e «média diária»
+   *     dentro dela seria outra conta.
+   *
+   * Quem decide é `operadoresEmDia`, testada à parte. O mapa só tem quem está em
+   * dia: é a pergunta da tela, e quem não ganha estrela não precisa de entrada.
+   */
+  const lenteEmDia: LenteEmDia | null = recorte.modo === 'periodo' ? null : recorte.modo;
+  const metasDoMes = useMetaDiariaOperadores({
+    ativo: abaVisivel === 'operadores' && lenteEmDia !== null,
+    empresaId,
+    mes,
+  });
+  const emDiaPorOperador = useMemo<Map<string, AvaliacaoEmDia>>(() => {
+    if (!lenteEmDia || !metasDoMes.carregado) return new Map();
+    return operadoresEmDia({
+      lente: lenteEmDia,
+      linhas: gruposDoPainel.flatMap(g => g.itens),
+      metaPorOperador: metasDoMes.metaPorOperador,
+      treinoPorEquipe: metasDoMes.treinoPorEquipe,
+      // A equipe de ORIGEM: um clone desenhado sob outra equipe segue o
+      // treinamento (ou não) da equipe dele, como nos Quartis.
+      equipeDoOperador: id => operadorEquipeMap[id]?.equipe_id,
+      calendario: {
+        ano: Number(mesAnoStr),
+        mes: Number(mesNumStr),
+        feriados: metasDoMes.feriados,
+        contarHoje: metasDoMes.contarHoje,
+        hojeISO,
+      },
+    });
+  }, [lenteEmDia, metasDoMes, gruposDoPainel, operadorEquipeMap, mesAnoStr, mesNumStr, hojeISO]);
+  /** O que o parabéns data: o dia da lente, ou o mês. */
+  const referenciaEmDia = recorte.modo === 'dia' ? recorte.dia : mes;
+
+  /*
    * ── O mapa do mês ────────────────────────────────────────────────────────
    *
    * Ele lê as MESMAS linhas do analítico que a quebra por forma — mas elas
@@ -1774,37 +1822,81 @@ export function AnaliticoLider({
               expandidos={expandidos}
               onToggle={id => void toggleExpandido(id)}
               renderExpandido={detalheDoOperador}
-              acoesDaLinha={l => (
-                /* Transferido neste mês: o recebimento continua aqui até a
-                   liderança decidir tirar. O selo diz por quê; o botão age. */
-                transferidos[l.operador_id] ? (
+              seloDoNome={l => {
+                const avaliacao = emDiaPorOperador.get(l.operador_id);
+                if (!avaliacao) return null;
+                return (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-600 dark:text-amber-400"
+                    title={avaliacao.lente === 'dia'
+                      ? `Recebeu ${formatBRL(avaliacao.valor)} no dia — a média diária necessária é ${formatBRL(avaliacao.metaDiaria)}`
+                      : `Média de ${formatBRL(avaliacao.mediaDiaria)} por dia útil — a necessária é ${formatBRL(avaliacao.metaDiaria)}`}
+                  >
+                    <Star className="h-3 w-3 fill-current" aria-hidden="true" />
+                    EM DIA
+                  </span>
+                );
+              }}
+              acoesDaLinha={l => {
+                const avaliacao   = emDiaPorOperador.get(l.operador_id);
+                const transferido = transferidos[l.operador_id];
+                if (!avaliacao && !transferido) return null;
+                return (
                   <div className="flex items-center gap-1.5">
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] font-normal gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
-                      title={
-                        'Transferido neste mês. O recebimento continua aqui até a '
-                        + 'liderança decidir tirar.'
-                      }
-                    >
-                      <ArrowRightLeft className="w-3 h-3" />
-                      transferido
-                    </Badge>
-                    {temPermissaoImportar && (
+                    {/* O parabéns pronto de quem está EM DIA: a liderança cola
+                        direto na conversa com o operador. */}
+                    {avaliacao && (
                       <Button size="sm" variant="ghost"
-                        className="h-7 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                        disabled={fantasmasTirados.has(l.operador_id)}
-                        onClick={() => setConfirmandoFantasma({
-                          perfilId: l.operador_id,
-                          nome: l.nome ?? l.usuario,
-                          equipeNome: l.equipeNome,
-                        })}>
-                        Tirar da equipe
+                        className="h-7 gap-1 rounded-lg px-2 text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400"
+                        title="Copia a mensagem de parabéns para mandar ao operador no WhatsApp"
+                        aria-label={`Copiar parabéns para ${l.nome ?? l.usuario}`}
+                        onClick={() => {
+                          void copiarTexto(
+                            montarMensagemEmDia({
+                              nome: l.nome ?? l.usuario,
+                              referencia: referenciaEmDia,
+                              avaliacao,
+                            }),
+                            'Parabéns copiado — é só colar no WhatsApp.',
+                            'Não foi possível copiar a mensagem.',
+                          );
+                        }}>
+                        <Copy className="w-3 h-3" />
+                        <span className="hidden sm:inline">Copiar</span>
                       </Button>
                     )}
+                    {/* Transferido neste mês: o recebimento continua aqui até a
+                        liderança decidir tirar. O selo diz por quê; o botão age. */}
+                    {transferido && (
+                      <>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-normal gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
+                          title={
+                            'Transferido neste mês. O recebimento continua aqui até a '
+                            + 'liderança decidir tirar.'
+                          }
+                        >
+                          <ArrowRightLeft className="w-3 h-3" />
+                          transferido
+                        </Badge>
+                        {temPermissaoImportar && (
+                          <Button size="sm" variant="ghost"
+                            className="h-7 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                            disabled={fantasmasTirados.has(l.operador_id)}
+                            onClick={() => setConfirmandoFantasma({
+                              perfilId: l.operador_id,
+                              nome: l.nome ?? l.usuario,
+                              equipeNome: l.equipeNome,
+                            })}>
+                            Tirar da equipe
+                          </Button>
+                        )}
+                      </>
+                    )}
                   </div>
-                ) : null
-              )}
+                );
+              }}
             />
           )}
         </div>

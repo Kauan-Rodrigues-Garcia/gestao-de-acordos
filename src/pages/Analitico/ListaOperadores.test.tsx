@@ -1,6 +1,6 @@
 // src/pages/Analitico/ListaOperadores.test.tsx
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ListaOperadores } from './ListaOperadores';
 import type { LinhaOperadorPainel } from './linhaOperador';
 
@@ -55,6 +55,17 @@ describe('ListaOperadores', () => {
     );
     fireEvent.click(screen.getByText('Ana Silva'));
     expect(onToggle).toHaveBeenCalledWith('a');
+  });
+
+  it('o selo ao lado do nome só aparece onde quem chama devolve um', () => {
+    render(
+      <ListaOperadores grupos={grupos} mostrarHO fotos={{}}
+        expandidos={new Set()} onToggle={vi.fn()} renderExpandido={() => null}
+        seloDoNome={l => (l.operador_id === 'a' ? <span>EM DIA</span> : null)} />,
+    );
+    expect(screen.getAllByText('EM DIA')).toHaveLength(1);
+    const linhaDaAna = screen.getByText('Ana Silva').closest('[role="button"]') as HTMLElement;
+    expect(within(linhaDaAna).getByText('EM DIA')).toBeInTheDocument();
   });
 
   it('só o expandido renderiza o conteúdo de dentro', () => {

@@ -774,6 +774,7 @@ export function DesempenhoEquipes({
               decorridos={dados.decorridos}
               quartis={quartis}
               operadores={sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid })}
+              mes={mes}
             />
           )}
           {/* Contribuição Receptivo — card manual do setor (BookPlay) */}
@@ -841,6 +842,7 @@ export function DesempenhoEquipes({
                   decorridos={eqDecorridos}
                   quartis={quartis}
                   operadores={operadoresDoCard({ tipo: 'equipe', id: eq.id })}
+                  mes={mes}
                 />
               );
             })}
@@ -851,7 +853,8 @@ export function DesempenhoEquipes({
         Acumulado e diário vêm do {fonteLabel} · meta, dias úteis e feriados
         vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis
         trabalhados) · clique num card para ver os degraus de quartil, o ritmo
-        necessário e a distribuição das pessoas.
+        necessário e a distribuição das pessoas, e para copiar o resumo que vai
+        para a equipe.
       </p>
     </div>
   );

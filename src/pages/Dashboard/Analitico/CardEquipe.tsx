@@ -29,12 +29,14 @@
  */
 
 import { useId, useState } from 'react';
-import { ChevronDown, Users, Target, CalendarClock, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, Users, Target, CalendarClock, SlidersHorizontal, Copy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 import { detalharEquipe, type OperadorNaEquipe } from './desempenhoEquipe';
+import { montarMensagemEquipe } from './mensagemEquipe';
+import { copiarTexto } from '@/lib/clipboard';
 
 import type { QuartilConfig } from '@/lib/supabase';
 /**
@@ -93,6 +95,11 @@ interface CardEquipeProps {
    * vazia, o que é pior que não abrir.
    */
   operadores?: readonly OperadorNaEquipe[];
+  /**
+   * Mês em análise (`yyyy-MM`). Liga o botão «Copiar para a equipe» da área
+   * expandida — o texto precisa dizer de que mês fala. Ausente = sem botão.
+   */
+  mes?: string;
 }
 
 // ── Avatares ─────────────────────────────────────────────────────────────────
@@ -309,7 +316,7 @@ function LinhaValor({
 export function CardEquipe({
   titulo, subtitulo, lideres, avatarProprio, ehSetor,
   acumulado, acumuladoHO, mostrarHO, metaHO, meta,
-  totalUteis, decorridos, quartis, operadores, ajusteManual,
+  totalUteis, decorridos, quartis, operadores, ajusteManual, mes,
 }: CardEquipeProps) {
   const [aberto, setAberto] = useState(false);
   const painelId = useId();
@@ -421,6 +428,38 @@ export function CardEquipe({
 
       {expansivel && aberto && (
         <div id={painelId} className="border-t border-border/70 p-4 sm:p-5 pt-4">
+          {/* O botão de copiar mora no topo da área aberta, como na linha aberta
+              dos Quartis: quem abre o card para falar com a equipe não deveria
+              rolar os três blocos até achar como levar aquilo para a conversa.
+              O texto sai do MESMO `d` que desenha os blocos abaixo. */}
+          {mes && (
+            <div className="flex justify-end mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  void copiarTexto(
+                    montarMensagemEquipe({
+                      titulo, ehSetor, mes, acumulado, meta,
+                      rotuloUnidade: mostrarHO ? 'Bruto' : null,
+                      acumuladoHO:   mostrarHO ? (acumuladoHO ?? 0) : null,
+                      detalhe: d,
+                    }),
+                    'Texto copiado — é só colar no WhatsApp.',
+                    'Não foi possível copiar o texto.',
+                  );
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border
+                  bg-card px-2.5 py-1 text-[11px] font-medium hover:bg-accent transition-colors
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                title={ehSetor
+                  ? 'Copia um resumo do setor pronto para mandar no WhatsApp'
+                  : 'Copia um resumo da equipe pronto para mandar no grupo do WhatsApp'}
+              >
+                <Copy className="w-3 h-3" />
+                {ehSetor ? 'Copiar para o setor' : 'Copiar para a equipe'}
+              </button>
+            </div>
+          )}
           <div className="grid gap-5 md:grid-cols-3">
 
             {/* ── Degraus de quartil ─────────────────────────────────────── */}

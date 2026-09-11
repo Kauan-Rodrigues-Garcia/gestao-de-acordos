@@ -51,8 +51,13 @@ export interface EntradaMensagem {
   detalhe: DetalheOperador;
 }
 
-/** `2026-08` → `agosto/2026`. Mês por extenso: o texto é para uma pessoa. */
-function mesPorExtenso(mes: string): string {
+/**
+ * `2026-08` → `agosto/2026`. Mês por extenso: o texto é para uma pessoa.
+ *
+ * Exportado: as mensagens da equipe e do EM DIA escrevem o mês do mesmo jeito,
+ * e três cópias desta lista divergiriam no primeiro ajuste.
+ */
+export function mesPorExtenso(mes: string): string {
   const [ano, m] = mes.split('-');
   const nomes = [
     'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
