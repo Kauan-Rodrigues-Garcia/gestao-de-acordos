@@ -1020,6 +1020,27 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Apagar a configuração mensal de dias úteis e quartis',
     grupo: 'Metas', padrao: {},
   },
+  /*
+   * Comissão por meta (migration 20260911190000). Três chaves e não uma: ver a
+   * comissão da equipe, configurar os percentuais e confirmar que o setor bateu
+   * a meta são decisões de pessoas diferentes — e as duas últimas mexem em
+   * dinheiro, por isso nascem só na gerência.
+   */
+  {
+    key: 'metas_comissao_ver', label: 'Metas: ver comissão',
+    descricao: 'Abrir a aba Comissão da tela de Metas e consultar a comissão dos operadores',
+    grupo: 'Metas', padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'metas_comissao_editar', label: 'Metas: configurar comissão',
+    descricao: 'Definir percentuais, regras e exceções da comissão do mês, e importar o mês anterior',
+    grupo: 'Metas', padrao: { gerencia: true },
+  },
+  {
+    key: 'metas_comissao_confirmar_setor', label: 'Metas: confirmar meta do setor na comissão',
+    descricao: 'Confirmar ou desfazer que o setor bateu a meta, o que liga o benefício da comissão',
+    grupo: 'Metas', padrao: { gerencia: true },
+  },
   {
     key: 'usuarios_escopo_setor', label: 'Usuários: pessoas do próprio setor',
     descricao: 'Ver na gestão de pessoas quem é do setor da própria pessoa',
@@ -1290,6 +1311,11 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'dashboard_escopo_todos_setores', label: 'Dashboard: todos os setores',
     descricao: 'Ver no Dashboard qualquer setor, com o filtro de setor disponível',
     grupo: 'Dashboard', padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'dashboard_comissao', label: 'Dashboard: ver a própria comissão',
+    descricao: 'Card de comissão e a tela Ver comissão no próprio Dashboard',
+    grupo: 'Dashboard', padrao: TODOS,
   },
 
   // ── Analítico ────────────────────────────────────────────────────────────

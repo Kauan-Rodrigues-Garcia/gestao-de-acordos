@@ -119,6 +119,13 @@ export interface FaixaComissao {
   pctEfetivo: number | null;
   comissaoNormal: number | null;
   comissao: number | null;
+  /**
+   * O % e a comissão desta faixa COM o benefício do setor, confirmado ou não.
+   * `null` sem regra no setor. É o que a tela usa para dizer «se o setor bater a
+   * meta, a 2ª Meta passa a 2,24%».
+   */
+  pctComBeneficio: number | null;
+  comissaoComBeneficio: number | null;
   situacao: SituacaoFaixa;
   atingida: boolean;
   /** Quanto falta. `null` quando já atingida. */
@@ -135,6 +142,9 @@ export interface IndiretaComissao {
   /** O que a indireta paga ao ser atingida, sem e com o benefício. */
   valorNormal: number | null;
   valor: number | null;
+  /** Como na faixa: o que a indireta pagaria com o benefício do setor. `null` sem regra. */
+  pctComBeneficio: number | null;
+  valorComBeneficio: number | null;
   /** O que ela soma agora: o valor quando atingida, zero antes disso. */
   comissaoNormal: number;
   comissao: number;
@@ -237,6 +247,13 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
   if (!config) return semComissao('sem_config');
 
   const beneficio: Beneficio = { ativo: beneficioAtivo, regra: regraSetor, multiplicador };
+  // O mesmo benefício como se a confirmação já existisse — só para a tela contar
+  // ao operador o que muda quando o setor bater a meta.
+  const beneficioHipotetico: Beneficio = {
+    ativo: temRegraSetor && (regraSetor !== 'multiplicador' || (multiplicador !== null && multiplicador > 0)),
+    regra: regraSetor,
+    multiplicador,
+  };
 
   // ── A frente indireta decide o que as faixas medem ─────────────────────────
   const metaIndiretaBruta = Number(entrada.metaIndiretaBruta) || 0;
@@ -263,6 +280,9 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
     const cfg = faixaDaOrdem.get(ordem);
     const pctNormal = cfg ? cfg.pct : null;
     const pctEfetivo = percentualEfetivo(pctNormal, cfg?.pctEspecial ?? null, beneficio);
+    const pctComBeneficio = temRegraSetor
+      ? percentualEfetivo(pctNormal, cfg?.pctEspecial ?? null, beneficioHipotetico)
+      : null;
     const atingida = emCentavos(recebido) >= emCentavos(meta);
     return {
       ordem,
@@ -271,6 +291,8 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
       pctEfetivo,
       comissaoNormal: comissaoDe(meta, pctNormal),
       comissao: comissaoDe(meta, pctEfetivo),
+      pctComBeneficio,
+      comissaoComBeneficio: comissaoDe(meta, pctComBeneficio),
       atingida,
       falta: atingida ? null : arredondar(meta - recebido),
     };
@@ -301,6 +323,9 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
     const pctEfetivo = percentualEfetivo(pctNormal, config.pctIndiretaEspecial, beneficio);
     const valorNormal = comissaoDe(meta, pctNormal);
     const valor = comissaoDe(meta, pctEfetivo);
+    const pctComBeneficio = temRegraSetor
+      ? percentualEfetivo(pctNormal, config.pctIndiretaEspecial, beneficioHipotetico)
+      : null;
     indireta = {
       meta,
       recebido: recebidoIndireto,
@@ -310,6 +335,8 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
       pctEfetivo,
       valorNormal,
       valor,
+      pctComBeneficio,
+      valorComBeneficio: comissaoDe(meta, pctComBeneficio),
       comissaoNormal: atingida ? (valorNormal ?? 0) : 0,
       comissao: atingida ? (valor ?? 0) : 0,
     };

@@ -15,8 +15,13 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileSpreadsheet, ChevronDown, ChevronUp, CalendarClock } from 'lucide-react';
+import { FileSpreadsheet, ChevronDown, ChevronUp, CalendarClock, Coins } from 'lucide-react';
 import { getTodayISO } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
+import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
+import { useComissaoOperador } from '@/services/comissao/useComissaoOperador';
+import { CardComissao } from '@/components/Comissao/CardComissao';
+import { VerComissao } from '@/components/Comissao/VerComissao';
 import { SkeletonCard } from '@/components/AnalyticsPanel/SubComponents';
 import { usePainelMetas } from '@/hooks/usePainelMetas';
 import type { UnidadeValor } from '@/lib/unidadeValor';
@@ -67,6 +72,19 @@ export function PainelMetas({
     unidade,
   });
 
+  /*
+   * Comissão por meta — só com uma pessoa em tela (`comissaoBase` nulo nos
+   * escopos de equipe e setor). O card mostra o essencial; o resto abre em
+   * «Ver comissão», para não poluir o Dashboard.
+   */
+  const isPaguePlay = useTenant().isPaguePlay;
+  const comissao = useComissaoOperador({ base: dados.comissaoBase, mes });
+  const [verComissao, setVerComissao] = useState(false);
+  const resultadoComissao = comissao.podeVer ? comissao.resultado : null;
+  const comissaoSemConfig = resultadoComissao?.motivo === 'sem_config';
+  const temCardComissao = !!resultadoComissao
+    && resultadoComissao.motivo !== 'sem_meta' && !comissaoSemConfig;
+
   if (dados.carregando) {
     return (
       <div className="space-y-3">
@@ -115,7 +133,38 @@ export function PainelMetas({
               tabulação acontece na aba Analítico, que já lista pagamento por
               pagamento o que falta. Aqui ele só ocupava a primeira dobra do
               painel de metas com uma pendência de outra tela. */}
-          <CardsMetas dados={dados} mes={mes} />
+          <CardsMetas
+            dados={dados}
+            mes={mes}
+            slotComissao={temCardComissao && resultadoComissao ? (
+              <CardComissao
+                resultado={resultadoComissao}
+                isPaguePlay={isPaguePlay}
+                mesFechado={!dados.noMesAtual}
+                onVer={() => setVerComissao(true)}
+              />
+            ) : null}
+          />
+
+          {/* Sem configuração no mês: uma linha, e não um card de R$ 0,00. */}
+          {comissaoSemConfig && (
+            <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+              <Coins className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {`Comissão de ${mesPorExtenso(mes)} ainda não configurada.`}
+            </p>
+          )}
+
+          {resultadoComissao && verComissao && (
+            <VerComissao
+              aberto
+              onFechar={() => setVerComissao(false)}
+              nome={comissao.nome}
+              mes={mes}
+              isPaguePlay={isPaguePlay}
+              mesFechado={!dados.noMesAtual}
+              resultado={resultadoComissao}
+            />
+          )}
 
           {/* Só para quem tem meta indireta ligada. O card grande acima já
               mostra a SOMA das duas frentes — este diz de onde ela vem. */}

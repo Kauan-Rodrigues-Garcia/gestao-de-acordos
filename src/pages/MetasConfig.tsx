@@ -71,6 +71,9 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AbaComissao } from "@/components/Comissao/AbaComissao";
+import type { MetaLinhaBruta } from "@/services/comissao/entradaDoOperador";
 
 const MESES = [
   "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
@@ -112,6 +115,11 @@ interface Operador {
   /** Nome do setor de origem quando o operador entra aqui como CLONE. A meta é
    *  a mesma nos dois setores — a linha em `metas` é por operador, sem setor. */
   clonadoDe?: string | null;
+  /**
+   * Equipe de ORIGEM do clone. No clone, `equipe_id` é a equipe deste setor em
+   * que ele foi clonado; a comissão é calculada pela equipe original.
+   */
+  equipeOrigemId?: string | null;
   situacao?: string | null;
   /**
    * Rastro das últimas férias, para avisar quem define a meta.
@@ -479,6 +487,8 @@ export default function MetasConfig() {
   const podeExcluirMetas = temPermissao("metas_excluir");
   const podeEditarDiasUteis = temPermissao("metas_editar_dias_uteis");
   const podeExcluirDiasUteis = temPermissao("metas_excluir_dias_uteis");
+  // A aba Comissão. Configurar e confirmar têm chaves próprias, lidas dentro dela.
+  const podeVerComissao = temPermissao("metas_comissao_ver");
 
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
@@ -545,6 +555,8 @@ export default function MetasConfig() {
 
   // inputs controlados por referencia_id
   const [inputMetas, setInputMetas] = useState<Record<string, MetaInput>>({});
+  // As linhas de meta do mês como vieram do banco — a aba Comissão lê daqui.
+  const [metasDoMes, setMetasDoMes] = useState<MetaLinhaBruta[]>([]);
   // Campos extras visíveis por seção (BP): padrão 0, "+" adiciona p/ todos
   const [extraCampos, setExtraCampos] = useState<Record<TipoMeta, number>>({ setor: 0, equipe: 0, operador: 0 });
 
@@ -715,9 +727,9 @@ export default function MetasConfig() {
     if (!faltando.length) return [];
 
     const { data: perfisClonados } = await supabase.from("perfis")
-      .select("id, nome, setor_id, situacao, ferias_ate").in("id", faltando)
+      .select("id, nome, setor_id, equipe_id, situacao, ferias_ate").in("id", faltando)
       .in("perfil", ["operador", "elite"]).order("nome");
-    const linhas = (perfisClonados ?? []) as unknown as { id: string; nome: string; setor_id: string | null; situacao?: string | null; ferias_ate?: string | null }[];
+    const linhas = (perfisClonados ?? []) as unknown as { id: string; nome: string; setor_id: string | null; equipe_id: string | null; situacao?: string | null; ferias_ate?: string | null }[];
     if (!linhas.length) return [];
 
     // Nome do setor de origem para a etiqueta (o líder pode não ter esse setor carregado)
@@ -729,6 +741,7 @@ export default function MetasConfig() {
       id: l.id,
       nome: l.nome,
       equipe_id: equipeAqui.get(l.id) ?? null,
+      equipeOrigemId: l.equipe_id ?? null,
       setor_id: l.setor_id,
       clonadoDe: (l.setor_id && nomeOrigem.get(l.setor_id)) || "outro setor",
     }));
@@ -742,6 +755,7 @@ export default function MetasConfig() {
         .eq("empresa_id", empresa.id).eq("mes", mes).eq("ano", ano);
       if (error) throw error;
       const loaded: Meta[] = (data ?? []) as Meta[];
+      setMetasDoMes(loaded as unknown as MetaLinhaBruta[]);
       const newInputs: Record<string, MetaInput> = {};
       const maxExtras: Record<TipoMeta, number> = { setor: 0, equipe: 0, operador: 0 };
       for (const m of loaded) {
@@ -1075,6 +1089,23 @@ export default function MetasConfig() {
   }, [configAlterada, salvarConfigMes]);
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
+
+  /*
+   * Os operadores do setor para a aba Comissão, com a ORIGEM de cada um.
+   *
+   * O clone aparece sob a equipe deste setor em que foi clonado, mas a comissão
+   * é calculada pelo usuário original: setor e equipe de origem.
+   */
+  const operadoresComissao = useMemo(() => operadores
+    .filter(op => typeof op?.id === "string" && op.id.length > 0)
+    .map(op => ({
+      id: op.id,
+      nome: op.nome,
+      setorOrigemId: op.setor_id ?? null,
+      equipeOrigemId: op.clonadoDe ? (op.equipeOrigemId ?? null) : op.equipe_id,
+      equipeAquiId: op.equipe_id,
+      clonadoDe: op.clonadoDe ?? null,
+    })), [operadores]);
   /** Alguma linha ainda no ar? É o que o rodapé anuncia. */
   const gravando = salvandoTudo
     || Object.values(estadoLinhas).some(e => e === "salvando");
@@ -1104,6 +1135,34 @@ export default function MetasConfig() {
 
       <Separator />
 
+      {/* Seletor de setor (admin) — acima das abas: vale para Metas e para Comissão */}
+      {isAdmin && (
+        <div className="flex items-center gap-3">
+          <Label className="text-sm font-medium shrink-0 flex items-center gap-1.5">
+            <Building2 className="h-4 w-4 text-muted-foreground" /> Setor
+          </Label>
+          {loadingSetores ? <Skeleton className="h-9 w-56" /> : (
+            <Select value={setorSelecionado} onValueChange={setSetorSelecionado}>
+              <SelectTrigger className="w-56 h-9"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
+              <SelectContent>
+                {setores.filter(s => typeof s?.id === "string" && s.id.length > 0).map(s => (
+                  <SelectItem key={s.id} value={s.id}>{String(s.nome ?? "")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+
+      <Tabs defaultValue="metas" className="space-y-6">
+        {podeVerComissao && (
+          <TabsList>
+            <TabsTrigger value="metas">Metas</TabsTrigger>
+            <TabsTrigger value="comissao">Comissão</TabsTrigger>
+          </TabsList>
+        )}
+
+        <TabsContent value="metas" className="mt-0 space-y-6">
       {/* ── Config do mês (PP + BookPlay): dias úteis + feriados + quartis ── */}
       {temConfigMes && configDbAtiva && configCarregada && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1216,25 +1275,6 @@ export default function MetasConfig() {
               </p>
             </div>
           </SectionCard>
-        </div>
-      )}
-
-      {/* Seletor de setor (admin) */}
-      {isAdmin && (
-        <div className="flex items-center gap-3">
-          <Label className="text-sm font-medium shrink-0 flex items-center gap-1.5">
-            <Building2 className="h-4 w-4 text-muted-foreground" /> Setor
-          </Label>
-          {loadingSetores ? <Skeleton className="h-9 w-56" /> : (
-            <Select value={setorSelecionado} onValueChange={setSetorSelecionado}>
-              <SelectTrigger className="w-56 h-9"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
-              <SelectContent>
-                {setores.filter(s => typeof s?.id === "string" && s.id.length > 0).map(s => (
-                  <SelectItem key={s.id} value={s.id}>{String(s.nome ?? "")}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
         </div>
       )}
 
@@ -1501,6 +1541,33 @@ export default function MetasConfig() {
           </div>
         </>
       )}
+        </TabsContent>
+
+        {podeVerComissao && (
+          <TabsContent value="comissao" className="mt-0">
+            {!setorSelecionado || !empresa?.id ? (
+              <Card className="border-dashed">
+                <CardContent className="py-10 text-center text-muted-foreground text-sm">
+                  {isAdmin ? "Selecione um setor para ver a comissão." : "Você não está associado a nenhum setor."}
+                </CardContent>
+              </Card>
+            ) : (
+              <AbaComissao
+                empresaId={empresa.id}
+                setorId={setorSelecionado}
+                setorNome={setorNome}
+                ano={ano}
+                mes={mes}
+                isPaguePlay={isPP}
+                metaTravada={metaTravada}
+                equipes={equipes.map(e => ({ id: e.id, nome: e.nome }))}
+                operadores={operadoresComissao}
+                metas={metasDoMes}
+              />
+            )}
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

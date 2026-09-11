@@ -167,6 +167,34 @@ describe('benefício quando o setor bate a meta', () => {
     expect(r.atual?.pctEfetivo).toBe(2);
   });
 
+  it('sem confirmação, diz o que o benefício faria — a tela avisa «se o setor bater a meta»', () => {
+    const cfg = config({ faixas: faixaEspecial, regraSetor: 'percentual_especial' });
+    const r = calcularComissao(entrada({
+      metaBruta: 32_000, metasExtrasBrutas: [], recebidoDireto: 33_000, config: cfg, doSetor: cfg,
+    }));
+    expect(r.atual?.pctEfetivo).toBe(2);
+    expect(r.atual?.pctComBeneficio).toBe(2.24);
+    expect(r.atual?.comissaoComBeneficio).toBe(716.8);
+  });
+
+  it('sem regra no setor, não existe «com benefício»', () => {
+    const r = calcularComissao(entrada());
+    expect(r.atual?.pctComBeneficio).toBeNull();
+    expect(r.atual?.comissaoComBeneficio).toBeNull();
+  });
+
+  it('a indireta também diz o que o benefício faria', () => {
+    const cfg = config({
+      modoIndireta: 'separado', pctIndireta: 1.5, regraSetor: 'multiplicador', multiplicador: 2,
+    });
+    const r = calcularComissao(entrada({
+      metaIndiretaBruta: 5_000, recebidoIndiretoBruto: 5_000, config: cfg, doSetor: cfg,
+    }));
+    expect(r.indireta?.comissao).toBe(75);
+    expect(r.indireta?.pctComBeneficio).toBe(3);
+    expect(r.indireta?.valorComBeneficio).toBe(150);
+  });
+
   it('multiplicador 2x vale na direta e na indireta', () => {
     const cfg = config({
       modoIndireta: 'separado', pctIndireta: 1.5,
