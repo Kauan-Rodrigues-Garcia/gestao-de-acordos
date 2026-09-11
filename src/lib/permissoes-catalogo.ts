@@ -74,9 +74,16 @@
 
 import { produtoDoSlug, type Produto } from '@/lib/produto';
 
-/** Os cargos que o administrador configura na tela. */
+/**
+ * Os cargos que o administrador configura na tela.
+ *
+ * `assistente_adm` é o cargo do Núcleo de Inteligência e Gestão (11/09/2026),
+ * exclusivo do setor. Como `rh`, não entra nos atalhos da operação: as chaves
+ * dele são nominais, no grupo «Controle de Números», no Dashboard e no chat.
+ */
 export const CARGOS_CONFIGURAVEIS = [
   'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria', 'rh',
+  'assistente_adm',
 ] as const;
 export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
 
@@ -251,6 +258,14 @@ const TODOS: Partial<Record<CargoConfiguravel, boolean>> = {
 const TODOS_COM_RH: Partial<Record<CargoConfiguravel, boolean>> = {
   ...TODOS, rh: true,
 };
+/**
+ * Quem nasce podendo procurar cada cargo no chat: todos os editáveis, inclusive
+ * RH e Assistente ADM. O chat é da empresa inteira, e o Núcleo também conversa
+ * com os setores para os quais distribui número.
+ */
+const CHAT_TODOS: Partial<Record<CargoConfiguravel, boolean>> = {
+  ...TODOS_COM_RH, assistente_adm: true,
+};
 
 /*
  * `rh` NÃO entra em `TODOS`, e a ausência é deliberada.
@@ -271,7 +286,11 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_dashboard', label: 'Exibir Dashboard',
     descricao: 'Abrir a tela inicial do sistema',
-    grupo: 'Dashboard', produtos: TODA_OPERACAO, padrao: TODOS_COM_RH,
+    // O Assistente ADM entra: `/` exige esta chave, e é por ela que ele chega ao
+    // painel do Núcleo — a rota é a mesma, o que muda é o que ela desenha (ver
+    // `PainelDeEntrada`). Sem nenhum `dashboard_escopo_*`, o Dashboard da
+    // cobrança continua sem nada a mostrar para ele.
+    grupo: 'Dashboard', produtos: TODA_OPERACAO, padrao: { ...TODOS_COM_RH, assistente_adm: true },
   },
   {
     key: 'ver_acordos', label: 'Aba Acordos',
@@ -342,55 +361,61 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'chat_cargo_operador', label: 'Chat: cargo Operador',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Operador',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_lider', label: 'Chat: cargo Líder',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Líder',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_elite', label: 'Chat: cargo Elite',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Elite',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_gerencia', label: 'Chat: cargo Gerência',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Gerência',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_diretoria', label: 'Chat: cargo Diretoria',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Diretoria',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_ouvidoria', label: 'Chat: cargo Ouvidoria',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Ouvidoria',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_rh', label: 'Chat: cargo RH',
     descricao: 'Permitir iniciar conversa com pessoas do cargo RH',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_assistente_adm', label: 'Chat: cargo Assistente ADM',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Assistente ADM',
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_administrador', label: 'Chat: cargo Administrador',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Administrador',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_super_admin', label: 'Chat: cargo Super Admin',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Super Admin',
-    grupo: 'Chat', padrao: TODOS_COM_RH,
+    grupo: 'Chat', padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   /*
@@ -1767,30 +1792,32 @@ export const PERMISSOES: PermissaoMeta[] = [
   //
   // As chaves têm DUAS metades, e a divisão é o que faz o módulo funcionar:
   //
-  //   `numeros_*` e `ver_controle_numeros` .. o Núcleo. Nascem em ninguém.
+  //   `numeros_*` e `ver_controle_numeros` .. o Núcleo. Nascem no Assistente ADM.
   //   `chips_*`   e `ver_meus_chips` ........ os setores. Nascem no padrão.
   //
-  // Por que as do Núcleo nascem desligadas: o acesso ali é do SETOR, e cargo
-  // não distingue setor. Semear `numeros_administrar` em `operador` daria a
-  // chave a todo operador da empresa. O administrador concede nominalmente a
-  // quem é do Núcleo.
+  // O Núcleo tem cargo próprio desde 11/09/2026: `assistente_adm`, exclusivo do
+  // setor nos dois sentidos (`fn_perfis_cargo_do_nucleo`, migration
+  // 20260911121000). Antes disso estas chaves nasciam em ninguém — cargo da
+  // cobrança não distingue setor, e semear `numeros_administrar` em `operador`
+  // daria a chave a todo operador. Com um cargo que só existe no Núcleo, o
+  // padrão dele É o Núcleo, e os cargos da cobrança não recebem nenhuma.
   //
-  // Ligar a chave não basta: a RLS confere também se a pessoa está no setor
-  // apontado por `numeros_config`. São duas fechaduras, e as duas precisam
-  // abrir. Ver `fn_numeros_visivel` (migration 20260910190000).
+  // Ligar a chave continua não bastando: a RLS confere também se a pessoa está
+  // no setor apontado por `numeros_config`. São duas fechaduras, e as duas
+  // precisam abrir. Ver `fn_numeros_visivel` (migration 20260910190000).
   {
     key: 'ver_controle_numeros', label: 'Aba Controle de Números',
     descricao:
       'Abrir a área do Núcleo: cadastrar celulares e números, acompanhar o '
       + 'aquecimento e receber o que os setores relançarem',
-    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: { assistente_adm: true },
   },
   {
     key: 'numeros_administrar', label: 'Números: cadastrar e alterar situação',
     descricao:
       'Cadastrar celular e número, corrigir cadastro, e mover a situação entre '
       + 'Em aquecimento, Ativo e Banido',
-    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: { assistente_adm: true },
     depende: {
       chaves: ['ver_controle_numeros'],
       motivo: 'Só se administra o que se enxerga — sem a aba não há o que cadastrar.',
@@ -1801,7 +1828,7 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao:
       'Disponibilizar ao setor dono um número que já está ativo. Só número '
       + 'ativo sai do Núcleo',
-    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: { assistente_adm: true },
     depende: {
       chaves: ['ver_controle_numeros'],
       motivo: 'Liberar é uma ação sobre a lista do Núcleo, que a aba abre.',
@@ -1828,7 +1855,8 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao:
       'Abrir a área do próprio setor e consultar os números que o Núcleo já '
       + 'liberou para ele',
-    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: TODOS,
+    // O Assistente ADM também: acompanha por aqui onde cada número está.
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: { ...TODOS, assistente_adm: true },
   },
   {
     key: 'chips_escopo_individual', label: 'Meus Chips: os números lançados para mim',
@@ -1842,7 +1870,10 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao:
       'Ver em Meus Chips todos os números do próprio setor, inclusive os que '
       + 'ainda não foram lançados a ninguém — a visão da liderança',
-    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: LIDERANCA,
+    // O Assistente ADM entra com a visão ampla: o setor dele não recebe número,
+    // e `fn_numeros_visivel` entrega ao Núcleo a distribuição de todos os
+    // setores. Na visão individual a tela ficaria vazia.
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: { ...LIDERANCA, assistente_adm: true },
   },
   {
     key: 'chips_lancar_ao_operador', label: 'Meus Chips: lançar a um operador',

@@ -15,6 +15,7 @@ export const CARGOS_ALVO_CHAT = [
   'diretoria',
   'ouvidoria',
   'rh',
+  'assistente_adm',
   'administrador',
   'super_admin',
 ] as const;
@@ -22,15 +23,16 @@ export const CARGOS_ALVO_CHAT = [
 export type CargoAlvoChat = typeof CARGOS_ALVO_CHAT[number];
 
 export const CHAVE_CARGO_CHAT: Record<CargoAlvoChat, string> = {
-  operador:      'chat_cargo_operador',
-  lider:         'chat_cargo_lider',
-  elite:         'chat_cargo_elite',
-  gerencia:      'chat_cargo_gerencia',
-  diretoria:     'chat_cargo_diretoria',
-  ouvidoria:     'chat_cargo_ouvidoria',
-  rh:            'chat_cargo_rh',
-  administrador: 'chat_cargo_administrador',
-  super_admin:   'chat_cargo_super_admin',
+  operador:       'chat_cargo_operador',
+  lider:          'chat_cargo_lider',
+  elite:          'chat_cargo_elite',
+  gerencia:       'chat_cargo_gerencia',
+  diretoria:      'chat_cargo_diretoria',
+  ouvidoria:      'chat_cargo_ouvidoria',
+  rh:             'chat_cargo_rh',
+  assistente_adm: 'chat_cargo_assistente_adm',
+  administrador:  'chat_cargo_administrador',
+  super_admin:    'chat_cargo_super_admin',
 };
 
 export function ehCargoAlvoChat(cargo: string): cargo is CargoAlvoChat {
@@ -49,7 +51,7 @@ export function rotuloCargoChat(cargo: CargoAlvoChat): string {
  * Quais cargos a pessoa logada pode procurar para iniciar conversa.
  *
  * As chamadas literais são deliberadas: além de deixar o contrato auditável,
- * fazem o teste do catálogo provar que todos os nove botões controlam código
+ * fazem o teste do catálogo provar que todos os dez botões controlam código
  * real — nenhum pode virar uma permissão apenas decorativa.
  */
 export function cargosChatLiberados(
@@ -63,6 +65,7 @@ export function cargosChatLiberados(
   if (temPermissao('chat_cargo_diretoria')) liberados.push('diretoria');
   if (temPermissao('chat_cargo_ouvidoria')) liberados.push('ouvidoria');
   if (temPermissao('chat_cargo_rh')) liberados.push('rh');
+  if (temPermissao('chat_cargo_assistente_adm')) liberados.push('assistente_adm');
   if (temPermissao('chat_cargo_administrador')) liberados.push('administrador');
   if (temPermissao('chat_cargo_super_admin')) liberados.push('super_admin');
   return liberados;

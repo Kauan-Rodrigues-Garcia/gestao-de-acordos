@@ -583,6 +583,7 @@ const CARGO_LABEL: Record<string, string> = {
   gerencia:      'Gerência',
   diretoria:     'Diretoria',
   ouvidoria:     'Ouvidoria',
+  assistente_adm: 'Assistente ADM',
 };
 
 /**

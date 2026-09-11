@@ -81,14 +81,27 @@ function catalogoSql(): LinhaSql[] {
 
   const linha = /\(\s*'([a-z_]+)',\s*(NULL::TEXT\[\]|ARRAY\[[^\]]*\](?:\s*::TEXT\[\])?),\s*(lideranca|todos|cupula|ninguem|ARRAY\[[^\]]*\](?:\s*::TEXT\[\])?),\s*(true|false)\s*\)/g;
 
-  return [...corpos.join('\n').matchAll(linha)]
+  const linhas = [...corpos.join('\n').matchAll(linha)]
     .map(m => ({
       chave: m[1],
       tenants: /^NULL/i.test(m[2]) ? null : listaDeArray(m[2]),
       padrao: listaDeArray(m[3]),
       explicita: m[4] === 'true',
-    }))
-    .filter(l => !removidas.has(l.chave));
+    }));
+
+  /**
+   * A ÚLTIMA definição de cada chave vence.
+   *
+   * Uma migration pode REDEFINIR uma chave que continua existindo — mudar o
+   * padrão sem aposentá-la. Foi o que 20260911120000 fez com as chaves do Núcleo
+   * e do chat, para o cargo `assistente_adm`: o SQL tira a versão velha com
+   * `NOT IN` e soma a nova. Os corpos já estão em ordem de migration, então a
+   * última ocorrência é a que o banco devolve.
+   */
+  const porChave = new Map<string, LinhaSql>();
+  for (const l of linhas) porChave.set(l.chave, l);
+
+  return [...porChave.values()].filter(l => !removidas.has(l.chave));
 }
 
 const SQL = catalogoSql();

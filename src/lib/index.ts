@@ -99,6 +99,15 @@ export const PERFIL_LABELS: Record<string, string> = {
    * sai das chaves `rh_*` do painel, não de uma lista de cargo escrita aqui.
    */
   rh: 'RH',
+  /*
+   * O cargo do Núcleo de Inteligência e Gestão (migration 20260911120000).
+   *
+   * Exclusivo do setor, nos dois sentidos: só existe no Núcleo, e o Núcleo só
+   * aceita ele — administrador e super_admin à parte. Quem garante é o banco
+   * (`fn_perfis_cargo_do_nucleo`). Como o RH, não entra em lista de liderança
+   * nem de escopo: o alcance dele sai das chaves do painel.
+   */
+  assistente_adm: 'Assistente ADM',
 };
 
 export const PERFIL_COLORS: Record<string, string> = {
@@ -111,6 +120,7 @@ export const PERFIL_COLORS: Record<string, string> = {
   super_admin:   'bg-role-super/10 text-role-super border-role-super/30',
   ouvidoria:     'bg-teal-500/10 text-teal-600 border-teal-500/30',
   rh:            'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/30',
+  assistente_adm: 'bg-sky-500/10 text-sky-600 border-sky-500/30',
 };
 
 // Perfis com acesso de líder (visão de setor + equipe).
