@@ -213,17 +213,18 @@ describe('abasDoMenu — por produto', () => {
 describe('abasDoMenu — o cargo do Núcleo', () => {
   /** O que o Assistente ADM nasce podendo, direto do catálogo. */
   const doAssistenteAdm = (chave: string) => [
-    'ver_dashboard', 'ver_controle_numeros', 'numeros_administrar',
+    'ver_dashboard_adm', 'ver_controle_numeros', 'numeros_administrar',
     'numeros_liberar_ao_setor', 'ver_meus_chips', 'chips_escopo_setor',
   ].includes(chave);
 
   it('o Assistente ADM recebe o Núcleo, e não a cobrança', () => {
     const abas = rotulos(abasDoMenu(ctx({ cargo: 'assistente_adm', temPermissao: doAssistenteAdm })));
-    expect(abas).toContain('Dashboard');
+    // O painel dele é a aba própria desde 11/09/2026; o Dashboard da cobrança saiu.
+    expect(abas).toContain('Dashboard – ADM');
     expect(abas).toContain('Controle de Números');
     expect(abas).toContain('Meus Chips');
     for (const proibida of [
-      'Acordos', 'Novo Acordo', 'Analítico', 'Lixeira',
+      'Dashboard', 'Acordos', 'Novo Acordo', 'Analítico', 'Lixeira',
       'Importar Excel', 'Campanha Fácil', 'Painel Líder', 'Painel Diretoria',
     ]) {
       expect(abas, `${proibida} não é do Núcleo`).not.toContain(proibida);

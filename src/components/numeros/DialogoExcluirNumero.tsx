@@ -1,24 +1,25 @@
 /**
- * DialogoExcluirNumero — apagar um cadastro feito errado.
+ * DialogoExcluirNumero — mandar um número para a Lixeira de Números.
  *
- * ## Por que a confirmação existe aqui, e não em «alterar situação»
+ * ## Excluir deixou de ser sem volta
  *
- * A regra do módulo: o que é reversível acontece em um clique; o que não é pede
- * confirmação. Trocar a situação é reversível e fica no histórico. Apagar não —
- * a linha some, e a trilha dela vai junto por `ON DELETE CASCADE`.
+ * Até a migration 20260911150000, excluir apagava a linha e a trilha junto, e
+ * por isso só valia para o que nunca tinha circulado. Agora a cópia, com o
+ * histórico, vai para a lixeira e volta inteira ao restaurar. A confirmação
+ * continua — tirar um número da lista é um passo que se confere —, mas o texto
+ * diz a verdade: dá para desfazer.
  *
- * ## O texto diz o que se perde
+ * ## Quando o número está com um setor
  *
- * «Tem certeza?» não ajuda ninguém a decidir. O aviso diz a consequência exata
- * (o histórico some junto) e aponta a alternativa (marcar Banido), porque na
- * maioria das vezes é ela que a pessoa quer — apagar só serve para o número que
- * foi digitado errado e nunca circulou.
+ * Só o super_admin chega aqui com um número assim (`podeExcluirNumero`). O
+ * aviso diz a consequência que não se vê desta tela: o número some do Meus
+ * Chips de quem o usa agora.
  *
- * Quem recusa de fato é o banco: `fn_numeros_pode_excluir` derruba a exclusão de
- * qualquer número que já tenha saído do Núcleo. Esta tela evita chegar lá.
+ * Quem recusa de fato é o banco: `fn_numeros_excluir`.
  */
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { AlertTriangle } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -30,14 +31,19 @@ export interface DialogoExcluirNumeroProps {
   numero: NumeroRow | null;
   /** O aparelho de onde ele sai, só para a frase. */
   nomeDoCelular?: string;
+  /** O setor com quem o número está, só para o aviso. */
+  nomeDoSetor?: string;
   onFechar: () => void;
   onExcluido: () => void;
 }
 
 export function DialogoExcluirNumero({
-  numero, nomeDoCelular, onFechar, onExcluido,
+  numero, nomeDoCelular, nomeDoSetor, onFechar, onExcluido,
 }: DialogoExcluirNumeroProps) {
   const [salvando, setSalvando] = useState(false);
+
+  const foraDoNucleo = numero !== null
+    && (numero.posse !== 'nucleo' || numero.operador_id !== null);
 
   async function excluir() {
     if (!numero) return;
@@ -46,7 +52,7 @@ export function DialogoExcluirNumero({
     setSalvando(false);
 
     if (!r.ok) { toast.error(r.erro ?? 'Não foi possível excluir.'); return; }
-    toast.success(`${mascararNumero(numero.numero)} foi excluído do cadastro.`);
+    toast.success(`${mascararNumero(numero.numero)} foi para a Lixeira de Números.`);
     onExcluido();
     onFechar();
   }
@@ -61,15 +67,20 @@ export function DialogoExcluirNumero({
           <AlertDialogDescription asChild>
             <div className="space-y-2">
               <p>
-                O número sai do cadastro
-                {nomeDoCelular ? ` de ${nomeDoCelular}` : ''}, e o histórico dele
-                é apagado junto. Não há como desfazer.
+                O número sai {nomeDoCelular ? `de ${nomeDoCelular}` : 'do cadastro'} e vai
+                para a <strong>Lixeira de Números</strong>, com o histórico inteiro. Dá
+                para restaurar de lá.
               </p>
-              <p>
-                Isto serve para o que foi digitado errado. Se o número existe de
-                verdade e parou de funcionar, marque <strong>Banido</strong> —
-                assim o registro e a trilha ficam.
-              </p>
+              {foraDoNucleo && (
+                <p className="flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-foreground">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                  <span>
+                    Este número está com {nomeDoSetor ?? 'um setor'}
+                    {numero?.operador_id ? ', na mão de um operador' : ''}. Ao excluir, ele
+                    some do Meus Chips de quem o usa agora.
+                  </span>
+                </p>
+              )}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -80,7 +91,7 @@ export function DialogoExcluirNumero({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={e => { e.preventDefault(); void excluir(); }}
           >
-            Excluir
+            Mover para a lixeira
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

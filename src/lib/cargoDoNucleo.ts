@@ -83,6 +83,24 @@ export function cargoCabeNoSetor(
   return motivoCargoForaDoSetor(cargo, setorId, setorNucleoId) === null;
 }
 
+/**
+ * Como alguém que está sendo EDITADO chega ao cargo do Núcleo.
+ *
+ *   `'direto'` ...... já está no setor do Núcleo: basta trocar o cargo;
+ *   `'transferir'` .. está em outro setor. Na edição o setor não muda (é
+ *                     transferência), então a porta é a transferência ao
+ *                     Núcleo, que troca setor e cargo no mesmo update;
+ *   `'nao'` ......... não se sabe qual setor é o Núcleo, ou a pessoa tem acesso
+ *                     total — a transferência manteria o cargo dela, e o
+ *                     Assistente ADM nunca chegaria.
+ */
+export function caminhoParaAssistenteAdm(
+  cargoAtual: string, setorAtual: string | null, setorNucleoId: string | null,
+): 'direto' | 'transferir' | 'nao' {
+  if (!setorNucleoId || ATRAVESSAM.includes(cargoAtual)) return 'nao';
+  return setorAtual === setorNucleoId ? 'direto' : 'transferir';
+}
+
 interface FormularioDeCargo {
   perfil: PerfilUsuario;
   setor_id: string;

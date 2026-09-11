@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CARGO_DO_NUCLEO, CARGOS_FORA_DO_NUCLEO,
   motivoCargoForaDoSetor, cargoCabeNoSetor,
-  aoTrocarCargo, aoTrocarSetor, ajusteDeCargoNaTransferencia,
+  aoTrocarCargo, aoTrocarSetor, ajusteDeCargoNaTransferencia, caminhoParaAssistenteAdm,
 } from '../cargoDoNucleo';
 import type { PerfilUsuario } from '@/lib/supabase';
 
@@ -22,6 +22,31 @@ const SETORES = [{ id: NUCLEO }, { id: PLAY }];
 function form(perfil: PerfilUsuario, setor_id: string) {
   return { nome: 'Ana', perfil, setor_id };
 }
+
+/*
+ * Editando alguém, o Assistente ADM deixou de sumir da lista: quem está fora do
+ * Núcleo chega a ele pela transferência, que troca setor e cargo juntos.
+ */
+describe('editando: como a pessoa chega ao Assistente ADM', () => {
+  it('quem já está no Núcleo troca o cargo direto', () => {
+    expect(caminhoParaAssistenteAdm('operador', NUCLEO, NUCLEO)).toBe('direto');
+  });
+
+  it('quem está em outro setor, ou sem setor, passa pela transferência', () => {
+    expect(caminhoParaAssistenteAdm('operador', PLAY, NUCLEO)).toBe('transferir');
+    expect(caminhoParaAssistenteAdm('diretoria', null, NUCLEO)).toBe('transferir');
+  });
+
+  it('acesso total não chega — a transferência manteria o cargo', () => {
+    for (const cargo of ['administrador', 'super_admin']) {
+      expect(caminhoParaAssistenteAdm(cargo, PLAY, NUCLEO), cargo).toBe('nao');
+    }
+  });
+
+  it('sem Núcleo configurado, não há caminho', () => {
+    expect(caminhoParaAssistenteAdm('operador', PLAY, null)).toBe('nao');
+  });
+});
 
 describe('onde cada cargo pode ser gravado', () => {
   it('Assistente ADM só no Núcleo', () => {

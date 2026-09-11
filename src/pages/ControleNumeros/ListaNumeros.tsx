@@ -97,6 +97,8 @@ export interface ListaNumerosProps {
   nomeDoSetor: (setorId: string) => string;
   podeAdministrar: boolean;
   podeLiberar: boolean;
+  /** A chave-mestra: o super_admin exclui número mesmo com setor ou operador. */
+  superAdmin?: boolean;
   onMudou: () => void;
   onVerHistorico: (numeroId: string, numero: string) => void;
   onCorrigir: (aparelho: CelularComNumeros, numero: NumeroRow) => void;
@@ -104,7 +106,7 @@ export interface ListaNumerosProps {
 }
 
 export function ListaNumeros({
-  aparelhos, nomeDoSetor, podeAdministrar, podeLiberar,
+  aparelhos, nomeDoSetor, podeAdministrar, podeLiberar, superAdmin = false,
   onMudou, onVerHistorico, onCorrigir, onExcluir,
 }: ListaNumerosProps) {
   const [filtroCelular, setFiltroCelular]   = useState<string>(TODOS);
@@ -254,7 +256,7 @@ export function ListaNumeros({
             {/* Corrigir e excluir moram num menu: são raros — conserto de
                 cadastro —, e ocupando espaço fixo competiriam com as ações do
                 dia a dia. */}
-            {podeAdministrar && (podeCorrigirNumero(estado) || podeExcluirNumero(estado)) && (
+            {podeAdministrar && (podeCorrigirNumero(estado) || podeExcluirNumero(estado, { superAdmin })) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -271,7 +273,7 @@ export function ListaNumeros({
                       <Pencil className="mr-2 h-3.5 w-3.5" /> Corrigir número
                     </DropdownMenuItem>
                   )}
-                  {podeExcluirNumero(estado) && (
+                  {podeExcluirNumero(estado, { superAdmin }) && (
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onSelect={() => onExcluir(aparelho, n)}

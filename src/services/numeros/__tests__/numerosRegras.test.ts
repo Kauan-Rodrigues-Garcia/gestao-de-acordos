@@ -302,16 +302,20 @@ describe('corrigir e excluir um cadastro', () => {
     expect(podeCorrigirNumero(comOperador)).toBe(false);
   });
 
-  it('exclui o que nunca saiu do Núcleo', () => {
+  it('exclui o que está no Núcleo e sem dono — inclusive o que já voltou de um setor', () => {
+    // Excluir manda para a Lixeira de Números com a trilha, e restaurar devolve
+    // tudo. «Já circulou» segurava porque apagar levava prova; não leva mais.
     expect(podeExcluirNumero(noNucleoAtivo)).toBe(true);
+    expect(podeExcluirNumero(voltouPendente)).toBe(true);
   });
 
-  it('não exclui o que está com um setor', () => {
+  it('o Núcleo não exclui o que está com um setor', () => {
     expect(podeExcluirNumero(noSetorLivre)).toBe(false);
     expect(podeExcluirNumero(comOperador)).toBe(false);
   });
 
-  it('não exclui o que já circulou — apagar levaria a trilha junto', () => {
-    expect(podeExcluirNumero(noNucleoAtivo, true)).toBe(false);
+  it('o super_admin exclui qualquer um, com setor ou com operador', () => {
+    expect(podeExcluirNumero(noSetorLivre, { superAdmin: true })).toBe(true);
+    expect(podeExcluirNumero(comOperador, { superAdmin: true })).toBe(true);
   });
 });

@@ -23,7 +23,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
-import { NucleoProvider, useNucleo } from '@/hooks/useNucleo';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -68,8 +67,8 @@ const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
 // O painel do Nucleo. Lazy como o resto, e aqui isso poupa o bundle de quase
-// todo mundo: um setor so o abre.
-const DashboardNucleo   = lazy(() => import('@/pages/DashboardNucleo'));
+// todo mundo: um cargo so nasce com a chave.
+const DashboardAdm      = lazy(() => import('@/pages/DashboardAdm'));
 const ModoTV            = lazy(() => import('@/pages/ModoTV'));
 // O palco. Lazy como o resto, e aqui isso importa por um motivo extra: o PC da
 // TV baixa SÓ este pedaço, e não a mesa nem o Gestão inteiro.
@@ -123,39 +122,25 @@ function VersionWatcher(): null {
 }
 
 /**
- * A rota `/` por produto — e, dentro da cobrança, por SETOR.
+ * A rota `/` por produto.
  *
  * O Dashboard é da cobrança inteiro. Enquanto Comercial e RH não têm o deles,
  * a porta de entrada avisa que a operação está sendo montada — em vez de abrir
  * uma tela de recebimento vazia para um vendedor.
  *
- * ## O Núcleo entra aqui, e não dentro do Dashboard
+ * ## O Núcleo não passa mais por aqui
  *
- * O Núcleo de Inteligência e Gestão é `cobranca` — mesma empresa, mesmo deploy —
- * e mesmo assim recebimento, acordo pago, ticket médio e meta do mês não dizem
- * nada sobre o trabalho dele, que é preparar e distribuir números de WhatsApp.
- *
- * A troca acontece nesta função, com um `return` diferente, e **o Dashboard da
- * cobrança não é tocado**. A alternativa — abrir o Dashboard e ramificar lá
- * dentro — colocaria dois painéis em mil linhas de componente e faria toda
- * mudança na cobrança arriscar quebrar o Núcleo, e vice-versa. Aqui os dois só
- * dividem a URL.
- *
- * É a única decisão que ainda olha o SETOR. O que cada pessoa enxerga no menu e
- * nas rotas sai do painel de permissões, e o cargo do Núcleo (`assistente_adm`)
- * não tem as chaves da cobrança. Administrador e super_admin cadastrados no
- * setor continuam abrindo no Dashboard — ver `abrePainelDoNucleo`.
- *
- * Enquanto `useNucleo` carrega, a resposta é `false` e o Dashboard da cobrança
- * aparece. Não é vazamento: o Dashboard mostra o que a RLS da pessoa entregar —
- * que, para quem é do Núcleo, é praticamente nada.
+ * Até 11/09/2026 esta função desenhava o painel do Núcleo para quem estava no
+ * SETOR dele, por um hook que saiu junto — a última decisão que olhava o setor. O
+ * painel virou a aba Dashboard – ADM, com chave própria, e o Assistente ADM
+ * deixou de ter `ver_dashboard`: quem chega em `/` sem essa chave e com
+ * `ver_dashboard_adm` é mandado para lá pela `alternativa` da rota, antes de
+ * chegar a esta função. Administrador e super_admin têm as duas chaves e
+ * continuam abrindo no Dashboard.
  */
 function PainelDeEntrada(): React.ReactElement {
   const { empresa, tenantSlug, loading } = useEmpresa();
-  const { abrePainelDoNucleo } = useNucleo();
   const produto = produtoDaEmpresa(empresa, tenantSlug);
-
-  if (abrePainelDoNucleo) return <DashboardNucleo />;
 
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
@@ -208,11 +193,6 @@ export default function App() {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
-          {/* Dentro de EmpresaProvider porque precisa da empresa. Serve à porta
-              de entrada (`PainelDeEntrada`), e fica acima do Router para a
-              consulta a `numeros_config` acontecer uma vez por sessão, e não a
-              cada navegação. */}
-          <NucleoProvider>
           {/* Acima de tudo que desenha número: o mês escolhido vale para o
               sistema inteiro, e não pode se perder ao trocar de página. */}
           <MesProvider>
@@ -239,11 +219,28 @@ export default function App() {
               {/* `/` existe em todo produto — é a porta de entrada. O que ela
                   DESENHA é que muda: o Dashboard atual é da cobrança de ponta a
                   ponta (recebimento, acordo, meta, ticket médio) e não significa
-                  nada em Vendas ou RH. Ver `PainelDeEntrada`. */}
+                  nada em Vendas ou RH. Ver `PainelDeEntrada`.
+
+                  `alternativa`: quem não tem o Dashboard da cobrança e tem o
+                  Dashboard – ADM — o Assistente ADM — entra direto no painel dele,
+                  em vez de ler «aba não liberada» na tela inicial. */}
               <Route path={ROUTE_PATHS.DASHBOARD} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_dashboard" mostrarSemAcesso>
+                  <ProtectedRoute
+                    requiredPermissao="ver_dashboard" mostrarSemAcesso
+                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
+                  >
                     <PainelDeEntrada />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.
+                  Quem abre é a chave, que nasce só no Assistente ADM; o dado
+                  passa pela RLS do Controle de Números. */}
+              <Route path={ROUTE_PATHS.DASHBOARD_ADM} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard_adm">
+                    <DashboardAdm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
@@ -491,7 +488,6 @@ export default function App() {
           </PresenceProvider>
           </RealtimeAcordosProvider>
           </MesProvider>
-          </NucleoProvider>
         </EmpresaProvider>
         <DevToolsAdminOnly />
       </AuthProvider>

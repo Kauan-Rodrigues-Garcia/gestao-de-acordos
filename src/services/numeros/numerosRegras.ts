@@ -272,33 +272,41 @@ export function podeCorrigirNumero(n: EstadoNumero): boolean {
   return n.posse === 'nucleo' && n.operadorId === null;
 }
 
-/**
- * Dá para apagar este número do cadastro?
- *
- * Apagar leva a trilha junto (`ON DELETE CASCADE`), então só vale para o que
- * nunca circulou: erro de digitação percebido logo depois. O que já passou por
- * um setor tem história, e a saída para ele é `banido`.
- *
- * A tela não sabe se houve movimentação além do cadastro — quem sabe é o banco,
- * e é ele quem recusa. `jaCirculou` deixa quem chama informar isso quando tiver
- * a resposta em mãos; sem ela, o predicado responde pelo que dá para ver.
- */
-export function podeExcluirNumero(n: EstadoNumero, jaCirculou = false): boolean {
-  return n.posse === 'nucleo' && n.operadorId === null && !jaCirculou;
+/** Quem está excluindo, naquilo que muda a resposta. */
+export interface QuemExclui {
+  /**
+   * A chave-mestra. O super_admin exclui qualquer número, com setor ou com
+   * operador — a mesma exceção que `fn_numeros_excluir` faz no banco.
+   */
+  superAdmin?: boolean;
 }
 
 /**
- * Dá para apagar este APARELHO do cadastro?
+ * Dá para mandar este número para a lixeira?
  *
- * Os números apontam para o aparelho com `ON DELETE RESTRICT`, então apagar o
- * aparelho é apagar os números dele junto — e isso só vale quando cada um pode
- * sair (`podeExcluirNumero`). Aparelho vazio sai sempre.
+ * Excluir não apaga mais de vez: a cópia, com a trilha, vai para a Lixeira de
+ * Números e volta inteira ao restaurar (migration 20260911150000). Por isso «já
+ * circulou por um setor» deixou de segurar — o motivo daquela trava era não
+ * apagar prova, e agora nada se perde.
  *
- * A mesma limitação do predicado de número: a tela não sabe se algum já
- * circulou e voltou. O banco sabe, e recusa a exclusão inteira.
+ * O que continua segurando é estar com um setor: tirar um número da mão de quem
+ * o usa é decisão de quem manda no sistema, e só o super_admin passa.
  */
-export function podeExcluirCelular(numeros: readonly EstadoNumero[]): boolean {
-  return numeros.every(n => podeExcluirNumero(n));
+export function podeExcluirNumero(n: EstadoNumero, quem: QuemExclui = {}): boolean {
+  if (quem.superAdmin) return true;
+  return n.posse === 'nucleo' && n.operadorId === null;
+}
+
+/**
+ * Dá para mandar este APARELHO para a lixeira?
+ *
+ * Os números vão junto, no mesmo lote, então vale quando cada um pode sair
+ * (`podeExcluirNumero`). Aparelho vazio sai sempre.
+ */
+export function podeExcluirCelular(
+  numeros: readonly EstadoNumero[], quem: QuemExclui = {},
+): boolean {
+  return numeros.every(n => podeExcluirNumero(n, quem));
 }
 
 /**

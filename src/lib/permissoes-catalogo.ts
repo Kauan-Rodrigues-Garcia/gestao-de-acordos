@@ -187,6 +187,9 @@ export const GRUPOS_PERMISSAO = [
   // e Gestão. Guarda as chaves das DUAS pontas — a do Núcleo e a dos setores —
   // porque elas descrevem o mesmo caminho de um número, visto dos dois lados.
   'Controle de Números',
+  // Dashboard – ADM, 11/09/2026. O painel do Núcleo, com card próprio: é outra
+  // aba, e não um alcance do Dashboard da cobrança.
+  'Dashboard ADM',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -286,11 +289,27 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_dashboard', label: 'Exibir Dashboard',
     descricao: 'Abrir a tela inicial do sistema',
-    // O Assistente ADM entra: `/` exige esta chave, e é por ela que ele chega ao
-    // painel do Núcleo — a rota é a mesma, o que muda é o que ela desenha (ver
-    // `PainelDeEntrada`). Sem nenhum `dashboard_escopo_*`, o Dashboard da
-    // cobrança continua sem nada a mostrar para ele.
-    grupo: 'Dashboard', produtos: TODA_OPERACAO, padrao: { ...TODOS_COM_RH, assistente_adm: true },
+    // O Assistente ADM saiu em 11/09/2026 (migration 20260911160000): o painel
+    // dele virou a aba própria `ver_dashboard_adm`, e o Dashboard da cobrança
+    // não mede nada do trabalho do Núcleo. Sem esta chave e com a dele, `/` o
+    // manda para o Dashboard – ADM — ver a `alternativa` da rota em App.tsx.
+    grupo: 'Dashboard', produtos: TODA_OPERACAO, padrao: TODOS_COM_RH,
+  },
+  {
+    /*
+     * A aba do Núcleo de Inteligência e Gestão, separada do Dashboard da
+     * cobrança, com card próprio no painel.
+     *
+     * Nasce só no Assistente ADM. Administrador e super_admin a recebem por
+     * acesso total, como toda chave não explícita — e o que a aba mostra ainda
+     * passa pela RLS do Controle de Números, que só entrega dado a quem é do
+     * Núcleo e ao super_admin.
+     */
+    key: 'ver_dashboard_adm', label: 'Aba Dashboard – ADM',
+    descricao:
+      'Abrir o painel do Núcleo: indicadores, evolução, qualidade e aparelhos do '
+      + 'Controle de Números',
+    grupo: 'Dashboard ADM', tenants: ['bookplay'], padrao: { assistente_adm: true },
   },
   {
     key: 'ver_acordos', label: 'Aba Acordos',
@@ -1815,8 +1834,8 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'numeros_administrar', label: 'Números: cadastrar e alterar situação',
     descricao:
-      'Cadastrar celular e número, corrigir cadastro, e mover a situação entre '
-      + 'Em aquecimento, Ativo e Banido',
+      'Cadastrar celular e número, corrigir cadastro, mover a situação entre '
+      + 'Em aquecimento, Ativo e Banido, e excluir e restaurar pela Lixeira de Números',
     grupo: 'Controle de Números', tenants: ['bookplay'], padrao: { assistente_adm: true },
     depende: {
       chaves: ['ver_controle_numeros'],
@@ -1849,6 +1868,25 @@ export const PERMISSOES: PermissaoMeta[] = [
       'Apontar qual setor é o Núcleo de Inteligência e Gestão. Decide quem '
       + 'administra o módulo inteiro',
     grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    /*
+     * Excluir DE VEZ o que está na Lixeira de Números (migration 20260911150000).
+     *
+     * Mandar um número para a lixeira é `numeros_administrar`: nada se perde, e
+     * restaurar devolve tudo. Esta chave é o passo seguinte, o que não tem
+     * volta — por isso nasce desligada para todo cargo configurável, e alguém
+     * precisa decidir quem pode.
+     */
+    key: 'numeros_lixeira_esvaziar', label: 'Números: excluir de vez da lixeira',
+    descricao:
+      'Tirar números e aparelhos da Lixeira de Números sem poder restaurar, um '
+      + 'a um ou esvaziando tudo',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['numeros_administrar'],
+      motivo: 'A lixeira é de quem administra os números — sem isso ela nem aparece.',
+    },
   },
   {
     key: 'ver_meus_chips', label: 'Aba Meus Chips',

@@ -32,6 +32,8 @@ export const ROUTE_PATHS = {
    */
   CONTROLE_NUMEROS: '/controle-numeros',
   MEUS_CHIPS: '/meus-chips',
+  /** O painel do Núcleo, separado do Dashboard da cobrança (11/09/2026). */
+  DASHBOARD_ADM: '/dashboard-adm',
   COMEMORACOES: '/comemoracoes',
   /** A mesa do Modo TV: prévia, no ar e o corte. Atrás do painel. */
   MODO_TV: '/modo-tv',
@@ -120,7 +122,12 @@ export const PERFIL_COLORS: Record<string, string> = {
   super_admin:   'bg-role-super/10 text-role-super border-role-super/30',
   ouvidoria:     'bg-teal-500/10 text-teal-600 border-teal-500/30',
   rh:            'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/30',
-  assistente_adm: 'bg-sky-500/10 text-sky-600 border-sky-500/30',
+  /*
+   * Sólido, e não o tom claro dos outros cargos: é o mesmo vermelho da etiqueta
+   * ADM do chat (`TagAdm`). O administrador também é avermelhado, mas claro —
+   * o fundo cheio é o que separa os dois de relance.
+   */
+  assistente_adm: 'bg-red-600 text-white border-red-700 font-semibold shadow-sm shadow-red-600/30',
 };
 
 // Perfis com acesso de líder (visão de setor + equipe).

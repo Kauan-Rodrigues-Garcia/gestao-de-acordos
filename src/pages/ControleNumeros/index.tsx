@@ -1,7 +1,7 @@
 /**
  * Controle de Números — a área do Núcleo de Inteligência e Gestão.
  *
- * ## As três abas, e por que são três
+ * ## As quatro abas, e por que são quatro
  *
  *   Celulares    o aparelho e os números dentro dele, com o cadastro e as
  *                correções. É a visão de quem está com o celular na mão.
@@ -9,6 +9,8 @@
  *                celular, situação e posse, e com as ações do fluxo — tratar,
  *                encerrar, etiquetar, liberar. É a visão de quem trabalha o
  *                acervo.
+ *   Lixeira      o que foi excluído, com a trilha guardada, e o caminho de
+ *                volta. Só aparece com `numeros_administrar`.
  *   Configuração qual setor é o Núcleo. Só aparece com `numeros_configurar`.
  *
  * As duas primeiras mostram o MESMO dado por recortes diferentes — não são
@@ -26,6 +28,14 @@
  * lançar de volta ao setor era a única forma de tirar o «Voltou: Banido» da
  * tela, e o tratamento acontecia com o número já fora das mãos.
  *
+ * ## Excluir não apaga
+ *
+ * Desde a migration 20260911150000, excluir manda para a Lixeira de Números: a
+ * cópia do número, do aparelho e da trilha fica guardada e volta inteira ao
+ * restaurar. O super_admin exclui qualquer número, com setor ou operador; o
+ * Núcleo, o que está em casa. A régua é `fn_numeros_excluir` — `superAdmin` aqui
+ * só evita oferecer o botão que o banco recusaria.
+ *
  * ## O que esta tela NÃO decide
  *
  * Nada sobre acesso. Quem chega aqui passou por `ProtectedRoute`
@@ -34,7 +44,7 @@
  * existem, não quais dados chegam.
  */
 import { useMemo, useState } from 'react';
-import { Smartphone, Hash, Settings, AlertTriangle } from 'lucide-react';
+import { Smartphone, Hash, Settings, AlertTriangle, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -42,18 +52,22 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useControleNumeros, type CelularComNumeros } from '@/hooks/useControleNumeros';
+import { useLixeiraNumeros } from '@/hooks/useLixeiraNumeros';
 import { HistoricoNumero } from '@/components/numeros/HistoricoNumero';
 import { DialogoExcluirNumero } from '@/components/numeros/DialogoExcluirNumero';
 import { DialogoExcluirCelular } from '@/components/numeros/DialogoExcluirCelular';
 import { EtiquetaTratamento } from '@/components/numeros/EtiquetasNumero';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import { MOTIVO_LABELS, esperaTratamento } from '@/services/numeros/numerosRegras';
-import type { NumeroRow } from '@/services/numeros/numeros.service';
+import {
+  listarHistoricoDaLixeira, type NumeroRow,
+} from '@/services/numeros/numeros.service';
 import { ListaCelulares } from './ListaCelulares';
 import { ListaNumeros } from './ListaNumeros';
 import { DialogoCelular } from './DialogoCelular';
 import { DialogoNumero } from './DialogoNumero';
 import { PainelConfiguracao } from './PainelConfiguracao';
+import { PainelLixeira } from './PainelLixeira';
 
 export default function ControleNumeros() {
   const { perfil } = useAuth();
@@ -67,7 +81,12 @@ export default function ControleNumeros() {
   const [celularEmEdicao, setCelularEmEdicao] = useState<CelularComNumeros | null>(null);
   const [celularAberto, setCelularAberto]     = useState(false);
   const [celularParaExcluir, setCelularParaExcluir] = useState<CelularComNumeros | null>(null);
-  const [historico, setHistorico] = useState<{ id: string; numero: string } | null>(null);
+  /*
+   * `daLixeira`: o número não existe mais na tabela viva, e `id` é o do item na
+   * lixeira. A trilha vem da cópia guardada — ver `listarHistoricoDaLixeira`.
+   */
+  const [historico, setHistorico] =
+    useState<{ id: string; numero: string; daLixeira?: boolean } | null>(null);
 
   /*
    * Cadastrar e corrigir usam o MESMO diálogo, e por isso um estado só.
@@ -83,11 +102,23 @@ export default function ControleNumeros() {
 
   const podeAdministrar = temPermissao('numeros_administrar');
   const podeLiberar     = temPermissao('numeros_liberar_ao_setor');
+  const podeEsvaziar    = temPermissao('numeros_lixeira_esvaziar');
   // Concessão nominal: o acesso total do administrador não concede esta.
   const podeConfigurar  = temPermissaoExplicita('numeros_configurar');
+  // Chave-mestra, a mesma de `fn_numeros_excluir`: ver o cabeçalho.
+  const superAdmin = perfil?.perfil === 'super_admin';
 
   const autor = perfil ? { id: perfil.id, nome: perfil.nome } : null;
   const empresaId = empresa?.id ?? '';
+
+  // Montado sempre (regra dos hooks); só lê a lixeira de quem pode ver a aba.
+  const lixeira = useLixeiraNumeros(podeAdministrar && empresaId ? empresaId : null);
+
+  /** Excluir, restaurar e esvaziar mexem nas duas listas ao mesmo tempo. */
+  const recarregarTudo = () => {
+    void recarregar();
+    void lixeira.recarregar();
+  };
 
   /*
    * O aviso do topo mostra só o que ninguém pegou ainda.
@@ -191,6 +222,16 @@ export default function ControleNumeros() {
           <TabsTrigger value="numeros">
             <Hash className="mr-1.5 h-4 w-4" /> Números
           </TabsTrigger>
+          {podeAdministrar && (
+            <TabsTrigger value="lixeira">
+              <Trash2 className="mr-1.5 h-4 w-4" /> Lixeira
+              {lixeira.itens.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                  {lixeira.itens.length}
+                </span>
+              )}
+            </TabsTrigger>
+          )}
           {podeConfigurar && (
             <TabsTrigger value="configuracao">
               <Settings className="mr-1.5 h-4 w-4" /> Configuração
@@ -203,6 +244,7 @@ export default function ControleNumeros() {
             aparelhos={aparelhos}
             nomeDoSetor={nomeDoSetor}
             podeAdministrar={podeAdministrar}
+            superAdmin={superAdmin}
             onNovoCelular={() => { setCelularEmEdicao(null); setCelularAberto(true); }}
             onEditarCelular={a => { setCelularEmEdicao(a); setCelularAberto(true); }}
             onExcluirCelular={setCelularParaExcluir}
@@ -219,12 +261,27 @@ export default function ControleNumeros() {
             nomeDoSetor={nomeDoSetor}
             podeAdministrar={podeAdministrar}
             podeLiberar={podeLiberar}
+            superAdmin={superAdmin}
             onMudou={() => void recarregar()}
             onVerHistorico={(id, numero) => setHistorico({ id, numero })}
             onCorrigir={(a, n) => setDialogoNumero({ aparelho: a, numero: n })}
             onExcluir={(a, n) => setNumeroParaExcluir({ aparelho: a, numero: n })}
           />
         </TabsContent>
+
+        {podeAdministrar && (
+          <TabsContent value="lixeira" className="mt-4">
+            <PainelLixeira
+              empresaId={empresaId}
+              itens={lixeira.itens}
+              loading={lixeira.loading}
+              erro={lixeira.erro}
+              podeEsvaziar={podeEsvaziar}
+              onMudou={recarregarTudo}
+              onVerHistorico={(id, numero) => setHistorico({ id, numero, daLixeira: true })}
+            />
+          </TabsContent>
+        )}
 
         {podeConfigurar && (
           <TabsContent value="configuracao" className="mt-4">
@@ -252,8 +309,9 @@ export default function ControleNumeros() {
 
       <DialogoExcluirCelular
         aparelho={celularParaExcluir}
+        superAdmin={superAdmin}
         onFechar={() => setCelularParaExcluir(null)}
-        onExcluido={() => void recarregar()}
+        onExcluido={recarregarTudo}
       />
 
       <DialogoNumero
@@ -272,13 +330,15 @@ export default function ControleNumeros() {
       <DialogoExcluirNumero
         numero={numeroParaExcluir?.numero ?? null}
         nomeDoCelular={numeroParaExcluir?.aparelho.celular.identificacao}
+        nomeDoSetor={numeroParaExcluir ? nomeDoSetor(numeroParaExcluir.numero.setor_id) : undefined}
         onFechar={() => setNumeroParaExcluir(null)}
-        onExcluido={() => void recarregar()}
+        onExcluido={recarregarTudo}
       />
 
       <HistoricoNumero
         numeroId={historico?.id ?? null}
         numero={historico?.numero}
+        buscar={historico?.daLixeira ? listarHistoricoDaLixeira : undefined}
         onFechar={() => setHistorico(null)}
       />
     </div>

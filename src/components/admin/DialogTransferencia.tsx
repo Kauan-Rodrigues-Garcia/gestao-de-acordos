@@ -65,13 +65,19 @@ interface Props {
   /** Setores da empresa ATUAL — o destino padrão. */
   setores: Setor[];
   empresaId: string | null | undefined;
+  /**
+   * O setor que já vem escolhido ao abrir. Existe para a janela de usuário:
+   * escolher Assistente ADM para alguém de outro setor abre a transferência já
+   * apontando para o Núcleo. Quem transfere ainda confere e confirma.
+   */
+  destinoSetorInicial?: string | null;
   onFechar: () => void;
   /** Chamado só quando pelo menos uma transferência deu certo. */
   onConcluida: () => void;
 }
 
 export function DialogTransferencia({
-  alvos, setores, empresaId, onFechar, onConcluida,
+  alvos, setores, empresaId, destinoSetorInicial = null, onFechar, onConcluida,
 }: Props) {
   const { perfil: perfilAtual } = useAuth();
   const { temPermissao } = useCargoPermissoes();
@@ -97,15 +103,16 @@ export function DialogTransferencia({
   const trocaDeEmpresa = !!destinoEmpresa && destinoEmpresa !== empresaId;
 
   // Reabrir SEMPRE recomeça em "chegar limpo": herdar a escolha da
-  // transferência anterior é como se apaga um histórico sem querer.
+  // transferência anterior é como se apaga um histórico sem querer. O único
+  // destino que vem pronto é o que quem abriu pediu (`destinoSetorInicial`).
   useEffect(() => {
     if (!alvos) return;
-    setDestinoSetor('');
+    setDestinoSetor(destinoSetorInicial ?? '');
     setDestinoEmpresa(empresaId ?? '');
     setSetoresDestino(setores);
     setLevarAcordos(false);
     setNovoCargo('');
-  }, [alvos, empresaId, setores]);
+  }, [alvos, empresaId, setores, destinoSetorInicial]);
 
   useEffect(() => {
     if (!podeTrocarEmpresa) { setEmpresas([]); return; }

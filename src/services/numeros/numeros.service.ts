@@ -360,6 +360,49 @@ export async function listarMovimentacoes(numeroId: string): Promise<Movimentaca
   return (data as MovimentacaoRow[]) ?? [];
 }
 
+/** A parte de uma movimentação que as contas do Dashboard – ADM usam. */
+export type MovimentacaoResumoRow = Pick<MovimentacaoRow,
+  'id' | 'numero_id' | 'tipo' | 'situacao_nova' | 'motivo'
+  | 'setor_origem_id' | 'setor_destino_id' | 'descricao' | 'autor_nome' | 'criado_em'>;
+
+const COLUNAS_MOV_RESUMO =
+  'id, numero_id, tipo, situacao_nova, motivo, setor_origem_id, setor_destino_id, '
+  + 'descricao, autor_nome, criado_em';
+
+/** O PostgREST entrega no máximo mil linhas por pedido. */
+const PAGINA_MOV = 1000;
+/** Teto de segurança: 90 dias de um Núcleo cabem folgado aqui. */
+const TETO_MOV = 20_000;
+
+/**
+ * A trilha da empresa desde um instante, da mais recente para a mais antiga.
+ *
+ * Em páginas: o PostgREST corta em mil linhas, e noventa dias de operação passam
+ * disso. Sem a paginação o gráfico mostraria só os dias mais recentes e zeraria o
+ * resto, calado. A ordem inclui o `id` para a página seguinte não repetir nem
+ * pular linha com o mesmo `criado_em`.
+ */
+export async function listarMovimentacoesDesde(
+  empresaId: string, desdeIso: string,
+): Promise<MovimentacaoResumoRow[]> {
+  const todas: MovimentacaoResumoRow[] = [];
+  for (let inicio = 0; inicio < TETO_MOV; inicio += PAGINA_MOV) {
+    const { data, error } = await db
+      .from('numeros_movimentacoes')
+      .select(COLUNAS_MOV_RESUMO)
+      .eq('empresa_id', empresaId)
+      .gte('criado_em', desdeIso)
+      .order('criado_em', { ascending: false })
+      .order('id', { ascending: false })
+      .range(inicio, inicio + PAGINA_MOV - 1);
+    if (error) throw error;
+    const pagina = (data as unknown as MovimentacaoResumoRow[]) ?? [];
+    todas.push(...pagina);
+    if (pagina.length < PAGINA_MOV) break;
+  }
+  return todas;
+}
+
 // ── Cadastro ─────────────────────────────────────────────────────────────────
 
 export interface NovoCelular {
@@ -546,35 +589,63 @@ export async function corrigirNumero(
 }
 
 /**
- * Apaga um número cadastrado por engano.
+ * Manda um número para a Lixeira de Números.
  *
- * Só vale para o que nunca saiu do Núcleo. Um número que circulou tem trilha, e
- * a trilha morre junto com ele — para esse caso a saída é marcar `banido`, que
- * preserva tudo. Quem recusa é o banco, e a mensagem dele já diz isso.
+ * Não apaga de vez: a cópia, com a trilha, fica em `numeros_lixeira` e volta
+ * inteira por `restaurarDaLixeira`. Quem recusa é o banco — o Núcleo exclui o
+ * que está no Núcleo e sem operador; o super_admin, qualquer número.
+ *
+ * RPC, e não `delete`, desde a migration 20260911150000: guardar a cópia e
+ * apagar precisam acontecer na mesma transação, e só o banco garante isso.
  */
 export async function excluirNumero(id: string): Promise<Resultado> {
-  const { error } = await db.from('numeros_whatsapp').delete().eq('id', id);
-  if (error) return falha(error);
-  return { ok: true };
+  const { error } = await rpc('fn_numeros_excluir', { p_numero_id: id });
+  if (!error) return { ok: true };
+  if (!rpcAusente(error)) return falha(error);
+
+  const { error: erroDireto } = await db.from('numeros_whatsapp').delete().eq('id', id);
+  return erroDireto ? falha(erroDireto) : { ok: true };
 }
 
 /**
- * Apaga um aparelho cadastrado por engano — e os números dele junto.
+ * Manda um aparelho para a lixeira, com os números dele.
  *
- * Os números apontam para o aparelho com `ON DELETE RESTRICT`: com número
- * dentro, o banco recusa apagar o aparelho. Por isso os números saem primeiro.
+ * Uma RPC só, e não «apagar os números e depois o aparelho» em duas idas: se a
+ * segunda falhasse, sobrariam os números na lixeira e o aparelho vazio na lista.
+ * No banco é uma transação — ou vai tudo, ou nada, e a frase da recusa chega na
+ * tela.
+ */
+export async function excluirCelular(celularId: string): Promise<Resultado> {
+  const { error } = await rpc('fn_numeros_excluir_celular', { p_celular_id: celularId });
+  if (!error) return { ok: true };
+  if (!rpcAusente(error)) return falha(error);
+  return excluirCelularDireto(celularId);
+}
+
+/**
+ * A RPC ainda não existe no banco?
  *
- * A exclusão dos números é UMA instrução. `fn_numeros_pode_excluir` recusa o que
- * já circulou por um setor, e uma recusa derruba a instrução inteira — ou saem
- * todos, ou nenhum, e a frase do banco chega na tela. O aparelho vai na segunda
- * ida; se ela falhar, sobra o aparelho vazio, e tentar de novo termina o
- * trabalho.
+ * A Lixeira nasce numa migration aplicada à mão, no SQL Editor, e o front pode
+ * chegar à produção antes dela. Nesse intervalo excluir cai no caminho antigo —
+ * `delete` direto, com as travas antigas do banco — em vez de quebrar a tela.
+ * Sai quando a migration 20260911150000 estiver aplicada em todo ambiente.
+ *
+ * `PGRST202` é o PostgREST dizendo que não achou a função; `42883`, o Postgres.
+ */
+function rpcAusente(erro: unknown): boolean {
+  const codigo = (erro as ErroPostgres | null)?.code;
+  return codigo === 'PGRST202' || codigo === '42883';
+}
+
+/**
+ * O caminho antigo do aparelho: os números primeiro (a FK é `RESTRICT`), depois
+ * ele. Só roda enquanto a RPC não existe — ver `rpcAusente`.
  *
  * `select` depois do `delete`: a RLS não dá erro para a linha que a pessoa não
  * pode apagar — simplesmente não apaga. Sem conferir, a tela diria «excluído»
  * de um aparelho que continua lá.
  */
-export async function excluirCelular(celularId: string): Promise<Resultado> {
+async function excluirCelularDireto(celularId: string): Promise<Resultado> {
   const { error: erroNumeros } = await db
     .from('numeros_whatsapp').delete().eq('celular_id', celularId);
   if (erroNumeros) return falha(erroNumeros);
@@ -597,6 +668,91 @@ export async function excluirCelular(celularId: string): Promise<Resultado> {
     };
   }
   return { ok: true };
+}
+
+// ── A Lixeira de Números ─────────────────────────────────────────────────────
+//
+// Leitura direta, como o resto do módulo: a policy entrega a lixeira só a quem
+// administra (`fn_numeros_nucleo_administra`). Restaurar e excluir de vez são
+// RPC, porque recriam linha, trilha e aparelho numa transação só.
+
+/** Um item da lixeira, como a tela lista. A cópia inteira fica no banco. */
+export interface LixeiraNumeroRow {
+  id: string;
+  empresa_id: string;
+  /** O que foi excluído junto: o aparelho e os números dele têm o mesmo lote. */
+  lote_id: string;
+  tipo: 'numero' | 'celular';
+  /** O id que o registro tinha, e volta a ter ao restaurar. */
+  registro_id: string;
+  numero: string | null;
+  celular_id: string;
+  celular_identificacao: string;
+  setor_id: string | null;
+  setor_nome: string | null;
+  /** Como o número estava na hora da exclusão. `null` para aparelho. */
+  situacao: Situacao | null;
+  posse: Posse | null;
+  operador_nome: string | null;
+  /** Aparelho: quantos números foram junto. Número: zero. */
+  quantidade_numeros: number;
+  excluido_por: string | null;
+  excluido_por_nome: string | null;
+  excluido_em: string;
+}
+
+/**
+ * As colunas da lista. `registro` e `movimentacoes` ficam de fora: são a cópia
+ * inteira, e a lista não precisa delas — o histórico vem sob demanda.
+ */
+const COLUNAS_LIXEIRA = [
+  'id', 'empresa_id', 'lote_id', 'tipo', 'registro_id', 'numero',
+  'celular_id', 'celular_identificacao', 'setor_id', 'setor_nome',
+  'situacao', 'posse', 'operador_nome', 'quantidade_numeros',
+  'excluido_por', 'excluido_por_nome', 'excluido_em',
+].join(', ');
+
+/** O que está na lixeira, do mais recente para o mais antigo. */
+export async function listarLixeira(empresaId: string): Promise<LixeiraNumeroRow[]> {
+  const { data, error } = await db
+    .from('numeros_lixeira')
+    .select(COLUNAS_LIXEIRA)
+    .eq('empresa_id', empresaId)
+    .order('excluido_em', { ascending: false });
+  if (error) throw error;
+  return (data as unknown as LixeiraNumeroRow[]) ?? [];
+}
+
+/**
+ * A trilha guardada de um número que está na lixeira.
+ *
+ * Gravada em ordem cronológica; devolvida do mais recente para o mais antigo,
+ * que é a ordem de `listarMovimentacoes` e a que `HistoricoNumero` desenha.
+ */
+export async function listarHistoricoDaLixeira(itemId: string): Promise<MovimentacaoRow[]> {
+  const { data, error } = await db
+    .from('numeros_lixeira')
+    .select('movimentacoes')
+    .eq('id', itemId)
+    .maybeSingle();
+  if (error) throw error;
+  const linhas = (data as { movimentacoes: MovimentacaoRow[] | null } | null)?.movimentacoes ?? [];
+  return [...linhas].reverse();
+}
+
+/** Recria o que foi excluído. Um aparelho volta com os números do mesmo lote. */
+export function restaurarDaLixeira(itemId: string): Promise<Resultado> {
+  return chamar('fn_numeros_restaurar', { p_lixeira_id: itemId });
+}
+
+/** Tira um item da lixeira de vez. Aparelho leva junto os números dele que estão lá. */
+export function excluirDaLixeira(itemId: string): Promise<Resultado> {
+  return chamar('fn_numeros_lixeira_excluir_definitivo', { p_lixeira_id: itemId });
+}
+
+/** Esvazia a lixeira da empresa inteira. Não tem volta. */
+export function esvaziarLixeira(empresaId: string): Promise<Resultado> {
+  return chamar('fn_numeros_lixeira_esvaziar', { p_empresa_id: empresaId });
 }
 
 // ── As transições ────────────────────────────────────────────────────────────

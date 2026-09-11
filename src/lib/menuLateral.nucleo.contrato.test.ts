@@ -38,14 +38,16 @@ describe('o recorte por setor saiu', () => {
     expect(GUARDA).not.toContain('useNucleo');
   });
 
-  it('o setor só decide o que a porta de entrada desenha', () => {
-    // A única decisão que sobrou do setor: o que `/` mostra, e não quem entra
-    // onde. Quem é do Núcleo abre no painel dele.
-    expect(APP).toMatch(/if \(abrePainelDoNucleo\) return <DashboardNucleo \/>/);
+  it('nem a porta de entrada pergunta o setor — a chave manda', () => {
+    // Até 11/09/2026 `/` desenhava o painel do Núcleo para quem estava no setor
+    // (`useNucleo`). O painel virou a aba Dashboard – ADM, e quem não tem o
+    // Dashboard da cobrança mas tem a aba nova é mandado para ela pela CHAVE.
+    expect(APP).not.toContain('useNucleo');
+    expect(APP).toMatch(/alternativa=\{\{\s*permissao: 'ver_dashboard_adm'/);
   });
 
-  it('Controle de Números e Meus Chips são abertos pela chave, como toda aba', () => {
-    for (const label of ['Controle de Números', 'Meus Chips']) {
+  it('Controle de Números, Meus Chips e Dashboard – ADM são abertos pela chave, como toda aba', () => {
+    for (const label of ['Controle de Números', 'Meus Chips', 'Dashboard – ADM']) {
       const item = NAV_ITEMS.find(i => i.label === label);
       expect(item?.permissaoKey, `${label} sem chave`).toBeTruthy();
     }

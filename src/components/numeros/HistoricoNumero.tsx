@@ -28,6 +28,12 @@ export interface HistoricoNumeroProps {
   numeroId: string | null;
   /** Só para o cabeçalho — evita uma consulta a mais só pelo rótulo. */
   numero?: string;
+  /**
+   * De onde vem a trilha. Por padrão, da tabela viva. A Lixeira de Números
+   * passa a trilha GUARDADA (`listarHistoricoDaLixeira`), e aí `numeroId` é o
+   * id do item na lixeira — o número em si não existe mais para consultar.
+   */
+  buscar?: (id: string) => Promise<MovimentacaoRow[]>;
   onFechar: () => void;
 }
 
@@ -38,7 +44,9 @@ function dataHora(iso: string): string {
   });
 }
 
-export function HistoricoNumero({ numeroId, numero, onFechar }: HistoricoNumeroProps) {
+export function HistoricoNumero({
+  numeroId, numero, buscar = listarMovimentacoes, onFechar,
+}: HistoricoNumeroProps) {
   const [linhas, setLinhas] = useState<MovimentacaoRow[]>([]);
   const [carregando, setCarregando] = useState(false);
 
@@ -46,12 +54,12 @@ export function HistoricoNumero({ numeroId, numero, onFechar }: HistoricoNumeroP
     if (!numeroId) { setLinhas([]); return; }
     let cancelado = false;
     setCarregando(true);
-    listarMovimentacoes(numeroId)
+    buscar(numeroId)
       .then(m => { if (!cancelado) setLinhas(m); })
       .catch(() => { if (!cancelado) setLinhas([]); })
       .finally(() => { if (!cancelado) setCarregando(false); });
     return () => { cancelado = true; };
-  }, [numeroId]);
+  }, [numeroId, buscar]);
 
   return (
     <Dialog open={numeroId !== null} onOpenChange={aberto => { if (!aberto) onFechar(); }}>

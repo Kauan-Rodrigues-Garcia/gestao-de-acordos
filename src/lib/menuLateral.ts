@@ -32,7 +32,7 @@
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
-  Ticket, ClipboardList, Tv, Smartphone, MessageCircle,
+  Ticket, ClipboardList, Tv, Smartphone, MessageCircle, Gauge,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -89,6 +89,11 @@ export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, permissaoKey: 'ver_dashboard' },
+  // Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão, separado do
+  // da cobrança. `hiddenForPaguePay` porque o Núcleo existe só na BookPlay. Quem
+  // abre é a chave, que nasce só no Assistente ADM; para ele é também a tela
+  // inicial — ver a `alternativa` da rota `/`, em App.tsx.
+  { label: 'Dashboard – ADM',  icon: Gauge,           to: ROUTE_PATHS.DASHBOARD_ADM,       produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_dashboard_adm' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
   { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, produtos: SO_COBRANCA, permissaoKey: 'ver_solicitacoes_whatsapp' },
   // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o

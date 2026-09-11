@@ -13,9 +13,10 @@
  * errado. Até então a única saída era apagar o aparelho inteiro, com os outros
  * cinco dentro.
  *
- * As duas ações só existem enquanto o número está no Núcleo e sem operador —
- * ver `podeCorrigirNumero` e `podeExcluirNumero`. Quem recusa de verdade são as
- * triggers `fn_numeros_whatsapp_valida` e `fn_numeros_pode_excluir`.
+ * Corrigir só existe enquanto o número está no Núcleo e sem operador
+ * (`podeCorrigirNumero`). Excluir manda para a Lixeira de Números e vale no
+ * mesmo caso — ou em qualquer caso, para o super_admin (`podeExcluirNumero`).
+ * Quem recusa de verdade são `fn_numeros_whatsapp_valida` e `fn_numeros_excluir`.
  *
  * ## Excluir o aparelho
  *
@@ -43,6 +44,8 @@ export interface ListaCelularesProps {
   aparelhos: CelularComNumeros[];
   nomeDoSetor: (setorId: string) => string;
   podeAdministrar: boolean;
+  /** A chave-mestra: o super_admin exclui número mesmo com setor ou operador. */
+  superAdmin?: boolean;
   onNovoCelular: () => void;
   onEditarCelular: (a: CelularComNumeros) => void;
   onExcluirCelular: (a: CelularComNumeros) => void;
@@ -53,7 +56,7 @@ export interface ListaCelularesProps {
 }
 
 export function ListaCelulares({
-  aparelhos, nomeDoSetor, podeAdministrar,
+  aparelhos, nomeDoSetor, podeAdministrar, superAdmin = false,
   onNovoCelular, onEditarCelular, onExcluirCelular, onNovoNumero, onVerHistorico,
   onCorrigirNumero, onExcluirNumero,
 }: ListaCelularesProps) {
@@ -161,7 +164,7 @@ export function ListaCelulares({
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                               )}
-                              {podeExcluirNumero(estado) && (
+                              {podeExcluirNumero(estado, { superAdmin }) && (
                                 <Button
                                   size="icon" variant="ghost"
                                   className="h-7 w-7 text-muted-foreground hover:text-destructive"

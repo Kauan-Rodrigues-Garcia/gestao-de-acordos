@@ -165,4 +165,26 @@ describe('o cargo do Núcleo', () => {
     montar({ editando: null, form: { ...FORM, perfil: 'assistente_adm' }, setorNucleoId: null });
     expect(screen.queryByText(/Assistente ADM é o cargo do Núcleo/)).not.toBeInTheDocument();
   });
+
+  it('editando alguém de outro setor, o Assistente ADM aparece e aponta a transferência', () => {
+    // Antes a opção sumia, e parecia defeito: o cargo só existe no Núcleo e o
+    // setor não muda na edição. Agora ela leva à transferência.
+    montar({ setorNucleoId: NUCLEO.id, onTransferirAoNucleo: vi.fn() });
+    expect(screen.getByText(/escolher o cargo abre a transferência/)).toBeInTheDocument();
+  });
+
+  it('sem poder transferir, a janela diz por que o Assistente ADM não abre', () => {
+    montar({ setorNucleoId: NUCLEO.id });
+    expect(screen.getByText(/seu cargo não pode transferir/)).toBeInTheDocument();
+  });
+
+  it('quem já está no Núcleo não precisa de transferência', () => {
+    montar({
+      editando: { ...PESSOA, setor_id: NUCLEO.id } as Perfil,
+      form: { ...FORM, setor_id: NUCLEO.id },
+      setoresDoForm: COM_NUCLEO, setores: COM_NUCLEO,
+      setorNucleoId: NUCLEO.id, onTransferirAoNucleo: vi.fn(),
+    });
+    expect(screen.queryByText(/abre a transferência/)).not.toBeInTheDocument();
+  });
 });

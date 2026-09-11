@@ -67,9 +67,21 @@ interface ProtectedRouteProps {
   produtos?: readonly Produto[];
   /** Mantém o layout aberto e mostra uma mensagem em vez de redirecionar. */
   mostrarSemAcesso?: boolean;
+  /**
+   * Para onde vai quem não tem `requiredPermissao`, mas tem a porta ao lado.
+   *
+   * Existe para `/`: o Assistente ADM não tem o Dashboard da cobrança, e a tela
+   * inicial dele é o Dashboard – ADM. Sem isto ele entraria no sistema lendo
+   * «aba não liberada». Quem decide continua sendo a chave — nada aqui pergunta
+   * cargo ou setor —, e a rota de destino exige `permissao`, então não há laço.
+   */
+  alternativa?: { permissao: string; rota: string };
 }
 
-export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, produtos, mostrarSemAcesso = false }: ProtectedRouteProps): React.ReactElement | null {
+export function ProtectedRoute({
+  children, roles, allowedProfiles, requiredPermissao, produtos, mostrarSemAcesso = false,
+  alternativa,
+}: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
@@ -149,6 +161,9 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
      * Ausência agora nega, como em todo o resto do sistema.
      */
     if (!temPermissao(requiredPermissao)) {
+      if (alternativa && temPermissao(alternativa.permissao)) {
+        return <Navigate to={alternativa.rota} replace />;
+      }
       if (mostrarSemAcesso) {
         return (
           <div className="flex min-h-[50vh] items-center justify-center p-8 text-center">

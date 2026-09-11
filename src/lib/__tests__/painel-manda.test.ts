@@ -164,6 +164,13 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'ReactQueryDevtools. Ferramenta de desenvolvimento, não dado do produto — não há o que o painel governe aqui.',
   },
+  'pages/ControleNumeros/index.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo:
+      'o super_admin exclui qualquer número ou celular, com setor ou operador; o Núcleo só o '
+      + 'que está em casa. A régua de verdade é `fn_numeros_excluir`, que usa a mesma '
+      + 'chave-mestra (`fn_user_is_super_admin`) — a tela só não oferece o botão que o banco recusaria.',
+  },
 
   // ── Definição dos helpers, e filtros de DADO ──────────────────────────────
   //

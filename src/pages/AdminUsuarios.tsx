@@ -279,6 +279,8 @@ export default function AdminUsuarios() {
   const podeTransferir = temPermissao('usuarios_transferir');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [transferindo, setTransferindo] = useState<Perfil[] | null>(null);
+  /** O setor que a transferência abre já escolhido — o Núcleo, vindo da janela de usuário. */
+  const [destinoTransferencia, setDestinoTransferencia] = useState<string | null>(null);
 
   /*
    * As equipes, para a coluna «Equipe».
@@ -1395,6 +1397,17 @@ export default function AdminUsuarios() {
         cargoEscopoEmpresa={cargoEscopoEmpresa}
         setorVazioParaPreencher={setorVazioParaPreencher}
         setorNucleoId={setorNucleoId}
+        onTransferirAoNucleo={
+          // Mesma empresa: a transferência parte da empresa atual, e o Núcleo
+          // calculado é o da empresa da pessoa editada.
+          editando && podeTransferir && setorNucleoId && editando.empresa_id === empresaAtual?.id
+            ? () => {
+                setDialogOpen(false);
+                setDestinoTransferencia(setorNucleoId);
+                setTransferindo([editando]);
+              }
+            : undefined
+        }
         salvando={saving}
         onSalvar={salvar}
         uploadando={uploadando}
@@ -1466,9 +1479,11 @@ export default function AdminUsuarios() {
         alvos={transferindo}
         setores={setores}
         empresaId={empresaAtual?.id}
-        onFechar={() => setTransferindo(null)}
+        destinoSetorInicial={destinoTransferencia}
+        onFechar={() => { setTransferindo(null); setDestinoTransferencia(null); }}
         onConcluida={() => {
           setTransferindo(null);
+          setDestinoTransferencia(null);
           setSelecionados(new Set());
           fetchDados();
         }}

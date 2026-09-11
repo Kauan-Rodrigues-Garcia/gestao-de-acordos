@@ -52,7 +52,7 @@ import {
 import { MIN_SENHA } from '@/services/senha.service';
 import { PERFIL_LABELS, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
 import {
-  CARGO_DO_NUCLEO, aoTrocarCargo, aoTrocarSetor, cargoCabeNoSetor,
+  CARGO_DO_NUCLEO, aoTrocarCargo, aoTrocarSetor, cargoCabeNoSetor, caminhoParaAssistenteAdm,
 } from '@/lib/cargoDoNucleo';
 import type { Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -105,6 +105,13 @@ interface Props {
    * gravado — ver `cargoDoNucleo.ts`.
    */
   setorNucleoId?: string | null;
+  /**
+   * Leva a pessoa editada para a transferência ao Núcleo. É o que acontece ao
+   * escolher Assistente ADM para alguém de OUTRO setor: o cargo só existe no
+   * Núcleo, e mudar de setor é transferência — ver `caminhoParaAssistenteAdm`.
+   * Ausente quando quem edita não pode transferir: a opção aparece desabilitada.
+   */
+  onTransferirAoNucleo?: () => void;
 
   salvando: boolean;
   onSalvar: () => void;
@@ -187,7 +194,7 @@ export function DialogUsuario({
   aberto, onFechar, editando, form, setForm,
   pode, isSuperAdmin, souEu, online,
   setoresDoForm, setores, empresas, empresaAtualNome,
-  cargoEscopoEmpresa, setorVazioParaPreencher, setorNucleoId = null,
+  cargoEscopoEmpresa, setorVazioParaPreencher, setorNucleoId = null, onTransferirAoNucleo,
   salvando, onSalvar,
   uploadando, onEscolherFoto, onRemoverFoto,
   novaSenha, setNovaSenha, salvandoSenha, onSalvarSenha,
@@ -206,12 +213,21 @@ export function DialogUsuario({
    *     aberto, então todo cargo aparece — escolher Assistente ADM leva o setor
    *     para o Núcleo, e escolher o Núcleo leva o cargo para Assistente ADM. Só
    *     some o Assistente ADM quando não se sabe qual setor é o Núcleo;
-   *   - editando: o setor não muda aqui (é transferência), então aparece só o
-   *     que pode ser gravado no setor ATUAL da pessoa.
+   *   - editando: o setor não muda aqui (é transferência), então aparece o que
+   *     pode ser gravado no setor ATUAL da pessoa — e o Assistente ADM sempre
+   *     que houver caminho até ele. Para quem está em outro setor o caminho é a
+   *     transferência ao Núcleo: escolher a opção abre a transferência, em vez
+   *     de trocar o cargo no formulário. Ver `caminhoParaAssistenteAdm`.
    *
    * O cargo atual fica sempre na lista: um cadastro anterior à trava, fora da
    * regra, apareceria com o seletor em branco.
    */
+  const caminhoAoNucleo = editando
+    ? caminhoParaAssistenteAdm(editando.perfil, editando.setor_id ?? null, setorNucleoId)
+    : 'nao';
+  const assistentePorTransferencia =
+    !criando && !setorVazioParaPreencher && caminhoAoNucleo === 'transferir';
+
   const opcoesDeCargo = useMemo(() => {
     const setorEmAberto = criando || setorVazioParaPreencher;
     const setorAtual = editando?.setor_id ?? null;
@@ -219,13 +235,19 @@ export function DialogUsuario({
       if (o.soSuperAdmin && !isSuperAdmin) return false;
       if (o.valor === form.perfil) return true;
       if (setorEmAberto) return o.valor !== CARGO_DO_NUCLEO || setorNucleoId !== null;
+      if (o.valor === CARGO_DO_NUCLEO) return caminhoAoNucleo !== 'nao';
       return cargoCabeNoSetor(o.valor, ehEscopoEmpresa(o.valor) ? null : setorAtual, setorNucleoId);
     });
-  }, [criando, setorVazioParaPreencher, editando?.setor_id, isSuperAdmin, form.perfil, setorNucleoId]);
+  }, [criando, setorVazioParaPreencher, editando?.setor_id, isSuperAdmin, form.perfil, setorNucleoId, caminhoAoNucleo]);
 
   /** Trocar cargo ou setor mantém os dois coerentes — ver `aoTrocarCargo`. */
-  const trocarCargo = (cargo: PerfilUsuario) =>
+  const trocarCargo = (cargo: PerfilUsuario) => {
+    if (cargo === CARGO_DO_NUCLEO && assistentePorTransferencia) {
+      onTransferirAoNucleo?.();
+      return;
+    }
     setForm(f => aoTrocarCargo(f, cargo, { setorNucleoId, setores: setoresDoForm }));
+  };
   const trocarSetor = (setorId: string) =>
     setForm(f => aoTrocarSetor(f, setorId, { setorNucleoId }));
 
@@ -401,15 +423,36 @@ export function DialogUsuario({
                   <Select value={form.perfil} onValueChange={v => trocarCargo(v as PerfilUsuario)}>
                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {opcoesDeCargo.map(o => (
-                        <SelectItem key={o.valor} value={o.valor}>{o.rotulo}</SelectItem>
-                      ))}
+                      {opcoesDeCargo.map(o => {
+                        const viaTransferencia = o.valor === CARGO_DO_NUCLEO && assistentePorTransferencia;
+                        return (
+                          <SelectItem
+                            key={o.valor} value={o.valor}
+                            disabled={viaTransferencia && !onTransferirAoNucleo}
+                          >
+                            {o.rotulo}
+                            {viaTransferencia && (
+                              <span className="ml-1.5 text-[11px] text-muted-foreground">· transferir ao Núcleo</span>
+                            )}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] text-muted-foreground leading-snug">
                     O cargo decide o que a pessoa enxerga e pode fazer. Quem define
                     isso por cargo é o painel de <strong>Permissões</strong>.
                   </p>
+                  {assistentePorTransferencia && (
+                    <p className="text-[11px] text-muted-foreground leading-snug flex items-start gap-1">
+                      <ArrowRightLeft className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>
+                        {onTransferirAoNucleo
+                          ? 'Assistente ADM só existe no Núcleo de Inteligência e Gestão: escolher o cargo abre a transferência para lá.'
+                          : 'Assistente ADM só existe no Núcleo de Inteligência e Gestão, e levar alguém para lá é transferência — seu cargo não pode transferir.'}
+                      </span>
+                    </p>
+                  )}
                 </>
               ) : (
                 <CampoTrancado

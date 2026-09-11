@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const { authRef, permRef } = vi.hoisted(() => ({
   authRef: { current: { user: { id: 'u1' }, perfil: { perfil: 'operador' }, loading: false } as unknown },
@@ -182,5 +182,48 @@ describe('ProtectedRoute — o esqueleto é só da primeira carga', () => {
       </MemoryRouter>,
     );
     expect(passou()).toBe(true);
+  });
+});
+
+/*
+ * A porta de entrada do Assistente ADM (11/09/2026). Sem o Dashboard da cobrança
+ * e com a aba do Núcleo, `/` manda para o Dashboard – ADM — pela chave, e não
+ * pelo setor.
+ */
+describe('ProtectedRoute — alternativa', () => {
+  function entrada() {
+    return render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={
+            <ProtectedRoute
+              requiredPermissao="ver_dashboard" mostrarSemAcesso
+              alternativa={{ permissao: 'ver_dashboard_adm', rota: '/dashboard-adm' }}
+            >
+              <p>dashboard da cobrança</p>
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard-adm" element={<p>dashboard adm</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it('sem a chave e com a da alternativa, vai para a outra porta', () => {
+    permRef.current = { temPermissao: (k: string) => k === 'ver_dashboard_adm', loading: false };
+    entrada();
+    expect(screen.getByText('dashboard adm')).toBeInTheDocument();
+  });
+
+  it('com a chave, fica onde está — a alternativa não rouba ninguém', () => {
+    permRef.current = { temPermissao: () => true, loading: false };
+    entrada();
+    expect(screen.getByText('dashboard da cobrança')).toBeInTheDocument();
+  });
+
+  it('sem nenhuma das duas, mostra a mensagem de sempre', () => {
+    permRef.current = { temPermissao: () => false, loading: false };
+    entrada();
+    expect(screen.getByText(/não foi liberada para seu cargo/)).toBeInTheDocument();
   });
 });

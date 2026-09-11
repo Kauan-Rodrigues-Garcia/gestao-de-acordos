@@ -18,6 +18,7 @@ import type { PermissaoMeta, GrupoPermissao, TenantSlug } from './permissoes-cat
 
 export type ModuloPermissaoId =
   | 'dashboard'
+  | 'dashboard_adm'
   | 'solicitacoes_whatsapp'
   | 'tickets'
   | 'rh'
@@ -61,6 +62,18 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     // Dashboard. As chaves continuam estáveis; só aparecem no card da tela em
     // que a pessoa realmente executa essas ações.
     gruposPorTenant: { pagueplay: ['Acordos'] },
+  },
+  {
+    /*
+     * O painel do Núcleo, separado do Dashboard da cobrança (11/09/2026). Sem
+     * `escopo`: o que ele mostra é recortado pela RLS do Controle de Números, e
+     * não por níveis de alcance.
+     */
+    id: 'dashboard_adm', rotulo: 'Dashboard – ADM', interruptor: 'ver_dashboard_adm',
+    descricao:
+      'O painel do Núcleo de Inteligência e Gestão: indicadores, evolução e '
+      + 'aparelhos do Controle de Números.',
+    grupos: ['Dashboard ADM'], tenants: ['bookplay'],
   },
   {
     id: 'solicitacoes_whatsapp', rotulo: 'Solicitar Atendimento',
@@ -171,7 +184,10 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     descricao:
       'A área do Núcleo de Inteligência e Gestão: celulares, números de '
       + 'WhatsApp, aquecimento e liberação aos setores.',
-    chaves: ['numeros_administrar', 'numeros_liberar_ao_setor', 'numeros_configurar'],
+    chaves: [
+      'numeros_administrar', 'numeros_liberar_ao_setor', 'numeros_configurar',
+      'numeros_lixeira_esvaziar',
+    ],
     tenants: ['bookplay'],
   },
   {
