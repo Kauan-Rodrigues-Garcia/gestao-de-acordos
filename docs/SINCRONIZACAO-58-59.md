@@ -226,7 +226,73 @@ No mês inteiro, com o 58 do Receptivo atualizado até 14/09, ele fecha em
 > diferença do lote, não do filtro. Antes de comparar, confira até onde o lote
 > vigente vai (`max(dt_pgto)`).
 
-### O Colchão deixou de existir como categoria — 2026-09-13
+### A REGRA DO COLCHÃO, definitiva — 2026-09-13
+
+> Este bloco substitui tudo o que foi escrito sobre colchão mais abaixo neste
+> documento. O que vem depois é o registro do caminho torto; a regra é esta.
+
+**O Colchão entra no TOTAL DA EMPRESA e não conta para SETOR, equipe ou
+operador.** Exatamente o tratamento que a Retenção já tinha
+(`mestre_equipes.destino = 'somente_geral'`) — o Colchão é a segunda coisa com
+esse comportamento.
+
+Única exceção, preservada: o pago entre **01 e 14/08/2026**. Agosto foi fechado
+com ela valendo.
+
+| Onde a regra mora | |
+|---|---|
+| Parser do 58 | `colchaoContaNaMeta` (`analiticoComum.ts`) |
+| Banco | `fn_mestre_conta_na_meta` |
+
+As duas precisam dizer a mesma coisa. Foi elas se separarem que produziu todo o
+problema de setembro.
+
+**Quem aplica, e quem não aplica de propósito:**
+
+| Função | Colchão |
+|---|---|
+| `fn_mestre_diretoria_visao_geral` | **entra** — é o total da empresa |
+| `fn_mestre_diretoria_linhas` (e `_setores`, que a consome) | sai |
+| `fn_mestre_diretoria_setor` (pelos dois caminhos) | sai |
+| `fn_mestre_diretoria_alternativos` (mês atual e anterior) | sai |
+| `fn_mestre_resumo_grupos`, `_setores`, `comparar_setores` | sai |
+
+A diferença entre a Visão Geral e a soma dos setores passa a ser **colchão +
+Retenção** — e isso é por desenho, não defeito. Em setembro/2026 o colchão são
+R$ 163.876,90 (Receptivo 78.207,16 · Manutenção 34.322,98 · Play 1 24.410,11 ·
+Play 2 11.000,93 · demais 15.935,72).
+
+**No ERP:** exportar o 58 com ou sem a opção de colchão dá no mesmo para o setor
+— o parser descarta de qualquer jeito. Medido em 13/09/2026 no Receptivo: o
+arquivo "com" tem 616 linhas a mais, R$ 78.207,16, todas `Colchão? = Sim`, todas
+PIX AUTOMÁTICO ou RECORRENTE, 610 delas parcela 2+. As 4.088 linhas comuns são
+idênticas nos dois arquivos.
+
+#### O caminho torto até aqui, para ninguém refazer
+
+Em 10/09 a `20260910215830` fez o colchão **contar** de setembro em diante. O
+motivo era real — três abas mostravam três totais para o mesmo arquivo —, mas a
+solução tratou o sintoma: em vez de fazer todo mundo aplicar a regra, mudou a
+regra para a divergência sumir. As cinco funções do painel que não consultavam
+`fn_mestre_conta_na_meta` continuaram não consultando.
+
+Em 13/09 a conta chegou: o comparável inflava em R$ 163.876,90. Foram três
+tentativas no mesmo dia — `fn_mestre_esta_no_58` (`…172128`/`…172251`), depois
+abolir a separação (`…173442`/`…173539`) — até a diretoria dizer o que de fato
+queria. A correção final (`…200932` e as três irmãs) fecha a lacuna de 10/09.
+
+**A lição, que vale além do colchão:** quando duas pontas discordam, a pergunta é
+*«qual delas está errada»*, não *«como faço a diferença sumir»*.
+
+---
+
+### ~~O Colchão deixou de existir como categoria~~ — revertido em 2026-09-13
+
+> ⚠️ **Este bloco está SUPERADO.** A decisão descrita aqui durou algumas horas e
+> foi revertida no mesmo dia — ver «A REGRA DO COLCHÃO, definitiva», acima. Fica
+> como registro de que a separação chegou a ser removida por engano, e do que
+> isso custou: 639 linhas presas na tabela do Colchão e uma reimportação com
+> arquivo antigo que apagou 413 linhas do Receptivo.
 
 **Decisão da diretoria:** o Colchão era exceção de agosto/2026. O relatório passou
 a trazer esses valores corretos, e de **01/09/2026** em diante uma linha marcada

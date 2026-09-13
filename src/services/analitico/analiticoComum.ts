@@ -164,47 +164,33 @@ export function ehLinhaColchao(valor: unknown): boolean {
 }
 
 /**
- * O Colchão ainda é uma categoria à parte nesta data?
+ * O Colchão conta para o SETOR?
  *
- * **Até agosto/2026, sim.** A partir de **01/09/2026, não**: o relatório passou
- * a trazer esses valores corretos, e uma linha marcada `Colchão? = Sim` virou
- * linha comum — entra no Analítico como qualquer outra, sem desvio e sem
- * contador próprio. Decisão da diretoria em 13/09/2026.
+ * **Não, nunca** — com uma exceção: o pago entre 01 e 14/08/2026.
  *
- * Enquanto `false`, `colchaoContaNaMeta` nem é consultada: não há o que separar.
+ * O Colchão é a parcela da 2ª em diante de acordo de Pix automático ou cartão
+ * recorrente. Ele **entra no total da empresa** e **não conta para setor,
+ * equipe ou operador** — o mesmo tratamento que a equipe de Retenção já tem
+ * (`destino = 'somente_geral'`). Decisão reafirmada pela diretoria em
+ * 13/09/2026.
  *
- * Meses anteriores a agosto/2026 continuam como sempre estiveram — colchão fora
- * da meta, guardado em `analitico_colchao_fora_meta`. Mexer neles reescreveria
- * fechamento antigo que ninguém pediu para mexer.
- *
- * ⚠️ A classificação é gravada na linha no momento da importação, não
- * recalculada na leitura. Setembro/2026 importado ANTES desta mudança tem o
- * colchão em `analitico_colchao_fora_meta`; só reimportar traz essas linhas
- * para o Analítico. O espelho disso no banco é `fn_mestre_conta_na_meta`.
- */
-export function colchaoEhSeparado(dataPagamento: Date): boolean {
-  return dataPagamento < new Date(2026, 8, 1);
-}
-
-/**
- * Dentro da era em que o Colchão era separado, ele conta na meta?
- *
- * Exceção única autorizada: Colchão pago até **14/08/2026**. De 15 a 31/08 — e
- * em qualquer mês anterior — fica só no acompanhamento.
- *
- * O corte nasceu no dia 12 e foi movido para o 14 em 23/08/2026, a pedido da
- * diretoria. É uma decisão de negócio, não um cálculo: não há fórmula que
- * derive o dia, e por isso ele está escrito aqui, num lugar só, em vez de
+ * O corte de agosto nasceu no dia 12 e foi movido para o 14 em 23/08/2026, a
+ * pedido da diretoria. É uma decisão de negócio, não um cálculo: não há fórmula
+ * que derive o dia, e por isso ele está escrito aqui, num lugar só, em vez de
  * espalhado pelos dois parsers que o consultam (PaguePlay e BookPlay).
  *
- * Só faz sentido perguntar quando `colchaoEhSeparado` é `true` — de setembro em
- * diante não existe colchão a separar, e esta função responde `false` para
- * datas que hoje contam normalmente. Perguntar na ordem errada inverte o
- * resultado.
+ * O espelho disto no banco é `fn_mestre_conta_na_meta`. As duas precisam dizer
+ * a mesma coisa: quando divergiram, em setembro/2026, o comparável do Painel
+ * Diretoria inflou em R$ 163.876,90.
  *
  * ⚠️ Mexer neste número muda valor de meta já apurado. Quem mover o corte
  * outra vez precisa reimportar agosto/2026 para os dias 13 e 14 mudarem de
- * lado.
+ * lado — a classificação é gravada na linha no momento da importação, não
+ * recalculada na leitura.
+ *
+ * ℹ️ No ERP, exportar o 58 **sem** a opção de colchão não traz essas linhas
+ * (medido em 13/09/2026: 616 linhas, R$ 78.207,16 no Receptivo). Exportar com
+ * ou sem dá no mesmo para o setor — o parser descarta de qualquer jeito.
  */
 export function colchaoContaNaMeta(dataPagamento: Date): boolean {
   return dataPagamento.getFullYear() === 2026

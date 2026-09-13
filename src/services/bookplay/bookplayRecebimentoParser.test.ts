@@ -82,34 +82,34 @@ describe('parseRelatorioBookplayRows — relatório 58', () => {
   });
 
   /*
-   * Antes de 13/09/2026 este teste travava o contrário: colchão fora de agosto
-   * ia INTEIRO para o acompanhamento. A diretoria aboliu a separação — o
-   * relatório passou a trazer esses valores corretos — e de 01/09/2026 em diante
-   * a linha é comum. Ver `colchaoEhSeparado`.
+   * O Colchão NÃO conta para o setor — nunca, fora da janela de agosto/2026.
+   * Ele entra no total da empresa e fica de fora de setor, equipe e operador,
+   * igual à Retenção.
+   *
+   * Em 13/09/2026 esta regra chegou a ser removida por engano, e a diretoria
+   * corrigiu no mesmo dia. Se alguém tentar de novo, estes dois testes caem.
    */
-  it('de setembro/2026 em diante o Colchão entra como linha comum', () => {
+  it('fora de agosto, todo Colchão fica somente no acompanhamento', () => {
     const resultado = parseRelatorioBookplayRows([
       CABECALHO,
       linha({ colchao: 'Sim', data: '01/09/2026' }),
     ]);
 
-    expect(resultado.analitico).toHaveLength(1);
-    expect(resultado.diario).toHaveLength(1);
-    expect(resultado.colchao).toHaveLength(0);
-    // Não é exceção: não entra no contador da janela de agosto.
+    expect(resultado.analitico).toHaveLength(0);
+    expect(resultado.diario).toHaveLength(0);
+    expect(resultado.colchao).toHaveLength(1);
     expect(resultado.colchaoNaMeta).toEqual({ linhas: 0, valor: 0 });
   });
 
-  it('antes de setembro/2026 o Colchão continua separado, como sempre esteve', () => {
+  it('dentro da janela de agosto/2026 o Colchão conta, como exceção daquele mês', () => {
     const resultado = parseRelatorioBookplayRows([
       CABECALHO,
-      // 20/08 está na era do colchão, mas fora da janela 01–14: acompanhamento.
-      linha({ colchao: 'Sim', data: '20/08/2026' }),
+      linha({ colchao: 'Sim', data: '10/08/2026' }),
     ]);
 
-    expect(resultado.analitico).toHaveLength(0);
-    expect(resultado.colchao).toHaveLength(1);
-    expect(resultado.colchaoNaMeta).toEqual({ linhas: 0, valor: 0 });
+    expect(resultado.analitico).toHaveLength(1);
+    expect(resultado.colchao).toHaveLength(0);
+    expect(resultado.colchaoNaMeta.linhas).toBe(1);
   });
 
   it('mantém a regra BookPlay de TpDoc vazio como cartão de crédito', () => {

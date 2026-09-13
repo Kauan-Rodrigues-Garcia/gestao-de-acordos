@@ -9,7 +9,6 @@ import {
   resolveCols,
   ehEquipeRetencao,
   ehLinhaColchao,
-  colchaoEhSeparado,
   colchaoContaNaMeta,
   parseRelatorioRows,
 } from './analiticoParser';
@@ -233,42 +232,34 @@ describe('regra do Colchão', () => {
   });
 
   /*
-   * O Colchão deixou de ser categoria em 01/09/2026 — o relatório passou a
-   * trazer esses valores certos, e a diretoria abolir a separação.
+   * O Colchão não conta para o SETOR — nunca, fora da janela de agosto/2026.
+   * Ele entra no total da empresa e fica de fora de setor, equipe e operador,
+   * do mesmo jeito que a equipe de Retenção.
    *
-   * `colchaoContaNaMeta` continua respondendo `false` para setembro, e está
-   * correto: ela só é consultada DENTRO da era em que havia colchão a separar.
-   * Quem inverter a ordem das duas perguntas joga o colchão de setembro fora.
+   * Em 13/09/2026 esta regra foi removida por engano e reposta no mesmo dia.
+   * Este teste cobre as três eras de uma vez, para o retrocesso não passar.
    */
-  it('o Colchão só é categoria à parte até agosto/2026', () => {
-    expect(colchaoEhSeparado(new Date(2026, 7, 1))).toBe(true);
-    expect(colchaoEhSeparado(new Date(2026, 7, 31))).toBe(true);
-    expect(colchaoEhSeparado(new Date(2026, 8, 1))).toBe(false);
-    expect(colchaoEhSeparado(new Date(2027, 0, 15))).toBe(false);
-    // Meses anteriores seguem como sempre estiveram: colchão fora da meta.
-    expect(colchaoEhSeparado(new Date(2026, 6, 20))).toBe(true);
-  });
-
-  it('de setembro/2026 em diante o Colchão entra no Analítico como linha comum', () => {
+  it('só o Colchão de 01 a 14/08/2026 entra no Analítico', () => {
     const headers = [
       'Cobradora', 'Equipe/SubGrupo', 'Cliente', 'Colchão?', 'NrDocumento',
       'TpDoc', 'DtPgto', 'Recebido', 'Total HO',
     ];
     const linhas = [
       headers,
-      // Colchão em setembro: conta, e NÃO vai para a aba do Colchão.
+      // Setembro: fora — é acompanhamento, conta só no total da empresa.
       ['ANA', 'EQUIPE X', '111 - CLIENTE A', 'Sim', 'NR1', 'PIX', '05/09/2026', '100,00', '25,00'],
-      // Colchão em 20/08: continua fora, como sempre esteve.
+      // 20/08: fora da janela, segue no acompanhamento.
       ['ANA', 'EQUIPE X', '222 - CLIENTE B', 'Sim', 'NR2', 'PIX', '20/08/2026', '200,00', '50,00'],
-      // Colchão em 10/08: a exceção daquele mês, conta e é contada como exceção.
+      // 10/08: a exceção daquele mês — conta, e é contada como exceção.
       ['ANA', 'EQUIPE X', '333 - CLIENTE C', 'Sim', 'NR3', 'PIX', '10/08/2026', '300,00', '75,00'],
+      // Linha comum de setembro: entra, para provar que o corte é do Colchão.
+      ['ANA', 'EQUIPE X', '444 - CLIENTE D', 'Não', 'NR4', 'PIX', '05/09/2026', '400,00', '100,00'],
     ];
 
     const r = parseRelatorioRows(linhas);
 
-    expect(r.linhas.map(l => l.codigo).sort()).toEqual(['111', '333']);
-    expect(r.linhasColchao.map(l => l.codigo)).toEqual(['222']);
-    // A linha de setembro é comum: não entra no contador da exceção de agosto.
+    expect(r.linhas.map(l => l.codigo).sort()).toEqual(['333', '444']);
+    expect(r.linhasColchao.map(l => l.codigo).sort()).toEqual(['111', '222']);
     expect(r.colchaoNaMeta).toEqual({ linhas: 1, valor: 300 });
   });
 
