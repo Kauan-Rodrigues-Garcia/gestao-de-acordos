@@ -10,8 +10,13 @@
  * tela volta a mentir em silêncio: `undefined` num `formatBRL` não estoura,
  * vira «R$ 0,00».
  *
+ * **O comparável segue a carteira.** Desde 13/09/2026 ele é
+ * `recebido_proprio − retenção` — o MESMO recorte que o 58 faz. `mestre_total`
+ * continua sendo o número real do setor, e `mestre_fora_do_58` é a ponte entre
+ * os dois.
+ *
  * **Os dois lados são numéricos.** O PostgREST entrega `numeric` como STRING.
- * Sem a coerção, `mestre_total - mestre_contribuido` concatena em vez de
+ * Sem a coerção, `mestre_total - mestre_fora_do_58` concatena em vez de
  * subtrair, e ninguém percebe até alguém somar a coluna.
  *
  * ## O dublê é THENABLE, e não `Promise`
@@ -58,6 +63,8 @@ const LINHA_CRUA = {
   mestre_colchao_fora: '0',
   mestre_emprestado_para: '0',
   mestre_emprestado_de: '0',
+  mestre_retencao: '0',
+  mestre_fora_do_58: '27127.89',
   mestre_comparavel: '99571.88',
   sistema_total: '0',
   sistema_linhas: '0',
@@ -73,6 +80,7 @@ const DETALHE_CRU = {
   mes: '2026-09',
   mestre_total: '126699.77',
   contrib_integral: '27127.89',
+  fora_do_58: '27127.89',
   comparavel: '99571.88',
   sistema_analitico: '0',
   sistema_ajustes: '0',
@@ -134,13 +142,57 @@ describe('compararSetores', () => {
    * sumir do mapeamento ele vira `undefined`, a subtração vira `NaN`, e este
    * teste cai — que é exatamente o que não aconteceu da primeira vez.
    */
-  it('Mestre − Integral = Comparável, e Comparável − Sistema = Diferença', async () => {
+  it('Mestre − Fora do 58 = Comparável, e Comparável − Sistema = Diferença', async () => {
     mock.porRpc = { fn_mestre_comparar_setores: { data: [LINHA_CRUA], error: null } };
 
     const [l] = await compararSetores('emp-1', '2026-09');
 
-    expect(l.mestre_total - l.mestre_contribuido).toBeCloseTo(l.mestre_comparavel, 2);
+    expect(l.mestre_total - l.mestre_fora_do_58).toBeCloseTo(l.mestre_comparavel, 2);
     expect(l.mestre_comparavel - l.sistema_total).toBeCloseTo(l.diferenca, 2);
+  });
+
+  /*
+   * O comparável segue a CARTEIRA, não a pessoa — é o recorte que o 58 faz.
+   *
+   * Antes de 13/09/2026 ele era `mestre_total − contrib_integral`, e
+   * `mestre_total` move dinheiro por pessoa: quem é de um setor e cobrou na
+   * carteira de outro levava o valor consigo. O 58 nunca fez isso, e era a
+   * única divergência de desenho entre os dois lados — sozinha, R$ 27.376,83 no
+   * Play 5 de agosto.
+   *
+   * Esta linha é o Play 5 de agosto/2026 como o banco devolve: empréstimo dos
+   * dois lados e Retenção zerada. Se alguém voltar a descontar o empréstimo do
+   * comparável, `mestre_fora_do_58` deixa de bater com a subtração e este teste
+   * cai.
+   */
+  it('o comparável não desconta empréstimo por pessoa', async () => {
+    const PLAY5 = {
+      ...LINHA_CRUA,
+      cod_grupo_filtro: '3',
+      rotulo: 'MARILIA - PLAY 5',
+      setor_nome: 'Play 5',
+      mestre_total: '388250.38',
+      mestre_proprio: '360873.55',
+      mestre_contribuido: '37710.01',
+      mestre_emprestado_para: '15337.95',
+      mestre_emprestado_de: '42714.78',
+      mestre_retencao: '0',
+      mestre_fora_do_58: '27376.83',
+      mestre_comparavel: '360873.55',
+      sistema_analitico: '360873.55',
+      sistema_ajustes: '36733.36',
+      sistema_total: '397606.91',
+      diferenca: '-36733.36',
+    };
+    mock.porRpc = { fn_mestre_comparar_setores: { data: [PLAY5], error: null } };
+
+    const [l] = await compararSetores('emp-1', '2026-08');
+
+    // O comparável é a carteira inteira, igual ao que o setor importou no 58.
+    expect(l.mestre_comparavel).toBeCloseTo(l.mestre_proprio, 2);
+    expect(l.mestre_comparavel).toBeCloseTo(l.sistema_analitico, 2);
+    // E a ponte continua fechando na horizontal.
+    expect(l.mestre_total - l.mestre_fora_do_58).toBeCloseTo(l.mestre_comparavel, 2);
   });
 
   it('erro do banco vira exceção com a mensagem do banco', async () => {

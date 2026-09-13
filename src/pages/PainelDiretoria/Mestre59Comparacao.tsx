@@ -90,7 +90,7 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
 
   const soma = useMemo(() => ({
     mestreVinc:  vinculadas.reduce((s, l) => s + l.mestre_total, 0),
-    integral:    vinculadas.reduce((s, l) => s + l.mestre_contribuido, 0),
+    foraDo58:    vinculadas.reduce((s, l) => s + l.mestre_fora_do_58, 0),
     comparavel:  vinculadas.reduce((s, l) => s + l.mestre_comparavel, 0),
     sistemaVinc: vinculadas.reduce((s, l) => s + l.sistema_total, 0),
     ajustes:     vinculadas.reduce((s, l) => s + l.sistema_ajustes, 0),
@@ -143,8 +143,8 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
             <Tile rotulo="Mestre (vinculados)" valor={formatBRL(soma.mestreVinc)}
               sub={`${soma.total} carteira(s) com setor`} />
             <Tile rotulo="Comparável" valor={formatBRL(soma.comparavel)}
-              sub={soma.integral > 0
-                ? `sem ${formatBRL(soma.integral)} de Integral`
+              sub={soma.foraDo58 !== 0
+                ? `sem ${formatBRL(soma.foraDo58)} que o 58 não tem`
                 : 'sem Integral a descontar'} />
             <Tile rotulo="Sistema" valor={formatBRL(soma.sistemaVinc)}
               sub={soma.ajustes !== 0
@@ -219,7 +219,7 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                   <th className="text-left font-semibold px-5 py-2.5">Grupo do relatório</th>
                   <th className="text-left font-semibold px-3 py-2.5">Setor</th>
                   <th className="text-right font-semibold px-3 py-2.5">Mestre</th>
-                  <th className="text-right font-semibold px-3 py-2.5">− Integral</th>
+                  <th className="text-right font-semibold px-3 py-2.5" title="Contribuição, empréstimo por pessoa, equipe movida e Retenção: o que o 59 conta aqui e o 58 da carteira não tem como ter">− Fora do 58</th>
                   <th className="text-right font-semibold px-3 py-2.5">Comparável</th>
                   <th className="text-right font-semibold px-3 py-2.5">Sistema</th>
                   <th className="text-right font-semibold px-3 py-2.5">Diferença</th>
@@ -246,11 +246,11 @@ export function Mestre59Comparacao({ empresaId, mes }: Props) {
                         <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                           {formatBRL(l.mestre_total)}
                         </td>
-                        {/* A coluna que faltava. Sem ela a subtração não fecha
-                            na horizontal e a tabela parece quebrada. */}
+                        {/* A ponte entre Mestre e Comparável. Sem ela a subtração
+                            não fecha na horizontal e a tabela parece quebrada. */}
                         <td className={cn('px-3 py-2.5 text-right tabular-nums',
-                          l.mestre_contribuido > 0 ? 'text-chart-4' : 'text-muted-foreground/40')}>
-                          {l.mestre_contribuido > 0 ? `−${formatBRL(l.mestre_contribuido)}` : '—'}
+                          l.mestre_fora_do_58 !== 0 ? 'text-chart-4' : 'text-muted-foreground/40')}>
+                          {l.mestre_fora_do_58 !== 0 ? `−${formatBRL(l.mestre_fora_do_58)}` : '—'}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-foreground">
                           {formatBRL(l.mestre_comparavel)}

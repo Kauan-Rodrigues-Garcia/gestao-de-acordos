@@ -7957,7 +7957,9 @@ export type Database = {
           mestre_contribuido: number
           mestre_emprestado_de: number
           mestre_emprestado_para: number
+          mestre_fora_do_58: number
           mestre_proprio: number
+          mestre_retencao: number
           mestre_total: number
           rotulo: string
           setor_id: string

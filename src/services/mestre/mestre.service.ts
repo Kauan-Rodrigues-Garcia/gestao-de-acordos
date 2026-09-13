@@ -236,17 +236,29 @@ export interface ComparacaoSetor {
   mestre_colchao_fora: number;
   mestre_emprestado_para: number;
   mestre_emprestado_de: number;
+  /** Equipes marcadas «somente geral» — a Retenção. O 58 as derruba na importação. */
+  mestre_retencao: number;
   /**
-   * `mestre_total` menos o Integral que outra carteira cobrou para cá.
+   * `mestre_total − mestre_comparavel`: tudo o que o 59 conta para este setor e
+   * o 58 da carteira não tem como ter. Contribuição, empréstimo por pessoa,
+   * equipe movida e Retenção, num número só.
    *
-   * É contra ISTO que `diferenca` é medida — e não contra `mestre_total`. A 2ª
-   * perna do Integral conta no 59 dos dois lados por rateio, e o analítico não
-   * a tem; comparar com `mestre_total` acusaria divergência falsa do tamanho
-   * exato da contribuição.
+   * Existe para a subtração fechar na horizontal da tela. Sem ela a tabela
+   * mostra três valores que não se ligam por conta nenhuma.
+   */
+  mestre_fora_do_58: number;
+  /**
+   * O MESMO recorte que o 58 faz: a carteira que conta na meta, menos as
+   * equipes marcadas «somente geral» (Retenção).
    *
-   * A coluna já vinha na resposta e a tela não mostrava. Daí a leitura de que
-   * a conta não fechava: 126.699,77 no Mestre, 0 no Sistema, e +99.571,88 na
-   * Diferença — que é 126.699,77 − 27.127,89 de Integral.
+   * É contra ISTO que `diferenca` é medida — e não contra `mestre_total`.
+   * `mestre_total` move dinheiro por PESSOA (quem é de um setor e cobrou na
+   * carteira de outro leva o valor consigo) e soma a 2ª perna do Integral. O 58
+   * não faz nem uma coisa nem outra: o arquivo é da carteira, e ponto.
+   *
+   * Medido em 13/09/2026 sobre agosto: Play 3, Play 4 e Play 5 fecham em ZERO
+   * contra `analitico_recebimentos`, bijetivo nota a nota. Ver
+   * `docs/SINCRONIZACAO-58-59.md`.
    */
   mestre_comparavel: number;
   sistema_total: number;
@@ -606,6 +618,8 @@ export async function compararSetores(empresaId: string, mes: string): Promise<C
     mestre_colchao_fora:    n(c.mestre_colchao_fora),
     mestre_emprestado_para: n(c.mestre_emprestado_para),
     mestre_emprestado_de:   n(c.mestre_emprestado_de),
+    mestre_retencao:        n(c.mestre_retencao),
+    mestre_fora_do_58:      n(c.mestre_fora_do_58),
     mestre_comparavel:      n(c.mestre_comparavel),
     sistema_total:          n(c.sistema_total),
     sistema_linhas:         n(c.sistema_linhas),
@@ -644,7 +658,7 @@ export async function buscarSetoresSemGrupo(empresaId: string, mes: string): Pro
 
 /** Uma parcela que separa os dois lados POR CONSTRUÇÃO. */
 export interface ParcelaEstrutural {
-  chave: 'contrib_integral' | 'colchao_fora' | 'emprestado_de' | 'emprestado_para' | 'ajustes';
+  chave: 'contrib_integral' | 'retencao' | 'colchao_fora' | 'emprestado_de' | 'emprestado_para' | 'ajustes';
   rotulo: string;
   valor: number;
   /** Por que essa parcela existe. Vai para a tela, não é comentário. */
@@ -736,6 +750,8 @@ export interface DiferencaDetalhe {
   mes: string;
   mestreTotal: number;
   contribIntegral: number;
+  /** `mestreTotal − comparavel`: o que o 59 conta aqui e o 58 da carteira não tem. */
+  foraDo58: number;
   comparavel: number;
   sistemaAnalitico: number;
   sistemaAjustes: number;
@@ -763,7 +779,8 @@ export async function buscarDetalheDaDiferenca(
 ): Promise<DiferencaDetalhe> {
   const { data, error } = await rpcSemTipo<{
     setor_id: string; setor_nome: string; carteira: string; mes: string;
-    mestre_total: unknown; contrib_integral: unknown; comparavel: unknown;
+    mestre_total: unknown; contrib_integral: unknown; fora_do_58: unknown;
+    comparavel: unknown;
     sistema_analitico: unknown; sistema_ajustes: unknown; sistema_total: unknown;
     diferenca: unknown; nao_explicado: unknown; nrs_truncado: unknown;
     estrutura: {
@@ -791,6 +808,7 @@ export async function buscarDetalheDaDiferenca(
     mes:       data.mes,
     mestreTotal:      n(data.mestre_total),
     contribIntegral:  n(data.contrib_integral),
+    foraDo58:         n(data.fora_do_58),
     comparavel:       n(data.comparavel),
     sistemaAnalitico: n(data.sistema_analitico),
     sistemaAjustes:   n(data.sistema_ajustes),

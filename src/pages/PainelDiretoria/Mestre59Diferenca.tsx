@@ -3,10 +3,16 @@
  *
  * ## Três camadas, e a ordem importa
  *
- * **Estrutura** primeiro: as parcelas que separam os dois lados POR CONSTRUÇÃO
- * — Integral recebido, empréstimo de pessoal, ajuste manual. Elas não são erro,
- * e vê-las antes evita a caça a um defeito que não existe. As duas de
- * empréstimo abrem, e dizem QUEM: cobradora, carteira e o setor do outro lado.
+ * **Estrutura** primeiro: as parcelas que separam `mestre_total` do recorte que
+ * o 58 faz — Integral recebido, Retenção, empréstimo de pessoal, ajuste manual.
+ * Elas não são erro, e vê-las antes evita a caça a um defeito que não existe.
+ * As duas de empréstimo abrem, e dizem QUEM: cobradora, carteira e o setor do
+ * outro lado.
+ *
+ * Desde 13/09/2026 nenhuma delas desloca a diferença: o comparável passou a
+ * seguir a carteira, como o 58, e as parcelas viraram explicação de por que
+ * `Mestre` e `Comparável` são números diferentes. Ver
+ * `docs/SINCRONIZACAO-58-59.md`.
  *
  * **Fora da comparação** depois: o NR que os dois lados conhecem, cada um no
  * seu lugar certo. O Receptivo cobra para a carteira do Play 3 — o 59 registra
@@ -167,11 +173,11 @@ export function Mestre59Diferenca({ empresaId, mes, setorId }: Props) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="text-muted-foreground">Mestre</span>
         <span className="font-mono tabular-nums text-foreground">{formatBRL(d.mestreTotal)}</span>
-        {Math.abs(d.contribIntegral) >= 0.01 && (
+        {Math.abs(d.foraDo58) >= 0.01 && (
           <>
             <span className="text-muted-foreground">−</span>
-            <span className="font-mono tabular-nums text-chart-4">{formatBRL(d.contribIntegral)}</span>
-            <span className="text-[10px] text-muted-foreground">(Integral)</span>
+            <span className="font-mono tabular-nums text-chart-4">{formatBRL(d.foraDo58)}</span>
+            <span className="text-[10px] text-muted-foreground">(fora do 58)</span>
           </>
         )}
         <span className="text-muted-foreground">=</span>
