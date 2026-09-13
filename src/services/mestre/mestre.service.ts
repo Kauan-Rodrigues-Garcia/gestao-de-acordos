@@ -233,6 +233,16 @@ export interface ComparacaoSetor {
   mestre_total: number;
   mestre_proprio: number;
   mestre_contribuido: number;
+  /**
+   * Colchão que o 58 **não guarda** em `analitico_recebimentos`.
+   *
+   * O parser do 58 manda colchão para `analitico_colchao_fora_meta` sempre,
+   * menos na janela 01–14/08/2026. No 59 ele conta na meta de setembro em
+   * diante — daí entrar em `mestre_total` e ficar fora do comparável.
+   *
+   * Até 13/09/2026 esta coluna media «colchão fora da janela da meta», que dá
+   * zero em setembro e não explicava nada. Ver `fn_mestre_esta_no_58`.
+   */
   mestre_colchao_fora: number;
   mestre_emprestado_para: number;
   mestre_emprestado_de: number;

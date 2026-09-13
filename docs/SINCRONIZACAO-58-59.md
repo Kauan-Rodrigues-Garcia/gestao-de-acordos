@@ -204,6 +204,78 @@ Mas o 59 agora **mede** o que hoje é digitado à mão em `contribuicao_receptiv
 | Play 5 | 37.710,01 | 35.395,54 | 2.314,47 |
 | Jornada Play | 93.489,09 | — | nada digitado |
 
+---
+
+## Setembro/2026: o recorte confirmado no mês corrente — 2026-09-13
+
+Conferido com o lote do 59 de 13/09 17:00 (21.838 linhas, até 14/09), cortando em
+**10/09** para dar folga ao horário em que cada setor importa o 58:
+
+| Setor | 59 no recorte | 58 | Δ | NRs comparados | divergentes |
+|---|---|---|---|---|---|
+| **Play 4** | 66.840,57 | 66.840,57 | **0,00** | 223 | **0** |
+| **Play Mix Marília** | 35.442,85 | 35.442,85 | **0,00** | 53 | **0** |
+| Play 5 | 135.804,35 | 136.022,75 | −218,40 | 390 | 1 |
+| Receptivo | 981.293,97 | 982.546,05 | −1.252,08 | 2.064 | 1 |
+
+No mês inteiro, com o 58 do Receptivo atualizado até 14/09, ele fecha em
+**0,00 exato**: 1.167.350,54 dos dois lados.
+
+> ⚠️ **Corte de data importa.** O lote anterior do 59 (10/09 20:36) tinha o dia 10
+> pela metade, e comparar até o dia 10 contra ele dava −33.830,32 no Receptivo —
+> diferença do lote, não do filtro. Antes de comparar, confira até onde o lote
+> vigente vai (`max(dt_pgto)`).
+
+### O colchão quase repetiu o erro do começo
+
+`mestre_comparavel` filtrava por `fn_mestre_conta_na_meta`, que desde a
+20260910215830 conta colchão a partir de setembro. Mas o parser do 58 manda
+colchão para `analitico_colchao_fora_meta` **sempre**, menos em 01–14/08/2026.
+Em agosto as duas regras coincidem — por isso o defeito não apareceu na primeira
+medição. Em setembro o comparável carregava:
+
+| Setor | colchão que o 58 não tem |
+|---|---|
+| Receptivo | 77.450,26 |
+| Play 5 | 857,33 |
+| Play Mix | 300,00 |
+| Play 4 | 263,00 |
+
+Corrigido nas migrations `20260913172128` e `20260913172251`, com um predicado
+próprio: **`fn_mestre_esta_no_58`**. A lição que fica é a regra de leitura deste
+documento inteiro — *«conta na meta»* e *«está no 58»* são perguntas diferentes,
+e misturá-las custa exatamente o tamanho da exceção do mês.
+
+### A data do pagamento: o 58 empilha, o 59 distribui
+
+O 58 carimba o valor **acumulado** do NR na data do **primeiro** pagamento.
+Quando o cliente paga de novo dias depois, o arquivo não cria linha no dia novo —
+aumenta o valor da linha antiga. Medido no Play 4 de setembro: 3 NRs de 223,
+R$ 2.641,04 no dia errado, **líquido zero no mês**.
+
+O caso mais limpo, NR 5747654 (ELISANDRA_RAQUEL):
+
+| | 08/09 | 09/09 |
+|---|---|---|
+| 59 | 155,00 (parcela 2) | 32,77 (parcela 2, mesmo boleto) |
+| 58 | **187,77** numa linha só | *nada* |
+
+A linha de 187,77 datada de 08/09 foi **inserida em 09/09 às 10:49**. Como o
+importador cria linha nova sempre que a data muda, se o arquivo trouxesse o
+pagamento do dia 09 em separado teriam nascido duas linhas. Nasceu uma, já
+somada: o dia não está no arquivo.
+
+Consequências, e as duas são decisões já tomadas:
+
+- **Não dá para corrigir na importação do 58.** O dado não existe lá; qualquer
+  correção seria o sistema inventar a data.
+- **Para valor por dia e por semana, a fonte é o 59** — ele guarda cada
+  pagamento na sua data e por parcela. O 58 acerta o mês, não o dia.
+- **A correção fica para quando a sincronização pelo 59 for implementada**, que é
+  quando os dados dele passam a valer em produção (decisão de 13/09/2026).
+
+---
+
 ### Três fragilidades que ficaram de pé
 
 1. **Retenção depende de marcação manual.** No 58 é automático (o rótulo que
@@ -243,7 +315,7 @@ meta, quartil e as outras abas seguem exatamente como estavam.
 |---|---|---|
 | 1 | Painel Diretoria · Visão geral (`fn_mestre_diretoria_visao_geral`) | ✅ no ar |
 | 2 | Painel Diretoria · Setores e equipes (`fn_mestre_diretoria_setores`, `_setor`) | ✅ no ar |
-| 3a | **Alinhar o recorte** — o 59 filtrado reproduz o 58 (`20260913154346`) | ✅ no ar |
+| 3a | **Alinhar o recorte** — o 59 filtrado reproduz o 58 (`20260913154346`, `…172128`, `…172251`) | ✅ no ar, conferido em agosto e setembro |
 | 3b | Corrigir os dados que sobraram (Play Mix 690,00 · Receptivo 698,43 + 338,11) | ⏳ aguarda decisão |
 | 3c | Fechar a porta da duplicata (`idx_analitico_unicidade`) | ❌ não começou |
 | 3d | Escrever no analítico a partir do 59 | ⛔ proibido, sem decisão |
@@ -348,6 +420,14 @@ setor.
 - [ ] **Fechar a porta da duplicata.** `idx_analitico_unicidade` não vê a
   parcela nem o valor. Trocar a chave mexe na importação de todo mundo — não é
   mudança para fazer junto com uma correção de dado.
+- [ ] **Corrigir a data do pagamento a partir do 59.** Adiado de propósito para
+  quando a sincronização pelo 59 for implementada — é quando os dados dele
+  passam a valer em produção (decisão de 13/09/2026). Até lá, o 58 segue
+  empilhando o acumulado na data do primeiro pagamento.
+- [ ] **Versionar o vínculo por mês.** `mestre_grupos` e `mestre_equipes` não têm
+  mês: são um mapeamento único e atual, então mexer neles hoje muda como agosto
+  é lido. O setor do operador, esse sim, já fica congelado por lote
+  (`operador_setor_id`). Fechar um mês exige as três coisas congeladas.
 - [ ] **O que acontece quando o 58 e o 59 discordam da equipe.** Regra proposta,
   não aprovada: equipe vem do 58, dinheiro vem do 59.
 - [ ] **Alias de login.** `JOAO_FAUSTINO` (ERP) e `JADE_FAUSTINO` (sistema) são a
