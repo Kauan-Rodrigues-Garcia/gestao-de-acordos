@@ -45,7 +45,9 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await db?.close(); });
 
-describe.sequential('consulta mensal autorizada no Postgres', () => {
+// Em ordem: os casos dividem o mesmo PGlite. `describe.sequential` saiu no
+// vitest 5; `concurrent: false` é a forma que ficou.
+describe('consulta mensal autorizada no Postgres', { concurrent: false }, () => {
   it('soma todas as linhas da competência, com percentuais diferentes e sem vazamento entre meses/empresas', async () => {
     expect(await consultar()).toEqual({ setor_id: setor, total_centavos: '39045', ho_centavos: '9033', quantidade: 2 });
   });

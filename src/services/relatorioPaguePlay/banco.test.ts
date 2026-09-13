@@ -45,7 +45,9 @@ beforeAll(async()=>{
 },30000);
 afterAll(async()=>{await db?.close();});
 
-describe.sequential('migração executada em Postgres isolado (sem rede)',()=>{
+// Em ordem: os casos dividem o mesmo PGlite. `describe.sequential` saiu no
+// vitest 5; `concurrent: false` é a forma que ficou.
+describe('migração executada em Postgres isolado (sem rede)',{concurrent:false},()=>{
   it('nega usuário sem autenticação, outra empresa e permissão revogada',async()=>{
     await expect(op('resumo',{empresa:outra,modalidade:'pagamento'})).rejects.toThrow('Sem acesso');
     await db.query("select set_config('test.uid','',false)");
