@@ -226,6 +226,45 @@ No mês inteiro, com o 58 do Receptivo atualizado até 14/09, ele fecha em
 > diferença do lote, não do filtro. Antes de comparar, confira até onde o lote
 > vigente vai (`max(dt_pgto)`).
 
+### O Colchão deixou de existir como categoria — 2026-09-13
+
+**Decisão da diretoria:** o Colchão era exceção de agosto/2026. O relatório passou
+a trazer esses valores corretos, e de **01/09/2026** em diante uma linha marcada
+`Colchão? = Sim` é **linha comum** — entra no Analítico como qualquer outra, sem
+desvio, sem contador próprio, sem aba à parte.
+
+Agosto/2026 fica exatamente como está, janela 01–14 inclusive. Meses anteriores
+também. A regra agora é uma só, escrita dos dois lados da ponte:
+
+| Onde | Função |
+|---|---|
+| Parser do 58 | `colchaoEhSeparado` + `colchaoContaNaMeta` (`analiticoComum.ts`) |
+| Banco | `fn_mestre_conta_na_meta` |
+
+`fn_mestre_esta_no_58`, criada horas antes para separar as duas perguntas, foi
+**derrubada**: a divergência que a justificava era o colchão de setembro, e ela
+acabou de ser abolida. Dois predicados idênticos são duas chances de divergir.
+
+> ⚠️ **Setembro já importado precisa de reimportação.** A classificação é gravada
+> na linha no momento da importação, não recalculada na leitura. O colchão de
+> setembro que entrou antes desta mudança está em `analitico_colchao_fora_meta`,
+> fora do Analítico:
+>
+> | Setor | linhas | valor |
+> |---|---|---|
+> | Receptivo | 603 | 76.351,76 |
+> | Playmix | 17 | 2.592,72 |
+> | Play 5 | 11 | 1.047,33 |
+> | Play 3 | 5 | 721,31 |
+> | Play 4 | 3 | 263,00 |
+>
+> Até cada setor reimportar setembro, a comparação acusa esse valor como NR «só
+> no 59» — e está certa: o dinheiro ainda não está no analítico. Depois da
+> reimportação, essas linhas continuam em `analitico_colchao_fora_meta` (a
+> limpeza por mês não alcança essa tabela — pendência conhecida), e aí elas
+> passam a aparecer nos dois lugares. A aba Colchão vai mostrar setembro como se
+> ainda fosse categoria.
+
 ### O colchão quase repetiu o erro do começo
 
 `mestre_comparavel` filtrava por `fn_mestre_conta_na_meta`, que desde a
@@ -242,9 +281,10 @@ medição. Em setembro o comparável carregava:
 | Play 4 | 263,00 |
 
 Corrigido nas migrations `20260913172128` e `20260913172251`, com um predicado
-próprio: **`fn_mestre_esta_no_58`**. A lição que fica é a regra de leitura deste
-documento inteiro — *«conta na meta»* e *«está no 58»* são perguntas diferentes,
-e misturá-las custa exatamente o tamanho da exceção do mês.
+próprio — que as `…173442` e `…173539` desfizeram horas depois, quando a decisão
+acima aboliu a divergência. A lição que fica vale além do colchão: *«conta na
+meta»* e *«está no 58»* são perguntas diferentes, e sempre que elas divergirem o
+comparável precisa seguir a segunda. Hoje coincidem.
 
 ### A data do pagamento: o 58 empilha, o 59 distribui
 

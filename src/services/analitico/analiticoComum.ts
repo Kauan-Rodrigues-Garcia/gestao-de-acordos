@@ -164,18 +164,47 @@ export function ehLinhaColchao(valor: unknown): boolean {
 }
 
 /**
- * Exceção única autorizada para a meta: Colchão pago até **14/08/2026**.
- * A partir de 15/08/2026 — e em qualquer outro mês — fica só no acompanhamento.
+ * O Colchão ainda é uma categoria à parte nesta data?
+ *
+ * **Até agosto/2026, sim.** A partir de **01/09/2026, não**: o relatório passou
+ * a trazer esses valores corretos, e uma linha marcada `Colchão? = Sim` virou
+ * linha comum — entra no Analítico como qualquer outra, sem desvio e sem
+ * contador próprio. Decisão da diretoria em 13/09/2026.
+ *
+ * Enquanto `false`, `colchaoContaNaMeta` nem é consultada: não há o que separar.
+ *
+ * Meses anteriores a agosto/2026 continuam como sempre estiveram — colchão fora
+ * da meta, guardado em `analitico_colchao_fora_meta`. Mexer neles reescreveria
+ * fechamento antigo que ninguém pediu para mexer.
+ *
+ * ⚠️ A classificação é gravada na linha no momento da importação, não
+ * recalculada na leitura. Setembro/2026 importado ANTES desta mudança tem o
+ * colchão em `analitico_colchao_fora_meta`; só reimportar traz essas linhas
+ * para o Analítico. O espelho disso no banco é `fn_mestre_conta_na_meta`.
+ */
+export function colchaoEhSeparado(dataPagamento: Date): boolean {
+  return dataPagamento < new Date(2026, 8, 1);
+}
+
+/**
+ * Dentro da era em que o Colchão era separado, ele conta na meta?
+ *
+ * Exceção única autorizada: Colchão pago até **14/08/2026**. De 15 a 31/08 — e
+ * em qualquer mês anterior — fica só no acompanhamento.
  *
  * O corte nasceu no dia 12 e foi movido para o 14 em 23/08/2026, a pedido da
  * diretoria. É uma decisão de negócio, não um cálculo: não há fórmula que
  * derive o dia, e por isso ele está escrito aqui, num lugar só, em vez de
  * espalhado pelos dois parsers que o consultam (PaguePlay e BookPlay).
  *
+ * Só faz sentido perguntar quando `colchaoEhSeparado` é `true` — de setembro em
+ * diante não existe colchão a separar, e esta função responde `false` para
+ * datas que hoje contam normalmente. Perguntar na ordem errada inverte o
+ * resultado.
+ *
  * ⚠️ Mexer neste número muda valor de meta já apurado. Quem mover o corte
  * outra vez precisa reimportar agosto/2026 para os dias 13 e 14 mudarem de
- * lado — a classificação é gravada na linha no momento da importação
- * (`analiticoParser.ts`), não recalculada na leitura.
+ * lado.
  */
 export function colchaoContaNaMeta(dataPagamento: Date): boolean {
   return dataPagamento.getFullYear() === 2026

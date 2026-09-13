@@ -22,6 +22,7 @@ import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 import { calcHO } from '@/lib/index';
 import {
   consolidar,
+  colchaoEhSeparado,
   colchaoContaNaMeta,
   ehEquipeRetencao,
   ehLinhaColchao,
@@ -164,7 +165,9 @@ export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
       tipo_comissao:    tipoComissao,
     };
 
-    if (cols.colchao != null && ehLinhaColchao(row[cols.colchao])) {
+    // De 01/09/2026 em diante o Colchão deixou de ser categoria: a linha cai
+    // direto em `linhasBrutas`, como qualquer outra. Ver `colchaoEhSeparado`.
+    if (cols.colchao != null && ehLinhaColchao(row[cols.colchao]) && colchaoEhSeparado(dt)) {
       if (colchaoContaNaMeta(dt)) {
         colchaoNaMeta.linhas++;
         colchaoNaMeta.valor += rec;

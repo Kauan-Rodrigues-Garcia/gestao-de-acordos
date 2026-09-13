@@ -81,14 +81,33 @@ describe('parseRelatorioBookplayRows — relatório 58', () => {
     expect(resultado.colchao).toHaveLength(0);
   });
 
-  it('fora de agosto, todo Colchão fica somente no acompanhamento', () => {
+  /*
+   * Antes de 13/09/2026 este teste travava o contrário: colchão fora de agosto
+   * ia INTEIRO para o acompanhamento. A diretoria aboliu a separação — o
+   * relatório passou a trazer esses valores corretos — e de 01/09/2026 em diante
+   * a linha é comum. Ver `colchaoEhSeparado`.
+   */
+  it('de setembro/2026 em diante o Colchão entra como linha comum', () => {
     const resultado = parseRelatorioBookplayRows([
       CABECALHO,
       linha({ colchao: 'Sim', data: '01/09/2026' }),
     ]);
 
+    expect(resultado.analitico).toHaveLength(1);
+    expect(resultado.diario).toHaveLength(1);
+    expect(resultado.colchao).toHaveLength(0);
+    // Não é exceção: não entra no contador da janela de agosto.
+    expect(resultado.colchaoNaMeta).toEqual({ linhas: 0, valor: 0 });
+  });
+
+  it('antes de setembro/2026 o Colchão continua separado, como sempre esteve', () => {
+    const resultado = parseRelatorioBookplayRows([
+      CABECALHO,
+      // 20/08 está na era do colchão, mas fora da janela 01–14: acompanhamento.
+      linha({ colchao: 'Sim', data: '20/08/2026' }),
+    ]);
+
     expect(resultado.analitico).toHaveLength(0);
-    expect(resultado.diario).toHaveLength(0);
     expect(resultado.colchao).toHaveLength(1);
     expect(resultado.colchaoNaMeta).toEqual({ linhas: 0, valor: 0 });
   });

@@ -213,7 +213,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
                   <strong>{preview.colchaoNaMeta.linhas}</strong>{' '}
-                  linha{preview.colchaoNaMeta.linhas !== 1 ? 's' : ''} do Colchão até 12/08/2026{' '}
+                  linha{preview.colchaoNaMeta.linhas !== 1 ? 's' : ''} do Colchão até 14/08/2026{' '}
                   {preview.colchaoNaMeta.linhas !== 1 ? 'contam' : 'conta'} na meta
                   {' '}({formatBRL(preview.colchaoNaMeta.valor)}).
                 </p>

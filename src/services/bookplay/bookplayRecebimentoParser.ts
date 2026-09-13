@@ -39,6 +39,7 @@
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 import {
+  colchaoEhSeparado,
   colchaoContaNaMeta,
   ehEquipeRetencao,
   ehLinhaColchao,
@@ -211,7 +212,9 @@ export function parseRelatorioBookplayRows(rows: unknown[][]): ResultadoParseBoo
 
     const label = labelPagamentoBookplay(tp);
 
-    if (cols.colchao != null && ehLinhaColchao(row[cols.colchao])) {
+    // De 01/09/2026 em diante o Colchão deixou de ser categoria: a linha segue
+    // para `brutas`, como qualquer outra. Ver `colchaoEhSeparado`.
+    if (cols.colchao != null && ehLinhaColchao(row[cols.colchao]) && colchaoEhSeparado(dt)) {
       if (colchaoContaNaMeta(dt)) {
         colchaoNaMeta.linhas++;
         colchaoNaMeta.valor += rec;
