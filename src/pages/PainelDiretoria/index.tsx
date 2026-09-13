@@ -3,7 +3,7 @@ import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, DollarSign, BarChart3,
-  Building2, RefreshCw, CreditCard, Database, Link2,
+  Building2, RefreshCw, CreditCard, Database, Link2, Users,
   TrendingDown, Target, Activity, PieChart,
   AlertCircle, CheckCircle2, Clock, CalendarClock,
 } from 'lucide-react';
@@ -54,6 +54,7 @@ import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types'
  */
 const Mestre59 = lazy(() => import('./Mestre59'));
 const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
+const Mestre59Operadores = lazy(() => import('./Mestre59Operadores'));
 const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
 
 /**
@@ -64,7 +65,7 @@ const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
  * conferência de super_admin, e `codigos` é onde o código do ERP amarra cada
  * setor à sua carteira do 59.
  */
-type AbaDoPainel = 'visao' | 'setores' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
+type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
 
 /**
  * Painel Diretoria.
@@ -357,9 +358,11 @@ export default function PainelDiretoria() {
     : aba === 'codigos'     ? (podeVerMestre ? 'codigos' : 'visao')
     : aba === 'painel'      ? 'visao'   // o painel antigo saiu do ar na BookPlay
     : aba === 'setores'     ? 'setores'
+    : aba === 'operadores'  ? 'operadores'
     : 'visao';
   /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
-  const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores';
+  const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores'
+    || abaVisivel === 'operadores';
 
   if (!perfil) return null;
 
@@ -437,6 +440,7 @@ export default function PainelDiretoria() {
           ] : [
             { key: 'visao'   as const, label: 'Visão geral',        Icon: TrendingUp },
             { key: 'setores' as const, label: 'Setores e equipes',  Icon: Building2 },
+            { key: 'operadores' as const, label: 'Por pessoa',        Icon: Users },
             // A conferência do 59 é de super_admin: ela mostra a linha crua e
             // deixa vincular grupo a setor, que é escrita, não leitura.
             //
@@ -470,6 +474,16 @@ export default function PainelDiretoria() {
           {/* `mesAnalise` é o mês do seletor do cabeçalho: as duas abas olham o
               mesmo período, senão trocar de aba trocaria o mês em silêncio. */}
           <Mestre59 empresaId={empresa?.id ?? ''} mes={mesAnalise} />
+        </Suspense>
+      ) : abaVisivel === 'operadores' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          {/* O recebimento por PESSOA, atravessando carteira e equipe. O mês é
+              o mesmo do seletor do cabeçalho, como nas outras abas do 59. */}
+          <Mestre59Operadores
+            empresaId={empresa?.id ?? ''}
+            mes={mesAnalise}
+            versao={versaoVisao}
+          />
         </Suspense>
       ) : abaVisivel === 'codigos' ? (
         <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>

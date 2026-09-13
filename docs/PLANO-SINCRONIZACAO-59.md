@@ -173,7 +173,7 @@ evitado estrago real nesta semana.
 
 | | O quê | Por quê |
 |---|---|---|
-| 0.1 | **Armadilha de cabeçalho** — guarda a assinatura de colunas por tipo de relatório e avisa no preview quando mudar | Regra 8. Protege as duas de baixo |
+| ✅ 0.1 | **Armadilha de cabeçalho** — guarda a assinatura de colunas por tipo de relatório e avisa no preview quando mudar (`20260913231913`, no ar) | Regra 8. Protege as duas de baixo |
 | 0.2 | **Trava de arquivo curto** — a importação para e pede confirmação quando for remover linhas acima de um limite, mostrando quantas e de quais dias | Em 13/09 um export antigo apagou 413 linhas e R$ 175.768,38 do Receptivo, sem aviso |
 | 0.3 | **Chave de unicidade do 58** — hoje é `(empresa, codigo, data, forma, operador)`: não vê parcela nem valor | Deixou R$ 698,43 duplicados no Receptivo. Envenena o «pendente» da fase 2 |
 
@@ -182,7 +182,39 @@ compara com o 59 seguinte. Com duplicata e remoção silenciosa na base, o
 «pendente» vira ruído e ninguém confia na aba de divergências — que é o coração
 do que você pediu.
 
-### Fase 1 — a camada de resolução (leitura, sem escrita)
+### ✅ Fase 1 — o recebimento por pessoa (no ar em 13/09/2026)
+
+Entregue: `fn_mestre_operadores_do_mes`, `fn_mestre_operador_detalhe` e a aba
+**«Por pessoa»** no Painel Diretoria.
+
+A soma é pela **cobradora**, atravessando carteira e subgrupo — que era o ponto.
+Dois números convivem, e os dois estão certos:
+
+| | |
+|---|---|
+| `total` | tudo o que a pessoa cobrou, em qualquer carteira |
+| `no_setor_dele` | a parte que caiu no setor dela — **é este que bate com o 58** |
+
+A validação que fecha a história, 01–10/09:
+
+| Pessoa | total no 59 | no setor dela | 58 do setor |
+|---|---|---|---|
+| KAROLAINE_SILVA | 37.081,78 | **7.445,58** | 7.445,58 |
+| HELTON_ROLDON | 30.281,46 | **1.743,78** | 1.743,78 |
+| NANCI_MOREIRA | 34.814,42 | **33.067,14** | 33.067,14 |
+
+**Os «18 operadores divergentes» não eram divergência.** A diferença era a parte
+cobrada fora do setor da pessoa, que o 58 daquele setor nunca teve como ter. Ela
+não some mais: abre no detalhe, dizendo para qual setor, carteira e equipe cada
+parte foi.
+
+Carteira sem vínculo aparece com o nome do ERP e o selo «sem vínculo». Pessoa
+sem perfil aparece pelo login, com o selo «sem registro» — e conta para o setor
+do mesmo jeito.
+
+---
+
+### ~~Fase 1 — a camada de resolução~~ (desenho original, entregue acima)
 
 Uma função que, para um mês, resolve **cada linha do 59** para:
 
@@ -242,6 +274,20 @@ e sem trava de mês, uma importação de hora em hora pode reescrever mês fecha
 sem ninguém ver.
 
 ---
+
+## O passo pendente agora
+
+**Fase 0.2 — a trava de arquivo curto.** É a que já custou dinheiro: em 13/09 um
+export antigo do Receptivo apagou 413 linhas e R$ 175.768,38, e o único registro
+foi uma frase no log depois do fato.
+
+O desenho: antes de confirmar, comparar até onde o arquivo vai com até onde o
+sistema já tem dados naquele setor/mês. Arquivo que para antes avisa quantas
+linhas e quanto valor vão sair, e de quais dias. Não bloqueia — pede confirmação.
+
+Depois dela vem a **0.3 (chave de unicidade do 58)**, que é a mais delicada das
+três: mexer na chave muda a deduplicação de toda importação, e a reconciliação
+depende dela. Merece sessão própria.
 
 ## Decisões tomadas nesta sessão
 
