@@ -739,8 +739,8 @@ export function useAnalytics(
         setAtualizando(false);
       }
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro,
-      podeTodosSetores, podeSetor, podeEquipe, isBookplay, chaveCache]);
+  }, [perfil, empresa, mes, ano, mesRef, setorFiltro, equipeFiltro, operadorFiltro,
+      podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache]);
 
   /*
    * Recorte novo — outro mês, outro filtro, outra empresa.

@@ -3,7 +3,7 @@
  * Exibe acordos excluídos (manual ou transferência de NR) armazenados em lixeira_acordos.
  * Acessível por líder e administrador via /admin/lixeira
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Search, Clock, ArrowRightLeft,
@@ -67,7 +67,7 @@ function tempoUrgencia(expiraEm?: string): 'green' | 'yellow' | 'red' | 'gray' {
 export default function Lixeira() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
+  const { temPermissao, loading: permissoesCarregando } = useCargoPermissoes();
 
   const [itens, setItens]               = useState<LixeiraAcordo[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -107,7 +107,7 @@ export default function Lixeira() {
   const escopo = escopoEfetivo('lixeira', temPermissao);
   const soOsProprios = escopo === 'individual' || escopo === null;
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     if (!empresa?.id) return;
     setLoading(true);
     try {
@@ -146,7 +146,7 @@ export default function Lixeira() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [empresa?.id, soOsProprios, perfil?.id]);
 
   async function handleEsvaziar() {
     if (!empresa?.id) return;
@@ -176,7 +176,18 @@ export default function Lixeira() {
     }
   }
 
-  useEffect(() => { carregar(); }, [empresa?.id]);
+  /*
+   * Esperar as permissões antes da primeira busca.
+   *
+   * `escopo` sai de `temPermissao`, que responde `false` enquanto as chaves
+   * carregam — `soOsProprios` nascia `true`. Com o efeito preso só a
+   * `empresa?.id`, a lista buscava recortada pela pessoa e não buscava de
+   * novo quando o escopo real chegava: a gerência abria a Lixeira e via só
+   * os próprios itens até clicar em recarregar.
+   */
+  useEffect(() => {
+    if (!permissoesCarregando) carregar();
+  }, [carregar, permissoesCarregando]);
 
   const itensFiltrados = itens.filter(item => {
     // Defesa em profundidade: se por qualquer motivo a purga server-side

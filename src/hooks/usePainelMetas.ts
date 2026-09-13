@@ -534,7 +534,10 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // entram, e cada uma na sua data.
   const inicioTreino = (modo === 'eu' ? minhaEquipe : equipeSelecionada)
     ?.treinamentoInicio ?? undefined;
-  const feriados = config?.feriados ?? [];
+  // Memoizado porque `?? []` cria um array NOVO a cada render quando não há
+  // config — e os dois `useMemo` de dias úteis logo abaixo, que dependem dele,
+  // recalculavam em toda renderização.
+  const feriados = useMemo(() => config?.feriados ?? [], [config?.feriados]);
 
   const diasUteisTotal = useMemo(
     () => diasUteisDoMes(ano, mesNum, feriados, inicioTreino),

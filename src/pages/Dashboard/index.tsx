@@ -497,10 +497,16 @@ export default function Dashboard() {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
   }, []);
 
+  // Mesmo padrão de `Acordos/index.tsx`: ref + updater. Pôr `setSearchParams`
+  // nas dependências — o que o lint pedia — faria a escrita na URL reagendar o
+  // próprio efeito e empilhar a mesma URL duas vezes no histórico.
+  const setSearchParamsRef = useRef(setSearchParams);
+  useEffect(() => { setSearchParamsRef.current = setSearchParams; });
+
   useEffect(() => {
     if (!isPP) return;
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams);
+    const timer = setTimeout(() => setSearchParamsRef.current(atual => {
+      const params = new URLSearchParams(atual);
       if (busca)        params.set('busca',  busca);        else params.delete('busca');
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
@@ -508,8 +514,8 @@ export default function Dashboard() {
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
-      setSearchParams(params);
-    }, 400);
+      return params;
+    }), 400);
     return () => clearTimeout(timer);
   }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, filtroVinculo, currentPage, isPP]);
 

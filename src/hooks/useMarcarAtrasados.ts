@@ -20,12 +20,20 @@ import { useCargoPermissoes } from './useCargoPermissoes';
 export function useMarcarAtrasados() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
+  const { temPermissao, loading: permissoesCarregando } = useCargoPermissoes();
   const jaRodouRef = useRef(false);
 
   useEffect(() => {
     if (jaRodouRef.current) return;
     if (!perfil?.id || !empresa?.id) return;
+    /*
+     * Esperar as permissões. Enquanto carregam, `temPermissao` responde
+     * `false` para todo cargo que não é de acesso total — e a varredura roda
+     * UMA vez por sessão. Quem enxerga a empresa inteira convertia só os
+     * próprios atrasados, e o `jaRodouRef` impedia a segunda chance: o resto
+     * da fila esperava outra pessoa abrir o sistema.
+     */
+    if (permissoesCarregando) return;
 
     jaRodouRef.current = true;
 
@@ -85,5 +93,5 @@ export function useMarcarAtrasados() {
         });
       }
     })();
-  }, [perfil?.id, perfil?.perfil, empresa?.id]);
+  }, [perfil?.id, perfil?.perfil, empresa?.id, permissoesCarregando, temPermissao]);
 }

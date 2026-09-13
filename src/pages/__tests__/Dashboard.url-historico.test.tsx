@@ -1,16 +1,22 @@
 /**
- * Dashboard.smoke.test.tsx
- * ─────────────────────────────────────────────────────────────────────────
- * Smoke tests for the Dashboard page.
- * Goal: verify the page mounts without throwing and shows a known element
- * under each major loading/empty state.
+ * Dashboard (PaguePlay) — uma troca de filtro, UMA entrada no histórico.
+ *
+ * Aqui o defeito NUNCA existiu, e o teste é uma guarda. O efeito que escreve
+ * os filtros na URL deixava `setSearchParams` fora das dependências — o lint
+ * acusava. O conserto óbvio, pôr a função na lista, é exatamente o que
+ * duplicava o histórico em `Acordos` (ver `Acordos.url-historico.test.tsx`):
+ * o react-router recria `setSearchParams` a cada mudança de URL, e a própria
+ * escrita reagendaria o efeito. Conferido: com a função nas dependências, este
+ * teste falha com 2 entradas.
+ *
+ * A sincronia só existe na PaguePlay — por isso o tenant difere do smoke.
  */
-import React from 'react';
+import React, { useRef } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom';
 
-// ── Subject under test ──────────────────────────────────────────────────────
 import Dashboard from '../Dashboard';
 
 // ── Hook / lib mocks ────────────────────────────────────────────────────────
@@ -64,7 +70,7 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
 
 vi.mock('@/lib/tenant-config', () => ({
   useTenant: () => ({
-    isPaguePlay: false,
+    isPaguePlay: true,
     useInstituicaoAsCodigo: false,
     limitedTipos: false,
     hasEstadoUF: false,
@@ -73,7 +79,7 @@ vi.mock('@/lib/tenant-config', () => ({
     tipoOptions: ['pix', 'boleto', 'cartao'],
     statusLabels: { verificar_pendente: 'Verificar', pago: 'Pago', nao_pago: 'Não Pago' },
     tipoLabels: { pix: 'PIX', boleto: 'Boleto', cartao: 'Cartão' },
-    slug: 'bookplay',
+    slug: 'pagueplay',
   }),
   getTenantCapabilities: (slug: string) => ({ slug }),
 }));
@@ -207,86 +213,52 @@ vi.mock('framer-motion', () => {
 // sonner
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-// react-router-dom
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return {
-    ...actual,
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
-    Link: ({ children, to, ...rest }: { children: React.ReactNode; to: string; [k: string]: unknown }) =>
-      React.createElement('a', { href: to as string, ...rest }, children),
-    Navigate: () => null,
-  };
-});
-
-// ── Tests ───────────────────────────────────────────────────────────────────
-
-/**
- * O Dashboard monta o `PainelMetas`, que consome `useAnaliticoDashboard` —
- * e esse hook usa React Query para compartilhar uma única busca do mês entre os
- * seus dois consumidores. O `QueryClientProvider` existe no App real (`App.tsx`);
- * aqui ele precisa ser fornecido, senão o hook lança "No QueryClient set".
- *
- * `retry: false` para o teste não ficar esperando retentativa quando uma query
- * falha, e um client novo por render para não vazar cache entre casos.
- */
-function renderDashboard() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <Dashboard />
-    </QueryClientProvider>,
-  );
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('Dashboard (smoke)', () => {
-  it('renders without crashing and shows greeting', async () => {
-    renderDashboard();
-    // Page shows a greeting ("Bom dia / Boa tarde / Boa noite")
-    await waitFor(() => {
-      expect(
-        screen.getByText(/bom dia|boa tarde|boa noite/i)
-      ).toBeInTheDocument();
-    });
-  });
+const historico = { pushes: 0, ultimaUrl: '' };
+function Sonda() {
+  const local = useLocation();
+  const tipo = useNavigationType();
+  const vistas = useRef(new Set<string>());
+  if (tipo === 'PUSH' && !vistas.current.has(local.key)) {
+    vistas.current.add(local.key);
+    historico.pushes++;
+  }
+  historico.ultimaUrl = local.search;
+  return null;
+}
 
-  it('shows analytics panel stub', async () => {
-    renderDashboard();
-    // AnalyticsPanel is mocked with data-testid="analytics-panel"
-    await waitFor(() => {
-      expect(screen.getByTestId('analytics-panel')).toBeInTheDocument();
-    });
-  });
+/** Em fatias — ver o comentário em `Acordos.url-historico.test.tsx`. */
+async function esperarEscritas() {
+  for (let i = 0; i < 8; i++) {
+    await act(() => new Promise(r => setTimeout(r, 200)));
+  }
+}
 
-  /*
-   * Guarda do dublê de `supabase`: se uma consulta do Dashboard não couber
-   * nele, o hook cai no `catch`, avisa no console e segue com o valor de
-   * segurança — e os outros testes continuam verdes sem testar nada.
-   */
-  it('nenhuma consulta de liderança cai no catch do dublê', async () => {
-    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    renderDashboard();
-    await waitFor(() => {
-      expect(screen.getByText(/bom dia|boa tarde|boa noite/i)).toBeInTheDocument();
-    });
-    const doHook = aviso.mock.calls.filter(
-      ([msg]) => typeof msg === 'string' && msg.startsWith('[useLideroEquipe]'),
+describe('Dashboard PaguePlay — filtros na URL', () => {
+  it('digitar na busca grava a URL uma vez só', async () => {
+    historico.pushes = 0;
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Dashboard />
+          <Sonda />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
-    expect(doHook).toEqual([]);
-    aviso.mockRestore();
-  });
+    await esperarEscritas();
+    const antes = historico.pushes;
 
-  it('shows link to acordos for Bookplay tenant', async () => {
-    renderDashboard();
-    await waitFor(() => {
-      // For non-PaguePLAY tenants Dashboard renders a "Ver todos os acordos" link
-      expect(screen.getByText(/ver todos os acordos/i)).toBeInTheDocument();
+    fireEvent.change(await screen.findByPlaceholderText('Buscar Código ou nome...'), {
+      target: { value: 'maria' },
     });
-  });
+    await esperarEscritas();
+
+    expect(historico.ultimaUrl).toContain('busca=maria');
+    expect(historico.pushes - antes).toBe(1);
+  }, 20_000);
 });

@@ -86,13 +86,30 @@ export function ThemeToggle() {
     setMenuEscuro(ligado);
     aplicarMenuEscuro(ligado);
     setEscuroEmVigor(temaEscuroEmVigor());
+  }, []);
 
-    // Listener para mudança de preferência do sistema
+  /*
+   * Seguir o sistema quando o tema é «Sistema».
+   *
+   * Morava no efeito de montagem acima, com `[]`, e o handler lia `current`
+   * pela closure — congelado no valor do PRIMEIRO render, `'light'`. A
+   * condição `current === 'system'` nunca era verdadeira: quem escolhia
+   * «Sistema» não via a tela acompanhar a troca claro/escuro do SO.
+   *
+   * Efeito próprio, que só escuta enquanto o tema é `system` e se refaz a
+   * cada troca. Recalcula também `escuroEmVigor`, que decide se o interruptor
+   * do menu escuro fica inerte.
+   */
+  useEffect(() => {
+    if (current !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => { if (current === 'system') applyTheme('system'); };
+    const handler = () => {
+      applyTheme('system');
+      setEscuroEmVigor(temaEscuroEmVigor());
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
-  }, []);
+  }, [current]);
 
   function setTheme(value: ThemeValue) {
     setCurrent(value);

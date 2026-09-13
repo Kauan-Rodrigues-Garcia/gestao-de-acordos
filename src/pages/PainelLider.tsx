@@ -443,18 +443,28 @@ export default function PainelLider() {
     });
   }, [setorAbas, escopoAbas.equipeId, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
 
+  /*
+   * Os carregadores abaixo leem do perfil só a identidade e o setor. Em
+   * primitivos, e não o objeto: o `useAuth` recria `perfil` a cada releitura
+   * da sessão com os mesmos valores, e depender do objeto refaria a carga
+   * inteira do painel sem nada ter mudado. As dependências já eram por campo;
+   * o corpo é que lia `perfil` inteiro, e o lint acusava a diferença.
+   */
+  const perfilId      = perfil?.id;
+  const perfilSetorId = perfil?.setor_id;
+
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
-    if (!perfil || !empresa?.id) return [];
-    const escopoSetor = soMeuSetor && !!perfil.setor_id;
+    if (!perfilId || !empresa?.id) return [];
+    const escopoSetorId = soMeuSetor && perfilSetorId ? perfilSetorId : null;
 
     // BookPlay: um setor pode ser formado SÓ por operadores CLONADOS (setor de
     // origem diferente). O filtro por setor_id os deixaria de fora e o painel
     // ficaria zerado. Inclui também os clonados em equipes do setor do líder.
     let cloneIds: string[] = [];
-    if (escopoSetor && isBookplay) {
+    if (escopoSetorId && isBookplay) {
       const { data: eqs } = await supabase
-        .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
+        .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', escopoSetorId);
       const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
       if (eqIds.length) {
         const { data: cl } = await supabase
@@ -472,15 +482,15 @@ export default function PainelLider() {
       // `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`.
       .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
       .eq('ativo', true);
-    if (escopoSetor) {
+    if (escopoSetorId) {
       q = cloneIds.length
-        ? q.or(`setor_id.eq.${perfil.setor_id},id.in.(${cloneIds.join(',')})`)
-        : q.eq('setor_id', perfil.setor_id);
+        ? q.or(`setor_id.eq.${escopoSetorId},id.in.(${cloneIds.join(',')})`)
+        : q.eq('setor_id', escopoSetorId);
     }
     const { data, error } = await q.order('nome');
     if (error) throw new Error(`Operadores: ${error.message}`);
     return (data as Perfil[]) ?? [];
-  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isBookplay, soMeuSetor]);
+  }, [perfilId, perfilSetorId, empresa?.id, isBookplay, soMeuSetor]);
 
   /**
    * Líderes e gerentes do escopo, para o Ajuste de recebimento.
@@ -490,26 +500,26 @@ export default function PainelLider() {
    * oferecendo os operadores, que é o caso comum.
    */
   const carregarLiderancaAjuste = useCallback(async (): Promise<Perfil[]> => {
-    if (!perfil || !empresa?.id) return [];
+    if (!perfilId || !empresa?.id) return [];
     let q = supabase
       .from('perfis')
       .select('*, setores(id, nome)')
       .eq('empresa_id', empresa.id)
       .in('perfil', [...PERFIS_LIDERANCA_AJUSTE])
       .eq('ativo', true);
-    if (soMeuSetor && perfil.setor_id) q = q.eq('setor_id', perfil.setor_id);
+    if (soMeuSetor && perfilSetorId) q = q.eq('setor_id', perfilSetorId);
     const { data, error } = await q.order('nome');
     if (error) {
       console.warn('[PainelLider] liderança para o ajuste:', error.message);
       return [];
     }
     return (data as Perfil[]) ?? [];
-  }, [perfil?.id, perfil?.setor_id, empresa?.id, soMeuSetor]);
+  }, [perfilId, perfilSetorId, empresa?.id, soMeuSetor]);
 
   // ── Carregar acordos do mês para os operadores ────────────────────────────
   // ── Orquestra a carga (operadores) ────────────────────────────────────────
   const carregarTudo = useCallback(async () => {
-    if (!perfil || !empresa?.id) return;
+    if (!perfilId || !empresa?.id) return;
     setLoading(true);
     setErro(null);
     try {
@@ -524,7 +534,7 @@ export default function PainelLider() {
     } finally {
       setLoading(false);
     }
-  }, [perfil?.id, empresa?.id, carregarOperadores, carregarLiderancaAjuste]);
+  }, [perfilId, empresa?.id, carregarOperadores, carregarLiderancaAjuste]);
 
   useEffect(() => { void carregarTudo(); }, [carregarTudo]);
 

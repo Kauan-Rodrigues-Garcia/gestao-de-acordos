@@ -101,7 +101,9 @@ function postAllRoutesOnce(children: AnyEl) {
 
 /** Our patched <Routes/>: same API, just posts route list once. */
 export function Routes(props: React.ComponentProps<typeof RRD.Routes>) {
-  React.useEffect(() => { postAllRoutesOnce(props.children); }, []);
+  // `postAllRoutesOnce` já se protege com `routesPosted`: rodar de novo quando
+  // `children` muda não reenvia nada, só deixa a dependência honesta.
+  React.useEffect(() => { postAllRoutesOnce(props.children); }, [props.children]);
   return React.createElement(RRD.Routes, { ...props });
 }
 

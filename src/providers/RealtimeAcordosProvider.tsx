@@ -313,7 +313,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
     };
    
-  }, [empresa?.id, perfil?.empresa_id, reconnectTick]);
+  }, [empresa?.id, perfil?.empresa_id, reconnectTick, queryClient]);
 
   return (
     <RealtimeContext.Provider value={{ status, subscribe, unsubscribe }}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Shield, FileText, Users, Archive, AlertTriangle, ClipboardCheck,
@@ -129,7 +129,7 @@ export default function AdminDocumentacoes() {
   const [rascunho, setRascunho] = useState('');
   const [saving, setSaving] = useState(false);
 
-  async function carregarDocumentos() {
+  const carregarDocumentos = useCallback(async () => {
     if (!empresa?.id) return;
     setLoading(true);
 
@@ -156,9 +156,9 @@ export default function AdminDocumentacoes() {
 
     setDocs(prev => ({ ...prev, ...mapa }));
     setLoading(false);
-  }
+  }, [empresa?.id]);
 
-  useEffect(() => { carregarDocumentos(); }, [empresa?.id]);
+  useEffect(() => { carregarDocumentos(); }, [carregarDocumentos]);
 
   function abrirVisualizacao(doc: DocumentoLgpd) {
     setModalDoc(doc);

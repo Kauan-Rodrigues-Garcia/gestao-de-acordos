@@ -239,9 +239,21 @@ export default function Acordos() {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
   }, []);
 
+  /*
+   * `setSearchParams` por ref, e a URL lida pelo updater — não pelo render.
+   *
+   * O react-router recria `setSearchParams` sempre que a URL muda. Com ele nas
+   * dependências, a própria escrita abaixo reagendava o efeito, que 400 ms
+   * depois gravava a MESMA URL de novo: duas entradas no histórico por troca
+   * de filtro, e o «voltar» do navegador precisava de dois cliques. Medido
+   * num teste com `MemoryRouter` — 2 pushes antes, 1 agora.
+   */
+  const setSearchParamsRef = useRef(setSearchParams);
+  useEffect(() => { setSearchParamsRef.current = setSearchParams; });
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams);
+    const timer = setTimeout(() => setSearchParamsRef.current(atual => {
+      const params = new URLSearchParams(atual);
       if (busca) params.set('busca', busca); else params.delete('busca');
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
@@ -259,10 +271,10 @@ export default function Acordos() {
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       if (filtroTag && filtroTag !== 'all') params.set('tag', filtroTag); else params.delete('tag');
       params.set('page', currentPage.toString());
-      setSearchParams(params);
-    }, 400);
+      return params;
+    }), 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, pixAba, filtroVinculo, filtroTag, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, pixAba, filtroVinculo, filtroTag, currentPage]);
 
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
     ? filtroStatus

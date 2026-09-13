@@ -936,7 +936,7 @@ export function QuartisOperadores({
   // `emHO` é dependência de verdade: sem ele, trocar a unidade no alternador
   // não recalcularia linha nenhuma — a tabela ficaria na unidade anterior e só
   // o rótulo mudaria.
-  }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp,
+  }, [anoNum, mesNum, mes, feriados, contarHoje, quartis, resumos, operadores, metasOp,
       metasIndiretas, indiretoMap, emHO,
       setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
       setorDaEquipe, nomeDaEquipe, treinoMap]);

@@ -136,8 +136,13 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
 
   const empresaId = empresa?.id ?? perfil?.empresa_id;
 
-  // ── Estabiliza filtros com useMemo ────────────────────────────────────────
-  const filtrosEstavel = useMemo(() => {
+  // ── Estabiliza filtros numa string ────────────────────────────────────────
+  // A string JÁ é o valor estável: duas renderizações com os mesmos filtros
+  // produzem o mesmo texto, e é por texto que `queryKey` compara. O `useMemo`
+  // que embrulhava isto listava 17 campos à mão (dois com `join` dentro da
+  // lista de deps) só para evitar um `JSON.stringify` de objeto pequeno — e
+  // cada campo novo em `filtros` precisava lembrar de entrar nas duas listas.
+  const filtrosEstavel = (() => {
     if (!filtros) return '';
     const {
       status, tipo, operador_id, setor_id, equipe_id, empresa_id,
@@ -151,15 +156,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
       status_exceto, tag_ids,
     });
-  }, [
-    filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
-    filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
-    filtros?.data_fim, filtros?.busca, filtros?.apenas_hoje, filtros?.page,
-    filtros?.perPage, filtros?.enableRealtime, filtros?.prioritize_today,
-    // `join` porque array literal quebra a comparacao referencial das deps.
-    filtros?.status_exceto?.join(','),
-    filtros?.tag_ids?.join(','),
-  ]);
+  })();
 
   const queryKey = useMemo(
     () => ['acordos', empresaId ?? '', filtrosEstavel] as const,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Edit, MessageSquare, CheckCircle2, Clock, Hash, User, Calendar, DollarSign, Smartphone, FileText, AlertCircle, Building2, MapPin, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,7 +42,7 @@ export default function AcordoDetalhe() {
    */
   const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento));
 
-  async function fetchAcordo() {
+  const fetchAcordo = useCallback(async () => {
     if (!id) return;
     const { data } = await supabase.from('acordos').select('*, perfis(id,nome,email,perfil)').eq('id', id).single();
     if (data) setAcordo(data as Acordo);
@@ -53,9 +53,9 @@ export default function AcordoDetalhe() {
       .order('criado_em', { ascending: false });
     setHistorico((hist as HistoricoAcordo[]) || []);
     setLoading(false);
-  }
+  }, [id]);
 
-  useEffect(() => { fetchAcordo(); }, [id]);
+  useEffect(() => { fetchAcordo(); }, [fetchAcordo]);
 
   async function atualizarStatus(novoStatus: StatusAcordo) {
     if (!acordo || !perfil) return;

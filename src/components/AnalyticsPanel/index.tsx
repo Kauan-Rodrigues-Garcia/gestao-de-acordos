@@ -283,15 +283,15 @@ export function AnalyticsPanel({
 
   useEffect(() => {
     if (setorExterno !== undefined) setSetorFiltro(setorExterno ?? null);
-  }, [setorExterno]);
+  }, [setorExterno, setSetorFiltro]);
 
   useEffect(() => {
     if (equipeFiltroExterno !== undefined) setEquipeFiltro(equipeFiltroExterno ?? null);
-  }, [equipeFiltroExterno]);
+  }, [equipeFiltroExterno, setEquipeFiltro]);
 
   useEffect(() => {
     if (operadorFiltroExterno !== undefined) setOperadorFiltro(operadorFiltroExterno ?? null);
-  }, [operadorFiltroExterno]);
+  }, [operadorFiltroExterno, setOperadorFiltro]);
 
   // `porTipo` (distribuicao por forma de pagamento) saiu com o ChartsSection.
   // A leitura por forma agora e o breakdown do donut do PainelMetas, que sai do
