@@ -22,7 +22,7 @@
  * ```
  */
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { lazy, useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
@@ -40,7 +40,6 @@ import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import { abasDoMenu } from '@/lib/menuLateral';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
-import { MenuLateralEditor } from '@/components/MenuLateralEditor';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/lib/supabase';
@@ -50,11 +49,8 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
-import { DesempenhoDia } from './DesempenhoDia';
 import { BotaoComissao } from './Comissao/BotaoComissao';
-import { PainelComissao } from './Comissao/PainelComissao';
 import { DesafioMenu } from './DesafioMenu';
-import { PainelDesafio } from './DesafioMenu/PainelDesafio';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BarraAtualizacao } from './BarraAtualizacao';
@@ -68,9 +64,37 @@ import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
-import { ModalRecortarFoto } from './ModalRecortarFoto';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
+import { PainelSobDemanda } from './PainelSobDemanda';
+import { comNovaTentativa } from '@/lib/sobDemanda';
+import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
+
+/*
+ * Painéis que só aparecem com um clique — fora do pacote de entrada.
+ *
+ * O Layout monta em toda página. Importados estaticamente, estes painéis (e o
+ * que eles puxam: o calendário do desempenho do dia, o serviço do analítico da
+ * comissão, o cálculo do desafio) eram baixados antes da primeira tela, por
+ * quem nunca abriria nenhum deles. Cada um vira um pedaço próprio; ver
+ * `lib/sobDemanda.ts` para a segunda tentativa e `PainelSobDemanda` para o
+ * boundary e a regra de montar só depois da primeira abertura.
+ *
+ * NÃO importe estes módulos estaticamente em nenhum arquivo que o Layout
+ * carrega: um único import estático devolve o módulo ao pacote de entrada, e o
+ * build só avisa com uma linha no meio do log.
+ */
+const carregarDesempenhoDia  = comNovaTentativa(() => import('./DesempenhoDia'));
+const carregarPainelComissao = comNovaTentativa(() => import('./Comissao/PainelComissao'));
+const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/PainelDesafio'));
+const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
+const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
+
+const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ default: m.DesempenhoDia })));
+const PainelComissao    = lazy(() => carregarPainelComissao().then(m => ({ default: m.PainelComissao })));
+const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
+const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
+const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -290,6 +314,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
   const [editorMenuAberto, setEditorMenuAberto] = useState(false);
   const podeEditarMenu = perfil?.perfil === 'super_admin';
+
+  /*
+   * Pré-carrega, quando a tela assenta, só os painéis que ESTA pessoa consegue
+   * abrir: comissão sem a chave, desafio sem campanha em cartaz e editor de
+   * menu fora do super_admin seriam download sem clique possível. O recorte de
+   * foto fica de fora — abre depois de escolher um arquivo, e essa espera não
+   * se nota.
+   */
+  const temComissao = temPermissao('dashboard_comissao');
+  const temDesafio = !!desafioDestaque;
+  const precarregarPaineis = useMemo(() => [
+    carregarDesempenhoDia,
+    ...(temComissao ? [carregarPainelComissao] : []),
+    ...(temDesafio ? [carregarPainelDesafio] : []),
+    ...(podeEditarMenu ? [carregarEditorMenu] : []),
+  ], [temComissao, temDesafio, podeEditarMenu]);
+  usePrecarregarQuandoOcioso(precarregarPaineis);
 
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
@@ -804,22 +845,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
       </div>
 
-      <DesempenhoDia
-        aberto={painelDiaAberto}
-        onClose={() => setPainelDiaAberto(false)}
-      />
+      <PainelSobDemanda aberto={painelDiaAberto} nome="Desempenho do dia">
+        <DesempenhoDia
+          aberto={painelDiaAberto}
+          onClose={() => setPainelDiaAberto(false)}
+        />
+      </PainelSobDemanda>
 
-      <PainelComissao
-        aberto={painelComissaoAberto}
-        onClose={() => setPainelComissaoAberto(false)}
-      />
+      <PainelSobDemanda aberto={painelComissaoAberto} nome="Comissão">
+        <PainelComissao
+          aberto={painelComissaoAberto}
+          onClose={() => setPainelComissaoAberto(false)}
+        />
+      </PainelSobDemanda>
 
       {/* O andamento da campanha, na gaveta que o campo do menu abre. */}
-      <PainelDesafio
-        desafio={desafioDestaque}
-        aberto={painelDesafioAberto}
-        onClose={() => setPainelDesafioAberto(false)}
-      />
+      <PainelSobDemanda aberto={painelDesafioAberto} nome="Desafio">
+        <PainelDesafio
+          desafio={desafioDestaque}
+          aberto={painelDesafioAberto}
+          onClose={() => setPainelDesafioAberto(false)}
+        />
+      </PainelSobDemanda>
 
 
       {isPP && (
@@ -915,31 +962,35 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         mostrar as abas do super_admin.
       */}
       {podeEditarMenu && (
-        <MenuLateralEditor
-          aberto={editorMenuAberto}
-          onFechar={() => setEditorMenuAberto(false)}
-          empresaId={empresa?.id}
-          perfilId={perfil?.id}
-          ordens={ordensMenu}
-          produto={produto}
-          isPaguePlay={isPP}
-          isBookplay={tenant.slug === 'bookplay'}
-          valorDoCargo={valorDoCargo}
-          ticketsLiberadoParaLideranca={acessoTickets.liberadoParaLideranca}
-          aoSalvar={aplicarOrdemMenu}
-        />
+        <PainelSobDemanda aberto={editorMenuAberto} nome="Editor do menu">
+          <MenuLateralEditor
+            aberto={editorMenuAberto}
+            onFechar={() => setEditorMenuAberto(false)}
+            empresaId={empresa?.id}
+            perfilId={perfil?.id}
+            ordens={ordensMenu}
+            produto={produto}
+            isPaguePlay={isPP}
+            isBookplay={tenant.slug === 'bookplay'}
+            valorDoCargo={valorDoCargo}
+            ticketsLiberadoParaLideranca={acessoTickets.liberadoParaLideranca}
+            aoSalvar={aplicarOrdemMenu}
+          />
+        </PainelSobDemanda>
       )}
 
       {/* Recorte da foto de perfil antes do upload */}
-      <ModalRecortarFoto
-        arquivo={fotoParaRecorte}
-        onCancelar={() => setFotoParaRecorte(null)}
-        onConfirmar={async (foto) => {
-          setFotoParaRecorte(null);
-          await handleFotoUpload(foto);
-          setPerfilPopoverOpen(false);
-        }}
-      />
+      <PainelSobDemanda aberto={!!fotoParaRecorte} nome="Recorte da foto">
+        <ModalRecortarFoto
+          arquivo={fotoParaRecorte}
+          onCancelar={() => setFotoParaRecorte(null)}
+          onConfirmar={async (foto) => {
+            setFotoParaRecorte(null);
+            await handleFotoUpload(foto);
+            setPerfilPopoverOpen(false);
+          }}
+        />
+      </PainelSobDemanda>
     </div>
   );
 }

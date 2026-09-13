@@ -9,7 +9,7 @@
  * • Filtro de data por operador expandido (client-side)
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
@@ -86,7 +86,6 @@ import { RankingView } from './RankingView';
 import { useRankingAnalitico } from './useRankingAnalitico';
 import { ConfigurarRankingDialog } from './ConfigurarRankingDialog';
 import { LABEL_CRITERIO, estadoBotaoConfigRanking } from './rankingCriterio';
-import { FormasPagamento } from './FormasPagamento';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
@@ -127,6 +126,19 @@ import { celulasDoMapa } from './fonteDoMapa';
 import {
   mensalJaImportadoHoje, limparMarcaMensal,
 } from '@/services/diario/diarioMensalGuard';
+
+/*
+ * Sob demanda, como em `AnaliticoOperador` — e é o MESMO `import()`.
+ *
+ * Os dois precisam carregar assim. Com este arquivo importando de cima, o build
+ * avisava «dynamic import will not move module into another chunk»: o `lazy`
+ * do operador virava enfeite, e o peso da aba (recharts, a consulta do
+ * analítico) voltava ao pedaço de TODA visão do analítico, inclusive a de quem
+ * nunca abre a aba.
+ */
+const FormasPagamento = lazy(() =>
+  import('./FormasPagamento').then(m => ({ default: m.FormasPagamento })),
+);
 
 const ORFAOS_PAGE = 100;
 const DIAS_PT     = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -1908,20 +1920,28 @@ export function AnaliticoLider({
 
       {/* ── Aba: Formas de pagamento ──────────────────────────────────────── */}
       {abaVisivel === 'formas' && (
-        <FormasPagamento
-          empresaId={empresaId}
-          mes={mes}
-          setorId={setorId}
-          setorNome={setorId ? nomeDoSetor.get(setorId) : undefined}
-          isPaguePlay={isPP}
-          mostrarHO={mostrarHO}
-          // As mesmas equipes dos outros filtros da tela (já pelo setor em foco)
-          equipes={equipesFiltradas}
-          resumos={resumos}
-          vinculos={vinculos}
-          equipeId={filtroEquipeId}
-          onEquipeChange={mudarFiltroEquipe}
-        />
+        <Suspense fallback={(
+          <div className="space-y-2 animate-pulse">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 bg-muted rounded-lg" />
+            ))}
+          </div>
+        )}>
+          <FormasPagamento
+            empresaId={empresaId}
+            mes={mes}
+            setorId={setorId}
+            setorNome={setorId ? nomeDoSetor.get(setorId) : undefined}
+            isPaguePlay={isPP}
+            mostrarHO={mostrarHO}
+            // As mesmas equipes dos outros filtros da tela (já pelo setor em foco)
+            equipes={equipesFiltradas}
+            resumos={resumos}
+            vinculos={vinculos}
+            equipeId={filtroEquipeId}
+            onEquipeChange={mudarFiltroEquipe}
+          />
+        </Suspense>
       )}
 
       {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}

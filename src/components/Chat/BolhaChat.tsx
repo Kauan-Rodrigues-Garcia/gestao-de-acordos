@@ -26,8 +26,8 @@
  * fora. Aqui a tela só pergunta; quem decide é o banco, e a RLS recusaria de
  * qualquer jeito.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageCircle, Minus, Maximize2, Minimize2 } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { MessageCircle, Minus, Maximize2, Minimize2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -39,15 +39,9 @@ import {
   type ConversaChat, type MensagemChat, type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
-import { ListaConversas } from './ListaConversas';
-import { Conversa } from './Conversa';
-import { DisparoDialog } from './DisparoDialog';
-import { NovaConversaDialog } from './NovaConversaDialog';
-import { NovoGrupoDialog } from './NovoGrupoDialog';
-import { ConfigGrupoDialog } from './ConfigGrupoDialog';
-import { GaleriaDialog } from './GaleriaDialog';
-import { PainelMonitor } from './PainelMonitor';
-import { BoasVindasChat } from './BoasVindasChat';
+import { PainelSobDemanda } from '@/components/PainelSobDemanda';
+import { comNovaTentativa } from '@/lib/sobDemanda';
+import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { toast } from 'sonner';
 import { toast as toastFlutuante } from '@/components/ui/sonner';
 import { NotificacaoMensagem } from './NotificacaoMensagem';
@@ -55,6 +49,41 @@ import {
   deveNotificarMensagemChat, executarNotificacaoChatUmaVez, tituloComMensagensNaoLidas,
 } from '@/lib/notificacao-chat';
 import { prepararSomChat, tocarSomChat } from '@/lib/som-chat';
+
+/*
+ * A janela aberta, sob demanda — ver `janela.ts`.
+ *
+ * A bolha fechada fica no pacote de entrada (é ela que conta as não lidas em
+ * toda página). Tudo que só existe com a janela aberta vem num pedaço à parte,
+ * pré-carregado quando a tela assenta e de novo ao passar o mouse na bolha: o
+ * clique quase sempre encontra o pedaço pronto.
+ */
+const carregarJanela = comNovaTentativa(() => import('./janela'));
+const JANELA_DO_CHAT = [carregarJanela] as const;
+const NADA_A_PRECARREGAR = [] as const;
+
+const ListaConversas     = lazy(() => carregarJanela().then(m => ({ default: m.ListaConversas })));
+const Conversa           = lazy(() => carregarJanela().then(m => ({ default: m.Conversa })));
+const PainelMonitor      = lazy(() => carregarJanela().then(m => ({ default: m.PainelMonitor })));
+const DisparoDialog      = lazy(() => carregarJanela().then(m => ({ default: m.DisparoDialog })));
+const NovaConversaDialog = lazy(() => carregarJanela().then(m => ({ default: m.NovaConversaDialog })));
+const NovoGrupoDialog    = lazy(() => carregarJanela().then(m => ({ default: m.NovoGrupoDialog })));
+const ConfigGrupoDialog  = lazy(() => carregarJanela().then(m => ({ default: m.ConfigGrupoDialog })));
+const GaleriaDialog      = lazy(() => carregarJanela().then(m => ({ default: m.GaleriaDialog })));
+const BoasVindasChat     = lazy(() => carregarJanela().then(m => ({ default: m.BoasVindasChat })));
+
+function precarregarJanela() {
+  void carregarJanela().catch(() => {});
+}
+
+/** O corpo da janela enquanto o pedaço desce: o cabeçalho já está na tela. */
+function CarregandoJanela() {
+  return (
+    <div className="flex-1 flex items-center justify-center" role="status" aria-label="Carregando o chat">
+      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 
 const CHAVE_LARGURA = 'chat-expandido';
 
@@ -364,6 +393,9 @@ export function BolhaChat() {
     setGaleria({ id: conversa.id, nome: conversa.outro_nome });
   }, []);
 
+  // Só quem vê o chat baixa a janela — antes do `return` abaixo, porque é hook.
+  usePrecarregarQuandoOcioso(podeVer ? JANELA_DO_CHAT : NADA_A_PRECARREGAR);
+
   if (!podeVer) return null;
 
   // ── Fechado: só a bolha ────────────────────────────────────────────────────
@@ -382,9 +414,9 @@ export function BolhaChat() {
       `}</style>
       <button
         onClick={abrirJanela}
-        onMouseEnter={() => setSobre(true)}
+        onMouseEnter={() => { setSobre(true); precarregarJanela(); }}
         onMouseLeave={() => setSobre(false)}
-        onFocus={() => setSobre(true)}
+        onFocus={() => { setSobre(true); precarregarJanela(); }}
         onBlur={() => setSobre(false)}
         className={cn(
           'fixed bottom-6 right-6 z-40 w-14 h-14 group',
@@ -435,8 +467,19 @@ export function BolhaChat() {
   const mostraLista = expandido || !conversaAtual;
   const mostraConversa = !!conversaAtual;
 
+  /*
+   * A janela inteira mora dentro da casca sob demanda: se o pedaço não descer,
+   * o aviso aparece e a janela FECHA — sem isso ela ficaria «aberta» e vazia, e
+   * a bolha que a reabre não voltaria. Os dois `Suspense` internos existem para
+   * o cabeçalho aparecer na hora, com o corpo girando, em vez de a janela
+   * inteira esperar pelos diálogos.
+   */
   return (
-    <>
+    <PainelSobDemanda
+      aberto
+      nome="Chat"
+      onFalha={() => { abertoRef.current = false; setAberto(false); }}
+    >
       <div
         className={cn(
           'fixed bottom-6 right-6 z-40 flex flex-col bg-background border border-border rounded-2xl shadow-2xl overflow-hidden transition-[width,height] duration-200',
@@ -485,6 +528,7 @@ export function BolhaChat() {
         </header>
 
         <div className="flex-1 min-h-0 flex">
+          <Suspense fallback={<CarregandoJanela />}>
           {/* A monitoria substitui o corpo inteiro — lista e conversa. Ela tem
               as próprias duas colunas e o próprio «voltar». */}
           {modoMonitor ? (
@@ -560,9 +604,11 @@ export function BolhaChat() {
           )}
           </>
           )}
+          </Suspense>
         </div>
       </div>
 
+      <Suspense fallback={null}>
       <NovaConversaDialog
         aberto={novaConversa} online={online}
         onFechar={() => setNovaConversa(false)}
@@ -612,6 +658,7 @@ export function BolhaChat() {
           chat.recarregar();
         }}
       />
-    </>
+      </Suspense>
+    </PainelSobDemanda>
   );
 }
