@@ -62,6 +62,27 @@ function lerCriterio(bruto: string | null | undefined): CriterioRanking {
 }
 
 /**
+ * A tabela de configuração existe neste banco?
+ *
+ * Pergunta separada de `buscarRankingConfig` porque as duas respondem coisas
+ * diferentes, e confundi-las foi um defeito de verdade: o botão "Configurar"
+ * só aparecia depois de a busca de UM setor voltar, então quem abria o
+ * Analítico sem setor em foco — todo mundo com escopo de todos os setores, que
+ * é exatamente quem tem a permissão — nunca via o botão.
+ *
+ * A sondagem não depende de setor e não lê dado de ninguém: pede uma coluna de
+ * uma linha só, e o que interessa é se o PostgREST reconhece a tabela.
+ */
+export async function rankingConfigDisponivel(empresaId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('analitico_ranking_config')
+    .select('setor_id')
+    .eq('empresa_id', empresaId)
+    .limit(1);
+  return !error;
+}
+
+/**
  * A configuração de um setor.
  *
  * `null` = a tabela não existe neste banco ainda. Qualquer outro caso — sem

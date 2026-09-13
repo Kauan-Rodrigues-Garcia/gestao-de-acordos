@@ -85,7 +85,7 @@ import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { useRankingAnalitico } from './useRankingAnalitico';
 import { ConfigurarRankingDialog } from './ConfigurarRankingDialog';
-import { LABEL_CRITERIO } from './rankingCriterio';
+import { LABEL_CRITERIO, estadoBotaoConfigRanking } from './rankingCriterio';
 import { FormasPagamento } from './FormasPagamento';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
@@ -824,9 +824,13 @@ export function AnaliticoLider({
     operadoresOcultos,
   });
 
-  // Sem setor em foco não há regra a escrever: a configuração é por setor.
-  const podeConfigurarRanking =
-    temPermissao('analitico_ranking_configurar') && !!setorId && rank.configDisponivel;
+  // Aparecer, poder clicar e por que não são três coisas distintas — a regra
+  // mora em `estadoBotaoConfigRanking`, com o histórico do defeito no lugar.
+  const botaoConfigRanking = estadoBotaoConfigRanking({
+    temPermissao: temPermissao('analitico_ranking_configurar'),
+    tabelaDisponivel: rank.tabelaDisponivel,
+    setorEmFoco: !!setorId,
+  });
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -1940,9 +1944,11 @@ export function AnaliticoLider({
                   {rank.config.perfisExcluidos.length} fora
                 </Badge>
               )}
-              {podeConfigurarRanking && (
+              {botaoConfigRanking.visivel && (
                 <Button
                   size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                  disabled={!botaoConfigRanking.habilitado}
+                  title={botaoConfigRanking.motivo}
                   onClick={() => setConfigRankingAberto(true)}
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" /> Configurar

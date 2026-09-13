@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   participaDoRanking, filtrarParticipantes, ordenarLinhas, agregarGrupos,
+  estadoBotaoConfigRanking,
   type LinhaRanking,
 } from './rankingCriterio';
 import {
@@ -184,5 +185,44 @@ describe('agregação por equipe/subgrupo', () => {
     const soma = g.reduce((s, x) => s + x.totalRecebido, 0);
     expect(soma).toBe(1_000);
     expect(g.find(x => x.grupoId === null)?.grupoNome).toBe('Sem equipe');
+  });
+});
+
+/**
+ * O botão "Configurar o ranking".
+ *
+ * A queixa era "às vezes aparece, na maioria não". A causa: a renderização
+ * dependia de haver setor em foco, e quem tem escopo de todos os setores abre
+ * a tela sem nenhum — o botão simplesmente não existia, e não existir não
+ * explica nada a ninguém.
+ */
+describe('estadoBotaoConfigRanking', () => {
+  const base = { temPermissao: true, tabelaDisponivel: true, setorEmFoco: true };
+
+  it('sem a permissão, o botão não existe', () => {
+    expect(estadoBotaoConfigRanking({ ...base, temPermissao: false }).visivel).toBe(false);
+  });
+
+  it('tabela ausente no banco esconde o botão — não há o que configurar', () => {
+    expect(estadoBotaoConfigRanking({ ...base, tabelaDisponivel: false }).visivel).toBe(false);
+  });
+
+  it('enquanto a sondagem não volta, aparece desabilitado em vez de piscar', () => {
+    const e = estadoBotaoConfigRanking({ ...base, tabelaDisponivel: null });
+    expect(e.visivel).toBe(true);
+    expect(e.habilitado).toBe(false);
+  });
+
+  it('SEM setor em foco o botão aparece, desabilitado, e diz o porquê', () => {
+    const e = estadoBotaoConfigRanking({ ...base, setorEmFoco: false });
+    expect(e.visivel).toBe(true);
+    expect(e.habilitado).toBe(false);
+    expect(e.motivo).toMatch(/setor/i);
+  });
+
+  it('com permissão, tabela e setor, clica', () => {
+    const e = estadoBotaoConfigRanking(base);
+    expect(e.visivel).toBe(true);
+    expect(e.habilitado).toBe(true);
   });
 });

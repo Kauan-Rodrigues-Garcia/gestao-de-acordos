@@ -36,7 +36,7 @@ import {
   listarSubgrupos, type SubgrupoEquipe,
 } from '@/services/equipes/equipesSubgrupos.service';
 import {
-  buscarRankingConfig, salvarRankingConfig,
+  buscarRankingConfig, salvarRankingConfig, rankingConfigDisponivel,
   CONFIG_RANKING_PADRAO, type RankingConfig,
 } from '@/services/analitico/rankingConfig.service';
 import {
@@ -71,8 +71,14 @@ export interface RankingAnalitico {
   /** Pódio de equipes/subgrupos — só usado quando o critério é `equipes`. */
   grupos: LinhaGrupoRanking[];
   config: RankingConfig;
-  /** `false` = tabela de configuração ausente; a tela esconde o botão. */
-  configDisponivel: boolean;
+  /**
+   * A tabela de configuração existe neste banco?
+   *
+   * `null` enquanto a sondagem não voltou, `false` quando a tabela não existe.
+   * NÃO depende do setor em foco — essa era a confusão que escondia o botão de
+   * quem tem escopo de todos os setores. Ver `estadoBotaoConfigRanking`.
+   */
+  tabelaDisponivel: boolean | null;
   carregando: boolean;
   salvando: boolean;
   /** Equipes e subgrupos elegíveis, para o diálogo de configuração. */
@@ -94,7 +100,7 @@ export function useRankingAnalitico({
   const [treinoMap, setTreinoMap] = useState<Record<string, string | null>>({});
 
   const [config, setConfig] = useState<RankingConfig>(CONFIG_RANKING_PADRAO);
-  const [configDisponivel, setConfigDisponivel] = useState(false);
+  const [tabelaDisponivel, setTabelaDisponivel] = useState<boolean | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando,   setSalvando]   = useState(false);
 
@@ -167,18 +173,33 @@ export function useRankingAnalitico({
     return () => { cancelado = true; };
   }, [empresaId, mesNum, anoNum]);
 
+  /*
+   * A tabela existe? — pergunta da EMPRESA, não do setor.
+   *
+   * Ficava amarrada ao resultado de `buscarRankingConfig`, que é por setor:
+   * sem setor em foco a resposta era sempre `false`, e o botão "Configurar"
+   * sumia justamente para quem enxerga todos os setores — que é exatamente
+   * quem costuma ter a permissão de configurar.
+   */
+  useEffect(() => {
+    if (!empresaId) { setTabelaDisponivel(null); return; }
+    let cancelado = false;
+    void rankingConfigDisponivel(empresaId).then(existe => {
+      if (!cancelado) setTabelaDisponivel(existe);
+    });
+    return () => { cancelado = true; };
+  }, [empresaId]);
+
   // A configuração é do SETOR, e muda quando o foco da tela muda de setor.
   useEffect(() => {
     if (!empresaId || !setorId) {
       setConfig(CONFIG_RANKING_PADRAO);
-      setConfigDisponivel(false);
       return;
     }
     let cancelado = false;
     void buscarRankingConfig(empresaId, setorId).then(c => {
       if (cancelado) return;
       setConfig(c ?? CONFIG_RANKING_PADRAO);
-      setConfigDisponivel(c !== null);
     });
     return () => { cancelado = true; };
   }, [empresaId, setorId]);
@@ -308,7 +329,7 @@ export function useRankingAnalitico({
   [linhasBrutas]);
 
   return {
-    linhas, grupos, config, configDisponivel, carregando, salvando,
+    linhas, grupos, config, tabelaDisponivel, carregando, salvando,
     gruposConfiguraveis, pessoasConfiguraveis, salvar,
   };
 }

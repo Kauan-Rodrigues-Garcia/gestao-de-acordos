@@ -174,6 +174,49 @@ export function agregarGrupos(
   return grupos;
 }
 
+/**
+ * O botão "Configurar o ranking": aparece? dá para clicar? por que não?
+ *
+ * Nasceu de um defeito: a condição era `permissão && setorEmFoco && tabela`, as
+ * três somadas para DECIDIR SE RENDERIZA. Quem tem escopo de todos os setores
+ * abre o Analítico sem setor em foco, então o botão simplesmente não existia —
+ * e não existir não explica nada. A queixa foi "às vezes aparece, na maioria
+ * não", que é a descrição exata de um botão amarrado a um filtro que a pessoa
+ * não sabe que precisa mexer.
+ *
+ * Agora só a permissão e a existência da tabela decidem a RENDERIZAÇÃO. Faltar
+ * setor em foco desabilita e diz o porquê — a régua do ranking é por setor, e
+ * essa é uma informação que a tela tem que dar, não esconder.
+ *
+ * `tabelaDisponivel: null` é "ainda sondando": o botão aparece desabilitado em
+ * vez de piscar para dentro e para fora a cada carregamento.
+ */
+export function estadoBotaoConfigRanking(entrada: {
+  temPermissao: boolean;
+  /** `null` = a sondagem ainda não voltou. */
+  tabelaDisponivel: boolean | null;
+  setorEmFoco: boolean;
+}): { visivel: boolean; habilitado: boolean; motivo: string } {
+  const { temPermissao, tabelaDisponivel, setorEmFoco } = entrada;
+
+  if (!temPermissao || tabelaDisponivel === false) {
+    return { visivel: false, habilitado: false, motivo: '' };
+  }
+  if (tabelaDisponivel === null) {
+    return { visivel: true, habilitado: false, motivo: 'Carregando a configuração…' };
+  }
+  if (!setorEmFoco) {
+    return {
+      visivel: true, habilitado: false,
+      motivo: 'Escolha um setor no filtro acima: a regra do ranking é definida por setor.',
+    };
+  }
+  return {
+    visivel: true, habilitado: true,
+    motivo: 'Escolher o critério do ranking e quem participa dele',
+  };
+}
+
 /** Rótulo do critério para a tela — um lugar só, para as duas abas dizerem igual. */
 export const LABEL_CRITERIO: Record<CriterioRanking, string> = {
   recebimento: 'Recebimento',
