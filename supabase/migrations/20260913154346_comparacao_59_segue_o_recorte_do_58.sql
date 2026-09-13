@@ -85,7 +85,10 @@
 -- As diferenças que sobram são de DADO, não de filtro, e corrigi-las é apagar
 -- ou reescrever linha de gente real:
 --
---   • Play Mix, R$ 690,00 — NR 12972071 e 12842628, que o 58 carimbou no Play 5.
+--   • Play Mix, R$ 690,00 — NR 12972071 e 12842628, em que o 58 do Play Mix traz
+--     MENOS valor que o 59 na mesma linha (389,66 contra 889,66, e 0,00 contra
+--     190,00). Nada foi carimbado em outro setor: ver o doc, secao «Correcao de
+--     2026-09-13».
 --   • Receptivo, R$ 698,43 — NR 12984182, 13000560 e 13012299 contados duas
 --     vezes: o lote de 2026-09-09 (5 linhas) reinseriu parcelas que já estavam
 --     dentro das linhas consolidadas do lote de 2026-09-08. Escaparam porque

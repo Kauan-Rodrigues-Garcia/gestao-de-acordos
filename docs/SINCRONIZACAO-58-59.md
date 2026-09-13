@@ -85,13 +85,44 @@ Em `fn_mestre_diferenca_detalhe`, três ajustes de consequência:
 
 ### As diferenças que sobraram são de DADO, não de filtro
 
-**Play Mix, R$ 690,00** — dois NRs que o 59 põe na carteira Play Mix e o 58
-carimbou no Play 5:
+**Play Mix, R$ 690,00** — dois NRs em que o 58 do Play Mix traz **menos valor**
+que o 59, na mesma linha: mesma operadora, mesma data, valor menor.
 
-| NR | 59 | 58 no Play Mix | onde está no 58 |
+| NR | 59, carteira 79 | 58 do Play Mix | falta |
 |---|---|---|---|
-| 12972071 | 889,66 (JULIANA_S_OLIVEIRA, ATESTADOS\|FERIAS, 27/08) | 389,66 | 500,00 no Play 5, como CINTIA_MENGUE |
-| 12842628 | 190,00 (ALLANA_BARBOSA, EQUIPE LAYANE, 21/08) | 0,00 | 190,00 no Play 5, mesma operadora |
+| 12972071 | 889,66 (JULIANA_S_OLIVEIRA, 27/08, parcelas 5–10) | 389,66 (JULIANA_S_OLIVEIRA, 27/08) | 500,00 |
+| 12842628 | 190,00 (ALLANA_BARBOSA, 21/08, parcela 8, Integral) | **0,00** (ALLANA_BARBOSA, 21/08) | 190,00 |
+
+> ⚠️ **Correção de 2026-09-13.** A primeira leitura desta análise dizia que o 58
+> «carimbou esses valores no Play 5». Está **errado**, e a mensagem do commit
+> `eb234f4` repete o engano. O que havia era uma consulta que só perguntava «este
+> NR aparece em outro setor?» — e aparece, por parcelas legítimas: o NR 12972071
+> tem 700,00 na carteira do Play 5 (parcelas 1–4), que o 58 do Play 5 traz
+> exatos. Nada foi carimbado no lugar errado. O 58 do Play Mix simplesmente
+> reporta menos.
+
+### A coluna `Setor` do 59 NÃO decide em qual 58 a linha cai
+
+Vale registrar porque a pergunta é natural: se cada linha do 59 traz um `Setor`,
+não seria ele o recorte? **Não.** Medido em agosto:
+
+| Carteira | `Setor` que o ERP aponta | linhas | valor |
+|---|---|---|---|
+| MARILIA PLAY MIX | MARILIA - PLAY 5 | 169 | 42.714,78 |
+| COB PLAY 1 - PAOLA | COB PLAY 2 - EDERLANDIA | 207 | 42.265,73 |
+| JORNADAPLAY | ALCATEIAS PLAY | 53 | 25.892,75 |
+| MARILIA - PLAY 4 | MARILIA - COFEN | 147 | 20.655,54 |
+| MARILIA - PLAY 5 | MARILIA PLAY MIX | 71 | 10.511,11 |
+| MARILIA - PLAY 5 | MARILIA - COFEN | 42 | 5.783,28 |
+
+São R$ 150 mil apontando para fora da própria carteira — e **mesmo assim** Play 3,
+Play 4 e Play 5 fecham em zero nota a nota contra o 58. O 58 do Play 5 contém os
+R$ 10.511,11 cuja coluna `Setor` diz «MARILIA PLAY MIX», e contém os R$ 5.783,28
+que dizem «MARILIA - COFEN».
+
+Ou seja: o 58 segue **quem cobrou** (`NomeGrupoFiltro`), não para quem o ERP diz
+que o dinheiro conta (`Setor`). Trocar o recorte para a coluna `Setor` quebraria
+os três zeros de uma vez.
 
 **Receptivo, R$ 360,32** — cinco NRs, duas causas opostas que quase se anulam:
 
@@ -110,12 +141,45 @@ carimbou no Play 5:
 
   `698,43 − 338,11 = 360,32`, ao centavo.
 
-**Causa raiz da duplicata, e ela não é de agosto:** `idx_analitico_unicidade` é
-`(empresa_id, codigo, data_pagamento, forma_pagamento, operador_usuario)`. A
-consolidação do parser junta parcelas por operador+código+**data**; quando o ERP
-reexporta a mesma parcela com outra `DtPgto`, a chave muda e a linha entra
-outra vez. O valor não está na chave, então o banco não tem como perceber.
-**Toda reimportação parcial pode repetir isso.**
+**Veio do relatório ou da importação? O log responde.** `logs_sistema` guardou o
+resumo das duas importações:
+
+| Quando | Resultado |
+|---|---|
+| 08/09 20:02 | 6.039 novas, 0 já existentes, 0 reconciliadas, **0 problemas** |
+| 09/09 10:56 | 5 novas, 5.519 já existentes, 2 reconciliadas, **3 problemas** |
+
+O arquivo do dia 09 tinha **5.524 linhas** contra 6.039 do dia 08 — é um recorte
+diferente, não uma reexportação idêntica. E os três problemas são exatamente os
+três NRs:
+
+```
+NR 12984182 (GABRIEL_OLIVEIRA): banco tem 742.40 em 2 linha(s),
+  relatório diz 259.15 — ajuste manual necessário (use "Limpar mês" e reimporte).
+NR 13000560 (KAUAN_TEIXEIRA): banco tem 729.73 em 2 linha(s), relatório diz 259.04 — …
+NR 13012299 (LARISSA_PEREIRAA): banco tem 540.48 em 2 linha(s), relatório diz 180.24 — …
+```
+
+Então a sequência é esta, e cada elo tem um dono:
+
+1. **O arquivo do dia 09 descreve os NRs de outro jeito** — traz só a última
+   parcela como linha própria (259,15 em 03/08), onde o do dia 08 trazia o valor
+   agregado (483,25 em 01/08). Isso é do relatório.
+2. **A porta estava aberta.** `idx_analitico_unicidade` é
+   `(empresa_id, codigo, data_pagamento, forma_pagamento, operador_usuario)` —
+   sem valor e sem parcela. Data nova = chave nova = dinheiro novo. Isso é nosso.
+3. **O alarme tocou e ninguém atendeu.** A reconciliação DETECTOU: comparou os
+   742,40 do banco com os 259,15 do relatório. Só que corrigir daria valor
+   negativo, e a guarda `novoValor < 0` impede escrever negativo — então ela
+   registrou o aviso e seguiu. O aviso apareceu na tela da importação e no log.
+   Ninguém rodou o «Limpar mês».
+
+**O caso do cartão é só nosso.** No NR 13012299 a consolidação de cartão agrupa
+por operador+código **ignorando a data** (`consolidar()` em `analiticoComum.ts`)
+e carimba a linha com a data da primeira parcela — 180,00 de 11/08 + 180,24 de
+31/08 viraram 360,24 em 11/08. Quando o arquivo seguinte trouxe a parcela de
+31/08 sozinha, a chave não existia. Isso se repete sempre que um NR de cartão
+tem parcelas em dias diferentes e o setor reimporta.
 
 ### A chave do pareamento por NR
 
