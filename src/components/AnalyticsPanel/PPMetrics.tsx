@@ -14,9 +14,13 @@ interface PPMetricsProps {
   pixHO?: number;
   cartaoBruto?: number;
   cartaoHO?: number;
-  /** Recebido no analítico que ainda não foi tabulado pelo operador. */
-  naoTabuladoBruto?: number;
-  naoTabuladoQtd?: number;
+  /*
+   * `naoTabuladoBruto`/`naoTabuladoQtd` saíram daqui junto com o
+   * `BannerNaoTabulado` (commit bbef382, «dashboard mais limpo»). O banner foi
+   * removido de propósito; os props ficaram, recebendo valor e não desenhando
+   * nada. A métrica continua viva onde é lida de verdade — `usePainelMetas` e
+   * os cartões de meta.
+   */
   valorHODireto: number;
   valorHOExtra: number;
   valorHOMes: number;
@@ -41,7 +45,6 @@ export function PPMetrics({
   usarAnalitico = false,
   analiticoBruto = 0, analiticoHO = 0, analiticoQtd = 0,
   pixBruto = 0, pixHO = 0, cartaoBruto = 0, cartaoHO = 0,
-  naoTabuladoBruto = 0, naoTabuladoQtd = 0,
   valorHODireto, valorHOExtra, valorHOMes,
   qtdDireto, qtdExtra,
   valorRecebidoDireto, valorRecebidoExtra, valorRecebidoMes,

@@ -33,6 +33,14 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // 5s (o padrão) é curto demais para os testes de MONTAGEM de tela.
+    //
+    // `AnaliticoOperador.montagem` passava sozinho e estourava na suíte
+    // cheia — 326 arquivos disputando CPU, e um render de tabela real leva
+    // mais que 5s sob essa carga. O vermelho não dizia nada sobre o código:
+    // dizia que a máquina estava ocupada. Um teste que falha por carga treina
+    // todo mundo a ignorar a suíte.
+    testTimeout: 20_000,
     // Credenciais de fachada para o teste.
     //
     // `src/lib/supabase.ts` chama `createClient` no topo do módulo, e o

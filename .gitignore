@@ -107,3 +107,7 @@ yarn.lock
 # --- Rascunhos locais (relatorios gerados, scripts de apoio) ---
 outputs/
 work/
+
+# --- Tokens de apoio gerados por script (nunca versionar) ---
+.tok.tmp
+*.tok.tmp

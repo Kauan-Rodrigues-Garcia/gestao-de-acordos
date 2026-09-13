@@ -380,8 +380,6 @@ export function AnalyticsPanel({
       pixHO={anal.pixHO}
       cartaoBruto={anal.cartaoBruto}
       cartaoHO={anal.cartaoHO}
-      naoTabuladoBruto={anal.naoTabuladoBruto}
-      naoTabuladoQtd={anal.naoTabuladoQtd}
       valorHODireto={valorHODireto}
       valorHOExtra={valorHOExtra}
       valorHOMes={valorHOMes}
