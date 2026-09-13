@@ -55,7 +55,7 @@ Sozinho, o empréstimo respondia por:
 | Play Mix | 84.320,92 | 116.524,59 | −31.513,67 |
 | Receptivo | 2.684.145,66 | 2.658.753,66 | +25.392,00 |
 
-### O que a migration `20260913153918` mudou
+### O que a migration `20260913154346` mudou
 
 `mestre_total` **não mudou** — segue sendo o número real do setor, com
 empréstimo, contribuição e equipe movida. É o que a diretoria usa, e trocá-lo
@@ -179,7 +179,7 @@ meta, quartil e as outras abas seguem exatamente como estavam.
 |---|---|---|
 | 1 | Painel Diretoria · Visão geral (`fn_mestre_diretoria_visao_geral`) | ✅ no ar |
 | 2 | Painel Diretoria · Setores e equipes (`fn_mestre_diretoria_setores`, `_setor`) | ✅ no ar |
-| 3a | **Alinhar o recorte** — o 59 filtrado reproduz o 58 (`20260913153918`) | ✅ no ar |
+| 3a | **Alinhar o recorte** — o 59 filtrado reproduz o 58 (`20260913154346`) | ✅ no ar |
 | 3b | Corrigir os dados que sobraram (Play Mix 690,00 · Receptivo 698,43 + 338,11) | ⏳ aguarda decisão |
 | 3c | Fechar a porta da duplicata (`idx_analitico_unicidade`) | ❌ não começou |
 | 3d | Escrever no analítico a partir do 59 | ⛔ proibido, sem decisão |
