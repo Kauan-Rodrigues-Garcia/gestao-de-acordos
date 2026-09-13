@@ -12,6 +12,7 @@ import {
   ChevronDown, ChevronUp, ArrowRight, Building2,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
+import { descreverMudanca } from '@/services/relatorio/assinaturaColunas';
 import { supabase } from '@/lib/supabase';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import type { UseAnaliticoImport } from './types';
@@ -205,6 +206,39 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   linha{preview.retencaoRemovidas !== 1 ? 's' : ''} da equipe de{' '}
                   <strong>Retenção</strong> {preview.retencaoRemovidas !== 1 ? 'foram removidas' : 'foi removida'}{' '}
                   do arquivo — esse recebimento não conta para o Receptivo.
+                </p>
+              </div>
+            )}
+
+            {/* ── A armadilha de cabeçalho ──────────────────────────────────
+                O parser resolve coluna por alias: coluna renomeada não quebra
+                nada, ela só para de ser lida — e o número encolhe sem aviso.
+                Este bloco é o único momento em que dá para pegar isso, e por
+                isso ele vem ANTES de tudo no preview. Não bloqueia: quem manda
+                decide se o formato novo é legítimo. */}
+            {preview.mudancaDeColunas && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 space-y-2">
+                <p className="text-xs font-semibold text-destructive">
+                  O formato deste relatório mudou — {descreverMudanca(preview.mudancaDeColunas)}.
+                </p>
+                {preview.mudancaDeColunas.novas.length > 0 && (
+                  <p className="text-[11px] text-destructive/90">
+                    <strong>Entraram:</strong> {preview.mudancaDeColunas.novas.join(', ')}
+                  </p>
+                )}
+                {preview.mudancaDeColunas.sumidas.length > 0 && (
+                  <p className="text-[11px] text-destructive/90">
+                    <strong>Sumiram:</strong> {preview.mudancaDeColunas.sumidas.join(', ')}
+                  </p>
+                )}
+                <p className="text-[11px] leading-snug text-destructive/80">
+                  Coluna que some não derruba a importação — ela deixa de ser lida, e o
+                  valor dela some junto. Confira o arquivo antes de confirmar.
+                  {preview.mudancaDeColunas.importacoesDoConhecido > 0 && (
+                    <> O formato anterior tinha sido aceito{' '}
+                      {preview.mudancaDeColunas.importacoesDoConhecido}{' '}
+                      {preview.mudancaDeColunas.importacoesDoConhecido === 1 ? 'vez' : 'vezes'}.</>
+                  )}
                 </p>
               </div>
             )}

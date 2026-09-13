@@ -44,6 +44,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // ── Parse principal ──────────────────────────────────────────────────────────
 
 export interface ResultadoParseRelatorio {
+  /** Cabeçalho como veio, para a armadilha de colunas comparar. */
+  cabecalho: string[];
   linhas: LinhaRelatorio[];
   /** Colchão posterior ao corte: não entra na meta e mantém o detalhe por NR. */
   linhasColchao: LinhaColchao[];
@@ -70,8 +72,9 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
   return parseRelatorioRows(rows);
 }
 
-function resultadoVazio(erros: string[]): ResultadoParseRelatorio {
+function resultadoVazio(erros: string[], cabecalho: string[] = []): ResultadoParseRelatorio {
   return {
+    cabecalho,
     linhas: [],
     linhasColchao: [],
     colchaoNaMeta: { linhas: 0, valor: 0 },
@@ -92,6 +95,7 @@ export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
   if (!cols) {
     const encontrados = headerRow.map(h => `"${h}"`).join(', ');
     return {
+      cabecalho: headerRow.map(h => String(h ?? "").trim()),
       linhas: [],
       erros: [
         `Colunas obrigatórias não encontradas. Cabeçalhos lidos: ${encontrados}. ` +
@@ -197,5 +201,8 @@ export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
   }
 
   const linhas = consolidar(linhasBrutas);
-  return { linhas, linhasColchao, colchaoNaMeta, erros, retencaoRemovidas };
+  return {
+    cabecalho: headerRow.map(h => String(h ?? "").trim()),
+    linhas, linhasColchao, colchaoNaMeta, erros, retencaoRemovidas,
+  };
 }

@@ -52,6 +52,8 @@ import { dayKeyDiario, type LinhaDiario } from '@/services/diario/diarioComum';
 import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
 export interface ResultadoParseBookplay {
+  /** Cabeçalho como veio, para a armadilha de colunas comparar. */
+  cabecalho: string[];
   analitico: LinhaRelatorio[];
   diario:    LinhaDiario[];
   colchao:   LinhaColchao[];
@@ -151,8 +153,9 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
   return parseRelatorioBookplayRows(rows);
 }
 
-function resultadoVazio(erros: string[]): ResultadoParseBookplay {
+function resultadoVazio(erros: string[], cabecalho: string[] = []): ResultadoParseBookplay {
   return {
+    cabecalho,
     analitico: [],
     diario: [],
     colchao: [],
@@ -166,13 +169,14 @@ function resultadoVazio(erros: string[]): ResultadoParseBookplay {
 export function parseRelatorioBookplayRows(rows: unknown[][]): ResultadoParseBookplay {
   if (rows.length < 2) return resultadoVazio(['Planilha sem dados.']);
 
+  const cabecalho = (rows[0] as unknown[]).map(h => String(h ?? '').trim());
   const cols = resolveCols(rows[0] as unknown[]);
   if (!cols) {
     const encontrados = (rows[0] as unknown[]).map(h => `"${h}"`).join(', ');
     return resultadoVazio([
         `Colunas obrigatórias (Cobradora, NrDocumento, DtPgto, Recebido) não encontradas. ` +
         `Cabeçalhos lidos: ${encontrados}. Verifique se é o relatório correto da BookPlay.`,
-    ]);
+    ], cabecalho);
   }
 
   const erros: string[] = [];
@@ -309,6 +313,7 @@ export function parseRelatorioBookplayRows(rows: unknown[][]): ResultadoParseBoo
   }
 
   return {
+    cabecalho,
     analitico: [...mapA.values()],
     diario: [...mapD.values()],
     colchao,

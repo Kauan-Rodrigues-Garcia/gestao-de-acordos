@@ -32,6 +32,14 @@ import {
   revincularOrfaosColchao,
 } from '@/services/analitico/colchao.service';
 import {
+  assinaturaDe,
+  buscarAssinatura,
+  compararAssinatura,
+  registrarAssinatura,
+  type MudancaDeColunas,
+  type TipoRelatorio,
+} from '@/services/relatorio/assinaturaColunas';
+import {
   importarLoteDiario,
   revincularOrfaosDiario,
   notificarImportacaoDiario,
@@ -62,6 +70,16 @@ export interface PreviewImport {
   dia?:             string;
   /** Linhas da equipe de Retenção descartadas do relatório do Receptivo. */
   retencaoRemovidas: number;
+  /**
+   * O cabeçalho mudou em relação ao que o ERP vinha mandando?
+   *
+   * `null` quando não mudou, ou quando é a primeira importação deste tipo.
+   * Não bloqueia a importação — quem manda decide se o formato novo é legítimo.
+   * Ver `assinaturaColunas.ts`.
+   */
+  mudancaDeColunas: MudancaDeColunas | null;
+  /** O cabeçalho lido, normalizado. Registrado quando a importação é confirmada. */
+  assinatura: string[];
 }
 
 export interface ResultadoImportacaoCompleta extends ResultadoImportacao {
@@ -144,6 +162,30 @@ export function useAnaliticoImport() {
   /** true quando o modal precisa exibir o seletor de setor. */
   const precisaEscolherSetor = usarSetorEscolhido;
 
+  /**
+   * O cabeçalho mudou desde a última importação aceita?
+   *
+   * Falha ao consultar NÃO impede a importação: a armadilha é um aviso, e
+   * derrubar o fluxo por causa dela trocaria um risco por outro maior — ficar
+   * sem importar o relatório do dia é pior que importar sem a conferência.
+   */
+  const conferirColunas = useCallback(async (
+    empresaId: string,
+    tipo: TipoRelatorio,
+    cabecalho: string[],
+  ): Promise<{ assinatura: string[]; mudanca: MudancaDeColunas | null }> => {
+    const assinatura = assinaturaDe(cabecalho);
+    try {
+      const conhecida = await buscarAssinatura(empresaId, tipo);
+      return {
+        assinatura,
+        mudanca: compararAssinatura(conhecida?.colunas, assinatura, conhecida?.importacoes ?? 0),
+      };
+    } catch {
+      return { assinatura, mudanca: null };
+    }
+  }, []);
+
   const carregarArquivo = useCallback(async (file: File) => {
     if (!empresa?.id) return;
     setEstado('parsing');
@@ -155,6 +197,7 @@ export function useAnaliticoImport() {
       // xlsx entra aqui, sob demanda (ver comentário do import no topo).
       const { parseRelatorioBookplay } = await import('@/services/bookplay/bookplayRecebimentoParser');
       const {
+        cabecalho,
         analitico,
         diario,
         colchao,
@@ -187,6 +230,8 @@ export function useAnaliticoImport() {
       const mesCountBP = mesesBP.reduce<Record<string, number>>((acc, m) => { acc[m] = (acc[m] ?? 0) + 1; return acc; }, {});
       const mesBP = Object.entries(mesCountBP).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
+      const colunasBP = await conferirColunas(empresa.id, 'analitico_bookplay', cabecalho);
+
       setPreview({
         linhasTotais:     analitico.length + colchao.length,
         linhasNovas:      analitico.length + colchao.length,
@@ -204,6 +249,8 @@ export function useAnaliticoImport() {
         loteId:           crypto.randomUUID(),
         mes:              mesBP,
         retencaoRemovidas,
+        mudancaDeColunas: colunasBP.mudanca,
+        assinatura:       colunasBP.assinatura,
       });
       setEstado('preview');
       return;
@@ -213,7 +260,7 @@ export function useAnaliticoImport() {
     // xlsx entra aqui, sob demanda (ver comentário do import no topo).
     const { parseRelatorioExcel } = await import('@/services/analitico/analiticoParser');
     const {
-      linhas, linhasColchao, colchaoNaMeta, erros, retencaoRemovidas,
+      cabecalho, linhas, linhasColchao, colchaoNaMeta, erros, retencaoRemovidas,
     } = await parseRelatorioExcel(file);
 
     if (!linhas.length && !linhasColchao.length) {
@@ -246,6 +293,8 @@ export function useAnaliticoImport() {
     }, {});
     const mes = Object.entries(mesCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
+    const colunasPP = await conferirColunas(empresa.id, 'analitico_pagueplay', cabecalho);
+
     setPreview({
       linhasTotais:     linhas.length + linhasColchao.length,
       linhasNovas:      linhas.length + linhasColchao.length,
@@ -261,9 +310,11 @@ export function useAnaliticoImport() {
       loteId:           crypto.randomUUID(),
       mes,
       retencaoRemovidas,
+      mudancaDeColunas: colunasPP.mudanca,
+      assinatura:       colunasPP.assinatura,
     });
     setEstado('preview');
-  }, [empresa?.id, tenant.isPaguePlay]);
+  }, [empresa?.id, tenant.isPaguePlay, conferirColunas]);
 
   const definirVinculo = useCallback((usuarioArquivo: string, perfilId: string | null) => {
     setVinculosManuais(prev => {
@@ -316,6 +367,23 @@ export function useAnaliticoImport() {
       // continua incremental porque seus relatórios podem ser parciais.
       { sincronizarAusentesDoSetor: !tenant.isPaguePlay },
     );
+
+    /*
+     * O formato aceito vira o novo normal — mas só aqui, depois de a importação
+     * ter acontecido de verdade. Um arquivo que a pessoa olhou no preview e
+     * descartou não pode redefinir o que o ERP "costuma mandar".
+     *
+     * `void` de propósito: registrar a assinatura é conveniência da próxima
+     * importação, não parte desta. Se falhar, a próxima compara com o formato
+     * anterior e no máximo avisa de novo.
+     */
+    if (preview.assinatura.length > 0) {
+      void registrarAssinatura(
+        empresa.id,
+        tenant.isPaguePlay ? 'analitico_pagueplay' : 'analitico_bookplay',
+        preview.assinatura,
+      ).catch(() => { /* aviso não pode derrubar importação concluída */ });
+    }
 
     // Revincula linhas órfãs de operadores criados após uma importação anterior.
     // Sem isto, reimportar o mesmo relatório não atribui os dados ao novo usuário
