@@ -1,4 +1,3 @@
-import { Skeleton } from '@/components/ui/skeleton';
 import type { Acordo } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 
@@ -46,27 +45,4 @@ export function getPageNumbers(current: number, total: number): (number | '...')
   if (current < total - 2) pages.push('...');
   pages.push(total);
   return pages;
-}
-
-export function TableSkeleton() {
-  return (
-    <div className="divide-y divide-border/50">
-      {[...Array(7)].map((_, i) => (
-        <div key={i} className="flex items-center gap-3 px-4 py-3">
-          <Skeleton className="h-4 w-4 rounded shrink-0" />
-          <Skeleton className="h-4 w-28 shrink-0" />
-          <Skeleton className="h-4 w-10 shrink-0" />
-          <Skeleton className="h-4 w-20 shrink-0 font-mono" />
-          <Skeleton className="h-4 w-24 shrink-0 font-mono text-right" />
-          <Skeleton className="h-5 w-16 rounded-full shrink-0" />
-          <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-5 w-20 rounded-full shrink-0" />
-          <div className="flex gap-1 shrink-0">
-            <Skeleton className="h-8 w-8 rounded" />
-            <Skeleton className="h-8 w-8 rounded" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }

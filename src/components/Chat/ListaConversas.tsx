@@ -25,7 +25,8 @@ import type {
 import {
   listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, rotuloAnexo,
 } from '@/services/chat/chat.service';
-import { AvatarChat, horaCurta, TagEmpresa, TagAdm } from './comum';
+import { AvatarChat, TagEmpresa, TagAdm } from './comum';
+import { horaCurta } from './formatos';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { cargosChatLiberados } from '@/lib/permissoes-chat';

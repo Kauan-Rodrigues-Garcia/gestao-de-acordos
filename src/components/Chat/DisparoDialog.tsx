@@ -31,7 +31,8 @@ import {
   listarContatos, dispararMensagem, subirAnexo, LIMITE_ANEXO,
   type AnexoChat, type ContatoChat,
 } from '@/services/chat/chat.service';
-import { AvatarChat, tamanhoLegivel } from './comum';
+import { AvatarChat } from './comum';
+import { tamanhoLegivel } from './formatos';
 import { PERFIL_COLORS } from '@/lib/index';
 
 interface Props {

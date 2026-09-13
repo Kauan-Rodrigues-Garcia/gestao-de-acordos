@@ -43,7 +43,8 @@ import {
   adicionarAoGrupo, subirFotoDoGrupo, definirAdminGrupo, type MembroGrupo,
 } from '@/services/chat/grupos.service';
 import { listarContatos, type ContatoChat, type ConversaChat } from '@/services/chat/chat.service';
-import { AvatarChat, useFotoResolvida } from './comum';
+import { AvatarChat } from './comum';
+import { useFotoResolvida } from './useFotoResolvida';
 
 interface Props {
   aberto:   boolean;

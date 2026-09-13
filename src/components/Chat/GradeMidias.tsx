@@ -20,7 +20,7 @@ import { useEffect, useState } from 'react';
 import { Images, Loader2, Play } from 'lucide-react';
 import { listarMidias, type MidiaDaConversa } from '@/services/chat/grupos.service';
 import type { AnexoChat } from '@/services/chat/chat.service';
-import { useFotoResolvida } from './comum';
+import { useFotoResolvida } from './useFotoResolvida';
 import { VisualizadorMidia } from './VisualizadorMidia';
 
 interface Props {

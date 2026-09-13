@@ -33,7 +33,8 @@ import {
 import { cn } from '@/lib/utils';
 import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service';
 import type { ConversaChat } from '@/services/chat/chat.service';
-import { AvatarChat, useFotoResolvida, TagAdm } from './comum';
+import { AvatarChat, TagAdm } from './comum';
+import { useFotoResolvida } from './useFotoResolvida';
 import { GradeMidias } from './GradeMidias';
 
 interface Props {

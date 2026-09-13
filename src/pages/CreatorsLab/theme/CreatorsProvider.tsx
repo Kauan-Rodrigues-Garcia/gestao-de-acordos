@@ -276,13 +276,9 @@ export function CreatorsProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useCreators(): ContextoCreators {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useCreators precisa estar dentro de <CreatorsProvider>');
   return ctx;
-}
-
-/** Atalho: só os rótulos do tema ativo. */
-export function useVocab() {
-  return useCreators().tokens.vocab;
 }

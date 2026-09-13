@@ -53,4 +53,5 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 )
 Button.displayName = "Button"
 
+// eslint-disable-next-line react-refresh/only-export-components -- `buttonVariants` é a API do shadcn: alert-dialog e calendar aplicam o estilo de botão sem o componente.
 export { Button, buttonVariants }

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- proxy da biblioteca inteira: reexporta tudo do react-router ao lado do <Routes> instrumentado. */
 import * as React from "react";
 
 // Runtime import of the real library under a different name (see vite.config alias)

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   lerDinheiro, calcularDesconto, diasUteisEntre, formatarBRL,
-} from '../../components/MiniApps';
+} from '../miniApps';
 
 describe('lerDinheiro', () => {
   it('aceita as quatro formas que a pessoa realmente digita', () => {

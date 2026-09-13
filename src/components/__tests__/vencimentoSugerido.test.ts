@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ultimoDiaProxMes, trintaDiasDepois, mesmoDiaProxMes, vencimentoSugerido,
-} from '../ModalReagendar';
+} from '@/lib/vencimentos';
 
 describe('ultimoDiaProxMes (PaguePlay)', () => {
   it('vai para o último dia do mês seguinte', () => {

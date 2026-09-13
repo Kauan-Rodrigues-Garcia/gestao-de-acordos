@@ -10,7 +10,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { EvolucaoDiaria, opacidadeDaBarra, OPACIDADES } from './EvolucaoDiaria';
+import { EvolucaoDiaria } from './EvolucaoDiaria';
+import { opacidadeDaBarra, OPACIDADES } from './opacidadeBarra';
 
 const PADRAO = {
   1:  { bruto: 611.62,    ho: 0, qtd: 3 },

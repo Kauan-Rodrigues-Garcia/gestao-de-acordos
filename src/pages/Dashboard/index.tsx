@@ -35,9 +35,9 @@ import { useLideroEquipe } from '@/hooks/useLideroEquipe';
 import { FiltroEscopo } from './FiltroEscopo';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
-  PER_PAGE, TIPOS_PARCELADOS_PP, VisaoFiltro,
-  addMesesDash, buildMensagem, saudacao, getPageNumbers, TableSkeleton,
+  PER_PAGE, TIPOS_PARCELADOS_PP, VisaoFiltro, addMesesDash, buildMensagem, saudacao, getPageNumbers,
 } from './helpers';
+import { TableSkeleton } from './TableSkeleton';
 import { PPTableFilters } from './PPTableFilters';
 import { PPTableBody } from './PPTableBody';
 import { PPModals } from './PPModals';

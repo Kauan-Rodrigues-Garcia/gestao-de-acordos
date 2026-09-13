@@ -23,7 +23,7 @@ import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import {
   estadoFechamentoDaData, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
-import { ultimoDiaProxMes } from '@/components/ModalReagendar';
+import { ultimoDiaProxMes } from '@/lib/vencimentos';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { solicitarAutorizacao } from '@/services/autorizacaoPedidos.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';

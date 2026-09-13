@@ -31,12 +31,17 @@ import {
 import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
-  AvatarChat, AnexoNoBalao, EMOJIS, BalaoDigitando, EstiloEntrada, PlayerAudio,
-  useFotoResolvida,
+  AvatarChat,
+  AnexoNoBalao,
+  EMOJIS,
+  BalaoDigitando,
+  EstiloEntrada,
+  PlayerAudio,
   TagAdm,
   ANIMACAO_ENTRADA,
-  horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
+import { horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta } from './formatos';
+import { useFotoResolvida } from './useFotoResolvida';
 import { VisualizadorMidia } from './VisualizadorMidia';
 import { InfoGrupoPainel } from './InfoGrupoPainel';
 import { StatusMensagem } from './StatusMensagem';

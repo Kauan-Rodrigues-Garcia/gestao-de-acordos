@@ -75,6 +75,7 @@ const RealtimeContext = createContext<RealtimeContextValue>({
 // ── Hook público ──────────────────────────────────────────────────────────────
 
 /** Acessa o canal Realtime centralizado. Disponível dentro de RealtimeAcordosProvider. */
+// eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useRealtimeAcordos(): RealtimeContextValue {
   return useContext(RealtimeContext);
 }

@@ -23,7 +23,7 @@ const ICONES: Record<string, LucideIcon> = {
 };
 
 /** O componente do ícone de uma categoria. `Info` cobre o que faltar. */
-export function iconeDaCategoria(categoria: CategoriaNotificacao): LucideIcon {
+function iconeDaCategoria(categoria: CategoriaNotificacao): LucideIcon {
   return ICONES[CATEGORIA_ICONE[categoria]] ?? Info;
 }
 

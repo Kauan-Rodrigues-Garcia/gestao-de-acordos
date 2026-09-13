@@ -8,7 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CardMetaDonut, fatiasDeForma, corDaMeta } from './CardMetaDonut';
+import { CardMetaDonut } from './CardMetaDonut';
+import { fatiasDeForma, corDaMeta } from './metaDonut';
 
 const FORMAS = {
   'Pix':    { valor: 40_000, qtd: 80 },

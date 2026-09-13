@@ -83,6 +83,7 @@ export function TermoUsoProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useTermoUso(): UseTermoUsoResult {
   const ctx = useContext(TermoUsoContext);
   if (!ctx) throw new Error('useTermoUso must be used within TermoUsoProvider');

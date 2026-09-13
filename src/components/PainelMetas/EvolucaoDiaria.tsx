@@ -34,13 +34,7 @@ import { diasNoMes } from '@/lib/mesReferencia';
 import type { UnidadeValor } from '@/lib/unidadeValor';
 import { CHART_RECEBIDO, CHART_AGENDADO } from '@/components/AnalyticsPanel/constants';
 import { CustomTooltip } from '@/components/AnalyticsPanel/SubComponents';
-
-/** Dia que alcançou a meta diária: barra cheia. */
-const OPACIDADE_ACIMA = 1;
-/** Dia abaixo da meta: mesma cor, menos peso. */
-const OPACIDADE_ABAIXO = 0.32;
-/** Sem meta cadastrada não há o que comparar — todos os dias pesam igual. */
-const OPACIDADE_NEUTRA = 0.7;
+import { OPACIDADES, opacidadeDaBarra } from './opacidadeBarra';
 
 export interface PontoAgendado {
   /** Dia do mês, 1..31. */
@@ -70,26 +64,6 @@ function formatYAxis(valor: number): string {
   if (valor >= 1_000)     return `R$${(valor / 1_000).toFixed(0)}k`;
   return `R$${valor}`;
 }
-
-/**
- * Peso da barra de um dia.
- *
- * Exportada porque é a regra que o teste precisa alcançar: o
- * `ResponsiveContainer` mede 0×0 em jsdom e não desenha `Cell` nenhuma, então
- * verificar isso pelo DOM renderizado seria verificar o vazio.
- *
- * A fronteira é `>=`: bater a meta exata conta como alcançada.
- */
-export function opacidadeDaBarra(recebido: number, metaDiaria: number | null): number {
-  if (metaDiaria === null) return OPACIDADE_NEUTRA;
-  return recebido >= metaDiaria ? OPACIDADE_ACIMA : OPACIDADE_ABAIXO;
-}
-
-export const OPACIDADES = {
-  acima: OPACIDADE_ACIMA,
-  abaixo: OPACIDADE_ABAIXO,
-  neutra: OPACIDADE_NEUTRA,
-} as const;
 
 export function EvolucaoDiaria({
   porDia, agendadoPorDia = [], mes, metaDiaria, diaDeHoje, unidade = 'bruto',
@@ -150,7 +124,7 @@ export function EvolucaoDiaria({
               <span className="flex items-center gap-1.5">
                 <span
                   className="inline-block w-2 h-2 rounded-[2px]"
-                  style={{ background: CHART_RECEBIDO, opacity: OPACIDADE_ABAIXO }}
+                  style={{ background: CHART_RECEBIDO, opacity: OPACIDADES.abaixo }}
                 />
                 Abaixo da meta
               </span>

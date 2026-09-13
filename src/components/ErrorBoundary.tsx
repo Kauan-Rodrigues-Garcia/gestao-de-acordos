@@ -142,26 +142,4 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-/**
- * HOC utilitário: envolve um componente funcional com ErrorBoundary automaticamente.
- *
- * Uso:
- *   const SafeDashboard = withErrorBoundary(Dashboard, { scope: 'Dashboard' });
- */
-export function withErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
-  options?: Omit<Props, 'children'>
-) {
-  const displayName = Component.displayName ?? Component.name ?? 'Component';
-  function Wrapped(props: P) {
-    return (
-      <ErrorBoundary {...options} scope={options?.scope ?? displayName}>
-        <Component {...props} />
-      </ErrorBoundary>
-    );
-  }
-  Wrapped.displayName = `withErrorBoundary(${displayName})`;
-  return Wrapped;
-}
-
 export default ErrorBoundary;

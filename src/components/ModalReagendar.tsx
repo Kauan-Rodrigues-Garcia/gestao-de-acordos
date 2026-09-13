@@ -10,17 +10,11 @@ import { DatePickerField } from '@/components/DatePickerField';
 import { Acordo } from '@/lib/supabase';
 import { parseCurrencyInput, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
+// As funções de data moram em `lib/vencimentos.ts` desde que o modal de
+// ADICIONAR parcelas passou a precisar da mesma regra. O reexport que mantinha
+// os imports antigos daqui saiu: um arquivo de componente que exporta funções
+// desliga o Fast Refresh dele inteiro, e só sobravam dois importadores.
 import { vencimentoSugerido } from '@/lib/vencimentos';
-
-/**
- * As funções de data moram em `lib/vencimentos.ts` desde que o modal de
- * ADICIONAR parcelas passou a precisar da mesma regra — duas telas calculando
- * vencimento por conta própria acabariam divergindo. Reexportadas aqui para os
- * imports antigos seguirem valendo.
- */
-export {
-  ultimoDiaProxMes, trintaDiasDepois, mesmoDiaProxMes, vencimentoSugerido,
-} from '@/lib/vencimentos';
 
 export interface ReagendarParams {
   novoVencimento: string;

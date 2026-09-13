@@ -56,7 +56,8 @@ import {
   listarMensagens, type MensagemChat, type ConversaChat,
 } from '@/services/chat/chat.service';
 import { Conversa } from './Conversa';
-import { AvatarChat, horaCurta, TagEmpresa, TagAdm } from './comum';
+import { AvatarChat, TagEmpresa, TagAdm } from './comum';
+import { horaCurta } from './formatos';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 

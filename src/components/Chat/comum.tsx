@@ -8,35 +8,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, ImageIcon, Music, Video, Download, Play, Pause, Mic } from 'lucide-react';
 import { urlDoAnexo, urlDoAnexoEmCache, type AnexoChat } from '@/services/chat/chat.service';
+import { tamanhoLegivel, duracaoCurta } from './formatos';
+import { useFotoResolvida } from './useFotoResolvida';
 import { cn } from '@/lib/utils';
 
 // ── Avatar ───────────────────────────────────────────────────────────────────
-
-/**
- * A foto pronta para o `<img>`, venha ela de onde vier.
- *
- * Foto de PESSOA é uma URL pública inteira (`https://…/object/public/perfis/…`)
- * e vai direto para a tag. Foto de GRUPO é um CAMINHO dentro do balde `chat`,
- * que é privado — o mesmo balde dos anexos, e pelo mesmo motivo: conversa
- * interna não fica em endereço público adivinhável.
- *
- * A primeira versão dos grupos gravou `getPublicUrl()` do balde privado, que
- * devolve um endereço bem-formado e morto: o navegador desenhava o ícone de
- * imagem quebrada, sem erro em lugar nenhum. Caminho que não começa com `http`
- * passa a ser assinado aqui, com o mesmo cache de `urlDoAnexo`.
- */
-export function useFotoResolvida(foto: string | null): string | null {
-  const [resolvida, setResolvida] = useState<{ caminho: string; url: string | null } | null>(null);
-  const publica = foto && /^(https?:|data:|blob:)/i.test(foto) ? foto : null;
-  useEffect(() => {
-    if (!foto || publica) return;
-    let vivo = true;
-    void urlDoAnexo(foto).then(url => { if (vivo) setResolvida({ caminho: foto, url }); });
-    return () => { vivo = false; };
-  }, [foto, publica]);
-  if (!foto) return null;
-  return publica ?? urlDoAnexoEmCache(foto) ?? (resolvida?.caminho === foto ? resolvida.url : null);
-}
 
 export function AvatarChat({
   nome, foto, tamanho = 36, online = false,
@@ -145,49 +121,6 @@ export function TagEmpresa({ slug }: { slug: string | null }) {
   );
 }
 
-// ── Tempo ────────────────────────────────────────────────────────────────────
-
-/**
- * Hora curta, do jeito que se lê de relance numa lista.
- *
- * Hoje mostra a hora; ontem, a palavra; nesta semana, o dia; antes disso, a
- * data. É a régua do WhatsApp e existe por um motivo: numa lista, «14:32» e
- * «23/07» respondem perguntas diferentes, e mostrar sempre a data completa
- * obriga a pessoa a calcular se aquilo foi agora ou no mês passado.
- */
-export function horaCurta(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const agora = new Date();
-  const meiaNoite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-  const dias = Math.floor((meiaNoite.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
-
-  if (dias <= 0) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  if (dias === 1) return 'ontem';
-  if (dias < 7)  return d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
-export function horaDoBalao(iso: string): string {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
-
-/** «Hoje», «Ontem» ou a data — o separador entre os dias da conversa. */
-export function rotuloDoDia(iso: string): string {
-  const d = new Date(iso);
-  const agora = new Date();
-  const dias = Math.floor(
-    (new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime()
-     - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
-  if (dias <= 0) return 'Hoje';
-  if (dias === 1) return 'Ontem';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-export function diaDaMensagem(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
 // ── Anexos ───────────────────────────────────────────────────────────────────
 
 function iconeDoTipo(tipo: string) {
@@ -195,12 +128,6 @@ function iconeDoTipo(tipo: string) {
   if (tipo.startsWith('video/')) return Video;
   if (tipo.startsWith('audio/')) return Music;
   return FileText;
-}
-
-export function tamanhoLegivel(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /**
@@ -298,14 +225,6 @@ export function AnexoNoBalao({
 }
 
 // ── Áudio ────────────────────────────────────────────────────────────────────
-
-/** `83` → `1:23`. Segundo cheio: milissegundo num áudio de recado é ruído. */
-export function duracaoCurta(segundos: number): string {
-  if (!isFinite(segundos) || segundos < 0) return '0:00';
-  const m = Math.floor(segundos / 60);
-  const s = Math.floor(segundos % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 /**
  * O player de áudio dentro do balão.

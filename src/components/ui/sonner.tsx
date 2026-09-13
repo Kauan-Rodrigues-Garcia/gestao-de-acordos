@@ -38,4 +38,5 @@ const Toaster = ({ ...props }: ToasterProps) => {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- reexporta o `toast` do sonner ao lado do Toaster; três telas e um mock de teste importam daqui.
 export { Toaster, toast }
