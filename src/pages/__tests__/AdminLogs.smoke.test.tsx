@@ -113,6 +113,46 @@ const authPorCargo: Record<string, { perfil: { id: string; nome: string; perfil:
   super_admin:   { perfil: { id: 'u-9', nome: 'Quem Olha', perfil: 'super_admin' } },
 };
 
+/*
+ * Sem este dublê, o cliente REAL do supabase subia com a URL de fachada do
+ * vitest (`localhost:54321`): a aba de monitoramento chama `supabase.rpc` pelo
+ * `uso.service`, e cada chamada virava uma tentativa de conexão recusada — 150
+ * linhas de `ECONNREFUSED` no meio da suíte, sem teste nenhum falhar e sem
+ * dizer de onde vinham. Qualquer cadeia resolve vazio; `rpc` também.
+ */
+vi.mock('@/lib/supabase', () => {
+  function consultaVazia(): object {
+    const resultado = { data: [], error: null };
+    const cadeia: object = new Proxy({}, {
+      get(_alvo, prop) {
+        if (typeof prop === 'symbol') return undefined;
+        if (prop === 'then') {
+          return (ok: (r: typeof resultado) => unknown, falha?: (e: unknown) => unknown) =>
+            Promise.resolve(resultado).then(ok, falha);
+        }
+        return () => cadeia;
+      },
+    });
+    return cadeia;
+  }
+  // Canal: `useCargoPermissoes` roda de verdade aqui e encadeia vários `.on()`.
+  // Sem `then` — canal não é aguardado.
+  function canalVazio(): object {
+    const canal: object = new Proxy({}, {
+      get: (_alvo, prop) => (typeof prop === 'symbol' ? undefined : () => canal),
+    });
+    return canal;
+  }
+  return {
+    supabase: {
+      from: () => consultaVazia(),
+      rpc: () => consultaVazia(),
+      channel: () => canalVazio(),
+      removeChannel: () => {},
+    },
+  };
+});
+
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => authPorCargo[cargo],
 }));
