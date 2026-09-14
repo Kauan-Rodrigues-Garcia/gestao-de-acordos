@@ -22,6 +22,22 @@ export interface ContribuicaoReceptivo {
 }
 
 /**
+ * O card do Receptivo só aparece quando tem número.
+ *
+ * Pedido de 14/09/2026: todo setor da BookPlay mostrava um card «Contribuição
+ * Receptivo» zerado, inclusive os que não recebem nada do Receptivo. Agora o
+ * card zerado (acumulado E meta em 0, ou nunca preenchido) sai de cena, e quem
+ * pode editar ganha um botão acima do primeiro card para adicioná-lo.
+ *
+ * Meta sozinha já conta como preenchido: o líder costuma lançar a meta no
+ * começo do mês, antes de haver acumulado — sumir com o card aí apagaria da
+ * tela o que ele acabou de digitar.
+ */
+export function receptivoPreenchido(dados: ContribuicaoReceptivo | null | undefined): boolean {
+  return !!dados && ((Number(dados.acumulado) || 0) > 0 || (Number(dados.meta) || 0) > 0);
+}
+
+/**
  * Quanto do Receptivo entra no acumulado que a tela está mostrando.
  *
  * ## O erro que esta função existe para não deixar acontecer

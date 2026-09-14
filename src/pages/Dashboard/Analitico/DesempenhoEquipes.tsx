@@ -22,7 +22,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { carregarConciliacaoSetor } from '@/services/relatorioPaguePlay/conciliacaoSetor';
-import { Building2, Headset, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { Building2, Headset, Pencil, Check, X, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +36,7 @@ import { reconciliarMapa } from '@/lib/dadosVivos';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
 import {
-  buscarContribuicoesReceptivo, salvarContribuicaoReceptivo,
+  buscarContribuicoesReceptivo, salvarContribuicaoReceptivo, receptivoPreenchido,
   type ContribuicaoReceptivo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
@@ -167,7 +167,7 @@ function paraInput(v: number): string {
 
 function CardContribuicaoReceptivo({
   dados, totalUteis, decorridos, quartis, podeEditar, salvando, somenteLocal, onSalvar,
-  foto, onEditarFoto, salvandoFoto,
+  foto, onEditarFoto, salvandoFoto, abrirEditando = false, onCancelarEdicao,
 }: {
   dados: ContribuicaoReceptivo | undefined;
   totalUteis: number;
@@ -182,10 +182,14 @@ function CardContribuicaoReceptivo({
   foto: string | null;
   onEditarFoto?: () => void;
   salvandoFoto?: boolean;
+  /** Recém-adicionado pelo botão: nasce com o formulário aberto. */
+  abrirEditando?: boolean;
+  /** Fechar o formulário sem salvar (o card recém-adicionado some junto). */
+  onCancelarEdicao?: () => void;
 }) {
-  const [editando, setEditando]         = useState(false);
-  const [acumuladoStr, setAcumuladoStr] = useState('');
-  const [metaStr, setMetaStr]           = useState('');
+  const [editando, setEditando]         = useState(abrirEditando);
+  const [acumuladoStr, setAcumuladoStr] = useState(() => paraInput(dados?.acumulado ?? 0));
+  const [metaStr, setMetaStr]           = useState(() => paraInput(dados?.meta ?? 0));
 
   function abrirEdicao() {
     setAcumuladoStr(paraInput(dados?.acumulado ?? 0));
@@ -196,6 +200,11 @@ function CardContribuicaoReceptivo({
   function salvar() {
     onSalvar({ acumulado: parseValorBR(acumuladoStr), meta: parseValorBR(metaStr) });
     setEditando(false);
+  }
+
+  function cancelar() {
+    setEditando(false);
+    onCancelarEdicao?.();
   }
 
   // `relative` + botão absoluto: o card ocupa a largura TODA, igual aos outros.
@@ -251,7 +260,7 @@ function CardContribuicaoReceptivo({
               placeholder="0,00"
               value={acumuladoStr}
               onChange={e => setAcumuladoStr(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
+              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') cancelar(); }}
               className="h-7 text-xs"
             />
           </div>
@@ -262,7 +271,7 @@ function CardContribuicaoReceptivo({
               placeholder="0,00"
               value={metaStr}
               onChange={e => setMetaStr(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
+              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') cancelar(); }}
               className="h-7 text-xs"
             />
           </div>
@@ -271,7 +280,7 @@ function CardContribuicaoReceptivo({
               <Check className="w-3 h-3" /> Salvar
             </Button>
             <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] gap-1"
-              onClick={() => setEditando(false)}>
+              onClick={cancelar}>
               <X className="w-3 h-3" />
             </Button>
           </div>
@@ -334,6 +343,20 @@ export function DesempenhoEquipes({
   const [contribDbAtiva, setContribDbAtiva] = useState(true);
   const [salvandoContrib, setSalvandoContrib] = useState<string | null>(null);
   const podeEditarContrib = podeEditarReceptivo(perfil?.perfil);
+  /*
+   * Setores em que o líder clicou «Adicionar Contribuição Receptivo» e ainda
+   * não salvou. O card zerado não aparece (`receptivoPreenchido`); este é o
+   * único jeito de ele surgir vazio — já com o formulário aberto.
+   */
+  const [receptivoAdicionando, setReceptivoAdicionando] = useState<ReadonlySet<string>>(new Set());
+  const pararDeAdicionarReceptivo = useCallback((sid: string) => {
+    setReceptivoAdicionando(atual => {
+      if (!atual.has(sid)) return atual;
+      const novo = new Set(atual);
+      novo.delete(sid);
+      return novo;
+    });
+  }, []);
 
   const recarregarContrib = useCallback(async () => {
     if (isPP) return;
@@ -739,14 +762,35 @@ export function DesempenhoEquipes({
           receptivoPorSetor: contrib,
         });
         const metaSetor = dados.metaDe('setor', sid);
+        // Receptivo (BookPlay): o card só aparece com número ou recém-adicionado;
+        // sem ele, quem pode editar vê o botão acima do primeiro card.
+        const receptivoCabe = !isPP && !equipeId && sid !== 'sem_setor';
+        const adicionandoReceptivo = receptivoAdicionando.has(sid);
+        const mostrarReceptivo = receptivoCabe && (receptivoPreenchido(contrib[sid]) || adicionandoReceptivo);
+        const mostrarBotaoReceptivo = receptivoCabe && podeEditarContrib && !mostrarReceptivo;
         return (
         <div key={sid} className="space-y-3">
           {/* Nome do setor acima do grupo: com "Todos os setores" a tela vira uma
               sequência longa de cards, e o título fixo dá onde se apoiar. */}
-          {!setorEfetivo && (
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1 pt-1">
-              {setores[sid] ?? 'Sem setor'}
-            </p>
+          {(!setorEfetivo || mostrarBotaoReceptivo) && (
+            <div className="flex items-center justify-between gap-2 px-1 pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {!setorEfetivo ? (setores[sid] ?? 'Sem setor') : ''}
+              </p>
+              {mostrarBotaoReceptivo && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => setReceptivoAdicionando(atual => new Set(atual).add(sid))}
+                  title="Adicionar o card manual da Contribuição Receptivo neste setor"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <Headset className="w-3.5 h-3.5" />
+                  Adicionar Contribuição Receptivo
+                </Button>
+              )}
+            </div>
           )}
           {/* Consolidado do setor. Sai de cena quando há filtro de equipe: o
               número dele é do setor inteiro e contradiria o recorte pedido. */}
@@ -786,12 +830,17 @@ export function DesempenhoEquipes({
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
               quartis={quartis}
-              operadores={usarConciliacao || sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid })}
+              // Abre como o card de equipe — degraus, ritmo e pessoas —, também
+              // com a conciliação (pedido de 14/09/2026: o clique não fazia
+              // nada). O número do alto segue sendo o da conciliação; as pessoas
+              // são as do setor pela regra de sempre.
+              operadores={sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid })}
               mes={mes}
             />
           )}
-          {/* Contribuição Receptivo — card manual do setor (BookPlay) */}
-          {!isPP && !equipeId && sid !== 'sem_setor' && (
+          {/* Contribuição Receptivo — card manual do setor (BookPlay). Zerado
+              não aparece: salvar tudo em 0 tira o card da tela. */}
+          {mostrarReceptivo && (
             <CardContribuicaoReceptivo
               dados={contrib[sid]}
               totalUteis={dados.totalUteis}
@@ -800,7 +849,12 @@ export function DesempenhoEquipes({
               podeEditar={podeEditarContrib}
               salvando={salvandoContrib === sid}
               somenteLocal={!contribDbAtiva}
-              onSalvar={valores => { void salvarContrib(sid, valores); }}
+              abrirEditando={adicionandoReceptivo}
+              onCancelarEdicao={() => pararDeAdicionarReceptivo(sid)}
+              onSalvar={valores => {
+                pararDeAdicionarReceptivo(sid);
+                void salvarContrib(sid, valores);
+              }}
               foto={receptivoFotos[sid] ?? null}
               onEditarFoto={podeEditarContrib ? () => abrirUploadFotoSetor(sid, 'receptivo') : undefined}
               salvandoFoto={salvandoFotoSetor && uploadAlvo?.setorId === sid && uploadAlvo.campo === 'receptivo'}

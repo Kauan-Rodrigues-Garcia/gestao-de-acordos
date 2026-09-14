@@ -321,15 +321,28 @@ export function CardEquipe({
   const [aberto, setAberto] = useState(false);
   const painelId = useId();
 
+  /*
+   * PaguePlay: o H.O. é o número principal do card.
+   *
+   * Pedido da liderança em 14/09/2026: o bruto aparecia em destaque e o H.O.
+   * miúdo embaixo, mas é o H.O. que a PaguePlay retém e é sobre ele que a meta
+   * se mede. O card inteiro passa a ler em H.O. — barra, projeção, falta e
+   * média —, e o bruto desce para a linha de apoio. Trocar só o número grande
+   * deixaria «Falta p/ meta» em bruto ao lado de um acumulado em H.O.
+   */
+  const emHO = !!mostrarHO;
+  const acumuladoCard = emHO ? (acumuladoHO ?? 0) : acumulado;
+  const metaCard = emHO ? (metaHO != null && metaHO > 0 ? metaHO : null) : meta;
+
   const d = detalharEquipe({
-    acumulado, meta, totalUteis, decorridos, quartis,
+    acumulado: acumuladoCard, meta: metaCard, totalUteis, decorridos, quartis,
     operadores: operadores ?? [],
   });
 
   const expansivel = operadores !== undefined;
   const cor = d.projecaoPct !== null ? corProjecao(d.projecaoPct) : 'var(--muted-foreground)';
-  const esperado = meta !== null && meta > 0 && totalUteis > 0
-    ? (meta / totalUteis) * Math.max(decorridos, 1)
+  const esperado = metaCard !== null && metaCard > 0 && totalUteis > 0
+    ? (metaCard / totalUteis) * Math.max(decorridos, 1)
     : null;
 
   const metaBatida = d.faltaMeta !== null && d.faltaMeta === 0;
@@ -388,7 +401,7 @@ export function CardEquipe({
       >
         {Cabecalho}
 
-        <BarraProgresso acumulado={acumulado} esperado={esperado} meta={meta} cor={cor} />
+        <BarraProgresso acumulado={acumuladoCard} esperado={esperado} meta={metaCard} cor={cor} />
 
         {/* De onde veio um pedaço do acumulado. Só aparece quando há ajuste —
             o card já tem números demais para carregar uma linha sempre vazia. */}
@@ -405,12 +418,12 @@ export function CardEquipe({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           <Numero
-            label="Acumulado" valor={formatBRL(acumulado)} cor={COR_QUARTIL[1]}
-            sub={mostrarHO ? `H.O. ${formatBRL(acumuladoHO ?? 0)}` : undefined}
+            label={emHO ? 'Acumulado H.O.' : 'Acumulado'} valor={formatBRL(acumuladoCard)} cor={COR_QUARTIL[1]}
+            sub={emHO ? `Bruto ${formatBRL(acumulado)}` : undefined}
           />
           <Numero
-            label="Meta" valor={meta ? formatBRL(meta) : '—'}
-            sub={mostrarHO && metaHO ? `H.O. ${formatBRL(metaHO)}` : undefined}
+            label={emHO ? 'Meta H.O.' : 'Meta'} valor={metaCard ? formatBRL(metaCard) : '—'}
+            sub={emHO && meta ? `Bruto ${formatBRL(meta)}` : undefined}
           />
           <Numero
             label="Falta p/ meta"
@@ -439,9 +452,12 @@ export function CardEquipe({
                 onClick={() => {
                   void copiarTexto(
                     montarMensagemEquipe({
-                      titulo, ehSetor, mes, acumulado, meta,
-                      rotuloUnidade: mostrarHO ? 'Bruto' : null,
-                      acumuladoHO:   mostrarHO ? (acumuladoHO ?? 0) : null,
+                      titulo, ehSetor, mes,
+                      // A mesma unidade do card: H.O. na frente, bruto de apoio.
+                      acumulado: acumuladoCard, meta: metaCard,
+                      rotuloUnidade:  emHO ? 'H.O.' : null,
+                      acumuladoHO:    null,
+                      acumuladoBruto: emHO ? acumulado : null,
                       detalhe: d,
                     }),
                     'Texto copiado — é só colar no WhatsApp.',

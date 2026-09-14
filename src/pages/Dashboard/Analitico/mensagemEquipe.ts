@@ -45,12 +45,17 @@ export interface EntradaMensagemEquipe {
   /** Meta do mês. `null` = sem meta configurada. */
   meta: number | null;
   /**
-   * 'Bruto' na PaguePlay, onde o card mostra bruto e H.O. lado a lado.
+   * 'H.O.' na PaguePlay, onde o card lê em H.O. e mostra o bruto de apoio.
    * `null` na BookPlay, que não tem duas unidades.
    */
   rotuloUnidade: string | null;
   /** H.O. do acumulado. `null` = não exibir. */
   acumuladoHO: number | null;
+  /**
+   * Bruto do acumulado, quando a unidade principal é o H.O. (card PaguePlay
+   * desde 14/09/2026). Ausente/`null` = não exibir.
+   */
+  acumuladoBruto?: number | null;
   /** O detalhe já calculado — a MESMA fonte que desenha o card. */
   detalhe: DetalheEquipe;
 }
@@ -67,7 +72,7 @@ function pessoas(qtd: number): string {
  */
 export function montarMensagemEquipe(entrada: EntradaMensagemEquipe): string {
   const {
-    titulo, ehSetor, mes, acumulado, meta, rotuloUnidade, acumuladoHO, detalhe: d,
+    titulo, ehSetor, mes, acumulado, meta, rotuloUnidade, acumuladoHO, acumuladoBruto, detalhe: d,
   } = entrada;
   const linhas: string[] = [];
 
@@ -78,6 +83,7 @@ export function montarMensagemEquipe(entrada: EntradaMensagemEquipe): string {
   const unidade = rotuloUnidade ? ` (${rotuloUnidade})` : '';
   linhas.push(`*Recebido ${ehSetor ? 'do setor' : 'da equipe'}${unidade}:* ${formatBRL(acumulado)}`);
   if (acumuladoHO !== null) linhas.push(`*H.O.:* ${formatBRL(acumuladoHO)}`);
+  if (acumuladoBruto != null) linhas.push(`*Bruto:* ${formatBRL(acumuladoBruto)}`);
   if (meta !== null && meta > 0) {
     linhas.push(`*Meta:* ${formatBRL(meta)} (${Math.round((acumulado / meta) * 100)}% da meta)`);
   }

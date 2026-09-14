@@ -59,3 +59,34 @@ describe('CardEquipe — copiar para a equipe', () => {
     expect(screen.queryByRole('button', { name: /Copiar para/ })).not.toBeInTheDocument();
   });
 });
+
+describe('CardEquipe — PaguePlay lê em H.O.', () => {
+  beforeEach(() => { copiarTexto.mockClear(); });
+
+  const PP = { ...PROPS, mostrarHO: true, acumuladoHO: 11_232, metaHO: 24_960 };
+
+  it('o H.O. é o número grande, e o bruto desce para a linha de apoio', () => {
+    render(<CardEquipe {...PP} />);
+    expect(screen.getByText('Acumulado H.O.')).toBeInTheDocument();
+    expect(screen.getByText('Meta H.O.')).toBeInTheDocument();
+    expect(screen.getByText(/Bruto R\$\s?45\.000,00/)).toBeInTheDocument();
+    expect(screen.getByText(/Bruto R\$\s?100\.000,00/)).toBeInTheDocument();
+    // «Falta p/ meta» na MESMA unidade do acumulado: 24.960 − 11.232.
+    expect(screen.getByText(/R\$\s?13\.728,00/)).toBeInTheDocument();
+  });
+
+  it('o texto copiado fala em H.O. e traz o bruto de apoio', () => {
+    render(<CardEquipe {...PP} mes="2026-09" />);
+    fireEvent.click(screen.getByText('Time Matheus'));
+    fireEvent.click(screen.getByRole('button', { name: /Copiar para a equipe/ }));
+    const texto = copiarTexto.mock.calls[0][0];
+    expect(texto).toMatch(/\*Recebido da equipe \(H\.O\.\):\* R\$\s?11\.232,00/);
+    expect(texto).toMatch(/\*Bruto:\* R\$\s?45\.000,00/);
+  });
+
+  it('BookPlay continua em bruto, sem linha de apoio', () => {
+    render(<CardEquipe {...PROPS} />);
+    expect(screen.getByText('Acumulado')).toBeInTheDocument();
+    expect(screen.queryByText(/^Bruto /)).not.toBeInTheDocument();
+  });
+});

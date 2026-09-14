@@ -65,7 +65,27 @@ import {
   buscarContribuicoesReceptivo,
   salvarContribuicaoReceptivo,
   receptivoDoEscopo,
+  receptivoPreenchido,
 } from './contribuicaoReceptivo.service';
+
+describe('receptivoPreenchido — card zerado não aparece', () => {
+  it('nunca preenchido não aparece', () => {
+    expect(receptivoPreenchido(undefined)).toBe(false);
+    expect(receptivoPreenchido(null)).toBe(false);
+  });
+
+  it('acumulado e meta em zero não aparece', () => {
+    expect(receptivoPreenchido({ acumulado: 0, meta: 0 })).toBe(false);
+  });
+
+  it('só a meta já conta como preenchido', () => {
+    expect(receptivoPreenchido({ acumulado: 0, meta: 5_000 })).toBe(true);
+  });
+
+  it('acumulado sem meta aparece', () => {
+    expect(receptivoPreenchido({ acumulado: 1_234.5, meta: 0 })).toBe(true);
+  });
+});
 
 const EMPRESA = 'emp-1';
 const SETOR   = 'setor-1';
