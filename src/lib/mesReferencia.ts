@@ -79,6 +79,13 @@ export function ehMesAtual(mes: string | null | undefined): boolean {
   return normalizarMes(mes) === mesAtual();
 }
 
+/*
+ * `mesFechado` NÃO mora aqui — mora em `lib/fechamentoMes.ts`, junto do cargo
+ * que passa pelo cadeado e das frases que a tela mostra. Foi quase duplicado
+ * aqui na Fase 6 da sincronização 58/59; duas respostas para «este mês fechou?»
+ * é exatamente o defeito que aquela fase estava consertando no banco.
+ */
+
 /** "Agosto 2026" — o rótulo que aparece no seletor. */
 export function rotuloDoMes(mes: string | null | undefined): string {
   const { ano, mes: m } = partesDoMes(mes);

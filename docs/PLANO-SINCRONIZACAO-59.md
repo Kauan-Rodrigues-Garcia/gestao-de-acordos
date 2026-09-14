@@ -610,10 +610,81 @@ duplicatas que não existem.
 **As importações anteriores a 14/09/2026 não têm botão**, e a tela explica o
 porquê em vez de oferecer um botão que falharia.
 
-### Fase 6 — travar o mês fechado
+### ✅ Fase 6 — travar o mês fechado (14/09/2026)
 
-Ligar a trava sobre `composicao_mes` e fechar as portas de edição que não sejam
-de super admin (regra 9).
+Migration `20260914022613`. **A Fase 6 está fechada.**
+
+#### Quase tudo já estava certo — e medi antes de mexer
+
+Auditoria das quatro tabelas `composicao_mes*` e das três funções que escrevem
+nelas:
+
+| | |
+|---|---|
+| RLS das tabelas | escrita só para super_admin ✅ |
+| `fn_composicao_mes_congelar()` | só age no mês corrente ✅ |
+| `fn_composicao_mes_snapshot()` | já tinha a trava: `p_mes < mês corrente` em America/Sao_Paulo, e aí só acrescenta o que falta ✅ |
+| `fn_composicao_mes_completar_clones()` | **nenhuma trava** ❌ |
+
+#### A porta
+
+`fn_composicao_mes_completar_clones` é **SECURITY DEFINER** — passa por cima do
+RLS super_admin-only — e aceita `gerencia`, `diretoria` e `administrador`.
+Chamada com um mês já fechado, ela acrescentava ao retrato daquele mês os clones
+de **hoje**.
+
+Ela é cuidadosa: só cresce, nunca apaga, e o comentário dela mesmo diz «tirar
+seria reescrever o mês». Mas crescer um retrato fechado também é alterá-lo, e
+isso reescreve a atribuição histórica do dinheiro em silêncio.
+
+A função continua inteira. O que mudou é **quem pode chamá-la para trás**.
+
+#### O fechamento é derivado da data, não um flag
+
+`fn_mes_fechado(mes)` — um lugar só decide. A regra 9 diz «à meia-noite do dia
+1º», e isso é conta de calendário: não precisa de job, não precisa de coluna, e
+não tem como dessincronizar. Um flag precisaria de alguém para ligá-lo, e o dia
+em que esse alguém falhasse o mês ficaria aberto sem ninguém notar.
+
+A mesma conta já estava escrita dentro de `fn_composicao_mes_snapshot`. Repeti-la
+uma terceira vez seria o começo do defeito que a Fase 4 consertou — regra
+copiada em N lugares, implementada inteira em alguns.
+
+#### ⚠️ São dois cadeados, e eles NÃO são o mesmo
+
+O sistema já tinha um fechamento de mês, em `lib/fechamentoMes.ts`: trava
+criar/editar/excluir **acordo**, e admite exceção por cargo ou pela permissão
+`ignorar_fechamento_mes`.
+
+Este é outro, e mais estrito de propósito: reescrever quem estava em qual equipe
+em agosto muda a **atribuição histórica do dinheiro**, que é mais grave que
+editar um acordo. A guarda exige `super_admin` e **não honra**
+`ignorar_fechamento_mes` — a regra 9 diz «só super admin», e é essa que vale
+para configuração. Um teste trava essa distinção, para ninguém «uniformizar» os
+dois sem perceber o que está afrouxando.
+
+#### Verificado contra produção
+
+```
+fn_mes_fechado('2026-08') ......... true     (corrente: 2026-09)
+fn_mes_fechado('2026-09') ......... false
+fn_mes_fechado(null) / ('lixo') ... false
+
+chamada em mês fechado, sem ser super_admin:
+  composicao_mes de 2026-08 antes .... 326 linhas
+  composicao_mes de 2026-08 depois ... 326 linhas
+  erro ............................... MES_FECHADO: 2026-08 ja fechou.
+
+chamada no mês corrente (em bloco revertido, sem deixar rastro):
+  {"mes": "2026-09", "pessoas": 0, "equipes": 0, "setores": 0}
+```
+
+#### O que continua liberado, e é de propósito
+
+Importar o 58 ou o 59 de um mês fechado. Isso é **dado**, não configuração, e
+cai na data certa — exatamente como a regra 9 diz. `fn_composicao_mes_snapshot`
+é chamada depois de cada importação e, em mês fechado, só acrescenta setor ou
+equipe que faltava no retrato; nunca reescreve quem estava onde.
 
 ### Fase 7 — sincronização horária
 
@@ -769,8 +840,13 @@ pagar.
       «somente geral» como a Retenção?
 - [ ] As 105 cobradoras sem perfil: são gente que saiu, de outra empresa, ou
       cadastro em falta? Muda se a solução é vincular ou rotular.
-- [ ] O fechamento do mês é automático à meia-noite do dia 1º, ou tem um botão?
-      (Decide a Fase 6.)
+- [x] ~~O fechamento do mês é automático ou tem botão?~~ — **resolvido pela
+      própria regra 9**, que diz «à meia-noite do dia 1º». Ficou automático e
+      derivado da data (`fn_mes_fechado`), sem job e sem flag. Não há botão de
+      fechar: não faz sentido fechar antes nem depois da virada, e um botão
+      criaria um estado que pode divergir do calendário. O botão que existe,
+      «Baixar fechamento» (`components/Fechamento`), é outra coisa — ele
+      exporta o relatório, não muda o estado do mês.
 
 ### Resolvido — fica registrado para não voltar como dúvida
 
