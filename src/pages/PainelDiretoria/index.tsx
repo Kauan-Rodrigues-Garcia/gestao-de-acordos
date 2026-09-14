@@ -5,7 +5,7 @@ import {
   TrendingUp, DollarSign, BarChart3,
   Building2, RefreshCw, CreditCard, Database, Link2, Users,
   TrendingDown, Target, Activity, PieChart,
-  AlertCircle, CheckCircle2, Clock, CalendarClock,
+  AlertCircle, CheckCircle2, Clock, CalendarClock, Scale,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -56,6 +56,7 @@ const Mestre59 = lazy(() => import('./Mestre59'));
 const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
 const Mestre59Operadores = lazy(() => import('./Mestre59Operadores'));
 const Mestre59EquipesSugeridas = lazy(() => import('./Mestre59EquipesSugeridas'));
+const Mestre59Divergencias = lazy(() => import('./Mestre59Divergencias'));
 const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
 
 /**
@@ -66,7 +67,8 @@ const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
  * conferência de super_admin, e `codigos` é onde o código do ERP amarra cada
  * setor à sua carteira do 59.
  */
-type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
+type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencias'
+  | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
 
 /**
  * Painel Diretoria.
@@ -361,10 +363,12 @@ export default function PainelDiretoria() {
     : aba === 'setores'     ? 'setores'
     : aba === 'operadores'  ? 'operadores'
     : aba === 'equipes'     ? (podeVerMestre ? 'equipes' : 'visao')
+    : aba === 'divergencias' ? 'divergencias'
     : 'visao';
   /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
   const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores'
-    || abaVisivel === 'operadores' || abaVisivel === 'equipes';
+    || abaVisivel === 'operadores' || abaVisivel === 'equipes'
+    || abaVisivel === 'divergencias';
 
   if (!perfil) return null;
 
@@ -443,6 +447,10 @@ export default function PainelDiretoria() {
             { key: 'visao'   as const, label: 'Visão geral',        Icon: TrendingUp },
             { key: 'setores' as const, label: 'Setores e equipes',  Icon: Building2 },
             { key: 'operadores' as const, label: 'Por pessoa',        Icon: Users },
+            // Conferência só LÊ: compara as duas fontes e classifica a
+            // diferença. Não vincula, não corrige, não grava — por isso não
+            // está atrás do super_admin como as três de baixo.
+            { key: 'divergencias' as const, label: 'Conferência 58 × 59', Icon: Scale },
             // A conferência do 59 é de super_admin: ela mostra a linha crua e
             // deixa vincular grupo a setor, que é escrita, não leitura.
             //
@@ -483,6 +491,17 @@ export default function PainelDiretoria() {
           {/* O recebimento por PESSOA, atravessando carteira e equipe. O mês é
               o mesmo do seletor do cabeçalho, como nas outras abas do 59. */}
           <Mestre59Operadores
+            empresaId={empresa?.id ?? ''}
+            mes={mesAnalise}
+            versao={versaoVisao}
+          />
+        </Suspense>
+      ) : abaVisivel === 'divergencias' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          {/* Onde as duas fontes discordam — com a diferença já classificada,
+              para que importação faltando e dia ainda aberto não apareçam como
+              se fossem divergência. Ver `divergencias.service.ts`. */}
+          <Mestre59Divergencias
             empresaId={empresa?.id ?? ''}
             mes={mesAnalise}
             versao={versaoVisao}

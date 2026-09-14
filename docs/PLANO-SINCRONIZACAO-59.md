@@ -86,6 +86,13 @@ defasagem é normal.
 - valor que existe só de um lado **em dias já fechados** (do dia anterior para
   trás).
 
+⚠️ **«Dia corrente» precisou ser lido por setor, não pelo calendário.** Ao
+implementar (Fase 2, 14/09/2026) ficou provado que a regra acima, tomada ao pé
+da letra, produzia 1.090 «divergências» — quase todas de setor cujo 58 não
+tinha chegado naquele dia, e do **último dia importado de cada setor, que é
+parcial** porque o relatório foi exportado no meio do dia. O dia corrente de um
+setor é o último dia do 58 *dele*. Com isso, sobram 6. Ver a Fase 2.
+
 ⚠️ A referência de data é **sempre a do 59**. O 58 empilha o acumulado na data do
 primeiro pagamento (medido: Play 4, setembro, 3 NRs, R$ 2.641,04 no dia errado,
 líquido zero no mês). Ele responde «existe / não existe», nunca «quando».
@@ -235,10 +242,58 @@ Entregas:
 
 ### Fase 2 — pendências e divergências
 
-- Marcar as linhas que o 58 traz e o 59 ainda não tem (regra 4);
-- Escalar o aviso: 1ª importação = pendente, 2ª = crítico;
-- **Aba de divergências** com filtro por operador e por setor (regra 6);
-- Regra do dia corrente (regra 5).
+- [x] **Aba de divergências** com filtro por operador e por setor (regra 6) —
+      no ar em 14/09/2026, ver abaixo;
+- [x] Regra do dia corrente (regra 5) — e ela precisou ser mais fina do que o
+      combinado, ver abaixo;
+- [ ] Coluna de procedência em `analitico_recebimentos`;
+- [ ] Marcar as linhas que o 58 traz e o 59 ainda não tem (regra 4);
+- [ ] Escalar o aviso: 1ª importação = pendente, 2ª = crítico.
+
+#### ✅ A aba «Conferência 58 × 59» (14/09/2026)
+
+`fn_mestre_divergencias` + `fn_mestre_divergencias_resumo`, migration
+`20260914005101`. Só leitura.
+
+Os dois lados são agrupados por **setor + cobradora + NR**, cada um passado pelo
+recorte provado em agosto (`docs/SINCRONIZACAO-58-59.md`): a carteira manda,
+colchão e Retenção ficam fora do setor.
+
+**A primeira versão não servia, e o número disse isso.** Com três classes
+(`do_dia`, `estrutural`, `divergencia`), setembro dava **1.090 NRs e
+R$ 375.193,73 de «divergência»** — exatamente o que tinha sido avisado: a aba
+listando ausência de importação como se fosse divergência. Ninguém abre uma
+lista dessas duas vezes.
+
+Duas coisas estavam sendo chamadas de divergência sem ser:
+
+1. **Setor cujo 58 não chegou naquele dia.** «Dos dias que já estão atualizados»
+   é por setor, não do mês. Jornada Play e Manutenção não importam o 58 nenhum
+   dia; o Play 1 estava no dia 11 enquanto o Receptivo já tinha o 14.
+2. **O último dia importado é parcial.** Esta não estava à vista. As 198
+   divergências do Play 1 caíam *todas* no dia 11 — o último dia do 58 dele. O
+   relatório foi exportado no meio do dia, o 59 tem o dia inteiro. O último dia
+   do 58 de cada setor é um dia aberto, igual a hoje, só que relativo à
+   importação daquele setor e não ao calendário.
+
+As cinco classes, e setembro/2026 nelas:
+
+| classe | o que é | NRs | valor |
+|---|---|---:|---:|
+| `divergencia` | nada explica — **alguém olha** | 6 | R$ 1.174,08 |
+| `estrutural` | o NR está do outro lado, noutro setor | 1 | R$ 179,10 |
+| `dia_aberto` | hoje, ou o último dia do 58 do setor | 406 | R$ 160.574,51 |
+| `aguardando_58` | o 58 do setor não chegou nesse dia | 171 | R$ 61.477,75 |
+| `sem_58` | o setor não importou o 58 no mês | 629 | R$ 197.401,20 |
+
+**Seis.** E as seis são `so_no_59` em dia que o 58 já cobria — pagamento lançado
+no ERP depois da exportação daquele 58. É o caso que merece olho humano, e agora
+ele aparece sozinho em vez de perdido em mil linhas.
+
+A aba abre filtrada em `divergencia`. Os cartões do topo são filtros e carregam
+a frase que explica cada classe, e uma faixa mostra **até que dia o 58 de cada
+setor chegou** — sem ela, «R$ 61 mil aguardando» é número sem causa; com ela é
+«o 58 do Play 1 está no dia 11».
 
 ### ✅ Fase 3 — vínculo de equipe sugerido pelas PESSOAS (no ar em 14/09/2026)
 
@@ -356,30 +411,37 @@ exatamente os duplicados. Num arquivo completo, nada a mais é removido.
 
 ## O passo pendente agora
 
-**Fase 2 — pendências e divergências.** A Fase 1 entregou a leitura por pessoa;
-a 2 é onde o 58 vira prévia de verdade:
+**O resto da Fase 2 — a coluna de procedência e a pendência.** A parte de
+conferência está no ar: a aba «Conferência 58 × 59» separa divergência de
+importação faltando, e as regras 5 e 6 estão fechadas.
 
-1. marcar as linhas que o 58 traz e o 59 ainda não tem (regra 4);
-2. escalar o aviso — 1ª importação pendente, 2ª crítica;
-3. a **aba de divergências** com filtro por operador e por setor (regra 6);
-4. a regra do dia corrente (regra 5).
+O que falta da Fase 2 é a outra metade, a da regra 4:
 
-Ela depende de uma coisa que ainda não existe:
+1. **uma coluna de procedência** em `analitico_recebimentos`, para separar «veio
+   do 59» de «pendente do 58». Sem ela não há onde o «pendente» morar;
+2. marcar as linhas que o 58 traz e o 59 ainda não tem;
+3. escalar o aviso — 1ª importação pendente, 2ª crítica.
 
-- **uma coluna de procedência** em `analitico_recebimentos`, para separar «veio
-  do 59» de «pendente do 58». Sem ela não há como saber o que está aguardando
-  confirmação, e o «pendente» da regra 4 não tem onde morar.
+O item 1 é **a primeira migration desta sequência que muda estrutura de uma
+tabela com dados de verdade** — todas as outras foram função de leitura. Por
+isso ela não sai sem o `ALTER TABLE` exato na frente de quem manda, antes de
+rodar.
 
-A outra dependência — o vínculo de equipe — **a Fase 3 já destravou**: a
-cobertura saiu de 50,4% para 65,7% em 14/09.
+### O que a conferência mostrou que é trabalho de cadastro, não de código
 
-O que ainda segura os 34,3% restantes é cadastro, e o maior bloco tem nome:
-**Jornada Play não tem nenhuma equipe cadastrada**, e sozinho responde por quase
-R$ 120 mil. Criadas as equipes, a aba «Equipes a vincular» propõe o resto.
+`sem_58` são **R$ 197.401,20** em dois setores que não importam o 58 nenhum dia:
 
-Vale subir mais alguns pontos antes de abrir a Fase 2, mas não é mais bloqueio:
-com 65,7% resolvido, a aba de divergências já consegue separar «isto é
-divergência» de «isto é cadastro faltando» sem afogar uma coisa na outra.
+| setor | NRs | valor |
+|---|---:|---:|
+| Jornada Play | 256 | R$ 122.371,19 |
+| Manutenção | 371 | R$ 74.622,86 |
+
+Enquanto eles não importarem, o 59 é a única fonte daquele dinheiro — o valor
+conta normalmente, mas não há com o que conferir.
+
+E o vínculo de equipe, que a Fase 3 destravou de 50,4% para 65,7%: o maior bloco
+do que sobra continua sendo **Jornada Play sem nenhuma equipe cadastrada**,
+quase R$ 120 mil. Criadas as equipes, a aba «Equipes a vincular» propõe o resto.
 
 ## Decisões tomadas nesta sessão
 
