@@ -55,6 +55,7 @@ import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types'
 const Mestre59 = lazy(() => import('./Mestre59'));
 const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
 const Mestre59Operadores = lazy(() => import('./Mestre59Operadores'));
+const Mestre59EquipesSugeridas = lazy(() => import('./Mestre59EquipesSugeridas'));
 const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
 
 /**
@@ -65,7 +66,7 @@ const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
  * conferência de super_admin, e `codigos` é onde o código do ERP amarra cada
  * setor à sua carteira do 59.
  */
-type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
+type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
 
 /**
  * Painel Diretoria.
@@ -359,10 +360,11 @@ export default function PainelDiretoria() {
     : aba === 'painel'      ? 'visao'   // o painel antigo saiu do ar na BookPlay
     : aba === 'setores'     ? 'setores'
     : aba === 'operadores'  ? 'operadores'
+    : aba === 'equipes'     ? (podeVerMestre ? 'equipes' : 'visao')
     : 'visao';
   /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
   const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores'
-    || abaVisivel === 'operadores';
+    || abaVisivel === 'operadores' || abaVisivel === 'equipes';
 
   if (!perfil) return null;
 
@@ -448,6 +450,7 @@ export default function PainelDiretoria() {
             // de um setor redireciona o dinheiro de uma carteira inteira.
             ...(podeVerMestre
               ? [{ key: 'mestre'  as const, label: 'Relatório 59', Icon: Database },
+                 { key: 'equipes' as const, label: 'Equipes a vincular', Icon: Link2 },
                  { key: 'codigos' as const, label: 'Códigos',      Icon: Link2 }]
               : []),
           ]).map(({ key, label, Icon }) => (
@@ -483,6 +486,18 @@ export default function PainelDiretoria() {
             empresaId={empresa?.id ?? ''}
             mes={mesAnalise}
             versao={versaoVisao}
+          />
+        </Suspense>
+      ) : abaVisivel === 'equipes' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          {/* O que falta vincular, com a equipe sugerida pelas PESSOAS que
+              receberam — não pelo nome do subgrupo. Escrita mediante
+              confirmação, e por isso fica junto das abas de super_admin. */}
+          <Mestre59EquipesSugeridas
+            empresaId={empresa?.id ?? ''}
+            mes={mesAnalise}
+            versao={versaoVisao}
+            aoVincular={() => setVersaoVisao(v => v + 1)}
           />
         </Suspense>
       ) : abaVisivel === 'codigos' ? (

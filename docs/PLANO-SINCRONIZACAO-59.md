@@ -240,13 +240,40 @@ Entregas:
 - **Aba de divergências** com filtro por operador e por setor (regra 6);
 - Regra do dia corrente (regra 5).
 
-### Fase 3 — vínculo automático de equipe pelo 58
+### ✅ Fase 3 — vínculo de equipe sugerido pelas PESSOAS (no ar em 14/09/2026)
 
-Quando um setor importa o 58, identificar os subgrupos e **propor** o vínculo.
-Proposta em lote, confirmada por quem manda — não vínculo calado.
+Entregue: `fn_mestre_equipes_sugeridas` e a aba **«Equipes a vincular»**.
 
-> Casar por nome não sobrevive a renomeação. É o alerta que
-> `SINCRONIZACAO-58-59.md` já registrou, e vale aqui.
+> ⚠️ **O plano original desta fase estava errado, e foi medido antes de virar
+> código.** O combinado era «o 58 do setor identifica as equipes e vincula» — o
+> que na prática vira casar `subgrupo_equipe` com `equipes.nome`. Não funciona:
+>
+> | casamento | cobertura |
+> |---|---|
+> | nome exato, dentro do setor | 3 de 34 |
+> | «contém» | 4 de 34 |
+> | **pelas pessoas que receberam** | **18 de 34** |
+>
+> E os que casam por nome trazem armadilha: `EQUIPE DANIELE` tem **dois**
+> candidatos (`DIGITAL (DANIELE)` e `MANUAL (DANIELE)`).
+
+O sinal certo é quem recebeu: essas pessoas já têm equipe no sistema. O método
+acerta onde o nome não tinha chance —
+
+| Subgrupo no 59 | Equipe | Concentração |
+|---|---|---|
+| EQUIPE DOUGLAS | **HIBRIDO** | 100% |
+| ELLEN 2°TURNO | SEGUNDO TURNO | 100% |
+| EQUIPE DANIELE | MANUAL (DANIELE) | 100% |
+| EQUIPE LUAN E GABRIELLY | Luan/ Gaby | 99,2% |
+
+Cobre **R$ 745.618,13** dos R$ 934.860,88 sem equipe. A equipe de cada pessoa vem
+de `composicao_mes` — congelada naquele mês.
+
+**Sugestão não é vínculo.** A tela pré-marca só o que é seguro (mesmo setor, 2+
+pessoas, concentração ≥ 90%); o resto aparece desmarcado com o motivo à vista.
+Com uma pessoa só, «100%» significa apenas que existe uma pessoa — e em setembro
+esses são todos casos de gente emprestada de outro setor, entre R$ 200 e R$ 600.
 
 ### Fase 4 — correção manual
 
@@ -308,17 +335,21 @@ a 2 é onde o 58 vira prévia de verdade:
 3. a **aba de divergências** com filtro por operador e por setor (regra 6);
 4. a regra do dia corrente (regra 5).
 
-Ela depende de duas coisas que ainda não existem e precisam vir antes, na ordem:
+Ela depende de uma coisa que ainda não existe:
 
 - **uma coluna de procedência** em `analitico_recebimentos`, para separar «veio
   do 59» de «pendente do 58». Sem ela não há como saber o que está aguardando
-  confirmação;
-- **o vínculo de equipe**, que hoje cobre 18 de 77 subgrupos. Enquanto metade do
-  dinheiro não tem equipe, a aba de divergências vai listar ausência de cadastro
-  como se fosse divergência — e o «não explicado» nunca chega a zero.
+  confirmação, e o «pendente» da regra 4 não tem onde morar.
 
-Por isso a **Fase 3 (vínculo automático de equipe pelo 58)** provavelmente deve
-vir antes da 2, ao contrário do que este plano dizia na primeira versão.
+A outra dependência — o vínculo de equipe — a Fase 3 destravou: a aba «Equipes a
+vincular» propõe 18 dos 34 subgrupos pendentes, cobrindo R$ 745.618,13. Aceitas
+as sugestões, a cobertura do 59 sai de **50,4%** para perto de **75%**.
+
+**Antes de abrir a Fase 2, vale rodar a Fase 3 até o fim** — aceitar as
+sugestões, vincular à mão o que sobrar, e remedir. Enquanto metade do dinheiro
+não tiver equipe, a aba de divergências vai listar ausência de cadastro como se
+fosse divergência, e o «não explicado» nunca chega a zero — que é justamente o
+campo que faz o sistema ser confiável.
 
 ## Decisões tomadas nesta sessão
 
