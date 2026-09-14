@@ -344,12 +344,12 @@ abrir o `.xlsx` no Excel e o `.html` no navegador.
 ## Andamento
 
 - **Onda 0:** não mexer (pedido do usuário).
-- **Ondas 1, 2 e 3:** implementadas em 14/09/2026, sem commit. Lint, typecheck e
-  suíte inteira (362 arquivos, 5.973 testes) passando. Conferência visual numa
-  página isolada, sem banco.
-- **Pendente de banco (1.4):** `20260914190000_chat_nomes_de_quem_ja_participou.sql`
-  está só no repositório. Até ser aplicada, o nome de quem saiu vem da leitura de
-  `perfis`, que a RLS limita ao escopo de quem olha.
+- **Ondas 1, 2 e 3:** implementadas e na `main` em 14/09/2026. Lint, typecheck e
+  suíte inteira passando. Conferência visual numa página isolada, sem banco.
+- **Banco (1.4):** `20260914190000_chat_nomes_de_quem_ja_participou.sql` aplicada
+  pelo usuário no SQL Editor em 14/09/2026 (fora do registro de
+  `schema_migrations`, como as outras do editor). A leitura de reserva em
+  `perfis` continua no front, mas deixa de ser o caminho normal.
 - **Ondas 4, 5 e 6:** não iniciadas.
 
 ## Verificação (toda onda)
