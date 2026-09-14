@@ -101,8 +101,29 @@ export function pedeAtencao(c: ClasseDivergencia): boolean {
   return c === 'divergencia';
 }
 
+/**
+ * Esta classe se resolve importando o 58?
+ *
+ * Só `aguardando_58`. `sem_58` parece a mesma coisa e não é: aqueles setores
+ * **ainda não foram integrados ao sistema de gestão**, então não existe 58 deles
+ * para importar. Chamar isso de «falta importar» manda alguém procurar um
+ * arquivo que não existe — e, pior, sugere que o número está errado quando ele
+ * está certo: o 59 é a única fonte daquele dinheiro até a integração acontecer.
+ *
+ * Em setembro/2026 são Jornada Play e Manutenção, R$ 197.401,20.
+ */
 export function pedeImportacao(c: ClasseDivergencia): boolean {
-  return c === 'sem_58' || c === 'aguardando_58';
+  return c === 'aguardando_58';
+}
+
+/**
+ * Esta classe está esperando algo que não é do dia a dia de quem olha a tela?
+ *
+ * `sem_58` espera a integração do setor, que é projeto, não tarefa. A tela
+ * mostra como estado — não como pendência de ninguém.
+ */
+export function esperaIntegracao(c: ClasseDivergencia): boolean {
+  return c === 'sem_58';
 }
 
 /** O rótulo curto de cada classe, e a frase que explica o porquê. */
@@ -135,10 +156,11 @@ export const ROTULO_CLASSE: Record<ClasseDivergencia, { curto: string; porque: s
       'importar o relatório mais recente.',
   },
   sem_58: {
-    curto: 'Sem 58 no mês',
+    curto: 'Setor não integrado',
     porque:
-      'Este setor não importou o 58 nenhum dia deste mês. Todo o valor do 59 aparece ' +
-      'sozinho por isso, e não por divergência.',
+      'Este setor ainda não foi integrado ao sistema de gestão, então não existe 58 dele ' +
+      'para importar. O 59 é a única fonte deste dinheiro, e o valor conta normalmente — ' +
+      'só não há com o que conferir até a integração acontecer.',
   },
 };
 

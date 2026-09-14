@@ -432,6 +432,81 @@ destrava sozinho a maior parte do que falta.
 Redirecionar um valor para outro setor, pessoa ou equipe. Só super admin, nunca
 duplicando, com registro de quem mudou e quando.
 
+#### ⚠️ O redirecionamento já existia — e estava pela metade (14/09/2026)
+
+Antes de construir qualquer coisa, medi o tamanho do problema e encontrei outro.
+
+**O que a Fase 4 teria de mover é pequeno.** O caso que nenhum vínculo resolve é
+gente emprestada — pessoa de um setor cobrando na carteira de outro. Em
+setembro/2026: **R$ 4.810,91 em 35 linhas, 7 pessoas** — 0,14% dos R$ 3,3
+milhões do mês. Construir uma máquina de exceção por NR, atravessando toda
+função de leitura, para mover 0,14% seria risco desproporcional.
+
+**E o mecanismo já existia.** `mestre_equipes.destino` é regra de três vias:
+
+| destino | para onde o dinheiro conta |
+|---|---|
+| `proprio` | setor da carteira (padrão) |
+| `outro_setor` | `destino_setor_id` |
+| `somente_geral` | nenhum setor — só o total da empresa |
+
+A tela `Mestre59Detalhe` deixa escolher as três. Mas **só 5 das 17 funções que
+leem `mestre_equipes` honravam `destino_setor_id`.** As outras filtravam apenas
+`<> 'somente_geral'` e deixavam `outro_setor` passar direto, caindo no setor da
+CARTEIRA — o setor de onde o dinheiro deveria ter saído.
+
+Quem usasse a opção veria o mesmo dinheiro num setor numa tela e noutro em
+outra. **Pior que o recurso não existir, porque parece que funciona.**
+
+Ninguém percebeu porque ninguém usou: das 124 linhas de `mestre_equipes` da
+BookPlay, 122 são `proprio`, 2 são `somente_geral` (Retenção) e **nenhuma** tem
+`destino_setor_id`. Armadilha armada, alcançável pela tela, nunca disparada.
+
+#### ✅ O conserto: um lugar só decide (migrations 20260914012331 … 012656)
+
+`fn_mestre_setor_resolvido(setor_do_grupo, destino, destino_setor_id)` — as três
+vias num lugar só, `IMMUTABLE` para o Postgres inlinear e não custar nada por
+linha. A regra estava repetida em 17 funções e só 5 a implementavam inteira; o
+que trava isso agora é `setorResolvido.sql.test.ts`, que falha se alguém
+reescrever `when 'outro_setor'` à mão dentro de uma função.
+
+Ligado em quatro funções: `fn_mestre_operadores_do_mes`,
+`fn_mestre_operador_detalhe`, `fn_mestre_divergencias`, `fn_analitico_pendencias`.
+
+**A mudança é inerte hoje, e isso foi provado duas vezes.** Algebricamente: com
+`destino ∈ {proprio, somente_geral}` em todas as linhas, o `case` de três vias
+reduz exatamente ao filtro antigo. Empiricamente, agosto + setembro/2026:
+
+| | |
+|---|---:|
+| linhas comparadas pela regra velha e pela nova | 69.737 |
+| linhas em que as duas discordam | **0** |
+| «no setor dele» pelos dois caminhos | R$ 13.149.666,99 |
+
+E na conferência, onde a troca foi estrutural (dois filtros viraram um): 9.519
+grupos, R$ 3.622.488,42, zero linhas só de um lado.
+
+Uma quinta função, `fn_mestre_resumo_grupos`, **não precisava**: ela é resumo
+por carteira, já tem `saiu_outro_setor` e subtrai do total, e nunca afirma para
+onde o dinheiro foi.
+
+#### ❌ Uma função ficou de fora, de propósito
+
+`fn_mestre_diferenca_detalhe` (tela «Diferença», 12.154 caracteres) continua
+seguindo a carteira na lista de NRs. Não a reescrevi, e a razão é risco:
+
+- reescrever 12 mil caracteres à mão para mudar duas CTEs transcreve o resto, e
+  é aí que erro se esconde;
+- ela tem `if not fn_user_is_super_admin() then raise` logo na entrada, então
+  não há como testá-la pelo MCP depois de aplicar — um erro de transcrição não
+  seria pego por nada;
+- os números de cabeçalho dela vêm de `fn_mestre_comparar_setores`, que **já
+  honra** o redirecionamento. Só a lista de NRs ficaria seguindo a carteira.
+
+O caminho certo para ela é uma mudança própria, revisada, ou aposentar a tela em
+favor da «Conferência 58 × 59» — que responde a mesma pergunta e já está certa.
+Fica registrado em «Em aberto».
+
 ### Fase 5 — histórico e rollback
 
 Tabela de lotes do **58** (hoje não existe — `lote_id` é só um agrupador) com
@@ -535,6 +610,13 @@ quase R$ 120 mil. Criadas as equipes, a aba «Equipes a vincular» propõe o res
 - [ ] `confirmado_em` em `analitico_recebimentos` ficou sem uso quando a
       pendência virou derivada. Ou a Fase 5 a aproveita para o histórico, ou ela
       sai num `drop column` — coluna de enfeite é dívida.
-- [ ] **Jornada Play e Manutenção não importam o 58 nenhum dia** (R$ 197.401,20
-      em setembro). Enquanto não importarem, o 59 é a única fonte daquele
-      dinheiro: o valor conta, mas não há com o que conferir.
+- [x] ~~Jornada Play e Manutenção não importam o 58~~ — **não é pendência.**
+      Esses setores ainda não foram integrados ao sistema de gestão, então não
+      existe 58 deles para importar. O 59 é a única fonte daquele dinheiro
+      (R$ 197.401,20 em setembro): o valor conta normalmente, e não há com o que
+      conferir até a integração acontecer. A aba de Conferência precisa dizer
+      isso com essas palavras, e não «falta importar».
+- [ ] `fn_mestre_diferenca_detalhe` ainda segue a carteira na lista de NRs, em
+      vez do setor de destino. Ou muda numa alteração própria e revisada, ou a
+      tela «Diferença» é aposentada em favor da «Conferência 58 × 59». Ver a
+      Fase 4.

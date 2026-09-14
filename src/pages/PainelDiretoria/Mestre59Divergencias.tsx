@@ -16,8 +16,9 @@
  *
  * Cada cartão é um filtro e carrega a frase que explica a classe. Quem chega
  * aqui vindo de «faltou R$ 122 mil no Jornada Play» precisa ler, na mesma tela,
- * que o Jornada Play não importou o 58 nenhum dia — senão a conclusão vira
- * «o sistema está errado».
+ * que o Jornada Play **ainda não foi integrado ao sistema de gestão** — não há
+ * 58 dele para importar, e o 59 é a única fonte daquele dinheiro. Sem essa
+ * frase, a conclusão vira «o sistema está errado».
  *
  * ## Esta tela só lê
  *
@@ -25,7 +26,7 @@
  * de quem tem poder para isso.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Search, Scale, Calendar, Download, Check } from 'lucide-react';
+import { AlertTriangle, Search, Scale, Calendar, Download, Building2, Check } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import {
@@ -38,6 +39,7 @@ import {
   buscarDivergencias,
   buscarResumoDivergencias,
   pedeAtencao,
+  esperaIntegracao,
   pedeImportacao,
   ROTULO_CLASSE,
   totalPorClasse,
@@ -64,7 +66,9 @@ const CORES: Record<ClasseDivergencia, string> = {
   estrutural:    'border-border/50 bg-muted/40 text-muted-foreground',
   dia_aberto:    'border-border/50 bg-muted/40 text-muted-foreground',
   aguardando_58: 'border-warning/25 bg-warning/10 text-warning',
-  sem_58:        'border-warning/25 bg-warning/10 text-warning',
+  /* Cinza, não âmbar. Setor não integrado não é pendência de ninguém: não
+     existe 58 dele para importar, e âmbar pediria uma ação que não há. */
+  sem_58:        'border-border/50 bg-muted/40 text-muted-foreground',
 };
 
 const ICONE: Record<ClasseDivergencia, typeof AlertTriangle> = {
@@ -72,7 +76,7 @@ const ICONE: Record<ClasseDivergencia, typeof AlertTriangle> = {
   estrutural:    Scale,
   dia_aberto:    Calendar,
   aguardando_58: Download,
-  sem_58:        Download,
+  sem_58:        Building2,
 };
 
 const SITUACAO: Record<Divergencia['situacao'], string> = {
@@ -216,6 +220,14 @@ export default function Mestre59Divergencias({ empresaId, mes, versao }: Props) 
                     importar
                   </span>
                 )}
+                {/* Setor não integrado não pede nada de quem está olhando: não
+                    existe 58 dele para importar. Marcar «importar» aqui mandaria
+                    procurar um arquivo que não existe. Ver `esperaIntegracao`. */}
+                {esperaIntegracao(classe) && (
+                  <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+                    integração
+                  </span>
+                )}
               </div>
               <p className="mt-1.5 font-mono text-sm font-bold tabular-nums text-foreground">
                 {formatBRL(valor)}
@@ -242,15 +254,18 @@ export default function Mestre59Divergencias({ empresaId, mes, versao }: Props) 
               const dia = ultimoDia.get(id) ?? null;
               return (
                 <span key={id}
-                  className={cn(
-                    'rounded-lg border px-2 py-1 text-[11px]',
-                    dia ? 'border-border/50 bg-muted/30 text-foreground'
-                        : 'border-warning/25 bg-warning/10 text-warning',
-                  )}
+                  title={dia
+                    ? undefined
+                    : 'Este setor ainda não foi integrado ao sistema de gestão: não existe 58 '
+                      + 'dele para importar. O 59 é a única fonte deste dinheiro.'}
+                  className="rounded-lg border border-border/50 bg-muted/30 px-2 py-1 text-[11px] text-foreground"
                 >
                   {nome}{' '}
-                  <strong className="font-mono tabular-nums">
-                    {dia ? diaCurto(dia) : 'sem 58'}
+                  <strong className={cn(
+                    'font-mono tabular-nums',
+                    !dia && 'font-sans text-muted-foreground',
+                  )}>
+                    {dia ? diaCurto(dia) : 'não integrado'}
                   </strong>
                 </span>
               );

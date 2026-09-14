@@ -36,6 +36,7 @@ vi.mock('@/lib/supabase', () => ({
 import {
   buscarDivergencias,
   buscarResumoDivergencias,
+  esperaIntegracao,
   ORDEM_CLASSE,
   pedeAtencao,
   pedeImportacao,
@@ -165,10 +166,23 @@ describe('pedeAtencao / pedeImportacao', () => {
     expect(pedem).toEqual(['divergencia']);
   });
 
-  it('falta de 58 pede importação, não conferência', () => {
-    expect(pedeImportacao('sem_58')).toBe(true);
+  it('58 atrasado pede importação, não conferência', () => {
     expect(pedeImportacao('aguardando_58')).toBe(true);
     expect(pedeImportacao('divergencia')).toBe(false);
+  });
+
+  /*
+   * `sem_58` parece «falta importar» e não é. Jornada Play e Manutenção ainda
+   * não foram integrados ao sistema de gestão: não existe 58 deles. Chamar isso
+   * de importação pendente manda alguém procurar um arquivo que não existe, e
+   * sugere que os R$ 197.401,20 estão errados quando estão certos — o 59 é a
+   * única fonte daquele dinheiro até a integração acontecer.
+   */
+  it('setor não integrado não pede importação — não há o que importar', () => {
+    expect(pedeImportacao('sem_58')).toBe(false);
+    expect(esperaIntegracao('sem_58')).toBe(true);
+    expect(esperaIntegracao('aguardando_58')).toBe(false);
+    expect(ROTULO_CLASSE.sem_58.porque).toContain('integrado');
   });
 
   /*
