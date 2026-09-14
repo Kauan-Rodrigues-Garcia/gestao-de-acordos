@@ -277,13 +277,14 @@ export interface ResultadoImportacao {
    */
   tiposPreenchidos?: number;
   /**
-   * Linhas que não foram gravadas porque aquele setor/mês já é do 59.
+   * Este setor/mês já é do relatório 59?
    *
-   * Quando é maior que zero, a importação foi **conferência, não carga**: o
-   * arquivo foi lido inteiro, mas quem manda naquele setor é o relatório 59 e
-   * o 58 não escreve por cima. Ver `fn_analitico_fonte_do_setor`.
+   * Não muda nada do que foi gravado — o 58 alimenta igual. Serve para a tela
+   * dizer que aqueles números ainda vão passar pela conferência do 59 na
+   * próxima entrada dele, que é quando a diferença de data entre as duas fontes
+   * se resolve. Ver `fn_analitico_fonte_do_setor`.
    */
-  previa?: number;
+  sincronizadoPelo59?: boolean;
   erros: string[];
 }
 
@@ -481,25 +482,39 @@ export async function importarLoteAnalitico(
   }));
 
   /*
-   * ## Onde o 59 já manda, o 58 vira prévia
+   * ## O 58 continua alimentando; o 59 reconcilia depois
    *
-   * Depois que `fn_mestre_aplicar_no_analitico` troca a fonte de um setor, o
-   * arquivo do 58 daquele setor continua sendo útil para CONFERIR — mas não
-   * pode mais gravar.
+   * Houve uma versão em que o 58 virava prévia INERTE nos setores do 59 — lia o
+   * arquivo e não gravava nada. Estava errado, e o pedido é explícito: «o 58 é
+   * pra ir atualizando os valores também, igual é hoje, porém ao entrar o 59
+   * sincroniza tudo».
    *
-   * O motivo é contagem dupla. A trava de procedência (migration
-   * 20260914010002) impede o 58 de APAGAR a linha do 59, mas não de INSERIR a
-   * dele ao lado. Nos 44 NRs (de 7.584 medidos em setembro/2026) em que as duas
-   * fontes discordam da DATA, a chave de `idx_analitico_unicidade` é outra —
-   * então entrariam duas linhas para o mesmo pagamento, e o dinheiro seria
-   * contado duas vezes até a promoção seguinte do 59.
+   * Então o 58 segue sendo a alimentação rápida do dia, importada por setor, e
+   * o 59 é a autoridade que corrige tudo quando chega — pelo gatilho
+   * `trg_mestre_aplicar_no_analitico` (migration 20260914…), que reaplica a
+   * projeção sobre cada setor do 59 no instante em que o lote é promovido.
    *
-   * Quem decide é o banco, por mês, e a resposta é derivada: existe linha com
-   * `procedencia = 'relatorio_59'` naquele setor/mês? Então ele é do 59. Não há
-   * flag para alguém esquecer de ligar.
+   * ## O que isso custa, medido
+   *
+   * Entre uma importação do 58 e a sincronização seguinte pode nascer linha
+   * dobrada: são os NRs em que as duas fontes discordam da DATA, porque aí a
+   * chave de `idx_analitico_unicidade` é outra e o 58 insere ao lado em vez de
+   * colidir.
+   *
+   *   grupos com data divergente ... 50
+   *   valor exposto ................ R$ 40.903,78
+   *   proporção dos grupos ......... 0,6%
+   *
+   * E some sozinho na próxima entrada do 59, que apaga e regrava. Por isso a
+   * sincronização é gatilho e não botão: se dependesse de alguém lembrar de
+   * clicar, esses R$ 40 mil virariam permanentes.
+   *
+   * O que se consulta aqui não muda o que é gravado — serve só para a tela
+   * dizer, depois, que aqueles números ainda passam pelo 59.
    */
-  const mesesDoArquivo = [...new Set(todasAsLinhas.map(r => r.mes_referencia))];
-  const mesesDo59 = new Set<string>();
+  const rows = todasAsLinhas;
+  const mesesDoArquivo = [...new Set(rows.map(r => r.mes_referencia))];
+  let sincronizadoPelo59 = false;
   if (setorImportacaoId) {
     for (const mes of mesesDoArquivo) {
       const { data, error } = await rpcSemTipo<string>('fn_analitico_fonte_do_setor', {
@@ -507,26 +522,11 @@ export async function importarLoteAnalitico(
         p_mes: String(mes).slice(0, 7),
         p_setor_id: setorImportacaoId,
       });
-      /* Erro aqui não pode virar gravação: na dúvida sobre quem manda, o 58
-         escreveria por cima do 59 e duplicaria. Mas também não pode travar a
-         importação de quem nunca trocou a fonte — por isso o erro só é
-         registrado, e o mês segue gravável. */
+      /* Falha aqui é cosmética: o aviso não aparece e a importação segue igual.
+         Não pode virar erro — a gravação não depende desta resposta. */
       if (error) console.warn('[analitico] fonte do setor não verificada:', error.message);
-      else if (data === 'relatorio_59') mesesDo59.add(String(mes));
+      else if (data === 'relatorio_59') sincronizadoPelo59 = true;
     }
-  }
-
-  const rows = todasAsLinhas.filter(r => !mesesDo59.has(String(r.mes_referencia)));
-  const previa = todasAsLinhas.length - rows.length;
-
-  /* Arquivo inteiro de um setor que já é do 59: nada a fazer além de dizer
-     que foi conferência. Seguir daqui rodaria a sincronização mensal sobre um
-     conjunto vazio, e ela trata vazio como «o mês encolheu». */
-  if (!rows.length) {
-    return {
-      inseridos: 0, duplicados: 0, atualizados: 0, removidos: 0,
-      previa, erros: [],
-    };
   }
 
   const CHUNK = 200;
@@ -583,7 +583,7 @@ export async function importarLoteAnalitico(
         /* Linhas lidas e NÃO gravadas porque aquele mês já é do 59. Fica no
            log para a pergunta «importei e o número não mudou, por quê?» ter
            resposta sem precisar reproduzir a importação. */
-        ...(previa > 0 ? { linhas_em_previa: previa, meses_do_59: [...mesesDo59] } : {}),
+        sincronizado_pelo_59: sincronizadoPelo59,
         primeiros_erros: erros.slice(0, 20),
       },
       usuarioId: importadoPorId,
@@ -757,7 +757,7 @@ export async function importarLoteAnalitico(
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
     registrarResumo(false);
-    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, previa, erros };
+    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
@@ -873,7 +873,7 @@ export async function importarLoteAnalitico(
   }
 
   registrarResumo(true);
-  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, previa, erros };
+  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, erros };
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────

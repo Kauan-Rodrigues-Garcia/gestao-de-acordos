@@ -447,22 +447,20 @@ export function useAnaliticoImport() {
     });
 
     /*
-     * O setor já é do 59: a importação foi CONFERÊNCIA, não carga.
+     * O setor é sincronizado pelo 59.
      *
-     * Este aviso vem primeiro e dura mais que os outros. Sem ele, a pessoa
-     * importa, vê «0 linhas novas», e conclui que o sistema quebrou ou que o
-     * arquivo estava errado — quando na verdade tudo funcionou como devia.
-     *
-     * Não é `toast.error`: nada deu errado. Também não é `success` discreto:
-     * é a informação mais importante daquela importação.
+     * A importação gravou normalmente — o 58 continua sendo a alimentação
+     * rápida do dia. O aviso existe porque, até o 59 entrar de novo, os NRs em
+     * que as duas fontes discordam da data podem aparecer duas vezes (50
+     * grupos, R$ 40.903,78 medidos em setembro). Quem vir um número estranho
+     * nessa janela precisa saber que ele se resolve sozinho, em vez de abrir
+     * chamado.
      */
-    const emPrevia = res.previa ?? 0;
-    if (emPrevia > 0) {
+    if (res.sincronizadoPelo59) {
       toast.info(
-        `Conferência: ${emPrevia} linha${emPrevia !== 1 ? 's' : ''} ` +
-        `${emPrevia !== 1 ? 'foram lidas' : 'foi lida'} e nada foi gravado. ` +
-        'Os números deste setor vêm do relatório 59 — o 58 aqui serve para comparar.',
-        { duration: 12000 },
+        'Valores gravados. Este setor é sincronizado pelo relatório 59 — '
+        + 'na próxima entrada dele os números são conferidos e ajustados.',
+        { duration: 9000 },
       );
     }
 

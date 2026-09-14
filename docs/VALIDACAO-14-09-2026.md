@@ -1,5 +1,27 @@
 # Validação de 14/09/2026 — a troca de fonte e a equipe do líder
 
+> ## ⚠️ Correção de desenho, no mesmo dia
+>
+> A primeira versão fazia o 58 virar **prévia inerte** nos setores do 59: lia o
+> arquivo e não gravava nada. Estava errado. O pedido é outro:
+>
+> > «o 58 é pra ir atualizando os valores também, igual é hoje, porém ao entrar
+> > o 59 sincroniza tudo»
+>
+> Corrigido em `20260914110614`. O 58 voltou a alimentar; o 59 passou a
+> sincronizar **por gatilho**, no instante em que o lote é promovido.
+>
+> **O que isso custa:** entre uma importação do 58 e a entrada seguinte do 59,
+> os NRs em que as duas fontes discordam da data podem aparecer duas vezes —
+> **50 grupos, R$ 40.903,78, 0,6% dos grupos**. Some sozinho na sincronização
+> seguinte.
+>
+> É por isso que a sincronização é gatilho e não botão: se dependesse de alguém
+> lembrar de clicar, esses R$ 40 mil virariam permanentes.
+>
+> Ciclo completo medido (promoção → sincronizar 10 setores → 301 notificações):
+> **2.689 ms**, e idempotente.
+
 O que foi verificado depois de trocar todos os setores para o relatório 59, e
 duas perguntas que foram feitas junto: **o valor do líder conta para a equipe
 dele?** e **algum caminho do Painel Diretoria deixa isso passar despercebido?**
