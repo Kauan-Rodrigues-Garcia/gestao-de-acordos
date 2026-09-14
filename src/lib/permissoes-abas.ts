@@ -111,6 +111,16 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     id: 'painel_diretoria', rotulo: 'Painel Diretoria',
     interruptor: 'ver_painel_diretoria', escopo: 'painel_diretoria',
     descricao: 'Indicadores estratégicos e alcance da diretoria.', grupos: ['Painel Diretoria'],
+    /*
+     * A chave do robô mora aqui porque o relatório 59 mora aqui — é desta aba
+     * que ele é importado à mão, e é ela que mostra o histórico das
+     * importações dele.
+     *
+     * Repare que ela NÃO segue o interruptor da aba: quem enxerga o Painel
+     * Diretoria não ganha a chave junto. Ela é explícita, e é ligada
+     * nominalmente para a conta do robô. Ver `scripts/robo59/README.md`.
+     */
+    chaves: ['mestre_importar_automatico'],
   },
   {
     id: 'usuarios', rotulo: 'Usuários', interruptor: 'ver_usuarios', escopo: 'usuarios',

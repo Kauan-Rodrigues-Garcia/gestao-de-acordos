@@ -80,6 +80,35 @@ function chavesDeEscopoResolvidas(): string[] {
   return achadas;
 }
 
+/**
+ * As chaves fiscalizadas dentro do BANCO.
+ *
+ * Nem toda permissão é lida pela tela. `mestre_importar_automatico` só existe
+ * para uma conta de robô, e quem a exige são as três RPCs de importação do 59:
+ *
+ *     if not (fn_user_is_super_admin() or fn_user_tem('mestre_importar_automatico'))
+ *
+ * Uma chave assim faz alguma coisa — só que no Postgres. Contá-la como
+ * decorativa obrigaria a abrir uma exceção no teste, e exceção é como o
+ * contrato começa a afrouxar. A varredura passa a olhar as migrations, que é
+ * onde a fiscalização mora de verdade.
+ */
+function chavesFiscalizadasNoBanco(): Set<string> {
+  const dir = path.resolve(RAIZ_SRC, '..', 'supabase', 'migrations');
+  const achadas = new Set<string>();
+  if (!fs.existsSync(dir)) return achadas;
+
+  for (const arquivo of fs.readdirSync(dir)) {
+    if (!arquivo.endsWith('.sql')) continue;
+    const sql = fs.readFileSync(path.join(dir, arquivo), 'utf8');
+    // `fn_user_tem('chave')`, com aspas simples do SQL ou dobradas do plpgsql.
+    for (const m of sql.matchAll(/fn_user_tem\(\s*'{1,2}([a-z_]+)'{1,2}\s*\)/g)) {
+      achadas.add(m[1]);
+    }
+  }
+  return achadas;
+}
+
 /** Toda chave fiscalizada no app, venha de onde vier. */
 function chavesFiscalizadas(): Set<string> {
   const achadas = new Set<string>();
@@ -95,7 +124,20 @@ function chavesFiscalizadas(): Set<string> {
 
 describe('contrato: catálogo ↔ código', () => {
   it('toda permissão do catálogo é consultada em algum lugar do app', () => {
-    const fiscalizadas = chavesFiscalizadas();
+    /*
+     * O banco entra AQUI e não em `chavesFiscalizadas()`.
+     *
+     * A pergunta deste teste é «alguém exige esta chave?», e o Postgres exige
+     * tanto quanto o React. Mas o teste seguinte pergunta o contrário — «toda
+     * chave exigida existe no catálogo?» — e ali as migrations não servem: elas
+     * são histórico, e citam chaves que foram removidas do catálogo depois (as
+     * de ouvidoria, por exemplo). Somar as duas fontes nos dois testes fazia o
+     * segundo acusar decisões antigas como se fossem defeito de hoje.
+     */
+    const fiscalizadas = new Set([
+      ...chavesFiscalizadas(),
+      ...chavesFiscalizadasNoBanco(),
+    ]);
     const decorativas = CHAVES_PERMISSAO.filter(k => !fiscalizadas.has(k));
 
     expect(

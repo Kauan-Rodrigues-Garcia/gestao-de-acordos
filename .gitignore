@@ -111,3 +111,7 @@ work/
 # --- Tokens de apoio gerados por script (nunca versionar) ---
 .tok.tmp
 *.tok.tmp
+
+# Robô do 59: o bundle é gerado, e o .env tem senha
+scripts/robo59/dist/
+scripts/robo59/.env

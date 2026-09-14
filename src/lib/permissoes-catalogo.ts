@@ -138,6 +138,21 @@ export const PERMISSOES_EXPLICITAS = [
    * chega por herança de acesso total. Alguém precisa ligar.
    */
   'numeros_configurar',
+  /*
+   * A chave do robô que sobe o relatório 59 de hora em hora.
+   *
+   * Mesma família das três acima. Ela abre as portas de `abrir_lote`,
+   * `inserir_linhas` e `promover_lote` — e promover um lote troca o retrato do
+   * mês inteiro, para todas as telas do sistema de uma vez.
+   *
+   * Não é coisa que um cargo deva ganhar junto com outras vinte, nem que o
+   * acesso total do administrador deva conceder de passagem. Alguém liga
+   * nominalmente, para uma conta que existe só para isso — e é essa deliberação
+   * que torna aceitável a senha dela morar num PC de trabalho.
+   *
+   * Ver `scripts/robo59/README.md`.
+   */
+  'mestre_importar_automatico',
 ] as const;
 
 /** A chave precisa de concessão nominal, mesmo para quem tem acesso total? */
@@ -713,6 +728,25 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'importar_diario', label: 'Importar Recebimento diário',
     descricao: 'Subir o relatório diário de recebimentos do ERP',
     grupo: 'Importações', padrao: LIDERANCA,
+  },
+  {
+    /*
+     * A chave do robô que sobe o relatório 59 de hora em hora.
+     *
+     * Existe para a conta do robô NÃO precisar ser super_admin. As três portas
+     * da importação (`abrir_lote`, `inserir_linhas`, `promover_lote`) passaram
+     * a aceitar `fn_user_is_super_admin() OR fn_user_tem(esta chave)`.
+     *
+     * É EXPLÍCITA, e essa é a parte que importa: promover um lote troca o
+     * retrato do mês inteiro, e não é coisa que um cargo deva ganhar junto com
+     * outras vinte. Alguém liga nominalmente, para uma conta que existe só para
+     * isso — e é o que torna seguro deixar aquela senha num PC de trabalho.
+     *
+     * Ver `scripts/robo59/README.md`.
+     */
+    key: 'mestre_importar_automatico', label: 'Importar relatório mestre automaticamente',
+    descricao: 'Conta de robô: subir o relatório 59 sem ser super admin. Nada além disso',
+    grupo: 'Importações', tenants: ['bookplay'], padrao: {},
   },
 
   // ── Gestão de pessoas ────────────────────────────────────────────────────

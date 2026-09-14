@@ -70,9 +70,21 @@ function catalogoSql(): LinhaSql[] {
    */
   const removidas = new Set<string>();
   for (const { sql } of definicoes.slice(baseIndex + 1)) {
-    const inicio = sql.indexOf('SELECT * FROM (VALUES');
-    const fim = sql.indexOf('AS novas(chave');
-    if (inicio >= 0 && fim > inicio) corpos.push(sql.slice(inicio, fim));
+    /*
+     * TODOS os blocos do arquivo, e não só o primeiro.
+     *
+     * Acrescentar uma chave à cadeia é congelar o catálogo atual numa função
+     * `_antes_` e redefinir a de cima unindo o que entrou — então a migration
+     * tem DOIS `VALUES`: o retrato do que já existia e a chave nova, nessa
+     * ordem.
+     *
+     * Ler só o primeiro fazia o teste enxergar o retrato e perder exatamente o
+     * que a migration acrescentou. Foi assim que `mestre_importar_automatico`
+     * apareceu como «no TypeScript e não no SQL» estando nos dois.
+     */
+    for (const m of sql.matchAll(/SELECT \* FROM \(VALUES[\s\S]*?AS novas\(chave/g)) {
+      corpos.push(m[0]);
+    }
 
     for (const m of sql.matchAll(/--\s*REMOVE_PERMISSOES:\s*(.+)/g)) {
       for (const chave of m[1].split(',')) removidas.add(chave.trim());
