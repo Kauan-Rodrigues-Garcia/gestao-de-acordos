@@ -509,12 +509,58 @@ Fica registrado em «Em aberto».
 
 ### Fase 5 — histórico e rollback
 
-Tabela de lotes do **58** (hoje não existe — `lote_id` é só um agrupador) com
-snapshot do que foi removido, e o histórico unificado dos dois relatórios com o
-botão de voltar.
+- [x] **Histórico unificado dos dois relatórios** — no ar em 14/09/2026;
+- [ ] Snapshot do que a importação do 58 remove (sem ele não há rollback);
+- [ ] O botão de voltar.
 
-> Sem o snapshot não há rollback do 58: a importação apaga e nada guarda o que
-> apagou.
+#### ✅ O histórico (migration 20260914014857)
+
+`fn_importacoes_historico`, aba **«Histórico de importações»** no Painel
+Diretoria, super_admin. Só leitura.
+
+**O plano dizia «criar tabela de lotes do 58». Não precisou.** Ele supunha que
+o histórico do 58 não existia, porque `lote_id` em `analitico_recebimentos` é só
+um agrupador. Medido antes de construir, `logs_sistema` já guardava:
+
+| | |
+|---|---:|
+| `importacao_concluida` | 1.416 eventos, desde 12/08/2026 |
+| `importacao_falhou` | 34 eventos |
+| linhas removidas, somadas | 2.659 |
+
+Na BookPlay: **463 importações, 26 pessoas, 12 falhas.** Cada evento já tinha
+quem, quando, o arquivo, as contagens e os erros.
+
+Reconstruir lotes a partir de `analitico_recebimentos` teria sido **pior**:
+mostraria só o que sobreviveu, não o que aconteceu — e lote cujas linhas foram
+todas substituídas depois é justamente o que mais interessa olhar.
+
+As duas origens entram na mesma linha do tempo sem fingir que têm a mesma forma:
+
+| | 58 | 59 |
+|---|---|---|
+| unidade | uma importação, de um setor | um lote, do mês inteiro |
+| frequência | várias por dia, por setor | uma por arquivo novo |
+| versionamento | não tem | `aberto` → `vigente` → `substituido` |
+
+Por isso o 58 traz inseridos/removidos e o 59 traz valor/estado. Onde a pergunta
+não se faz àquela origem, a célula mostra «—» — **nunca zero**, que seria uma
+afirmação falsa.
+
+Importação do 58 que removeu **10 linhas ou mais** vem marcada em vermelho. É a
+régua de `remocaoPrevista.ts`, e o caso que a fundou aparece na lista: 413
+linhas e R$ 175.768,38 do Receptivo, 13/09/2026, por um export salvo da manhã do
+dia 11.
+
+#### ❌ O rollback não existe, e a tela diz isso
+
+A aba tem um aviso explícito: **ainda não dá para voltar uma importação**. Não é
+limitação de tela — a importação do 58 apaga as linhas ausentes do arquivo e
+**nada guarda o que apagou**. Foram 2.659 linhas entre agosto e setembro, e elas
+não existem mais em lugar nenhum.
+
+Um botão de voltar hoje seria um botão que mente. O que falta é o registro do
+que sai, e é a parte 2 desta fase — a única que precisa de estrutura nova.
 
 ### Fase 6 — travar o mês fechado
 
@@ -602,21 +648,88 @@ quase R$ 120 mil. Criadas as equipes, a aba «Equipes a vincular» propõe o res
 
 ## Em aberto
 
+Tudo que ficou para trás, num lugar só. Cada item diz **o que é**, **por que
+ficou** e **como verificar** se ainda importa — porque «em aberto» sem como
+conferir vira lista que ninguém lê.
+
+### Dívida técnica que eu deixei de propósito
+
+#### 1. `fn_mestre_diferenca_detalhe` não segue o setor de destino
+
+**O que é.** A tela «Diferença» (`Mestre59Diferenca.tsx`) lista os NRs seguindo
+o setor da **carteira**, e não o setor de **destino** do subgrupo. As outras
+quatro funções foram corrigidas na Fase 4; esta não.
+
+**Por que ficou.** Três razões, e as três continuam valendo:
+- são 12.154 caracteres, e a mudança real são duas CTEs — transcrever o resto é
+  onde erro se esconde;
+- ela começa com `if not fn_user_is_super_admin() then raise`, então não há como
+  testá-la pelo MCP depois de aplicar: um erro de transcrição não seria pego por
+  nada;
+- os números de cabeçalho dela vêm de `fn_mestre_comparar_setores`, que **já
+  honra** o redirecionamento. Só a lista de NRs ficaria torta.
+
+**Como verificar se importa.** Só passa a importar quando alguém usar
+`destino = 'outro_setor'`. Enquanto esta consulta devolver zero, o defeito é
+teórico:
+
+```sql
+select count(*) from mestre_equipes
+ where destino = 'outro_setor' or destino_setor_id is not null;
+```
+
+**As duas saídas.** Ou uma alteração própria e revisada, ou aposentar a tela em
+favor da «Conferência 58 × 59», que responde a mesma pergunta e já está certa.
+
+#### 2. `confirmado_em` está sem uso
+
+**O que é.** Coluna em `analitico_recebimentos`, criada na `20260914010002`.
+
+**Por que ficou.** Eu a propus para carimbar a confirmação do 59, e a medição
+feita logo depois mostrou que derivar é mais barato (92 ms contra 289) **e** mais
+correto — estorno no ERP faz a pendência voltar, e o carimbo diria «confirmado»
+para sempre. A coluna é inofensiva: nullable, nada escreve nela.
+
+**Como verificar.** `select count(*) from analitico_recebimentos where
+confirmado_em is not null;` — se continuar zero depois da Fase 5, ela não achou
+uso e deve sair num `drop column`. Coluna de enfeite é dívida.
+
+#### 3. A exceção por NR da Fase 4 não foi construída
+
+**O que é.** Redirecionar **uma linha** (não um subgrupo inteiro) para outro
+setor, pessoa ou equipe.
+
+**Por que ficou.** Medido: o caso que nenhum vínculo resolve — gente emprestada —
+é **R$ 4.810,91 em 35 linhas, 7 pessoas**, 0,14% do mês. Uma máquina de exceção
+por NR atravessando toda função de leitura, para mover 0,14%, é risco
+desproporcional. O redirecionamento **por subgrupo** já funciona e cobre o caso
+sistemático.
+
+**Como verificar se cresceu.** A consulta de `fn_mestre_emprestados`, ou:
+
+```sql
+-- emprestado: pessoa cujo setor difere do setor da carteira onde cobrou
+-- (setembro/2026: 35 linhas, 7 pessoas, R$ 4.810,91)
+```
+
+Se esse número virar dezenas de milhares de reais, a exceção por NR passa a se
+pagar.
+
+### Decisões de cadastro que são de quem manda
+
 - [ ] `COBRANÇA - GERAL` (R$ 341 mil, 9 operadores): vincula a um setor, ou é
       «somente geral» como a Retenção?
 - [ ] As 105 cobradoras sem perfil: são gente que saiu, de outra empresa, ou
       cadastro em falta? Muda se a solução é vincular ou rotular.
 - [ ] O fechamento do mês é automático à meia-noite do dia 1º, ou tem um botão?
-- [ ] `confirmado_em` em `analitico_recebimentos` ficou sem uso quando a
-      pendência virou derivada. Ou a Fase 5 a aproveita para o histórico, ou ela
-      sai num `drop column` — coluna de enfeite é dívida.
-- [x] ~~Jornada Play e Manutenção não importam o 58~~ — **não é pendência.**
+      (Decide a Fase 6.)
+
+### Resolvido — fica registrado para não voltar como dúvida
+
+- [x] ~~Jornada Play e Manutenção não importam o 58~~ — **não era pendência.**
       Esses setores ainda não foram integrados ao sistema de gestão, então não
       existe 58 deles para importar. O 59 é a única fonte daquele dinheiro
       (R$ 197.401,20 em setembro): o valor conta normalmente, e não há com o que
-      conferir até a integração acontecer. A aba de Conferência precisa dizer
-      isso com essas palavras, e não «falta importar».
-- [ ] `fn_mestre_diferenca_detalhe` ainda segue a carteira na lista de NRs, em
-      vez do setor de destino. Ou muda numa alteração própria e revisada, ou a
-      tela «Diferença» é aposentada em favor da «Conferência 58 × 59». Ver a
-      Fase 4.
+      conferir até a integração acontecer. A aba de Conferência diz isso com
+      essas palavras desde 14/09/2026 — classe «Setor não integrado», selo cinza
+      e não âmbar.

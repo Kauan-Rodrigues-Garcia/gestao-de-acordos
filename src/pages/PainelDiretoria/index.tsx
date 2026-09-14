@@ -5,7 +5,7 @@ import {
   TrendingUp, DollarSign, BarChart3,
   Building2, RefreshCw, CreditCard, Database, Link2, Users,
   TrendingDown, Target, Activity, PieChart,
-  AlertCircle, CheckCircle2, Clock, CalendarClock, Scale,
+  AlertCircle, CheckCircle2, Clock, CalendarClock, Scale, History,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -57,6 +57,7 @@ const CodigosDeSetor = lazy(() => import('./CodigosDeSetor'));
 const Mestre59Operadores = lazy(() => import('./Mestre59Operadores'));
 const Mestre59EquipesSugeridas = lazy(() => import('./Mestre59EquipesSugeridas'));
 const Mestre59Divergencias = lazy(() => import('./Mestre59Divergencias'));
+const Mestre59Historico = lazy(() => import('./Mestre59Historico'));
 const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
 
 /**
@@ -68,7 +69,7 @@ const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
  * setor à sua carteira do 59.
  */
 type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencias'
-  | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
+  | 'historico' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
 
 /**
  * Painel Diretoria.
@@ -364,11 +365,12 @@ export default function PainelDiretoria() {
     : aba === 'operadores'  ? 'operadores'
     : aba === 'equipes'     ? (podeVerMestre ? 'equipes' : 'visao')
     : aba === 'divergencias' ? 'divergencias'
+    : aba === 'historico'    ? (podeVerMestre ? 'historico' : 'visao')
     : 'visao';
   /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
   const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores'
     || abaVisivel === 'operadores' || abaVisivel === 'equipes'
-    || abaVisivel === 'divergencias';
+    || abaVisivel === 'divergencias' || abaVisivel === 'historico';
 
   if (!perfil) return null;
 
@@ -459,6 +461,10 @@ export default function PainelDiretoria() {
             ...(podeVerMestre
               ? [{ key: 'mestre'  as const, label: 'Relatório 59', Icon: Database },
                  { key: 'equipes' as const, label: 'Equipes a vincular', Icon: Link2 },
+                 // Histórico mostra QUEM importou o quê — inclusive as
+                 // importações que apagaram linhas. É informação de auditoria,
+                 // e fica com as outras de super_admin pelo mesmo motivo.
+                 { key: 'historico' as const, label: 'Histórico de importações', Icon: History },
                  { key: 'codigos' as const, label: 'Códigos',      Icon: Link2 }]
               : []),
           ]).map(({ key, label, Icon }) => (
@@ -502,6 +508,16 @@ export default function PainelDiretoria() {
               para que importação faltando e dia ainda aberto não apareçam como
               se fossem divergência. Ver `divergencias.service.ts`. */}
           <Mestre59Divergencias
+            empresaId={empresa?.id ?? ''}
+            mes={mesAnalise}
+            versao={versaoVisao}
+          />
+        </Suspense>
+      ) : abaVisivel === 'historico' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          {/* Quem importou o quê, quando, e o que deu errado — os dois
+              relatórios na mesma linha do tempo. Ver `historico.service.ts`. */}
+          <Mestre59Historico
             empresaId={empresa?.id ?? ''}
             mes={mesAnalise}
             versao={versaoVisao}
