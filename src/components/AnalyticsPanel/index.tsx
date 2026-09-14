@@ -217,9 +217,11 @@ export function AnalyticsPanel({
   const usarAnalitico = temAnalitico && analiticoDash.dbAtiva;
 
   // ── Contribuição Receptivo (BookPlay) ──────────────────────────────────────
-  // Valor digitado à mão por setor (`contribuicao_receptivo`, 20260730a). Não
-  // vem no relatório: soma POR CIMA do acumulado, como já faz o card de setor
-  // do Painel Líder. O dashboard ignorava esse dinheiro por completo.
+  // O Integral que o Receptivo cobrou para cada setor — do 59 desde 14/09/2026
+  // (antes, digitado em `contribuicao_receptivo`). Não está nas linhas do setor
+  // no analítico: soma POR CIMA no escopo de setor, como o card de setor do
+  // Painel Líder. No escopo de empresa não soma — já está no total do Receptivo
+  // (ver `receptivoDoEscopo`).
   const [receptivoPorSetor, setReceptivoPorSetor] = useState<Record<string, number>>({});
   useEffect(() => {
     if (isPP || !isBookplay || !empresa?.id) { setReceptivoPorSetor({}); return; }

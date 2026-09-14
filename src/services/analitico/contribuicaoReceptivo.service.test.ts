@@ -61,14 +61,26 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { from: vi.fn((t: string) => createBuilder(t)) },
 }));
 
+// O 59: o Integral que outro setor cobrou para cada setor. `null` = sem lote no mês.
+const { mockIntegral } = vi.hoisted(() => ({ mockIntegral: vi.fn() }));
+vi.mock('@/services/mestre/diretoriaSetores.service', () => ({
+  buscarIntegralRecebidoPorSetor: (...args: unknown[]) => mockIntegral(...args),
+}));
+
 import {
   buscarContribuicoesReceptivo,
   salvarContribuicaoReceptivo,
+  salvarMetaContribuicaoReceptivo,
   receptivoDoEscopo,
   receptivoPreenchido,
 } from './contribuicaoReceptivo.service';
 
-describe('receptivoPreenchido — card zerado não aparece', () => {
+/*
+ * Desde 14/09/2026 o card é alimentado pelo 59: ele aparece quando existe valor
+ * para mostrar, e só então. Meta sozinha não o faz aparecer — sem dinheiro do
+ * Receptivo no setor, não há contribuição a acompanhar.
+ */
+describe('receptivoPreenchido — só aparece com valor', () => {
   it('nunca preenchido não aparece', () => {
     expect(receptivoPreenchido(undefined)).toBe(false);
     expect(receptivoPreenchido(null)).toBe(false);
@@ -78,12 +90,13 @@ describe('receptivoPreenchido — card zerado não aparece', () => {
     expect(receptivoPreenchido({ acumulado: 0, meta: 0 })).toBe(false);
   });
 
-  it('só a meta já conta como preenchido', () => {
-    expect(receptivoPreenchido({ acumulado: 0, meta: 5_000 })).toBe(true);
+  it('meta sozinha, sem valor, não aparece', () => {
+    expect(receptivoPreenchido({ acumulado: 0, meta: 5_000 })).toBe(false);
   });
 
-  it('acumulado sem meta aparece', () => {
+  it('com valor aparece, com ou sem meta', () => {
     expect(receptivoPreenchido({ acumulado: 1_234.5, meta: 0 })).toBe(true);
+    expect(receptivoPreenchido({ acumulado: 1_234.5, meta: 5_000 })).toBe(true);
   });
 });
 
@@ -96,6 +109,9 @@ beforeEach(() => {
   currentCall    = null;
   nextResult     = { data: null, error: null };
   lancarNoAwait  = false;
+  // Padrão: mês sem lote do 59 — o comportamento antigo, valor digitado.
+  mockIntegral.mockReset();
+  mockIntegral.mockResolvedValue(null);
 });
 
 // ── buscarContribuicoesReceptivo ────────────────────────────────────────────
@@ -127,8 +143,8 @@ describe('buscarContribuicoesReceptivo', () => {
 
     expect(dbAtiva).toBe(true);
     expect(porSetor).toEqual({
-      s1: { acumulado: 1000,  meta: 5000 },
-      s2: { acumulado: 250.5, meta: 0 },
+      s1: { acumulado: 1000,  meta: 5000, origem: 'manual' },
+      s2: { acumulado: 250.5, meta: 0,    origem: 'manual' },
     });
   });
 
@@ -151,6 +167,40 @@ describe('buscarContribuicoesReceptivo', () => {
     nextResult = { data: [], error: null };
     const { porSetor } = await buscarContribuicoesReceptivo(EMPRESA, MES);
     expect(porSetor).toEqual({});
+  });
+
+  describe('mês com o 59: o valor vem do relatório, a meta continua do líder', () => {
+    it('acumulado = Integral cobrado por outro setor para este; o digitado é ignorado', async () => {
+      mockIntegral.mockResolvedValue({ s1: 3_936.55, s3: 800 });
+      nextResult = {
+        data: [
+          { setor_id: 's1', acumulado: 9_999, meta: 5_000 },
+          { setor_id: 's2', acumulado: 250,   meta: 1_000 },
+        ],
+        error: null,
+      };
+
+      const { porSetor, do59 } = await buscarContribuicoesReceptivo(EMPRESA, MES);
+
+      expect(do59).toBe(true);
+      expect(porSetor).toEqual({
+        s1: { acumulado: 3_936.55, meta: 5_000, origem: 'relatorio_59' },
+        // O 59 não tem nada para o s2: o digitado não volta a somar.
+        s2: { acumulado: 0,        meta: 1_000, origem: 'relatorio_59' },
+        s3: { acumulado: 800,      meta: 0,     origem: 'relatorio_59' },
+      });
+    });
+
+    it('com a tabela ausente, o 59 continua valendo', async () => {
+      mockIntegral.mockResolvedValue({ s1: 500 });
+      nextResult = { data: null, error: { message: 'relation "public.contribuicao_receptivo" does not exist' } };
+
+      const { porSetor, dbAtiva, do59 } = await buscarContribuicoesReceptivo(EMPRESA, MES);
+
+      expect(dbAtiva).toBe(false);
+      expect(do59).toBe(true);
+      expect(porSetor.s1).toEqual({ acumulado: 500, meta: 0, origem: 'relatorio_59' });
+    });
   });
 
   it('migration pendente → dbAtiva false, sem ruído no console', async () => {
@@ -266,6 +316,32 @@ describe('salvarContribuicaoReceptivo', () => {
   });
 });
 
+// ── salvarMetaContribuicaoReceptivo ─────────────────────────────────────────
+
+describe('salvarMetaContribuicaoReceptivo — o lápis só mexe na meta', () => {
+  it('upsert sem a coluna acumulado: o valor vem do 59 e o antigo fica intacto', async () => {
+    nextResult = { data: null, error: null };
+
+    const ok = await salvarMetaContribuicaoReceptivo({
+      empresaId: EMPRESA, setorId: SETOR, mes: MES, meta: 8_000, atualizadoPor: 'user-9',
+    });
+
+    expect(ok).toBe(true);
+    expect(calls[0].operation).toBe('upsert');
+    expect(calls[0].payload).toEqual({
+      empresa_id: EMPRESA, setor_id: SETOR, mes: MES, meta: 8_000, atualizado_por: 'user-9',
+    });
+    expect(calls[0].upsertOpts).toEqual({ onConflict: 'empresa_id,setor_id,mes' });
+  });
+
+  it('devolve false quando o banco recusa', async () => {
+    nextResult = { data: null, error: { message: 'new row violates row-level security policy' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await salvarMetaContribuicaoReceptivo({ empresaId: EMPRESA, setorId: SETOR, mes: MES, meta: 1 })).toBe(false);
+    warn.mockRestore();
+  });
+});
+
 // ── receptivoDoEscopo ────────────────────────────────────────────────────────
 //
 // Bug de 05/08/2026: o valor do card do Receptivo (do SETOR, digitado à mão)
@@ -295,12 +371,19 @@ describe('receptivoDoEscopo', () => {
     })).toBe(3936.55);
   });
 
-  it('visão de empresa soma todos os setores', () => {
+  /*
+   * 14/09/2026: a contribuição é o Integral que o Receptivo cobrou PARA outro
+   * setor, e esse dinheiro já está no total do próprio Receptivo. Somar no
+   * setor que recebeu é certo; somar de novo no total da empresa contaria a
+   * mesma cobrança duas vezes — é a regra do total da empresa no Painel
+   * Diretoria («sem a 2ª perna do Integral»).
+   */
+  it('visão de empresa NÃO soma: o dinheiro já está no total do Receptivo', () => {
     expect(receptivoDoEscopo({
       escopo: { tipo: 'empresa' },
       porSetor,
       veDadosDeOutros: true,
-    })).toBeCloseTo(4936.55, 2);
+    })).toBe(0);
   });
 
   it('empresa sem ser líder continua zero', () => {

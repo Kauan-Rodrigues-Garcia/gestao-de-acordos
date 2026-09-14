@@ -15,8 +15,9 @@
  *   • PaguePlay e setor alternativo → soma dos operadores (clones e órfãos
  *     incluídos), decidido por `setorSomaPorUsuarios`;
  *   • BookPlay, setor normal        → total do relatório carimbado por setor;
- *   • Contribuição Receptivo        → soma no bruto, nunca no H.O.: é valor
- *     digitado à mão, sem H.O. próprio;
+ *   • Contribuição Receptivo        → soma no bruto, nunca no H.O. Desde
+ *     14/09/2026 vem do 59 (o Integral cobrado para o setor), e o digitado não
+ *     soma mais — ver `buscarContribuicoesReceptivo`;
  *   • ajuste manual                 → sempre da soma. Nos dois caminhos ele já
  *     está dentro do acumulado; o que muda entre eles é de onde vem o TOTAL,
  *     não esta parcela.
