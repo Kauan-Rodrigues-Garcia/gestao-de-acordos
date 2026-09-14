@@ -26,7 +26,7 @@
  */
 
 import {
-  calcularProjecao, degrausQuartis, ritmoDoPeriodo, type DegrauQuartil,
+  calcularProjecao, degrausComAmanha, ritmoDoPeriodo, type DegrauComAmanha,
 } from '@/lib/projecaoMetas';
 import { quartilAtual } from '@/lib/diasUteis';
 
@@ -98,8 +98,21 @@ export interface DetalheEquipe {
   projecaoPct: number | null;
   /** Faixa em que a equipe está. `null` sem meta ou sem quartis. */
   faixaAtual: QuartilConfig | null;
-  /** Quanto falta para cada faixa, da melhor para a pior. Vazio sem meta. */
-  degraus: DegrauQuartil[];
+  /**
+   * Quanto falta para cada faixa, da melhor para a pior. Vazio sem meta.
+   *
+   * Cada degrau traz as DUAS respostas: `falta` é o que entra na faixa hoje,
+   * `faltaAmanha` é o que mantém a equipe nela depois que a régua subir mais um
+   * dia útil. Entrar não é ficar — ver `degrausComAmanha`.
+   */
+  degraus: DegrauComAmanha[];
+  /**
+   * Quanto a meta exige por dia útil (`meta ÷ dias úteis do mês`).
+   *
+   * É o tamanho do degrau que a régua sobe todo dia, e a tela cita esse número
+   * para o valor de amanhã não parecer arbitrário. `null` sem meta.
+   */
+  metaDiaria: number | null;
   // ── Pessoas ──────────────────────────────────────────────────────────────
   /** Quantos operadores em cada faixa, da melhor para a pior. */
   porQuartil: FaixaPessoas[];
@@ -143,8 +156,19 @@ export function detalharEquipe(entrada: EntradaDetalheEquipe): DetalheEquipe {
   // mostra essa % e as duas não podem divergir.
   const proj = calcularProjecao({ meta, recebido: acumulado, totalUteis, decorridos, quartis });
 
+  // `degrausComAmanha` e não `degrausQuartis`: o card precisa responder também
+  // o que MANTÉM a equipe na faixa amanhã. A linha do operador já dava as duas
+  // respostas (`detalheOperador`) e o card da equipe dava só metade — uma
+  // equipe fechava o dia no alvo de hoje e amanhecia fora da faixa, e o líder
+  // repetia a mesma conversa no dia seguinte.
   const degraus = proj
-    ? degrausQuartis({ recebido: acumulado, esperado: proj.esperado, quartis })
+    ? degrausComAmanha({
+        recebido:      acumulado,
+        esperado:      proj.esperado,
+        metaDiaria:    proj.metaDiaria,
+        diasRestantes,
+        quartis,
+      })
     : [];
 
   // ── Distribuição dos operadores ─────────────────────────────────────────
@@ -196,6 +220,7 @@ export function detalharEquipe(entrada: EntradaDetalheEquipe): DetalheEquipe {
     projecaoPct: proj?.projecaoPct ?? null,
     faixaAtual:  proj?.quartil ?? null,
     degraus,
+    metaDiaria:  proj?.metaDiaria ?? null,
     porQuartil,
     semMeta,
     totalOperadores:  operadores.length,

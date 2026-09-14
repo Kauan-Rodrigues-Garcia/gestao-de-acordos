@@ -81,6 +81,22 @@ export interface VisaoGeralDiretoria {
   carteirasQtd: number;
   recebidoAnterior: number;
   linhasAnterior: number;
+  /**
+   * A parte de `recebido` que é colchão — e que NÃO conta para setor nenhum.
+   *
+   * Colchão é a parcela da 2ª em diante de Pix automático ou cartão
+   * recorrente. Decisão da diretoria em 13/09/2026: ele entra no total da
+   * empresa e fica fora de setor, equipe e operador, igual à Retenção.
+   *
+   * Está aqui para a tela poder NOMEAR a diferença contra a aba Setores e
+   * equipes. Sem esse número, as duas abas mostram dois totais para o mesmo mês
+   * e a leitura óbvia é que uma delas quebrou.
+   *
+   * Zerado quando a migration `20260914180000` ainda não foi aplicada — o bloco
+   * simplesmente não vem no jsonb, e `n()` devolve 0. A seção some, o resto da
+   * tela continua.
+   */
+  colchao: { valor: number; linhas: number; valorAnterior: number };
   serie: DiaDaSerie[];
   formas: FormaDePagamento[];
   carteiras: CarteiraDoMes[];
@@ -117,6 +133,8 @@ interface RespostaCrua {
   tem_lote_anterior: boolean;
   total: { recebido: unknown; linhas: unknown; operadores: unknown; carteiras: unknown };
   total_anterior: { recebido: unknown; linhas: unknown };
+  /** Ausente antes da migration 20260914180000 — vira zero, e a seção some. */
+  colchao?: { valor: unknown; linhas: unknown; valor_anterior: unknown };
   serie: { dia: unknown; valor: unknown; valor_anterior: unknown; dentro_do_corte: boolean }[];
   formas: { forma: string; valor: unknown; qtd: unknown; valor_anterior: unknown }[];
   carteiras: {
@@ -173,6 +191,11 @@ export async function buscarVisaoGeralDiretoria(
     carteirasQtd:    n(data.total?.carteiras),
     recebidoAnterior: n(data.total_anterior?.recebido),
     linhasAnterior:   n(data.total_anterior?.linhas),
+    colchao: {
+      valor:         n(data.colchao?.valor),
+      linhas:        n(data.colchao?.linhas),
+      valorAnterior: n(data.colchao?.valor_anterior),
+    },
     serie: (data.serie ?? []).map(d => ({
       dia:           n(d.dia),
       valor:         n(d.valor),

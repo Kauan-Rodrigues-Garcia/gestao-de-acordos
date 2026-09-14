@@ -83,6 +83,21 @@
   --chart-4: oklch(0.55 0.16 280);
   --chart-5: oklch(0.60 0.17 10);
 
+  /*
+   * O azul da BookPlay nos gráficos do Painel Diretoria.
+   *
+   * Definido UMA vez, em `:root`, e de propósito sem variante por tema: o
+   * painel do 59 é da BookPlay, e a série do mês em foco tem que sair azul
+   * mesmo com o tema rosa ligado — `--primary` e `--chart-1` viram rose ali, e
+   * `--primary` na BookPlay clara é escuro o bastante (L 0.45) para a linha
+   * ler como preta sobre o card branco.
+   *
+   * L 0.62 é o meio-termo que sobrevive aos dois fundos: vivo no claro, ainda
+   * legível no escuro. Quem for lê-lo tem que passar por `useChartColors` —
+   * atributo SVG não aceita `oklch()` direto.
+   */
+  --azul-bookplay: oklch(0.62 0.18 245);
+
   /* Cargo Role Colors (light) */
   --role-operador:      oklch(0.45 0.15 220);
   --role-operador-fg:   oklch(0.98 0.005 220);

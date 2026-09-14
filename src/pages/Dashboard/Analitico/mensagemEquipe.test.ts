@@ -34,9 +34,13 @@ function montar(opts: {
   ehSetor?: boolean;
   rotuloUnidade?: string | null;
   acumuladoHO?: number | null;
+  totalUteis?: number;
+  decorridos?: number;
 } = {}) {
   const acumulado = opts.acumulado ?? 45_000;
   const meta = opts.meta === undefined ? 100_000 : opts.meta;
+  const totalUteis = opts.totalUteis ?? 20;
+  const decorridos = opts.decorridos ?? 10;
   return montarMensagemEquipe({
     titulo: 'Time Matheus',
     ehSetor: opts.ehSetor,
@@ -46,7 +50,7 @@ function montar(opts: {
     rotuloUnidade: opts.rotuloUnidade ?? null,
     acumuladoHO: opts.acumuladoHO ?? null,
     detalhe: detalharEquipe({
-      acumulado, meta, totalUteis: 20, decorridos: 10, quartis: QUARTIS_PADRAO,
+      acumulado, meta, totalUteis, decorridos, quartis: QUARTIS_PADRAO,
       operadores: opts.operadores ?? OPERADORES,
     }),
   });
@@ -106,11 +110,25 @@ describe('montarMensagemEquipe', () => {
   });
 
   describe('faixas', () => {
-    it('lista só as faixas que faltam, com quanto falta', () => {
+    it('lista só as faixas que faltam, com quanto falta hoje e amanhã', () => {
       const texto = montar();
       expect(texto).toContain('*Para subir de faixa*');
-      expect(texto).toMatch(/1º quartil: faltam R\$\s?5\.000,00/);
-      expect(texto).not.toContain('2º quartil: faltam');
+      expect(texto).toMatch(/1º quartil: hoje faltam R\$\s?5\.000,00/);
+      expect(texto).toMatch(/para seguir amanhã R\$\s?10\.000,00/);
+      expect(texto).not.toContain('2º quartil: hoje faltam');
+    });
+
+    // A régua sobe todo dia útil: quem entra na faixa fazendo só o de hoje
+    // amanhece fora dela. O texto tem que dizer as duas coisas, senão a
+    // conversa com a equipe se repete no dia seguinte.
+    it('explica a diferença entre hoje e amanhã', () => {
+      expect(montar()).toContain('"hoje" entra na faixa; "amanhã" é o que mantém');
+    });
+
+    it('sem dia útil restante o texto omite o amanhã em vez de inventar', () => {
+      const texto = montar({ decorridos: 20, totalUteis: 20 });
+      expect(texto).toContain('*Para subir de faixa*');
+      expect(texto).not.toContain('para seguir amanhã');
     });
 
     it('equipe na melhor faixa recebe elogio, não uma lista vazia', () => {

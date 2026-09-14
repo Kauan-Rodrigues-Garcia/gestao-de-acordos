@@ -105,18 +105,32 @@ export function montarMensagemEquipe(entrada: EntradaMensagemEquipe): string {
   }
 
   // ── Faixas ─────────────────────────────────────────────────────────────────
-  // Só «hoje», como o card: os degraus da equipe não têm a coluna «amanhã» que
-  // a linha do operador tem, e o texto não pode dizer mais que a tela.
+  // As DUAS respostas, como o card passou a mostrar: «hoje» entra na faixa,
+  // «amanhã» é o que mantém depois que a régua sobe mais um dia útil. Mandar só
+  // o de hoje fazia a equipe bater o alvo e amanhecer fora da faixa — a mesma
+  // correção que a mensagem do operador já tinha recebido.
   const pendentes = d.degraus.filter(g => !g.alcancado);
   if (pendentes.length) {
     linhas.push('');
     linhas.push('*Para subir de faixa*');
+    linhas.push('_"hoje" entra na faixa; "amanhã" é o que mantém, porque a régua sobe todo dia útil._');
     for (const g of pendentes) {
-      linhas.push(`• ${g.quartil}º quartil: faltam ${formatBRL(g.falta)}`);
+      // Sem amanhã útil no mês a segunda metade some em vez de virar «—»: no
+      // último dia útil a pergunta não tem resposta, e um número ali é invenção.
+      const amanha = g.faltaAmanha !== null
+        ? ` · para seguir amanhã ${formatBRL(g.faltaAmanha)}`
+        : '';
+      linhas.push(`• ${g.quartil}º quartil: hoje faltam ${formatBRL(g.falta)}${amanha}`);
     }
   } else if (d.degraus.length) {
     linhas.push('');
     linhas.push(`*${ehSetor ? 'O setor' : 'A equipe'} já está na melhor faixa.* 👏`);
+    // Estar na melhor faixa não é ficar nela: a régua sobe amanhã também, e
+    // este é o único número que diz o que segurar.
+    const melhor = d.degraus[0];
+    if (melhor && melhor.faltaAmanha !== null && melhor.faltaAmanha > 0) {
+      linhas.push(`Para continuar nela amanhã: ${formatBRL(melhor.faltaAmanha)}.`);
+    }
   }
 
   // ── Pessoas ────────────────────────────────────────────────────────────────

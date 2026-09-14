@@ -83,6 +83,22 @@ export interface CarteiraSemSetor {
   valorAnterior: number;
 }
 
+/**
+ * Uma carteira vista pelo que ela mandou para o geral.
+ *
+ * A carteira pode estar perfeitamente vinculada — o que conta só no geral é a
+ * EQUIPE dentro dela. Por isso `equipes` em vez de `operadores`: a pergunta que
+ * essa linha responde é «quais equipes desta carteira não contam para o setor».
+ */
+export interface CarteiraSoNoGeral {
+  cod: string;
+  nome: string;
+  valor: number;
+  linhas: number;
+  equipes: number;
+  valorAnterior: number;
+}
+
 export interface GradeDeSetores {
   mes: string;
   mesAnterior: string;
@@ -95,6 +111,23 @@ export interface GradeDeSetores {
   semSetor: { valor: number; linhas: number };
   setores: SetorDoPainel[];
   carteirasSemSetor: CarteiraSemSetor[];
+  /**
+   * O dinheiro que conta SÓ NO GERAL: equipe com `destino = 'somente_geral'`.
+   *
+   * Hoje é a Retenção. Ele soma em `totalEmpresa` — sempre somou — e não
+   * pertence a setor nenhum, por decisão registrada em `mestre_equipes`.
+   *
+   * Até a migration `20260914181000` isso caía dentro de `carteirasSemSetor`, e
+   * o resultado era um card com o nome de uma carteira JÁ vinculada pedindo
+   * «vincule a um setor». Foi o que produziu os dois cards «COB RECEPTIVO -
+   * BEATRIZ» na tela. Sem a migration aplicada o bloco chega vazio e a seção
+   * some — o comportamento antigo volta inteiro.
+   */
+  somenteGeral: {
+    valor: number;
+    linhas: number;
+    carteiras: CarteiraSoNoGeral[];
+  };
   /**
    * Os setores que CLONAM recebimento de gente de outros setores.
    *
@@ -166,6 +199,14 @@ interface GradeCrua {
     cod: string; nome: string; valor: unknown; linhas: unknown;
     operadores: unknown; valor_anterior: unknown;
   }[];
+  /** Ausente antes da migration 20260914181000 — o bloco chega vazio. */
+  somente_geral?: {
+    valor: unknown; linhas: unknown;
+    carteiras: {
+      cod: string; nome: string; valor: unknown; linhas: unknown;
+      equipes: unknown; valor_anterior: unknown;
+    }[];
+  };
 }
 
 type AlternativoCru = GradeCrua['setores'][number] & { pessoas: unknown };
@@ -247,6 +288,23 @@ export async function buscarGradeDeSetores(
       operadores:    n(c.operadores),
       valorAnterior: n(c.valor_anterior),
     })),
+    somenteGeral: {
+      valor:  n(data.somente_geral?.valor),
+      linhas: n(data.somente_geral?.linhas),
+      // `Array.isArray` pelo mesmo motivo do alternativo abaixo: jsonb com
+      // formato inesperado viraria `.map is not a function` e derrubaria a aba
+      // inteira por causa de uma seção secundária.
+      carteiras: Array.isArray(data.somente_geral?.carteiras)
+        ? data.somente_geral.carteiras.map(c => ({
+            cod:           c.cod,
+            nome:          c.nome,
+            valor:         n(c.valor),
+            linhas:        n(c.linhas),
+            equipes:       n(c.equipes),
+            valorAnterior: n(c.valor_anterior),
+          }))
+        : [],
+    },
     // `Array.isArray`: a RPC devolve jsonb, e um formato inesperado viraria
     // `.map is not a function` — a tela inteira em branco por causa de uma
     // seção secundária.

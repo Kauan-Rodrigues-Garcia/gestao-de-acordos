@@ -31,6 +31,21 @@
  * lugar. É por isso que as cores saem de `useChartColors`/`useAxisColors`, que
  * resolvem a variável para `rgb()` e reagem à troca de tema.
  *
+ * ## A série do mês é o azul da BookPlay, e não `--primary`
+ *
+ * `--primary` na BookPlay clara é `oklch(0.45 0.15 220)` — escuro o bastante
+ * para uma linha de 2,5px ler como PRETA ao lado da grade cinza, que foi a
+ * queixa que trouxe esta mudança. Pior: no tema rosa ele vira rose, e o painel
+ * do 59 é da BookPlay. Por isso existe `--azul-bookplay`, fixo em `:root`.
+ *
+ * ## Cada modo tem a forma da pergunta
+ *
+ * «Acumulado» é uma corrida contra o mês passado: área preenchida, que mostra
+ * distância entre as duas curvas. «Por dia» é um evento por dia — barra, porque
+ * é isso que um recebimento diário é. Ligar os dias com uma linha inventa uma
+ * rampa entre o dia 12 e o 13 que não existe. O mês anterior fica como linha
+ * tracejada nos dois modos: ele é a régua, não o assunto.
+ *
  * ## Tudo vem de UMA chamada
  *
  * `buscarVisaoGeralDiretoria` traz total, série, formas e carteiras juntos, do
@@ -38,7 +53,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ComposedChart, Area, Bar, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { motion } from 'framer-motion';
 import {
@@ -59,7 +75,7 @@ import {
   intensidadeDaBarra, type VisaoGeralDiretoria,
 } from '@/services/mestre/diretoria.service';
 
-/** Enquanto o tema não resolveu (primeiro quadro), a linha usa isto. */
+/** Enquanto o tema não resolveu (primeiro quadro), a série usa isto. */
 const FALLBACK_PRIMARIA = '#3b82f6';
 const FALLBACK_ANTERIOR = '#94a3b8';
 
@@ -281,8 +297,8 @@ export function DiretoriaVisaoGeral({
   const [formaSobre, setFormaSobre] = useState<string | null>(null);
 
   const { tickColor, gridColor } = useAxisColors();
-  const cores = useChartColors(['--primary', '--muted-foreground']);
-  const corAtual    = cores['--primary']          ?? FALLBACK_PRIMARIA;
+  const cores = useChartColors(['--azul-bookplay', '--muted-foreground']);
+  const corAtual    = cores['--azul-bookplay']    ?? FALLBACK_PRIMARIA;
   const corAnterior = cores['--muted-foreground'] ?? FALLBACK_ANTERIOR;
 
   const carregar = useCallback(async (corte: number | null) => {
@@ -468,6 +484,46 @@ export function DiretoriaVisaoGeral({
         dois totais diferem de propósito.
       </p>
 
+      {/* ── O colchão ────────────────────────────────────────────────────
+          Fica logo abaixo do total, e não no fim da tela, porque é a
+          explicação DELE: a diferença contra a aba Setores e equipes é este
+          número, e ele precisa ser lido junto com o valor que o contém.
+
+          Decisão da diretoria em 13/09/2026: colchão soma no geral e não conta
+          para setor, equipe ou operador. A regra estava certa e invisível — dois
+          totais para o mesmo mês, sem nada dizendo por quê. */}
+      {dados.colchao.valor > 0 && (
+        <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                Colchão no período
+              </h3>
+              <p className="mt-0.5 max-w-[46rem] text-[11px] leading-relaxed text-muted-foreground">
+                Parcela da 2ª em diante de Pix automático e cartão recorrente. Ela{' '}
+                <strong className="text-foreground">entra</strong> no total acima e{' '}
+                <strong className="text-foreground">não conta</strong> para setor, equipe ou
+                operador — é a diferença entre este total e a soma dos setores na aba{' '}
+                <em>Setores e equipes</em>.
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-mono text-xl font-bold tabular-nums text-foreground">
+                {formatBRL(dados.colchao.valor)}
+              </p>
+              <p className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground">
+                <Selo pct={dados.temLoteAnterior
+                  ? variacao(dados.colchao.valor, dados.colchao.valorAnterior) : null} />
+                {dados.recebido > 0
+                  ? `${pct((dados.colchao.valor / dados.recebido) * 100)}% do total`
+                  : `${dados.colchao.linhas.toLocaleString('pt-BR')} pagamentos`}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── Ritmo + leitura do período ───────────────────────────────────── */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
@@ -500,7 +556,16 @@ export function DiretoriaVisaoGeral({
 
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={serieGrafico} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
+              <ComposedChart data={serieGrafico} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
+                {/* O degradê da área do acumulado. Vive aqui, e não numa
+                    constante, porque `corAtual` só existe depois do tema
+                    resolver — um `<defs>` estático nasceria com a cor errada. */}
+                <defs>
+                  <linearGradient id="gradienteRitmoGeral" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={corAtual} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={corAtual} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                 <XAxis
                   dataKey="dia" tick={{ fontSize: 10, fill: tickColor }}
@@ -516,28 +581,48 @@ export function DiretoriaVisaoGeral({
                 />
                 <Tooltip
                   content={<TooltipRitmo />}
-                  cursor={{ stroke: corAtual, strokeWidth: 1, strokeDasharray: '4 4' }}
+                  /* Barra pede realce de COLUNA; linha pede uma guia vertical.
+                     O cursor de traço sobre barras deixa o dia sob o cursor sem
+                     nenhum destaque, e a leitura passa a depender de mirar. */
+                  cursor={modo === 'dia'
+                    ? { fill: corAtual, fillOpacity: 0.08 }
+                    : { stroke: corAtual, strokeWidth: 1, strokeDasharray: '4 4' }}
                 />
+                {/* O mês anterior é a RÉGUA, não o assunto: fica tracejado e
+                    atrás, nos dois modos. Declarado antes para o recharts
+                    desenhá-lo por baixo da série do mês em foco. */}
                 <Line
                   type="monotone" dataKey="valorAnterior" name="Mês anterior"
                   stroke={corAnterior} strokeWidth={1.5} strokeOpacity={0.7}
                   strokeDasharray="5 4" dot={false} isAnimationActive={false}
                 />
-                <Line
-                  type="monotone" dataKey="valor" name="Este mês"
-                  stroke={corAtual} strokeWidth={2.5}
-                  dot={false} isAnimationActive={false}
-                  /* Sem isto o recharts pula o buraco e liga o último dia com
-                     dado ao primeiro depois dele, inventando um trecho. */
-                  connectNulls={false}
-                />
-              </LineChart>
+                {modo === 'dia' ? (
+                  <Bar
+                    dataKey="valor" name="Este mês"
+                    fill={corAtual} radius={[3, 3, 0, 0]}
+                    maxBarSize={22} isAnimationActive={false}
+                  />
+                ) : (
+                  <Area
+                    type="monotone" dataKey="valor" name="Este mês"
+                    stroke={corAtual} strokeWidth={2.5}
+                    fill="url(#gradienteRitmoGeral)"
+                    dot={false} isAnimationActive={false}
+                    /* Sem isto o recharts pula o buraco e liga o último dia com
+                       dado ao primeiro depois dele, inventando um trecho. */
+                    connectNulls={false}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-border/50 pt-2.5 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <i className="h-0.5 w-4 rounded-full" style={{ background: corAtual }} />
+              <i
+                className={cn('shrink-0', modo === 'dia' ? 'h-2.5 w-2.5 rounded-sm' : 'h-0.5 w-4 rounded-full')}
+                style={{ background: corAtual }}
+              />
               Este mês
             </span>
             <span className="inline-flex items-center gap-1.5">

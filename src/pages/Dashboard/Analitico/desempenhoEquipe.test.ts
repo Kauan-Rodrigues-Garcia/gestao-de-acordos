@@ -121,6 +121,35 @@ describe('degraus até cada quartil', () => {
     const d = detalharEquipe({ ...BASE, acumulado: 0, decorridos: 10, operadores: [] });
     expect(d.degraus.find(x => x.quartil === 4)?.alcancado).toBe(true);
   });
+
+  /**
+   * A metade que faltava no card da equipe: entrar na faixa não é ficar nela.
+   * `esperado` é `meta diária × dias decorridos` e sobe sozinho todo dia útil,
+   * então quem faz exatamente o de hoje amanhece fora da faixa.
+   */
+  it('diz também quanto falta para SEGUIR na faixa amanhã', () => {
+    // Meta 100.000 em 20 úteis → diária 5.000. 10 dias → esperado 50.000.
+    const d = detalharEquipe({ ...BASE, acumulado: 10_000, decorridos: 10, operadores: [] });
+    expect(d.metaDiaria).toBe(5_000);
+
+    const amanha = Object.fromEntries(d.degraus.map(x => [x.quartil, x.faltaAmanha]));
+    // Amanhã o esperado é 55.000: 100% dele = 55.000 − 10.000 recebidos.
+    expect(amanha[1]).toBe(45_000);
+    expect(amanha[2]).toBe(34_000);   // 80% de 55.000 = 44.000 − 10.000
+    expect(amanha[3]).toBe(17_500);   // 50% de 55.000 = 27.500 − 10.000
+  });
+
+  it('no último dia útil não há amanhã a responder', () => {
+    const d = detalharEquipe({ ...BASE, acumulado: 10_000, decorridos: 20, operadores: [] });
+    expect(d.diasRestantes).toBe(0);
+    expect(d.degraus.every(x => x.faltaAmanha === null)).toBe(true);
+  });
+
+  it('sem meta não há régua de amanhã nem diária', () => {
+    const d = detalharEquipe({ ...BASE, meta: null, acumulado: 10_000, decorridos: 10, operadores: [] });
+    expect(d.metaDiaria).toBeNull();
+    expect(d.degraus).toEqual([]);
+  });
 });
 
 describe('distribuição dos operadores por quartil', () => {

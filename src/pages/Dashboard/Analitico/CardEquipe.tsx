@@ -250,10 +250,26 @@ function BarraProgresso({
   );
 }
 
-/** Uma linha do "quanto falta para cada faixa". */
+/**
+ * Uma linha do "quanto falta para cada faixa" — com as DUAS respostas.
+ *
+ * `hoje` é quanto falta para a equipe ENTRAR na faixa agora. `amanhã` é quanto
+ * falta para ela ainda estar lá depois que a régua subir mais um dia útil,
+ * porque `esperado` é `meta diária × dias decorridos` e cresce sozinho.
+ *
+ * Entrar não é ficar. Uma equipe que fecha o dia no alvo de hoje amanhece fora
+ * da faixa outra vez — era a metade que faltava neste card, e que a linha do
+ * operador em Quartis já mostrava.
+ *
+ * A faixa já alcançada mostra um traço no lugar do «amanhã»: ela não tem alvo
+ * de entrada, e repetir o valor de manter ali competiria com o «✓».
+ */
 function Degrau({
-  quartil, falta, alcancado, ehAtual,
-}: { quartil: number; falta: number; alcancado: boolean; ehAtual: boolean }) {
+  quartil, falta, faltaAmanha, alcancado, ehAtual,
+}: {
+  quartil: number; falta: number; faltaAmanha: number | null;
+  alcancado: boolean; ehAtual: boolean;
+}) {
   const cor = COR_QUARTIL[quartil] ?? '#6366f1';
   return (
     <div className={cn(
@@ -272,10 +288,19 @@ function Degrau({
         {ehAtual ? 'faixa atual' : alcancado ? 'já alcançado' : 'faltam'}
       </span>
       <span
-        className="text-[11px] tabular-nums font-mono font-semibold shrink-0"
+        className="text-[11px] tabular-nums font-mono font-semibold shrink-0 w-[5rem] text-right"
         style={{ color: alcancado ? COR_QUARTIL[1] : undefined }}
+        title={alcancado ? undefined : 'Quanto falta para entrar nesta faixa hoje'}
       >
         {alcancado ? '✓' : formatBRL(falta)}
+      </span>
+      <span
+        className="text-[11px] tabular-nums font-mono text-muted-foreground shrink-0 w-[5rem] text-right"
+        title={alcancado
+          ? undefined
+          : 'Quanto precisa para AINDA estar nesta faixa amanhã — a régua sobe um dia útil'}
+      >
+        {alcancado || faltaAmanha === null ? '—' : formatBRL(faltaAmanha)}
       </span>
     </div>
   );
@@ -486,17 +511,35 @@ export function CardEquipe({
                 </p>
               ) : (
                 <div className="space-y-1.5">
+                  {/* Os rótulos das duas colunas. Sem eles, dois valores lado a
+                      lado seriam adivinhação — e adivinhar num painel de
+                      dinheiro é pior que não mostrar. Mesma solução da linha
+                      aberta em Quartis. */}
+                  <div className="flex items-center gap-2 px-2 pb-0.5">
+                    <span className="w-5 shrink-0" />
+                    <span className="flex-1 text-[10px] text-muted-foreground">faixa</span>
+                    <span className="w-[5rem] shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide">
+                      hoje
+                    </span>
+                    <span className="w-[5rem] shrink-0 text-right text-[10px] uppercase tracking-wide text-muted-foreground">
+                      amanhã
+                    </span>
+                  </div>
+
                   {d.degraus.map(g => (
                     <Degrau
                       key={g.quartil}
                       quartil={g.quartil}
                       falta={g.falta}
+                      faltaAmanha={g.faltaAmanha}
                       alcancado={g.alcancado}
                       ehAtual={d.faixaAtual?.quartil === g.quartil}
                     />
                   ))}
-                  <p className="text-[10px] text-muted-foreground pt-0.5">
-                    Medido contra o esperado até hoje, igual à % do card.
+                  <p className="text-[10px] text-muted-foreground pt-0.5 leading-relaxed">
+                    <strong>Hoje</strong> entra na faixa; <strong>amanhã</strong> é o que mantém —
+                    a régua sobe {d.metaDiaria !== null ? formatBRL(d.metaDiaria) : 'um dia de meta'}{' '}
+                    a cada dia útil. Medido contra o esperado até hoje, igual à % do card.
                   </p>
                 </div>
               )}

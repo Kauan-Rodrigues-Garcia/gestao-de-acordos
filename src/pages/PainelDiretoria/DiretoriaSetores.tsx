@@ -26,6 +26,24 @@
  * é. Ela aparece assim mesmo, com o número do 59 e sem inventar percentual,
  * porque é dinheiro real e esconder daria um total que não fecha.
  *
+ * ## O alternativo entrou na MESMA grade
+ *
+ * Ele morava numa seção própria no rodapé, com a frase «não somam» ao lado do
+ * título. Isso resolvia a corretude e estragava a leitura: um setor da empresa
+ * ficava fora da lista de setores por causa de uma regra de soma, e quem
+ * procurava «Treinamento» não o achava onde procurou.
+ *
+ * Agora ele fica junto, com um selo «alternativo» e nada mais no card — a
+ * explicação inteira (que ele espelha dinheiro de outro setor e por isso não
+ * entra no total) aparece ao ABRIR. O selo é a promessa de que há algo
+ * diferente ali; abrir é onde se paga essa promessa.
+ *
+ * O card dele não mostra participação: uma fatia de um total do qual ele não
+ * faz parte seria número inventado. E o detalhe dele não vem de
+ * `fn_mestre_diretoria_setor` — aquela função monta o painel a partir das
+ * CARTEIRAS do setor, e o alternativo não tem nenhuma. Os números do detalhe
+ * saem da própria grade, que já os trouxe.
+ *
  * ## O denominador da porcentagem
  *
  * `participacao` divide pela soma dos SETORES, nunca pelo total da empresa. Com
@@ -33,7 +51,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ComposedChart, Area, Bar, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { motion } from 'framer-motion';
 import {
@@ -55,7 +74,7 @@ import { formatBRL } from '@/lib/money';
 import { variacao, acumular, intensidadeDaBarra } from '@/services/mestre/diretoria.service';
 import {
   buscarGradeDeSetores, buscarDetalheDoSetor, participacao, projecaoDoSetor,
-  type GradeDeSetores, type DetalheDoSetor, type SetorDoPainel,
+  type GradeDeSetores, type DetalheDoSetor,
   type CarteiraSemSetor,
 } from '@/services/mestre/diretoriaSetores.service';
 import type { SetorAgregado } from './useSetoresExtras';
@@ -69,8 +88,9 @@ const iniciais = (nome: string) =>
 
 /** O que está aberto na aba. `null` = a grade. */
 type Alvo =
-  | { tipo: 'setor';    id: string }
-  | { tipo: 'carteira'; cod: string };
+  | { tipo: 'setor';       id: string }
+  | { tipo: 'carteira';    cod: string }
+  | { tipo: 'alternativo'; id: string };
 
 // ── Peças ───────────────────────────────────────────────────────────────────
 
@@ -95,7 +115,8 @@ function SeloQuartil({ quartil }: { quartil: number }) {
  * um setor bem configurado parecer o pior da empresa.
  */
 function CardSetor({
-  nome, fotoUrl, valor, parte, projecao, quartil, operadores, sub, aviso, onClick,
+  nome, fotoUrl, valor, parte, projecao, quartil, operadores, sub, aviso,
+  etiqueta, onClick,
 }: {
   nome: string;
   fotoUrl?: string | null;
@@ -107,13 +128,14 @@ function CardSetor({
   sub?: string;
   aviso?: string;
   /**
-   * Ausente = card de leitura, sem clique.
+   * Selo curto ao lado do nome — «alternativo», «sem setor».
    *
-   * O setor alternativo é assim hoje: `fn_mestre_diretoria_setor` monta o
-   * detalhe a partir das CARTEIRAS do setor, e o alternativo não tem nenhuma
-   * — abrir mostraria um painel vazio. Card que não abre é melhor que clique
-   * que leva a lugar nenhum.
+   * Curto de propósito: o card tem que caber numa grade de quatro colunas, e a
+   * explicação inteira mora DENTRO do card aberto. Aqui o selo só avisa que
+   * aquele card não é igual aos vizinhos.
    */
+  etiqueta?: { texto: string; titulo: string };
+  /** Ausente = card de leitura, sem clique. */
   onClick?: () => void;
 }) {
   const Caixa = onClick ? 'button' : 'div';
@@ -121,8 +143,8 @@ function CardSetor({
     <Caixa
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       className={cn(
-        'group flex flex-col gap-2.5 rounded-xl border border-border/70 bg-card p-3.5 text-left shadow-sm transition-colors',
-        onClick && 'hover:border-primary/50 hover:bg-muted/30',
+        'group flex flex-col gap-2.5 rounded-xl border border-border/70 bg-card p-3.5 text-left shadow-sm transition-all',
+        onClick && 'hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md',
       )}
     >
       <div className="flex items-start gap-2">
@@ -133,12 +155,24 @@ function CardSetor({
           </AvatarFallback>
         </Avatar>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-foreground" title={nome}>
-            {nome}
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 truncate text-sm font-semibold text-foreground" title={nome}>
+              {nome}
+            </span>
+            {etiqueta && (
+              <span
+                title={etiqueta.titulo}
+                className="shrink-0 rounded border border-border bg-muted/60 px-1 text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                {etiqueta.texto}
+              </span>
+            )}
           </span>
           {sub && <span className="block truncate text-[10px] text-muted-foreground">{sub}</span>}
         </span>
-        <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        {onClick && (
+          <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        )}
       </div>
 
       <p className="font-mono text-lg font-bold tabular-nums leading-none text-foreground">
@@ -247,9 +281,10 @@ export function DiretoriaSetores({
   const [quartis, setQuartis]   = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [contarDiaAtual, setContarDiaAtual] = useState(false);
 
+  // O mesmo azul da Visão Geral, pelo mesmo motivo — ver o cabeçalho de lá.
   const { tickColor, gridColor } = useAxisColors();
-  const cores = useChartColors(['--primary', '--muted-foreground']);
-  const corAtual    = cores['--primary']          ?? FALLBACK_PRIMARIA;
+  const cores = useChartColors(['--azul-bookplay', '--muted-foreground']);
+  const corAtual    = cores['--azul-bookplay']    ?? FALLBACK_PRIMARIA;
   const corAnterior = cores['--muted-foreground'] ?? FALLBACK_ANTERIOR;
 
   // ── Carga da grade ────────────────────────────────────────────────────────
@@ -305,7 +340,9 @@ export function DiretoriaSetores({
   useEffect(() => { setAlvo(null); setDetalhe(null); }, [mes]);
 
   // ── Carga do detalhe ──────────────────────────────────────────────────────
-  const carregarDetalhe = useCallback(async (a: Alvo, corte: number | null) => {
+  const carregarDetalhe = useCallback(async (
+    a: Extract<Alvo, { tipo: 'setor' | 'carteira' }>, corte: number | null,
+  ) => {
     setCarregandoDetalhe(true);
     setErroDetalhe(null);
     try {
@@ -324,7 +361,10 @@ export function DiretoriaSetores({
   }, [empresaId, mes]);
 
   useEffect(() => {
-    if (!alvo) { setDetalhe(null); return; }
+    // O alternativo não passa por aqui: `fn_mestre_diretoria_setor` monta o
+    // detalhe a partir das carteiras do setor, e ele não tem nenhuma — a
+    // chamada voltaria vazia. O detalhe dele sai da grade, que já o trouxe.
+    if (!alvo || alvo.tipo === 'alternativo') { setDetalhe(null); return; }
     void carregarDetalhe(alvo, grade?.diaCorte ?? null);
   }, [alvo, carregarDetalhe, grade?.diaCorte]);
 
@@ -365,6 +405,28 @@ export function DiretoriaSetores({
     () => agruparFormas(detalhe?.formas ?? []), [detalhe],
   );
 
+  /**
+   * Setores e alternativos numa lista só, ordenados por recebimento.
+   *
+   * O alternativo deixou de ter seção própria (ver o cabeçalho): ele é um setor
+   * da empresa e tem que aparecer onde alguém o procura. O que o separa é o
+   * selo e o `alternativo: true`, que a grade usa para não inventar
+   * participação e para mandar o clique ao painel certo.
+   *
+   * Ordenar junto é de propósito: a grade responde «quem é grande», e um setor
+   * alternativo grande escondido no rodapé respondia pior que um card no meio
+   * da lista com um selo ao lado do nome.
+   */
+  const cardsDaGrade = useMemo(() => {
+    const todos = [
+      ...(grade?.setores ?? []).map(s => ({ setor: s, alternativo: false })),
+      ...(grade?.alternativos ?? []).map(s => ({ setor: s, alternativo: true })),
+    ];
+    return todos.sort((a, b) => b.setor.valor - a.setor.valor);
+  }, [grade]);
+
+  const alternativosQtd = grade?.alternativos.length ?? 0;
+
   // ── Estados de borda ──────────────────────────────────────────────────────
 
   if (carregando) {
@@ -400,6 +462,180 @@ export function DiretoriaSetores({
           </p>
         </div>
       </div>
+    );
+  }
+
+  // ── O DETALHE DO ALTERNATIVO ──────────────────────────────────────────────
+  //
+  // Vem antes do detalhe comum porque não compartilha nada com ele: não há
+  // carteira, não há equipe e não há chamada ao banco. É aqui que a frase «não
+  // conta no total» aparece — no card ela seria mais um selo entre selos, e é
+  // justamente a informação que não pode passar batida.
+
+  if (alvo?.tipo === 'alternativo') {
+    const s = grade.alternativos.find(x => x.setorId === alvo.id);
+    // Some da grade entre o clique e a recarga (troca de lote, por exemplo).
+    // Um `setAlvo` aqui seria estado alterado durante o render; o caminho de
+    // volta resolve sem isso.
+    if (!s) {
+      return (
+        <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/20 px-4 py-4">
+          <Layers className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="text-xs leading-relaxed">
+            <p className="font-semibold text-foreground">Este setor alternativo não está mais na grade</p>
+            <button
+              type="button"
+              onClick={() => setAlvo(null)}
+              className="mt-1 inline-flex items-center gap-1.5 font-semibold text-primary hover:opacity-80"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para os setores
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const p        = projecoes[s.setorId];
+    const pessoas  = s.pessoas ?? s.operadores;
+    const varAlt   = s.temAnterior ? variacao(s.valor, s.valorAnterior) : null;
+    const diferenca = s.valor - s.valorAnterior;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.2 }}
+        className="space-y-4 pb-16"
+      >
+        <button
+          type="button"
+          onClick={() => setAlvo(null)}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para os setores
+        </button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Avatar className="h-10 w-10 shrink-0 border border-border/60">
+            {s.fotoUrl && <AvatarImage src={s.fotoUrl} alt="" />}
+            <AvatarFallback className="bg-muted text-[11px] font-semibold text-muted-foreground">
+              {iniciais(s.setorNome)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <h2 className="flex flex-wrap items-center gap-2 text-xl font-bold tracking-tight text-foreground">
+              {s.setorNome}
+              <span className="rounded border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                setor alternativo
+              </span>
+            </h2>
+            <p className="text-[11px] text-muted-foreground">
+              {grade.diaCorte >= grade.diasNoMes
+                ? `${rotuloDoMes(grade.mes)} inteiro`
+                : `1 a ${grade.diaCorte} de ${rotuloDoMes(grade.mes)}`}
+            </p>
+          </div>
+        </div>
+
+        {/* O aviso em destaque, e não uma nota de rodapé: quem abriu este card
+            está prestes a somar o número dele com os outros. */}
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+          <CopyPlus className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div className="text-xs leading-relaxed">
+            <p className="font-semibold text-foreground">Não conta no total da empresa</p>
+            <p className="text-muted-foreground">
+              Este setor <strong className="text-foreground">clona</strong> o recebimento de pessoas
+              que pertencem a outros setores. O dinheiro já foi contado no setor que cobrou; somar
+              aqui de novo contaria duas vezes. Por isso ele fica fora de{' '}
+              <em>soma dos setores</em> e de <em>empresa</em>, e a participação dele aparece como «—».
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-primary/40 bg-card p-3.5 shadow-sm">
+            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Wallet className="h-3 w-3" /> Recebido no período
+            </span>
+            <p className="mt-1.5 font-mono text-xl font-bold tabular-nums text-foreground">
+              {formatBRL(s.valor)}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {s.linhas.toLocaleString('pt-BR')} pagamentos
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm">
+            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Target className="h-3 w-3" /> Projeção
+            </span>
+            {p ? (
+              <>
+                <p className="mt-1.5 font-mono text-xl font-bold tabular-nums"
+                   style={{ color: corProjecao(p.projecaoPct) }}>
+                  {pct1(p.projecaoPct)}%
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  {p.quartil && <SeloQuartil quartil={p.quartil.quartil} />}
+                  esperado {formatBRL(p.esperado)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1.5 font-mono text-xl font-bold text-muted-foreground">—</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">sem meta configurada</p>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm">
+            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Users className="h-3 w-3" /> Pessoas no setor
+            </span>
+            <p className="mt-1.5 font-mono text-xl font-bold tabular-nums text-foreground">
+              {pessoas}
+            </p>
+            {/* «Pessoas» e «operadores» são contagens diferentes, e a segunda
+                sem a primeira faz um setor de treinamento parecer vazio. */}
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {s.operadores} com recebimento no 59
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm">
+            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <CalendarClock className="h-3 w-3" /> Contra {rotuloDoMes(grade.mesAnterior)}
+            </span>
+            {varAlt !== null ? (
+              <>
+                <p className={cn(
+                  'mt-1.5 font-mono text-xl font-bold tabular-nums',
+                  varAlt >= 0 ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-rose-600 dark:text-rose-400',
+                )}>
+                  {varAlt >= 0 ? '+' : '−'}{pct1(Math.abs(varAlt))}%
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {formatBRL(Math.abs(diferenca))} {varAlt >= 0 ? 'acima' : 'abaixo'} · mesmo corte
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1.5 font-mono text-xl font-bold text-muted-foreground">—</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  sem mês anterior importado
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Dizer o que NÃO existe aqui é o que impede a leitura de «quebrou». */}
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Setor alternativo não tem carteira própria no 59 — o recebimento dele é espelhado das
+          pessoas que o compõem. Por isso não há quebra por equipe, por carteira ou por forma de
+          pagamento nesta tela: esses números pertencem ao setor que de fato cobrou.
+        </p>
+      </motion.div>
     );
   }
 
@@ -568,7 +804,13 @@ export function DiretoriaSetores({
               </div>
               <div className="h-[240px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={serieDetalhe} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
+                  <ComposedChart data={serieDetalhe} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
+                    <defs>
+                      <linearGradient id="gradienteRitmoSetor" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor={corAtual} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={corAtual} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                     <XAxis dataKey="dia" tick={{ fontSize: 10, fill: tickColor }} stroke={gridColor} tickLine={false} />
                     <YAxis
@@ -576,19 +818,54 @@ export function DiretoriaSetores({
                       tickLine={false} axisLine={false} width={52}
                       tickFormatter={v => `${Math.round(Number(v) / 1000)}k`}
                     />
-                    <Tooltip content={<TooltipRitmoSetor />} cursor={{ stroke: corAtual, strokeWidth: 1, strokeDasharray: '4 4' }} />
+                    <Tooltip
+                      content={<TooltipRitmoSetor />}
+                      cursor={modo === 'dia'
+                        ? { fill: corAtual, fillOpacity: 0.08 }
+                        : { stroke: corAtual, strokeWidth: 1, strokeDasharray: '4 4' }}
+                    />
                     <Line
                       type="monotone" dataKey="valorAnterior" name="Mês anterior"
                       stroke={corAnterior} strokeWidth={1.5} strokeOpacity={0.7}
                       strokeDasharray="5 4" dot={false} isAnimationActive={false}
                     />
-                    <Line
-                      type="monotone" dataKey="valor" name="Este mês"
-                      stroke={corAtual} strokeWidth={2.5} dot={false}
-                      isAnimationActive={false} connectNulls={false}
-                    />
-                  </LineChart>
+                    {/* Recebimento de um dia é evento, não curva: barra. Ver o
+                        cabeçalho da Visão Geral para o porquê. */}
+                    {modo === 'dia' ? (
+                      <Bar
+                        dataKey="valor" name="Este mês"
+                        fill={corAtual} radius={[3, 3, 0, 0]}
+                        maxBarSize={22} isAnimationActive={false}
+                      />
+                    ) : (
+                      <Area
+                        type="monotone" dataKey="valor" name="Este mês"
+                        stroke={corAtual} strokeWidth={2.5}
+                        fill="url(#gradienteRitmoSetor)"
+                        dot={false} isAnimationActive={false} connectNulls={false}
+                      />
+                    )}
+                  </ComposedChart>
                 </ResponsiveContainer>
+              </div>
+
+              {/* A legenda que a Visão Geral já tinha: sem ela, a linha
+                  tracejada cinza fica sem nome e vira ruído no gráfico. */}
+              <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-border/50 pt-2.5 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <i
+                    className={cn('shrink-0', modo === 'dia' ? 'h-2.5 w-2.5 rounded-sm' : 'h-0.5 w-4 rounded-full')}
+                    style={{ background: corAtual }}
+                  />
+                  Este mês
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <i
+                    className="h-0.5 w-4 shrink-0 rounded-full opacity-70"
+                    style={{ background: `repeating-linear-gradient(90deg, ${corAnterior} 0 4px, transparent 4px 7px)` }}
+                  />
+                  {rotuloDoMes(detalhe.mesAnterior)}
+                </span>
               </div>
             </section>
 
@@ -725,43 +1002,71 @@ export function DiretoriaSetores({
       transition={{ duration: 0.25 }}
       className="space-y-4 pb-16"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* A barra de contexto: o recorte à esquerda, os totais à direita. Os
+          números da direita são a resposta para «por que a soma não fecha» e
+          ficam sempre visíveis, não escondidos num rodapé. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 rounded-xl border border-border/70 bg-card px-4 py-2.5 shadow-sm">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           <span className="font-semibold text-foreground">
-            {grade.setores.length} {grade.setores.length === 1 ? 'setor' : 'setores'}
+            {cardsDaGrade.length} {cardsDaGrade.length === 1 ? 'setor' : 'setores'}
           </span>
+          {alternativosQtd > 0 && (
+            <> · {alternativosQtd} {alternativosQtd === 1 ? 'alternativo' : 'alternativos'}</>
+          )}
           {' '}· {grade.diaCorte >= grade.diasNoMes
             ? `${rotuloDoMes(grade.mes)} inteiro`
             : `1 a ${grade.diaCorte} de ${rotuloDoMes(grade.mes)}`}
-          {' '}· clique num card para abrir as equipes
+          {' '}· clique num card para abrir
         </p>
-        {/* A soma dos setores passa do total da empresa quando há Integral
-            cruzado. Dizer o valor exato aqui é o que separa «está certo» de
-            «alguém vai abrir um chamado». */}
-        {diferencaIntegral > 0.01 && (
-          <p className="text-[10px] text-muted-foreground">
-            soma dos setores {formatBRL(grade.totalSetores)} · empresa{' '}
-            {formatBRL(grade.totalEmpresa)} — a diferença de{' '}
-            {formatBRL(diferencaIntegral)} é o Integral que conta nos dois setores
-          </p>
-        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+          <span>
+            soma dos setores{' '}
+            <strong className="font-mono tabular-nums text-foreground">{formatBRL(grade.totalSetores)}</strong>
+          </span>
+          <span>
+            empresa{' '}
+            <strong className="font-mono tabular-nums text-foreground">{formatBRL(grade.totalEmpresa)}</strong>
+          </span>
+          {/* A soma dos setores passa do total da empresa quando há Integral
+              cruzado. Dizer o valor exato aqui é o que separa «está certo» de
+              «alguém vai abrir um chamado». */}
+          {diferencaIntegral > 0.01 && (
+            <span>
+              diferença de{' '}
+              <strong className="font-mono tabular-nums text-foreground">{formatBRL(diferencaIntegral)}</strong>
+              {' '}= Integral, que conta nos dois setores
+            </span>
+          )}
+        </div>
       </div>
 
+      {/* Uma grade só. O alternativo entra aqui com o selo — ver o cabeçalho. */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {grade.setores.map((s: SetorDoPainel) => {
+        {cardsDaGrade.map(({ setor: s, alternativo }) => {
           const p = projecoes[s.setorId];
+          const pessoas = s.pessoas ?? s.operadores;
           return (
             <CardSetor
               key={s.setorId}
               nome={s.setorNome}
               fotoUrl={s.fotoUrl}
               valor={s.valor}
-              parte={participacao(s.valor, grade.totalSetores)}
+              /* Alternativo vai com `null` de propósito: participação num total
+                 do qual ele não faz parte seria um número inventado. */
+              parte={alternativo ? null : participacao(s.valor, grade.totalSetores)}
               projecao={p ? p.projecaoPct : null}
               quartil={p?.quartil?.quartil ?? null}
               operadores={s.operadores}
-              sub={`${s.carteiras} ${s.carteiras === 1 ? 'carteira' : 'carteiras'}`}
-              onClick={() => setAlvo({ tipo: 'setor', id: s.setorId })}
+              sub={alternativo
+                ? `${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}`
+                : `${s.carteiras} ${s.carteiras === 1 ? 'carteira' : 'carteiras'}`}
+              etiqueta={alternativo
+                ? { texto: 'alternativo', titulo: 'Espelha o recebimento de outros setores — abra o card para entender' }
+                : undefined}
+              onClick={() => setAlvo(
+                alternativo ? { tipo: 'alternativo', id: s.setorId }
+                            : { tipo: 'setor', id: s.setorId },
+              )}
             />
           );
         })}
@@ -795,43 +1100,68 @@ export function DiretoriaSetores({
         </section>
       )}
 
-      {grade.alternativos.length > 0 && (
-        <section className="space-y-3">
+      {/* ── Conta só no geral ────────────────────────────────────────────
+          Isto NÃO é pendência, e é por isso que tem seção própria com título
+          próprio. É equipe marcada como `somente_geral` em `mestre_equipes`
+          (hoje, a Retenção): dinheiro que soma no total da empresa e não
+          pertence a setor nenhum, por decisão registrada.
+
+          Até 14/09/2026 caía dentro de «Ainda sem setor vinculado», e o
+          resultado era um card com o nome de uma carteira JÁ vinculada pedindo
+          um vínculo que já existe — dois cards com o mesmo nome na tela. */}
+      {grade.somenteGeral.valor > 0 && (
+        <section className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-4">
-            <CopyPlus className="h-3.5 w-3.5 text-muted-foreground" />
-            <h3 className="text-sm font-semibold text-foreground">Setores alternativos</h3>
-            {/*
-              A frase não é enfeite. Estes números espelham dinheiro que outro
-              setor já cobrou, e quem lê a tela precisa saber disso antes de
-              somar de cabeça — senão o total «não fecha» e vira chamado.
-            */}
+            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Conta só no geral</h3>
             <span className="text-[11px] text-muted-foreground">
-              clonam o recebimento de quem é de outros setores —{' '}
-              <strong className="text-foreground">não somam</strong> no total da empresa
+              {formatBRL(grade.somenteGeral.valor)} · equipes marcadas para não somar em setor —{' '}
+              <strong className="text-foreground">entra</strong> no total da empresa
             </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {grade.alternativos.map((s: SetorDoPainel) => {
-              const p = projecoes[s.setorId];
-              const pessoas = s.pessoas ?? s.operadores;
-              return (
-                <CardSetor
-                  key={s.setorId}
-                  nome={s.setorNome}
-                  fotoUrl={s.fotoUrl}
-                  valor={s.valor}
-                  /* `null` de propósito: participação num total do qual ele não
-                     faz parte seria um número inventado. */
-                  parte={null}
-                  projecao={p ? p.projecaoPct : null}
-                  quartil={p?.quartil?.quartil ?? null}
-                  operadores={s.operadores}
-                  sub={`${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}`}
-                />
-              );
-            })}
+          <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+            <div className="space-y-0.5">
+              {grade.somenteGeral.carteiras.map(c => (
+                <div
+                  key={c.cod}
+                  className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40"
+                >
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="truncate text-xs text-foreground" title={c.nome}>
+                      {c.nome || c.cod}
+                    </span>
+                    <span className="shrink-0 rounded border border-border px-1 text-[9px] uppercase text-muted-foreground">
+                      {c.equipes} {c.equipes === 1 ? 'equipe' : 'equipes'}
+                    </span>
+                  </span>
+                  <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+                    {formatBRL(c.valor)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 border-t border-border/50 pt-2 text-[10px] leading-relaxed text-muted-foreground">
+              A carteira pode estar vinculada normalmente — quem não conta para o setor é a EQUIPE,
+              marcada com <code className="text-foreground">destino = somente_geral</code> na aba{' '}
+              <em>Relatório 59</em>. É por isso que o valor não aparece em nenhum card acima.
+            </p>
           </div>
         </section>
+      )}
+
+      {/* A nota de rodapé dos alternativos. O selo no card avisa que aquele
+          card é diferente; esta linha diz o que «diferente» significa para quem
+          está só varrendo a grade, sem abrir nada. */}
+      {alternativosQtd > 0 && (
+        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          <CopyPlus className="mt-0.5 h-3 w-3 shrink-0" />
+          <span>
+            Os cards marcados como <strong className="text-foreground">alternativo</strong> clonam o
+            recebimento de quem é de outros setores —{' '}
+            <strong className="text-foreground">não somam</strong> no total da empresa. Abra um deles
+            para ver a explicação inteira.
+          </span>
+        </p>
       )}
 
       {!grade.setores.length && (
