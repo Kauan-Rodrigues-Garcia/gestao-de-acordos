@@ -44,7 +44,7 @@ import {
   buscarManuaisDoMes, salvarManualFechamento, type ManualFechamento,
 } from '@/services/fechamentoOperadores/fechamentoOperadores.service';
 import {
-  montarLinhaFechamento, resumirFechamento,
+  montarLinhaFechamento, ordenarLinhasFechamento, resumirFechamento,
   type LinhaFechamento, type ResumoFechamento,
 } from '@/services/fechamentoOperadores/calculoFechamento';
 
@@ -250,7 +250,7 @@ export function useFechamentoOperadores({
       diasUteisDecorridos(ano, mesNum, base.feriados, getTodayISO(), undefined, base.contarHoje), 1,
     );
 
-    return base.perfis
+    const montadas = base.perfis
       .filter(p => {
         if (!setorId) return true;
         const setores = setoresDoOperador(
@@ -290,8 +290,9 @@ export function useFechamentoOperadores({
           totalUteis: dias.totalUteis,
           decorridos: dias.decorridos,
         }, base.quartis);
-      })
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      });
+    // Por quartil, como a aba Quartis do Painel Líder (14/09/2026).
+    return ordenarLinhasFechamento(montadas);
   }, [base, manuais, setorId, ano, mesNum]);
 
   const resumo = useMemo(() => resumirFechamento(linhas, quartis), [linhas, quartis]);

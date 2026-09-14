@@ -11,6 +11,7 @@
  * esse dado depois.
  */
 
+import { baixarArquivo, TIPO_HTML } from '@/lib/baixarArquivo';
 import { registrarLog } from '@/services/logs.service';
 import { montarFechamento, type ParametrosFechamento } from './fechamento.service';
 import { montarHtmlFechamento, nomeArquivoFechamento } from './fechamentoHtml';
@@ -23,19 +24,9 @@ export interface ResultadoDownload {
   erro?: string;
 }
 
-/** Dispara o download de um Blob com o nome dado. */
+/** Dispara o download do HTML com o nome dado. */
 function entregarArquivo(conteudo: string, nome: string): void {
-  const blob = new Blob([conteudo], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nome;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Sem o revoke, cada download deixa o arquivo inteiro preso na memória da aba
-  // até o refresh. O atraso dá tempo de o navegador iniciar a gravação.
-  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  baixarArquivo(conteudo, nome, TIPO_HTML);
 }
 
 export async function baixarRelatorioFechamento(

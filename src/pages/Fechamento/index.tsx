@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ClipboardCheck, Building2, RefreshCw, Wallet, CalendarDays, Users, TriangleAlert, Info,
+  FileSpreadsheet, FileCode2, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,9 @@ import { formatBRL } from '@/lib/money';
 import { ehMesAtual, rotuloDoMes } from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
 import type { ManualFechamento } from '@/services/fechamentoOperadores/fechamentoOperadores.service';
+import {
+  baixarFechamentoOperadores, type FormatoFechamento,
+} from '@/services/fechamentoOperadores/baixarFechamentoOperadores';
 import { TabelaFechamento } from './TabelaFechamento';
 import { GraficosFechamento } from './GraficosFechamento';
 
@@ -123,6 +127,26 @@ export default function PaginaFechamento() {
 
   const aoInvalido = useCallback((mensagem: string) => { toast.error(mensagem); }, []);
 
+  const [baixando, setBaixando] = useState<FormatoFechamento | null>(null);
+  const nomeDoSetorEmFoco = setores.find(s => s.id === setorEmFoco)?.nome;
+  const baixar = useCallback(async (formato: FormatoFechamento) => {
+    if (!empresa?.id) return;
+    setBaixando(formato);
+    const r = await baixarFechamentoOperadores({
+      empresaNome: empresa.nome ?? '',
+      // Sem setor em foco é «todos» — e quem só vê o próprio sempre tem foco.
+      setorNome: setorEmFoco ? (nomeDoSetorEmFoco ?? 'Setor') : null,
+      mes,
+      mesRotulo: rotuloDoMes(mes),
+      parcial: ehMesAtual(mes),
+      geradoEm: new Date(),
+      linhas: fechamento.linhas,
+      resumo: fechamento.resumo,
+    }, formato, empresa.id);
+    setBaixando(null);
+    if (!r.ok) toast.error('Não foi possível gerar o arquivo', { description: r.erro });
+  }, [empresa?.id, empresa?.nome, setorEmFoco, nomeDoSetorEmFoco, mes, fechamento.linhas, fechamento.resumo]);
+
   // ── Guards (após todos os hooks) ─────────────────────────────────────────
   if (tenant.isPaguePlay) {
     return (
@@ -136,7 +160,7 @@ export default function PaginaFechamento() {
 
   const { linhas, resumo, carregando, atualizando, erro } = fechamento;
   const noMesAtual = ehMesAtual(mes);
-  const nomeDoSetor = setores.find(s => s.id === setorEmFoco)?.nome;
+  const nomeDoSetor = nomeDoSetorEmFoco;
   const preenchidos = linhas.filter(l => l.duTrabalhado !== null && l.situacao !== null).length;
 
   return (
@@ -153,14 +177,34 @@ export default function PaginaFechamento() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
-          onClick={() => void fechamento.recarregar()}
-          disabled={carregando || atualizando || !temAlcance}
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', atualizando && 'animate-spin')} />
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Baixar: a mesma tabela e os mesmos cards da tela, na mesma ordem.
+              Quem vê a aba baixa — o arquivo não traz nada além do que está
+              aqui. Ver `exportarFechamento.ts`. */}
+          {(['xlsx', 'html'] as const).map(formato => (
+            <Button
+              key={formato}
+              variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
+              onClick={() => void baixar(formato)}
+              disabled={carregando || !temAlcance || linhas.length === 0 || baixando !== null}
+            >
+              {baixando === formato
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : formato === 'xlsx'
+                  ? <FileSpreadsheet className="h-3.5 w-3.5" />
+                  : <FileCode2 className="h-3.5 w-3.5" />}
+              {formato === 'xlsx' ? 'Baixar Excel' : 'Baixar HTML'}
+            </Button>
+          ))}
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
+            onClick={() => void fechamento.recarregar()}
+            disabled={carregando || atualizando || !temAlcance}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', atualizando && 'animate-spin')} />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Mês + setor */}

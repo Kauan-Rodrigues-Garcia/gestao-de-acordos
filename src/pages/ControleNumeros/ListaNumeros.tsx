@@ -1,5 +1,12 @@
 /**
- * ListaNumeros — os números do Núcleo, agrupados pelo aparelho em que moram.
+ * ListaNumeros — os números do Núcleo, agrupados por situação ou por aparelho.
+ *
+ * ## Abre por situação (14/09/2026)
+ *
+ * «Todos os aguardando 24 horas juntos, em aquecimento a mesma coisa»: a tela
+ * abre com um bloco por situação, e o aparelho vira coluna da linha. O
+ * agrupamento por celular, descrito logo abaixo, continua no seletor «Agrupar
+ * por». As contas dos dois estão em `agrupamento.ts`.
  *
  * ## O celular é o agrupamento, e não uma coluna
  *
@@ -77,8 +84,9 @@ import {
 import { SeletorSituacao } from '@/components/numeros/SeletorSituacao';
 import { SituacaoDoNumero } from '@/components/numeros/SituacaoDoNumero';
 import type { CelularComNumeros } from '@/hooks/useControleNumeros';
-
-const TODOS = '__todos__';
+import {
+  agruparPorSituacao, passaNosFiltros, TODOS, type ModoAgrupamento,
+} from './agrupamento';
 
 /** Um aparelho e os números dele que sobreviveram aos filtros. */
 interface Grupo {
@@ -114,23 +122,32 @@ export function ListaNumeros({
   const [filtroCelular, setFiltroCelular]   = useState<string>(TODOS);
   const [filtroSituacao, setFiltroSituacao] = useState<string>(TODOS);
   const [filtroPosse, setFiltroPosse]       = useState<string>(TODOS);
+  const [agruparPor, setAgruparPor]         = useState<ModoAgrupamento>('situacao');
   const [ocupado, setOcupado]               = useState<string | null>(null);
+
+  const filtros = useMemo(
+    () => ({ celular: filtroCelular, situacao: filtroSituacao, posse: filtroPosse }),
+    [filtroCelular, filtroSituacao, filtroPosse],
+  );
 
   const grupos = useMemo<Grupo[]>(() => {
     return aparelhos
       .filter(a => filtroCelular === TODOS || a.celular.id === filtroCelular)
       .map(a => ({
         aparelho: a,
-        visiveis: a.numeros.filter(n =>
-          (filtroSituacao === TODOS || n.situacao === filtroSituacao)
-          && (filtroPosse === TODOS || n.posse === filtroPosse)),
+        visiveis: a.numeros.filter(n => passaNosFiltros(n, filtros)),
         lancados: a.numeros.filter(foiLancadoAoSetorRow).length,
       }))
       // Aparelho que ficou sem nenhum número no recorte sai: um cartão vazio
       // dizendo «nada aqui» trinta vezes é a mesma poluição que o agrupamento
       // veio resolver. O único que fica é quando ele é o escolhido no seletor.
       .filter(g => g.visiveis.length > 0 || filtroCelular === g.aparelho.celular.id);
-  }, [aparelhos, filtroCelular, filtroSituacao, filtroPosse]);
+  }, [aparelhos, filtroCelular, filtros]);
+
+  const gruposSituacao = useMemo(
+    () => agruparPorSituacao(aparelhos, filtros),
+    [aparelhos, filtros],
+  );
 
   const totalVisivel = grupos.reduce((s, g) => s + g.visiveis.length, 0);
   const totalGeral   = aparelhos.reduce((s, a) => s + a.numeros.length, 0);
@@ -147,7 +164,8 @@ export function ListaNumeros({
     onMudou();
   }
 
-  function linha(n: NumeroRow, aparelho: CelularComNumeros) {
+  /** `comCelular`: no agrupamento por situação o aparelho é coluna da linha. */
+  function linha(n: NumeroRow, aparelho: CelularComNumeros, comCelular = false) {
     const estado = {
       situacao: n.situacao, posse: n.posse,
       operadorId: n.operador_id, tratamento: n.tratamento,
@@ -172,6 +190,18 @@ export function ListaNumeros({
             {mascararNumero(n.numero)}
           </button>
         </TableCell>
+
+        {comCelular && (
+          <TableCell>
+            <span className="flex items-center gap-1.5 whitespace-nowrap text-sm">
+              <Smartphone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {aparelho.celular.identificacao}
+              {!aparelho.celular.ativo && (
+                <span className="text-xs text-muted-foreground">· inativo</span>
+              )}
+            </span>
+          </TableCell>
+        )}
 
         <TableCell>
           {/* O seletor traz o cronômetro junto: esperas e restrição contam o
@@ -286,7 +316,17 @@ export function ListaNumeros({
       <div className="flex flex-wrap items-center gap-2">
         <ListFilter className="h-4 w-4 text-muted-foreground" />
 
-        {/* O celular vem primeiro entre os filtros porque é o agrupamento. */}
+        <Select value={agruparPor} onValueChange={v => setAgruparPor(v as ModoAgrupamento)}>
+          <SelectTrigger className="w-[200px]" aria-label="Agrupar por">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={'situacao' satisfies ModoAgrupamento}>Agrupar por situação</SelectItem>
+            <SelectItem value={'celular' satisfies ModoAgrupamento}>Agrupar por celular</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* O celular vem primeiro entre os filtros: é o outro agrupamento. */}
         <Select value={filtroCelular} onValueChange={setFiltroCelular}>
           <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -323,7 +363,56 @@ export function ListaNumeros({
         </span>
       </div>
 
-      {grupos.length === 0 ? (
+      {agruparPor === 'situacao' ? (
+        gruposSituacao.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              {totalGeral === 0
+                ? 'Nenhum número cadastrado ainda. Comece pela aba Celulares.'
+                : 'Nenhum número neste recorte.'}
+            </CardContent>
+          </Card>
+        ) : (
+          gruposSituacao.map(g => (
+            <Card key={g.situacao}>
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base">{g.rotulo}</CardTitle>
+                  <div className="flex items-center gap-1.5">
+                    {g.lancados > 0 && (
+                      <Badge variant="outline"
+                             className="border-primary/30 bg-primary/10 text-primary">
+                        {g.lancados} no setor
+                      </Badge>
+                    )}
+                    <Badge variant="secondary">
+                      {g.itens.length} {g.itens.length === 1 ? 'número' : 'números'}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Celular</TableHead>
+                        <TableHead>Situação</TableHead>
+                        <TableHead>Onde está</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {g.itens.map(({ numero, aparelho }) => linha(numero, aparelho, true))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )
+      ) : grupos.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             {totalGeral === 0
