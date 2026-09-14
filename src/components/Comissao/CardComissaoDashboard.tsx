@@ -1,0 +1,172 @@
+/**
+ * CardComissaoDashboard — a própria comissão, ao lado do «Progresso da meta».
+ *
+ * ## Por que voltou ao Dashboard
+ *
+ * Em 11/09/2026 o card saiu do Dashboard e a comissão passou a abrir só pelo
+ * botão do menu lateral. A liderança pediu em 14/09/2026 que ela volte a ficar
+ * à vista, ao lado do donut da meta — as duas perguntas andam juntas: «quanto
+ * da meta eu fiz» e «quanto isso me paga» —, e que o botão do menu saia.
+ *
+ * ## O desenho
+ *
+ * Mesmo acabamento do `CardMetaDonut` (Card, cabeçalho com ícone em quadrado
+ * tingido), porque os dois ficam lado a lado e com a mesma altura. O valor
+ * grande é a comissão; embaixo, a escada das faixas em uma linha cada — sem os
+ * cartões do `ConteudoComissao`, que não caberiam numa coluna de grade. O resto
+ * abre em «Ver comissão», no mesmo Dialog da tela de Metas.
+ *
+ * Só desenha. Quem decide se o card existe é o `PainelMetas`.
+ */
+import { useState } from 'react';
+import { ArrowRight, CheckCircle2, Circle, Coins, Sparkles, Star } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { formatBRL } from '@/lib/money';
+import { cn } from '@/lib/utils';
+import type { FaixaComissao, ResultadoComissao } from '@/services/comissao/comissao';
+import { formatarPct } from './formato';
+import { VerComissao } from './VerComissao';
+
+interface CardComissaoDashboardProps {
+  resultado: ResultadoComissao;
+  isPaguePlay: boolean;
+  /** Mês que já passou: «faltou», e não «faltam». */
+  mesFechado: boolean;
+  /** `yyyy-MM` — vai para o título do «Ver comissão». */
+  mes: string;
+  /** Nome da pessoa — idem. */
+  nome: string;
+}
+
+const ICONE_SITUACAO = {
+  atingida:     { Icone: CheckCircle2, classe: 'text-emerald-600 dark:text-emerald-400', rotulo: 'atingida' },
+  atual:        { Icone: Star,         classe: 'text-primary',                            rotulo: 'atual' },
+  proxima:      { Icone: ArrowRight,   classe: 'text-sky-600 dark:text-sky-400',          rotulo: 'próxima' },
+  nao_atingida: { Icone: Circle,       classe: 'text-muted-foreground',                   rotulo: 'não atingida' },
+} as const;
+
+function LinhaFaixa({ faixa }: { faixa: FaixaComissao }) {
+  const s = ICONE_SITUACAO[faixa.situacao];
+  const ehAtual = faixa.situacao === 'atual';
+  return (
+    <li
+      aria-current={ehAtual ? 'step' : undefined}
+      className={cn(
+        'flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs',
+        ehAtual ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : 'bg-muted/30',
+      )}
+    >
+      <s.Icone className={cn('h-3.5 w-3.5 shrink-0', s.classe)} aria-label={s.rotulo} />
+      <span className={cn('shrink-0', ehAtual ? 'font-bold' : 'font-medium')}>{faixa.ordem}ª Meta</span>
+      <span className="min-w-0 flex-1 truncate text-right font-mono tabular-nums text-muted-foreground">
+        {formatBRL(faixa.meta)}
+      </span>
+      <span className={cn('w-14 shrink-0 text-right font-mono tabular-nums', ehAtual && 'font-bold text-primary')}>
+        {formatarPct(faixa.pctEfetivo)}
+      </span>
+    </li>
+  );
+}
+
+export function CardComissaoDashboard({
+  resultado: r, isPaguePlay, mesFechado, mes, nome,
+}: CardComissaoDashboardProps) {
+  const [verAberto, setVerAberto] = useState(false);
+  const cor = r.beneficioAtivo ? '#f59e0b' : '#10b981';
+  const falta = mesFechado ? 'Faltou' : 'Faltam';
+
+  let apoio: string | null = null;
+  if (r.atual) {
+    apoio = `${r.atual.ordem}ª Meta · ${formatarPct(r.atual.pctEfetivo)} sobre ${formatBRL(r.recebido)}`;
+  } else if (r.proxima) {
+    apoio = `Realizado ${formatBRL(r.recebido)}`;
+  }
+
+  let proxima: string | null = null;
+  if (r.proxima && r.proxima.falta !== null) {
+    const minimo = r.proxima.minimo !== null ? ` · a partir de ${formatBRL(r.proxima.minimo)}` : '';
+    proxima = `${falta} ${formatBRL(r.proxima.falta)} para a ${r.proxima.ordem}ª Meta${minimo}`;
+  } else if (r.atual && !r.proxima) {
+    proxima = 'Todas as faixas atingidas';
+  }
+
+  const indireta = r.indireta && r.indireta.comissao > 0 ? r.indireta.comissao : 0;
+
+  return (
+    <Card className="flex h-full flex-col border-border/70 bg-card shadow-sm">
+      <CardHeader className="px-4 pb-2 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <div
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+              style={{ background: cor + '22' }}
+            >
+              <Coins className="h-3.5 w-3.5" style={{ color: cor }} aria-hidden="true" />
+            </div>
+            Comissão
+            {isPaguePlay && (
+              <span className="text-[11px] font-normal text-muted-foreground">· H.O.</span>
+            )}
+          </CardTitle>
+          {r.beneficioAtivo && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300"
+              title="Meta do setor atingida — benefício ativo"
+            >
+              <Sparkles className="h-3 w-3" aria-hidden="true" />
+              setor
+            </span>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex flex-1 flex-col gap-3 pb-4">
+        <div className="space-y-0.5 text-center">
+          <p
+            className="font-mono text-2xl font-bold leading-tight tabular-nums"
+            style={r.atual || r.total > 0 ? { color: cor } : undefined}
+          >
+            {r.atual || r.total > 0 ? formatBRL(r.total) : 'Nenhuma faixa ainda'}
+          </p>
+          {apoio && <p className="text-[11px] text-muted-foreground">{apoio}</p>}
+          {indireta > 0 && (
+            <p className="text-[11px] text-muted-foreground">{`inclui ${formatBRL(indireta)} da indireta`}</p>
+          )}
+        </div>
+
+        {r.faixas.length > 0 && (
+          <ol className="space-y-1" aria-label="Faixas de comissão">
+            {r.faixas.map(f => <LinhaFaixa key={f.ordem} faixa={f} />)}
+          </ol>
+        )}
+
+        {proxima && (
+          <p className="text-center text-[11px] font-medium text-sky-700 dark:text-sky-400">{proxima}</p>
+        )}
+
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-auto h-7 self-center text-xs"
+          onClick={() => setVerAberto(true)}
+        >
+          Ver comissão
+        </Button>
+      </CardContent>
+
+      {verAberto && (
+        <VerComissao
+          aberto
+          onFechar={() => setVerAberto(false)}
+          nome={nome}
+          mes={mes}
+          isPaguePlay={isPaguePlay}
+          mesFechado={mesFechado}
+          resultado={r}
+        />
+      )}
+    </Card>
+  );
+}

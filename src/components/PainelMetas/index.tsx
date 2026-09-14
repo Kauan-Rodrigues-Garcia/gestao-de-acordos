@@ -19,6 +19,10 @@ import { FileSpreadsheet, ChevronDown, ChevronUp, CalendarClock } from 'lucide-r
 import { getTodayISO } from '@/lib/index';
 import { SkeletonCard } from '@/components/AnalyticsPanel/SubComponents';
 import { usePainelMetas } from '@/hooks/usePainelMetas';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/lib/tenant-config';
+import { useMinhaComissao } from '@/services/comissao/useMinhaComissao';
+import { CardComissaoDashboard } from '@/components/Comissao/CardComissaoDashboard';
 import type { UnidadeValor } from '@/lib/unidadeValor';
 import { FaixaDiasUteis } from './FaixaDiasUteis';
 import { CardsMetas } from './CardsMetas';
@@ -66,6 +70,25 @@ export function PainelMetas({
     temLogicaDiretoExtra,
     unidade,
   });
+
+  /*
+   * Comissão ao lado do «Progresso da meta» (pedido de 14/09/2026).
+   *
+   * Só com a PRÓPRIA pessoa em tela: `useMinhaComissao` conta a comissão de
+   * quem está logado, e ao lado da meta de um setor ou de outro operador ela
+   * responderia a pergunta errada. A liderança consulta a dos operadores na aba
+   * Comissão da tela de Metas. A chave `dashboard_comissao` é conferida no hook.
+   *
+   * Sem meta ou sem configuração no mês não há card: um R$ 0,00 ali pareceria
+   * resultado — a mesma regra dos outros cards desta grade.
+   */
+  const { perfil } = useAuth();
+  const isPaguePlay = useTenant().isPaguePlay;
+  const comissaoDaPessoa = !!perfil?.id && dados.operadorEmTela === perfil.id;
+  const comissao = useMinhaComissao({ aberto: comissaoDaPessoa && !dados.carregando, mes });
+  const resultadoComissao = comissao.podeVer && comissaoDaPessoa ? comissao.resultado : null;
+  const temCardComissao = !!resultadoComissao
+    && resultadoComissao.motivo !== 'sem_meta' && resultadoComissao.motivo !== 'sem_config';
 
   if (dados.carregando) {
     return (
@@ -115,7 +138,19 @@ export function PainelMetas({
               tabulação acontece na aba Analítico, que já lista pagamento por
               pagamento o que falta. Aqui ele só ocupava a primeira dobra do
               painel de metas com uma pendência de outra tela. */}
-          <CardsMetas dados={dados} mes={mes} />
+          <CardsMetas
+            dados={dados}
+            mes={mes}
+            slotComissao={temCardComissao && resultadoComissao ? (
+              <CardComissaoDashboard
+                resultado={resultadoComissao}
+                isPaguePlay={isPaguePlay}
+                mesFechado={!dados.noMesAtual}
+                mes={mes}
+                nome={perfil?.nome ?? 'Minha comissão'}
+              />
+            ) : null}
+          />
 
           {/* Só para quem tem meta indireta ligada. O card grande acima já
               mostra a SOMA das duas frentes — este diz de onde ela vem. */}

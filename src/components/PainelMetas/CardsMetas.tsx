@@ -29,6 +29,7 @@ import {
   TrendingUp, TrendingDown, History, FileWarning,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
+import { cn } from '@/lib/utils';
 import { COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
 import { MetricCard } from '@/components/AnalyticsPanel/SubComponents';
 import { containerVariants } from '@/components/AnalyticsPanel/constants';
@@ -58,9 +59,14 @@ function formatarPct(v: number): string {
 interface CardsMetasProps {
   dados: DadosPainelMetas;
   mes: string;
+  /**
+   * O card de comissão, quando há. Fica AO LADO do «Progresso da meta» (pedido
+   * de 14/09/2026) — quem decide se ele existe é o `PainelMetas`.
+   */
+  slotComissao?: React.ReactNode;
 }
 
-export function CardsMetas({ dados, mes }: CardsMetasProps) {
+export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
   const {
     totalRecebido, totalRecebidoOposto, diretoExtra, extraTabulado, meta, metaOposta,
     projecao, escopoRotulo, modoAgregado,
@@ -134,7 +140,15 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
           cards esticados enquanto a de baixo tinha quatro estreitos, e a tela
           parecia montada errada. Com uma grade só, card que some é card que
           não ocupa trilha — o resto continua alinhado sozinho. */}
-      <div className="grid gap-3 lg:grid-cols-3 items-start">
+      {/* Com a comissão, a coluna da direita vira um par — donut e comissão —
+          lado a lado a partir de `2xl`, com a mesma altura. Abaixo disso uma
+          quarta coluna teria ~230px, e o anel de 180px do donut não caberia com
+          o respiro do card: os dois empilham na coluna da direita, e os cards de
+          valor não perdem largura. Sem comissão, a grade é a de antes. */}
+      <div className={cn(
+        'grid gap-3 items-start lg:grid-cols-3',
+        slotComissao && meta !== null && '2xl:grid-cols-4',
+      )}>
         <div className="lg:col-span-2 grid gap-3 sm:grid-cols-2">
         <MetricCard
           label={rotuloTotal}
@@ -283,7 +297,22 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
 
         {/* O donut fecha a grade pela DIREITA: os números correm da esquerda
             para a direita e o anel é a conclusão deles, não a abertura. */}
-        {meta !== null && (
+        {slotComissao ? (
+          <div className={cn(
+            'grid gap-3',
+            meta !== null && 'sm:grid-cols-2 lg:grid-cols-1 2xl:col-span-2 2xl:grid-cols-2',
+          )}>
+            {meta !== null && (
+              <CardMetaDonut
+                recebido={totalRecebido}
+                meta={meta}
+                escopoRotulo={escopoRotulo}
+                porForma={porForma}
+              />
+            )}
+            {slotComissao}
+          </div>
+        ) : meta !== null && (
           <CardMetaDonut
             recebido={totalRecebido}
             meta={meta}

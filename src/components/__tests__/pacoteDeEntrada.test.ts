@@ -42,7 +42,6 @@ describe('pacote de entrada', () => {
     const imports = importsEstaticos(ler('components/Layout.tsx'));
     for (const painel of [
       './DesempenhoDia',
-      './Comissao/PainelComissao',
       './DesafioMenu/PainelDesafio',
       './ModalRecortarFoto',
       '@/components/MenuLateralEditor',

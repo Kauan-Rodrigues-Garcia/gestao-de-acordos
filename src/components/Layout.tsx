@@ -49,7 +49,6 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
-import { BotaoComissao } from './Comissao/BotaoComissao';
 import { DesafioMenu } from './DesafioMenu';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
@@ -85,13 +84,11 @@ import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
  * build só avisa com uma linha no meio do log.
  */
 const carregarDesempenhoDia  = comNovaTentativa(() => import('./DesempenhoDia'));
-const carregarPainelComissao = comNovaTentativa(() => import('./Comissao/PainelComissao'));
 const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/PainelDesafio'));
 const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
 const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
 
 const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ default: m.DesempenhoDia })));
-const PainelComissao    = lazy(() => carregarPainelComissao().then(m => ({ default: m.PainelComissao })));
 const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
 const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
 const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
@@ -113,7 +110,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [painelDiaAberto, setPainelDiaAberto] = useState(false);
-  const [painelComissaoAberto, setPainelComissaoAberto] = useState(false);
   const [painelDesafioAberto, setPainelDesafioAberto] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -317,19 +313,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   /*
    * Pré-carrega, quando a tela assenta, só os painéis que ESTA pessoa consegue
-   * abrir: comissão sem a chave, desafio sem campanha em cartaz e editor de
-   * menu fora do super_admin seriam download sem clique possível. O recorte de
-   * foto fica de fora — abre depois de escolher um arquivo, e essa espera não
-   * se nota.
+   * abrir: desafio sem campanha em cartaz e editor de menu fora do super_admin
+   * seriam download sem clique possível. O recorte de foto fica de fora — abre
+   * depois de escolher um arquivo, e essa espera não se nota.
    */
-  const temComissao = temPermissao('dashboard_comissao');
   const temDesafio = !!desafioDestaque;
   const precarregarPaineis = useMemo(() => [
     carregarDesempenhoDia,
-    ...(temComissao ? [carregarPainelComissao] : []),
     ...(temDesafio ? [carregarPainelDesafio] : []),
     ...(podeEditarMenu ? [carregarEditorMenu] : []),
-  ], [temComissao, temDesafio, podeEditarMenu]);
+  ], [temDesafio, podeEditarMenu]);
   usePrecarregarQuandoOcioso(precarregarPaineis);
 
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
@@ -514,7 +507,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {temPermissao('ver_analitico') && (
         <div className="px-2 pt-2">
           <button
-            onClick={() => { setPainelDiaAberto(v => !v); setPainelComissaoAberto(false); }}
+            onClick={() => setPainelDiaAberto(v => !v)}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
               painelDiaAberto
@@ -541,20 +534,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       {/*
-        Comissão — logo abaixo do Desempenho do Dia, e pelo mesmo motivo: é painel
-        por cima da página, não rota. Os dois ocupam o mesmo canto, então abrir um
-        fecha o outro.
-
-        A chave é a da própria comissão. A liderança consulta a dos operadores na
-        aba Comissão da tela de Metas.
+        A Comissão saiu do menu em 14/09/2026: voltou a ser card do Dashboard, ao
+        lado do «Progresso da meta» (`CardComissaoDashboard`). A liderança
+        consulta a dos operadores na aba Comissão da tela de Metas.
       */}
-      {temPermissao('dashboard_comissao') && (
-        <BotaoComissao
-          aberto={painelComissaoAberto}
-          comRotulo={sidebarOpen || mobileOpen}
-          onClick={() => { setPainelComissaoAberto(v => !v); setPainelDiaAberto(false); }}
-        />
-      )}
 
       {/* Recolhimento automático do sidebar (desktop) — discreto */}
       {sidebarOpen && (
@@ -849,13 +832,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <DesempenhoDia
           aberto={painelDiaAberto}
           onClose={() => setPainelDiaAberto(false)}
-        />
-      </PainelSobDemanda>
-
-      <PainelSobDemanda aberto={painelComissaoAberto} nome="Comissão">
-        <PainelComissao
-          aberto={painelComissaoAberto}
-          onClose={() => setPainelComissaoAberto(false)}
         />
       </PainelSobDemanda>
 

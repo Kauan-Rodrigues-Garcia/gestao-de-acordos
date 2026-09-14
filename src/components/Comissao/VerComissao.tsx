@@ -1,9 +1,10 @@
 /**
  * VerComissao — a comissão de uma pessoa, num Dialog.
  *
- * É a consulta da liderança, aberta pela linha do operador na aba Comissão da
- * tela de Metas. O corpo é `ConteudoComissao`, o mesmo do painel lateral do
- * operador: as duas telas não podem contar a comissão de jeitos diferentes.
+ * Abre pela linha do operador na aba Comissão da tela de Metas (a consulta da
+ * liderança) e pelo «Ver comissão» do card do Dashboard (a própria pessoa). O
+ * corpo é `ConteudoComissao` nos dois: as telas não podem contar a comissão de
+ * jeitos diferentes.
  */
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,

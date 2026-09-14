@@ -1,5 +1,8 @@
 /**
- * useMinhaComissao — a comissão da própria pessoa, para o painel do menu lateral.
+ * useMinhaComissao — a comissão da própria pessoa, para o card do Dashboard.
+ *
+ * Até 14/09/2026 alimentava o painel do botão Comissão no menu lateral; o botão
+ * saiu e a comissão voltou a ser card, ao lado do «Progresso da meta».
  *
  * ## De onde vem cada peça
  *

@@ -155,6 +155,13 @@ export interface DadosPainelMetas {
   escopoRotulo: string;
   /** true quando o escopo soma mais de uma pessoa (setor ou equipe). */
   modoAgregado: boolean;
+  /**
+   * A pessoa cujos números estão na tela. `null` nos escopos de equipe e setor.
+   *
+   * O card de comissão só aparece quando é a PRÓPRIA pessoa: «individual» vale
+   * também para o líder olhando um operador, e ali a comissão seria a de outro.
+   */
+  operadorEmTela: string | null;
   noMesAtual: boolean;
 }
 
@@ -729,6 +736,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
     escopoRotulo,
     modoAgregado: modo !== 'eu',
+    operadorEmTela: modo === 'eu' ? (operadorEfetivo ?? perfil?.id ?? null) : null,
     noMesAtual,
   };
 }

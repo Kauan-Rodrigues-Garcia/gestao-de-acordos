@@ -14,9 +14,11 @@
  *
  * ## Dois lugares, uma conta
  *
- * Aparece no Dialog «Ver comissão» (a consulta da liderança, na tela de Metas) e
- * no painel lateral do operador. `compacto` é o painel: 420px numa tela larga,
- * então a coluna única vem da prop, e não da largura da janela.
+ * Aparece no Dialog «Ver comissão», aberto pela aba Comissão da tela de Metas
+ * (a consulta da liderança) e pelo card de comissão do Dashboard (a própria
+ * pessoa). `compacto` era o painel do menu lateral, que saiu em 14/09/2026: a
+ * coluna única vem da prop, e não da largura da janela, para quem precisar de
+ * novo de um espaço estreito.
  */
 import type { CSSProperties, ReactNode } from 'react';
 import { ArrowRight, CheckCircle2, Circle, MinusCircle, Sparkles, Star } from 'lucide-react';
@@ -29,7 +31,7 @@ interface ConteudoComissaoProps {
   resultado: ResultadoComissao;
   /** Mês que já passou: «faltou», e não «faltam». */
   mesFechado: boolean;
-  /** Uma coluna só — o painel lateral. */
+  /** Uma coluna só, para espaço estreito. */
   compacto?: boolean;
 }
 

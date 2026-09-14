@@ -1473,8 +1473,10 @@ Migration `20260911190000`, tabelas `comissao_config` e `comissao_faixas`. Desen
 - **Direta + indireta `[PP]`:** `junto` — 1ª Meta = direta + indireta, e o % vale
   sobre o realizado total; `separado` — as faixas medem a direta, e a indireta soma
   `realizado indireto × % indireta` quando atingida.
-- **Onde aparece:** o operador vê a própria no botão **Comissão** do menu lateral
-  (`dashboard_comissao`); a liderança consulta na aba Comissão da tela de Metas. No
+- **Onde aparece:** o operador vê a própria no card **Comissão** do Dashboard, ao
+  lado do Progresso da meta, com a própria pessoa em tela (`dashboard_comissao`;
+  desde 14/09/2026 — antes era um botão no menu lateral); a liderança consulta a
+  dos operadores na aba Comissão da tela de Metas. No
   RH Gestão, as linhas de setores do tipo Comissão mostram a comissão do mês de
   apuração, e **Preencher com a comissão** escreve o valor nas linhas ainda
   editáveis — nunca zero, nunca em linha fora da folha.
