@@ -40,6 +40,11 @@ import {
   type TipoRelatorio,
 } from '@/services/relatorio/assinaturaColunas';
 import {
+  chaveDaLinha,
+  preverRemocao,
+  type RemocaoPrevista,
+} from '@/services/analitico/remocaoPrevista';
+import {
   importarLoteDiario,
   revincularOrfaosDiario,
   notificarImportacaoDiario,
@@ -115,6 +120,14 @@ export function useAnaliticoImport() {
   // Vínculos manuais definidos pelo usuário no preview: username_arquivo → perfil_id
   const [vinculosManuais, setVinculosManuais] = useState<Record<string, string>>({});
 
+  /**
+   * O que a sincronização mensal vai APAGAR se este arquivo for confirmado.
+   *
+   * `null` enquanto não dá para saber: sem setor escolhido, ou na PaguePlay,
+   * onde a importação é incremental e não remove nada.
+   */
+  const [remocaoPrevista, setRemocaoPrevista] = useState<RemocaoPrevista | null>(null);
+
   // ── Setor da importação ───────────────────────────────────────────────────
   // O relatório é de UM setor. Quem só enxerga o próprio setor não tem o que
   // escolher — é o dele. Quem enxerga mais de um PRECISA dizer de qual setor é
@@ -161,6 +174,31 @@ export function useAnaliticoImport() {
   const setorImportacao = usarSetorEscolhido ? setorEscolhido : setorAutomatico;
   /** true quando o modal precisa exibir o seletor de setor. */
   const precisaEscolherSetor = usarSetorEscolhido;
+
+  /*
+   * A remoção é recalculada quando o setor muda, e não só ao ler o arquivo.
+   *
+   * Quem enxerga mais de um setor escolhe o setor DENTRO do modal, depois do
+   * parse. Calcular só uma vez mostraria a previsão do setor errado — ou
+   * nenhuma, que é pior: a tela ficaria silenciosa justamente no caso em que a
+   * pessoa está prestes a carimbar o arquivo no lugar errado.
+   *
+   * Só na BookPlay: na PaguePlay a importação é incremental e não remove nada.
+   */
+  useEffect(() => {
+    if (!preview || !empresa?.id || tenant.isPaguePlay || !setorImportacao) {
+      setRemocaoPrevista(null);
+      return;
+    }
+    let cancelado = false;
+    const chaves = preview.linhas.map(l => chaveDaLinha(l.operador_usuario, l.codigo));
+    preverRemocao(empresa.id, setorImportacao, preview.mes, chaves)
+      .then(r => { if (!cancelado) setRemocaoPrevista(r); })
+      // Falhar a previsão não pode impedir a importação — o aviso é um extra,
+      // e ficar sem importar o relatório do dia é pior que importar sem ele.
+      .catch(() => { if (!cancelado) setRemocaoPrevista(null); });
+    return () => { cancelado = true; };
+  }, [preview, empresa?.id, tenant.isPaguePlay, setorImportacao]);
 
   /**
    * O cabeçalho mudou desde a última importação aceita?
@@ -511,5 +549,7 @@ export function useAnaliticoImport() {
     setSetorEscolhido,
     /** true quando o importador é de um setor alternativo (escolhe o setor de origem). */
     setorProprioAlternativo,
+    /** O que a sincronização mensal vai apagar. `null` = nada a prever. */
+    remocaoPrevista,
   };
 }

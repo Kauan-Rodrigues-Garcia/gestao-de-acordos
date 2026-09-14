@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { descreverMudanca } from '@/services/relatorio/assinaturaColunas';
+import { remocaoPreocupa } from '@/services/analitico/remocaoPrevista';
 import { supabase } from '@/lib/supabase';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import type { UseAnaliticoImport } from './types';
@@ -29,6 +30,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
     vinculosManuais,
     carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
     precisaEscolherSetor, setorImportacao, setSetorEscolhido, setorProprioAlternativo,
+    remocaoPrevista,
   } = hook;
 
   const { empresa } = useEmpresa();
@@ -239,6 +241,41 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                       {preview.mudancaDeColunas.importacoesDoConhecido}{' '}
                       {preview.mudancaDeColunas.importacoesDoConhecido === 1 ? 'vez' : 'vezes'}.</>
                   )}
+                </p>
+              </div>
+            )}
+
+            {/* ── A trava de arquivo curto ──────────────────────────────────
+                Na BookPlay o 58 é o retrato completo do mês: o que não está no
+                arquivo é REMOVIDO do setor. Em 13/09/2026 um export salvo da
+                manhã do dia 11 apagou 413 linhas e R$ 175.768,38 do Receptivo,
+                e o único registro foi uma frase no log depois do fato.
+                Não bloqueia — reduzir o mês é legítimo. O que faltava era a
+                informação na hora da decisão. */}
+            {remocaoPreocupa(remocaoPrevista) && remocaoPrevista && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 space-y-2">
+                <p className="text-xs font-semibold text-destructive">
+                  Esta importação vai <strong>apagar {remocaoPrevista.linhas}</strong>{' '}
+                  linha{remocaoPrevista.linhas !== 1 ? 's' : ''} deste setor —{' '}
+                  {formatBRL(remocaoPrevista.valor)}.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {remocaoPrevista.porDia.slice(0, 12).map(d => (
+                    <span key={d.dia}
+                      className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] tabular-nums text-destructive">
+                      {d.dia.slice(8, 10)}/{d.dia.slice(5, 7)}: {formatBRL(d.valor)}
+                    </span>
+                  ))}
+                  {remocaoPrevista.porDia.length > 12 && (
+                    <span className="px-1.5 py-0.5 text-[10px] text-destructive/70">
+                      +{remocaoPrevista.porDia.length - 12} dia(s)
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] leading-snug text-destructive/80">
+                  O relatório do mês é o retrato completo: o que não está neste arquivo
+                  sai do setor. Se você está importando um export antigo, feche e gere
+                  um novo — o que sair daqui só volta reimportando.
                 </p>
               </div>
             )}

@@ -174,7 +174,7 @@ evitado estrago real nesta semana.
 | | O quê | Por quê |
 |---|---|---|
 | ✅ 0.1 | **Armadilha de cabeçalho** — guarda a assinatura de colunas por tipo de relatório e avisa no preview quando mudar (`20260913231913`, no ar) | Regra 8. Protege as duas de baixo |
-| 0.2 | **Trava de arquivo curto** — a importação para e pede confirmação quando for remover linhas acima de um limite, mostrando quantas e de quais dias | Em 13/09 um export antigo apagou 413 linhas e R$ 175.768,38 do Receptivo, sem aviso |
+| ✅ 0.2 | **Trava de arquivo curto** — o preview diz quantas linhas e quanto valor vão ser apagados, e de quais dias (`20260913235702`, no ar) | Em 13/09 um export antigo apagou 413 linhas e R$ 175.768,38 do Receptivo, sem aviso |
 | 0.3 | **Chave de unicidade do 58** — hoje é `(empresa, codigo, data, forma, operador)`: não vê parcela nem valor | Deixou R$ 698,43 duplicados no Receptivo. Envenena o «pendente» da fase 2 |
 
 **Por que antes de tudo:** a fase 2 marca linhas do 58 como pendentes e as
@@ -277,17 +277,30 @@ sem ninguém ver.
 
 ## O passo pendente agora
 
-**Fase 0.2 — a trava de arquivo curto.** É a que já custou dinheiro: em 13/09 um
-export antigo do Receptivo apagou 413 linhas e R$ 175.768,38, e o único registro
-foi uma frase no log depois do fato.
+**Fase 0.3 — a chave de unicidade do 58.** A última das três travas, e a mais
+delicada.
 
-O desenho: antes de confirmar, comparar até onde o arquivo vai com até onde o
-sistema já tem dados naquele setor/mês. Arquivo que para antes avisa quantas
-linhas e quanto valor vão sair, e de quais dias. Não bloqueia — pede confirmação.
+Hoje a chave é `(empresa_id, codigo, data_pagamento, forma_pagamento,
+operador_usuario)`. Ela **não vê parcela nem valor**. Quando o ERP reexporta a
+mesma parcela com outra `DtPgto`, a chave muda e a linha entra de novo: foi
+assim que R$ 698,43 ficaram duplicados no Receptivo em agosto (NR 12984182,
+13000560 e 13012299).
 
-Depois dela vem a **0.3 (chave de unicidade do 58)**, que é a mais delicada das
-três: mexer na chave muda a deduplicação de toda importação, e a reconciliação
-depende dela. Merece sessão própria.
+Por que é delicada, e por que merece sessão própria:
+
+- mexer na chave muda a **deduplicação de toda importação**, dos dois tenants;
+- a reconciliação (`importarLoteAnalitico`) compara o total do relatório com o
+  total do banco por `operador::codigo::mes` e soma a diferença numa linha — ela
+  depende da chave atual;
+- a consolidação do parser agrupa cartão por operador+código **ignorando a
+  data**, o que faz a data gravada não ser a do pagamento em alguns casos;
+- e a Fase 2 marca linhas do 58 como pendentes. Com duplicata na base, o
+  «pendente» vira ruído e ninguém confia na aba de divergências.
+
+O caminho provável é incluir `parcela` na identidade da linha — o 58 já traz a
+coluna, e o parser já a lê para o Colchão. Mas isso precisa ser medido contra os
+dados de agosto e setembro antes de virar migration: mudar a chave de uma tabela
+com 100 mil linhas em produção não é coisa de fim de sessão.
 
 ## Decisões tomadas nesta sessão
 
