@@ -14,6 +14,14 @@
  * As faixas de cor do anel são as MESMAS do card original (100 / 70 / 40), e
  * não as de quartil: aqui se mede a meta do mês, não a projeção contra o
  * esperado até hoje. Trocar a régua mudaria a cor de um número que não mudou.
+ *
+ * ## As duas vistas têm o mesmo tamanho (14/09/2026)
+ *
+ * A vista da meta tinha embaixo um «Top formas de pagamento», e a de formas uma
+ * lista que crescia com o mês: o card mudava de altura a cada clique. Agora a
+ * meta é só anel, percentual e valor; as formas ficam atrás do botão «Formas de
+ * pagamento»; e as duas ocupam a altura fixa de `ALTURA_CARD_PROGRESSO`, a
+ * mesma do card de Comissão ao lado. Lista maior que isso rola por dentro.
  */
 
 import { useState, type CSSProperties } from 'react';
@@ -28,7 +36,9 @@ import { DonutChart } from '@/components/AnalyticsPanel/SubComponents';
 import { BREAKDOWN_COLORS } from '@/components/AnalyticsPanel/constants';
 import { formatBRL } from '@/lib/money';
 import { pctLimitado } from '@/lib/projecaoMetas';
+import { cn } from '@/lib/utils';
 import { corDaMeta, fatiasDeForma, type FatiaForma } from './metaDonut';
+import { ALTURA_CARD_PROGRESSO } from './tamanhoCards';
 
 function formatarPct(v: number): string {
   return v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -51,17 +61,17 @@ export function CardMetaDonut({
   const fatias = fatiasDeForma(porForma);
 
   return (
-    <Card className="border-border/70 bg-card shadow-sm h-full">
+    <Card className={cn('flex flex-col border-border/70 bg-card shadow-sm', ALTURA_CARD_PROGRESSO)}>
       <CardHeader className="pb-2 pt-4 px-4">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2 min-w-0">
             <div
               className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
               style={{ background: cor + '22' }}
             >
               <Target className="w-3.5 h-3.5" style={{ color: cor }} />
             </div>
-            Progresso da meta
+            <span className="truncate">{breakdownAberto ? 'Formas de pagamento' : 'Progresso da meta'}</span>
           </CardTitle>
           {fatias.length > 0 && (
             <Button
@@ -70,7 +80,7 @@ export function CardMetaDonut({
               className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2 shrink-0"
               onClick={() => setBreakdownAberto(v => !v)}
             >
-              {breakdownAberto ? 'Resumo' : 'Formas'}
+              {breakdownAberto ? 'Progresso da meta' : 'Formas de pagamento'}
               <ChevronRight
                 className={`w-3 h-3 transition-transform duration-200 ${breakdownAberto ? 'rotate-90' : ''}`}
               />
@@ -79,7 +89,9 @@ export function CardMetaDonut({
         </div>
       </CardHeader>
 
-      <CardContent className="pb-5">
+      {/* `min-h-0` no conteúdo e `h-full` nas vistas: é o que deixa a altura do
+          card mandar, e a lista de formas rolar em vez de esticá-lo. */}
+      <CardContent className="flex-1 min-h-0 pb-5">
         <AnimatePresence mode="wait">
           {!breakdownAberto ? (
             <motion.div
@@ -88,7 +100,7 @@ export function CardMetaDonut({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ duration: 0.22 }}
-              className="flex flex-col items-center gap-4"
+              className="flex h-full flex-col items-center justify-center gap-4"
             >
               <DonutChart
                 percent={pct}
@@ -113,22 +125,6 @@ export function CardMetaDonut({
                   </p>
                 )}
               </div>
-
-              {fatias.length > 0 && (
-                <div className="w-full space-y-2 pt-3 border-t border-border/60">
-                  <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">
-                    Top formas de pagamento
-                  </p>
-                  {fatias.slice(0, 2).map((f, i) => (
-                    <LinhaForma key={f.label} fatia={f} indice={i} />
-                  ))}
-                  {fatias.length > 2 && (
-                    <p className="text-[11px] text-muted-foreground pl-0.5">
-                      +{fatias.length - 2} mais — clique em &quot;Formas&quot;
-                    </p>
-                  )}
-                </div>
-              )}
             </motion.div>
           ) : (
             <motion.div
@@ -137,9 +133,9 @@ export function CardMetaDonut({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ duration: 0.22 }}
-              className="space-y-3"
+              className="flex h-full flex-col gap-3"
             >
-              <div className="flex flex-col items-center">
+              <div className="flex shrink-0 flex-col items-center">
                 <ResponsiveContainer width="100%" height={150}>
                   <PieChart>
                     <Pie
@@ -179,7 +175,7 @@ export function CardMetaDonut({
                 </ResponsiveContainer>
               </div>
 
-              <div className="space-y-2">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                 {fatias.map((f, i) => <LinhaForma key={f.label} fatia={f} indice={i} detalhado />)}
               </div>
             </motion.div>

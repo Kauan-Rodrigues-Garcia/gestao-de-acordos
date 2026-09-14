@@ -11,6 +11,7 @@ import { formatBRL } from '@/lib/money';
 import {
   calcularComissao, type ConfigComissao, type EntradaComissao,
 } from '@/services/comissao/comissao';
+import { ALTURA_CARD_PROGRESSO } from '@/components/PainelMetas/tamanhoCards';
 import { CardComissaoDashboard } from './CardComissaoDashboard';
 
 vi.mock('./VerComissao', () => ({
@@ -100,6 +101,14 @@ describe('CardComissaoDashboard', () => {
   it('na BookPlay, não fala em H.O.', () => {
     desenhar();
     expect(screen.queryByText('· H.O.')).toBeNull();
+  });
+
+  // Mesma altura do «Progresso da meta», nas duas vistas dele (14/09/2026):
+  // os dois ficam lado a lado e nenhum pode crescer sozinho.
+  it('usa a altura fixa do card de Progresso da meta', () => {
+    desenhar();
+    const card = screen.getByRole('list', { name: 'Faixas de comissão' }).closest('[data-card-comissao]');
+    expect(card?.className).toContain(ALTURA_CARD_PROGRESSO);
   });
 
   it('«Ver comissão» abre a tela completa', () => {

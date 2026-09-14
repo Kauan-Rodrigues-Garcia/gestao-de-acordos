@@ -31,7 +31,9 @@ export function VerComissao({
 }: VerComissaoProps) {
   return (
     <Dialog open={aberto} onOpenChange={abrir => { if (!abrir) onFechar(); }}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      {/* `max-w-4xl`: quatro faixas lado a lado com «A partir de R$ 1.974,70»
+          numa linha só. Em `3xl` o valor não cabia e o rótulo quebrava. */}
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{`Comissão — ${nome}`}</DialogTitle>
           <DialogDescription>
