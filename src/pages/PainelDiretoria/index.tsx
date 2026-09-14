@@ -58,6 +58,7 @@ const Mestre59Operadores = lazy(() => import('./Mestre59Operadores'));
 const Mestre59EquipesSugeridas = lazy(() => import('./Mestre59EquipesSugeridas'));
 const Mestre59Divergencias = lazy(() => import('./Mestre59Divergencias'));
 const Mestre59Historico = lazy(() => import('./Mestre59Historico'));
+const Mestre59Fontes = lazy(() => import('./Mestre59Fontes'));
 const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
 
 /**
@@ -69,7 +70,7 @@ const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
  * setor à sua carteira do 59.
  */
 type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencias'
-  | 'historico' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
+  | 'historico' | 'fontes' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
 
 /**
  * Painel Diretoria.
@@ -366,11 +367,13 @@ export default function PainelDiretoria() {
     : aba === 'equipes'     ? (podeVerMestre ? 'equipes' : 'visao')
     : aba === 'divergencias' ? 'divergencias'
     : aba === 'historico'    ? (podeVerMestre ? 'historico' : 'visao')
+    : aba === 'fontes'       ? (podeVerMestre ? 'fontes' : 'visao')
     : 'visao';
   /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
   const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores'
     || abaVisivel === 'operadores' || abaVisivel === 'equipes'
-    || abaVisivel === 'divergencias' || abaVisivel === 'historico';
+    || abaVisivel === 'divergencias' || abaVisivel === 'historico'
+    || abaVisivel === 'fontes';
 
   if (!perfil) return null;
 
@@ -465,6 +468,10 @@ export default function PainelDiretoria() {
                  // importações que apagaram linhas. É informação de auditoria,
                  // e fica com as outras de super_admin pelo mesmo motivo.
                  { key: 'historico' as const, label: 'Histórico de importações', Icon: History },
+                 // Troca a fonte de um setor: o 59 passa a escrever no
+                 // analítico, e o Dashboard, o Painel Líder, o Analítico e a
+                 // comissão mudam junto. É a ação mais consequente do sistema.
+                 { key: 'fontes' as const, label: 'Fonte dos dados', Icon: Database },
                  { key: 'codigos' as const, label: 'Códigos',      Icon: Link2 }]
               : []),
           ]).map(({ key, label, Icon }) => (
@@ -511,6 +518,18 @@ export default function PainelDiretoria() {
             empresaId={empresa?.id ?? ''}
             mes={mesAnalise}
             versao={versaoVisao}
+          />
+        </Suspense>
+      ) : abaVisivel === 'fontes' ? (
+        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+          {/* De onde cada setor tira o número. Trocar para o 59 aqui muda o
+              Dashboard, o Painel Líder, o Analítico e a comissão de uma vez —
+              ver `fonteDoSetor.service.ts`. */}
+          <Mestre59Fontes
+            empresaId={empresa?.id ?? ''}
+            mes={mesAnalise}
+            versao={versaoVisao}
+            aoTrocar={() => setVersaoVisao(v => v + 1)}
           />
         </Suspense>
       ) : abaVisivel === 'historico' ? (

@@ -446,6 +446,26 @@ export function useAnaliticoImport() {
       colchaoDuplicados: resColchao.duplicados,
     });
 
+    /*
+     * O setor já é do 59: a importação foi CONFERÊNCIA, não carga.
+     *
+     * Este aviso vem primeiro e dura mais que os outros. Sem ele, a pessoa
+     * importa, vê «0 linhas novas», e conclui que o sistema quebrou ou que o
+     * arquivo estava errado — quando na verdade tudo funcionou como devia.
+     *
+     * Não é `toast.error`: nada deu errado. Também não é `success` discreto:
+     * é a informação mais importante daquela importação.
+     */
+    const emPrevia = res.previa ?? 0;
+    if (emPrevia > 0) {
+      toast.info(
+        `Conferência: ${emPrevia} linha${emPrevia !== 1 ? 's' : ''} ` +
+        `${emPrevia !== 1 ? 'foram lidas' : 'foi lida'} e nada foi gravado. ` +
+        'Os números deste setor vêm do relatório 59 — o 58 aqui serve para comparar.',
+        { duration: 12000 },
+      );
+    }
+
     if (res.atualizados > 0) {
       toast.success(
         `${res.atualizados} recebimento${res.atualizados !== 1 ? 's' : ''} ` +

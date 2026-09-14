@@ -767,30 +767,59 @@ todo mundo a ignorar o aviso.
 > por dia, o que dá ~300 notificações/dia. De hora em hora seriam ~3.000/dia, e
 > aí é spam.
 
-#### ❌ Passo 3 — a escrita, e o obstáculo que ela tem
+#### ✅ Passo 3 — a escrita e a prévia (migrations 20260914101153 … 102015)
 
-Falta `fn_mestre_aplicar_no_analitico`: apagar (com snapshot da Fase 5) as
-linhas do setor/mês e gravar a projeção.
+`fn_mestre_aplicar_no_analitico(empresa, mês, setor)`: guarda (snapshot da Fase
+5), remove as linhas 58/59 daquele setor e grava a projeção com
+`procedencia = 'relatorio_59'`. Linha `manual` não é tocada — é correção humana
+e não pertence a nenhuma das duas fontes.
 
-**O obstáculo é a janela de contagem dupla.** Depois que o 59 escrever, a
-próxima importação do 58 daquele setor vai reinserir as linhas dela — e, para
-os 44 NRs em que as duas fontes discordam da data, isso é dinheiro contado duas
-vezes até a promoção seguinte do 59 corrigir.
+A partir daí, aquele setor é do 59, e **as ~30 telas mostram o número do 59 sem
+mudar uma linha de código**.
 
-A trava de procedência (Fase 2) não resolve isso: ela impede o 58 de **apagar**
-a linha do 59, mas não o impede de **inserir** a dele ao lado.
+**A marca de «este setor é do 59» não precisa de tabela.** É derivável: existe
+linha com `procedencia = 'relatorio_59'` naquele setor/mês? Então o 59 é o dono.
+Mesma disciplina de `fn_mes_fechado` (Fase 6) e das pendências (Fase 2) — nada
+de flag que alguém precisa lembrar de ligar.
 
-A saída é o que o próprio plano sempre disse — **o 58 vira prévia**. Para setor
-cujo dado é do 59, a importação do 58 mostra o que veio e **não grava**. Isso
-precisa de:
+**O 58 vira prévia.** `analitico.service.ts` consulta
+`fn_analitico_fonte_do_setor` antes de gravar e descarta as linhas dos meses que
+já são do 59. O arquivo é lido inteiro e nada é escrito; a tela avisa, em toast
+de 12 segundos, que aquilo foi conferência e não carga.
 
-1. uma marca de «este setor é do 59» (por setor e mês);
-2. a importação do 58 consultando essa marca antes de gravar;
-3. a tela de importação dizendo, com todas as letras, que ali ela é conferência
-   e não carga.
+Isso fecha a janela de contagem dupla: a trava de procedência impedia o 58 de
+**apagar** a linha do 59, mas não de **inserir** a dele ao lado — e nos 44 NRs
+em que as fontes discordam da data a chave de unicidade é outra.
 
-Enquanto o passo 3 não existir, a projeção serve para conferir e o Painel
-Diretoria continua sendo o lugar onde o número do 59 aparece.
+**Dá para voltar.** `fn_mestre_devolver_ao_58` tira as linhas do 59 e repõe o
+retrato guardado. A ordem é a regra inteira dessa função: apagar o 59 **antes**
+de repor, senão a reposição esbarraria no índice de unicidade e voltaria quase
+nada, em silêncio.
+
+##### Verificado contra produção (Play 4, em bloco revertido)
+
+```
+antes ....... 225 linhas / R$ 67.023,90
+removidas ... 225   (snapshot: 225 — tudo guardado)
+gravadas .... 254   (de outro setor: 0)
+depois ...... 254 linhas / R$ 73.052,59
+```
+
+Bate ao centavo com a projeção.
+
+##### A aba «Fonte dos dados»
+
+Painel Diretoria, super_admin. Uma linha por setor com fonte atual, valor hoje,
+valor com o 59 e a diferença — e o botão.
+
+**Um setor por vez, de propósito.** Um «trocar tudo» seria mais rápido e não
+existe: assim a liderança de cada setor confere o próprio número no dia
+seguinte, e o estrago possível é um setor e não a empresa.
+
+A tela não oferece o que o banco recusaria. Sem lote vigente do 59
+(`SEM_LOTE_59`), com projeção vazia (`PROJECAO_VAZIA`, que significa carteira
+sem vínculo) ou sem retrato guardado (`NADA_GUARDADO`), o botão não aparece — e
+o motivo aparece no lugar dele.
 
 ---
 
