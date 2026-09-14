@@ -45,7 +45,7 @@ import { parseMestre59 } from '../../src/services/mestre/mestre59Parser';
 import { importarMestre59, hashDoConteudo } from '../../src/services/mestre/mestre.service';
 import { rpcSemTipo } from '../../src/lib/supabaseSemTipo';
 import { obrigatorio } from './env';
-import { entrar, sair } from './supabaseNode';
+import { entrar, empresaDoRobo, sair } from './supabaseNode';
 
 const agora = () => new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 /* A regra de `no-console` existe para o app, onde `console.log` vira lixo no
@@ -59,9 +59,49 @@ const erre = (msg: string) => console.error(`[${agora()}] ERRO: ${msg}`);
 /** Quantas horas o arquivo pode ter sem virar suspeita. */
 const HORAS_ATE_SUSPEITAR = Number(process.env.ROBO_HORAS_ATE_SUSPEITAR ?? 3);
 
+/** A marca, no `ROBO_ARQUIVO`, que vira o ano e o mês correntes. */
+const MARCA_MES = '{AAAAMM}';
+
+/** Ano e mês de Brasília, deslocados `delta` meses: `['202609', '2026-09']`. */
+function anoMes(delta: number): [string, string] {
+  const [ano, mes] = new Date()
+    .toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' })
+    .split('-').map(Number);
+  const total = ano * 12 + (mes - 1) + delta;
+  const a = String(Math.floor(total / 12));
+  const m = String((total % 12) + 1).padStart(2, '0');
+  return [`${a}${m}`, `${a}-${m}`];
+}
+
+/**
+ * O arquivo desta execução.
+ *
+ * O ERP grava um arquivo por mês (`rel_59_202609.csv`, `rel_59_202610.csv`…).
+ * Com a marca `{AAAAMM}` no caminho, o robô procura o do mês corrente.
+ *
+ * Na virada, o arquivo do mês novo pode ainda não existir — o ERP só o cria na
+ * primeira exportação. Até lá o robô olha o do mês anterior, em vez de falhar a
+ * madrugada inteira: se nada mudou, o hash para tudo; se o ERP ainda mexeu no
+ * mês que acabou, essa última versão entra.
+ */
+function arquivoDaVez(modelo: string): { caminho: string; mesEsperado: string | null } {
+  if (!modelo.includes(MARCA_MES)) return { caminho: modelo, mesEsperado: null };
+
+  const [atual, mesAtual] = anoMes(0);
+  const doMes = modelo.replace(MARCA_MES, atual);
+  if (existsSync(doMes)) return { caminho: doMes, mesEsperado: mesAtual };
+
+  const [anterior, mesAnterior] = anoMes(-1);
+  const doAnterior = modelo.replace(MARCA_MES, anterior);
+  if (existsSync(doAnterior)) {
+    diga(`O arquivo de ${mesAtual} ainda não existe; olhando o de ${mesAnterior}.`);
+    return { caminho: doAnterior, mesEsperado: mesAnterior };
+  }
+  return { caminho: doMes, mesEsperado: mesAtual };
+}
+
 async function principal(): Promise<number> {
-  const caminho   = obrigatorio('ROBO_ARQUIVO');
-  const empresaId = obrigatorio('ROBO_EMPRESA_ID');
+  const { caminho, mesEsperado } = arquivoDaVez(obrigatorio('ROBO_ARQUIVO'));
 
   if (!existsSync(caminho)) {
     erre(`O arquivo não está lá: ${caminho}`);
@@ -98,16 +138,23 @@ async function principal(): Promise<number> {
     erre('O arquivo não tem nenhuma linha válida.');
     return 1;
   }
+  // O nome diz um mês e o conteúdo outro: o ERP gravou no arquivo errado, ou
+  // alguém renomeou. Importar assim trocaria o retrato do mês que não era.
+  if (mesEsperado !== null && r.mes !== mesEsperado) {
+    erre(`${basename(caminho)} traz dados de ${r.mes}, não de ${mesEsperado}. Nada foi importado.`);
+    return 1;
+  }
 
   const hash = await hashDoConteudo(conteudo);
   diga(`Arquivo lido: ${r.linhas.length} linha(s), mês ${r.mes}, `
      + `R$ ${r.totalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
   if (r.descartadas > 0) diga(`${r.descartadas} linha(s) descartada(s) pelo parser.`);
 
-  await entrar();
+  const usuarioId = await entrar();
   diga('Autenticado como robô.');
 
   try {
+    const empresaId = await empresaDoRobo(usuarioId);
     const { data: hashVigente, error: errHash } = await rpcSemTipo<string>(
       'fn_mestre_hash_do_lote_vigente',
       { p_empresa_id: empresaId, p_mes: r.mes },

@@ -34,7 +34,11 @@
  * o processo aberto depois do fim.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { pareceEmailEntregavel } from '../../src/lib/identificadorLogin';
 import { obrigatorio } from './env';
+
+/** O robô só existe para a BookPlay — é o único tenant que tem o 59. */
+const TENANT_DO_ROBO = 'bookplay';
 
 let real: SupabaseClient | null = null;
 
@@ -68,12 +72,58 @@ export const supabase = new Proxy({} as SupabaseClient, {
  */
 export async function entrar(): Promise<string> {
   const { data, error } = await cliente().auth.signInWithPassword({
-    email:    obrigatorio('ROBO_EMAIL'),
+    email:    await emailDoLogin(),
     password: obrigatorio('ROBO_SENHA'),
   });
   if (error) throw new Error(`Login do robô: ${error.message}`);
   if (!data.user) throw new Error('Login do robô não devolveu usuário.');
   return data.user.id;
+}
+
+/**
+ * O e-mail com que o robô entra, a partir do login digitado no `.env`.
+ *
+ * A conta do robô é criada pela tela de Usuários com um NOME DE USUÁRIO, e o
+ * e-mail dela é sintético. Quem instala conhece o login, não o e-mail — então o
+ * robô resolve do mesmo jeito que a tela de login: parece e-mail, vai direto;
+ * senão, pergunta ao banco pelas mesmas duas RPCs, na mesma ordem.
+ *
+ * `ROBO_EMAIL` continua aceito para quem já configurou assim.
+ */
+async function emailDoLogin(): Promise<string> {
+  const login = (process.env.ROBO_LOGIN ?? process.env.ROBO_EMAIL ?? '').trim();
+  if (!login) obrigatorio('ROBO_LOGIN');
+  if (pareceEmailEntregavel(login)) return login;
+
+  const porEmpresa = await cliente().rpc('buscar_email_por_usuario_empresa', {
+    p_usuario: login, p_empresa_slug: TENANT_DO_ROBO,
+  });
+  if (!porEmpresa.error && porEmpresa.data) return porEmpresa.data as string;
+
+  const global = await cliente().rpc('buscar_email_por_usuario', { p_usuario: login });
+  if (!global.error && global.data) return global.data as string;
+
+  throw new Error(`Login do robô: o usuário «${login}» não foi encontrado. `
+    + 'Confira o login em Usuários — é o nome de usuário, não o nome de exibição.');
+}
+
+/**
+ * A empresa em que o robô importa.
+ *
+ * `ROBO_EMPRESA_ID` vence, se estiver preenchida. Sem ela, vale a empresa da
+ * própria conta do robô — que é a única em que a permissão dele foi ligada, e
+ * portanto a única em que a importação pode dar certo.
+ */
+export async function empresaDoRobo(usuarioId: string): Promise<string> {
+  const doEnv = process.env.ROBO_EMPRESA_ID?.trim();
+  if (doEnv) return doEnv;
+
+  const { data, error } = await cliente()
+    .from('perfis').select('empresa_id').eq('id', usuarioId).maybeSingle();
+  if (error) throw new Error(`Empresa do robô: ${error.message}`);
+  const empresaId = (data as { empresa_id: string | null } | null)?.empresa_id;
+  if (!empresaId) throw new Error('A conta do robô não está vinculada a nenhuma empresa.');
+  return empresaId;
 }
 
 export async function sair(): Promise<void> {

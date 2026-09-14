@@ -73,8 +73,15 @@ a senha consegue importar o 59, e nada mais.
 
 ### 4. O `.env`
 
-Copie `.env.example` para `.env` e preencha as seis variáveis. Cada uma está
-explicada no próprio arquivo.
+Copie `.env.example` para `.env` e preencha. Cada variável está explicada no
+próprio arquivo. Duas coisas que costumam pegar:
+
+- **O nome muda todo mês.** Escreva `{AAAAMM}` no lugar do ano e mês
+  (`rel_59_{AAAAMM}.csv`). O robô procura o do mês corrente e, na virada,
+  enquanto o novo não existe, o do mês anterior. Se o conteúdo do arquivo for
+  de outro mês que não o do nome, ele recusa.
+- **Login é o nome de usuário**, o mesmo da tela de entrada. Não precisa saber
+  o e-mail da conta.
 
 ### 5. Teste antes de agendar
 
@@ -121,6 +128,12 @@ básica» — a básica não tem as opções que importam).
 - **Iniciar em: `C:\robo59`** ← não deixe em branco; sem isso o Windows roda a
   partir de `System32` e o robô não acha o `.env`
 
+> **Unidade de rede.** Se o `ROBO_ARQUIVO` começa com uma letra mapeada (`Y:`),
+> a tarefa com *«executar estando o usuário conectado ou não»* não enxerga essa
+> letra — ela só existe na sessão de quem está logado. Troque pelo caminho
+> `\\servidor\pasta` (o `net use` mostra) ou marque *«executar somente quando o
+> usuário estiver conectado»*.
+
 **Configurações**
 - ☑ *Executar a tarefa assim que possível após uma inicialização agendada ter
   sido perdida* — o PC desligado à noite não perde a manhã
@@ -162,7 +175,9 @@ como erro. A mensagem sempre diz o que houve:
 | mensagem | o que é |
 |---|---|
 | `Falta ROBO_ARQUIVO` (ou outra) | o `.env` não foi preenchido, ou o Agendador não está com «Iniciar em» |
-| `O arquivo não está lá` | o ERP mudou o nome ou a pasta |
+| `O arquivo não está lá` | o ERP mudou o nome ou a pasta, ou a unidade de rede não está conectada |
+| `… traz dados de 2026-08, não de 2026-09` | o conteúdo não é do mês que o nome diz |
+| `o usuário «…» não foi encontrado` | o `ROBO_LOGIN` não é o nome de usuário da conta |
 | `Não parece o relatório 59: faltam…` | o arquivo é outro, ou o ERP mudou as colunas |
 | `Login do robô: …` | senha trocada, ou a conta foi desativada |
 | `Apenas super_admin pode importar…` | a permissão `mestre_importar_automatico` não está ligada para a conta |
