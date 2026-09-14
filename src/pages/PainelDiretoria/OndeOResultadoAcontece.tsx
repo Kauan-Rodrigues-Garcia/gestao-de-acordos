@@ -69,7 +69,8 @@ export function OndeOResultadoAcontece({
   const [grade, setGrade] = useState<GradeDeSetores | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [equipes, setEquipes] = useState<Record<string, EquipesDoSetor>>({});
-  const [fechados, setFechados] = useState<ReadonlySet<string>>(new Set());
+  /** Setores abertos. Nascem todos fechados: as equipes só aparecem no clique (14/09/2026). */
+  const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     if (!empresaId) return;
@@ -144,13 +145,13 @@ export function OndeOResultadoAcontece({
     <div className="space-y-3">
       <div className="space-y-0.5">
         {setores.map(s => {
-          const aberto = !fechados.has(s.setorId);
+          const aberto = abertos.has(s.setorId);
           const e = equipes[s.setorId];
           return (
             <div key={s.setorId}>
               <button
                 type="button"
-                onClick={() => setFechados(atual => {
+                onClick={() => setAbertos(atual => {
                   const novo = new Set(atual);
                   if (novo.has(s.setorId)) novo.delete(s.setorId); else novo.add(s.setorId);
                   return novo;

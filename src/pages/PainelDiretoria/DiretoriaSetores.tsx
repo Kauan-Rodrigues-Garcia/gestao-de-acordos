@@ -83,6 +83,7 @@ import { separarEquipesDo59 } from '@/services/mestre/equipesDiretoria';
 import { useEquipesDiretoria } from './useEquipesDiretoria';
 import { CardEquipeDiretoria } from './CardEquipeDiretoria';
 import { DetalheEquipeDiretoria } from './DetalheEquipeDiretoria';
+import { OperadoresDaEquipe59 } from './OperadoresDaEquipe59';
 
 const FALLBACK_PRIMARIA = '#3b82f6';
 const FALLBACK_ANTERIOR = '#94a3b8';
@@ -105,38 +106,65 @@ type Alvo =
  * Uma equipe como o 59 a escreve — subgrupo do ERP, valor e o que ela carrega.
  *
  * Desde 14/09/2026 é a lista SECUNDÁRIA do setor vinculado (só as sem vínculo
- * com equipe do sistema) e a lista inteira da carteira ainda sem setor.
+ * com equipe do sistema) e a lista inteira da carteira ainda sem setor. O clique
+ * abre os operadores logo abaixo — quem são e quanto cada um recebeu
+ * (`OperadoresDaEquipe59`).
  */
-function LinhaEquipe59({ equipe: e, maior }: { equipe: EquipeDoSetor; maior: number }) {
+function LinhaEquipe59({ equipe: e, maior, contexto }: {
+  equipe: EquipeDoSetor;
+  maior: number;
+  contexto: { empresaId: string; mes: string; setorId: string | null; diaCorte: number };
+}) {
+  const [aberta, setAberta] = useState(false);
   return (
-    <div className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
-        <Link2Off className="h-3 w-3" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium text-foreground">{e.equipeNome ?? e.nome}</span>
-        <span className="block truncate text-[10px] text-muted-foreground">
-          {e.carteira ? `${e.carteira} · ` : ''}
-          {e.operadores} {e.operadores === 1 ? 'operador' : 'operadores'}
-          {!e.eEquipe && ' · rótulo do ERP, não é equipe'}
-          {e.veioDeFora && ' · veio de outro setor'}
-          {/* O Integral cruzado conta aqui E na origem. Dizer isso é o que
-              impede alguém somar duas vezes na mão. */}
-          {e.eIntegral && ' · integral cobrado para cá'}
+    <div>
+      <button
+        type="button"
+        onClick={() => setAberta(v => !v)}
+        aria-expanded={aberta}
+        title={aberta ? 'Fechar os operadores' : 'Ver os operadores desta equipe'}
+        className="flex w-full items-center gap-3 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-muted/40"
+      >
+        <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', aberta && 'rotate-90')} />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
+          <Link2Off className="h-3 w-3" />
         </span>
-      </span>
-      <span className="hidden h-2 w-[22%] shrink-0 overflow-hidden rounded-full bg-muted/60 sm:block">
-        <span
-          className="block h-full rounded-full bg-primary"
-          style={{
-            width: `${maior ? Math.max(2, (e.valor / maior) * 100) : 0}%`,
-            opacity: intensidadeDaBarra(e.valor, maior),
-          }}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium text-foreground">{e.equipeNome ?? e.nome}</span>
+          <span className="block truncate text-[10px] text-muted-foreground">
+            {e.carteira ? `${e.carteira} · ` : ''}
+            {e.operadores} {e.operadores === 1 ? 'operador' : 'operadores'}
+            {!e.eEquipe && ' · rótulo do ERP, não é equipe'}
+            {e.veioDeFora && ' · veio de outro setor'}
+            {/* O Integral cruzado conta aqui E na origem. Dizer isso é o que
+                impede alguém somar duas vezes na mão. */}
+            {e.eIntegral && ' · integral cobrado para cá'}
+          </span>
+        </span>
+        <span className="hidden h-2 w-[22%] shrink-0 overflow-hidden rounded-full bg-muted/60 sm:block">
+          <span
+            className="block h-full rounded-full bg-primary"
+            style={{
+              width: `${maior ? Math.max(2, (e.valor / maior) * 100) : 0}%`,
+              opacity: intensidadeDaBarra(e.valor, maior),
+            }}
+          />
+        </span>
+        <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+          {formatBRL(e.valor)}
+        </span>
+      </button>
+      {aberta && (
+        <OperadoresDaEquipe59
+          empresaId={contexto.empresaId}
+          mes={contexto.mes}
+          setorId={contexto.setorId}
+          codGrupo={e.codGrupo}
+          subgrupo={e.nome}
+          diaCorte={contexto.diaCorte}
+          totalEquipe={e.valor}
         />
-      </span>
-      <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
-        {formatBRL(e.valor)}
-      </span>
+      )}
     </div>
   );
 }
@@ -1012,7 +1040,8 @@ export function DiretoriaSetores({
                         </p>
                         <p className="mb-1.5 text-[10px] text-muted-foreground">
                           {formatBRL(equipes59.semVinculo.reduce((t, e) => t + e.valor, 0))} que contam no setor
-                          e não chegam a nenhuma equipe acima. Vincule na aba Relatório 59.
+                          e não chegam a nenhuma equipe acima. Clique numa equipe para ver quem recebeu;
+                          o vínculo é feito na aba Relatório 59.
                         </p>
                         <div className="space-y-0.5">
                           {equipes59.semVinculo.map(e => (
@@ -1020,6 +1049,7 @@ export function DiretoriaSetores({
                               key={`${e.codGrupo}|${e.nome}`}
                               equipe={e}
                               maior={equipes59.semVinculo[0]?.valor ?? 0}
+                              contexto={{ empresaId, mes, setorId: detalhe.setorId, diaCorte: detalhe.diaCorte }}
                             />
                           ))}
                         </div>
@@ -1034,7 +1064,12 @@ export function DiretoriaSetores({
                     </div>
                     <div className="space-y-0.5">
                       {detalhe.equipes.map(e => (
-                        <LinhaEquipe59 key={`${e.codGrupo}|${e.nome}`} equipe={e} maior={maiorEquipe} />
+                        <LinhaEquipe59
+                          key={`${e.codGrupo}|${e.nome}`}
+                          equipe={e}
+                          maior={maiorEquipe}
+                          contexto={{ empresaId, mes, setorId: detalhe.setorId, diaCorte: detalhe.diaCorte }}
+                        />
                       ))}
                       {!detalhe.equipes.length && (
                         <p className="py-3 text-center text-xs text-muted-foreground">
