@@ -42,6 +42,14 @@ import { origemDaLinha, origemConta, type OrigemKey } from './composicaoAcumulad
 export interface LinhaEscopavel {
   operador_id: string | null;
   /**
+   * A linha é Contribuição Receptivo (`procedencia = contribuicao_59`, 14/09/2026):
+   * a 2ª perna do Integral que outro setor cobrou para este. Conta no setor que
+   * recebeu e NÃO na empresa — o mesmo dinheiro já está no total do Receptivo.
+   */
+  contribuicao?: boolean;
+  /** O setor de quem cobrou a contribuição. É a origem da linha. */
+  contribuicao_de_setor_id?: string | null;
+  /**
    * Setor carimbado na importação.
    *
    * `undefined` = a origem não informou a coluna (RPC antiga, antes da
@@ -137,7 +145,9 @@ const SEM_EXCLUSAO: ReadonlySet<OrigemKey> = new Set<OrigemKey>();
 export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): boolean {
   switch (escopo.tipo) {
     case 'empresa':
-      return true;
+      // Tudo o que veio no relatório, menos a contribuição: ela é a 2ª perna de
+      // um pagamento que já está no Receptivo, e somá-la aqui dobraria.
+      return !linha.contribuicao;
 
     case 'operador':
       return linha.operador_id === escopo.operadorId;
@@ -160,7 +170,7 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
       // A linha é do setor; falta saber se a ORIGEM dela continua marcada.
       if (escopo.origensExcluidas.size === 0) return true;
       return origemConta(
-        origemDaLinha(linha.operador_id, escopo.setorDoOperador),
+        origemDaLinha(linha.operador_id, escopo.setorDoOperador, linha.contribuicao_de_setor_id),
         escopo.origensExcluidas,
       );
     }

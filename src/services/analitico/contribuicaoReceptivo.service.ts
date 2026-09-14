@@ -13,29 +13,46 @@
  * for aplicado, `dbAtiva` volta false e a tela cai no localStorage antigo — o
  * card continua funcionando exatamente como antes em vez de ficar vazio.
  *
- * ## O valor passou a vir do 59 (14/09/2026)
+ * ## O valor vem do 59, já dentro do total (14/09/2026)
  *
- * A contribuição é o `Integral` que o Receptivo cobra PARA outro setor. O 59
- * traz esse dinheiro, e desde a sincronização do 59 ele não é mais digitado:
- * nos meses com lote do 59 o acumulado sai de `buscarIntegralRecebidoPorSetor`,
- * e o que estiver gravado em `acumulado` na tabela é ignorado — somar os dois
- * dobraria a contribuição. A tabela continua guardando a META, a única parte
- * que o líder ainda escolhe.
+ * A contribuição é o `Integral` que o Receptivo cobra PARA outro setor. Quando
+ * o 59 entra, a sincronização grava esse dinheiro no analítico do setor que
+ * recebeu (`procedencia = contribuicao_59`, migration 20260914220000). O total
+ * do setor já sai CERTO do banco, em toda tela, sem conta nenhuma: o card do
+ * Receptivo só mostra quanto daquele total é contribuição
+ * (`TotalDoSetor.contribuicao`), e ninguém soma por cima.
  *
- * Mês SEM lote do 59 (os anteriores à troca de fonte) segue com o valor
- * digitado: é o que valia naquele mês, e reescrevê-lo mudaria o passado.
+ * O `acumulado` digitado na tabela é ignorado no setor que está no 59 — somá-lo
+ * dobraria a contribuição. A tabela continua guardando a META, a única parte que
+ * o líder ainda escolhe.
+ *
+ * Setor que NÃO está no 59 naquele mês (os meses anteriores à troca de fonte)
+ * segue com o valor digitado, e só ele soma por cima: é o que valia naquele mês,
+ * e reescrevê-lo mudaria o passado. `origem` diz qual dos dois é.
  */
 import { supabase } from '@/lib/supabase';
-import { buscarIntegralRecebidoPorSetor } from '@/services/mestre/diretoriaSetores.service';
+import { buscarTotalPorSetor } from './analitico.service';
 import type { EscopoAnalitico } from './escopoAnalitico';
 
 export interface ContribuicaoReceptivo {
-  /** O que o card mostra e o que soma no card do setor. */
+  /** O que o card mostra. Só soma no card do setor quando é digitado (`origem` manual). */
   acumulado: number;
   /** Meta de contribuição, digitada pelo líder. Não soma em lugar nenhum. */
   meta:      number;
-  /** De onde veio o acumulado: do relatório 59 ou do valor digitado (mês sem 59). */
+  /**
+   * De onde veio o acumulado. `relatorio_59` = linhas do analítico, JÁ dentro do
+   * total do setor; `manual` = digitado num mês sem 59, que soma por cima.
+   */
   origem?:   'relatorio_59' | 'manual';
+}
+
+/**
+ * O acumulado ainda precisa ser somado por cima do total do setor?
+ *
+ * Só o digitado. O do 59 é uma parte do total que o banco já devolve.
+ */
+export function receptivoSomaPorCima(dados: ContribuicaoReceptivo | null | undefined): boolean {
+  return !!dados && dados.origem !== 'relatorio_59';
 }
 
 /**
@@ -93,12 +110,18 @@ export function receptivoDoEscopo(params: {
 }
 
 export interface ResultadoContribuicoes {
-  /** setor_id → valores. Setor sem linha no banco nem valor no 59 não aparece. */
+  /** setor_id → valores. Setor sem linha no banco nem no 59 não aparece. */
   porSetor: Record<string, ContribuicaoReceptivo>;
   /** false = migration 20260730a ainda não aplicada; use o fallback local. */
   dbAtiva:  boolean;
-  /** true = o acumulado veio do 59; a tela não oferece mais editá-lo. */
+  /** true = algum setor do mês está no 59. */
   do59:     boolean;
+}
+
+/** O que `mesclarContribuicoes` precisa do total do setor (`TotalDoSetor`). */
+export interface TotalComContribuicao {
+  contribuicao?: number;
+  do59?: boolean;
 }
 
 /** Erro de "tabela/coluna não existe" — migration pendente, não falha real. */
@@ -106,8 +129,13 @@ function ehMigrationAusente(mensagem: string): boolean {
   return /relation|does not exist|schema cache/i.test(mensagem);
 }
 
-/** A tabela: meta sempre; acumulado só vale em mês sem 59. */
-async function lerTabela(
+/**
+ * A tabela: meta sempre; acumulado só vale em setor fora do 59.
+ *
+ * Exportada para o Painel Líder, que já tem o total do setor na mão e junta os
+ * dois com `mesclarContribuicoes` — sem ler o mês de novo.
+ */
+export async function buscarContribuicoesDigitadas(
   empresaId: string, mes: string,
 ): Promise<{ linhas: Record<string, ContribuicaoReceptivo>; dbAtiva: boolean }> {
   try {
@@ -139,33 +167,53 @@ async function lerTabela(
 }
 
 /**
+ * Junta o digitado com o que o 59 gravou, setor por setor.
+ *
+ *   • setor no 59 → acumulado = a contribuição que já está no total dele; a
+ *     meta continua a digitada. O acumulado digitado não volta, nem zerado;
+ *   • setor fora do 59 → o digitado, como sempre foi.
+ *
+ * Pura: o Painel Líder chama com o total que já carregou.
+ */
+export function mesclarContribuicoes(
+  digitadas: Record<string, ContribuicaoReceptivo>,
+  totalPorSetor: Record<string, TotalComContribuicao>,
+): Record<string, ContribuicaoReceptivo> {
+  const porSetor: Record<string, ContribuicaoReceptivo> = {};
+  for (const [sid, linha] of Object.entries(digitadas)) {
+    porSetor[sid] = totalPorSetor[sid]?.do59
+      ? { acumulado: Number(totalPorSetor[sid].contribuicao) || 0, meta: linha.meta, origem: 'relatorio_59' }
+      : { ...linha, origem: linha.origem ?? 'manual' };
+  }
+  for (const [sid, total] of Object.entries(totalPorSetor)) {
+    if (porSetor[sid] || !total?.do59) continue;
+    porSetor[sid] = { acumulado: Number(total.contribuicao) || 0, meta: 0, origem: 'relatorio_59' };
+  }
+  return porSetor;
+}
+
+/**
  * As contribuições de TODOS os setores da empresa no mês.
  *
  * Uma leitura para o mês inteiro (em vez de uma por setor) porque a aba
  * renderiza vários setores em sequência para admin/diretoria sem setor. As duas
- * fontes — a tabela e o 59 — vão juntas.
+ * fontes — a tabela e o analítico — vão juntas; a leitura do mês é a mesma de
+ * `buscarTotalPorSetor`, compartilhada quando as duas chamadas correm juntas.
  */
 export async function buscarContribuicoesReceptivo(
   empresaId: string,
   mes:       string,
 ): Promise<ResultadoContribuicoes> {
-  const [tabela, do59] = await Promise.all([
-    lerTabela(empresaId, mes),
-    buscarIntegralRecebidoPorSetor(empresaId, mes),
+  const [tabela, totalPorSetor] = await Promise.all([
+    buscarContribuicoesDigitadas(empresaId, mes),
+    buscarTotalPorSetor(empresaId, mes).catch((): Record<string, TotalComContribuicao> => ({})),
   ]);
-
-  if (!do59) return { porSetor: tabela.linhas, dbAtiva: tabela.dbAtiva, do59: false };
-
-  // Mês com 59: o acumulado é o do relatório, para todo setor. O digitado não
-  // volta a somar nem onde o 59 não trouxe nada.
-  const porSetor: Record<string, ContribuicaoReceptivo> = {};
-  for (const [sid, linha] of Object.entries(tabela.linhas)) {
-    porSetor[sid] = { acumulado: do59[sid] ?? 0, meta: linha.meta, origem: 'relatorio_59' };
-  }
-  for (const [sid, valor] of Object.entries(do59)) {
-    if (!porSetor[sid]) porSetor[sid] = { acumulado: valor, meta: 0, origem: 'relatorio_59' };
-  }
-  return { porSetor, dbAtiva: tabela.dbAtiva, do59: true };
+  const totais: Record<string, TotalComContribuicao> = totalPorSetor;
+  return {
+    porSetor: mesclarContribuicoes(tabela.linhas, totais),
+    dbAtiva:  tabela.dbAtiva,
+    do59:     Object.values(totais).some(t => t?.do59),
+  };
 }
 
 /**

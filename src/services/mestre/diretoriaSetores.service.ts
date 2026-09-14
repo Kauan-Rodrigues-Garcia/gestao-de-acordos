@@ -312,46 +312,6 @@ export async function buscarGradeDeSetores(
   };
 }
 
-/**
- * O `Integral` que outro setor cobrou para cada setor, no mês — a Contribuição
- * Receptivo, como o 59 a escreve.
- *
- * ## Por que existe (14/09/2026)
- *
- * O card «Contribuição Receptivo» do Painel Líder era preenchido à mão. O 59 já
- * traz esse dinheiro: é a 2ª perna do Integral (`fn_mestre_diretoria_linhas`,
- * origem `integral`), que o analítico NÃO tem — a sincronização grava só a 1ª
- * perna, no setor de quem cobrou (ver `20260914024100`). Então o número certo
- * para somar no setor que recebeu é este, e não o digitado.
- *
- * Só a grade, sem a chamada dos alternativos: aqui interessa um número por
- * setor, e o alternativo não recebe Integral.
- *
- * `null` = o mês não tem lote do 59 (ou a leitura falhou). Quem chama volta ao
- * valor digitado, que é o que valia nos meses de antes do 59.
- */
-export async function buscarIntegralRecebidoPorSetor(
-  empresaId: string, mes: string,
-): Promise<Record<string, number> | null> {
-  try {
-    const { data, error } = await rpcSemTipo<GradeCrua>('fn_mestre_diretoria_setores', {
-      p_empresa_id: empresaId, p_mes: mes, p_dia_corte: null,
-    });
-    if (error || !data) return null;
-    const setores = Array.isArray(data.setores) ? data.setores : [];
-    const semSetor = Array.isArray(data.carteiras_sem_setor) ? data.carteiras_sem_setor : [];
-    if (setores.length === 0 && semSetor.length === 0) return null;
-    const porSetor: Record<string, number> = {};
-    for (const s of setores) {
-      const v = n(s.integral_recebido);
-      if (v > 0) porSetor[s.setor_id] = v;
-    }
-    return porSetor;
-  } catch {
-    return null;
-  }
-}
-
 /** Quem recebeu dentro de uma equipe do 59, no detalhe do setor. */
 export interface OperadorDaEquipe59 {
   /** O login como o 59 escreve. */

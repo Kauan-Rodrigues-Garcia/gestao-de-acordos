@@ -36,8 +36,8 @@ import { reconciliarMapa } from '@/lib/dadosVivos';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
 import {
-  buscarContribuicoesReceptivo, salvarMetaContribuicaoReceptivo, receptivoPreenchido,
-  type ContribuicaoReceptivo,
+  buscarContribuicoesDigitadas, mesclarContribuicoes, salvarMetaContribuicaoReceptivo,
+  receptivoPreenchido, type ContribuicaoReceptivo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
@@ -75,8 +75,11 @@ interface DesempenhoEquipesProps {
   /** Total dos órfãos (sem operador) por setor — entram no card do setor. */
   orfaosPorSetor?: Record<string, { total: number; qtd: number }>;
   /** Total do RELATÓRIO por setor (soma das linhas carimbadas). Fonte do card
-   *  do setor NORMAL — clones não afetam. */
-  totalPorSetor?: Record<string, { total: number; ho: number; qtd: number }>;
+   *  do setor NORMAL — clones não afetam. `contribuicao` é quanto dele é
+   *  Contribuição Receptivo gravada pelo 59 — o valor do card do Receptivo. */
+  totalPorSetor?: Record<string, {
+    total: number; ho: number; qtd: number; contribuicao?: number; do59?: boolean;
+  }>;
   /** Ids dos setores ALTERNATIVOS: total = soma dos membros/clones, não do relatório. */
   setoresAlternativos?: Set<string>;
   /** PaguePlay: card do setor = soma dos operadores (analítico), não o total
@@ -98,7 +101,9 @@ interface IdentidadeOperador { nome: string; fotoUrl: string | null }
 // ── Contribuição Receptivo (card por setor — BookPlay) ─────────────────────────
 // Card visual idêntico ao dos demais. Desde 14/09/2026 o ACUMULADO vem do 59 —
 // é o Integral que o Receptivo cobrou para o setor — e o lápis só grava a META.
-// Antes os dois eram digitados à mão.
+// Antes os dois eram digitados à mão. O 59 grava a contribuição nas linhas do
+// setor, então o card do setor já a traz no total; este card só mostra a parte
+// (`totalPorSetor[sid].contribuicao`) e não soma nada.
 //
 // O valor agora vive no banco (`contribuicao_receptivo`, migration 20260730a):
 // uma linha por (empresa, setor, mês), compartilhada — se um líder edita, todos
@@ -317,31 +322,35 @@ export function DesempenhoEquipes({
   // renderiza vários setores para admin/diretoria sem setor) e uma assinatura de
   // realtime serve a aba toda. Na versão anterior cada card lia o próprio
   // localStorage e reportava de volta pelo `onReport`.
-  const [contrib, setContrib]               = useState<Record<string, ContribuicaoReceptivo>>({});
+  // Só a parte DIGITADA vem do banco aqui (meta sempre; acumulado de setor fora
+  // do 59). O valor do 59 sai de `totalPorSetor`, que o pai já carregou e relê a
+  // cada importação — o card acompanha o total sem uma leitura própria do mês.
+  const [digitadas, setDigitadas]           = useState<Record<string, ContribuicaoReceptivo>>({});
   const [contribDbAtiva, setContribDbAtiva] = useState(true);
-  /** O acumulado do mês veio do 59 — ver `buscarContribuicoesReceptivo`. */
-  const [contribDo59, setContribDo59]       = useState(false);
   const [salvandoContrib, setSalvandoContrib] = useState<string | null>(null);
   const podeEditarContrib = podeEditarReceptivo(perfil?.perfil);
   const recarregarContrib = useCallback(async () => {
     if (isPP) return;
-    const { porSetor, dbAtiva, do59 } = await buscarContribuicoesReceptivo(empresaId, mes);
+    const { linhas, dbAtiva } = await buscarContribuicoesDigitadas(empresaId, mes);
     setContribDbAtiva(dbAtiva);
-    setContribDo59(do59);
     // Reconciliado: o evento de realtime chega a cada tecla salva do outro
     // lado, e sem isto todo cartao de equipe do setor re-renderizaria com
     // exatamente os mesmos numeros dentro.
-    // Com o 59, o localStorage antigo não entra: o acumulado dele é digitado e
-    // somaria por cima do valor do relatório.
-    if (dbAtiva || do59) { setContrib(atual => reconciliarMapa(atual, porSetor)); return; }
-    // Migration pendente e mês sem 59 → localStorage antigo, setor por setor.
+    if (dbAtiva) { setDigitadas(atual => reconciliarMapa(atual, linhas)); return; }
+    // Migration pendente → localStorage antigo, setor por setor. Em setor do 59
+    // `mesclarContribuicoes` ignora o acumulado dele, como o do banco.
     const local: Record<string, ContribuicaoReceptivo> = {};
     for (const sid of Object.keys(setores)) {
       const v = lerContribuicaoLocal(empresaId, sid, mes);
       if (v) local[sid] = v;
     }
-    setContrib(local);
+    setDigitadas(local);
   }, [isPP, empresaId, mes, setores]);
+
+  const contrib = useMemo(
+    () => (isPP ? {} : mesclarContribuicoes(digitadas, totalPorSetor)),
+    [isPP, digitadas, totalPorSetor],
+  );
 
   // Lido por ref na assinatura de realtime: `recarregarContrib` muda quando os
   // setores carregam, e isso não deve derrubar e recriar o canal.
@@ -374,7 +383,7 @@ export function DesempenhoEquipes({
         return;
       }
       // Otimista: a tela de quem editou reage na hora; o realtime leva aos outros.
-      setContrib(prev => ({ ...prev, [sid]: { acumulado: prev[sid]?.acumulado ?? 0, meta, origem: prev[sid]?.origem } }));
+      setDigitadas(prev => ({ ...prev, [sid]: { acumulado: prev[sid]?.acumulado ?? 0, meta, origem: 'manual' } }));
       const ok = await salvarMetaContribuicaoReceptivo({
         empresaId, setorId: sid, mes, meta, atualizadoPor: perfil?.id ?? null,
       });
@@ -789,8 +798,8 @@ export function DesempenhoEquipes({
             />
           )}
           {/* Contribuição Receptivo (BookPlay). O valor vem do 59 e já está
-              somado no card do setor acima (`acumuladoDoSetor`); zerado não
-              aparece. */}
+              dentro do total do setor acima — o banco o grava nas linhas do
+              setor; zerado não aparece. */}
           {mostrarReceptivo && (
             <CardContribuicaoReceptivo
               dados={contrib[sid]}
@@ -799,7 +808,7 @@ export function DesempenhoEquipes({
               quartis={quartis}
               podeEditar={podeEditarContrib}
               salvando={salvandoContrib === sid}
-              do59={contribDo59}
+              do59={contrib[sid]?.origem === 'relatorio_59'}
               onSalvarMeta={meta => { void salvarMetaContrib(sid, meta); }}
               foto={receptivoFotos[sid] ?? null}
               onEditarFoto={podeEditarContrib ? () => abrirUploadFotoSetor(sid, 'receptivo') : undefined}

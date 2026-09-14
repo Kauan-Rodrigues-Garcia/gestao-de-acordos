@@ -97,6 +97,30 @@ describe('acumuladoDoSetor', () => {
     expect(r.ho).toBe(300);
   });
 
+  it('Receptivo do 59 não soma: já está no total do relatório', () => {
+    expect(acumuladoDoSetor({
+      setorId: 's1', isPaguePlay: false, alternativo: false,
+      somaPorSetor, totalPorSetor,
+      receptivoPorSetor: { s1: { acumulado: 100, origem: 'relatorio_59' } },
+    })).toEqual({ bruto: 1_200, ho: 300, ajuste: 50 });
+  });
+
+  it('Receptivo do 59 no setor alternativo: já está na soma (órfãos do setor)', () => {
+    expect(acumuladoDoSetor({
+      setorId: 's1', isPaguePlay: false, alternativo: true,
+      somaPorSetor, totalPorSetor,
+      receptivoPorSetor: { s1: { acumulado: 100, origem: 'relatorio_59' } },
+    })).toEqual({ bruto: 1_000, ho: 250, ajuste: 50 });
+  });
+
+  it('Receptivo digitado (setor fora do 59) continua somando', () => {
+    expect(acumuladoDoSetor({
+      setorId: 's1', isPaguePlay: false, alternativo: false,
+      somaPorSetor, totalPorSetor,
+      receptivoPorSetor: { s1: { acumulado: 100, origem: 'manual' } },
+    })).toEqual({ bruto: 1_300, ho: 300, ajuste: 50 });
+  });
+
   it('setor sem dado nenhum é zero, não NaN', () => {
     expect(acumuladoDoSetor({
       setorId: 'sx', isPaguePlay: false, alternativo: false,

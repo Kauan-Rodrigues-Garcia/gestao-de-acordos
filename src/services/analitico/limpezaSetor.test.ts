@@ -38,6 +38,7 @@ function createBuilder(table: string) {
     is:  vi.fn((c: string, v: unknown) => { call!.filters.push(['is',  c, v]); return builder; }),
     gte: vi.fn((c: string, v: unknown) => { call!.filters.push(['gte', c, v]); return builder; }),
     lte: vi.fn((c: string, v: unknown) => { call!.filters.push(['lte', c, v]); return builder; }),
+    filter: vi.fn((c: string, op: string, v: unknown) => { call!.filters.push([op, c, v]); return builder; }),
     then: (resolve: (v: { data: null; error: { message: string } | null }) => unknown) =>
       Promise.resolve({ data: null, error: erroDoBanco }).then(resolve),
   };
@@ -192,7 +193,11 @@ describe('removerOrfaosDoMes', () => {
 
     expect(error).toBeNull();
     expect(calls).toHaveLength(1);
-    expect(alemDoMes(calls[0])).toEqual([['is', 'operador_id', null]]);
+    // A Contribuição Receptivo do 59 também não tem operador, e não é órfã.
+    expect(alemDoMes(calls[0])).toEqual([
+      ['is', 'operador_id', null],
+      ['neq', 'procedencia', 'contribuicao_59'],
+    ]);
   });
 
   it('com escopo, remove o órfão CARIMBADO no setor — não só o que ele importou', async () => {
@@ -204,10 +209,12 @@ describe('removerOrfaosDoMes', () => {
     conferirRecorteDoMes();
     expect(alemDoMes(calls[0])).toEqual([
       ['is', 'operador_id', null],
+      ['neq', 'procedencia', 'contribuicao_59'],
       ['eq', 'setor_id', SETOR],
     ]);
     expect(alemDoMes(calls[1])).toEqual([
       ['is', 'operador_id', null],
+      ['neq', 'procedencia', 'contribuicao_59'],
       ['in', 'importado_por_id', PERFIS],
       ['is', 'setor_id', null],
     ]);

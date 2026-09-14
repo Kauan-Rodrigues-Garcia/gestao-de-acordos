@@ -153,8 +153,16 @@ export function GraficoRecebimento({
       // filtrava nada: o gráfico mostrava a empresa inteira com o nome de uma
       // equipe no cabeçalho.
       if (escopo) {
-        if (!linhaNoEscopo({ operador_id: l.operador_id, setor_id: l.setor_id }, escopo)) continue;
-      } else if (setorId) {
+        if (!linhaNoEscopo({
+          operador_id: l.operador_id,
+          setor_id: l.setor_id,
+          contribuicao: l.contribuicao,
+          contribuicao_de_setor_id: l.contribuicao_de_setor_id,
+        }, escopo)) continue;
+      } else if (!setorId) {
+        // Empresa sem escopo: a contribuição já está no setor de quem cobrou.
+        if (l.contribuicao) continue;
+      } else {
         // Sem escopo (quem chama ainda não passa): regra anterior, para o
         // gráfico não ficar vazio.
         const conta = l.operador_id

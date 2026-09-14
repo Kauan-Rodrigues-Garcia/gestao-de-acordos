@@ -311,6 +311,9 @@ export async function buscarDiretoExtraDoMes(params: {
 
       if (filtro && 'igual' in filtro)  q = q.eq(filtro.coluna, filtro.igual);
       if (filtro && 'dentro' in filtro) q = q.in(filtro.coluna, filtro.dentro);
+      // Empresa: a Contribuição Receptivo já está no setor de quem cobrou
+      // (`linhaNoEscopo`). No setor pelo carimbo ela entra — é dele.
+      if (!filtro) q = q.filter('procedencia', 'neq', 'contribuicao_59');
 
       const { data, error } = await q.range(offset, offset + PAGINA - 1);
       if (error) {

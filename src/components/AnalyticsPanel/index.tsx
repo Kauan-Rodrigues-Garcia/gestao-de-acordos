@@ -21,7 +21,7 @@ import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { niveisLiberados, veAlemDeSi } from '@/lib/permissoes-escopo';
 import {
-  buscarContribuicoesReceptivo, receptivoDoEscopo,
+  buscarContribuicoesReceptivo, receptivoDoEscopo, receptivoSomaPorCima,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { formatCurrency, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -217,11 +217,11 @@ export function AnalyticsPanel({
   const usarAnalitico = temAnalitico && analiticoDash.dbAtiva;
 
   // ── Contribuição Receptivo (BookPlay) ──────────────────────────────────────
-  // O Integral que o Receptivo cobrou para cada setor — do 59 desde 14/09/2026
-  // (antes, digitado em `contribuicao_receptivo`). Não está nas linhas do setor
-  // no analítico: soma POR CIMA no escopo de setor, como o card de setor do
-  // Painel Líder. No escopo de empresa não soma — já está no total do Receptivo
-  // (ver `receptivoDoEscopo`).
+  // O Integral que o Receptivo cobrou para cada setor. Desde 14/09/2026 o 59 a
+  // grava nas linhas do setor (`contribuicao_59`): ela já chega em
+  // `analiticoDash.linhas` e `linhaNoEscopo` decide onde conta — no setor sim,
+  // na empresa não. Aqui sobra só o valor DIGITADO de setor fora do 59, que não
+  // está em linha nenhuma e soma por cima no escopo de setor (`receptivoDoEscopo`).
   const [receptivoPorSetor, setReceptivoPorSetor] = useState<Record<string, number>>({});
   useEffect(() => {
     if (isPP || !isBookplay || !empresa?.id) { setReceptivoPorSetor({}); return; }
@@ -229,7 +229,10 @@ export function AnalyticsPanel({
     void buscarContribuicoesReceptivo(empresa.id, mesAnalise).then(({ porSetor }) => {
       if (cancelado) return;
       const mapa: Record<string, number> = {};
-      for (const [sid, v] of Object.entries(porSetor)) mapa[sid] = v.acumulado;
+      for (const [sid, v] of Object.entries(porSetor)) {
+        // O do 59 já está nas linhas; somá-lo aqui dobraria.
+        if (receptivoSomaPorCima(v)) mapa[sid] = v.acumulado;
+      }
       setReceptivoPorSetor(mapa);
     });
     return () => { cancelado = true; };

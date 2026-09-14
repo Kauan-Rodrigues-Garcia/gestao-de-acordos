@@ -507,6 +507,14 @@ export interface AnaliticoDashboardLinha {
   /** Rótulo real da forma (BookPlay: Boleto, Pix, Pix Automático…); NULL na PaguePlay. */
   forma_detalhe: string | null;
   status_tabulacao: 'tabulado' | 'nao_tabulado' | 'divergente';
+  /**
+   * Contribuição Receptivo gravada pelo 59 (`procedencia = contribuicao_59`,
+   * migration 20260914220000): conta no setor que recebeu e não na empresa —
+   * ver `linhaNoEscopo`. `undefined` antes da migration.
+   */
+  contribuicao?: boolean;
+  /** Só na contribuição: o setor de quem cobrou. */
+  contribuicao_de_setor_id?: string | null;
   total: number;
   total_ho: number;
   qtd: number;
