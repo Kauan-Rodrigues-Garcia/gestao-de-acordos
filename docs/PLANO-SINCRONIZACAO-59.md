@@ -275,6 +275,35 @@ pessoas, concentração ≥ 90%); o resto aparece desmarcado com o motivo à vis
 Com uma pessoa só, «100%» significa apenas que existe uma pessoa — e em setembro
 esses são todos casos de gente emprestada de outro setor, entre R$ 200 e R$ 600.
 
+#### Resultado depois de rodar — 14/09/2026
+
+Vínculos passaram de 18 para **30**, e a cobertura do 59 subiu:
+
+| | antes | depois |
+|---|---|---|
+| Com equipe | 2.096.172,87 (50,4%) | **2.736.386,80 (65,7%)** |
+| Resolvido nos três | 2.096.172,87 | **2.735.176,98** |
+
+Ganho de **R$ 639.004,11** sem tocar em dado.
+
+> ⚠️ **A tela oferecia uma ação que o banco sempre recusaria.**
+> `fn_mestre_vincular_equipe` tem uma guarda que barra equipe de outro setor —
+> e ela está certa: vincular mandaria o dinheiro daquela carteira para a equipe
+> de outro setor. Mas a lista deixava marcar assim mesmo, e quem tentou levou
+> erro. Corrigido: agora essas linhas vêm desabilitadas, com o motivo. Ver
+> `podeVincular`.
+
+**O que sobrou, e por quê:**
+
+| Setor | Situação | Valor |
+|---|---|---|
+| Jornada Play | **não tem nenhuma equipe cadastrada** — DIGITAL, ACESSO/RECEBIMENTO, RETENÇÃO | ~119.900 |
+| Play 5 / Playmix | equipe de outro setor, bloqueado pela guarda (gente emprestada) | 1.244 |
+| vários | concentração abaixo de 80%, ou subgrupo que não é equipe | pequeno |
+
+O maior bloco é **cadastro, não código**: criar as equipes do Jornada Play
+destrava sozinho a maior parte do que falta.
+
 ### Fase 4 — correção manual
 
 Redirecionar um valor para outro setor, pessoa ou equipe. Só super admin, nunca
@@ -341,15 +370,16 @@ Ela depende de uma coisa que ainda não existe:
   do 59» de «pendente do 58». Sem ela não há como saber o que está aguardando
   confirmação, e o «pendente» da regra 4 não tem onde morar.
 
-A outra dependência — o vínculo de equipe — a Fase 3 destravou: a aba «Equipes a
-vincular» propõe 18 dos 34 subgrupos pendentes, cobrindo R$ 745.618,13. Aceitas
-as sugestões, a cobertura do 59 sai de **50,4%** para perto de **75%**.
+A outra dependência — o vínculo de equipe — **a Fase 3 já destravou**: a
+cobertura saiu de 50,4% para 65,7% em 14/09.
 
-**Antes de abrir a Fase 2, vale rodar a Fase 3 até o fim** — aceitar as
-sugestões, vincular à mão o que sobrar, e remedir. Enquanto metade do dinheiro
-não tiver equipe, a aba de divergências vai listar ausência de cadastro como se
-fosse divergência, e o «não explicado» nunca chega a zero — que é justamente o
-campo que faz o sistema ser confiável.
+O que ainda segura os 34,3% restantes é cadastro, e o maior bloco tem nome:
+**Jornada Play não tem nenhuma equipe cadastrada**, e sozinho responde por quase
+R$ 120 mil. Criadas as equipes, a aba «Equipes a vincular» propõe o resto.
+
+Vale subir mais alguns pontos antes de abrir a Fase 2, mas não é mais bloqueio:
+com 65,7% resolvido, a aba de divergências já consegue separar «isto é
+divergência» de «isto é cadastro faltando» sem afogar uma coisa na outra.
 
 ## Decisões tomadas nesta sessão
 

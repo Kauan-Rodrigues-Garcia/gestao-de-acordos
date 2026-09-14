@@ -29,6 +29,7 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
   buscarEquipesSugeridas,
+  podeVincular,
   sugestaoConfiavel,
   type EquipeSugerida,
 } from '@/services/mestre/equipesSugeridas.service';
@@ -57,7 +58,7 @@ export default function Mestre59EquipesSugeridas({ empresaId, mes, versao, aoVin
       const dados = await buscarEquipesSugeridas(empresaId, mes);
       setLinhas(dados);
       // Só as seguras vêm marcadas. Ver `sugestaoConfiavel`.
-      setMarcadas(new Set(dados.filter(sugestaoConfiavel).map(chaveDe)));
+      setMarcadas(new Set(dados.filter(s => podeVincular(s) && sugestaoConfiavel(s)).map(chaveDe)));
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao buscar as sugestões.');
     } finally {
@@ -67,7 +68,11 @@ export default function Mestre59EquipesSugeridas({ empresaId, mes, versao, aoVin
 
   useEffect(() => { void carregar(); }, [carregar, versao]);
 
-  const alternar = useCallback((chave: string) => {
+  /* Sugestão que o banco vai recusar não entra na seleção: a guarda de
+     `fn_mestre_vincular_equipe` barra equipe de outro setor, e deixar marcar
+     seria oferecer um botão que só sabe falhar. Ver `podeVincular`. */
+  const alternar = useCallback((chave: string, habilitada: boolean) => {
+    if (!habilitada) return;
     setMarcadas(prev => {
       const proximo = new Set(prev);
       if (proximo.has(chave)) proximo.delete(chave); else proximo.add(chave);
@@ -183,16 +188,22 @@ export default function Mestre59EquipesSugeridas({ empresaId, mes, versao, aoVin
             {linhas.map(s => {
               const chave = chaveDe(s);
               const segura = sugestaoConfiavel(s);
+              const habilitada = podeVincular(s);
               return (
                 <tr key={chave}
                   className={cn(
-                    'cursor-pointer border-b border-border/25 transition-colors hover:bg-muted/30',
+                    'border-b border-border/25 transition-colors',
+                    habilitada ? 'cursor-pointer hover:bg-muted/30' : 'opacity-70',
                     marcadas.has(chave) && 'bg-primary/5',
                   )}
-                  onClick={() => alternar(chave)}
+                  onClick={() => alternar(chave, habilitada)}
                 >
                   <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <Checkbox checked={marcadas.has(chave)} onCheckedChange={() => alternar(chave)} />
+                    <Checkbox
+                      checked={marcadas.has(chave)}
+                      disabled={!habilitada}
+                      onCheckedChange={() => alternar(chave, habilitada)}
+                    />
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="block font-medium text-foreground">{s.subgrupo}</span>
@@ -206,9 +217,18 @@ export default function Mestre59EquipesSugeridas({ empresaId, mes, versao, aoVin
                   <td className="px-3 py-2.5">
                     <span className="block text-xs font-medium text-foreground">{s.equipeNome}</span>
                     {!s.mesmoSetor && (
-                      <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+                      <span
+                        className="mt-0.5 inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning"
+                        title={
+                          `A equipe é do setor ${s.equipeSetorNome ?? 'outro'} e a carteira é do ` +
+                          `${s.setorNome ?? 'setor atual'}. Vincular mandaria o dinheiro desta ` +
+                          'carteira para a equipe do outro setor, e o banco recusa. ' +
+                          'Quase sempre é gente emprestada — se não for, o que precisa mudar é ' +
+                          'o cadastro da carteira ou o setor da equipe.'
+                        }
+                      >
                         <AlertTriangle className="h-2.5 w-2.5" />
-                        equipe de {s.equipeSetorNome ?? 'outro setor'}
+                        equipe de {s.equipeSetorNome ?? 'outro setor'} · não dá para vincular
                       </span>
                     )}
                   </td>
@@ -239,6 +259,15 @@ export default function Mestre59EquipesSugeridas({ empresaId, mes, versao, aoVin
         estão na lista para você olhar: com uma pessoa só, «100%» significa apenas que
         existe uma pessoa.
       </p>
+      {linhas.some(s => !podeVincular(s)) && (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          As linhas apagadas <strong>não podem ser vinculadas por aqui</strong>: a equipe
+          sugerida é de outro setor, e o banco recusa — vincular mandaria o dinheiro
+          daquela carteira para a equipe de outro setor. Quase sempre é gente emprestada.
+          Se não for, o que precisa mudar é o cadastro: ou o setor da carteira, ou o setor
+          da equipe.
+        </p>
+      )}
     </div>
   );
 }

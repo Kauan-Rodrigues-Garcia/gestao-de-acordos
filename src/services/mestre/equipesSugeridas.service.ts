@@ -63,6 +63,31 @@ export interface EquipeSugerida {
 }
 
 /**
+ * Esta sugestão pode virar vínculo?
+ *
+ * Espelha a guarda de `fn_mestre_vincular_equipe`:
+ *
+ *     if v_setor_eq is distinct from v_setor_grupo then
+ *       raise exception 'A equipe é de outro setor que não o vinculado a este grupo.';
+ *
+ * A guarda está certa e não deve sair. O caso que ela barra é gente emprestada:
+ * alguém do Play Mix cobrando na carteira do Play 5 faz o subgrupo apontar para
+ * uma equipe do Play Mix — e vincular mandaria dinheiro do Play 5 para a equipe
+ * do outro setor.
+ *
+ * O que estava errado era a tela: ela deixava marcar uma ação que o banco sempre
+ * recusaria. Oferecer um botão que só sabe falhar é pior que não oferecer.
+ *
+ * Para vincular de verdade um desses casos, o caminho é outro: ou a carteira
+ * pertence a esse setor (e aí é o vínculo da carteira que está errado), ou a
+ * equipe pertence ao setor da carteira. Os dois são decisões de cadastro, não
+ * desta tela.
+ */
+export function podeVincular(s: EquipeSugerida): boolean {
+  return s.mesmoSetor;
+}
+
+/**
  * Quando uma sugestão pode vir marcada por padrão.
  *
  * Três condições, e as três precisam valer:
