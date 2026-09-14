@@ -28,8 +28,11 @@ import {
 import { nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 
 interface Props {
-  /** `null` = fechado. Aberto, traz o NR gravado e a forma escolhida. */
-  aviso: { nr: string; forma: string } | null;
+  /**
+   * `null` = fechado. Aberto, traz o NR gravado, a forma escolhida e — desde o
+   * registro automático (14/09/2026) — por que ele não entrou sozinho no Pix.
+   */
+  aviso: { nr: string; forma: string; motivo?: string } | null;
   /** Abre a aba Pix Automático com o NR já preenchido. */
   onIr: () => void;
   /** Fecha e segue o caminho normal de quem salvou (voltar para a lista). */
@@ -53,8 +56,13 @@ export function ModalAvisoPixAutomatico({ aviso, onIr, onDepois }: Props) {
                 foi salvo como{' '}
                 <strong className="text-foreground">
                   {aviso ? nomeDaFormaRecorrente(aviso.forma) : ''}
-                </strong>.
+                </strong>, mas não entrou sozinho no Pix Automático.
               </p>
+              {aviso?.motivo && (
+                <p className="text-xs rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 text-amber-700 dark:text-amber-400">
+                  {aviso.motivo}
+                </p>
+              )}
               <div className="rounded-lg bg-cyan-500/10 border border-cyan-500/30 p-3 space-y-1">
                 <p className="text-xs font-semibold text-cyan-700 dark:text-cyan-400">
                   A comissão desta forma de pagamento sai da aba Pix Automático.

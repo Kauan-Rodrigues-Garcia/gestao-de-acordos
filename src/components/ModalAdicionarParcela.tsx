@@ -33,6 +33,7 @@ import {
   TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
 } from '@/lib/index';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY, STATUS_OPTIONS } from '@/components/AcordoNovoInline/constants';
+import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -117,7 +118,9 @@ export function ModalAdicionarParcela({
         ? inicial.valor.toFixed(2).replace('.', ',')
         : '',
     );
-    setTipoSel(tipoParaOpcao(inicial?.tipo ?? acordo.tipo, isPaguePlay));
+    // Recorrente não é forma de parcela (ver `confirmar`): abre em Boleto.
+    const tipoInicial = tipoParaOpcao(inicial?.tipo ?? acordo.tipo, isPaguePlay);
+    setTipoSel(!isPaguePlay && ehFormaRecorrente(tipoInicial) ? 'boleto' : tipoInicial);
     setStatusSel(inicial?.status ?? 'verificar_pendente');
     setQtdStr('1');
     setPersonalizar(false);
@@ -175,6 +178,23 @@ export function ModalAdicionarParcela({
     // apareceria.
     const erro = validarPlano(plano);
     if (erro) { toast.error(erro); return; }
+    /*
+     * PIX Automático e Cartão Recorrente não entram como PARCELA.
+     *
+     * Como parcela, o valor é só um pedaço do acordo, e o Pix Automático paga
+     * comissão sobre o total — a liderança pediu que esse caso não entre
+     * (14/09/2026). A forma recorrente se lança como acordo próprio, com o
+     * valor total, e vai sozinha para o Pix (ver `AcordoNovoInline`).
+     */
+    const recorrente = !isPaguePlay && plano.parcelas.find(p => ehFormaRecorrente(p.tipo));
+    if (recorrente) {
+      toast.error(
+        `${nomeDaFormaRecorrente(recorrente.tipo)} não pode ser adicionado como parcela: ele entra com o `
+        + 'valor total, como acordo próprio. Escolha outra forma de pagamento para a parcela.',
+        { duration: 8000 },
+      );
+      return;
+    }
     void onConfirm(plano.parcelas.map(p => ({
       vencimento: p.vencimento,
       valor:      p.valor,

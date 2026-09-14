@@ -20,8 +20,11 @@
  *      exatamente o que aconteceu no Play 3, com um lote inteiro registrado no
  *      lugar errado.
  *
- * O aviso pós-gravação existe por causa do item 3: o acordo está salvo e certo
- * na lista, mas o trabalho ainda não acabou.
+ * Por causa do item 3, desde 14/09/2026 o acordo recorrente é registrado
+ * sozinho no Pix Automático ao salvar (`pixAutomaticoDoAcordo.service`), com o
+ * VALOR TOTAL confirmado no formulário — só a parcela não entra, nem como valor
+ * nem como parcela de acordo existente. O aviso pós-gravação ficou para quando o
+ * registro automático não acontece.
  */
 
 /** Os `value` de `TIPOS_BOOKPLAY` que seguem a regra da recorrência. */

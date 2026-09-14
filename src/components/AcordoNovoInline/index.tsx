@@ -39,6 +39,9 @@ import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
 import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
+import { useCargoPermissoes }       from '@/hooks/useCargoPermissoes';
+import { niveisLiberados }          from '@/lib/permissoes-escopo';
+import { registrarAcordoNoPixAutomatico } from '@/services/pixAutomaticoDoAcordo.service';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -73,6 +76,7 @@ export function AcordoNovoInline({
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const { tags: empresaTags }  = useEmpresaTags();
+  const { temPermissao }       = useCargoPermissoes();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
@@ -201,14 +205,23 @@ export function AcordoNovoInline({
   const [avisoDiretoExtra, setAvisoDiretoExtra] = useState<PendingAvisoDiretoExtra | null>(null);
   const [confirmandoDiretoExtra, setConfirmandoDiretoExtra] = useState(false);
   /*
-   * PIX Automático / Cartão Recorrente gravado → aviso de que falta a aba.
+   * PIX Automático / Cartão Recorrente gravado que NÃO entrou no Pix sozinho →
+   * aviso de que falta a aba (ver `concluirSalvo`).
    *
    * Guarda o acordo inserido junto: `onSaved` sai da tela, e chamá-lo antes de
    * mostrar a janela desmontaria a janela no mesmo quadro. Aqui ele espera a
    * pessoa decidir — ver `ModalAvisoPixAutomatico`.
    */
   const [avisoPixAutomatico, setAvisoPixAutomatico] =
-    useState<{ nr: string; forma: string; inserido: Acordo } | null>(null);
+    useState<{ nr: string; forma: string; motivo: string; inserido: Acordo } | null>(null);
+  /*
+   * «O Valor é o total do acordo» — confirmação obrigatória da forma recorrente.
+   *
+   * O Pix Automático paga comissão sobre o TOTAL, e o pessoal lançava o valor da
+   * parcela. O sistema não tem como distinguir um do outro pelo número; quem
+   * sabe é quem digitou. Sem a confirmação, não salva (pedido de 14/09/2026).
+   */
+  const [confirmouValorTotal, setConfirmouValorTotal] = useState(false);
   // NR já tabulado pelo PRÓPRIO operador → oferta de adicionar parcela
   const [acordoParaParcela, setAcordoParaParcela] = useState<Acordo | null>(null);
   const [salvandoParcela,   setSalvandoParcela]   = useState(false);
@@ -241,6 +254,9 @@ export function AcordoNovoInline({
   }, [entradaDisponivel, temEntradaForm]);
 
   function handleChangeTipo(t: string) {
+    // Trocar de forma pede a confirmação de novo: ela vale para a forma que a
+    // pessoa estava olhando quando marcou.
+    if (t !== tipo) setConfirmouValorTotal(false);
     setTipo(t);
     if (!tipos.find((x) => x.value === t)?.parcelado) { setParcelasStr('1'); setQuarentaPct(false); }
   }
@@ -266,6 +282,11 @@ export function AcordoNovoInline({
     }
     const v = parseCurrencyInput(valorStr);
     if (isNaN(v) || v <= 0)                 return entradaAtiva ? 'Informe o valor da entrada' : 'Informe o valor do acordo';
+    // Só a parcela não entra: o registro no Pix Automático usa este valor.
+    if (formaRecorrente && !confirmouValorTotal) {
+      return `${nomeDaFormaRecorrente(tipo)} é lançado com o VALOR TOTAL do acordo, não o da parcela — `
+        + 'confira o valor e marque a confirmação.';
+    }
     if (entradaAtiva) {
       const d = parseCurrencyInput(demaisStr);
       if (isNaN(d) || d <= 0)               return 'Informe o valor das demais parcelas';
@@ -319,6 +340,74 @@ export function AcordoNovoInline({
       return null;
     }
     return inserido as Acordo;
+  }
+
+  /**
+   * Fim de todo caminho que gravou o acordo: sai da tela e diz o que aconteceu.
+   *
+   * ## Recorrente entra no Pix Automático sozinho
+   *
+   * Pedido de 14/09/2026: o pessoal lançava PIX Automático só na lista de
+   * acordos, e o registro na aba — de onde sai a comissão — nunca acontecia.
+   * Agora ele é feito aqui, pelas mesmas regras do botão da aba (ver
+   * `pixAutomaticoDoAcordo.service`).
+   *
+   * Quando o registro NÃO acontece (setor com registro desligado, erro), a
+   * janela de aviso continua sendo a saída: ela leva à aba com o NR preenchido.
+   * Nesse caso `onSaved` espera a pessoa decidir — chamá-lo antes desmontaria a
+   * janela no mesmo quadro.
+   *
+   * Nunca lança: o acordo já está gravado, e um erro aqui cairia no `catch` de
+   * `salvar` como se nada tivesse sido salvo.
+   */
+  async function concluirSalvo(inserido: Acordo, sucesso: string): Promise<void> {
+    const nr = String(inserido.nr_cliente ?? nrCliente).trim();
+    // Não pago não rende comissão de Pix — a mesma régua da lista de acordos
+    // sem registro (`fetchAcordosRecorrentesSemPix`).
+    if (!formaRecorrente || !perfil?.id || !empresa?.id || inserido.status === 'nao_pago') {
+      onSaved(inserido);
+      toast.success(sucesso);
+      return;
+    }
+
+    const niveisPix = niveisLiberados('pix', temPermissao);
+    let motivo: string;
+    try {
+      const r = await registrarAcordoNoPixAutomatico({
+        empresaId:    empresa.id,
+        operadorId:   perfil.id,
+        operadorNome: perfil.nome ?? perfil.email ?? '—',
+        setorId:      perfil.setor_id ?? null,
+        nrCliente:    nr,
+        valor:        Number(inserido.valor),
+        extra:        inserido.tipo_vinculo === 'extra',
+        podeAgirSobreOutros: niveisPix.includes('setor') || niveisPix.includes('todos_setores'),
+      });
+      if (r.tipo === 'registrado') {
+        onSaved(inserido);
+        toast.success(`${sucesso} Registrado no Pix Automático — aguardando verificação do líder.`);
+        return;
+      }
+      if (r.tipo === 'ja_registrado') {
+        onSaved(inserido);
+        toast.success(`${sucesso} O NR ${nr} já estava no seu Pix Automático.`);
+        return;
+      }
+      if (r.tipo === 'pedido_enviado') {
+        onSaved(inserido);
+        toast.success(
+          `${sucesso} O NR ${nr} já está no Pix Automático de outra pessoa — pedido de autorização enviado aos líderes.`,
+          { duration: 8000 },
+        );
+        return;
+      }
+      motivo = r.motivo;
+    } catch (e) {
+      motivo = e instanceof Error ? e.message : 'Não foi possível registrar no Pix Automático.';
+    }
+
+    toast.success(sucesso);
+    setAvisoPixAutomatico({ nr, forma: tipo, motivo, inserido });
   }
 
   async function salvar() {
@@ -431,6 +520,21 @@ export function AcordoNovoInline({
             // (ex.: entrada no Pix + boleto do restante).
             // PaguePlay mantém o bloqueio original.
             if (!isPaguePlay) {
+              /*
+               * Recorrente não vira PARCELA de acordo existente.
+               *
+               * Como parcela, o valor seria só um pedaço do acordo — e o Pix
+               * Automático paga sobre o total. A liderança pediu que esse caso
+               * não entre (14/09/2026). `ModalAdicionarParcela` recusa o mesmo.
+               */
+              if (formaRecorrente) {
+                toast.error(
+                  `${label} "${nrParaVerificar}" já é seu. ${nomeDaFormaRecorrente(tipo)} entra com o valor total, `
+                  + 'como acordo próprio — não pode ser adicionado como parcela de um acordo existente.',
+                  { duration: 8000 },
+                );
+                return;
+              }
               const { data: acordoMeu } = await supabase
                 .from('acordos')
                 .select('*, perfis(id, nome, email, perfil, setor_id)')
@@ -467,8 +571,8 @@ export function AcordoNovoInline({
             const inserido = await executarSalvar(payload);
             if (!inserido) return;
             limparDraft();
-            onSaved(inserido);
-            toast.success(
+            await concluirSalvo(
+              inserido,
               `${label} "${nrParaVerificar}" reatribuído: ${conflitoFinal.operadorNome} está desligado.`,
             );
             return;
@@ -544,8 +648,10 @@ export function AcordoNovoInline({
                 empresa_id: empresa.id,
               });
               limparDraft();
-              onSaved(inseridoExtra);
-              toast.success(`Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`);
+              await concluirSalvo(
+                inseridoExtra,
+                `Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`,
+              );
             }
             return;
           }
@@ -572,19 +678,8 @@ export function AcordoNovoInline({
       if (inserido) {
         if (agendarProxima) await criarProximaParcela(inserido);
         limparDraft();
-        /*
-         * Recorrente: a janela primeiro, `onSaved` depois.
-         *
-         * `onSaved` navega para fora do formulário. Chamando-o aqui, o aviso
-         * de que a comissão ainda depende da aba Pix Automático apareceria e
-         * sumiria junto com a tela.
-         */
-        if (formaRecorrente) {
-          setAvisoPixAutomatico({ nr: nrCliente.trim(), forma: tipo, inserido });
-          return;
-        }
-        onSaved(inserido);
-        toast.success(
+        await concluirSalvo(
+          inserido,
           agendarProxima
             ? `Parcela ${parcelaInicial}/${parcelas} registrada como paga. Próxima agendada para ${format(parseISO(ultimoDiaProxMes(vencimento)), 'dd/MM/yyyy', { locale: ptBR })}.`
             : entradaAtiva
@@ -722,8 +817,7 @@ export function AcordoNovoInline({
 
       setAvisoDiretoExtra(null);
       limparDraft();
-      onSaved(inserido);
-      toast.success(`Acordo tabulado como DIRETO. ${operadorAntNome} foi notificado.`);
+      await concluirSalvo(inserido, `Acordo tabulado como DIRETO. ${operadorAntNome} foi notificado.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro inesperado ao tabular');
     } finally {
@@ -816,8 +910,9 @@ export function AcordoNovoInline({
     profissionalLoading,
     profissionalEncontrado: !!profissional,
     formaRecorrente,
+    confirmouValorTotal, setConfirmouValorTotal,
     avisoPixAutomatico: avisoPixAutomatico
-      ? { nr: avisoPixAutomatico.nr, forma: avisoPixAutomatico.forma }
+      ? { nr: avisoPixAutomatico.nr, forma: avisoPixAutomatico.forma, motivo: avisoPixAutomatico.motivo }
       : null,
     irParaPixAutomatico,
     dispensarAvisoPixAutomatico,

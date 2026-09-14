@@ -103,8 +103,17 @@ export interface SharedFormState {
   // ── PIX Automático / Cartão Recorrente (BookPlay) ────────────────────────
   /** A forma escolhida é PIX Automático ou Cartão Recorrente? */
   formaRecorrente: boolean;
-  /** Acordo recorrente recém-gravado, esperando o aviso. `null` = sem aviso. */
-  avisoPixAutomatico: { nr: string; forma: string } | null;
+  /**
+   * A pessoa confirmou que o Valor é o TOTAL do acordo. Sem isto a forma
+   * recorrente não salva — só a parcela deixaria a comissão do Pix errada.
+   */
+  confirmouValorTotal: boolean;
+  setConfirmouValorTotal: (v: boolean) => void;
+  /**
+   * Acordo recorrente gravado que NÃO entrou no Pix sozinho. `motivo` diz por
+   * quê. `null` = sem aviso.
+   */
+  avisoPixAutomatico: { nr: string; forma: string; motivo?: string } | null;
   /** Abre a aba Pix Automático com o NR já preenchido. */
   irParaPixAutomatico: () => void;
   /** Fecha o aviso e segue o caminho normal de quem salvou. */

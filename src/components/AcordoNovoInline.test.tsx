@@ -44,6 +44,12 @@ vi.mock('@/services/direto_extra.service', () => ({
   fetchIsDiretoExtraAtivo: (...a: unknown[]) => fetchIsDiretoExtraAtivoMock(...a),
 }));
 
+// 2c) PIX Automático / Cartão Recorrente entram sozinhos no Pix (14/09/2026).
+const registrarNoPixMock = vi.fn().mockResolvedValue({ tipo: 'registrado' });
+vi.mock('@/services/pixAutomaticoDoAcordo.service', () => ({
+  registrarAcordoNoPixAutomatico: (...a: unknown[]) => registrarNoPixMock(...a),
+}));
+
 // 3) hooks
 const verificarConflitoCache = vi.fn().mockReturnValue(null);
 vi.mock('@/hooks/useNrRegistros', () => ({
@@ -492,6 +498,94 @@ describe('AcordoNovoInline — fluxo salvar() (caminho livre)', () => {
       empresa_id:   'emp-1',
     });
     expect(toastSuccess).toHaveBeenCalled();
+  });
+});
+
+describe('AcordoNovoInline — PIX Automático entra sozinho no Pix', () => {
+  /** Rascunho com a forma recorrente: o Select do shadcn não abre no happy-dom. */
+  function semearRecorrente(extra: Record<string, string> = {}) {
+    sessionStorage.setItem(
+      'acordo-inline-draft::emp-1::me-1::bp',
+      JSON.stringify({
+        tipo: 'pix_automatico', nrCliente: '900', valorStr: '1800',
+        vencimento: '2026-05-25', nomeCliente: 'Cliente Pix', ...extra,
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    registrarNoPixMock.mockReset().mockResolvedValue({ tipo: 'registrado' });
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = {
+      data: {
+        id: 'pix-1', nr_cliente: '900', valor: 1800, status: 'verificar_pendente',
+        tipo: 'pix_automatico', tipo_vinculo: null,
+      } as unknown as Acordo,
+      error: null,
+    };
+  });
+
+  it('lembra que o valor é o TOTAL e não salva sem a confirmação', async () => {
+    semearRecorrente();
+    renderInline();
+    expect(screen.getByText('Valor total do acordo *')).toBeInTheDocument();
+    expect(screen.getByText(/tem que ser o/i)).toBeInTheDocument();
+
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/VALOR TOTAL/)));
+    expect(supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert')).toBeUndefined();
+    expect(registrarNoPixMock).not.toHaveBeenCalled();
+  });
+
+  it('confirmado, grava o acordo e registra no Pix com o valor total', async () => {
+    const onSaved = vi.fn();
+    semearRecorrente();
+    renderInline({ onSaved });
+    fireEvent.click(screen.getByRole('checkbox'));
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(registrarNoPixMock).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId: 'emp-1', operadorId: 'me-1', setorId: 'setor-A',
+      nrCliente: '900', valor: 1800, extra: false,
+    }));
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/Registrado no Pix Automático/));
+  });
+
+  it('se não entrou no Pix, o aviso diz por quê e espera a pessoa decidir', async () => {
+    const onSaved = vi.fn();
+    registrarNoPixMock.mockResolvedValue({
+      tipo: 'nao_registrado', motivo: 'O registro no Pix Automático está desativado para o seu setor.',
+    });
+    semearRecorrente();
+    renderInline({ onSaved });
+    fireEvent.click(screen.getByRole('checkbox'));
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(screen.getByText('Falta registrar no Pix Automático')).toBeInTheDocument());
+    expect(screen.getByText(/desativado para o seu setor/)).toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Agora não/i }));
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('NR já seu: recorrente não vira parcela do acordo existente', async () => {
+    verificarNrRegistroMock.mockResolvedValue({
+      registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
+    });
+    semearRecorrente();
+    renderInline();
+    fireEvent.click(screen.getByRole('checkbox'));
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(
+      expect.stringMatching(/não pode ser adicionado como parcela/),
+      expect.anything(),
+    ));
+    expect(screen.queryByText(/Adicionar parcela ao acordo/i)).not.toBeInTheDocument();
+    expect(registrarNoPixMock).not.toHaveBeenCalled();
   });
 });
 

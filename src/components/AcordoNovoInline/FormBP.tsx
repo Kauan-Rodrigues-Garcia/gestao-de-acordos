@@ -41,7 +41,8 @@ export function FormBP({ state }: { state: SharedFormState }) {
     conflito,
     autorizando, solicitarAutorizacaoConflito, cancelarConflito,
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
-    formaRecorrente, avisoPixAutomatico, irParaPixAutomatico, dispensarAvisoPixAutomatico,
+    formaRecorrente, confirmouValorTotal, setConfirmouValorTotal,
+    avisoPixAutomatico, irParaPixAutomatico, dispensarAvisoPixAutomatico,
   } = state;
 
   const { temPermissao } = useCargoPermissoes();
@@ -100,7 +101,9 @@ export function FormBP({ state }: { state: SharedFormState }) {
                   semPassado={formaRecorrente}
                 />
                 <div className="space-y-1">
-                  <Label className="text-xs">{temEntradaForm ? 'Valor da entrada *' : 'Valor *'}</Label>
+                  <Label className="text-xs">
+                    {temEntradaForm ? 'Valor da entrada *' : formaRecorrente ? 'Valor total do acordo *' : 'Valor *'}
+                  </Label>
                   <Input value={valorStr} onChange={(e) => setValorStr(e.target.value)} placeholder="0,00" className="h-8 text-xs font-mono" />
                 </div>
                 {/* Só aparece com a entrada ligada — ver `entradaDisponivel`. */}
@@ -140,13 +143,34 @@ export function FormBP({ state }: { state: SharedFormState }) {
                   A frase existe porque o campo sumindo, sozinho, parece defeito
                   para quem acabou de vê-lo em outra forma de pagamento. */}
               {formaRecorrente && (
-                <div className="mt-2 flex items-start gap-1.5 text-[11px] text-cyan-700 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-md px-2.5 py-1.5">
-                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>{nomeDaFormaRecorrente(tipo)}</strong> entra sempre em{' '}
-                    <strong>1 vez</strong> e com vencimento de <strong>hoje em diante</strong>.
-                    {' '}A comissão sai da aba <strong>Pix Automático</strong> — lembramos disso ao salvar.
-                  </span>
+                <div className="mt-2 space-y-1.5 text-[11px] text-cyan-700 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-md px-2.5 py-2">
+                  <p className="flex items-start gap-1.5">
+                    <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Lembre: o <strong>Valor</strong> tem que ser o <strong>VALOR TOTAL</strong> do acordo,
+                      {' '}não o de uma parcela. <strong>{nomeDaFormaRecorrente(tipo)}</strong> entra em{' '}
+                      <strong>1 vez</strong>, com vencimento de <strong>hoje em diante</strong>, e ao salvar
+                      {' '}é registrado <strong>automaticamente no Pix Automático</strong>.
+                    </span>
+                  </p>
+                  {/* Sem esta confirmação o acordo não salva: só a parcela
+                      entraria no Pix e a comissão sairia errada. */}
+                  <label className="flex items-start gap-2 pl-5 cursor-pointer select-none text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={confirmouValorTotal}
+                      onChange={(e) => setConfirmouValorTotal(e.target.checked)}
+                      disabled={salvando}
+                      className="h-3.5 w-3.5 mt-0.5 accent-cyan-600 cursor-pointer"
+                    />
+                    <span>
+                      Confirmo que{' '}
+                      <strong className="font-mono">
+                        {parseBRL(valorStr) > 0 ? formatBRL(parseBRL(valorStr)) : 'o valor informado'}
+                      </strong>{' '}
+                      é o valor total do acordo.
+                    </span>
+                  </label>
                 </div>
               )}
 

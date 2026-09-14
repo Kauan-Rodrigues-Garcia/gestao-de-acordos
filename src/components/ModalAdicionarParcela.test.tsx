@@ -127,3 +127,32 @@ describe('ModalAdicionarParcela — parcelas personalizadas', () => {
     expect(await screen.findByRole('option', { name: 'Boleto / PIX' })).toBeTruthy();
   });
 });
+
+describe('ModalAdicionarParcela — recorrente não entra como parcela', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('acordo de PIX Automático abre a nova parcela em Boleto', async () => {
+    const { onConfirm } = abrir({ inicial: { vencimento: '2026-09-10', valor: 400, tipo: 'pix_automatico' } });
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalled());
+    expect(onConfirm.mock.calls[0][0][0].tipo).toBe('boleto');
+  });
+
+  it('escolher PIX Automático numa parcela recusa, sem gravar', async () => {
+    const { toast } = await import('sonner');
+    const { onConfirm } = abrir();
+    await ligarPersonalizacao('2');
+
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.keyDown(selects[selects.length - 1], { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('option', { name: 'PIX Automático' }));
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/não pode ser adicionado como parcela/),
+      expect.anything(),
+    ));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
