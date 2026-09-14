@@ -1661,6 +1661,17 @@ export const PERMISSOES: PermissaoMeta[] = [
     padrao: { lider: true, elite: true, gerencia: true, diretoria: true, ouvidoria: true },
   },
   {
+    key: 'tickets_excluir', label: 'Tickets: excluir',
+    descricao: 'Apagar de vez um ticket que a pessoa enxerga, com a conversa, a trilha e os anexos',
+    /*
+     * Pedido de 14/09/2026. Exclusão DEFINITIVA, com confirmação — não há
+     * Lixeira de tickets. Padrão vazio: ninguém nasce com ela; administrador e
+     * super_admin recebem por acesso total. No banco quem cumpre é
+     * `fn_ticket_excluir` (migration 20260914200000).
+     */
+    grupo: 'Tickets', padrao: {},
+  },
+  {
     key: 'criar_solicitacao_whatsapp', label: 'Abrir solicitação de WhatsApp',
     descricao: 'Pedir o envio de uma mensagem, além de acompanhar as existentes',
     grupo: 'Ações específicas', padrao: TODOS,

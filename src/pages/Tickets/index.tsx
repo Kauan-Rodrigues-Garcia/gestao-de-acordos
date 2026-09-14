@@ -570,9 +570,11 @@ export default function Tickets() {
               <DetalheTicket
                 ticket={aberto}
                 podeAtender={acesso.podeAtender}
+                podeExcluir={temPermissao('tickets_excluir')}
                 fotos={fotos}
                 onFechar={fechar}
                 onMudou={() => { void recarregar(); }}
+                onExcluido={() => { fechar(); void recarregar(); }}
               />
             </div>
           )}
