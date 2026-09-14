@@ -1,25 +1,47 @@
+/**
+ * A sincronização do relatório mensal completo.
+ *
+ * Na BookPlay o 58 é o retrato do mês: o que não está no arquivo sai do setor.
+ *
+ * ## O que se trava aqui
+ *
+ * **A chave é a da LINHA, não a do grupo.** Até 13/09/2026 a remoção comparava
+ * por `operador::codigo::mês` enquanto a inserção usava
+ * `(codigo, data, forma, operador)`. A assimetria fazia uma linha cujo dia sumiu
+ * do arquivo SOBREVIVER — bastava outra linha do mesmo NR no mês — e a linha
+ * nova, com a data nova, entrava do lado dela.
+ *
+ * Custou R$ 698,43 contados duas vezes no Receptivo, em três NRs, quando o ERP
+ * moveu parcelas de dia entre dois exports.
+ */
 import { describe, expect, it } from 'vitest';
 import { idsAusentesDoRelatorioMensal } from './analitico.service';
 
-const linha = (id: string, operador: string, codigo: string, mes = '2026-08-01') => ({
+const linha = (
+  id: string,
+  operador: string,
+  codigo: string,
+  data = '2026-08-01',
+  forma = 'boleto_pix',
+  mes = '2026-08-01',
+) => ({
   id,
   operador_usuario: operador,
   codigo,
   mes_referencia: mes,
+  data_pagamento: data,
+  forma_pagamento: forma,
 });
 
 describe('sincronização do relatório mensal completo', () => {
-  it('remove apenas grupos antigos que não aparecem no arquivo atual', () => {
+  it('remove apenas o que não aparece no arquivo atual', () => {
     const existentes = [
-      linha('mantem-1', 'AGATHA_ROCHA', '13000001'),
-      linha('mantem-2', 'AGATHA_ROCHA', '13000001'),
+      linha('mantem', 'AGATHA_ROCHA', '13000001'),
       linha('retencao-antiga', 'tamiris_hilario', '13010424'),
       linha('colchao-antigo', 'KAUAN_TEIXEIRA', '12980581'),
       linha('nr-retirado', 'THIAGO_ALVES', '12995133'),
     ];
-    const relatorioAtual = [
-      linha('arquivo', 'AGATHA_ROCHA', '13000001'),
-    ];
+    const relatorioAtual = [linha('arquivo', 'AGATHA_ROCHA', '13000001')];
 
     expect(idsAusentesDoRelatorioMensal(existentes, relatorioAtual)).toEqual([
       'retencao-antiga',
@@ -28,11 +50,11 @@ describe('sincronização do relatório mensal completo', () => {
     ]);
   });
 
-  it('considera operador, NR e mês na identidade do grupo', () => {
+  it('considera operador, NR e mês na identidade', () => {
     const existentes = [
       linha('outro-operador', 'OPERADOR_B', '13000001'),
       linha('outro-nr', 'OPERADOR_A', '13000002'),
-      linha('outro-mes', 'OPERADOR_A', '13000001', '2026-07-01'),
+      linha('outro-mes', 'OPERADOR_A', '13000001', '2026-07-01', 'boleto_pix', '2026-07-01'),
     ];
     const relatorioAtual = [linha('arquivo', 'OPERADOR_A', '13000001')];
 
@@ -41,5 +63,65 @@ describe('sincronização do relatório mensal completo', () => {
       'outro-nr',
       'outro-mes',
     ]);
+  });
+
+  /*
+   * O caso que gerou a duplicata, com os números reais do NR 12984182
+   * (GABRIEL_OLIVEIRA, Receptivo, agosto/2026).
+   *
+   * O ERP moveu a parcela 29 do dia 01 para o dia 03 entre dois exports. A linha
+   * de 01/08 não está mais no arquivo, e tem de sair — se ela sobreviver, os
+   * R$ 259,15 ficam contados duas vezes, porque a linha de 03/08 entra do lado.
+   */
+  it('remove a linha cujo DIA sumiu do arquivo, mesmo com o NR presente', () => {
+    const existentes = [
+      linha('dia-1', 'GABRIEL_OLIVEIRA', '12984182', '2026-08-01'),
+      linha('dia-3', 'GABRIEL_OLIVEIRA', '12984182', '2026-08-03'),
+    ];
+    // O arquivo novo traz o NR só no dia 3.
+    const relatorioAtual = [linha('arquivo', 'GABRIEL_OLIVEIRA', '12984182', '2026-08-03')];
+
+    expect(idsAusentesDoRelatorioMensal(existentes, relatorioAtual)).toEqual(['dia-1']);
+  });
+
+  /*
+   * O contrário também precisa valer: cliente que pagou em dois dias e cujos
+   * dois dias estão no arquivo não perde nada. É a maioria dos casos — em
+   * agosto e setembro juntos, 17 grupos têm linhas em dias diferentes, e só 3
+   * eram duplicata.
+   */
+  it('mantém as duas linhas quando os dois dias estão no arquivo', () => {
+    const existentes = [
+      linha('dia-9', 'JENIFFER_OLIVEIRA', '12598212', '2026-09-09'),
+      linha('dia-10', 'JENIFFER_OLIVEIRA', '12598212', '2026-09-10'),
+    ];
+    const relatorioAtual = [
+      linha('a', 'JENIFFER_OLIVEIRA', '12598212', '2026-09-09'),
+      linha('b', 'JENIFFER_OLIVEIRA', '12598212', '2026-09-10'),
+    ];
+
+    expect(idsAusentesDoRelatorioMensal(existentes, relatorioAtual)).toEqual([]);
+  });
+
+  /*
+   * A forma entra na chave porque entra no índice: o mesmo NR pode ser pago no
+   * mesmo dia por cartão e por pix, e são duas linhas.
+   */
+  it('separa cartão de boleto/pix no mesmo dia', () => {
+    const existentes = [
+      linha('cartao', 'ANA', '1', '2026-09-01', 'cartao'),
+      linha('pix', 'ANA', '1', '2026-09-01', 'boleto_pix'),
+    ];
+    const relatorioAtual = [linha('so-pix', 'ANA', '1', '2026-09-01', 'boleto_pix')];
+
+    expect(idsAusentesDoRelatorioMensal(existentes, relatorioAtual)).toEqual(['cartao']);
+  });
+
+  it('arquivo vazio remove tudo — é o retrato do mês, e ele veio vazio', () => {
+    const existentes = [
+      linha('a', 'ANA', '1'),
+      linha('b', 'BIA', '2'),
+    ];
+    expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual(['a', 'b']);
   });
 });

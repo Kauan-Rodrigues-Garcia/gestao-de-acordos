@@ -41,6 +41,7 @@ import {
 } from '@/services/relatorio/assinaturaColunas';
 import {
   chaveDaLinha,
+  diaISO,
   preverRemocao,
   type RemocaoPrevista,
 } from '@/services/analitico/remocaoPrevista';
@@ -191,7 +192,9 @@ export function useAnaliticoImport() {
       return;
     }
     let cancelado = false;
-    const chaves = preview.linhas.map(l => chaveDaLinha(l.operador_usuario, l.codigo));
+    const chaves = preview.linhas.map(l => chaveDaLinha(
+      l.operador_usuario, l.codigo, diaISO(l.data_pagamento), l.forma_pagamento,
+    ));
     preverRemocao(empresa.id, setorImportacao, preview.mes, chaves)
       .then(r => { if (!cancelado) setRemocaoPrevista(r); })
       // Falhar a previsão não pode impedir a importação — o aviso é um extra,

@@ -53,13 +53,33 @@ export interface RemocaoPrevista {
 /**
  * A chave que a importação usa para decidir o que sobrevive.
  *
- * Tem de ser idêntica ao `chaveGrupoAnalitico` de `analitico.service.ts`
- * (`operador::codigo::mes`) menos o mês, que já está no recorte da consulta. Se
- * as duas divergirem o aviso mente — e mente para MENOS, dizendo que nada sai
+ * Tem de ser idêntica ao `chaveLinhaAnalitico` de `analitico.service.ts` menos o
+ * mês, que já está no recorte da consulta — e, por tabela, idêntica a
+ * `idx_analitico_unicidade`. São três lugares que precisam andar juntos:
+ *
+ *   índice ..... (empresa, codigo, data, forma, operador)
+ *   importador . chaveLinhaAnalitico
+ *   aviso ...... esta função
+ *
+ * Se divergirem, o aviso mente — e mente para MENOS, dizendo que nada sai
  * quando sai, que é o pior lado para errar.
+ *
+ * `data` no formato `yyyy-MM-dd`, como o banco grava.
  */
-export function chaveDaLinha(operadorUsuario: string, codigo: string): string {
-  return `${operadorUsuario}::${codigo}`;
+export function chaveDaLinha(
+  operadorUsuario: string,
+  codigo: string,
+  data: string,
+  formaPagamento: string,
+): string {
+  return `${operadorUsuario}::${codigo}::${data}::${formaPagamento}`;
+}
+
+/** `Date` → `yyyy-MM-dd` local, como o parser monta e o banco grava. */
+export function diaISO(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 /**

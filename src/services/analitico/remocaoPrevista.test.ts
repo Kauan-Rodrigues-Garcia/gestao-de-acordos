@@ -4,8 +4,9 @@
  * O que se trava aqui é a CHAVE e o CORTE.
  *
  * A chave tem de ser idêntica à que o importador usa para decidir o que
- * sobrevive (`chaveGrupoAnalitico`, menos o mês). Se divergir, o aviso mente —
- * e mente para menos, dizendo que nada sai quando sai, que é o pior lado.
+ * sobrevive (`chaveLinhaAnalitico`, menos o mês) e à de
+ * `idx_analitico_unicidade`. Se divergir, o aviso mente — e mente para menos,
+ * dizendo que nada sai quando sai, que é o pior lado.
  *
  * O corte decide quando falar. Falar demais treina a pessoa a fechar o aviso sem
  * ler, e aí no dia do estrago ela fecha também.
@@ -29,6 +30,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import {
   chaveDaLinha,
+  diaISO,
   preverRemocao,
   remocaoPreocupa,
   CORTE_LINHAS,
@@ -39,16 +41,55 @@ beforeEach(() => { mock.porRpc = {}; mock.args = {}; });
 
 describe('chaveDaLinha', () => {
   /*
-   * `chaveGrupoAnalitico` é `operador::codigo::mes`. Aqui o mês já está no
-   * recorte da consulta, então a chave para. Mudar o separador ou a ordem em um
-   * lado sem mudar no outro quebra o aviso em silêncio.
+   * Três lugares precisam dizer a MESMA coisa:
+   *
+   *   índice ..... idx_analitico_unicidade (empresa, codigo, data, forma, operador)
+   *   importador . chaveLinhaAnalitico
+   *   aviso ...... esta função
+   *
+   * Enquanto a remoção usava a chave do GRUPO (operador::codigo) e a inserção
+   * usava a da LINHA, uma linha cujo dia sumiu do arquivo sobrevivia e a nova
+   * entrava do lado: R$ 698,43 contados duas vezes no Receptivo em agosto/2026.
    */
-  it('é operador::codigo, na ordem, com o mesmo separador do importador', () => {
-    expect(chaveDaLinha('GABRIEL_OLIVEIRA', '12984182')).toBe('GABRIEL_OLIVEIRA::12984182');
+  it('é operador::codigo::data::forma, na ordem do importador', () => {
+    expect(chaveDaLinha('GABRIEL_OLIVEIRA', '12984182', '2026-08-01', 'boleto_pix'))
+      .toBe('GABRIEL_OLIVEIRA::12984182::2026-08-01::boleto_pix');
+  });
+
+  /*
+   * O caso concreto: a MESMA parcela em dois dias vira duas chaves. Era isso
+   * que a chave de grupo não enxergava.
+   */
+  it('separa o mesmo NR em dias diferentes', () => {
+    const dia1 = chaveDaLinha('GABRIEL_OLIVEIRA', '12984182', '2026-08-01', 'boleto_pix');
+    const dia3 = chaveDaLinha('GABRIEL_OLIVEIRA', '12984182', '2026-08-03', 'boleto_pix');
+    expect(dia1).not.toBe(dia3);
+  });
+
+  it('separa a mesma data em formas diferentes', () => {
+    expect(chaveDaLinha('ANA', '1', '2026-09-01', 'cartao'))
+      .not.toBe(chaveDaLinha('ANA', '1', '2026-09-01', 'boleto_pix'));
   });
 
   it('não normaliza nada — a comparação no banco é literal', () => {
-    expect(chaveDaLinha('juliana_itala', '007')).toBe('juliana_itala::007');
+    expect(chaveDaLinha('juliana_itala', '007', '2026-09-04', 'boleto_pix'))
+      .toBe('juliana_itala::007::2026-09-04::boleto_pix');
+  });
+});
+
+describe('diaISO', () => {
+  /*
+   * O parser monta a data com `new Date(ano, mes, dia)` — meia-noite LOCAL.
+   * `toISOString()` converteria para UTC e, a oeste de Greenwich, voltaria o dia
+   * anterior: a chave apontaria para o dia errado e o aviso erraria a conta.
+   */
+  it('usa a data local, não a UTC', () => {
+    expect(diaISO(new Date(2026, 8, 1))).toBe('2026-09-01');
+    expect(diaISO(new Date(2026, 7, 31))).toBe('2026-08-31');
+  });
+
+  it('preenche mês e dia com zero à esquerda', () => {
+    expect(diaISO(new Date(2026, 0, 5))).toBe('2026-01-05');
   });
 });
 

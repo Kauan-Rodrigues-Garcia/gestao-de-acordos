@@ -175,7 +175,7 @@ evitado estrago real nesta semana.
 |---|---|---|
 | ✅ 0.1 | **Armadilha de cabeçalho** — guarda a assinatura de colunas por tipo de relatório e avisa no preview quando mudar (`20260913231913`, no ar) | Regra 8. Protege as duas de baixo |
 | ✅ 0.2 | **Trava de arquivo curto** — o preview diz quantas linhas e quanto valor vão ser apagados, e de quais dias (`20260913235702`, no ar) | Em 13/09 um export antigo apagou 413 linhas e R$ 175.768,38 do Receptivo, sem aviso |
-| 0.3 | **Chave de unicidade do 58** — hoje é `(empresa, codigo, data, forma, operador)`: não vê parcela nem valor | Deixou R$ 698,43 duplicados no Receptivo. Envenena o «pendente» da fase 2 |
+| ✅ 0.3 | **A remoção passa a usar a chave da LINHA**, igual à inserção (`20260914000757` + `idsAusentesDoRelatorioMensal`) | A assimetria deixou R$ 698,43 duplicados no Receptivo. Envenenaria o «pendente» da fase 2 |
 
 **Por que antes de tudo:** a fase 2 marca linhas do 58 como pendentes e as
 compara com o 59 seguinte. Com duplicata e remoção silenciosa na base, o
@@ -275,32 +275,50 @@ sem ninguém ver.
 
 ---
 
+## A Fase 0 está fechada
+
+As três travas estão no ar. O que a 0.3 revelou merece ficar escrito, porque o
+diagnóstico inicial estava errado:
+
+**O defeito não era a chave, era a ASSIMETRIA entre duas chaves.**
+
+|  | chave |
+|---|---|
+| inserção | `idx_analitico_unicidade` — (empresa, codigo, **data**, forma, operador) |
+| remoção | `chaveGrupoAnalitico` — (operador, codigo, mês) |
+
+Uma linha cujo **dia** sumiu do arquivo sobrevivia — bastava outra linha do mesmo
+NR no mesmo mês estar presente — e a linha nova, com a data nova, entrava do lado
+dela. Duas linhas, o mesmo dinheiro.
+
+Não era preciso mexer no índice nem acrescentar `parcela`: bastou a remoção
+passar a comparar por linha. Medido antes de mudar: de **24.567 grupos** em
+agosto e setembro, só **17** têm linhas em dias diferentes, e **3** deles são
+exatamente os duplicados. Num arquivo completo, nada a mais é removido.
+
+---
+
 ## O passo pendente agora
 
-**Fase 0.3 — a chave de unicidade do 58.** A última das três travas, e a mais
-delicada.
+**Fase 2 — pendências e divergências.** A Fase 1 entregou a leitura por pessoa;
+a 2 é onde o 58 vira prévia de verdade:
 
-Hoje a chave é `(empresa_id, codigo, data_pagamento, forma_pagamento,
-operador_usuario)`. Ela **não vê parcela nem valor**. Quando o ERP reexporta a
-mesma parcela com outra `DtPgto`, a chave muda e a linha entra de novo: foi
-assim que R$ 698,43 ficaram duplicados no Receptivo em agosto (NR 12984182,
-13000560 e 13012299).
+1. marcar as linhas que o 58 traz e o 59 ainda não tem (regra 4);
+2. escalar o aviso — 1ª importação pendente, 2ª crítica;
+3. a **aba de divergências** com filtro por operador e por setor (regra 6);
+4. a regra do dia corrente (regra 5).
 
-Por que é delicada, e por que merece sessão própria:
+Ela depende de duas coisas que ainda não existem e precisam vir antes, na ordem:
 
-- mexer na chave muda a **deduplicação de toda importação**, dos dois tenants;
-- a reconciliação (`importarLoteAnalitico`) compara o total do relatório com o
-  total do banco por `operador::codigo::mes` e soma a diferença numa linha — ela
-  depende da chave atual;
-- a consolidação do parser agrupa cartão por operador+código **ignorando a
-  data**, o que faz a data gravada não ser a do pagamento em alguns casos;
-- e a Fase 2 marca linhas do 58 como pendentes. Com duplicata na base, o
-  «pendente» vira ruído e ninguém confia na aba de divergências.
+- **uma coluna de procedência** em `analitico_recebimentos`, para separar «veio
+  do 59» de «pendente do 58». Sem ela não há como saber o que está aguardando
+  confirmação;
+- **o vínculo de equipe**, que hoje cobre 18 de 77 subgrupos. Enquanto metade do
+  dinheiro não tem equipe, a aba de divergências vai listar ausência de cadastro
+  como se fosse divergência — e o «não explicado» nunca chega a zero.
 
-O caminho provável é incluir `parcela` na identidade da linha — o 58 já traz a
-coluna, e o parser já a lê para o Colchão. Mas isso precisa ser medido contra os
-dados de agosto e setembro antes de virar migration: mudar a chave de uma tabela
-com 100 mil linhas em produção não é coisa de fim de sessão.
+Por isso a **Fase 3 (vínculo automático de equipe pelo 58)** provavelmente deve
+vir antes da 2, ao contrário do que este plano dizia na primeira versão.
 
 ## Decisões tomadas nesta sessão
 

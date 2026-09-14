@@ -285,17 +285,57 @@ type GrupoRelatorioAnalitico = {
   mes_referencia: string;
 };
 
+/**
+ * A chave do GRUPO: uma pessoa, um NR, um mês.
+ *
+ * É o alvo da reconciliação de valor — ela compara o total do relatório com o
+ * total do banco para o mesmo NR e ajusta a diferença. Aqui a data fica de fora
+ * de propósito: o mesmo NR pode ser pago em vários dias, e a reconciliação
+ * precisa enxergar o conjunto.
+ */
 const chaveGrupoAnalitico = (r: GrupoRelatorioAnalitico) =>
   `${r.operador_usuario}::${r.codigo}::${r.mes_referencia}`;
 
-/** IDs do mesmo empresa/setor/mês que sobraram fora do relatório completo. */
+type LinhaRelatorioAnalitico = GrupoRelatorioAnalitico & {
+  data_pagamento: string;
+  forma_pagamento: string;
+};
+
+/**
+ * A chave da LINHA, idêntica à de `idx_analitico_unicidade`.
+ *
+ * ⚠️ Esta e a chave de inserção têm de ser a mesma coisa. Quando divergiram,
+ * dinheiro foi contado duas vezes.
+ *
+ * O que acontecia: a inserção era por LINHA (codigo, data, forma, operador) e a
+ * remoção era por GRUPO (operador, codigo, mês). Uma linha cujo dia sumiu do
+ * arquivo SOBREVIVIA — bastava outra linha do mesmo NR/mês estar presente — e a
+ * linha nova, com a data nova, entrava do lado dela.
+ *
+ * Medido em agosto/2026, Receptivo: R$ 698,43 duplicados em três NRs
+ * (12984182, 13000560, 13012299). Em todos, o ERP moveu uma parcela de dia entre
+ * dois exports: 483,25 em 01/08 continuou lá, e 259,15 entrou em 03/08.
+ *
+ * O raio da mudança é pequeno — em agosto e setembro juntos, só 17 grupos têm
+ * linhas em dias diferentes, e 3 deles são justamente os duplicados. Num arquivo
+ * completo nada a mais é removido: toda linha do banco veio daquele arquivo.
+ */
+const chaveLinhaAnalitico = (r: LinhaRelatorioAnalitico) =>
+  `${chaveGrupoAnalitico(r)}::${r.data_pagamento}::${r.forma_pagamento}`;
+
+/**
+ * IDs do mesmo empresa/setor/mês que sobraram fora do relatório completo.
+ *
+ * Compara por LINHA, e não por grupo — ver `chaveLinhaAnalitico` para o porquê
+ * e para o que custou descobrir isso.
+ */
 export function idsAusentesDoRelatorioMensal(
-  existentes: Array<GrupoRelatorioAnalitico & { id: string }>,
-  relatorio: GrupoRelatorioAnalitico[],
+  existentes: Array<LinhaRelatorioAnalitico & { id: string }>,
+  relatorio: LinhaRelatorioAnalitico[],
 ): string[] {
-  const presentes = new Set(relatorio.map(chaveGrupoAnalitico));
+  const presentes = new Set(relatorio.map(chaveLinhaAnalitico));
   return existentes
-    .filter(linha => !presentes.has(chaveGrupoAnalitico(linha)))
+    .filter(linha => !presentes.has(chaveLinhaAnalitico(linha)))
     .map(linha => linha.id);
 }
 
