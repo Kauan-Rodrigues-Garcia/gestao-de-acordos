@@ -105,6 +105,61 @@ describe('rolagem viva da conversa', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  /*
+   * Pedido de 14/09/2026: carregar como o WhatsApp — a conversa abre com a
+   * última página e as anteriores chegam sozinhas conforme a pessoa sobe, sem
+   * botão para clicar.
+   */
+  describe('carrega as anteriores ao subir', () => {
+    const msg = (id: string): MensagemChat => ({
+      id, conversa_id: 'c-1', autor_id: 'ana', texto: id, anexos: [],
+      criado_em: '2026-08-26T16:00:00Z', disparo_id: null, expurgado_em: null,
+      respondendo_id: null, curtida_em: null, sistema: null, sistema_dados: null,
+    });
+    const mensagens = [msg('m-1'), msg('m-2')];
+    const caixa = (c: HTMLElement) => c.querySelector('[data-rolagem-conversa]') as HTMLElement;
+    const rolarPara = (el: HTMLElement, top: number) => {
+      el.scrollTop = top;
+      fireEvent.scroll(el);
+    };
+
+    it('perto do topo pede a página anterior, uma vez só até ela chegar', () => {
+      const ver = vi.fn();
+      const tela = render(<Conversa {...base} temMais onVerAnteriores={ver} mensagens={mensagens} digitando={false} />);
+      const el = caixa(tela.container);
+
+      rolarPara(el, 40);
+      rolarPara(el, 10);
+      expect(ver).toHaveBeenCalledTimes(1);
+
+      // A página chegou: pode pedir a próxima.
+      tela.rerender(<Conversa {...base} temMais carregandoMais onVerAnteriores={ver} mensagens={mensagens} digitando={false} />);
+      tela.rerender(<Conversa {...base} temMais onVerAnteriores={ver} mensagens={[msg('m-0'), ...mensagens]} digitando={false} />);
+      rolarPara(el, 0);
+      expect(ver).toHaveBeenCalledTimes(2);
+    });
+
+    it('longe do topo não pede nada', () => {
+      const ver = vi.fn();
+      const tela = render(<Conversa {...base} temMais onVerAnteriores={ver} mensagens={mensagens} digitando={false} />);
+      rolarPara(caixa(tela.container), 900);
+      expect(ver).not.toHaveBeenCalled();
+    });
+
+    it('sem página anterior, subir até o topo não pede nada', () => {
+      const ver = vi.fn();
+      const tela = render(<Conversa {...base} temMais={false} onVerAnteriores={ver} mensagens={mensagens} digitando={false} />);
+      rolarPara(caixa(tela.container), 0);
+      expect(ver).not.toHaveBeenCalled();
+    });
+
+    it('não oferece mais o botão «Ver mensagens anteriores» enquanto carrega sozinho', () => {
+      render(<Conversa {...base} temMais carregandoMais mensagens={mensagens} digitando={false} />);
+      expect(screen.queryByRole('button', { name: 'Ver mensagens anteriores' })).toBeNull();
+      expect(screen.getByText('Carregando mensagens anteriores…')).toBeInTheDocument();
+    });
+  });
+
   it('libera o campo imediatamente e não apaga a próxima mensagem quando o envio termina', async () => {
     let confirmar!: (erro: string | null) => void;
     const enviar = vi.fn(() => new Promise<string | null>(r => { confirmar = r; }));

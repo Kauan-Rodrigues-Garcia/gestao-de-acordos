@@ -474,8 +474,14 @@ async function buscarGrupo(conversaId: string): Promise<ConversaChat | null> {
   };
 }
 
-/** Quantas mensagens a conversa abre de uma vez. */
-export const PAGINA_MENSAGENS = 60;
+/**
+ * Quantas mensagens a conversa abre de uma vez.
+ *
+ * Eram 60. Desde 14/09/2026 as anteriores chegam sozinhas ao subir (ver
+ * `talvezPedirAnteriores` em `Conversa`), então a primeira página só precisa
+ * encher a caixa com folga — e menor, abre mais rápido.
+ */
+export const PAGINA_MENSAGENS = 30;
 
 /**
  * As mensagens da conversa, da mais antiga para a mais nova.
