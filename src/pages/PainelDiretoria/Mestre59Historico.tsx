@@ -20,19 +20,26 @@
  * lote». Onde a pergunta não se faz àquela origem, a célula fica com um traço —
  * nunca com zero, que seria uma afirmação falsa.
  *
- * ## Ainda não dá para voltar
+ * ## O desfazer aparece onde existe o que desfazer
  *
- * O botão de rollback não está aqui, e a razão é dado e não tela: a importação
- * do 58 apaga as linhas ausentes e **nada guarda o que apagou**. Foram 2.659
- * linhas entre agosto e setembro. Enquanto não existir o snapshot, um botão de
- * voltar seria um botão que mente — e a tela diz isso, em vez de fingir.
+ * O botão só nasce na linha cuja importação tem linhas guardadas em
+ * `analitico_removidos`. Ele desfaz a **remoção**, não a importação inteira: o
+ * que ela inseriu se desfaz reimportando o arquivo, o que ela removeu não se
+ * desfazia de jeito nenhum.
+ *
+ * **As importações anteriores a 14/09/2026 não têm botão**, e isso é verdade e
+ * não defeito: até essa data nada guardava o que saía, e as 2.659 linhas
+ * removidas entre agosto e setembro não estão em lugar nenhum. Um botão ali
+ * seria um botão que falha — a tela diz o porquê em vez de oferecer.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { History, AlertTriangle, FileWarning, Undo2 } from 'lucide-react';
+import { History, AlertTriangle, FileWarning, Undo2, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
@@ -43,6 +50,12 @@ import {
   type EventoImportacao,
   type OrigemImportacao,
 } from '@/services/importacoes/historico.service';
+import {
+  buscarRemocoesGuardadas,
+  fraseDaRestauracao,
+  restaurarRemocao,
+  type RemocaoGuardada,
+} from '@/services/importacoes/desfazer.service';
 
 interface Props {
   empresaId: string;
@@ -65,15 +78,21 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
   const [erro, setErro] = useState<string | null>(null);
   const [origem, setOrigem] = useState<OrigemImportacao | 'all'>('all');
   const [doMes, setDoMes] = useState(true);
+  const [guardadas, setGuardadas] = useState<RemocaoGuardada[]>([]);
+  const [desfazendo, setDesfazendo] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null);
     try {
-      setEventos(await buscarHistoricoImportacoes(empresaId, {
-        mes: doMes ? mes : null,
-        origem: origem === 'all' ? null : origem,
-        limite: 300,
-      }));
+      const [hist, snap] = await Promise.all([
+        buscarHistoricoImportacoes(empresaId, {
+          mes: doMes ? mes : null,
+          origem: origem === 'all' ? null : origem,
+          limite: 300,
+        }),
+        buscarRemocoesGuardadas(empresaId, doMes ? mes : null),
+      ]);
+      setEventos(hist); setGuardadas(snap);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao buscar o histórico.');
     } finally {
@@ -84,6 +103,42 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
   useEffect(() => { void carregar(); }, [carregar, versao]);
 
   const resumo = useMemo(() => resumoDoHistorico(eventos), [eventos]);
+
+  /** Lote → o que ele apagou e ainda dá para trazer de volta. */
+  const desfazivel = useMemo(() => {
+    const m = new Map<string, RemocaoGuardada>();
+    for (const g of guardadas) if (g.podeDesfazer) m.set(g.loteId, g);
+    return m;
+  }, [guardadas]);
+
+  /*
+   * Confirmação explícita antes de mexer em dinheiro. A operação é segura — ela
+   * só insere o que estava guardado, não apaga nada —, mas trazer centenas de
+   * linhas de volta muda números que outras pessoas estão olhando, e isso
+   * merece um «tem certeza».
+   */
+  const desfazer = useCallback(async (g: RemocaoGuardada) => {
+    const ok = window.confirm(
+      `Trazer de volta ${g.linhas} linha${g.linhas !== 1 ? 's' : ''} `
+      + `(${formatBRL(g.valor)}) que esta importação apagou?\n\n`
+      + 'Nada é apagado: as linhas guardadas voltam para o analítico. '
+      + 'As que outra importação já tiver trazido de volta são ignoradas.',
+    );
+    if (!ok) return;
+
+    setDesfazendo(g.loteId);
+    try {
+      const r = await restaurarRemocao(g.loteId);
+      toast.success(fraseDaRestauracao(r), { duration: 8000 });
+      await carregar();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível desfazer.', {
+        duration: 8000,
+      });
+    } finally {
+      setDesfazendo(null);
+    }
+  }, [carregar]);
 
   if (carregando) return <Skeleton className="h-64 rounded-2xl" />;
   if (erro) {
@@ -141,15 +196,28 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
         </div>
       </div>
 
-      {/* ── A verdade sobre o rollback ──────────────────────────────────── */}
+      {/* ── O que dá e o que não dá para desfazer ───────────────────────── */}
       <div className="flex items-start gap-2 rounded-2xl border border-border/40 bg-muted/30 p-3">
         <Undo2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <p className="text-[11px] leading-snug text-muted-foreground">
-          <strong className="text-foreground">Ainda não dá para voltar uma importação.</strong>{' '}
-          Não é limitação de tela: a importação do 58 apaga as linhas ausentes do arquivo e
-          nada guarda o que apagou — foram {resumo.removidas > 0 ? '' : 'cerca de '}2.659 linhas
-          entre agosto e setembro. Um botão de voltar hoje seria um botão que mente. O que falta
-          é o registro do que sai, e é o próximo passo.
+          {desfazivel.size > 0 ? (
+            <>
+              <strong className="text-foreground">
+                {desfazivel.size} importaç{desfazivel.size === 1 ? 'ão tem' : 'ões têm'} o que
+                desfazer.
+              </strong>{' '}
+              O botão traz de volta as linhas que aquela importação apagou. Ele desfaz a
+              <strong> remoção</strong>, não a importação inteira — o que ela inseriu se desfaz
+              reimportando o arquivo, o que ela removeu não se desfazia de jeito nenhum.
+            </>
+          ) : (
+            <>
+              <strong className="text-foreground">Nenhuma importação com o que desfazer aqui.</strong>{' '}
+              O registro do que a importação apaga passou a existir em 14/09/2026. As 2.659 linhas
+              removidas entre agosto e setembro não estão guardadas — nada as guardava —, e por
+              isso as importações antigas não têm botão: ele só falharia.
+            </>
+          )}
         </p>
       </div>
 
@@ -172,11 +240,13 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
                 <th className="px-3 py-2.5 text-right font-semibold">Removidas</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Valor</th>
                 <th className="px-3 py-2.5 text-left font-semibold">Estado</th>
+                <th className="px-3 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {eventos.map(e => {
                 const grande = removeuDemais(e);
+                const guardada = e.loteId ? desfazivel.get(e.loteId) : undefined;
                 return (
                   <tr key={`${e.origem}-${e.id}`}
                     className={cn(
@@ -236,6 +306,26 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
                         {e.deuErrado && <FileWarning className="h-3 w-3" />}
                         {e.estado}
                       </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {/* Só onde existe o que trazer de volta. Botão que só sabe
+                          falhar é pior que botão nenhum. */}
+                      {guardada && (
+                        <Button
+                          variant="outline" size="sm"
+                          className="h-7 rounded-lg text-[11px]"
+                          disabled={desfazendo !== null}
+                          onClick={() => void desfazer(guardada)}
+                          title={
+                            `Traz de volta ${guardada.linhas} linha(s), `
+                            + `${formatBRL(guardada.valor)}, que esta importação apagou.`
+                          }
+                        >
+                          {desfazendo === guardada.loteId
+                            ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Voltando…</>
+                            : <><Undo2 className="mr-1 h-3 w-3" /> Desfazer</>}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 );

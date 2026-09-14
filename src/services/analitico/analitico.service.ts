@@ -779,17 +779,33 @@ export async function importarLoteAnalitico(
         erros.push(`Leitura para sincronização mensal: ${leituraSetor.error}`);
       } else {
         const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, rows);
+        /*
+         * Copiar e apagar, numa transação só.
+         *
+         * Antes isto era um `delete` direto e nada guardava o que saía — 2.659
+         * linhas se perderam assim entre agosto e setembro de 2026, incluindo
+         * as 413 do Receptivo apagadas por um export salvo da manhã do dia 11.
+         *
+         * `fn_analitico_remover_com_snapshot` (migration 20260914021223) grava
+         * a linha inteira em `analitico_removidos` e só então apaga, no mesmo
+         * comando. Fazer a cópia daqui, como um segundo `insert`, deixaria a
+         * janela aberta: falha entre os dois e o dado some sem registro.
+         *
+         * O contador passa a vir do BANCO, não do tamanho da fatia: a função
+         * também aplica a guarda de procedência, e o número que vai para o log
+         * tem de ser o que de fato saiu.
+         */
         for (let i = 0; i < idsAusentes.length; i += CHUNK) {
           const fatia = idsAusentes.slice(i, i + CHUNK);
-          const { error } = await supabase
-            .from('analitico_recebimentos')
-            .delete()
-            .in('id', fatia);
+          const { data, error } = await rpcSemTipo<number>(
+            'fn_analitico_remover_com_snapshot',
+            { p_lote_id: loteId, p_ids: fatia },
+          );
           if (error) {
             erros.push(`Remoção de registros ausentes: ${error.message}`);
             break;
           }
-          removidos += fatia.length;
+          removidos += Number(data ?? 0) || 0;
         }
       }
     }

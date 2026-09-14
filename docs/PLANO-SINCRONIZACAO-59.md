@@ -510,8 +510,10 @@ Fica registrado em «Em aberto».
 ### Fase 5 — histórico e rollback
 
 - [x] **Histórico unificado dos dois relatórios** — no ar em 14/09/2026;
-- [ ] Snapshot do que a importação do 58 remove (sem ele não há rollback);
-- [ ] O botão de voltar.
+- [x] **Snapshot do que a importação do 58 remove** — migration `20260914021223`;
+- [x] **O botão de voltar** — migration `20260914021354`.
+
+**A Fase 5 está fechada.**
 
 #### ✅ O histórico (migration 20260914014857)
 
@@ -552,15 +554,61 @@ régua de `remocaoPrevista.ts`, e o caso que a fundou aparece na lista: 413
 linhas e R$ 175.768,38 do Receptivo, 13/09/2026, por um export salvo da manhã do
 dia 11.
 
-#### ❌ O rollback não existe, e a tela diz isso
+#### ✅ O registro do que sai (migration 20260914021223)
 
-A aba tem um aviso explícito: **ainda não dá para voltar uma importação**. Não é
-limitação de tela — a importação do 58 apaga as linhas ausentes do arquivo e
-**nada guarda o que apagou**. Foram 2.659 linhas entre agosto e setembro, e elas
-não existem mais em lugar nenhum.
+Tabela `analitico_removidos`. **Nasceu vazia, nenhuma linha existente foi
+tocada.** SQL mostrado e aprovado antes de rodar.
 
-Um botão de voltar hoje seria um botão que mente. O que falta é o registro do
-que sai, e é a parte 2 desta fase — a única que precisa de estrutura nova.
+Até 14/09/2026 a remoção era um `delete` e ponto: **2.659 linhas se perderam
+assim** entre 12/08 e 13/09, incluindo as 413 e R$ 175.768,38 do Receptivo
+apagadas por um export salvo da manhã do dia 11. Naquele caso deu para recuperar
+reimportando, porque tudo era do 58 e o ERP ainda tinha o dado. Não havia
+garantia de que a próxima vez fosse assim.
+
+A lixeira que já existe (`lixeira_acordos`) não servia: é moldada para acordo —
+`acordo_id` obrigatório, campos de acordo — e expira em 3 dias.
+
+Duas decisões que valem registro:
+
+- **`conteudo` é jsonb, não 23 colunas espelhadas.** Assim a restauração
+  sobrevive a mudança de coluna; duas foram adicionadas no mesmo dia. Restaurar
+  é `jsonb_populate_record(null::analitico_recebimentos, conteudo)`.
+- **Copiar e apagar viraram uma transação só**
+  (`fn_analitico_remover_com_snapshot`). O cliente fazia `delete` direto; fazer
+  a cópia como um segundo comando dele deixaria a janela aberta — falha entre os
+  dois e o dado some sem registro.
+
+Custo medido: ~2.600 linhas/mês, algo como 2 MB/mês. **Sem expiração** — apagar
+o registro do que foi apagado tem que ser decisão consciente, não efeito de um
+default que ninguém escolheu.
+
+#### ✅ O botão de voltar (migration 20260914021354)
+
+`fn_analitico_restaurar_remocao`, botão na linha do histórico. Super_admin,
+com confirmação.
+
+**Desfaz a remoção, não a importação inteira.** A regra 7 falava em «voltar a um
+ponto do dia — o que foi importado depois é apagado». Implementei metade de
+propósito, por assimetria de risco:
+
+| | |
+|---|---|
+| o que a importação **removeu** | estava perdido para sempre — é o dano |
+| o que a importação **inseriu** | reimportar o arquivo traz de volta |
+
+Apagar o que uma importação inseriu tiraria linhas que o 58 atual diz que
+existem, e a próxima importação as traria de novo. Muito barulho para desfazer o
+lado que já se desfaz sozinho. Se depois de restaurar o estado ainda estiver
+errado, o caminho é o que a própria regra 7 diz: «para avançar, importa-se um
+relatório novo».
+
+A restauração devolve **dois números**, não um: quantas voltaram e quantas outra
+importação já tinha trazido de volta. Dizer «restaurei 413» quando 400 já
+estavam lá seria número bonito e mentiroso, e mandaria alguém procurar 400
+duplicatas que não existem.
+
+**As importações anteriores a 14/09/2026 não têm botão**, e a tela explica o
+porquê em vez de oferecer um botão que falharia.
 
 ### Fase 6 — travar o mês fechado
 

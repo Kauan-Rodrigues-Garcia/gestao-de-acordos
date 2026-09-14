@@ -24,12 +24,16 @@
  * `estado`. Forçar as duas nas mesmas colunas encheria metade da tabela de
  * traços e faria o leitor achar que a informação sumiu.
  *
- * ## O que esta tela ainda NÃO faz: voltar
+ * ## O desfazer, e por que ele começa vazio
  *
- * Rollback do 58 é impossível hoje e a razão é dado, não tela: a importação
- * apaga as linhas ausentes e **nada guarda o que apagou** — 2.659 linhas se
- * foram assim entre agosto e setembro. Enquanto não existir o snapshot, o botão
- * de voltar seria um botão que mente.
+ * Cada evento traz `loteId`, e é por ele que a tela acha o que aquela
+ * importação apagou (`analitico_removidos`, migration 20260914021223) para
+ * oferecer o desfazer na linha certa.
+ *
+ * O snapshot passou a existir em 14/09/2026. As 2.659 linhas removidas entre
+ * agosto e setembro **não estão guardadas** — nada as guardava. Para os eventos
+ * antigos não há o que desfazer, e a tela diz isso em vez de mostrar um botão
+ * que falharia.
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -40,6 +44,8 @@ const n = (v: unknown): number | null =>
 export type OrigemImportacao = '58' | '59';
 
 export interface EventoImportacao {
+  /** O lote da importação. É por ele que o snapshot do que saiu se liga. */
+  loteId: string | null;
   origem: OrigemImportacao;
   id: string;
   quando: string;
@@ -102,7 +108,7 @@ export async function buscarHistoricoImportacoes(
   opcoes: { mes?: string | null; origem?: OrigemImportacao | null; limite?: number } = {},
 ): Promise<EventoImportacao[]> {
   const { data, error } = await rpcSemTipo<{
-    origem: OrigemImportacao; evento_id: string; quando: string;
+    origem: OrigemImportacao; evento_id: string; lote_id: string | null; quando: string;
     quem_id: string | null; quem: string;
     setor_id: string | null; setor_nome: string | null;
     mes: string; arquivo: string | null;
@@ -119,6 +125,7 @@ export async function buscarHistoricoImportacoes(
   return (data ?? []).map(e => ({
     origem:      e.origem,
     id:          e.evento_id,
+    loteId:      e.lote_id,
     quando:      e.quando,
     quemId:      e.quem_id,
     quem:        e.quem,

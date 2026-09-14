@@ -44,6 +44,7 @@ import {
 const DO_58 = {
   origem: '58' as const,
   evento_id: 'log-1',
+  lote_id: 'lote-58',
   quando: '2026-09-13T12:40:00Z',
   quem_id: 'u-1',
   quem: 'Fulana',
@@ -64,6 +65,7 @@ const DO_58 = {
 const DO_59 = {
   origem: '59' as const,
   evento_id: 'lote-1',
+  lote_id: 'lote-1',
   quando: '2026-09-13T21:00:00Z',
   quem_id: 'u-2',
   quem: 'Beltrano',
@@ -82,7 +84,7 @@ const DO_59 = {
 };
 
 const evento = (over: Partial<EventoImportacao> = {}): EventoImportacao => ({
-  origem: '58', id: 'e', quando: '2026-09-13T12:00:00Z',
+  origem: '58', id: 'e', loteId: 'lote-e', quando: '2026-09-13T12:00:00Z',
   quemId: 'u', quem: 'Alguém', setorId: 's', setorNome: 'S',
   mes: '2026-09', arquivo: 'a', linhas: 10,
   inseridos: 1, atualizados: 0, removidos: 0, valor: null,
