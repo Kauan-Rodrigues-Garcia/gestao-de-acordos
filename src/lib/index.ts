@@ -24,6 +24,12 @@ export const ROUTE_PATHS = {
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',
   /**
+   * O fechamento mensal por operador — a planilha de fechamento da gerência.
+   * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um
+   * arquivo baixado e não tem rota.
+   */
+  FECHAMENTO: '/fechamento',
+  /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *
    * Duas rotas, e não uma que muda de cara: são telas com finalidades

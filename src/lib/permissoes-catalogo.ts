@@ -205,6 +205,8 @@ export const GRUPOS_PERMISSAO = [
   // Dashboard – ADM, 11/09/2026. O painel do Núcleo, com card próprio: é outra
   // aba, e não um alcance do Dashboard da cobrança.
   'Dashboard ADM',
+  // Fechamento, 14/09/2026. A planilha de fechamento da gerência virou aba.
+  'Fechamento',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -2013,6 +2015,46 @@ export const PERMISSOES: PermissaoMeta[] = [
     depende: {
       chaves: ['chips_escopo_individual'],
       motivo: 'Só se devolve o número que se recebeu, e é o alcance individual que o mostra.',
+    },
+  },
+
+  // ── Fechamento ───────────────────────────────────────────────────────────
+  //
+  // As quatro nascem em `{}`: nenhum cargo configurável abre a aba. Foi o
+  // pedido de 14/09/2026 — só a administração por enquanto, e a gerência entra
+  // depois, ligando as chaves no painel. Administrador e super_admin enxergam
+  // por acesso total, como toda chave não explícita. Migration 20260914170000.
+  {
+    key: 'ver_fechamento', label: 'Aba Fechamento',
+    descricao:
+      'Abrir o fechamento mensal por operador: fechamento, meta, alcance, quartil, '
+      + 'D.U. trabalhado e situação',
+    grupo: 'Fechamento', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    key: 'fechamento_escopo_setor', label: 'Fechamento: o próprio setor',
+    descricao: 'Ver no Fechamento os operadores do setor da própria pessoa',
+    grupo: 'Fechamento', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    key: 'fechamento_escopo_todos_setores', label: 'Fechamento: todos os setores',
+    descricao: 'Ver no Fechamento qualquer setor, com o filtro de setor disponível',
+    grupo: 'Fechamento', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    /*
+     * Preencher o que a planilha deixava à mão: D.U. trabalhado e a situação do
+     * operador no fechamento. Essa situação é da aba — não é `perfis.situacao`
+     * e não mexe em login, ranking nem cadastro.
+     */
+    key: 'fechamento_editar', label: 'Fechamento: preencher D.U. e situação',
+    descricao:
+      'Informar os dias úteis trabalhados e a situação de cada operador no '
+      + 'fechamento do mês',
+    grupo: 'Fechamento', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['fechamento_escopo_setor', 'fechamento_escopo_todos_setores'],
+      motivo: 'Só se preenche o fechamento de quem aparece na aba, e é o alcance que mostra.',
     },
   },
 ];

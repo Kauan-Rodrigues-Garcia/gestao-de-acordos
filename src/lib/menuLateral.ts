@@ -32,7 +32,7 @@
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
-  Ticket, ClipboardList, Tv, Smartphone, MessageCircle, Gauge,
+  Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -108,6 +108,10 @@ export const NAV_ITEMS: NavItem[] = [
   // e equipes dela. O produto `rh`, quando tiver tela, terá a sua — com a
   // visão das quatro empresas, que esta não tem.
   { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           produtos: SO_COBRANCA, permissaoKey: 'ver_rh_gestao' },
+  // Fechamento — a planilha de fechamento da gerência. Só BookPlay. A chave
+  // nasce desligada para todo cargo configurável: hoje o item aparece só para
+  // quem tem acesso total, e a gerência entra quando alguém ligar no painel.
+  { label: 'Fechamento',       icon: ClipboardCheck,  to: ROUTE_PATHS.FECHAMENTO,          produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_fechamento' },
   // Modo TV. Sem lista de cargo, como as demais: quem abre é a chave. Ela nasce
   // desligada para todo cargo configurável, então hoje o item só aparece para
   // quem tem acesso total — que é o pedido enquanto a fase 1 está sendo provada

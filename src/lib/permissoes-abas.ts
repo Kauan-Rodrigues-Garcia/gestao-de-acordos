@@ -35,7 +35,8 @@ export type ModuloPermissaoId =
   | 'chat'
   | 'modo_tv'
   | 'controle_numeros'
-  | 'meus_chips';
+  | 'meus_chips'
+  | 'fechamento';
 
 interface DefinicaoModulo {
   id: ModuloPermissaoId;
@@ -217,6 +218,19 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
       'chips_devolver_a_lideranca',
     ],
     tenants: ['bookplay'],
+  },
+  {
+    /*
+     * A planilha de fechamento da gerência, como aba. O que ela calcula vem do
+     * Analítico e das Metas; o que ela guarda é só D.U. trabalhado e situação,
+     * e quem preenche é `fechamento_editar`.
+     */
+    id: 'fechamento', rotulo: 'Fechamento', interruptor: 'ver_fechamento',
+    escopo: 'fechamento',
+    descricao:
+      'Fechamento mensal por operador: fechamento, meta, alcance, quartil, D.U. '
+      + 'trabalhado e situação.',
+    grupos: ['Fechamento'], tenants: ['bookplay'],
   },
 ] as const;
 

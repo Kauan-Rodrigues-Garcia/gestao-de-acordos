@@ -259,6 +259,19 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'chips',
     niveis: ['individual', 'setor'],
   },
+  /*
+   * Fechamento: dois níveis, como o Painel Líder, e pelo mesmo motivo.
+   *
+   * A aba é a planilha de fechamento da gerência: quem a abre olha o próprio
+   * setor, e a cúpula escolhe entre os setores. `individual` não faz sentido —
+   * o operador não preenche o próprio fechamento — e `equipe` nunca foi o
+   * recorte da planilha. No banco, `fn_fechamento_alcanca` lê estes níveis.
+   */
+  fechamento: {
+    chaveAba: 'ver_fechamento',
+    prefixo: 'fechamento',
+    niveis: ['setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

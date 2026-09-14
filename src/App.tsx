@@ -64,6 +64,7 @@ const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
+const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
 // O painel do Nucleo. Lazy como o resto, e aqui isso poupa o bundle de quase
@@ -393,6 +394,17 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_rh_gestao">
                     <RhGestao />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Fechamento [BP] — a planilha de fechamento da gerência. Quem
+                  abre é `ver_fechamento`; o setor que aparece sai do escopo da
+                  aba, e `fn_fechamento_alcanca` cumpre o mesmo recorte no banco. */}
+              <Route path={ROUTE_PATHS.FECHAMENTO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_fechamento">
+                    <Fechamento />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
