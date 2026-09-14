@@ -144,6 +144,88 @@ export async function buscarHistoricoImportacoes(
   }));
 }
 
+// ── O detalhe de uma importação ──────────────────────────────────────────────
+
+/**
+ * O que entrou e o que saiu, num setor, numa importação.
+ *
+ * As duas metades vêm de lugares diferentes, e é honesto saber de onde:
+ *
+ * **Entrou** são as linhas que aquela importação escreveu **e que ainda estão
+ * lá**. Se uma importação posterior substituiu a linha, ela conta para a
+ * posterior — a pergunta útil é «o que deste lote vale hoje», não «o que ele
+ * escreveu num instante que já passou».
+ *
+ * **Saiu** vem do registro de remoção, que só existe desde 14/09/2026. Antes
+ * disso apagar era um `delete` e ponto, e foi assim que 2.659 linhas se
+ * perderam entre agosto e setembro sem deixar rastro.
+ */
+export interface DetalheDeSetor {
+  setorId: string | null;
+  setorNome: string;
+  entrouLinhas: number;
+  entrouValor: number;
+  saiuLinhas: number;
+  saiuValor: number;
+  /** Entrou menos saiu. É o que o setor ganhou ou perdeu naquela importação. */
+  delta: number;
+  /** Quantas das que saíram já foram trazidas de volta pelo «Desfazer». */
+  saiuRestaurado: number;
+}
+
+export async function buscarDetalheDaImportacao(
+  empresaId: string,
+  loteId: string,
+): Promise<DetalheDeSetor[]> {
+  const { data, error } = await rpcSemTipo<{
+    setor_id: string | null; setor_nome: string;
+    entrou_linhas: unknown; entrou_valor: unknown;
+    saiu_linhas: unknown; saiu_valor: unknown;
+    delta: unknown; saiu_restaurado: unknown;
+  }[]>('fn_importacoes_detalhe', { p_empresa_id: empresaId, p_lote_id: loteId });
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(d => ({
+    setorId:        d.setor_id,
+    setorNome:      d.setor_nome,
+    entrouLinhas:   n(d.entrou_linhas) ?? 0,
+    entrouValor:    n(d.entrou_valor) ?? 0,
+    saiuLinhas:     n(d.saiu_linhas) ?? 0,
+    saiuValor:      n(d.saiu_valor) ?? 0,
+    delta:          n(d.delta) ?? 0,
+    saiuRestaurado: n(d.saiu_restaurado) ?? 0,
+  }));
+}
+
+/** O total da importação, somando os setores. */
+export function totalDoDetalhe(linhas: DetalheDeSetor[]): DetalheDeSetor {
+  return linhas.reduce<DetalheDeSetor>((t, l) => ({
+    setorId: null, setorNome: 'Total',
+    entrouLinhas: t.entrouLinhas + l.entrouLinhas,
+    entrouValor:  t.entrouValor + l.entrouValor,
+    saiuLinhas:   t.saiuLinhas + l.saiuLinhas,
+    saiuValor:    t.saiuValor + l.saiuValor,
+    delta:        t.delta + l.delta,
+    saiuRestaurado: t.saiuRestaurado + l.saiuRestaurado,
+  }), {
+    setorId: null, setorNome: 'Total',
+    entrouLinhas: 0, entrouValor: 0, saiuLinhas: 0, saiuValor: 0,
+    delta: 0, saiuRestaurado: 0,
+  });
+}
+
+/**
+ * O detalhe por setor existe para esta importação?
+ *
+ * Só as que escreveram ou removeram alguma linha ainda rastreável. Importação
+ * antiga cujas linhas foram todas substituídas depois não tem o que mostrar —
+ * e a tela precisa dizer isso, em vez de abrir uma tabela vazia que parece
+ * defeito.
+ */
+export function temDetalhe(e: EventoImportacao): boolean {
+  return e.loteId !== null;
+}
+
 /** Um resumo do que a lista mostra, para o cabeçalho. */
 export function resumoDoHistorico(eventos: EventoImportacao[]): {
   total: number; falhas: number; removidas: number; pessoas: number;

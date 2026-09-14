@@ -32,8 +32,11 @@
  * removidas entre agosto e setembro não estão em lugar nenhum. Um botão ali
  * seria um botão que falha — a tela diz o porquê em vez de oferecer.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { History, AlertTriangle, FileWarning, Undo2, Loader2 } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  History, AlertTriangle, FileWarning, Undo2, Loader2, ChevronRight,
+  ArrowDownRight, ArrowUpRight,
+} from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,10 +46,14 @@ import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
+  buscarDetalheDaImportacao,
   buscarHistoricoImportacoes,
   removeuDemais,
   resumoDoHistorico,
   ROTULO_ORIGEM,
+  temDetalhe,
+  totalDoDetalhe,
+  type DetalheDeSetor,
   type EventoImportacao,
   type OrigemImportacao,
 } from '@/services/importacoes/historico.service';
@@ -80,6 +87,10 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
   const [doMes, setDoMes] = useState(true);
   const [guardadas, setGuardadas] = useState<RemocaoGuardada[]>([]);
   const [desfazendo, setDesfazendo] = useState<string | null>(null);
+  /** Detalhe por setor, carregado sob demanda e guardado por lote. */
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [detalhes, setDetalhes] = useState<Record<string, DetalheDeSetor[]>>({});
+  const [carregandoDetalhe, setCarregandoDetalhe] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null);
@@ -103,6 +114,32 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
   useEffect(() => { void carregar(); }, [carregar, versao]);
 
   const resumo = useMemo(() => resumoDoHistorico(eventos), [eventos]);
+
+  /*
+   * O detalhe é buscado quando a linha é aberta, e fica guardado.
+   *
+   * Carregar os detalhes das 300 importações da lista de uma vez seria 300
+   * consultas para mostrar, no máximo, uma. Guardar depois de abrir é o que
+   * permite abrir e fechar sem repetir a ida ao banco.
+   */
+  const alternar = useCallback(async (e: EventoImportacao) => {
+    if (!e.loteId) return;
+    const chave = `${e.origem}-${e.id}`;
+    if (aberto === chave) { setAberto(null); return; }
+    setAberto(chave);
+    if (detalhes[chave]) return;
+
+    setCarregandoDetalhe(chave);
+    try {
+      const d = await buscarDetalheDaImportacao(empresaId, e.loteId);
+      setDetalhes(prev => ({ ...prev, [chave]: d }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao abrir o detalhe.');
+      setAberto(null);
+    } finally {
+      setCarregandoDetalhe(null);
+    }
+  }, [aberto, detalhes, empresaId]);
 
   /** Lote → o que ele apagou e ainda dá para trazer de volta. */
   const desfazivel = useMemo(() => {
@@ -231,6 +268,7 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <th className="w-8 px-2 py-2.5" />
                 <th className="px-3 py-2.5 text-left font-semibold">Quando</th>
                 <th className="px-3 py-2.5 text-left font-semibold">Relatório</th>
                 <th className="px-3 py-2.5 text-left font-semibold">Quem</th>
@@ -247,14 +285,32 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
               {eventos.map(e => {
                 const grande = removeuDemais(e);
                 const guardada = e.loteId ? desfazivel.get(e.loteId) : undefined;
+                const chave = `${e.origem}-${e.id}`;
+                const expandido = aberto === chave;
+                const detalhe = detalhes[chave];
+                const podeAbrir = temDetalhe(e);
                 return (
-                  <tr key={`${e.origem}-${e.id}`}
+                  <Fragment key={chave}>
+                  <tr
                     className={cn(
                       'border-b border-border/25',
                       e.deuErrado && 'bg-destructive/5',
                       grande && 'bg-destructive/10',
+                      podeAbrir && 'cursor-pointer hover:bg-muted/30',
+                      expandido && 'bg-muted/40',
                     )}
+                    onClick={podeAbrir ? () => void alternar(e) : undefined}
                   >
+                    <td className="px-2 py-2 text-center">
+                      {podeAbrir && (
+                        carregandoDetalhe === chave
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          : <ChevronRight className={cn(
+                              'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                              expandido && 'rotate-90',
+                            )} />
+                      )}
+                    </td>
                     <td className="px-3 py-2 font-mono text-[11px] tabular-nums text-foreground">
                       {quando(e.quando)}
                     </td>
@@ -307,7 +363,7 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
                         {e.estado}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-right" onClick={ev => ev.stopPropagation()}>
                       {/* Só onde existe o que trazer de volta. Botão que só sabe
                           falhar é pior que botão nenhum. */}
                       {guardada && (
@@ -328,6 +384,107 @@ export default function Mestre59Historico({ empresaId, mes, versao }: Props) {
                       )}
                     </td>
                   </tr>
+
+                  {/* ── O detalhe: o que entrou e o que saiu, setor a setor ── */}
+                  {expandido && detalhe && (
+                    <tr className="border-b border-border/25 bg-muted/20">
+                      <td colSpan={9} className="px-3 py-3">
+                        {detalhe.length === 0 ? (
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            Sem detalhe por setor para esta importação. O registro do que sai
+                            passou a existir em <strong>14/09/2026</strong>, e as linhas que esta
+                            importação escreveu já foram substituídas por outra desde então —
+                            então não há o que atribuir a ela hoje. As contagens da linha acima
+                            vêm do log e continuam válidas.
+                          </p>
+                        ) : (
+                          <>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                  <th className="py-1 text-left font-semibold">Setor</th>
+                                  <th className="py-1 text-right font-semibold">Entrou</th>
+                                  <th className="py-1 text-right font-semibold">Saiu</th>
+                                  <th className="py-1 text-right font-semibold">Diferença</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detalhe.map(d => (
+                                  <tr key={d.setorId ?? d.setorNome} className="border-t border-border/20">
+                                    <td className="py-1.5 text-foreground">{d.setorNome}</td>
+                                    <td className="py-1.5 text-right font-mono tabular-nums text-muted-foreground">
+                                      {d.entrouLinhas > 0 ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <ArrowDownRight className="h-3 w-3 text-success" />
+                                          {formatBRL(d.entrouValor)}
+                                          <span className="text-[10px] opacity-60">({d.entrouLinhas})</span>
+                                        </span>
+                                      ) : '—'}
+                                    </td>
+                                    <td className="py-1.5 text-right font-mono tabular-nums text-muted-foreground">
+                                      {d.saiuLinhas > 0 ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <ArrowUpRight className="h-3 w-3 text-destructive" />
+                                          {formatBRL(d.saiuValor)}
+                                          <span className="text-[10px] opacity-60">({d.saiuLinhas})</span>
+                                          {d.saiuRestaurado > 0 && (
+                                            <span className="text-[10px] text-success">
+                                              · {d.saiuRestaurado} de volta
+                                            </span>
+                                          )}
+                                        </span>
+                                      ) : '—'}
+                                    </td>
+                                    <td className={cn(
+                                      'py-1.5 text-right font-mono font-semibold tabular-nums',
+                                      d.delta > 0 ? 'text-success'
+                                        : d.delta < 0 ? 'text-destructive' : 'text-muted-foreground',
+                                    )}>
+                                      {d.delta > 0 ? '+' : ''}{formatBRL(d.delta)}
+                                    </td>
+                                  </tr>
+                                ))}
+                                {detalhe.length > 1 && (() => {
+                                  const t = totalDoDetalhe(detalhe);
+                                  return (
+                                    <tr className="border-t-2 border-border/40 font-semibold">
+                                      <td className="py-1.5 text-foreground">Total</td>
+                                      <td className="py-1.5 text-right font-mono tabular-nums text-foreground">
+                                        {formatBRL(t.entrouValor)}
+                                        <span className="ml-1 text-[10px] font-normal opacity-60">
+                                          ({t.entrouLinhas})
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5 text-right font-mono tabular-nums text-foreground">
+                                        {formatBRL(t.saiuValor)}
+                                        <span className="ml-1 text-[10px] font-normal opacity-60">
+                                          ({t.saiuLinhas})
+                                        </span>
+                                      </td>
+                                      <td className={cn(
+                                        'py-1.5 text-right font-mono tabular-nums',
+                                        t.delta > 0 ? 'text-success'
+                                          : t.delta < 0 ? 'text-destructive' : 'text-foreground',
+                                      )}>
+                                        {t.delta > 0 ? '+' : ''}{formatBRL(t.delta)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })()}
+                              </tbody>
+                            </table>
+                            <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+                              <strong>Entrou</strong> são as linhas que esta importação escreveu e
+                              que ainda estão lá — se outra as substituiu depois, contam para a
+                              outra. <strong>Saiu</strong> é o que ela apagou, guardado para poder
+                              voltar; esse registro só existe desde 14/09/2026.
+                            </p>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

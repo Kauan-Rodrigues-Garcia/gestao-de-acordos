@@ -32,12 +32,16 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
+  buscarDetalheDaImportacao,
   buscarHistoricoImportacoes,
   CORTE_REMOCAO,
   removeuDemais,
   resumoDoHistorico,
   ROTULO_ORIGEM,
   temContagemDeLinhas,
+  temDetalhe,
+  totalDoDetalhe,
+  type DetalheDeSetor,
   type EventoImportacao,
 } from './historico.service';
 
@@ -193,6 +197,83 @@ describe('temContagemDeLinhas e os rótulos', () => {
       expect(ROTULO_ORIGEM[o].curto.length).toBeGreaterThan(0);
       expect(ROTULO_ORIGEM[o].longo.length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe('o detalhe por setor', () => {
+  /*
+   * O caso real da primeira sincronização automática, em 14/09/2026 11:17: o
+   * Receptivo recebeu 2.549 linhas no lugar de 2.542, ganhando R$ 1.577,15.
+   */
+  it('converte os números e calcula a diferença', async () => {
+    mock.porRpc = {
+      fn_importacoes_detalhe: {
+        data: [{
+          setor_id: 'setor-receptivo', setor_nome: 'Receptivo',
+          entrou_linhas: '2549', entrou_valor: '1168927.69',
+          saiu_linhas: '2542', saiu_valor: '1167350.54',
+          delta: '1577.15', saiu_restaurado: '0',
+        }],
+        error: null,
+      },
+    };
+
+    const [d] = await buscarDetalheDaImportacao('emp-1', 'lote-1');
+
+    expect(d.setorNome).toBe('Receptivo');
+    expect(d.entrouLinhas).toBe(2549);
+    expect(d.saiuLinhas).toBe(2542);
+    expect(d.delta).toBeCloseTo(1577.15, 2);
+  });
+
+  /*
+   * Importação antiga cujas linhas já foram todas substituídas não tem o que
+   * atribuir a ela hoje. A tela precisa dizer isso — lista vazia que parece
+   * defeito é pior que a frase explicando.
+   */
+  it('lista vazia não vira erro', async () => {
+    mock.porRpc = { fn_importacoes_detalhe: { data: null, error: null } };
+    await expect(buscarDetalheDaImportacao('emp-1', 'lote-1')).resolves.toEqual([]);
+  });
+
+  it('repassa o lote para o banco', async () => {
+    mock.porRpc = { fn_importacoes_detalhe: { data: [], error: null } };
+    await buscarDetalheDaImportacao('emp-1', 'lote-abc');
+    expect(mock.args.fn_importacoes_detalhe).toMatchObject({
+      p_empresa_id: 'emp-1', p_lote_id: 'lote-abc',
+    });
+  });
+
+  it('sem lote não há detalhe para abrir', () => {
+    expect(temDetalhe(evento({ loteId: 'x' }))).toBe(true);
+    expect(temDetalhe(evento({ loteId: null }))).toBe(false);
+  });
+});
+
+describe('totalDoDetalhe', () => {
+  const setor = (over: Partial<DetalheDeSetor> = {}): DetalheDeSetor => ({
+    setorId: 's', setorNome: 'S',
+    entrouLinhas: 10, entrouValor: 100, saiuLinhas: 8, saiuValor: 80,
+    delta: 20, saiuRestaurado: 0, ...over,
+  });
+
+  it('soma as duas metades e a diferença', () => {
+    const t = totalDoDetalhe([
+      setor({ entrouLinhas: 2549, entrouValor: 1168927.69, saiuLinhas: 2542, saiuValor: 1167350.54, delta: 1577.15 }),
+      setor({ entrouLinhas: 3697, entrouValor: 977018.78, saiuLinhas: 3696, saiuValor: 976815.30, delta: 203.48 }),
+    ]);
+
+    expect(t.entrouLinhas).toBe(6246);
+    expect(t.saiuLinhas).toBe(6238);
+    expect(t.delta).toBeCloseTo(1780.63, 2);
+  });
+
+  /* O total de uma lista vazia é zero, não `NaN` nem exceção. */
+  it('lista vazia devolve tudo zerado', () => {
+    const t = totalDoDetalhe([]);
+    expect(t.entrouValor).toBe(0);
+    expect(t.saiuValor).toBe(0);
+    expect(t.delta).toBe(0);
   });
 });
 
