@@ -58,8 +58,8 @@ import {
 } from 'recharts';
 import { motion } from 'framer-motion';
 import {
-  TrendingUp, TrendingDown, Minus, Activity, Wallet, Users, Layers,
-  ArrowUpRight, ArrowDownRight, AlertCircle, CheckCircle2, FileSpreadsheet,
+  TrendingUp, TrendingDown, Activity, Wallet, Users, Layers,
+  ArrowUpRight, AlertCircle, CheckCircle2, FileSpreadsheet,
   CalendarRange, ChevronRight, RotateCcw,
 } from 'lucide-react';
 import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
@@ -70,9 +70,11 @@ import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { rotuloDoMes } from '@/lib/mesReferencia';
 import { corDaForma, agruparFormas } from '@/lib/formasPagamento';
+import { SeloVariacao as Selo } from './components';
+import { OndeOResultadoAcontece } from './OndeOResultadoAcontece';
 import {
   buscarVisaoGeralDiretoria, variacao, acumular, estimativaDeFechamento,
-  intensidadeDaBarra, type VisaoGeralDiretoria,
+  type VisaoGeralDiretoria,
 } from '@/services/mestre/diretoria.service';
 
 /** Enquanto o tema não resolveu (primeiro quadro), a série usa isto. */
@@ -84,22 +86,6 @@ const pct = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 
 // ── Peças pequenas ──────────────────────────────────────────────────────────
 
 /** Selo de variação. `null` não vira 0% — vira nada. Ver `variacao`. */
-function Selo({ pct: p, className }: { pct: number | null; className?: string }) {
-  if (p === null) return null;
-  const positivo = p >= 0;
-  const Icone = Math.abs(p) < 0.05 ? Minus : positivo ? ArrowUpRight : ArrowDownRight;
-  return (
-    <span className={cn(
-      'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
-      positivo ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-               : 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-      className,
-    )}>
-      <Icone className="h-3 w-3" />
-      {pct(Math.abs(p))}%
-    </span>
-  );
-}
 
 function Numero({
   rotulo, valor, sub, Icone, destaque,
@@ -744,53 +730,22 @@ export function DiretoriaVisaoGeral({
         <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <div className="mb-3">
             <h3 className="text-sm font-semibold text-foreground">Onde o resultado acontece</h3>
+            {/* Por setor e equipe desde 14/09/2026, na mesma fonte dos cards de
+                «Setores e equipes». Ver `OndeOResultadoAcontece`. */}
             <p className="text-[11px] text-muted-foreground">
-              Recebimento por carteira do 59{dados.temLoteAnterior && ' · variação contra o mês anterior'}.
+              Recebimento por setor e pelas equipes do Gestão — os mesmos números da aba Setores e equipes
+              {dados.temLoteAnterior && ' · variação contra o mês anterior'}.
             </p>
           </div>
-          {/* A barra é um DEGRADÊ da cor da empresa, não uma paleta por
-              categoria: aqui a cor é grandeza, não rótulo. Quanto maior o
-              recebimento, mais forte o tom — ver `intensidadeDaBarra` para o
-              porquê da raiz quadrada. */}
-          <div className="space-y-0.5">
-            {dados.carteiras.map(c => {
-              const largura = maiorCarteira?.valor
-                ? Math.max(2, (c.valor / maiorCarteira.valor) * 100) : 0;
-              const forca = intensidadeDaBarra(c.valor, maiorCarteira?.valor ?? 0);
-              return (
-                <div
-                  key={c.cod}
-                  className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40"
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="truncate text-xs text-foreground" title={c.nome}>{c.nome}</span>
-                    {/* Carteira sem setor não é defeito: parte da cobrança não
-                        pertence a setor nenhum, e o total da empresa a inclui. */}
-                    {!c.setorId && (
-                      <span className="shrink-0 rounded border border-border px-1 text-[9px] uppercase text-muted-foreground">
-                        sem setor
-                      </span>
-                    )}
-                  </span>
-                  <span className="hidden h-2 w-[26%] shrink-0 overflow-hidden rounded-full bg-muted/60 sm:block">
-                    <span
-                      className="block h-full rounded-full bg-primary"
-                      style={{ width: `${largura}%`, opacity: forca }}
-                    />
-                  </span>
-                  <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
-                    {formatBRL(c.valor)}
-                  </span>
-                  <span className="w-[62px] shrink-0 text-right">
-                    <Selo pct={dados.temLoteAnterior ? variacao(c.valor, c.valorAnterior) : null} />
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <OndeOResultadoAcontece
+            empresaId={empresaId}
+            mes={mes}
+            diaCorte={dados.diaCorte}
+            versao={versao}
+          />
         </section>
 
-        {/* `self-start`: a lista de carteiras ao lado é muito mais alta, e um
+        {/* `self-start`: a tabela de setores ao lado é muito mais alta, e um
             card esticado até lá teria o rodapé boiando sobre um vão vazio. */}
         <section className="self-start rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <div>

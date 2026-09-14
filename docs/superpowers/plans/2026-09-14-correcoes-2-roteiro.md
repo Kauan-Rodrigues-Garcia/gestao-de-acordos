@@ -350,7 +350,23 @@ abrir o `.xlsx` no Excel e o `.html` no navegador.
   pelo usuário no SQL Editor em 14/09/2026 (fora do registro de
   `schema_migrations`, como as outras do editor). A leitura de reserva em
   `perfis` continua no front, mas deixa de ser o caminho normal.
-- **Ondas 4, 5 e 6:** não iniciadas.
+- **Onda 4 (14/09/2026):** as anteriores chegam sozinhas ao subir (sem botão),
+  com trava contra pedido em rajada; página de 60 para 30 mensagens.
+- **Onda 5 (14/09/2026):** botão «Excluir» no detalhe do ticket, com confirmação;
+  chave `tickets_excluir`; `excluirTicket` apaga pela RPC, depois os anexos, e
+  registra `ticket_excluido`. **Banco pendente:** `20260914200000_tickets_excluir.sql`
+  — depende de `20260914170000` (Fechamento) já aplicada.
+- **Onda 6 (14/09/2026):**
+  - «Onde o resultado acontece» (Visão Geral) passou a ler a MESMA grade dos cards
+    de setor, com as equipes do Gestão dentro de cada setor e a lista separada das
+    equipes do 59 sem vínculo (D7).
+  - No detalhe do setor, as equipes são as do Gestão, em cards com os números do
+    Painel Líder (`equipesDiretoria.ts` sobre `detalharEquipe`); o clique abre o
+    detalhe da equipe: operação, projeção e faixa, fechamento projetado, ritmo
+    necessário, recebimento diário, degraus, pessoas por quartil, destaque e o
+    quartil de cada operador. As do 59 sem vínculo ficam numa lista à parte.
+  - Sem banco novo. A equipe mostra o valor do 59 ao lado só quando diverge do
+    analítico.
 
 ## Verificação (toda onda)
 

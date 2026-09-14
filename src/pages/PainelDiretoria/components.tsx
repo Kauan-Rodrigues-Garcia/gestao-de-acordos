@@ -4,11 +4,12 @@ import { motion } from 'framer-motion';
 import {
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
   Building2, Clock, Landmark,
-  ArrowUpRight, ArrowDownRight,
+  ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
+import { COR_QUARTIL } from '@/lib/diasUteis';
 import type { SetorAgendamento } from './types';
 import { TIPO_ICONS, TIPO_CORES, TIPO_LABELS_DISPLAY } from './types';
 
@@ -318,3 +319,48 @@ export const SetorRow = memo(function SetorRow({ setor, index, tipos }: { setor:
     </motion.div>
   );
 });
+
+// ─── Selo de quartil ──────────────────────────────────────────────────────────
+
+/**
+ * «Q1» na cor da faixa. Mora aqui desde que as equipes do Gestão entraram no
+ * painel (14/09/2026): setor, equipe e operador usam o mesmo selo.
+ */
+export function SeloQuartil({ quartil }: { quartil: number }) {
+  const cor = COR_QUARTIL[quartil] ?? COR_QUARTIL[4];
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+      style={{ background: `${cor}1f`, color: cor }}
+      title={`Quartil ${quartil}`}
+    >
+      Q{quartil}
+    </span>
+  );
+}
+
+// ─── Selo de variação ─────────────────────────────────────────────────────────
+
+/**
+ * «↗ 12,3%» verde ou «↘ 4,1%» vermelho. `null` não desenha nada: sem mês
+ * anterior não há variação, e um «0%» diria que houve comparação.
+ *
+ * Saiu da Visão Geral em 14/09/2026, quando a tabela «Onde o resultado
+ * acontece» virou componente próprio e passou a precisar dele também.
+ */
+export function SeloVariacao({ pct: p, className }: { pct: number | null; className?: string }) {
+  if (p === null) return null;
+  const positivo = p >= 0;
+  const Icone = Math.abs(p) < 0.05 ? Minus : positivo ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
+      positivo ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+               : 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+      className,
+    )}>
+      <Icone className="h-3 w-3" />
+      {Math.abs(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+    </span>
+  );
+}
