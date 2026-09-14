@@ -328,13 +328,35 @@ const chaveLinhaAnalitico = (r: LinhaRelatorioAnalitico) =>
  *
  * Compara por LINHA, e não por grupo — ver `chaveLinhaAnalitico` para o porquê
  * e para o que custou descobrir isso.
+ *
+ * ## O 58 só apaga o que o 58 trouxe
+ *
+ * Esta função trata o arquivo como retrato completo do mês: o que não está nele
+ * é removido. Isso vale para o que veio do próprio 58 — e só.
+ *
+ * A partir do momento em que o 59 escrever nesta tabela (Fase 7) e em que
+ * houver correção manual (Fase 4), uma linha de outra procedência ausente do
+ * arquivo do 58 não significa «foi estornada»; significa que o 58 nunca soube
+ * dela. Apagá-la seria perda de dado sem volta: o 58 não tem como reimportar o
+ * que não é dele.
+ *
+ * O precedente existe e foi caro. Uma importação de um 58 antigo apagou 413
+ * linhas e R$ 175.768,38 em silêncio — naquele caso deu para recuperar
+ * reimportando o arquivo novo, porque tudo ali era do 58. Com linha do 59 no
+ * meio, não daria.
+ *
+ * A guarda está em dois lugares de propósito: a consulta do banco já filtra
+ * `procedencia = 'relatorio_58'`, e aqui a regra fica escrita e testada. Linha
+ * sem o campo é tratada como do 58 — é o que toda linha era antes da coluna
+ * existir (migration 20260914010002).
  */
 export function idsAusentesDoRelatorioMensal(
-  existentes: Array<LinhaRelatorioAnalitico & { id: string }>,
+  existentes: Array<LinhaRelatorioAnalitico & { id: string; procedencia?: string }>,
   relatorio: LinhaRelatorioAnalitico[],
 ): string[] {
   const presentes = new Set(relatorio.map(chaveLinhaAnalitico));
   return existentes
+    .filter(linha => (linha.procedencia ?? 'relatorio_58') === 'relatorio_58')
     .filter(linha => !presentes.has(chaveLinhaAnalitico(linha)))
     .map(linha => linha.id);
 }
@@ -607,6 +629,9 @@ export async function importarLoteAnalitico(
   type ExRow = {
     id: string; codigo: string; operador_usuario: string; mes_referencia: string;
     data_pagamento: string; forma_pagamento: string; valor_recebido: number; total_ho: number;
+    /* De onde a linha veio (migration 20260914010002). Só a sincronização
+       mensal olha para isto — ver `idsAusentesDoRelatorioMensal`. */
+    procedencia?: string;
   };
   type RowImport = (typeof rows)[number];
 
@@ -735,9 +760,13 @@ export async function importarLoteAnalitico(
       erros.push('Sincronização mensal não executada: o setor da importação não foi informado.');
     } else if (erros.length === 0) {
       const leituraSetor = await paginarParalelo<ExRow>(async (de, ate) => {
+        /* `procedencia` vem junto e a regra é aplicada de novo em
+           `idsAusentesDoRelatorioMensal`: o 58 só apaga o que o 58 trouxe. Ler
+           só as linhas dele já bastaria, mas a guarda repetida é de propósito —
+           o dia em que alguém mudar este `select`, a regra continua valendo. */
         const r = await supabase
           .from('analitico_recebimentos')
-          .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho')
+          .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho, procedencia')
           .eq('empresa_id', empresaId)
           .eq('setor_id', setorImportacaoId)
           .in('mes_referencia', meses)

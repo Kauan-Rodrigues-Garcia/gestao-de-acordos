@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import Mestre59Pendencias from './Mestre59Pendencias';
 import {
   buscarDivergencias,
   buscarResumoDivergencias,
@@ -174,6 +175,14 @@ export default function Mestre59Divergencias({ empresaId, mes, versao }: Props) 
           </div>
         </div>
       </div>
+
+      {/* ── A mesma pergunta pelo outro lado: o que o 58 tem e o 59 não ── */}
+      <Mestre59Pendencias
+        empresaId={empresaId}
+        mes={mes}
+        versao={versao}
+        setorId={setorFiltro === 'all' ? null : setorFiltro}
+      />
 
       {/* ── Os cartões: cada um é um filtro, com o porquê junto ─────────── */}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

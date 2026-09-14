@@ -246,9 +246,12 @@ Entregas:
       no ar em 14/09/2026, ver abaixo;
 - [x] Regra do dia corrente (regra 5) — e ela precisou ser mais fina do que o
       combinado, ver abaixo;
-- [ ] Coluna de procedência em `analitico_recebimentos`;
-- [ ] Marcar as linhas que o 58 traz e o 59 ainda não tem (regra 4);
-- [ ] Escalar o aviso: 1ª importação = pendente, 2ª = crítico.
+- [x] Coluna de procedência em `analitico_recebimentos` — migration
+      `20260914010002`, ver abaixo;
+- [x] Marcar as linhas que o 58 traz e o 59 ainda não tem (regra 4);
+- [x] Escalar o aviso: 1ª importação = pendente, 2ª = crítico.
+
+**A Fase 2 está fechada.**
 
 #### ✅ A aba «Conferência 58 × 59» (14/09/2026)
 
@@ -294,6 +297,71 @@ A aba abre filtrada em `divergencia`. Os cartões do topo são filtros e carrega
 a frase que explica cada classe, e uma faixa mostra **até que dia o 58 de cada
 setor chegou** — sem ela, «R$ 61 mil aguardando» é número sem causa; com ela é
 «o 58 do Play 1 está no dia 11».
+
+#### ✅ A procedência de cada linha (14/09/2026)
+
+Migration `20260914010002` — **a primeira desta sequência que muda estrutura de
+tabela com dados reais**. Mostrada em SQL exato e aprovada antes de rodar.
+`add column` com default constante é metadado no Postgres 11+: nenhuma das
+48.550 linhas foi reescrita.
+
+Duas colunas em `analitico_recebimentos`:
+
+- `procedencia` (`relatorio_58` | `relatorio_59` | `manual`), com constraint;
+- `confirmado_em` — ver a nota de honestidade abaixo.
+
+**Para que `procedencia` serve, hoje:** `sincronizarAusentesDoSetor` trata o
+arquivo do 58 como retrato completo do mês e **apaga** o que não está nele. Isso
+já custou 413 linhas e R$ 175.768,38 num único import errado — e ali deu para
+recuperar porque tudo era do 58. Quando o 59 escrever nesta tabela (Fase 7) e
+quando houver correção manual (Fase 4), uma linha de outra procedência ausente
+do arquivo não quer dizer «foi estornada»; quer dizer que o 58 nunca soube dela,
+e apagá-la seria perda sem volta.
+
+A trava está em três lugares, de propósito: o `select` da sincronização, a
+função pura `idsAusentesDoRelatorioMensal` (onde é testada) e
+`fn_analitico_remocao_prevista`, para que a prévia anuncie exatamente o que a
+importação vai fazer.
+
+#### ✅ As pendências do 58, com escalada (14/09/2026)
+
+`fn_analitico_pendencias` + `fn_analitico_pendencias_resumo`, migration
+`20260914010454`. Só leitura. Aparecem dentro da própria aba de Conferência — é
+a mesma pergunta pelo outro lado, e 18 linhas não justificam uma aba própria que
+ninguém abriria.
+
+A escalada da regra 4 conta **quantas vezes o 59 rodou sem ver a linha**, não
+horas — é o que separa «o 59 está atrasado» de «o 59 rodou e não trouxe», que
+têm donos diferentes:
+
+| promoções do 59 desde | severidade | significa |
+|---|---|---|
+| 0 | `aguardando` | o 59 não rodou desde que o 58 trouxe. Não cobra ninguém. |
+| 1 | `pendente` | o 59 rodou uma vez e não viu. |
+| 2+ | `critico` | rodou duas ou mais e continua sem ver. Alguém olha. |
+
+Setembro/2026: 8.400 linhas do 58, **18 pendências, todas `aguardando`** — o 58
+do Receptivo foi importado depois do último lote do 59.
+
+#### ⚠️ Nota de honestidade: `confirmado_em` está sem uso
+
+Eu propus `confirmado_em` com o desenho de carimbar a linha quando o 59 a visse,
+por trigger na promoção do lote, e foi com esse argumento que a coluna foi
+aprovada. Medido logo depois:
+
+| | custo |
+|---|---:|
+| carimbar (semi join, dentro da promoção) | 289 ms |
+| derivar (anti join, `fn_analitico_pendencias`) | 92 ms |
+
+A derivação é mais barata **e mais correta**: se o ERP estornar um pagamento e o
+lote novo do 59 não o trouxer, o carimbo continuaria dizendo «confirmado» para
+sempre, enquanto a derivação volta a apontar a pendência.
+
+Então `procedencia` está em uso e é load-bearing; `confirmado_em` ficou sem
+função. A coluna é inofensiva (nullable, nada escreve nela), mas coluna de
+enfeite é dívida. **Decisão pendente:** ou a Fase 5 a usa para o histórico, ou
+ela sai num `drop column`.
 
 ### ✅ Fase 3 — vínculo de equipe sugerido pelas PESSOAS (no ar em 14/09/2026)
 
@@ -411,21 +479,23 @@ exatamente os duplicados. Num arquivo completo, nada a mais é removido.
 
 ## O passo pendente agora
 
-**O resto da Fase 2 — a coluna de procedência e a pendência.** A parte de
-conferência está no ar: a aba «Conferência 58 × 59» separa divergência de
-importação faltando, e as regras 5 e 6 estão fechadas.
+**Fase 4 — correção manual da divergência.** As fases 1, 2 e 3 estão fechadas.
+A conferência mostra onde as duas fontes discordam e por quê; falta poder
+resolver a divergência pela tela.
 
-O que falta da Fase 2 é a outra metade, a da regra 4:
+O que a Fase 4 precisa decidir antes de virar código:
 
-1. **uma coluna de procedência** em `analitico_recebimentos`, para separar «veio
-   do 59» de «pendente do 58». Sem ela não há onde o «pendente» morar;
-2. marcar as linhas que o 58 traz e o 59 ainda não tem;
-3. escalar o aviso — 1ª importação pendente, 2ª crítica.
+1. **o que «corrigir» faz.** Apontar o destino certo (setor, pessoa ou equipe)
+   sem nunca duplicar — sai de um lado, entra no outro. Isso é escrita em
+   `analitico_recebimentos` com `procedencia = 'manual'`, e é a primeira vez que
+   a tela grava recebimento;
+2. **o que acontece na importação seguinte.** Uma correção manual sobrevive ao
+   próximo 58 (a trava de procedência já garante) — mas e ao próximo 59? Se o 59
+   passar a trazer a linha certa, a correção vira duplicata. Precisa de regra;
+3. **quem pode.** Só super_admin, e com registro de quem fez e quando.
 
-O item 1 é **a primeira migration desta sequência que muda estrutura de uma
-tabela com dados de verdade** — todas as outras foram função de leitura. Por
-isso ela não sai sem o `ALTER TABLE` exato na frente de quem manda, antes de
-rodar.
+Antes dela, duas coisas menores que a Fase 2 deixou em aberto estão listadas em
+«Em aberto» abaixo — inclusive o destino de `confirmado_em`.
 
 ### O que a conferência mostrou que é trabalho de cadastro, não de código
 
@@ -462,3 +532,9 @@ quase R$ 120 mil. Criadas as equipes, a aba «Equipes a vincular» propõe o res
 - [ ] As 105 cobradoras sem perfil: são gente que saiu, de outra empresa, ou
       cadastro em falta? Muda se a solução é vincular ou rotular.
 - [ ] O fechamento do mês é automático à meia-noite do dia 1º, ou tem um botão?
+- [ ] `confirmado_em` em `analitico_recebimentos` ficou sem uso quando a
+      pendência virou derivada. Ou a Fase 5 a aproveita para o histórico, ou ela
+      sai num `drop column` — coluna de enfeite é dívida.
+- [ ] **Jornada Play e Manutenção não importam o 58 nenhum dia** (R$ 197.401,20
+      em setembro). Enquanto não importarem, o 59 é a única fonte daquele
+      dinheiro: o valor conta, mas não há com o que conferir.

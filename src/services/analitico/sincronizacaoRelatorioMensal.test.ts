@@ -13,6 +13,12 @@
  *
  * Custou R$ 698,43 contados duas vezes no Receptivo, em três NRs, quando o ERP
  * moveu parcelas de dia entre dois exports.
+ *
+ * **O 58 só apaga o que o 58 trouxe.** A partir do momento em que o 59 escrever
+ * nesta tabela e em que houver correção manual, uma linha de outra procedência
+ * ausente do arquivo do 58 não quer dizer «foi estornada» — quer dizer que o 58
+ * nunca soube dela. Apagá-la seria perda sem volta: o 58 não tem como
+ * reimportar o que não é dele.
  */
 import { describe, expect, it } from 'vitest';
 import { idsAusentesDoRelatorioMensal } from './analitico.service';
@@ -24,6 +30,7 @@ const linha = (
   data = '2026-08-01',
   forma = 'boleto_pix',
   mes = '2026-08-01',
+  procedencia?: string,
 ) => ({
   id,
   operador_usuario: operador,
@@ -31,6 +38,7 @@ const linha = (
   mes_referencia: mes,
   data_pagamento: data,
   forma_pagamento: forma,
+  ...(procedencia ? { procedencia } : {}),
 });
 
 describe('sincronização do relatório mensal completo', () => {
@@ -123,5 +131,40 @@ describe('sincronização do relatório mensal completo', () => {
       linha('b', 'BIA', '2'),
     ];
     expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual(['a', 'b']);
+  });
+
+  /*
+   * A trava de procedência (migration 20260914010002).
+   *
+   * «Arquivo vazio remove tudo» acima continua valendo — para o que é do 58. O
+   * que o 59 escreveu e o que alguém corrigiu à mão não está no arquivo do 58
+   * por definição, e sair por isso seria apagar o dado justamente da fonte que
+   * virou oficial.
+   */
+  describe('o 58 só apaga o que o 58 trouxe', () => {
+    it('não remove linha escrita pelo 59, nem com o arquivo vazio', () => {
+      const existentes = [
+        linha('do-58', 'ANA', '1', '2026-08-01', 'boleto_pix', '2026-08-01', 'relatorio_58'),
+        linha('do-59', 'BIA', '2', '2026-08-01', 'boleto_pix', '2026-08-01', 'relatorio_59'),
+      ];
+      expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual(['do-58']);
+    });
+
+    it('não remove correção manual', () => {
+      const existentes = [
+        linha('mao', 'ANA', '1', '2026-08-01', 'boleto_pix', '2026-08-01', 'manual'),
+      ];
+      expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual([]);
+    });
+
+    /*
+     * Antes da coluna existir, toda linha da tabela tinha vindo do 58 — eram
+     * 48.550 delas. Linha sem o campo tem de continuar se comportando como
+     * antes, senão a trava vira uma mudança de regra em cima de dado histórico.
+     */
+    it('linha sem o campo é tratada como do 58, que é o que ela era', () => {
+      const existentes = [linha('antiga', 'ANA', '1')];
+      expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual(['antiga']);
+    });
   });
 });
