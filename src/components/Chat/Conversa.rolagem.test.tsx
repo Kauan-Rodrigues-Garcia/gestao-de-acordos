@@ -34,6 +34,7 @@ vi.mock('@/services/chat/chat.service', () => ({
 // Grupo: a conversa busca os membros para nomear os autores dos baloes.
 vi.mock('@/services/chat/grupos.service', () => ({
   listarMembros: vi.fn(async () => []),
+  nomesDeQuemParticipou: vi.fn(async () => new Map()),
 }));
 
 import { Conversa } from './Conversa';

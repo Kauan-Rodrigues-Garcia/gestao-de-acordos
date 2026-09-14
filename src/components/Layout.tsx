@@ -712,9 +712,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
               <PopoverTrigger asChild>
-                <button className="flex items-center gap-2.5 pl-2 border-l border-border hover:opacity-80 transition-opacity cursor-pointer" title="Clique para alterar foto de perfil">
-                  <div className="relative">
-                    <Avatar className="w-7 h-7">
+                {/* `text-left` não é detalhe: botão centraliza o texto por padrão,
+                    e com o nome e a linha do cargo de larguras diferentes o nome
+                    ficava deslocado para dentro. As duas linhas têm altura fixa
+                    (16 px) e a foto tem a altura das duas — daí o alinhamento. */}
+                <button className="flex min-w-0 items-center gap-2.5 pl-2 border-l border-border text-left hover:opacity-80 transition-opacity cursor-pointer" title="Clique para alterar foto de perfil">
+                  <div className="relative shrink-0">
+                    <Avatar className="w-8 h-8">
                       {fotoUrl && <AvatarImage src={fotoUrl} alt={perfil?.nome ?? ''} className="object-cover" />}
                       <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">{initials}</AvatarFallback>
                     </Avatar>
@@ -722,13 +726,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <Camera className="w-2 h-2 text-muted-foreground" />
                     </span>
                   </div>
-                  <div className="hidden sm:block">
-                    <p className="text-xs font-semibold leading-none text-foreground">{perfil?.nome ?? 'Carregando...'}</p>
-                    <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <span className={cn('px-1.5 py-0 rounded text-[10px] font-medium border', PERFIL_COLORS[userRole])}>
+                  <div className="hidden min-w-0 flex-col gap-0.5 sm:flex">
+                    <p className="max-w-[220px] truncate text-xs font-semibold leading-4 text-foreground">{perfil?.nome ?? 'Carregando...'}</p>
+                    <p className="flex h-4 min-w-0 items-center gap-1 text-[11px] leading-4 text-muted-foreground">
+                      <span className={cn('inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded border px-1.5 text-[10px] font-medium leading-none', PERFIL_COLORS[userRole])}>
                         {PERFIL_LABELS[userRole]}
                       </span>
-                      {nomeSetor && <span>· {nomeSetor}</span>}
+                      {nomeSetor && <span className="max-w-[200px] truncate" title={nomeSetor}>· {nomeSetor}</span>}
                     </p>
                   </div>
                 </button>

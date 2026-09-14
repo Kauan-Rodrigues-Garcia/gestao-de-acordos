@@ -12,7 +12,7 @@
  *   2) Hook reage à troca de tema (class no <html>).
  *   3) Contraste: no tema escuro, tickColor é claro (luminosidade alta).
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAxisColors, useChartColors } from '../useChartColors';
 
@@ -113,6 +113,32 @@ describe('useChartColors — lista de vars customizadas', () => {
     // Nenhuma oklch aninhada
     for (const v of Object.values(vs)) {
       expect(v).not.toMatch(/oklch\(oklch/);
+    }
+  });
+
+  /*
+   * Regressão de 14/09/2026 — «O ritmo do recebimento» do Painel Diretoria
+   * saía cinza. O Chrome devolve `getComputedStyle().color` no próprio espaço
+   * de cor (`oklch(0.45 0.15 220)`), não em `rgb()`. A leitura antiga só
+   * aceitava `rgb()`, caía no fallback `#94a3b8` e todo gráfico com
+   * `--primary` virava cinza. O canvas 2D sempre devolve os pixels em RGB.
+   */
+  it('converte oklch pelo canvas em vez de cair no cinza de fallback', () => {
+    const pixel = [0, 100, 142, 255];
+    const ctx = {
+      fillStyle: '',
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      getImageData: vi.fn(() => ({ data: pixel })),
+    };
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
+    try {
+      aplicarTema({ '--primary': 'oklch(0.45 0.15 220)' });
+      const { result } = renderHook(() => useChartColors(['--primary']));
+      expect(result.current['--primary']).toBe('rgb(0, 100, 142)');
+    } finally {
+      spy.mockRestore();
     }
   });
 

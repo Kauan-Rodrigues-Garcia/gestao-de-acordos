@@ -25,3 +25,26 @@ export function filtrarUsuariosVisiveis<
   if (veTodosSetores) return cargosPermitidos;
   return cargosPermitidos.filter(usuario => usuario.setor_id === setorAtualId);
 }
+
+/**
+ * As transferências que dizem respeito a quem olha.
+ *
+ * Com alcance de setor, só as que saem do setor ou entram nele: «Play 4 para
+ * Play 5» não afeta o Play 1, e mostrá-la ali era ruído (pedido de 14/09/2026).
+ * Com alcance de empresa, todas — é o mesmo eixo de `filtrarUsuariosVisiveis`,
+ * lido da mesma chave, para as duas listas da aba não discordarem.
+ *
+ * É recorte de tela, não de segurança: a leitura em `perfis_transferencias`
+ * continua sendo decidida pela RLS.
+ */
+export function filtrarTransferenciasVisiveis<
+  T extends { origemSetorId: string | null; destinoSetorId: string | null },
+>(
+  lista: T[],
+  opcoes: { veTodosSetores: boolean; setorAtualId: string | null | undefined },
+): T[] {
+  const { veTodosSetores, setorAtualId } = opcoes;
+  if (veTodosSetores) return lista;
+  if (!setorAtualId) return [];
+  return lista.filter(t => t.origemSetorId === setorAtualId || t.destinoSetorId === setorAtualId);
+}

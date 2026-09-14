@@ -29,6 +29,7 @@ import {
   listarTransferencias, listarTransferenciasDoPerfil, desfazerTransferencia,
   type TransferenciaRegistrada,
 } from '@/services/admin/transferenciaUsuario.service';
+import { filtrarTransferenciasVisiveis } from '@/lib/usuarios-visibilidade';
 import { toast } from 'sonner';
 
 interface Props {
@@ -44,26 +45,42 @@ interface Props {
   nomeDoPerfil?: (id: string) => string | undefined;
   /** Recarrega a tela de trás depois de desfazer. */
   onDesfeita: () => void;
+  /**
+   * O alcance de quem olha, na lista da empresa. Sem «todos os setores», só
+   * aparecem as transferências que saem do setor dele ou entram nele. Ausente =
+   * sem recorte. Não vale para o histórico de UMA pessoa (`perfilId`): quem
+   * abriu o card dela já passou pelo recorte da lista de usuários.
+   */
+  alcance?: { veTodosSetores: boolean; setorAtualId: string | null | undefined };
 }
 
 export function HistoricoTransferencias({
   empresaId, perfilId, podeDesfazer, nomeDoSetor, nomeDaEmpresa,
-  nomeDoPerfil, onDesfeita,
+  nomeDoPerfil, onDesfeita, alcance,
 }: Props) {
   const [itens, setItens] = useState<TransferenciaRegistrada[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [confirmando, setConfirmando] = useState<TransferenciaRegistrada | null>(null);
   const [desfazendo, setDesfazendo] = useState(false);
 
+  // Em primitivos: o objeto `alcance` nasce novo a cada render do pai, e como
+  // dependência recarregaria a lista em laço.
+  const temAlcance = alcance !== undefined;
+  const veTodosSetores = alcance?.veTodosSetores ?? true;
+  const setorAtualId = alcance?.setorAtualId ?? null;
+
   const carregar = useCallback(async () => {
     setCarregando(true);
-    setItens(
-      perfilId
-        ? await listarTransferenciasDoPerfil(perfilId)
-        : empresaId ? await listarTransferencias(empresaId) : [],
-    );
+    if (perfilId) {
+      setItens(await listarTransferenciasDoPerfil(perfilId));
+    } else {
+      const daEmpresa = empresaId ? await listarTransferencias(empresaId) : [];
+      setItens(temAlcance
+        ? filtrarTransferenciasVisiveis(daEmpresa, { veTodosSetores, setorAtualId })
+        : daEmpresa);
+    }
     setCarregando(false);
-  }, [perfilId, empresaId]);
+  }, [perfilId, empresaId, temAlcance, veTodosSetores, setorAtualId]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 

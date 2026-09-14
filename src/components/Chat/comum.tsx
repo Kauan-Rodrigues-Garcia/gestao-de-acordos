@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, ImageIcon, Music, Video, Download, Play, Pause, Mic } from 'lucide-react';
 import { urlDoAnexo, urlDoAnexoEmCache, type AnexoChat } from '@/services/chat/chat.service';
 import { tamanhoLegivel, duracaoCurta } from './formatos';
+import { baixarAnexo } from './baixarAnexo';
 import { useFotoResolvida } from './useFotoResolvida';
 import { cn } from '@/lib/utils';
 
@@ -205,11 +206,15 @@ export function AnexoNoBalao({
   }
 
   const Icone = iconeDoTipo(anexo.tipo ?? '');
+  // Botão, e não link para a URL de exibir: link de outra origem com
+  // `target="_blank"` abria o arquivo numa guia nova. Ver `baixarAnexo`.
   return (
-    <a
-      href={url ?? undefined} target="_blank" rel="noreferrer" download={anexo.nome}
+    <button
+      type="button"
+      onClick={() => void baixarAnexo(anexo.url, anexo.nome)}
+      aria-label={`Baixar ${anexo.nome}`}
       className={cn(
-        'flex items-center gap-2 rounded-lg px-2.5 py-2 max-w-[240px] transition-colors',
+        'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 max-w-[240px] text-left transition-colors',
         meu ? 'bg-primary-foreground/15 hover:bg-primary-foreground/25'
             : 'bg-background/70 hover:bg-background',
       )}
@@ -220,7 +225,7 @@ export function AnexoNoBalao({
         <span className="block text-[10px] opacity-60">{tamanhoLegivel(anexo.tamanho)}</span>
       </span>
       <Download className="w-3.5 h-3.5 shrink-0 opacity-50" />
-    </a>
+    </button>
   );
 }
 

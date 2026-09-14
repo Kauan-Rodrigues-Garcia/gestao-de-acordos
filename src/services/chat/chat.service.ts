@@ -938,6 +938,35 @@ async function assinarLote(): Promise<void> {
   }
 }
 
+/** Vida curta: a URL de download é usada no clique, não guardada. */
+const VALIDADE_DOWNLOAD = 60;
+
+/**
+ * A URL que SALVA o anexo, em vez de abri-lo.
+ *
+ * O link de visualização (`urlDoAnexo`) é de outro domínio — o do Storage —, e
+ * o navegador ignora o atributo `download` em link de outra origem: o botão de
+ * baixar abria o arquivo numa guia nova (pedido de 14/09/2026). Com a opção
+ * `download`, o próprio Storage responde `Content-Disposition: attachment`, e o
+ * navegador grava o arquivo sem sair da página e sem carregá-lo inteiro na
+ * memória da aba, como faria um `fetch` + Blob.
+ *
+ * Não entra no cache de `assinaturas`: o cache guarda a URL de EXIBIR, e uma
+ * miniatura desenhada com a URL de baixar dispararia download ao montar.
+ */
+export async function urlDeDownloadDoAnexo(caminho: string, nome: string): Promise<string | null> {
+  // Anexo que ainda está subindo mora num blob da própria aba — mesma origem,
+  // o `download` do link já basta.
+  if (caminho.startsWith('blob:')) return caminho;
+  const { data, error } = await supabase.storage.from('chat')
+    .createSignedUrl(caminho, VALIDADE_DOWNLOAD, { download: nome });
+  if (error || !data) {
+    console.warn('[chat] urlDeDownloadDoAnexo:', error?.message);
+    return null;
+  }
+  return data.signedUrl;
+}
+
 // ── Erros ────────────────────────────────────────────────────────────────────
 
 /** As exceções do banco viram frase. O texto cru nunca chega à tela. */

@@ -28,7 +28,7 @@ import {
   type MensagemChat, type ConversaChat, type AnexoChat,
   type CurtidasDaMensagem, type QuemCurtiu,
 } from '@/services/chat/chat.service';
-import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service';
+import { listarMembros, nomesDeQuemParticipou, type MembroGrupo } from '@/services/chat/grupos.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
   AvatarChat,
@@ -374,17 +374,53 @@ export function Conversa({
    * isso chega como aviso de sistema — que recarrega a lista pelo efeito.
    */
   const [membros, setMembros] = useState<MembroGrupo[]>([]);
+  /** De qual conversa é a lista em `membros` — antes dela chegar, ninguém «falta». */
+  const [membrosDe, setMembrosDe] = useState<string | null>(null);
   const entradasESaidas = mensagens.filter(m => m.sistema).length;
   useEffect(() => {
-    if (conversa.tipo !== 'grupo') { setMembros([]); return; }
+    if (conversa.tipo !== 'grupo') { setMembros([]); setMembrosDe(null); return; }
     let cancelado = false;
-    void listarMembros(conversa.id).then(r => { if (!cancelado) setMembros(r); });
+    void listarMembros(conversa.id).then(r => {
+      if (!cancelado) { setMembros(r); setMembrosDe(conversa.id); }
+    });
     return () => { cancelado = true; };
   }, [conversa.id, conversa.tipo, entradasESaidas]);
 
+  /*
+   * Quem escreveu e já não está no grupo.
+   *
+   * A lista de membros é a de AGORA. Sem este complemento, o aviso de quem saiu
+   * dizia «Alguém saiu do grupo», e o balão antigo de um ex-membro vinha sem
+   * nome. A busca só dispara quando há autor sem nome depois de a lista chegar,
+   * e o que já foi achado não é pedido de novo.
+   */
+  const [nomesDeQuemSaiu, setNomesDeQuemSaiu] = useState<Map<string, string>>(new Map());
+  useEffect(() => { setNomesDeQuemSaiu(new Map()); }, [conversa.id]);
+  const autoresSemNome = useMemo(() => {
+    if (conversa.tipo !== 'grupo' || membrosDe !== conversa.id) return '';
+    const noGrupo = new Set(membros.map(m => m.perfil_id));
+    const faltam = new Set<string>();
+    for (const m of mensagens) {
+      if (m.autor_id && !noGrupo.has(m.autor_id) && !nomesDeQuemSaiu.has(m.autor_id)) {
+        faltam.add(m.autor_id);
+      }
+    }
+    return [...faltam].sort().join(',');
+  }, [conversa.id, conversa.tipo, membrosDe, membros, mensagens, nomesDeQuemSaiu]);
+  useEffect(() => {
+    if (!autoresSemNome) return;
+    let cancelado = false;
+    void nomesDeQuemParticipou(conversa.id, autoresSemNome.split(',')).then(achados => {
+      if (cancelado || achados.size === 0) return;
+      setNomesDeQuemSaiu(antes => new Map([...antes, ...achados]));
+    });
+    return () => { cancelado = true; };
+  }, [conversa.id, autoresSemNome]);
+
   const autores = useMemo(
-    () => new Map(membros.map(m => [m.perfil_id, m.nome])),
-    [membros],
+    // Os membros de agora por último: se alguém trocou de nome, vale o atual.
+    () => new Map([...nomesDeQuemSaiu, ...membros.map(m => [m.perfil_id, m.nome] as const)]),
+    [membros, nomesDeQuemSaiu],
   );
 
   /*

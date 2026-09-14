@@ -129,11 +129,15 @@ export const PERFIL_COLORS: Record<string, string> = {
   ouvidoria:     'bg-teal-500/10 text-teal-600 border-teal-500/30',
   rh:            'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/30',
   /*
-   * Sólido, e não o tom claro dos outros cargos: é o mesmo vermelho da etiqueta
-   * ADM do chat (`TagAdm`). O administrador também é avermelhado, mas claro —
-   * o fundo cheio é o que separa os dois de relance.
+   * Vermelho, no tom claro dos outros cargos.
+   *
+   * Nasceu sólido (`bg-red-600 text-white` com sombra) para casar com a etiqueta
+   * ADM do chat. No header ficou gritando e mais alto que a linha do texto,
+   * desalinhando o bloco do perfil — pedido de 14/09/2026 foi manter o vermelho
+   * e perder o peso. O que ainda o separa do administrador (rosado, matiz 10) é
+   * o vermelho puro e a borda mais marcada.
    */
-  assistente_adm: 'bg-red-600 text-white border-red-700 font-semibold shadow-sm shadow-red-600/30',
+  assistente_adm: 'bg-red-500/10 text-red-600 border-red-500/50 dark:text-red-400',
 };
 
 // Perfis com acesso de líder (visão de setor + equipe).

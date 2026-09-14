@@ -31,14 +31,46 @@ function normalizarCor(raw: string, fallback = '#94a3b8'): string {
  * Motivação: atributos SVG (`fill`, `stroke`) em alguns engines de renderização
  * — especialmente através do Recharts — ignoram funções de cor modernas como
  * `oklch(...)` e `color-mix(...)`. A única forma 100% compatível é usar
- * `rgb()`/`rgba()`/`#rrggbb`. O browser já sabe converter qualquer cor CSS
- * válida — basta atribuir a um elemento e ler de volta via getComputedStyle.
+ * `rgb()`/`rgba()`/`#rrggbb`.
+ *
+ * ## Por que o canvas vem primeiro
+ *
+ * A conversão antiga pintava um `<span>` e lia `getComputedStyle().color`,
+ * contando que o navegador devolvesse `rgb()`. O Chrome atual devolve a cor no
+ * PRÓPRIO espaço (`oklch(0.45 0.15 220)`), a regex falhava e tudo caía no
+ * fallback — foi assim que «O ritmo do recebimento» do Painel Diretoria ficou
+ * cinza (14/09/2026). O canvas 2D não tem essa escolha: o pixel pintado sempre
+ * volta em RGB. O `<span>` fica como segunda tentativa, para ambiente sem canvas.
  */
+function viaCanvas(cor: string): string | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  // Cor inválida não troca o `fillStyle` — sem a sentinela, ela pintaria a cor
+  // anterior e devolveria um valor com cara de certo.
+  const sentinela = '#010203';
+  ctx.fillStyle = sentinela;
+  ctx.fillStyle = cor;
+  if (ctx.fillStyle === sentinela && cor.toLowerCase() !== sentinela) return null;
+
+  ctx.clearRect(0, 0, 1, 1);
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+  if (a === 255) return `rgb(${r}, ${g}, ${b})`;
+  return `rgba(${r}, ${g}, ${b}, ${Math.round((a / 255) * 1000) / 1000})`;
+}
+
 function toRgbCompativelComSvg(cor: string, fallback = '#1f2937'): string {
   if (typeof document === 'undefined') return fallback;
   try {
     // Atalho: hex e rgb() já funcionam em SVG
     if (cor.startsWith('#') || /^rgba?\(/i.test(cor)) return cor;
+
+    const doCanvas = viaCanvas(cor);
+    if (doCanvas) return doCanvas;
 
     const probe = document.createElement('span');
     probe.style.color = cor;
