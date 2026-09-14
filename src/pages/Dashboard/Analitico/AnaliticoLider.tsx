@@ -1183,6 +1183,11 @@ export function AnaliticoLider({
   }, [lenteEmDia, metasDoMes, gruposDoPainel, operadorEquipeMap, mesAnoStr, mesNumStr, hojeISO]);
   /** O que o parabéns data: o dia da lente, ou o mês. */
   const referenciaEmDia = recorte.modo === 'dia' ? recorte.dia : mes;
+  /*
+   * O parabéns pronto só sai no recorte Dia. A liderança pediu: a mensagem é
+   * mandada no dia; no Mês a estrela continua como leitura, sem o botão.
+   */
+  const copiarParabensVisivel = recorte.modo === 'dia';
 
   /*
    * ── O mapa do mês ────────────────────────────────────────────────────────
@@ -1854,13 +1859,13 @@ export function AnaliticoLider({
                 );
               }}
               acoesDaLinha={l => {
-                const avaliacao   = emDiaPorOperador.get(l.operador_id);
+                const avaliacao   = copiarParabensVisivel ? emDiaPorOperador.get(l.operador_id) : undefined;
                 const transferido = transferidos[l.operador_id];
                 if (!avaliacao && !transferido) return null;
                 return (
                   <div className="flex items-center gap-1.5">
                     {/* O parabéns pronto de quem está EM DIA: a liderança cola
-                        direto na conversa com o operador. */}
+                        direto na conversa com o operador. Só no recorte Dia. */}
                     {avaliacao && (
                       <Button size="sm" variant="ghost"
                         className="h-7 gap-1 rounded-lg px-2 text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400"
