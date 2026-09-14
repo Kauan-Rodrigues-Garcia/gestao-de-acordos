@@ -686,11 +686,111 @@ cai na data certa — exatamente como a regra 9 diz. `fn_composicao_mes_snapshot
 é chamada depois de cada importação e, em mês fechado, só acrescenta setor ou
 equipe que faltava no retrato; nunca reescreve quem estava onde.
 
-### Fase 7 — sincronização horária
+### Fase 7 — o 59 vira a fonte do sistema inteiro
 
-Automatizar. **Por último**, e só depois da fase 6: com o vínculo não versionado
-e sem trava de mês, uma importação de hora em hora pode reescrever mês fechado
-sem ninguém ver.
+O pedido, em 14/09/2026: **toda tela** — Dashboard, Painel Líder e suas
+sub-abas, Analítico, comissão, desafios — deve mostrar o dado alinhado ao 59, e
+não só o Painel Diretoria. E quando o 59 atualizar, todo mundo é avisado.
+
+#### O inventário decidiu o desenho
+
+| | alimenta |
+|---|---|
+| 58 (`analitico_recebimentos`) | ~30 módulos |
+| 59 (`mestre_recebimentos`) | só o Painel Diretoria |
+
+Reescrever 30 módulos para lerem o 59 seria caro, arriscado e ainda deixaria
+duas verdades no sistema.
+
+O caminho curto é o que a Fase 2 preparou sem saber: **o 59 passa a ESCREVER em
+`analitico_recebimentos`**, com `procedencia = 'relatorio_59'`. Nenhuma das 30
+telas muda de código — todas continuam lendo a mesma tabela e passam a ver o
+número do 59. A coluna `procedencia` já existe e a trava de remoção já protege a
+linha do 59 contra a importação do 58.
+
+#### ✅ Passo 1 — a projeção (migration 20260914024100)
+
+`fn_mestre_projecao_analitico` devolve exatamente o que o 59 escreveria, pela
+chave de `idx_analitico_unicidade`, **sem gravar nada**. É o que permite medir a
+troca antes de fazê-la.
+
+O que a medição respondeu:
+
+| | |
+|---|---|
+| H.O. na BookPlay | **zero** — nada se perde escrevendo pelo 59 |
+| `tipo` × `tipo_comissao` | mesmo vocabulário (Integral/Extra) |
+| linhas do 58 com `tipo_comissao` nulo | **4.750, R$ 1.542.372,87** — o 59 preenche |
+| data divergente entre as fontes | só **44 de 7.584 NRs** (0,58%) |
+| `RECORRENTE` | vai para `boleto_pix`, não cartão — R$ 156.609,84/mês que uma leitura apressada poria no balde errado |
+
+E o impacto por setor, em setembro/2026:
+
+| setor | hoje | com o 59 | Δ |
+|---|---:|---:|---:|
+| Jornada Play | 0 | 122.778 | **+122.778** |
+| Play 1 | 873.308 | 976.815 | +103.508 |
+| Manutenção | 0 | 74.623 | **+74.623** |
+| Play 3 | 334.475 | 384.457 | +49.982 |
+| Playmix | 229.389 | 257.871 | +28.482 |
+| Play 2 | 355.837 | 379.843 | +24.006 |
+| Play 4 | 67.024 | 73.053 | +6.029 |
+| Play Mix Marília | 35.543 | 39.526 | +3.983 |
+| Play 5 | 143.877 | 146.172 | +2.295 |
+| Receptivo | 1.171.117 | 1.167.351 | −3.767 |
+| **total** | **3.210.569** | **3.622.488** | **+411.919** |
+
+5.834 linhas ganhariam `tipo_comissao`. Os R$ 197 mil de Jornada Play e
+Manutenção são dinheiro que hoje **não aparece em nenhuma tela** fora do Painel
+Diretoria.
+
+**A caixa do login importa.** `idx_analitico_unicidade` é por
+`operador_usuario` e é sensível a maiúsculas; o 58 tem 1.185 linhas em minúscula
+e o 59, 5.063. Escrever `THALITA_ANGELO` onde o 58 gravou `Thalita_Angelo`
+criaria linha gêmea em vez de colidir, e o dinheiro dobraria. A projeção reusa a
+grafia que o 58 já usa para cada pessoa.
+
+#### ✅ Passo 2 — a notificação (migrations 20260914024336 e 100309)
+
+Gatilho em `mestre_lotes`: quando um lote passa a `vigente`, toda pessoa ativa
+da empresa recebe «Dados analíticos atualizados», com o mês e quanto mudou.
+
+Gatilho, e não chamada dentro de `fn_mestre_promover_lote`, porque aquela função
+tem 200 linhas e já estourou o tempo uma vez — reescrevê-la para acrescentar
+três linhas transcreveria o resto.
+
+**Não avisa quando nada mudou**: reimportar o mesmo arquivo dá o mesmo total, e
+avisar 301 pessoas de uma mudança que não houve é a forma mais rápida de ensinar
+todo mundo a ignorar o aviso.
+
+> ⚠️ **Revisar quando a importação virar automática.** Hoje o 59 entra ~1 vez
+> por dia, o que dá ~300 notificações/dia. De hora em hora seriam ~3.000/dia, e
+> aí é spam.
+
+#### ❌ Passo 3 — a escrita, e o obstáculo que ela tem
+
+Falta `fn_mestre_aplicar_no_analitico`: apagar (com snapshot da Fase 5) as
+linhas do setor/mês e gravar a projeção.
+
+**O obstáculo é a janela de contagem dupla.** Depois que o 59 escrever, a
+próxima importação do 58 daquele setor vai reinserir as linhas dela — e, para
+os 44 NRs em que as duas fontes discordam da data, isso é dinheiro contado duas
+vezes até a promoção seguinte do 59 corrigir.
+
+A trava de procedência (Fase 2) não resolve isso: ela impede o 58 de **apagar**
+a linha do 59, mas não o impede de **inserir** a dele ao lado.
+
+A saída é o que o próprio plano sempre disse — **o 58 vira prévia**. Para setor
+cujo dado é do 59, a importação do 58 mostra o que veio e **não grava**. Isso
+precisa de:
+
+1. uma marca de «este setor é do 59» (por setor e mês);
+2. a importação do 58 consultando essa marca antes de gravar;
+3. a tela de importação dizendo, com todas as letras, que ali ela é conferência
+   e não carga.
+
+Enquanto o passo 3 não existir, a projeção serve para conferir e o Painel
+Diretoria continua sendo o lugar onde o número do 59 aparece.
 
 ---
 
