@@ -689,3 +689,94 @@ describe('a equipe que credita vale nos DOIS caminhos', () => {
     }
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Fase 7 — indicações
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('indicações', () => {
+  const FASE7 = migration('_vendas_fase7_indicacoes.sql');
+  const C7 = compacto(FASE7);
+
+  it('a cadeia do catálogo parte do topo de VERDADE, que é a Fase 5', () => {
+    // A Fase 6 não tocou o catálogo, então o topo continua sendo a 5. Chegar
+    // pela 6 criaria um elo que não existe e derrubaria as chaves de meta.
+    expect(C7).toContain('fn_permissoes_catalogo_antes_indicacoes_20260915');
+    expect(C7).toContain(
+      'SELECT * FROM public.fn_permissoes_catalogo_antes_meta_vendas_20260915()',
+    );
+    // E o congelamento REPETE as chaves da Fase 5 — é o que o torna retrato.
+    const congelada = C7.slice(
+      C7.indexOf('fn_permissoes_catalogo_antes_indicacoes_20260915'),
+      C7.indexOf('CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo()'),
+    );
+    expect(congelada).toContain("'ver_metas_vendas'");
+    expect(congelada).toContain("'editar_metas_vendas'");
+  });
+
+  it('a migration recusa aplicar se a cadeia tiver perdido alguma chave', () => {
+    expect(C7).toContain("chave = 'tickets_excluir'");
+    expect(C7).toContain("chave = 'editar_metas_vendas'");
+  });
+
+  it('a instituição é única por empresa — é o que faz o ranking valer', () => {
+    // Sem isto, dois operadores que visitam a mesma escola somam dois pontos
+    // por um contato, e o ranking premia quem cadastrou mais rápido.
+    expect(C7).toContain(
+      'CREATE UNIQUE INDEX IF NOT EXISTS uq_indicacoes_instituicao '
+      + 'ON public.indicacoes(empresa_id, LOWER(BTRIM(instituicao)))',
+    );
+  });
+
+  it('o lote não aborta no repetido — devolve quem já indicou e quando', () => {
+    const corpo = compacto(corpoDaFuncao(FASE7, 'fn_indicacoes_salvar_lote'));
+    // Quem volta com oito nomes e tem o terceiro repetido quer os outros sete.
+    expect(corpo).toContain("'ja_indicada_por'");
+    expect(corpo).toContain("'em', v_dona.data_indicacao");
+    expect(corpo).toMatch(/IF FOUND THEN[\s\S]*?v_repetidas := v_repetidas \|\|[\s\S]*?CONTINUE;/);
+  });
+
+  it('cadastrar EM NOME DE OUTRO exige `editar_indicacoes`', () => {
+    const corpo = compacto(corpoDaFuncao(FASE7, 'fn_indicacoes_salvar_lote'));
+    // Sem isto, um operador enche o ranking de um colega — ou esvazia o próprio.
+    expect(corpo).toMatch(
+      /p_operador_id <> \(SELECT auth\.uid\(\)\)[\s\S]*?NOT public\.fn_user_tem\('editar_indicacoes'\)[\s\S]*?RAISE EXCEPTION/,
+    );
+  });
+
+  it('a equipe sai da liderança, como em vendas', () => {
+    const corpo = compacto(corpoDaFuncao(FASE7, 'fn_indicacoes_salvar_lote'));
+    expect(corpo).toContain('public.fn_vendas_equipe_que_credita(p_operador_id)');
+    expect(corpo).not.toMatch(/p\.equipe_id INTO/);
+  });
+
+  it('o ranking é INVOKER: o recorte de quem olha é a resposta certa', () => {
+    const corpo = corpoDaFuncao(FASE7, 'fn_indicacoes_ranking');
+    // DEFINER obrigaria a repetir a regra de escopo dentro da função, e duas
+    // cópias da mesma regra é como as telas passam a discordar.
+    expect(corpo).not.toContain('SECURITY DEFINER');
+    expect(compacto(corpo)).toContain('FROM public.indicacoes i');
+  });
+
+  it('escopo PRÓPRIO, com os quatro níveis, e nenhuma aba antiga se perdeu', () => {
+    expect(C7).toContain("('indicacoes', 'ver_indicacoes')");
+    for (const aba of ['vendas', 'fechamento', 'chips', 'rh', 'usuarios', 'analitico']) {
+      expect(C7, `a aba ${aba} sumiu de fn_abas_escopo`).toContain(`('${aba}',`);
+    }
+    for (const nivel of ['individual', 'equipe', 'setor', 'todos_setores']) {
+      expect(C7, `falta indicacoes_escopo_${nivel}`).toContain(`'indicacoes_escopo_${nivel}'`);
+    }
+    // E a verificação exige as 13 — acrescentar sem contar é como se perde uma.
+    expect(C7).toContain('IF n <> 13 THEN');
+  });
+
+  it('a policy espelha os quatro níveis, com a função em subconsulta', () => {
+    const policy = C7.slice(C7.indexOf('CREATE POLICY indicacoes_select'), C7.indexOf('CREATE OR REPLACE FUNCTION public.fn_indicacoes_salvar_lote'));
+    // `(SELECT fn(...))` e não `fn(...)`: chamada por LINHA custa caro aqui —
+    // ver a memória «Como escrever policy aqui».
+    expect(policy).toContain("(SELECT public.fn_user_escopo('indicacoes')) >= 3");
+    expect(policy).toContain("(SELECT public.fn_user_escopo('indicacoes')) = 2");
+    expect(policy).toContain("(SELECT public.fn_user_escopo('indicacoes')) = 1");
+    expect(policy).toContain('TO authenticated');
+  });
+});

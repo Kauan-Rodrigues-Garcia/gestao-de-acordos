@@ -122,6 +122,25 @@ export const ABAS_COM_ESCOPO = {
     niveis: NIVEIS_ESCOPO,
   },
   /*
+   * Indicações tem escopo PRÓPRIO, e a tentação de reusar o de Vendas era real:
+   * são a mesma equipe, o mesmo setor, a mesma gente.
+   *
+   * São perguntas diferentes. Alcance em Vendas responde «de quem eu vejo a
+   * venda» — dinheiro, meta, comissão. Aqui responde «de quem eu vejo a
+   * indicação», que é trabalho de prospecção. Um operador que só enxerga a
+   * própria carteira pode precisar ver o ranking do setor inteiro para saber
+   * onde está — e amarrar os dois faria ampliar um ampliar o outro em silêncio.
+   *
+   * ⚠️ Espelha a policy `indicacoes_select` (migration 20260915200000). Os dois
+   * lados mudam juntos: divergir faria o filtro da tela oferecer um recorte que
+   * o banco recusa, e a lista voltaria vazia sem explicação.
+   */
+  indicacoes: {
+    chaveAba: 'ver_indicacoes',
+    prefixo: 'indicacoes',
+    niveis: NIVEIS_ESCOPO,
+  },
+  /*
    * O Painel Lider so tem dois niveis, e isso e proposital: a aba nasceu para
    * a lideranca olhar o proprio setor, e a unica pergunta que ela faz e se
    * essa pessoa enxerga alem dele. `individual` nao faria sentido — um painel

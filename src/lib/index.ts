@@ -64,6 +64,12 @@ export const ROUTE_PATHS = {
    */
   VENDAS_FECHAMENTO: '/vendas/fechamento',
   /**
+   * Indicações. Rota própria, e não uma aba dentro de Vendas: indicação
+   * acontece ANTES da venda e não vira venda sozinha. Misturá-las faria a aba
+   * do dia a dia responder duas perguntas que não se encontram.
+   */
+  VENDAS_INDICACOES: '/vendas/indicacoes',
+  /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *
    * Duas rotas, e não uma que muda de cara: são telas com finalidades

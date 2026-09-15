@@ -2254,6 +2254,77 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'Só se edita a meta de quem aparece na tela.',
     },
   },
+
+  /*
+   * Indicações — Fase 7, 15/09/2026.
+   *
+   * Escopo PRÓPRIO, e não o de Vendas. Alcance em Vendas responde «de quem eu
+   * vejo a venda»; aqui, «de quem eu vejo a indicação». Um operador que só vê a
+   * própria carteira pode perfeitamente precisar ver o ranking do setor — é a
+   * mesma distinção que separou Monitoria de Chat.
+   */
+  {
+    key: 'ver_indicacoes', label: 'Aba Indicações',
+    descricao: 'Abrir a aba Indicações do Comercial',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { operador: true, lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'indicacoes_escopo_individual', label: 'Indicações: as próprias',
+    descricao: 'Ver em Indicações somente as que a própria pessoa indicou',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { operador: true },
+  },
+  {
+    key: 'indicacoes_escopo_equipe', label: 'Indicações: a equipe',
+    descricao: 'Ver em Indicações as das equipes em que a pessoa está ou que ela lidera',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: {},
+  },
+  {
+    key: 'indicacoes_escopo_setor', label: 'Indicações: o setor',
+    descricao: 'Ver em Indicações as dos setores da própria pessoa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { lider: true, elite: true },
+  },
+  {
+    key: 'indicacoes_escopo_todos_setores', label: 'Indicações: todos os setores',
+    descricao: 'Ver em Indicações as de qualquer setor da empresa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'criar_indicacoes', label: 'Indicações: cadastrar',
+    descricao:
+      'Cadastrar indicações, várias de uma vez. Sem «corrigir», só em nome próprio',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { operador: true, lider: true, elite: true, gerencia: true },
+  },
+  {
+    /*
+     * Corrigir é ato de liderança por um motivo concreto: o nome da instituição
+     * É a chave única. Editá-lo muda quem pode cadastrá-la depois.
+     *
+     * A mesma chave libera cadastrar EM NOME DE OUTRA PESSOA. Sem ela, um
+     * operador poderia encher o ranking de um colega — ou esvaziar o próprio.
+     */
+    key: 'editar_indicacoes', label: 'Indicações: corrigir e cadastrar por outro',
+    descricao:
+      'Corrigir uma indicação e cadastrar em nome de outra pessoa — o nome da '
+      + 'instituição é a chave que impede contá-la duas vezes',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+    depende: {
+      chaves: ['ver_indicacoes'],
+      motivo: 'Só se corrige o que aparece na tela.',
+    },
+  },
+  {
+    key: 'excluir_indicacoes', label: 'Indicações: excluir',
+    descricao: 'Apagar uma indicação de vez — não há lixeira aqui, e ela sai do ranking',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { gerencia: true },
+    depende: {
+      chaves: ['ver_indicacoes'],
+      motivo: 'Só se exclui o que aparece na tela.',
+    },
+  },
 ];
 
 /** Índice por chave, para consulta direta. */

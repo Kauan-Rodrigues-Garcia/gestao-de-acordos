@@ -69,6 +69,7 @@ const Vendas            = lazy(() => import('@/pages/Vendas'));
 const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
 const VendasMetas       = lazy(() => import('@/pages/Vendas/Metas'));
 const VendasFechamento  = lazy(() => import('@/pages/Vendas/FechamentoDoSetor'));
+const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
@@ -408,6 +409,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_vendas">
                     <VendasFechamento />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Indicações tem chave e escopo PRÓPRIOS: quem prospecta não é
+                  necessariamente quem a venda pertence. Ver permissoes-escopo. */}
+              <Route path={ROUTE_PATHS.VENDAS_INDICACOES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_indicacoes">
+                    <VendasIndicacoes />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
