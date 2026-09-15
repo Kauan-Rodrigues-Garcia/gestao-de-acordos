@@ -320,6 +320,20 @@ export interface ResultadoProjecao {
   preservadas: number;
   sem_dono: number;
   divergencia_setor: number;
+  /*
+   * O que a projeção NÃO escreveu, e quanto vale.
+   *
+   * Até a Fase 6 isso era descartado sem número: a linha de franquia que
+   * ninguém vinculou sumia, e depois de projetar ninguém mais perguntava.
+   * Medido no lote de setembro, é a maior parte do arquivo — 2.834 de 2.973
+   * linhas, R$ 13.424.041,59 — porque o relatório é da empresa toda e só um
+   * setor está vinculado. Não é erro; é o que ainda não tem dono.
+   */
+  sem_franquia: number;
+  sem_franquia_valor: number;
+  franquia_ignorada: number;
+  ignorada_valor: number;
+  sem_dono_valor: number;
 }
 
 /** Uma venda que o retrato anterior tinha e o novo não tem. */
@@ -389,6 +403,11 @@ export async function projetar(loteId: string): Promise<Resultado<ResultadoProje
       preservadas:       num(l?.preservadas),
       sem_dono:          num(l?.sem_dono),
       divergencia_setor: num(l?.divergencia_setor),
+      sem_franquia:       num(l?.sem_franquia),
+      sem_franquia_valor: num(l?.sem_franquia_valor),
+      franquia_ignorada:  num(l?.franquia_ignorada),
+      ignorada_valor:     num(l?.ignorada_valor),
+      sem_dono_valor:     num(l?.sem_dono_valor),
     },
     erro: null,
   };

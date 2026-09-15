@@ -126,6 +126,19 @@ COMMENT ON FUNCTION public.fn_vendas_equipe_que_credita(UUID) IS
 -- ============================================================================
 -- 3. A projecao devolve o que descartou
 -- ============================================================================
+--
+-- ⚠️ O que ESTA migration aplicou em producao tinha TRES defeitos nos INSERTs
+-- desta funcao, corrigidos em 20260915180000: `vendas_eventos` com 12 colunas e
+-- 11 valores, `tipo = 'importada'` (que o CHECK recusa) e `cliente`/`criado_por`
+-- faltando em `vendas`. Entraram porque a funcao foi redigitada inteira para
+-- mudar duas linhas dela, e `CREATE OR REPLACE ... plpgsql` aceita erro de
+-- aridade sem reclamar — o corpo so e planejado na execucao.
+--
+-- O ARQUIVO aqui ja esta corrigido, de proposito: uma migration e o que se
+-- reaplica num banco novo, e guardar SQL sabidamente quebrado seria armadilha
+-- para quem replicasse. A 20260915180000 continua existindo porque foi ela que
+-- consertou o banco de producao, e o cabecalho dela conta a historia inteira.
+-- `insertsBatem.sql.test.ts` conta colunas e valores de todo INSERT daqui.
 
 -- DROP e nao CREATE OR REPLACE: a assinatura muda (cinco colunas de saida
 -- novas), e o Postgres recusa trocar o tipo de retorno de funcao existente.
@@ -289,27 +302,27 @@ BEGIN
       END IF;
     ELSE
       INSERT INTO public.vendas (
-        empresa_id, operador_id, setor_id, equipe_id, nr_documento, uf,
+        empresa_id, operador_id, setor_id, equipe_id,
+        nr_documento, cliente, uf,
         valor_total, valor_entrada, valor_recebido, forma_pagamento,
         data_venda, data_confirmacao, situacao, contrato_assinado, motivo,
-        origem, lote_id
+        origem, lote_id, criado_por
       ) VALUES (
-        r.empresa_id, r.perfil_id, r.franquia_setor, v_equipe, r.nr_documento, r.uf,
+        r.empresa_id, r.perfil_id, r.franquia_setor, v_equipe,
+        r.nr_documento, NULL, r.uf,
         r.valor_total, r.valor_entrada, r.valor_recebido, r.tipo_recebimento,
         r.data_venda, r.data_confirmacao, r.situacao, r.contrato_assinado, r.motivo,
-        'geral', p_lote_id
+        'geral', p_lote_id, auth.uid()
       )
       RETURNING id INTO v_id;
 
       v_criadas := v_criadas + 1;
 
       INSERT INTO public.vendas_eventos (
-        venda_id, empresa_id, tipo, situacao_antes, situacao_depois,
-        assinado_antes, assinado_depois, valor_antes, valor_depois,
-        origem, motivo, autor_id
+        venda_id, empresa_id, tipo, situacao_depois, assinado_depois,
+        valor_depois, origem, autor_id
       ) VALUES (
-        v_id, r.empresa_id, 'importada', NULL, r.situacao,
-        NULL, r.contrato_assinado, 0,
+        v_id, r.empresa_id, 'criada', r.situacao, r.contrato_assinado,
         CASE WHEN r.situacao = 'confirmada' AND r.contrato_assinado
              THEN r.valor_total ELSE 0 END,
         'geral', auth.uid()

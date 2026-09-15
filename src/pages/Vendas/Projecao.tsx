@@ -101,10 +101,28 @@ export function Projecao({ lote, podeProjetar, onProjetou }: Props) {
     if (!r.ok) { toast.error(r.erro ?? 'A projeção falhou.'); return; }
 
     const d = r.dado!;
+    /*
+     * O aviso diz o que ENTROU e o que FICOU DE FORA, nas duas frases.
+     *
+     * Só «138 criadas» leria como sucesso completo num arquivo de 2.973 linhas,
+     * e as outras 2.835 sumiriam da conversa — que é exatamente o buraco que a
+     * Fase 6 fechou no banco. Contar aqui é o que faz o número chegar a quem
+     * clicou.
+     */
+    const foraValor = d.sem_franquia_valor + d.ignorada_valor + d.sem_dono_valor;
+    const fora = d.sem_franquia + d.franquia_ignorada + d.sem_dono;
+
     toast.success(
-      d.revertidas > 0
-        ? `${d.criadas} criadas, ${d.atualizadas} atualizadas. ${d.revertidas} saíram do recebimento (${formatBRL(d.revertido_valor)}).`
-        : `${d.criadas} criadas, ${d.atualizadas} atualizadas.`,
+      [
+        `${d.criadas} criadas, ${d.atualizadas} atualizadas.`,
+        d.revertidas > 0
+          ? `${d.revertidas} saíram do recebimento (${formatBRL(d.revertido_valor)}).`
+          : '',
+        fora > 0
+          ? `${fora} linhas ficaram de fora (${formatBRL(foraValor)}) — sem franquia vinculada ou sem perfil.`
+          : '',
+      ].filter(Boolean).join(' '),
+      { duration: fora > 0 ? 9000 : 5000 },
     );
     setPrevia(null);
     setSumidas([]);
