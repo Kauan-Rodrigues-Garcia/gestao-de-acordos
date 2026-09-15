@@ -77,7 +77,23 @@ export interface Resultado<T = null> {
   erro: string | null;
 }
 
-const NAO_INSTALADO = 'A importação de vendas ainda não foi instalada neste banco.';
+/**
+ * A tabela não respondeu — e as duas causas pedem ações diferentes.
+ *
+ * `relation ... does not exist` é a migration mesmo faltando. Mas
+ * `Could not find the table ... in the schema cache` é outra coisa: o
+ * PostgREST guarda o desenho do banco em memória, e tabela criada por SQL **não
+ * aparece na API até o cache recarregar**. O banco está certo e a tela mente.
+ *
+ * Aconteceu em 15/09/2026, minutos depois de aplicar as migrations: a mensagem
+ * dizia «precisa ser aplicada» sobre uma migration que já estava no ar, e
+ * mandou quem leu procurar no lugar errado. Por isso o texto agora cita as
+ * duas causas, e a mais provável primeiro.
+ */
+const NAO_INSTALADO =
+  'A importação de vendas não respondeu. Recarregue a página — se persistir, ou a '
+  + 'migration não foi aplicada, ou o cache de schema do banco ainda não recarregou '
+  + "(`NOTIFY pgrst, 'reload schema'`).";
 
 function tabelaAusente(mensagem: string): boolean {
   return /relation|does not exist|schema cache|could not find/i.test(mensagem);

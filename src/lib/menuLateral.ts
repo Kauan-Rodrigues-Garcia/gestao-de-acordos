@@ -152,6 +152,10 @@ export const NAV_ITEMS: NavItem[] = [
   // Importar Vendas — o prospecção e o de-para de franquia. Espelha o que
   // 'Importar Excel' é para a cobrança, com o relatório que é o do comercial.
   { label: 'Importar Vendas',  icon: Upload,          to: ROUTE_PATHS.VENDAS_IMPORTAR,     produtos: SO_COMERCIAL, permissaoKey: 'ver_importacoes_vendas' },
+  // Metas de vendas — duas réguas, e só uma decide. Chave própria e rota
+  // própria: a aba 'Metas' da cobrança fala de quartil e dia útil, que aqui
+  // não querem dizer nada.
+  { label: 'Metas de Vendas',  icon: Target,          to: ROUTE_PATHS.VENDAS_METAS,        produtos: SO_COMERCIAL, permissaoKey: 'ver_metas_vendas' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },

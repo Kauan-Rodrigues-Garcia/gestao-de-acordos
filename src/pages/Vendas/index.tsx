@@ -26,7 +26,7 @@
  * As duas leituras estão certas; o que seria errado é não dizer qual está
  * valendo.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingBag, Plus, RefreshCw, TriangleAlert, Info, PenLine, Trash2,
   CheckCircle2, Clock, Target, Wallet, Percent,
@@ -48,8 +48,8 @@ import { useMesGlobal } from '@/providers/MesProvider';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useVendas } from '@/hooks/useVendas';
 import { formatBRL } from '@/lib/money';
-import { formatDate } from '@/lib/index';
-import { rotuloDoMes } from '@/lib/mesReferencia';
+import { formatDate, getTodayISO } from '@/lib/index';
+import { partesDoMes, rotuloDoMes } from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
 import {
   classificarVenda, resumirVendas, agruparPorDia,
@@ -57,7 +57,10 @@ import {
   type EixoDaVenda, type GavetaVenda,
 } from '@/lib/vendas';
 import type { Venda } from '@/services/vendas/vendas.service';
+import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
+import { buscarMetasDoMes, type MetaDeRecorte } from '@/services/vendas/metasVendas.service';
 import { FormularioVenda } from './FormularioVenda';
+import { AndamentoDasMetas } from './AndamentoDasMetas';
 import { FilaDoLider } from './FilaDoLider';
 
 /** O `Select` do shadcn recusa `value=""`; o «todos» precisa de um valor. */
@@ -148,6 +151,7 @@ export default function Vendas() {
   const [formAberto, setFormAberto] = useState(false);
   const [emEdicao, setEmEdicao] = useState<Venda | null>(null);
   const [filtroOperador, setFiltroOperador] = useState<string>(TODOS_OPERADORES);
+  const [metas, setMetas] = useState<MetaDeRecorte[]>([]);
 
   const empresaId = empresa?.id ?? null;
   const {
@@ -192,6 +196,27 @@ export default function Vendas() {
     [filtrando, vendasNaTela, resumoTudo],
   );
   const porDia = useMemo(() => agruparPorDia(vendasNaTela, eixo), [vendasNaTela, eixo]);
+
+  /*
+   * As metas do mês, para o bloco de andamento.
+   *
+   * Leitura à parte do hook de vendas de propósito: a meta muda quando alguém
+   * a configura noutra tela, e não quando uma venda entra. Amarrá-la ao tempo
+   * real de `vendas` recarregaria a configuração a cada lançamento, de graça.
+   */
+  useEffect(() => {
+    if (!empresaId || !temPermissao('ver_metas_vendas')) { setMetas([]); return; }
+    const { ano, mes: m } = partesDoMes(mes);
+    void buscarMetasDoMes(empresaId, ano, m).then(r => setMetas(r.dado ?? []));
+  }, [empresaId, mes, temPermissao]);
+
+  const { uteis, trabalhados } = useMemo(() => {
+    const { ano, mes: m } = partesDoMes(mes);
+    return {
+      uteis: diasUteisDoMes(ano, m),
+      trabalhados: diasUteisDecorridos(ano, m, [], getTodayISO()),
+    };
+  }, [mes]);
 
   const podeCriar    = temPermissao('criar_vendas');
   const podeEditar   = temPermissao('editar_vendas');
@@ -264,11 +289,13 @@ export default function Vendas() {
 
       {!disponivel && (
         <Aviso tom="alerta">
-          A aba Vendas ainda não foi instalada neste banco. A migration
+          A aba Vendas não respondeu. <strong>Recarregue a página</strong> — o banco guarda o
+          desenho das tabelas em cache, e uma criada agora leva um instante para aparecer na
+          API. Se persistir, confira se a migration
           <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">
             20260915100000_vendas_fase1.sql
           </code>
-          precisa ser aplicada antes que qualquer venda possa ser lançada.
+          está aplicada.
         </Aviso>
       )}
       {erro && <Aviso tom="alerta">{erro}</Aviso>}
@@ -313,6 +340,12 @@ export default function Vendas() {
           ))}
         </div>
       )}
+
+      {/* ── O andamento da meta ────────────────────────────────────────── */}
+      <AndamentoDasMetas
+        vendas={vendasNaTela} metas={metas} eixo={eixo}
+        uteis={uteis} trabalhados={trabalhados}
+      />
 
       {/* ── A fila do líder ────────────────────────────────────────────── */}
       {podeConfirmar && pendentes.length > 0 && (

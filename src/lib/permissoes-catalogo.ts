@@ -2229,6 +2229,31 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'Só se projeta um relatório que já foi importado.',
     },
   },
+
+  // ── Vendas: a meta de duas réguas (migration 20260915140000) ─────────────
+  {
+    /*
+     * Ver a meta é de todo mundo: o operador precisa saber o que se espera
+     * dele. Chave própria, e não `ver_metas` da cobrança, porque a de lá abre
+     * uma tela com quartis, dias úteis, metas extras e validação por setor —
+     * vocabulário que não é de Vendas.
+     */
+    key: 'ver_metas_vendas', label: 'Vendas: ver a meta',
+    descricao: 'Abrir a meta do mês por setor e por equipe, e o andamento dela',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { operador: true, lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'editar_metas_vendas', label: 'Vendas: definir a meta e a régua',
+    descricao:
+      'Escolher se o recorte é medido por quantidade de vendas ou por valor de '
+      + 'faturamento, e informar a meta',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true },
+    depende: {
+      chaves: ['ver_metas_vendas'],
+      motivo: 'Só se edita a meta de quem aparece na tela.',
+    },
+  },
 ];
 
 /** Índice por chave, para consulta direta. */

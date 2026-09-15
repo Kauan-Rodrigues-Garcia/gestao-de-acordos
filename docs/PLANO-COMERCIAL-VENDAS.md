@@ -586,6 +586,43 @@ Usuários.
 
 ---
 
+## O registro de migrations precisa ser reconciliado
+
+As quatro foram aplicadas em 15/09/2026 pelo MCP do Supabase, e ele **carimba a
+versão com a hora da aplicação, não com o nome do arquivo**:
+
+| arquivo | registrado como |
+|---|---|
+| `20260915100000_vendas_fase1` | `20260915124540` |
+| `20260915110000_vendas_fase2_lote_e_depara` | `20260915124723` |
+| `20260915120000_vendas_fase3_projecao_do_geral` | `20260915124945` |
+| `20260915130000_vendas_fase4_previa_do_setor` | `20260915125039` |
+
+Para o `supabase_migrations.schema_migrations` os quatro arquivos continuam sem
+registro, e um `supabase db push` tentaria **reaplicá-los**. A Fase 1
+sobreviveria (`CREATE TABLE IF NOT EXISTS`), mas a Fase 4 faria `ADD CONSTRAINT`
+num constraint que já existe e quebraria no meio.
+
+Antes do próximo `db push`, com a CLI logada:
+
+```bash
+supabase migration repair --status applied \
+  20260915100000 20260915110000 20260915120000 20260915130000
+```
+
+⚠️ **A distorção não é nossa.** `20260914175008` e `20260914175050` no registro
+são o Fechamento (`20260914170000`) e o Tickets (`20260914200000`) com o mesmo
+problema, e há 26 arquivos no repositório sem registro — todos conferidos em
+15/09/2026 e **todos aplicados**, cada um pelo objeto no schema. O registro é
+que está incompleto, como o `CLAUDE.md` avisa.
+
+E em 15/09/2026 `20260909100000_pix_expurgo_desaprovados_agendado.sql` foi
+renumerado para `20260909100100`: ele dividia a versão com
+`20260909100000_diretoria_setores_e_equipes.sql`, e versão repetida não é chave
+válida. As duas já estavam aplicadas, então a mudança é só de arquivo.
+
+---
+
 ## O que ainda depende de gente, não de código
 
 1. **O filtro de cada setor** (regra 7). Sem saber o que cada relatório de setor

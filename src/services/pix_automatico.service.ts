@@ -1120,9 +1120,13 @@ export const PIX_DIAS_UTEIS_EXPURGO = 2;
  * Apaga os desaprovados cujo prazo já venceu e devolve quantos saíram.
  *
  * Chamada ao abrir a tela para ADIANTAR o expurgo de quem está olhando. Desde
- * a migration 20260909100000 quem garante que ele acontece é o trabalho diário
+ * a migration 20260909100100 quem garante que ele acontece é o trabalho diário
  * `pix-expurga-desaprovados` no pg_cron — antes disso, um desaprovado ficava
  * ocupando o NR enquanto ninguém abrisse a aba.
+ *
+ * (O arquivo nasceu como `20260909100000` e foi renumerado em 15/09/2026: ele
+ * dividia a versão com `20260909100000_diretoria_setores_e_equipes`, e versão
+ * repetida não é chave válida para o `supabase db push`.)
  *
  * É idempotente e barata (índice por status), e a policy do banco garante que
  * só líder+ da empresa consegue executar.

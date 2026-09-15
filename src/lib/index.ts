@@ -48,6 +48,13 @@ export const ROUTE_PATHS = {
    */
   VENDAS_IMPORTAR: '/vendas/importar',
   /**
+   * A meta do Comercial. Rota própria, e não a `/admin/metas` da cobrança: a
+   * de lá tem quartis, dias úteis, metas extras e validação por setor — e nada
+   * disso é vocabulário de Vendas. Aqui a pergunta é uma só: este recorte é
+   * medido por quantidade ou por valor?
+   */
+  VENDAS_METAS: '/vendas/metas',
+  /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *
    * Duas rotas, e não uma que muda de cara: são telas com finalidades

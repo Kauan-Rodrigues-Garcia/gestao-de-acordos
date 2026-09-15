@@ -42,11 +42,13 @@ const FASE1 = migration('_vendas_fase1.sql');
 const FASE2 = migration('_vendas_fase2_lote_e_depara.sql');
 const FASE3 = migration('_vendas_fase3_projecao_do_geral.sql');
 const FASE4 = migration('_vendas_fase4_previa_do_setor.sql');
+const FASE5 = migration('_vendas_fase5_meta_com_duas_reguas.sql');
 
 const C1 = compacto(FASE1);
 const C2 = compacto(FASE2);
 const C3 = compacto(FASE3);
 const C4 = compacto(FASE4);
+const C5 = compacto(FASE5);
 
 describe('a régua mora no banco, não numa consulta', () => {
   it('`conta_na_meta` é coluna GERADA em vendas', () => {
@@ -366,6 +368,52 @@ describe('a verificação não tropeça no cargo rh', () => {
     for (const [nome, sql] of [['fase1', C1], ['fase2', C2], ['fase3', C3]] as const) {
       expect(sql, nome).toContain("AND cp.cargo <> 'rh'");
     }
+  });
+});
+
+describe('a meta tem duas réguas, e só uma decide', () => {
+  it('a régua é coluna em `metas`, e só aceita os dois valores', () => {
+    expect(C5).toContain('ALTER TABLE public.metas ADD COLUMN IF NOT EXISTS regua TEXT');
+    expect(C5).toContain("CHECK (regua IS NULL OR regua IN ('quantidade', 'valor'))");
+  });
+
+  it('não cria tabela nova — a linha de `metas` já tinha as duas metas', () => {
+    expect(C5).not.toContain('CREATE TABLE');
+  });
+
+  /*
+   * Escolher «quantidade» e deixar o campo vazio gravaria meta 0, que «bate»
+   * sozinha no primeiro dia do mês.
+   */
+  it('régua sem a meta dela é recusada', () => {
+    const corpo = semComentarios(corpoDaFuncao(FASE5, 'fn_vendas_meta_salvar'));
+    expect(corpo).toMatch(/v_regua = 'quantidade' AND v_qtd <= 0 THEN[\s\S]*?RAISE EXCEPTION/);
+    expect(corpo).toMatch(/v_regua = 'valor' AND v_val <= 0 THEN[\s\S]*?RAISE EXCEPTION/);
+  });
+
+  it('tudo zerado apaga a linha — meta vazia não informa nada', () => {
+    const corpo = compacto(corpoDaFuncao(FASE5, 'fn_vendas_meta_salvar'));
+    expect(corpo).toContain('v_regua IS NULL AND v_qtd = 0 AND v_val = 0');
+    expect(corpo).toContain('DELETE FROM public.metas');
+  });
+
+  it('editar a meta é chave separada de ver', () => {
+    const corpo = semComentarios(corpoDaFuncao(FASE5, 'fn_vendas_meta_salvar'));
+    expect(corpo).toContain("fn_user_tem('editar_metas_vendas')");
+    const leitura = semComentarios(corpoDaFuncao(FASE5, 'fn_vendas_metas_do_mes'));
+    expect(leitura).toContain("fn_user_tem('ver_metas_vendas')");
+    expect(leitura, 'ler não pode exigir editar').not.toContain("fn_user_tem('editar_metas_vendas')");
+  });
+
+  it('a leitura traz quem NÃO tem meta — senão esconde quem falta configurar', () => {
+    const corpo = compacto(corpoDaFuncao(FASE5, 'fn_vendas_metas_do_mes'));
+    expect(corpo).toContain('LEFT JOIN public.metas m');
+    expect(corpo).toContain('COALESCE(m.meta_acordos, 0)');
+  });
+
+  it('a coluna meta_acordos ganhou comentário: no Comercial é quantidade de vendas', () => {
+    expect(C5).toContain('COMMENT ON COLUMN public.metas.meta_acordos');
+    expect(FASE5).toContain('no Comercial, de vendas');
   });
 });
 

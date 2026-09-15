@@ -164,7 +164,17 @@ export interface Resultado {
   erro: string | null;
 }
 
-const NAO_INSTALADO = 'A aba Vendas ainda não foi instalada neste banco.';
+/**
+ * As duas causas de a tabela não responder, e elas pedem ações diferentes.
+ *
+ * `relation ... does not exist` é a migration faltando. Mas
+ * `Could not find the table ... in the schema cache` é o PostgREST com o
+ * desenho do banco velho em memória — o banco está certo e a tela mente.
+ * Ver o comentário em `importacaoVendas.service.ts`.
+ */
+const NAO_INSTALADO =
+  'A aba Vendas não respondeu. Recarregue a página — se persistir, ou a migration não '
+  + 'foi aplicada, ou o cache de schema do banco ainda não recarregou.';
 
 function traduzir(mensagem: string): string {
   if (tabelaAusente(mensagem)) return NAO_INSTALADO;

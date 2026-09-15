@@ -320,11 +320,13 @@ export default function ImportacaoVendas() {
 
       {!disponivel && (
         <Aviso tom="alerta">
-          A importação de vendas ainda não foi instalada neste banco. A migration
+          A importação de vendas não respondeu. <strong>Recarregue a página</strong> — o banco
+          guarda o desenho das tabelas em cache, e uma criada agora leva um instante para
+          aparecer na API. Se persistir, confira se a migration
           <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">
             20260915110000_vendas_fase2_lote_e_depara.sql
           </code>
-          precisa ser aplicada.
+          está aplicada.
         </Aviso>
       )}
 

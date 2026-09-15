@@ -67,6 +67,7 @@ const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
 const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
+const VendasMetas       = lazy(() => import('@/pages/Vendas/Metas'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
@@ -382,6 +383,14 @@ export default function App() {
               {/* Tickets — a fila de pedidos da liderança. O cargo aqui é só a
                   porta larga: quem enxerga de fato depende da chave em
                   `tickets_config`, e a própria página resolve isso. */}
+              <Route path={ROUTE_PATHS.VENDAS_METAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_metas_vendas">
+                    <VendasMetas />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
               {/* Vendas — a primeira tela própria do Comercial. */}
               <Route path={ROUTE_PATHS.VENDAS_IMPORTAR} element={
                 <LayoutWrapper>
