@@ -2,8 +2,7 @@
 -- Comercial, Fase 2: o lote e o de-para de franquia
 -- ============================================================================
 --
--- ⚠️  NAO APLICADA. Escrita em 15/09/2026. Depende da Fase 1
---     (20260915100000_vendas_fase1.sql), que tambem nao foi aplicada.
+-- ✅ APLICADA em 15/09/2026. Depende da Fase 1 (20260915100000).
 --
 -- ## Um lote e um RETRATO, e retratos se substituem
 --
@@ -723,6 +722,11 @@ BEGIN
     JOIN public.cargos_permissoes cp ON cp.empresa_id = emp.id
     CROSS JOIN public.fn_permissoes_catalogo() cat
    WHERE (cat.tenants IS NULL OR emp.slug = ANY(cat.tenants))
+     -- O cargo `rh` fica de fora, e nao por descuido: o ARRAY de
+     -- fn_permissoes_semear_empresa tem NOVE cargos e nao o inclui, entao a
+     -- linha dele nunca recebe chave nova. Conferi-la aqui faria esta migration
+     -- falhar por um buraco que ela nao abriu — e que e anterior a ela.
+     AND cp.cargo <> 'rh'
      AND NOT (cp.permissoes ? cat.chave);
 
   IF v_faltando IS NOT NULL THEN

@@ -2,8 +2,7 @@
 -- Comercial, Fase 3: o relatorio geral vira venda
 -- ============================================================================
 --
--- ⚠️  NAO APLICADA. Escrita em 15/09/2026. Depende das Fases 1 e 2
---     (20260915100000 e 20260915110000), que tambem nao foram aplicadas.
+-- ✅ APLICADA em 15/09/2026. Depende das Fases 1 e 2.
 --
 -- ## O que a projecao faz, e o que ela recusa a fazer
 --
@@ -148,7 +147,7 @@ STABLE
 SECURITY DEFINER
 SET search_path TO ''
 AS $function$
-  SELECT CASE WHEN COUNT(*) = 1 THEN MIN(p.id) ELSE NULL END
+  SELECT CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(p.id))[1] ELSE NULL END
     FROM public.perfis p
    WHERE p.empresa_id = p_empresa_id
      AND LOWER(BTRIM(p.usuario)) = LOWER(BTRIM(p_login))
@@ -523,6 +522,11 @@ BEGIN
     JOIN public.cargos_permissoes cp ON cp.empresa_id = emp.id
     CROSS JOIN public.fn_permissoes_catalogo() cat
    WHERE (cat.tenants IS NULL OR emp.slug = ANY(cat.tenants))
+     -- O cargo `rh` fica de fora, e nao por descuido: o ARRAY de
+     -- fn_permissoes_semear_empresa tem NOVE cargos e nao o inclui, entao a
+     -- linha dele nunca recebe chave nova. Conferi-la aqui faria esta migration
+     -- falhar por um buraco que ela nao abriu — e que e anterior a ela.
+     AND cp.cargo <> 'rh'
      AND NOT (cp.permissoes ? cat.chave);
 
   IF v_faltando IS NOT NULL THEN

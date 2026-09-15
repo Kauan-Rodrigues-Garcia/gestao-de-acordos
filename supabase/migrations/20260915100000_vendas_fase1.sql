@@ -2,9 +2,8 @@
 -- Comercial, Fase 1: a venda, o dia e o ciclo
 -- ============================================================================
 --
--- ⚠️  NAO APLICADA. Escrita em 14/09/2026 junto com o plano
---     (docs/PLANO-COMERCIAL-VENDAS.md). Aplicar so depois de decidido o
---     cadastro de franquias por setor — ver «O que esta migration NAO faz».
+-- ✅ APLICADA em 15/09/2026. Escrita junto com o plano
+--     (docs/PLANO-COMERCIAL-VENDAS.md).
 --
 -- ## A regra que esta tabela existe para segurar
 --
@@ -933,6 +932,11 @@ BEGIN
     JOIN public.cargos_permissoes cp ON cp.empresa_id = emp.id
     CROSS JOIN public.fn_permissoes_catalogo() cat
    WHERE (cat.tenants IS NULL OR emp.slug = ANY(cat.tenants))
+     -- O cargo `rh` fica de fora, e nao por descuido: o ARRAY de
+     -- fn_permissoes_semear_empresa tem NOVE cargos e nao o inclui, entao a
+     -- linha dele nunca recebe chave nova. Conferi-la aqui faria esta migration
+     -- falhar por um buraco que ela nao abriu — e que e anterior a ela.
+     AND cp.cargo <> 'rh'
      AND NOT (cp.permissoes ? cat.chave);
 
   IF v_faltando IS NOT NULL THEN

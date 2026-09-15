@@ -161,7 +161,9 @@ describe('a projeção só escreve o que tem dono', () => {
 
   it('login ambíguo devolve NULL em vez de escolher por sorte', () => {
     const corpo = compacto(corpoDaFuncao(FASE3, 'fn_vendas_perfil_do_login'));
-    expect(corpo).toContain('CASE WHEN COUNT(*) = 1 THEN MIN(p.id) ELSE NULL END');
+    // `MIN(uuid)` nao existe no Postgres — a funcao falhava ao ser criada.
+    // `(ARRAY_AGG(id))[1]` faz o mesmo papel: com uma linha so, devolve o id dela.
+    expect(corpo).toContain('CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(p.id))[1] ELSE NULL END');
   });
 
   it('só o relatório GERAL vira venda — o do setor é prévia', () => {
@@ -315,7 +317,7 @@ describe('a prévia do setor cabe na tabela, e não afrouxa a venda', () => {
     expect(corpo).toContain('f.codigo = BTRIM(p_codigo)');
     expect(corpo).toContain('LOWER(BTRIM(f.nome)) = LOWER(BTRIM(p_nome))');
     // Nome ambíguo não escolhe por sorte.
-    expect(corpo).toContain('CASE WHEN COUNT(*) = 1 THEN MIN(f.id) ELSE NULL END');
+    expect(corpo).toContain('CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(f.id))[1] ELSE NULL END');
   });
 });
 
@@ -350,6 +352,20 @@ describe('a conciliação não escreve nada', () => {
     expect(corpo).toContain('g.situacao IS DISTINCT FROM pr.situacao');
     expect(corpo).toContain('g.contrato_assinado IS DISTINCT FROM pr.contrato_assinado');
     expect(corpo).toContain('g.valor_total IS DISTINCT FROM pr.valor_total');
+  });
+});
+
+describe('a verificação não tropeça no cargo rh', () => {
+  /*
+   * `fn_permissoes_semear_empresa` percorre NOVE cargos e não inclui `rh`,
+   * então a linha dele nunca recebe chave nova. Conferi-la fazia a migration
+   * falhar por um buraco anterior a ela — aconteceu de verdade em 15/09/2026,
+   * na primeira tentativa de aplicar a Fase 1.
+   */
+  it('as três migrations que semeiam excluem o cargo rh da conferência', () => {
+    for (const [nome, sql] of [['fase1', C1], ['fase2', C2], ['fase3', C3]] as const) {
+      expect(sql, nome).toContain("AND cp.cargo <> 'rh'");
+    }
   });
 });
 

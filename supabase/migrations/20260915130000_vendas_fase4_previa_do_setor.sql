@@ -2,8 +2,7 @@
 -- Comercial, Fase 4: a previa do setor e a conciliacao das tres camadas
 -- ============================================================================
 --
--- ⚠️  NAO APLICADA. Escrita em 15/09/2026. Depende das Fases 1, 2 e 3
---     (20260915100000, 110000 e 120000), que tambem nao foram aplicadas.
+-- ✅ APLICADA em 15/09/2026. Depende das Fases 1, 2 e 3.
 --
 -- ## O relatorio do setor nao cabia na tabela como ela estava
 --
@@ -106,7 +105,7 @@ AS $function$
     -- O nome e o que o relatorio do setor tem. Um so, ou nenhum: dois cadastros
     -- com o mesmo nome e problema de cadastro, e escolher por sorte poria o
     -- faturamento no setor errado.
-    (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(f.id) ELSE NULL END
+    (SELECT CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(f.id))[1] ELSE NULL END
        FROM public.vendas_franquias f
       WHERE f.empresa_id = p_empresa_id
         AND LOWER(BTRIM(f.nome)) = LOWER(BTRIM(p_nome))
