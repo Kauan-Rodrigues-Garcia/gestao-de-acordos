@@ -39,6 +39,15 @@ interface ConsultaSemTipo<T> extends PromiseLike<RespostaTabela<T>> {
      por pedido seria uma ida ao servidor por cartão desenhado. Continua sendo
      leitura. */
   in(coluna: string, valores: readonly string[]): ConsultaSemTipo<T>;
+  /* `gte`/`lte` entraram com a aba Vendas (migration 20260915100000): a tela
+     lê um intervalo de dias, e sem eles a alternativa seria trazer a tabela
+     inteira e filtrar no navegador. Continuam sendo leitura. */
+  gte(coluna: string, valor: string): ConsultaSemTipo<T>;
+  lte(coluna: string, valor: string): ConsultaSemTipo<T>;
+  /* `or` entrou junto, pela fila do líder: «aberta OU confirmada sem
+     assinatura» é uma pergunta só, e parti-la em duas consultas faria a tela
+     juntar e reordenar o que o banco já sabe ordenar. */
+  or(filtro: string): ConsultaSemTipo<T>;
 }
 
 /** Consulta de leitura numa tabela que os tipos gerados ainda não conhecem. */

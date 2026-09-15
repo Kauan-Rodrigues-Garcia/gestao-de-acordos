@@ -207,6 +207,10 @@ export const GRUPOS_PERMISSAO = [
   'Dashboard ADM',
   // Fechamento, 14/09/2026. A planilha de fechamento da gerência virou aba.
   'Fechamento',
+  // Vendas, 15/09/2026. A primeira aba do produto COMERCIAL — e o primeiro
+  // grupo do painel que não fala de cobrança. As chaves dele não aparecem na
+  // BookPlay nem na PaguePlay: `produtos: SO_COMERCIAL` as esconde de lá.
+  'Vendas',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -265,6 +269,15 @@ export interface PermissaoMeta {
  * o padrão de `produtos` é só cobrança.
  */
 const TODA_OPERACAO: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
+
+/**
+ * Só o Comercial. Nasceu com as chaves da aba Vendas, em 15/09/2026.
+ *
+ * O espelho de `SO_COBRANCA`, que não precisa existir porque é o padrão: uma
+ * chave sem `produtos` é da cobrança. Aqui a declaração é obrigatória, e é ela
+ * que mantém «Vendas: confirmar e assinar» fora do painel da BookPlay.
+ */
+const SO_COMERCIAL: readonly Produto[] = ['comercial'];
 
 /** Atalhos para os padrões que se repetem. */
 const LIDERANCA: Partial<Record<CargoConfiguravel, boolean>> = {
@@ -2055,6 +2068,154 @@ export const PERMISSOES: PermissaoMeta[] = [
     depende: {
       chaves: ['fechamento_escopo_setor', 'fechamento_escopo_todos_setores'],
       motivo: 'Só se preenche o fechamento de quem aparece na aba, e é o alcance que mostra.',
+    },
+  },
+
+  // ── Vendas (Comercial) ───────────────────────────────────────────────────
+  // Migration 20260915100000. Primeiro grupo do painel fora da cobrança:
+  // `produtos: SO_COMERCIAL` faz as chaves não aparecerem na BookPlay nem na
+  // PaguePlay, onde venda não significa nada.
+  //
+  // Os padrões NÃO são vazios, ao contrário do Fechamento. Lá a gerência
+  // ganharia a aba depois, pelo painel; aqui o operador precisa lançar a venda
+  // dele no primeiro dia, senão a aba nasce inútil. O que nasce fechado é o
+  // que decide dinheiro alheio — confirmar, excluir e restaurar.
+  {
+    key: 'ver_vendas', label: 'Aba Vendas',
+    descricao: 'Abrir a aba Vendas do Comercial',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { operador: true, lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'vendas_escopo_individual', label: 'Vendas: as próprias',
+    descricao: 'Ver na aba Vendas somente as vendas lançadas pela própria pessoa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { operador: true },
+  },
+  {
+    key: 'vendas_escopo_equipe', label: 'Vendas: a equipe',
+    descricao: 'Ver na aba Vendas as vendas das equipes em que a pessoa está ou que ela lidera',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: {},
+  },
+  {
+    key: 'vendas_escopo_setor', label: 'Vendas: o setor',
+    descricao: 'Ver na aba Vendas as vendas dos setores da própria pessoa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { lider: true, elite: true },
+  },
+  {
+    key: 'vendas_escopo_todos_setores', label: 'Vendas: todos os setores',
+    descricao: 'Ver na aba Vendas as vendas de qualquer setor da empresa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'criar_vendas', label: 'Vendas: lançar',
+    descricao: 'Lançar uma venda nova, que entra em aberto e espera o líder',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { operador: true, lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'editar_vendas', label: 'Vendas: corrigir',
+    descricao:
+      'Corrigir NR, cliente, valor, entrada, estado e data de uma venda. Não muda '
+      + 'situação nem assinatura',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { operador: true, lider: true, elite: true, gerencia: true },
+  },
+  {
+    /*
+     * A chave que separa quem produz de quem valida.
+     *
+     * Confirmar é o ato do líder, e por isso não mora em `editar_vendas`: se
+     * morasse, o operador com permissão de corrigir a própria venda poderia
+     * dá-la como confirmada e assinada — que é exatamente a régua da meta.
+     */
+    key: 'confirmar_vendas', label: 'Vendas: confirmar e assinar',
+    descricao:
+      'Decidir a situação da venda e marcar o contrato como assinado — é o que '
+      + 'faz a venda contar para a meta',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'excluir_vendas', label: 'Vendas: excluir',
+    descricao: 'Mandar uma venda para a lixeira, onde ela fica sete dias',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'ver_lixeira_vendas', label: 'Vendas: ver a lixeira',
+    descricao: 'Abrir a lixeira de vendas e ver o que foi excluído',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'restaurar_vendas', label: 'Vendas: restaurar da lixeira',
+    descricao: 'Devolver uma venda excluída, se o NR dela ainda não voltou pelo relatório',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+    depende: {
+      chaves: ['ver_lixeira_vendas'],
+      motivo: 'Só se restaura o que se enxerga, e quem mostra é a lixeira.',
+    },
+  },
+
+  // ── Vendas: importação e de-para (migration 20260915110000) ──────────────
+  // Poderes de liderança, e nascem só nela. Uma importação errada troca o
+  // retrato do mês inteiro; um vínculo errado move o faturamento de um setor
+  // para outro sem que nada apareça quebrado.
+  {
+    key: 'importar_vendas', label: 'Vendas: importar o relatório',
+    descricao:
+      'Carregar o relatório de prospecção e promovê-lo a retrato do mês, '
+      + 'substituindo a carga anterior',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'ver_importacoes_vendas', label: 'Vendas: ver as importações',
+    descricao:
+      'Abrir o histórico de cargas e as linhas cruas do relatório, para conferir '
+      + 'o que entrou',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    /*
+     * Franquia não é setor: o relatório recorta por franquia e o sistema pensa
+     * em setor, equipe e operador. São 80 códigos, e ligar cada um ao setor
+     * certo é o que faz o faturamento cair no lugar.
+     *
+     * Nasce só na gerência — é a mesma gravidade do de-para do 59
+     * (`mestre_grupos`), onde vincular o grupo errado move dinheiro de setor.
+     */
+    key: 'vendas_vincular_franquia', label: 'Vendas: vincular franquia a setor',
+    descricao:
+      'Decidir de qual setor é cada franquia do relatório, ou marcá-la como '
+      + 'ignorada',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true },
+    depende: {
+      chaves: ['ver_importacoes_vendas'],
+      motivo: 'A franquia aparece pelo relatório; sem ver as importações não há o que vincular.',
+    },
+  },
+  {
+    /*
+     * Separada de `importar_vendas` de propósito.
+     *
+     * Importar troca o retrato do RELATÓRIO, que não conta para meta nenhuma —
+     * o pior que um erro faz é um retrato errado, que a próxima carga
+     * substitui. Projetar escreve em `vendas`, que é o placar do operador, e
+     * pode **reverter venda que estava contando**.
+     *
+     * Dois poderes de gravidade diferente não devem morar na mesma chave.
+     */
+    key: 'projetar_vendas', label: 'Vendas: lançar o relatório sobre o placar',
+    descricao:
+      'Escrever o relatório geral em cima das vendas — cria, atualiza e pode '
+      + 'reverter venda que estava contando para a meta',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true },
+    depende: {
+      chaves: ['importar_vendas'],
+      motivo: 'Só se projeta um relatório que já foi importado.',
     },
   },
 ];

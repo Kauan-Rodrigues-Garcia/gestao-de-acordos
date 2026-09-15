@@ -104,6 +104,24 @@ export const ABAS_COM_ESCOPO = {
     niveis: NIVEIS_ESCOPO,
   },
   /*
+   * Vendas usa os quatro níveis, e é a primeira aba deste registro que não é
+   * da cobrança.
+   *
+   * `individual` existe aqui, ao contrário do Painel Líder: o operador do
+   * comercial trabalha na própria aba, lançando a venda dele o dia inteiro, e
+   * «a minha carteira» é o recorte normal dele — não um caso degenerado.
+   *
+   * ⚠️ Estes níveis espelham, um a um, a policy `vendas_select` e a função
+   * `fn_vendas_alcanca` (migration 20260915100000). Os dois lados mudam
+   * juntos: divergir faria o filtro da tela oferecer um recorte que o banco
+   * recusa, e a lista voltaria vazia sem explicação.
+   */
+  vendas: {
+    chaveAba: 'ver_vendas',
+    prefixo: 'vendas',
+    niveis: NIVEIS_ESCOPO,
+  },
+  /*
    * O Painel Lider so tem dois niveis, e isso e proposital: a aba nasceu para
    * a lideranca olhar o proprio setor, e a unica pergunta que ela faz e se
    * essa pessoa enxerga alem dele. `individual` nao faria sentido — um painel

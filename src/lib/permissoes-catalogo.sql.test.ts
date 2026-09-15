@@ -133,12 +133,52 @@ describe('contrato: catálogo TypeScript ↔ catálogo SQL', () => {
     expect([...noSql].filter(k => !noTs.has(k)), 'no SQL e não no TypeScript').toEqual([]);
   });
 
+  /**
+   * O SQL tem UM eixo de recorte; o TypeScript tem dois.
+   *
+   * No banco existe só `tenants`, comparado com `empresas.slug` na semeadura
+   * (`emp.slug = ANY(cat.tenants)`). No app existem dois: `tenants` separa
+   * BookPlay de PaguePlay — as duas empresas DA cobrança — e `produtos`, acima
+   * dele, separa cobrança de Comercial e de RH.
+   *
+   * Enquanto `produtos` só AMPLIAVA (a lista `TODA_OPERACAO`, para as chaves
+   * genéricas), os dois lados coincidiam campo a campo e bastava compará-los.
+   * A aba Vendas (15/09/2026) trouxe o primeiro `produtos` que ESTREITA para
+   * fora da cobrança, e aí a tradução passou a importar: no TypeScript a chave
+   * diz `produtos: ['comercial']`, e a única forma de o SQL dizer a mesma coisa
+   * é `tenants = {comercial}` — porque, para um produto que tem uma empresa só,
+   * o slug e o produto são a mesma palavra.
+   *
+   * O que continua NÃO sendo comparado aqui é a chave de cobrança comum, que no
+   * SQL é `NULL` (semeada em toda empresa) e no app aparece só nas duas de
+   * cobrança. Essa diferença é deliberada e antiga: semear a mais é barato, e
+   * `produtos` é o filtro de TELA. Estreitar o SQL também seria possível, mas é
+   * outra decisão — e mudá-la por dentro deste teste a esconderia.
+   */
   it('o recorte por operação é o mesmo dos dois lados', () => {
+    /** Produtos com empresa própria: o slug é a própria palavra do produto. */
+    const SLUG_DO_PRODUTO: Record<string, string> = { comercial: 'comercial', rh: 'rh' };
+
+    let traduzidas = 0;
     for (const l of SQL) {
       const ts = PERMISSOES.find(p => p.key === l.chave)!;
+      const foraDaCobranca = ts.produtos && !ts.produtos.includes('cobranca');
+
+      const esperado = foraDaCobranca
+        ? ts.produtos!.map(p => SLUG_DO_PRODUTO[p]).filter(Boolean).sort()
+        : [...(ts.tenants ?? [])].sort();
+
+      if (foraDaCobranca) traduzidas += 1;
+
       expect([...(l.tenants ?? [])].sort(), `tenants divergem em ${l.chave}`)
-        .toEqual([...(ts.tenants ?? [])].sort());
+        .toEqual(esperado);
     }
+
+    // A tradução só vale se estiver exercitada: sem nenhuma chave fora da
+    // cobrança, o ramo acima nunca roda e o teste volta a ser o antigo sem
+    // ninguém perceber.
+    expect(traduzidas, 'nenhuma chave fora da cobrança — a tradução não foi exercitada')
+      .toBeGreaterThan(0);
   });
 
   /**

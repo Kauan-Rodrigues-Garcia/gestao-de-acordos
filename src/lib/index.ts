@@ -30,6 +30,24 @@ export const ROUTE_PATHS = {
    */
   FECHAMENTO: '/fechamento',
   /**
+   * A aba Vendas, do Comercial. É a primeira rota do produto `comercial` — até
+   * ela, `/` abria em `ProdutoEmMontagem` e não havia mais nada.
+   *
+   * Não tem par `/vendas/nova`: o lançamento é um diálogo dentro da própria
+   * aba, porque a unidade de trabalho aqui é o DIA, e sair da pilha de dias
+   * para voltar a ela a cada venda seria atrito num fluxo que se repete dezenas
+   * de vezes por turno. É o contrário do acordo, que tem tela própria.
+   */
+  VENDAS: '/vendas',
+  /**
+   * A importação do prospecção e o de-para de franquia, na mesma tela.
+   *
+   * Juntas porque é assim que o trabalho acontece: importa-se, aparecem
+   * franquias novas, e liga-se cada uma ao setor. Separá-las faria a pessoa
+   * descobrir a pendência só se lembrasse de abrir a outra aba.
+   */
+  VENDAS_IMPORTAR: '/vendas/importar',
+  /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *
    * Duas rotas, e não uma que muda de cara: são telas com finalidades

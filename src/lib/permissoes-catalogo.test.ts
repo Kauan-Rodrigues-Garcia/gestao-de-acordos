@@ -20,7 +20,7 @@ import {
   PERMISSOES, CHAVES_PERMISSAO, PERMISSOES_POR_CHAVE,
   CARGOS_CONFIGURAVEIS, CARGOS_ACESSO_TOTAL, PERMISSOES_EXPLICITAS,
   catalogoDoTenant, gruposDoTenant, permissoesPadraoDoCargo,
-  exigeConcessaoExplicita,
+  exigeConcessaoExplicita, produtosDaPermissao,
 } from './permissoes-catalogo';
 import { ABAS_COM_ESCOPO, chaveEscopo } from './permissoes-escopo';
 
@@ -252,9 +252,26 @@ describe('recorte por operação', () => {
   });
 
   it('o que não declara tenant aparece nas duas', () => {
+    /*
+     * `tenants` e `produtos` são eixos diferentes, e a distinção passou a
+     * importar em 15/09/2026, quando nasceram as chaves da aba Vendas.
+     *
+     * `tenants` separa BookPlay de PaguePlay — as duas empresas DA cobrança.
+     * `produtos` separa cobrança de Comercial e RH, e está acima. Uma chave do
+     * Comercial não declara `tenants` (não há dois comerciais), e mesmo assim
+     * não aparece em nenhuma das duas empresas de cobrança — está fora do
+     * produto delas.
+     *
+     * O que este teste protege continua sendo o mesmo: dentro da cobrança,
+     * silêncio significa «as duas».
+     */
     const bp = new Set(catalogoDoTenant('bookplay').map(p => p.key));
     const pp = new Set(catalogoDoTenant('pagueplay').map(p => p.key));
-    for (const p of PERMISSOES.filter(x => !x.tenants)) {
+    const daCobranca = PERMISSOES.filter(
+      x => !x.tenants && produtosDaPermissao(x).includes('cobranca'),
+    );
+    expect(daCobranca.length, 'o filtro não pode esvaziar o teste').toBeGreaterThan(50);
+    for (const p of daCobranca) {
       expect(bp.has(p.key) && pp.has(p.key), `${p.key} sumiu de uma operação`).toBe(true);
     }
   });
@@ -376,19 +393,47 @@ describe('catálogo por produto', () => {
     }
   });
 
-  it('RH e Comercial recebem o mesmo recorte — nenhum tem privilégio sobre a cobrança', () => {
-    const comercial = catalogoDoTenant('comercial').map(p => p.key).sort();
-    const rh        = catalogoDoTenant('rh').map(p => p.key).sort();
-    expect(rh).toEqual(comercial);
+  /*
+   * Até 15/09/2026 este teste dizia «RH e Comercial recebem o MESMO recorte»,
+   * e era verdade: os dois produtos só tinham o punhado de chaves genéricas.
+   *
+   * A aba Vendas quebrou a igualdade de propósito — o Comercial passou a ter
+   * chaves próprias. O que precisa continuar valendo não é a igualdade: é que
+   * a diferença entre eles seja SÓ o que é do próprio produto, e que nenhum
+   * dos dois ganhe nada da cobrança por tabela.
+   */
+  it('RH e Comercial partem do mesmo recorte genérico', () => {
+    const comercial = new Set(catalogoDoTenant('comercial').map(p => p.key));
+    const rh        = new Set(catalogoDoTenant('rh').map(p => p.key));
+
+    // Tudo que o RH tem, o Comercial também tem: o RH não tem chave própria.
+    for (const k of rh) {
+      expect(comercial.has(k), `${k} está no RH e sumiu do Comercial`).toBe(true);
+    }
+    // E o que o Comercial tem a mais é, chave por chave, declaradamente dele.
+    const soDoComercial = [...comercial].filter(k => !rh.has(k));
+    for (const k of soDoComercial) {
+      const p = PERMISSOES_POR_CHAVE[k];
+      expect(produtosDaPermissao(p), `${k} sobra no Comercial sem ser do Comercial`)
+        .toEqual(['comercial']);
+    }
   });
 
-  it('a cobrança continua com o catálogo inteiro', () => {
-    // A prova de que a mudança não tirou nada de quem já usava: as duas
-    // empresas de cobrança somadas cobrem todas as chaves declaradas.
+  it('a cobrança continua com o catálogo inteiro dela', () => {
+    /*
+     * A prova de que nada foi tirado de quem já usava: as duas empresas de
+     * cobrança somadas cobrem todas as chaves DA COBRANÇA.
+     *
+     * A comparação era contra `PERMISSOES.length` e deixou de servir quando
+     * apareceu a primeira chave que não é de cobrança. Contra o total, este
+     * teste passaria a falhar a cada aba nova de Comercial ou RH — acusando
+     * como perda o que é crescimento do outro lado.
+     */
     const bp = catalogoDoTenant('bookplay').map(p => p.key);
     const pp = catalogoDoTenant('pagueplay').map(p => p.key);
     const juntas = new Set([...bp, ...pp]);
-    expect(juntas.size).toBe(PERMISSOES.length);
+    const esperadas = PERMISSOES.filter(p => produtosDaPermissao(p).includes('cobranca'));
+    expect(juntas.size).toBe(esperadas.length);
   });
 
   it('o recorte genérico é bem menor que o da cobrança', () => {

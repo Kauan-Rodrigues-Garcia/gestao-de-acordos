@@ -33,6 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
+  ShoppingBag,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -85,6 +86,16 @@ const TODOS_OS_PRODUTOS: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
 /** Só cobrança. O apelido existe para a lista abaixo ficar legível. */
 const SO_COBRANCA: readonly Produto[] = ['cobranca'];
 
+/**
+ * Só o Comercial. Nasceu com a aba Vendas, em 15/09/2026.
+ *
+ * É o primeiro apelido que aponta para fora da cobrança, e a existência dele é
+ * a prova de que a lista branca de 25/08 valeu: acrescentar a primeira aba de
+ * um produto novo não exigiu revisar aba nenhuma das outras — o que não declara
+ * `comercial` continua sem aparecer lá.
+ */
+const SO_COMERCIAL: readonly Produto[] = ['comercial'];
+
 export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
@@ -134,6 +145,13 @@ export const NAV_ITEMS: NavItem[] = [
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
   // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
+  // A aba Vendas — Comercial. O que Acordos é para a cobrança, ela é para o
+  // comercial: a tela do dia a dia de quem produz. E, como Acordos, é uma aba
+  // de produto só — venda não significa nada em cobrança nem em RH.
+  { label: 'Vendas',           icon: ShoppingBag,     to: ROUTE_PATHS.VENDAS,              produtos: SO_COMERCIAL, permissaoKey: 'ver_vendas' },
+  // Importar Vendas — o prospecção e o de-para de franquia. Espelha o que
+  // 'Importar Excel' é para a cobrança, com o relatório que é o do comercial.
+  { label: 'Importar Vendas',  icon: Upload,          to: ROUTE_PATHS.VENDAS_IMPORTAR,     produtos: SO_COMERCIAL, permissaoKey: 'ver_importacoes_vendas' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },

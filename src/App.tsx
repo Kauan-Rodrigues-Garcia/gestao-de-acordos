@@ -32,6 +32,8 @@ import { produtoDaEmpresa, type Produto } from '@/lib/produto';
  * aparece em teste nenhum — aparece quando um vendedor abre a URL.
  */
 const SO_COBRANCA: readonly Produto[] = ['cobranca'];
+/** Mesma razão, do outro lado: o Comercial começou com uma rota e vai ter mais. */
+const SO_COMERCIAL: readonly Produto[] = ['comercial'];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,6 +65,8 @@ const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
+const Vendas            = lazy(() => import('@/pages/Vendas'));
+const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
@@ -378,6 +382,22 @@ export default function App() {
               {/* Tickets — a fila de pedidos da liderança. O cargo aqui é só a
                   porta larga: quem enxerga de fato depende da chave em
                   `tickets_config`, e a própria página resolve isso. */}
+              {/* Vendas — a primeira tela própria do Comercial. */}
+              <Route path={ROUTE_PATHS.VENDAS_IMPORTAR} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_importacoes_vendas">
+                    <VendasImportar />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.VENDAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_vendas">
+                    <Vendas />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_tickets">
