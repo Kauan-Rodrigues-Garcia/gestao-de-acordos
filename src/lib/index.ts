@@ -55,6 +55,15 @@ export const ROUTE_PATHS = {
    */
   VENDAS_METAS: '/vendas/metas',
   /**
+   * A conta do setor, e a prova de que ela fecha.
+   *
+   * Rota própria, e não uma aba dentro de Importar: quem importa e quem cobra
+   * o número do setor não são a mesma pessoa no mesmo momento. A importação é
+   * tarefa; o fechamento é a pergunta que a liderança faz depois — «de onde
+   * veio esse número, e ele bate?».
+   */
+  VENDAS_FECHAMENTO: '/vendas/fechamento',
+  /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *
    * Duas rotas, e não uma que muda de cara: são telas com finalidades

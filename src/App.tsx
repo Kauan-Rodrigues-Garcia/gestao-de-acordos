@@ -68,6 +68,7 @@ const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
 const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
 const VendasMetas       = lazy(() => import('@/pages/Vendas/Metas'));
+const VendasFechamento  = lazy(() => import('@/pages/Vendas/FechamentoDoSetor'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
@@ -396,6 +397,17 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_importacoes_vendas">
                     <VendasImportar />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* O fechamento pede `ver_vendas` como porta, e o alcance de
+                  verdade é o do ESCOPO — a conta é a do setor inteiro. Quem
+                  alcança menos é recusado pela própria RPC, que é
+                  SECURITY DEFINER: esconder o botão aqui não seria trava. */}
+              <Route path={ROUTE_PATHS.VENDAS_FECHAMENTO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_vendas">
+                    <VendasFechamento />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

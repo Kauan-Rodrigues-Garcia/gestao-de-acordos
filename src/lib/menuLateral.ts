@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
-  ShoppingBag,
+  ShoppingBag, Scale,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -156,6 +156,11 @@ export const NAV_ITEMS: NavItem[] = [
   // própria: a aba 'Metas' da cobrança fala de quartil e dia útil, que aqui
   // não querem dizer nada.
   { label: 'Metas de Vendas',  icon: Target,          to: ROUTE_PATHS.VENDAS_METAS,        produtos: SO_COMERCIAL, permissaoKey: 'ver_metas_vendas' },
+  // Fechamento do Setor — a conta do mês e a prova de que ela fecha. A chave é
+  // `ver_vendas` porque o item de menu aceita UMA chave, e o que realmente
+  // decide aqui é o escopo: a tela mostra a conta do setor inteiro. Quem
+  // alcança menos abre e lê por que não alcança, em vez de achar que sumiu.
+  { label: 'Fechamento',       icon: Scale,           to: ROUTE_PATHS.VENDAS_FECHAMENTO,   produtos: SO_COMERCIAL, permissaoKey: 'ver_vendas' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },

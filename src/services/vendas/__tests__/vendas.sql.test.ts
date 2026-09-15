@@ -43,12 +43,19 @@ const FASE2 = migration('_vendas_fase2_lote_e_depara.sql');
 const FASE3 = migration('_vendas_fase3_projecao_do_geral.sql');
 const FASE4 = migration('_vendas_fase4_previa_do_setor.sql');
 const FASE5 = migration('_vendas_fase5_meta_com_duas_reguas.sql');
+/*
+ * A Fase 6 SUBSTITUI `fn_vendas_projetar` (a assinatura mudou: cinco colunas de
+ * descarte novas). Por isso as asserções sobre a projeção leem daqui, e não da
+ * Fase 3 — ler da Fase 3 seria provar uma função que o banco não tem mais.
+ */
+const FASE6 = migration('_vendas_fase6_a_conta_do_setor_fecha.sql');
 
 const C1 = compacto(FASE1);
 const C2 = compacto(FASE2);
 const C3 = compacto(FASE3);
 const C4 = compacto(FASE4);
 const C5 = compacto(FASE5);
+const C6 = compacto(FASE6);
 
 describe('a régua mora no banco, não numa consulta', () => {
   it('`conta_na_meta` é coluna GERADA em vendas', () => {
@@ -139,7 +146,7 @@ describe('retrato velho não desfaz retrato novo', () => {
   });
 
   it('a projeção pula a linha que um lote mais recente já escreveu', () => {
-    const corpo = compacto(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
     expect(corpo).toContain('lb.importado_em > v_lote.importado_em');
     expect(corpo).toContain('v_preservadas := v_preservadas + 1');
   });
@@ -151,13 +158,22 @@ describe('retrato velho não desfaz retrato novo', () => {
 });
 
 describe('a projeção só escreve o que tem dono', () => {
-  it('a franquia precisa estar vinculada', () => {
-    const corpo = compacto(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
-    expect(corpo).toContain("AND f.estado = 'vinculado'");
+  it('franquia não vinculada não vira venda — mas é CONTADA, não descartada em silêncio', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
+    // Até a Fase 5 isto era `JOIN ... AND f.estado = 'vinculado'`, e a linha
+    // sumia sem deixar número. Medido em 15/09: 2.834 das 2.973 linhas do lote
+    // caem aqui, R$ 13.424.041,59 — some-las em silêncio era o buraco.
+    expect(corpo).toContain('LEFT JOIN public.vendas_franquias f');
+    expect(corpo).toMatch(
+      /franquia_estado IS NULL[\s\S]*?= 'novo' THEN[\s\S]*?v_sem_fr := v_sem_fr \+ 1;[\s\S]*?CONTINUE;/,
+    );
+    expect(corpo).toMatch(
+      /franquia_estado = 'ignorado' THEN[\s\S]*?v_ignorada := v_ignorada \+ 1;[\s\S]*?CONTINUE;/,
+    );
   });
 
   it('login sem pessoa vira contagem, não vira venda no nome de ninguém', () => {
-    const corpo = semComentarios(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
     expect(corpo).toMatch(/IF r\.perfil_id IS NULL THEN[\s\S]*?v_sem_dono := v_sem_dono \+ 1;[\s\S]*?CONTINUE;/);
   });
 
@@ -169,12 +185,12 @@ describe('a projeção só escreve o que tem dono', () => {
   });
 
   it('só o relatório GERAL vira venda — o do setor é prévia', () => {
-    const corpo = semComentarios(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
+    const corpo = semComentarios(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
     expect(corpo).toMatch(/v_lote\.origem <> 'geral' THEN[\s\S]*?RAISE EXCEPTION/);
   });
 
   it('só o lote vigente é projetado', () => {
-    const corpo = semComentarios(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
+    const corpo = semComentarios(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
     expect(corpo).toMatch(/v_lote\.estado <> 'vigente' THEN[\s\S]*?RAISE EXCEPTION/);
   });
 });
@@ -185,7 +201,7 @@ describe('a reversão deixa rastro', () => {
    * recebimento, «porém fica a informação em algum lugar para acompanhar».
    */
   it('a projeção grava evento `revertida` com o valor de antes', () => {
-    const corpo = compacto(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
     expect(corpo).toContain('v_antes.conta_na_meta AND NOT (r.situacao = ');
     expect(corpo).toContain("'revertida'");
     expect(corpo).toContain('v_antes.valor_na_meta');
@@ -218,7 +234,7 @@ describe('quem pode o quê', () => {
   });
 
   it('projetar é chave própria, separada de importar', () => {
-    const projetar = semComentarios(corpoDaFuncao(FASE3, 'fn_vendas_projetar'));
+    const projetar = semComentarios(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
     expect(projetar).toContain("fn_user_tem('projetar_vendas')");
 
     const promover = semComentarios(corpoDaFuncao(FASE2, 'fn_vendas_lote_promover'));
@@ -482,5 +498,141 @@ describe('a cadeia do catálogo não se parte', () => {
     for (const nivel of ['individual', 'equipe', 'setor', 'todos_setores']) {
       expect(C1, `falta vendas_escopo_${nivel}`).toContain(`'vendas_escopo_${nivel}'`);
     }
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Fase 6 — a conta do setor fecha, e o robô tem lugar próprio
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('a projeção devolve o que descartou', () => {
+  it('as cinco colunas de descarte estão na assinatura', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
+    for (const coluna of [
+      'sem_franquia INTEGER', 'sem_franquia_valor NUMERIC',
+      'franquia_ignorada INTEGER', 'ignorada_valor NUMERIC',
+      'sem_dono_valor NUMERIC',
+    ]) {
+      expect(corpo, `falta ${coluna} no RETURNS TABLE`).toContain(coluna);
+    }
+  });
+
+  it('cada descarte soma o VALOR, não só a contagem', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
+    // Contagem sem valor responde «quantas linhas sumiram» e não «quanto
+    // dinheiro» — que é a pergunta que a liderança faz.
+    expect(corpo).toContain('v_sem_fr_v := v_sem_fr_v + COALESCE(r.valor_total, 0)');
+    expect(corpo).toContain('v_ignorada_v := v_ignorada_v + COALESCE(r.valor_total, 0)');
+    expect(corpo).toContain('v_sem_dono_v := v_sem_dono_v + COALESCE(r.valor_total, 0)');
+  });
+
+  it('o DROP vem antes, e os privilégios voltam depois', () => {
+    // Trocar o tipo de retorno exige DROP, e o DROP zera os GRANTs. Sem as duas
+    // linhas seguintes a função que ESCREVE em `vendas` fica aberta a PUBLIC.
+    expect(C6).toContain('DROP FUNCTION IF EXISTS public.fn_vendas_projetar(UUID);');
+    expect(C6).toContain('REVOKE ALL ON FUNCTION public.fn_vendas_projetar(UUID) FROM PUBLIC;');
+    expect(C6).toContain('GRANT EXECUTE ON FUNCTION public.fn_vendas_projetar(UUID) TO authenticated;');
+  });
+});
+
+describe('líder credita a equipe que lidera', () => {
+  it('a projeção usa a função, e não `perfis.equipe_id` cru', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
+    expect(corpo).toContain('v_equipe := public.fn_vendas_equipe_que_credita(r.perfil_id)');
+    // Os 11 líderes do Comercial têm `equipe_id` nulo por desenho. Ler o campo
+    // direto punha as vendas deles fora de equipe nenhuma.
+    expect(corpo).not.toMatch(/SELECT equipe_id, setor_id INTO v_equipe/);
+  });
+
+  it('liderança só credita quando é ÚNICA', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_equipe_que_credita'));
+    // Quem lidera três equipes não tem «a sua equipe»: creditar nas três
+    // contaria o mesmo dinheiro três vezes. Mesma decisão de
+    // fn_desafio_contexto_equipe.
+    expect(corpo).toContain('HAVING COUNT(DISTINCT el.equipe_id) = 1');
+    expect(corpo).toContain('FROM public.equipe_lideres el');
+  });
+
+  it('o cadastro é reserva, para quem não lidera nada', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_equipe_que_credita'));
+    expect(corpo).toMatch(/COALESCE\([\s\S]*equipe_lideres[\s\S]*SELECT p\.equipe_id FROM public\.perfis p/);
+  });
+});
+
+describe('o robô conta no setor e fica fora do placar de gente', () => {
+  it('a marcação é coluna, não palpite pelo prefixo do login', () => {
+    expect(C6).toContain('ADD COLUMN IF NOT EXISTS robo BOOLEAN NOT NULL DEFAULT FALSE');
+  });
+
+  it('nenhuma régua olha para `robo` — a venda do robô conta igual', () => {
+    const projetar = compacto(corpoDaFuncao(FASE6, 'fn_vendas_projetar'));
+    // Se a projeção passasse a filtrar por robô, o dinheiro dele sairia do
+    // setor — e ele entrou no caixa como qualquer venda confirmada e assinada.
+    expect(projetar).not.toContain('robo');
+  });
+
+  it('o fechamento separa por natureza sem tirar ninguém da soma', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_fechamento_do_setor'));
+    expect(corpo).toContain("CASE WHEN e.e_robo THEN 'robo' ELSE 'humano' END");
+    // `deste` é o recorte do setor; natureza agrupa DENTRO dele, então as duas
+    // linhas somam a parcela do setor por construção.
+    expect(corpo).toMatch(/FROM deste e GROUP BY e\.e_robo/);
+  });
+});
+
+describe('o fechamento não pode mentir nem vazar', () => {
+  it('os cinco destinos são exclusivos: cada linha para no primeiro CASE', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_fechamento_do_setor'));
+    const ordem = ['sem_franquia', 'ignorada', 'sem_operador', 'deste_setor', 'outro_setor'];
+    let anterior = -1;
+    for (const destino of ordem) {
+      const pos = corpo.indexOf(`'${destino}'`);
+      expect(pos, `destino ${destino} sumiu do CASE`).toBeGreaterThan(anterior);
+      anterior = pos;
+    }
+  });
+
+  it('exige escopo de setor — a resposta é a conta do setor inteiro', () => {
+    const corpo = semComentarios(corpoDaFuncao(FASE6, 'fn_vendas_fechamento_do_setor'));
+    expect(corpo).toContain("public.fn_user_escopo('vendas')");
+    expect(corpo).toMatch(/v_escopo < 2 THEN[\s\S]*?RAISE EXCEPTION/);
+    // Escopo 2 alcança o PRÓPRIO setor, não qualquer um.
+    expect(corpo).toMatch(/v_escopo = 2 AND p_setor_id NOT IN[\s\S]*?fn_setores_do_operador/);
+  });
+
+  it('é plpgsql de propósito: função SQL não sabe recusar', () => {
+    const corpo = corpoDaFuncao(FASE6, 'fn_vendas_fechamento_do_setor');
+    expect(corpo).toContain('LANGUAGE plpgsql');
+    // Devolver zero linhas para quem não alcança seria pior: «conta vazia» é
+    // indistinguível de «mês sem venda».
+    expect(corpo).toContain("USING ERRCODE = '42501'");
+  });
+
+  it('lê o lote VIGENTE do mês, e só o geral', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_fechamento_do_setor'));
+    expect(corpo).toContain("l.origem = 'geral'");
+    expect(corpo).toContain("l.estado = 'vigente'");
+  });
+
+  it('a conferência compara com `vendas` pelo eixo de CONFIRMAÇÃO', () => {
+    const corpo = compacto(corpoDaFuncao(FASE6, 'fn_vendas_fechamento_do_setor'));
+    // Pelo eixo da venda o número nunca bateria: o geral recorta por
+    // confirmação, e comparar eixos diferentes produziria alarme todo dia.
+    expect(corpo).toContain('v.data_confirmacao >=');
+    expect(corpo).toContain('v.data_confirmacao <');
+  });
+});
+
+describe('a Fase 6 não mexe no catálogo de permissões', () => {
+  it('não redefine fn_permissoes_catalogo', () => {
+    // A cadeia já se partiu uma vez neste projeto, quando duas migrations
+    // disputaram o topo e `tickets_excluir` sumiu em silêncio. Não havendo
+    // chave nova a pedir, o jeito mais seguro de não partir a cadeia é não
+    // tocá-la.
+    expect(C6).not.toContain('CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo()');
+  });
+
+  it('reusa `ver_vendas` e o escopo que já existem', () => {
+    expect(C6).toContain("fn_user_escopo('vendas')");
   });
 });
