@@ -133,9 +133,15 @@ e o jeito mais seguro de não partir a cadeia é não tocá-la.
 
 ## 3. Migrations — o que existe e o que está mal registrado
 
-14 arquivos no repo, **todos aplicados**. Das 11 primeiras há **12 versões
-registradas**; as três últimas (Fases 7/8/9) não tiveram a versão conferida —
-`list_migrations` também é consulta ao banco e pede o seu próprio «pode».
+14 arquivos no repo, **todos aplicados e todos registrados**. O de-para abaixo
+está completo: as três últimas linhas, que este arquivo dava como «versão não
+conferida», foram lidas em 15/09 com autorização.
+
+> **O repair foi feito** em 15/09 — e não só o do Comercial: a conferência
+> descobriu **22 arquivos de sessões anteriores** também sem registro, e as 22
+> foram provadas no schema antes de marcar. Resultado: **248 de 248** arquivos
+> do repo registrados, zero que `db push` reaplicaria. Ver
+> [`COMERCIAL-MIGRATION-REPAIR.md`](COMERCIAL-MIGRATION-REPAIR.md).
 
 | arquivo | registrado como |
 |---|---|
@@ -150,39 +156,41 @@ registradas**; as três últimas (Fases 7/8/9) não tiveram a versão conferida 
 | `20260915180000_projetar_o_insert_que_eu_redigitei_errado` | `20260915183032` |
 | `20260915190000_o_relatorio_sempre_trouxe_o_cliente` | `20260915184604` |
 | `20260915200000_vendas_fase7_indicacoes` | `20260915185605` |
-| `20260915210000_vendas_fase7_corrigir_indicacao` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
-| `20260915220000_vendas_fase8_feedback_e_ausencias` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
-| `20260915230000_vendas_fase9_placar_e_paineis` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
+| `20260915210000_vendas_fase7_corrigir_indicacao` | `20260915195145` |
+| `20260915220000_vendas_fase8_feedback_e_ausencias` | `20260915195452` |
+| `20260915230000_vendas_fase9_placar_e_paineis` | `20260915213958` |
 
-As duas foram aplicadas na ordem dos nomes, e as duas terminaram o bloco de
-verificação sem erro (cadeia do catálogo inteira, 14 abas, 10 chaves novas).
-A versão com que o MCP as registrou não foi lida: `list_migrations` também é
-consulta ao banco e pede o seu próprio «pode».
+As três foram aplicadas na ordem dos nomes, e as três terminaram o bloco de
+verificação sem erro (cadeia do catálogo inteira, 14 abas, as chaves novas).
 
 O MCP do Supabase **carimba a versão com a hora da aplicação, não com o nome do
 arquivo**. `20260915173729` (`vendas_fechamento_do_setor_com_portao_de_escopo`)
 não tem arquivo próprio: é um segundo `apply_migration` cujo conteúdo foi
 dobrado dentro do arquivo da Fase 6.
 
-### ⚠️ Antes de qualquer `supabase db push`
+### `supabase db push` já pode rodar
 
-O passo a passo completo, com o que conferir entre um comando e o outro, está
-em [`COMERCIAL-MIGRATION-REPAIR.md`](COMERCIAL-MIGRATION-REPAIR.md).
+**O repair foi feito em 15/09**, com autorização, e conferido: **248 de 248**
+arquivos do repo registrados. `db push` não reaplicaria nenhum.
 
-Sem reconciliar, ele reaplica os 13 arquivos.
+A CLI não pôde ser usada (`LegacyPlatformAuthRequiredError` — `supabase login`
+abre navegador), então foi pelo MCP, com o `INSERT` que é exatamente o que
+`repair --status applied` grava. **36 versões**: as 14 do Comercial e 22 de
+sessões anteriores que a conferência descobriu e que ninguém tinha mapeado.
 
-```bash
-supabase migration repair --status applied \
-  20260915100000 20260915110000 20260915120000 20260915130000 \
-  20260915140000 20260915150000 20260915160000 20260915170000 \
-  20260915180000 20260915190000 20260915200000 20260915210000 \
-  20260915220000 20260915230000
-```
+Nenhuma foi marcada no escuro — 8 casaram por nome com a versão carimbada pela
+hora, e as outras 14 tiveram o objeto que criam encontrado no schema. O roteiro,
+a prova de cada uma e as duas ciladas do caminho estão em
+[`COMERCIAL-MIGRATION-REPAIR.md`](COMERCIAL-MIGRATION-REPAIR.md).
 
-E decidir o que fazer com `20260915173729`, que não tem arquivo — o provável é
-marcá-la `reverted`, já que o conteúdo dela vive na Fase 6.
+Os **90 registros órfãos** — versões carimbadas pela hora que duplicam um
+arquivo, como `20260915173729` — **ficaram**. Apagar é `DELETE` no histórico de
+produção, e `db push` compara arquivo local contra versão remota: registro a
+mais nunca fez ele reaplicar nada.
 
-**Não rodei.** Precisa de autorização e de alguém com a CLI logada.
+> ⚠️ A causa continua de pé. Toda migration nova aplicada pelo MCP nasce com
+> versão carimbada pela hora, e recria o desencontro — o repair vira rotina de
+> fim de fase, não conserto de uma vez.
 
 ---
 
@@ -429,7 +437,7 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
 - [ ] **Abrir a aba** logado como líder e como gerência: lançar uma ausência,
       registrar um feedback, corrigir uma indicação. Nada disso foi exercido
       contra o banco — só os testes estáticos do SQL.
-- [ ] **`supabase migration repair`** das duas versões novas junto com as de §3.
+- [x] **`supabase migration repair`** — feito 15/09, e alcançou 36 versões (as 14 do Comercial + 22 anteriores). Ver §3.
 
 Falta conferir se `pg_cron` agendou `ausencias-iniciar-ferias`
 (`SELECT jobname, schedule FROM cron.job`) — o `DO` pula o agendamento em
@@ -529,7 +537,7 @@ já nasce coberta.
       o tipo existe. Não foi feito junto — é arquivo por arquivo, com a suíte
       verificando cada um, e misturá-lo num commit de 3.000 linhas de tipo
       geradas tornaria impossível revisar qualquer uma das duas coisas.
-- [ ] **`supabase migration repair`** — ver §3.
+- [x] **`supabase migration repair`** — feito 15/09. Ver §3 e [`COMERCIAL-MIGRATION-REPAIR.md`](COMERCIAL-MIGRATION-REPAIR.md).
 - [ ] **64 franquias em estado `novo`**, de outros setores e operações. Não é
       erro: é franquia que ninguém vinculou. Aparecem na gaveta `sem_franquia`
       do Fechamento, com valor.

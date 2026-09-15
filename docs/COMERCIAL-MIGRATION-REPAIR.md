@@ -1,17 +1,77 @@
 # `supabase migration repair` — o passo a passo
 
-> Escrito em 15/09/2026, para ser executado por uma pessoa com a CLI logada.
-> Um agente não consegue: `supabase login` abre navegador, e `db push` escreve
-> em produção. O que está aqui é o roteiro, com o que conferir entre um passo e
-> o outro.
+> **Já foi feito em 15/09/2026**, com autorização — e não pela CLI. Este
+> arquivo virou as duas coisas: o registro do que foi corrigido (e como ficou
+> provado) e o roteiro para a próxima vez. Ver «O que foi feito» logo abaixo.
+
+---
+
+## O que foi feito, em 15/09/2026
+
+**Resultado: 248 de 248 arquivos locais registrados. `db push` não reaplicaria
+nenhum.** Antes eram 226 de 248.
+
+A CLI não pôde ser usada — `supabase projects list` respondeu
+`LegacyPlatformAuthRequiredError`, e `supabase login` abre navegador. O repair
+foi feito pelo MCP, com o `INSERT` que é exatamente o que
+`repair --status applied` grava: `version` e `name`, `statements` nulo. Nenhum
+SQL de migration foi reexecutado, nenhuma tabela de aplicação foi tocada,
+`ON CONFLICT (version) DO NOTHING` em tudo.
+
+Foram **36 versões**, em duas levas:
+
+| leva | quantas | o que era |
+|---|---|---|
+| Comercial | 14 | `20260915100000`…`20260915230000`, as Fases 1–9 |
+| anteriores | 22 | `20260908150000`…`20260914220000` — Mestre 59, Números, Assistente ADM, Comissão, Tickets, Chat |
+
+### As 22 apareceram por acaso, e é a parte que importa
+
+A conferência depois do primeiro repair perguntou «que arquivo local o banco
+ainda não conhece?» — e voltou com 22 de sessões anteriores que ninguém tinha
+mapeado. A tabela do §3 do estado só cobria o Comercial.
+
+**Nenhuma delas foi marcada no escuro.** Marcar como aplicada uma migration que
+nunca rodou é o erro pior desta operação: ela não roda nunca mais, e o erro só
+aparece quando alguém clica num botão que depende dela. A prova veio em duas
+formas:
+
+- **8 casaram por NOME** com uma versão carimbada pela hora — mesmo nome,
+  timestamp de aplicação. É a assinatura do MCP.
+- **14 não tinham par de nome**, e para essas a prova foi o OBJETO no schema,
+  como manda a regra da casa: `to_regprocedure`, `to_regclass`, `pg_proc`,
+  `pg_constraint`, `information_schema.columns`. As 14 voltaram `true`.
+
+Duas ciladas nessa conferência, as duas reais:
+
+1. **Três arquivos escrevem o SQL em minúsculas** (`create or replace function`),
+   e um `grep` por `CREATE` passou direto por elas. Um agente apressado
+   concluiria «não cria objeto nenhum» e marcaria sem prova.
+2. **`contribuicao_receptivo_no_analitico` não cria função nova em cima**: ela
+   troca um `CHECK` e acrescenta uma coluna. A primeira tentativa procurou
+   colunas com nomes que eu **chutei**, e voltou `false` — o que, aceito sem
+   desconfiança, teria dito que a migration não rodou. A prova certa foi ler o
+   `ALTER TABLE` do arquivo: `analitico_recebimentos.contribuicao_de_setor_id`
+   e o valor `contribuicao_59` dentro do `CHECK`. As duas estavam no banco.
+
+### Os 90 registros órfãos ficaram
+
+São versões carimbadas pela hora que duplicam um arquivo (`20260915124540` é a
+Fase 1, `20260915173729` é a metade da Fase 6 aplicada em segunda chamada), mais
+resíduo de sessões antigas. **Não foram apagados.** Apagar é `DELETE` no
+histórico de produção, e o ganho seria cosmético: `db push` compara arquivo
+local contra versão remota, e registro a mais nunca fez ele reaplicar nada.
 
 ---
 
 ## Por que isto precisa existir
 
-O histórico em `supabase_migrations.schema_migrations` está **defasado**. As
-migrations do Comercial foram aplicadas pelo **MCP**, que carimba a versão com
-a **hora da aplicação**, e não com o nome do arquivo:
+*(Escrito antes do repair, e mantido no presente porque a causa continua de
+pé: a próxima migration aplicada pelo MCP recria o mesmo desencontro.)*
+
+O histórico em `supabase_migrations.schema_migrations` fica **defasado** a
+cada aplicação pelo **MCP**, que carimba a versão com a **hora da aplicação**,
+e não com o nome do arquivo:
 
 ```
 arquivo  20260915100000_vendas_fase1.sql
@@ -75,25 +135,31 @@ arquivos — é só o registro.
 **Quantas linhas:** 14 inserções na tabela de histórico. Nenhuma outra tabela é
 tocada.
 
-> ⚠️ Só inclua `20260915230000` **depois** de a migration da Fase 9 ter sido
-> aplicada de verdade. Marcá-la como aplicada sem ter rodado é pior do que não
-> marcar: `db push` passaria por cima dela para sempre, e
-> `fn_vendas_placar_pessoas` nunca existiria.
+> ⚠️ **A regra que vale para toda versão desta lista:** só marque como aplicada
+> a que você PROVOU que rodou. Marcar no escuro é pior do que não marcar —
+> `db push` passa por cima dela para sempre, e o objeto que ela cria nunca
+> existe. Em 15/09 a prova foi nome casado ou objeto no schema; ver «O que foi
+> feito» no topo.
 
 ---
 
-## A versão órfã
+## As versões órfãs
 
 ```
 20260915173729   vendas_fechamento_do_setor_com_portao_de_escopo
 ```
 
-Ela **não tem arquivo**. É um segundo `apply_migration` cujo conteúdo foi
+Ela **não tem arquivo**: é um segundo `apply_migration` cujo conteúdo foi
 dobrado dentro de `20260915160000_vendas_fase6_a_conta_do_setor_fecha.sql`.
 
-O provável certo é marcá-la revertida — o conteúdo vive na Fase 6, e deixá-la
-no histórico faz `migration list` mostrar uma linha remota sem par local para
-sempre:
+E não está sozinha — são **90** assim no histórico, quase todas o par
+carimbado-pela-hora de um arquivo que também está registrado pelo nome dele.
+
+**Decidido em 15/09: ficam.** Apagar é `DELETE` no histórico de produção, e o
+ganho seria cosmético — `db push` compara arquivo local contra versão remota,
+e registro a mais nunca fez ele reaplicar nada.
+
+Se um dia alguém quiser a limpeza, o comando é este, uma versão por vez:
 
 ```bash
 supabase migration repair --status reverted 20260915173729
@@ -112,7 +178,8 @@ nada.
 supabase migration list
 ```
 
-Todo arquivo `20260915*` deve aparecer com `Local` **e** `Remote` preenchidos.
+Todo arquivo deve aparecer com `Local` **e** `Remote` preenchidos. Em 15/09,
+conferido fora da CLI: **248 de 248**.
 
 E então, e só então:
 
