@@ -150,6 +150,61 @@ export async function salvarLote(params: {
   };
 }
 
+/**
+ * Corrige uma indicação — inclusive QUEM indicou, que é o erro mais provável
+ * quando o líder cadastra pelo operador (migration 20260915210000).
+ *
+ * Setor e equipe só mudam no banco quando o operador muda: corrigir o telefone
+ * de uma indicação de março não a puxa para a equipe de hoje. Nome que colide
+ * com outra instituição volta recusado com quem e quando.
+ */
+export async function corrigirIndicacao(params: {
+  id: string;
+  operadorId: string;
+  instituicao: string;
+  gestora: string | null;
+  telefone: string | null;
+  dataIndicacao: string;
+  observacao: string | null;
+}): Promise<Resultado<string>> {
+  const { data, error } = await rpcSemTipo<string>('fn_indicacao_corrigir', {
+    p_id:             params.id,
+    p_operador_id:    params.operadorId,
+    p_instituicao:    params.instituicao,
+    p_gestora:        params.gestora,
+    p_telefone:       params.telefone,
+    p_data_indicacao: params.dataIndicacao,
+    p_observacao:     params.observacao,
+  });
+  if (error) {
+    return {
+      ok: false,
+      dado: null,
+      erro: mensagemDoErro(error.message, 'A correção de indicação', '20260915210000_vendas_fase7_corrigir_indicacao.sql'),
+    };
+  }
+  return { ok: true, dado: data ?? null, erro: null };
+}
+
+/** Quem pode aparecer como «quem indicou». Gente de verdade, e ainda na casa. */
+export interface PessoaQueIndica {
+  id: string;
+  nome: string;
+}
+
+export async function buscarQuemPodeIndicar(empresaId: string): Promise<PessoaQueIndica[]> {
+  const { data, error } = await tabelaSemTipo<Record<string, unknown>>('perfis')
+    .select('id, nome, situacao, robo')
+    .eq('empresa_id', empresaId)
+    .order('nome', { ascending: true });
+
+  if (error || !data) return [];
+  // Robô não visita escola, e desligado não volta com oito nomes.
+  return data
+    .filter(p => p.situacao !== 'desligado' && p.robo !== true)
+    .map(p => ({ id: String(p.id), nome: String(p.nome ?? '—') }));
+}
+
 export async function excluirIndicacao(id: string): Promise<Resultado<string>> {
   const { data, error } = await rpcSemTipo<string>('fn_indicacao_excluir', { p_id: id });
   if (error) return { ok: false, dado: null, erro: traduzir(error.message) };

@@ -780,3 +780,196 @@ describe('indicações', () => {
     expect(policy).toContain('TO authenticated');
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Fase 7 (continuação) — corrigir indicação
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('corrigir indicação', () => {
+  const F7B = migration('_vendas_fase7_corrigir_indicacao.sql');
+  const corpo = compacto(corpoDaFuncao(F7B, 'fn_indicacao_corrigir'));
+
+  it('exige `editar_indicacoes` — a chave que a Fase 7 criou e nada usava para corrigir', () => {
+    expect(corpo).toMatch(/NOT public\.fn_user_tem\('editar_indicacoes'\) THEN RAISE EXCEPTION/);
+  });
+
+  it('nome que colide com OUTRA linha é recusado com quem e quando', () => {
+    // A própria linha, só reescrita em maiúsculas, não conta.
+    expect(corpo).toContain('AND i.id <> p_id');
+    expect(corpo).toContain('LOWER(BTRIM(i.instituicao)) = LOWER(v_nome)');
+    expect(corpo).toMatch(/IF FOUND THEN RAISE EXCEPTION '«%» já foi indicada por % em %\.'/);
+  });
+
+  it('setor e equipe só mudam quando QUEM indicou muda', () => {
+    // Corrigir o telefone de uma indicação de março não a puxa para a equipe de hoje.
+    expect(corpo).toMatch(
+      /IF v_operador <> v_linha\.operador_id THEN[\s\S]*?fn_vendas_equipe_que_credita\(v_operador\)[\s\S]*?ELSE v_setor := v_linha\.setor_id; v_equipe := v_linha\.equipe_id;/,
+    );
+    expect(corpo).not.toMatch(/p\.equipe_id INTO/);
+  });
+
+  it('não é executável por PUBLIC', () => {
+    expect(compacto(F7B)).toContain(
+      'REVOKE ALL ON FUNCTION public.fn_indicacao_corrigir(UUID, UUID, TEXT, TEXT, TEXT, DATE, TEXT) FROM PUBLIC',
+    );
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Fase 8 — feedback e ausências
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('feedback e ausências', () => {
+  const FASE8 = migration('_vendas_fase8_feedback_e_ausencias.sql');
+  const C8 = compacto(FASE8);
+
+  it('a cadeia do catálogo parte do topo de VERDADE, que é a Fase 7', () => {
+    expect(C8).toContain(
+      'SELECT * FROM public.fn_permissoes_catalogo_antes_indicacoes_20260915()',
+    );
+    const congelada = C8.slice(
+      C8.indexOf('fn_permissoes_catalogo_antes_acompanhamento_20260915'),
+      C8.indexOf('CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo()'),
+    );
+    // O retrato REPETE as oito chaves da Fase 7. Sem elas, somem do catálogo.
+    for (const chave of [
+      'ver_indicacoes', 'criar_indicacoes', 'editar_indicacoes', 'excluir_indicacoes',
+      'indicacoes_escopo_individual', 'indicacoes_escopo_equipe',
+      'indicacoes_escopo_setor', 'indicacoes_escopo_todos_setores',
+    ]) {
+      expect(congelada, `o retrato perdeu ${chave}`).toContain(`'${chave}'`);
+    }
+    expect(C8).toContain(
+      'SELECT * FROM public.fn_permissoes_catalogo_antes_acompanhamento_20260915() UNION ALL',
+    );
+  });
+
+  it('a migration recusa aplicar se a cadeia tiver perdido alguma chave', () => {
+    expect(C8).toContain("chave = 'tickets_excluir'");
+    expect(C8).toContain("chave = 'editar_metas_vendas'");
+    expect(C8).toContain("chave = 'excluir_indicacoes'");
+  });
+
+  it('o operador fica fora da aba e dos feedbacks por padrão', () => {
+    const novas = C8.slice(
+      C8.indexOf('CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo()'),
+      C8.indexOf('COMMENT ON FUNCTION public.fn_permissoes_catalogo()'),
+    );
+    for (const chave of ['ver_acompanhamento', 'ver_feedbacks', 'registrar_feedbacks', 'excluir_feedbacks']) {
+      const linha = novas.slice(novas.indexOf(`('${chave}'`), novas.indexOf('false)', novas.indexOf(`('${chave}'`)));
+      expect(linha, `${chave} nasceu ligada para operador`).not.toContain("'operador'");
+    }
+  });
+
+  it('escopo PRÓPRIO, com os quatro níveis, e nenhuma aba antiga se perdeu', () => {
+    expect(C8).toContain("('acompanhamento', 'ver_acompanhamento')");
+    for (const aba of ['vendas', 'indicacoes', 'fechamento', 'chips', 'rh', 'usuarios', 'analitico']) {
+      expect(C8, `a aba ${aba} sumiu de fn_abas_escopo`).toContain(`('${aba}',`);
+    }
+    for (const nivel of ['individual', 'equipe', 'setor', 'todos_setores']) {
+      expect(C8, `falta acompanhamento_escopo_${nivel}`).toContain(`'acompanhamento_escopo_${nivel}'`);
+    }
+    expect(C8).toContain('IF n <> 14 THEN');
+  });
+
+  it('o alcance é pela equipe de HOJE: as tabelas não congelam setor nem equipe', () => {
+    for (const tabela of ['feedbacks', 'ausencias']) {
+      const i = C8.indexOf(`CREATE TABLE IF NOT EXISTS public.${tabela} (`);
+      const ddl = C8.slice(i, C8.indexOf(');', i));
+      expect(ddl, `${tabela} guarda setor_id`).not.toContain('setor_id');
+      expect(ddl, `${tabela} guarda equipe_id`).not.toContain('equipe_id');
+    }
+  });
+
+  it('uma função só decide o alcance, e as duas policies a chamam em subconsulta', () => {
+    const fb = C8.slice(C8.indexOf('CREATE POLICY feedbacks_select'), C8.indexOf('ALTER TABLE public.ausencias ENABLE'));
+    const au = C8.slice(C8.indexOf('CREATE POLICY ausencias_select'), C8.indexOf('CREATE OR REPLACE FUNCTION public.fn_ausencias_espelhar_ferias'));
+    for (const policy of [fb, au]) {
+      expect(policy).toContain('operador_id IN (SELECT public.fn_acompanhamento_alcancados())');
+      expect(policy).toContain('TO authenticated');
+    }
+    // Ler o texto do feedback é chave própria — quem lança atestado não lê coaching.
+    expect(fb).toContain("(SELECT public.fn_user_tem('ver_feedbacks'))");
+    expect(au).not.toContain('ver_feedbacks');
+  });
+
+  it('o alcance tem as três portas de fn_setores_do_operador, nos níveis setor e equipe', () => {
+    const corpo = compacto(corpoDaFuncao(FASE8, 'fn_acompanhamento_alcancados'));
+    expect(corpo).toContain("public.fn_user_escopo('acompanhamento')");
+    expect(corpo).toContain('FROM public.equipe_operadores_clones c');
+    expect(corpo).toContain('FROM public.equipe_lideres l');
+    expect(corpo).toContain('public.fn_equipes_com_lideranca((SELECT id FROM eu))');
+    // Sem a aba (-1), nem a própria pessoa.
+    expect(corpo).toContain('WHERE (SELECT n FROM nivel) >= 0');
+  });
+
+  it('as RPCs perguntam o alcance com NOT EXISTS — NOT IN com NULL deixaria passar', () => {
+    const sem = semComentarios(FASE8);
+    expect(sem).not.toMatch(/NOT IN \(SELECT public\.fn_acompanhamento_alcancados\(\)\)/);
+    for (const fn of ['fn_feedback_salvar', 'fn_feedback_excluir', 'fn_ausencia_salvar', 'fn_ausencia_excluir']) {
+      expect(compacto(corpoDaFuncao(FASE8, fn)), `${fn} não confere alcance`)
+        .toMatch(/IF NOT EXISTS \( SELECT 1 FROM public\.fn_acompanhamento_alcancados\(\) AS a\(id\) WHERE a\.id = [a-z_.]+ \) THEN RAISE EXCEPTION/);
+    }
+  });
+
+  it('nenhuma policy de escrita — grava-se só por RPC', () => {
+    const sem = semComentarios(FASE8);
+    expect(sem).not.toMatch(/CREATE POLICY [a-z_]+ ON public\.(feedbacks|ausencias|ausencias_tipos)\s+FOR (INSERT|UPDATE|DELETE|ALL)/);
+  });
+
+  it('feedback: autor congelado, sobre outra pessoa, sem data futura, corrigido só pelo autor', () => {
+    const corpo = compacto(corpoDaFuncao(FASE8, 'fn_feedback_salvar'));
+    expect(C8).toContain('autor_nome TEXT NOT NULL');
+    expect(corpo).toMatch(/IF p_operador_id = \(SELECT auth\.uid\(\)\) THEN RAISE EXCEPTION/);
+    expect(corpo).toMatch(/IF p_data_feedback > v_hoje THEN RAISE EXCEPTION/);
+    expect(corpo).toMatch(/IF v_linha\.autor_id IS DISTINCT FROM \(SELECT auth\.uid\(\)\) THEN RAISE EXCEPTION/);
+  });
+
+  it('ausência: sobreposição recusada, com a pessoa travada contra corrida', () => {
+    const corpo = compacto(corpoDaFuncao(FASE8, 'fn_ausencia_salvar'));
+    // Dois períodos cobrindo o mesmo dia contariam esse dia duas vezes na meta.
+    expect(corpo).toContain('AND a.id IS DISTINCT FROM p_id AND a.inicio <= p_fim AND a.fim >= p_inicio');
+    expect(corpo).toMatch(/PERFORM 1 FROM public\.perfis p WHERE p\.id = p_operador_id AND p\.empresa_id = p_empresa_id FOR UPDATE;/);
+    // A trava vem ANTES da conferência de sobreposição, senão não trava nada.
+    expect(corpo.indexOf('FOR UPDATE')).toBeLessThan(corpo.indexOf('a.inicio <= p_fim'));
+    expect(C8).toContain('CONSTRAINT ausencias_meio_periodo_um_dia CHECK (NOT meio_periodo OR inicio = fim)');
+  });
+
+  it('férias: a ausência manda, e o espelho só desfaz o que ele pôs', () => {
+    const espelho = compacto(corpoDaFuncao(FASE8, 'fn_ausencias_espelhar_ferias'));
+    expect(espelho).toContain("AND p.situacao <> 'desligado'");
+    expect(espelho).toMatch(
+      /SET situacao = 'ativo',[\s\S]*?AND p\.ferias_desde IS NOT DISTINCT FROM p_antes_inicio AND p\.ferias_ate IS NOT DISTINCT FROM p_antes_fim/,
+    );
+    // As duas escritas chamam o espelho, com o que a linha era ANTES.
+    expect(compacto(corpoDaFuncao(FASE8, 'fn_ausencia_salvar')))
+      .toContain('PERFORM public.fn_ausencias_espelhar_ferias( p_operador_id, v_antes.tipo, v_antes.inicio, v_antes.fim )');
+    expect(compacto(corpoDaFuncao(FASE8, 'fn_ausencia_excluir')))
+      .toContain('PERFORM public.fn_ausencias_espelhar_ferias( v_linha.operador_id, v_linha.tipo, v_linha.inicio, v_linha.fim )');
+    // Exposto, deixaria qualquer um trocar a situação de qualquer perfil.
+    expect(C8).toContain(
+      'REVOKE ALL ON FUNCTION public.fn_ausencias_espelhar_ferias(UUID, TEXT, DATE, DATE) FROM PUBLIC, anon, authenticated',
+    );
+  });
+
+  it('férias futuras começam sozinhas, DEPOIS do encerramento diário', () => {
+    // 03:15 UTC encerra as vencidas (20260901100000); 03:20 começa as novas.
+    expect(C8).toContain("cron.schedule('ausencias-iniciar-ferias', '20 3 * * *'");
+    const corpo = compacto(corpoDaFuncao(FASE8, 'fn_ausencias_iniciar_ferias_diario'));
+    expect(corpo).toContain("AND p.situacao = 'ativo'");
+    expect(C8).toContain(
+      'REVOKE ALL ON FUNCTION public.fn_ausencias_iniciar_ferias_diario() FROM PUBLIC, anon, authenticated',
+    );
+  });
+
+  it('a lista de pessoas não entrega resumo de feedback a quem não lê feedback', () => {
+    const corpo = compacto(corpoDaFuncao(FASE8, 'fn_acompanhamento_pessoas'));
+    // DEFINER passa por cima da RLS de feedbacks — a trava tem que estar aqui.
+    expect(corpo).toContain("CASE WHEN public.fn_user_tem('ver_feedbacks') THEN f.quantidade END");
+    expect(corpo).toContain("CASE WHEN public.fn_user_tem('ver_feedbacks') THEN f.ultimo END");
+    expect(corpo).toContain('p.id IN (SELECT public.fn_acompanhamento_alcancados())');
+    expect(corpo).toContain('NOT COALESCE(p.robo, false)');
+    // Equipe pela liderança, como no resto do Comercial.
+    expect(corpo).toContain('public.fn_vendas_equipe_que_credita(p.id)');
+  });
+});

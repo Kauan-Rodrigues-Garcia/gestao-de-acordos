@@ -1,7 +1,9 @@
 # Comercial / Vendas — estado e pendências
 
 > **Escrito para quem pega isto do zero**, humano ou agente. Fechado em
-> **15/09/2026**, fim da sessão. O plano original continua em
+> **15/09/2026**, fim da sessão, e **atualizado no mesmo dia** com a
+> continuação da Fase 7 e a Fase 8 — escritas, testadas e **aplicadas em
+> produção pelo MCP** em 15/09/2026 (ver §3 e §6.0). Código ainda sem commit. O plano original continua em
 > [`PLANO-COMERCIAL-VENDAS.md`](PLANO-COMERCIAL-VENDAS.md) — este arquivo diz
 > o que daquilo virou realidade, o que mudou de ideia pelo caminho e o que
 > falta, com detalhe suficiente para continuar sem reabrir a investigação.
@@ -120,8 +122,8 @@ catálogo atual, e redefine `fn_permissoes_catalogo()` como
 Chegar pelo elo errado **derruba as chaves do elo pulado, sem erro nenhum**.
 Já aconteceu uma vez aqui (`tickets_excluir` sumiu).
 
-Topo atual: **`fn_permissoes_catalogo_antes_indicacoes_20260915`**
-(migration `20260915200000`).
+Topo atual: **`fn_permissoes_catalogo_antes_acompanhamento_20260915`**
+(migration `20260915220000`, Fase 8). Chave nova encadeia a partir desta.
 
 A Fase 6 **não tocou** o catálogo de propósito — não havia chave nova a pedir,
 e o jeito mais seguro de não partir a cadeia é não tocá-la.
@@ -130,7 +132,8 @@ e o jeito mais seguro de não partir a cadeia é não tocá-la.
 
 ## 3. Migrations — o que existe e o que está mal registrado
 
-11 arquivos no repo, **12 versões registradas**. Todas aplicadas.
+13 arquivos no repo, todos aplicados. Das 11 primeiras há **12 versões
+registradas**; as 2 últimas não tiveram a versão conferida.
 
 | arquivo | registrado como |
 |---|---|
@@ -145,6 +148,13 @@ e o jeito mais seguro de não partir a cadeia é não tocá-la.
 | `20260915180000_projetar_o_insert_que_eu_redigitei_errado` | `20260915183032` |
 | `20260915190000_o_relatorio_sempre_trouxe_o_cliente` | `20260915184604` |
 | `20260915200000_vendas_fase7_indicacoes` | `20260915185605` |
+| `20260915210000_vendas_fase7_corrigir_indicacao` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
+| `20260915220000_vendas_fase8_feedback_e_ausencias` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
+
+As duas foram aplicadas na ordem dos nomes, e as duas terminaram o bloco de
+verificação sem erro (cadeia do catálogo inteira, 14 abas, 10 chaves novas).
+A versão com que o MCP as registrou não foi lida: `list_migrations` também é
+consulta ao banco e pede o seu próprio «pode».
 
 O MCP do Supabase **carimba a versão com a hora da aplicação, não com o nome do
 arquivo**. `20260915173729` (`vendas_fechamento_do_setor_com_portao_de_escopo`)
@@ -153,13 +163,14 @@ dobrado dentro do arquivo da Fase 6.
 
 ### ⚠️ Antes de qualquer `supabase db push`
 
-Sem reconciliar, ele reaplica os 11 arquivos.
+Sem reconciliar, ele reaplica os 13 arquivos.
 
 ```bash
 supabase migration repair --status applied \
   20260915100000 20260915110000 20260915120000 20260915130000 \
   20260915140000 20260915150000 20260915160000 20260915170000 \
-  20260915180000 20260915190000 20260915200000
+  20260915180000 20260915190000 20260915200000 20260915210000 \
+  20260915220000
 ```
 
 E decidir o que fazer com `20260915173729`, que não tem arquivo — o provável é
@@ -211,6 +222,69 @@ A mesma instituição não pode ser indicada duas vezes — sem isso o ranking
 premia quem cadastrou mais rápido, não quem prospectou melhor. **Se a regra for
 outra** (reindicar a cada campanha), troque o índice por `(empresa, instituicao, mês)`.
 
+### Fase 7 — continuação: corrigir e cadastrar por outro
+
+`20260915210000`, aplicada. A chave `editar_indicacoes` prometia
+«corrigir uma indicação e cadastrar em nome de outra pessoa» e só a segunda
+metade existia no banco — e nenhuma das duas na tela: o lote gravava sempre em
+nome de quem estava logado.
+
+- **`fn_indicacao_corrigir`** — instituição, gestora, telefone, data,
+  observação e **quem indicou**. Setor e equipe só são recalculados quando o
+  operador muda (o congelamento de `vendas` continua valendo). Nome que colide
+  com outra linha volta recusado com quem e quando.
+- **Tela:** seletor «em nome de» acima da lista e lápis em cada linha, os dois
+  atrás de `editar_indicacoes`. Robôs e desligados ficam fora do seletor.
+
+### Fase 8 — feedback e ausências
+
+`20260915220000`, aplicada. Rota `/vendas/acompanhamento`, menu
+«Acompanhamento».
+
+| | |
+|---|---|
+| `feedbacks` | operador, autor, **`autor_nome` congelado**, data, texto (≤ 5.000) |
+| `ausencias` | operador, tipo, início, fim (inclusive), meio período, observação |
+| `ausencias_tipos` | 10 tipos com `abate_meta` — referência global |
+| Permissões | 10: aba + 4 escopos, `ver_/registrar_/excluir_feedbacks`, `registrar_/excluir_ausencias` |
+| Escopo | aba própria `acompanhamento` em `fn_abas_escopo()` — 14 abas |
+
+**Quatro decisões, todas de 15/09/2026:**
+
+1. **Férias: a ausência manda, `perfis` espelha.** Lançar/corrigir/excluir
+   férias que cobrem hoje atualiza `perfis.situacao/ferias_desde/ferias_ate`
+   na hora (`fn_ausencias_espelhar_ferias`). Férias futuras começam sozinhas às
+   00:20 de SP (`ausencias-iniciar-ferias`, cinco minutos depois do
+   `ferias-encerrar-vencidas` de 20260901100000, que continua fazendo o
+   retorno). O espelho só desfaz o que ele pôs: reverte `perfis` apenas se as
+   datas de lá forem exatamente as da ausência que saiu. ⚠️ Marcar férias pela
+   tela de **Usuários** continua mexendo só em `perfis` e **não** cria ausência.
+2. **Feedback é da liderança.** Operador fora de `ver_acompanhamento` e de
+   `ver_feedbacks` por padrão. `ver_feedbacks` é separada da aba: quem lança
+   atestado não precisa ler coaching.
+3. **Alcance pela equipe de HOJE**, ao contrário de `vendas` e `indicacoes`:
+   o líder que recebe um transferido lê o histórico dele desde o início. As
+   tabelas não guardam setor nem equipe; `fn_acompanhamento_alcancados()` é a
+   única cópia da regra (as duas policies, as quatro RPCs e a lista de pessoas).
+4. **Sem desconto na meta ainda.** `abate_meta` já está gravado por tipo para a
+   ligação futura — ver §6.5.
+
+**Travas que valem registro:**
+
+- Sobreposição de ausência para a mesma pessoa é recusada. A corrida é fechada
+  com `FOR UPDATE` na linha de `perfis`, porque `EXCLUDE USING gist` exigiria
+  `btree_gist`, que nenhuma migration instala.
+- As RPCs perguntam o alcance com `NOT EXISTS`. `x NOT IN (conjunto com NULL)`
+  dá NULL, o `IF` lê como falso e a recusa não acontece — há teste que proíbe.
+- Feedback é sobre **outra** pessoa, sem data futura, e corrigido só pelo autor.
+  Excluir é de gerência; ausência lançada errada, o líder exclui.
+- `fn_acompanhamento_pessoas` é DEFINER e por isso escreve a trava de
+  `ver_feedbacks` dentro dela: sem a chave, a contagem de feedback vem nula.
+
+**O que a planilha tinha e ficou de fora da ausência, de propósito:** FERIADO
+(é do calendário) e SAIU / TRANSFERIDO / DESPENSADO / REMANEJADA (movimentação
+de cadastro). A planilha **não foi importada** — nem feedback, nem ausência.
+
 ### Correções dentro da sessão
 
 | commit | o que |
@@ -220,6 +294,7 @@ outra** (reindicar a cada campanha), troque o índice por `(empresa, instituicao
 | `493c4d7` | três defeitos de ter redigitado a projeção |
 | `232375c` | o relatório sempre trouxe o cliente, o parser é que não lia |
 | `484922f` | Fase 7 |
+| — | Fase 7 (corrigir) e Fase 8 — **sem commit** até a revisão |
 
 ---
 
@@ -254,6 +329,20 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
 
 ## 6. PENDENTE
 
+### 6.0 Depois de aplicar as duas migrations novas
+
+- [x] `20260915210000_vendas_fase7_corrigir_indicacao.sql` — aplicada 15/09.
+- [x] `20260915220000_vendas_fase8_feedback_e_ausencias.sql` — aplicada 15/09.
+- [ ] **Commit** do código (tela, serviços, testes, este doc).
+- [ ] **Abrir a aba** logado como líder e como gerência: lançar uma ausência,
+      registrar um feedback, corrigir uma indicação. Nada disso foi exercido
+      contra o banco — só os testes estáticos do SQL.
+- [ ] **`supabase migration repair`** das duas versões novas junto com as de §3.
+
+Falta conferir se `pg_cron` agendou `ausencias-iniciar-ferias`
+(`SELECT jobname, schedule FROM cron.job`) — o `DO` pula o agendamento em
+silêncio quando a extensão não existe.
+
 ### 6.1 Precisa de um clique seu (não de código)
 
 - [ ] **Reimportar o CSV e reprojetar.** As 140 vendas estão com `cliente`
@@ -265,24 +354,26 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
 - [ ] **Configurar as metas** do setor e das 3 equipes. A Fase 5 está pronta e
       vazia — `/vendas/metas`.
 
-### 6.2 Fase 8 — feedback e ausências
+### 6.2 Fase 8 — o que sobrou
 
-Não começou. Do plano:
+Código entregue (§4). Falta:
 
-> `feedbacks` (operador, autor, data, texto) e `ausencias` (operador, tipo,
-> período: atestado, INSS, férias, banco de horas). Tela por operador, com
-> foto, filtrada por equipe e setor.
+- [ ] **Aplicar a migration** (§6.0).
+- [ ] **Ligar ausência à meta proporcional.** Andamento das Metas ainda cobra
+      o mês cheio de quem esteve fora. A regra de quais tipos descontam já está
+      em `ausencias_tipos.abate_meta`; a conta de dias úteis mora em
+      `@/lib/diasUteis`. Confirmar antes a leitura de `abate_meta` (§6.5).
+- [ ] **Importar o histórico da planilha**, se a operação quiser. Não foi feito:
+      as abas por operador trazem autores que não são contas do sistema
+      («Karina», «Priscila», «Gabrieli», «Carla») — por isso `autor_nome`
+      existe e aceita texto livre, mas `autor_id` ficaria nulo. O vocabulário
+      das células está no cabeçalho da migration.
+- [ ] **Férias marcadas pela tela de Usuários não viram ausência.** Aceito na
+      decisão; se incomodar, o conserto é a tela de Usuários chamar
+      `fn_ausencia_salvar` em vez de gravar `perfis` direto.
 
-Referência em `C:\Users\multiplay\Desktop\relatórios vendas\`:
-`Planilha De Feedback (1).xlsx` e `Planilha Mensal (1).xlsx`. **Não foram
-analisadas em detalhe** — a análise da pasta parou nas colunas do prospecção.
-
-Independente das outras fases. Ao criar as permissões, **chain a partir de
-`fn_permissoes_catalogo_antes_indicacoes_20260915`** (ver §2.5).
-
-Cuidado: `perfis` já tem `ferias_desde` / `ferias_ate` e `situacao='ferias'`.
-Uma tabela `ausencias` que também guarde férias cria **duas verdades** sobre a
-mesma coisa. Decidir qual manda antes de escrever.
+A planilha usada foi `Downloads\Vendas\Planilha De Feedback.xlsx` desta
+máquina. `Planilha Mensal.xlsx` **não** foi relida — o plano já a descrevia.
 
 ### 6.3 Fase 9 — painéis e herança
 
@@ -313,18 +404,24 @@ Não começou. Desbloqueada agora que a projeção rodou.
 | Instituição única para sempre, ou por campanha? | Implementado **para sempre**. Trocar = mudar o índice único (§4) |
 | Os robôs deveriam herdar a equipe do líder? | **Não** — ficaram sem equipe, para não inflar o número da equipe. O pedido era card separado |
 | `lyra_oliveira` | Saiu da empresa. Perfil existe como `desligado` só para a venda dela ter dono |
+| Quem manda nas férias: `ausencias` ou `perfis`? | **Decidido: `ausencias` manda**, `perfis` espelha (§4, Fase 8) |
+| Operador lê os próprios feedbacks? | **Decidido: não**, por padrão. Liga em Permissões (`ver_acompanhamento` + escopo individual + `ver_feedbacks`) |
+| Ausência desconta da meta já? | **Decidido: ainda não.** Só cadastro e tela |
+| Quais tipos descontam da meta? | **Leitura minha, a confirmar.** Descontam: férias, atestado, INSS, banco de horas, abono, declaração, licença. Não descontam: falta, suspensão, outros. Mudar = `UPDATE ausencias_tipos` + `TIPOS_AUSENCIA` em `src/lib/ausencias.ts` (há teste que compara os dois) |
+| Declaração vale dia inteiro? | Hoje sim, salvo quem marcar meio período. Declaração de comparecimento costuma cobrir horas — confirmar |
 
 ---
 
 ## 7. Onde as coisas moram
 
 ```
-supabase/migrations/20260915*.sql      as 11 migrations (cabeçalhos longos, leia-os)
+supabase/migrations/20260915*.sql      as 13 migrations (cabeçalhos longos, leia-os)
 
 src/lib/vendas.ts                      régua, gavetas, pareceLoginDeIa
 src/lib/vendasMeta.ts                  progresso e ritmo do mês
 src/lib/vendasFechamento.ts            as 4 igualdades que têm que fechar
 src/lib/indicacoes.ts                  parse da colagem, repetidas
+src/lib/ausencias.ts                   tipos (espelho de ausencias_tipos), dias, sobreposição
 
 src/services/vendas/
   prospeccaoParser.ts                  CSV geral — formato por coluna
@@ -333,18 +430,20 @@ src/services/vendas/
   importacaoVendas.service.ts
   metasVendas.service.ts
   fechamentoSetor.service.ts
-  indicacoes.service.ts
+  indicacoes.service.ts                inclui corrigir e «quem pode indicar»
+  acompanhamento.service.ts            pessoas, feedbacks, ausências
   erroDoBanco.ts                       separa «tabela ausente» de «vínculo ausente»
-  __tests__/vendas.sql.test.ts         contrato SQL das 7 fases
+  __tests__/vendas.sql.test.ts         contrato SQL das 8 fases
   __tests__/insertsBatem.sql.test.ts   aridade de todo INSERT
 
 src/pages/Vendas/
   index.tsx  FormularioVenda  FilaDoLider  Importacao  Projecao
   Conciliacao  Metas  AndamentoDasMetas  FechamentoDoSetor  Indicacoes
+  Acompanhamento  AcompanhamentoPessoa
 ```
 
 **Rotas:** `/vendas` · `/vendas/importar` · `/vendas/metas` ·
-`/vendas/fechamento` · `/vendas/indicacoes`.
+`/vendas/fechamento` · `/vendas/indicacoes` · `/vendas/acompanhamento`.
 
 ---
 
@@ -365,7 +464,6 @@ src/pages/Vendas/
   `MIN(x::TEXT)::UUID`.
 - **Cor de gráfico nunca é `hsl(var(--x))`.** As variáveis são `oklch` e o
   gráfico apaga sem erro. Por isso o gráfico de Indicações é CSS puro.
-- **Um teste falha e não é desta frente:**
-  `src/services/numeros/__tests__/numerosSituacoesPrazo.sql.test.ts`, por
-  `core.autocrlf=true`. Pré-existente e independente.
-  Suíte: **6.343 de 6.344 verdes.**
+- **`numerosSituacoesPrazo.sql.test.ts`** falhava por `core.autocrlf=true` na
+  máquina da sessão anterior. Nesta máquina passa.
+  Suíte após a Fase 8: **6.394 de 6.394 verdes**, `tsc` e `eslint` limpos.

@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Scale, Handshake,
+  ShoppingBag, Scale, Handshake, UsersRound,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -165,6 +165,9 @@ export const NAV_ITEMS: NavItem[] = [
   // `ver_vendas`: quem prospecta pode precisar do ranking do setor sem ver a
   // carteira de ninguém.
   { label: 'Indicações',       icon: Handshake,       to: ROUTE_PATHS.VENDAS_INDICACOES,   produtos: SO_COMERCIAL, permissaoKey: 'ver_indicacoes' },
+  // Acompanhamento — feedback e ausências de cada pessoa. Da liderança por
+  // padrão: os feedbacks são nota escrita para quem acompanha.
+  { label: 'Acompanhamento',   icon: UsersRound,      to: ROUTE_PATHS.VENDAS_ACOMPANHAMENTO, produtos: SO_COMERCIAL, permissaoKey: 'ver_acompanhamento' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },

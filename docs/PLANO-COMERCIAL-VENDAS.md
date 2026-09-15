@@ -568,16 +568,20 @@ valor, `TipoRecebimento` como classificação) · total por operador.
 E a **área de IA**: cadastro explícito de quais logins são robôs, qual robô é
 qual, e os recebimentos separados por robô, fora do placar humano.
 
-### Fase 7 — indicações
+### ✅ Fase 7 — indicações
 
 Tabela `indicacoes` — instituição, gestora, telefone, data, operador — com
-cadastro **manual** em lote, ranking e gráficos.
+cadastro **manual** em lote, ranking e gráficos. Aplicada (`20260915200000`).
+Corrigir e cadastrar por outro: `20260915210000`, aplicada 15/09/2026.
 
-### Fase 8 — feedback e ausências
+### ✅ Fase 8 — feedback e ausências (escrita e aplicada em 15/09/2026)
 
 `feedbacks` (operador, autor, data, texto) e `ausencias` (operador, tipo,
 período: atestado, INSS, férias, banco de horas). Tela por operador, com foto,
-filtrada por equipe e setor.
+filtrada por equipe e setor. Migration `20260915220000`, rota
+`/vendas/acompanhamento`. Férias: a ausência manda e `perfis` espelha. O estado
+e as decisões estão em
+[`COMERCIAL-ESTADO-E-PENDENCIAS.md`](COMERCIAL-ESTADO-E-PENDENCIAS.md) §4.
 
 ### Fase 9 — painéis e herança
 

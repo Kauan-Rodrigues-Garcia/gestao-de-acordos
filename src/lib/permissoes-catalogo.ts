@@ -2325,6 +2325,101 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'Só se exclui o que aparece na tela.',
     },
   },
+
+  /*
+   * Acompanhamento (feedback e ausências) — Fase 8, 15/09/2026.
+   *
+   * O operador fica FORA por padrão, decidido em 15/09: os feedbacks são nota
+   * de acompanhamento escrita para a liderança. `ver_feedbacks` é separada da
+   * aba para duas coisas poderem mudar sem migration — quem lança atestado não
+   * precisar ler coaching, e o operador um dia ganhar a aba sem os textos.
+   *
+   * O alcance é pela equipe de HOJE, ao contrário de Vendas e Indicações: o
+   * líder que recebe um transferido precisa do histórico dele desde o início.
+   */
+  {
+    key: 'ver_acompanhamento', label: 'Aba Acompanhamento',
+    descricao: 'Abrir a aba de feedback e ausências do Comercial, pessoa por pessoa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'acompanhamento_escopo_individual', label: 'Acompanhamento: só a própria pessoa',
+    descricao: 'Ver em Acompanhamento somente as ausências (e, com a chave, os feedbacks) sobre si',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: {},
+  },
+  {
+    key: 'acompanhamento_escopo_equipe', label: 'Acompanhamento: a equipe',
+    descricao: 'Ver em Acompanhamento as pessoas das equipes em que está ou que lidera, pela equipe de hoje',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: {},
+  },
+  {
+    key: 'acompanhamento_escopo_setor', label: 'Acompanhamento: o setor',
+    descricao: 'Ver em Acompanhamento as pessoas dos setores da própria pessoa, pelo setor de hoje',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { lider: true, elite: true },
+  },
+  {
+    key: 'acompanhamento_escopo_todos_setores', label: 'Acompanhamento: todos os setores',
+    descricao: 'Ver em Acompanhamento as pessoas de qualquer setor da empresa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'ver_feedbacks', label: 'Acompanhamento: ler os feedbacks',
+    descricao:
+      'Ler o texto dos feedbacks das pessoas que alcança. Sem ela, a aba mostra só as ausências',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+    depende: {
+      chaves: ['ver_acompanhamento'],
+      motivo: 'Os feedbacks moram dentro da aba Acompanhamento.',
+    },
+  },
+  {
+    key: 'registrar_feedbacks', label: 'Acompanhamento: registrar feedback',
+    descricao: 'Escrever feedback sobre outra pessoa. Corrigir depois é só de quem escreveu',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+    depende: {
+      chaves: ['ver_feedbacks'],
+      motivo: 'Quem não lê os feedbacks não vê o que acabou de escrever.',
+    },
+  },
+  {
+    key: 'excluir_feedbacks', label: 'Acompanhamento: excluir feedback',
+    descricao: 'Apagar um feedback de vez — é histórico de acompanhamento, e não há lixeira',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { gerencia: true },
+    depende: {
+      chaves: ['ver_feedbacks'],
+      motivo: 'Só se exclui o que aparece na tela.',
+    },
+  },
+  {
+    /*
+     * Férias lançadas aqui MANDAM em `perfis.situacao`: a pessoa sai do ranking
+     * no primeiro dia e volta sozinha no dia seguinte ao último.
+     */
+    key: 'registrar_ausencias', label: 'Acompanhamento: lançar e corrigir ausência',
+    descricao:
+      'Lançar férias, atestado, INSS, banco de horas e afins. Férias daqui mudam a '
+      + 'situação da pessoa no cadastro',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+    depende: {
+      chaves: ['ver_acompanhamento'],
+      motivo: 'Só se lança ausência para quem aparece na tela.',
+    },
+  },
+  {
+    key: 'excluir_ausencias', label: 'Acompanhamento: excluir ausência',
+    descricao: 'Apagar uma ausência lançada errada. Se eram férias em curso, a pessoa volta a ativa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true },
+    depende: {
+      chaves: ['ver_acompanhamento'],
+      motivo: 'Só se exclui o que aparece na tela.',
+    },
+  },
 ];
 
 /** Índice por chave, para consulta direta. */

@@ -70,6 +70,12 @@ export const ROUTE_PATHS = {
    */
   VENDAS_INDICACOES: '/vendas/indicacoes',
   /**
+   * Acompanhamento — feedback e ausências, pessoa por pessoa (Fase 8). Rota
+   * própria, e não aba dentro de Vendas: a pergunta é sobre a PESSOA, não sobre
+   * a venda, e o alcance é pela equipe de hoje, não pela da gravação.
+   */
+  VENDAS_ACOMPANHAMENTO: '/vendas/acompanhamento',
+  /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *
    * Duas rotas, e não uma que muda de cara: são telas com finalidades

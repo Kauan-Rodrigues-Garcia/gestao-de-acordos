@@ -15,6 +15,13 @@
  * indicou e QUANDO — e é essa segunda que resolve a dúvida real: «essa escola
  * já é de alguém?». Só «duplicada» não responderia nada.
  *
+ * ## Corrigir e cadastrar por outro são a mesma chave
+ *
+ * `editar_indicacoes` libera as duas coisas, e as duas aparecem juntas: o
+ * seletor «em nome de» acima da lista e o lápis em cada linha. O erro mais
+ * provável de quem cadastra pelo operador é escolher a pessoa errada — por isso
+ * a correção deixa trocar QUEM indicou, e não só o texto.
+ *
  * ## O gráfico é de CSS, e é de propósito
  *
  * Barra por dia não precisa de biblioteca, e as variáveis de cor deste projeto
@@ -22,12 +29,18 @@
  * custou caro aqui. Sem biblioteca não há como cair nessa.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Handshake, Trash2, Plus, ClipboardPaste, TriangleAlert, Info, Trophy } from 'lucide-react';
+import { Handshake, Trash2, Plus, ClipboardPaste, TriangleAlert, Info, Trophy, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -43,7 +56,8 @@ import {
 } from '@/lib/indicacoes';
 import {
   buscarIndicacoes, buscarRanking, buscarPorDia, salvarLote, excluirIndicacao,
-  type Indicacao, type LinhaRanking, type PontoDoDia,
+  corrigirIndicacao, buscarQuemPodeIndicar,
+  type Indicacao, type LinhaRanking, type PontoDoDia, type PessoaQueIndica,
 } from '@/services/vendas/indicacoes.service';
 
 /** Primeiro e último dia do mês `yyyy-MM`, como o banco os espera. */
@@ -66,6 +80,21 @@ function diaCurto(iso: string): string {
   return iso.slice(8, 10) + '/' + iso.slice(5, 7);
 }
 
+/** O que o diálogo de correção edita. Texto vazio vira nulo ao gravar. */
+interface Correcao {
+  id: string;
+  operadorId: string;
+  instituicao: string;
+  gestora: string;
+  telefone: string;
+  dataIndicacao: string;
+  observacao: string;
+}
+
+function textoOuNulo(v: string): string | null {
+  return v.trim() === '' ? null : v;
+}
+
 const ROTULO_DO_NIVEL: Record<NivelEscopo, string> = {
   individual:    'Só as minhas',
   equipe:        'Minha equipe',
@@ -82,6 +111,8 @@ export default function Indicacoes() {
   const empresaId = empresa?.id ?? null;
   const podeCriar = temPermissao('criar_indicacoes');
   const podeExcluir = temPermissao('excluir_indicacoes');
+  // Corrigir E cadastrar em nome de outra pessoa. O banco confere de novo.
+  const podeEditar = temPermissao('editar_indicacoes');
   const hoje = useMemo(hojeISO, []);
 
   const [itens, setItens] = useState<Indicacao[]>([]);
@@ -93,6 +124,16 @@ export default function Indicacoes() {
   const [grade, setGrade] = useState<ItemIndicacao[]>([itemVazio(hojeISO())]);
   const [colagem, setColagem] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  /*
+   * Em nome de quem a lista vai ser gravada. Vazio = a própria pessoa: sem
+   * `editar_indicacoes` o seletor nem aparece, e o banco recusa se alguém
+   * mandar outro id por fora.
+   */
+  const [quemPodeIndicar, setQuemPodeIndicar] = useState<PessoaQueIndica[]>([]);
+  const [emNomeDe, setEmNomeDe] = useState<string>('');
+  const [correcao, setCorrecao] = useState<Correcao | null>(null);
+  const [corrigindo, setCorrigindo] = useState(false);
 
   const { de, ate } = useMemo(() => limitesDoMes(mes), [mes]);
 
@@ -157,6 +198,13 @@ export default function Indicacoes() {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
+  useEffect(() => {
+    if (!podeEditar || !empresaId) return;
+    let vivo = true;
+    void buscarQuemPodeIndicar(empresaId).then(lista => { if (vivo) setQuemPodeIndicar(lista); });
+    return () => { vivo = false; };
+  }, [podeEditar, empresaId]);
+
   const repetidas = useMemo(() => repetidasNaGrade(grade), [grade]);
   const prontas = useMemo(() => prontosParaGravar(grade), [grade]);
 
@@ -214,7 +262,7 @@ export default function Indicacoes() {
     }
 
     setSalvando(true);
-    const r = await salvarLote({ empresaId, operadorId: perfil.id, itens: prontas });
+    const r = await salvarLote({ empresaId, operadorId: emNomeDe || perfil.id, itens: prontas });
     setSalvando(false);
 
     if (!r.ok) { toast.error(r.erro ?? 'Não deu para gravar.'); return; }
@@ -234,6 +282,43 @@ export default function Indicacoes() {
     }
 
     setGrade([itemVazio(hoje)]);
+    void carregar();
+  }
+
+  function abrirCorrecao(item: Indicacao) {
+    setCorrecao({
+      id: item.id,
+      operadorId: item.operador_id,
+      instituicao: item.instituicao,
+      gestora: item.gestora ?? '',
+      telefone: item.telefone ?? '',
+      dataIndicacao: item.data_indicacao,
+      observacao: item.observacao ?? '',
+    });
+  }
+
+  async function gravarCorrecao() {
+    if (!correcao) return;
+    if (correcao.instituicao.trim() === '') { toast.error('A instituição não pode ficar vazia.'); return; }
+    if (correcao.dataIndicacao === '') { toast.error('A data da indicação é obrigatória.'); return; }
+
+    setCorrigindo(true);
+    const r = await corrigirIndicacao({
+      id: correcao.id,
+      operadorId: correcao.operadorId,
+      instituicao: correcao.instituicao,
+      gestora: textoOuNulo(correcao.gestora),
+      telefone: textoOuNulo(correcao.telefone),
+      dataIndicacao: correcao.dataIndicacao,
+      observacao: textoOuNulo(correcao.observacao),
+    });
+    setCorrigindo(false);
+
+    // Nome que já é de outra linha volta com quem e quando — o diálogo fica
+    // aberto para a pessoa ajustar, em vez de perder o que digitou.
+    if (!r.ok) { toast.error(r.erro ?? 'Não deu para corrigir.', { duration: 9000 }); return; }
+    toast.success('Indicação corrigida.');
+    setCorrecao(null);
     void carregar();
   }
 
@@ -332,7 +417,21 @@ export default function Indicacoes() {
             <h2 className="text-[13px] font-semibold">
               A lista ({prontas.length} {prontas.length === 1 ? 'pronta' : 'prontas'})
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {podeEditar && quemPodeIndicar.length > 0 && (
+                <Select value={emNomeDe || perfil?.id || ''} onValueChange={setEmNomeDe}>
+                  <SelectTrigger className="h-8 w-[220px] text-xs" aria-label="Em nome de">
+                    <SelectValue placeholder="Em nome de" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {quemPodeIndicar.map(p => (
+                      <SelectItem key={p.id} value={p.id} className="text-xs">
+                        {p.id === perfil?.id ? `${p.nome} (eu)` : `Em nome de ${p.nome}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Button size="sm" variant="ghost"
                       onClick={() => setGrade(a => [...a, itemVazio(hoje)])}>
                 <Plus className="mr-1 h-3.5 w-3.5" /> Linha
@@ -447,7 +546,7 @@ export default function Indicacoes() {
                   <th className="px-3 py-2 text-left font-medium">Telefone</th>
                   <th className="px-3 py-2 text-left font-medium">Indicou</th>
                   <th className="px-3 py-2 text-left font-medium">Data</th>
-                  {podeExcluir && <th className="w-10" />}
+                  {(podeEditar || podeExcluir) && <th className="w-20" />}
                 </tr>
               </thead>
               <tbody>
@@ -460,12 +559,20 @@ export default function Indicacoes() {
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
                       {diaCurto(item.data_indicacao)}
                     </td>
-                    {podeExcluir && (
-                      <td className="px-1 py-2">
-                        <Button size="icon" variant="ghost" aria-label="Excluir"
-                                onClick={() => void apagar(item.id, item.instituicao)}>
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
+                    {(podeEditar || podeExcluir) && (
+                      <td className="whitespace-nowrap px-1 py-2">
+                        {podeEditar && (
+                          <Button size="icon" variant="ghost" aria-label="Corrigir"
+                                  onClick={() => abrirCorrecao(item)}>
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        )}
+                        {podeExcluir && (
+                          <Button size="icon" variant="ghost" aria-label="Excluir"
+                                  onClick={() => void apagar(item.id, item.instituicao)}>
+                            <Trash2 className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -475,6 +582,60 @@ export default function Indicacoes() {
           </div>
         )}
       </section>
+
+      <Dialog open={correcao !== null} onOpenChange={o => { if (!o && !corrigindo) setCorrecao(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Corrigir indicação</DialogTitle>
+            <DialogDescription>
+              O nome da instituição é o que impede contá-la duas vezes: se virar o nome
+              de outra já cadastrada, a correção é recusada.
+            </DialogDescription>
+          </DialogHeader>
+          {correcao && (
+            <div className="grid gap-2">
+              <Input value={correcao.instituicao} placeholder="Instituição"
+                     onChange={e => setCorrecao({ ...correcao, instituicao: e.target.value })} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input value={correcao.gestora} placeholder="Gestora"
+                       onChange={e => setCorrecao({ ...correcao, gestora: e.target.value })} />
+                <Input value={correcao.telefone} placeholder="Telefone"
+                       onChange={e => setCorrecao({ ...correcao, telefone: e.target.value })} />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input type="date" value={correcao.dataIndicacao}
+                       onChange={e => setCorrecao({ ...correcao, dataIndicacao: e.target.value })} />
+                {quemPodeIndicar.length > 0 && (
+                  <Select value={correcao.operadorId}
+                          onValueChange={v => setCorrecao({ ...correcao, operadorId: v })}>
+                    <SelectTrigger aria-label="Quem indicou"><SelectValue placeholder="Quem indicou" /></SelectTrigger>
+                    <SelectContent>
+                      {/* Quem indicou pode ter saído da casa — continua na lista para a
+                          correção não trocar a pessoa sem ninguém pedir. */}
+                      {!quemPodeIndicar.some(p => p.id === correcao.operadorId) && (
+                        <SelectItem value={correcao.operadorId}>
+                          {itens.find(i => i.id === correcao.id)?.perfis?.nome ?? 'Quem indicou'}
+                        </SelectItem>
+                      )}
+                      {quemPodeIndicar.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <Textarea value={correcao.observacao} placeholder="Observação" rows={2}
+                        onChange={e => setCorrecao({ ...correcao, observacao: e.target.value })} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCorrecao(null)} disabled={corrigindo}>Cancelar</Button>
+            <Button onClick={() => void gravarCorrecao()} disabled={corrigindo}>
+              {corrigindo ? 'Gravando…' : 'Gravar correção'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

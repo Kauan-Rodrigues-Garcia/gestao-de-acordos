@@ -70,6 +70,7 @@ const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
 const VendasMetas       = lazy(() => import('@/pages/Vendas/Metas'));
 const VendasFechamento  = lazy(() => import('@/pages/Vendas/FechamentoDoSetor'));
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
+const VendasAcompanhamento = lazy(() => import('@/pages/Vendas/Acompanhamento'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
@@ -418,6 +419,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_indicacoes">
                     <VendasIndicacoes />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Acompanhamento: feedback e ausências. A chave abre a aba; ler o
+                  texto dos feedbacks é outra chave, conferida na tela e na RLS. */}
+              <Route path={ROUTE_PATHS.VENDAS_ACOMPANHAMENTO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_acompanhamento">
+                    <VendasAcompanhamento />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

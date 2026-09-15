@@ -141,6 +141,22 @@ export const ABAS_COM_ESCOPO = {
     niveis: NIVEIS_ESCOPO,
   },
   /*
+   * Acompanhamento (feedback e ausências) mede o alcance pela equipe de HOJE,
+   * e não pela da gravação como Vendas e Indicações: o líder que recebe um
+   * transferido precisa ler o histórico dele desde o primeiro dia.
+   *
+   * `individual` existe para o dia em que o operador ganhar a aba — ver as
+   * próprias ausências. Nasce desligado para todo cargo.
+   *
+   * ⚠️ Espelha `fn_acompanhamento_alcancados` (migration 20260915220000), que as
+   * duas policies e as RPCs de escrita chamam. Os dois lados mudam juntos.
+   */
+  acompanhamento: {
+    chaveAba: 'ver_acompanhamento',
+    prefixo: 'acompanhamento',
+    niveis: NIVEIS_ESCOPO,
+  },
+  /*
    * O Painel Lider so tem dois niveis, e isso e proposital: a aba nasceu para
    * a lideranca olhar o proprio setor, e a unica pergunta que ela faz e se
    * essa pessoa enxerga alem dele. `individual` nao faria sentido — um painel
