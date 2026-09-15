@@ -166,6 +166,9 @@ dobrado dentro do arquivo da Fase 6.
 
 ### ⚠️ Antes de qualquer `supabase db push`
 
+O passo a passo completo, com o que conferir entre um comando e o outro, está
+em [`COMERCIAL-MIGRATION-REPAIR.md`](COMERCIAL-MIGRATION-REPAIR.md).
+
 Sem reconciliar, ele reaplica os 13 arquivos.
 
 ```bash
