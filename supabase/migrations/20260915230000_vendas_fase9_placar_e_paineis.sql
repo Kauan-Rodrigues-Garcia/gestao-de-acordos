@@ -191,7 +191,7 @@ AS $function$
     ) a ON TRUE
    WHERE public.fn_vendas_alcanca(
            p_empresa_id, p.id,
-           COALESCE(p.setor_id_resolvido, e.setor_id),
+           COALESCE(p.setor_id, e.setor_id),
            p.equipe_credita)
    ORDER BY p.nome;
 $function$;

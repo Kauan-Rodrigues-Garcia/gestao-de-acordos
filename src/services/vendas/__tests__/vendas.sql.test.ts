@@ -1102,3 +1102,43 @@ describe('Fase 9 — o placar e a meta proporcional', () => {
     expect(C9).toContain('RAISE EXCEPTION');
   });
 });
+
+/**
+ * A trava que faltava: o SELECT e o WHERE têm de resolver o setor igual.
+ *
+ * Escrito depois de o defeito acontecer. `fn_vendas_placar_pessoas` nasceu com
+ * uma subconsulta que expunha `setor_id_resolvido`; a simplificação tirou a
+ * subconsulta e trocou a referência **no SELECT e não no WHERE**, que ficou
+ * apontando para uma coluna que já não existia.
+ *
+ * Como a função é `LANGUAGE sql`, o Postgres teria recusado a criação — é a
+ * diferença que §2.4 do estado descreve: `plpgsql` não planeja o corpo e
+ * aceita, `sql` planeja e recusa. Mas o mesmo descuido num corpo `plpgsql`
+ * aplicaria com sucesso e só falharia no clique de alguém.
+ *
+ * E há o defeito silencioso, que nenhuma das duas linguagens pega: filtrar o
+ * alcance por um setor e MOSTRAR outro. A pessoa apareceria na lista com o
+ * setor de uma equipe e teria sido alcançada pelo do cadastro — sem erro, sem
+ * linha vermelha, só um nome a mais ou a menos no painel.
+ */
+describe('o setor é resolvido do mesmo jeito em toda a função', () => {
+  const FASE9 = migration('_vendas_fase9_placar_e_paineis.sql');
+  const corpo = compacto(corpoDaFuncao(FASE9, 'fn_vendas_placar_pessoas'));
+
+  it('a mesma expressão decide o que a tela mostra e quem o alcance deixa entrar', () => {
+    const ocorrencias = corpo.match(/COALESCE\(p\.setor_id, e\.setor_id\)/g) ?? [];
+    // Três: a coluna devolvida, o JOIN que busca o nome, e o filtro de alcance.
+    expect(ocorrencias.length).toBe(3);
+  });
+
+  it('nenhum alias de subconsulta sobrevivente', () => {
+    // O nome exato do defeito. Vale a asserção literal: ele já existiu.
+    expect(corpo).not.toContain('setor_id_resolvido');
+  });
+
+  it('o alcance recebe a equipe que CREDITA, não a do cadastro', () => {
+    expect(corpo).toMatch(
+      /public\.fn_vendas_alcanca\( p_empresa_id, p\.id, COALESCE\(p\.setor_id, e\.setor_id\), p\.equipe_credita\)/,
+    );
+  });
+});
