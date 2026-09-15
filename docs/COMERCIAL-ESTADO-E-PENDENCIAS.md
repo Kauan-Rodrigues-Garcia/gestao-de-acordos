@@ -1,9 +1,10 @@
 # Comercial / Vendas — estado e pendências
 
 > **Escrito para quem pega isto do zero**, humano ou agente. Fechado em
-> **15/09/2026**, fim da sessão, e **atualizado no mesmo dia** com a
-> continuação da Fase 7 e a Fase 8 — escritas, testadas e **aplicadas em
-> produção pelo MCP** em 15/09/2026 (ver §3 e §6.0). Código ainda sem commit. O plano original continua em
+> **15/09/2026** e reescrito no mesmo dia, duas vezes: com a continuação da
+> Fase 7 e a Fase 8 (aplicadas em produção pelo MCP, §3) e depois com a
+> **Fase 9** — painéis e herança, commit `d6ce7ee`, **código no repo e
+> migration ainda NÃO aplicada** (§6.3). O plano original continua em
 > [`PLANO-COMERCIAL-VENDAS.md`](PLANO-COMERCIAL-VENDAS.md) — este arquivo diz
 > o que daquilo virou realidade, o que mudou de ideia pelo caminho e o que
 > falta, com detalhe suficiente para continuar sem reabrir a investigação.
@@ -132,8 +133,9 @@ e o jeito mais seguro de não partir a cadeia é não tocá-la.
 
 ## 3. Migrations — o que existe e o que está mal registrado
 
-13 arquivos no repo, todos aplicados. Das 11 primeiras há **12 versões
-registradas**; as 2 últimas não tiveram a versão conferida.
+14 arquivos no repo, **13 aplicados**. Das 11 primeiras há **12 versões
+registradas**; as duas da Fase 7/8 não tiveram a versão conferida, e a da
+Fase 9 ainda não rodou.
 
 | arquivo | registrado como |
 |---|---|
@@ -150,6 +152,7 @@ registradas**; as 2 últimas não tiveram a versão conferida.
 | `20260915200000_vendas_fase7_indicacoes` | `20260915185605` |
 | `20260915210000_vendas_fase7_corrigir_indicacao` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
 | `20260915220000_vendas_fase8_feedback_e_ausencias` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
+| `20260915230000_vendas_fase9_placar_e_paineis` | **NÃO APLICADA** — ver §6.3 |
 
 As duas foram aplicadas na ordem dos nomes, e as duas terminaram o bloco de
 verificação sem erro (cadeia do catálogo inteira, 14 abas, 10 chaves novas).
@@ -170,7 +173,7 @@ supabase migration repair --status applied \
   20260915100000 20260915110000 20260915120000 20260915130000 \
   20260915140000 20260915150000 20260915160000 20260915170000 \
   20260915180000 20260915190000 20260915200000 20260915210000 \
-  20260915220000
+  20260915220000 20260915230000
 ```
 
 E decidir o que fazer com `20260915173729`, que não tem arquivo — o provável é
@@ -285,6 +288,82 @@ nome de quem estava logado.
 (é do calendário) e SAIU / TRANSFERIDO / DESPENSADO / REMANEJADA (movimentação
 de cadastro). A planilha **não foi importada** — nem feedback, nem ausência.
 
+### Fase 9 — painéis e herança
+
+`20260915230000`, **escrita e não aplicada** (§6.3). Commit `d6ce7ee`.
+
+| rota | o que responde |
+|---|---|
+| `/` | **Dashboard do Comercial** — era `ProdutoEmMontagem`. É o rodapé da planilha de agosto escrito uma vez: as duas réguas juntas, ritmo, ranking, destaque do dia, estados, formas de pagamento |
+| `/vendas/painel-lider` | **o que o líder faz hoje** — a meta com a ausência descontada, a fila de assinatura pessoa a pessoa, e quem NÃO vendeu |
+| `/vendas/painel-diretoria` | **o mês contra o anterior**, inclusive por dia útil |
+| `/vendas/lixeira` | `lixeira_vendas` — existia desde a Fase 1 e nenhuma tela a chamava |
+| `/vendas/desafios` | a aba do Analítico com porta própria |
+| `/tickets` | agora nas duas operações |
+
+**Os quatro números que a Fase 6 prometeu e não entregou.** Ranking por
+operador com % de devolução e cancelamento, destaque do dia, vendas por estado
+e formas de pagamento estavam no plano e nunca saíram dele. Moram em
+`src/lib/vendasPlacar.ts`, **em memória**, sobre a lista que a RLS já recortou
+— 140 vendas no mês do setor cabem na mão, e uma RPC por recorte criaria cinco
+lugares onde a régua «confirmada E assinada» poderia ser esquecida. 27 testes.
+
+**A migration tem uma função só.** `fn_vendas_placar_pessoas(empresa, mês)`
+responde as duas perguntas que a lista de vendas não responde: quem é robô, e
+quantos dias úteis a pessoa perdeu em ausência que abate meta.
+
+- Alcance por `fn_vendas_alcanca` — o **mesmo da policy `vendas_select`**, e
+  não `fn_acompanhamento_alcancados`. Tem de ser: esta lista existe para dar
+  nome e equipe às vendas que já chegaram na tela. Mais estreito deixaria
+  linhas sem cadastro (viram «Sem nome», e o robô vira gente); mais largo
+  entregaria nomes de graça num painel.
+- **Os robôs entram**, ao contrário de `fn_acompanhamento_pessoas`. Aquela é de
+  gente a acompanhar, e robô não recebe feedback; esta é o cadastro do
+  dinheiro, e o robô vendeu.
+- Devolve o **número** de dias, nunca o tipo. `ver_acompanhamento` e
+  `ver_feedbacks` existem porque atestado e INSS são dado de saúde, e a meta
+  proporcional não precisa saber a doença de ninguém para dividir por 21. Há
+  teste que varre o `RETURNS` e falha se `tipo` aparecer ali.
+- Dias **úteis**, não corridos — `diasDaAusencia` responde outra pergunta
+  («INSS de 30 dias é de 30 dias»); aqui a pergunta é quanto do mês de trabalho
+  se perdeu. Segunda a sexta, o mesmo calendário de `diasUteisDoMes`.
+
+**A meta proporcional.** Uma equipe de 5 com 21 dias úteis tem 105 dias de
+trabalho; se dois atestados comeram 10, ela teve 95, e cobrar 100% da meta é
+cobrar por um trabalho que ninguém podia fazer. O número cheio fica na tela,
+**riscado ao lado do ajustado** — meta que desce sem explicação se lê como
+defeito, e a primeira pessoa a notar vai perguntar se o sistema está somando
+direito.
+
+`fatorDePresenca` devolve `null`, e nunca `1`, quando não dá para saber: «não
+perguntei» virando «ninguém faltou» seria uma migration não aplicada
+produzindo, em silêncio, um mês de presença perfeita.
+
+Quem conta na capacidade é **o cadastro, não quem vendeu**. A diferença
+aparece em quem passou o mês inteiro de férias: pelo cadastro ela entra com 21
+de capacidade e 21 de ausência, líquido zero — a resposta certa. Contando só
+quem vendeu, ela sairia do denominador e os 21 dias dela seriam descontados da
+capacidade dos colegas.
+
+**O desligado que vendeu continua na lista do Painel Líder.** Seria mais
+simples tirar todo desligado, mas as vendas dele somam no total lá em cima, e
+uma tela que mostra um total maior do que a soma da lista abaixo é o defeito
+que o Fechamento existe para tornar impossível. Ele aparece com o rótulo
+«desligado · a venda continua contando».
+
+**A caixa do robô.** Usuários → editar → «Função e lotação». Só no Comercial:
+mandar `robo` da cobrança gravaria `false` em toda edição de perfil, apagando
+em silêncio a marcação feita do outro lado. Atrás de `usuarios_editar_cargo`,
+porque dizer que um login é automação é decidir se ele disputa o placar.
+
+**Tickets herdado com uma correção de vocabulário.** A tela não tem palavra de
+produto — chamado, fila, atendente e chat. O que tinha eram duas categorias:
+«erro em acordo / tabulação» e «divergência de recebimento» ganharam
+`produtos: ['cobranca']`, e o Comercial ganhou «erro em venda» e «divergência
+no fechamento». O **filtro** da lista continua mostrando todas de propósito: o
+formulário decide o que se pode abrir hoje, o filtro precisa alcançar o que já
+foi aberto.
+
 ### Correções dentro da sessão
 
 | commit | o que |
@@ -333,7 +412,7 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
 
 - [x] `20260915210000_vendas_fase7_corrigir_indicacao.sql` — aplicada 15/09.
 - [x] `20260915220000_vendas_fase8_feedback_e_ausencias.sql` — aplicada 15/09.
-- [ ] **Commit** do código (tela, serviços, testes, este doc).
+- [x] **Commit** do código — 568c2f8 (Fases 7/8) e d6ce7ee (Fase 9).
 - [ ] **Abrir a aba** logado como líder e como gerência: lançar uma ausência,
       registrar um feedback, corrigir uma indicação. Nada disso foi exercido
       contra o banco — só os testes estáticos do SQL.
@@ -358,11 +437,15 @@ silêncio quando a extensão não existe.
 
 Código entregue (§4). Falta:
 
-- [ ] **Aplicar a migration** (§6.0).
-- [ ] **Ligar ausência à meta proporcional.** Andamento das Metas ainda cobra
-      o mês cheio de quem esteve fora. A regra de quais tipos descontam já está
-      em `ausencias_tipos.abate_meta`; a conta de dias úteis mora em
-      `@/lib/diasUteis`. Confirmar antes a leitura de `abate_meta` (§6.5).
+- [x] **Aplicar a migration** — feito 15/09.
+- [x] **Ligar ausência à meta proporcional.** Entregue na Fase 9: a conta de
+      dias úteis abatidos vem de `fn_vendas_placar_pessoas`, e
+      `fatorDePresenca` / `ajustarMetaPorPresenca` (`@/lib/vendasMeta`) fazem o
+      desconto — com o número cheio riscado ao lado, para meta que desce não se
+      ler como defeito. A leitura de `abate_meta` (§6.5) **continua a
+      confirmar**: se a operação disser que falta e suspensão descontam, é um
+      `UPDATE` em `ausencias_tipos` mais a lista em `src/lib/ausencias.ts`
+      (há teste que compara as duas).
 - [ ] **Importar o histórico da planilha**, se a operação quiser. Não foi feito:
       as abas por operador trazem autores que não são contas do sistema
       («Karina», «Priscila», «Gabrieli», «Carla») — por isso `autor_nome`
@@ -377,16 +460,60 @@ máquina. `Planilha Mensal.xlsx` **não** foi relida — o plano já a descrevia
 
 ### 6.3 Fase 9 — painéis e herança
 
-Não começou. Desbloqueada agora que a projeção rodou.
+**Código entregue** em 15/09/2026, commit `d6ce7ee`. Falta:
 
-> Painel Líder e Painel Diretoria adaptados · Tickets · Desafios ·
-> Configurações · Usuários.
+- [ ] **Aplicar `20260915230000_vendas_fase9_placar_e_paineis.sql`.** Sem ela
+      as telas abrem e a maior parte dos números está certa, mas três coisas
+      ficam erradas em silêncio se ninguém avisar — e por isso cada tela avisa,
+      numa faixa: **a automação aparece como gente** (o robô entra no ranking
+      por cabeça e pode virar o destaque do dia), **quem não vendeu some do
+      Painel Líder** — que é justamente quem o líder precisa procurar — e **a
+      meta não desconta ausência**.
+- [ ] **Ligar Desafios às vendas.** A aba abre, configura e lista participantes
+      no Comercial, mas o ranking vem zerado: `fn_desafio_dados` calcula sobre
+      `analitico_recebimentos`, que é a tabela da cobrança. A tela diz isso em
+      cima, em vez de mostrar um pódio de zeros. Ver §6.4.
+- [ ] **Ligar as chaves nos cargos do Comercial.** `ver_painel_lider`,
+      `ver_painel_diretoria`, `ver_lixeira`, `ver_tickets` e
+      `analitico_sub_desafios` são **reusadas** da cobrança: existem no
+      catálogo, mas podem estar desligadas nos cargos desta empresa — o seed
+      usa `ON CONFLICT DO NOTHING`, e empresa nova já nasceu com
+      `cargos_permissoes` vazio antes. É clique em Configurações →
+      Permissões, não código.
+
+**A decisão que estrutura a fase: rota própria, chave compartilhada.**
+
+Painel Líder, Painel Diretoria, Lixeira e Desafios existem nas duas operações.
+A ROTA é própria (`/vendas/painel-lider`, `/vendas/lixeira`, …) porque a tela é
+outra de verdade — `/painel-lider` desenha recebimento e quartil, e
+`/admin/lixeira` restaura acordo, que é outra tabela e outra RPC. A CHAVE é a
+mesma porque a pergunta que ela faz — «esta pessoa enxerga o painel da
+liderança?» — é a mesma dos dois lados.
+
+Chave nova exigiria encostar na cadeia de `fn_permissoes_catalogo()`, que
+congela o catálogo a cada elo e já se partiu uma vez aqui (§2.5). O topo
+continua sendo `fn_permissoes_catalogo_antes_acompanhamento_20260915`.
+
+`menuLateral.test.ts` passou a conferir por **rota**, e não por rótulo: com
+«Painel Líder» existindo nos dois produtos, a conferência por nome aprovaria
+exatamente o vazamento que ela existe para impedir. A lista de telas de
+cobrança sai de `NAV_ITEMS`, não escrita à mão — aba de cobrança criada amanhã
+já nasce coberta.
 
 ### 6.4 Dívida conhecida
 
-- [ ] **Não existe tela para marcar alguém como robô.** A coluna
-      `perfis.robo` existe; marquei os 3 por SQL. Ninguém consegue marcar o 4º.
-      É pequeno e destrava o cadastro.
+- [x] **Tela para marcar alguém como robô** — entregue na Fase 9. Caixa
+      «este login é de automação» em Usuários → editar, dentro de «Função e
+      lotação». Só aparece no Comercial, e atrás de `usuarios_editar_cargo`.
+      Mandá-la da cobrança gravaria `robo: false` em toda edição de perfil,
+      apagando em silêncio a marcação feita do outro lado. O prefixo `ia_` do
+      login vira **dica em amarelo** ao lado da caixa, nunca cadastro.
+- [ ] **O placar do desafio não conta venda.** `fn_desafio_dados` lê
+      `analitico_recebimentos`. Ensiná-la a ler `vendas` é mudança numa função
+      de produção que a cobrança usa todo dia — precisa de migration própria,
+      com o caminho da cobrança saindo byte a byte igual. Ver §2.4: para mudar
+      duas linhas de uma função, **edite as duas**; redigitar trocou um diff de
+      2 linhas por um de 200 e saiu com três defeitos.
 - [ ] **`src/lib/database.types.ts` nunca foi regenerado.** Zero tabelas de
       vendas ali — é por isso que todo serviço usa `rpcSemTipo` /
       `tabelaSemTipo` de `src/lib/supabaseSemTipo.ts`. Funciona, mas sem tipo
@@ -415,10 +542,11 @@ Não começou. Desbloqueada agora que a projeção rodou.
 ## 7. Onde as coisas moram
 
 ```
-supabase/migrations/20260915*.sql      as 13 migrations (cabeçalhos longos, leia-os)
+supabase/migrations/20260915*.sql      as 14 migrations (cabeçalhos longos, leia-os)
 
 src/lib/vendas.ts                      régua, gavetas, pareceLoginDeIa
-src/lib/vendasMeta.ts                  progresso e ritmo do mês
+src/lib/vendasMeta.ts                  progresso, ritmo e a meta proporcional à presença
+src/lib/vendasPlacar.ts                ranking, estados, formas, destaque do dia, série diária
 src/lib/vendasFechamento.ts            as 4 igualdades que têm que fechar
 src/lib/indicacoes.ts                  parse da colagem, repetidas
 src/lib/ausencias.ts                   tipos (espelho de ausencias_tipos), dias, sobreposição
@@ -432,17 +560,22 @@ src/services/vendas/
   fechamentoSetor.service.ts
   indicacoes.service.ts                inclui corrigir e «quem pode indicar»
   acompanhamento.service.ts            pessoas, feedbacks, ausências
+  placar.service.ts                    quem é robô + dias úteis abatidos no mês
   erroDoBanco.ts                       separa «tabela ausente» de «vínculo ausente»
-  __tests__/vendas.sql.test.ts         contrato SQL das 8 fases
+  __tests__/vendas.sql.test.ts         contrato SQL das 9 fases
   __tests__/insertsBatem.sql.test.ts   aridade de todo INSERT
 
 src/pages/Vendas/
   index.tsx  FormularioVenda  FilaDoLider  Importacao  Projecao
   Conciliacao  Metas  AndamentoDasMetas  FechamentoDoSetor  Indicacoes
   Acompanhamento  AcompanhamentoPessoa
+  DashboardComercial  PainelLiderComercial  PainelDiretoriaComercial
+  LixeiraVendas  DesafiosComercial  componentes.tsx (Bloco, Faixa, Barra…)
+
+src/hooks/useVendasPlacar.ts           o cadastro + a presença de cada recorte
 ```
 
-**Rotas:** `/vendas` · `/vendas/importar` · `/vendas/metas` ·
+**Rotas:** `/` (Dashboard) · `/vendas` · `/vendas/importar` · `/vendas/metas` ·
 `/vendas/fechamento` · `/vendas/indicacoes` · `/vendas/acompanhamento`.
 
 ---
@@ -466,4 +599,4 @@ src/pages/Vendas/
   gráfico apaga sem erro. Por isso o gráfico de Indicações é CSS puro.
 - **`numerosSituacoesPrazo.sql.test.ts`** falhava por `core.autocrlf=true` na
   máquina da sessão anterior. Nesta máquina passa.
-  Suíte após a Fase 8: **6.394 de 6.394 verdes**, `tsc` e `eslint` limpos.
+  Suíte após a Fase 9: **6.436 de 6.436 verdes**, `tsc` e `eslint` limpos.
