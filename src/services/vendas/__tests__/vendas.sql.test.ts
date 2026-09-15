@@ -636,3 +636,56 @@ describe('a Fase 6 não mexe no catálogo de permissões', () => {
     expect(C6).toContain("fn_user_escopo('vendas')");
   });
 });
+
+describe('a equipe que credita vale nos DOIS caminhos', () => {
+  /*
+   * A Fase 6 consertou só a projeção. O lançamento manual continuou lendo
+   * `perfis.equipe_id`, e meio conserto é pior que defeito conhecido: o número
+   * do relatório ficaria certo e o do lançamento errado, na mesma equipe, no
+   * mesmo mês — sem como saber em qual acreditar.
+   */
+  const MANUAL = migration('_venda_manual_credita_a_equipe_que_lidera.sql');
+
+  it('o lançamento manual usa a mesma função da projeção', () => {
+    const corpo = compacto(corpoDaFuncao(MANUAL, 'fn_venda_salvar'));
+    expect(corpo).toContain('v_equipe := public.fn_vendas_equipe_que_credita(p_operador_id)');
+  });
+
+  it('e parou de ler `perfis.equipe_id` direto', () => {
+    const corpo = compacto(corpoDaFuncao(MANUAL, 'fn_venda_salvar'));
+    expect(corpo).not.toContain('p.setor_id, p.equipe_id INTO');
+    expect(corpo).toContain('SELECT p.setor_id INTO v_setor');
+  });
+
+  it('a equipe decide ALCANCE, não só crédito — por isso importava', () => {
+    const corpo = compacto(corpoDaFuncao(MANUAL, 'fn_venda_salvar'));
+    // Com `v_equipe` nulo, quem tem `vendas_escopo_equipe` era recusado ao
+    // lançar a própria venda, com uma mensagem que manda procurar permissão
+    // onde o problema era cadastro.
+    expect(corpo).toContain(
+      'public.fn_vendas_alcanca(p_empresa_id, p_operador_id, v_setor, v_equipe)',
+    );
+  });
+
+  it('editar continua sem mexer em situação nem assinatura', () => {
+    const corpo = compacto(corpoDaFuncao(MANUAL, 'fn_venda_salvar'));
+    const update = corpo.slice(corpo.indexOf('UPDATE public.vendas SET'));
+    expect(update).not.toContain('situacao =');
+    expect(update).not.toContain('contrato_assinado =');
+  });
+
+  it('nenhuma RPC de vendas lê `perfis.equipe_id` cru', () => {
+    // A varredura é a garantia de que o próximo caminho novo não repita o erro.
+    for (const [rotulo, sql, nomes] of [
+      ['fase1',  FASE1,  ['fn_venda_confirmar', 'fn_venda_excluir', 'fn_venda_restaurar']],
+      ['fase6',  FASE6,  ['fn_vendas_projetar']],
+      ['manual', MANUAL, ['fn_venda_salvar']],
+    ] as const) {
+      for (const nome of nomes) {
+        const corpo = compacto(corpoDaFuncao(sql, nome));
+        expect(corpo, `${rotulo}/${nome} lê perfis.equipe_id direto`)
+          .not.toMatch(/p\.equipe_id INTO/);
+      }
+    }
+  });
+});
