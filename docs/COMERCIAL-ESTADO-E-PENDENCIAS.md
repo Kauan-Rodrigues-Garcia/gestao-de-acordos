@@ -133,9 +133,9 @@ e o jeito mais seguro de não partir a cadeia é não tocá-la.
 
 ## 3. Migrations — o que existe e o que está mal registrado
 
-14 arquivos no repo, **13 aplicados**. Das 11 primeiras há **12 versões
-registradas**; as duas da Fase 7/8 não tiveram a versão conferida, e a da
-Fase 9 ainda não rodou.
+14 arquivos no repo, **todos aplicados**. Das 11 primeiras há **12 versões
+registradas**; as três últimas (Fases 7/8/9) não tiveram a versão conferida —
+`list_migrations` também é consulta ao banco e pede o seu próprio «pode».
 
 | arquivo | registrado como |
 |---|---|
@@ -152,7 +152,7 @@ Fase 9 ainda não rodou.
 | `20260915200000_vendas_fase7_indicacoes` | `20260915185605` |
 | `20260915210000_vendas_fase7_corrigir_indicacao` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
 | `20260915220000_vendas_fase8_feedback_e_ausencias` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
-| `20260915230000_vendas_fase9_placar_e_paineis` | **NÃO APLICADA** — ver §6.3 |
+| `20260915230000_vendas_fase9_placar_e_paineis` | aplicada 15/09 pelo MCP — versão carimbada **não conferida** |
 
 As duas foram aplicadas na ordem dos nomes, e as duas terminaram o bloco de
 verificação sem erro (cadeia do catálogo inteira, 14 abas, 10 chaves novas).
@@ -293,7 +293,17 @@ de cadastro). A planilha **não foi importada** — nem feedback, nem ausência.
 
 ### Fase 9 — painéis e herança
 
-`20260915230000`, **escrita e não aplicada** (§6.3). Commit `d6ce7ee`.
+`20260915230000`, **aplicada em produção pelo MCP em 15/09/2026**, com o bloco
+de verificação passando: as 10 chaves do catálogo intactas e `ausencias_tipos`
+no lugar. Commits `d6ce7ee` (telas) e `072a340` (o defeito abaixo).
+
+> **O defeito que a leitura pegou.** A função nasceu com uma subconsulta que
+> expunha `setor_id_resolvido`; ao simplificar o `FROM`, a referência foi
+> trocada no SELECT e **não no WHERE**. Como ela é `LANGUAGE sql`, o Postgres
+> teria recusado a criação — é a diferença que §2.4 descreve. O mesmo descuido
+> num corpo `plpgsql` teria aplicado com sucesso e esperado o clique de
+> alguém. O teste novo não mira a digitação: exige que a MESMA expressão
+> decida o setor que a tela mostra e o setor que o alcance usa.
 
 | rota | o que responde |
 |---|---|
@@ -465,13 +475,8 @@ máquina. `Planilha Mensal.xlsx` **não** foi relida — o plano já a descrevia
 
 **Código entregue** em 15/09/2026, commit `d6ce7ee`. Falta:
 
-- [ ] **Aplicar `20260915230000_vendas_fase9_placar_e_paineis.sql`.** Sem ela
-      as telas abrem e a maior parte dos números está certa, mas três coisas
-      ficam erradas em silêncio se ninguém avisar — e por isso cada tela avisa,
-      numa faixa: **a automação aparece como gente** (o robô entra no ranking
-      por cabeça e pode virar o destaque do dia), **quem não vendeu some do
-      Painel Líder** — que é justamente quem o líder precisa procurar — e **a
-      meta não desconta ausência**.
+- [x] **Aplicar `20260915230000_vendas_fase9_placar_e_paineis.sql`** — feito
+      15/09, com autorização, verificação passando.
 - [ ] **Ligar Desafios às vendas.** A aba abre, configura e lista participantes
       no Comercial, mas o ranking vem zerado: `fn_desafio_dados` calcula sobre
       `analitico_recebimentos`, que é a tabela da cobrança. A tela diz isso em
@@ -517,10 +522,13 @@ já nasce coberta.
       com o caminho da cobrança saindo byte a byte igual. Ver §2.4: para mudar
       duas linhas de uma função, **edite as duas**; redigitar trocou um diff de
       2 linhas por um de 200 e saiu com três defeitos.
-- [ ] **`src/lib/database.types.ts` nunca foi regenerado.** Zero tabelas de
-      vendas ali — é por isso que todo serviço usa `rpcSemTipo` /
-      `tabelaSemTipo` de `src/lib/supabaseSemTipo.ts`. Funciona, mas sem tipo
-      de verdade. `perfis.robo` e `vendas_relatorio.cliente` também não estão.
+- [x] **`src/lib/database.types.ts` regenerado** em 15/09 (`f666ce1`). As 10
+      tabelas do Comercial entraram, mais `perfis.robo`,
+      `vendas_relatorio.cliente`, `metas.regua` e as RPCs das nove fases.
+- [ ] **Migrar os serviços de `rpcSemTipo` para o cliente tipado.** Agora dá:
+      o tipo existe. Não foi feito junto — é arquivo por arquivo, com a suíte
+      verificando cada um, e misturá-lo num commit de 3.000 linhas de tipo
+      geradas tornaria impossível revisar qualquer uma das duas coisas.
 - [ ] **`supabase migration repair`** — ver §3.
 - [ ] **64 franquias em estado `novo`**, de outros setores e operações. Não é
       erro: é franquia que ninguém vinculou. Aparecem na gaveta `sem_franquia`
