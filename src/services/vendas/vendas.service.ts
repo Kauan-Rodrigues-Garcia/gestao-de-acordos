@@ -17,6 +17,7 @@
  */
 import { rpcSemTipo, tabelaSemTipo } from '@/lib/supabaseSemTipo';
 import type { OrigemVenda, SituacaoVenda } from '@/lib/vendas';
+import { mensagemDoErro, pareceNaoInstalado } from './erroDoBanco';
 
 /** A linha como o banco a devolve. `conta_na_meta` e `valor_na_meta` são geradas. */
 export interface Venda {
@@ -71,9 +72,6 @@ export interface VendasDoPeriodo {
   erro: string | null;
 }
 
-function tabelaAusente(mensagem: string): boolean {
-  return /relation|does not exist|schema cache|could not find/i.test(mensagem);
-}
 
 /** Números chegam do PostgREST como string quando a coluna é `numeric`. */
 function num(valor: unknown): number {
@@ -119,7 +117,7 @@ export async function buscarVendas(params: {
     .order('criado_em', { ascending: false });
 
   if (error) {
-    return { vendas: [], disponivel: !tabelaAusente(error.message), erro: error.message };
+    return { vendas: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
   return { vendas: (data ?? []).map(normalizar), disponivel: true, erro: null };
 }
@@ -140,7 +138,7 @@ export async function buscarPendentes(empresaId: string): Promise<VendasDoPeriod
     .order('data_venda', { ascending: true });
 
   if (error) {
-    return { vendas: [], disponivel: !tabelaAusente(error.message), erro: error.message };
+    return { vendas: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
   return { vendas: (data ?? []).map(normalizar), disponivel: true, erro: null };
 }
@@ -165,24 +163,19 @@ export interface Resultado {
 }
 
 /**
- * As duas causas de a tabela não responder, e elas pedem ações diferentes.
+ * As três causas de a tabela não responder, e cada uma pede uma frase.
  *
- * `relation ... does not exist` é a migration faltando. Mas
- * `Could not find the table ... in the schema cache` é o PostgREST com o
- * desenho do banco velho em memória — o banco está certo e a tela mente.
- * Ver o comentário em `importacaoVendas.service.ts`.
+ * Migration faltando, cache do PostgREST velho, ou uma FOREIGN KEY ausente no
+ * join que a consulta pediu. A classificação mora em `erroDoBanco.ts` — e mora
+ * lá porque esta função já esteve errada nos três serviços de Vendas ao mesmo
+ * tempo, e mandou procurar migration quando faltava constraint.
  */
-const NAO_INSTALADO =
-  'A aba Vendas não respondeu. Recarregue a página — se persistir, ou a migration não '
-  + 'foi aplicada, ou o cache de schema do banco ainda não recarregou.';
-
 function traduzir(mensagem: string): string {
-  if (tabelaAusente(mensagem)) return NAO_INSTALADO;
   // O CHECK da chave única fala em inglês; o líder precisa saber o que fazer.
   if (/vendas_nr_unico|duplicate key/i.test(mensagem)) {
     return 'Já existe uma venda com este NR nesta empresa.';
   }
-  return mensagem;
+  return mensagemDoErro(mensagem, 'A aba Vendas', '20260915100000_vendas_fase1.sql');
 }
 
 /** Lança (sem `id`) ou edita (com `id`). Nunca muda situação nem assinatura. */
@@ -273,7 +266,7 @@ export async function buscarLixeiraVendas(
     .order('excluido_em', { ascending: false });
 
   if (error) {
-    return { itens: [], disponivel: !tabelaAusente(error.message), erro: error.message };
+    return { itens: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
   const itens = (data ?? []).map(l => ({
     ...(l as unknown as ItemLixeiraVenda),

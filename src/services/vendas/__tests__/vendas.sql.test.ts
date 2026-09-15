@@ -417,6 +417,57 @@ describe('a meta tem duas réguas, e só uma decide', () => {
   });
 });
 
+describe('todo join da API tem a FOREIGN KEY que o sustenta', () => {
+  /*
+   * O PostgREST monta os joins a partir das FKs. Um `select` que pede
+   * `perfis:coluna ( ... )` sobre coluna SEM foreign key falha com «Could not
+   * find a relationship ... in the schema cache» — e essa frase derrubou a tela
+   * de Importar Vendas em 15/09/2026, porque a deteccao de erro a confundiu com
+   * «tabela nao existe».
+   *
+   * Este teste varre os `select` dos servicos de Vendas, junta as colunas
+   * embutidas e cobra a FK de cada uma nas migrations.
+   */
+  const SERVICOS = [
+    'src/services/vendas/vendas.service.ts',
+    'src/services/vendas/importacaoVendas.service.ts',
+  ] as const;
+
+  /** `perfis:importado_por ( id, nome )` -> { tabela, coluna }. */
+  function embutidosDe(arquivo: string): Array<{ alvo: string; coluna: string }> {
+    const codigo = fs.readFileSync(path.resolve(arquivo), 'utf8');
+    const achados: Array<{ alvo: string; coluna: string }> = [];
+    for (const m of codigo.matchAll(/([a-z_]+):([a-z_]+)\s*\(/g)) {
+      achados.push({ alvo: m[1], coluna: m[2] });
+    }
+    return achados;
+  }
+
+  const TODAS = [C1, C2, C3, C4, C5, compacto(migration('_vendas_lote_importado_por_tem_fk.sql'))].join(' ');
+
+  it('encontra os joins nos servicos — senao o teste passa vazio', () => {
+    const todos = SERVICOS.flatMap(embutidosDe);
+    expect(todos.length).toBeGreaterThan(2);
+    expect(todos.map(e => e.coluna)).toContain('importado_por');
+  });
+
+  it('cada coluna embutida tem FOREIGN KEY em alguma migration', () => {
+    const semFk: string[] = [];
+    for (const arquivo of SERVICOS) {
+      for (const { alvo, coluna } of embutidosDe(arquivo)) {
+        const temInline = new RegExp(`${coluna}\\s+UUID[^,]*REFERENCES`, 'i').test(TODAS);
+        const temAlter  = new RegExp(`FOREIGN KEY \\(${coluna}\\)`, 'i').test(TODAS);
+        if (!temInline && !temAlter) semFk.push(alvo + ':' + coluna + '  (' + arquivo.split('/').pop() + ')');
+      }
+    }
+    expect(
+      semFk,
+      'Estes joins da API nao tem FOREIGN KEY. O PostgREST responde "could not find a '
+      + 'relationship" e a tela mostra um erro que aponta para o lugar errado: '
+      + semFk.join(', '),
+    ).toEqual([]);
+  });
+});
 describe('a cadeia do catálogo não se parte', () => {
   it('cada fase congela a anterior antes de estender', () => {
     expect(C1).toContain('fn_permissoes_catalogo_antes_vendas_20260915');

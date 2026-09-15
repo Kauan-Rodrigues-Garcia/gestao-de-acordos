@@ -13,6 +13,7 @@
  */
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { ReguaMeta } from '@/lib/vendasMeta';
+import { mensagemDoErro } from './erroDoBanco';
 
 /** Um setor ou equipe, com a meta do mês — ou sem, se ninguém configurou. */
 export interface MetaDeRecorte {
@@ -32,16 +33,9 @@ export interface Resultado<T = null> {
   erro: string | null;
 }
 
-const NAO_INSTALADO =
-  'A meta de vendas não respondeu. Recarregue a página — se persistir, ou a migration '
-  + 'não foi aplicada, ou o cache de schema do banco ainda não recarregou.';
-
-function tabelaAusente(mensagem: string): boolean {
-  return /relation|does not exist|schema cache|could not find/i.test(mensagem);
-}
-
+/** Ver `erroDoBanco.ts`: vínculo que falta não é tabela que falta. */
 function traduzir(mensagem: string): string {
-  return tabelaAusente(mensagem) ? NAO_INSTALADO : mensagem;
+  return mensagemDoErro(mensagem, 'A meta de vendas', '20260915140000_vendas_fase5_meta_com_duas_reguas.sql');
 }
 
 function num(valor: unknown): number {

@@ -22,6 +22,7 @@
 import { rpcSemTipo, tabelaSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaProspeccao } from './prospeccaoParser';
 import type { LinhaSetor } from './prospeccaoSetorParser';
+import { mensagemDoErro, pareceNaoInstalado } from './erroDoBanco';
 
 /**
  * Quantas linhas por ida ao servidor.
@@ -78,29 +79,14 @@ export interface Resultado<T = null> {
 }
 
 /**
- * A tabela não respondeu — e as duas causas pedem ações diferentes.
+ * O que o banco disse, traduzido para o que é preciso fazer.
  *
- * `relation ... does not exist` é a migration mesmo faltando. Mas
- * `Could not find the table ... in the schema cache` é outra coisa: o
- * PostgREST guarda o desenho do banco em memória, e tabela criada por SQL **não
- * aparece na API até o cache recarregar**. O banco está certo e a tela mente.
- *
- * Aconteceu em 15/09/2026, minutos depois de aplicar as migrations: a mensagem
- * dizia «precisa ser aplicada» sobre uma migration que já estava no ar, e
- * mandou quem leu procurar no lugar errado. Por isso o texto agora cita as
- * duas causas, e a mais provável primeiro.
+ * A classificação mora em `erroDoBanco.ts`, e não aqui, porque esta função
+ * existia copiada em três serviços — todas com o mesmo defeito, que em
+ * 15/09/2026 fez a tela pedir a aplicação de uma migration **já aplicada**
+ * enquanto o problema era uma FOREIGN KEY faltando em `vendas_lotes`.
  */
-const NAO_INSTALADO =
-  'A importação de vendas não respondeu. Recarregue a página — se persistir, ou a '
-  + 'migration não foi aplicada, ou o cache de schema do banco ainda não recarregou '
-  + "(`NOTIFY pgrst, 'reload schema'`).";
-
-function tabelaAusente(mensagem: string): boolean {
-  return /relation|does not exist|schema cache|could not find/i.test(mensagem);
-}
-
 function traduzir(mensagem: string): string {
-  if (tabelaAusente(mensagem)) return NAO_INSTALADO;
   if (/vendas_relatorio_nr_unico_no_lote/i.test(mensagem)) {
     return 'O arquivo trouxe o mesmo NR duas vezes no mesmo lote. '
          + 'Isso deveria ter sido resolvido na leitura — recarregue o arquivo.';
@@ -109,7 +95,9 @@ function traduzir(mensagem: string): string {
     return 'Outra importação deste mês terminou primeiro. Recarregue a tela e confira '
          + 'antes de importar de novo.';
   }
-  return mensagem;
+  return mensagemDoErro(
+    mensagem, 'A importação de vendas', '20260915110000_vendas_fase2_lote_e_depara.sql',
+  );
 }
 
 function num(valor: unknown): number {
@@ -255,7 +243,7 @@ export async function buscarLotes(empresaId: string): Promise<ListaLotes> {
     .limit(50);
 
   if (error) {
-    return { lotes: [], disponivel: !tabelaAusente(error.message), erro: error.message };
+    return { lotes: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
   const lotes = (data ?? []).map(l => ({
     ...(l as unknown as Lote),
@@ -282,7 +270,7 @@ export async function buscarFranquias(empresaId: string): Promise<ListaFranquias
     .order('codigo', { ascending: true });
 
   if (error) {
-    return { franquias: [], disponivel: !tabelaAusente(error.message), erro: error.message };
+    return { franquias: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
   return { franquias: (data ?? []) as unknown as Franquia[], disponivel: true, erro: null };
 }
