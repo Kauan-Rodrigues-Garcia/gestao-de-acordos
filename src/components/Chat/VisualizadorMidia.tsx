@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { urlDoAnexo, type AnexoChat } from '@/services/chat/chat.service';
+import { baixarAnexo } from './baixarAnexo';
 
 const ESCALA_MIN = 1;
 const ESCALA_MAX = 6;
@@ -197,12 +198,11 @@ export function VisualizadorMidia({ midias, inicial, onFechar }: Props) {
           </>
         )}
 
-        {url && (
-          <a href={url} download={atual.nome} target="_blank" rel="noreferrer"
-             className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="Baixar">
-            <Download className="w-4 h-4" />
-          </a>
-        )}
+        {/* Botão, e não `<a download target="_blank">`: o link é de outra
+            origem, o navegador ignorava o `download` e abria guia nova. */}
+        <BotaoBarra onClick={() => void baixarAnexo(atual.url, atual.nome)} rotulo="Baixar">
+          <Download className="w-4 h-4" />
+        </BotaoBarra>
         <BotaoBarra onClick={onFechar} rotulo="Fechar"><X className="w-5 h-5" /></BotaoBarra>
       </div>
 

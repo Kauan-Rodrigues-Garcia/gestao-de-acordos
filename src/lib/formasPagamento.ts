@@ -20,6 +20,8 @@ import { Landmark, QrCode, CreditCard, type LucideIcon } from 'lucide-react';
 /** Rótulo consolidado quando o ERP não informa a forma detalhada (PaguePlay). */
 export const ROTULO_CARTAO      = 'Cartão';
 export const ROTULO_BOLETO_PIX  = 'Pix/Boleto';
+/** A família do consolidado acima — ver a regra 3 de `familiaDaForma`. */
+export const ROTULO_BOLETO_PIX_COFEN = 'Boleto/Pix Cofen';
 /** Linha sem operador cadastrado (órfã) nas quebras por operador/equipe. */
 export const ROTULO_SEM_OPERADOR = 'Sem operador';
 
@@ -27,6 +29,9 @@ export const ROTULO_SEM_OPERADOR = 'Sem operador';
 export function corDaForma(rotulo: string): string {
   const n = rotulo.toLowerCase();
   if (n.includes('cart'))      return n.includes('recorrente') ? '#f97316' : '#f59e0b';
+  // O consolidado Pix/Boleto não é nem um nem outro: cor própria, senão ele se
+  // confundiria com a fatia de Pix ao lado.
+  if (n.includes('cofen') || (n.includes('pix') && n.includes('boleto'))) return '#8b5cf6';
   // "Recorrente" sozinho (sem a palavra cartão) aparece no relatório BookPlay:
   // é o mesmo dinheiro do cartão recorrente e merece a mesma cor.
   if (n.includes('recorrente')) return '#f97316';
@@ -70,9 +75,10 @@ export function rotuloDaForma(
  * A família de uma forma de pagamento, ou `null` se ela não pertence a nenhuma.
  *
  * O ERP escreve a variação no rótulo: «Boleto Bancário», «Boleto Negociação»,
- * «Cartão de Crédito», «Cartão Site Parcial + Boleto», «Recorrente». Para quem
- * lê o painel são três meios — boleto, cartão e cartão recorrente — e a
- * variação só interessa a quem abrir o grupo para investigar.
+ * «Cartão de Crédito», «Cartão Site Parcial + Boleto», «Recorrente», «Pix
+ * Automático». Para quem lê o painel são poucos meios — boleto, cartão, cartão
+ * recorrente, Pix e Pix automático — e a variação só interessa a quem abrir o
+ * grupo para investigar.
  *
  * A ORDEM dos testes é a regra, não detalhe de implementação:
  *
@@ -82,15 +88,30 @@ export function rotuloDaForma(
  * 2. «cart» ANTES de «boleto», senão «Cartão Site Parcial + Boleto» viraria
  *    boleto. O dinheiro entrou por cartão; o boleto ali é a outra metade da
  *    negociação, não o meio da linha.
+ * 3. O consolidado «Pix/Boleto» ANTES dos dois. Ele não diz quanto foi Pix e
+ *    quanto foi boleto — somá-lo a qualquer um inventaria a divisão. Vira campo
+ *    próprio, «Boleto/Pix Cofen» (decisão de 14/09/2026). O casamento é pelo
+ *    rótulo inteiro, e não por conter as duas palavras: uma variação futura do
+ *    ERP como «Boleto + Pix» não é o consolidado e não deve ganhar esse nome.
+ * 4. «pix automático» ANTES de «pix», pelo mesmo motivo do recorrente: é a
+ *    assinatura do Pix.
+ *
+ * Pix entrou em 14/09/2026. Antes cada variação ficava solta; com o 59 elas se
+ * multiplicaram, e o card do Dashboard passou a usar este mesmo agrupamento.
  *
  * Rótulo que não casa fica SOZINHO, com o nome que o ERP deu. Um grupo
  * «Outros» esconderia a forma nova exatamente no mês em que ela apareceu.
  */
 export function familiaDaForma(rotulo: string): { chave: string; rotulo: string } | null {
-  const n = rotulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const n = rotulo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   if (n.includes('recorrente')) return { chave: 'cartao_recorrente', rotulo: 'Cartão recorrente' };
   if (n.includes('cart'))       return { chave: 'cartao',            rotulo: 'Cartão' };
+  if (/^\s*(pix\s*\/\s*boleto|boleto\s*\/\s*pix)\s*$/.test(n)) {
+    return { chave: 'boleto_pix_cofen', rotulo: ROTULO_BOLETO_PIX_COFEN };
+  }
   if (n.includes('boleto'))     return { chave: 'boleto',            rotulo: 'Boleto' };
+  if (n.includes('pix') && n.includes('autom')) return { chave: 'pix_automatico', rotulo: 'Pix automático' };
+  if (n.includes('pix'))        return { chave: 'pix',               rotulo: 'Pix' };
   return null;
 }
 

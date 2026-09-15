@@ -237,17 +237,18 @@ describe('CardsMetas — formas de pagamento', () => {
     }
   });
 
-  it('as duas maiores aparecem no resumo do donut', () => {
+  // Desde 14/09/2026 o resumo do donut não lista forma nenhuma: elas ficam
+  // atrás do botão «Formas de pagamento», para o card não mudar de tamanho.
+  it('as formas ficam atrás do botão, fora do resumo do donut', () => {
     render0(dados({ porForma: FORMAS }));
-    expect(screen.getByText('Top formas de pagamento')).toBeInTheDocument();
-    expect(screen.getByText('Pix')).toBeInTheDocument();
-    expect(screen.getByText('Boleto')).toBeInTheDocument();
-    expect(screen.getByText(/\+1 mais/)).toBeInTheDocument();
+    expect(screen.queryByText('Top formas de pagamento')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pix')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Formas de pagamento' })).toBeInTheDocument();
   });
 
-  it('sem formas, a seção inteira some', () => {
+  it('sem formas, nem o botão aparece', () => {
     render0(dados());
-    expect(screen.queryByText('Top formas de pagamento')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Formas de pagamento' })).not.toBeInTheDocument();
   });
 });
 

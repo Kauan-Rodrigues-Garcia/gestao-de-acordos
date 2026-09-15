@@ -299,6 +299,11 @@ export const ACAO_LABEL: Record<string, string> = {
   // O arquivo sai do sistema com nome, valor e meta de cada operador — quem
   // baixou e quando precisa ficar registrado.
   fechamento_mes_baixado:      'Relatório de fechamento do mês baixado',
+  // A aba Fechamento da gerência em Excel ou HTML — mesmo motivo (14/09/2026).
+  fechamento_operadores_baixado: 'Fechamento dos operadores baixado',
+  // Exclusão definitiva: a trilha do ticket some com ele, e este é o registro
+  // que sobra de que ele existiu e de quem o apagou (14/09/2026).
+  ticket_excluido:             'Ticket excluído',
 
   // ── Importação ────────────────────────────────────────────────────────────
   importacao_iniciada:         'Importação iniciada',

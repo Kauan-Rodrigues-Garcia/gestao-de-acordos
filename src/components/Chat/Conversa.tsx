@@ -28,7 +28,7 @@ import {
   type MensagemChat, type ConversaChat, type AnexoChat,
   type CurtidasDaMensagem, type QuemCurtiu,
 } from '@/services/chat/chat.service';
-import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service';
+import { listarMembros, nomesDeQuemParticipou, type MembroGrupo } from '@/services/chat/grupos.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
   AvatarChat,
@@ -46,6 +46,9 @@ import { VisualizadorMidia } from './VisualizadorMidia';
 import { InfoGrupoPainel } from './InfoGrupoPainel';
 import { StatusMensagem } from './StatusMensagem';
 import { estadoMensagem } from './estadoMensagem';
+
+/** A quantos px do topo a página anterior começa a ser pedida. */
+const PERTO_DO_TOPO = 160;
 
 interface Props {
   conversa:   ConversaChat;
@@ -157,7 +160,7 @@ export function Conversa({
    * As mensagens que já estavam na tela quando ela montou.
    *
    * A animação de entrada vale só para o que CHEGA depois. Sem esta conta,
-   * abrir uma conversa animaria as sessenta de uma vez — festa, não informação.
+   * abrir uma conversa animaria a página inteira de uma vez — festa, não informação.
    */
   const jaVistas = useRef<Set<string>>(new Set(mensagens.map(m => m.id)));
   const ultimaRolada = useRef<string | null>(null);
@@ -198,9 +201,9 @@ export function Conversa({
     /*
      * Chegou página anterior: devolve a rolagem para onde ela estava.
      *
-     * Inserir 60 mensagens acima empurra para baixo o que a pessoa está lendo —
-     * ela clica em «ver anteriores» e perde justamente a linha que queria
-     * comparar. A diferença de altura é o quanto compensar.
+     * Inserir uma página inteira acima empurra para baixo o que a pessoa está
+     * lendo — ela sobe, a página chega, e sem isto perderia justamente a linha
+     * que queria comparar. A diferença de altura é o quanto compensar.
      */
     if (el && alturaAntes.current !== null) {
       el.scrollTop += el.scrollHeight - alturaAntes.current;
@@ -279,6 +282,49 @@ export function Conversa({
     onVerAnteriores();
   }, [onVerAnteriores]);
 
+  /*
+   * As anteriores chegam sozinhas, como no WhatsApp (14/09/2026).
+   *
+   * Era um botão «Ver mensagens anteriores» no topo. Agora, chegando perto do
+   * topo, a página anterior é pedida sem clique, e a compensação de altura do
+   * efeito de rolagem acima mantém na tela a linha que a pessoa estava lendo.
+   *
+   * `pedindoAnteriores` é a trava contra pedido em rajada: o evento de rolagem
+   * dispara dezenas de vezes por segundo, e o `carregandoMais` do pai só chega
+   * no render seguinte. Ela solta quando a página chega (`carregandoMais` volta
+   * a falso) ou quando a pessoa se afasta do topo — o que também cobre o pai
+   * ter recusado o pedido sem nunca ligar o `carregandoMais`.
+   *
+   * Nada é pedido antes da primeira ida ao fim (`ultimaRolada`): na montagem a
+   * rolagem ainda está no zero, e sem isso toda conversa aberta já buscaria a
+   * segunda página.
+   */
+  const pedindoAnteriores = useRef(false);
+  useEffect(() => {
+    if (!carregandoMais) pedindoAnteriores.current = false;
+  }, [carregandoMais]);
+
+  const talvezPedirAnteriores = useCallback(() => {
+    const el = rolagem.current;
+    if (!el) return;
+    if (el.scrollTop >= PERTO_DO_TOPO) { pedindoAnteriores.current = false; return; }
+    if (!temMais || carregandoMais || pedindoAnteriores.current) return;
+    if (ultimaRolada.current === null) return;
+    pedindoAnteriores.current = true;
+    pedirAnteriores();
+  }, [temMais, carregandoMais, pedirAnteriores]);
+
+  /*
+   * Conversa que não enche a caixa não tem como rolar — e sem rolar, nunca
+   * chegaria ao topo. Quando a caixa tem tamanho medido e o conteúdo cabe nela,
+   * a próxima página vem direto. `clientHeight` zero é caixa ainda sem layout.
+   */
+  useEffect(() => {
+    const el = rolagem.current;
+    if (!el || el.clientHeight === 0) return;
+    if (el.scrollHeight <= el.clientHeight + PERTO_DO_TOPO) talvezPedirAnteriores();
+  }, [mensagens, talvezPedirAnteriores]);
+
   // ── Arquivos ───────────────────────────────────────────────────────────────
   const receberArquivos = useCallback((arquivos: File[]) => {
     const grandes = arquivos.filter(a => a.size > LIMITE_ANEXO);
@@ -339,7 +385,7 @@ export function Conversa({
    *
    * `chat_curtidas` é uma tabela à parte desde 01/09/2026 — em grupo, a coluna
    * única de antes apagava a curtida anterior em silêncio a cada nova. O preço
-   * é esta consulta; ela cobre as 60 mensagens da página numa ida só.
+   * é esta consulta; ela cobre as mensagens da página numa ida só.
    *
    * A dependência é a IDENTIDADE das mensagens, não o array: `mensagens` é
    * recriado a cada evento de realtime, e depender dele relançaria a consulta
@@ -374,17 +420,53 @@ export function Conversa({
    * isso chega como aviso de sistema — que recarrega a lista pelo efeito.
    */
   const [membros, setMembros] = useState<MembroGrupo[]>([]);
+  /** De qual conversa é a lista em `membros` — antes dela chegar, ninguém «falta». */
+  const [membrosDe, setMembrosDe] = useState<string | null>(null);
   const entradasESaidas = mensagens.filter(m => m.sistema).length;
   useEffect(() => {
-    if (conversa.tipo !== 'grupo') { setMembros([]); return; }
+    if (conversa.tipo !== 'grupo') { setMembros([]); setMembrosDe(null); return; }
     let cancelado = false;
-    void listarMembros(conversa.id).then(r => { if (!cancelado) setMembros(r); });
+    void listarMembros(conversa.id).then(r => {
+      if (!cancelado) { setMembros(r); setMembrosDe(conversa.id); }
+    });
     return () => { cancelado = true; };
   }, [conversa.id, conversa.tipo, entradasESaidas]);
 
+  /*
+   * Quem escreveu e já não está no grupo.
+   *
+   * A lista de membros é a de AGORA. Sem este complemento, o aviso de quem saiu
+   * dizia «Alguém saiu do grupo», e o balão antigo de um ex-membro vinha sem
+   * nome. A busca só dispara quando há autor sem nome depois de a lista chegar,
+   * e o que já foi achado não é pedido de novo.
+   */
+  const [nomesDeQuemSaiu, setNomesDeQuemSaiu] = useState<Map<string, string>>(new Map());
+  useEffect(() => { setNomesDeQuemSaiu(new Map()); }, [conversa.id]);
+  const autoresSemNome = useMemo(() => {
+    if (conversa.tipo !== 'grupo' || membrosDe !== conversa.id) return '';
+    const noGrupo = new Set(membros.map(m => m.perfil_id));
+    const faltam = new Set<string>();
+    for (const m of mensagens) {
+      if (m.autor_id && !noGrupo.has(m.autor_id) && !nomesDeQuemSaiu.has(m.autor_id)) {
+        faltam.add(m.autor_id);
+      }
+    }
+    return [...faltam].sort().join(',');
+  }, [conversa.id, conversa.tipo, membrosDe, membros, mensagens, nomesDeQuemSaiu]);
+  useEffect(() => {
+    if (!autoresSemNome) return;
+    let cancelado = false;
+    void nomesDeQuemParticipou(conversa.id, autoresSemNome.split(',')).then(achados => {
+      if (cancelado || achados.size === 0) return;
+      setNomesDeQuemSaiu(antes => new Map([...antes, ...achados]));
+    });
+    return () => { cancelado = true; };
+  }, [conversa.id, autoresSemNome]);
+
   const autores = useMemo(
-    () => new Map(membros.map(m => [m.perfil_id, m.nome])),
-    [membros],
+    // Os membros de agora por último: se alguém trocou de nome, vale o atual.
+    () => new Map([...nomesDeQuemSaiu, ...membros.map(m => [m.perfil_id, m.nome] as const)]),
+    [membros, nomesDeQuemSaiu],
   );
 
   /*
@@ -716,17 +798,17 @@ export function Conversa({
 
       {/* Mensagens */}
       <div ref={rolagem}
+           data-rolagem-conversa
+           onScroll={talvezPedirAnteriores}
            className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1.5">
         <EstiloEntrada />
 
-        {temMais && (
-          <div className="flex justify-center pb-2">
-            <button
-              onClick={pedirAnteriores} disabled={carregandoMais}
-              className="text-[11px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded-full px-3 py-1 transition-colors disabled:opacity-60"
-            >
-              {carregandoMais ? 'Carregando…' : 'Ver mensagens anteriores'}
-            </button>
+        {/* Sem botão: a página anterior vem ao subir. Ver `talvezPedirAnteriores`. */}
+        {temMais && carregandoMais && (
+          <div className="flex justify-center pb-2" role="status">
+            <span className="text-[11px] text-muted-foreground bg-muted/60 rounded-full px-3 py-1">
+              Carregando mensagens anteriores…
+            </span>
           </div>
         )}
 

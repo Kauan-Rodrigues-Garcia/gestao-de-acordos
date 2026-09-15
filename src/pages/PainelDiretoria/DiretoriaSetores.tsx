@@ -66,7 +66,7 @@ import { useAxisColors, useChartColors } from '@/hooks/useChartColors';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
-import { QUARTIS_PADRAO, COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
+import { QUARTIS_PADRAO, corProjecao } from '@/lib/diasUteis';
 import { partesDoMes, rotuloDoMes } from '@/lib/mesReferencia';
 import { corDaForma, agruparFormas } from '@/lib/formasPagamento';
 import { cn } from '@/lib/utils';
@@ -74,10 +74,16 @@ import { formatBRL } from '@/lib/money';
 import { variacao, acumular, intensidadeDaBarra } from '@/services/mestre/diretoria.service';
 import {
   buscarGradeDeSetores, buscarDetalheDoSetor, participacao, projecaoDoSetor,
-  type GradeDeSetores, type DetalheDoSetor,
+  type GradeDeSetores, type DetalheDoSetor, type EquipeDoSetor,
   type CarteiraSemSetor,
 } from '@/services/mestre/diretoriaSetores.service';
 import type { SetorAgregado } from './useSetoresExtras';
+import { SeloQuartil } from './components';
+import { separarEquipesDo59 } from '@/services/mestre/equipesDiretoria';
+import { useEquipesDiretoria } from './useEquipesDiretoria';
+import { CardEquipeDiretoria } from './CardEquipeDiretoria';
+import { DetalheEquipeDiretoria } from './DetalheEquipeDiretoria';
+import { OperadoresDaEquipe59 } from './OperadoresDaEquipe59';
 
 const FALLBACK_PRIMARIA = '#3b82f6';
 const FALLBACK_ANTERIOR = '#94a3b8';
@@ -90,20 +96,76 @@ const iniciais = (nome: string) =>
 type Alvo =
   | { tipo: 'setor';       id: string }
   | { tipo: 'carteira';    cod: string }
-  | { tipo: 'alternativo'; id: string };
+  | { tipo: 'alternativo'; id: string }
+  /** Uma equipe do Gestão, aberta de dentro do setor (14/09/2026). */
+  | { tipo: 'equipe';      setorId: string; equipeId: string };
 
 // ── Peças ───────────────────────────────────────────────────────────────────
 
-function SeloQuartil({ quartil }: { quartil: number }) {
-  const cor = COR_QUARTIL[quartil] ?? COR_QUARTIL[4];
+/**
+ * Uma equipe como o 59 a escreve — subgrupo do ERP, valor e o que ela carrega.
+ *
+ * Desde 14/09/2026 é a lista SECUNDÁRIA do setor vinculado (só as sem vínculo
+ * com equipe do sistema) e a lista inteira da carteira ainda sem setor. O clique
+ * abre os operadores logo abaixo — quem são e quanto cada um recebeu
+ * (`OperadoresDaEquipe59`).
+ */
+function LinhaEquipe59({ equipe: e, maior, contexto }: {
+  equipe: EquipeDoSetor;
+  maior: number;
+  contexto: { empresaId: string; mes: string; setorId: string | null; diaCorte: number };
+}) {
+  const [aberta, setAberta] = useState(false);
   return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-      style={{ background: `${cor}1f`, color: cor }}
-      title={`Quartil ${quartil}`}
-    >
-      Q{quartil}
-    </span>
+    <div>
+      <button
+        type="button"
+        onClick={() => setAberta(v => !v)}
+        aria-expanded={aberta}
+        title={aberta ? 'Fechar os operadores' : 'Ver os operadores desta equipe'}
+        className="flex w-full items-center gap-3 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-muted/40"
+      >
+        <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', aberta && 'rotate-90')} />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
+          <Link2Off className="h-3 w-3" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium text-foreground">{e.equipeNome ?? e.nome}</span>
+          <span className="block truncate text-[10px] text-muted-foreground">
+            {e.carteira ? `${e.carteira} · ` : ''}
+            {e.operadores} {e.operadores === 1 ? 'operador' : 'operadores'}
+            {!e.eEquipe && ' · rótulo do ERP, não é equipe'}
+            {e.veioDeFora && ' · veio de outro setor'}
+            {/* O Integral cruzado conta aqui E na origem. Dizer isso é o que
+                impede alguém somar duas vezes na mão. */}
+            {e.eIntegral && ' · integral cobrado para cá'}
+          </span>
+        </span>
+        <span className="hidden h-2 w-[22%] shrink-0 overflow-hidden rounded-full bg-muted/60 sm:block">
+          <span
+            className="block h-full rounded-full bg-primary"
+            style={{
+              width: `${maior ? Math.max(2, (e.valor / maior) * 100) : 0}%`,
+              opacity: intensidadeDaBarra(e.valor, maior),
+            }}
+          />
+        </span>
+        <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+          {formatBRL(e.valor)}
+        </span>
+      </button>
+      {aberta && (
+        <OperadoresDaEquipe59
+          empresaId={contexto.empresaId}
+          mes={contexto.mes}
+          setorId={contexto.setorId}
+          codGrupo={e.codGrupo}
+          subgrupo={e.nome}
+          diaCorte={contexto.diaCorte}
+          totalEquipe={e.valor}
+        />
+      )}
+    </div>
   );
 }
 
@@ -361,12 +423,33 @@ export function DiretoriaSetores({
   }, [empresaId, mes]);
 
   useEffect(() => {
+    // A equipe abre por cima do setor que já estava carregado: o detalhe dele
+    // continua valendo (é dele que sai o que o 59 diz da equipe).
+    if (alvo?.tipo === 'equipe') return;
     // O alternativo não passa por aqui: `fn_mestre_diretoria_setor` monta o
     // detalhe a partir das carteiras do setor, e ele não tem nenhuma — a
     // chamada voltaria vazia. O detalhe dele sai da grade, que já o trouxe.
     if (!alvo || alvo.tipo === 'alternativo') { setDetalhe(null); return; }
     void carregarDetalhe(alvo, grade?.diaCorte ?? null);
   }, [alvo, carregarDetalhe, grade?.diaCorte]);
+
+  /*
+   * As equipes do Gestão, com os números do Painel Líder (14/09/2026).
+   *
+   * Só carregam quando alguém abre um setor: a grade não precisa delas, e a
+   * carga traz o resumo do analítico da empresa inteira. Depois de ligada, fica
+   * ligada — voltar à grade e abrir outro setor não busca de novo.
+   */
+  const [querEquipes, setQuerEquipes] = useState(false);
+  useEffect(() => { if (alvo?.tipo === 'setor') setQuerEquipes(true); }, [alvo]);
+  const equipesGestao = useEquipesDiretoria(empresaId, mes, querEquipes, versao);
+
+  const setorAbertoId = alvo?.tipo === 'setor' ? alvo.id : alvo?.tipo === 'equipe' ? alvo.setorId : null;
+  const equipesDoSetorAberto = useMemo(
+    () => (setorAbertoId ? equipesGestao.equipesDoSetor(setorAbertoId) : []),
+    [setorAbertoId, equipesGestao],
+  );
+  const equipes59 = useMemo(() => separarEquipesDo59(detalhe?.equipes ?? []), [detalhe]);
 
   /** A projeção de cada setor, na régua do painel. */
   const projecoes = useMemo(() => {
@@ -639,6 +722,43 @@ export function DiretoriaSetores({
     );
   }
 
+  // ── A EQUIPE, dentro do setor ─────────────────────────────────────────────
+
+  if (alvo?.tipo === 'equipe') {
+    const equipe = equipesDoSetorAberto.find(x => x.equipeId === alvo.equipeId);
+    const setorNome = grade.setores.find(s => s.setorId === alvo.setorId)?.setorNome ?? detalhe?.setorNome ?? 'o setor';
+    const voltar = () => setAlvo({ tipo: 'setor', id: alvo.setorId });
+    if (!equipe) {
+      return (
+        <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/20 px-4 py-4">
+          <Users className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="text-xs leading-relaxed">
+            <p className="font-semibold text-foreground">
+              {equipesGestao.carregando ? 'Carregando a equipe…' : 'Esta equipe não está mais no setor'}
+            </p>
+            <button type="button" onClick={voltar}
+              className="mt-1 inline-flex items-center gap-1.5 font-semibold text-primary hover:opacity-80">
+              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para {setorNome}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    const vinculada = equipes59.vinculadas.find(v => v.equipeId === equipe.equipeId);
+    return (
+      <DetalheEquipeDiretoria
+        equipe={equipe}
+        lideres={equipesGestao.lideresDe(equipe.equipeId)}
+        setorNome={setorNome}
+        mes={mes}
+        valor59={vinculada?.valor ?? null}
+        rotulos59={vinculada?.rotulos59 ?? []}
+        carregarSerie={equipesGestao.serieDaEquipe}
+        onVoltar={voltar}
+      />
+    );
+  }
+
   // ── O DETALHE, na própria aba ─────────────────────────────────────────────
 
   if (alvo) {
@@ -775,7 +895,9 @@ export function DiretoriaSetores({
                   {detalhe.operadores}
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  em {detalhe.equipes.length} {detalhe.equipes.length === 1 ? 'equipe' : 'equipes'}
+                  {detalhe.vinculado && !equipesGestao.carregando && equipesDoSetorAberto.length > 0
+                    ? `em ${equipesDoSetorAberto.length} ${equipesDoSetorAberto.length === 1 ? 'equipe' : 'equipes'} do Gestão`
+                    : `em ${detalhe.equipes.length} ${detalhe.equipes.length === 1 ? 'equipe' : 'equipes'} do 59`}
                 </p>
               </div>
             </div>
@@ -872,71 +994,91 @@ export function DiretoriaSetores({
             {/* Equipes + formas */}
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
               <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-foreground">As equipes</h3>
-                  {/* A comparação com o mês anterior NÃO desce até a equipe: o
-                      subgrupo do ERP muda de nome, e casar por nome inventaria
-                      «equipe nova» e «equipe que sumiu» onde houve renomeação. */}
-                  <p className="text-[11px] text-muted-foreground">
-                    {detalhe.vinculado
-                      ? 'Como estão configuradas no sistema. Sem comparação com o mês anterior — nome de equipe muda no ERP.'
-                      : 'Direto do 59, sem vínculo aplicado.'}
-                  </p>
-                </div>
-                <div className="space-y-0.5">
-                  {detalhe.equipes.map(e => (
-                    <div
-                      key={`${e.codGrupo}|${e.nome}`}
-                      className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40"
-                    >
-                      {detalhe.vinculado && e.equipeId ? (
-                        <Avatar className="h-7 w-7 shrink-0 border border-border/60">
-                          {e.liderFoto && <AvatarImage src={e.liderFoto} alt="" />}
-                          <AvatarFallback className="bg-muted text-[9px] font-semibold text-muted-foreground">
-                            {iniciais(e.liderNome ?? e.equipeNome ?? e.nome)}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : (
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
-                          <Link2Off className="h-3 w-3" />
-                        </span>
-                      )}
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-medium text-foreground">
-                          {e.equipeNome ?? e.nome}
-                        </span>
-                        <span className="block truncate text-[10px] text-muted-foreground">
-                          {e.liderNome ? `${e.liderNome} · ` : ''}
-                          {e.operadores} {e.operadores === 1 ? 'operador' : 'operadores'}
-                          {e.veioDeFora && ' · veio de outro setor'}
-                          {/* O Integral cruzado conta aqui E na origem. Dizer
-                              isso é o que impede alguém somar duas vezes na
-                              mão e concluir que o painel está errado. */}
-                          {e.eIntegral && ' · integral cobrado para cá'}
-                        </span>
-                      </span>
-
-                      <span className="hidden h-2 w-[22%] shrink-0 overflow-hidden rounded-full bg-muted/60 sm:block">
-                        <span
-                          className="block h-full rounded-full bg-primary"
-                          style={{
-                            width: `${maiorEquipe ? Math.max(2, (e.valor / maiorEquipe) * 100) : 0}%`,
-                            opacity: intensidadeDaBarra(e.valor, maiorEquipe),
-                          }}
-                        />
-                      </span>
-                      <span className="w-[104px] shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
-                        {formatBRL(e.valor)}
-                      </span>
+                {detalhe.vinculado && alvo.tipo === 'setor' ? (
+                  <>
+                    {/* As equipes que EXISTEM no Gestão para este setor, com os
+                        números do Painel Líder (14/09/2026). O 59 deixa de ser a
+                        lista: ele entra só no que não casou com equipe nenhuma. */}
+                    <div className="mb-3">
+                      <h3 className="text-sm font-semibold text-foreground">As equipes</h3>
+                      <p className="text-[11px] text-muted-foreground">
+                        Cadastradas no Gestão para {detalhe.setorNome}, com os números do Painel Líder
+                        (analítico e Metas). Clique numa equipe para abrir.
+                      </p>
                     </div>
-                  ))}
-                  {!detalhe.equipes.length && (
-                    <p className="py-3 text-center text-xs text-muted-foreground">
-                      Nenhuma equipe com recebimento no período.
-                    </p>
-                  )}
-                </div>
+                    {equipesGestao.carregando ? (
+                      <div className="grid gap-3 xl:grid-cols-2">
+                        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-[190px] rounded-xl" />)}
+                      </div>
+                    ) : equipesDoSetorAberto.length === 0 ? (
+                      <p className="py-3 text-center text-xs text-muted-foreground">
+                        {equipesGestao.erro
+                          ? `Não foi possível carregar as equipes: ${equipesGestao.erro}`
+                          : 'Nenhuma equipe cadastrada no Gestão para este setor.'}
+                      </p>
+                    ) : (
+                      <div className="grid gap-3 xl:grid-cols-2">
+                        {equipesDoSetorAberto.map(eq => (
+                          <CardEquipeDiretoria
+                            key={eq.equipeId}
+                            equipe={eq}
+                            lideres={equipesGestao.lideresDe(eq.equipeId)}
+                            valor59={equipes59.vinculadas.find(v => v.equipeId === eq.equipeId)?.valor ?? null}
+                            onAbrir={() => setAlvo({ tipo: 'equipe', setorId: alvo.id, equipeId: eq.equipeId })}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Equipe do 59 sem vínculo com equipe do sistema: separada,
+                        porque é o que precisa de alguém para vincular. */}
+                    {equipes59.semVinculo.length > 0 && (
+                      <div className="mt-4 border-t border-border/50 pt-3">
+                        <p className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+                          <Link2Off className="h-3.5 w-3.5 text-muted-foreground" />
+                          No 59, sem vínculo com equipe do sistema
+                        </p>
+                        <p className="mb-1.5 text-[10px] text-muted-foreground">
+                          {formatBRL(equipes59.semVinculo.reduce((t, e) => t + e.valor, 0))} que contam no setor
+                          e não chegam a nenhuma equipe acima. Clique numa equipe para ver quem recebeu;
+                          o vínculo é feito na aba Relatório 59.
+                        </p>
+                        <div className="space-y-0.5">
+                          {equipes59.semVinculo.map(e => (
+                            <LinhaEquipe59
+                              key={`${e.codGrupo}|${e.nome}`}
+                              equipe={e}
+                              maior={equipes59.semVinculo[0]?.valor ?? 0}
+                              contexto={{ empresaId, mes, setorId: detalhe.setorId, diaCorte: detalhe.diaCorte }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-3">
+                      <h3 className="text-sm font-semibold text-foreground">As equipes</h3>
+                      <p className="text-[11px] text-muted-foreground">Direto do 59, sem vínculo aplicado.</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      {detalhe.equipes.map(e => (
+                        <LinhaEquipe59
+                          key={`${e.codGrupo}|${e.nome}`}
+                          equipe={e}
+                          maior={maiorEquipe}
+                          contexto={{ empresaId, mes, setorId: detalhe.setorId, diaCorte: detalhe.diaCorte }}
+                        />
+                      ))}
+                      {!detalhe.equipes.length && (
+                        <p className="py-3 text-center text-xs text-muted-foreground">
+                          Nenhuma equipe com recebimento no período.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </section>
 
               <section className="self-start rounded-xl border border-border/70 bg-card p-4 shadow-sm">

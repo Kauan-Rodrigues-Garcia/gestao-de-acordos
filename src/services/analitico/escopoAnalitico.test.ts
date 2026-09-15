@@ -176,3 +176,37 @@ describe('temCarimboDeSetor', () => {
  * declarados por aba, e `permissoes-escopo.test.ts` trava que uma nunca fala
  * pela outra.
  */
+
+/*
+ * 14/09/2026: a Contribuição Receptivo passou a ENTRAR no analítico, como linha
+ * sem operador no setor que recebeu (`procedencia = contribuicao_59`). O mesmo
+ * dinheiro já está no total do Receptivo — então conta no setor e não na empresa.
+ */
+describe('linha de contribuição (2ª perna do Integral)', () => {
+  const RECEPTIVO = 'setor-receptivo';
+  const contribuicaoPlay4: LinhaEscopavel = {
+    operador_id: null, setor_id: PLAY4, contribuicao: true, contribuicao_de_setor_id: RECEPTIVO,
+  };
+
+  it('não conta no total da empresa — já está no Receptivo', () => {
+    expect(linhaNoEscopo(contribuicaoPlay4, ESCOPO_EMPRESA)).toBe(false);
+  });
+
+  it('conta no setor que recebeu, pelo carimbo', () => {
+    const escopo = escopoDeSetor({ setorId: PLAY4, alternativo: false, operadores: new Set(), temCarimbo: true });
+    expect(linhaNoEscopo(contribuicaoPlay4, escopo)).toBe(true);
+  });
+
+  it('não conta para operador nem equipe', () => {
+    expect(linhaNoEscopo(contribuicaoPlay4, { tipo: 'operador', operadorId: ANA })).toBe(false);
+    expect(linhaNoEscopo(contribuicaoPlay4, { tipo: 'equipe', operadores: new Set([ANA]) })).toBe(false);
+  });
+
+  it('a origem dela é o setor de quem cobrou: desmarcar o Receptivo tira a contribuição', () => {
+    const escopo = escopoDeSetor({
+      setorId: PLAY4, alternativo: false, operadores: new Set(), temCarimbo: true,
+      origensExcluidas: new Set([RECEPTIVO]), setorDoOperador: () => null,
+    });
+    expect(linhaNoEscopo(contribuicaoPlay4, escopo)).toBe(false);
+  });
+});

@@ -18,7 +18,7 @@ import { enviarParaLixeira } from '@/services/lixeira.service';
 import { registrarLog } from '@/services/logs.service';
 import { mesReferencia } from './analiticoComum';
 import {
-  montarOrigens, totalLiquido, totalExcluido,
+  montarOrigens, totalLiquido, totalExcluido, origemDaLinha, origemConta,
   type ExclusoesPorSetor, type OrigemDoAcumulado,
 } from './composicaoAcumulado';
 import {
@@ -912,6 +912,8 @@ export async function revincularOrfaosAnalitico(
       .eq('empresa_id', empresaId)
       .eq('operador_usuario', usuario)
       .is('operador_id', null)
+      // A Contribuição Receptivo do 59 também não tem operador, mas o login
+      // dela é `#contribuicao>…` — nunca casa com um login do mapa.
       .select('id');
     if (!error && data?.length) {
       revinculados += data.length;
@@ -1170,7 +1172,9 @@ export async function buscarAnalitico(
     }
     if (filtros.operadorId !== undefined) {
       if (filtros.operadorId === null) {
-        q = q.is('operador_id', null);
+        // Órfã é linha a vincular. A Contribuição Receptivo não tem operador de
+        // propósito (é do setor), e listá-la aqui convidaria a apagá-la.
+        q = q.is('operador_id', null).filter('procedencia', 'neq', PROCEDENCIA_CONTRIBUICAO);
       } else {
         q = q.eq('operador_id', filtros.operadorId);
       }
@@ -1265,7 +1269,8 @@ export async function removerLinhasSemOperador(
     .from('analitico_recebimentos')
     .delete()
     .eq('empresa_id', empresaId)
-    .is('operador_id', null);
+    .is('operador_id', null)
+    .filter('procedencia', 'neq', PROCEDENCIA_CONTRIBUICAO);
   if (loteId) q = q.eq('lote_id', loteId);
   const { count, error } = await (q as ReturnType<typeof q.select>);
   return { removidos: count ?? 0, error: error?.message ?? null };
@@ -1419,6 +1424,8 @@ export async function removerOrfaosDoMes(
     .delete()
     .eq('empresa_id', empresaId)
     .is('operador_id', null)
+    // Mesmo recorte da lista de órfãos: a contribuição do 59 fica.
+    .filter('procedencia', 'neq', PROCEDENCIA_CONTRIBUICAO)
     .gte('data_pagamento', primeiro)
     .lte('data_pagamento', fim);
 
@@ -1563,6 +1570,22 @@ interface LinhaMesAnalitico {
   qtd?:             number;
   /** Linha sintética de ajuste manual — não veio do relatório do ERP. */
   ajuste?:          boolean;
+  /**
+   * De onde a linha veio. `contribuicao_59` é a Contribuição Receptivo que o 59
+   * grava no setor que recebeu (14/09/2026) — sem operador, conta no setor e
+   * não na empresa. Ausente em base anterior à coluna.
+   */
+  procedencia?:     string;
+  /** Só na contribuição: o setor de quem cobrou. É a origem da linha. */
+  contribuicao_de_setor_id?: string | null;
+}
+
+/** A 2ª perna do Integral, gravada pelo 59 no setor que recebeu. */
+export const PROCEDENCIA_CONTRIBUICAO = 'contribuicao_59';
+
+/** A linha é a Contribuição Receptivo escrita pelo 59? */
+function ehContribuicao(l: { procedencia?: string }): boolean {
+  return l.procedencia === PROCEDENCIA_CONTRIBUICAO;
 }
 
 interface MesCarregado {
@@ -1580,10 +1603,12 @@ function limitesDoMes(mes: string): { primeiro: string; fim: string } {
 async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarregado> {
   const { primeiro, fim } = limitesDoMes(mes);
 
-  const buscar = async (comSetor: boolean): Promise<LinhaMesAnalitico[] | null> => {
-    const cols = comSetor
-      ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento'
-      : 'operador_id, importado_por_id, valor_recebido, total_ho, data_pagamento';
+  const buscar = async (nivel: 'contribuicao' | 'setor' | 'minimo'): Promise<LinhaMesAnalitico[] | null> => {
+    const cols = nivel === 'contribuicao'
+      ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento, procedencia, contribuicao_de_setor_id'
+      : nivel === 'setor'
+        ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento'
+        : 'operador_id, importado_por_id, valor_recebido, total_ho, data_pagamento';
 
     const { data, error } = await paginarParalelo<LinhaMesAnalitico>(async (de, ate) => {
       const r = await supabase
@@ -1609,8 +1634,9 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
     return data;
   };
 
-  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
-  const linhas = (await buscar(true)) ?? (await buscar(false));
+  // Colunas mais novas primeiro, cada uma com a sua reserva: a da contribuição
+  // (20260914220000) e o setor_id (migration 20260712a).
+  const linhas = (await buscar('contribuicao')) ?? (await buscar('setor')) ?? (await buscar('minimo'));
 
   const setorDoPerfil = new Map<string, string | null>();
   // A condição era `linhas?.length`. Passou a ser «a leitura funcionou», porque
@@ -1739,6 +1765,10 @@ function setorDaLinha(l: LinhaMesAnalitico, setorDoPerfil: Map<string, string | 
 // no setor de quem importou). O card "Total recebido" do setor e o painel do
 // setor em Desempenho Equipes somam esses valores — sem isso o card fica menor
 // que o total do relatório sempre que o arquivo traz operadores sem conta.
+//
+// A Contribuição Receptivo (`contribuicao_59`) também é dinheiro do setor sem
+// operador, e entra aqui: é por esta soma que o setor ALTERNATIVO a enxerga. Ela
+// só fica fora da LISTA de órfãos e da remoção — não é linha a vincular.
 
 export async function buscarTotalOrfaosPorSetor(
   empresaId: string,
@@ -1774,6 +1804,14 @@ export interface TotalDoSetor {
   origens: OrigemDoAcumulado[];
   /** Quanto saiu do total por exclusão. 0 quando nada foi desmarcado. */
   excluido: number;
+  /**
+   * Quanto do `total` é Contribuição Receptivo — as linhas `contribuicao_59`
+   * que o 59 gravou no setor (14/09/2026). JÁ ESTÁ dentro de `total`: é o valor
+   * que o card do Receptivo mostra, e ninguém soma por cima.
+   */
+  contribuicao: number;
+  /** O setor tem linha do 59 no mês — então a contribuição vem dele, e não da digitada. */
+  do59: boolean;
 }
 
 export async function buscarTotalPorSetor(
@@ -1806,6 +1844,17 @@ export async function buscarTotalPorSetor(
       setorDoOperador,
       excluidas: exclusoes[sid],
     });
+    // A contribuição acompanha a exclusão da origem dela (o setor de quem
+    // cobrou): desmarcar o Receptivo tira do total E do card do Receptivo.
+    let contribuicao = 0;
+    let do59 = false;
+    for (const l of doSetor) {
+      if (l.procedencia === 'relatorio_59') do59 = true;
+      if (!ehContribuicao(l)) continue;
+      do59 = true;
+      const origem = origemDaLinha(l.operador_id, setorDoOperador, l.contribuicao_de_setor_id);
+      if (origemConta(origem, exclusoes[sid])) contribuicao += Number(l.valor_recebido) || 0;
+    }
     porSetor[sid] = {
       total:    totalLiquido(origens),
       // H.O. e quantidade acompanham o total: um acumulado sem a origem e uma
@@ -1814,6 +1863,8 @@ export async function buscarTotalPorSetor(
       qtd:      origens.reduce((s, o) => (o.excluida ? s : s + o.qtd), 0),
       origens,
       excluido: totalExcluido(origens),
+      contribuicao: Math.round(contribuicao * 100) / 100,
+      do59,
     };
   }
   return porSetor;
@@ -1829,6 +1880,9 @@ export interface LinhaRecebidaDia {
   importado_por_id: string | null;
   valor_recebido: number;
   data_pagamento: string;   // 'yyyy-MM-dd'
+  /** Contribuição Receptivo: conta no setor, não na empresa — `linhaNoEscopo`. */
+  contribuicao?: boolean;
+  contribuicao_de_setor_id?: string | null;
 }
 
 /**
@@ -1850,6 +1904,8 @@ export async function buscarRecebidoPorDia(
       importado_por_id: l.importado_por_id,
       valor_recebido:   l.valor_recebido,
       data_pagamento:   l.data_pagamento,
+      contribuicao:     ehContribuicao(l),
+      contribuicao_de_setor_id: l.contribuicao_de_setor_id ?? null,
     })),
     error: null,
   };

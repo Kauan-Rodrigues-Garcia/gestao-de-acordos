@@ -474,8 +474,14 @@ async function buscarGrupo(conversaId: string): Promise<ConversaChat | null> {
   };
 }
 
-/** Quantas mensagens a conversa abre de uma vez. */
-export const PAGINA_MENSAGENS = 60;
+/**
+ * Quantas mensagens a conversa abre de uma vez.
+ *
+ * Eram 60. Desde 14/09/2026 as anteriores chegam sozinhas ao subir (ver
+ * `talvezPedirAnteriores` em `Conversa`), então a primeira página só precisa
+ * encher a caixa com folga — e menor, abre mais rápido.
+ */
+export const PAGINA_MENSAGENS = 30;
 
 /**
  * As mensagens da conversa, da mais antiga para a mais nova.
@@ -936,6 +942,35 @@ async function assinarLote(): Promise<void> {
   } catch {
     for (const resolver of lote.values()) resolver(null);
   }
+}
+
+/** Vida curta: a URL de download é usada no clique, não guardada. */
+const VALIDADE_DOWNLOAD = 60;
+
+/**
+ * A URL que SALVA o anexo, em vez de abri-lo.
+ *
+ * O link de visualização (`urlDoAnexo`) é de outro domínio — o do Storage —, e
+ * o navegador ignora o atributo `download` em link de outra origem: o botão de
+ * baixar abria o arquivo numa guia nova (pedido de 14/09/2026). Com a opção
+ * `download`, o próprio Storage responde `Content-Disposition: attachment`, e o
+ * navegador grava o arquivo sem sair da página e sem carregá-lo inteiro na
+ * memória da aba, como faria um `fetch` + Blob.
+ *
+ * Não entra no cache de `assinaturas`: o cache guarda a URL de EXIBIR, e uma
+ * miniatura desenhada com a URL de baixar dispararia download ao montar.
+ */
+export async function urlDeDownloadDoAnexo(caminho: string, nome: string): Promise<string | null> {
+  // Anexo que ainda está subindo mora num blob da própria aba — mesma origem,
+  // o `download` do link já basta.
+  if (caminho.startsWith('blob:')) return caminho;
+  const { data, error } = await supabase.storage.from('chat')
+    .createSignedUrl(caminho, VALIDADE_DOWNLOAD, { download: nome });
+  if (error || !data) {
+    console.warn('[chat] urlDeDownloadDoAnexo:', error?.message);
+    return null;
+  }
+  return data.signedUrl;
 }
 
 // ── Erros ────────────────────────────────────────────────────────────────────

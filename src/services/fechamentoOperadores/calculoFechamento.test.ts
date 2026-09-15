@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
   metaAtingida, alcanceDaMeta, mediaPorDu, montarLinhaFechamento, resumirFechamento,
+  ordenarLinhasFechamento,
   type EntradaLinhaFechamento, type LinhaFechamento,
 } from './calculoFechamento';
 import { SITUACOES_FECHAMENTO, FORA_DO_FATURAMENTO_TOTAL } from './situacoes';
@@ -196,5 +197,50 @@ describe('gráficos', () => {
     const vazio = resumirFechamento([], QUARTIS_PADRAO);
     expect(vazio.porQuartil.every(q => q.pct === 0)).toBe(true);
     expect(vazio.porSituacao.every(s => s.pct === 0)).toBe(true);
+  });
+});
+
+/*
+ * Pedido de 14/09/2026: a tabela aparece na ordem do quartil, «igual os
+ * quartis do painel líder» — 1º quartil primeiro, depois o 2º, e assim por
+ * diante. A régua do Painel Líder (`QuartisOperadores`) é a projeção, da maior
+ * para a menor; o quartil sai dela, então a ordem por projeção já agrupa.
+ */
+describe('ordenarLinhasFechamento', () => {
+  const nomes = (ls: LinhaFechamento[]) => ordenarLinhasFechamento(ls).map(l => l.nome);
+
+  it('1º quartil primeiro, e dentro do quartil a maior projeção', () => {
+    const ls = [
+      linha({ nome: 'Quarto',   fechamento: 20_000,  meta: 100_000 }),
+      linha({ nome: 'Primeiro', fechamento: 110_000, meta: 100_000 }),
+      linha({ nome: 'Segundo',  fechamento: 85_000,  meta: 100_000 }),
+      linha({ nome: 'Topo',     fechamento: 150_000, meta: 100_000 }),
+    ];
+    expect(ls.map(l => l.quartil)).toEqual([4, 1, 2, 1]);
+    expect(nomes(ls)).toEqual(['Topo', 'Primeiro', 'Segundo', 'Quarto']);
+  });
+
+  it('sem meta vai para o fim, em ordem alfabética', () => {
+    const ls = [
+      linha({ nome: 'Zeca',  fechamento: 90_000 }),
+      linha({ nome: 'Ana',   fechamento: 1_000 }),
+      linha({ nome: 'Bruno', fechamento: 50_000, meta: 100_000 }),
+    ];
+    expect(nomes(ls)).toEqual(['Bruno', 'Ana', 'Zeca']);
+  });
+
+  it('projeção igual desempata pelo nome', () => {
+    const ls = [
+      linha({ nome: 'Carla', fechamento: 100_000, meta: 100_000 }),
+      linha({ nome: 'Beto',  fechamento: 100_000, meta: 100_000 }),
+    ];
+    expect(nomes(ls)).toEqual(['Beto', 'Carla']);
+  });
+
+  it('não muta a lista recebida', () => {
+    const ls = [linha({ nome: 'B', fechamento: 1, meta: 100 }), linha({ nome: 'A', fechamento: 99, meta: 100 })];
+    const antes = ls.map(l => l.nome);
+    ordenarLinhasFechamento(ls);
+    expect(ls.map(l => l.nome)).toEqual(antes);
   });
 });

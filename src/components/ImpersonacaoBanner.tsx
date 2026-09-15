@@ -1,6 +1,12 @@
 /**
  * Faixa fixa exibida enquanto um super_admin está impersonando outro usuário.
- * Sempre visível (topo, z alto) com saída em 1 clique.
+ * Sempre visível (z alto) com saída em 1 clique.
+ *
+ * Mora no RODAPÉ, ao centro. Ficava no canto superior direito e cobria o nome
+ * no bloco do perfil do header — justamente o nome que diz de quem é a sessão
+ * (14/09/2026). Embaixo ao centro é o vão livre: o dock de autorizações ocupa o
+ * canto esquerdo e a bolha do chat, o direito; a largura máxima deixa espaço
+ * para os dois no celular.
  */
 import { useEffect, useState } from 'react';
 import { UserCog, LogOut, Loader2 } from 'lucide-react';
@@ -38,8 +44,8 @@ export function ImpersonacaoBanner() {
   }
 
   return (
-    <div className="fixed top-1.5 right-1.5 z-[100]">
-      <div className="flex items-center gap-1.5 rounded-full bg-amber-500 text-amber-950 shadow-md pl-2.5 pr-1 py-1 text-[11px] max-w-[70vw]">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] print:hidden">
+      <div className="flex items-center gap-1.5 rounded-full bg-amber-500 text-amber-950 shadow-md pl-2.5 pr-1 py-1 text-[11px] max-w-[calc(100vw-10rem)]">
         <UserCog className="w-3 h-3 shrink-0" />
         <span className="truncate">
           Como <strong>{ativa.alvoNome}</strong>

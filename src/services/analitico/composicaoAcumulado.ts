@@ -60,6 +60,11 @@ export interface LinhaComOrigem {
    * `recebido ÷ pagamentos`.
    */
   qtd?: number | null;
+  /**
+   * Só na Contribuição Receptivo (`procedencia = contribuicao_59`): o setor de
+   * quem cobrou. É a origem da linha — ela não tem operador para dizer isso.
+   */
+  contribuicao_de_setor_id?: string | null;
 }
 
 /**
@@ -69,11 +74,18 @@ export interface LinhaComOrigem {
  * dela, caindo no setor do cadastro quando não tem equipe — a mesma definição
  * que `operadorEquipeMap` usa no resto do analítico. Usar `perfis.setor_id` cru
  * aqui e a equipe ali daria duas listas de origem diferentes para o mesmo mês.
+ *
+ * A Contribuição Receptivo (14/09/2026) não tem operador: a origem é o setor de
+ * quem cobrou, `contribuicaoDe`. Assim ela aparece na composição como dinheiro
+ * que veio do Receptivo — e desmarcar o Receptivo a tira junto, que é o que a
+ * palavra «origem» promete.
  */
 export function origemDaLinha(
   operadorId: string | null,
   setorDoOperador: (id: string) => string | null | undefined,
+  contribuicaoDe?: string | null,
 ): OrigemKey {
+  if (contribuicaoDe) return contribuicaoDe;
   if (operadorId == null) return ORIGEM_SEM_OPERADOR;
   return setorDoOperador(operadorId) ?? ORIGEM_SEM_OPERADOR;
 }
@@ -114,7 +126,7 @@ export function montarOrigens(params: {
 
   const porChave = new Map<OrigemKey, OrigemDoAcumulado>();
   for (const l of linhas) {
-    const chave = origemDaLinha(l.operador_id, setorDoOperador);
+    const chave = origemDaLinha(l.operador_id, setorDoOperador, l.contribuicao_de_setor_id);
     let acc = porChave.get(chave);
     if (!acc) {
       acc = {

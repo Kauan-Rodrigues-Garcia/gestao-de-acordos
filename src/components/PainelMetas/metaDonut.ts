@@ -5,6 +5,8 @@
  * porque um arquivo de componente que exporta funções perde o Fast Refresh.
  */
 
+import { agruparFormas } from '@/lib/formasPagamento';
+
 /**
  * Faixas de cor do card original.
  *
@@ -34,7 +36,13 @@ export interface FatiaForma {
 }
 
 /**
- * Ordena as formas e calcula a participação de cada uma.
+ * Agrupa as formas, ordena e calcula a participação de cada uma.
+ *
+ * O agrupamento é o de `agruparFormas`, o MESMO do «Como o dinheiro chega» do
+ * Painel Diretoria: com o 59 o ERP escreve «PIX», «Pix QR Code», «Boleto
+ * Negociação»… e o card listava cada variação como se fosse um meio diferente
+ * (pedido de 14/09/2026). Duas telas agrupando com regras próprias é como elas
+ * passariam a discordar sobre quanto entrou por Pix.
  *
  * A % é sobre o VALOR, não sobre a quantidade de pagamentos: num painel de
  * recebimento, "40% veio de Pix" precisa querer dizer 40% do dinheiro. O
@@ -47,14 +55,16 @@ export interface FatiaForma {
 export function fatiasDeForma(
   porForma: Record<string, { valor: number; qtd: number }>,
 ): FatiaForma[] {
-  const entradas = Object.entries(porForma);
-  const total = entradas.reduce((s, [, f]) => s + f.valor, 0);
-  return entradas
-    .map(([label, f]) => ({
-      label,
-      valor: f.valor,
-      qtd: f.qtd,
-      perc: total > 0 ? Math.round((f.valor / total) * 1000) / 10 : 0,
-    }))
-    .sort((a, b) => b.valor - a.valor);
+  const grupos = agruparFormas(
+    Object.entries(porForma).map(([forma, f]) => ({
+      forma, valor: f.valor, qtd: f.qtd, valorAnterior: 0,
+    })),
+  );
+  const total = grupos.reduce((s, g) => s + g.valor, 0);
+  return grupos.map(g => ({
+    label: g.rotulo,
+    valor: g.valor,
+    qtd: g.qtd,
+    perc: total > 0 ? Math.round((g.valor / total) * 1000) / 10 : 0,
+  }));
 }

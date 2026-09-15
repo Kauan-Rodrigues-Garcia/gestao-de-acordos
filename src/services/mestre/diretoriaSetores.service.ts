@@ -312,6 +312,81 @@ export async function buscarGradeDeSetores(
   };
 }
 
+/** Quem recebeu dentro de uma equipe do 59, no detalhe do setor. */
+export interface OperadorDaEquipe59 {
+  /** O login como o 59 escreve. */
+  cobradora: string;
+  linhas: number;
+  recebido: number;
+  /** Quanto disso é 2ª perna de Integral cobrado para este setor. */
+  integralParaCa: number;
+  dias: number;
+  primeiroPgto: string | null;
+  ultimoPgto: string | null;
+  /** `null` = o login do 59 não casa com nenhum cadastro da empresa. */
+  perfilId: string | null;
+  perfilNome: string | null;
+  perfilAtivo: boolean | null;
+  fotoUrl: string | null;
+  equipeAtual: string | null;
+  setorAtual: string | null;
+}
+
+interface OperadorDaEquipe59Cru {
+  cobradora: string; linhas: unknown; recebido: unknown; integral_para_ca: unknown; dias: unknown;
+  primeiro_pgto: string | null; ultimo_pgto: string | null;
+  perfil_id: string | null; perfil_nome: string | null; perfil_ativo: boolean | null;
+  foto_url: string | null; equipe_atual: string | null; setor_atual: string | null;
+}
+
+/**
+ * Os operadores de uma equipe do 59, com o que cada um recebeu — o clique numa
+ * equipe «sem vínculo» do detalhe do setor (14/09/2026).
+ *
+ * Lê as mesmas linhas de `buscarDetalheDoSetor` (atribuição, corte, colchão
+ * fora), então a soma fecha com a linha da equipe. `setorId` nulo = carteira
+ * ainda sem setor, pelo caminho cru, como o detalhe dela.
+ *
+ * Sem a migration `20260914210000` a função não existe, e o erro diz isso.
+ */
+export async function buscarOperadoresDaEquipe59(
+  empresaId: string,
+  mes: string,
+  alvo: { setorId: string | null; codGrupo: string; subgrupo: string },
+  diaCorte?: number | null,
+): Promise<OperadorDaEquipe59[]> {
+  const { data, error } = await rpcSemTipo<OperadorDaEquipe59Cru[]>('fn_mestre_diretoria_equipe_operadores', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+    p_setor_id:   alvo.setorId,
+    p_cod_grupo:  alvo.codGrupo,
+    p_subgrupo:   alvo.subgrupo,
+    p_dia_corte:  diaCorte ?? null,
+  });
+  if (error) {
+    if (/fn_mestre_diretoria_equipe_operadores/i.test(error.message)
+        && /schema cache|does not exist|could not find/i.test(error.message)) {
+      throw new Error('Migration 20260914210000 pendente — aplique-a no Supabase para ver os operadores.');
+    }
+    throw new Error(error.message);
+  }
+  return (Array.isArray(data) ? data : []).map(o => ({
+    cobradora:      o.cobradora,
+    linhas:         n(o.linhas),
+    recebido:       n(o.recebido),
+    integralParaCa: n(o.integral_para_ca),
+    dias:           n(o.dias),
+    primeiroPgto:   o.primeiro_pgto,
+    ultimoPgto:     o.ultimo_pgto,
+    perfilId:       o.perfil_id,
+    perfilNome:     o.perfil_nome,
+    perfilAtivo:    o.perfil_ativo,
+    fotoUrl:        o.foto_url,
+    equipeAtual:    o.equipe_atual,
+    setorAtual:     o.setor_atual,
+  }));
+}
+
 /** O card de um setor, do jsonb cru. Igual para grade e alternativo. */
 function paraCard(s: AlternativoCru): SetorDoPainel {
   return {

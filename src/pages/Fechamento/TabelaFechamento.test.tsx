@@ -14,7 +14,7 @@ function linha(p: Partial<LinhaFechamento> = {}): LinhaFechamento {
     operadorId: 'op1', nome: 'João', equipeNome: 'Play 1',
     fechamento: 201_000, meta: 130_000, metasExtras: [150_000, 170_000, 200_000],
     duTrabalhado: null, situacao: null,
-    metaAtingida: 4, alcance: 201_000 / 130_000, quartil: 1, mediaPorDu: null,
+    metaAtingida: 4, alcance: 201_000 / 130_000, quartil: 1, projecao: 155, mediaPorDu: null,
     ...p,
   };
 }

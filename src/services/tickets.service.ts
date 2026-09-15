@@ -17,6 +17,7 @@
  * `supabase.from('tickets')` é substituição direta.
  */
 import { supabase } from '@/lib/supabase';
+import { registrarLog } from '@/services/logs.service';
 import type { StatusTicket, PrioridadeTicket } from '@/pages/Tickets/categorias';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
@@ -255,6 +256,71 @@ export async function mudarPrioridade(
 ): Promise<{ erro: string | null }> {
   const { error } = await db('tickets').update({ prioridade }).eq('id', ticketId);
   return { erro: error ? traduzir(error.message) : null };
+}
+
+/**
+ * Exclui o ticket de vez — pedido de 14/09/2026, sem Lixeira.
+ *
+ * ## A ordem é a garantia
+ *
+ * 1. `fn_ticket_excluir` confere a chave `tickets_excluir` e se a pessoa
+ *    ENXERGA o ticket, e apaga (mensagens e eventos vão em cascata).
+ * 2. Só depois de ela aceitar, a pasta `empresa/ticket/` do bucket é apagada.
+ *    Apagar antes deixaria um ticket recusado sem os prints.
+ * 3. O log fica com o número e o assunto: a trilha do ticket foi junto com ele,
+ *    e este é o único registro de que existiu e de quem o apagou.
+ *
+ * Anexo que não sai do Storage não desfaz nada — o ticket já não existe. Volta
+ * `anexosPendentes` para a tela avisar, e o arquivo órfão fica no prefixo, fácil
+ * de achar depois.
+ */
+export async function excluirTicket(
+  ticketId: string,
+): Promise<{ erro: string | null; anexosPendentes?: boolean }> {
+  const { data, error } = await supabase.rpc(
+    'fn_ticket_excluir' as never, { p_ticket: ticketId } as never,
+  ) as unknown as {
+    data: { id: string; numero: number; empresa_id: string; assunto: string } | null;
+    error: { message: string } | null;
+  };
+
+  if (error || !data) {
+    const mensagem = error?.message ?? '';
+    if (/fn_ticket_excluir/i.test(mensagem) && /schema cache|does not exist|could not find/i.test(mensagem)) {
+      return { erro: 'Migration 20260914200000 pendente — aplique-a no Supabase para excluir tickets.' };
+    }
+    return { erro: traduzir(mensagem || 'Não foi possível excluir o ticket.') };
+  }
+
+  let anexosPendentes = false;
+  const pasta = `${data.empresa_id}/${data.id}`;
+  const { data: arquivos, error: erroLista } = await supabase.storage.from('tickets').list(pasta, { limit: 1000 });
+  if (erroLista) {
+    anexosPendentes = true;
+    console.warn('[tickets] excluirTicket, listando anexos:', erroLista.message);
+  } else if (arquivos && arquivos.length > 0) {
+    const { error: erroRemove } = await supabase.storage.from('tickets')
+      .remove(arquivos.map(a => `${pasta}/${a.name}`));
+    if (erroRemove) {
+      anexosPendentes = true;
+      console.warn('[tickets] excluirTicket, apagando anexos:', erroRemove.message);
+    }
+  }
+
+  void registrarLog({
+    acao: 'ticket_excluido',
+    categoria: 'sistema',
+    severidade: 'aviso',
+    descricao: `Excluiu o ticket #${data.numero} — ${data.assunto}`,
+    empresaId: data.empresa_id,
+    tabela: 'tickets',
+    registroId: data.id,
+    alvoTipo: 'ticket',
+    alvoRotulo: `#${data.numero} — ${data.assunto}`,
+    detalhes: { numero: data.numero, anexos_pendentes: anexosPendentes },
+  });
+
+  return { erro: null, anexosPendentes };
 }
 
 // ── Anexos ───────────────────────────────────────────────────────────────────

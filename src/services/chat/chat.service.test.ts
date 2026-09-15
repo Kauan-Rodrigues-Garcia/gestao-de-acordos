@@ -13,8 +13,10 @@ vi.mock('@/lib/supabaseSemTipo', () => ({
   rpcSemTipo: (...args: unknown[]) => mockRpc(...args),
 }));
 
+import { supabase } from '@/lib/supabase';
 import {
   listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, esbocoDeConversa, abrirConversa,
+  urlDeDownloadDoAnexo,
 } from './chat.service';
 
 describe('listarDestinosDisparo', () => {
@@ -141,5 +143,38 @@ describe('abrirConversa', () => {
     expect(r.id).toBeNull();
     expect(r.erro).toBeTruthy();
     expect(console.warn).toHaveBeenCalled();
+  });
+});
+
+describe('urlDeDownloadDoAnexo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('pede ao Storage a URL com o nome do arquivo, para salvar em vez de abrir', async () => {
+    const createSignedUrl = vi.fn().mockResolvedValue({
+      data: { signedUrl: 'https://x.supabase.co/assinada?download=relatorio.pdf' }, error: null,
+    });
+    vi.mocked(supabase.storage.from).mockReturnValue({ createSignedUrl } as never);
+
+    const url = await urlDeDownloadDoAnexo('c-1/abc.pdf', 'relatorio.pdf');
+
+    expect(supabase.storage.from).toHaveBeenCalledWith('chat');
+    expect(createSignedUrl).toHaveBeenCalledWith('c-1/abc.pdf', expect.any(Number), { download: 'relatorio.pdf' });
+    expect(url).toBe('https://x.supabase.co/assinada?download=relatorio.pdf');
+  });
+
+  it('devolve o blob local como está — o anexo ainda não subiu', async () => {
+    const url = await urlDeDownloadDoAnexo('blob:http://localhost/123', 'foto.png');
+    expect(url).toBe('blob:http://localhost/123');
+    expect(supabase.storage.from).not.toHaveBeenCalled();
+  });
+
+  it('devolve null quando o Storage recusa', async () => {
+    const createSignedUrl = vi.fn().mockResolvedValue({ data: null, error: { message: 'Object not found' } });
+    vi.mocked(supabase.storage.from).mockReturnValue({ createSignedUrl } as never);
+
+    expect(await urlDeDownloadDoAnexo('c-1/sumiu.pdf', 'sumiu.pdf')).toBeNull();
   });
 });

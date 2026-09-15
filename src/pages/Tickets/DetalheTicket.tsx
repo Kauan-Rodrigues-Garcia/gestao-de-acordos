@@ -34,9 +34,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send, Paperclip, Loader2, X, FileText, UserCheck, UserMinus, Ban, ArrowLeft,
-  Clock, Tag,
+  Clock, Tag, Trash2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -51,7 +55,7 @@ import { criarAgrupador } from '@/lib/agrupador';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
   listarMensagens, listarEventos, enviarMensagem, mudarStatus, assumirTicket,
-  mudarPrioridade, subirAnexo,
+  mudarPrioridade, subirAnexo, excluirTicket,
   type Ticket, type MensagemTicket, type EventoTicket, type AnexoTicket,
 } from '@/services/tickets.service';
 import {
@@ -63,10 +67,14 @@ import { temperatura, tempoSemMovimento, textoDeIdade, iniciais } from './fila';
 interface Props {
   ticket: Ticket;
   podeAtender: boolean;
+  /** `tickets_excluir`. A tela só antecipa: quem recusa é `fn_ticket_excluir`. */
+  podeExcluir: boolean;
   /** Fotos já carregadas pela tela — o detalhe não faz consulta própria. */
   fotos: Map<string, string | null>;
   onFechar: () => void;
   onMudou: () => void;
+  /** O ticket deixou de existir: a tela fecha o detalhe e relê a fila. */
+  onExcluido: () => void;
 }
 
 /** 10 MB — o mesmo teto do bucket (migration 20260819120000). */
@@ -78,7 +86,7 @@ type ItemLinha =
   | { tipo: 'evento';   em: number; evento: EventoTicket };
 
 export default function DetalheTicket({
-  ticket, podeAtender, fotos, onFechar, onMudou,
+  ticket, podeAtender, podeExcluir, fotos, onFechar, onMudou, onExcluido,
 }: Props) {
   const { perfil } = useAuth();
   const [mensagens, setMensagens] = useState<MensagemTicket[]>([]);
@@ -239,6 +247,22 @@ export default function DetalheTicket({
     } finally { setOcupado(false); }
   }
 
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+
+  async function excluir() {
+    setOcupado(true);
+    try {
+      const r = await excluirTicket(ticket.id);
+      if (r.erro) { toast.error(r.erro); return; }
+      toast.success(`Ticket #${ticket.numero} excluído.`);
+      if (r.anexosPendentes) {
+        toast.warning('Parte dos anexos não saiu do armazenamento — o ticket já foi excluído.');
+      }
+      setConfirmarExclusao(false);
+      onExcluido();
+    } finally { setOcupado(false); }
+  }
+
   const temp = temperatura(ticket, agora);
 
   return (
@@ -327,7 +351,7 @@ export default function DetalheTicket({
         )}
 
         {/* ── Ações ──────────────────────────────────────────────────────── */}
-        {(podeAtender || (souAutor && !fechado)) && (
+        {(podeAtender || (souAutor && !fechado) || podeExcluir) && (
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             {podeAtender && (
               <>
@@ -403,8 +427,41 @@ export default function DetalheTicket({
                 <Ban className="w-3.5 h-3.5" /> Cancelar pedido
               </Button>
             )}
+
+            {/* Excluir mora no fim da linha e pede confirmação: é o único gesto
+                aqui que não tem volta. Ver `excluirTicket`. */}
+            {podeExcluir && (
+              <Button variant="ghost" size="sm"
+                className={cn('h-8 gap-1.5 text-xs text-destructive', !(souAutor && !fechado) && 'ml-auto')}
+                disabled={ocupado}
+                onClick={() => setConfirmarExclusao(true)}>
+                <Trash2 className="w-3.5 h-3.5" /> Excluir
+              </Button>
+            )}
           </div>
         )}
+
+        <AlertDialog open={confirmarExclusao} onOpenChange={aberto => { if (!ocupado) setConfirmarExclusao(aberto); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{`Excluir o ticket #${ticket.numero}?`}</AlertDialogTitle>
+              <AlertDialogDescription>
+                «{ticket.assunto}» será apagado de vez, com a conversa, o histórico e os
+                anexos. Não há como desfazer — fica só o registro nos logs de quem excluiu.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={ocupado}>Manter</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={ocupado}
+                onClick={e => { e.preventDefault(); void excluir(); }}
+              >
+                {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Excluir de vez'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* ── Linha do tempo ───────────────────────────────────────────────── */}

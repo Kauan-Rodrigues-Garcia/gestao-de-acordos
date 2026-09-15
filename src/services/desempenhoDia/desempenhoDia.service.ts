@@ -39,6 +39,9 @@ export interface LinhaAnaliticoDia {
   total_ho: number | null;
   operador_id: string | null;
   setor_id?: string | null;
+  /** Contribuição Receptivo do 59: conta no setor, não na empresa. */
+  contribuicao?: boolean;
+  contribuicao_de_setor_id?: string | null;
 }
 
 export interface AcordoDoDia {
@@ -82,7 +85,7 @@ export async function buscarAnaliticoPeriodo(params: {
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
     let q = supabase
       .from('analitico_recebimentos')
-      .select('data_pagamento, valor_recebido, total_ho, operador_id, setor_id')
+      .select('data_pagamento, valor_recebido, total_ho, operador_id, setor_id, procedencia, contribuicao_de_setor_id')
       .eq('empresa_id', empresaId)
       .gte('data_pagamento', de)
       .lte('data_pagamento', ate)
@@ -96,7 +99,12 @@ export async function buscarAnaliticoPeriodo(params: {
     const { data, error } = await q;
     if (error) return { linhas: [], erro: error.message };
 
-    const lote = (data as LinhaAnaliticoDia[] | null) ?? [];
+    type Crua = LinhaAnaliticoDia & { procedencia?: string };
+    const lote = ((data as unknown as Crua[] | null) ?? []).map(({ procedencia, ...l }) => ({
+      ...l,
+      // `linhaNoEscopo` decide pela flag; a coluna crua não sai daqui.
+      contribuicao: procedencia === 'contribuicao_59',
+    }));
     linhas.push(...lote);
     if (lote.length < PAGINA) break;
   }

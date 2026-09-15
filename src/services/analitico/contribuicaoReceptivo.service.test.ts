@@ -61,14 +61,29 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { from: vi.fn((t: string) => createBuilder(t)) },
 }));
 
+// O total do setor no analítico: `contribuicao` é o que o 59 gravou como
+// Contribuição Receptivo, `do59` diz se o setor está no 59 naquele mês.
+const { mockTotalPorSetor } = vi.hoisted(() => ({ mockTotalPorSetor: vi.fn() }));
+vi.mock('./analitico.service', () => ({
+  buscarTotalPorSetor: (...args: unknown[]) => mockTotalPorSetor(...args),
+}));
+
 import {
   buscarContribuicoesReceptivo,
+  mesclarContribuicoes,
   salvarContribuicaoReceptivo,
+  salvarMetaContribuicaoReceptivo,
   receptivoDoEscopo,
   receptivoPreenchido,
+  receptivoSomaPorCima,
 } from './contribuicaoReceptivo.service';
 
-describe('receptivoPreenchido — card zerado não aparece', () => {
+/*
+ * Desde 14/09/2026 o card é alimentado pelo 59: ele aparece quando existe valor
+ * para mostrar, e só então. Meta sozinha não o faz aparecer — sem dinheiro do
+ * Receptivo no setor, não há contribuição a acompanhar.
+ */
+describe('receptivoPreenchido — só aparece com valor', () => {
   it('nunca preenchido não aparece', () => {
     expect(receptivoPreenchido(undefined)).toBe(false);
     expect(receptivoPreenchido(null)).toBe(false);
@@ -78,12 +93,13 @@ describe('receptivoPreenchido — card zerado não aparece', () => {
     expect(receptivoPreenchido({ acumulado: 0, meta: 0 })).toBe(false);
   });
 
-  it('só a meta já conta como preenchido', () => {
-    expect(receptivoPreenchido({ acumulado: 0, meta: 5_000 })).toBe(true);
+  it('meta sozinha, sem valor, não aparece', () => {
+    expect(receptivoPreenchido({ acumulado: 0, meta: 5_000 })).toBe(false);
   });
 
-  it('acumulado sem meta aparece', () => {
+  it('com valor aparece, com ou sem meta', () => {
     expect(receptivoPreenchido({ acumulado: 1_234.5, meta: 0 })).toBe(true);
+    expect(receptivoPreenchido({ acumulado: 1_234.5, meta: 5_000 })).toBe(true);
   });
 });
 
@@ -96,6 +112,9 @@ beforeEach(() => {
   currentCall    = null;
   nextResult     = { data: null, error: null };
   lancarNoAwait  = false;
+  // Padrão: nenhum setor no 59 — o comportamento antigo, valor digitado.
+  mockTotalPorSetor.mockReset();
+  mockTotalPorSetor.mockResolvedValue({});
 });
 
 // ── buscarContribuicoesReceptivo ────────────────────────────────────────────
@@ -127,8 +146,8 @@ describe('buscarContribuicoesReceptivo', () => {
 
     expect(dbAtiva).toBe(true);
     expect(porSetor).toEqual({
-      s1: { acumulado: 1000,  meta: 5000 },
-      s2: { acumulado: 250.5, meta: 0 },
+      s1: { acumulado: 1000,  meta: 5000, origem: 'manual' },
+      s2: { acumulado: 250.5, meta: 0,    origem: 'manual' },
     });
   });
 
@@ -151,6 +170,61 @@ describe('buscarContribuicoesReceptivo', () => {
     nextResult = { data: [], error: null };
     const { porSetor } = await buscarContribuicoesReceptivo(EMPRESA, MES);
     expect(porSetor).toEqual({});
+  });
+
+  describe('setor no 59: o valor é a parte do total que o 59 gravou, a meta continua do líder', () => {
+    it('acumulado = contribuição das linhas do setor; o digitado é ignorado só onde há 59', async () => {
+      mockTotalPorSetor.mockResolvedValue({
+        s1: { total: 240_000, contribuicao: 3_936.55, do59: true },
+        s3: { total: 50_000,  contribuicao: 800,      do59: true },
+        // Setor ainda no 58: nada do 59 para ele.
+        s2: { total: 10_000,  contribuicao: 0,        do59: false },
+      });
+      nextResult = {
+        data: [
+          { setor_id: 's1', acumulado: 9_999, meta: 5_000 },
+          { setor_id: 's2', acumulado: 250,   meta: 1_000 },
+        ],
+        error: null,
+      };
+
+      const { porSetor, do59 } = await buscarContribuicoesReceptivo(EMPRESA, MES);
+
+      expect(do59).toBe(true);
+      expect(porSetor).toEqual({
+        s1: { acumulado: 3_936.55, meta: 5_000, origem: 'relatorio_59' },
+        // Fora do 59: o digitado continua valendo, e é o único que soma por cima.
+        s2: { acumulado: 250,      meta: 1_000, origem: 'manual' },
+        s3: { acumulado: 800,      meta: 0,     origem: 'relatorio_59' },
+      });
+    });
+
+    it('lê o total do mês sem exclusões — o card mostra a contribuição inteira', async () => {
+      nextResult = { data: [], error: null };
+      await buscarContribuicoesReceptivo(EMPRESA, MES);
+      expect(mockTotalPorSetor).toHaveBeenCalledWith(EMPRESA, MES);
+    });
+
+    it('com a tabela ausente, o 59 continua valendo', async () => {
+      mockTotalPorSetor.mockResolvedValue({ s1: { total: 1_000, contribuicao: 500, do59: true } });
+      nextResult = { data: null, error: { message: 'relation "public.contribuicao_receptivo" does not exist' } };
+
+      const { porSetor, dbAtiva, do59 } = await buscarContribuicoesReceptivo(EMPRESA, MES);
+
+      expect(dbAtiva).toBe(false);
+      expect(do59).toBe(true);
+      expect(porSetor.s1).toEqual({ acumulado: 500, meta: 0, origem: 'relatorio_59' });
+    });
+
+    it('falha ao ler o analítico não derruba a meta digitada', async () => {
+      mockTotalPorSetor.mockRejectedValue(new Error('rede'));
+      nextResult = { data: [{ setor_id: 's1', acumulado: 10, meta: 20 }], error: null };
+
+      const { porSetor, do59 } = await buscarContribuicoesReceptivo(EMPRESA, MES);
+
+      expect(do59).toBe(false);
+      expect(porSetor.s1).toEqual({ acumulado: 10, meta: 20, origem: 'manual' });
+    });
   });
 
   it('migration pendente → dbAtiva false, sem ruído no console', async () => {
@@ -188,6 +262,42 @@ describe('buscarContribuicoesReceptivo', () => {
     const { porSetor, dbAtiva } = await buscarContribuicoesReceptivo(EMPRESA, MES);
     expect(dbAtiva).toBe(false);
     expect(porSetor).toEqual({});
+  });
+});
+
+// ── mesclarContribuicoes ────────────────────────────────────────────────────
+
+describe('mesclarContribuicoes — o Painel Líder junta o digitado com o total que já tem', () => {
+  it('setor no 59 com contribuição zerada: aparece zerado, e o digitado não volta', () => {
+    const r = mesclarContribuicoes(
+      { s1: { acumulado: 700, meta: 1_000, origem: 'manual' } },
+      { s1: { contribuicao: 0, do59: true } },
+    );
+    expect(r.s1).toEqual({ acumulado: 0, meta: 1_000, origem: 'relatorio_59' });
+    // Zerado não mostra o card.
+    expect(receptivoPreenchido(r.s1)).toBe(false);
+  });
+
+  it('setor fora do 59 sem nada digitado não aparece', () => {
+    expect(mesclarContribuicoes({}, { s1: { contribuicao: 0, do59: false } })).toEqual({});
+  });
+
+  it('total sem os campos novos (base antiga) cai no digitado', () => {
+    const r = mesclarContribuicoes({ s1: { acumulado: 5, meta: 0 } }, { s1: {} });
+    expect(r.s1).toEqual({ acumulado: 5, meta: 0, origem: 'manual' });
+  });
+});
+
+describe('receptivoSomaPorCima — só o digitado soma no total do setor', () => {
+  it('do 59: já está no total', () => {
+    expect(receptivoSomaPorCima({ acumulado: 100, meta: 0, origem: 'relatorio_59' })).toBe(false);
+  });
+  it('digitado: soma', () => {
+    expect(receptivoSomaPorCima({ acumulado: 100, meta: 0, origem: 'manual' })).toBe(true);
+    expect(receptivoSomaPorCima({ acumulado: 100, meta: 0 })).toBe(true);
+  });
+  it('sem dado: nada a somar', () => {
+    expect(receptivoSomaPorCima(undefined)).toBe(false);
   });
 });
 
@@ -266,6 +376,32 @@ describe('salvarContribuicaoReceptivo', () => {
   });
 });
 
+// ── salvarMetaContribuicaoReceptivo ─────────────────────────────────────────
+
+describe('salvarMetaContribuicaoReceptivo — o lápis só mexe na meta', () => {
+  it('upsert sem a coluna acumulado: o valor vem do 59 e o antigo fica intacto', async () => {
+    nextResult = { data: null, error: null };
+
+    const ok = await salvarMetaContribuicaoReceptivo({
+      empresaId: EMPRESA, setorId: SETOR, mes: MES, meta: 8_000, atualizadoPor: 'user-9',
+    });
+
+    expect(ok).toBe(true);
+    expect(calls[0].operation).toBe('upsert');
+    expect(calls[0].payload).toEqual({
+      empresa_id: EMPRESA, setor_id: SETOR, mes: MES, meta: 8_000, atualizado_por: 'user-9',
+    });
+    expect(calls[0].upsertOpts).toEqual({ onConflict: 'empresa_id,setor_id,mes' });
+  });
+
+  it('devolve false quando o banco recusa', async () => {
+    nextResult = { data: null, error: { message: 'new row violates row-level security policy' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await salvarMetaContribuicaoReceptivo({ empresaId: EMPRESA, setorId: SETOR, mes: MES, meta: 1 })).toBe(false);
+    warn.mockRestore();
+  });
+});
+
 // ── receptivoDoEscopo ────────────────────────────────────────────────────────
 //
 // Bug de 05/08/2026: o valor do card do Receptivo (do SETOR, digitado à mão)
@@ -295,12 +431,19 @@ describe('receptivoDoEscopo', () => {
     })).toBe(3936.55);
   });
 
-  it('visão de empresa soma todos os setores', () => {
+  /*
+   * 14/09/2026: a contribuição é o Integral que o Receptivo cobrou PARA outro
+   * setor, e esse dinheiro já está no total do próprio Receptivo. Somar no
+   * setor que recebeu é certo; somar de novo no total da empresa contaria a
+   * mesma cobrança duas vezes — é a regra do total da empresa no Painel
+   * Diretoria («sem a 2ª perna do Integral»).
+   */
+  it('visão de empresa NÃO soma: o dinheiro já está no total do Receptivo', () => {
     expect(receptivoDoEscopo({
       escopo: { tipo: 'empresa' },
       porSetor,
       veDadosDeOutros: true,
-    })).toBeCloseTo(4936.55, 2);
+    })).toBe(0);
   });
 
   it('empresa sem ser líder continua zero', () => {

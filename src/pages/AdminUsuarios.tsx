@@ -1311,6 +1311,7 @@ export default function AdminUsuarios() {
                 }}
                 nomeDoPerfil={id => usuarios.find(p => p.id === id)?.nome}
                 onDesfeita={fetchDados}
+                alcance={{ veTodosSetores: veUsuariosDeTodosSetores, setorAtualId: perfilAtual?.setor_id }}
               />
             </div>
           )}

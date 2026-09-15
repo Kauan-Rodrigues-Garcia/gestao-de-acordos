@@ -209,3 +209,24 @@ describe('linhaNoEscopo com exclusão — as telas têm que concordar', () => {
     expect(somaLinhaALinha).toBeCloseTo(totalLiquido(origens), 2);
   });
 });
+
+describe('contribuição do Receptivo na composição do setor (14/09/2026)', () => {
+  const RECEPTIVO = 'setor-receptivo';
+
+  it('a origem é o setor de quem cobrou, e não «sem operador»', () => {
+    expect(origemDaLinha(null, () => null, RECEPTIVO)).toBe(RECEPTIVO);
+    expect(origemDaLinha(null, () => null, null)).toBe(ORIGEM_SEM_OPERADOR);
+  });
+
+  it('entra na lista de origens do setor com o valor dela', () => {
+    const origens = montarOrigens({
+      setorId: PLAY5,
+      linhas: [
+        { operador_id: 'op-1', valor_recebido: 100 },
+        { operador_id: null, valor_recebido: 40, contribuicao_de_setor_id: RECEPTIVO },
+      ],
+      setorDoOperador: () => PLAY5,
+    });
+    expect(origens.map(o => [o.chave, o.total])).toEqual([[PLAY5, 100], [RECEPTIVO, 40]]);
+  });
+});

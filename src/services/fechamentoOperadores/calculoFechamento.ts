@@ -118,6 +118,11 @@ export interface LinhaFechamento extends Omit<EntradaLinhaFechamento, 'totalUtei
   alcance: number | null;
   /** 1..4, ou `null` sem meta. */
   quartil: number | null;
+  /**
+   * `projecaoPct` de `calcularProjecao` — a régua de onde o quartil sai, e a
+   * ordem da tabela (ver `ordenarLinhasFechamento`). `null` sem meta.
+   */
+  projecao: number | null;
   mediaPorDu: number | null;
 }
 
@@ -146,8 +151,34 @@ export function montarLinhaFechamento(
     metaAtingida: metaAtingida(entrada.fechamento, entrada.meta, entrada.metasExtras),
     alcance: alcanceDaMeta(entrada.fechamento, entrada.meta),
     quartil: projecao?.quartil?.quartil ?? null,
+    projecao: projecao?.projecaoPct ?? null,
     mediaPorDu: mediaPorDu(entrada.fechamento, entrada.duTrabalhado),
   };
+}
+
+/**
+ * A ordem da tabela: por quartil, como a aba Quartis do Painel Líder.
+ *
+ * Pedido de 14/09/2026 — «primeiros 1º quartil, 2º quartil e assim por
+ * diante». Dentro do quartil, a maior projeção primeiro, que é a régua de
+ * `QuartisOperadores`; sem meta (sem quartil) no fim, por nome, também como lá.
+ * Empate pelo nome, para a ordem não mudar entre uma releitura e outra.
+ *
+ * A ordem alfabética de antes saiu da tabela, mas não do arquivo baixado: ele
+ * usa esta mesma função, para a planilha e a tela contarem na mesma ordem.
+ */
+export function ordenarLinhasFechamento(linhas: readonly LinhaFechamento[]): LinhaFechamento[] {
+  return [...linhas].sort((a, b) => {
+    if (a.quartil !== b.quartil) {
+      if (a.quartil === null) return 1;
+      if (b.quartil === null) return -1;
+      return a.quartil - b.quartil;
+    }
+    const pa = a.projecao ?? -Infinity;
+    const pb = b.projecao ?? -Infinity;
+    if (pa !== pb) return pb - pa;
+    return a.nome.localeCompare(b.nome, 'pt-BR');
+  });
 }
 
 export interface FatiaSituacao {

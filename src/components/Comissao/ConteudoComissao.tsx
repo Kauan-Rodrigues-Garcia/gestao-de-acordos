@@ -73,17 +73,30 @@ function dataHora(iso: string): string {
   });
 }
 
+/*
+ * ## Simetria (14/09/2026)
+ *
+ * O print do pedido mostrava a tela torta: «A partir de» quebrava em duas linhas
+ * na 3ª e 4ª Meta, empurrando o «Faltam» para baixo só nelas; a faixa atual
+ * subia 4 px e tinha título maior; e o primeiro dos três números do topo tinha
+ * fonte maior que os vizinhos. As regras abaixo são o conserto, e valem juntas:
+ *
+ * - rótulo e valor de cada linha NÃO quebram;
+ * - todo cartão tem a mesma tipografia — o destaque é cor, borda e anel, nunca
+ *   tamanho ou deslocamento;
+ * - o «Faltam» mora no rodapé do cartão (`mt-auto`), na mesma altura em todos.
+ */
 function Numero({ rotulo, valor, apoio, destaque, className }: {
   rotulo: string; valor: string; apoio?: string; destaque?: boolean; className?: string;
 }) {
   return (
     <div className={cn(
-      'rounded-xl border px-3 py-2.5',
+      'flex h-full flex-col rounded-xl border px-3 py-2.5',
       destaque ? 'border-primary/40 bg-primary/5' : 'border-border bg-card',
       className,
     )}>
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{rotulo}</p>
-      <p className={cn('mt-0.5 font-mono font-bold tabular-nums leading-tight', destaque ? 'text-2xl' : 'text-lg')}>
+      <p className="mt-0.5 font-mono text-xl font-bold tabular-nums leading-tight">
         {valor}
       </p>
       {apoio && <p className="mt-0.5 text-xs text-muted-foreground">{apoio}</p>}
@@ -94,8 +107,8 @@ function Numero({ rotulo, valor, apoio, destaque, className }: {
 function Linha({ rotulo, children, forte }: { rotulo: string; children: ReactNode; forte?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-muted-foreground">{rotulo}</dt>
-      <dd className={cn('font-mono tabular-nums', forte ? 'font-bold' : 'font-medium')}>{children}</dd>
+      <dt className="whitespace-nowrap text-muted-foreground">{rotulo}</dt>
+      <dd className={cn('whitespace-nowrap font-mono tabular-nums', forte ? 'font-bold' : 'font-medium')}>{children}</dd>
     </div>
   );
 }
@@ -112,19 +125,17 @@ function CartaoFaixa({ faixa, recebido, beneficioAtivo, faltaRotulo, compacto }:
     <li
       aria-current={ehAtual ? 'step' : undefined}
       className={cn(
-        'flex flex-col gap-2 rounded-xl border bg-card p-3',
-        ehAtual
-          ? cn('border-primary shadow-md ring-2 ring-primary/25', !compacto && 'sm:-translate-y-1')
-          : 'border-border',
+        'flex h-full flex-col gap-2 rounded-xl border bg-card p-3',
+        ehAtual ? 'border-primary shadow-md ring-2 ring-primary/25' : 'border-border',
         faixa.situacao === 'nao_atingida' && 'bg-muted/30',
       )}
     >
       <div className={cn('flex gap-2', compacto ? 'items-baseline justify-between' : 'flex-col')}>
-        <p className={cn('flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide', s.classe)}>
+        <p className={cn('flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide', s.classe)}>
           <s.Icone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{s.rotulo}</span>
         </p>
-        <p className={cn('font-bold leading-none', ehAtual ? 'text-lg' : 'text-base')}>{faixa.ordem}ª Meta</p>
+        <p className="text-base font-bold leading-none">{faixa.ordem}ª Meta</p>
       </div>
       <dl className="space-y-1 text-xs">
         <Linha rotulo="Meta">{formatBRL(faixa.meta)}</Linha>
@@ -150,7 +161,7 @@ function CartaoFaixa({ faixa, recebido, beneficioAtivo, faltaRotulo, compacto }:
         <p className="text-[11px] text-muted-foreground">{`sobre ${formatBRL(recebido)} realizados`}</p>
       )}
       {faixa.falta !== null && (
-        <p className="text-xs font-medium text-sky-700 dark:text-sky-300">
+        <p className="mt-auto whitespace-nowrap text-xs font-medium text-sky-700 dark:text-sky-300">
           {`${faltaRotulo} ${formatBRL(faixa.falta)}`}
         </p>
       )}

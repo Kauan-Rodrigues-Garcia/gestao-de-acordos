@@ -138,6 +138,49 @@ export async function listarMembros(conversaId: string): Promise<MembroGrupo[]> 
   return data ?? [];
 }
 
+/**
+ * O nome de quem escreveu na conversa e não está mais nela.
+ *
+ * `listarMembros` só devolve quem ESTÁ no grupo (`saiu_em IS NULL`), e é dela
+ * que a conversa tira o nome de cada autor. Quem saiu sumia do mapa, e o aviso
+ * dele virava «Alguém saiu do grupo» — justamente o aviso cujo assunto é essa
+ * pessoa (pedido de 14/09/2026).
+ *
+ * ## Duas fontes, e por que a segunda não basta sozinha
+ *
+ * `fn_chat_participantes_nomes` (migration 20260914190000) é `SECURITY DEFINER`
+ * e responde por todo mundo que já participou, com a mesma guarda da lista de
+ * membros. Enquanto ela não estiver no banco, a leitura direta de `perfis`
+ * resolve o que a RLS deixa — o mesmo setor, para quem é operador; tudo, para
+ * a diretoria. Um grupo que junta setores ficaria com buracos, e é por isso que
+ * a RPC existe.
+ *
+ * `ids` são os autores sem nome. Só a leitura de reserva os usa; a RPC devolve
+ * a conversa inteira, que é uma lista curta.
+ */
+export async function nomesDeQuemParticipou(
+  conversaId: string, ids: string[],
+): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+
+  const { data, error } = await rpcSemTipo<{ perfil_id: string; nome: string | null }[]>(
+    'fn_chat_participantes_nomes', { p_conversa: conversaId },
+  );
+  if (!error && data) {
+    return new Map(
+      data.filter(l => l.nome).map(l => [l.perfil_id, l.nome as string]),
+    );
+  }
+
+  console.warn('[chat/grupos] nomesDeQuemParticipou, lendo perfis:', error?.message);
+  const { data: perfis } = await supabase.from('perfis').select('id, nome').in('id', ids);
+  return new Map(
+    ((perfis ?? []) as { id: string; nome: string | null }[])
+      .filter(p => p.nome)
+      .map(p => [p.id, p.nome as string]),
+  );
+}
+
 /** Uma imagem, GIF ou vídeo já enviado na conversa. Alimenta a galeria. */
 export interface MidiaDaConversa {
   mensagem_id: string;

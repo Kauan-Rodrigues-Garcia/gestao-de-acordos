@@ -16,6 +16,13 @@
  * cartões do `ConteudoComissao`, que não caberiam numa coluna de grade. O resto
  * abre em «Ver comissão», no mesmo Dialog da tela de Metas.
  *
+ * ## A altura é a do card ao lado
+ *
+ * `ALTURA_CARD_PROGRESSO`, a mesma do «Progresso da meta» nas duas vistas dele
+ * (14/09/2026). Com a altura do próprio conteúdo, uma faixa a mais ou o aviso da
+ * indireta faziam este card e o vizinho andarem juntos. A escada rola por dentro
+ * quando não cabe.
+ *
  * Só desenha. Quem decide se o card existe é o `PainelMetas`.
  */
 import { useState } from 'react';
@@ -24,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { ALTURA_CARD_PROGRESSO } from '@/components/PainelMetas/tamanhoCards';
 import type { FaixaComissao, ResultadoComissao } from '@/services/comissao/comissao';
 import { formatarPct } from './formato';
 import { VerComissao } from './VerComissao';
@@ -94,7 +102,7 @@ export function CardComissaoDashboard({
   const indireta = r.indireta && r.indireta.comissao > 0 ? r.indireta.comissao : 0;
 
   return (
-    <Card className="flex h-full flex-col border-border/70 bg-card shadow-sm">
+    <Card data-card-comissao className={cn('flex flex-col border-border/70 bg-card shadow-sm', ALTURA_CARD_PROGRESSO)}>
       <CardHeader className="px-4 pb-2 pt-4">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -121,8 +129,8 @@ export function CardComissaoDashboard({
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-3 pb-4">
-        <div className="space-y-0.5 text-center">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 pb-4">
+        <div className="shrink-0 space-y-0.5 text-center">
           <p
             className="font-mono text-2xl font-bold leading-tight tabular-nums"
             style={r.atual || r.total > 0 ? { color: cor } : undefined}
@@ -136,20 +144,20 @@ export function CardComissaoDashboard({
         </div>
 
         {r.faixas.length > 0 && (
-          <ol className="space-y-1" aria-label="Faixas de comissão">
+          <ol className="min-h-0 space-y-1 overflow-y-auto" aria-label="Faixas de comissão">
             {r.faixas.map(f => <LinhaFaixa key={f.ordem} faixa={f} />)}
           </ol>
         )}
 
         {proxima && (
-          <p className="text-center text-[11px] font-medium text-sky-700 dark:text-sky-400">{proxima}</p>
+          <p className="shrink-0 text-center text-[11px] font-medium text-sky-700 dark:text-sky-400">{proxima}</p>
         )}
 
         <Button
           type="button"
           size="sm"
           variant="outline"
-          className="mt-auto h-7 self-center text-xs"
+          className="mt-auto h-7 shrink-0 self-center text-xs"
           onClick={() => setVerAberto(true)}
         >
           Ver comissão

@@ -7,7 +7,7 @@
  * contado como boleto. Nenhum dos dois dá erro — só um número torto.
  */
 import { describe, it, expect } from 'vitest';
-import { familiaDaForma, agruparFormas, type LinhaDeForma } from '../formasPagamento';
+import { familiaDaForma, agruparFormas, ROTULO_BOLETO_PIX, type LinhaDeForma } from '../formasPagamento';
 
 const linha = (forma: string, valor: number, qtd = 1, valorAnterior = 0): LinhaDeForma =>
   ({ forma, valor, qtd, valorAnterior });
@@ -36,11 +36,28 @@ describe('familiaDaForma', () => {
     expect(familiaDaForma('boleto')?.chave).toBe('boleto');
   });
 
+  /*
+   * Pedido de 14/09/2026: com o 59, o Pix também chega em variações. Tudo que é
+   * Pix vira «Pix», menos o automático, que é família própria — é assinatura,
+   * como o cartão recorrente é do cartão.
+   */
+  it('junta as variações de Pix, com o automático à parte', () => {
+    expect(familiaDaForma('PIX')).toEqual({ chave: 'pix', rotulo: 'Pix' });
+    expect(familiaDaForma('Pix QR Code')?.chave).toBe('pix');
+    expect(familiaDaForma('PIX AUTOMÁTICO')).toEqual({ chave: 'pix_automatico', rotulo: 'Pix automático' });
+    expect(familiaDaForma('pix automatico')?.chave).toBe('pix_automatico');
+  });
+
+  it('o consolidado «Pix/Boleto» é campo próprio: Boleto/Pix Cofen', () => {
+    // O rótulo não diz quanto foi Pix e quanto foi boleto. Somá-lo em qualquer
+    // um dos dois inventaria a divisão — ele fica separado, com o nome dele.
+    expect(familiaDaForma(ROTULO_BOLETO_PIX)).toEqual({ chave: 'boleto_pix_cofen', rotulo: 'Boleto/Pix Cofen' });
+    expect(familiaDaForma('boleto/pix')?.chave).toBe('boleto_pix_cofen');
+  });
+
   it('forma fora das famílias devolve null e continua sozinha', () => {
-    // Pix e uma forma inédita do ERP não podem virar «Outros»: um grupo genérico
+    // Uma forma inédita do ERP não pode virar «Outros»: um grupo genérico
     // esconderia a novidade justamente no mês em que ela apareceu.
-    expect(familiaDaForma('PIX')).toBeNull();
-    expect(familiaDaForma('PIX AUTOMÁTICO')).toBeNull();
     expect(familiaDaForma('CRIPTO XYZ')).toBeNull();
   });
 });
@@ -73,15 +90,25 @@ describe('agruparFormas', () => {
 
   it('ordena grupos e itens do maior para o menor', () => {
     const g = agruparFormas(entrada);
-    expect(g.map(x => x.chave)).toEqual(['cru:PIX', 'boleto', 'cartao', 'cartao_recorrente']);
+    expect(g.map(x => x.chave)).toEqual(['pix', 'boleto', 'cartao', 'cartao_recorrente']);
     expect(g.find(x => x.chave === 'boleto')!.itens.map(i => i.valor)).toEqual([300, 100]);
   });
 
   it('forma solta vira grupo de um item, com o rótulo do ERP', () => {
-    const g = agruparFormas([linha('PIX AUTOMÁTICO', 10)]);
+    const g = agruparFormas([linha('CRIPTO XYZ', 10)]);
     expect(g).toHaveLength(1);
-    expect(g[0].rotulo).toBe('PIX AUTOMÁTICO');
+    expect(g[0].chave).toBe('cru:CRIPTO XYZ');
+    expect(g[0].rotulo).toBe('CRIPTO XYZ');
     expect(g[0].itens).toHaveLength(1);
+  });
+
+  it('Pix e Pix automático somam cada um no seu grupo', () => {
+    const g = agruparFormas([
+      linha('PIX', 100), linha('PIX QR CODE', 50),
+      linha('PIX AUTOMÁTICO', 30), linha('Pix Automatico Recorrência', 20),
+    ]);
+    expect(g.find(x => x.chave === 'pix')!.valor).toBe(150);
+    expect(g.find(x => x.chave === 'pix_automatico')!.valor).toBe(50);
   });
 
   it('não muta a lista nem as linhas recebidas', () => {

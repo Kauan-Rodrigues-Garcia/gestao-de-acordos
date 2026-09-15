@@ -15,8 +15,11 @@
  *   • PaguePlay e setor alternativo → soma dos operadores (clones e órfãos
  *     incluídos), decidido por `setorSomaPorUsuarios`;
  *   • BookPlay, setor normal        → total do relatório carimbado por setor;
- *   • Contribuição Receptivo        → soma no bruto, nunca no H.O.: é valor
- *     digitado à mão, sem H.O. próprio;
+ *   • Contribuição Receptivo        → desde 14/09/2026 o 59 a grava no
+ *     analítico do setor (`contribuicao_59`), então ela JÁ ESTÁ no total do
+ *     relatório e na soma dos órfãos — não soma de novo. Só o valor digitado de
+ *     setor fora do 59 soma por cima, no bruto e nunca no H.O. — ver
+ *     `buscarContribuicoesReceptivo`;
  *   • ajuste manual                 → sempre da soma. Nos dois caminhos ele já
  *     está dentro do acumulado; o que muda entre eles é de onde vem o TOTAL,
  *     não esta parcela.
@@ -92,7 +95,7 @@ export function acumuladoDoSetor(params: {
   alternativo: boolean;
   somaPorSetor: Record<string, SomaDoSetor>;
   totalPorSetor: Record<string, { total: number; ho: number }>;
-  receptivoPorSetor: Record<string, { acumulado: number }>;
+  receptivoPorSetor: Record<string, { acumulado: number; origem?: 'relatorio_59' | 'manual' }>;
 }): SomaDoSetor {
   const {
     setorId, isPaguePlay, alternativo, somaPorSetor, totalPorSetor, receptivoPorSetor,
@@ -105,8 +108,14 @@ export function acumuladoDoSetor(params: {
   const bruto = usarSoma ? (soma?.bruto ?? 0) : (Number(relatorio?.total) || 0);
   const ho    = usarSoma ? (soma?.ho ?? 0)    : (Number(relatorio?.ho) || 0);
 
+  // O do 59 já veio dentro de `bruto`; somá-lo aqui dobraria.
+  const receptivo = receptivoPorSetor[setorId];
+  const receptivoPorCima = receptivo && receptivo.origem !== 'relatorio_59'
+    ? Number(receptivo.acumulado) || 0
+    : 0;
+
   return {
-    bruto: bruto + (Number(receptivoPorSetor[setorId]?.acumulado) || 0),
+    bruto: bruto + receptivoPorCima,
     ho,
     ajuste: soma?.ajuste ?? 0,
   };
