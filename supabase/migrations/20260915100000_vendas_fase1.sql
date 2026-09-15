@@ -78,19 +78,29 @@ SET LOCAL statement_timeout = '120s';
 -- `fn_permissoes_catalogo` e uma cadeia de funcoes `_antes_`. Acrescentar
 -- chave e congelar a de hoje (corpo de 20260914170000) e redefinir a de cima.
 
+-- ⚠️ A cadeia parte de `_antes_tickets_excluir_20260914`, e nao de
+-- `_antes_fechamento_20260914`.
+--
+-- Esta migration foi escrita quando o topo da cadeia era o Fechamento
+-- (20260914170000). Enquanto isso, 20260914200000 entrou na main com a chave
+-- `tickets_excluir` e virou o novo topo. Continuar partindo do Fechamento
+-- faria esta funcao redefinir `fn_permissoes_catalogo()` SEM `tickets_excluir`,
+-- e a chave sumiria do catalogo em silencio — a tela de Permissoes deixaria de
+-- mostra-la e o `fn_user_tem` dela passaria a responder falso para todo mundo.
+--
+-- E exatamente o defeito que a cadeia de `_antes_` existe para tornar visivel:
+-- quem acrescenta chave precisa congelar o topo de VERDADE, nao o topo de
+-- quando comecou a escrever.
 CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo_antes_vendas_20260915()
 RETURNS TABLE(chave TEXT, tenants TEXT[], padrao TEXT[], explicita BOOLEAN)
 LANGUAGE sql
 IMMUTABLE
 SET search_path TO ''
 AS $function$
-  SELECT * FROM public.fn_permissoes_catalogo_antes_fechamento_20260914()
+  SELECT * FROM public.fn_permissoes_catalogo_antes_tickets_excluir_20260914()
   UNION ALL
   SELECT * FROM (VALUES
-    ('ver_fechamento',                  ARRAY['bookplay']::TEXT[], ARRAY[]::TEXT[], false),
-    ('fechamento_escopo_setor',         ARRAY['bookplay']::TEXT[], ARRAY[]::TEXT[], false),
-    ('fechamento_escopo_todos_setores', ARRAY['bookplay']::TEXT[], ARRAY[]::TEXT[], false),
-    ('fechamento_editar',               ARRAY['bookplay']::TEXT[], ARRAY[]::TEXT[], false)
+    ('tickets_excluir', NULL::TEXT[], ARRAY[]::TEXT[], false)
   ) AS novas(chave, tenants, padrao, explicita);
 $function$;
 
