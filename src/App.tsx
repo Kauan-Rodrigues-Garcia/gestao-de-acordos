@@ -66,6 +66,13 @@ const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
+// A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
+// este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
+const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'));
+const VendasPainelLider  = lazy(() => import('@/pages/Vendas/PainelLiderComercial'));
+const VendasPainelDiretoria = lazy(() => import('@/pages/Vendas/PainelDiretoriaComercial'));
+const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
+const VendasDesafios     = lazy(() => import('@/pages/Vendas/DesafiosComercial'));
 const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
 const VendasMetas       = lazy(() => import('@/pages/Vendas/Metas'));
 const VendasFechamento  = lazy(() => import('@/pages/Vendas/FechamentoDoSetor'));
@@ -133,9 +140,14 @@ function VersionWatcher(): null {
 /**
  * A rota `/` por produto.
  *
- * O Dashboard é da cobrança inteiro. Enquanto Comercial e RH não têm o deles,
- * a porta de entrada avisa que a operação está sendo montada — em vez de abrir
- * uma tela de recebimento vazia para um vendedor.
+ * O Dashboard é da cobrança inteiro — recebimento, acordo, ticket médio e
+ * colchão —, e nenhuma dessas palavras significa alguma coisa fora dela. Por
+ * isso `/` escolhe o painel pelo produto, e não mostra o mesmo para todos.
+ *
+ * Desde a Fase 9 (15/09/2026) o Comercial tem o dele: `DashboardComercial`, que
+ * é o rodapé da planilha mensal escrito uma vez. O RH ainda não, e continua
+ * caindo em `ProdutoEmMontagem` — avisar que a operação está sendo montada é
+ * melhor do que abrir uma tela de recebimento vazia para um vendedor.
  *
  * ## O Núcleo não passa mais por aqui
  *
@@ -154,6 +166,7 @@ function PainelDeEntrada(): React.ReactElement {
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
   if (loading || produto === 'cobranca') return <Dashboard />;
+  if (produto === 'comercial') return <DashboardComercial />;
   return <ProdutoEmMontagem produto={produto} />;
 }
 
@@ -435,6 +448,58 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_vendas">
                     <Vendas />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Fase 9 — painéis e herança.
+
+                  As CHAVES são as mesmas da cobrança (`ver_painel_lider`,
+                  `ver_painel_diretoria`, `ver_lixeira`,
+                  `analitico_sub_desafios`): a pergunta que elas fazem é a
+                  mesma dos dois lados, e criar chave nova exigiria encostar na
+                  cadeia de `fn_permissoes_catalogo()`, que já se partiu uma
+                  vez aqui. O que separa as duas operações é a barreira de
+                  PRODUTO, e ela está em cada linha abaixo.
+
+                  As listas de cargo espelham as da cobrança, para quem tem o
+                  painel lá ter o de cá sem ninguém reconfigurar cargo. */}
+              <Route path={ROUTE_PATHS.VENDAS_PAINEL_LIDER} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL}
+                    allowedProfiles={['lider','administrador','elite','gerencia']}
+                    requiredPermissao="ver_painel_lider">
+                    <VendasPainelLider />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL}
+                    allowedProfiles={['diretoria','administrador']}
+                    requiredPermissao="ver_painel_diretoria">
+                    <VendasPainelDiretoria />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* A lixeira do Comercial é outra TABELA, não outro filtro:
+                  `lixeira_vendas` e `fn_venda_restaurar`, criadas na Fase 1.
+                  Restaurar exige `restaurar_vendas`, conferida na tela e na
+                  RPC — quem só tem `ver_lixeira` lê e não mexe. */}
+              <Route path={ROUTE_PATHS.VENDAS_LIXEIRA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_lixeira">
+                    <VendasLixeira />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Desafios: o mesmo componente do Analítico, com porta própria.
+                  `analitico_sub_desafios` não depende de `ver_analitico`, e é
+                  por isso que o Comercial a herda sem chave nova. */}
+              <Route path={ROUTE_PATHS.VENDAS_DESAFIOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="analitico_sub_desafios">
+                    <VendasDesafios />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

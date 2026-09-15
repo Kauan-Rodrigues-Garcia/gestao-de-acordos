@@ -414,6 +414,12 @@ export default function Tickets() {
           onMudar={v => mudar('categoria', v === 'todos' ? null : v)}
           rotuloVazio="Toda categoria"
           largura="w-40"
+          /* Todas as categorias, e não só as do produto (`categoriasDoProduto`,
+             que o formulário usa). O formulário decide o que se pode ABRIR
+             hoje; o filtro precisa alcançar o que já foi aberto — inclusive um
+             chamado gravado numa categoria que o produto desta empresa deixou
+             de oferecer. Uma categoria a mais no filtro devolve zero linhas; um
+             ticket fora de toda opção do filtro fica inalcançável. */
           opcoes={CATEGORIAS.map(c => ({ valor: c.key, label: c.label }))}
         />
 

@@ -973,3 +973,132 @@ describe('feedback e ausências', () => {
     expect(corpo).toContain('public.fn_vendas_equipe_que_credita(p.id)');
   });
 });
+
+/**
+ * Fase 9 — o cadastro que o placar pergunta, e a ausência que a meta desconta.
+ *
+ * A fase é quase toda tela: Dashboard do Comercial, Painel Líder, Painel
+ * Diretoria, Lixeira, Tickets e Desafios. As contas ficaram em memória, em
+ * `@/lib/vendasPlacar`, sobre a lista que a RLS já recortou.
+ *
+ * Sobram duas perguntas que a lista de vendas não responde — quem é robô e
+ * quantos dias úteis a pessoa perdeu —, e são estas que a migration atende.
+ */
+describe('Fase 9 — o placar e a meta proporcional', () => {
+  const FASE9 = migration('_vendas_fase9_placar_e_paineis.sql');
+  const C9 = compacto(FASE9);
+  const placar = () => compacto(corpoDaFuncao(FASE9, 'fn_vendas_placar_pessoas'));
+
+  it('o alcance é o DE VENDAS, e não o de Acompanhamento', () => {
+    /*
+     * Tem de ser `fn_vendas_alcanca` — a mesma função da policy
+     * `vendas_select`. Esta lista existe para dar nome e equipe às vendas que
+     * JÁ chegaram na tela: um alcance mais estreito deixaria linhas do placar
+     * sem cadastro (viram «Sem nome», e o robô vira gente); um mais largo
+     * entregaria, de graça, nomes que a pessoa não pode ver.
+     *
+     * `fn_acompanhamento_alcancados` mede pela equipe de HOJE — certo para ler
+     * o histórico de um transferido, errado para creditar dinheiro, que conta
+     * pela equipe da gravação.
+     */
+    expect(placar()).toContain('public.fn_vendas_alcanca(');
+    expect(placar()).not.toContain('fn_acompanhamento_alcancados');
+  });
+
+  it('os robôs ENTRAM nesta lista, ao contrário da de Acompanhamento', () => {
+    // Aquela é de gente a acompanhar, e robô não recebe feedback. Esta é o
+    // cadastro do dinheiro, e o robô vendeu — ele vem marcado, e quem separa
+    // é a tela (`separarAutomacao`).
+    expect(placar()).toContain('COALESCE(p.robo, false) AS robo');
+    expect(placar()).not.toContain('AND NOT COALESCE(p.robo, false)');
+  });
+
+  it('a equipe é a que CREDITA, nunca `perfis.equipe_id` cru', () => {
+    // A regra da casa, na terceira cópia que se cita: 20260909160000,
+    // `equipeDoLider.ts` e `fn_vendas_equipe_que_credita` (20260915160000).
+    expect(placar()).toContain('public.fn_vendas_equipe_que_credita(p.id)');
+    expect(placar()).not.toMatch(/p\.equipe_id\s+INTO/);
+  });
+
+  it('só descontam da meta os tipos marcados em `ausencias_tipos.abate_meta`', () => {
+    // A regra de QUAIS tipos descontam já estava gravada desde a Fase 8; o que
+    // faltava era alguém perguntar. Ler `ausencias` sem esse JOIN faria falta
+    // e suspensão abaterem meta, que é a decisão contrária à tomada.
+    expect(placar()).toContain('JOIN public.ausencias_tipos t ON t.tipo = au.tipo AND t.abate_meta');
+  });
+
+  it('a conta é em dias ÚTEIS, e o dia inteiro vence o meio período', () => {
+    // Dias úteis e não corridos: `diasDaAusencia` responde «INSS de 30 dias é
+    // de 30 dias»; aqui a pergunta é quanto do MÊS DE TRABALHO se perdeu, e o
+    // mês de trabalho tem 21 dias. Segunda a sexta, como `diasUteisDoMes`.
+    expect(placar()).toContain('EXTRACT(ISODOW FROM d.dia) <= 5');
+    // `MAX` e não `MIN`: se duas ausências cobrem o mesmo dia e uma é de dia
+    // inteiro, o dia se perdeu inteiro. `MIN` deixaria a metade vencer o todo.
+    expect(placar()).toContain(
+      'MAX(CASE WHEN au.meio_periodo AND au.inicio = au.fim THEN 0.5 ELSE 1 END) AS peso',
+    );
+    // Agrupado por DIA antes de somar: duas ausências encostadas nas pontas
+    // depois de uma correção tirariam dois dias da meta por um dia de falta.
+    expect(placar()).toContain('GROUP BY d.dia');
+  });
+
+  it('devolve o NÚMERO de dias, nunca o tipo — atestado é dado de saúde', () => {
+    /*
+     * `ver_acompanhamento` e `ver_feedbacks` existem porque atestado e INSS
+     * são dado de saúde. A meta proporcional precisa saber que a pessoa perdeu
+     * 4 dias úteis; não precisa saber por quê.
+     *
+     * A prova é a lista de colunas do RETURNS: se algum dia alguém
+     * acrescentar `tipo` ali, este teste cai.
+     */
+    const returns = C9.slice(
+      C9.indexOf('fn_vendas_placar_pessoas('),
+      C9.indexOf('LANGUAGE sql'),
+    );
+    expect(returns).toContain('dias_abatidos NUMERIC');
+    expect(returns).toContain('dias_uteis_do_mes INTEGER');
+    expect(returns).not.toContain('tipo');
+    expect(returns).not.toContain('observacao');
+  });
+
+  it('é DEFINER e não fica exposta a anon', () => {
+    expect(C9).toContain('SECURITY DEFINER');
+    expect(C9).toContain("SET search_path TO ''");
+    expect(C9).toContain(
+      'REVOKE ALL ON FUNCTION public.fn_vendas_placar_pessoas(UUID, DATE) FROM PUBLIC, anon',
+    );
+    expect(C9).toContain(
+      'GRANT EXECUTE ON FUNCTION public.fn_vendas_placar_pessoas(UUID, DATE) TO authenticated',
+    );
+  });
+
+  it('NÃO encosta na cadeia do catálogo de permissões', () => {
+    /*
+     * A decisão da fase: os painéis do Comercial reusam `ver_painel_lider`,
+     * `ver_painel_diretoria`, `ver_lixeira`, `ver_tickets` e
+     * `analitico_sub_desafios`, que já existem.
+     *
+     * Cada migration que acrescenta chave cria um `_antes_X()` que CONGELA o
+     * catálogo, e chegar pelo elo errado derruba as chaves do elo pulado sem
+     * erro nenhum — já aconteceu aqui (`tickets_excluir` sumiu). Não encostar
+     * é o jeito mais seguro de não partir.
+     */
+    expect(C9).not.toContain('CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo');
+    expect(C9).not.toContain('fn_permissoes_catalogo_antes_');
+    // Mas confere que ela continua inteira, com as chaves que as telas usam.
+    for (const chave of [
+      'ver_painel_lider', 'ver_painel_diretoria', 'ver_lixeira',
+      'ver_tickets', 'analitico_sub_desafios',
+    ]) {
+      expect(C9, `a verificação não testemunha ${chave}`).toContain(`'${chave}'`);
+    }
+  });
+
+  it('o bloco de verificação CLICA, porque a criação não valida', () => {
+    // `plpgsql` não planeja o corpo na criação, e função `sql` valida sintaxe
+    // sem executar uma linha. As duas só falham no clique de alguém.
+    expect(C9).toContain("to_regprocedure('public.fn_vendas_placar_pessoas(uuid,date)')");
+    expect(C9).toContain("to_regclass('public.ausencias_tipos')");
+    expect(C9).toContain('RAISE EXCEPTION');
+  });
+});

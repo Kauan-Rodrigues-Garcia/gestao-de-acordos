@@ -12,6 +12,8 @@
  * teria que ser mantida para valer.
  */
 
+import type { Produto } from '@/lib/produto';
+
 /** Como o campo é preenchido na tela. */
 export type TipoCampo =
   | 'usuario'  // busca em perfis; grava id + nome, e o ticket fica ligado à pessoa
@@ -32,6 +34,21 @@ export interface CategoriaTicket {
   label: string;
   descricao: string;
   campos: CampoCategoria[];
+  /**
+   * Em que produtos esta categoria existe. Omitido = TODOS.
+   *
+   * Lista branca com padrão permissivo, ao contrário de `menuLateral` — e a
+   * diferença é deliberada. Lá, esquecer de declarar vaza uma tela de cobrança
+   * inteira para um vendedor; aqui, esquecer de declarar oferece uma linha a
+   * mais num seletor de categoria. O custo de errar não é o mesmo, e o padrão
+   * acompanha o custo.
+   *
+   * Só as categorias escritas no vocabulário de um produto declaram: «erro em
+   * acordo / tabulação» não quer dizer nada para quem vende, e oferecê-la
+   * convida a abrir o chamado na categoria errada — que é trabalho para o
+   * atendente e demora para quem abriu.
+   */
+  produtos?: readonly Produto[];
 }
 
 export const CATEGORIAS: CategoriaTicket[] = [
@@ -52,11 +69,22 @@ export const CATEGORIAS: CategoriaTicket[] = [
   },
   {
     key: 'erro_acordo',
+    produtos: ['cobranca'],
     label: 'Erro em acordo / tabulação',
     descricao: 'Acordo com dado errado, NR travado, vínculo trocado',
     campos: [
       { key: 'nr', label: 'NR / Código', tipo: 'nr' },
       { key: 'usuario', label: 'Operador do acordo', tipo: 'usuario' },
+    ],
+  },
+  {
+    key: 'erro_venda',
+    produtos: ['comercial'],
+    label: 'Erro em venda',
+    descricao: 'Venda com dado errado, NR duplicado, confirmação ou assinatura trocada',
+    campos: [
+      { key: 'nr', label: 'NR / Código', tipo: 'nr' },
+      { key: 'usuario', label: 'Operador da venda', tipo: 'usuario' },
     ],
   },
   {
@@ -70,11 +98,23 @@ export const CATEGORIAS: CategoriaTicket[] = [
   },
   {
     key: 'recebimento',
+    produtos: ['cobranca'],
     label: 'Divergência de recebimento',
     descricao: 'Valor que não bate no analítico, na equipe ou no setor',
     campos: [
       { key: 'setor', label: 'Setor', tipo: 'setor' },
       { key: 'mes', label: 'Mês de referência', tipo: 'texto', dica: 'Ex.: 2026-08' },
+      { key: 'usuario', label: 'Operador', tipo: 'usuario' },
+    ],
+  },
+  {
+    key: 'divergencia_venda',
+    produtos: ['comercial'],
+    label: 'Divergência no fechamento',
+    descricao: 'Valor que não bate entre o lançado, o relatório do setor e o geral',
+    campos: [
+      { key: 'setor', label: 'Setor', tipo: 'setor' },
+      { key: 'mes', label: 'Mês de referência', tipo: 'texto', dica: 'Ex.: 2026-09' },
       { key: 'usuario', label: 'Operador', tipo: 'usuario' },
     ],
   },
@@ -107,6 +147,21 @@ export const CATEGORIAS: CategoriaTicket[] = [
   },
 ];
 
+/**
+ * As categorias que este produto oferece, na ordem em que foram escritas.
+ *
+ * `produto === null` (a empresa ainda carregando, ou um slug sem produto
+ * declarado) devolve só as categorias sem produto — as que valem em toda
+ * operação. É a escolha segura: oferecer «erro em acordo» a um vendedor
+ * durante o meio segundo de carregamento seria oferecer a categoria errada
+ * exatamente a quem não sabe que ela é errada.
+ */
+export function categoriasDoProduto(produto: Produto | null): CategoriaTicket[] {
+  return CATEGORIAS.filter(
+    c => !c.produtos || (produto !== null && c.produtos.includes(produto)),
+  );
+}
+
 export function categoriaPorChave(key: string): CategoriaTicket | undefined {
   return CATEGORIAS.find(c => c.key === key);
 }
@@ -136,6 +191,13 @@ export const ABAS_DO_SISTEMA: { valor: string; permissao?: string }[] = [
   { valor: 'Campanha Fácil',     permissao: 'ver_campanha_facil' },
   { valor: 'Solicitar Atendimento', permissao: 'ver_solicitacoes_whatsapp' },
   { valor: 'Configurações',      permissao: 'ver_configuracoes' },
+  // As abas do Comercial. Entram na mesma lista e são recortadas pela mesma
+  // régua: quem não tem a chave não as vê, e por isso não precisam de produto.
+  { valor: 'Vendas',             permissao: 'ver_vendas' },
+  { valor: 'Importar Vendas',    permissao: 'ver_importacoes_vendas' },
+  { valor: 'Metas de Vendas',    permissao: 'ver_metas_vendas' },
+  { valor: 'Indicações',         permissao: 'ver_indicacoes' },
+  { valor: 'Acompanhamento',     permissao: 'ver_acompanhamento' },
   { valor: 'Login / entrada' },
   { valor: 'Outra' },
 ];

@@ -11,10 +11,26 @@ import path from 'node:path';
 
 const MIGRATIONS = path.resolve(__dirname, '../../../../supabase/migrations');
 
+/**
+ * O SQL da migration, sempre com `\n`.
+ *
+ * A normalização não é preciosismo: há asserção aqui que procura por
+ * `'FUNCTION public.fn_numeros_alterar_situacao(\n  p_numero_id UUID'` — uma
+ * quebra de linha LITERAL dentro da string esperada. Num clone com
+ * `core.autocrlf=true`, o arquivo chega ao disco com `\r\n`, o `indexOf`
+ * devolve −1, e o teste acusa «a assinatura nova não veio depois do DROP»
+ * quando o SQL está perfeito e o que mudou foi a configuração de git da
+ * máquina.
+ *
+ * Já aconteceu: este arquivo falhava na máquina de uma sessão e passava na de
+ * outra, sem uma linha de diferença no repositório. Normalizar na leitura faz
+ * o teste responder sobre o SQL, que é o que ele existe para verificar.
+ */
 function migration(sufixo: string): string {
   const arquivo = fs.readdirSync(MIGRATIONS).find(f => f.endsWith(sufixo));
   expect(arquivo, `migration *${sufixo} não encontrada`).toBeTruthy();
-  return fs.readFileSync(path.join(MIGRATIONS, arquivo as string), 'utf8');
+  return fs.readFileSync(path.join(MIGRATIONS, arquivo as string), 'utf8')
+    .replace(/\r\n/g, '\n');
 }
 
 function corpoDaFuncao(sql: string, nome: string): string {

@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { abasDoMenu, ticketsVisivelParaCargo, NAV_ITEMS, type ContextoMenu } from './menuLateral';
+import { ROUTE_PATHS } from './index';
 import { ordemDoCargo, CARGO_GERAL } from '@/services/menuLateral.service';
 
 /** Contexto de um cargo que pode tudo, para o teste dizer o que ele nega. */
@@ -154,22 +155,82 @@ describe('ordemDoCargo', () => {
  * Comercial, e nenhuma permissão faz virar.
  */
 describe('abasDoMenu — por produto', () => {
-  it('o Comercial não vê nenhuma tela de cobrança, nem com super_admin', () => {
-    const abas = rotulos(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
-    for (const daCobranca of [
-      'Acordos', 'Novo Acordo', 'Painel Líder', 'Painel Diretoria',
-      'Analítico', 'Campanha Fácil', 'Importar Excel', 'Metas',
-      'Tickets', 'RH Gestão', 'Solicitar Atendimento',
-    ]) {
-      expect(abas).not.toContain(daCobranca);
+  /*
+   * A identidade de uma aba é a ROTA, e não o rótulo.
+   *
+   * Até a Fase 9 dava para conferir por rótulo, porque cada nome existia num
+   * produto só. Desde então há «Painel Líder» e «Lixeira» nos dois — telas
+   * diferentes, em endereços diferentes, com o mesmo nome na barra, porque a
+   * pergunta que elas respondem é a mesma em cada operação.
+   *
+   * Conferir por rótulo agora daria um teste que passa quando o Comercial
+   * ganha o painel DA COBRANÇA — exatamente o vazamento que este bloco existe
+   * para impedir.
+   */
+  const rotas = (itens: { to: string }[]) => itens.map(i => i.to);
+
+  it('o Comercial não alcança nenhuma ROTA de cobrança, nem com super_admin', () => {
+    const daCobranca = NAV_ITEMS
+      .filter(i => i.produtos?.includes('cobranca') && !i.produtos?.includes('comercial'))
+      .map(i => i.to);
+    // A lista não é escrita à mão: ela sai de `NAV_ITEMS`, e por isso uma aba
+    // de cobrança criada amanhã já nasce coberta por este teste.
+    expect(daCobranca.length).toBeGreaterThan(5);
+
+    const noComercial = rotas(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
+    for (const rota of daCobranca) {
+      expect(noComercial, `${rota} vazou para o Comercial`).not.toContain(rota);
     }
   });
 
   it('o Comercial vê o que toda operação precisa', () => {
     const abas = rotulos(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
     expect(abas).toEqual(expect.arrayContaining(['Dashboard', 'Usuários', 'Configurações']));
-    // Lixeira NÃO: ela lista acordos excluídos, não «coisas apagadas» em geral.
-    expect(abas).not.toContain('Lixeira');
+  });
+
+  /*
+   * As quatro heranças da Fase 9.
+   *
+   * Painel Líder, Painel Diretoria, Lixeira e Desafios existem nas duas
+   * operações com CHAVE compartilhada e ROTA própria. O teste fixa as duas
+   * metades: a rota é a do Comercial, e a de cobrança continua fora.
+   */
+  it('a herança da Fase 9 chega pelo endereço do Comercial, não pelo da cobrança', () => {
+    const abas = abasDoMenu(ctx({ produto: 'comercial', isBookplay: false }));
+    const porRotulo = (label: string) => abas.filter(i => i.label === label).map(i => i.to);
+
+    expect(porRotulo('Painel Líder')).toEqual([ROUTE_PATHS.VENDAS_PAINEL_LIDER]);
+    expect(porRotulo('Painel Diretoria')).toEqual([ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA]);
+    expect(porRotulo('Lixeira')).toEqual([ROUTE_PATHS.VENDAS_LIXEIRA]);
+    expect(porRotulo('Desafios')).toEqual([ROUTE_PATHS.VENDAS_DESAFIOS]);
+
+    // E a cobrança não ganhou as do Comercial de volta.
+    const naCobranca = abasDoMenu(ctx({ produto: 'cobranca', isBookplay: true }));
+    for (const rota of [
+      ROUTE_PATHS.VENDAS_PAINEL_LIDER, ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA,
+      ROUTE_PATHS.VENDAS_LIXEIRA, ROUTE_PATHS.VENDAS_DESAFIOS, ROUTE_PATHS.VENDAS,
+    ]) {
+      expect(naCobranca.map(i => i.to)).not.toContain(rota);
+    }
+  });
+
+  /*
+   * Tickets é a única aba de tela ÚNICA compartilhada pelas duas operações.
+   *
+   * Uma rota só, um componente só — porque chamado, fila, atendente e chat não
+   * têm vocabulário de produto. O que tinha eram duas categorias do
+   * formulário, e elas passaram a declarar produto em `Tickets/categorias.ts`.
+   */
+  it('Tickets é a mesma rota nas duas operações, e some no RH', () => {
+    const noComercial = rotas(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
+    const naCobranca  = rotas(abasDoMenu(ctx({ produto: 'cobranca', isBookplay: true })));
+    expect(noComercial).toContain(ROUTE_PATHS.TICKETS);
+    expect(naCobranca).toContain(ROUTE_PATHS.TICKETS);
+
+    // O RH não tem tela nenhuma ainda: uma aba que apareça lá é uma aba que
+    // ninguém revisou, aparecendo para ninguém.
+    expect(rotas(abasDoMenu(ctx({ produto: 'rh', isBookplay: false }))))
+      .not.toContain(ROUTE_PATHS.TICKETS);
   });
 
   it('o RH se comporta igual ao Comercial — nenhum privilégio sobre a cobrança', () => {

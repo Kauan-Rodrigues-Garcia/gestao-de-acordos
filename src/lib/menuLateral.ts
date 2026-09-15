@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Scale, Handshake, UsersRound,
+  ShoppingBag, Scale, Handshake, UsersRound, Trophy,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -96,6 +96,19 @@ const SO_COBRANCA: readonly Produto[] = ['cobranca'];
  */
 const SO_COMERCIAL: readonly Produto[] = ['comercial'];
 
+/**
+ * As duas operações que já existem de verdade.
+ *
+ * Não é «todos menos RH»: é a lista das abas cuja tela é neutra o bastante
+ * para servir às duas, e que alguém conferiu que serve. Tickets é a primeira
+ * — chamado, fila e chat não têm vocabulário de produto.
+ *
+ * Escrever `TODOS_OS_PRODUTOS` aqui seria mais curto e estaria errado: o RH
+ * não tem tela nenhuma, nem cargo, nem gente, e uma aba que aparece lá é uma
+ * aba que ninguém revisou aparecendo para ninguém.
+ */
+const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+
 export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
@@ -110,7 +123,12 @@ export const NAV_ITEMS: NavItem[] = [
   // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o
   // cadastro de atendentes decidem quando ela abre. Ate 23/08 nao havia chave
   // nenhuma aqui, e o cargo escrito na rota era o unico dono da decisao.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             produtos: SO_COBRANCA, permissaoKey: 'ver_tickets' },
+  // Tickets — nas DUAS operações desde a Fase 9 (15/09/2026). Nada na tela é
+  // de cobrança: ela é chamado, fila, atendente e chat, tudo por empresa. O que
+  // era de cobrança eram duas CATEGORIAS do formulário, e elas ganharam
+  // `produtos` em `Tickets/categorias.ts` — quem vende escolhe «erro em venda»
+  // e «divergência no fechamento» no lugar delas.
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             produtos: COBRANCA_E_COMERCIAL, permissaoKey: 'ver_tickets' },
   // RH Gestão. Sem lista de cargo: quem abre é a chave, e o alcance de dentro
   // vem dos níveis da aba. É o padrão das abas já convertidas.
   //
@@ -168,6 +186,27 @@ export const NAV_ITEMS: NavItem[] = [
   // Acompanhamento — feedback e ausências de cada pessoa. Da liderança por
   // padrão: os feedbacks são nota escrita para quem acompanha.
   { label: 'Acompanhamento',   icon: UsersRound,      to: ROUTE_PATHS.VENDAS_ACOMPANHAMENTO, produtos: SO_COMERCIAL, permissaoKey: 'ver_acompanhamento' },
+  // Fase 9 — os painéis do Comercial.
+  //
+  // Rota própria e CHAVE COMPARTILHADA com a cobrança. As duas decisões andam
+  // juntas: a tela é outra (aqui não há recebimento, acordo nem quartil), mas
+  // a pergunta que a chave faz — «esta pessoa enxerga o painel da liderança?»
+  // — é a mesma nas duas operações, e um cargo que já a tem lá não deveria
+  // precisar de outra configuração aqui.
+  //
+  // Criar chave nova também custaria encostar na cadeia de
+  // `fn_permissoes_catalogo()`, que congela o catálogo a cada elo e já se
+  // partiu uma vez neste projeto (`tickets_excluir` sumiu).
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.VENDAS_PAINEL_LIDER,     produtos: SO_COMERCIAL, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA, produtos: SO_COMERCIAL, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
+  // Desafios ganha item de menu no Comercial porque perdeu a casa: na cobrança
+  // ela é aba interna do Analítico, e o Analítico é uma das telas que o
+  // Comercial mata. A chave continua sendo `analitico_sub_desafios`, que não
+  // depende de `ver_analitico` — conferido no catálogo.
+  { label: 'Desafios',         icon: Trophy,          to: ROUTE_PATHS.VENDAS_DESAFIOS,         produtos: SO_COMERCIAL, permissaoKey: 'analitico_sub_desafios' },
+  // A lixeira do Comercial é outra TABELA (`lixeira_vendas`), não outro filtro.
+  // `ver_lixeira` abre; `restaurar_vendas` é que deixa mexer.
+  { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },

@@ -37,7 +37,7 @@
 import { useMemo } from 'react';
 import {
   Camera, Trash2, KeyRound, Save, Lock, ArrowRightLeft, Building2, Shield,
-  AlertTriangle, Loader2, UserPlus, IdCard, Briefcase, X,
+  AlertTriangle, Loader2, UserPlus, IdCard, Briefcase, X, Bot,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/select';
 import { MIN_SENHA } from '@/services/senha.service';
 import { PERFIL_LABELS, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
+import { pareceLoginDeIa } from '@/lib/vendas';
 import {
   CARGO_DO_NUCLEO, aoTrocarCargo, aoTrocarSetor, cargoCabeNoSetor, caminhoParaAssistenteAdm,
 } from '@/lib/cargoDoNucleo';
@@ -65,6 +66,19 @@ export interface UserForm {
   perfil:     PerfilUsuario;
   setor_id:   string;
   empresa_id: string;
+  /**
+   * Este login é de automação, e não de gente? (`perfis.robo`)
+   *
+   * A coluna nasceu na Fase 6 do Comercial e ficou um mês sem tela: os três
+   * robôs foram marcados por SQL, e ninguém conseguia marcar o quarto.
+   *
+   * **Não muda régua nenhuma.** A venda do robô é confirmada, assinada, entrou
+   * no caixa do setor e SOMA no total — tirá-la faria o painel discordar do
+   * Fechamento. O que a marcação muda é o placar por cabeça: uma automação que
+   * roda 24 horas seria o destaque de todo dia, e o card deixaria de dizer
+   * alguma coisa sobre alguém.
+   */
+  robo:       boolean;
 }
 
 /** O que o cargo de quem está editando pode mexer nesta pessoa. */
@@ -95,6 +109,18 @@ interface Props {
   empresas: Empresa[];
   empresaAtualNome?: string;
 
+  /**
+   * O campo «este login é automação» aparece?
+   *
+   * Só no Comercial: `perfis.robo` só é lido pelos painéis de Vendas, e
+   * oferecer a caixa na cobrança seria um controle que não controla nada —
+   * o defeito que a lista branca de `menuLateral` existe para não cometer.
+   *
+   * Quem pode marcar é quem pode mexer no cargo (`usuarios_editar_cargo`):
+   * dizer que um login é robô é decidir se ele disputa o placar, que é da
+   * mesma família de «que cargo esta pessoa tem».
+   */
+  mostrarRobo?: boolean;
   /** Cargo que pertence à EMPRESA, não a um setor — o campo Setor sai da tela. */
   cargoEscopoEmpresa: boolean;
   /** Sem setor num cargo que precisa de um: aqui, e só aqui, o campo abre. */
@@ -194,6 +220,7 @@ export function DialogUsuario({
   aberto, onFechar, editando, form, setForm,
   pode, isSuperAdmin, souEu, online,
   setoresDoForm, setores, empresas, empresaAtualNome,
+  mostrarRobo = false,
   cargoEscopoEmpresa, setorVazioParaPreencher, setorNucleoId = null, onTransferirAoNucleo,
   salvando, onSalvar,
   uploadando, onEscolherFoto, onRemoverFoto,
@@ -462,6 +489,48 @@ export function DialogUsuario({
                 />
               )}
             </div>
+
+            {/* Automação — só no Comercial, e só para quem mexe no cargo.
+
+                A coluna `perfis.robo` existe desde a Fase 6 e passou um mês
+                sem tela: os três robôs foram marcados por SQL e ninguém
+                conseguia marcar o quarto.
+
+                O prefixo `ia_` do login é PISTA, nunca cadastro — são 21
+                logins com ele entre os 358 vendedores do relatório, e confiar
+                na string faria um humano chamado `ian_pereira` sair do placar
+                sem ninguém entender por quê. Por isso a sugestão aparece como
+                texto, e quem decide é esta caixa. */}
+            {mostrarRobo && pode.cargo && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Natureza do login</Label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={form.robo}
+                    onChange={e => setForm(f => ({ ...f, robo: e.target.checked }))}
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      <Bot className="h-3.5 w-3.5" aria-hidden /> Este login é de automação
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                      As vendas dele continuam somando no total do setor — foram confirmadas,
+                      assinadas e entraram no caixa. O que muda é que ele sai do placar por
+                      cabeça e do destaque do dia, onde comparar uma pessoa com um robô que
+                      trabalha 24 horas não mede nada.
+                    </span>
+                    {!form.robo && pareceLoginDeIa(form.usuario) && (
+                      <span className="mt-1 block text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                        O login começa com <code className="rounded bg-muted px-1">ia_</code> e
+                        não está marcado. É só uma pista — confirme antes de marcar.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              </div>
+            )}
 
             {/* Setor: escolhido ao CRIAR, somente leitura ao editar.
                 ─────────────────────────────────────────────────────────────

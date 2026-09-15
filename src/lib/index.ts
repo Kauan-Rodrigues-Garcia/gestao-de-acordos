@@ -75,6 +75,26 @@ export const ROUTE_PATHS = {
    * a venda, e o alcance é pela equipe de hoje, não pela da gravação.
    */
   VENDAS_ACOMPANHAMENTO: '/vendas/acompanhamento',
+  /*
+   * Os quatro endereços da Fase 9 — painéis e herança.
+   *
+   * Todos com rota PRÓPRIA, e nenhum reaproveitando a URL da cobrança. O
+   * motivo é o mesmo nos quatro: `/painel-lider` desenha recebimento, acordo e
+   * quartil, e `/admin/lixeira` restaura acordo. Fazer a mesma URL trocar de
+   * tela por produto criaria um componente com dois modos e um `if` de
+   * produto no meio — que é exatamente o que `menuLateral` e `ProtectedRoute`
+   * existem para não precisar.
+   *
+   * As CHAVES, ao contrário das rotas, são reaproveitadas: `ver_painel_lider`,
+   * `ver_painel_diretoria`, `ver_lixeira` e `analitico_sub_desafios` já
+   * existem, com escopo próprio, e a pergunta que fazem é a mesma dos dois
+   * lados. Criar chave nova exigiria encostar na cadeia de
+   * `fn_permissoes_catalogo()`, que já se partiu uma vez aqui.
+   */
+  VENDAS_PAINEL_LIDER: '/vendas/painel-lider',
+  VENDAS_PAINEL_DIRETORIA: '/vendas/painel-diretoria',
+  VENDAS_LIXEIRA: '/vendas/lixeira',
+  VENDAS_DESAFIOS: '/vendas/desafios',
   /**
    * O Controle de Números, do setor Núcleo de Inteligência e Gestão.
    *

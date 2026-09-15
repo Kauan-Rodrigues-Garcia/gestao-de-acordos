@@ -162,6 +162,15 @@ export default function AdminUsuarios() {
    * defeito do botão de excluir oferecido a quem o banco recusa.
    */
   const podeAlgoNoUsuario = Object.values(podeNoUsuario).some(Boolean);
+  /*
+   * A caixa «este login é automação» só existe no Comercial.
+   *
+   * `perfis.robo` é lido pelos painéis de Vendas e por mais nada. Oferecer a
+   * marcação na cobrança seria um controle que não controla — e, pior, faria
+   * toda edição de perfil de lá mandar `robo: false` no payload, apagando em
+   * silêncio o que alguém marcou do outro lado.
+   */
+  const mostrarRobo = produtoDaEmpresa(empresaAtual, tenant.slug) === 'comercial';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
@@ -332,7 +341,7 @@ export default function AdminUsuarios() {
   });
 
   const [saving,      setSaving]      = useState(false);
-  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
+  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '', robo: false });
   /*
    * Qual setor é o Núcleo na empresa do FORMULÁRIO — o super_admin cadastra
    * gente em outra empresa, e o Núcleo dela é outro. Decide onde o cargo
@@ -498,13 +507,20 @@ export default function AdminUsuarios() {
       perfil: 'operador',
       setor_id: setores.find(s => s.empresa_id === (empresaAtual?.id ?? ''))?.id ?? '',
       empresa_id: empresaAtual?.id ?? '',
+      // Pessoa até que alguém diga o contrário. O prefixo `ia_` do login é
+      // pista e nunca cadastro — quem marca é a caixa, não a string.
+      robo: false,
     });
     setDialogOpen(true);
   }
 
   function abrirEditar(u: Perfil) {
     setEditando(u);
-    setForm({ nome: u.nome, email: u.email, usuario: u.usuario ?? '', senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '' });
+    setForm({
+      nome: u.nome, email: u.email, usuario: u.usuario ?? '', senha: '',
+      perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '',
+      robo: (u as { robo?: boolean | null }).robo === true,
+    });
     setNovaSenha('');
     setDialogOpen(true);
   }
@@ -542,6 +558,21 @@ export default function AdminUsuarios() {
     }
     if (setorVazioParaPreencher && form.setor_id) {
       updatePayload.setor_id = form.setor_id;
+    }
+    /*
+     * `robo` viaja com o cargo, e só no Comercial.
+     *
+     * Viaja com o cargo porque dizer que um login é automação é decidir se ele
+     * disputa o placar — mesma família de «que cargo esta pessoa tem», e
+     * governada pela mesma chave (`usuarios_editar_cargo`).
+     *
+     * Só no Comercial porque é lá que a marcação é lida. Mandá-la da cobrança
+     * gravaria `false` em toda edição de perfil, apagando em silêncio uma
+     * marcação feita do outro lado — o mesmo tipo de defeito que o payload
+     * parcial acima existe para impedir.
+     */
+    if (mostrarRobo && podeNoUsuario.cargo) {
+      updatePayload.robo = form.robo;
     }
     /*
      * Nada a gravar não é erro. Acontece quando o cargo só podia redefinir a

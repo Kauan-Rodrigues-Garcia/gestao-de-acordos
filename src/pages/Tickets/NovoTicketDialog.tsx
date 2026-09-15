@@ -23,10 +23,11 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { abrirTicket } from '@/services/tickets.service';
 import {
-  CATEGORIAS, ABAS_DO_SISTEMA, PRIORIDADES,
+  categoriasDoProduto, ABAS_DO_SISTEMA, PRIORIDADES,
   type CampoCategoria, type PrioridadeTicket,
 } from './categorias';
 
@@ -40,9 +41,23 @@ interface Opcao { id: string; nome: string; foto?: string | null }
 
 export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const empresaId = empresa?.id ?? null;
+
+  /*
+   * As categorias deste produto.
+   *
+   * Cobrança e Comercial abrem chamado sobre coisas diferentes: «erro em
+   * acordo / tabulação» não quer dizer nada para quem vende, e «divergência no
+   * fechamento» não quer dizer nada para quem cobra. Oferecer as duas a todos
+   * convida a abrir na categoria errada — trabalho para o atendente e demora
+   * para quem abriu.
+   */
+  const categorias = useMemo(
+    () => categoriasDoProduto(produtoDaEmpresa(empresa, tenantSlug)),
+    [empresa, tenantSlug],
+  );
 
   const [categoria, setCategoria] = useState('senha');
   const [assunto, setAssunto] = useState('');
@@ -54,7 +69,10 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
   const [pessoas, setPessoas] = useState<Opcao[]>([]);
   const [setores, setSetores] = useState<Opcao[]>([]);
 
-  const definicao = useMemo(() => CATEGORIAS.find(c => c.key === categoria), [categoria]);
+  const definicao = useMemo(
+    () => categorias.find(c => c.key === categoria),
+    [categorias, categoria],
+  );
 
   // Só busca pessoas/setores quando a categoria escolhida pede algum deles —
   // a maioria dos tickets não precisa de nenhuma das duas listas.
@@ -168,7 +186,7 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
             <Select value={categoria} onValueChange={v => { setCategoria(v); setCampos({}); }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent className="max-h-64">
-                {CATEGORIAS.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
+                {categorias.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
               </SelectContent>
             </Select>
             {definicao && (

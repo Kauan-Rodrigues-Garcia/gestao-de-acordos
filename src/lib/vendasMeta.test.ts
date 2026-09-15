@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   progressoDaMeta, bateuAMeta, rotuloDoAndamento, ehRegua, REGUAS,
+  fatorDePresenca, ajustarMetaPorPresenca, rotuloDaPresenca,
   type MetaDoRecorte,
 } from './vendasMeta';
 
@@ -194,5 +195,82 @@ describe('a régua é valor fechado', () => {
     expect(ehRegua('faturamento')).toBe(false);
     expect(ehRegua(null)).toBe(false);
     expect(ehRegua('')).toBe(false);
+  });
+});
+
+/*
+ * A meta proporcional à presença — o item que sobrou da Fase 8.
+ *
+ * O cenário é o mês de agosto da planilha, com 21 dias úteis, numa equipe de
+ * 5 pessoas: 105 dias de trabalho disponíveis.
+ */
+describe('a ausência desconta da meta, e diz por quê', () => {
+  const EQUIPE = { uteis: 21, pessoas: 5 };
+
+  it('ninguém faltou: fator 1, e a meta não é tocada', () => {
+    const f = fatorDePresenca({ ...EQUIPE, diasAbatidos: 0 });
+    expect(f).toBe(1);
+
+    const meta: MetaDoRecorte = { regua: 'valor', quantidade: 161, valor: 962_136 };
+    expect(ajustarMetaPorPresenca(meta, f)).toBe(meta);
+    expect(rotuloDaPresenca({ ...EQUIPE, diasAbatidos: 0 }, f)).toBeNull();
+  });
+
+  it('dez dias perdidos em 105 deixam a equipe com 90,5% do mês', () => {
+    const f = fatorDePresenca({ ...EQUIPE, diasAbatidos: 10 })!;
+    expect(f).toBeCloseTo(95 / 105, 10);
+
+    const meta: MetaDoRecorte = { regua: 'valor', quantidade: 161, valor: 962_136 };
+    const ajustada = ajustarMetaPorPresenca(meta, f);
+    expect(ajustada.valor).toBeCloseTo(962_136 * (95 / 105), 6);
+    // Meia venda não existe, e arredondar para baixo daria de presente a
+    // fração que a proporcionalidade acabou de criar.
+    expect(ajustada.quantidade).toBe(Math.ceil(161 * (95 / 105)));
+    expect(ajustada.quantidade).toBe(146);
+    // A régua não muda: quem decide continua sendo a configuração.
+    expect(ajustada.regua).toBe('valor');
+  });
+
+  it('`null` não é 1 — «não perguntei» não pode virar «ninguém faltou»', () => {
+    expect(fatorDePresenca({ uteis: 0, pessoas: 5, diasAbatidos: 0 })).toBeNull();
+    expect(fatorDePresenca({ uteis: 21, pessoas: 0, diasAbatidos: 0 })).toBeNull();
+
+    const meta: MetaDoRecorte = { regua: 'quantidade', quantidade: 161, valor: 0 };
+    expect(ajustarMetaPorPresenca(meta, null)).toBe(meta);
+  });
+
+  it('ausência marcada errada não gera meta negativa', () => {
+    // 200 dias perdidos numa capacidade de 105. O fator trava em 0.
+    const f = fatorDePresenca({ ...EQUIPE, diasAbatidos: 200 });
+    expect(f).toBe(0);
+    const ajustada = ajustarMetaPorPresenca(
+      { regua: 'valor', quantidade: 161, valor: 962_136 }, f,
+    );
+    expect(ajustada.valor).toBe(0);
+    expect(ajustada.quantidade).toBe(0);
+  });
+
+  it('meio período aparece como 3,5 no rótulo, e não como 3.5', () => {
+    const p = { uteis: 21, pessoas: 1, diasAbatidos: 3.5 };
+    const f = fatorDePresenca(p)!;
+    expect(rotuloDaPresenca(p, f)).toBe('3,5 dias úteis de ausência · meta em 83%');
+  });
+
+  it('um dia só fala no singular', () => {
+    const p = { uteis: 21, pessoas: 1, diasAbatidos: 1 };
+    expect(rotuloDaPresenca(p, fatorDePresenca(p))).toBe('1 dia útil de ausência · meta em 95%');
+  });
+
+  it('a meta ajustada é a que o progresso cobra', () => {
+    const p = { uteis: 21, pessoas: 1, diasAbatidos: 10.5 };
+    const f = fatorDePresenca(p)!;
+    const meta = ajustarMetaPorPresenca({ regua: 'valor', quantidade: 0, valor: 100_000 }, f);
+    // Metade do mês fora: a meta é metade, e fazer metade bate 100%.
+    expect(meta.valor).toBeCloseTo(50_000, 6);
+
+    const a = progressoDaMeta({
+      meta, resumo: { quantidade: 0, valor: 50_000 }, uteis: 21, trabalhados: 21,
+    });
+    expect(bateuAMeta(a)).toBe(true);
   });
 });

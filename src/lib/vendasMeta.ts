@@ -197,3 +197,100 @@ export function rotuloDoAndamento(a: AndamentoDaMeta): string {
     ? `${a.oficial.feito} de ${a.oficial.alvo} vendas · ${pct}`
     : `${pct} do faturamento`;
 }
+
+/* ── A meta proporcional à presença ───────────────────────────────────────── */
+
+/**
+ * Quanto do mês de trabalho o recorte teve de verdade.
+ *
+ * Era o item que sobrou da Fase 8: «Andamento das Metas ainda cobra o mês
+ * cheio de quem esteve fora». A regra de QUAIS tipos descontam já estava
+ * gravada em `ausencias_tipos.abate_meta` desde 15/09; o que faltava era a
+ * conta.
+ */
+export interface PresencaDoRecorte {
+  /** Dias úteis do mês. É o mês cheio de UMA pessoa. */
+  uteis: number;
+  /**
+   * Quantas pessoas o recorte tem.
+   *
+   * É o multiplicador da capacidade: uma equipe de 5 tem `5 × uteis` dias de
+   * trabalho disponíveis no mês, e é disso que a ausência desconta.
+   *
+   * **Quem está cadastrado, e não quem vendeu.** A diferença aparece em quem
+   * passou o mês inteiro de férias: pelo cadastro ela entra com 21 dias de
+   * capacidade e 21 de ausência, e o líquido dela é zero — que é a resposta
+   * certa. Contando só quem vendeu, ela sairia do denominador e os 21 dias de
+   * ausência dela seriam descontados da capacidade dos colegas.
+   *
+   * Robô fica fora dos dois lados: automação não tira férias, e somá-la ao
+   * denominador diluiria o desconto de quem tirou.
+   */
+  pessoas: number;
+  /** A soma dos dias úteis perdidos por todas elas. Meio período vale 0,5. */
+  diasAbatidos: number;
+}
+
+/**
+ * A fração do mês que o recorte esteve presente: de 0 a 1.
+ *
+ * `null` quando não dá para saber — sem dias úteis, sem pessoa, ou sem
+ * ninguém tendo perguntado a ausência ao banco. **`null` não é 1**: a tela
+ * precisa distinguir «ninguém faltou» de «não perguntei», ou uma migration
+ * não aplicada viraria, em silêncio, um mês de presença perfeita.
+ *
+ * Nunca passa de 1 nem desce de 0. Ausência marcada errada — dez dias num
+ * mês de cinco pessoas que só teve três — não pode virar meta negativa.
+ */
+export function fatorDePresenca(p: PresencaDoRecorte): number | null {
+  const capacidade = (Number(p.uteis) || 0) * (Number(p.pessoas) || 0);
+  if (capacidade <= 0) return null;
+  const presentes = capacidade - (Number(p.diasAbatidos) || 0);
+  return Math.min(1, Math.max(0, presentes / capacidade));
+}
+
+/**
+ * A meta reescrita pelo que o recorte teve de mês.
+ *
+ * Uma equipe de 5 com 21 dias úteis tem 105 dias de trabalho. Se dois
+ * atestados comeram 10, ela teve 95 — 90,5% do mês —, e cobrar dela os 100%
+ * da meta é cobrar por um trabalho que ninguém podia fazer.
+ *
+ * **A régua não muda.** O que muda é o alvo; qual das duas decide continua
+ * sendo a configuração. E `fator: null` devolve a meta intacta, porque não
+ * saber quanto alguém faltou não é motivo para mexer no número de ninguém.
+ *
+ * A quantidade é arredondada para cima: meia venda não existe, e arredondar
+ * para baixo daria de presente a fração de venda que a proporcionalidade
+ * acabou de criar.
+ */
+export function ajustarMetaPorPresenca(
+  meta: MetaDoRecorte,
+  fator: number | null,
+): MetaDoRecorte {
+  if (fator === null || fator >= 1) return meta;
+  return {
+    regua: meta.regua,
+    quantidade: Math.ceil((Number(meta.quantidade) || 0) * fator),
+    valor: (Number(meta.valor) || 0) * fator,
+  };
+}
+
+/**
+ * O rótulo do desconto, para a tela dizer por que o número mudou.
+ *
+ * Meta que desce sem explicação se lê como erro, e a primeira pessoa a notar
+ * vai perguntar se o sistema está somando direito. `null` quando não houve
+ * desconto — aí não há nada a explicar.
+ */
+export function rotuloDaPresenca(p: PresencaDoRecorte, fator: number | null): string | null {
+  if (fator === null || fator >= 1) return null;
+  const dias = Number(p.diasAbatidos) || 0;
+  const plural = dias === 1 ? 'dia útil' : 'dias úteis';
+  return `${formatarDias(dias)} ${plural} de ausência · meta em ${Math.round(fator * 100)}%`;
+}
+
+/** `4` e não `4,0`; `3,5` quando houve meio período. */
+function formatarDias(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+}
