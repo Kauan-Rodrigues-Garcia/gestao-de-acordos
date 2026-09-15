@@ -45,6 +45,7 @@ function linha(campos: Campos): string {
     TipoVenda: 'PEC', Tipo_Produto: 'PEC 4',
     ScoreClasse: 'C', SpcSerasa: 'Aprovado',
     ContratoAssinado: 'Sim', VendaLead: 'Não',
+    Cliente: 'LUIZ RIVAMAR ALVES PAZ',
   };
   return nomes.map(n => campos[n] ?? padrao[n] ?? '').join(';');
 }
@@ -335,5 +336,39 @@ describe('o que o parser NÃO traz', () => {
     // O que fica é o par que a regra 4 definiu.
     expect(chaves).toContain('valor_recebido');
     expect(chaves).toContain('tipo_recebimento');
+  });
+});
+
+describe('o cliente, que o parser não lia', () => {
+  /*
+   * Até 15/09/2026 a coluna `Cliente` não estava declarada em `COLUNAS`. O
+   * efeito só apareceu com as 140 vendas de setembro projetadas: a aba Vendas
+   * mostrava «sem cliente» na frente de TODOS os NRs, e parecia dado que o
+   * relatório não traz.
+   *
+   * Traz — coluna 51, com ZERO vazios em 3.101 linhas nos dois meses medidos.
+   */
+  it('lê o nome de quem comprou', () => {
+    const r = parseProspeccao(arquivo(linha({})));
+    expect(r.linhas[0].cliente).toBe('LUIZ RIVAMAR ALVES PAZ');
+  });
+
+  it('cliente em branco vira null, e não string vazia', () => {
+    const r = parseProspeccao(arquivo(linha({ Cliente: '   ' })));
+    expect(r.linhas[0].cliente).toBeNull();
+  });
+
+  it('é coluna OBRIGATÓRIA — export sem ela é recusado, não silenciado', () => {
+    // O contrário — aceitar e gravar 140 nomes em branco — foi exatamente o
+    // que aconteceu. Recusar dizendo qual coluna falta é o comportamento que
+    // teria evitado a viagem.
+    const cabSemCliente = CABECALHO.split(';').filter(c => c !== 'Cliente').join(';');
+    const corpo = linha({}).split(';');
+    const iCliente = CABECALHO.split(';').indexOf('Cliente');
+    corpo.splice(iCliente, 1);
+
+    const r = parseProspeccao('﻿' + [cabSemCliente, corpo.join(';')].join('\r\n'));
+    expect(r.colunasFaltando).toContain('cliente');
+    expect(r.linhas).toHaveLength(0);
   });
 });

@@ -77,6 +77,8 @@ export interface LinhaProspeccao {
   codigo_franquia: string;
   /** Último nome visto da franquia. Rótulo, nunca chave. */
   franquia: string;
+  /** Quem comprou. Coluna `Cliente`, sem nenhum vazio nos dois meses medidos. */
+  cliente: string | null;
   uf: string | null;
   nome_vendedor: string | null;
   login_vendedor: string | null;
@@ -164,6 +166,19 @@ const COLUNAS: readonly Coluna[] = [
   { chave: 'dataconfirmacao',     formato: 'data',    obrigatoria: true  },
   { chave: 'codigofranquia',      formato: 'texto',   obrigatoria: true  },
   { chave: 'franquia',            formato: 'texto',   obrigatoria: true  },
+  /*
+   * `Cliente` — quem comprou.
+   *
+   * Ficou de fora até 15/09/2026 por descuido, e o efeito apareceu na tela: as
+   * 140 vendas projetadas mostravam «sem cliente» na frente do NR, todas.
+   * Parecia dado que o relatório não traz; o relatório traz, na coluna 51, e
+   * com ZERO vazios em 3.101 linhas — nos dois meses.
+   *
+   * `obrigatoria: true` de propósito: se um export futuro deixar de trazê-la, é
+   * melhor a importação recusar e dizer qual coluna falta do que voltar a
+   * gravar 140 nomes em branco sem ninguém perceber.
+   */
+  { chave: 'cliente',             formato: 'texto',   obrigatoria: true  },
   { chave: 'uf',                  formato: 'texto',   obrigatoria: true  },
   { chave: 'nomevendedor',        formato: 'texto',   obrigatoria: true  },
   { chave: 'loginvendedor',       formato: 'texto',   obrigatoria: true  },
@@ -397,6 +412,7 @@ export function parseProspeccao(conteudo: string): ResultadoParseProspeccao {
       data_confirmacao:   dataConfirmacao,
       codigo_franquia:    codigoFranquia,
       franquia:           cru(campos, 'franquia').trim(),
+      cliente:            texto(cru(campos, 'cliente')),
       uf:                 texto(cru(campos, 'uf'))?.toUpperCase() ?? null,
       nome_vendedor:      texto(cru(campos, 'nomevendedor')),
       login_vendedor:     texto(cru(campos, 'loginvendedor'))?.toLowerCase() ?? null,
