@@ -28,6 +28,17 @@
  * ordem vêm depois, alfabeticamente.
  *
  * O painel de permissões controla tanto a abertura da aba quanto cada ação.
+ *
+ * ## Remover setor (16/09/2026)
+ *
+ * Só o setor ZERADO sai: sem equipe, sem usuário e sem histórico apontando
+ * para ele. A lixeira ao lado do lápis já nasce desabilitada quando o contador
+ * de pessoas ou o de equipes não é zero — é a regra do pedido, e a tela sabe
+ * dela sem perguntar ao banco. O histórico (acordos, recebimentos, vendas…) só
+ * o banco conhece, e por isso a janela de confirmação pergunta a
+ * `fn_setor_impedimentos_exclusao` antes de oferecer o botão. A exclusão em si
+ * é `fn_setor_excluir`, que refaz a conta com a linha travada: a tela avisa,
+ * o banco decide. Mesma chave de criar e editar (`setores_criar_editar`).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -35,6 +46,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Building2, Plus, GripVertical, Edit, Save, X, Power, Users, ArrowRight,
+  Trash2, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
@@ -52,6 +64,10 @@ import { cn } from '@/lib/utils';
 import {
   aplicarOrdemSetores, lerOrdemSetores, salvarOrdemSetores,
 } from '@/lib/setores-ordem';
+import {
+  buscarImpedimentosDeExclusao, excluirSetor, rotuloDoImpedimento,
+  type ImpedimentoExclusao,
+} from '@/services/setores/excluirSetor.service';
 
 // ─── Drag state (module-level, evita stale closures) ────────────────────────
 let draggedSetorId: string | null = null;
@@ -91,6 +107,15 @@ export default function AdminSetoresAba() {
   const [vinculos, setVinculos] = useState<{ id: string; setor_id: string | null }[]>([]);
   const clonesCross = useClonesCross(empresaAtual?.id);
 
+  /** Quantas equipes há em cada setor — a outra metade de «zerado». */
+  const [equipesPorSetor, setEquipesPorSetor] = useState<Record<string, number>>({});
+
+  // Remover setor: o alvo, o que o banco disse que impede, e o andamento.
+  const [removendo, setRemovendo] = useState<Setor | null>(null);
+  const [impedimentos, setImpedimentos] = useState<ImpedimentoExclusao[] | null>(null);
+  const [erroImpedimentos, setErroImpedimentos] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
   const fetchSetores = useCallback(async () => {
     if (!empresaAtual?.id) { setSetores([]); setLoading(false); return; }
     setLoading(true);
@@ -125,7 +150,26 @@ export default function AdminSetoresAba() {
     setVinculos(linhas.filter(l => !l.arquivado).map(l => ({ id: l.id, setor_id: l.setor_id })));
   }, [empresaAtual?.id]);
 
-  useEffect(() => { void fetchSetores(); void fetchVinculos(); }, [fetchSetores, fetchVinculos]);
+  const fetchEquipes = useCallback(async () => {
+    if (!empresaAtual?.id) { setEquipesPorSetor({}); return; }
+    const { data, error } = await supabase
+      .from('equipes').select('id, setor_id')
+      .eq('empresa_id', empresaAtual.id);
+    if (error) {
+      console.warn('[AdminSetoresAba] fetchEquipes error:', error.message);
+      setEquipesPorSetor({});
+      return;
+    }
+    const conta: Record<string, number> = {};
+    for (const e of (data as { id: string; setor_id: string | null }[]) ?? []) {
+      if (e.setor_id) conta[e.setor_id] = (conta[e.setor_id] ?? 0) + 1;
+    }
+    setEquipesPorSetor(conta);
+  }, [empresaAtual?.id]);
+
+  useEffect(() => {
+    void fetchSetores(); void fetchVinculos(); void fetchEquipes();
+  }, [fetchSetores, fetchVinculos, fetchEquipes]);
 
   /**
    * Pessoas por setor — membros mais os clones de outro setor.
@@ -244,6 +288,44 @@ export default function AdminSetoresAba() {
     void fetchSetores();
   }
 
+  // ─── Remover ──────────────────────────────────────────────────────────────
+
+  /**
+   * Abre a confirmação e pergunta ao banco o que impede.
+   *
+   * O botão só chega aqui com zero pessoas e zero equipes na tela. O que
+   * sobra para descobrir é o histórico — e um desligado arquivado, que a
+   * contagem da aba não mostra.
+   */
+  async function abrirRemover(s: Setor) {
+    if (!podeCriarEditar) return;
+    setRemovendo(s);
+    setImpedimentos(null);
+    setErroImpedimentos(null);
+    const r = await buscarImpedimentosDeExclusao(s.id);
+    if (r.status === 'ok') setImpedimentos(r.impedimentos);
+    else setErroImpedimentos(r.mensagem);
+  }
+
+  async function confirmarRemocao() {
+    if (!removendo || !empresaAtual?.id) return;
+    setExcluindo(true);
+    try {
+      const r = await excluirSetor(removendo.id);
+      if (r.status === 'falha') { toast.error(r.mensagem); return; }
+      // A ordem arrastada mora no navegador; o id apagado sai dela também.
+      salvarOrdemSetores(
+        empresaAtual.id,
+        lerOrdemSetores(empresaAtual.id).filter(id => id !== removendo.id),
+      );
+      toast.success(`Setor «${removendo.nome}» removido.`);
+      setRemovendo(null);
+      void fetchSetores(); void fetchVinculos(); void fetchEquipes();
+    } finally {
+      setExcluindo(false);
+    }
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const totalAtivos = useMemo(() => setores.filter(s => s.ativo).length, [setores]);
@@ -312,6 +394,12 @@ export default function AdminSetoresAba() {
           <AnimatePresence initial={false}>
             {setores.map(s => {
               const total = totalPorSetor[s.id] ?? 0;
+              const equipesDoSetor = equipesPorSetor[s.id] ?? 0;
+              const zerado = total === 0 && equipesDoSetor === 0;
+              const motivoBloqueio = [
+                total > 0 && `${total} ${total === 1 ? 'pessoa' : 'pessoas'}`,
+                equipesDoSetor > 0 && `${equipesDoSetor} ${equipesDoSetor === 1 ? 'equipe' : 'equipes'}`,
+              ].filter(Boolean).join(' e ');
               return (
                 <motion.div
                   key={s.id}
@@ -415,6 +503,26 @@ export default function AdminSetoresAba() {
                         <Edit className="w-3.5 h-3.5" />
                       </Button>
                     )}
+                    {/* Remover: desabilitado, com o motivo no título, enquanto
+                        houver gente ou equipe. O `span` carrega o título porque
+                        botão desabilitado não dispara o hover que o mostra. */}
+                    {podeCriarEditar && (
+                      <span
+                        title={zerado
+                          ? 'Remover setor'
+                          : `Só setores zerados podem ser removidos — este tem ${motivoBloqueio}`}
+                      >
+                        <Button
+                          variant="ghost" size="icon"
+                          className="w-7 h-7 text-muted-foreground hover:text-destructive"
+                          disabled={!zerado}
+                          aria-label={`Remover setor ${s.nome}`}
+                          onClick={() => void abrirRemover(s)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </span>
+                    )}
                   </div>
                 </motion.div>
               );
@@ -422,6 +530,71 @@ export default function AdminSetoresAba() {
           </AnimatePresence>
         </div>
       )}
+
+      {/* ── Dialog remover setor ── */}
+      <Dialog
+        open={removendo !== null}
+        onOpenChange={aberto => { if (!aberto && !excluindo) setRemovendo(null); }}
+      >
+        <DialogContent className="max-w-md" aria-describedby="modal-remover-setor-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-destructive" />
+              Remover setor
+            </DialogTitle>
+            <DialogDescription id="modal-remover-setor-desc">
+              {removendo?.nome}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-1 text-sm">
+            {erroImpedimentos ? (
+              <p className="text-destructive">{erroImpedimentos}</p>
+            ) : impedimentos === null ? (
+              <p className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Conferindo se o setor está zerado…
+              </p>
+            ) : impedimentos.length > 0 ? (
+              <div className="space-y-2">
+                <p className="flex items-start gap-2 text-foreground">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-warning" />
+                  Só setores zerados podem ser removidos. Este ainda tem:
+                </p>
+                <ul className="ml-6 list-disc space-y-0.5 text-xs text-muted-foreground">
+                  {impedimentos.map(i => <li key={i.motivo}>{rotuloDoImpedimento(i)}</li>)}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  Para tirar o setor de uso sem apagar o histórico, desative-o no botão de ligar.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-foreground">
+                  O setor não tem equipes, usuários nem histórico. Removê-lo apaga também a
+                  configuração dele (metas, ranking, comissão, RH).
+                </p>
+                <p className="text-xs font-medium text-destructive">Esta ação não pode ser desfeita.</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setRemovendo(null)} disabled={excluindo}>
+              <X className="w-3.5 h-3.5 mr-1" />
+              {impedimentos && impedimentos.length > 0 ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {impedimentos !== null && impedimentos.length === 0 && !erroImpedimentos && (
+              <Button
+                variant="destructive" size="sm" className="gap-2"
+                onClick={() => void confirmarRemocao()} disabled={excluindo}
+              >
+                {excluindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {excluindo ? 'Removendo…' : 'Remover setor'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog criar/editar setor ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
