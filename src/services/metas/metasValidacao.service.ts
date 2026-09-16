@@ -61,3 +61,32 @@ export async function reabrirMetaSetor(
   const row = (Array.isArray(data) ? data[0] : data) as { ok: boolean; erro: string | null } | undefined;
   return { ok: row?.ok ?? false, erro: row?.erro ?? null };
 }
+
+/**
+ * Exclui as metas do mês de um tipo (setor, equipe ou operador).
+ *
+ * Sem RPC: a policy `metas_delete` já exige `metas_excluir` e recusa a meta de
+ * setor validado (`fn_meta_esta_bloqueada`). Só que a RLS recusa um DELETE em
+ * silêncio — a linha simplesmente não sai, sem erro. Por isso a volta traz quem
+ * SAIU: quem foi pedido e não está em `excluidas` foi recusado (ou já não
+ * existia).
+ */
+export async function excluirMetas(p: {
+  empresaId: string;
+  mes: number;
+  ano: number;
+  tipo: 'setor' | 'equipe' | 'operador';
+  referenciaIds: string[];
+}): Promise<{ excluidas: string[]; error: string | null }> {
+  if (p.referenciaIds.length === 0) return { excluidas: [], error: null };
+  const { data, error } = await supabase
+    .from('metas')
+    .delete()
+    .eq('empresa_id', p.empresaId).eq('mes', p.mes).eq('ano', p.ano)
+    .eq('tipo', p.tipo)
+    .in('referencia_id', p.referenciaIds)
+    .select('referencia_id');
+  if (error) return { excluidas: [], error: error.message };
+  const ids = ((data ?? []) as { referencia_id: string }[]).map(l => l.referencia_id);
+  return { excluidas: [...new Set(ids)], error: null };
+}

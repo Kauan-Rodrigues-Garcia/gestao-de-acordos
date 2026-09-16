@@ -28,7 +28,13 @@
  *
  * O comportamento é o do botão que saiu: meta zerada não é gravada. Apagar o
  * valor de quem já tem meta NÃO apaga a meta — para tirar a meta de alguém
- * existe a tela de exclusões, não o campo em branco.
+ * existe a lixeira da linha, não o campo em branco.
+ *
+ * ## Excluir meta (16/09/2026)
+ *
+ * A lixeira aparece nas linhas que TÊM meta gravada no mês, para quem tem
+ * `metas_excluir` e com o setor aberto. Sempre pergunta antes: não há desfazer.
+ * Com operadores marcados, o painel do lote também exclui a meta de todos.
  *
  * ## Meta em lote (16/09/2026)
  *
@@ -43,7 +49,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import { useNavigate } from "react-router-dom";
 import {
   Target, Check, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
-  TriangleAlert,
+  TriangleAlert, Trash2,
   Loader2, CalendarDays, Plus, X, Layers, GraduationCap, Lock, LockOpen, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -58,7 +64,7 @@ import { PP_HO_PERCENTUAL, getTodayISO } from "@/lib/index";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
 import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
 import {
-  getMetaValidacaoStatus, upsertMetas, validarMetaSetor, reabrirMetaSetor,
+  getMetaValidacaoStatus, upsertMetas, validarMetaSetor, reabrirMetaSetor, excluirMetas,
   type MetaValidacaoStatus,
 } from "@/services/metas/metasValidacao.service";
 import { listarClonesEquipes } from "@/services/equipes/equipesClones.service";
@@ -80,6 +86,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AbaComissao } from "@/components/Comissao/AbaComissao";
 import type { MetaLinhaBruta } from "@/services/comissao/entradaDoOperador";
 
@@ -289,13 +299,15 @@ interface MetaRowProps {
   onChangeIndiretaHO?: (v: string) => void;
   /** Caixa de seleção da meta em lote. Ausente = linha sem seleção. */
   selecao?: { marcado: boolean; onMudar: (v: boolean) => void };
+  /** Lixeira da linha. Ausente = sem meta gravada ou sem permissão. */
+  onExcluir?: () => void;
 }
 
 function MetaRow({
   label, sublabel, icon, aviso, input, onChangeValor, mostrarHO, onChangeHO,
   numExtras = 0, onChangeExtra, onChangeExtraHO, disabled, proporcional, onChangeProporcional,
   permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
-  onGravar, estado, selecao,
+  onGravar, estado, selecao, onExcluir,
 }: MetaRowProps) {
   return (
     <div className={cn("py-2.5 border-b border-border last:border-0", selecao?.marcado && "bg-primary/5 -mx-2 px-2 rounded-md")}>
@@ -417,6 +429,22 @@ function MetaRow({
                 Meta direta e indireta
               </span>
             </label>
+          </div>
+        )}
+        {onExcluir && (
+          <div className="flex flex-col gap-1 shrink-0 ml-auto">
+            <Label className="text-xs text-muted-foreground">&nbsp;</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              aria-label={`Excluir a meta de ${label}`}
+              title="Excluir a meta deste mês"
+              onClick={onExcluir}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         )}
       </div>
@@ -584,6 +612,12 @@ export default function MetasConfig() {
   const [metaLote, setMetaLote] = useState<MetaInput>(emptyInput);
   const [extrasLote, setExtrasLote] = useState(0);
   const [aplicandoLote, setAplicandoLote] = useState(false);
+
+  // Quem tem meta GRAVADA no mês — só essas linhas mostram a lixeira.
+  const [gravadas, setGravadas] = useState<Set<string>>(() => new Set());
+  // A exclusão à espera da confirmação; `rotulo` completa «Excluir a meta …?».
+  const [excluindo, setExcluindo] = useState<{ tipo: TipoMeta; ids: string[]; rotulo: string } | null>(null);
+  const [excluindoAgora, setExcluindoAgora] = useState(false);
 
   function getInput(id: string): MetaInput { return inputMetas[id] ?? emptyInput(); }
   function setInput(id: string, patch: Partial<MetaInput>) {
@@ -805,6 +839,7 @@ export default function MetasConfig() {
         if (m.tipo && extras.length > maxExtras[m.tipo]) maxExtras[m.tipo] = extras.length;
       }
       setInputMetas(newInputs);
+      setGravadas(new Set(Object.keys(newInputs)));
       setExtraCampos(maxExtras);
       /*
        * A semente das assinaturas: o que o banco acabou de devolver JÁ está
@@ -1014,7 +1049,7 @@ export default function MetasConfig() {
     /*
      * Linha em branco continua não virando linha no banco — é o comportamento
      * do botão que saiu. Apagar o valor de quem já tem meta NÃO apaga a meta:
-     * para tirar a meta de alguém existe a tela de exclusões, e um campo
+     * para tirar a meta de alguém existe a lixeira da linha, e um campo
      * limpo por engano não pode zerar a meta do mês de ninguém.
      */
     const vazia = payload.meta_valor <= 0 && !(Number(payload.meta_indireta_valor) > 0);
@@ -1035,6 +1070,7 @@ export default function MetasConfig() {
       }
 
       assinaturasSalvas.current[referenciaId] = assinatura;
+      setGravadas(g => new Set(g).add(referenciaId));
       setEstadoLinhas(e => ({ ...e, [referenciaId]: "salvo" }));
       // O selo some sozinho: ele confirma, não fica de enfeite.
       window.setTimeout(() => {
@@ -1154,6 +1190,7 @@ export default function MetasConfig() {
 
       setInputMetas(prev => ({ ...prev, ...Object.fromEntries(gravados.map(id => [id, linhaDe(id)])) }));
       for (const id of gravados) assinaturasSalvas.current[id] = assinaturaDaLinha(linhaDe(id));
+      setGravadas(g => new Set([...g, ...gravados]));
       setEstadoLinhas(e => ({
         ...e,
         ...Object.fromEntries(ids.map(id => [id, (recusados.has(id) ? "erro" : "salvo") as EstadoLinha])),
@@ -1199,6 +1236,54 @@ export default function MetasConfig() {
     empresa?.id, podeGerenciarMetas, metaTravada, selecionadosOp, operadores, metaLote,
     comDiretoExtra, montarPayload,
   ]);
+
+  /**
+   * Exclui a meta do mês das linhas pedidas, depois da confirmação.
+   *
+   * A tela só limpa o que o banco devolveu como excluído: a RLS recusa em
+   * silêncio (sem `metas_excluir` ou setor validado), e limpar tudo mostraria
+   * como apagada uma meta que continua valendo.
+   */
+  const confirmarExclusao = useCallback(async () => {
+    if (!excluindo || !empresa?.id || !podeExcluirMetas || metaTravada) return;
+    const { tipo, ids } = excluindo;
+
+    setExcluindoAgora(true);
+    const { excluidas, error } = await excluirMetas({ empresaId: empresa.id, mes, ano, tipo, referenciaIds: ids });
+    setExcluindoAgora(false);
+    setExcluindo(null);
+
+    if (error) {
+      toast.error("Erro ao excluir a meta", { description: error });
+      return;
+    }
+
+    const saiu = new Set(excluidas);
+    if (saiu.size > 0) {
+      setInputMetas(prev => {
+        const resto = { ...prev };
+        for (const id of saiu) delete resto[id];
+        return resto;
+      });
+      for (const id of saiu) delete assinaturasSalvas.current[id];
+      setGravadas(g => new Set([...g].filter(id => !saiu.has(id))));
+      setMetasDoMes(prev => prev.filter(m => !(m.tipo === tipo && m.referencia_id && saiu.has(m.referencia_id))));
+      setEstadoLinhas(e => {
+        const resto = { ...e };
+        for (const id of saiu) delete resto[id];
+        return resto;
+      });
+      setSelecionadosOp(sel => sel.filter(id => !saiu.has(id)));
+      toast.success(saiu.size === 1 ? "Meta excluída." : `${saiu.size} metas excluídas.`);
+    }
+
+    const recusadas = ids.length - saiu.size;
+    if (recusadas > 0) {
+      toast.warning(recusadas === 1 ? "Uma meta não foi excluída." : `${recusadas} metas não foram excluídas.`, {
+        description: "Seu cargo não pode excluir metas, o setor está validado ou a meta já tinha sido apagada.",
+      });
+    }
+  }, [excluindo, empresa?.id, podeExcluirMetas, metaTravada, mes, ano]);
 
   /**
    * Grava os dias úteis, feriados e quartis do mês.
@@ -1268,6 +1353,8 @@ export default function MetasConfig() {
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
   const podeLote = podeGerenciarMetas && !metaTravada;
+  const podeExcluirLinha = (id: string) => podeExcluirMetas && !metaTravada && gravadas.has(id);
+  const selecionadosComMeta = selecionadosOp.filter(id => podeExcluirLinha(id));
   const marcados = new Set(selecionadosOp);
   const todosVisiveisMarcados = operadoresVisiveis.length > 0 && operadoresVisiveis.every(op => marcados.has(op.id));
   const loteComIndireta = selecionadosOp.some(id => comDiretoExtra.has(id));
@@ -1561,6 +1648,9 @@ export default function MetasConfig() {
                   icon={<Building2 className="h-4 w-4" />}
                   input={getInput(setorSelecionado)}
                   onGravar={(patch) => void salvarLinha("setor", setorSelecionado, patch)}
+                  onExcluir={podeExcluirLinha(setorSelecionado)
+                    ? () => setExcluindo({ tipo: "setor", ids: [setorSelecionado], rotulo: `do setor ${setorNome}` })
+                    : undefined}
                   estado={estadoLinhas[setorSelecionado]}
                   disabled={!podeGerenciarMetas || metaTravada}
                   mostrarHO={isPP}
@@ -1596,6 +1686,9 @@ export default function MetasConfig() {
                     icon={<Users className="h-4 w-4" />}
                     input={getInput(eq.id)}
                     onGravar={(patch) => void salvarLinha("equipe", eq.id, patch)}
+                    onExcluir={podeExcluirLinha(eq.id)
+                      ? () => setExcluindo({ tipo: "equipe", ids: [eq.id], rotulo: `da equipe ${eq.nome}` })
+                      : undefined}
                     estado={estadoLinhas[eq.id]}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
@@ -1705,6 +1798,20 @@ export default function MetasConfig() {
                     onClick={() => setExtrasLote(n => n + 1)}>
                     <Plus className="h-3.5 w-3.5" /> Adicionar {extrasLote + 2}ª meta
                   </Button>
+                  {selecionadosComMeta.length > 0 && (
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                      disabled={aplicandoLote}
+                      onClick={() => setExcluindo({
+                        tipo: "operador",
+                        ids: selecionadosComMeta,
+                        rotulo: selecionadosComMeta.length === 1
+                          ? `de ${operadores.find(o => o.id === selecionadosComMeta[0])?.nome ?? "1 operador"}`
+                          : `de ${selecionadosComMeta.length} operadores selecionados`,
+                      })}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {`Excluir a meta de ${selecionadosComMeta.length} ${selecionadosComMeta.length === 1 ? "selecionado" : "selecionados"}`}
+                    </Button>
+                  )}
                   <Button size="sm" className="h-8 gap-1.5 ml-auto"
                     disabled={aplicandoLote || parseBRL(metaLote.meta_valor) <= 0}
                     onClick={() => void aplicarLote()}>
@@ -1735,6 +1842,9 @@ export default function MetasConfig() {
                     aviso={<AvisoVoltouDeFerias situacao={op.situacao} feriasAte={op.ferias_ate} />}
                     input={getInput(op.id)}
                     onGravar={(patch) => void salvarLinha("operador", op.id, patch)}
+                    onExcluir={podeExcluirLinha(op.id)
+                      ? () => setExcluindo({ tipo: "operador", ids: [op.id], rotulo: `de ${op.nome}` })
+                      : undefined}
                     estado={estadoLinhas[op.id]}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
@@ -1778,7 +1888,7 @@ export default function MetasConfig() {
                 <>Selecione um setor para começar.</>
               ) : (
                 <><Check className="h-3.5 w-3.5 text-emerald-500" /> Cada meta é salva
-                  sozinha ao sair do campo. Campo em branco não apaga a meta de ninguém.</>
+                  sozinha ao sair do campo. Campo em branco não apaga a meta de ninguém — para isso, use a lixeira da linha.</>
               )}
             </p>
           </div>
@@ -1811,6 +1921,27 @@ export default function MetasConfig() {
           </TabsContent>
         )}
       </Tabs>
+
+      <AlertDialog open={excluindo !== null} onOpenChange={aberto => { if (!aberto && !excluindoAgora) setExcluindo(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{`Excluir a meta ${excluindo?.rotulo ?? ""}?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`A meta de ${MESES[mes - 1]}/${ano} é apagada, com as metas extras e a meta indireta. Os painéis e a comissão deixam de ter essa meta. Não dá para desfazer: para voltar, é preciso digitar a meta de novo.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoAgora}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluindoAgora}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); void confirmarExclusao(); }}
+            >
+              Excluir meta
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
