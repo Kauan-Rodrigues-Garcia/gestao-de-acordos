@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Scale, Handshake, UsersRound, Trophy,
+  ShoppingBag, Handshake,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -167,25 +167,29 @@ export const NAV_ITEMS: NavItem[] = [
   // comercial: a tela do dia a dia de quem produz. E, como Acordos, é uma aba
   // de produto só — venda não significa nada em cobrança nem em RH.
   { label: 'Vendas',           icon: ShoppingBag,     to: ROUTE_PATHS.VENDAS,              produtos: SO_COMERCIAL, permissaoKey: 'ver_vendas' },
-  // Importar Vendas — o prospecção e o de-para de franquia. Espelha o que
-  // 'Importar Excel' é para a cobrança, com o relatório que é o do comercial.
-  { label: 'Importar Vendas',  icon: Upload,          to: ROUTE_PATHS.VENDAS_IMPORTAR,     produtos: SO_COMERCIAL, permissaoKey: 'ver_importacoes_vendas' },
-  // Metas de vendas — duas réguas, e só uma decide. Chave própria e rota
-  // própria: a aba 'Metas' da cobrança fala de quartil e dia útil, que aqui
-  // não querem dizer nada.
-  { label: 'Metas de Vendas',  icon: Target,          to: ROUTE_PATHS.VENDAS_METAS,        produtos: SO_COMERCIAL, permissaoKey: 'ver_metas_vendas' },
-  // Fechamento do Setor — a conta do mês e a prova de que ela fecha. A chave é
-  // `ver_vendas` porque o item de menu aceita UMA chave, e o que realmente
-  // decide aqui é o escopo: a tela mostra a conta do setor inteiro. Quem
-  // alcança menos abre e lê por que não alcança, em vez de achar que sumiu.
-  { label: 'Fechamento',       icon: Scale,           to: ROUTE_PATHS.VENDAS_FECHAMENTO,   produtos: SO_COMERCIAL, permissaoKey: 'ver_vendas' },
   // Indicações — o que acontece ANTES da venda. Chave própria, e não
   // `ver_vendas`: quem prospecta pode precisar do ranking do setor sem ver a
   // carteira de ninguém.
   { label: 'Indicações',       icon: Handshake,       to: ROUTE_PATHS.VENDAS_INDICACOES,   produtos: SO_COMERCIAL, permissaoKey: 'ver_indicacoes' },
-  // Acompanhamento — feedback e ausências de cada pessoa. Da liderança por
-  // padrão: os feedbacks são nota escrita para quem acompanha.
-  { label: 'Acompanhamento',   icon: UsersRound,      to: ROUTE_PATHS.VENDAS_ACOMPANHAMENTO, produtos: SO_COMERCIAL, permissaoKey: 'ver_acompanhamento' },
+  // Importar Vendas — o prospecção e o de-para de franquia. Espelha o que
+  // 'Importar Excel' é para a cobrança, com o relatório que é o do comercial.
+  //
+  // ## Quatro abas que viraram abas internas (16/09/2026)
+  //
+  // «Criou várias abas que não têm sentido ser separadas.» O menu do Comercial
+  // tinha 14 itens, e a BookPlay já tinha resolvido o mesmo problema dobrando
+  // telas da mesma família numa só. O Comercial passou a seguir o desenho de lá:
+  //
+  //   Metas de Vendas .. aba «Metas» de Usuários, como a Metas da BookPlay
+  //   Acompanhamento ... aba de Usuários — é feedback e ausência de PESSOA
+  //   Fechamento ....... aba de Importar Vendas, depois de Projeção e
+  //                      Conciliação: é a última pergunta da importação
+  //   Desafios ......... aba do Painel Líder; na cobrança mora no Analítico,
+  //                      que o Comercial não tem
+  //
+  // As rotas antigas continuam existindo e redirecionam (App.tsx), e cada aba
+  // interna pede a MESMA chave que o item de menu pedia.
+  { label: 'Importar Vendas',  icon: Upload,          to: ROUTE_PATHS.VENDAS_IMPORTAR,     produtos: SO_COMERCIAL, permissaoKey: 'ver_importacoes_vendas' },
   // Fase 9 — os painéis do Comercial.
   //
   // Rota própria e CHAVE COMPARTILHADA com a cobrança. As duas decisões andam
@@ -199,11 +203,6 @@ export const NAV_ITEMS: NavItem[] = [
   // partiu uma vez neste projeto (`tickets_excluir` sumiu).
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.VENDAS_PAINEL_LIDER,     produtos: SO_COMERCIAL, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA, produtos: SO_COMERCIAL, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
-  // Desafios ganha item de menu no Comercial porque perdeu a casa: na cobrança
-  // ela é aba interna do Analítico, e o Analítico é uma das telas que o
-  // Comercial mata. A chave continua sendo `analitico_sub_desafios`, que não
-  // depende de `ver_analitico` — conferido no catálogo.
-  { label: 'Desafios',         icon: Trophy,          to: ROUTE_PATHS.VENDAS_DESAFIOS,         produtos: SO_COMERCIAL, permissaoKey: 'analitico_sub_desafios' },
   // A lixeira do Comercial é outra TABELA (`lixeira_vendas`), não outro filtro.
   // `ver_lixeira` abre; `restaurar_vendas` é que deixa mexer.
   { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira' },

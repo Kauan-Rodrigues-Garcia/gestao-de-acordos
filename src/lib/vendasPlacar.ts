@@ -175,6 +175,22 @@ export interface LinhaDaEquipe {
 const SEM_EQUIPE = '__sem_equipe__';
 
 /**
+ * A equipe que conta uma venda: a do cadastro de hoje, com a gravada na venda
+ * como reserva. `null` = ninguém conta — quem está sem equipe, e a automação.
+ *
+ * É a regra de `placarPorEquipe`, com nome, desde que os painéis do Comercial
+ * passaram a recortar a lista de vendas por equipe (16/09/2026): um recorte
+ * que decidisse a equipe de outro jeito mostraria no card um número diferente
+ * do da linha da mesma equipe no placar.
+ */
+export function equipeDaVenda(
+  venda: Pick<VendaAgrupavel, 'operador_id' | 'equipe_id'>,
+  pessoas: IndicePessoas,
+): string | null {
+  return pessoas.get(venda.operador_id)?.equipe_id ?? venda.equipe_id ?? null;
+}
+
+/**
  * Uma linha por equipe, com a gaveta «Sem equipe» sempre por último.
  *
  * Sem equipe **não some**: eram 9 das 138 vendas do setor na medição de 15/09,
@@ -189,7 +205,7 @@ export function placarPorEquipe(
 
   for (const v of vendas) {
     const cadastro = pessoas.get(v.operador_id);
-    const id = cadastro?.equipe_id ?? v.equipe_id ?? SEM_EQUIPE;
+    const id = equipeDaVenda(v, pessoas) ?? SEM_EQUIPE;
     const nome = cadastro?.equipe_nome ?? (id === SEM_EQUIPE ? 'Sem equipe' : 'Equipe');
     let g = grupos.get(id);
     if (!g) { g = { nome, vendas: [], gente: new Set() }; grupos.set(id, g); }

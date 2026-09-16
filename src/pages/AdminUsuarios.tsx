@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus } from 'lucide-react';
+import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
@@ -57,6 +57,19 @@ import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
 // biblioteca de mídia. Enquanto era rota própria, só baixava para quem a abria;
 // o carregamento sob demanda mantém esse comportamento agora que virou aba.
 const Comemoracoes = lazy(() => import('@/pages/Comemoracoes'));
+// As duas abas do Comercial. Lazy pelo mesmo motivo: quem abre Usuários na
+// cobrança não tem por que baixar a tela de metas de vendas nem a de feedback.
+const MetasVendas = lazy(() => import('@/pages/Vendas/Metas'));
+const AcompanhamentoVendas = lazy(() => import('@/pages/Vendas/Acompanhamento'));
+
+/** O que as abas lazy mostram enquanto baixam. */
+function CarregandoAba() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+      <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+    </div>
+  );
+}
 
 /** Valor sentinela do seletor de setor — o Radix não aceita `value=""`. */
 const TODOS_SETORES_SELECT_VALUE = '__todos_setores__';
@@ -170,7 +183,8 @@ export default function AdminUsuarios() {
    * toda edição de perfil de lá mandar `robo: false` no payload, apagando em
    * silêncio o que alguém marcou do outro lado.
    */
-  const mostrarRobo = produtoDaEmpresa(empresaAtual, tenant.slug) === 'comercial';
+  const ehComercial = produtoDaEmpresa(empresaAtual, tenant.slug) === 'comercial';
+  const mostrarRobo = ehComercial;
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
@@ -206,12 +220,30 @@ export default function AdminUsuarios() {
 
   const podeVerSetores = temPermissao('ver_setores');
   const podeVerEquipes = temPermissao('ver_equipes');
-  const podeVerMetas = metasComoAba && temPermissao('ver_metas');
+  /*
+   * A aba Metas tem DUAS telas, uma por produto, e a mesma chave de URL.
+   *
+   * `metasComoAba` olha o slug do SITE, e o Comercial abre pelo site da
+   * BookPlay — então só ele não bastava: a aba Metas da cobrança, com quartil e
+   * dia útil, aparecia dentro do Comercial para quem tivesse `ver_metas`.
+   * `ehCobranca` fecha isso.
+   *
+   * No Comercial a aba é a Metas de Vendas, que era item de menu próprio até
+   * 16/09/2026 e pede a mesma chave que o item pedia. Pedido: «Meta de vendas
+   * está separado de Usuários, sendo que na BookPlay metas é dentro de
+   * Usuários».
+   */
+  const podeVerMetas = ehCobranca && metasComoAba && temPermissao('ver_metas');
+  const podeVerMetasVendas = ehComercial && temPermissao('ver_metas_vendas');
+  // Acompanhamento — feedback e ausências — é assunto de pessoa, e veio para cá
+  // junto com a Metas de Vendas. Mesma chave do item de menu que existia.
+  const podeVerAcompanhamento = ehComercial && temPermissao('ver_acompanhamento');
   const abasVisiveis = [
     podeVerUsuarios && 'usuarios',
     podeVerSetores && 'setores',
     podeVerEquipes && 'equipes',
-    podeVerMetas && 'metas',
+    (podeVerMetas || podeVerMetasVendas) && 'metas',
+    podeVerAcompanhamento && 'acompanhamento',
     podeVerComemoracoes && 'comemoracoes',
     // Arquivo morto: so quem administra contas. Nao e uma aba de operacao.
     podeAdministrarContas && 'desligados',
@@ -238,6 +270,7 @@ export default function AdminUsuarios() {
     setores:      { label: 'Setores',      Icon: Building2 },
     equipes:      { label: 'Equipes',      Icon: Users2 },
     metas:        { label: 'Metas',        Icon: Target },
+    acompanhamento: { label: 'Acompanhamento', Icon: UsersRound },
     comemoracoes: { label: 'Comemorações', Icon: PartyPopper },
     desligados:   { label: 'Desligados',   Icon: UserX },
   };
@@ -1371,6 +1404,26 @@ export default function AdminUsuarios() {
           </TabsContent>
         )}
 
+        {/* ─── Aba: Metas (Comercial) ────────────────────────────────────
+            Sem `p-6`: a tela de metas de vendas já traz o próprio
+            espaçamento, como Setores e Equipes. */}
+        {podeVerMetasVendas && (
+          <TabsContent value="metas" className="flex-1 overflow-y-auto mt-0">
+            <Suspense fallback={<CarregandoAba />}>
+              <MetasVendas />
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {/* ─── Aba: Acompanhamento (Comercial) ───────────────────────── */}
+        {podeVerAcompanhamento && (
+          <TabsContent value="acompanhamento" className="flex-1 overflow-y-auto mt-0">
+            <Suspense fallback={<CarregandoAba />}>
+              <AcompanhamentoVendas />
+            </Suspense>
+          </TabsContent>
+        )}
+
         {/* ─── Aba: Comemorações ─────────────────────────────────────── */}
         {/* Sem `p-6` aqui: a página já traz o próprio espaçamento, como
             Setores e Equipes. O Suspense é obrigatório — o import é lazy. */}
@@ -1392,11 +1445,7 @@ export default function AdminUsuarios() {
 
         {podeVerComemoracoes && (
           <TabsContent value="comemoracoes" className="flex-1 overflow-y-auto mt-0">
-            <Suspense fallback={
-              <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
-              </div>
-            }>
+            <Suspense fallback={<CarregandoAba />}>
               <Comemoracoes />
             </Suspense>
           </TabsContent>

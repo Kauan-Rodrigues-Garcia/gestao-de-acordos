@@ -100,6 +100,16 @@ interface CardEquipeProps {
    * expandida — o texto precisa dizer de que mês fala. Ausente = sem botão.
    */
   mes?: string;
+  /**
+   * Como o card escreve os números. Padrão: reais.
+   *
+   * Existe para o Comercial (16/09/2026), cujo Painel Líder usa este mesmo
+   * card e cuja meta pode ser em QUANTIDADE de vendas — «R$ 12,00» no lugar de
+   * «12 vendas» seria um número certo com a unidade errada. As contas não
+   * mudam: barra, projeção, degraus e ritmo são proporções, e valem para as
+   * duas unidades.
+   */
+  formatar?: (valor: number) => string;
 }
 
 // ── Avatares ─────────────────────────────────────────────────────────────────
@@ -202,8 +212,11 @@ function Numero({
  * preenchimento está adiantado, à direita está atrasado, e isso se lê sem número.
  */
 function BarraProgresso({
-  acumulado, esperado, meta, cor,
-}: { acumulado: number; esperado: number | null; meta: number | null; cor: string }) {
+  acumulado, esperado, meta, cor, formatar,
+}: {
+  acumulado: number; esperado: number | null; meta: number | null; cor: string;
+  formatar: (valor: number) => string;
+}) {
   const teto = Math.max(meta ?? 0, acumulado, 1);
   const pctAcum = Math.min(100, (acumulado / teto) * 100);
   const pctEsp  = esperado !== null ? Math.min(100, (esperado / teto) * 100) : null;
@@ -231,19 +244,19 @@ function BarraProgresso({
           <div
             className="absolute -top-[14px] w-0.5 h-[18px] bg-foreground/70 rounded-full"
             style={{ left: `calc(${pctEsp}% - 1px)` }}
-            title={`Deveria ter até hoje: ${formatBRL(esperado!)}`}
+            title={`Deveria ter até hoje: ${formatar(esperado!)}`}
           />
         </div>
       )}
       <div className="flex items-center justify-between mt-1.5 text-[10px] text-muted-foreground">
-        <span className="tabular-nums font-mono">{formatBRL(acumulado)}</span>
+        <span className="tabular-nums font-mono">{formatar(acumulado)}</span>
         {esperado !== null && (
           <span className="tabular-nums font-mono">
-            esperado hoje {formatBRL(esperado)}
+            esperado hoje {formatar(esperado)}
           </span>
         )}
         <span className="tabular-nums font-mono">
-          {meta !== null && meta > 0 ? `meta ${formatBRL(meta)}` : 'sem meta'}
+          {meta !== null && meta > 0 ? `meta ${formatar(meta)}` : 'sem meta'}
         </span>
       </div>
     </div>
@@ -265,10 +278,11 @@ function BarraProgresso({
  * de entrada, e repetir o valor de manter ali competiria com o «✓».
  */
 function Degrau({
-  quartil, falta, faltaAmanha, alcancado, ehAtual,
+  quartil, falta, faltaAmanha, alcancado, ehAtual, formatar,
 }: {
   quartil: number; falta: number; faltaAmanha: number | null;
   alcancado: boolean; ehAtual: boolean;
+  formatar: (valor: number) => string;
 }) {
   const cor = COR_QUARTIL[quartil] ?? '#6366f1';
   return (
@@ -292,7 +306,7 @@ function Degrau({
         style={{ color: alcancado ? COR_QUARTIL[1] : undefined }}
         title={alcancado ? undefined : 'Quanto falta para entrar nesta faixa hoje'}
       >
-        {alcancado ? '✓' : formatBRL(falta)}
+        {alcancado ? '✓' : formatar(falta)}
       </span>
       <span
         className="text-[11px] tabular-nums font-mono text-muted-foreground shrink-0 w-[5rem] text-right"
@@ -300,7 +314,7 @@ function Degrau({
           ? undefined
           : 'Quanto precisa para AINDA estar nesta faixa amanhã — a régua sobe um dia útil'}
       >
-        {alcancado || faltaAmanha === null ? '—' : formatBRL(faltaAmanha)}
+        {alcancado || faltaAmanha === null ? '—' : formatar(faltaAmanha)}
       </span>
     </div>
   );
@@ -342,6 +356,7 @@ export function CardEquipe({
   titulo, subtitulo, lideres, avatarProprio, ehSetor,
   acumulado, acumuladoHO, mostrarHO, metaHO, meta,
   totalUteis, decorridos, quartis, operadores, ajusteManual, mes,
+  formatar = formatBRL,
 }: CardEquipeProps) {
   const [aberto, setAberto] = useState(false);
   const painelId = useId();
@@ -426,7 +441,7 @@ export function CardEquipe({
       >
         {Cabecalho}
 
-        <BarraProgresso acumulado={acumuladoCard} esperado={esperado} meta={metaCard} cor={cor} />
+        <BarraProgresso acumulado={acumuladoCard} esperado={esperado} meta={metaCard} cor={cor} formatar={formatar} />
 
         {/* De onde veio um pedaço do acumulado. Só aparece quando há ajuste —
             o card já tem números demais para carregar uma linha sempre vazia. */}
@@ -443,21 +458,21 @@ export function CardEquipe({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           <Numero
-            label={emHO ? 'Acumulado H.O.' : 'Acumulado'} valor={formatBRL(acumuladoCard)} cor={COR_QUARTIL[1]}
-            sub={emHO ? `Bruto ${formatBRL(acumulado)}` : undefined}
+            label={emHO ? 'Acumulado H.O.' : 'Acumulado'} valor={formatar(acumuladoCard)} cor={COR_QUARTIL[1]}
+            sub={emHO ? `Bruto ${formatar(acumulado)}` : undefined}
           />
           <Numero
-            label={emHO ? 'Meta H.O.' : 'Meta'} valor={metaCard ? formatBRL(metaCard) : '—'}
-            sub={emHO && meta ? `Bruto ${formatBRL(meta)}` : undefined}
+            label={emHO ? 'Meta H.O.' : 'Meta'} valor={metaCard ? formatar(metaCard) : '—'}
+            sub={emHO && meta ? `Bruto ${formatar(meta)}` : undefined}
           />
           <Numero
             label="Falta p/ meta"
-            valor={d.faltaMeta === null ? '—' : metaBatida ? 'Batida! 🎉' : formatBRL(d.faltaMeta)}
+            valor={d.faltaMeta === null ? '—' : metaBatida ? 'Batida! 🎉' : formatar(d.faltaMeta)}
             cor={d.faltaMeta === null ? undefined : metaBatida ? COR_QUARTIL[1] : undefined}
             hint="Quanto falta para bater a meta do mês"
           />
           <Numero
-            label="Média diária" valor={formatBRL(d.mediaDiaria)}
+            label="Média diária" valor={formatar(d.mediaDiaria)}
             hint="Acumulado ÷ dias úteis trabalhados"
             sub={`${decorridos} de ${totalUteis} dias`}
           />
@@ -534,11 +549,12 @@ export function CardEquipe({
                       faltaAmanha={g.faltaAmanha}
                       alcancado={g.alcancado}
                       ehAtual={d.faixaAtual?.quartil === g.quartil}
+                      formatar={formatar}
                     />
                   ))}
                   <p className="text-[10px] text-muted-foreground pt-0.5 leading-relaxed">
                     <strong>Hoje</strong> entra na faixa; <strong>amanhã</strong> é o que mantém —
-                    a régua sobe {d.metaDiaria !== null ? formatBRL(d.metaDiaria) : 'um dia de meta'}{' '}
+                    a régua sobe {d.metaDiaria !== null ? formatar(d.metaDiaria) : 'um dia de meta'}{' '}
                     a cada dia útil. Medido contra o esperado até hoje, igual à % do card.
                   </p>
                 </div>
@@ -553,7 +569,7 @@ export function CardEquipe({
                 />
                 <LinhaValor
                   label="Precisa por dia restante"
-                  valor={d.ritmoNecessario !== null ? formatBRL(d.ritmoNecessario) : '—'}
+                  valor={d.ritmoNecessario !== null ? formatar(d.ritmoNecessario) : '—'}
                   cor={d.ritmoNecessario !== null && d.ritmoNecessario > d.mediaDiaria
                     ? COR_QUARTIL[4] : COR_QUARTIL[1]}
                   hint={d.ritmoNecessario === null
@@ -562,20 +578,20 @@ export function CardEquipe({
                 />
                 <LinhaValor
                   label="Fecha o mês em"
-                  valor={formatBRL(d.projecaoFechamento)}
+                  valor={formatar(d.projecaoFechamento)}
                   hint="Mantendo a média diária atual"
                 />
                 {d.sobraProjetada !== null && (
                   <LinhaValor
                     label={d.sobraProjetada >= 0 ? 'Sobra projetada' : 'Falta projetada'}
-                    valor={`${d.sobraProjetada >= 0 ? '+' : '−'}${formatBRL(Math.abs(d.sobraProjetada))}`}
+                    valor={`${d.sobraProjetada >= 0 ? '+' : '−'}${formatar(Math.abs(d.sobraProjetada))}`}
                     cor={d.sobraProjetada >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
                     hint="Projeção de fechamento menos a meta"
                   />
                 )}
                 <LinhaValor
                   label="Média por operador"
-                  valor={formatBRL(d.mediaPorOperador)}
+                  valor={formatar(d.mediaPorOperador)}
                   hint={`Acumulado ÷ ${d.totalOperadores} operador(es)`}
                 />
               </div>
@@ -615,14 +631,14 @@ export function CardEquipe({
                     <div className="pt-1.5 space-y-1 border-t border-border/50">
                       <LinhaValor
                         label={`🔥 ${d.destaque.nome.split(' ')[0]}`}
-                        valor={formatBRL(d.destaque.recebido)}
+                        valor={formatar(d.destaque.recebido)}
                         cor={COR_QUARTIL[1]}
                         hint={`Maior recebimento: ${d.destaque.nome}`}
                       />
                       {d.atencao && d.atencao.id !== d.destaque.id && (
                         <LinhaValor
                           label={`🎯 ${d.atencao.nome.split(' ')[0]}`}
-                          valor={formatBRL(d.atencao.recebido)}
+                          valor={formatar(d.atencao.recebido)}
                           cor={COR_QUARTIL[4]}
                           hint={`Menor projeção — mais longe do próprio ritmo: ${d.atencao.nome}`}
                         />

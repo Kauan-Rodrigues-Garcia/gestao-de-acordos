@@ -72,12 +72,10 @@ const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'
 const VendasPainelLider  = lazy(() => import('@/pages/Vendas/PainelLiderComercial'));
 const VendasPainelDiretoria = lazy(() => import('@/pages/Vendas/PainelDiretoriaComercial'));
 const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
-const VendasDesafios     = lazy(() => import('@/pages/Vendas/DesafiosComercial'));
-const VendasImportar    = lazy(() => import('@/pages/Vendas/Importacao'));
-const VendasMetas       = lazy(() => import('@/pages/Vendas/Metas'));
-const VendasFechamento  = lazy(() => import('@/pages/Vendas/FechamentoDoSetor'));
+// Importação e Fechamento do Setor, em abas. Metas, Acompanhamento e Desafios
+// também deixaram de ser página própria — ver os redirecionamentos abaixo.
+const VendasImportar    = lazy(() => import('@/pages/Vendas/ImportarVendas'));
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
-const VendasAcompanhamento = lazy(() => import('@/pages/Vendas/Acompanhamento'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
@@ -399,13 +397,15 @@ export default function App() {
               {/* Tickets — a fila de pedidos da liderança. O cargo aqui é só a
                   porta larga: quem enxerga de fato depende da chave em
                   `tickets_config`, e a própria página resolve isso. */}
-              <Route path={ROUTE_PATHS.VENDAS_METAS} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_metas_vendas">
-                    <VendasMetas />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* ── O Comercial no desenho da BookPlay (16/09/2026) ─────────
+                  Quatro telas viraram abas de outra, e os endereços antigos
+                  continuam valendo — um favorito ou um link colado no grupo
+                  não pode virar «página não encontrada». Cada aba de destino
+                  pede a mesma chave que a rota antiga pedia. */}
+              <Route path={ROUTE_PATHS.VENDAS_METAS} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=metas'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_ACOMPANHAMENTO} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=acompanhamento'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_FECHAMENTO} element={<Navigate to={ROUTE_PATHS.VENDAS_IMPORTAR + '?tab=fechamento'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_DESAFIOS} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_LIDER + '?tab=desafios'} replace />} />
 
               {/* Vendas — a primeira tela própria do Comercial. */}
               <Route path={ROUTE_PATHS.VENDAS_IMPORTAR} element={
@@ -415,32 +415,12 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* O fechamento pede `ver_vendas` como porta, e o alcance de
-                  verdade é o do ESCOPO — a conta é a do setor inteiro. Quem
-                  alcança menos é recusado pela própria RPC, que é
-                  SECURITY DEFINER: esconder o botão aqui não seria trava. */}
-              <Route path={ROUTE_PATHS.VENDAS_FECHAMENTO} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_vendas">
-                    <VendasFechamento />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
               {/* Indicações tem chave e escopo PRÓPRIOS: quem prospecta não é
                   necessariamente quem a venda pertence. Ver permissoes-escopo. */}
               <Route path={ROUTE_PATHS.VENDAS_INDICACOES} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_indicacoes">
                     <VendasIndicacoes />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
-              {/* Acompanhamento: feedback e ausências. A chave abre a aba; ler o
-                  texto dos feedbacks é outra chave, conferida na tela e na RLS. */}
-              <Route path={ROUTE_PATHS.VENDAS_ACOMPANHAMENTO} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_acompanhamento">
-                    <VendasAcompanhamento />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
@@ -493,17 +473,6 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* Desafios: o mesmo componente do Analítico, com porta própria.
-                  `analitico_sub_desafios` não depende de `ver_analitico`, e é
-                  por isso que o Comercial a herda sem chave nova. */}
-              <Route path={ROUTE_PATHS.VENDAS_DESAFIOS} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="analitico_sub_desafios">
-                    <VendasDesafios />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
-
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_tickets">

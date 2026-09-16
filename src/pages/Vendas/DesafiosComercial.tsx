@@ -34,6 +34,13 @@
  * cobrança usa todo dia, e não entra de carona numa fase de telas. A tela diz
  * isso em cima, em vez de mostrar um pódio de zeros e deixar a operação
  * concluir que o sistema está quebrado.
+ *
+ * ## Desde 16/09/2026 é aba do Painel Líder
+ *
+ * O item de menu próprio saiu — na cobrança os Desafios são aba de uma tela
+ * maior (o Analítico), e o Comercial passou a seguir o mesmo desenho, dentro
+ * do Painel Líder. `embutido` tira o cabeçalho e o espaçamento de página, que
+ * lá são do painel.
  */
 import { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
@@ -45,7 +52,7 @@ import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { AbaDesafios } from '@/pages/Analitico/Desafios';
 import { Faixa } from './componentes';
 
-export default function DesafiosComercial() {
+export default function DesafiosComercial({ embutido = false }: { embutido?: boolean }) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -78,8 +85,8 @@ export default function DesafiosComercial() {
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="flex items-center gap-2.5">
+    <div className={embutido ? 'space-y-4' : 'space-y-4 p-4 md:p-6'}>
+      {!embutido && <div className="flex items-center gap-2.5">
         <div className="rounded-xl border border-border bg-card p-2">
           <Trophy className="h-5 w-5 text-muted-foreground" aria-hidden />
         </div>
@@ -89,7 +96,7 @@ export default function DesafiosComercial() {
             As gincanas internas, com ranking individual e por equipe
           </p>
         </div>
-      </div>
+      </div>}
 
       <Faixa tom="info">
         <strong>O placar ainda não conta venda.</strong> A campanha abre, configura e lista quem

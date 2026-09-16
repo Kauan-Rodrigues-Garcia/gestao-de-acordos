@@ -466,6 +466,56 @@ robô fora do pódio e o convite de meta no lugar do 0%.
 > `then` é um *thenable*: o `await import()` do vitest espera para sempre e a
 > suíte trava **sem mensagem nenhuma**. Liste as peças.
 
+### Fase 11 — correções de 16/09/2026 (sem migration)
+
+Pedido em `Downloads\Vendas.docx`, quatro itens. **O banco não foi tocado.**
+
+1. **Bolinhas da legenda cortadas** — no Comercial, na BookPlay e na
+   PaguePlay. O ponto era `ring-2 ring-offset-1`, que desenha 3px FORA do
+   elemento, e a lista rola por dentro (`overflow-y-auto`), o que corta também
+   na horizontal. Virou `PontoDaLegenda` (`components/PainelMetas`), com o halo
+   dentro da caixa. Usado em `CardMetaDonut` (cobrança) e `CardDoMes`.
+2. **Menu: de 14 itens para 10**, no desenho da BookPlay. Quatro telas viraram
+   aba de outra, e as rotas antigas redirecionam:
+
+   | era item de menu | agora | chave |
+   |---|---|---|
+   | Metas de Vendas | Usuários › Metas (`?tab=metas`) | `ver_metas_vendas` |
+   | Acompanhamento | Usuários › Acompanhamento | `ver_acompanhamento` |
+   | Fechamento | Importar Vendas › Fechamento do setor | `ver_vendas` |
+   | Desafios | Painel Líder › Desafios | `analitico_sub_desafios` |
+
+   De quebra: a aba Metas de Usuários mostrava a Metas **da cobrança** dentro
+   do Comercial para quem tivesse `ver_metas` — `metasComoAba` olhava só o slug
+   do site, e o Comercial abre pelo site da BookPlay. Agora exige `ehCobranca`.
+
+   ⚠️ **Quem perde o caminho:** Usuários pede cargo de liderança +
+   `ver_usuarios`; Importar Vendas pede `ver_importacoes_vendas`. Um `operador`
+   com `ver_metas_vendas`, ou alguém com `ver_vendas` sem a chave de
+   importação, deixa de alcançar Metas ou Fechamento. É o mesmo recorte da
+   BookPlay; se incomodar, liga-se a chave da tela de destino.
+3. **Painel Líder** refeito sobre o esqueleto de `pages/PainelLider.tsx`:
+   navegador de mês, abas sublinhadas (Desempenho Equipes · Pessoas · Gráfico
+   de vendas · Desafios), um recorte de equipe (`FiltrosEscopo`) e o
+   **`CardEquipe` da cobrança** — o mesmo componente, que ganhou a prop
+   `formatar` para escrever «12 vendas» quando a régua é quantidade. A aba
+   Pessoas é o lugar dos Quartis: fila de assinatura no aviso âmbar do alto,
+   tabela por pessoa, distribuição por gaveta ao lado.
+4. **Painel Diretoria** refeito sobre `pages/PainelDiretoria`: cabeçalho
+   executivo, abas Visão geral · Setores e equipes · Por pessoa, e a regra do
+   **mesmo corte** — o mês anterior é medido até o mesmo dia
+   (`FiltroDePeriodo`, extraído de `DiretoriaVisaoGeral` para as duas telas
+   usarem). Projeção e quartil dos cards usam a régua da meta, com a ausência
+   descontada e `QUARTIS_PADRAO`.
+
+`equipeDaVenda` saiu de dentro de `placarPorEquipe` para `vendasPlacar.ts`:
+os dois painéis recortam por equipe com a mesma regra do placar.
+
+Testes: `src/pages/Vendas/__tests__/PaineisComercial.test.tsx` (9) e
+`menuLateral.test.ts` («o Comercial não tem item próprio para o que virou aba
+interna»). **Não foi visto no navegador** — abrir exige sessão no banco de
+produção.
+
 ### Correções dentro da sessão
 
 | commit | o que |
@@ -673,6 +723,7 @@ src/pages/Vendas/
   Acompanhamento  AcompanhamentoPessoa
   DashboardComercial  PainelLiderComercial  PainelDiretoriaComercial
   LixeiraVendas  DesafiosComercial  componentes.tsx (Bloco, Faixa, Barra…)
+  ImportarVendas                       Importação + Fechamento em abas (Fase 11)
 
 src/pages/Vendas/dashboard/            só a Fase 10 — nada aqui calcula
   CardsDoMes.tsx                       a grade de MetricCard
@@ -684,8 +735,11 @@ src/hooks/useVendasPlacar.ts           o cadastro + a presença de cada recorte
 src/hooks/useVendasMesAnterior.ts      só o resumo do mês passado, para as setas
 ```
 
-**Rotas:** `/` (Dashboard) · `/vendas` · `/vendas/importar` · `/vendas/metas` ·
-`/vendas/fechamento` · `/vendas/indicacoes` · `/vendas/acompanhamento`.
+**Rotas:** `/` (Dashboard) · `/vendas` · `/vendas/importar` (`?tab=fechamento`) ·
+`/vendas/indicacoes` · `/vendas/painel-lider` (`?tab=desafios`) ·
+`/vendas/painel-diretoria` · `/vendas/lixeira` · `/admin/usuarios`
+(`?tab=metas`, `?tab=acompanhamento`). `/vendas/metas`, `/vendas/fechamento`,
+`/vendas/acompanhamento` e `/vendas/desafios` só redirecionam (Fase 11).
 
 ---
 

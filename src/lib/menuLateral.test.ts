@@ -202,7 +202,8 @@ describe('abasDoMenu — por produto', () => {
     expect(porRotulo('Painel Líder')).toEqual([ROUTE_PATHS.VENDAS_PAINEL_LIDER]);
     expect(porRotulo('Painel Diretoria')).toEqual([ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA]);
     expect(porRotulo('Lixeira')).toEqual([ROUTE_PATHS.VENDAS_LIXEIRA]);
-    expect(porRotulo('Desafios')).toEqual([ROUTE_PATHS.VENDAS_DESAFIOS]);
+    // Desafios deixou de ser item de menu em 16/09/2026: é aba do Painel Líder.
+    expect(porRotulo('Desafios')).toEqual([]);
 
     // E a cobrança não ganhou as do Comercial de volta.
     const naCobranca = abasDoMenu(ctx({ produto: 'cobranca', isBookplay: true }));
@@ -212,6 +213,28 @@ describe('abasDoMenu — por produto', () => {
     ]) {
       expect(naCobranca.map(i => i.to)).not.toContain(rota);
     }
+  });
+
+  /*
+   * O menu do Comercial no desenho da BookPlay (16/09/2026).
+   *
+   * Quatro telas viraram abas de outra: Metas e Acompanhamento em Usuários,
+   * Fechamento em Importar Vendas, Desafios no Painel Líder. Se uma delas
+   * voltar a ganhar item próprio, o menu volta a ter duas portas para a mesma
+   * tela — que é o que o pedido mandou desfazer.
+   */
+  it('o Comercial não tem item próprio para o que virou aba interna', () => {
+    const noComercial = rotas(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
+    for (const rota of [
+      ROUTE_PATHS.VENDAS_METAS, ROUTE_PATHS.VENDAS_ACOMPANHAMENTO,
+      ROUTE_PATHS.VENDAS_FECHAMENTO, ROUTE_PATHS.VENDAS_DESAFIOS,
+    ]) {
+      expect(noComercial, `${rota} voltou a ser item de menu`).not.toContain(rota);
+    }
+    expect(noComercial).toEqual(expect.arrayContaining([
+      ROUTE_PATHS.VENDAS, ROUTE_PATHS.VENDAS_IMPORTAR, ROUTE_PATHS.VENDAS_INDICACOES,
+      ROUTE_PATHS.ADMIN_USUARIOS,
+    ]));
   });
 
   /*
