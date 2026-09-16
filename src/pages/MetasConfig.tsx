@@ -29,6 +29,14 @@
  * O comportamento é o do botão que saiu: meta zerada não é gravada. Apagar o
  * valor de quem já tem meta NÃO apaga a meta — para tirar a meta de alguém
  * existe a tela de exclusões, não o campo em branco.
+ *
+ * ## Meta em lote (16/09/2026)
+ *
+ * Cada operador tem uma caixa de seleção. Com alguém marcado, aparece acima da
+ * lista o mesmo formulário de uma linha (meta, H.O., metas extras, proporcional,
+ * direta e indireta) e o botão «Confirmar». Aqui NÃO grava sozinho: são várias
+ * metas de uma vez, e só o clique decide. Confirmar SUBSTITUI a linha inteira de
+ * cada selecionado — a mesma gravação de digitar a linha dele — num `upsert` só.
  */
 
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -279,18 +287,29 @@ interface MetaRowProps {
   onChangeIndiretaAtiva?: (v: boolean) => void;
   onChangeIndireta?: (v: string) => void;
   onChangeIndiretaHO?: (v: string) => void;
+  /** Caixa de seleção da meta em lote. Ausente = linha sem seleção. */
+  selecao?: { marcado: boolean; onMudar: (v: boolean) => void };
 }
 
 function MetaRow({
   label, sublabel, icon, aviso, input, onChangeValor, mostrarHO, onChangeHO,
   numExtras = 0, onChangeExtra, onChangeExtraHO, disabled, proporcional, onChangeProporcional,
   permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
-  onGravar, estado,
+  onGravar, estado, selecao,
 }: MetaRowProps) {
   return (
-    <div className="py-2.5 border-b border-border last:border-0">
+    <div className={cn("py-2.5 border-b border-border last:border-0", selecao?.marcado && "bg-primary/5 -mx-2 px-2 rounded-md")}>
     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
       <div className="flex items-center gap-2 sm:w-52 shrink-0">
+        {selecao && (
+          <input
+            type="checkbox"
+            checked={selecao.marcado}
+            aria-label={`Selecionar ${label} para a meta em lote`}
+            onChange={(e) => selecao.onMudar(e.target.checked)}
+            className="h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          />
+        )}
         {icon && <span className="text-muted-foreground shrink-0">{icon}</span>}
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{String(label ?? "")}</p>
@@ -559,6 +578,12 @@ export default function MetasConfig() {
   const [metasDoMes, setMetasDoMes] = useState<MetaLinhaBruta[]>([]);
   // Campos extras visíveis por seção (BP): padrão 0, "+" adiciona p/ todos
   const [extraCampos, setExtraCampos] = useState<Record<TipoMeta, number>>({ setor: 0, equipe: 0, operador: 0 });
+
+  // Meta em lote: quem está marcado e o formulário que vai para todos eles.
+  const [selecionadosOp, setSelecionadosOp] = useState<string[]>([]);
+  const [metaLote, setMetaLote] = useState<MetaInput>(emptyInput);
+  const [extrasLote, setExtrasLote] = useState(0);
+  const [aplicandoLote, setAplicandoLote] = useState(false);
 
   function getInput(id: string): MetaInput { return inputMetas[id] ?? emptyInput(); }
   function setInput(id: string, patch: Partial<MetaInput>) {
@@ -862,6 +887,13 @@ export default function MetasConfig() {
     await fetchValidacao();
   }
 
+  // Seleção é do setor e do mês em tela: trocar qualquer um dos dois a desfaz.
+  useEffect(() => {
+    setSelecionadosOp([]);
+    setMetaLote(emptyInput());
+    setExtrasLote(0);
+  }, [setorSelecionado, mes, ano]);
+
   useEffect(() => { fetchSetores(); }, [fetchSetores]);
   useEffect(() => { fetchEquipes(); }, [fetchEquipes]);
   useEffect(() => { fetchOperadores(); }, [fetchOperadores]);
@@ -1045,6 +1077,129 @@ export default function MetasConfig() {
     operadores,
   ]);
 
+  // ── Meta em lote ──────────────────────────────────────────────────────────
+  // Os mesmos pares de conversão das linhas, sobre o formulário do lote.
+  function mudarLote(patch: Partial<MetaInput>) {
+    setMetaLote(atual => ({ ...atual, ...patch }));
+  }
+  function loteValor(v: string) {
+    mudarLote(isPP ? { meta_valor: v, meta_ho: fmtNum(parseBRL(v) * PP_HO_PERCENTUAL) } : { meta_valor: v });
+  }
+  function loteHO(v: string) {
+    mudarLote({ meta_ho: v, meta_valor: fmtNum(parseBRL(v) / PP_HO_PERCENTUAL) });
+  }
+  function loteExtra(idx: number, v: string) {
+    setMetaLote(atual => {
+      const extras = [...atual.extras];
+      extras[idx] = v;
+      if (!isPP) return { ...atual, extras };
+      const extrasHO = [...atual.extras_ho];
+      extrasHO[idx] = fmtNum(parseBRL(v) * PP_HO_PERCENTUAL);
+      return { ...atual, extras, extras_ho: extrasHO };
+    });
+  }
+  function loteExtraHO(idx: number, v: string) {
+    setMetaLote(atual => {
+      const extrasHO = [...atual.extras_ho];
+      extrasHO[idx] = v;
+      const extras = [...atual.extras];
+      extras[idx] = fmtNum(parseBRL(v) / PP_HO_PERCENTUAL);
+      return { ...atual, extras, extras_ho: extrasHO };
+    });
+  }
+
+  /**
+   * Grava o formulário do lote em todos os selecionados, num `upsert` só.
+   *
+   * Cada linha recebe a mesma gravação que receberia se a meta fosse digitada
+   * nela: meta, extras e proporcional substituídos; a meta indireta só para quem
+   * tem Direto/Extra (`montarPayload` decide). Quem o banco recusa por setor
+   * validado fica marcado com erro, como na linha.
+   */
+  const aplicarLote = useCallback(async () => {
+    if (!empresa?.id || !podeGerenciarMetas || metaTravada) return;
+    const ids = selecionadosOp.filter(id => operadores.some(o => o.id === id));
+    if (ids.length === 0) return;
+    if (parseBRL(metaLote.meta_valor) <= 0) {
+      toast.warning("Preencha a meta antes de confirmar.");
+      return;
+    }
+
+    const extrasPreenchidas = metaLote.extras.map(parseBRL).filter(v => v > 0);
+    const linhaDe = (id: string): MetaInput => {
+      const indireta = comDiretoExtra.has(id) && metaLote.indiretaAtiva;
+      return {
+        meta_valor: fmtNum(parseBRL(metaLote.meta_valor)),
+        meta_ho: fmtNum(parseBRL(metaLote.meta_valor) * PP_HO_PERCENTUAL),
+        extras: extrasPreenchidas.map(fmtNum),
+        extras_ho: extrasPreenchidas.map(v => fmtNum(v * PP_HO_PERCENTUAL)),
+        proporcional: metaLote.proporcional,
+        indiretaAtiva: indireta,
+        meta_indireta: indireta ? metaLote.meta_indireta : "",
+        meta_indireta_ho: indireta ? metaLote.meta_indireta_ho : "",
+      };
+    };
+    const payloads = ids
+      .map(id => montarPayload("operador", id, linhaDe(id)))
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    setAplicandoLote(true);
+    setEstadoLinhas(e => ({ ...e, ...Object.fromEntries(ids.map(id => [id, "salvando" as EstadoLinha])) }));
+    try {
+      const { bloqueados, error } = await upsertMetas(payloads);
+      if (error) throw new Error(error);
+
+      const recusados = new Set(bloqueados.map(b => b.referencia_id));
+      const gravados = ids.filter(id => !recusados.has(id));
+
+      setInputMetas(prev => ({ ...prev, ...Object.fromEntries(gravados.map(id => [id, linhaDe(id)])) }));
+      for (const id of gravados) assinaturasSalvas.current[id] = assinaturaDaLinha(linhaDe(id));
+      setEstadoLinhas(e => ({
+        ...e,
+        ...Object.fromEntries(ids.map(id => [id, (recusados.has(id) ? "erro" : "salvo") as EstadoLinha])),
+      }));
+      window.setTimeout(() => {
+        setEstadoLinhas(e => {
+          const resto = { ...e };
+          for (const id of gravados) if (resto[id] === "salvo") delete resto[id];
+          return resto;
+        });
+      }, 2500);
+      setExtraCampos(p => ({ ...p, operador: Math.max(p.operador, extrasPreenchidas.length) }));
+
+      if (recusados.size > 0) {
+        toast.warning(`${recusados.size} meta(s) não salva(s) — setor já validado.`, {
+          description: "Peça a um admin para reabrir antes de editar.",
+        });
+      }
+      if (gravados.length > 0) {
+        toast.success(`Meta aplicada a ${gravados.length} ${gravados.length === 1 ? "operador" : "operadores"}.`);
+        setSelecionadosOp([]);
+        setMetaLote(emptyInput());
+        setExtrasLote(0);
+      }
+
+      // O aviso «esteve de férias» sai de quem acabou de receber a meta.
+      const deFerias = gravados.filter(id => operadores.find(o => o.id === id)?.ferias_ate);
+      if (deFerias.length > 0) {
+        try {
+          await limparAvisoDeFerias(deFerias);
+          setOperadores(atual => atual.map(o => (deFerias.includes(o.id) ? { ...o, ferias_ate: null } : o)));
+        } catch { /* o aviso reaparece na próxima abertura, e só */ }
+      }
+    } catch (err: unknown) {
+      setEstadoLinhas(e => ({ ...e, ...Object.fromEntries(ids.map(id => [id, "erro" as EstadoLinha])) }));
+      toast.error("Erro ao aplicar a meta em lote", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setAplicandoLote(false);
+    }
+  }, [
+    empresa?.id, podeGerenciarMetas, metaTravada, selecionadosOp, operadores, metaLote,
+    comDiretoExtra, montarPayload,
+  ]);
+
   /**
    * Grava os dias úteis, feriados e quartis do mês.
    *
@@ -1112,6 +1267,17 @@ export default function MetasConfig() {
   const operadoresVisiveis = operadores
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
+  const podeLote = podeGerenciarMetas && !metaTravada;
+  const marcados = new Set(selecionadosOp);
+  const todosVisiveisMarcados = operadoresVisiveis.length > 0 && operadoresVisiveis.every(op => marcados.has(op.id));
+  const loteComIndireta = selecionadosOp.some(id => comDiretoExtra.has(id));
+  function marcarOperador(id: string, v: boolean) {
+    setSelecionadosOp(atual => (v ? [...new Set([...atual, id])] : atual.filter(x => x !== id)));
+  }
+  function marcarVisiveis(v: boolean) {
+    const ids = operadoresVisiveis.map(op => op.id);
+    setSelecionadosOp(atual => (v ? [...new Set([...atual, ...ids])] : atual.filter(x => !ids.includes(x))));
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
@@ -1459,21 +1625,97 @@ export default function MetasConfig() {
               1ª Meta = meta do operador; da 2ª em diante, as metas extras. A comissão
               por meta usa estas faixas.
             </p>
-            {/* Filtro por equipe */}
-            {equipes.length > 0 && (
-              <div className="flex items-center gap-2 pb-2 mb-1 border-b border-border">
-                <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground shrink-0">Equipe:</span>
-                <Select value={equipeFiltroOp || "__todas__"}
-                  onValueChange={(v) => setEquipeFiltroOp(v === "__todas__" ? "" : v)}>
-                  <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__todas__">Todas as equipes</SelectItem>
-                    {equipes.map(eq => (
-                      <SelectItem key={eq.id} value={eq.id}>{String(eq.nome ?? "")}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {/* Filtro por equipe + seleção para a meta em lote */}
+            {(equipes.length > 0 || podeLote) && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-2 mb-1 border-b border-border">
+                {podeLote && operadoresVisiveis.length > 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={todosVisiveisMarcados}
+                      onChange={(e) => marcarVisiveis(e.target.checked)}
+                      className="h-4 w-4 accent-primary cursor-pointer"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {equipeFiltroOp ? "Selecionar os da equipe" : "Selecionar todos"}
+                    </span>
+                  </label>
+                )}
+                {equipes.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground shrink-0">Equipe:</span>
+                    <Select value={equipeFiltroOp || "__todas__"}
+                      onValueChange={(v) => setEquipeFiltroOp(v === "__todas__" ? "" : v)}>
+                      <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__todas__">Todas as equipes</SelectItem>
+                        {equipes.map(eq => (
+                          <SelectItem key={eq.id} value={eq.id}>{String(eq.nome ?? "")}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {selecionadosOp.length > 0 && (
+                  <span className="text-xs font-medium text-primary">
+                    {`${selecionadosOp.length} ${selecionadosOp.length === 1 ? "selecionado" : "selecionados"}`}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Meta em lote: o formulário de uma linha, para todos os marcados */}
+            {podeLote && selecionadosOp.length > 0 && (
+              <div className="mb-2 rounded-lg border border-primary/40 bg-primary/5 px-3 pt-2 pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">
+                    {`Meta para ${selecionadosOp.length} ${selecionadosOp.length === 1 ? "operador selecionado" : "operadores selecionados"}`}
+                  </p>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground"
+                    onClick={() => setSelecionadosOp([])}>
+                    Limpar seleção
+                  </Button>
+                </div>
+                <MetaRow
+                  label="Selecionados"
+                  sublabel="Vale para todos os marcados"
+                  icon={<Users className="h-4 w-4" />}
+                  input={metaLote}
+                  onGravar={() => { /* o lote só grava no Confirmar */ }}
+                  disabled={aplicandoLote}
+                  mostrarHO={isPP}
+                  numExtras={extrasLote}
+                  onChangeExtra={loteExtra}
+                  onChangeExtraHO={loteExtraHO}
+                  onChangeValor={loteValor}
+                  onChangeHO={loteHO}
+                  proporcional={metaLote.proporcional}
+                  onChangeProporcional={v => mudarLote({ proporcional: v })}
+                  permiteIndireta={loteComIndireta}
+                  onChangeIndiretaAtiva={v => mudarLote(v
+                    ? { indiretaAtiva: true }
+                    : { indiretaAtiva: false, meta_indireta: "", meta_indireta_ho: "" })}
+                  onChangeIndireta={v => mudarLote({ meta_indireta: v, meta_indireta_ho: fmtNum(parseBRL(v) * PP_HO_PERCENTUAL) })}
+                  onChangeIndiretaHO={v => mudarLote({ meta_indireta_ho: v, meta_indireta: fmtNum(parseBRL(v) / PP_HO_PERCENTUAL) })}
+                />
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground"
+                    disabled={aplicandoLote}
+                    onClick={() => setExtrasLote(n => n + 1)}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar {extrasLote + 2}ª meta
+                  </Button>
+                  <Button size="sm" className="h-8 gap-1.5 ml-auto"
+                    disabled={aplicandoLote || parseBRL(metaLote.meta_valor) <= 0}
+                    onClick={() => void aplicarLote()}>
+                    {aplicandoLote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    {`Confirmar para ${selecionadosOp.length} ${selecionadosOp.length === 1 ? "operador" : "operadores"}`}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  Substitui a meta, as metas extras e a meta proporcional de cada selecionado.
+                  {loteComIndireta && " A meta indireta vale só para quem tem Direto/Extra."}
+                </p>
               </div>
             )}
             {loadingOperadores ? (
@@ -1506,7 +1748,8 @@ export default function MetasConfig() {
                     permiteIndireta={comDiretoExtra.has(op.id)}
                     onChangeIndiretaAtiva={v => onChangeIndiretaAtiva(op.id, v)}
                     onChangeIndireta={v => onChangeIndireta(op.id, v)}
-                    onChangeIndiretaHO={v => onChangeIndiretaHO(op.id, v)} />
+                    onChangeIndiretaHO={v => onChangeIndiretaHO(op.id, v)}
+                    selecao={podeLote ? { marcado: marcados.has(op.id), onMudar: v => marcarOperador(op.id, v) } : undefined} />
                 ))}
                 {podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
