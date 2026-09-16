@@ -253,9 +253,10 @@ const MEIO = DIVISOR / BigInt(2);
  *
  * A conta é inteira. Em ponto flutuante, 38.450 × 2,11% = 811,295 vira
  * 81129,4999… centavos e cai para R$ 811,29. Aqui o valor vira centavos e o
- * percentual vira milionésimos de ponto — o NUMERIC(6,3) do % vezes o
- * NUMERIC(6,3) do multiplicador cabe inteiro nessa escala —, e o produto é
- * BigInt. Os valores que chegam aqui nunca são negativos: meta positiva, e
+ * percentual vira milionésimos de ponto — o NUMERIC(9,6) do % cabe inteiro
+ * nessa escala (20260916140000); com o multiplicador, o produto passa de seis
+ * casas e o resto abaixo do milionésimo de ponto é arredondado, menos de um
+ * centavo a cada R$ 1 milhão —, e o produto é BigInt. Os valores que chegam aqui nunca são negativos: meta positiva, e
  * realizado só quando já passou dela.
  */
 function aplicarPct(valor: number, pct: number | null): number | null {

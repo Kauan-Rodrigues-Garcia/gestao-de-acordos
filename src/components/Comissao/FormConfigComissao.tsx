@@ -77,7 +77,7 @@ function CampoPct({ rotulo, valor, invalido, desabilitado, visivel, onMudar, onS
         placeholder="0,00"
         aria-label={visivel ? undefined : rotulo}
         aria-invalid={invalido || undefined}
-        className={cn('h-8 w-20 text-right text-sm tabular-nums', invalido && 'border-amber-500')}
+        className={cn('h-8 w-24 text-right text-sm tabular-nums', invalido && 'border-amber-500')}
         value={valor}
         disabled={desabilitado}
         onChange={e => onMudar(e.target.value)}

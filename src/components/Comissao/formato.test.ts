@@ -18,6 +18,10 @@ describe('formatarPct', () => {
     expect(formatarPct(4.035)).toBe('4,035%');
   });
 
+  it('percentual de seis casas aparece com quatro', () => {
+    expect(formatarPct(0.518889)).toBe('0,5189%');
+  });
+
   it('sem percentual vira travessão', () => {
     expect(formatarPct(null)).toBe('—');
   });
@@ -49,5 +53,10 @@ describe('paraCampo', () => {
     expect(paraCampo(2.11)).toBe('2,11');
     expect(paraCampo(2)).toBe('2');
     expect(paraCampo(null)).toBe('');
+  });
+
+  it('o campo guarda as seis casas: editar não arredonda o que estava gravado', () => {
+    expect(paraCampo(0.518889)).toBe('0,518889');
+    expect(lerPct(paraCampo(1.432857))).toBe(1.432857);
   });
 });

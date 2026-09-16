@@ -24,6 +24,7 @@ const DE_FORA = '00000000-0000-4000-8000-0000000000c9';
 const MIGRATIONS = resolve(__dirname, '../../../../supabase/migrations');
 const ORIGINAL = readFileSync(resolve(MIGRATIONS, '20260911190000_comissao_por_meta.sql'), 'utf8');
 const NOVA = readFileSync(resolve(MIGRATIONS, '20260916120000_comissao_excecao_usuario_e_bonus.sql'), 'utf8');
+const SEIS_CASAS = readFileSync(resolve(MIGRATIONS, '20260916140000_comissao_pct_seis_casas.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -100,6 +101,7 @@ beforeAll(async () => {
   await db.query('select public.fn_comissao_salvar($1::jsonb)', [config()]);
   await db.query('select public.fn_comissao_salvar($1::jsonb)', [config({ equipe_id: EQUIPE })]);
   await db.exec(NOVA);
+  await db.exec(SEIS_CASAS);
 });
 
 beforeEach(async () => {
@@ -198,6 +200,20 @@ describe('exceção por usuário', () => {
     } finally {
       await db.exec(`update public.perfis set setor_id = '${SETOR}' where id = '${BRUNO}'`);
     }
+  });
+});
+
+describe('percentual com seis casas (20260916140000)', () => {
+  it('prêmio ÷ meta do Receptivo é gravado sem arredondar', async () => {
+    const id = await rpc<string>('public.fn_comissao_salvar($1::jsonb)', [
+      config({ faixas: [{ ordem: 1, pct: 0.518889, pct_especial: 0.572 }, { ordem: 2, pct: 1.432857 }] }),
+    ]);
+    const f = await db.query<{ pct: string; pct_especial: string | null }>(
+      `select pct::text, pct_especial::text from public.comissao_faixas where config_id = $1 order by ordem`, [id]);
+    expect(f.rows).toEqual([
+      { pct: '0.518889', pct_especial: '0.572000' },
+      { pct: '1.432857', pct_especial: null },
+    ]);
   });
 });
 
