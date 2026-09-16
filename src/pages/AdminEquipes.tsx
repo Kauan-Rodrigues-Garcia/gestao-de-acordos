@@ -1887,6 +1887,12 @@ export default function AdminEquipes() {
                                     : deOutroSetor
                                       ? nomeSetorQualquer(operador.setor_id) ?? 'outro setor'
                                       : nomeEquipeQualquer(operador.equipe_id) ?? 'equipe';
+                                  // A equipe de origem é lida do perfil de hoje, não do dia em que
+                                  // o clone nasceu: se a pessoa troca de equipe no setor dela, o
+                                  // clone fica onde está e o selo passa a dizer a equipe nova.
+                                  const equipeOrigem = deOutroSetor && !naoResolvido
+                                    ? nomeEquipeQualquer(operador.equipe_id)
+                                    : null;
                                   return (
                                   <div
                                     key={clone.id}
@@ -1899,7 +1905,7 @@ export default function AdminEquipes() {
                                       naoResolvido
                                         ? 'Este clone é de outro setor e o seu acesso mostra apenas o próprio setor, então o nome dele não pode ser carregado. O recebimento continua contando aqui.'
                                         : deOutroSetor
-                                          ? `Clone de ${operador.nome} — original no setor "${origem}", equipe "${nomeEquipeQualquer(operador.equipe_id) ?? '?'}". O recebimento conta nos dois setores.`
+                                          ? `Clone de ${operador.nome} — original no setor "${origem}", ${equipeOrigem ? `equipe "${equipeOrigem}"` : 'sem equipe'}. O recebimento conta nos dois setores.`
                                           : `Clone de ${operador.nome} — original na equipe "${origem}". O recebimento conta nas duas equipes.`
                                     }
                                   >
@@ -1909,12 +1915,12 @@ export default function AdminEquipes() {
                                     }`}>
                                       {operador.nome}
                                     </span>
-                                    <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 text-[9px] px-1 py-0 h-3.5 ${
+                                    <span className={`inline-block truncate max-w-[160px] rounded-full border font-medium text-[9px] leading-[12px] px-1 py-0 h-3.5 ${
                                       naoResolvido
                                         ? 'border-border text-muted-foreground'
                                         : 'border-primary/30 text-primary'
                                     }`}>
-                                      clone de {origem}
+                                      clone de {origem}{equipeOrigem ? ` · ${equipeOrigem}` : ''}
                                     </span>
                                     {/* Item 1: caixinha de contar recebimento nesta equipe */}
                                     <label
