@@ -24,7 +24,7 @@
  * mesma do card de Comissão ao lado. Lista maior que isso rola por dentro.
  */
 
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Target, ArrowUpRight, ChevronRight } from 'lucide-react';
 import {
@@ -39,6 +39,7 @@ import { pctLimitado } from '@/lib/projecaoMetas';
 import { cn } from '@/lib/utils';
 import { corDaMeta, fatiasDeForma, type FatiaForma } from './metaDonut';
 import { ALTURA_CARD_PROGRESSO } from './tamanhoCards';
+import { PontoDaLegenda } from './PontoDaLegenda';
 
 function formatarPct(v: number): string {
   return v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -192,10 +193,7 @@ function LinhaForma({
   const cor = BREAKDOWN_COLORS[indice % BREAKDOWN_COLORS.length];
   return (
     <div className="flex items-center gap-2.5">
-      <span
-        className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card"
-        style={{ background: cor, ringColor: cor + '55' } as CSSProperties}
-      />
+      <PontoDaLegenda cor={cor} />
       <span className="text-xs flex-1 truncate font-medium">{fatia.label}</span>
       <div className="flex items-center gap-2 shrink-0">
         {detalhado && (

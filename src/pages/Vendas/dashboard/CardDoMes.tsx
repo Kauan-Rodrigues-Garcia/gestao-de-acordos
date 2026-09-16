@@ -30,7 +30,7 @@
  * fatia tem o tamanho do dinheiro que ela representa, que é como a perda se
  * enxerga.
  */
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Target, Scale, CreditCard, ArrowUpRight, ChevronRight } from 'lucide-react';
@@ -41,6 +41,7 @@ import { DonutChart } from '@/components/AnalyticsPanel/SubComponents';
 import { BREAKDOWN_COLORS } from '@/components/AnalyticsPanel/constants';
 import { ALTURA_CARD_PROGRESSO } from '@/components/PainelMetas/tamanhoCards';
 import { corDaMeta } from '@/components/PainelMetas/metaDonut';
+import { PontoDaLegenda } from '@/components/PainelMetas/PontoDaLegenda';
 import { formatBRL } from '@/lib/money';
 import { pctLimitado } from '@/lib/projecaoMetas';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -298,10 +299,7 @@ function Anel({ fatias, rodape }: { fatias: FatiaDoAnel[]; rodape: React.ReactNo
 function LinhaDaFatia({ fatia }: { fatia: FatiaDoAnel }) {
   return (
     <div className="flex items-center gap-2.5">
-      <span
-        className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card"
-        style={{ background: fatia.cor, ringColor: fatia.cor + '55' } as CSSProperties}
-      />
+      <PontoDaLegenda cor={fatia.cor} />
       <span className="text-xs flex-1 truncate font-medium">{fatia.label}</span>
       <div className="flex items-center gap-2 shrink-0">
         <span className="text-[11px] text-muted-foreground tabular-nums font-mono">
@@ -334,7 +332,7 @@ function ConviteDeMeta({ podeConfigurar }: { podeConfigurar: boolean }) {
         {podeConfigurar ? (
           <>
             {texto}{' '}
-            <Link to={ROUTE_PATHS.VENDAS_METAS} className="font-medium text-primary hover:underline">
+            <Link to={`${ROUTE_PATHS.ADMIN_USUARIOS}?tab=metas`} className="font-medium text-primary hover:underline">
               Configurar agora
             </Link>
           </>
