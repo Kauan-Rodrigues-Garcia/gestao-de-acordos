@@ -13,11 +13,14 @@
  *   • o padrão do setor: percentuais das faixas, regra de quando o setor bate a
  *     meta e, na PaguePlay, o modo da meta indireta;
  *   • as exceções por equipe;
+ *   • as exceções por usuário, que passam na frente da equipe e do setor;
+ *   • os bônus por usuário (16/09/2026);
  *   • a confirmação da meta do setor, com o mesmo acumulado do card de setor;
  *   • a consulta da comissão de cada operador.
  *
  * A trava da meta do setor vale aqui também: com o setor validado, configurar,
- * importar e mexer em exceção ficam bloqueados. Confirmar a meta continua possível.
+ * importar e mexer em exceção ou bônus ficam bloqueados. Confirmar a meta
+ * continua possível.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CopyPlus, Lock, Undo2 } from 'lucide-react';
@@ -33,23 +36,30 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { useAnaliticoDashboard } from '@/hooks/useAnaliticoDashboard';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { ehMesAtual } from '@/lib/mesReferencia';
 import { configDoOperador, type ConfigComissao } from '@/services/comissao/comissao';
 import {
   excluirExcecao, importarMesAnterior, mesAnterior, salvarConfig,
 } from '@/services/comissao/comissao.service';
-import { lerMetasExtras, type MetaLinhaBruta } from '@/services/comissao/entradaDoOperador';
+import {
+  lerMetasExtras, recebidoPorDiaDasLinhas, type MetaLinhaBruta,
+} from '@/services/comissao/entradaDoOperador';
 import { useAcumuladoDoSetorNoMes } from '@/services/comissao/useAcumuladoDoSetorNoMes';
 import { useConfigsComissao } from '@/services/comissao/useConfigsComissao';
 import { lerMetaIndiretaDaLinha } from '@/services/metas/metaIndireta';
 import {
   buscarRecebimentoIndireto, type MapaRecebimentoIndireto,
 } from '@/services/metas/recebimentoIndireto.service';
+import { BonusPorUsuario } from './BonusPorUsuario';
+import { resumoDeNomes } from './bonusTexto';
+import { ExcecoesPorUsuario } from './ExcecoesPorUsuario';
 import { FormConfigComissao } from './FormConfigComissao';
 import { ListaComissaoOperadores, type OperadorComissao } from './ListaComissaoOperadores';
 import { MetaDoSetorComissao } from './MetaDoSetorComissao';
 import { payloadDe, rascunhoParaExcecao } from './rascunhoConfig';
+import type { PessoaSelecionavel } from './SeletorPessoas';
 
 const MESES = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -106,13 +116,42 @@ export function AbaComissao({
   const [indiretos, setIndiretos] = useState<MapaRecebimentoIndireto>({});
 
   const doSetor = atual.configs.filter(c => c.setorId === setorId);
-  const padrao = doSetor.find(c => c.equipeId === null) ?? null;
+  const padrao = doSetor.find(c => c.equipeId === null && !c.grupoUsuarios) ?? null;
   const excecoes = doSetor.filter(c => c.equipeId !== null);
+  const grupos = doSetor.filter(c => c.grupoUsuarios);
+  const todosBonus = atual.bonus ?? [];
+  const bonusDoSetor = todosBonus.filter(b => b.setorId === setorId);
   const temMesAnterior = doMesAnterior.configs.some(c => c.setorId === setorId);
   const bloqueado = !podeEditar || metaTravada;
 
   const nomeDaEquipe = (id: string | null) => equipes.find(e => e.id === id)?.nome ?? 'Equipe';
   const equipesSemExcecao = equipes.filter(e => !excecoes.some(x => x.equipeId === e.id));
+
+  // As pessoas que a exceção por usuário e o bônus oferecem: só as do setor em
+  // tela. O clone é de outro setor e é configurado lá.
+  const pessoas = useMemo<PessoaSelecionavel[]>(() => operadores
+    .filter(op => op.setorOrigemId === setorId && !op.clonadoDe)
+    .map(op => ({ id: op.id, nome: op.nome, detalhe: equipes.find(e => e.id === op.equipeAquiId)?.nome ?? null })),
+  [operadores, setorId, equipes]);
+  const nomeDaPessoa = useMemo(() => new Map(operadores.map(o => [o.id, o.nome])), [operadores]);
+  const rotuloDaExcecao = (c: ConfigComissao | null) => (c?.grupoUsuarios
+    ? resumoDeNomes(c.usuarioIds, nomeDaPessoa)
+    : nomeDaEquipe(c?.equipeId ?? null));
+
+  // O bônus da 1ª…Nª Meta oferece pelo menos as metas que alguém do setor tem.
+  const quantasMetas = useMemo(() => Math.max(
+    padrao?.faixas.length ?? 0,
+    ...metas.filter(m => m.tipo === 'operador').map(m => 1 + lerMetasExtras(m.metas_extras).length),
+  ), [padrao, metas]);
+
+  // Meta especial do bônus: o realizado por dia vem do agregado do Dashboard, e
+  // só é buscado quando existe um bônus desses no setor.
+  const temMetaEspecial = bonusDoSetor.some(b => b.tipo === 'especial');
+  const analitico = useAnaliticoDashboard(temMetaEspecial, mesISO);
+  const porDia = useMemo(
+    () => (temMetaEspecial && analitico.carregado ? recebidoPorDiaDasLinhas(analitico.linhas, isPaguePlay) : null),
+    [temMetaEspecial, analitico.carregado, analitico.linhas, isPaguePlay],
+  );
 
   const metaDoSetor = Number(
     metas.find(m => m.tipo === 'setor' && m.referencia_id === setorId)?.meta_valor,
@@ -146,7 +185,7 @@ export function AbaComissao({
       const meta = metaDe.get(op.id);
       if (!meta || !(Number(meta.meta_valor) > 0)) return false;
       const { config } = configDoOperador({
-        configs: atual.configs, setorId: op.setorOrigemId, equipeId: op.equipeOrigemId,
+        configs: atual.configs, setorId: op.setorOrigemId, equipeId: op.equipeOrigemId, operadorId: op.id,
       });
       return !!config && 1 + lerMetasExtras(meta.metas_extras).length > config.faixas.length;
     }).length;
@@ -187,7 +226,9 @@ export function AbaComissao({
       toast.error('A exceção não foi removida', { description: r.erro });
       return;
     }
-    toast.success(`${nomeDaEquipe(config.equipeId)} voltou ao padrão do setor.`);
+    toast.success(config.grupoUsuarios
+      ? `${rotuloDaExcecao(config)} ${config.usuarioIds.length === 1 ? 'voltou' : 'voltaram'} ao padrão.`
+      : `${nomeDaEquipe(config.equipeId)} voltou ao padrão do setor.`);
     atual.recarregar();
   }
 
@@ -317,6 +358,47 @@ export function AbaComissao({
         </Secao>
       )}
 
+      {/* ── Exceções por usuário ─────────────────────────────────────────── */}
+      {padrao && (
+        <Secao
+          titulo="Exceções por usuário"
+          descricao="Pessoas com percentuais próprios. Valem no lugar da exceção da equipe e do padrão do setor. Quando o setor bate a meta, vale a regra do padrão."
+        >
+          <ExcecoesPorUsuario
+            empresaId={empresaId}
+            setorId={setorId}
+            ano={ano}
+            mes={mes}
+            isPaguePlay={isPaguePlay}
+            padrao={padrao}
+            grupos={grupos}
+            pessoas={pessoas}
+            bloqueado={bloqueado}
+            onMudou={atual.recarregar}
+            onRemover={setRemovendo}
+          />
+        </Secao>
+      )}
+
+      {/* ── Bônus por usuário ────────────────────────────────────────────── */}
+      <Secao
+        titulo="Bônus por usuário"
+        descricao="Valor fixo pago à parte da comissão: ao bater uma meta, ao chegar a um valor ou numa meta especial com período. Cada pessoa vê o bônus no Dashboard."
+      >
+        <BonusPorUsuario
+          empresaId={empresaId}
+          setorId={setorId}
+          ano={ano}
+          mes={mes}
+          isPaguePlay={isPaguePlay}
+          bonus={bonusDoSetor}
+          pessoas={pessoas}
+          quantasMetas={quantasMetas}
+          bloqueado={bloqueado}
+          onMudou={atual.recarregar}
+        />
+      </Secao>
+
       {/* ── Meta do setor ────────────────────────────────────────────────── */}
       {padrao && padrao.regraSetor !== 'nenhuma' && (
         <Secao
@@ -350,6 +432,8 @@ export function AbaComissao({
           resumos={setor.resumos}
           indiretos={indiretos}
           configs={atual.configs}
+          bonus={todosBonus}
+          recebidoPorDia={porDia}
           isPaguePlay={isPaguePlay}
           mes={mesISO}
           mesFechado={!ehMesAtual(mesISO)}
@@ -377,9 +461,11 @@ export function AbaComissao({
       <AlertDialog open={removendo !== null} onOpenChange={aberto => { if (!aberto) setRemovendo(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{`${nomeDaEquipe(removendo?.equipeId ?? null)} volta ao padrão?`}</AlertDialogTitle>
+            <AlertDialogTitle>{`${rotuloDaExcecao(removendo)} ${removendo?.grupoUsuarios && removendo.usuarioIds.length > 1 ? 'voltam' : 'volta'} ao padrão?`}</AlertDialogTitle>
             <AlertDialogDescription>
-              Os percentuais próprios desta equipe neste mês são apagados, e ela passa a usar o padrão do setor.
+              {removendo?.grupoUsuarios
+                ? 'Os percentuais próprios desta exceção neste mês são apagados. As pessoas passam a usar a exceção da equipe delas, se houver, ou o padrão do setor.'
+                : 'Os percentuais próprios desta equipe neste mês são apagados, e ela passa a usar o padrão do setor.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

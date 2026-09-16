@@ -27,3 +27,26 @@ export function paraCampo(valor: number | null | undefined): string {
   if (valor === null || valor === undefined || !Number.isFinite(valor)) return '';
   return valor.toLocaleString('pt-BR', { maximumFractionDigits: 3, useGrouping: false });
 }
+
+/**
+ * Máscara de dinheiro como a tela de Metas: só dígitos, os dois últimos são os
+ * centavos. `'2000000'` → `'20.000,00'`.
+ */
+export function mascararReais(texto: string): string {
+  const digitos = texto.replace(/\D/g, '');
+  if (!digitos) return '';
+  return (Number(digitos) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** `'20.000,00'` → `20000`. Vazio ou zero → `null`. */
+export function lerReais(texto: string): number | null {
+  const limpo = texto.replace(/[^\d,]/g, '').replace(',', '.');
+  const n = Number.parseFloat(limpo);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** `20000` → `'20.000,00'`; `null` → `''`. */
+export function reaisParaCampo(valor: number | null | undefined): string {
+  if (valor === null || valor === undefined || !Number.isFinite(valor) || valor <= 0) return '';
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}

@@ -8,12 +8,14 @@
  *
  *   • a unidade — PaguePlay em H.O. (`PP_HO_PERCENTUAL`), BookPlay em bruto;
  *   • a origem — a configuração é a do setor e da equipe do usuário ORIGINAL,
- *     também para o clone.
+ *     também para o clone; a exceção por usuário é achada pela pessoa;
+ *   • os bônus — só os que têm a pessoa entre os usuários.
  *
  * Sem React, sem fetch.
  */
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { PP_HO_PERCENTUAL, getTodayISO } from '@/lib/index';
 import { lerMetaIndiretaDaLinha } from '@/services/metas/metaIndireta';
+import type { BonusComissao } from './bonus';
 import { configDoOperador, type ConfigComissao, type EntradaComissao } from './comissao';
 
 /** O mínimo de uma linha de `metas` (tipo operador) que a comissão lê. */
@@ -49,12 +51,20 @@ export function montarEntradaComissao(params: {
   configs: readonly ConfigComissao[];
   setorOrigemId: string | null;
   equipeOrigemId: string | null;
+  /** A pessoa — acha a exceção por usuário e os bônus dela. */
+  operadorId: string | null;
+  /** Os bônus do mês (de todos); aqui ficam só os da pessoa. */
+  bonus?: readonly BonusComissao[];
+  /** `yyyy-MM-dd` → realizado direto do dia, JÁ na unidade. Só a meta especial lê. */
+  recebidoPorDia?: Readonly<Record<string, number>> | null;
+  hoje?: string;
 }): EntradaComissao {
-  const { meta, isPaguePlay } = params;
-  const { config, doSetor } = configDoOperador({
+  const { meta, isPaguePlay, operadorId } = params;
+  const { config, doSetor, origem } = configDoOperador({
     configs: params.configs,
     setorId: params.setorOrigemId,
     equipeId: params.equipeOrigemId,
+    operadorId,
   });
 
   return {
@@ -69,5 +79,31 @@ export function montarEntradaComissao(params: {
     fatorUnidade: isPaguePlay ? PP_HO_PERCENTUAL : 1,
     config,
     doSetor,
+    origemConfig: origem,
+    bonus: operadorId ? (params.bonus ?? []).filter(b => b.usuarioIds.includes(operadorId)) : [],
+    recebidoPorDia: params.recebidoPorDia ?? null,
+    hoje: params.hoje ?? getTodayISO(),
   };
+}
+
+/**
+ * operador → `yyyy-MM-dd` → realizado do dia, na unidade da comissão.
+ *
+ * Lê as linhas do agregado do Dashboard (`fn_analitico_dashboard_mes`), que
+ * trazem dia e operador — o resumo por operador é só do mês e não serve à meta
+ * especial com período.
+ */
+export function recebidoPorDiaDasLinhas(
+  linhas: readonly { dia: string; operador_id: string | null; total: number; total_ho: number }[],
+  isPaguePlay: boolean,
+): Record<string, Record<string, number>> {
+  const saida: Record<string, Record<string, number>> = {};
+  for (const l of linhas) {
+    if (!l.operador_id) continue;
+    const dia = String(l.dia).slice(0, 10);
+    const valor = Number(isPaguePlay ? l.total_ho : l.total) || 0;
+    const daPessoa = saida[l.operador_id] ?? (saida[l.operador_id] = {});
+    daPessoa[dia] = (daPessoa[dia] ?? 0) + valor;
+  }
+  return saida;
 }

@@ -7,13 +7,13 @@
  * acumulado na meta.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ConfigComissao } from '@/services/comissao/comissao';
 
 const { estado, servico } = vi.hoisted(() => ({
   estado: {
-    atual:     { configs: [] as unknown[], dbAtiva: true, carregado: true },
-    anterior:  { configs: [] as unknown[], dbAtiva: true, carregado: true },
+    atual:     { configs: [] as unknown[], bonus: [] as unknown[], dbAtiva: true, carregado: true } as { configs: unknown[]; bonus?: unknown[]; dbAtiva: boolean; carregado: boolean },
+    anterior:  { configs: [] as unknown[], bonus: [] as unknown[], dbAtiva: true, carregado: true } as { configs: unknown[]; bonus?: unknown[]; dbAtiva: boolean; carregado: boolean },
     acumulado: { acumulado: null as null | { bruto: number; ho: number; ajuste: number }, resumos: [] as unknown[], carregado: true },
   },
   servico: {
@@ -21,6 +21,8 @@ const { estado, servico } = vi.hoisted(() => ({
     importarMesAnterior: vi.fn(async () => ({ ok: true, dados: 1 })),
     excluirExcecao:      vi.fn(async () => ({ ok: true })),
     confirmarMetaSetor:  vi.fn(async () => ({ ok: true })),
+    salvarBonus:         vi.fn(async () => ({ ok: true, dados: 'bonus' })),
+    excluirBonus:        vi.fn(async () => ({ ok: true })),
   },
 }));
 
@@ -46,6 +48,10 @@ vi.mock('@/services/comissao/comissao.service', () => ({
   ...servico,
 }));
 
+vi.mock('@/hooks/useAnaliticoDashboard', () => ({
+  useAnaliticoDashboard: () => ({ linhas: [], carregado: true, dbAtiva: true, refetch: vi.fn() }),
+}));
+
 vi.mock('@/services/metas/recebimentoIndireto.service', () => ({
   buscarRecebimentoIndireto: vi.fn(async () => ({})),
 }));
@@ -54,7 +60,8 @@ import { AbaComissao } from './AbaComissao';
 
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   return {
-    id: 'cfg-set', empresaId: 'e1', setorId: 's1', equipeId: null, ano: 2026, mes: 9,
+    id: 'cfg-set', empresaId: 'e1', setorId: 's1', equipeId: null, grupoUsuarios: false, usuarioIds: [],
+    ano: 2026, mes: 9,
     modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,
     setorMetaConfirmadaEm: null, setorMetaConfirmadaPor: null, setorMetaConfirmadaPorNome: null,
@@ -75,10 +82,12 @@ const PROPS = {
   isPaguePlay: false,
   metaTravada: false,
   equipes: [{ id: 'eq-x', nome: 'Equipe X' }],
-  operadores: [{
-    id: 'op1', nome: 'Ana Paula', setorOrigemId: 's1', equipeOrigemId: 'eq-x',
-    equipeAquiId: 'eq-x', clonadoDe: null,
-  }],
+  operadores: [
+    { id: 'op1', nome: 'Ana Paula', setorOrigemId: 's1', equipeOrigemId: 'eq-x', equipeAquiId: 'eq-x', clonadoDe: null },
+    { id: 'op2', nome: 'Bruno Lima', setorOrigemId: 's1', equipeOrigemId: 'eq-x', equipeAquiId: 'eq-x', clonadoDe: null },
+    // Clone de outro setor: aparece na lista de comissão, mas não se configura aqui.
+    { id: 'op9', nome: 'Zeca Clone', setorOrigemId: 's2', equipeOrigemId: 'eq-z', equipeAquiId: 'eq-x', clonadoDe: 'Play 5' },
+  ],
   metas: [
     { tipo: 'operador', referencia_id: 'op1', meta_valor: 34_000, metas_extras: [37_000] },
     { tipo: 'setor', referencia_id: 's1', meta_valor: 800_000 },
@@ -87,8 +96,8 @@ const PROPS = {
 
 describe('AbaComissao', () => {
   beforeEach(() => {
-    estado.atual = { configs: [], dbAtiva: true, carregado: true };
-    estado.anterior = { configs: [], dbAtiva: true, carregado: true };
+    estado.atual = { configs: [], bonus: [], dbAtiva: true, carregado: true };
+    estado.anterior = { configs: [], bonus: [], dbAtiva: true, carregado: true };
     estado.acumulado = { acumulado: null, resumos: [], carregado: true };
     Object.values(servico).forEach(f => f.mockClear());
   });
@@ -130,6 +139,75 @@ describe('AbaComissao', () => {
     estado.acumulado = { acumulado: { bruto: 812_400, ho: 0, ajuste: 0 }, resumos: [], carregado: true };
     rerender(<AbaComissao {...PROPS} />);
     expect(screen.getByRole('button', { name: /Confirmar meta atingida/ })).toBeEnabled();
+  });
+
+  it('exceção por usuário: escolhe várias pessoas do setor e cria uma exceção só, com o % do padrão', async () => {
+    estado.atual = { configs: [config()], bonus: [], dbAtiva: true, carregado: true };
+    render(<AbaComissao {...PROPS} />);
+
+    const campo = screen.getByRole('combobox', { name: 'Pessoas para a nova exceção' });
+    fireEvent.focus(campo);
+    const lista = screen.getByRole('listbox');
+    // Só gente do setor: o clone não entra.
+    expect(within(lista).queryByText('Zeca Clone')).toBeNull();
+    fireEvent.click(within(lista).getByRole('checkbox', { name: /Marcar todas/ }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Criar exceção para 2 pessoas' }));
+    await waitFor(() => expect(servico.salvarConfig).toHaveBeenCalledTimes(1));
+    expect(servico.salvarConfig.mock.calls[0][0]).toMatchObject({
+      grupoUsuarios: true,
+      equipeId: null,
+      usuarios: ['op1', 'op2'],
+      regraSetor: 'nenhuma',
+      faixas: [{ ordem: 1, pct: 1.75 }, { ordem: 2, pct: 2.11 }],
+    });
+  });
+
+  it('quem já está numa exceção por usuário não pode entrar em outra', () => {
+    estado.atual = {
+      configs: [config(), config({ id: 'cfg-u', grupoUsuarios: true, usuarioIds: ['op1'] })],
+      bonus: [], dbAtiva: true, carregado: true,
+    };
+    render(<AbaComissao {...PROPS} />);
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Pessoas para a nova exceção' }));
+    const ana = within(screen.getByRole('listbox')).getByRole('option', { name: /Ana Paula/ });
+    expect(ana).toHaveAttribute('aria-disabled', 'true');
+    expect(within(ana).getByText('já tem exceção')).toBeInTheDocument();
+  });
+
+  it('sem padrão do setor não há exceção por usuário; o bônus existe mesmo assim', () => {
+    render(<AbaComissao {...PROPS} />);
+    expect(screen.queryByText('Exceções por usuário')).toBeNull();
+    expect(screen.getByText('Bônus por usuário')).toBeInTheDocument();
+  });
+
+  it('bônus: escolhe as pessoas e abre a criação com as três formas', () => {
+    render(<AbaComissao {...PROPS} />);
+    expect(screen.getByRole('button', { name: 'Criar bônus' })).toBeDisabled();
+
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Pessoas para o novo bônus' }));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('checkbox', { name: /Marcar todas/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar bônus para 2 pessoas' }));
+
+    const dialogo = screen.getByRole('dialog');
+    expect(within(dialogo).getByText('Meta existente')).toBeInTheDocument();
+    expect(within(dialogo).getByText('Valor realizado')).toBeInTheDocument();
+    expect(within(dialogo).getByText('Meta especial')).toBeInTheDocument();
+    expect(within(dialogo).getByRole('button', { name: 'Criar para 2 pessoas' })).toBeDisabled();
+  });
+
+  it('bônus gravado aparece com a condição e as pessoas', () => {
+    estado.atual = {
+      configs: [], dbAtiva: true, carregado: true,
+      bonus: [{
+        id: 'b1', empresaId: 'e1', setorId: 's1', ano: 2026, mes: 9, tipo: 'meta', metaOrdem: 4,
+        valorAlvo: null, periodoInicio: null, periodoFim: null, valorBonus: 200, descricao: null,
+        usuarioIds: ['op1', 'op2'],
+      }],
+    };
+    render(<AbaComissao {...PROPS} />);
+    expect(screen.getByText(/R\$\s?200,00 ao bater a 4ª Meta/)).toBeInTheDocument();
+    expect(screen.getByText('Ana Paula, Bruno Lima')).toBeInTheDocument();
   });
 
   it('sem regra do setor, não há confirmação a fazer', () => {

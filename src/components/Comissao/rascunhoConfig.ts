@@ -6,8 +6,8 @@
  *
  *   • faixa sem percentual não vai ao banco — a coluna é obrigatória, e gravar
  *     zero faria uma faixa «atingida» pagar R$ 0,00 sem ninguém ter decidido;
- *   • exceção de equipe nunca leva a regra do setor — ela mora só na linha do
- *     setor, e o banco recusaria;
+ *   • exceção (de equipe ou por usuário) nunca leva a regra do setor — ela mora
+ *     só na linha do setor, e o banco a descartaria;
  *   • reformatar um campo (`2,1` → `2,10`) não dispara escrita: a assinatura
  *     compara valores, não texto.
  */
@@ -31,10 +31,13 @@ export interface RascunhoConfig {
 }
 
 export interface AlvoConfig {
+  /** Só na exceção por usuário: o grupo já gravado. */
+  id?: string | null;
   empresaId: string;
   setorId: string;
-  /** `null` = padrão do setor. */
+  /** `null` = padrão do setor (ou exceção por usuário, com `grupoUsuarios`). */
   equipeId: string | null;
+  grupoUsuarios?: boolean;
   ano: number;
   mes: number;
 }
@@ -84,7 +87,8 @@ export function faixasSemPct(rascunho: RascunhoConfig): number[] {
 export function payloadDe(rascunho: RascunhoConfig, alvo: AlvoConfig): PayloadConfig | null {
   if (faixasSemPct(rascunho).length > 0) return null;
 
-  const regraSetor: RegraSetor = alvo.equipeId === null ? rascunho.regraSetor : 'nenhuma';
+  const doSetor = alvo.equipeId === null && !alvo.grupoUsuarios;
+  const regraSetor: RegraSetor = doSetor ? rascunho.regraSetor : 'nenhuma';
 
   return {
     ...alvo,

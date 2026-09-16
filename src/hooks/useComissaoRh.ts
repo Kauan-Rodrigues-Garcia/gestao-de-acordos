@@ -122,6 +122,8 @@ export function useComissaoRh(params: {
         configs: configs.configs,
         setorOrigemId: l.setor_id_snapshot ?? null,
         equipeOrigemId: l.equipe_id_snapshot ?? null,
+        // A exceção por usuário vale na folha; o bônus não entra na comissão.
+        operadorId: l.operador_id,
       })));
     }
     return saida;

@@ -8,9 +8,12 @@
  * O clone aparece com selo, sob a equipe em que foi clonado, e é calculado pelo
  * usuário ORIGINAL: configuração do setor e da equipe de origem, meta e recebido
  * dele. É o que `montarEntradaComissao` recebe como origem.
+ *
+ * Quem tem percentual próprio (exceção por usuário) leva o selo «% individual»;
+ * quem tem bônus, o presente com o valor já garantido.
  */
 import { useMemo, useState } from 'react';
-import { ChevronRight, Layers } from 'lucide-react';
+import { ChevronRight, Gift, Layers } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -18,6 +21,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatBRL } from '@/lib/money';
 import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
+import type { BonusComissao } from '@/services/comissao/bonus';
 import { calcularComissao, type ConfigComissao, type ResultadoComissao } from '@/services/comissao/comissao';
 import { montarEntradaComissao, type MetaLinhaBruta } from '@/services/comissao/entradaDoOperador';
 import type { MapaRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
@@ -44,6 +48,10 @@ interface ListaComissaoOperadoresProps {
   resumos: ResumoOperadorAnalitico[];
   indiretos: MapaRecebimentoIndireto;
   configs: ConfigComissao[];
+  /** Os bônus do mês (de todos os setores). */
+  bonus: BonusComissao[];
+  /** operador → dia → realizado, na unidade. `null` = sem bônus de período ou ainda carregando. */
+  recebidoPorDia: Record<string, Record<string, number>> | null;
   isPaguePlay: boolean;
   /** `yyyy-MM`. */
   mes: string;
@@ -62,7 +70,7 @@ function descricao(r: ResultadoComissao, falta: string): string {
 }
 
 export function ListaComissaoOperadores({
-  operadores, equipes, metas, resumos, indiretos, configs, isPaguePlay, mes, mesFechado, carregando,
+  operadores, equipes, metas, resumos, indiretos, configs, bonus, recebidoPorDia, isPaguePlay, mes, mesFechado, carregando,
 }: ListaComissaoOperadoresProps) {
   const [equipeFiltro, setEquipeFiltro] = useState('');
   const [aberto, setAberto] = useState<{ nome: string; resultado: ResultadoComissao } | null>(null);
@@ -86,12 +94,15 @@ export function ListaComissaoOperadores({
           configs,
           setorOrigemId: op.setorOrigemId,
           equipeOrigemId: op.equipeOrigemId,
+          operadorId: op.id,
+          bonus,
+          recebidoPorDia: recebidoPorDia ? (recebidoPorDia[op.id] ?? {}) : null,
         }));
         return { op, resultado };
       })
       .sort((a, b) => b.resultado.total - a.resultado.total
         || a.op.nome.localeCompare(b.op.nome, 'pt-BR'));
-  }, [operadores, metas, resumos, indiretos, configs, isPaguePlay]);
+  }, [operadores, metas, resumos, indiretos, configs, bonus, recebidoPorDia, isPaguePlay]);
 
   const visiveis = equipeFiltro ? linhas.filter(l => l.op.equipeAquiId === equipeFiltro) : linhas;
 
@@ -121,11 +132,12 @@ export function ListaComissaoOperadores({
         <ul className="divide-y divide-border rounded-lg border border-border">
           {visiveis.map(({ op, resultado }) => {
             const semFaixas = resultado.motivo === 'sem_meta' || resultado.motivo === 'sem_config';
+            const temBonus = resultado.bonus.length > 0;
             return (
               <li key={op.id}>
                 <button
                   type="button"
-                  disabled={semFaixas}
+                  disabled={semFaixas && !temBonus}
                   onClick={() => setAberto({ nome: op.nome, resultado })}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
                 >
@@ -135,6 +147,20 @@ export function ListaComissaoOperadores({
                       <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
                         {`clone · ${op.clonadoDe}`}
                       </Badge>
+                    )}
+                    {resultado.origemConfig === 'usuario' && !semFaixas && (
+                      <Badge variant="secondary" className="shrink-0 text-[10px] font-normal" title="Exceção por usuário">
+                        % individual
+                      </Badge>
+                    )}
+                    {temBonus && (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                        title={`${resultado.bonus.length} bônus · ${formatBRL(resultado.totalBonus)} garantido`}
+                      >
+                        <Gift className="h-3 w-3" aria-hidden="true" />
+                        {resultado.totalBonus > 0 ? formatBRL(resultado.totalBonus) : resultado.bonus.length}
+                      </span>
                     )}
                     {resultado.beneficioAtivo && !semFaixas && (
                       <span className="shrink-0 text-[10px] font-bold text-amber-700 dark:text-amber-300" title="Benefício do setor ativo">
@@ -148,7 +174,7 @@ export function ListaComissaoOperadores({
                   <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">
                     {semFaixas ? '—' : formatBRL(resultado.total)}
                   </span>
-                  {!semFaixas && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                  {(!semFaixas || temBonus) && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                 </button>
               </li>
             );

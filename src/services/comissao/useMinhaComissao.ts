@@ -11,8 +11,9 @@
  *     (`useAnaliticoDashboard` + `agregarAnalitico`), já com o ajuste manual — a
  *     mesma base dos cards de meta e do card de comissão que existia lá;
  *   • indireta: `buscarRecebimentoIndireto`, só da pessoa;
- *   • configuração e confirmação do setor: `useConfigsComissao`, com tempo real —
- *     a confirmação do líder chega sem recarregar;
+ *   • configuração, confirmação do setor e bônus: `useConfigsComissao`, com
+ *     tempo real — a confirmação do líder e o bônus novo chegam sem recarregar;
+ *   • realizado por dia (meta especial do bônus): as mesmas linhas do agregado;
  *   • setor e equipe de origem: o perfil.
  *
  * ## Por que não o resumo por operador
@@ -35,7 +36,7 @@ import { normalizarMes, partesDoMes } from '@/lib/mesReferencia';
 import { useTenant } from '@/lib/tenant-config';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import { calcularComissao, type ResultadoComissao } from './comissao';
-import { montarEntradaComissao, type MetaLinhaBruta } from './entradaDoOperador';
+import { montarEntradaComissao, recebidoPorDiaDasLinhas, type MetaLinhaBruta } from './entradaDoOperador';
 import { useConfigsComissao } from './useConfigsComissao';
 
 export interface MinhaComissao {
@@ -85,6 +86,13 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
   const realizado = useMemo(
     () => (operadorId ? agregarAnalitico(analitico.linhas, { tipo: 'operador', operadorId }) : null),
     [analitico.linhas, operadorId],
+  );
+
+  const porDia = useMemo(
+    () => (operadorId
+      ? recebidoPorDiaDasLinhas(analitico.linhas.filter(l => l.operador_id === operadorId), isPaguePlay)[operadorId] ?? {}
+      : {}),
+    [analitico.linhas, operadorId, isPaguePlay],
   );
 
   const [pecas, setPecas] = useState<Pecas | null>(null);
@@ -150,10 +158,14 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
       configs: configs.configs,
       setorOrigemId: setorId,
       equipeOrigemId: equipeId,
+      operadorId,
+      bonus: configs.bonus,
+      recebidoPorDia: porDia,
     }));
   }, [
     ativo, pecasDoMes, erro, realizado, analitico.carregado,
-    configs.carregado, configs.dbAtiva, configs.configs, isPaguePlay, setorId, equipeId,
+    configs.carregado, configs.dbAtiva, configs.configs, configs.bonus, isPaguePlay, setorId, equipeId,
+    operadorId, porDia,
   ]);
 
   return {

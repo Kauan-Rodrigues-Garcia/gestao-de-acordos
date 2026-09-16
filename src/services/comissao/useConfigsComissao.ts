@@ -1,5 +1,5 @@
 /**
- * useConfigsComissao — as configurações de comissão do mês, vivas.
+ * useConfigsComissao — as configurações e os bônus de comissão do mês, vivos.
  *
  * O Dashboard do operador e a aba Comissão da tela de Metas leem daqui. O tempo
  * real é o que faz a confirmação da meta do setor chegar ao operador sem
@@ -16,12 +16,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { assinarTabela } from '@/lib/realtime';
 import { criarAgrupador } from '@/lib/agrupador';
 import { buscarConfigsDoMes } from './comissao.service';
+import type { BonusComissao } from './bonus';
 import type { ConfigComissao } from './comissao';
 
 const NENHUMA: ConfigComissao[] = [];
+const NENHUM_BONUS: BonusComissao[] = [];
 
 export interface ConfigsDoMes {
   configs: ConfigComissao[];
+  bonus: BonusComissao[];
   /** `false` = a migration da comissão ainda não existe neste banco. */
   dbAtiva: boolean;
   carregado: boolean;
@@ -38,9 +41,9 @@ export function useConfigsComissao(params: {
   const { empresaId, ano, mes, ativo } = params;
   const chave = `${empresaId ?? ''}|${ano}|${mes}`;
 
-  const [lido, setLido] = useState<{ chave: string; configs: ConfigComissao[]; dbAtiva: boolean }>(
-    { chave: '', configs: NENHUMA, dbAtiva: true },
-  );
+  const [lido, setLido] = useState<{
+    chave: string; configs: ConfigComissao[]; bonus: BonusComissao[]; dbAtiva: boolean;
+  }>({ chave: '', configs: NENHUMA, bonus: NENHUM_BONUS, dbAtiva: true });
   const [versao, setVersao] = useState(0);
   const recarregar = useCallback(() => setVersao(v => v + 1), []);
 
@@ -48,7 +51,7 @@ export function useConfigsComissao(params: {
     if (!ativo || !empresaId) return;
     let vivo = true;
     void buscarConfigsDoMes(empresaId, ano, mes).then(r => {
-      if (vivo) setLido({ chave, configs: r.configs, dbAtiva: r.dbAtiva });
+      if (vivo) setLido({ chave, configs: r.configs, bonus: r.bonus, dbAtiva: r.dbAtiva });
     });
     return () => { vivo = false; };
   }, [ativo, empresaId, ano, mes, chave, versao]);
@@ -64,6 +67,9 @@ export function useConfigsComissao(params: {
           { tabela: 'comissao_config', filtro: `empresa_id=eq.${empresaId}` },
           // Sem coluna de empresa: a RLS de leitura filtra os eventos.
           { tabela: 'comissao_faixas' },
+          { tabela: 'comissao_config_usuarios', filtro: `empresa_id=eq.${empresaId}` },
+          { tabela: 'comissao_bonus', filtro: `empresa_id=eq.${empresaId}` },
+          { tabela: 'comissao_bonus_usuarios' },
         ],
       },
       {
@@ -77,6 +83,7 @@ export function useConfigsComissao(params: {
   const carregado = lido.chave === chave;
   return useMemo(() => ({
     configs: carregado ? lido.configs : NENHUMA,
+    bonus: carregado ? lido.bonus : NENHUM_BONUS,
     dbAtiva: lido.dbAtiva,
     carregado,
     recarregar,

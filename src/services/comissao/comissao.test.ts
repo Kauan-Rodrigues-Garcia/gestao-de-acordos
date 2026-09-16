@@ -18,10 +18,12 @@ import {
   calcularComissao, configDoOperador,
   type ConfigComissao, type EntradaComissao,
 } from './comissao';
+import { montarEntradaComissao } from './entradaDoOperador';
 
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   return {
-    id: 'cfg-s1', empresaId: 'e1', setorId: 's1', equipeId: null, ano: 2026, mes: 9,
+    id: 'cfg-s1', empresaId: 'e1', setorId: 's1', equipeId: null, grupoUsuarios: false, usuarioIds: [],
+    ano: 2026, mes: 9,
     modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,
     setorMetaConfirmadaEm: null, setorMetaConfirmadaPor: null, setorMetaConfirmadaPorNome: null,
@@ -324,25 +326,78 @@ describe('configDoOperador', () => {
   const padraoS1 = config();
   const excecaoX = config({ id: 'cfg-x', equipeId: 'eq-x' });
   const padraoS2 = config({ id: 'cfg-s2', setorId: 's2' });
-  const configs = [padraoS1, excecaoX, padraoS2];
+  // Exceção por usuário: Ana (equipe X) e Bruno (sem exceção de equipe).
+  const individual = config({ id: 'cfg-u', grupoUsuarios: true, usuarioIds: ['ana', 'bruno'] });
+  const configs = [padraoS1, individual, excecaoX, padraoS2];
 
   it('a exceção da equipe vence o padrão do setor', () => {
-    expect(configDoOperador({ configs, setorId: 's1', equipeId: 'eq-x' }))
-      .toEqual({ config: excecaoX, doSetor: padraoS1 });
+    expect(configDoOperador({ configs, setorId: 's1', equipeId: 'eq-x', operadorId: 'carla' }))
+      .toEqual({ config: excecaoX, doSetor: padraoS1, origem: 'equipe' });
   });
 
   it('sem exceção, vale o padrão do setor', () => {
-    expect(configDoOperador({ configs, setorId: 's1', equipeId: 'eq-y' }))
-      .toEqual({ config: padraoS1, doSetor: padraoS1 });
+    expect(configDoOperador({ configs, setorId: 's1', equipeId: 'eq-y', operadorId: 'carla' }))
+      .toEqual({ config: padraoS1, doSetor: padraoS1, origem: 'setor' });
+  });
+
+  it('a exceção por usuário vence a da equipe e o padrão — e a linha do setor continua a do padrão', () => {
+    expect(configDoOperador({ configs, setorId: 's1', equipeId: 'eq-x', operadorId: 'ana' }))
+      .toEqual({ config: individual, doSetor: padraoS1, origem: 'usuario' });
+    expect(configDoOperador({ configs, setorId: 's1', equipeId: 'eq-y', operadorId: 'bruno' }))
+      .toEqual({ config: individual, doSetor: padraoS1, origem: 'usuario' });
+  });
+
+  it('o grupo de usuários nunca é tomado pelo padrão do setor', () => {
+    // O grupo também tem equipe nula; vir antes na lista não pode fazê-lo virar padrão.
+    expect(configDoOperador({ configs, setorId: 's1', equipeId: null, operadorId: 'carla' }).doSetor)
+      .toBe(padraoS1);
   });
 
   it('setor sem configuração não herda de outro setor', () => {
     expect(configDoOperador({ configs, setorId: 's3', equipeId: null }))
-      .toEqual({ config: null, doSetor: null });
+      .toEqual({ config: null, doSetor: null, origem: null });
   });
 
   it('sem setor de origem não há configuração', () => {
     expect(configDoOperador({ configs, setorId: null, equipeId: 'eq-x' }))
-      .toEqual({ config: null, doSetor: null });
+      .toEqual({ config: null, doSetor: null, origem: null });
+  });
+});
+
+describe('a ordem usuário > equipe > setor, na comissão paga', () => {
+  // Setor 1,75%; equipe X 2,50%; exceção individual 3,00%. Uma meta só, batida.
+  const faixa = (pct: number) => [{ ordem: 1, pct, pctEspecial: null }];
+  const setor = config({ faixas: faixa(1.75), regraSetor: 'multiplicador', multiplicador: 2 });
+  const equipe = config({ id: 'cfg-x', equipeId: 'eq-x', faixas: faixa(2.5) });
+  const individual = config({ id: 'cfg-u', grupoUsuarios: true, usuarioIds: ['ana'], faixas: faixa(3) });
+  const configs = [setor, equipe, individual];
+
+  function comissaoDe(operadorId: string, equipeId: string | null, configsDoMes = configs) {
+    return calcularComissao(montarEntradaComissao({
+      meta: { meta_valor: 10_000, metas_extras: [] },
+      recebidoBruto: 20_000, recebidoHO: 0, recebidoIndiretoBruto: 0, isPaguePlay: false,
+      configs: configsDoMes, setorOrigemId: 's1', equipeOrigemId: equipeId, operadorId,
+    }));
+  }
+
+  it('quem não tem exceção recebe o % do setor', () => {
+    expect(comissaoDe('carla', 'eq-y').total).toBe(350);
+  });
+
+  it('a equipe com exceção recebe o % da equipe, não o do setor', () => {
+    expect(comissaoDe('bruno', 'eq-x').total).toBe(500);
+  });
+
+  it('a exceção individual não usa nem o % do setor nem o da equipe', () => {
+    const r = comissaoDe('ana', 'eq-x');
+    expect(r.total).toBe(600);
+    expect(r.origemConfig).toBe('usuario');
+  });
+
+  it('a regra do setor continua valendo para a exceção individual', () => {
+    const confirmado = { ...setor, setorMetaConfirmadaEm: CONFIRMADA };
+    const r = comissaoDe('ana', 'eq-x', [confirmado, equipe, individual]);
+    expect(r.beneficioAtivo).toBe(true);
+    expect(r.total).toBe(1_200);
   });
 });

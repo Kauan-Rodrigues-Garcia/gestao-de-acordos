@@ -80,15 +80,18 @@ export function PainelMetas({
    * Comissão da tela de Metas. A chave `dashboard_comissao` é conferida no hook.
    *
    * Sem meta ou sem configuração no mês não há card: um R$ 0,00 ali pareceria
-   * resultado — a mesma regra dos outros cards desta grade.
+   * resultado — a mesma regra dos outros cards desta grade. A exceção é quem
+   * tem bônus (16/09/2026): o card aparece para mostrá-lo.
    */
   const { perfil } = useAuth();
   const isPaguePlay = useTenant().isPaguePlay;
   const comissaoDaPessoa = !!perfil?.id && dados.operadorEmTela === perfil.id;
   const comissao = useMinhaComissao({ aberto: comissaoDaPessoa && !dados.carregando, mes });
   const resultadoComissao = comissao.podeVer && comissaoDaPessoa ? comissao.resultado : null;
-  const temCardComissao = !!resultadoComissao
-    && resultadoComissao.motivo !== 'sem_meta' && resultadoComissao.motivo !== 'sem_config';
+  const temCardComissao = !!resultadoComissao && (
+    (resultadoComissao.motivo !== 'sem_meta' && resultadoComissao.motivo !== 'sem_config')
+    || resultadoComissao.bonus.length > 0
+  );
 
   if (dados.carregando) {
     return (

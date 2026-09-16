@@ -12,6 +12,10 @@
  * A faixa atual mostra a comissão sobre o realizado; as outras, o mínimo que
  * pagam («a partir de»). As contas vêm prontas de `calcularComissao`.
  *
+ * Os bônus (16/09/2026) vêm depois da escada, à parte: não somam na comissão.
+ * Sem meta ou sem configuração no mês, a pessoa ainda pode ter bônus — o aviso
+ * aparece e os bônus também.
+ *
  * ## Dois lugares, uma conta
  *
  * Aparece no Dialog «Ver comissão», aberto pela aba Comissão da tela de Metas
@@ -25,6 +29,7 @@ import { ArrowRight, CheckCircle2, Circle, MinusCircle, Sparkles, Star } from 'l
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import type { FaixaComissao, ResultadoComissao } from '@/services/comissao/comissao';
+import { BonusDaPessoa } from './BonusDaPessoa';
 import { formatarPct } from './formato';
 
 interface ConteudoComissaoProps {
@@ -192,13 +197,18 @@ export function ConteudoComissao({ resultado: r, mesFechado, compacto = false }:
     ? `multiplicador ${r.multiplicador.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}×`
     : '% especial';
 
+  const bonus = <BonusDaPessoa bonus={r.bonus} totalBonus={r.totalBonus} mesFechado={mesFechado} />;
+
   if (r.motivo === 'sem_meta' || r.motivo === 'sem_config') {
     return (
-      <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-        {r.motivo === 'sem_meta'
-          ? 'Sem meta cadastrada neste mês — não há faixas de comissão.'
-          : 'A comissão deste mês ainda não foi configurada para este setor.'}
-      </p>
+      <div className="space-y-5">
+        <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+          {r.motivo === 'sem_meta'
+            ? 'Sem meta cadastrada neste mês — não há faixas de comissão.'
+            : 'A comissão deste mês ainda não foi configurada para este setor.'}
+        </p>
+        {bonus}
+      </div>
     );
   }
 
@@ -228,6 +238,12 @@ export function ConteudoComissao({ resultado: r, mesFechado, compacto = false }:
             : undefined}
         />
       </div>
+
+      {r.origemConfig === 'usuario' && (
+        <p className="text-xs text-muted-foreground">
+          Percentuais individuais — valem no lugar dos da equipe e do padrão do setor.
+        </p>
+      )}
 
       {/* ── Benefício do setor ──────────────────────────────────────────── */}
       {r.beneficioAtivo && (
@@ -328,6 +344,8 @@ export function ConteudoComissao({ resultado: r, mesFechado, compacto = false }:
       {r.indireta && (
         <p className="text-right text-sm font-semibold">{`Total ${formatBRL(r.total)}`}</p>
       )}
+
+      {bonus}
 
       <p className="text-[11px] text-muted-foreground">
         Comissão = valor realizado × percentual da maior faixa atingida. O percentual muda quando a

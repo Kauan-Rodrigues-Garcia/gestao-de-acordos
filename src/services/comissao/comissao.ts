@@ -42,6 +42,8 @@
  * Sem React, sem fetch. Os casos estão em `comissao.test.ts`.
  */
 
+import { calcularBonus, totalDosBonus, type BonusCalculado, type BonusComissao } from './bonus';
+
 export type ModoIndireta = 'junto' | 'separado';
 export type RegraSetor = 'nenhuma' | 'percentual_especial' | 'multiplicador';
 
@@ -53,12 +55,20 @@ export interface FaixaConfig {
   pctEspecial: number | null;
 }
 
-/** Uma configuração do mês: o padrão do setor (`equipeId` nulo) ou a exceção de uma equipe. */
+/**
+ * Uma configuração do mês: o padrão do setor (`equipeId` nulo), a exceção de
+ * uma equipe ou a exceção por usuário (`grupoUsuarios`, com as pessoas em
+ * `usuarioIds`).
+ */
 export interface ConfigComissao {
   id: string;
   empresaId: string;
   setorId: string;
   equipeId: string | null;
+  /** Exceção por usuário — passa na frente da equipe e do setor. */
+  grupoUsuarios: boolean;
+  /** Só na exceção por usuário: quem está nela. */
+  usuarioIds: string[];
   ano: number;
   mes: number;
   modoIndireta: ModoIndireta;
@@ -73,26 +83,40 @@ export interface ConfigComissao {
   faixas: FaixaConfig[];
 }
 
+/** De onde veio a configuração que vale para a pessoa. */
+export type OrigemConfig = 'usuario' | 'equipe' | 'setor';
+
 /**
  * A configuração que vale para um operador, e a linha do setor dele.
  *
+ * A ordem é usuário > equipe > setor (16/09/2026): quem está numa exceção por
+ * usuário ignora os percentuais da equipe e os do setor. A regra de quando o
+ * setor bate a meta continua sendo a da linha do setor, para todos.
+ *
  * `setorId` e `equipeId` são os de ORIGEM — o clone é calculado pelo usuário
- * original, nunca pela equipe que o tomou emprestado.
+ * original, nunca pela equipe que o tomou emprestado. A exceção por usuário é
+ * achada pela pessoa: o banco deixa cada uma em uma só por mês.
  */
 export function configDoOperador(params: {
   configs: readonly ConfigComissao[];
   setorId: string | null;
   equipeId: string | null;
-}): { config: ConfigComissao | null; doSetor: ConfigComissao | null } {
-  const { configs, setorId, equipeId } = params;
-  if (!setorId) return { config: null, doSetor: null };
+  operadorId?: string | null;
+}): { config: ConfigComissao | null; doSetor: ConfigComissao | null; origem: OrigemConfig | null } {
+  const { configs, setorId, equipeId, operadorId } = params;
+  if (!setorId) return { config: null, doSetor: null, origem: null };
 
-  const doSetor = configs.find(c => c.setorId === setorId && c.equipeId === null) ?? null;
-  const excecao = equipeId
+  const doSetor = configs.find(c => c.setorId === setorId && c.equipeId === null && !c.grupoUsuarios) ?? null;
+  const individual = operadorId
+    ? configs.find(c => c.grupoUsuarios && c.usuarioIds.includes(operadorId)) ?? null
+    : null;
+  const daEquipe = equipeId
     ? configs.find(c => c.setorId === setorId && c.equipeId === equipeId) ?? null
     : null;
 
-  return { config: excecao ?? doSetor, doSetor };
+  if (individual) return { config: individual, doSetor, origem: 'usuario' };
+  if (daEquipe) return { config: daEquipe, doSetor, origem: 'equipe' };
+  return { config: doSetor, doSetor, origem: doSetor ? 'setor' : null };
 }
 
 export interface EntradaComissao {
@@ -112,6 +136,14 @@ export interface EntradaComissao {
   config: ConfigComissao | null;
   /** A linha do setor: dona da regra e da confirmação. */
   doSetor: ConfigComissao | null;
+  /** Por que esta configuração — ver `configDoOperador`. */
+  origemConfig?: OrigemConfig | null;
+  /** Os bônus da pessoa no mês. Ausente = nenhum. */
+  bonus?: readonly BonusComissao[];
+  /** `yyyy-MM-dd` → realizado direto do dia, na unidade. Só a meta especial lê. */
+  recebidoPorDia?: Readonly<Record<string, number>> | null;
+  /** `yyyy-MM-dd` — decide «em andamento» × «não atingido» do bônus. */
+  hoje?: string;
 }
 
 export type SituacaoFaixa = 'atingida' | 'atual' | 'proxima' | 'nao_atingida';
@@ -189,10 +221,16 @@ export interface ResultadoComissao {
   beneficioAtivo: boolean;
   confirmadaEm: string | null;
   confirmadaPorNome: string | null;
-  /** Faixa atual + indireta. */
+  /** Faixa atual + indireta. O bônus NÃO entra aqui. */
   total: number;
   /** O mesmo total sem o benefício — o «anterior» da tela. */
   totalNormal: number;
+  /** De onde vieram os percentuais: exceção por usuário, de equipe ou o padrão. */
+  origemConfig: OrigemConfig | null;
+  /** Os bônus da pessoa, com a situação de cada um. */
+  bonus: BonusCalculado[];
+  /** Soma dos bônus já atingidos. */
+  totalBonus: number;
 }
 
 /** Centavos inteiros: a unidade em que se compara e se arredonda. */
@@ -260,35 +298,11 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
     confirmadaPorNome: doSetor?.setorMetaConfirmadaPorNome ?? null,
   };
 
-  const semComissao = (motivo: MotivoSemComissao): ResultadoComissao => ({
-    motivo,
-    modoIndireta: null,
-    recebido: arredondar(Number(entrada.recebidoDireto) || 0),
-    faixas: [],
-    atual: null,
-    proxima: null,
-    indireta: null,
-    ...doCabecalho,
-    total: 0,
-    totalNormal: 0,
-  });
-
-  const metaBruta = Number(entrada.metaBruta) || 0;
-  if (metaBruta <= 0) return semComissao('sem_meta');
-  if (!config) return semComissao('sem_config');
-
-  const beneficio: Beneficio = { ativo: beneficioAtivo, regra: regraSetor, multiplicador };
-  // O mesmo benefício como se a confirmação já existisse — só para a tela contar
-  // ao operador o que muda quando o setor bater a meta.
-  const beneficioHipotetico: Beneficio = {
-    ativo: temRegraSetor && (regraSetor !== 'multiplicador' || (multiplicador !== null && multiplicador > 0)),
-    regra: regraSetor,
-    multiplicador,
-  };
-
   // ── A frente indireta decide o que as faixas medem ─────────────────────────
+  // Sem configuração não há modo: as faixas (e o bônus) medem só a direta.
+  const metaBruta = Number(entrada.metaBruta) || 0;
   const metaIndiretaBruta = Number(entrada.metaIndiretaBruta) || 0;
-  const modoIndireta: ModoIndireta | null = metaIndiretaBruta > 0 ? config.modoIndireta : null;
+  const modoIndireta: ModoIndireta | null = config && metaIndiretaBruta > 0 ? config.modoIndireta : null;
   const recebidoIndireto = arredondar((Number(entrada.recebidoIndiretoBruto) || 0) * fatorUnidade);
   const recebidoDireto = Number(entrada.recebidoDireto) || 0;
   const recebido = arredondar(
@@ -300,9 +314,50 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
   const extras = entrada.metasExtrasBrutas
     .map(v => Number(v) || 0)
     .filter(v => v > 0);
-  const degraus = [primeira, ...extras]
-    .map(v => arredondar(v * fatorUnidade))
-    .sort((a, b) => a - b);
+  const degraus = metaBruta > 0
+    ? [primeira, ...extras].map(v => arredondar(v * fatorUnidade)).sort((a, b) => a - b)
+    : [];
+
+  // ── Bônus: independe de haver configuração de percentuais ──────────────────
+  const bonus = calcularBonus({
+    bonus: entrada.bonus ?? [],
+    degraus: degraus.map((meta, i) => ({ ordem: i + 1, meta })),
+    recebido,
+    fatorUnidade,
+    recebidoPorDia: entrada.recebidoPorDia ?? null,
+    hoje: entrada.hoje ?? new Date().toISOString().slice(0, 10),
+  });
+  const doBonus = {
+    origemConfig: config ? (entrada.origemConfig ?? null) : null,
+    bonus,
+    totalBonus: totalDosBonus(bonus),
+  };
+
+  const semComissao = (motivo: MotivoSemComissao): ResultadoComissao => ({
+    motivo,
+    modoIndireta: null,
+    recebido,
+    faixas: [],
+    atual: null,
+    proxima: null,
+    indireta: null,
+    ...doCabecalho,
+    total: 0,
+    totalNormal: 0,
+    ...doBonus,
+  });
+
+  if (metaBruta <= 0) return semComissao('sem_meta');
+  if (!config) return semComissao('sem_config');
+
+  const beneficio: Beneficio = { ativo: beneficioAtivo, regra: regraSetor, multiplicador };
+  // O mesmo benefício como se a confirmação já existisse — só para a tela contar
+  // ao operador o que muda quando o setor bater a meta.
+  const beneficioHipotetico: Beneficio = {
+    ativo: temRegraSetor && (regraSetor !== 'multiplicador' || (multiplicador !== null && multiplicador > 0)),
+    regra: regraSetor,
+    multiplicador,
+  };
 
   const faixaDaOrdem = new Map(config.faixas.map(f => [f.ordem, f]));
 
@@ -388,5 +443,6 @@ export function calcularComissao(entrada: EntradaComissao): ResultadoComissao {
     ...doCabecalho,
     total: arredondar((atual?.comissao ?? 0) + (indireta?.comissao ?? 0)),
     totalNormal: arredondar((atual?.comissaoNormal ?? 0) + (indireta?.comissaoNormal ?? 0)),
+    ...doBonus,
   };
 }

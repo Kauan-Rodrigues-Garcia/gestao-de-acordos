@@ -23,16 +23,25 @@
  * indireta faziam este card e o vizinho andarem juntos. A escada rola por dentro
  * quando não cabe.
  *
+ * ## Bônus (16/09/2026)
+ *
+ * Cada bônus da pessoa entra na mesma lista rolável, depois das faixas, com o
+ * valor e a situação. O detalhe — quanto falta, período — fica no «Ver
+ * comissão». Sem faixas no mês (sem meta ou sem configuração) e com bônus, o
+ * card existe só por causa deles.
+ *
  * Só desenha. Quem decide se o card existe é o `PainelMetas`.
  */
 import { useState } from 'react';
-import { ArrowRight, CheckCircle2, Circle, Coins, Sparkles, Star } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle, Coins, Gift, Sparkles, Star } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { ALTURA_CARD_PROGRESSO } from '@/components/PainelMetas/tamanhoCards';
+import type { BonusCalculado } from '@/services/comissao/bonus';
 import type { FaixaComissao, ResultadoComissao } from '@/services/comissao/comissao';
+import { SITUACAO_BONUS, diaMes } from './bonusTexto';
 import { formatarPct } from './formato';
 import { VerComissao } from './VerComissao';
 
@@ -77,6 +86,31 @@ function LinhaFaixa({ faixa }: { faixa: FaixaComissao }) {
   );
 }
 
+function rotuloCurtoDoBonus(b: BonusCalculado): string {
+  if (b.tipo === 'meta') return `Bônus ${b.metaOrdem}ª Meta`;
+  if (b.tipo === 'valor') return `Bônus ${b.alvo !== null ? formatBRL(b.alvo) : ''}`;
+  return `Bônus ${diaMes(b.periodoInicio)}–${diaMes(b.periodoFim)}`;
+}
+
+function LinhaBonus({ bonus: b }: { bonus: BonusCalculado }) {
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs',
+        b.atingido ? 'bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/30' : 'bg-muted/30',
+      )}
+    >
+      {b.atingido
+        ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label={SITUACAO_BONUS[b.situacao]} />
+        : <Gift className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-label={SITUACAO_BONUS[b.situacao]} />}
+      <span className="min-w-0 flex-1 truncate font-medium">{rotuloCurtoDoBonus(b)}</span>
+      <span className={cn('shrink-0 text-right font-mono tabular-nums', b.atingido && 'font-bold text-emerald-700 dark:text-emerald-400')}>
+        {`+${formatBRL(b.valorBonus)}`}
+      </span>
+    </li>
+  );
+}
+
 export function CardComissaoDashboard({
   resultado: r, isPaguePlay, mesFechado, mes, nome,
 }: CardComissaoDashboardProps) {
@@ -100,6 +134,7 @@ export function CardComissaoDashboard({
   }
 
   const indireta = r.indireta && r.indireta.comissao > 0 ? r.indireta.comissao : 0;
+  const semFaixas = r.motivo === 'sem_meta' || r.motivo === 'sem_config';
 
   return (
     <Card data-card-comissao className={cn('flex flex-col border-border/70 bg-card shadow-sm', ALTURA_CARD_PROGRESSO)}>
@@ -135,17 +170,23 @@ export function CardComissaoDashboard({
             className="font-mono text-2xl font-bold leading-tight tabular-nums"
             style={r.atual || r.total > 0 ? { color: cor } : undefined}
           >
-            {r.atual || r.total > 0 ? formatBRL(r.total) : 'Nenhuma faixa ainda'}
+            {semFaixas ? 'Sem faixas no mês' : r.atual || r.total > 0 ? formatBRL(r.total) : 'Nenhuma faixa ainda'}
           </p>
           {apoio && <p className="text-[11px] text-muted-foreground">{apoio}</p>}
           {indireta > 0 && (
             <p className="text-[11px] text-muted-foreground">{`inclui ${formatBRL(indireta)} da indireta`}</p>
           )}
+          {r.totalBonus > 0 && (
+            <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+              {`+ ${formatBRL(r.totalBonus)} de bônus garantido`}
+            </p>
+          )}
         </div>
 
-        {r.faixas.length > 0 && (
+        {(r.faixas.length > 0 || r.bonus.length > 0) && (
           <ol className="min-h-0 space-y-1 overflow-y-auto" aria-label="Faixas de comissão">
             {r.faixas.map(f => <LinhaFaixa key={f.ordem} faixa={f} />)}
+            {r.bonus.map(b => <LinhaBonus key={b.id} bonus={b} />)}
           </ol>
         )}
 

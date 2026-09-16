@@ -20,7 +20,8 @@ vi.mock('./VerComissao', () => ({
 
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   return {
-    id: 'cfg', empresaId: 'e1', setorId: 's1', equipeId: null, ano: 2026, mes: 9,
+    id: 'cfg', empresaId: 'e1', setorId: 's1', equipeId: null, grupoUsuarios: false, usuarioIds: [],
+    ano: 2026, mes: 9,
     modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,
     setorMetaConfirmadaEm: null, setorMetaConfirmadaPor: null, setorMetaConfirmadaPorNome: null,
@@ -109,6 +110,41 @@ describe('CardComissaoDashboard', () => {
     desenhar();
     const card = screen.getByRole('list', { name: 'Faixas de comissão' }).closest('[data-card-comissao]');
     expect(card?.className).toContain(ALTURA_CARD_PROGRESSO);
+  });
+
+  it('bônus: uma linha por bônus, e o garantido embaixo do valor', () => {
+    const r = resultado({
+      recebidoDireto: 43_000,
+      hoje: '2026-09-16',
+      bonus: [
+        {
+          id: 'b1', empresaId: 'e1', setorId: 's1', ano: 2026, mes: 9, tipo: 'meta', metaOrdem: 4,
+          valorAlvo: null, periodoInicio: null, periodoFim: null, valorBonus: 200, descricao: null, usuarioIds: ['ana'],
+        },
+        {
+          id: 'b2', empresaId: 'e1', setorId: 's1', ano: 2026, mes: 9, tipo: 'valor', metaOrdem: null,
+          valorAlvo: 200_000, periodoInicio: null, periodoFim: null, valorBonus: 500, descricao: null, usuarioIds: ['ana'],
+        },
+      ],
+    });
+    desenhar({ resultado: r });
+    expect(r.total).toBe(1_732.9);
+    expect(texto()).toContain(`+ ${formatBRL(200)} de bônus garantido`.replace(/\s+/g, ' '));
+    expect(texto()).toContain('Bônus 4ª Meta');
+    expect(texto()).toContain(`+${formatBRL(500)}`.replace(/\s+/g, ' '));
+  });
+
+  it('sem faixas no mês e com bônus, o card mostra o bônus', () => {
+    const r = resultado({
+      config: null, doSetor: null, hoje: '2026-09-16',
+      bonus: [{
+        id: 'b1', empresaId: 'e1', setorId: 's1', ano: 2026, mes: 9, tipo: 'valor', metaOrdem: null,
+        valorAlvo: 30_000, periodoInicio: null, periodoFim: null, valorBonus: 150, descricao: null, usuarioIds: ['ana'],
+      }],
+    });
+    desenhar({ resultado: r });
+    expect(texto()).toContain('Sem faixas no mês');
+    expect(texto()).toContain(`+ ${formatBRL(150)} de bônus garantido`.replace(/\s+/g, ' '));
   });
 
   it('«Ver comissão» abre a tela completa', () => {
