@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { carregarResumo, excluirRelatorio, importarRelatorio } from '@/services/relatorioPaguePlay/service';
 import { diaAnterior, formatarCentavos, validarPeriodo, type Modalidade, type RelatorioLido, type ResumoSalvo } from '@/services/relatorioPaguePlay/modelo';
@@ -22,6 +23,7 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [ocupado, setOcupado] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [progresso, setProgresso] = useState(0);
   const [arquivo, setArquivo] = useState<{ nome: string; dados: RelatorioLido } | null>(null);
@@ -110,6 +112,15 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
     finally { setOcupado(false); }
   }
 
+  async function baixarAcumulado() {
+    setExportando(true); setAviso('');
+    try {
+      const { baixarAcumuladoMensal } = await import('@/services/relatorioPaguePlay/baixarAcumulado');
+      await baixarAcumuladoMensal(empresaId);
+    } catch (e) { setAviso(`Não foi possível gerar a planilha: ${mensagemErro(e)}`); }
+    finally { setExportando(false); }
+  }
+
   async function excluir() {
     if (!exclusao || (exclusao === 'mes' && !mes)) return;
     setOcupado(true); setAviso('');
@@ -127,6 +138,12 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
         {(['pagamento', 'conciliacao'] as const).map(m => <Button key={m} variant={m === modo ? 'default' : 'outline'} disabled={ocupado} onClick={() => setModo(m)}>{m === 'pagamento' ? 'Pagamento' : 'Conciliação'}</Button>)}
         <Button variant="outline" disabled={ocupado} onClick={() => input.current?.click()}>Importar relatório de {nome(modo)}</Button>
         <input ref={input} type="file" accept=".xlsx,.xls" className="hidden" aria-label={`Arquivo de ${nome(modo)}`} onChange={e => void selecionar(e.target.files?.[0])} />
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button variant="outline" disabled={exportando || !empresaId} onClick={() => void baixarAcumulado()}
+            title="Busca o histórico salvo de pagamento e de conciliação e baixa o acumulado por mês, por estado, em Excel">
+            <FileSpreadsheet className="h-4 w-4" />{exportando ? 'Gerando planilha…' : 'Baixar acumulado por mês (Excel)'}
+          </Button>
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">Históricos independentes. Os valores de Pague Play, Coren e Cofen vêm das colunas do relatório; os percentuais exibem a participação desses valores no total.</p>
       <p className="text-sm">{resumo?.primeiraImportacaoPendente ? `Primeira atualização de hoje: importe ${dataBR(diaAnterior(hoje))} e ${dataBR(hoje)} juntos. Cargas históricas até ontem também são permitidas e não liberam essa atualização.` : resumo ? 'Ontem já foi atualizado hoje. As próximas importações podem conter somente hoje.' : 'Carregue um arquivo para conferir a prévia.'}</p>
