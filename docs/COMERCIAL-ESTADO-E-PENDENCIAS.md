@@ -1,10 +1,11 @@
 # Comercial / Vendas — estado e pendências
 
 > **Escrito para quem pega isto do zero**, humano ou agente. Fechado em
-> **15/09/2026** e reescrito no mesmo dia, duas vezes: com a continuação da
-> Fase 7 e a Fase 8 (aplicadas em produção pelo MCP, §3) e depois com a
-> **Fase 9** — painéis e herança, commit `d6ce7ee`, **código no repo e
-> migration ainda NÃO aplicada** (§6.3). O plano original continua em
+> **15/09/2026** e reescrito no mesmo dia, três vezes: com a continuação da
+> Fase 7 e a Fase 8, com a **Fase 9** (painéis e herança) e, por último, com a
+> **reforma do Dashboard** (§4, Fase 10) — pedida na mesma noite, depois de a
+> tela da Fase 9 ser vista em uso. **As nove migrations estão aplicadas e
+> registradas** (§3); a Fase 10 não tem migration. O plano original continua em
 > [`PLANO-COMERCIAL-VENDAS.md`](PLANO-COMERCIAL-VENDAS.md) — este arquivo diz
 > o que daquilo virou realidade, o que mudou de ideia pelo caminho e o que
 > falta, com detalhe suficiente para continuar sem reabrir a investigação.
@@ -385,6 +386,86 @@ no fechamento». O **filtro** da lista continua mostrando todas de propósito: o
 formulário decide o que se pode abrir hoje, o filtro precisa alcançar o que já
 foi aberto.
 
+### Fase 10 — o Dashboard refeito (sem migration)
+
+Pedido na noite de 15/09/2026, com a Fase 9 já no ar: *«painel líder, dashboard,
+vendas mostram quase exatamente as mesmas informações… já existe um dashboard no
+projeto, para BookPlay e PaguePlay — quero a mesma estética, com informações do
+Comercial»*.
+
+**Os dois defeitos eram reais e mediram-se na tela:**
+
+1. **Estética.** O Dashboard da Fase 9 era `KpiTile` chapado, `Bloco` de borda
+   fina e barra de `div`. O da cobrança tem anel de meta em recharts, gráfico
+   composto, cards com barra de acento e gradiente, animação de entrada e
+   número que anda até o valor novo.
+2. **Repetição.** Os quatro números do topo eram **os mesmos** da aba Vendas
+   (`Faturamento`, `Vendas na meta`, `Recebido`, `Devolução/cancelamento`), e o
+   ranking de doze linhas era a lista do Painel Líder cortada, sem as ações.
+
+**A regra da reforma: usar as PEÇAS do painel da cobrança, nunca copiá-las.**
+`MetricCard`, `DonutChart`, `AnelProjecao`, `FaixaDiasUteis`, `MiniSparkline`,
+`SkeletonCard`, `opacidadeDaBarra`, `ALTURA_CARD_PROGRESSO`, `corDaMeta`,
+`BREAKDOWN_COLORS` e `containerVariants` são importados de
+`@/components/AnalyticsPanel` e `@/components/PainelMetas`. Uma cópia visual
+começaria idêntica e divergiria no primeiro ajuste de lá.
+
+**O que cada tela responde agora**, que é a parte que resolve a repetição:
+
+| tela | a pergunta |
+|---|---|
+| **Dashboard** | como o mês está indo, no conjunto |
+| Painel Líder | o que eu faço agora — fila de assinatura, pessoa a pessoa, com as ações |
+| aba Vendas | o que entrou hoje — a lista por dia |
+| Fechamento | a conta fecha? |
+
+**Trocas concretas:**
+
+- Ranking de 12 linhas → **pódio de 3**, com barra de distância entre os
+  degraus e «ver todos (N)» para o Painel Líder. A versão cortada de uma tela
+  que existe inteira noutro lugar não é resumo, é repetição.
+- Bloco «Automação» com parágrafo → **faixa de uma linha** (quantos robôs,
+  quanto, que fração do mês).
+- «Fora da meta» como fileira de etiquetas → **anel «Onde as vendas pararam»**,
+  onde a fatia tem o tamanho do dinheiro. 9 pendentes e 131 na régua ocupavam o
+  mesmo espaço visual antes.
+- Barras de `div` do dia a dia → **`EvolucaoVendas`**: barra do dia + linha do
+  acumulado **em eixo próprio** (um dia bom faz R$ 80 mil, o mês fecha em
+  R$ 740 mil — no mesmo eixo a linha achata as barras) + régua tracejada na
+  meta diária.
+
+**Contas novas, em `src/lib/vendasDashboard.ts`** — nenhuma delas aparece em
+outra aba, que é o ponto: `ticketMedio`, `aproveitamento`
+(quanto do confirmado ficou de pé), `coberturaDeRecebimento` (faturado × o que
+entrou de verdade — 6% em 15/09, e sem essa linha alguém acha que um dos dois
+cards está quebrado), `serieDoMes` (preenche o dia vazio e acumula) e
+`variacao`.
+
+**As setas de tendência são de verdade.** No painel da cobrança `trend="up"`
+está escrito na mão em todo card. Aqui a seta só existe quando há o mesmo
+número no mês anterior — e `variacao()` devolve `null` contra base zero, senão
+todo card abriria em «+100%» contra um agosto que ninguém importou.
+
+**Sem meta, o anel abre na régua e convida a configurar.** O Comercial tem
+**zero metas configuradas** (§6.1): um anel em 0% com «R$ 0,00 de R$ 0,00» se lê
+como mês ruim, não como configuração faltando.
+
+**O banco não foi tocado.** Nenhuma migration, nenhuma escrita — tudo o que a
+tela mostra já vinha de `useVendas`, `fn_vendas_placar_pessoas` e
+`buscarMetasDoMes`. A leitura de conferência mostrou também que a pendência de
+permissões de §6.3 **já não existe**: `ver_vendas`, `ver_painel_lider`,
+`ver_metas_vendas` e `ver_indicacoes` estão ligadas nos cargos do Comercial
+(`operador` sem `ver_painel_lider`, que é o certo).
+
+`src/pages/Vendas/__tests__/DashboardComercial.test.tsx` prende as decisões que
+regridem sem aparecer: o pódio de três, o «ver todos» que some sem a chave, o
+robô fora do pódio e o convite de meta no lugar do 0%.
+
+> ⚠️ **Cilada do arquivo de teste.** Mockar `recharts` com um `Proxy` que
+> responde a qualquer nome faz o módulo responder a `then` — e um módulo com
+> `then` é um *thenable*: o `await import()` do vitest espera para sempre e a
+> suíte trava **sem mensagem nenhuma**. Liste as peças.
+
 ### Correções dentro da sessão
 
 | commit | o que |
@@ -489,13 +570,14 @@ máquina. `Planilha Mensal.xlsx` **não** foi relida — o plano já a descrevia
       no Comercial, mas o ranking vem zerado: `fn_desafio_dados` calcula sobre
       `analitico_recebimentos`, que é a tabela da cobrança. A tela diz isso em
       cima, em vez de mostrar um pódio de zeros. Ver §6.4.
-- [ ] **Ligar as chaves nos cargos do Comercial.** `ver_painel_lider`,
-      `ver_painel_diretoria`, `ver_lixeira`, `ver_tickets` e
-      `analitico_sub_desafios` são **reusadas** da cobrança: existem no
-      catálogo, mas podem estar desligadas nos cargos desta empresa — o seed
-      usa `ON CONFLICT DO NOTHING`, e empresa nova já nasceu com
-      `cargos_permissoes` vazio antes. É clique em Configurações →
-      Permissões, não código.
+- [x] **Ligar as chaves nos cargos do Comercial.** Conferido no banco em
+      15/09/2026 (leitura autorizada, na sessão do Dashboard): **já estão
+      ligadas**. `ver_vendas`, `ver_painel_lider`, `ver_metas_vendas` e
+      `ver_indicacoes` valem `true` em `administrador`, `diretoria`, `elite`,
+      `gerencia`, `lider` e `super_admin`; `operador` tem tudo menos
+      `ver_painel_lider`, que é o recorte certo. `assistente_adm` e
+      `ouvidoria` estão fora do Comercial por desenho. O medo era o
+      `ON CONFLICT DO NOTHING` do seed — ele não mordeu aqui.
 
 **A decisão que estrutura a fase: rota própria, chave compartilhada.**
 
@@ -566,6 +648,7 @@ supabase/migrations/20260915*.sql      as 14 migrations (cabeçalhos longos, lei
 src/lib/vendas.ts                      régua, gavetas, pareceLoginDeIa
 src/lib/vendasMeta.ts                  progresso, ritmo e a meta proporcional à presença
 src/lib/vendasPlacar.ts                ranking, estados, formas, destaque do dia, série diária
+src/lib/vendasDashboard.ts             ticket médio, aproveitamento, cobertura, acumulado, variação
 src/lib/vendasFechamento.ts            as 4 igualdades que têm que fechar
 src/lib/indicacoes.ts                  parse da colagem, repetidas
 src/lib/ausencias.ts                   tipos (espelho de ausencias_tipos), dias, sobreposição
@@ -591,7 +674,14 @@ src/pages/Vendas/
   DashboardComercial  PainelLiderComercial  PainelDiretoriaComercial
   LixeiraVendas  DesafiosComercial  componentes.tsx (Bloco, Faixa, Barra…)
 
+src/pages/Vendas/dashboard/            só a Fase 10 — nada aqui calcula
+  CardsDoMes.tsx                       a grade de MetricCard
+  CardDoMes.tsx                        o anel de 3 vistas (meta / régua / formas)
+  EvolucaoVendas.tsx                   barra do dia + acumulado + meta diária
+  ComposicaoDoMes.tsx                  pódio, equipes, estados, faixa da automação
+
 src/hooks/useVendasPlacar.ts           o cadastro + a presença de cada recorte
+src/hooks/useVendasMesAnterior.ts      só o resumo do mês passado, para as setas
 ```
 
 **Rotas:** `/` (Dashboard) · `/vendas` · `/vendas/importar` · `/vendas/metas` ·
@@ -618,4 +708,5 @@ src/hooks/useVendasPlacar.ts           o cadastro + a presença de cada recorte
   gráfico apaga sem erro. Por isso o gráfico de Indicações é CSS puro.
 - **`numerosSituacoesPrazo.sql.test.ts`** falhava por `core.autocrlf=true` na
   máquina da sessão anterior. Nesta máquina passa.
-  Suíte após a Fase 9: **6.436 de 6.436 verdes**, `tsc` e `eslint` limpos.
+  Suíte após a Fase 10: **6.465 de 6.465 verdes** em 379 arquivos, `tsc`,
+  `eslint` e `npm run build` limpos.
