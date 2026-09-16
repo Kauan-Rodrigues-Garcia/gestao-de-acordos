@@ -14,7 +14,7 @@ import { registrarLog } from '@/services/logs.service';
 import { montarAcumuladoMensal } from './acumuladoMensal';
 import { carregarResumo } from './service';
 import type { ResumoSalvo } from './modelo';
-import { montarPlanilhaAcumulado, PALETA_CONCILIACAO, PALETA_PAGAMENTO, type AbaAcumulado } from './planilhaAcumulado';
+import { montarPlanilhaAcumulado, PALETA_CONCILIACAO, PALETA_PAGAMENTO, PALETA_PAGUEPLAY, type AbaAcumulado } from './planilhaAcumulado';
 
 const FUSO = 'America/Sao_Paulo';
 const dataHora = (d: Date) => {
@@ -35,6 +35,7 @@ export function abasAcumulado(pagamento: ResumoSalvo, conciliacao: ResumoSalvo, 
       titulo: 'Acumulado por mês',
       subtitulo: 'PaguePlay  ·  Relatório de pagamento  ·  por estado (COREN)',
       nota: nota(pagamento, geradoEm),
+      rotuloTotal: 'TOTAL RECEBIDO',
       paleta: PALETA_PAGAMENTO,
       anos: montarAcumuladoMensal(pagamento.grupos),
     },
@@ -43,8 +44,20 @@ export function abasAcumulado(pagamento: ResumoSalvo, conciliacao: ResumoSalvo, 
       titulo: 'Acumulado por mês (sem cartão de crédito)',
       subtitulo: 'PaguePlay  ·  Relatório de conciliação  ·  por estado (COREN)',
       nota: nota(conciliacao, geradoEm),
+      rotuloTotal: 'TOTAL RECEBIDO',
       paleta: PALETA_CONCILIACAO,
       anos: montarAcumuladoMensal(conciliacao.grupos),
+    },
+    // A mesma conciliação, só com a coluna Pague Play (HO): o que ficou para a
+    // PaguePlay de cada estado, mês a mês (pedido de 16/09/2026).
+    {
+      nome: 'PaguePlay sem cartão de crédito',
+      titulo: 'PaguePlay · Acumulado por mês (sem cartão de crédito)',
+      subtitulo: 'Valores da PaguePlay (HO)  ·  Relatório de conciliação  ·  por estado (COREN)',
+      nota: nota(conciliacao, geradoEm),
+      rotuloTotal: 'TOTAL PAGUEPLAY',
+      paleta: PALETA_PAGUEPLAY,
+      anos: montarAcumuladoMensal(conciliacao.grupos, 'pp'),
     },
   ];
 }
@@ -61,11 +74,11 @@ export async function baixarAcumuladoMensal(empresaId: string): Promise<void> {
   const nome = nomeArquivoAcumulado(pagamento.hoje);
   baixarArquivo(montarPlanilhaAcumulado(abas, 'PaguePlay · Acumulado por mês', geradoEm), nome, TIPO_XLSX);
 
-  const [abaPagamento, abaConciliacao] = abas;
+  const [abaPagamento, abaConciliacao, abaPaguePlay] = abas;
   void registrarLog({
     acao: 'relatorio_pagueplay_acumulado_baixado',
     categoria: 'financeiro',
-    descricao: 'Baixou o Acumulado por mês do Relatório PaguePlay em Excel (pagamento e conciliação)',
+    descricao: 'Baixou o Acumulado por mês do Relatório PaguePlay em Excel (pagamento, conciliação e parte da PaguePlay)',
     empresaId,
     alvoTipo: 'relatorio_pagueplay',
     alvoRotulo: 'Acumulado por mês',
@@ -75,6 +88,7 @@ export async function baixarAcumuladoMensal(empresaId: string): Promise<void> {
       anos_conciliacao: abaConciliacao.anos.map(a => a.ano),
       total_pagamento_centavos: abaPagamento.anos.reduce((s, a) => s + a.total, 0),
       total_conciliacao_centavos: abaConciliacao.anos.reduce((s, a) => s + a.total, 0),
+      total_pagueplay_conciliacao_centavos: abaPaguePlay.anos.reduce((s, a) => s + a.total, 0),
     },
   });
 }

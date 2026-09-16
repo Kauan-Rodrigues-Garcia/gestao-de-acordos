@@ -4,7 +4,9 @@
  * Pedido de 16/09/2026: um botão no Relatório PaguePlay do Painel Diretoria que
  * baixa o acumulado por mês «com estética profissional, não uma planilha simples»,
  * numa aba o relatório de pagamento e noutra o de conciliação (sem cartão de
- * crédito), por estado, como a tabela da tela.
+ * crédito), por estado, como a tabela da tela. Ajuste do mesmo dia: sem a
+ * coluna «% do ano», e uma terceira aba só com a parte da PaguePlay (HO) da
+ * conciliação, em degradê de verde para azul.
  *
  * ## Por que o XML é escrito aqui
  *
@@ -15,7 +17,7 @@
  *
  * ## Totais são fórmula com valor pronto
  *
- * Total da linha, total do mês e participação saem como `SUM`/`IF` — quem
+ * Total da linha e total do mês saem como `SUM` — quem
  * receber o arquivo e corrigir uma célula vê o total acompanhar. Cada fórmula
  * leva o valor já calculado (`<v>`), para que visualizadores sem motor de
  * cálculo (prévia do WhatsApp, Google Drive) mostrem os números; o Excel
@@ -37,11 +39,24 @@ export interface Paleta {
   faixa: string;
   /** Texto secundário sobre o escuro. */
   subtitulo: string;
+  /**
+   * Cores da ponta direita, para um degradê horizontal. Sem isso, cor lisa.
+   * Faixas mescladas usam `gradientFill`; cabeçalho e rodapé são células
+   * soltas, e cada uma recebe o tom da sua coluna — um degradê por célula
+   * repetiria a listra quinze vezes.
+   */
+  degrade?: Pick<Paleta, 'escuro' | 'cabecalho' | 'faixa'>;
 }
 
 /** As cores do próprio relatório: Pagamento é o tema verde, Conciliação o azul. */
 export const PALETA_PAGAMENTO: Paleta = { escuro: '14532D', cabecalho: '166534', acento: '15803D', faixa: 'DCFCE7', subtitulo: 'BBF7D0' };
 export const PALETA_CONCILIACAO: Paleta = { escuro: '1E3A8A', cabecalho: '1D4ED8', acento: '1D4ED8', faixa: 'DBEAFE', subtitulo: 'BFDBFE' };
+/** A parte da PaguePlay na conciliação: do verde ao azul, destaque no meio-termo. */
+export const PALETA_PAGUEPLAY: Paleta = {
+  escuro: PALETA_PAGAMENTO.escuro, cabecalho: PALETA_PAGAMENTO.cabecalho, faixa: PALETA_PAGAMENTO.faixa,
+  acento: '0F766E', subtitulo: 'CCFBF1',
+  degrade: { escuro: PALETA_CONCILIACAO.escuro, cabecalho: PALETA_CONCILIACAO.cabecalho, faixa: PALETA_CONCILIACAO.faixa },
+};
 
 export interface AbaAcumulado {
   /** Nome da aba (até 31 caracteres, sem `[]:*?/\`). */
@@ -50,6 +65,8 @@ export interface AbaAcumulado {
   subtitulo: string;
   /** Linha fina abaixo do título: quando foi gerado, de onde vêm os números. */
   nota: string;
+  /** Rótulo da linha de total de cada ano. */
+  rotuloTotal: string;
   paleta: Paleta;
   anos: AnoAcumulado[];
 }
@@ -66,16 +83,17 @@ const ZEBRA = 'F8FAFC';
 
 /** Zero vira «–», como o «—» da tela; negativo (estorno) em vermelho. */
 const FORMATO_BRL = '"R$" #,##0.00;[Red]\\-"R$" #,##0.00;"–"';
-const FORMATO_PCT = '0.0%;[Red]\\-0.0%;"–"';
-const ID_FORMATO: Record<string, number> = { [FORMATO_BRL]: 164, [FORMATO_PCT]: 165 };
+const ID_FORMATO: Record<string, number> = { [FORMATO_BRL]: 164 };
 
 type Borda = { estilo: 'thin' | 'medium'; cor: string };
+/** Cor lisa, ou degradê da esquerda (`de`) para a direita (`para`). */
+type Fundo = string | { de: string; para: string };
 interface Estilo {
   tamanho?: number;
   negrito?: boolean;
   italico?: boolean;
   cor?: string;
-  fundo?: string;
+  fundo?: Fundo;
   formato?: string;
   horizontal?: 'left' | 'center' | 'right';
   recuo?: number;
@@ -104,9 +122,10 @@ class Estilos {
 
     const fonte = this.indice(this.fontes, `<font>${e.negrito ? '<b/>' : ''}${e.italico ? '<i/>' : ''}`
       + `<sz val="${e.tamanho ?? 10}"/><color rgb="FF${e.cor ?? TEXTO}"/><name val="${FONTE}"/><family val="2"/></font>`);
-    const fundo = e.fundo
-      ? this.indice(this.fundos, `<fill><patternFill patternType="solid"><fgColor rgb="FF${e.fundo}"/><bgColor indexed="64"/></patternFill></fill>`)
-      : 0;
+    const fundo = !e.fundo ? 0 : this.indice(this.fundos, typeof e.fundo === 'string'
+      ? `<fill><patternFill patternType="solid"><fgColor rgb="FF${e.fundo}"/><bgColor indexed="64"/></patternFill></fill>`
+      : `<fill><gradientFill degree="0"><stop position="0"><color rgb="FF${e.fundo.de}"/></stop>`
+        + `<stop position="1"><color rgb="FF${e.fundo.para}"/></stop></gradientFill></fill>`);
     const lado = (nome: 'left' | 'right' | 'top' | 'bottom') => {
       const b = e.bordas?.[nome];
       return b ? `<${nome} style="${b.estilo}"><color rgb="FF${b.cor}"/></${nome}>` : `<${nome}/>`;
@@ -138,10 +157,9 @@ class Estilos {
 
 // ── Folha ───────────────────────────────────────────────────────────────────
 
-/** A=#, B=COREN, C..N=Jan..Dez, O=Total, P=% do ano. */
+/** A=#, B=COREN, C..N=Jan..Dez, O=Total. */
 const COL_MES = 3;
 const COL_TOTAL = COL_MES + 12;
-const COL_PCT = COL_TOTAL + 1;
 
 /**
  * Largura de coluna pelo maior valor dela: um total na casa dos milhões não
@@ -161,7 +179,7 @@ function larguras(anos: AnoAcumulado[]): number[] {
     larguraMoeda(anos.flatMap(a => a.regionais.map(r => r.total)), 18),
     larguraMoeda(anos.map(a => a.total), 18, 1.2),
   );
-  return [5, 20, ...meses, total, 11];
+  return [5, 20, ...meses, total];
 }
 
 const letra = (col: number): string => {
@@ -171,6 +189,10 @@ const letra = (col: number): string => {
 };
 const ref = (col: number, linha: number) => `${letra(col)}${linha}`;
 const reais = (centavos: number) => String(centavos / 100);
+/** Tom entre duas cores `RRGGBB`, com `t` de 0 (`de`) a 1 (`para`). */
+const misturar = (de: string, para: string, t: number) => [0, 2, 4]
+  .map(i => Math.round(parseInt(de.slice(i, i + 2), 16) * (1 - t) + parseInt(para.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0'))
+  .join('').toUpperCase();
 
 /** Sem `texto` nem `valor`: célula só com estilo (parte de uma faixa mesclada). */
 interface Celula { col: number; estilo: number; texto?: string; valor?: string; formula?: string }
@@ -191,12 +213,12 @@ class Folha {
     };
   }
 
-  /** Faixa mesclada de A até P, com o estilo em todas as células (fundo e borda contínuos). */
+  /** Faixa mesclada de A até O, com o estilo em todas as células (fundo e borda contínuos). */
   faixa(altura: number, estilo: number, texto: string) {
     const l = this.linha(altura);
     l.texto(1, estilo, texto);
-    for (let c = 2; c <= COL_PCT; c++) l.vazia(c, estilo);
-    this.mesclas.push(`${ref(1, l.numero)}:${ref(COL_PCT, l.numero)}`);
+    for (let c = 2; c <= COL_TOTAL; c++) l.vazia(c, estilo);
+    this.mesclas.push(`${ref(1, l.numero)}:${ref(COL_TOTAL, l.numero)}`);
     return l.numero;
   }
 
@@ -211,7 +233,7 @@ class Folha {
         if (c.valor !== undefined) return `<c r="${endereco}" s="${c.estilo}">${c.formula ? `<f>${c.formula}</f>` : ''}<v>${c.valor}</v></c>`;
         return `<c r="${endereco}" s="${c.estilo}"/>`;
       }).join('');
-      return `<row r="${r}" spans="1:${COL_PCT}" ht="${l.altura}" customHeight="1">${celulas}</row>`;
+      return `<row r="${r}" spans="1:${COL_TOTAL}" ht="${l.altura}" customHeight="1">${celulas}</row>`;
     }).join('');
   }
 }
@@ -220,17 +242,22 @@ function montarFolha(aba: AbaAcumulado, estilos: Estilos): string {
   const p = aba.paleta;
   const fina = (cor: string): Borda => ({ estilo: 'thin', cor });
   const media = (cor: string): Borda => ({ estilo: 'medium', cor });
+  type Tom = 'escuro' | 'cabecalho' | 'faixa';
+  /** Faixa mesclada: o degradê inteiro numa célula só. */
+  const faixa = (tom: Tom): Fundo => p.degrade ? { de: p[tom], para: p.degrade[tom] } : p[tom];
+  /** Célula solta: o tom do degradê na altura da coluna. */
+  const naColuna = (tom: Tom, col: number): string => p.degrade ? misturar(p[tom], p.degrade[tom], (col - 1) / (COL_TOTAL - 1)) : p[tom];
 
   const s = {
-    titulo: estilos.id({ tamanho: 18, negrito: true, cor: 'FFFFFF', fundo: p.escuro, recuo: 1 }),
-    subtitulo: estilos.id({ tamanho: 11, cor: p.subtitulo, fundo: p.escuro, recuo: 1 }),
+    titulo: estilos.id({ tamanho: 18, negrito: true, cor: 'FFFFFF', fundo: faixa('escuro'), recuo: 1 }),
+    subtitulo: estilos.id({ tamanho: 11, cor: p.subtitulo, fundo: faixa('escuro'), recuo: 1 }),
     nota: estilos.id({ tamanho: 9, italico: true, cor: CINZA, recuo: 1 }),
-    ano: estilos.id({ tamanho: 13, negrito: true, cor: p.acento, fundo: p.faixa, recuo: 1, bordas: { bottom: media(p.acento) } }),
-    cabecalho: (h: 'left' | 'center' | 'right') => estilos.id({ tamanho: 9, negrito: true, cor: 'FFFFFF', fundo: p.cabecalho, horizontal: h, recuo: h === 'left' ? 1 : 0 }),
+    ano: estilos.id({ tamanho: 13, negrito: true, cor: p.acento, fundo: faixa('faixa'), recuo: 1, bordas: { bottom: media(p.acento) } }),
+    cabecalho: (col: number, h: 'left' | 'center' | 'right') => estilos.id({ tamanho: 9, negrito: true, cor: 'FFFFFF', fundo: naColuna('cabecalho', col), horizontal: h, recuo: h === 'left' ? 1 : 0 }),
     vazio: estilos.id({ tamanho: 11, italico: true, cor: CINZA, horizontal: 'center' }),
   };
   const corpo = (zebra: boolean, e: Estilo) => estilos.id({ tamanho: 10, fundo: zebra ? ZEBRA : undefined, ...e, bordas: { bottom: fina(LINHA), ...e.bordas } });
-  const rodape = (e: Estilo) => estilos.id({ tamanho: 10, negrito: true, fundo: p.faixa, ...e, bordas: { top: media(p.acento), bottom: media(p.acento), ...e.bordas } });
+  const rodape = (col: number, e: Estilo) => estilos.id({ tamanho: 10, negrito: true, fundo: naColuna('faixa', col), ...e, bordas: { top: media(p.acento), bottom: media(p.acento), ...e.bordas } });
 
   const folha = new Folha();
   folha.faixa(36, s.titulo, aba.titulo);
@@ -248,16 +275,14 @@ function montarFolha(aba: AbaAcumulado, estilos: Estilos): string {
     folha.faixa(26, s.ano, `${ano.ano}  ·  ${ano.regionais.length} ${ano.regionais.length === 1 ? 'regional' : 'regionais'}`);
 
     const cab = folha.linha(24);
-    cab.texto(1, s.cabecalho('center'), '#');
-    cab.texto(2, s.cabecalho('left'), 'COREN');
-    MESES_ABREVIADOS.forEach((m, i) => cab.texto(COL_MES + i, s.cabecalho('right'), m));
-    cab.texto(COL_TOTAL, s.cabecalho('right'), 'Total');
-    cab.texto(COL_PCT, s.cabecalho('right'), '% do ano');
+    cab.texto(1, s.cabecalho(1, 'center'), '#');
+    cab.texto(2, s.cabecalho(2, 'left'), 'COREN');
+    MESES_ABREVIADOS.forEach((m, i) => cab.texto(COL_MES + i, s.cabecalho(COL_MES + i, 'right'), m));
+    cab.texto(COL_TOTAL, s.cabecalho(COL_TOTAL, 'right'), 'Total');
     if (!congelarAte) congelarAte = cab.numero;
 
     const primeira = cab.numero + 1;
     const ultima = cab.numero + ano.regionais.length;
-    const linhaRodape = ultima + 1;
 
     ano.regionais.forEach((r, i) => {
       const z = i % 2 === 1;
@@ -273,20 +298,15 @@ function montarFolha(aba: AbaAcumulado, estilos: Estilos): string {
         reais(v)));
       l.valor(COL_TOTAL, corpo(z, { negrito: true, cor: TEXTO, formato: FORMATO_BRL, horizontal: 'right', bordas: { left: media('CBD5E1') } }),
         reais(r.total), `SUM(${ref(COL_MES, l.numero)}:${ref(COL_MES + 11, l.numero)})`);
-      l.valor(COL_PCT, corpo(z, { tamanho: 9, cor: CINZA, formato: FORMATO_PCT, horizontal: 'right' }),
-        String(ano.total ? r.total / ano.total : 0),
-        `IF($${letra(COL_TOTAL)}$${linhaRodape}=0,0,${ref(COL_TOTAL, l.numero)}/$${letra(COL_TOTAL)}$${linhaRodape})`);
     });
 
     const rod = folha.linha(28);
-    rod.vazia(1, rodape({}));
-    rod.texto(2, rodape({ cor: TEXTO, recuo: 1 }), 'TOTAL RECEBIDO');
-    ano.totaisMes.forEach((v, m) => rod.valor(COL_MES + m, rodape({ cor: TEXTO, formato: FORMATO_BRL, horizontal: 'right' }),
+    rod.vazia(1, rodape(1, {}));
+    rod.texto(2, rodape(2, { cor: TEXTO, recuo: 1 }), aba.rotuloTotal);
+    ano.totaisMes.forEach((v, m) => rod.valor(COL_MES + m, rodape(COL_MES + m, { cor: TEXTO, formato: FORMATO_BRL, horizontal: 'right' }),
       reais(v), `SUM(${ref(COL_MES + m, primeira)}:${ref(COL_MES + m, ultima)})`));
-    rod.valor(COL_TOTAL, rodape({ tamanho: 12, cor: p.acento, formato: FORMATO_BRL, horizontal: 'right', bordas: { left: media('CBD5E1') } }),
+    rod.valor(COL_TOTAL, rodape(COL_TOTAL, { tamanho: 12, cor: p.acento, formato: FORMATO_BRL, horizontal: 'right', bordas: { left: media('CBD5E1') } }),
       reais(ano.total), `SUM(${ref(COL_MES, rod.numero)}:${ref(COL_MES + 11, rod.numero)})`);
-    rod.valor(COL_PCT, rodape({ tamanho: 9, cor: CINZA, formato: FORMATO_PCT, horizontal: 'right' }),
-      ano.total ? '1' : '0', `SUM(${ref(COL_PCT, primeira)}:${ref(COL_PCT, ultima)})`);
   });
 
   // Congela título e primeiro cabeçalho na vertical, # e COREN na horizontal.
@@ -299,7 +319,7 @@ function montarFolha(aba: AbaAcumulado, estilos: Estilos): string {
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
     + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
     + `<sheetPr><tabColor rgb="FF${p.acento}"/><pageSetUpPr fitToPage="1"/></sheetPr>`
-    + `<dimension ref="A1:${ref(COL_PCT, folha.total)}"/>`
+    + `<dimension ref="A1:${ref(COL_TOTAL, folha.total)}"/>`
     + `<sheetViews><sheetView showGridLines="0" workbookViewId="0">${painel}</sheetView></sheetViews>`
     + '<sheetFormatPr defaultRowHeight="15"/>'
     + `<cols>${colunas}</cols>`

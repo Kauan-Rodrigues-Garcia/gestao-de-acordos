@@ -6,7 +6,8 @@
  * histórico salvo, então ela é repetida aqui, com as mesmas regras:
  *
  *  - o mês e o ano saem da coluna `data` (competência), não de `data_pagamento`;
- *  - uma linha por UF (COREN), uma coluna por mês, soma de `total`;
+ *  - uma linha por UF (COREN), uma coluna por mês, soma de `total` — ou de `pp`,
+ *    a parte da PaguePlay (HO), na aba que mostra só essa parte;
  *  - some a regional sem nenhum mês diferente de zero (estorno aparece);
  *  - ordem pelo total do ano, maior primeiro.
  *
@@ -33,7 +34,7 @@ export interface AnoAcumulado {
   total: number;
 }
 
-export function montarAcumuladoMensal(grupos: ResumoSalvo['grupos']): AnoAcumulado[] {
+export function montarAcumuladoMensal(grupos: ResumoSalvo['grupos'], campo: 'total' | 'pp' = 'total'): AnoAcumulado[] {
   const anos = new Map<number, Map<string, RegionalAcumulada>>();
   for (const g of grupos) {
     const ano = Number(g.data.slice(0, 4));
@@ -43,8 +44,8 @@ export function montarAcumuladoMensal(grupos: ResumoSalvo['grupos']): AnoAcumula
     if (!regionais) { regionais = new Map(); anos.set(ano, regionais); }
     let r = regionais.get(g.uf);
     if (!r) { r = { uf: g.uf, meses: new Array(12).fill(0), total: 0 }; regionais.set(g.uf, r); }
-    r.meses[mes] += g.total;
-    r.total += g.total;
+    r.meses[mes] += g[campo];
+    r.total += g[campo];
   }
 
   return [...anos.entries()]
