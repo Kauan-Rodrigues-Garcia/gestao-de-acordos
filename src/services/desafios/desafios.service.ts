@@ -375,6 +375,10 @@ export async function buscarContextoEquipe(
     equipe_empresa: Record<string, string>;
     config: Record<string, { feriados?: string[]; contar_dia_atual?: boolean }>;
     recebido_mes_equipe?: Record<string, { total?: number | string; qtd?: number | string }>;
+    metas_setor?: Record<string, number | string>;
+    setor_empresa?: Record<string, string>;
+    setores_alternativos?: string[];
+    recebido_mes_setor?: Record<string, { total?: number | string; qtd?: number | string }>;
   }>('fn_desafio_contexto_equipe', { p_desafio_id: desafioId });
 
   // NULL = não passou nos portões. Contexto vazio é a leitura certa: a tela
@@ -424,11 +428,36 @@ export async function buscarContextoEquipe(
       ]))
     : undefined;
 
+  /*
+   * O quadro do SETOR, para o líder de setor ALTERNATIVO.
+   *
+   * Ausente = migration 20260917180000 ainda não aplicada nesta base. Deixar
+   * `undefined` é a leitura certa: `calcularDesafio` volta à média das equipes,
+   * que é o comportamento de antes dela. `{}` diria outra coisa — «nenhum setor
+   * tem meta» — e zeraria a nota de quem lidera um setor alternativo.
+   */
+  const metaPorSetor = data.metas_setor
+    ? Object.fromEntries(
+        Object.entries(data.metas_setor)
+          .map(([id, valor]) => [id, Number(valor) || 0] as const)
+          .filter(([, v]) => v > 0),
+      )
+    : undefined;
+  const recebidoMesPorSetor = data.recebido_mes_setor
+    ? Object.fromEntries(Object.entries(data.recebido_mes_setor).map(([id, v]) => [
+        id, { total: Number(v?.total) || 0, qtd: Number(v?.qtd) || 0 },
+      ]))
+    : undefined;
+
   return {
     metaPorEquipe,
     recebidoMesPorEquipe,
     empresaPorEquipe: data.equipe_empresa ?? {},
     uteisPorEmpresa,
+    metaPorSetor,
+    recebidoMesPorSetor,
+    setoresAlternativos: data.setores_alternativos,
+    empresaPorSetor: data.setor_empresa,
     totalUteis: diasUteisDoMes(ano, mes, semFeriado),
     decorridos: diasUteisDecorridos(ano, mes, semFeriado, hoje, undefined, false),
     mes, ano,

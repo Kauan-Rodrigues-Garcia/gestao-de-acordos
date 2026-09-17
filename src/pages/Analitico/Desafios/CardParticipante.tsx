@@ -133,9 +133,15 @@ export function CardParticipante({
         </div>
 
         <p className="mt-1 break-words text-[11px] text-muted-foreground">
-          {!ocultarEquipe && <>{pessoa.equipeNome}</>}
+          {/* Líder de setor alternativo é medido pelo SETOR, e não pela média
+              das equipes dele. Sem esta linha a tela mostraria o nome de uma
+              equipe ao lado de um percentual que não é o dela. */}
+          {item.notaDoSetor
+            ? <>Nota do setor</>
+            : !ocultarEquipe && <>{pessoa.equipeNome}</>}
           {corridaDeProjecao ? (
-            !item.meta && <>{!ocultarEquipe && pessoa.equipeNome ? ' · ' : ''}Equipe sem meta no mês</>
+            !item.meta && <>{!ocultarEquipe && pessoa.equipeNome ? ' · ' : ''}
+              {item.notaDoSetor ? 'Setor sem meta no mês' : 'Equipe sem meta no mês'}</>
           ) : (
             <>
               {!ocultarEquipe && <> · </>}

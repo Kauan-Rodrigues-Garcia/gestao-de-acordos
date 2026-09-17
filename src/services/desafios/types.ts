@@ -471,4 +471,20 @@ export interface ContextoEquipe {
    * cálculo cai no elenco sobre o recorte da campanha, o comportamento de antes.
    */
   recebidoMesPorEquipe?: Record<string, { total: number; qtd: number }>;
+  /**
+   * Meta mensal por SETOR (`metas`, tipo `setor`, > 0).
+   *
+   * Existe para o líder de SETOR ALTERNATIVO, que disputa pelo número do setor
+   * e não pela média das equipes dele. Ver `notaDoSetorAlternativo`.
+   */
+  metaPorSetor?: Record<string, number>;
+  /** Recebido do MÊS por setor, pela régua de `linhaNoEscopo`. */
+  recebidoMesPorSetor?: Record<string, { total: number; qtd: number }>;
+  /** Os setores marcados como `setores.alternativo`. */
+  setoresAlternativos?: string[];
+  /**
+   * De qual empresa é cada setor — é o que liga o setor à régua de dias úteis
+   * dele na campanha entre empresas, como `empresaPorEquipe` faz com a equipe.
+   */
+  empresaPorSetor?: Record<string, string>;
 }

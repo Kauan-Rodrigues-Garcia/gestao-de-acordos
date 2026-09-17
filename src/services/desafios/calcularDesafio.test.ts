@@ -1282,6 +1282,168 @@ describe('líder de várias equipes: média das porcentagens', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// Líder de SETOR ALTERNATIVO: a nota é a do setor, não a média das equipes
+// ══════════════════════════════════════════════════════════════════════════
+
+/*
+ * O caso é o do Brunno no Digital (17/09/2026).
+ *
+ * Setor alternativo é o que não tem relatório próprio: o Digital existe porque
+ * operadores do Play 4 e do Play 5 são clonados para dentro dele. Quem lidera
+ * um setor desses responde por UM número — o do setor, que tem meta própria —,
+ * e a média das equipes dele dizia outra coisa.
+ *
+ * Os números abaixo são os mesmos do bloco anterior de propósito: é a mesma
+ * campanha, e o que muda é só o quadro do setor chegar junto.
+ */
+describe('líder de setor alternativo: a nota é a do setor', () => {
+  const bru = pessoa({
+    id: 'bru', nome: 'Brunno', perfil: 'lider', setorId: 'digital',
+    equipeId: null, equipeNome: 'Sem equipe',
+    equipesLideradas: ['esp4', 'esp5', 'espmix'],
+    setores: ['digital'], equipes: [],
+  });
+  const lay = pessoa({
+    id: 'lay', nome: 'Layane', perfil: 'lider', setorId: 'play5',
+    equipeId: 'eqLay', equipeNome: 'Layane', equipesLideradas: ['eqLay'],
+    setores: ['play5'], equipes: ['eqLay'],
+  });
+  const p4  = pessoa({ id: 'p4',  nome: 'Do Play 4',   equipeId: 'real4',   equipes: ['real4', 'esp4'] });
+  const p5  = pessoa({ id: 'p5',  nome: 'Do Play 5',   equipeId: 'real5',   equipes: ['real5', 'esp5'] });
+  const pmx = pessoa({ id: 'pmx', nome: 'Do Play Mix', equipeId: 'realmix', equipes: ['realmix', 'espmix'] });
+  const play = pessoa({ id: 'plyA', nome: 'Da Layane', equipeId: 'eqLay',   equipes: ['eqLay'] });
+  const participantes = [bru, lay, p4, p5, pmx, play];
+
+  const linhas = [
+    linha('p4',   25_000),
+    linha('p5',   52_500),
+    linha('pmx',  30_000),
+    linha('plyA', 40_000),
+  ];
+
+  /** 20 dias úteis, 10 corridos: a projeção é METADE da meta. */
+  const base = {
+    metaPorEquipe: { esp4: 50_000, esp5: 210_000, espmix: 40_000, eqLay: 100_000 },
+    totalUteis: 20, decorridos: 10, mes: 9, ano: 2026,
+  };
+
+  /*
+   * O Digital tem meta de 300.000 (projeção 150.000) e recebeu 120.000 no mês:
+   * 80% da projeção. A média das equipes do Brunno é 100% — os dois números
+   * existem, e o que a tela tem de mostrar é o primeiro.
+   */
+  const comSetor = {
+    ...base,
+    setoresAlternativos: ['digital'],
+    metaPorSetor: { digital: 300_000, play5: 400_000 },
+    recebidoMesPorSetor: {
+      digital: { total: 120_000, qtd: 9 },
+      play5:   { total: 100_000, qtd: 4 },
+    },
+  };
+
+  function campanha() {
+    return desafio({
+      regra: {
+        criterioRanking: 'maior_percentual',
+        metaIndividual: null, metaEquipe: null,
+        fonteResultado: 'equipe_liderada',
+        fonteMeta: 'projecao_equipe',
+        agregacaoLider: 'media_das_equipes',
+        participantes: {
+          setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+          convidados: [],
+        },
+      },
+    });
+  }
+
+  it('usa a porcentagem do setor, e não a média das equipes', () => {
+    const r = calcularDesafio({
+      desafio: campanha(), dados: { participantes, linhas }, contextoEquipe: comSetor,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.progresso).toBeCloseTo(80, 5);   // 120.000 ÷ 150.000
+    expect(b?.recebido).toBe(120_000);
+    expect(b?.meta).toBe(150_000);
+    expect(b?.notaDoSetor).toBe(true);
+  });
+
+  it('a média das equipes deixa de aparecer — era ela que se pediu para tirar', () => {
+    const semSetor = calcularDesafio({
+      desafio: campanha(), dados: { participantes, linhas }, contextoEquipe: base,
+    }).individual.find(i => i.pessoa.id === 'bru');
+    const comSetorR = calcularDesafio({
+      desafio: campanha(), dados: { participantes, linhas }, contextoEquipe: comSetor,
+    }).individual.find(i => i.pessoa.id === 'bru');
+
+    expect(semSetor?.progresso).toBeCloseTo(100, 5);   // a média das três
+    expect(comSetorR?.progresso).toBeCloseTo(80, 5);   // a do setor
+    expect(semSetor?.notaDoSetor).toBe(false);
+  });
+
+  it('líder de setor NORMAL continua pela equipe dele', () => {
+    const r = calcularDesafio({
+      desafio: campanha(), dados: { participantes, linhas }, contextoEquipe: comSetor,
+    });
+    const l = r.individual.find(i => i.pessoa.id === 'lay');
+    expect(l?.progresso).toBeCloseTo(80, 5);   // 40.000 ÷ 50.000, da equipe
+    expect(l?.recebido).toBe(40_000);
+    expect(l?.notaDoSetor).toBe(false);
+  });
+
+  it('setor alternativo sem meta é «sem meta» — e não volta à média', () => {
+    const r = calcularDesafio({
+      desafio: campanha(),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...comSetor, metaPorSetor: { play5: 400_000 } },
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.meta).toBeNull();
+    expect(b?.progresso).toBe(0);
+    expect(b?.bateuMeta).toBe(false);
+    expect(b?.notaDoSetor).toBe(true);
+  });
+
+  it('base sem a migration 20260917180000 mantém o comportamento anterior', () => {
+    // `recebidoMesPorSetor` ausente = quadro de setor não veio. Cair na média
+    // é o certo aqui: é o número que a tela mostrava antes.
+    const r = calcularDesafio({
+      desafio: campanha(),
+      dados: { participantes, linhas },
+      contextoEquipe: { ...base, setoresAlternativos: ['digital'], metaPorSetor: { digital: 300_000 } },
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.progresso).toBeCloseTo(100, 5);
+    expect(b?.notaDoSetor).toBe(false);
+  });
+
+  it('a campanha por QUANTIDADE lê a contagem do setor', () => {
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: {
+          metrica: 'quantidade',
+          criterioRanking: 'maior_valor',
+          metaIndividual: null, metaEquipe: null,
+          fonteResultado: 'equipe_liderada',
+          fonteMeta: 'meta_equipe',
+          agregacaoLider: 'media_das_equipes',
+          participantes: {
+            setores: [], equipes: [], operadores: [], cargos: ['lider'], excluidos: [],
+            convidados: [],
+          },
+        },
+      }),
+      dados: { participantes, linhas },
+      contextoEquipe: comSetor,
+    });
+    const b = r.individual.find(i => i.pessoa.id === 'bru');
+    expect(b?.recebido).toBe(9);
+    expect(b?.qtd).toBe(9);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // Campanha ENTRE EMPRESAS: a projeção atravessa, e cada uma com a régua dela
 // ══════════════════════════════════════════════════════════════════════════
 

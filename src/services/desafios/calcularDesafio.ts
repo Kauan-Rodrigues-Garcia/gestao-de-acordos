@@ -58,6 +58,14 @@ export interface ResultadoParticipante {
    */
   paraUltrapassar: number | null;
   nomeAcima: string | null;
+  /**
+   * A nota saiu do SETOR ALTERNATIVO desta pessoa, e não das equipes dela.
+   *
+   * A tela diz isso ao lado do nome: o percentual que ela mostra é o do setor,
+   * medido contra a meta do setor, e não a média das equipes lideradas. Ver
+   * `notaDoSetorAlternativo`.
+   */
+  notaDoSetor: boolean;
 }
 
 export interface ResultadoEquipe {
@@ -348,6 +356,120 @@ function somaDaEquipe(
     qtd   += s.qtd;
   }
   return { total, qtd };
+}
+
+/**
+ * O SETOR ALTERNATIVO deste líder, quando ele está em um.
+ *
+ * Setor alternativo (`setores.alternativo`) é o que não tem relatório próprio:
+ * o Digital existe porque operadores do Play 4 e do Play 5 são clonados para
+ * dentro dele. Quem lidera um setor desses responde por UM número — o do setor
+ * —, e não por um punhado de equipes independentes.
+ *
+ * O cadastro manda: é o setor do perfil que diz «eu sou do Digital». Só quando
+ * ele não é alternativo é que se olha o resto de `pessoa.setores` (cadastro
+ * mais os clones), para o líder que foi emprestado ao setor alternativo sem ter
+ * a matrícula mudada.
+ *
+ * `null` — e portanto a média das equipes de sempre — em três casos: a pessoa
+ * não está em setor alternativo nenhum, o contexto não foi carregado, ou a base
+ * ainda não tem a migration 20260917180000 (`setoresAlternativos` ausente).
+ */
+export function setorAlternativoDoLider(
+  pessoa: PessoaDesafio,
+  contexto?: ContextoEquipe | null,
+): string | null {
+  const alternativos = contexto?.setoresAlternativos;
+  if (!alternativos || alternativos.length === 0) return null;
+  const alt = new Set(alternativos);
+  if (pessoa.setorId && alt.has(pessoa.setorId)) return pessoa.setorId;
+  return (pessoa.setores ?? []).find(s => alt.has(s)) ?? null;
+}
+
+/** Recebido, alvo e nota de um líder medido pelo setor alternativo dele. */
+export interface NotaDoSetor {
+  setorId: string;
+  /** Recebido do MÊS no setor, pela régua de `linhaNoEscopo`. */
+  recebido: number;
+  qtd: number;
+  /** Meta do setor — cheia ou proporcional ao mês corrido. */
+  meta: number | null;
+  /** `recebido ÷ meta`. Zero sem meta, e aí a tela mostra «sem meta». */
+  progresso: number;
+}
+
+/**
+ * A nota de quem lidera um setor alternativo.
+ *
+ * É a porcentagem REAL do setor: o recebido do mês dele contra a meta dele. A
+ * média das porcentagens das equipes não entra — foi para tirá-la daqui que
+ * esta função existe. Duas razões, e as duas são da operação:
+ *
+ *   • a média de três equipes não é a porcentagem do setor, que tem meta
+ *     própria em `metas` (tipo `setor`) e é contra ela que a diretoria cobra;
+ *   • o mesmo líder aparecia medido por uma régua diferente da dos colegas de
+ *     setor normal, sem nada na tela dizendo isso.
+ *
+ * Setor sem meta devolve `meta: null` e `progresso: 0` — «sem meta», que a tela
+ * já sabe mostrar. Cair na média das equipes nesse caso seria voltar, pelas
+ * costas, exatamente ao número que se pediu para desconsiderar.
+ *
+ * `null` só quando não há quadro de setor: contexto ausente, ou base sem a
+ * migration 20260917180000. Aí o comportamento anterior continua valendo.
+ */
+export function notaDoSetorAlternativo(
+  setorId: string,
+  desafio: Desafio,
+  contexto: ContextoEquipe | null | undefined,
+  porQuantidade: boolean,
+): NotaDoSetor | null {
+  if (!contexto?.recebidoMesPorSetor) return null;
+
+  const s = contexto.recebidoMesPorSetor[setorId] ?? { total: 0, qtd: 0 };
+  const recebido = porQuantidade ? s.qtd : s.total;
+  const meta = alvoDoSetor(setorId, desafio.regra, contexto);
+
+  return {
+    setorId,
+    recebido,
+    qtd: s.qtd,
+    meta,
+    progresso: meta && meta > 0 ? (recebido / meta) * 100 : 0,
+  };
+}
+
+/**
+ * O alvo de UM setor: a meta cheia do mês, ou quanto dela já deveria ter
+ * entrado até hoje.
+ *
+ * O gêmeo de `alvoDaEquipe`, e de propósito: as duas chamam a MESMA
+ * `calcularProjecao` com a MESMA régua de dias úteis da empresa. Se uma
+ * reescrevesse a conta, o líder do setor alternativo e o do setor normal
+ * passariam a ser medidos por projeções diferentes no mesmo mês.
+ */
+export function alvoDoSetor(
+  setorId: string,
+  regra: Desafio['regra'],
+  contexto?: ContextoEquipe | null,
+): number | null {
+  if (!contexto) return null;
+  const metaMensal = contexto.metaPorSetor?.[setorId];
+  if (!metaMensal || metaMensal <= 0) return null;
+
+  if (regra.fonteMeta === 'meta_equipe') return metaMensal;
+
+  const empresaDoSetor = contexto.empresaPorSetor?.[setorId];
+  const uteis = (empresaDoSetor && contexto.uteisPorEmpresa?.[empresaDoSetor])
+    ?? { totalUteis: contexto.totalUteis, decorridos: contexto.decorridos };
+
+  const proj = calcularProjecao({
+    meta: metaMensal,
+    recebido: 0,            // só `esperado` interessa, e ele não depende disto
+    totalUteis: uteis.totalUteis,
+    decorridos: uteis.decorridos,
+    quartis: [],
+  });
+  return proj ? proj.esperado : null;
 }
 
 /** Recebido, alvo e nota de um líder que responde por várias equipes. */
@@ -706,7 +828,44 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
      * coisas diferentes — o primeiro é a média das responsabilidades, o
      * segundo o caixa somado.
      */
-    const media = regra.fonteResultado === 'equipe_liderada'
+    const disputaDeLider = regra.fonteResultado === 'equipe_liderada';
+
+    /*
+     * Líder de SETOR ALTERNATIVO: a nota é a do SETOR, e nada mais.
+     *
+     * O setor alternativo (Digital) não tem relatório próprio — ele existe
+     * porque operadores de outros setores são clonados para dentro dele. Quem o
+     * lidera responde por um número só, que tem meta própria em `metas`, e a
+     * média das equipes dele dizia outra coisa. Isto vem ANTES da média de
+     * propósito: era ela que se pediu para desconsiderar.
+     *
+     * Vale mesmo com `agregacaoLider = 'equipe_unica'`: o que decide aqui é o
+     * setor em que a pessoa está, e não como a campanha resolve as equipes.
+     */
+    const setorAlt = disputaDeLider ? setorAlternativoDoLider(pessoa, contextoEquipe) : null;
+    const doSetor = setorAlt
+      ? notaDoSetorAlternativo(setorAlt, desafio, contextoEquipe, porQuantidade)
+      : null;
+
+    if (doSetor) {
+      return {
+        pessoa,
+        posicao: 0,
+        recebido: doSetor.recebido,
+        qtd: doSetor.qtd,
+        meta: doSetor.meta,
+        falta: faltaParaMeta(doSetor.recebido, doSetor.meta),
+        progresso: doSetor.progresso,
+        // Corrida de projeção não tem conclusão: o alvo se move todo dia útil.
+        bateuMeta: !ehCorridaDeProjecao(regra)
+          && !!doSetor.meta && doSetor.meta > 0 && doSetor.progresso >= 100,
+        paraUltrapassar: null as number | null,
+        nomeAcima: null as string | null,
+        notaDoSetor: true,
+      };
+    }
+
+    const media = disputaDeLider
       && regra.agregacaoLider === 'media_das_equipes'
       ? notaDoLider(pessoa, desafio, somas, dados.participantes, contextoEquipe, porQuantidade)
       : null;
@@ -724,6 +883,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
         bateuMeta: !ehCorridaDeProjecao(regra) && media.progresso >= 100,
         paraUltrapassar: null as number | null,
         nomeAcima: null as string | null,
+        notaDoSetor: false,
       };
     }
 
@@ -748,6 +908,7 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
       bateuMeta: !ehCorridaDeProjecao(regra) && !!meta && meta > 0 && recebido >= meta,
       paraUltrapassar: null as number | null,
       nomeAcima: null as string | null,
+      notaDoSetor: false,
     };
   });
 
