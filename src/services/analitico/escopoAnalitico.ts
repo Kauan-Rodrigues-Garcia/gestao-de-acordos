@@ -64,6 +64,17 @@ export type EscopoAnalitico =
   | { tipo: 'operador'; operadorId: string }
   | { tipo: 'equipe'; operadores: ReadonlySet<string> }
   | {
+      /**
+       * Vários recortes somados — o recorte de N setores do Painel Líder.
+       *
+       * A linha entra se couber em QUALQUER uma das partes, e entra uma vez
+       * só: quem chama pergunta `linhaNoEscopo` por linha e segue adiante, de
+       * modo que a linha carimbada em dois setores marcados não dobra.
+       */
+      tipo: 'uniao';
+      partes: readonly EscopoAnalitico[];
+    }
+  | {
       tipo: 'setor';
       setorId: string;
       /** true = setor normal (soma pelo carimbo). false = alternativo/PaguePlay. */
@@ -141,6 +152,17 @@ export function escopoDeSetor(params: {
 /** Conjunto vazio compartilhado: identidade estável para os `useMemo` da tela. */
 const SEM_EXCLUSAO: ReadonlySet<OrigemKey> = new Set<OrigemKey>();
 
+/**
+ * Junta recortes num só — o caso de marcar vários setores no Painel Líder.
+ *
+ * Com uma parte devolve a própria parte: um "união de um" existiria só para
+ * dar mais um nível ao `switch`, e o escopo de um setor marcado tem de ser
+ * idêntico ao que era quando o filtro escolhia um de cada vez.
+ */
+export function escopoUniao(partes: readonly EscopoAnalitico[]): EscopoAnalitico {
+  return partes.length === 1 ? partes[0] : { tipo: 'uniao', partes };
+}
+
 /** A linha entra na conta deste escopo? */
 export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): boolean {
   switch (escopo.tipo) {
@@ -156,6 +178,9 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
       // Órfã não tem equipe — ficaria sempre de fora de qualquer equipe, então
       // somá-la aqui seria atribuir a alguém o recebimento de ninguém.
       return linha.operador_id !== null && escopo.operadores.has(linha.operador_id);
+
+    case 'uniao':
+      return escopo.partes.some(p => linhaNoEscopo(linha, p));
 
     case 'setor': {
       const daquiPeloCarimbo = (linha.setor_id ?? null) === escopo.setorId;

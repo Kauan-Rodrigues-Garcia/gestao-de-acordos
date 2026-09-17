@@ -9,8 +9,9 @@
  *
  * ## O recorte é do pai
  *
- * `setorId` e `equipeId` chegam prontos de `resolverEscopoPainel`, e `setorId`
- * nulo significa "todos os setores". Nada aqui os completa.
+ * `setorIds` e `equipeIds` chegam prontos de `resolverEscopoPainel`. Lista
+ * VAZIA significa "todos os setores" / "todas as equipes", e desde 17/09/2026
+ * as duas aceitam VÁRIOS itens de uma vez. Nada aqui os completa.
  *
  * Esta tela tinha filtro PRÓPRIO, com dois defeitos: a lista de cargos era
  * escrita à mão (gerência com `ver_todos_setores` via tudo e não ganhava
@@ -122,11 +123,11 @@ interface QuartisOperadoresProps {
   empresaId: string;
   mes: string;                 // 'yyyy-MM'
   /**
-   * Setor em foco. `null` = todos os setores. AUTORITATIVA — ver o cabeçalho.
+   * Setores em foco. Lista VAZIA = todos. AUTORITATIVA — ver o cabeçalho.
    */
-  setorId: string | null;
-  /** Equipe em foco. `null` = todas as equipes do setor. */
-  equipeId?: string | null;
+  setorIds: string[];
+  /** Equipes em foco. Lista VAZIA = todas as equipes dos setores em foco. */
+  equipeIds?: string[];
   equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
@@ -539,14 +540,23 @@ function DetalheOperador({
   );
 }
 
+/**
+ * Lista vazia compartilhada para o padrão de `equipeIds`.
+ *
+ * `= []` no parâmetro criaria um array novo a cada render, e ele entra nas
+ * dependências dos `useMemo` — a tabela inteira seria refeita sem nada ter
+ * mudado.
+ */
+const VAZIO: string[] = [];
+
 export function QuartisOperadores({
-  empresaId, mes, setorId, equipeId = null, equipes, resumos,
+  empresaId, mes, setorIds, equipeIds = VAZIO, equipes, resumos,
   operadorEquipeMap, equipesExtrasPorOperador = {}, loading,
 }: QuartisOperadoresProps) {
   // O recorte vem do pai, resolvido por `resolverEscopoPainel`. Nada aqui o
   // completa nem o reinterpreta — ver o cabeçalho do arquivo.
-  const setorEfetivo = setorId;
-  const filtroEquipe = equipeId;
+  const setoresFoco = useMemo(() => new Set(setorIds), [setorIds]);
+  const equipesFoco = useMemo(() => new Set(equipeIds), [equipeIds]);
   const [anoNum, mesNum] = mes.split('-').map(Number);
   const isPP = useTenant().isPaguePlay;
 
@@ -825,12 +835,12 @@ export function QuartisOperadores({
        */
       .filter(o => o.arquivado !== true
         || (!!o.desligado_em && mes <= o.desligado_em.slice(0, 7)))
-      .filter(o => !setorEfetivo || setoresDoOperador(
+      .filter(o => setoresFoco.size === 0 || [...setoresDoOperador(
         o.id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
-      ).has(setorEfetivo))
-      .filter(o => !filtroEquipe
-        || o.equipe_id === filtroEquipe
-        || (equipesExtrasPorOperador[o.id] ?? []).includes(filtroEquipe));
+      )].some(s => setoresFoco.has(s)))
+      .filter(o => equipesFoco.size === 0
+        || (o.equipe_id ? equipesFoco.has(o.equipe_id) : false)
+        || (equipesExtrasPorOperador[o.id] ?? []).some(e => equipesFoco.has(e)));
 
     const porSetor = new Map<string, LinhaQuartil[]>();
     const semMeta: PerfilOp[] = [];
@@ -852,8 +862,20 @@ export function QuartisOperadores({
        */
       if (!(metasOp[op.id] > 0)) { semMeta.push(op); continue; }
 
-      // Agrupa pelo setor em exibição quando há um; senão, pelo setor de origem
-      const sid = setorEfetivo ?? op.setor_id ?? 'sem_setor';
+      /*
+       * Agrupa pelo setor EM EXIBIÇÃO, e não pelo de origem.
+       *
+       * Com um setor marcado é ele, como sempre foi: o clone emprestado de
+       * outro setor aparece na tabela do setor que o está olhando. Com vários
+       * marcados, é o primeiro dos marcados em que a pessoa conta — senão o
+       * clone cairia no setor de origem, que pode nem estar no recorte, e a
+       * linha ficaria num grupo que a pessoa não pediu para ver.
+       */
+      const sid = setoresFoco.size
+        ? (setorIds.find(id => setoresDoOperador(
+            op.id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
+          ).has(id)) ?? op.setor_id ?? 'sem_setor')
+        : (op.setor_id ?? 'sem_setor');
       const dias = diasDoOperador(op);
 
       /*
@@ -938,7 +960,7 @@ export function QuartisOperadores({
   // o rótulo mudaria.
   }, [anoNum, mesNum, mes, feriados, contarHoje, quartis, resumos, operadores, metasOp,
       metasIndiretas, indiretoMap, emHO,
-      setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
+      setorIds, setoresFoco, equipesFoco, operadorEquipeMap, equipesExtrasPorOperador,
       setorDaEquipe, nomeDaEquipe, treinoMap]);
 
   /*

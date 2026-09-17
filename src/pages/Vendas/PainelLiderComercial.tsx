@@ -254,16 +254,25 @@ export default function PainelLiderComercial() {
   }, [placar.pessoas, metas]);
 
   // ── O recorte ───────────────────────────────────────────────────────────
-  const [equipeId, setEquipeId] = useState<string | null>(null);
+  // Marcação múltipla desde 17/09/2026: lista vazia é "todas as equipes", e dá
+  // para comparar duas ou três de uma vez. Ver `FiltrosEscopo`.
+  const [equipesMarcadas, setEquipesMarcadas] = useState<string[]>([]);
   // Trocar de empresa não pode deixar uma equipe de outra empresa escolhida.
-  useEffect(() => { setEquipeId(null); }, [empresaId]);
-  const equipeValida = equipeId && equipes.some(e => e.id === equipeId) ? equipeId : null;
+  useEffect(() => { setEquipesMarcadas([]); }, [empresaId]);
+  const equipesValidas = useMemo(() => {
+    const existe = new Set(equipes.map(e => e.id));
+    return equipesMarcadas.filter(id => existe.has(id));
+  }, [equipesMarcadas, equipes]);
+  const noRecorte = useMemo(() => new Set(equipesValidas), [equipesValidas]);
 
   const vendasNaTela = useMemo(
-    () => (equipeValida
-      ? vendas.filter(v => equipeDaVenda(v, placar.indice) === equipeValida)
+    () => (noRecorte.size
+      ? vendas.filter(v => {
+          const eq = equipeDaVenda(v, placar.indice);
+          return eq ? noRecorte.has(eq) : false;
+        })
       : vendas),
-    [vendas, equipeValida, placar.indice],
+    [vendas, noRecorte, placar.indice],
   );
 
   const quemVendeu = useMemo(() => new Set(vendasNaTela.map(v => v.operador_id)), [vendasNaTela]);
@@ -278,8 +287,8 @@ export default function PainelLiderComercial() {
     () => placar.pessoas.filter(p =>
       !p.robo
       && (p.situacao !== 'desligado' || quemVendeu.has(p.id))
-      && (!equipeValida || p.equipe_id === equipeValida)),
-    [placar.pessoas, equipeValida, quemVendeu],
+      && (noRecorte.size === 0 || (p.equipe_id ? noRecorte.has(p.equipe_id) : false))),
+    [placar.pessoas, noRecorte, quemVendeu],
   );
 
   const placarDaTela = useMemo(
@@ -327,7 +336,7 @@ export default function PainelLiderComercial() {
 
       const equipesDoSetor = equipes
         .filter(e => e.setor_id === setor.id)
-        .filter(e => !equipeValida || e.id === equipeValida)
+        .filter(e => noRecorte.size === 0 || noRecorte.has(e.id))
         .map(e => {
           const resumo = resumirVendas(vendasDoSetor.filter(v => equipeDaVenda(v, placar.indice) === e.id));
           const { presenca, fator } = presencaDe(e.id);
@@ -365,12 +374,23 @@ export default function PainelLiderComercial() {
       };
     });
   }, [setores, equipes, vendas, metas, placar.pessoas, placar.indice, presencaDe,
-      operadoresDe, regua, equipeValida]);
+      operadoresDe, regua, noRecorte]);
 
   // ── A meta do recorte, para a régua diária do gráfico ─────────────────────
   const andamentoDoRecorte = useMemo(() => {
-    const meta = equipeValida
-      ? metas.find(m => m.tipo === 'equipe' && m.referencia_id === equipeValida)
+    /*
+     * A régua do gráfico só existe para um recorte com UMA meta.
+     *
+     * Com uma equipe marcada é a meta dela; sem nenhuma, a do setor. Com duas
+     * ou mais marcadas não há uma meta a mostrar — somar as delas daria um
+     * alvo que ninguém combinou, e escolher a primeira mediria o recorte
+     * inteiro contra a régua de um pedaço. Aí o gráfico fica sem linha de
+     * meta, que é a leitura honesta.
+     */
+    if (equipesValidas.length > 1) return null;
+    const equipeUnica = equipesValidas[0] ?? null;
+    const meta = equipeUnica
+      ? metas.find(m => m.tipo === 'equipe' && m.referencia_id === equipeUnica)
       : metas.find(m => m.tipo === 'setor' && ehRegua(m.regua));
     if (!meta || !ehRegua(meta.regua)) return null;
     const { fator } = presencaDe(meta.referencia_id);
@@ -378,7 +398,7 @@ export default function PainelLiderComercial() {
       { regua: meta.regua, quantidade: meta.quantidade, valor: meta.valor }, fator,
     );
     return progressoDaMeta({ meta: ajustada, resumo: total.resumo, uteis, trabalhados });
-  }, [metas, equipeValida, presencaDe, total.resumo, uteis, trabalhados]);
+  }, [metas, equipesValidas, presencaDe, total.resumo, uteis, trabalhados]);
 
   const serie = useMemo(
     () => serieDoMes(serieDiaria(vendasNaTela, 'confirmacao'), mes),
@@ -394,11 +414,12 @@ export default function PainelLiderComercial() {
 
   const nomeSetorTravado = setores.length === 1 ? setores[0].nome : null;
   const escopo: EscopoPainel = {
-    setorId: null,
-    equipeId: equipeValida,
+    setorIds: [],
+    equipeIds: equipesValidas,
+    setorUnico: null,
     podeFiltrarSetor: false,
     equipesDisponiveis: equipes,
-    temFiltroAtivo: equipeValida !== null,
+    temFiltroAtivo: equipesValidas.length > 0,
   };
 
   if (!empresaId) return null;
@@ -472,8 +493,8 @@ export default function PainelLiderComercial() {
         <FiltrosEscopo
           escopo={escopo}
           setores={setores}
-          onSetor={() => undefined}
-          onEquipe={setEquipeId}
+          onSetores={() => undefined}
+          onEquipes={setEquipesMarcadas}
           nomeSetorTravado={nomeSetorTravado}
         />
       )}
@@ -518,7 +539,7 @@ export default function PainelLiderComercial() {
                   )}
                   {/* O card do setor sai de cena com filtro de equipe: o número
                       dele é do setor inteiro e contradiria o recorte. */}
-                  {!equipeValida && (
+                  {noRecorte.size === 0 && (
                     <CardEquipe
                       titulo={c.setor.nome}
                       subtitulo={['Setor · vendas confirmadas e assinadas', c.ausencia]
@@ -554,7 +575,7 @@ export default function PainelLiderComercial() {
                       formatar={formatar}
                     />
                   ))}
-                  {!equipeValida && c.semEquipe.quantidade > 0 && (
+                  {noRecorte.size === 0 && c.semEquipe.quantidade > 0 && (
                     <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
                       <Bot className="w-3 h-3 shrink-0" />
                       {c.semEquipe.quantidade} {c.semEquipe.quantidade === 1 ? 'venda' : 'vendas'}

@@ -38,7 +38,7 @@ import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
 import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
 import {
-  escopoDeSetor, setorSomaPorUsuarios, ESCOPO_EMPRESA,
+  escopoDeSetor, escopoUniao, setorSomaPorUsuarios, ESCOPO_EMPRESA,
 } from '@/services/analitico/escopoAnalitico';
 import {
   buscarResumoMensalDiario, type ResumoMensalDiario,
@@ -207,17 +207,21 @@ export default function PainelLider() {
   // setores" voltava para um setor só), Desempenho e Gráfico não tinham nenhum, e
   // este arquivo passava `null` que os filhos completavam com `perfil.setor_id`.
   // Agora quem decide é `resolverEscopoPainel`, e o valor desce pronto.
-  const [filtroSetorId, setFiltroSetorId]   = useState<string | null>(null);
-  const [filtroEquipeId, setFiltroEquipeId] = useState<string | null>(null);
-  const [setoresLista, setSetoresLista]     = useState<{ id: string; nome: string }[]>([]);
+  //
+  // Desde 17/09/2026 os dois filtros são de MARCAÇÃO MÚLTIPLA: lista vazia é
+  // "todos", e marcar três setores mostra exatamente esses três. O caso de um
+  // continua sendo o de sempre — é o conjunto de tamanho 1.
+  const [filtroSetores, setFiltroSetores] = useState<string[]>([]);
+  const [filtroEquipes, setFiltroEquipes] = useState<string[]>([]);
+  const [setoresLista, setSetoresLista]   = useState<{ id: string; nome: string }[]>([]);
 
-  // Trocar o setor descarta a equipe escolhida antes: ela pode ser de outro
-  // setor, e o cruzamento devolveria lista vazia parecendo "não há ninguém".
-  // `resolverEscopoPainel` já ignora a equipe órfã; limpar o estado evita que o
-  // seletor continue exibindo um nome que não está mais valendo.
-  const mudarFiltroSetor = useCallback((sid: string | null) => {
-    setFiltroSetorId(sid);
-    setFiltroEquipeId(null);
+  // Mexer nos setores descarta as equipes marcadas antes: elas podem ser de um
+  // setor que saiu do recorte, e o cruzamento devolveria lista vazia parecendo
+  // "não há ninguém". `resolverEscopoPainel` já ignora a equipe órfã; limpar o
+  // estado evita que o seletor continue exibindo um nome que não vale mais.
+  const mudarFiltroSetores = useCallback((ids: string[]) => {
+    setFiltroSetores(ids);
+    setFiltroEquipes([]);
   }, []);
 
   const [equipesInfo, setEquipesInfo] = useState<{
@@ -230,13 +234,13 @@ export default function PainelLider() {
     cargo:           perfil?.perfil,
     temPermissao,
     setorDoPerfil:   perfil?.setor_id ?? null,
-    setorEscolhido:  filtroSetorId,
-    equipeEscolhida: filtroEquipeId,
-    equipes:         equipesInfo?.equipes ?? [],
-  }), [perfil?.perfil, perfil?.setor_id, temPermissao, filtroSetorId, filtroEquipeId, equipesInfo?.equipes]);
+    setoresEscolhidos: filtroSetores,
+    equipesEscolhidas: filtroEquipes,
+    equipes:           equipesInfo?.equipes ?? [],
+  }), [perfil?.perfil, perfil?.setor_id, temPermissao, filtroSetores, filtroEquipes, equipesInfo?.equipes]);
 
-  /** Setor em foco. `null` = todos. É este valor que as três abas recebem. */
-  const setorAbas = escopoAbas.setorId;
+  /** Setores em foco. Lista vazia = todos. É este valor que as abas recebem. */
+  const setoresAbas = escopoAbas.setorIds;
 
   /**
    * As pessoas que o seletor do Ajuste de recebimento oferece.
@@ -267,10 +271,10 @@ export default function PainelLider() {
     [operadores, liderancaAjuste, equipesInfo],
   );
   const nomeSetorTravado = useMemo(
-    () => (escopoAbas.podeFiltrarSetor || !setorAbas
+    () => (escopoAbas.podeFiltrarSetor || !escopoAbas.setorUnico
       ? null
-      : setoresLista.find(s => s.id === setorAbas)?.nome ?? null),
-    [escopoAbas.podeFiltrarSetor, setorAbas, setoresLista],
+      : setoresLista.find(s => s.id === escopoAbas.setorUnico)?.nome ?? null),
+    [escopoAbas.podeFiltrarSetor, escopoAbas.setorUnico, setoresLista],
   );
 
   /**
@@ -281,15 +285,26 @@ export default function PainelLider() {
    * enxerga a empresa toda.
    */
   const rotuloDoEscopo = useMemo(() => {
-    const nomeSetor = setorAbas
-      ? setoresLista.find(s => s.id === setorAbas)?.nome ?? null
-      : null;
-    const nomeEquipe = escopoAbas.equipeId
-      ? escopoAbas.equipesDisponiveis.find(e => e.id === escopoAbas.equipeId)?.nome ?? null
-      : null;
-    const partes = [nomeSetor, nomeEquipe && `Equipe ${nomeEquipe}`].filter(Boolean);
+    const nomes = (ids: readonly string[], acha: (id: string) => string | null) => {
+      if (ids.length === 0) return null;
+      // Até dois nomes cabem no cabeçalho e dizem mais que a contagem; de três
+      // em diante o título ficaria mais longo que o próprio gráfico.
+      if (ids.length > 2) return null;
+      const lista = ids.map(acha).filter(Boolean) as string[];
+      return lista.length ? lista.join(' + ') : null;
+    };
+    const nomeSetor = nomes(setoresAbas, id => setoresLista.find(s => s.id === id)?.nome ?? null)
+      ?? (setoresAbas.length > 2 ? `${setoresAbas.length} setores` : null);
+    const nomeEquipe = nomes(escopoAbas.equipeIds,
+      id => escopoAbas.equipesDisponiveis.find(e => e.id === id)?.nome ?? null);
+    const partes = [
+      nomeSetor,
+      nomeEquipe
+        ? `Equipe${escopoAbas.equipeIds.length > 1 ? 's' : ''} ${nomeEquipe}`
+        : (escopoAbas.equipeIds.length > 2 ? `${escopoAbas.equipeIds.length} equipes` : null),
+    ].filter(Boolean);
     return partes.length ? partes.join(' · ') : null;
-  }, [setorAbas, setoresLista, escopoAbas.equipeId, escopoAbas.equipesDisponiveis]);
+  }, [setoresAbas, setoresLista, escopoAbas.equipeIds, escopoAbas.equipesDisponiveis]);
   // Abas Desempenho Equipes / Quartis (e Gráfico na BookPlay) são alimentadas
   // pelo relatório ANALÍTICO nos dois tenants: resumos por operador + órfãos +
   // total do relatório por setor + setores alternativos. (PP: Gráfico = diário.)
@@ -415,33 +430,40 @@ export default function PainelLider() {
     // Filtro de EQUIPE manda sobre o de setor: é o recorte mais estreito, e a
     // equipe já pertence a um setor. `linhaNoEscopo` no ramo 'equipe' deixa a
     // linha órfã de fora de propósito — ela tem setor, não tem equipe.
-    if (escopoAbas.equipeId) {
-      return {
-        tipo: 'equipe' as const,
-        operadores: operadoresDaEquipe(escopoAbas.equipeId, fontes),
-      };
+    //
+    // Com várias equipes marcadas os operadores entram num conjunto só: quem
+    // está em duas delas conta uma vez, que é o que o `Set` garante.
+    if (escopoAbas.equipeIds.length) {
+      const operadores = new Set<string>();
+      for (const eq of escopoAbas.equipeIds) {
+        for (const id of operadoresDaEquipe(eq, fontes)) operadores.add(id);
+      }
+      return { tipo: 'equipe' as const, operadores };
     }
 
     // Sem setor em foco o gráfico soma a empresa: é o mesmo total do relatório,
     // e `linhaNoEscopo` no ramo 'empresa' aceita tudo, inclusive as órfãs.
     // Antes esta função devolvia `null` aqui, e o gráfico caía numa regra
     // própria — a que divergia do card em R$ 1.933,21.
-    if (!setorAbas) return ESCOPO_EMPRESA;
+    if (setoresAbas.length === 0) return ESCOPO_EMPRESA;
 
-    return escopoDeSetor({
-      setorId:     setorAbas,
+    // Vários setores marcados viram a UNIÃO dos escopos deles: cada um mantém a
+    // regra que é dele (carimbo no normal, soma dos usuários no alternativo, as
+    // origens que cada um tirou do acumulado), e a linha entra uma vez só.
+    return escopoUniao(setoresAbas.map(sid => escopoDeSetor({
+      setorId:     sid,
       alternativo: setorSomaPorUsuarios({
         isPaguePlay: isPP,
-        alternativo: analiticoSetoresAlt.has(setorAbas),
+        alternativo: analiticoSetoresAlt.has(sid),
       }),
-      operadores:  operadoresDoSetor(setorAbas, fontes),
+      operadores:  operadoresDoSetor(sid, fontes),
       // As linhas do analítico sempre trazem o carimbo desde a 20260802a; na
       // PaguePlay ele nem é usado (cai no ramo alternativo acima).
       temCarimbo:  true,
-      origensExcluidas: analiticoExclusoes[setorAbas],
+      origensExcluidas: analiticoExclusoes[sid],
       setorDoOperador:  id => equipesInfo.operadorEquipeMap[id]?.setor_id ?? null,
-    });
-  }, [setorAbas, escopoAbas.equipeId, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
+    })));
+  }, [setoresAbas, escopoAbas.equipeIds, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
 
   /*
    * Os carregadores abaixo leem do perfil só a identidade e o setor. Em
@@ -615,8 +637,8 @@ export default function PainelLider() {
         <FiltrosEscopo
           escopo={escopoAbas}
           setores={setoresLista}
-          onSetor={mudarFiltroSetor}
-          onEquipe={setFiltroEquipeId}
+          onSetores={mudarFiltroSetores}
+          onEquipes={setFiltroEquipes}
           nomeSetorTravado={nomeSetorTravado}
         />
       )}
@@ -641,8 +663,8 @@ export default function PainelLider() {
           <DesempenhoEquipes
             empresaId={empresa.id}
             mes={mesStr}
-            setorId={setorAbas}
-            equipeId={escopoAbas.equipeId}
+            setorIds={setoresAbas}
+            equipeIds={escopoAbas.equipeIds}
             equipes={equipesInfo?.equipes ?? []}
             resumos={analiticoResumos}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
@@ -665,8 +687,8 @@ export default function PainelLider() {
           <QuartisOperadores
             empresaId={empresa.id}
             mes={mesStr}
-            setorId={setorAbas}
-            equipeId={escopoAbas.equipeId}
+            setorIds={setoresAbas}
+            equipeIds={escopoAbas.equipeIds}
             equipes={equipesInfo?.equipes ?? []}
             resumos={analiticoResumos}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
@@ -686,10 +708,12 @@ export default function PainelLider() {
               <Loader2 className="w-4 h-4 animate-spin" /> Carregando recebimentos do mês…
             </div>
           ) : (
+            /* `setorId` aqui é só o NOME do cabeçalho, e só quando há um setor
+               e um só. Quem recorta é `escopo`, logo abaixo. */
             <GraficoRecebimento
               empresaId={empresa.id}
               mes={mesStr}
-              setorId={setorAbas}
+              setorId={escopoAbas.setorUnico}
               equipes={equipesInfo?.equipes ?? []}
               operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
               equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}

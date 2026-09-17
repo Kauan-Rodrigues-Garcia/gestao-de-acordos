@@ -39,8 +39,8 @@ function escopo(over: Partial<Parameters<typeof resolverEscopoPainel>[0]> = {}) 
     cargo: 'lider',
     temPermissao: SO_SETOR,
     setorDoPerfil: 'setorA',
-    setorEscolhido: null,
-    equipeEscolhida: null,
+    setoresEscolhidos: [],
+    equipesEscolhidas: [],
     equipes: EQUIPES,
     ...over,
   });
@@ -53,23 +53,23 @@ describe('quem enxerga a empresa toda', () => {
    */
   it('diretoria sem escolha vê TODOS os setores, não o setor do próprio perfil', () => {
     const r = escopo({
-      cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO,
+      cargo: 'diretoria', temPermissao: VE_TUDO,
       setorDoPerfil: 'setorA',      // era o valor de preenchimento que vazava
-      setorEscolhido: null,
+      setoresEscolhidos: [],
     });
-    expect(r.setorId).toBeNull();
+    expect(r.setorIds).toEqual([]);
     expect(r.podeFiltrarSetor).toBe(true);
   });
 
   it('super_admin e administrador também', () => {
     for (const cargo of ['super_admin', 'administrador']) {
-      expect(escopo({ cargo, temPermissao: VE_TUDO, setorEscolhido: null }).setorId).toBeNull();
+      expect(escopo({ cargo, temPermissao: VE_TUDO, setoresEscolhidos: [] }).setorIds).toEqual([]);
     }
   });
 
   it('escolher um setor estreita de verdade', () => {
-    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: 'setorB' });
-    expect(r.setorId).toBe('setorB');
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, setoresEscolhidos: ['setorB'] });
+    expect(r.setorIds).toEqual(['setorB']);
   });
 
   /**
@@ -114,7 +114,7 @@ describe('quem enxerga a empresa toda', () => {
 describe('quem só enxerga o próprio setor', () => {
   it('fica travado no setor do perfil e não vê o seletor', () => {
     const r = escopo({ cargo: 'lider', setorDoPerfil: 'setorA' });
-    expect(r.setorId).toBe('setorA');
+    expect(r.setorIds).toEqual(['setorA']);
     expect(r.podeFiltrarSetor).toBe(false);
   });
 
@@ -128,9 +128,9 @@ describe('quem só enxerga o próprio setor', () => {
       cargo: 'lider',
       temPermissao: SEM_PERMISSAO,   // a chave da aba caiu junto
       setorDoPerfil: 'setorA',
-      setorEscolhido: 'setorB',     // escolhido quando ainda podia
+      setoresEscolhidos: ['setorB'],     // escolhido quando ainda podia
     });
-    expect(r.setorId).toBe('setorA');
+    expect(r.setorIds).toEqual(['setorA']);
   });
 
   it('o próprio setor não conta como "filtro ativo"', () => {
@@ -142,12 +142,12 @@ describe('quem só enxerga o próprio setor', () => {
 
 describe('filtro de equipe', () => {
   it('lista só as equipes do setor em foco', () => {
-    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: 'setorA' });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, setoresEscolhidos: ['setorA'] });
     expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqA1', 'eqA2']);
   });
 
   it('sem setor em foco, lista as equipes de todos os setores', () => {
-    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: null });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, setoresEscolhidos: [] });
     expect(r.equipesDisponiveis).toHaveLength(3);
   });
 
@@ -158,35 +158,35 @@ describe('filtro de equipe', () => {
    */
   it('equipe de outro setor é descartada ao trocar o setor', () => {
     const r = escopo({
-      cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO,
-      setorEscolhido: 'setorB',
-      equipeEscolhida: 'eqA1',      // ficou do setor anterior
+      cargo: 'diretoria', temPermissao: VE_TUDO,
+      setoresEscolhidos: ['setorB'],
+      equipesEscolhidas: ['eqA1'],      // ficou do setor anterior
     });
-    expect(r.equipeId).toBeNull();
+    expect(r.equipeIds).toEqual([]);
   });
 
   it('equipe do setor em foco sobrevive', () => {
     const r = escopo({
-      cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: 'setorA', equipeEscolhida: 'eqA2',
+      cargo: 'diretoria', temPermissao: VE_TUDO, setoresEscolhidos: ['setorA'], equipesEscolhidas: ['eqA2'],
     });
-    expect(r.equipeId).toBe('eqA2');
+    expect(r.equipeIds).toEqual(['eqA2']);
     expect(r.temFiltroAtivo).toBe(true);
   });
 
   it('equipe inexistente é descartada', () => {
-    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, equipeEscolhida: 'eqFantasma' });
-    expect(r.equipeId).toBeNull();
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, equipesEscolhidas: ['eqFantasma'] });
+    expect(r.equipeIds).toEqual([]);
   });
 
   it('líder travado no setor pode filtrar equipe do setor dele', () => {
-    const r = escopo({ cargo: 'lider', setorDoPerfil: 'setorA', equipeEscolhida: 'eqA1' });
-    expect(r.equipeId).toBe('eqA1');
+    const r = escopo({ cargo: 'lider', setorDoPerfil: 'setorA', equipesEscolhidas: ['eqA1'] });
+    expect(r.equipeIds).toEqual(['eqA1']);
     expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqA1', 'eqA2']);
   });
 
   it('líder não consegue filtrar equipe de outro setor', () => {
-    const r = escopo({ cargo: 'lider', setorDoPerfil: 'setorA', equipeEscolhida: 'eqB1' });
-    expect(r.equipeId).toBeNull();
+    const r = escopo({ cargo: 'lider', setorDoPerfil: 'setorA', equipesEscolhidas: ['eqB1'] });
+    expect(r.equipeIds).toEqual([]);
   });
 });
 
@@ -197,14 +197,70 @@ describe('cúpula sem setor no perfil', () => {
    * algum filho complete de novo.
    */
   it('setor nulo no perfil continua significando todos os setores', () => {
-    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorDoPerfil: null, setorEscolhido: null });
-    expect(r.setorId).toBeNull();
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, setorDoPerfil: null, setoresEscolhidos: [] });
+    expect(r.setorIds).toEqual([]);
     expect(r.equipesDisponiveis).toHaveLength(3);
   });
 
   it('e ainda pode escolher um setor específico', () => {
-    const r = escopo({ cargo: 'super_admin', temPermissao: VE_TUDO, setorDoPerfil: null, setorEscolhido: 'setorB' });
-    expect(r.setorId).toBe('setorB');
+    const r = escopo({ cargo: 'super_admin', temPermissao: VE_TUDO, setorDoPerfil: null, setoresEscolhidos: ['setorB'] });
+    expect(r.setorIds).toEqual(['setorB']);
     expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqB1']);
+  });
+});
+
+/*
+ * Marcação múltipla (17/09/2026). O filtro deixou de escolher um item de cada
+ * vez: marcar três setores tem de mostrar exatamente esses três, e não o
+ * primeiro nem todos.
+ */
+describe('marcação múltipla', () => {
+  it('vários setores marcados sobrevivem inteiros', () => {
+    const r = escopo({
+      cargo: 'diretoria', temPermissao: VE_TUDO,
+      setoresEscolhidos: ['setorA', 'setorB'],
+    });
+    expect(r.setorIds).toEqual(['setorA', 'setorB']);
+    expect(r.setorUnico).toBeNull();
+    expect(r.temFiltroAtivo).toBe(true);
+  });
+
+  it('as equipes oferecidas são a união das dos setores marcados', () => {
+    const r = escopo({
+      cargo: 'diretoria', temPermissao: VE_TUDO,
+      setoresEscolhidos: ['setorA', 'setorB'],
+    });
+    expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqA1', 'eqA2', 'eqB1']);
+  });
+
+  it('só a equipe fora dos setores marcados é descartada — as outras ficam', () => {
+    const r = escopo({
+      cargo: 'diretoria', temPermissao: VE_TUDO,
+      setoresEscolhidos: ['setorA'],
+      equipesEscolhidas: ['eqA1', 'eqB1', 'eqA2'],
+    });
+    expect(r.equipeIds).toEqual(['eqA1', 'eqA2']);
+  });
+
+  it('id repetido não entra duas vezes', () => {
+    const r = escopo({
+      cargo: 'diretoria', temPermissao: VE_TUDO,
+      setoresEscolhidos: ['setorA', 'setorA'],
+    });
+    expect(r.setorIds).toEqual(['setorA']);
+  });
+
+  it('um setor marcado ainda é o caso de sempre', () => {
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, setoresEscolhidos: ['setorB'] });
+    expect(r.setorUnico).toBe('setorB');
+    expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqB1']);
+  });
+
+  it('líder travado não ganha os setores que marcou por fora', () => {
+    const r = escopo({
+      cargo: 'lider', setorDoPerfil: 'setorA',
+      setoresEscolhidos: ['setorA', 'setorB'],
+    });
+    expect(r.setorIds).toEqual(['setorA']);
   });
 });

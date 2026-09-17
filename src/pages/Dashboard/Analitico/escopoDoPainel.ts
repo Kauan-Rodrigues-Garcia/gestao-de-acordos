@@ -17,14 +17,28 @@
  *   • o `Gráfico` não tinha filtro nenhum, e o escopo virava `null` sempre que
  *     não houvesse setor — somando a empresa toda sem como estreitar.
  *
- * Agora existe UM escopo, calculado aqui e passado pronto. `null` em `setorId`
- * significa "todos os setores" e nada mais o reinterpreta.
+ * Agora existe UM escopo, calculado aqui e passado pronto. Lista VAZIA em
+ * `setorIds` significa "todos os setores" e nada mais o reinterpreta.
+ *
+ * ## Escolha múltipla (17/09/2026)
+ *
+ * O recorte deixou de ser "um setor OU todos". A liderança pediu para comparar
+ * um punhado de setores — ou um punhado de equipes dentro deles — sem ter de
+ * olhar um de cada vez e somar de cabeça. Por isso o escopo é um CONJUNTO:
+ *
+ *   • `setorIds` vazio  = todos os setores que a pessoa enxerga;
+ *   • `setorIds` com N  = exatamente esses N, e nada além deles;
+ *   • idem para `equipeIds`, sempre dentro do que os setores deixaram passar.
+ *
+ * O caso de um item continua existindo e continua valendo o que valia — é o
+ * conjunto de tamanho 1. Nenhum consumidor deve completar uma lista vazia com
+ * o setor do próprio perfil: era esse `??` que mostrava um setor à diretoria.
  *
  * ## A regra
  *
- * Quem enxerga mais de um setor ESCOLHE qual olhar (ou todos). Quem não enxerga
- * fica travado no próprio, e para essa pessoa o filtro nem aparece — um seletor
- * com uma opção só é ruído.
+ * Quem enxerga mais de um setor ESCOLHE quais olhar (ou todos). Quem não
+ * enxerga fica travado no próprio, e para essa pessoa o filtro nem aparece —
+ * um seletor com uma opção só é ruído.
  *
  * Quem decide isso são as permissões DESTA aba, resolvidas por
  * `escopoEfetivo("painel_lider")`. Antes vinha de `veTodosOsSetores`, que
@@ -54,31 +68,44 @@ export interface EntradaEscopoPainel {
   temPermissao: (chave: string) => boolean;
   /** Setor do próprio perfil. Nulo para a cúpula — ver `PERFIS_ESCOPO_EMPRESA`. */
   setorDoPerfil: string | null;
-  /** Setor escolhido no filtro. `null` = "todos os setores". */
-  setorEscolhido: string | null;
-  /** Equipe escolhida no filtro. `null` = "todas as equipes". */
-  equipeEscolhida: string | null;
+  /** Setores marcados no filtro. Lista vazia = "todos os setores". */
+  setoresEscolhidos: readonly string[];
+  /** Equipes marcadas no filtro. Lista vazia = "todas as equipes". */
+  equipesEscolhidas: readonly string[];
   /** Equipes da empresa no mês, para validar a escolha e montar a lista. */
   equipes: readonly EquipeAnalitico[];
 }
 
 export interface EscopoPainel {
   /**
-   * Setor que as abas devem usar. `null` = todos.
+   * Setores que as abas devem usar. Lista VAZIA = todos.
    *
    * Autoritativo: nenhum componente filho deve completar este valor com o setor
    * do próprio perfil. Era exatamente esse `??` que mostrava um setor à
    * diretoria quando o pai já havia dito "todos".
    */
-  setorId: string | null;
-  /** Equipe em foco. `null` = todas as equipes do setor em foco. */
-  equipeId: string | null;
+  setorIds: string[];
+  /** Equipes em foco. Lista VAZIA = todas as equipes dos setores em foco. */
+  equipeIds: string[];
+  /**
+   * O setor em foco quando há EXATAMENTE um.
+   *
+   * Existe para o que é legítimo com um só: o nome no cabeçalho, o rótulo do
+   * setor travado. Não serve de filtro — quem filtra usa `setorIds`, senão
+   * "três setores" viraria "todos" pelo caminho.
+   */
+  setorUnico: string | null;
   /** Mostrar o seletor de setor? Falso para quem só enxerga o próprio. */
   podeFiltrarSetor: boolean;
-  /** Equipes que cabem no seletor, já recortadas pelo setor em foco. */
+  /** Equipes que cabem no seletor, já recortadas pelos setores em foco. */
   equipesDisponiveis: EquipeAnalitico[];
   /** Alguma restrição está ativa? Serve ao rótulo "limpar filtros". */
   temFiltroAtivo: boolean;
+}
+
+/** Sem repetições e sem `''`, preservando a ordem em que foram marcados. */
+function limpar(ids: readonly string[]): string[] {
+  return [...new Set(ids.filter(Boolean))];
 }
 
 /**
@@ -86,10 +113,10 @@ export interface EscopoPainel {
  *
  * Duas correções de coerência acontecem aqui, e não na tela:
  *
- * 1. **Equipe órfã.** Trocar o setor deixaria uma equipe do setor anterior
- *    selecionada, e o cruzamento devolveria lista vazia — parecendo "não há
- *    ninguém" quando o filtro é que estava impossível. A equipe que não pertence
- *    ao setor em foco é descartada.
+ * 1. **Equipe órfã.** Trocar os setores deixaria equipes do recorte anterior
+ *    selecionadas, e o cruzamento devolveria lista vazia — parecendo "não há
+ *    ninguém" quando o filtro é que estava impossível. Equipe que não pertence
+ *    a nenhum setor em foco é descartada.
  * 2. **Setor de quem não pode escolher.** Se a permissão for revogada enquanto a
  *    tela está aberta, o valor escolhido antes continuaria valendo. Quem não
  *    pode filtrar usa o próprio setor, ponto.
@@ -101,24 +128,28 @@ export function resolverEscopoPainel(e: EntradaEscopoPainel): EscopoPainel {
   // Acordos, Lixeira ou Pix não abre setor nenhum aqui.
   const podeFiltrarSetor = escopoEfetivo('painel_lider', e.temPermissao) === 'todos_setores';
 
-  const setorId = podeFiltrarSetor ? e.setorEscolhido : setorDoPerfil;
+  const setorIds = podeFiltrarSetor
+    ? limpar(e.setoresEscolhidos)
+    : (setorDoPerfil ? [setorDoPerfil] : []);
 
-  const equipesDisponiveis = equipes.filter(eq => !setorId || eq.setor_id === setorId);
+  const noFoco = new Set(setorIds);
+  const equipesDisponiveis = equipes.filter(
+    eq => noFoco.size === 0 || (eq.setor_id ? noFoco.has(eq.setor_id) : false),
+  );
 
   // A equipe só sobrevive se estiver entre as disponíveis.
-  const equipeId = e.equipeEscolhida
-      && equipesDisponiveis.some(eq => eq.id === e.equipeEscolhida)
-    ? e.equipeEscolhida
-    : null;
+  const disponivel = new Set(equipesDisponiveis.map(eq => eq.id));
+  const equipeIds = limpar(e.equipesEscolhidas).filter(id => disponivel.has(id));
 
   return {
-    setorId,
-    equipeId,
+    setorIds,
+    equipeIds,
+    setorUnico: setorIds.length === 1 ? setorIds[0] : null,
     podeFiltrarSetor,
     equipesDisponiveis,
     // O setor só conta como filtro para quem tinha a opção de não filtrar: para
     // um líder travado no setor dele, "limpar filtros" não deveria oferecer
     // remover o próprio escopo.
-    temFiltroAtivo: (podeFiltrarSetor && setorId !== null) || equipeId !== null,
+    temFiltroAtivo: (podeFiltrarSetor && setorIds.length > 0) || equipeIds.length > 0,
   };
 }

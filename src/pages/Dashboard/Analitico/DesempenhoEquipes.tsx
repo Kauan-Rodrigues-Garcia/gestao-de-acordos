@@ -12,11 +12,12 @@
  * `CardEquipe.tsx`. Este arquivo ficou com o que é dele: buscar dado, montar as
  * fontes e decidir quais cards aparecem.
  *
- * **O recorte** é do pai. A prop `setorId` é AUTORITATIVA: `null` significa
- * "todos os setores", e nada aqui a completa com o setor do próprio perfil.
- * Fazer isso era o defeito que mostrava um setor só à diretoria — o pai dizia
- * "todos" e este arquivo respondia com `setorId ?? perfil?.setor_id`. Ver
- * `escopoDoPainel.ts`.
+ * **O recorte** é do pai. A prop `setorIds` é AUTORITATIVA: lista VAZIA
+ * significa "todos os setores", e nada aqui a completa com o setor do próprio
+ * perfil. Fazer isso era o defeito que mostrava um setor só à diretoria — o pai
+ * dizia "todos" e este arquivo respondia com `setorId ?? perfil?.setor_id`.
+ * Desde 17/09/2026 o recorte aceita VÁRIOS setores e várias equipes de uma vez;
+ * o caso de um é o conjunto de tamanho 1. Ver `escopoDoPainel.ts`.
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -58,15 +59,15 @@ interface DesempenhoEquipesProps {
   empresaId: string;
   mes: string;                 // 'yyyy-MM'
   /**
-   * Setor em foco. `null` = todos os setores.
+   * Setores em foco. Lista VAZIA = todos os setores.
    *
    * Obrigatória de propósito: era opcional, e o valor ausente virava um
    * `?? perfil?.setor_id` que desfazia a decisão do pai. Com o tipo exigindo o
    * valor, quem renderiza precisa dizer o que quer.
    */
-  setorId: string | null;
-  /** Equipe em foco. `null` = todas as equipes do setor. */
-  equipeId?: string | null;
+  setorIds: string[];
+  /** Equipes em foco. Lista VAZIA = todas as equipes dos setores em foco. */
+  equipeIds?: string[];
   equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
@@ -273,10 +274,19 @@ function CardContribuicaoReceptivo({
   );
 }
 
+/**
+ * Lista vazia compartilhada para o padrão de `equipeIds`.
+ *
+ * `= []` no parâmetro criaria um array novo a cada render, e ele entra nas
+ * dependências dos `useMemo` abaixo — a conta inteira seria refeita sem nada
+ * ter mudado.
+ */
+const VAZIO: string[] = [];
+
 // ── Aba ───────────────────────────────────────────────────────────────────────
 
 export function DesempenhoEquipes({
-  empresaId, mes, setorId, equipeId = null, equipes, resumos, operadorEquipeMap,
+  empresaId, mes, setorIds, equipeIds = VAZIO, equipes, resumos, operadorEquipeMap,
   equipesExtrasPorOperador = {}, orfaosPorSetor = {},
   totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, setorConciliacao = false, loading,
   fonteLabel = 'relatório analítico',
@@ -288,15 +298,20 @@ export function DesempenhoEquipes({
   const conciliacao = useQuery({
     queryKey: ['pp-conciliacao-setor', empresaId, mes, perfil?.id, conciliacaoVersao],
     queryFn: () => carregarConciliacaoSetor(empresaId, mes),
-    enabled: usarConciliacao && !equipeId,
+    enabled: usarConciliacao && equipeIds.length === 0,
     staleTime: 0,
     refetchOnWindowFocus: 'always',
     refetchInterval: 60_000,
   });
-  // `setorId` vem do pai e vale como está — `null` é "todos os setores". Não há
-  // fallback para `perfil.setor_id`: era ele que desfazia a decisão do pai e
-  // mostrava um setor só à diretoria. Ver o cabeçalho do arquivo.
-  const setorEfetivo = setorId;
+  // `setorIds` vem do pai e vale como está — lista vazia é "todos os setores".
+  // Não há fallback para `perfil.setor_id`: era ele que desfazia a decisão do
+  // pai e mostrava um setor só à diretoria. Ver o cabeçalho do arquivo.
+  const setoresFoco = useMemo(() => new Set(setorIds), [setorIds]);
+  const equipesFoco = useMemo(() => new Set(equipeIds), [equipeIds]);
+  /** Um setor marcado e só um — o que dispensa o título acima de cada grupo. */
+  const setorUnico = setorIds.length === 1 ? setorIds[0] : null;
+  /** Nenhuma equipe marcada: os números de SETOR continuam fazendo sentido. */
+  const setorInteiro = equipeIds.length === 0;
   const [metas, setMetas]       = useState<MetaRow[]>([]);
   const [feriados, setFeriados] = useState<string[]>([]);
   const [quartis, setQuartis]   = useState<QuartilConfig[]>(QUARTIS_PADRAO);
@@ -622,10 +637,12 @@ export function DesempenhoEquipes({
       if (v > 0) metaPorOperador[m.referencia_id] = v;
     }
 
-    // Agrupa por setor. `setorEfetivo` nulo = todos os setores; `equipeId`
+    // Agrupa por setor. `setoresFoco` vazio = todos os setores; `equipesFoco`
     // recorta as equipes dentro do que sobrou.
-    let visiveis = setorEfetivo ? equipes.filter(e => e.setor_id === setorEfetivo) : equipes;
-    if (equipeId) visiveis = visiveis.filter(e => e.id === equipeId);
+    let visiveis = setoresFoco.size
+      ? equipes.filter(e => (e.setor_id ? setoresFoco.has(e.setor_id) : false))
+      : equipes;
+    if (equipesFoco.size) visiveis = visiveis.filter(e => equipesFoco.has(e.id));
     const grupos = new Map<string, EquipeAnalitico[]>();
     for (const eq of visiveis) {
       const sid = eq.setor_id ?? 'sem_setor';
@@ -638,7 +655,7 @@ export function DesempenhoEquipes({
       recebidoPorOperador, metaPorOperador, setorDaEquipe,
     };
   }, [anoNum, mesNum, feriados, contarHoje, resumos, operadorEquipeMap, equipesExtrasPorOperador,
-      orfaosPorSetor, equipes, metas, setorEfetivo, equipeId]);
+      orfaosPorSetor, equipes, metas, setoresFoco, equipesFoco]);
 
   /**
    * Operadores de um card, prontos para a área expandida.
@@ -705,7 +722,8 @@ export function DesempenhoEquipes({
   if (dados.grupos.size === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-10">
-        Nenhuma equipe encontrada{setorEfetivo ? ' neste setor' : ''}.
+        Nenhuma equipe encontrada{setoresFoco.size
+          ? (setorUnico ? ' neste setor' : ' nos setores escolhidos') : ''}.
       </p>
     );
   }
@@ -738,13 +756,13 @@ export function DesempenhoEquipes({
         const metaSetor = dados.metaDe('setor', sid);
         // Receptivo (BookPlay): o card aparece quando o 59 traz contribuição para
         // o setor, e só então. O botão de adicionar à mão saiu (14/09/2026).
-        const receptivoCabe = !isPP && !equipeId && sid !== 'sem_setor';
+        const receptivoCabe = !isPP && setorInteiro && sid !== 'sem_setor';
         const mostrarReceptivo = receptivoCabe && receptivoPreenchido(contrib[sid]);
         return (
         <div key={sid} className="space-y-3">
           {/* Nome do setor acima do grupo: com "Todos os setores" a tela vira uma
               sequência longa de cards, e o título fixo dá onde se apoiar. */}
-          {!setorEfetivo && (
+          {!setorUnico && (
             <div className="flex items-center justify-between gap-2 px-1 pt-1">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {setores[sid] ?? 'Sem setor'}
@@ -753,7 +771,7 @@ export function DesempenhoEquipes({
           )}
           {/* Consolidado do setor. Sai de cena quando há filtro de equipe: o
               número dele é do setor inteiro e contradiria o recorte pedido. */}
-          {!equipeId && (
+          {setorInteiro && (
             usarConciliacao && (conciliacao.isPending || conciliacao.isError || !resumoConciliacao) ? (
               <div role="status" className="rounded-lg border p-5 text-sm text-muted-foreground">
                 {conciliacao.isPending ? 'Carregando conciliação do setor…' : (
