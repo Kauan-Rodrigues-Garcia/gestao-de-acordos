@@ -36,8 +36,7 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import Mestre59Pendencias from './Mestre59Pendencias';
 import {
-  buscarDivergencias,
-  buscarResumoDivergencias,
+  buscarConferencia,
   pedeAtencao,
   esperaIntegracao,
   pedeImportacao,
@@ -99,10 +98,8 @@ export default function Mestre59Divergencias({ empresaId, mes, versao }: Props) 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null);
     try {
-      const [r, l] = await Promise.all([
-        buscarResumoDivergencias(empresaId, mes),
-        buscarDivergencias(empresaId, mes, { limite: 500 }),
-      ]);
+      // Resumo e lista de um cruzamento só — ver `buscarConferencia`.
+      const { resumo: r, linhas: l } = await buscarConferencia(empresaId, mes, 500);
       setResumo(r); setLinhas(l);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao comparar o 59 com o 58.');

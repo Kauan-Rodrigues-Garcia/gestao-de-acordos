@@ -221,6 +221,16 @@ export interface OpcoesAnalytics {
    * `dashboard_escopo_equipe_todas`.
    */
   podeTodasEquipes?: boolean;
+  /**
+   * Busca alguma coisa? Padrão: `true`.
+   *
+   * Existe para o Painel Diretoria da BookPlay (17/09/2026). Lá as abas leem o
+   * 59 e o painel antigo nem aparece — mas o hook continuava montado, porque
+   * hook não pode ser condicional, e baixava todos os acordos do mês a cada
+   * abertura do painel, competindo com as consultas da aba que estava na tela.
+   * Desligado, ele não busca, não mostra esqueleto e o `refetch` não faz nada.
+   */
+  ativo?: boolean;
 }
 
 export function useAnalytics(
@@ -230,6 +240,7 @@ export function useAnalytics(
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { niveis, podeTodasEquipes = true } = opcoes;
+  const ativo = opcoes.ativo !== false;
   /*
    * `todos_setores` e `setor` são o que decidia, antes, `isAdmin ||
    * isDiretoria || (isLider && ver_todos_setores)` e o ramo de liderança.
@@ -782,6 +793,7 @@ export function useAnalytics(
    * resposta certa — o que está em tela responde a outra pergunta.
    */
   useEffect(() => {
+    if (!ativo) { setLoading(false); return; }
     const semente = lerInstantaneo<InstantaneoAnalytics>(chaveCache);
     if (semente) {
       const p = semente.valor;
@@ -799,7 +811,7 @@ export function useAnalytics(
       return;
     }
     void carregarTudo(true);
-  }, [carregarTudo, chaveCache]);
+  }, [carregarTudo, chaveCache, ativo]);
 
   /**
    * Releitura silenciosa, para o botão de atualizar e para o tempo real.
@@ -808,7 +820,9 @@ export function useAnalytics(
    * lugar mais cedo ou mais tarde, e o `MouseEvent` no primeiro parâmetro faria
    * a tela inteira virar esqueleto num clique de "atualizar".
    */
-  const releituraSilenciosa = useCallback(() => { void carregarTudo(false); }, [carregarTudo]);
+  const releituraSilenciosa = useCallback(() => {
+    if (ativo) void carregarTudo(false);
+  }, [carregarTudo, ativo]);
 
   // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
   // Qualquer evento de acordos dispara um refetch completo das métricas analíticas.

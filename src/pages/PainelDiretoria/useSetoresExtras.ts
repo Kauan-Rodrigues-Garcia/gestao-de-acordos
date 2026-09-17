@@ -65,7 +65,25 @@ function normalizar(linhas: LinhaRpc[]): SetorAgregado[] {
   }));
 }
 
-export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, mesRef?: string | null) {
+export interface OpcoesSetoresExtras {
+  /** Busca alguma coisa? Padrão `true`. */
+  ativo?: boolean;
+  /**
+   * Busca também o mês anterior? Padrão `true`.
+   *
+   * Só o painel antigo usa o comparativo. A aba Setores da BookPlay quer o
+   * agendado do mês e nada mais — pedir o anterior ali era uma segunda
+   * agregação da tabulação inteira jogada fora.
+   */
+  comparativo?: boolean;
+}
+
+export function useSetoresExtras(
+  empresaId: string | undefined,
+  isPP: boolean,
+  mesRef?: string | null,
+  { ativo = true, comparativo = true }: OpcoesSetoresExtras = {},
+) {
   const [setoresDetalhes, setSetoresDetalhes] = useState<SetorAgregado[]>([]);
   /** Acordos sem setor: não vira card, mas conta nos totais do painel. */
   const [semSetor, setSemSetor] = useState<SetorAgregado | null>(null);
@@ -81,14 +99,16 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
   const mes = normalizarMes(mesRef);
 
   const carregarSetoresDetalhes = useCallback(async () => {
-    if (!empresaId) return;
+    if (!empresaId || !ativo) return;
     setLoadingSetores(true);
     try {
       const mesPrev = deslocarMes(mes, -1);
 
       const [atual, anterior] = await Promise.all([
         supabase.rpc('fn_diretoria_setores_do_mes', { p_empresa_id: empresaId, p_mes: mes }),
-        supabase.rpc('fn_diretoria_setores_do_mes', { p_empresa_id: empresaId, p_mes: mesPrev }),
+        comparativo
+          ? supabase.rpc('fn_diretoria_setores_do_mes', { p_empresa_id: empresaId, p_mes: mesPrev })
+          : null,
       ]);
 
       if (atual.error) throw atual.error;
@@ -97,7 +117,7 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
       setSetoresDetalhes(linhas.filter(l => l.id !== null));
       setSemSetor(linhas.find(l => l.id === null) ?? null);
 
-      if (!anterior.error) {
+      if (anterior && !anterior.error) {
         // Soma TODAS as linhas, inclusive a de sem setor: o comparativo é do
         // mês inteiro, não do que coube em card.
         const prev = normalizar((anterior.data ?? []) as unknown as LinhaRpc[]);
@@ -114,10 +134,10 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
     } finally {
       setLoadingSetores(false);
     }
-  }, [empresaId, mes]);
+  }, [empresaId, mes, ativo, comparativo]);
 
   const carregarExtras = useCallback(async () => {
-    if (!empresaId || !isPP) return;
+    if (!empresaId || !isPP || !ativo) return;
     setLoadingExtras(true);
     try {
       const inicio = primeiroDiaDoMes(mes);
@@ -162,7 +182,7 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, m
     } finally {
       setLoadingExtras(false);
     }
-  }, [empresaId, isPP, mes]);
+  }, [empresaId, isPP, mes, ativo]);
 
   useEffect(() => { carregarSetoresDetalhes(); }, [carregarSetoresDetalhes]);
   useEffect(() => { carregarExtras(); }, [carregarExtras]);

@@ -29,6 +29,7 @@
  * fora daqui é o que permite mexer no painel sem risco para o resto.
  */
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { espiarDo59, lerDo59 } from './cache59';
 
 /** `numeric` do Postgres chega como string. Ver o cabeçalho. */
 const n = (v: unknown): number => Number(v) || 0;
@@ -156,7 +157,22 @@ interface AlternativoCru {
  * num mês fechado. Quem chama não precisa saber a diferença — e não deve, senão
  * a mesma regra passa a existir em dois lugares.
  */
-export async function buscarVisaoGeralDiretoria(
+export function buscarVisaoGeralDiretoria(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): Promise<VisaoGeralDiretoria> {
+  // Guardada por alguns minutos: ver `cache59.ts`.
+  return lerDo59(['visao', empresaId, mes, diaCorte],
+    () => buscarVisaoGeralNoBanco(empresaId, mes, diaCorte));
+}
+
+/** A visão geral já buscada, se ainda válida — para a aba abrir sem esqueleto. */
+export function espiarVisaoGeralDiretoria(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): VisaoGeralDiretoria | undefined {
+  return espiarDo59(['visao', empresaId, mes, diaCorte]);
+}
+
+async function buscarVisaoGeralNoBanco(
   empresaId: string, mes: string, diaCorte?: number | null,
 ): Promise<VisaoGeralDiretoria> {
   const args = { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null };

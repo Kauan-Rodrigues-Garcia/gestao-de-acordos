@@ -73,7 +73,7 @@ import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { variacao, acumular, intensidadeDaBarra } from '@/services/mestre/diretoria.service';
 import {
-  buscarGradeDeSetores, buscarDetalheDoSetor, participacao, projecaoDoSetor,
+  buscarGradeDeSetores, buscarDetalheDoSetor, espiarGradeDeSetores, participacao, projecaoDoSetor,
   type GradeDeSetores, type DetalheDoSetor, type EquipeDoSetor,
   type CarteiraSemSetor,
 } from '@/services/mestre/diretoriaSetores.service';
@@ -327,9 +327,12 @@ export function DiretoriaSetores({
    */
   agendadoPorSetor?: SetorAgregado[];
 }) {
-  const [grade, setGrade]   = useState<GradeDeSetores | null>(null);
+  // Abre com a grade guardada, se houver — ver `cache59.ts`.
+  const [grade, setGrade]   = useState<GradeDeSetores | null>(
+    () => (empresaId ? espiarGradeDeSetores(empresaId, mes) ?? null : null),
+  );
   const [erro, setErro]     = useState<string | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(() => !(empresaId && espiarGradeDeSetores(empresaId, mes)));
 
   const [alvo, setAlvo]     = useState<Alvo | null>(null);
   const [detalhe, setDetalhe] = useState<DetalheDoSetor | null>(null);
@@ -353,7 +356,9 @@ export function DiretoriaSetores({
   useEffect(() => {
     if (!empresaId) return;   // antes de ligar o esqueleto, senão ele fica aceso
     let vivo = true;
-    setCarregando(true);
+    const guardada = espiarGradeDeSetores(empresaId, mes);
+    if (guardada) setGrade(guardada);
+    setCarregando(!guardada);
     setErro(null);
     void (async () => {
       try {

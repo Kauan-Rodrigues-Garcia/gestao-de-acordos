@@ -72,7 +72,7 @@ import { SeloVariacao as Selo } from './components';
 import { OndeOResultadoAcontece } from './OndeOResultadoAcontece';
 import { FiltroDePeriodo } from './FiltroDePeriodo';
 import {
-  buscarVisaoGeralDiretoria, variacao, acumular, estimativaDeFechamento,
+  buscarVisaoGeralDiretoria, espiarVisaoGeralDiretoria, variacao, acumular, estimativaDeFechamento,
   type VisaoGeralDiretoria,
 } from '@/services/mestre/diretoria.service';
 
@@ -162,12 +162,30 @@ export function DiretoriaVisaoGeral({
   /** Leva para a aba de setores. Opcional: a aba funciona sozinha. */
   onAbrirSetores?: () => void;
 }) {
-  const [dados, setDados]       = useState<VisaoGeralDiretoria | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  // Abre com a resposta guardada, se houver (ver `cache59.ts`): voltar de outra
+  // aba do painel não mostra esqueleto para chegar aos mesmos números.
+  const [dados, setDados]       = useState<VisaoGeralDiretoria | null>(
+    () => (empresaId ? espiarVisaoGeralDiretoria(empresaId, mes, null) ?? null : null),
+  );
+  const [carregando, setCarregando] = useState(
+    () => !(empresaId && espiarVisaoGeralDiretoria(empresaId, mes, null)),
+  );
   const [erro, setErro]         = useState<string | null>(null);
   const [modo, setModo]         = useState<'acumulado' | 'dia'>('acumulado');
-  /** `null` = o corte que o banco escolheu (hoje). Só vira número se alguém mexe. */
-  const [corteEscolhido, setCorteEscolhido] = useState<number | null>(null);
+  /**
+   * O corte escolhido, preso ao mês em que foi escolhido. `null` = o corte que o
+   * banco escolheu (hoje). Só vira número se alguém mexe.
+   *
+   * Guardar o mês junto faz a troca de mês zerar o corte na mesma renderização.
+   * Zerar num efeito, como era, deixava uma busca sair com o mês novo e o corte
+   * velho antes da busca certa — duas agregações por troca de mês.
+   */
+  const [corteDoMes, setCorteDoMes] = useState<{ mes: string; dia: number } | null>(null);
+  const corteEscolhido = corteDoMes?.mes === mes ? corteDoMes.dia : null;
+  const escolherCorte = useCallback(
+    (dia: number | null) => setCorteDoMes(dia === null ? null : { mes, dia }),
+    [mes],
+  );
   /** Grupo de forma de pagamento aberto pelo clique. Um por vez: a lista é curta. */
   const [formaAberta, setFormaAberta] = useState<string | null>(null);
   /** Grupo sob o cursor. Separado do aberto — realçar não é abrir. */
@@ -190,10 +208,16 @@ export function DiretoriaVisaoGeral({
     }
   }, [empresaId, mes]);
 
-  // Trocar de mês zera o corte: o dia 20 de agosto e o dia 20 de setembro são
-  // pontos diferentes do mês, e herdar o corte anterior mostraria um recorte
-  // que ninguém pediu.
-  useEffect(() => { setCorteEscolhido(null); setCarregando(true); }, [mes]);
+  // Trocar de mês zera o corte (ver `corteDoMes`): o dia 20 de agosto e o dia 20
+  // de setembro são pontos diferentes do mês, e herdar o corte anterior mostraria
+  // um recorte que ninguém pediu. O esqueleto só aparece se o mês novo ainda não
+  // foi lido.
+  useEffect(() => {
+    if (!empresaId) return;
+    const guardado = espiarVisaoGeralDiretoria(empresaId, mes, null);
+    if (guardado) setDados(guardado);
+    setCarregando(!guardado);
+  }, [empresaId, mes]);
   // `versao` entra nas dependências só para o «Atualizar» do cabeçalho poder
   // disparar a mesma busca sem esta aba precisar expor nada para cima.
   useEffect(() => { void carregar(corteEscolhido); }, [carregar, corteEscolhido, versao]);
@@ -294,7 +318,7 @@ export function DiretoriaVisaoGeral({
           corte={dados.diaCorte}
           diasNoMes={dados.diasNoMes}
           escolhido={corteEscolhido}
-          onEscolher={setCorteEscolhido}
+          onEscolher={escolherCorte}
         />
       </div>
 

@@ -39,6 +39,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { lerDo59 } from './cache59';
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
@@ -108,7 +109,17 @@ export function sugestaoConfiavel(s: EquipeSugerida): boolean {
   return s.mesmoSetor && s.pessoasNaEquipe >= 2 && s.concentracao >= CONCENTRACAO_SEGURA;
 }
 
-export async function buscarEquipesSugeridas(
+/** Guardada por alguns minutos; vincular uma equipe descarta — ver `cache59.ts`. */
+export function buscarEquipesSugeridas(
+  empresaId: string,
+  mes: string,
+  minimo = 0.8,
+): Promise<EquipeSugerida[]> {
+  return lerDo59(['equipes-sugeridas', empresaId, mes, minimo],
+    () => buscarEquipesSugeridasNoBanco(empresaId, mes, minimo));
+}
+
+async function buscarEquipesSugeridasNoBanco(
   empresaId: string,
   mes: string,
   minimo = 0.8,

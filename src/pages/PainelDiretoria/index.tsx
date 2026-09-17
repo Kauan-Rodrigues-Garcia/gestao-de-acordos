@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
@@ -45,6 +45,7 @@ import { MetaSection } from './MetaSection';
 import { ExtrasSection } from './ExtrasSection';
 import { DiretoriaVisaoGeral } from './DiretoriaVisaoGeral';
 import { DiretoriaSetores } from './DiretoriaSetores';
+import { esquecerLeiturasDo59 } from '@/services/mestre/cache59';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
 
 /*
@@ -122,6 +123,39 @@ export default function PainelDiretoria() {
    */
   const { mes: mesAnalise, setMes: setMesAnalise } = useMesGlobal();
 
+  /*
+   * ── A BookPlay passou a ler o 59 ─────────────────────────────────────────
+   *
+   * O painel antigo somava o que o SISTEMA tabulou. O novo lê o relatório
+   * mestre, que traz a cobrança inteira — inclusive a carteira que não pertence
+   * a setor nenhum. Para um diretor, é a diferença entre o número de uma parte
+   * da empresa e o número da empresa.
+   *
+   * Só a BookPlay: o 59 é o relatório do ERP dela, e a PaguePlay ainda não tem
+   * equivalente. Lá o painel continua exatamente como era — nenhuma linha do
+   * caminho antigo foi tocada, e é isso que permite trazer a PaguePlay depois
+   * virando esta chave, sem reescrever nada.
+   */
+  const usaPainel59 = tenant.slug === 'bookplay';
+  const [aba, setAba] = useState<AbaDoPainel>(usaPainel59 ? 'visao' : 'painel');
+
+  /*
+   * O painel antigo só busca onde ele aparece (17/09/2026).
+   *
+   * Na BookPlay nenhuma aba mostra o painel antigo, mas os hooks dele
+   * continuavam montados: todos os acordos do mês, a agregação da tabulação de
+   * dois meses, o analítico de dois meses e as fontes de escopo — a cada
+   * abertura do painel, disputando o banco com as consultas do 59 da aba que
+   * estava na tela. Era parte do motivo de as abas estourarem os 8 s.
+   *
+   * Da tabulação, a BookPlay só usa o agendado por setor, na aba «Setores e
+   * equipes». Ele passa a ser buscado quando essa aba abre pela primeira vez,
+   * do mês em foco e sem o mês anterior.
+   */
+  const painelAntigo = !usaPainel59;
+  const [querAgendado, setQuerAgendado] = useState(false);
+  useEffect(() => { if (aba === 'setores') setQuerAgendado(true); }, [aba]);
+
   // Sem realtime de propósito: esta tela é de leitura. Os dados chegam ao abrir
   // a página e pelo botão de atualizar do cabeçalho — número que se mexe sozinho
   // no meio de uma análise atrapalha mais do que ajuda. O Dashboard, que usa o
@@ -135,24 +169,27 @@ export default function PainelDiretoria() {
     meta, percMeta, setores, setorFiltro, setSetorFiltro,
     valorRecebidoMes: recebidoTabulado,
     loading, refetch,
-  } = useAnalytics(mesAnalise, { realtime: false, niveis: niveisPainelDiretoria });
+  } = useAnalytics(mesAnalise, { realtime: false, niveis: niveisPainelDiretoria, ativo: painelAntigo });
 
   const { empresa } = useEmpresa();
   const {
     setoresDetalhes, loadingSetores, mesAnterior,
     extrasAcordos, extrasOperadoresMap, extrasOpEquipeMap, extrasEquipesMap, loadingExtras,
     reload: reloadSetoresExtras,
-  } = useSetoresExtras(empresa?.id, isPP, mesAnalise);
+  } = useSetoresExtras(empresa?.id, isPP, mesAnalise, {
+    ativo:       painelAntigo || querAgendado,
+    comparativo: painelAntigo,
+  });
 
   // ── Relatório analítico: o mês e o anterior (para o comparativo) ───────────
-  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
-  const analiticoPrev = useAnaliticoDashboard(temAnalitico, deslocarMes(mesAnalise, -1));
+  const analiticoDash = useAnaliticoDashboard(temAnalitico && painelAntigo, mesAnalise);
+  const analiticoPrev = useAnaliticoDashboard(temAnalitico && painelAntigo, deslocarMes(mesAnalise, -1));
 
   const {
     escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador,
     pendente: escopoPendente,
   } = useEscopoAnalitico({
-    ativo:       temAnalitico,
+    ativo:       temAnalitico && painelAntigo,
     empresaId:   empresa?.id,
     isPaguePlay: isPP,
     setorId:     setorFiltro,
@@ -330,22 +367,9 @@ export default function PainelDiretoria() {
    */
   const podeVerMestre = perfil?.perfil === 'super_admin' && tenant.slug === 'bookplay';
 
-  /*
-   * ── A BookPlay passou a ler o 59 ─────────────────────────────────────────
-   *
-   * O painel antigo somava o que o SISTEMA tabulou. O novo lê o relatório
-   * mestre, que traz a cobrança inteira — inclusive a carteira que não pertence
-   * a setor nenhum. Para um diretor, é a diferença entre o número de uma parte
-   * da empresa e o número da empresa.
-   *
-   * Só a BookPlay: o 59 é o relatório do ERP dela, e a PaguePlay ainda não tem
-   * equivalente. Lá o painel continua exatamente como era — nenhuma linha do
-   * caminho antigo foi tocada, e é isso que permite trazer a PaguePlay depois
-   * virando esta chave, sem reescrever nada.
-   */
-  const usaPainel59 = tenant.slug === 'bookplay';
+  // `usaPainel59` e a aba moraram aqui até 17/09/2026; subiram para antes dos
+  // hooks do painel antigo, que agora dependem deles para saber se buscam.
   const podeVerRelatorioPP = isPP && temPermissao('ver_painel_diretoria') && temPermissao('painel_diretoria_escopo_todos_setores');
-  const [aba, setAba] = useState<AbaDoPainel>(usaPainel59 ? 'visao' : 'painel');
   /*
    * O botão «Atualizar» do cabeçalho para as abas do 59. Um contador em vez de
    * uma função de recarga vinda de baixo: cada aba busca dentro dela mesma, e
@@ -369,11 +393,9 @@ export default function PainelDiretoria() {
     : aba === 'historico'    ? (podeVerMestre ? 'historico' : 'visao')
     : aba === 'fontes'       ? (podeVerMestre ? 'fontes' : 'visao')
     : 'visao';
-  /** As abas que leem o 59. O «Atualizar» recarrega estas por contador. */
-  const abaDo59 = abaVisivel === 'visao' || abaVisivel === 'setores'
-    || abaVisivel === 'operadores' || abaVisivel === 'equipes'
-    || abaVisivel === 'divergencias' || abaVisivel === 'historico'
-    || abaVisivel === 'fontes';
+  // Na BookPlay toda aba lê o 59 (ou a conferência dele), e o «Atualizar»
+  // recarrega todas por contador — inclusive «Códigos», que recebe `versao` e
+  // antes ficava de fora da lista.
 
   if (!perfil) return null;
 
@@ -427,7 +449,15 @@ export default function PainelDiretoria() {
                  `useAnalytics`, então `refetch()` ali não traria nada — o botão
                  girava e a tela continuava igual. */
               onClick={() => {
-                if (abaDo59 || abaVisivel === 'relatorioPP') { setVersaoVisao(v => v + 1); return; }
+                if (usaPainel59 || abaVisivel === 'relatorioPP') {
+                  // As leituras do 59 ficam guardadas alguns minutos
+                  // (`cache59.ts`). «Atualizar» é o pedido explícito de não
+                  // usar a guardada.
+                  if (usaPainel59) esquecerLeiturasDo59();
+                  if (abaVisivel === 'setores') reloadSetoresExtras();
+                  setVersaoVisao(v => v + 1);
+                  return;
+                }
                 refetch(); reloadSetoresExtras(); void analiticoDash.refetch();
               }}
               disabled={abaVisivel === 'painel' && (carregando || loadingSetores || loadingExtras)}
@@ -529,7 +559,7 @@ export default function PainelDiretoria() {
             empresaId={empresa?.id ?? ''}
             mes={mesAnalise}
             versao={versaoVisao}
-            aoTrocar={() => setVersaoVisao(v => v + 1)}
+            aoTrocar={() => { esquecerLeiturasDo59(); setVersaoVisao(v => v + 1); }}
           />
         </Suspense>
       ) : abaVisivel === 'historico' ? (
@@ -551,7 +581,7 @@ export default function PainelDiretoria() {
             empresaId={empresa?.id ?? ''}
             mes={mesAnalise}
             versao={versaoVisao}
-            aoVincular={() => setVersaoVisao(v => v + 1)}
+            aoVincular={() => { esquecerLeiturasDo59(); setVersaoVisao(v => v + 1); }}
           />
         </Suspense>
       ) : abaVisivel === 'codigos' ? (

@@ -34,6 +34,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { espiarDo59, lerDo59 } from './cache59';
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
@@ -71,7 +72,24 @@ interface OperadorCru {
   subgrupos: unknown;
 }
 
-export async function buscarOperadoresDoMes(
+/** Guardada por alguns minutos: ver `cache59.ts`. */
+export function buscarOperadoresDoMes(
+  empresaId: string,
+  mes: string,
+  diaCorte?: number | null,
+): Promise<OperadorDoMes[]> {
+  return lerDo59(['operadores', empresaId, mes, diaCorte],
+    () => buscarOperadoresDoMesNoBanco(empresaId, mes, diaCorte));
+}
+
+/** A lista já buscada, se ainda válida — para a aba abrir sem esqueleto. */
+export function espiarOperadoresDoMes(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): OperadorDoMes[] | undefined {
+  return espiarDo59(['operadores', empresaId, mes, diaCorte]);
+}
+
+async function buscarOperadoresDoMesNoBanco(
   empresaId: string,
   mes: string,
   diaCorte?: number | null,
@@ -146,7 +164,18 @@ export interface OperadorDetalhe {
   porDia: { dia: string; valor: number; linhas: number }[];
 }
 
-export async function buscarOperadorDetalhe(
+/** Guardado por alguns minutos: reabrir a mesma pessoa não refaz a consulta. */
+export function buscarOperadorDetalhe(
+  empresaId: string,
+  mes: string,
+  cobradora: string,
+  diaCorte?: number | null,
+): Promise<OperadorDetalhe> {
+  return lerDo59(['operador', empresaId, mes, cobradora, diaCorte],
+    () => buscarOperadorDetalheNoBanco(empresaId, mes, cobradora, diaCorte));
+}
+
+async function buscarOperadorDetalheNoBanco(
   empresaId: string,
   mes: string,
   cobradora: string,

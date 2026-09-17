@@ -41,6 +41,7 @@ import { calcularProjecao, type ResultadoProjecao } from '@/lib/projecaoMetas';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import type { QuartilConfig } from '@/lib/supabase';
 import type { DiaDaSerie, FormaDePagamento } from './diretoria.service';
+import { espiarDo59, lerDo59 } from './cache59';
 
 /** `numeric` do Postgres chega como string. Mesma regra do resto do mestre. */
 const n = (v: unknown): number => Number(v) || 0;
@@ -211,6 +212,14 @@ interface GradeCrua {
 
 type AlternativoCru = GradeCrua['setores'][number] & { pessoas: unknown };
 
+interface EquipeCrua {
+  nome: string; cod_grupo: string; carteira: string;
+  valor: unknown; linhas: unknown; operadores: unknown;
+  veio_de_fora: boolean; e_integral: boolean; e_equipe: boolean;
+  equipe_id: string | null; equipe_nome: string | null;
+  lider_id: string | null; lider_nome: string | null; lider_foto: string | null;
+}
+
 interface DetalheCru {
   setor_id: string | null; cod_grupo: string | null; setor_nome: string;
   vinculado: boolean; mes: string; mes_anterior: string;
@@ -220,18 +229,46 @@ interface DetalheCru {
   serie: { dia: unknown; valor: unknown; valor_anterior: unknown; dentro_do_corte: boolean }[];
   formas: { forma: string; valor: unknown; qtd: unknown; valor_anterior: unknown }[];
   carteiras: { cod: string; nome: string; valor: unknown; qtd: unknown }[];
-  equipes: {
-    nome: string; cod_grupo: string; carteira: string;
-    valor: unknown; linhas: unknown; operadores: unknown;
-    veio_de_fora: boolean; e_integral: boolean; e_equipe: boolean;
-    equipe_id: string | null; equipe_nome: string | null;
-    lider_id: string | null; lider_nome: string | null; lider_foto: string | null;
-  }[];
+  equipes: EquipeCrua[];
+}
+
+function paraEquipe(e: EquipeCrua): EquipeDoSetor {
+  return {
+    nome:       e.nome,
+    codGrupo:   e.cod_grupo,
+    carteira:   e.carteira,
+    valor:      n(e.valor),
+    linhas:     n(e.linhas),
+    operadores: n(e.operadores),
+    veioDeFora: e.veio_de_fora === true,
+    eIntegral:  e.e_integral === true,
+    eEquipe:    e.e_equipe === true,
+    equipeId:   e.equipe_id,
+    equipeNome: e.equipe_nome,
+    liderId:    e.lider_id,
+    liderNome:  e.lider_nome,
+    liderFoto:  e.lider_foto,
+  };
 }
 
 // ── As buscas ───────────────────────────────────────────────────────────────
 
-export async function buscarGradeDeSetores(
+/** Guardada por alguns minutos: ver `cache59.ts`. */
+export function buscarGradeDeSetores(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): Promise<GradeDeSetores> {
+  return lerDo59(['grade', empresaId, mes, diaCorte],
+    () => buscarGradeNoBanco(empresaId, mes, diaCorte));
+}
+
+/** A grade já buscada, se ainda válida — para a aba abrir sem esqueleto. */
+export function espiarGradeDeSetores(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): GradeDeSetores | undefined {
+  return espiarDo59(['grade', empresaId, mes, diaCorte]);
+}
+
+async function buscarGradeNoBanco(
   empresaId: string, mes: string, diaCorte?: number | null,
 ): Promise<GradeDeSetores> {
   const args = { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null };
@@ -411,8 +448,23 @@ function paraCard(s: AlternativoCru): SetorDoPainel {
  *
  * Exatamente um dos dois — o banco recusa os dois juntos em vez de escolher em
  * silêncio, e esta assinatura existe para o erro aparecer aqui e não lá.
+ *
+ * Guardado por alguns minutos: abrir, voltar à grade e abrir o mesmo setor não
+ * refaz a agregação. Ver `cache59.ts`.
  */
-export async function buscarDetalheDoSetor(
+export function buscarDetalheDoSetor(
+  empresaId: string,
+  mes: string,
+  alvo: { setorId: string; codGrupo?: never } | { codGrupo: string; setorId?: never },
+  diaCorte?: number | null,
+): Promise<DetalheDoSetor> {
+  return lerDo59(
+    ['setor', empresaId, mes, alvo.setorId ?? null, alvo.codGrupo ?? null, diaCorte],
+    () => buscarDetalheNoBanco(empresaId, mes, alvo, diaCorte),
+  );
+}
+
+async function buscarDetalheNoBanco(
   empresaId: string,
   mes: string,
   alvo: { setorId: string; codGrupo?: never } | { codGrupo: string; setorId?: never },
@@ -460,23 +512,48 @@ export async function buscarDetalheDoSetor(
     carteiras: (data.carteiras ?? []).map(c => ({
       cod: c.cod, nome: c.nome, valor: n(c.valor), qtd: n(c.qtd),
     })),
-    equipes: (data.equipes ?? []).map(e => ({
-      nome:       e.nome,
-      codGrupo:   e.cod_grupo,
-      carteira:   e.carteira,
-      valor:      n(e.valor),
-      linhas:     n(e.linhas),
-      operadores: n(e.operadores),
-      veioDeFora: e.veio_de_fora === true,
-      eIntegral:  e.e_integral === true,
-      eEquipe:    e.e_equipe === true,
-      equipeId:   e.equipe_id,
-      equipeNome: e.equipe_nome,
-      liderId:    e.lider_id,
-      liderNome:  e.lider_nome,
-      liderFoto:  e.lider_foto,
-    })),
+    equipes: (data.equipes ?? []).map(paraEquipe),
   };
+}
+
+/**
+ * As equipes do 59 de TODOS os setores, numa chamada só (17/09/2026).
+ *
+ * A tabela «Onde o resultado acontece» chamava `buscarDetalheDoSetor` uma vez
+ * por setor para usar só as equipes. Cada chamada resolvia o 59 do mês inteiro
+ * duas vezes (mês e anterior) e montava série, formas e carteiras que ninguém
+ * lia: 220 chamadas em 48 h gravaram 3,3 GB em disco temporário no banco.
+ * `fn_mestre_diretoria_equipes_dos_setores` resolve o mês uma vez e devolve o
+ * mesmo bloco `equipes` que o detalhe devolveria, setor a setor — o teste em
+ * PGlite da migration 20260917160000 compara os dois.
+ *
+ * Devolve `null` quando a função ainda não existe no banco (migration pendente):
+ * quem chama volta ao caminho de uma chamada por setor, que continua certo, só
+ * mais caro.
+ */
+export function buscarEquipesDosSetores(
+  empresaId: string, mes: string, diaCorte?: number | null,
+): Promise<Record<string, EquipeDoSetor[]> | null> {
+  return lerDo59(['equipes-dos-setores', empresaId, mes, diaCorte], async () => {
+    const { data, error } = await rpcSemTipo<Record<string, EquipeCrua[]>>(
+      'fn_mestre_diretoria_equipes_dos_setores',
+      { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null },
+    );
+    if (error) {
+      if (/fn_mestre_diretoria_equipes_dos_setores/i.test(error.message)
+          && /schema cache|does not exist|could not find/i.test(error.message)) {
+        return null;
+      }
+      throw new Error(error.message);
+    }
+    const porSetor: Record<string, EquipeDoSetor[]> = {};
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      for (const [setorId, equipes] of Object.entries(data)) {
+        porSetor[setorId] = Array.isArray(equipes) ? equipes.map(paraEquipe) : [];
+      }
+    }
+    return porSetor;
+  });
 }
 
 // ── Contas puras ────────────────────────────────────────────────────────────

@@ -33,6 +33,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { lerDo59, VALIDADE_58_MS } from '@/services/mestre/cache59';
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
@@ -102,7 +103,20 @@ export const ROTULO_SEVERIDADE: Record<Severidade, { curto: string; porque: stri
   },
 };
 
-export async function buscarPendencias(
+/**
+ * Guardada por um minuto (`VALIDADE_58_MS`): o 58 muda a cada importação de
+ * setor. O «Atualizar» do painel descarta na hora — ver `cache59.ts`.
+ */
+export function buscarPendencias(
+  empresaId: string,
+  mes: string,
+  opcoes: { setorId?: string | null; limite?: number } = {},
+): Promise<Pendencia[]> {
+  return lerDo59(['pendencias', empresaId, mes, opcoes.setorId, opcoes.limite],
+    () => buscarPendenciasNoBanco(empresaId, mes, opcoes), VALIDADE_58_MS);
+}
+
+async function buscarPendenciasNoBanco(
   empresaId: string,
   mes: string,
   opcoes: { setorId?: string | null; limite?: number } = {},
@@ -138,7 +152,15 @@ export async function buscarPendencias(
   }));
 }
 
-export async function buscarResumoPendencias(
+export function buscarResumoPendencias(
+  empresaId: string,
+  mes: string,
+): Promise<ResumoPendencia[]> {
+  return lerDo59(['pendencias-resumo', empresaId, mes],
+    () => buscarResumoPendenciasNoBanco(empresaId, mes), VALIDADE_58_MS);
+}
+
+async function buscarResumoPendenciasNoBanco(
   empresaId: string,
   mes: string,
 ): Promise<ResumoPendencia[]> {

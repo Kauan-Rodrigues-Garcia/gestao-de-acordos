@@ -30,6 +30,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { esquecerLeiturasDo59, lerDo59, VALIDADE_58_MS } from './cache59';
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
@@ -89,7 +90,16 @@ export function podeVoltarPara58(l: LinhaDeFonte): boolean {
   return l.fonte === 'relatorio_59' && l.temGuardado;
 }
 
-export async function buscarFontesDosSetores(
+/** Guardada por um minuto: compara com o 58, que muda várias vezes ao dia. */
+export function buscarFontesDosSetores(
+  empresaId: string,
+  mes: string,
+): Promise<LinhaDeFonte[]> {
+  return lerDo59(['fontes', empresaId, mes],
+    () => buscarFontesNoBanco(empresaId, mes), VALIDADE_58_MS);
+}
+
+async function buscarFontesNoBanco(
   empresaId: string,
   mes: string,
 ): Promise<LinhaDeFonte[]> {
@@ -123,6 +133,7 @@ export async function trocarPara59(
   }>('fn_mestre_aplicar_no_analitico', {
     p_empresa_id: empresaId, p_mes: mes, p_setor_id: setorId,
   });
+  esquecerLeiturasDo59();
   if (error) throw new Error(error.message);
   if (!data) throw new Error('O banco não respondeu à troca de fonte.');
 
@@ -145,6 +156,7 @@ export async function devolverAo58(
   }>('fn_mestre_devolver_ao_58', {
     p_empresa_id: empresaId, p_mes: mes, p_setor_id: setorId,
   });
+  esquecerLeiturasDo59();
   if (error) throw new Error(error.message);
   if (!data) throw new Error('O banco não respondeu à devolução.');
 

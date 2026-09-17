@@ -35,6 +35,7 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
   buscarOperadoresDoMes,
+  espiarOperadoresDoMes,
   buscarOperadorDetalhe,
   type OperadorDoMes,
   type OperadorDetalhe,
@@ -169,8 +170,11 @@ function Detalhe({ d }: { d: OperadorDetalhe }) {
 }
 
 export default function Mestre59Operadores({ empresaId, mes, versao }: Props) {
-  const [linhas, setLinhas]       = useState<OperadorDoMes[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  // Abre com a lista guardada, se houver — ver `cache59.ts`.
+  const [linhas, setLinhas]       = useState<OperadorDoMes[]>(
+    () => (empresaId ? espiarOperadoresDoMes(empresaId, mes) ?? [] : []),
+  );
+  const [carregando, setCarregando] = useState(() => !(empresaId && espiarOperadoresDoMes(empresaId, mes)));
   const [erro, setErro]           = useState<string | null>(null);
   const [busca, setBusca]         = useState('');
   const [setorFiltro, setSetorFiltro] = useState<string>('all');
@@ -181,7 +185,9 @@ export default function Mestre59Operadores({ empresaId, mes, versao }: Props) {
   const [erroDetalhe, setErroDetalhe] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
-    setCarregando(true); setErro(null);
+    const guardada = espiarOperadoresDoMes(empresaId, mes);
+    if (guardada) setLinhas(guardada);
+    setCarregando(!guardada); setErro(null);
     try {
       setLinhas(await buscarOperadoresDoMes(empresaId, mes));
     } catch (e) {

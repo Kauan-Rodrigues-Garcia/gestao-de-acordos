@@ -34,6 +34,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { lerDo59, VALIDADE_58_MS } from './cache59';
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
@@ -180,6 +181,40 @@ interface DivergenciaCrua {
   ultimo_dia_58: string | null;
 }
 
+function paraDivergencia(d: DivergenciaCrua): Divergencia {
+  return {
+    setorId:      d.setor_id,
+    setorNome:    d.setor_nome,
+    cobradora:    d.cobradora,
+    operadorId:   d.operador_id,
+    operadorNome: d.operador_nome,
+    nr:           d.nr_documento,
+    dia:          d.dia,
+    valor59:      n(d.valor_59),
+    valor58:      n(d.valor_58),
+    delta:        n(d.delta),
+    situacao:     d.situacao,
+    classe:       d.classe,
+    ultimoDia58:  d.ultimo_dia_58,
+  };
+}
+
+interface ResumoCru {
+  setor_id: string | null; setor_nome: string | null; ultimo_dia_58: string | null;
+  classe: ClasseDivergencia; nrs: unknown; valor: unknown;
+}
+
+function paraResumo(r: ResumoCru): ResumoDivergencia {
+  return {
+    setorId:     r.setor_id,
+    setorNome:   r.setor_nome,
+    ultimoDia58: r.ultimo_dia_58,
+    classe:      r.classe,
+    nrs:         n(r.nrs),
+    valor:       n(r.valor),
+  };
+}
+
 export async function buscarDivergencias(
   empresaId: string,
   mes: string,
@@ -200,41 +235,63 @@ export async function buscarDivergencias(
   });
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map(d => ({
-    setorId:      d.setor_id,
-    setorNome:    d.setor_nome,
-    cobradora:    d.cobradora,
-    operadorId:   d.operador_id,
-    operadorNome: d.operador_nome,
-    nr:           d.nr_documento,
-    dia:          d.dia,
-    valor59:      n(d.valor_59),
-    valor58:      n(d.valor_58),
-    delta:        n(d.delta),
-    situacao:     d.situacao,
-    classe:       d.classe,
-    ultimoDia58:  d.ultimo_dia_58,
-  }));
+  return (data ?? []).map(paraDivergencia);
 }
 
 export async function buscarResumoDivergencias(
   empresaId: string,
   mes: string,
 ): Promise<ResumoDivergencia[]> {
-  const { data, error } = await rpcSemTipo<{
-    setor_id: string | null; setor_nome: string | null; ultimo_dia_58: string | null;
-    classe: ClasseDivergencia; nrs: unknown; valor: unknown;
-  }[]>('fn_mestre_divergencias_resumo', { p_empresa_id: empresaId, p_mes: mes });
+  const { data, error } = await rpcSemTipo<ResumoCru[]>(
+    'fn_mestre_divergencias_resumo', { p_empresa_id: empresaId, p_mes: mes },
+  );
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map(r => ({
-    setorId:     r.setor_id,
-    setorNome:   r.setor_nome,
-    ultimoDia58: r.ultimo_dia_58,
-    classe:      r.classe,
-    nrs:         n(r.nrs),
-    valor:       n(r.valor),
-  }));
+  return (data ?? []).map(paraResumo);
+}
+
+export interface Conferencia {
+  resumo: ResumoDivergencia[];
+  /** As primeiras `limite` linhas, na ordem de `fn_mestre_divergencias`. */
+  linhas: Divergencia[];
+}
+
+/**
+ * Resumo e lista da conferência numa chamada só (17/09/2026).
+ *
+ * A aba pedia `buscarResumoDivergencias` e `buscarDivergencias` juntas, e o
+ * resumo, no banco, chama `fn_mestre_divergencias` inteira de novo: o cruzamento
+ * do 58 com o 59 do mês rodava duas vezes em paralelo a cada abertura.
+ * `fn_mestre_conferencia` roda o cruzamento uma vez e devolve os dois — o teste
+ * em PGlite da migration 20260917160000 confere que batem com as funções de
+ * antes.
+ *
+ * Guardada por um minuto (o 58 muda a cada importação de setor). Sem a migration,
+ * cai nas duas chamadas de antes: mesma resposta, mais cara.
+ */
+export function buscarConferencia(
+  empresaId: string, mes: string, limite = 500,
+): Promise<Conferencia> {
+  return lerDo59(['conferencia', empresaId, mes, limite], async () => {
+    const { data, error } = await rpcSemTipo<{ resumo: ResumoCru[]; linhas: DivergenciaCrua[] }>(
+      'fn_mestre_conferencia', { p_empresa_id: empresaId, p_mes: mes, p_limite: limite },
+    );
+    if (error) {
+      if (/fn_mestre_conferencia/i.test(error.message)
+          && /schema cache|does not exist|could not find/i.test(error.message)) {
+        const [resumo, linhas] = await Promise.all([
+          buscarResumoDivergencias(empresaId, mes),
+          buscarDivergencias(empresaId, mes, { limite }),
+        ]);
+        return { resumo, linhas };
+      }
+      throw new Error(error.message);
+    }
+    return {
+      resumo: Array.isArray(data?.resumo) ? data.resumo.map(paraResumo) : [],
+      linhas: Array.isArray(data?.linhas) ? data.linhas.map(paraDivergencia) : [],
+    };
+  }, VALIDADE_58_MS);
 }
 
 /** Um total por classe, para os cartões do topo da aba. */

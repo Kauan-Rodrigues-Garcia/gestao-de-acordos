@@ -26,6 +26,7 @@
 
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaMestre59 } from './mestre59Parser';
+import { esquecerLeiturasDo59, lerDo59 } from './cache59';
 
 /**
  * Quantas linhas por requisição.
@@ -411,6 +412,8 @@ export async function importarMestre59(params: {
 
     onProgresso?.({ enviadas: linhas.length, total: linhas.length, fase: 'promovendo' });
     const { data, error } = await rpcSemTipo<ResultadoPromocao>('fn_mestre_promover_lote', { p_lote_id: loteId });
+    // Mesmo com erro: um timeout do cliente não prova que o banco desistiu.
+    esquecerLeiturasDo59();
     if (error || !data) throw new Error(error?.message ?? 'Promoção do lote não devolveu resultado.');
     return data;
   } catch (e) {
@@ -443,7 +446,15 @@ export async function importarMestre59(params: {
  */
 const n = (v: unknown): number => Number(v) || 0;
 
-export async function buscarResumoGrupos(empresaId: string, mes: string): Promise<GrupoDoMestre[]> {
+/**
+ * Guardado por alguns minutos. Duas abas leem isto (Relatório 59 e Códigos), e
+ * a Comparação chama a mesma agregação no banco — ver `cache59.ts`.
+ */
+export function buscarResumoGrupos(empresaId: string, mes: string): Promise<GrupoDoMestre[]> {
+  return lerDo59(['resumo-grupos', empresaId, mes], () => buscarResumoGruposNoBanco(empresaId, mes));
+}
+
+async function buscarResumoGruposNoBanco(empresaId: string, mes: string): Promise<GrupoDoMestre[]> {
   const { data, error } = await rpcSemTipo<GrupoDoMestre[]>('fn_mestre_resumo_grupos', {
     p_empresa_id: empresaId, p_mes: mes,
   });
@@ -564,6 +575,7 @@ export async function moverEquipe(params: {
     p_destino:    params.destino,
     p_setor_id:   params.destino === 'outro_setor' ? (params.setorId ?? null) : null,
   });
+  esquecerLeiturasDo59();
   if (error) throw new Error(error.message);
 }
 
@@ -598,6 +610,7 @@ export async function vincularEquipe(params: {
     p_equipe_id:  params.estado === 'vinculado' ? params.equipeId : null,
     p_estado:     params.estado,
   });
+  esquecerLeiturasDo59();
   if (error) throw new Error(error.message);
 }
 
@@ -939,6 +952,7 @@ export async function definirCodigoDeSetor(params: {
     p_setor_id: params.setorId,
     p_codigo:   params.codigo,
   });
+  esquecerLeiturasDo59();
   if (error) throw new Error(traduzirCodigo(error.message));
   const linha = (data ?? [])[0];
   return {

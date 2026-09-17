@@ -21,9 +21,10 @@
  * do sistema a que está vinculada (`separarEquipesDo59`); a que não tem vínculo
  * vai para a lista de baixo, com o setor ao lado.
  *
- * O detalhe de cada setor é uma chamada (`fn_mestre_diretoria_setor`), feita em
- * lotes pequenos depois da grade. Os setores aparecem na hora; as equipes
- * preenchem conforme chegam.
+ * As equipes de todos os setores vêm numa chamada só
+ * (`fn_mestre_diretoria_equipes_dos_setores`, 17/09/2026), depois da grade. Até
+ * então era uma `fn_mestre_diretoria_setor` por setor, e era a consulta mais
+ * pesada do painel — ver `buscarEquipesDosSetores`.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Link2Off, AlertCircle } from 'lucide-react';
@@ -32,7 +33,7 @@ import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { variacao, intensidadeDaBarra } from '@/services/mestre/diretoria.service';
 import {
-  buscarGradeDeSetores, buscarDetalheDoSetor,
+  buscarGradeDeSetores, buscarDetalheDoSetor, buscarEquipesDosSetores, espiarGradeDeSetores,
   type GradeDeSetores, type EquipeDoSetor,
 } from '@/services/mestre/diretoriaSetores.service';
 import {
@@ -40,7 +41,10 @@ import {
 } from '@/services/mestre/equipesDiretoria';
 import { SeloVariacao } from './components';
 
-/** Quantos detalhes de setor vão ao banco ao mesmo tempo. */
+/**
+ * Quantos detalhes de setor vão ao banco ao mesmo tempo — só no caminho antigo,
+ * enquanto `fn_mestre_diretoria_equipes_dos_setores` não estiver aplicada.
+ */
 const LOTE = 4;
 
 type EquipesDoSetor = { vinculadas: EquipeVinculada59[]; semVinculo: EquipeDoSetor[] } | 'erro';
@@ -66,7 +70,9 @@ export function OndeOResultadoAcontece({
   diaCorte: number;
   versao?: number;
 }) {
-  const [grade, setGrade] = useState<GradeDeSetores | null>(null);
+  const [grade, setGrade] = useState<GradeDeSetores | null>(
+    () => (empresaId ? espiarGradeDeSetores(empresaId, mes, diaCorte) ?? null : null),
+  );
   const [erro, setErro] = useState<string | null>(null);
   const [equipes, setEquipes] = useState<Record<string, EquipesDoSetor>>({});
   /** Setores abertos. Nascem todos fechados: as equipes só aparecem no clique (14/09/2026). */
@@ -83,6 +89,22 @@ export function OndeOResultadoAcontece({
         if (!vivo) return;
         setGrade(g);
         const ids = [...g.setores].sort((a, b) => b.valor - a.valor).map(s => s.setorId);
+
+        // Caminho de uma chamada só (migration 20260917160000). `null` = a
+        // função ainda não existe no banco, e aí vale o laço de baixo.
+        let todas: Record<string, EquipeDoSetor[]> | null;
+        try {
+          todas = await buscarEquipesDosSetores(empresaId, mes, diaCorte);
+        } catch {
+          if (vivo) setEquipes(Object.fromEntries(ids.map(id => [id, 'erro' as const])));
+          return;
+        }
+        if (!vivo) return;
+        if (todas) {
+          setEquipes(Object.fromEntries(ids.map(id => [id, separarEquipesDo59(todas[id] ?? [])])));
+          return;
+        }
+
         for (let i = 0; i < ids.length; i += LOTE) {
           const lote = ids.slice(i, i + LOTE);
           const resultados = await Promise.all(lote.map(async id => {
