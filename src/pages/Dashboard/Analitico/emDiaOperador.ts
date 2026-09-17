@@ -9,17 +9,19 @@
  * frase: «você atingiu a média diária necessária». Este arquivo decide quando
  * ela é verdade.
  *
- * ## A régua é uma só, nas duas lentes
+ * ## A régua, e a única lente que a usa
  *
  * Média diária necessária = meta do mês ÷ dias úteis do mês. É a `metaDiaria`
- * de `calcularProjecao`, a mesma «Meta diária» da linha aberta dos Quartis.
+ * de `calcularProjecao`, a mesma «Meta diária» da linha aberta dos Quartis. O
+ * que se compara com ela é o recebido NAQUELE DIA.
  *
- *   • **Mês** — a média do operador (recebido ÷ dias úteis trabalhados) contra
- *     a régua. É a conta da projeção dos Quartis dita de outro jeito: média ≥
- *     régua é o mesmo que recebido ≥ esperado até hoje.
- *   • **Dia** — o recebido naquele dia contra a mesma régua.
+ * A estrela nasceu (08/09/2026) valendo também no recorte Mês, onde comparava a
+ * média do mês — recebido ÷ dias trabalhados — com a mesma régua. Essa lente
+ * foi RETIRADA em 17/09/2026, a pedido da liderança: «em dia» é uma afirmação
+ * sobre um dia, e no mês ela dizia a mesma coisa que a projeção dos Quartis já
+ * diz, com outro número ao lado e sem explicar a diferença.
  *
- * O Período não entra: é uma janela escolhida à mão, e «média diária» dentro
+ * O Período nunca entrou: é uma janela escolhida à mão, e «média diária» dentro
  * dela pediria outra contagem de dias que ninguém pediu.
  *
  * ## Centavos, não frações
@@ -39,63 +41,46 @@
  *
  * Sem React, sem fetch.
  */
-import { diasUteisDecorridos, diasUteisDoMes } from '@/lib/diasUteis';
-
-export type LenteEmDia = 'mes' | 'dia';
+import { diasUteisDoMes } from '@/lib/diasUteis';
 
 export interface EntradaEmDia {
-  lente: LenteEmDia;
-  /** Recebido na janela da lente: o mês até agora, ou o dia. */
+  /** Recebido no DIA escolhido no recorte. */
   valor: number;
   /** Meta individual do mês. `null`/0 = sem meta, e sem régua. */
   meta: number | null;
   /** Dias úteis do mês — reduzidos quando a equipe é de treinamento. */
   totalUteis: number;
-  /** Dias úteis já trabalhados, na mesma base. Só a lente Mês usa. */
-  decorridos: number;
 }
 
 export interface AvaliacaoEmDia {
-  lente: LenteEmDia;
   emDia: boolean;
-  /** Recebido na janela da lente. */
+  /** Recebido no dia. */
   valor: number;
   /** Meta ÷ dias úteis do mês — a média diária necessária. */
   metaDiaria: number;
-  /**
-   * O que se compara com a régua. Mês: recebido ÷ dias trabalhados. Dia: o
-   * próprio recebido — um dia é a média de si mesmo.
-   */
-  mediaDiaria: number;
 }
 
 const centavos = (v: number) => Math.round(v * 100);
 
 /**
- * A avaliação de um operador.
+ * A avaliação de um operador no dia.
  *
  * Devolve `null` — e não `emDia: false` — quando não há régua: sem meta ou sem
  * dia útil. É a diferença entre «não alcançou» e «não há o que alcançar», e só
  * a primeira é uma afirmação sobre a pessoa.
  */
 export function avaliarEmDia(entrada: EntradaEmDia): AvaliacaoEmDia | null {
-  const { lente, valor, totalUteis } = entrada;
+  const { valor, totalUteis } = entrada;
   const meta = Number(entrada.meta) || 0;
   if (meta <= 0 || totalUteis <= 0) return null;
 
   const metaDiaria = meta / totalUteis;
-  // Piso de 1, igual a `calcularProjecao`: no primeiro dia útil ainda não há
-  // dia trabalhado, e cobrar um dia é a leitura certa — não dividir por zero.
-  const mediaDiaria = lente === 'dia'
-    ? valor
-    : valor / Math.max(entrada.decorridos, 1);
 
   return {
-    lente,
     valor,
     metaDiaria,
-    mediaDiaria,
-    emDia: centavos(mediaDiaria) >= centavos(metaDiaria),
+    // Um dia é a média de si mesmo: não há o que dividir por dias trabalhados.
+    emDia: centavos(valor) >= centavos(metaDiaria),
   };
 }
 
@@ -105,9 +90,6 @@ export interface CalendarioDoMes {
   /** 1 a 12. */
   mes: number;
   feriados: string[];
-  /** `metas_config_mes.contar_dia_atual`. */
-  contarHoje: boolean;
-  hojeISO: string;
 }
 
 /**
@@ -120,12 +102,9 @@ export interface CalendarioDoMes {
 export function diasDoOperador(
   cal: CalendarioDoMes,
   inicioTreino?: string | null,
-): { totalUteis: number; decorridos: number } {
-  const { ano, mes, feriados, contarHoje, hojeISO } = cal;
-  const inicio = inicioTreino || undefined;
+): { totalUteis: number } {
   return {
-    totalUteis: diasUteisDoMes(ano, mes, feriados, inicio),
-    decorridos: diasUteisDecorridos(ano, mes, feriados, hojeISO, inicio, contarHoje),
+    totalUteis: diasUteisDoMes(cal.ano, cal.mes, cal.feriados, inicioTreino || undefined),
   };
 }
 
@@ -137,7 +116,6 @@ export function diasDoOperador(
  * duas equipes tem o mesmo valor nas duas, e vira uma entrada só.
  */
 export function operadoresEmDia(params: {
-  lente: LenteEmDia;
   linhas: readonly { operador_id: string; valor: number }[];
   /** operador_id → meta DIRETA bruta do mês. Ausente = sem meta. */
   metaPorOperador: Record<string, number>;
@@ -148,13 +126,13 @@ export function operadoresEmDia(params: {
   calendario: CalendarioDoMes;
 }): Map<string, AvaliacaoEmDia> {
   const {
-    lente, linhas, metaPorOperador, treinoPorEquipe, equipeDoOperador, calendario,
+    linhas, metaPorOperador, treinoPorEquipe, equipeDoOperador, calendario,
   } = params;
 
   const emDia = new Map<string, AvaliacaoEmDia>();
   // Os dias úteis dependem só do início do treinamento; a lista inteira
   // costuma ter dois ou três valores distintos, não um por operador.
-  const diasPorInicio = new Map<string, { totalUteis: number; decorridos: number }>();
+  const diasPorInicio = new Map<string, { totalUteis: number }>();
 
   for (const l of linhas) {
     if (emDia.has(l.operador_id)) continue;
@@ -169,7 +147,7 @@ export function operadoresEmDia(params: {
       diasPorInicio.set(inicio, dias);
     }
 
-    const avaliacao = avaliarEmDia({ lente, valor: l.valor, meta, ...dias });
+    const avaliacao = avaliarEmDia({ valor: l.valor, meta, ...dias });
     if (avaliacao?.emDia) emDia.set(l.operador_id, avaliacao);
   }
 

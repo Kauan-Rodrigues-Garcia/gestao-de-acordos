@@ -75,7 +75,7 @@ import { montarTextoListaAnalitico } from './textoListaAnalitico';
 // A estrela EM DIA da lista «Por operador»: a régua vem da aba Metas, a conta de
 // `emDiaOperador` e o parabéns de `mensagemEmDia` — as duas testadas à parte.
 import { useMetaDiariaOperadores } from './useMetaDiariaOperadores';
-import { operadoresEmDia, type AvaliacaoEmDia, type LenteEmDia } from './emDiaOperador';
+import { operadoresEmDia, type AvaliacaoEmDia } from './emDiaOperador';
 import { montarMensagemEmDia } from './mensagemEmDia';
 import { getTodayISO } from '@/lib/index';
 import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
@@ -1146,26 +1146,27 @@ export function AnaliticoLider({
    *
    * A liderança pediu para bater o olho na lista e ver quem mantém a média
    * diária — e mandar um parabéns pronto a essa pessoa. A régua é a meta do mês
-   * ÷ dias úteis, a mesma «Meta diária» da linha aberta dos Quartis:
+   * ÷ dias úteis, a mesma «Meta diária» da linha aberta dos Quartis, e o que se
+   * compara com ela é o recebido NAQUELE DIA.
    *
-   *   • Mês — a média do operador no mês contra a régua;
-   *   • Dia — o recebido naquele dia contra a mesma régua;
-   *   • Período — sem estrela: a janela é escolhida à mão, e «média diária»
-   *     dentro dela seria outra conta.
+   * SÓ o recorte Dia acende a estrela. Ela também valia no Mês até 17/09/2026,
+   * comparando a média do mês com a régua; a liderança pediu para tirar — «em
+   * dia» é uma afirmação sobre um dia, e no Mês ela repetia, com outro número,
+   * o que a projeção dos Quartis já diz. O Período nunca teve estrela: a janela
+   * é escolhida à mão, e «média diária» dentro dela seria outra conta.
    *
    * Quem decide é `operadoresEmDia`, testada à parte. O mapa só tem quem está em
    * dia: é a pergunta da tela, e quem não ganha estrela não precisa de entrada.
    */
-  const lenteEmDia: LenteEmDia | null = recorte.modo === 'periodo' ? null : recorte.modo;
+  const noRecorteDia = recorte.modo === 'dia';
   const metasDoMes = useMetaDiariaOperadores({
-    ativo: abaVisivel === 'operadores' && lenteEmDia !== null,
+    ativo: abaVisivel === 'operadores' && noRecorteDia,
     empresaId,
     mes,
   });
   const emDiaPorOperador = useMemo<Map<string, AvaliacaoEmDia>>(() => {
-    if (!lenteEmDia || !metasDoMes.carregado) return new Map();
+    if (!noRecorteDia || !metasDoMes.carregado) return new Map();
     return operadoresEmDia({
-      lente: lenteEmDia,
       linhas: gruposDoPainel.flatMap(g => g.itens),
       metaPorOperador: metasDoMes.metaPorOperador,
       treinoPorEquipe: metasDoMes.treinoPorEquipe,
@@ -1176,18 +1177,13 @@ export function AnaliticoLider({
         ano: Number(mesAnoStr),
         mes: Number(mesNumStr),
         feriados: metasDoMes.feriados,
-        contarHoje: metasDoMes.contarHoje,
-        hojeISO,
       },
     });
-  }, [lenteEmDia, metasDoMes, gruposDoPainel, operadorEquipeMap, mesAnoStr, mesNumStr, hojeISO]);
-  /** O que o parabéns data: o dia da lente, ou o mês. */
-  const referenciaEmDia = recorte.modo === 'dia' ? recorte.dia : mes;
-  /*
-   * O parabéns pronto só sai no recorte Dia. A liderança pediu: a mensagem é
-   * mandada no dia; no Mês a estrela continua como leitura, sem o botão.
-   */
-  const copiarParabensVisivel = recorte.modo === 'dia';
+  }, [noRecorteDia, metasDoMes, gruposDoPainel, operadorEquipeMap, mesAnoStr, mesNumStr]);
+  /** O que o parabéns data: o dia do recorte, que é o único que tem estrela. */
+  const referenciaEmDia = noRecorteDia ? recorte.dia : mes;
+  /* O botão de copiar acompanha a estrela — os dois só existem no recorte Dia. */
+  const copiarParabensVisivel = noRecorteDia;
 
   /*
    * ── O mapa do mês ────────────────────────────────────────────────────────
@@ -1849,9 +1845,7 @@ export function AnaliticoLider({
                 return (
                   <span
                     className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-600 dark:text-amber-400"
-                    title={avaliacao.lente === 'dia'
-                      ? `Recebeu ${formatBRL(avaliacao.valor)} no dia — a média diária necessária é ${formatBRL(avaliacao.metaDiaria)}`
-                      : `Média de ${formatBRL(avaliacao.mediaDiaria)} por dia útil — a necessária é ${formatBRL(avaliacao.metaDiaria)}`}
+                    title={`Recebeu ${formatBRL(avaliacao.valor)} no dia — a média diária necessária é ${formatBRL(avaliacao.metaDiaria)}`}
                   >
                     <Star className="h-3 w-3 fill-current" aria-hidden="true" />
                     EM DIA
