@@ -33,6 +33,7 @@ import { partesDoMes } from '@/lib/mesReferencia';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { assinarTabela } from '@/lib/realtime';
 import { assinarSinal } from '@/lib/sinais';
+import { invalidarSomasDeAjuste } from '@/services/analitico/ajusteManual.service';
 import { criarAgrupador } from '@/lib/agrupador';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -233,7 +234,12 @@ export function useFechamentoOperadores({
     });
     const cancelarAjustes = assinarTabela(
       { topico: `rt-ajustes-${empresaId}`, escutas: [{ tabela: 'analitico_ajustes_manuais' }] },
-      { onEvento: agrupador.avisar, onReconectado: reler },
+      {
+        // As somas de ajuste ficam guardadas por segundos (`somasPorOperador`):
+        // o card mudou em outra tela, então a releitura não pode usar a guardada.
+        onEvento: () => { invalidarSomasDeAjuste(); agrupador.avisar(); },
+        onReconectado: () => { invalidarSomasDeAjuste(); reler(); },
+      },
     );
     return () => { agrupador.cancelar(); cancelarAnalitico(); cancelarAjustes(); };
   }, [ativo, empresaId, carregar]);

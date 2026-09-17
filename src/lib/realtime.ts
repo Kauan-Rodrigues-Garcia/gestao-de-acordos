@@ -128,9 +128,12 @@ const BACKOFF_BASE_MS = 2_000;
 const BACKOFF_MAX_MS  = 30_000;
 /**
  * Quando o servidor cai, os canais de TODO mundo voltam no mesmo segundo. Se
- * todos relessem no mesmo instante, a volta viraria outro pico no banco.
+ * todos relessem no mesmo instante, a volta viraria outro pico no banco: são
+ * ~150 pessoas com uma dezena de telas ouvindo cada uma. Oito segundos
+ * espalham isso em ~200 leituras por segundo no pior caso, em vez de 1.500 de
+ * uma vez.
  */
-export const ESPALHAMENTO_RELEITURA_MS = 3_000;
+export const ESPALHAMENTO_RELEITURA_MS = 8_000;
 /** Voltar para a aba: rápido, mas não no mesmo milissegundo para todas as abas. */
 const ESPALHAMENTO_RETOMADA_MS = 1_000;
 

@@ -52,6 +52,7 @@
 import { supabase } from '@/lib/supabase';
 import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supabase';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 /**
  * A linha sintética tem o formato de um recebimento, sem os campos que só um
@@ -196,14 +197,30 @@ export async function somasPorOperador(
 ): Promise<Map<string, { valor: number; setorId: string | null; equipeId: string | null }>> {
   const mapa = new Map<string, { valor: number; setorId: string | null; equipeId: string | null }>();
 
-  const { data, error } = await db('analitico_ajustes_manuais')
-    .select('operador_id, setor_id, equipe_id, valor, cancelado')
-    .eq('empresa_id', empresaId)
-    .eq('mes_referencia', primeiroDiaDaCompetencia(mes));
+  /*
+   * Guardada por `VALIDADE_SOMAS_AJUSTE_MS` (17/09/2026): cinco agregações do
+   * analítico pedem isto na MESMA releitura do painel — 21 mil leituras por dia
+   * em produção. Guarda-se a LINHA crua, e o `Map` é montado a cada chamada:
+   * quem recebe pode mexer nele sem estragar a resposta dos outros.
+   *
+   * Erro não é guardado (a leitura devolve `null` e o `guardarSe` recusa).
+   */
+  const data = await lerComCache(
+    `${PREFIXO_SOMAS_AJUSTE}${empresaId}:${mes}`,
+    VALIDADE_SOMAS_AJUSTE_MS,
+    async () => {
+      const r = await db('analitico_ajustes_manuais')
+        .select('operador_id, setor_id, equipe_id, valor, cancelado')
+        .eq('empresa_id', empresaId)
+        .eq('mes_referencia', primeiroDiaDaCompetencia(mes));
+      return r.error || !r.data ? null : (r.data as Record<string, unknown>[]);
+    },
+    { guardarSe: linhas => linhas !== null },
+  );
 
-  if (error || !data) return mapa;
+  if (!data) return mapa;
 
-  for (const linha of data as Record<string, unknown>[]) {
+  for (const linha of data) {
     if (linha.cancelado === true) continue;
     const id = String(linha.operador_id);
     const atual = mapa.get(id);
@@ -349,6 +366,18 @@ export async function listarEventos(ajusteId: string): Promise<EventoAjuste[]> {
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
 
+/**
+ * Quanto tempo as somas dos ajustes valem guardadas. Curto: é dinheiro no card.
+ * Quem lança, edita ou cancela descarta na hora (`invalidarSomasDeAjuste`), e
+ * as telas que ouvem `analitico_ajustes_manuais` também.
+ */
+export const VALIDADE_SOMAS_AJUSTE_MS = 20 * 1000;
+const PREFIXO_SOMAS_AJUSTE = 'ajustes-somas:';
+
+export function invalidarSomasDeAjuste(): void {
+  invalidarCache(PREFIXO_SOMAS_AJUSTE);
+}
+
 export async function lancarAjuste(params: {
   empresaId: string;
   operadorId: string;
@@ -372,6 +401,7 @@ export async function lancarAjuste(params: {
     criado_por:      params.criadoPor,
     criado_por_nome: params.criadoPorNome,
   });
+  invalidarSomasDeAjuste();
   return { erro: error ? traduzir(error.message) : null };
 }
 
@@ -403,6 +433,7 @@ export async function editarAjuste(params: {
     editado_por_nome:  params.editadoPorNome,
     atualizado_em:     new Date().toISOString(),
   }).eq('id', params.id);
+  invalidarSomasDeAjuste();
   return { erro: error ? traduzir(error.message) : null };
 }
 
@@ -430,6 +461,7 @@ export async function cancelarAjuste(params: {
     motivo_cancelamento:  params.motivo?.trim() || null,
     atualizado_em:        new Date().toISOString(),
   }).eq('id', params.id);
+  invalidarSomasDeAjuste();
   return { erro: error ? traduzir(error.message) : null };
 }
 

@@ -44,6 +44,23 @@ import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
 import { esquecerInstantaneos } from '@/lib/cacheInstantaneo';
 import { registrarLog, registrarLoginRecusado } from '@/services/logs.service';
+import { iguaisProfundo } from '@/lib/dadosVivos';
+import { limparCacheCurto } from '@/lib/cacheCurto';
+
+/**
+ * De quanto em quanto tempo a volta à aba pode reler o perfil da MESMA pessoa.
+ *
+ * O supabase-js reemite `SIGNED_IN` toda vez que a aba volta ao foco (ver
+ * `useEmpresa.foco.test.tsx`). Cada emissão relia o perfil e trocava o objeto
+ * `perfil`/`empresa` por um novo, igual ao anterior — e todo hook que depende
+ * deles recarregava: o Dashboard refazia composição, metas e acordos a cada
+ * alt-tab. Em 17/09/2026 eram 10,5 mil leituras de perfil por dia para ~150
+ * pessoas, e o resto da cascata em cima.
+ *
+ * Cinco minutos ainda pegam um cargo trocado sem F5; o `refreshPerfil` segue
+ * disponível para quem precisa na hora.
+ */
+const RELEITURA_PERFIL_NO_FOCO_MS = 5 * 60 * 1000;
 
 interface AuthContextType {
   user: User | null;
@@ -70,6 +87,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError]     = useState<string | null>(null);
   const isSigningIn                   = useRef(false);
   const isManualSignOut               = useRef(false);
+  /** Quem teve o perfil lido por último, e quando. */
+  const ultimaLeituraPerfil           = useRef<{ usuarioId: string; em: number } | null>(null);
+
+  /*
+   * Perfil e empresa só trocam de OBJETO quando trocam de conteúdo. Eles são
+   * dependência de dezenas de hooks; um objeto novo igual ao velho recarrega
+   * todos eles sem que nada tenha mudado.
+   */
+  function aplicarPerfil(proximo: Perfil | null) {
+    setPerfil(atual => (atual && proximo && iguaisProfundo(atual, proximo) ? atual : proximo));
+  }
+  function aplicarEmpresa(proxima: Empresa | null) {
+    setEmpresa(atual => (atual && proxima && iguaisProfundo(atual, proxima) ? atual : proxima));
+  }
+  function aplicarSessao(proxima: Session | null) {
+    setSession(atual => (atual && proxima && atual.access_token === proxima.access_token ? atual : proxima));
+    const proximoUser = proxima?.user ?? null;
+    setUser(atual => (atual && proximoUser && iguaisProfundo(atual, proximoUser) ? atual : proximoUser));
+  }
 
   /**
    * signOut() com rede de segurança: alguns builds do supabase-js abortam a
@@ -168,11 +204,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (empData && (empData as Empresa).slug !== tenantSlug) {
                 return rejectTenantMismatch(empData as Empresa);
               }
-              setEmpresa((empData as Empresa) ?? null);
+              aplicarEmpresa((empData as Empresa) ?? null);
             } else {
               setEmpresa(null);
             }
-            setPerfil(data2 as Perfil);
+            aplicarPerfil(data2 as Perfil);
+            ultimaLeituraPerfil.current = { usuarioId: userId, em: Date.now() };
             return { tenantMismatch: null, missingProfile: null };
           }
         } else if (data) {
@@ -191,8 +228,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return rejectTenantMismatch(emp);
           }
 
-          setPerfil(nextPerfil);
-          setEmpresa(emp ?? null);
+          aplicarPerfil(nextPerfil);
+          aplicarEmpresa(emp ?? null);
+          ultimaLeituraPerfil.current = { usuarioId: userId, em: Date.now() };
           return { tenantMismatch: null, missingProfile: null };
         }
 
@@ -275,6 +313,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthError('Sua sessão expirou. Por favor, faça login novamente.');
         }
         isManualSignOut.current = false;
+        ultimaLeituraPerfil.current = null;
+        limparCacheCurto();
         setSession(null);
         setUser(null);
         setPerfil(null);
@@ -283,10 +323,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (_event === 'SIGNED_IN') {
-        setSession(s);
-        setUser(s?.user ?? null);
+        aplicarSessao(s);
         if (s?.user && !isSigningIn.current) {
-          fetchPerfil(s.user.id);
+          // Mesma pessoa voltando para a aba: o perfil que está na memória vale.
+          // Ver `RELEITURA_PERFIL_NO_FOCO_MS`.
+          const ultima = ultimaLeituraPerfil.current;
+          // Outra pessoa na mesma aba: nada do que foi lido pela RLS da anterior vale.
+          if (ultima && ultima.usuarioId !== s.user.id) limparCacheCurto();
+          const mesmaPessoaRecente = ultima?.usuarioId === s.user.id
+            && Date.now() - ultima.em < RELEITURA_PERFIL_NO_FOCO_MS;
+          if (!mesmaPessoaRecente) fetchPerfil(s.user.id);
         }
         return;
       }
@@ -294,7 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // (para manter o access_token válido) sem recarregar o perfil nem re-renderizar
       // a UI a ponto de perder estado de formulários em andamento.
       if (s) {
-        setSession(s);
+        aplicarSessao(s);
       }
     });
 
@@ -449,6 +495,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // de usuário na mesma aba é caminho real (o suporte faz isso o dia inteiro),
     // e a primeira tela do próximo não pode nascer com os números do anterior.
     esquecerInstantaneos();
+    limparCacheCurto();
+    ultimaLeituraPerfil.current = null;
     setPerfil(null);
     setEmpresa(null);
     setUser(null);

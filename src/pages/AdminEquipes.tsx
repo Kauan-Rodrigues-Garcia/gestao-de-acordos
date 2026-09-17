@@ -61,6 +61,7 @@ import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
+import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 import {
   listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, setCloneContaRecebimento,
   removerTodosClonesEmpresa, type CloneEquipe,
@@ -838,6 +839,7 @@ export default function AdminEquipes() {
         empresa_id: empresaId,
       });
       if (error) throw error;
+      invalidarComposicaoEquipes();
       toast.success(`Equipe "${nome}" criada com sucesso!`);
       setNovaEquipeNome('');
       setShowNovaEquipe(false);
@@ -875,6 +877,7 @@ export default function AdminEquipes() {
     try {
       const { error } = await supabase.from('equipes').delete().eq('id', equipe.id);
       if (error) throw error;
+      invalidarComposicaoEquipes();
       toast.success(`Equipe "${equipe.nome}" excluída.`);
       setEquipeParaExcluir(null);
       await loadData();
@@ -909,6 +912,7 @@ export default function AdminEquipes() {
     try {
       const { error } = await supabase.from('equipes').update({ nome }).eq('id', equipe.id);
       if (error) throw error;
+      invalidarComposicaoEquipes();
       toast.success('Nome da equipe atualizado.');
       cancelarEdicaoNome();
       await loadData();
@@ -1009,6 +1013,7 @@ export default function AdminEquipes() {
         .update(patch)
         .eq('id', operadorId);
       if (error) throw error;
+      invalidarComposicaoEquipes();
 
       const equipeNome = equipeId
         ? equipes.find(e => e.id === equipeId)?.nome ?? 'equipe'
@@ -1138,6 +1143,7 @@ export default function AdminEquipes() {
         .update({ equipe_id: null })
         .eq('id', operadorId);
       if (error) throw error;
+      invalidarComposicaoEquipes();
       toast.success(`${operador.nome} removido da equipe.`);
     } catch (err: unknown) {
       toast.error('Erro ao remover membro: ' + (err instanceof Error ? err.message : 'Erro desconhecido'));

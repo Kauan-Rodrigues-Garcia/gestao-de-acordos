@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { ehMesAtual } from '@/lib/mesReferencia';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 
 /**
  * Define a situação de um usuário, ajustando os efeitos colaterais:
@@ -76,6 +77,8 @@ export async function definirSituacao(
    */
   const { error } = await supabase.from('perfis').update(patch).eq('id', perfilId);
   if (error) return { error: error.message };
+  // A situação entra na composição de equipes guardada (`composicaoCache.ts`).
+  invalidarComposicaoEquipes();
 
   /*
    * Os vinculos NAO sao soltos aqui desde 31/08/2026.
@@ -114,6 +117,7 @@ export async function arquivarDesligadosAnteriores(
     'fn_arquivar_desligados_ids', { p_empresa_id: empresaId },
   );
   if (error) return 0;
+  invalidarComposicaoEquipes();
 
   // A RPC devolve SETOF uuid; o PostgREST entrega ora uma lista de strings, ora
   // uma lista de objetos de uma chave, conforme a versão.

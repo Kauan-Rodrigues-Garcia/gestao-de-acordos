@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 
 export interface CloneEquipe {
   id: string;
@@ -43,6 +44,7 @@ export async function setCloneContaRecebimento(cloneId: string, conta: boolean):
     .from('equipe_operadores_clones')
     .update({ conta_recebimento: conta })
     .eq('id', cloneId);
+  invalidarComposicaoEquipes();
   return !error;
 }
 
@@ -64,6 +66,7 @@ export async function criarCloneEquipe(
     .select('id, equipe_id, operador_id')
     .single();
   if (error) return null;
+  invalidarComposicaoEquipes();
   return data as CloneEquipe;
 }
 
@@ -73,6 +76,7 @@ export async function removerCloneEquipe(cloneId: string): Promise<boolean> {
     .from('equipe_operadores_clones')
     .delete()
     .eq('id', cloneId);
+  invalidarComposicaoEquipes();
   return !error;
 }
 
@@ -84,6 +88,7 @@ export async function removerTodosClonesEmpresa(empresaId: string): Promise<numb
     .delete()
     .eq('empresa_id', empresaId)
     .select('id');
+  invalidarComposicaoEquipes();
   if (error) return null;
   return (data as { id: string }[] | null)?.length ?? 0;
 }

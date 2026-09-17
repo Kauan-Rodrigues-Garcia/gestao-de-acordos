@@ -304,6 +304,72 @@ describe('useAuth – onAuthStateChange', () => {
   });
 });
 
+describe('useAuth – volta à aba (SIGNED_IN reemitido)', () => {
+  /*
+   * O supabase-js reemite SIGNED_IN a cada volta ao foco. Reler o perfil ali, e
+   * trocar o objeto por um igual, recarregava todo hook que depende dele — era
+   * o Dashboard inteiro por alt-tab (17/09/2026).
+   */
+  const leiturasDePerfil = () =>
+    mockSupabaseFrom.mock.calls.filter(([tabela]) => tabela === 'perfis').length;
+
+  it('mesma pessoa voltando em menos de 5 min: não relê o perfil e mantém o objeto', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: makeSession() } });
+    queueResultFor('perfis', { data: makePerfil(), error: null });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.perfil).not.toBeNull());
+    const perfilAntes  = result.current.perfil;
+    const sessaoAntes  = result.current.session;
+    const leituras     = leiturasDePerfil();
+
+    await act(async () => { capturedAuthCallback!('SIGNED_IN', makeSession()); });
+
+    expect(leiturasDePerfil()).toBe(leituras);
+    expect(result.current.perfil).toBe(perfilAntes);
+    expect(result.current.session).toBe(sessaoAntes);
+  });
+
+  it('passados 5 min, relê — e o objeto só troca se o conteúdo trocou', async () => {
+    const agora = Date.now();
+    const relogio = vi.spyOn(Date, 'now').mockReturnValue(agora);
+    mockGetSession.mockResolvedValue({ data: { session: makeSession() } });
+    queueResultFor('perfis', { data: makePerfil(), error: null });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.perfil).not.toBeNull());
+    const perfilAntes = result.current.perfil;
+
+    relogio.mockReturnValue(agora + 5 * 60 * 1000 + 1);
+    queueResultFor('perfis', { data: makePerfil(), error: null });
+    await act(async () => { capturedAuthCallback!('SIGNED_IN', makeSession()); });
+    await waitFor(() => expect(result.current.perfilLoading).toBe(false));
+    expect(result.current.perfil).toBe(perfilAntes);   // releu, mas nada mudou
+
+    relogio.mockReturnValue(agora + 11 * 60 * 1000);
+    queueResultFor('perfis', { data: makePerfil({ nome: 'Nome Novo' }), error: null });
+    await act(async () => { capturedAuthCallback!('SIGNED_IN', makeSession()); });
+    await waitFor(() => expect(result.current.perfil?.nome).toBe('Nome Novo'));
+
+    relogio.mockRestore();
+  });
+
+  it('outra pessoa na mesma aba: relê na hora', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: makeSession() } });
+    queueResultFor('perfis', { data: makePerfil(), error: null });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.perfil).not.toBeNull());
+    const leituras = leiturasDePerfil();
+
+    queueResultFor('perfis', { data: makePerfil({ id: 'uid-999', nome: 'Outra Pessoa' }), error: null });
+    await act(async () => { capturedAuthCallback!('SIGNED_IN', makeSession({ id: 'uid-999' })); });
+
+    await waitFor(() => expect(result.current.perfil?.nome).toBe('Outra Pessoa'));
+    expect(leiturasDePerfil()).toBeGreaterThan(leituras);
+  });
+});
+
 describe('useAuth – signIn', () => {
   it('happy path com email: chama signInWithPassword e carrega perfil', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null } });

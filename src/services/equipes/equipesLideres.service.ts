@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 
 export interface LiderEquipe {
   id: string;
@@ -44,6 +45,7 @@ export async function adicionarLiderEquipe(
     .select('id, equipe_id, lider_id')
     .single();
   if (error) return null;
+  invalidarComposicaoEquipes();
   return data as LiderEquipe;
 }
 
@@ -62,5 +64,6 @@ export async function removerLiderEquipe(vinculoId: string): Promise<boolean> {
     .delete()
     .eq('id', vinculoId)
     .select('id');
+  invalidarComposicaoEquipes();
   return !error && (data?.length ?? 0) > 0;
 }

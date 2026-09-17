@@ -426,6 +426,47 @@ describe('useCargoPermissoes', () => {
     // × duas tabelas = quatro chamadas.
     expect(mockSupabaseFrom).toHaveBeenCalledTimes(4);
   });
+
+  // ─── Leitura compartilhada (17/09/2026) ───────────────────────────────
+
+  it('vários componentes montados leem as tabelas UMA vez', async () => {
+    // O hook vive no menu, no chat, nos formulários e nos painéis ao mesmo
+    // tempo. Cada um lendo sozinho eram 71 mil leituras por dia.
+    mockPerfilRef.current  = { id: 'p1', perfil: 'operador' };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+    queueResultFor('cargos_permissoes', {
+      data: [makeCargoRow({ permissoes: { ver_lixeira: true } })], error: null,
+    });
+
+    const a = renderHook(() => useCargoPermissoes());
+    const b = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(a.result.current.loading).toBe(false));
+    await waitFor(() => expect(b.result.current.loading).toBe(false));
+
+    expect(a.result.current.temPermissao('ver_lixeira')).toBe(true);
+    expect(b.result.current.temPermissao('ver_lixeira')).toBe(true);
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(2);
+
+    // Quem monta depois já nasce pronto, sem esqueleto.
+    const c = renderHook(() => useCargoPermissoes());
+    expect(c.result.current.loading).toBe(false);
+    expect(c.result.current.temPermissao('ver_lixeira')).toBe(true);
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(2);
+  });
+
+  it('outra pessoa na mesma empresa não reaproveita a leitura', async () => {
+    // A RLS de `perfis_permissoes` responde diferente para cada pessoa.
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+    mockPerfilRef.current  = { id: 'p1', perfil: 'operador' };
+    const a = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(a.result.current.loading).toBe(false));
+
+    mockPerfilRef.current = { id: 'p2', perfil: 'operador' };
+    const b = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(b.result.current.loading).toBe(false));
+
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(4);
+  });
 });
 
 // ─── Permissões 2.0: exceção por pessoa ──────────────────────────────────────

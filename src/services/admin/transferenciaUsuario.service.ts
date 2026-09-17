@@ -42,6 +42,7 @@
  * setor. Na equipe, quem cuida é o fantasma (`fantasmaTransferencia.ts`).
  */
 import { supabase } from '@/lib/supabase';
+import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 import type { Json } from '@/lib/database.types';
 import {
   buscarAcordosDoUsuario, baixarRelatorioAcordos, traduzirErro,
@@ -186,7 +187,7 @@ async function checarColisaoDeLogin(
  * isso em `avisoRegistro`, e a tela mostra: sem registro não há desfazer, e o
  * admin precisa saber disso na hora, não no dia em que tentar desfazer.
  */
-export async function executarTransferencia(params: {
+async function executarTransferenciaSemInvalidar(params: {
   alvo: AlvoTransferencia;
   /** Só vale para troca de setor. Empresa é sempre limpa. */
   levarAcordos: boolean;
@@ -528,7 +529,7 @@ export type ResultadoDesfazer =
  * Acordo apagado não volta. O relatório baixado na ida é o registro — e é por
  * isso que ele é gerado antes de qualquer DELETE.
  */
-export async function desfazerTransferencia(
+async function desfazerTransferenciaSemInvalidar(
   transferenciaId: string,
 ): Promise<ResultadoDesfazer> {
   const cliente = supabase as unknown as {
@@ -660,6 +661,7 @@ export async function removerFantasma(
       fantasma_removido_em:  new Date().toISOString(),
     })
     .eq('id', transferenciaId);
+  invalidarComposicaoEquipes();
   return { error: error?.message ?? null };
 }
 
@@ -675,6 +677,7 @@ export async function restaurarFantasma(
       fantasma_removido_em:  null,
     })
     .eq('id', transferenciaId);
+  invalidarComposicaoEquipes();
   return { error: error?.message ?? null };
 }
 
@@ -710,4 +713,29 @@ export function traduzirTransferencia(mensagem: string): string {
   // prefixo genérico só a esconderia.
   if (/Assistente ADM|N[úu]cleo de Intelig/i.test(mensagem)) return mensagem;
   return `Erro ao transferir: ${mensagem}`;
+}
+
+/**
+ * Transferência muda equipe, setor, clones e fantasma de uma vez: a composição
+ * de equipes guardada (`composicaoCache.ts`) deixa de valer, dê certo ou não —
+ * uma falha no meio pode ter gravado parte.
+ */
+export async function executarTransferencia(
+  params: Parameters<typeof executarTransferenciaSemInvalidar>[0],
+): ReturnType<typeof executarTransferenciaSemInvalidar> {
+  try {
+    return await executarTransferenciaSemInvalidar(params);
+  } finally {
+    invalidarComposicaoEquipes();
+  }
+}
+
+export async function desfazerTransferencia(
+  ...args: Parameters<typeof desfazerTransferenciaSemInvalidar>
+): ReturnType<typeof desfazerTransferenciaSemInvalidar> {
+  try {
+    return await desfazerTransferenciaSemInvalidar(...args);
+  } finally {
+    invalidarComposicaoEquipes();
+  }
 }

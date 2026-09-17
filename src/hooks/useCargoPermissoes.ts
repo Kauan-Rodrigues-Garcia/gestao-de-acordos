@@ -36,6 +36,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { assinarSinal } from '@/lib/sinais';
+import { espiarCache, invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 export type PermissoesMap = Record<string, boolean>;
 
@@ -99,16 +100,102 @@ interface UseCargoPermissoesReturn {
   refresh: () => Promise<void>;
 }
 
+// ── Uma leitura para o app inteiro ───────────────────────────────────────────
+//
+// Este hook é montado em mais de dez componentes ao mesmo tempo (menu, chat,
+// formulários, painéis). Cada um buscava as duas tabelas sozinho: 71 mil
+// leituras por dia em 17/09/2026, para dados que mudam quando alguém salva o
+// painel de permissões. Agora a leitura é compartilhada pelo `cacheCurto` e o
+// sinal do banco é assinado UMA vez por empresa, não uma por componente.
+
+interface DadosPermissoes {
+  cargos:   CargoPermissaoRow[];
+  excecoes: PerfilPermissaoRow[];
+}
+
+/**
+ * Validade da leitura compartilhada. A mudança chega pelo sinal `permissoes:`
+ * na hora; a validade só cobre o sinal perdido (aba dormindo, queda).
+ */
+const VALIDADE_PERMISSOES_MS = 10 * 60 * 1000;
+
+/**
+ * A chave leva a PESSOA e o cargo, não só a empresa: a RLS de
+ * `perfis_permissoes` devolve todas as linhas para o admin e só a própria para
+ * os demais. Duas pessoas na mesma aba (impersonação, troca de login) nunca
+ * dividem resposta.
+ */
+function chavePermissoes(empresaId: string, perfilId: string | undefined, cargo: string): string {
+  return `permissoes:${empresaId}:${perfilId ?? '-'}:${cargo}`;
+}
+
+async function lerPermissoes(empresaId: string): Promise<DadosPermissoes> {
+  const [resCargos, resExcecoes] = await Promise.all([
+    supabase.from('cargos_permissoes').select('*')
+      .eq('empresa_id', empresaId).order('cargo'),
+    // A RLS já recorta: operador recebe só a própria linha, admin recebe
+    // todas. Não é preciso filtrar por usuário aqui.
+    supabase.from('perfis_permissoes').select('*')
+      .eq('empresa_id', empresaId),
+  ]);
+
+  if (resCargos.error) throw resCargos.error;
+
+  // Tabela nova: tolera ausência para o app não quebrar entre o deploy do
+  // frontend e a aplicação da migration.
+  if (resExcecoes.error) {
+    console.warn('[permissoes] exceções indisponíveis:', resExcecoes.error.message);
+  }
+  return {
+    cargos:   (resCargos.data as CargoPermissaoRow[]) ?? [],
+    excecoes: resExcecoes.error ? [] : ((resExcecoes.data as PerfilPermissaoRow[]) ?? []),
+  };
+}
+
+/** Uma assinatura do sinal por empresa, dividida entre os componentes montados. */
+const mudancasPorEmpresa = new Map<string, { ouvintes: Set<() => void>; cancelar: () => void }>();
+
+function ouvirMudancas(empresaId: string, ouvinte: () => void): () => void {
+  let registro = mudancasPorEmpresa.get(empresaId);
+  if (!registro) {
+    const ouvintes = new Set<() => void>();
+    // Descarta a leitura UMA vez e avisa todos; o primeiro a reler abre a busca
+    // e os outros entram nela.
+    const avisar = () => {
+      invalidarCache(`permissoes:${empresaId}:`);
+      for (const o of [...ouvintes]) o();
+    };
+    registro = {
+      ouvintes,
+      cancelar: assinarSinal('permissoes', empresaId, { onMudou: avisar, onReconectado: avisar }),
+    };
+    mudancasPorEmpresa.set(empresaId, registro);
+  }
+  const atual = registro;
+  atual.ouvintes.add(ouvinte);
+  return () => {
+    atual.ouvintes.delete(ouvinte);
+    if (atual.ouvintes.size > 0 || mudancasPorEmpresa.get(empresaId) !== atual) return;
+    atual.cancelar();
+    mudancasPorEmpresa.delete(empresaId);
+  };
+}
+
 export function useCargoPermissoes(): UseCargoPermissoesReturn {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const [todasPermissoes, setTodasPermissoes] = useState<CargoPermissaoRow[]>([]);
-  const [todasExcecoes, setTodasExcecoes]     = useState<PerfilPermissaoRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const cargo = perfil?.perfil ?? '';
   const isAdmin = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
+  const chave = empresa?.id && cargo ? chavePermissoes(empresa.id, perfil?.id, cargo) : null;
+
+  // Outro componente já leu: começa pronto, sem esconder o menu nem um frame.
+  const [todasPermissoes, setTodasPermissoes] = useState<CargoPermissaoRow[]>(
+    () => (chave ? espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS)?.cargos : undefined) ?? []);
+  const [todasExcecoes, setTodasExcecoes] = useState<PerfilPermissaoRow[]>(
+    () => (chave ? espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS)?.excecoes : undefined) ?? []);
+  const [loading, setLoading] = useState(
+    () => !(chave && espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS)));
 
   /*
    * O realtime deste hook dispara a cada salvamento no painel de permissões — e
@@ -123,55 +210,40 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
    */
   const primeiraCarga = useRef(true);
 
-  const fetch = useCallback(async () => {
-    if (!empresa?.id || !cargo) {
+  /** @param forcar descarta a leitura compartilhada antes (o `refresh`). */
+  const carregar = useCallback(async (forcar: boolean) => {
+    if (!empresa?.id || !cargo || !chave) {
       setLoading(false);
       return;
     }
 
-    const comEsqueleto = primeiraCarga.current;
+    const comEsqueleto = primeiraCarga.current
+      && !espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS);
     if (comEsqueleto) setLoading(true);
+    if (forcar) invalidarCache(chave);
     try {
-      const [resCargos, resExcecoes] = await Promise.all([
-        supabase.from('cargos_permissoes').select('*')
-          .eq('empresa_id', empresa.id).order('cargo'),
-        // A RLS já recorta: operador recebe só a própria linha, admin recebe
-        // todas. Não é preciso filtrar por usuário aqui.
-        //
-        supabase.from('perfis_permissoes').select('*')
-          .eq('empresa_id', empresa.id),
-      ]);
-
-      if (resCargos.error) throw resCargos.error;
+      const dados = await lerComCache(chave, VALIDADE_PERMISSOES_MS, () => lerPermissoes(empresa.id));
       // `iguaisProfundo`: a coluna `permissoes` é um JSONB, então o objeto vem
       // novo a cada leitura — a comparação rasa nunca acharia duas linhas iguais.
       setTodasPermissoes(atual => reconciliarLista(
-        atual, (resCargos.data as CargoPermissaoRow[]) ?? [],
-        { chave: r => r.id, iguais: iguaisProfundo }));
-
-      // Tabela nova: tolera ausência para o app não quebrar entre o deploy do
-      // frontend e a aplicação da migration.
-      if (resExcecoes.error) {
-        console.warn('[permissoes] exceções indisponíveis:', resExcecoes.error.message);
-        setTodasExcecoes([]);
-      } else {
-        setTodasExcecoes(atual => reconciliarLista(
-          atual, (resExcecoes.data as PerfilPermissaoRow[]) ?? [],
-          { chave: r => r.id, iguais: iguaisProfundo }));
-      }
+        atual, dados.cargos, { chave: r => r.id, iguais: iguaisProfundo }));
+      setTodasExcecoes(atual => reconciliarLista(
+        atual, dados.excecoes, { chave: r => r.id, iguais: iguaisProfundo }));
     } catch (e) {
       console.warn('[useCargoPermissoes] fetch error:', e);
     } finally {
-      if (comEsqueleto) setLoading(false);
+      if (primeiraCarga.current) setLoading(false);
       primeiraCarga.current = false;
     }
-  }, [empresa?.id, cargo]);
+  }, [empresa?.id, cargo, chave]);
+
+  const fetch = useCallback(() => carregar(true), [carregar]);
 
   // Trocar de empresa ou de cargo e contexto novo: o mapa em memoria e de
   // outra pessoa, e responder com ele seria conceder o que ela tinha.
   useEffect(() => { primeiraCarga.current = true; }, [empresa?.id, cargo]);
 
-  useEffect(() => { void fetch(); }, [fetch]);
+  useEffect(() => { void carregar(false); }, [carregar]);
 
   /**
    * Realtime: mudou a permissão, quem está logado sente na hora.
@@ -185,15 +257,14 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
    * o aviso nunca chegou. E o canal era cru: com o hook montado em dez
    * componentes, o primeiro a desmontar derrubava a escuta dos outros nove.
    * Agora é o sinal `permissoes:<empresa>` que o banco manda a cada comando
-   * (migration 20260917110000), com contagem de referências.
+   * (migration 20260917110000), assinado uma vez por empresa: `ouvirMudancas`
+   * descarta a leitura compartilhada e cada componente relê — o primeiro busca,
+   * os outros entram na mesma busca.
    */
   useEffect(() => {
     if (!empresa?.id) return;
-    return assinarSinal('permissoes', empresa.id, {
-      onMudou:       () => { void fetch(); },
-      onReconectado: () => { void fetch(); },
-    });
-  }, [empresa?.id, fetch]);
+    return ouvirMudancas(empresa.id, () => { void carregar(false); });
+  }, [empresa?.id, carregar]);
 
   const permissoes = useMemo(
     () => todasPermissoes.find(r => r.cargo === cargo)?.permissoes ?? {},

@@ -28,6 +28,8 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { reconciliarLista } from '@/lib/dadosVivos';
 import { chaveDeCache, gravarInstantaneo, lerInstantaneo } from '@/lib/cacheInstantaneo';
 import { criarAgrupador } from '@/lib/agrupador';
+import { lerComCache } from '@/lib/cacheCurto';
+import { PREFIXO_METAS, VALIDADE_METAS_MS } from '@/services/metas/metasCache';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
@@ -647,16 +649,32 @@ export function useAnalytics(
         }
       }
 
+      /*
+       * Metas e nomes vêm do cache curto (17/09/2026): esta função roda a cada
+       * acordo salvo na empresa, e nenhum dos dois muda com um acordo. Resposta
+       * com erro não é guardada. Ver `metasCache.ts`.
+       */
+      const empresaId = empresa.id;
       if (tipoMeta && refId) {
-        const { data: metaData } = await supabase
-          .from('metas')
-          .select('*')
-          .eq('tipo', tipoMeta)
-          .eq('referencia_id', refId)
-          .eq('empresa_id', empresa.id)
-          .eq('mes', mes)
-          .eq('ano', ano)
-          .maybeSingle();
+        const tipo = tipoMeta;
+        const referencia = refId;
+        const { data: metaData } = await lerComCache(
+          `${PREFIXO_METAS}principal:${empresaId}:${ano}-${mes}:${tipo}:${referencia}`,
+          VALIDADE_METAS_MS,
+          async () => {
+            const r = await supabase
+              .from('metas')
+              .select('*')
+              .eq('tipo', tipo)
+              .eq('referencia_id', referencia)
+              .eq('empresa_id', empresaId)
+              .eq('mes', mes)
+              .eq('ano', ano)
+              .maybeSingle();
+            return { data: r.data, error: r.error };
+          },
+          { guardarSe: r => !r.error },
+        );
         if (vencida()) { encerrar?.(false); return; }
         pacote.meta = (metaData as MetaInfo | null) ?? null;
         setMeta(pacote.meta);
@@ -666,24 +684,28 @@ export function useAnalytics(
 
       // ── Metas por equipe / operador: quem enxerga alem de si ───────────────
       if (semMetaPrincipal || veDeOutros) {
+        const metasDoTipo = (tipo: 'equipe' | 'operador') => lerComCache(
+          `${PREFIXO_METAS}lista:${empresaId}:${ano}-${mes}:${tipo}`,
+          VALIDADE_METAS_MS,
+          async () => {
+            const r = await supabase
+              .from('metas')
+              .select('*')
+              .eq('tipo', tipo)
+              .eq('empresa_id', empresaId)
+              .eq('mes', mes)
+              .eq('ano', ano);
+            return { data: r.data, error: r.error };
+          },
+          { guardarSe: r => !r.error },
+        );
         const [{ data: meq }, { data: mop }] = await Promise.all([
-          supabase
-            .from('metas')
-            .select('*')
-            .eq('tipo', 'equipe')
-            .eq('empresa_id', empresa.id)
-            .eq('mes', mes)
-            .eq('ano', ano),
-          supabase
-            .from('metas')
-            .select('*')
-            .eq('tipo', 'operador')
-            .eq('empresa_id', empresa.id)
-            .eq('mes', mes)
-            .eq('ano', ano),
+          metasDoTipo('equipe'),
+          metasDoTipo('operador'),
         ]);
-        pacote.metasEquipe   = (meq as MetaInfo[]) || [];
-        pacote.metasOperador = (mop as MetaInfo[]) || [];
+        // Cópias: a lista guardada é de todos os painéis, o estado é deste.
+        pacote.metasEquipe   = [...((meq as MetaInfo[] | null) ?? [])];
+        pacote.metasOperador = [...((mop as MetaInfo[] | null) ?? [])];
         setMetasEquipe(pacote.metasEquipe);
         setMetasOperador(pacote.metasOperador);
 
@@ -698,11 +720,19 @@ export function useAnalytics(
          * agosto era desenhado com as equipes de setembro — o primeiro é o
          * recorte da consulta, lá em cima.
          */
-        const { data: ops } = await supabase
-          .from('perfis')
-          .select('id, nome')
-          .eq('empresa_id', empresa.id)
-          .in('perfil', ['operador', 'elite', 'gerencia']);
+        const { data: ops } = await lerComCache(
+          `perfis-nomes:${empresaId}`,
+          VALIDADE_METAS_MS,
+          async () => {
+            const r = await supabase
+              .from('perfis')
+              .select('id, nome')
+              .eq('empresa_id', empresaId)
+              .in('perfil', ['operador', 'elite', 'gerencia']);
+            return { data: r.data, error: r.error };
+          },
+          { guardarSe: r => !r.error },
+        );
         if (vencida()) { encerrar?.(false); return; }
 
         const opMap: Record<string, string> = {};

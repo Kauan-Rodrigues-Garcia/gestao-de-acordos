@@ -3,6 +3,7 @@
  * Ver a função correspondente na baseline ativa do Supabase.
  */
 import { supabase } from '@/lib/supabase';
+import { invalidarMetasGuardadas } from './metasCache';
 
 export interface MetaValidacaoStatus {
   status: 'aberto' | 'validado';
@@ -33,6 +34,7 @@ export async function upsertMetas(
   payloads: Record<string, unknown>[],
 ): Promise<{ salvos: number; bloqueados: { referencia_id: string; tipo: string }[]; error: string | null }> {
   const { data, error } = await supabase.rpc('fn_metas_upsert', { p_payloads: payloads as never });
+  invalidarMetasGuardadas();
   if (error) return { salvos: 0, bloqueados: [], error: error.message };
   const row = (Array.isArray(data) ? data[0] : data) as
     | { salvos: number; bloqueados: { referencia_id: string; tipo: string }[] }
@@ -86,6 +88,7 @@ export async function excluirMetas(p: {
     .eq('tipo', p.tipo)
     .in('referencia_id', p.referenciaIds)
     .select('referencia_id');
+  invalidarMetasGuardadas();
   if (error) return { excluidas: [], error: error.message };
   const ids = ((data ?? []) as { referencia_id: string }[]).map(l => l.referencia_id);
   return { excluidas: [...new Set(ids)], error: null };

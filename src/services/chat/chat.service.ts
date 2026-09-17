@@ -22,6 +22,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
 
@@ -535,19 +536,32 @@ export async function listarContatos(): Promise<ContatoChat[]> {
   return data ?? [];
 }
 
-export async function listarDisparos(): Promise<DisparoChat[]> {
-  const { data, error } = await db('chat_disparos')
-    .select('id, texto, anexos, criado_em, total_destinos')
-    .order('criado_em', { ascending: false })
-    .limit(100);
+/**
+ * Os disparos só mudam quando ESTA pessoa dispara (a RLS devolve os dela), e
+ * `dispararMensagem` descarta a lista guardada. Sem a guarda, cada evento de
+ * chat — inclusive a leitura de qualquer conversa — relia os cem últimos:
+ * 14,8 mil leituras por dia em 17/09/2026.
+ */
+const CHAVE_DISPAROS = 'chat-disparos';
+const VALIDADE_DISPAROS_MS = 5 * 60 * 1000;
 
-  if (error) {
-    console.warn('[chat] listarDisparos:', error.message);
-    return [];
-  }
-  return ((data ?? []) as DisparoChat[]).map(d => ({
-    ...d, anexos: Array.isArray(d.anexos) ? d.anexos : [],
-  }));
+export async function listarDisparos(): Promise<DisparoChat[]> {
+  const lista = await lerComCache(CHAVE_DISPAROS, VALIDADE_DISPAROS_MS, async () => {
+    const { data, error } = await db('chat_disparos')
+      .select('id, texto, anexos, criado_em, total_destinos')
+      .order('criado_em', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.warn('[chat] listarDisparos:', error.message);
+      return null;
+    }
+    return ((data ?? []) as DisparoChat[]).map(d => ({
+      ...d, anexos: Array.isArray(d.anexos) ? d.anexos : [],
+    }));
+  }, { guardarSe: l => l !== null });
+  // Cópia: o estado da tela é desta montagem, a lista guardada é de todas.
+  return lista ? [...lista] : [];
 }
 
 /**
@@ -819,6 +833,7 @@ export async function dispararMensagem(
     p_texto:    texto.trim() || null,
     p_anexos:   anexos,
   });
+  invalidarCache(CHAVE_DISPAROS);
 
   if (error) return { disparoId: null, enviados: 0, pulados: [], erro: traduzir(error.message) };
   return {

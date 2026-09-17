@@ -35,6 +35,8 @@ import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferenci
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaRelatorio } from './analiticoComum';
+import { lerComCache } from '@/lib/cacheCurto';
+import { chaveComposicao, invalidarComposicaoEquipes, VALIDADE_COMPOSICAO_MS } from './composicaoCache';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
@@ -2052,11 +2054,27 @@ export async function buscarEquipesComOperadores(
   empresaId: string,
   mes?: string | null,
 ): Promise<ComposicaoEquipes> {
-  if (mes && !ehMesAtual(mes)) {
-    const retrato = await buscarComposicaoDoRetrato(empresaId, mes);
-    if (retrato) return retrato;
-  }
-  return buscarComposicaoAoVivo(empresaId, mes ?? null);
+  /*
+   * Guardada por `VALIDADE_COMPOSICAO_MS` e compartilhada entre quem pede junto
+   * (17/09/2026): o Dashboard relia isto a cada acordo salvo na empresa, por
+   * cada painel aberto. Quem grava invalida — ver `composicaoCache.ts`.
+   *
+   * Resposta vazia não é guardada: as leituras abaixo engolem erro de rede e
+   * devolvem listas vazias, e guardar isso deixaria o painel sem equipes por
+   * minuto e meio.
+   */
+  return lerComCache(
+    chaveComposicao(empresaId, mes ?? null),
+    VALIDADE_COMPOSICAO_MS,
+    async () => {
+      if (mes && !ehMesAtual(mes)) {
+        const retrato = await buscarComposicaoDoRetrato(empresaId, mes);
+        if (retrato) return retrato;
+      }
+      return buscarComposicaoAoVivo(empresaId, mes ?? null);
+    },
+    { guardarSe: c => c.equipes.length > 0 || Object.keys(c.operadorEquipeMap).length > 0 },
+  );
 }
 
 /**
@@ -2432,6 +2450,8 @@ export async function congelarComposicaoDoMes(
   const { error } = await rpcSemTipo('fn_composicao_mes_snapshot', {
     p_empresa_id: empresaId, p_mes: mes,
   });
+  // O retrato novo substitui o que estava guardado do mês.
+  invalidarComposicaoEquipes();
   // Migration pendente não pode derrubar a importação, que já terminou.
   if (error) console.warn('[composicao_mes] retrato não gravado:', error.message);
 }

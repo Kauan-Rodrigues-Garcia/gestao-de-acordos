@@ -13,6 +13,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { __resetCacheParaTestes } from '@/lib/cacheInstantaneo';
+import { __limparCacheCurtoParaTestes } from '@/lib/cacheCurto';
 
 // ── tesseract.js: stub global ────────────────────────────────────────────────
 // Exceção consciente à regra acima. O OCR já é carregado por `import()`
@@ -57,6 +58,10 @@ vi.mock('tesseract.js', () => ({
 afterEach(() => {
   cleanup();
   __resetCacheParaTestes();
+  // O cache curto (`cacheCurto.ts`) é um `Map` de módulo pelo mesmo motivo, e
+  // guarda leituras por empresa: sem limpar, o caso seguinte recebe a
+  // composição de equipes ou as permissões do caso anterior.
+  __limparCacheCurtoParaTestes();
 });
 
 // Polyfill de window.matchMedia — alguns componentes do Radix/Tailwind consultam
