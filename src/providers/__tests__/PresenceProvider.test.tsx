@@ -184,6 +184,8 @@ describe('PresenceProvider + useOnlineUsers', () => {
   afterEach(() => {
     mockPerfilRef.current  = null;
     mockEmpresaRef.current = null;
+    // Desfaz os `spyOn` (Math.random) — os `vi.fn` do mock seguem de pé.
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -555,6 +557,75 @@ describe('PresenceProvider + useOnlineUsers', () => {
         simulateSubscribeStatus('TIMED_OUT');
       });
     }).not.toThrow();
+  });
+
+  // ─── Erro fica com a reentrada do supabase-js (17/09/2026) ────────────
+
+  it('reentrada depois de erro NÃO recria o canal, e o track dela é sorteado', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(1);
+
+    mockPerfilRef.current  = { id: USER_ID };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    renderHook(() => useOnlineUsers(), { wrapper });
+
+    await act(async () => {
+      simulateSubscribeStatus('SUBSCRIBED');
+      await Promise.resolve();
+    });
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
+
+    // O servidor caiu e a biblioteca reentrou no mesmo canal.
+    await act(async () => {
+      simulateSubscribeStatus('CHANNEL_ERROR');
+      vi.advanceTimersByTime(2_000);
+      simulateSubscribeStatus('SUBSCRIBED');
+      await Promise.resolve();
+    });
+    // Todo mundo reentra no mesmo segundo: o track não sai na hora.
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+      await Promise.resolve();
+    });
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(2);
+
+    // E nada de derrubar e recriar o canal que acabou de voltar.
+    await act(async () => {
+      vi.advanceTimersByTime(120_000);
+      await Promise.resolve();
+    });
+    expect(mockChannelSpy).toHaveBeenCalledTimes(1);
+    expect(mockRemoveChannelSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  it('CLOSED do servidor recria o canal', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(1);
+
+    mockPerfilRef.current  = { id: USER_ID };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    renderHook(() => useOnlineUsers(), { wrapper });
+
+    await act(async () => {
+      simulateSubscribeStatus('SUBSCRIBED');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      simulateSubscribeStatus('CLOSED');
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+
+    expect(mockRemoveChannelSpy).toHaveBeenCalledTimes(1);
+    expect(mockChannelSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 
   // ─── Reconecta ao trocar de empresa ───────────────────────────────────

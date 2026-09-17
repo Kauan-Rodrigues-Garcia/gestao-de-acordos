@@ -14,9 +14,17 @@
  *  um callback e recebe os eventos, sem criar canais próprios.
  *
  * ─── RECONEXÃO AUTOMÁTICA ────────────────────────────────────────────────────
- *  Quando o canal fecha (CLOSED/TIMED_OUT/CHANNEL_ERROR), o provider destrói
- *  o canal morto e cria um novo com backoff exponencial (2s → 4s → … → 30s).
+ *  CHANNEL_ERROR/TIMED_OUT: o supabase-js reentra sozinho no mesmo canal. O
+ *  provider só destrói e recria se ele não voltar em `VIGIA_MS`.
+ *  CLOSED (o servidor encerrou): a biblioteca não reentra — o provider recria
+ *  com backoff exponencial (2s → 4s → … → 30s).
  *  Ao voltar para a aba com o canal morto, a reconexão é imediata (sem backoff).
+ *  Qualquer queda, por qualquer caminho, invalida os acordos ao voltar.
+ *
+ *  Até 17/09/2026 o erro também recriava em 3 s, brigando com a reentrada da
+ *  biblioteca, e o CLOSED do canal que o próprio cleanup removia caía no
+ *  callback e agendava OUTRA recriação — com o servidor lento, o ciclo não
+ *  terminava.
  *
  * ─── TIPOS EXPORTADOS ────────────────────────────────────────────────────────
  *  RealtimeStatus      → 'off' | 'connecting' | 'connected' | 'error'
@@ -51,6 +59,9 @@ export interface AcordoRealtimeEvent {
 }
 
 type Subscriber = (event: AcordoRealtimeEvent) => void;
+
+/** Quanto esperar a reentrada do supabase-js depois de erro/timeout. */
+const VIGIA_MS = 45_000;
 
 interface RealtimeContextValue {
   /** Estado da conexão WebSocket — use para indicador visual */
@@ -103,6 +114,8 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Contador de tentativas de reconexão consecutivas (para backoff)
   const reconnectRef      = useRef(0);
+  // Caiu desde o último SUBSCRIBED: eventos do intervalo se perderam
+  const caiuRef           = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -144,6 +157,10 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     };
 
     upd('connecting');
+
+    // Este ciclo do efeito. O cleanup remove o canal, e o CLOSED dessa remoção
+    // não pode agendar outra recriação.
+    let vivo = true;
 
     // Nome único por empresa — ao recriar, usamos um novo nome para forçar
     // o Supabase a criar um canal fresh (não reutilizar um canal CLOSED)
@@ -248,40 +265,46 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
         },
       )
       .subscribe((channelStatus, err) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || !vivo) return;
 
         if (channelStatus === 'SUBSCRIBED') {
           // Conexão estabelecida — cancela grace timer e zera backoff
           if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
           if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
-          // Reconexão após falha: invalida cache para recuperar eventos perdidos durante o downtime
-          if (reconnectRef.current > 0) {
+          // Voltou depois de queda — pela reentrada da biblioteca ou por canal
+          // novo: invalida o cache para recuperar os eventos perdidos.
+          if (caiuRef.current || reconnectRef.current > 0) {
             queryClient.invalidateQueries({ queryKey: ['acordos'] });
           }
+          caiuRef.current = false;
           reconnectRef.current = 0;
           upd('connected');
           return;
         }
 
-        // CLOSED/ERROR: aguarda 3s (troca rápida de aba → reconecta automaticamente)
-        // Se não reconectar, destrói o canal e cria um novo com backoff exponencial.
-        const handleFailure = (nextStatus: RealtimeStatus) => {
+        // CLOSED/ERROR: o status muda em 3s (troca rápida de aba reconecta antes
+        // disso). Recriar o canal espera `recriarApos`: curto para CLOSED, que
+        // ninguém mais vai reerguer; `VIGIA_MS` para erro, que a biblioteca
+        // reergue sozinha.
+        const handleFailure = (nextStatus: RealtimeStatus, recriarApos: number) => {
+          caiuRef.current = true;
           if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
           closeTimerRef.current = setTimeout(() => {
-            if (!mountedRef.current) return;
+            if (!mountedRef.current || !vivo) return;
             upd(nextStatus);
             // Agendar reconexão com backoff: 2s → 4s → 8s → 16s → 30s (cap)
             reconnectRef.current++;
-            const delay = Math.min(1000 * Math.pow(2, reconnectRef.current), 30_000);
+            const backoff = Math.min(1000 * Math.pow(2, reconnectRef.current), 30_000);
+            const delay = Math.max(backoff, recriarApos);
             if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
             reconnectTimerRef.current = setTimeout(() => {
-              if (mountedRef.current) setReconnectTick(t => t + 1);
+              if (mountedRef.current && vivo) setReconnectTick(t => t + 1);
             }, delay);
           }, 3000);
         };
 
         if (channelStatus === 'CLOSED') {
-          handleFailure('off');
+          handleFailure('off', 0);
           return;
         }
         /*
@@ -296,19 +319,20 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
         const registrar = primeiraFalha ? logger.info : logger.warn;
 
         if (channelStatus === 'CHANNEL_ERROR') {
-          handleFailure('error');
+          handleFailure('error', VIGIA_MS);
           if (err) registrar('[Realtime] channel error:', err);
           else registrar('[Realtime] channel error');
           return;
         }
         if (channelStatus === 'TIMED_OUT') {
-          handleFailure('error');
+          handleFailure('error', VIGIA_MS);
           registrar('[Realtime] channel timed out');
           return;
         }
       });
 
     return () => {
+      vivo = false;
       if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
       if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
       supabase.removeChannel(channel);

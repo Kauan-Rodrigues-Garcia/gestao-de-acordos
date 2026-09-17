@@ -14,14 +14,13 @@
  *
  * O desafio não tem tabela própria de recebimento: ele lê
  * `analitico_recebimentos`. Então o gatilho de atualização é o MESMO do
- * Analítico — o canal de `analitico_recebimentos` filtrado por empresa, com o
- * mesmo debounce de 1,5 s que existe para a importação em lote (uma importação
- * insere centenas de linhas e dispara um evento por linha).
+ * Analítico — o sinal `analitico:<empresa>` que o banco manda a cada comando
+ * (migration 20260917110000), com o mesmo debounce de 1,5 s da importação em
+ * lote (uma importação manda alguns sinais seguidos).
  *
- * O tópico é literalmente o mesmo de `useAnaliticoDashboard`
- * (`analitico-dash-<empresa>`), com as mesmas escutas: `assinarTabela` conta
- * referências, então o Desafios entra de carona no canal que já existe em vez
- * de abrir um segundo. Um canal por empresa, não um por aba aberta.
+ * O tópico é literalmente o mesmo de `useAnaliticoDashboard`: `assinarSinal`
+ * conta referências, então o Desafios entra de carona no canal que já existe em
+ * vez de abrir um segundo. Um canal por empresa, não um por aba aberta.
  *
  * ## Por que React Query, e não `useState` + `useEffect`
  *
@@ -34,6 +33,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import {
@@ -262,22 +262,13 @@ export function useDesafioEmCartaz(ativo: boolean): UsoDesafioEmCartaz {
       { onEvento: invalidar, onReconectado: invalidar },
     );
 
-    const cancelarAnalitico = assinarTabela(
-      {
-        topico:  `analitico-dash-${empresaId}`,
-        escutas: [{
-          tabela: 'analitico_recebimentos',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
+    const cancelarAnalitico = assinarSinal('analitico', empresaId, {
+      onMudou: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
       },
-      {
-        onEvento: () => {
-          if (debounce) clearTimeout(debounce);
-          debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
-        },
-        onReconectado: invalidar,
-      },
-    );
+      onReconectado: invalidar,
+    });
 
     return () => {
       if (debounce) clearTimeout(debounce);
@@ -379,11 +370,8 @@ export function useResultadoDesafio(
   });
 
   /*
-   * O mesmo canal do Analítico, por contagem de referências.
-   *
-   * Tópico e escutas idênticos aos de `useAnaliticoDashboard`: `assinarTabela`
-   * avisa em DEV quando um tópico é reutilizado com escutas diferentes, e aqui
-   * elas são as mesmas de propósito — é o ponto.
+   * O mesmo canal do Analítico, por contagem de referências: o sinal
+   * `analitico:<empresa>` é um tópico só, qualquer que seja a tela que o abriu.
    */
   useEffect(() => {
     if (!desafioId || !empresaId) return;
@@ -391,23 +379,14 @@ export function useResultadoDesafio(
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
 
-    const cancelar = assinarTabela(
-      {
-        topico:  `analitico-dash-${empresaId}`,
-        escutas: [{
-          tabela: 'analitico_recebimentos',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
+    const cancelar = assinarSinal('analitico', empresaId, {
+      onMudou: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
       },
-      {
-        onEvento: () => {
-          if (debounce) clearTimeout(debounce);
-          debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
-        },
-        // Já é uma invalidação — sem debounce, é evento único.
-        onReconectado: invalidar,
-      },
-    );
+      // Já é uma invalidação — sem debounce, é evento único.
+      onReconectado: invalidar,
+    });
 
     return () => {
       if (debounce) clearTimeout(debounce);

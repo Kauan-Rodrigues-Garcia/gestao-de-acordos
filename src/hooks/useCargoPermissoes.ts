@@ -35,6 +35,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
+import { assinarSinal } from '@/lib/sinais';
 
 export type PermissoesMap = Record<string, boolean>;
 
@@ -178,22 +179,20 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
    * Antes o hook buscava uma vez na montagem, então salvar uma permissão só
    * afetava a pessoa depois que ela recarregava a página — e ninguém avisava
    * que era preciso recarregar.
+   *
+   * Até 17/09/2026 isto assinava `cargos_permissoes` e `perfis_permissoes` pelo
+   * Postgres Changes — e nenhuma das duas estava na publicação `supabase_realtime`:
+   * o aviso nunca chegou. E o canal era cru: com o hook montado em dez
+   * componentes, o primeiro a desmontar derrubava a escuta dos outros nove.
+   * Agora é o sinal `permissoes:<empresa>` que o banco manda a cada comando
+   * (migration 20260917110000), com contagem de referências.
    */
   useEffect(() => {
     if (!empresa?.id) return;
-    const canal = supabase
-      .channel(`rt-permissoes-${empresa.id}`)
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'cargos_permissoes',
-          filter: `empresa_id=eq.${empresa.id}` },
-        () => { void fetch(); })
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'perfis_permissoes',
-          filter: `empresa_id=eq.${empresa.id}` },
-        () => { void fetch(); })
-      .subscribe();
-
-    return () => { void supabase.removeChannel(canal); };
+    return assinarSinal('permissoes', empresa.id, {
+      onMudou:       () => { void fetch(); },
+      onReconectado: () => { void fetch(); },
+    });
   }, [empresa?.id, fetch]);
 
   const permissoes = useMemo(

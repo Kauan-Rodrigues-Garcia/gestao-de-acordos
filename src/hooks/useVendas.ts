@@ -19,7 +19,7 @@
  * o operador olha noutra — o tempo real recarrega, e a conta refaz sozinha.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { criarAgrupador } from '@/lib/agrupador';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import {
@@ -104,13 +104,11 @@ export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela
   useEffect(() => {
     if (!empresaId || !ativo) return;
     const agrupador = criarAgrupador(() => { void carregar(); }, { esperaMs: 1_000, tetoMs: 5_000 });
-    const cancelar = assinarTabela(
-      {
-        topico: `vendas-${empresaId}`,
-        escutas: [{ tabela: 'vendas', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      { onEvento: agrupador.avisar, onReconectado: () => { void carregar(); } },
-    );
+    // `vendas` nunca esteve na publicação `supabase_realtime`: a escuta por
+    // linha não recebia nada. O banco avisa por sinal (migration 20260917110000).
+    const cancelar = assinarSinal('vendas', empresaId, {
+      onMudou: agrupador.avisar, onReconectado: () => { void carregar(); },
+    });
     return () => { agrupador.cancelar(); cancelar(); };
   }, [empresaId, ativo, carregar]);
 

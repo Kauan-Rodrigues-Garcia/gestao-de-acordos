@@ -32,6 +32,7 @@ import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { partesDoMes } from '@/lib/mesReferencia';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { criarAgrupador } from '@/lib/agrupador';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -224,17 +225,17 @@ export function useFechamentoOperadores({
   useEffect(() => {
     if (!ativo || !empresaId) return;
     const agrupador = criarAgrupador(() => { void carregar(); }, { esperaMs: 1_500, tetoMs: 6_000 });
-    const cancelar = assinarTabela(
-      {
-        topico: `fechamento-operadores-${empresaId}`,
-        escutas: [
-          { tabela: 'analitico_recebimentos', filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'analitico_ajustes_manuais' },
-        ],
-      },
-      { onEvento: agrupador.avisar, onReconectado: () => { void carregar(); } },
+    const reler = () => { void carregar(); };
+    // O analítico vem por sinal do banco (um aviso por comando). O ajuste manual
+    // segue linha a linha, no mesmo tópico da tela de ajustes — um canal só.
+    const cancelarAnalitico = assinarSinal('analitico', empresaId, {
+      onMudou: agrupador.avisar, onReconectado: reler,
+    });
+    const cancelarAjustes = assinarTabela(
+      { topico: `rt-ajustes-${empresaId}`, escutas: [{ tabela: 'analitico_ajustes_manuais' }] },
+      { onEvento: agrupador.avisar, onReconectado: reler },
     );
-    return () => { agrupador.cancelar(); cancelar(); };
+    return () => { agrupador.cancelar(); cancelarAnalitico(); cancelarAjustes(); };
   }, [ativo, empresaId, carregar]);
 
   const quartis = base?.quartis ?? QUARTIS_PADRAO;

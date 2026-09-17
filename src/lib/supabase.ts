@@ -23,6 +23,24 @@ function getSupabase(): SupabaseClient<Database> {
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
+    /*
+     * Aba em segundo plano: o navegador espaça os timers da página para uma vez
+     * por minuto, o heartbeat do socket atrasa, o servidor dá a conexão por
+     * morta e todos os canais da aba reentram quando ela acorda. Numa operação
+     * que deixa o sistema aberto atrás de outras janelas o dia inteiro, isso é
+     * reinscrição constante no Realtime (17/09/2026: 450 mil em 48 h).
+     *
+     * No Web Worker o heartbeat não é espaçado. E se o socket cair mesmo assim,
+     * o `heartbeatCallback` religa na batida seguinte em vez de esperar a
+     * próxima ação da pessoa. Recomendação do Supabase: «Handling Silent
+     * Disconnections in Background Applications».
+     */
+    realtime: {
+      worker: typeof window !== 'undefined' && typeof window.Worker !== 'undefined',
+      heartbeatCallback: (status) => {
+        if (status === 'disconnected') _instance?.realtime.connect();
+      },
+    },
   });
   return _instance;
 }

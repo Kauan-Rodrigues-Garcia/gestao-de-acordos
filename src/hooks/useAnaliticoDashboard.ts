@@ -28,7 +28,7 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { normalizarMes } from '@/lib/mesReferencia';
 import { rotuloDaForma } from '@/lib/formasPagamento';
@@ -132,8 +132,9 @@ export function agregarAnalitico(
 // ── Realtime compartilhado ───────────────────────────────────────────────────
 // A dedução por tópico e a contagem de referências que existiam aqui viraram
 // `assinarTabela` (src/lib/realtime.ts), que faz o mesmo para todo o app e ainda
-// reconecta. Sobra o debounce, que é específico daqui: a importação insere EM
-// LOTE (um evento por linha) e queremos um único disparo por importação.
+// reconecta. O analítico chega por SINAL do banco (`assinarSinal`, um aviso por
+// comando), mas a importação ainda manda alguns seguidos — apagar, inserir,
+// atualizar —, e o debounce junta tudo num disparo só.
 const DEBOUNCE_IMPORTACAO_MS = 1_500;
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -185,23 +186,14 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
 
-    const cancelar = assinarTabela(
-      {
-        topico:  `analitico-dash-${empresaId}`,
-        escutas: [{
-          tabela: 'analitico_recebimentos',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
+    const cancelar = assinarSinal('analitico', empresaId, {
+      onMudou: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
       },
-      {
-        onEvento: () => {
-          if (debounce) clearTimeout(debounce);
-          debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
-        },
-        // Já é uma invalidação — sem debounce, é evento único.
-        onReconectado: invalidar,
-      },
-    );
+      // Já é uma invalidação — sem debounce, é evento único.
+      onReconectado: invalidar,
+    });
 
     return () => {
       if (debounce) clearTimeout(debounce);

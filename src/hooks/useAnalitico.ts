@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -118,14 +118,16 @@ export function useAnalitico(options: UseAnaliticoOptions) {
     void fetchDados();
   }, [fetchDados]);
 
-  // Realtime: a importação insere EM LOTE (1 evento por linha), então o
-  // refetch/toast é debounced — um único aviso por importação, e nunca para
-  // quem importou (o próprio fluxo de importar já dá o feedback).
+  // Realtime: a importação grava EM LOTE, e o banco avisa por comando (sinal
+  // `analitico:<empresa>`, migration 20260917110000) — ainda assim podem vir
+  // alguns avisos seguidos (apagar, inserir, atualizar), então o refetch/toast
+  // é debounced: um único aviso por importação, e nunca para quem importou (o
+  // próprio fluxo de importar já dá o feedback).
   const rtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rtToastRef    = useRef(false);
 
   // `fetchDados` muda a cada troca de filtro. Lido por ref para que a assinatura
-  // dependa só de (empresa, mês): trocar de operador no filtro não precisa
+  // dependa só da empresa: trocar de mês ou de operador no filtro não precisa
   // derrubar e recriar o canal.
   const fetchRef  = useRef(fetchDados);
   fetchRef.current = fetchDados;
@@ -134,42 +136,33 @@ export function useAnalitico(options: UseAnaliticoOptions) {
 
   useEffect(() => {
     if (!empresa?.id) return;
-    const empresaId = empresa.id;
 
-    return assinarTabela(
-      {
-        topico:  `analitico-${empresaId}-${options.mes}`,
-        escutas: [{
-          tabela: 'analitico_recebimentos',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
-      },
-      {
-        onEvento: (payload) => {
-          const importadoPorMim =
-            (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id
-              === perfilRef.current;
-          if (hasLoadedOnce.current && payload.eventType === 'INSERT' && !importadoPorMim) {
-            rtToastRef.current = true;
+    return assinarSinal('analitico', empresa.id, {
+      onMudou: (sinal) => {
+        // Linha sem importador (gatilho do 59, robô) também é novidade de outro.
+        const importadoPorOutro =
+          sinal.importado_por.length === 0
+          || sinal.importado_por.some(id => id !== perfilRef.current);
+        if (hasLoadedOnce.current && sinal.operacao === 'INSERT' && importadoPorOutro) {
+          rtToastRef.current = true;
+        }
+        if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+        rtDebounceRef.current = setTimeout(() => {
+          if (rtToastRef.current) {
+            rtToastRef.current = false;
+            toast.info('Analítico atualizado!', {
+              id: 'analitico-atualizado',   // mesmo id → substitui, não empilha
+              description: 'Novos recebimentos foram importados.',
+              duration: 4000,
+            });
           }
-          if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
-          rtDebounceRef.current = setTimeout(() => {
-            if (rtToastRef.current) {
-              rtToastRef.current = false;
-              toast.info('Analítico atualizado!', {
-                id: 'analitico-atualizado',   // mesmo id → substitui, não empilha
-                description: 'Novos recebimentos foram importados.',
-                duration: 4000,
-              });
-            }
-            void fetchRef.current(true);   // silencioso: a tabela fica na tela
-          }, 1500);
-        },
-        // Sem toast: a reconexão é assunto interno, não "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(true); },
+          void fetchRef.current(true);   // silencioso: a tabela fica na tela
+        }, 1500);
       },
-    );
-  }, [empresa?.id, options.mes]);
+      // Sem toast: a reconexão é assunto interno, não "chegou importação nova".
+      onReconectado: () => { void fetchRef.current(true); },
+    });
+  }, [empresa?.id]);
 
   // Debounce pendente não deve sobreviver ao unmount do hook.
   useEffect(() => () => {

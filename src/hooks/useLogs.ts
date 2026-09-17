@@ -20,8 +20,8 @@
  * resultado de total.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import type { LogSistema } from '@/lib/supabase';
+import { assinarTabela, type EscutaTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
@@ -259,13 +259,17 @@ export function useLogs(): UseLogsReturn {
   useEffect(() => {
     if (!empresaEfetiva && !isSuperAdmin) return;
 
-    const canal = supabase
-      .channel(`logs-sistema-${empresaEfetiva ?? 'todas'}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'logs_sistema' },
-        (payload) => {
-          const novo = payload.new as LogSistema;
+    // Com empresa escolhida, o filtro vai para o servidor: o Realtime descarta a
+    // linha das outras empresas antes de avaliar a RLS para esta pessoa.
+    const escuta: EscutaTabela = { tabela: 'logs_sistema', evento: 'INSERT' };
+    if (empresaEfetiva) escuta.filtro = `empresa_id=eq.${empresaEfetiva}`;
+
+    return assinarTabela(
+      { topico: `logs-sistema-${empresaEfetiva ?? 'todas'}`, escutas: [escuta] },
+      {
+        onEvento: (payload) => {
+          if (payload.eventType !== 'INSERT') return;
+          const novo = payload.new as unknown as LogSistema;
 
           // O realtime não aplica os filtros da tela — só o RLS. Uma linha de
           // outra empresa ou fora do recorte não pode entrar na lista.
@@ -284,10 +288,8 @@ export function useLogs(): UseLogsReturn {
             setTotal((t) => t + 1);
           }
         },
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(canal); };
+      },
+    );
   }, [empresaEfetiva, isSuperAdmin]);
 
   // ── Ações ─────────────────────────────────────────────────────────────────

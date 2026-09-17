@@ -39,7 +39,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { reconciliarLista, reconciliarItem, iguaisProfundo } from '@/lib/dadosVivos';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { getTodayISO } from '@/lib/index';
 import { mesAtual, deslocarMes, normalizarMes, partesDoMes } from '@/lib/mesReferencia';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -284,22 +284,17 @@ export function useRhGestao(): EstadoRhGestao {
    * — e as RPCs recusariam, com uma mensagem que ele não esperava.
    *
    * A releitura é silenciosa e reconciliada: só a linha que mudou é trocada.
+   *
+   * `rh_lancamentos` e `rh_fechamentos` nunca estiveram na publicação
+   * `supabase_realtime` — a escuta por linha não recebia nada. O banco avisa
+   * pelo sinal `rh:<empresa>` (migration 20260917110000).
    */
   useEffect(() => {
     if (!empresaId || !permissoes.podeVer) return;
-    return assinarTabela(
-      {
-        topico: `rt-rh-${empresaId}`,
-        escutas: [
-          { tabela: 'rh_lancamentos', filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'rh_fechamentos', filtro: `empresa_id=eq.${empresaId}` },
-        ],
-      },
-      {
-        onEvento:      () => { void carregarLancamentos(); void carregarMoldura(); },
-        onReconectado: () => { void recarregar(); },
-      },
-    );
+    return assinarSinal('rh', empresaId, {
+      onMudou:       () => { void carregarLancamentos(); void carregarMoldura(); },
+      onReconectado: () => { void recarregar(); },
+    });
   }, [empresaId, permissoes.podeVer, carregarLancamentos, carregarMoldura, recarregar]);
 
   // ── O percentual vivo ─────────────────────────────────────────────────────

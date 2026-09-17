@@ -80,6 +80,20 @@
  * Daí o jitter em `esperaComJitter`: mesma ordem de grandeza de espera, mas
  * cada aba sorteia a sua e a onda vira chuvisco. Pelo mesmo motivo o retorno à
  * aba não reconecta mais no mesmo milissegundo para todos.
+ *
+ * ── Quem reergue o canal depois de ERRO (17/09/2026) ─────────────────────────
+ * O supabase-js reentra sozinho num canal com CHANNEL_ERROR/TIMED_OUT e dispara
+ * SUBSCRIBED de novo. Este provider recriava o canal por cima, e o SUBSCRIBED
+ * da reentrada não cancelava a recriação agendada: a pessoa entrava, fazia
+ * `track`, e segundos depois o canal era derrubado e recriado — dois eventos de
+ * presence por queda. E como o tópico é fixo e `supabase.channel(nome)` devolve
+ * o canal que ainda estiver saindo, a recriação às vezes pegava o canal morto e
+ * a presença sumia até a pessoa voltar para a aba.
+ *
+ * Agora: ERRO/TIMEOUT fica com a biblioteca (um vigia recria só se não voltar);
+ * CLOSED recria; o canal novo só nasce depois que o antigo saiu; e o `track` da
+ * reentrada é sorteado em `ESPALHAMENTO_RETRACK_MS`, porque quando o servidor
+ * cai todo mundo reentra no mesmo segundo.
  */
 import {
   createContext, useContext, useEffect, useRef,
@@ -151,6 +165,16 @@ const BACKOFF_MAX_MS  = 30_000;
 const ESPALHAMENTO_RETOMADA_MS = 1_500;
 
 /**
+ * Espalhamento do `track` quando o canal REENTRA depois de uma queda. A queda do
+ * servidor derruba todo mundo junto; dez segundos sorteados dividem o turno
+ * inteiro em poucos eventos por segundo.
+ */
+const ESPALHAMENTO_RETRACK_MS = 10_000;
+
+/** Quanto esperar a reentrada da biblioteca antes de recriar o canal. */
+const VIGIA_MS = 45_000;
+
+/**
  * Backoff exponencial com "equal jitter": metade fixa, metade sorteada.
  *
  * A metade fixa garante que a espera cresce de verdade a cada tentativa (com
@@ -186,6 +210,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const reconnectTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const mountedRef          = useRef(true);
+  /** Remoção do canal anterior ainda em curso — o próximo espera por ela. */
+  const saindoRef           = useRef<Promise<unknown> | null>(null);
 
   // ── Extrai os DOIS conjuntos do mesmo presenceState ───────────────────────
   // `Object.keys(state)` devolve a `key` do canal — que definimos como o
@@ -255,115 +281,159 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     if (!userId || !empresaId) return;
 
-    // ── Canal único da APLICAÇÃO ───────────────────────────────────────────
-    // A key é o userId → cada usuário ocupa uma "slot" no presenceState.
-    //
-    // Um só, global, em vez de um por empresa: ver o cabeçalho. O tópico é
-    // adivinhável, ao contrário do antigo `presence-empresa-{uuid}`, então
-    // nasce `private` — a RLS de `realtime.messages` exige sessão para
-    // publicar e para receber (migration 20260910143000).
-    const channel = supabase.channel('presence-global', {
-      config: {
-        private: true,
-        presence: { key: userId },
-      },
-    });
+    /** Este ciclo do efeito. Callback de um canal de ciclo anterior é ignorado. */
+    let vivo = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let vigia: ReturnType<typeof setTimeout> | null = null;
 
-    channelRef.current = channel;
+    // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta deve
+    // continuar tentando. O limite antigo de 5 tentativas fazia a presença
+    // morrer de vez depois de suspender a máquina.
+    const agendarRecriacao = () => {
+      const delay = esperaComJitter(reconnectAttemptsRef.current);
+      reconnectAttemptsRef.current += 1;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) setReconnectKey(k => k + 1);
+      }, delay);
+    };
 
-    /**
-     * Anuncia esta pessoa no canal. Chamado UMA vez por SUBSCRIBED.
-     *
-     * Repete só quando falha, com teto — nunca em intervalo fixo, que foi o que
-     * estourou o limite de presence do Realtime (ver cabeçalho).
-     */
-    const doTrack = async (tentativa = 0) => {
-      const repetir = () => {
-        if (tentativa + 1 >= MAX_TENTATIVAS_TRACK) return;
-        if (retryTrackRef.current) clearTimeout(retryTrackRef.current);
-        retryTrackRef.current = setTimeout(() => {
-          if (mountedRef.current) void doTrack(tentativa + 1);
-        }, RETRY_TRACK_MS);
+    const iniciar = () => {
+      if (!vivo || !mountedRef.current) return;
+
+      // ── Canal único da APLICAÇÃO ─────────────────────────────────────────
+      // A key é o userId → cada usuário ocupa uma "slot" no presenceState.
+      //
+      // Um só, global, em vez de um por empresa: ver o cabeçalho. O tópico é
+      // adivinhável, ao contrário do antigo `presence-empresa-{uuid}`, então
+      // nasce `private` — a RLS de `realtime.messages` exige sessão para
+      // publicar e para receber (migration 20260910143000).
+      const ch = supabase.channel('presence-global', {
+        config: {
+          private: true,
+          presence: { key: userId },
+        },
+      });
+      channel = ch;
+      channelRef.current = ch;
+
+      /** SUBSCRIBED já veio uma vez neste canal: o próximo é reentrada. */
+      let jaInscrito = false;
+
+      /**
+       * Anuncia esta pessoa no canal. Chamado UMA vez por SUBSCRIBED.
+       *
+       * Repete só quando falha, com teto — nunca em intervalo fixo, que foi o
+       * que estourou o limite de presence do Realtime (ver cabeçalho).
+       */
+      const doTrack = async (tentativa = 0) => {
+        const repetir = () => {
+          if (tentativa + 1 >= MAX_TENTATIVAS_TRACK) return;
+          if (retryTrackRef.current) clearTimeout(retryTrackRef.current);
+          retryTrackRef.current = setTimeout(() => {
+            if (vivo && mountedRef.current) void doTrack(tentativa + 1);
+          }, RETRY_TRACK_MS);
+        };
+
+        try {
+          const resposta = await ch.track({
+            user_id:     userId,
+            nome:        perfil?.nome        ?? '',
+            perfil_tipo: perfil?.perfil      ?? '',
+            // Sem isto o contador nao teria como recortar por empresa.
+            empresa_id:  empresaId,
+          });
+          // 'ok' | 'timed out' | 'error' — só o primeiro colocou a pessoa no ar.
+          if (resposta !== 'ok') repetir();
+        } catch (e) {
+          console.warn('[PresenceProvider] track error:', e);
+          repetir();
+        }
       };
 
-      try {
-        const resposta = await channel.track({
-          user_id:     userId,
-          nome:        perfil?.nome        ?? '',
-          perfil_tipo: perfil?.perfil      ?? '',
-          // Sem isto o contador nao teria como recortar por empresa.
-          empresa_id:  empresaId,
-        });
-        // 'ok' | 'timed out' | 'error' — só o primeiro colocou a pessoa no ar.
-        if (resposta !== 'ok') repetir();
-      } catch (e) {
-        console.warn('[PresenceProvider] track error:', e);
-        repetir();
-      }
-    };
+      // ── Handlers ────────────────────────────────────────────────────────
+      // Este Provider está no topo da árvore: trocar o Set faz o app inteiro
+      // re-renderizar. `mesmosIds` corta o render quando o evento não mudou
+      // nada — e sync/join/leave chegam bastante numa empresa com muita gente.
+      const aplicarEstado = () => {
+        if (!vivo || !mountedRef.current) return;
+        const { todos, daEmpresa } = extrairConjuntos(ch.presenceState<PresencePayload>());
+        setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
+        setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
+      };
 
-    // ── Handlers ──────────────────────────────────────────────────────────
-    // Este Provider está no topo da árvore: trocar o Set faz o app inteiro
-    // re-renderizar. `mesmosIds` corta o render quando o evento não mudou nada
-    // — e sync/join/leave chegam bastante numa empresa com muita gente online.
-    const aplicarEstado = () => {
-      if (!mountedRef.current) return;
-      const { todos, daEmpresa } = extrairConjuntos(channel.presenceState<PresencePayload>());
-      setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
-      setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
-    };
+      ch
+        .on('presence', { event: 'sync' }, () => {
+          aplicarEstado();
+          if (vivo && mountedRef.current) setLoading(false);
+        })
+        .on('presence', { event: 'join' },  aplicarEstado)
+        .on('presence', { event: 'leave' }, aplicarEstado)
+        .subscribe(async (status, err) => {
+          if (!vivo || !mountedRef.current) return;
 
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        aplicarEstado();
-        if (mountedRef.current) setLoading(false);
-      })
-      .on('presence', { event: 'join' },  aplicarEstado)
-      .on('presence', { event: 'leave' }, aplicarEstado)
-      .subscribe(async (status, err) => {
-        if (!mountedRef.current) return;
+          if (status === 'SUBSCRIBED') {
+            reconnectAttemptsRef.current = 0;
+            // A biblioteca reentrou por conta própria: a recriação agendada
+            // derrubaria um canal que acabou de voltar.
+            if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+            if (vigia) { clearTimeout(vigia); vigia = null; }
+            if (retryTrackRef.current) { clearTimeout(retryTrackRef.current); retryTrackRef.current = null; }
 
-        if (status === 'SUBSCRIBED') {
-          reconnectAttemptsRef.current = 0;
-          // Uma vez só. A presença vive enquanto o socket viver.
-          if (retryTrackRef.current) { clearTimeout(retryTrackRef.current); retryTrackRef.current = null; }
-          await doTrack();
-        }
+            if (!jaInscrito) {
+              // Uma vez só. A presença vive enquanto o socket viver.
+              jaInscrito = true;
+              await doTrack();
+              return;
+            }
+            // Reentrada depois de queda: o servidor perdeu a presença de todos
+            // ao mesmo tempo. Anunciar de novo, mas sorteado.
+            retryTrackRef.current = setTimeout(() => {
+              retryTrackRef.current = null;
+              if (vivo && mountedRef.current) void doTrack();
+            }, Math.random() * ESPALHAMENTO_RETRACK_MS);
+            return;
+          }
 
-        // CLOSED entra aqui de propósito: era o caso NÃO tratado, e é o mais
-        // comum de todos (o servidor encerra o socket ocioso). Sem isso, a
-        // presença ficava morta em silêncio e todo mundo aparecia offline.
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          /*
-           * A PRIMEIRA falha de um ciclo não é defeito, é a reconexão fazendo o
-           * trabalho dela — o servidor encerra o socket ocioso e todo canal cai
-           * junto. Avisar em vermelho a cada queda enchia o console de linhas
-           * `CHANNEL_ERROR undefined` (o Supabase não manda `Error` num
-           * fechamento de socket) para algo que se resolve sozinho logo abaixo.
-           *
-           * Se a retentativa também falhar, aí sim vira aviso: canal que não
-           * volta é problema de verdade.
-           */
-          if (status !== 'CLOSED') {
-            const registrar = reconnectAttemptsRef.current === 0 ? console.info : console.warn;
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            /*
+             * A PRIMEIRA falha de um ciclo não é defeito, é a reconexão fazendo
+             * o trabalho dela — o servidor encerra o socket ocioso e todo canal
+             * cai junto. Avisar em vermelho a cada queda enchia o console de
+             * linhas `CHANNEL_ERROR undefined` (o Supabase não manda `Error` num
+             * fechamento de socket) para algo que se resolve sozinho.
+             */
+            const registrar = reconnectAttemptsRef.current === 0 && !vigia ? console.info : console.warn;
             if (err) registrar('[Realtime] presence:', status, err);
             else registrar('[Realtime] presence:', status);
+            // O supabase-js reentra sozinho. O vigia só recria se não voltar.
+            if (!vigia) {
+              vigia = setTimeout(() => {
+                vigia = null;
+                if (vivo && mountedRef.current && ch.state !== 'joined') agendarRecriacao();
+              }, VIGIA_MS);
+            }
+            return;
           }
-          // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta
-          // deve continuar tentando. O limite antigo de 5 tentativas fazia a
-          // presença morrer de vez depois de suspender a máquina.
-          const delay = esperaComJitter(reconnectAttemptsRef.current);
-          reconnectAttemptsRef.current += 1;
-          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setReconnectKey(k => k + 1);
-          }, delay);
-        }
-      });
+
+          // CLOSED que não fomos nós (o servidor encerrou o canal): a biblioteca
+          // não reentra canal fechado. Sem isso a presença ficava morta em
+          // silêncio e todo mundo aparecia offline.
+          if (status === 'CLOSED') agendarRecriacao();
+        });
+    };
+
+    // O tópico é fixo, e `supabase.channel(nome)` devolve o canal que ainda
+    // estiver saindo com o mesmo nome — um canal morto. O novo espera o antigo.
+    const saindo = saindoRef.current;
+    if (saindo) void saindo.then(iniciar, iniciar);
+    else iniciar();
 
     // ── Cleanup ───────────────────────────────────────────────────────────
     return () => {
+      vivo = false;
       mountedRef.current = false;
+      if (vigia) { clearTimeout(vigia); vigia = null; }
       if (retryTrackRef.current) {
         clearTimeout(retryTrackRef.current);
         retryTrackRef.current = null;
@@ -378,7 +448,14 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       // evento de presence a mais no canal — enviado justamente quando ele está
       // saturado, que é o que derruba a conexão. Sair do canal já basta: o
       // servidor descarta a presença da key e difunde o `leave` para os demais.
-      supabase.removeChannel(channel);
+      const antigo = channel;
+      if (antigo) {
+        let saida: Promise<unknown> | null = null;
+        saida = (async () => {
+          try { await supabase.removeChannel(antigo); } catch { /* sair já basta */ }
+        })().finally(() => { if (saindoRef.current === saida) saindoRef.current = null; });
+        saindoRef.current = saida;
+      }
       channelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
