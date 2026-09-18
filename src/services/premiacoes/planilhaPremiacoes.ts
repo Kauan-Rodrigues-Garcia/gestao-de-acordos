@@ -15,16 +15,25 @@
  *
  * ## Vazio não é zero
  *
- * Célula de valor vazia = não se aplica (a outra cidade) ou sem meta/config — a
- * Obs. diz qual. Zero = tinha meta e não bateu. Os totais são `SUM`, com o valor
- * já calculado para quem abre sem motor de cálculo.
+ * Célula de valor vazia = sem meta/config (a Obs. diz qual), ou a outra cidade
+ * no recorte de todos os setores. Zero = tinha meta e não bateu. Os totais são
+ * `SUM`, com o valor já calculado para quem abre sem motor de cálculo.
+ *
+ * ## Uma cidade, uma coluna
+ *
+ * Correção de 18/09/2026: o recorte de Birigui sai só com Premiação, e o de
+ * Marília só com Comissão — título, coluna e nome da aba acompanham
+ * (`tiposNoRecorte`, a mesma régua da tela). As duas colunas só quando o
+ * recorte mistura cidades.
  *
  * Função pura: nada de `document`.
  */
 import {
   Estilos, escXml, montarPacoteXlsx, refCelula, type Borda, type Estilo,
 } from '@/lib/xlsxEstilizado';
-import type { LinhaPremiacao } from './calculoPremiacoes';
+import {
+  ROTULO_TIPO, tiposNoRecorte, valorDoTipo, type LinhaPremiacao, type TipoRemuneracao,
+} from './calculoPremiacoes';
 
 export interface DadosPlanilhaPremiacoes {
   empresaNome: string;
@@ -39,6 +48,15 @@ export interface DadosPlanilhaPremiacoes {
 }
 
 export const TITULO_PREMIACOES = 'Relatório de Premiações e Comissões';
+
+/** O título pelo que o recorte tem: só premiação, só comissão ou as duas. */
+export function tituloPremiacoes(tipos: readonly TipoRemuneracao[]): string {
+  if (tipos.length !== 1) return TITULO_PREMIACOES;
+  return tipos[0] === 'premiacao' ? 'Relatório de Premiações' : 'Relatório de Comissões';
+}
+
+/** Plural do tipo, para o nome da aba e do arquivo. */
+const PLURAL: Record<TipoRemuneracao, string> = { premiacao: 'Premiações', comissao: 'Comissões' };
 
 const MESES = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -64,8 +82,10 @@ function slug(texto: string): string {
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-export function nomeArquivoPremiacoes(d: Pick<DadosPlanilhaPremiacoes, 'mes' | 'setorNome'>): string {
-  return `premiacoes-comissoes-${d.mes}-${slug(d.setorNome ?? 'todos os setores')}.xlsx`;
+export function nomeArquivoPremiacoes(d: Pick<DadosPlanilhaPremiacoes, 'mes' | 'setorNome' | 'linhas'>): string {
+  const tipos = tiposNoRecorte(d.linhas);
+  const prefixo = tipos.length === 1 ? slug(PLURAL[tipos[0]]) : 'premiacoes-comissoes';
+  return `${prefixo}-${d.mes}-${slug(d.setorNome ?? 'todos os setores')}.xlsx`;
 }
 
 // ── Estilo ──────────────────────────────────────────────────────────────────
@@ -85,18 +105,20 @@ const VERDE = '15803D';
 
 const FORMATO_BRL = '"R$" #,##0.00';
 
-/** A=Crachá, B=Nome, C=Setor, D=Comissão, E=Premiação, F=Obs. */
-const COLUNAS = [
-  { titulo: 'Crachá',         largura: 12, alinhamento: 'center' },
-  { titulo: 'Nome',           largura: 40, alinhamento: 'left' },
-  { titulo: 'Setor',          largura: 22, alinhamento: 'left' },
-  { titulo: 'Comissão (R$)',  largura: 17, alinhamento: 'right' },
-  { titulo: 'Premiação (R$)', largura: 17, alinhamento: 'right' },
-  { titulo: 'Obs.',           largura: 52, alinhamento: 'left' },
-] as const;
-const ULTIMA = COLUNAS.length;
-const COL_COMISSAO = 4;
-const COL_PREMIACAO = 5;
+interface ColunaFolha { titulo: string; largura: number; alinhamento: 'left' | 'center' | 'right' }
+
+/** A=Crachá, B=Nome, C=Setor, depois uma coluna por tipo do recorte, e Obs. por último. */
+function colunasDaFolha(tipos: readonly TipoRemuneracao[]): ColunaFolha[] {
+  return [
+    { titulo: 'Crachá', largura: 12, alinhamento: 'center' },
+    { titulo: 'Nome',   largura: 40, alinhamento: 'left' },
+    { titulo: 'Setor',  largura: 22, alinhamento: 'left' },
+    ...tipos.map((t): ColunaFolha => ({ titulo: `${ROTULO_TIPO[t]} (R$)`, largura: 19, alinhamento: 'right' })),
+    { titulo: 'Obs.',   largura: 52, alinhamento: 'left' },
+  ];
+}
+/** A primeira coluna de valor. */
+const COL_VALOR = 4;
 
 type Celula =
   | { col: number; estilo: number; texto: string }
@@ -121,6 +143,11 @@ export function montarFolhaPremiacoes(d: DadosPlanilhaPremiacoes, estilos: Estil
   const rodape = (e: Estilo) =>
     estilos.id({ tamanho: 10, negrito: true, fundo: FAIXA, cor: TEXTO, ...e, bordas: { top: media(ACENTO), bottom: media(ACENTO) } });
 
+  const tipos = tiposNoRecorte(d.linhas);
+  const COLUNAS = colunasDaFolha(tipos);
+  const ULTIMA = COLUNAS.length;
+  const colDoTipo = (t: TipoRemuneracao) => COL_VALOR + tipos.indexOf(t);
+
   const linhas: { altura: number; celulas: Celula[] }[] = [];
   const mesclas: string[] = [];
   const nova = (altura: number) => { const l = { altura, celulas: [] as Celula[] }; linhas.push(l); return { l, numero: linhas.length }; };
@@ -132,12 +159,15 @@ export function montarFolhaPremiacoes(d: DadosPlanilhaPremiacoes, estilos: Estil
   };
 
   const alvo = d.setorNome ?? 'Todos os setores';
-  faixa(34, s.titulo, TITULO_PREMIACOES);
+  /** «Premiação: Birigui», com as cidades que estão de fato no recorte. */
+  const cidadesDoTipo = (t: TipoRemuneracao) =>
+    [...new Set(d.linhas.filter(l => l.tipo === t && l.celula).map(l => l.celula))].join(', ');
+  faixa(34, s.titulo, tituloPremiacoes(tipos));
   faixa(22, s.subtitulo, `Período: ${rotuloPeriodo(d.mes)}  ·  Gerado em: ${rotuloGeradoEm(d.geradoEm)}`);
   faixa(20, s.nota, [
     `${d.empresaNome} · ${alvo}`,
-    'Premiação: Birigui · Comissão: Marília',
-    'valor = comissão por meta do mês (faixa atingida × %)',
+    ...tipos.map(t => (cidadesDoTipo(t) ? `${ROTULO_TIPO[t]}: ${cidadesDoTipo(t)}` : null)),
+    'valor = meta do mês (faixa atingida × %)',
     d.parcial ? 'mês em aberto: valores parciais' : null,
   ].filter(Boolean).join('  ·  '));
   nova(8);
@@ -158,7 +188,7 @@ export function montarFolhaPremiacoes(d: DadosPlanilhaPremiacoes, estilos: Estil
       l.celulas.push({
         col,
         estilo: corpo(z, v > 0
-          ? { negrito: true, cor: VERDE, formato: FORMATO_BRL, horizontal: 'right' }
+          ? { negrito: true, tamanho: 11, cor: VERDE, formato: FORMATO_BRL, horizontal: 'right' }
           : { cor: CINZA_CLARO, formato: FORMATO_BRL, horizontal: 'right' }),
         valor: v,
       });
@@ -167,9 +197,8 @@ export function montarFolhaPremiacoes(d: DadosPlanilhaPremiacoes, estilos: Estil
     else l.celulas.push({ col: 1, estilo: corpo(z, { horizontal: 'center' }) });
     l.celulas.push({ col: 2, estilo: corpo(z, { negrito: true, cor: TEXTO, recuo: 1 }), texto: p.nome.toUpperCase() });
     l.celulas.push({ col: 3, estilo: corpo(z, { cor: TEXTO, recuo: 1 }), texto: p.setorNome.toUpperCase() });
-    valor(COL_COMISSAO, p.comissao);
-    valor(COL_PREMIACAO, p.premiacao);
-    l.celulas.push({ col: 6, estilo: corpo(z, { cor: CINZA, recuo: 1, tamanho: 9 }), texto: p.obs });
+    for (const t of tipos) valor(colDoTipo(t), valorDoTipo(p, t));
+    l.celulas.push({ col: ULTIMA, estilo: corpo(z, { cor: CINZA, recuo: 1, tamanho: 9 }), texto: p.obs });
   });
 
   const primeira = linhaCabecalho + 1;
@@ -185,10 +214,11 @@ export function montarFolhaPremiacoes(d: DadosPlanilhaPremiacoes, estilos: Estil
     tot.l.celulas.push({ col: 1, estilo: rodape({ recuo: 1 }), texto: `TOTAL  ·  ${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}` });
     tot.l.celulas.push({ col: 2, estilo: rodape({}) }, { col: 3, estilo: rodape({}) });
     mesclas.push(`${refCelula(1, tot.numero)}:${refCelula(3, tot.numero)}`);
-    tot.l.celulas.push(soma(COL_COMISSAO, d.linhas.reduce((t, l) => t + (l.comissao ?? 0), 0)));
-    tot.l.celulas.push(soma(COL_PREMIACAO, d.linhas.reduce((t, l) => t + (l.premiacao ?? 0), 0)));
+    for (const t of tipos) {
+      tot.l.celulas.push(soma(colDoTipo(t), d.linhas.reduce((acc, l) => acc + (valorDoTipo(l, t) ?? 0), 0)));
+    }
     const bateram = d.linhas.filter(l => l.estado === 'bateu').length;
-    tot.l.celulas.push({ col: 6, estilo: rodape({ recuo: 1, cor: CINZA }), texto: `${bateram} ${bateram === 1 ? 'bateu' : 'bateram'} a meta` });
+    tot.l.celulas.push({ col: ULTIMA, estilo: rodape({ recuo: 1, cor: CINZA }), texto: `${bateram} ${bateram === 1 ? 'bateu' : 'bateram'} a meta` });
   }
 
   const xmlLinhas = linhas.map((l, i) => {
@@ -222,16 +252,20 @@ export function montarFolhaPremiacoes(d: DadosPlanilhaPremiacoes, estilos: Estil
     + '<printOptions horizontalCentered="1"/>'
     + '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/>'
     + '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
-    + `<headerFooter><oddFooter>&amp;L&amp;8${escXml(TITULO_PREMIACOES)} · ${escXml(rotuloPeriodo(d.mes))}&amp;R&amp;8Página &amp;P de &amp;N</oddFooter></headerFooter>`
+    + `<headerFooter><oddFooter>&amp;L&amp;8${escXml(tituloPremiacoes(tipos))} · ${escXml(rotuloPeriodo(d.mes))}&amp;R&amp;8Página &amp;P de &amp;N</oddFooter></headerFooter>`
     + '</worksheet>';
 }
 
 export function montarPlanilhaPremiacoes(d: DadosPlanilhaPremiacoes): Uint8Array<ArrayBuffer> {
   const estilos = new Estilos();
+  const tipos = tiposNoRecorte(d.linhas);
   return montarPacoteXlsx({
-    folhas: [{ nome: 'Premiações e Comissões', xml: montarFolhaPremiacoes(d, estilos) }],
+    folhas: [{
+      nome: tipos.length === 1 ? PLURAL[tipos[0]] : 'Premiações e Comissões',
+      xml: montarFolhaPremiacoes(d, estilos),
+    }],
     estilos,
-    titulo: `${TITULO_PREMIACOES} · ${rotuloPeriodo(d.mes)}`,
+    titulo: `${tituloPremiacoes(tipos)} · ${rotuloPeriodo(d.mes)}`,
     geradoEm: d.geradoEm,
   });
 }

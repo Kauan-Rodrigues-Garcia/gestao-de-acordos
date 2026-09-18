@@ -27,6 +27,9 @@ const LINHAS = [
   linha({ operadorId: 'c', nome: 'Bruno & Cia', setorNome: 'Play 4', celula: 'Marília', tipo: 'comissao', comissao: 500, premiacao: null }),
 ];
 
+/** Só Birigui: Ana, que bateu, e Bia, que não. */
+const BIRIGUI = LINHAS.slice(0, 2);
+
 function abrir(linhas = LINHAS) {
   const arquivo = montarPlanilhaPremiacoes({
     empresaNome: 'BookPlay', setorNome: 'Receptivo', mes: '2026-08', parcial: false,
@@ -42,9 +45,43 @@ describe('rótulos', () => {
     expect(rotuloGeradoEm(new Date('2026-09-17T11:39:00Z'))).toBe('17/09/2026, 08:39');
   });
 
-  it('nome do arquivo com mês e setor', () => {
-    expect(nomeArquivoPremiacoes({ mes: '2026-08', setorNome: 'Receptivo' })).toBe('premiacoes-comissoes-2026-08-receptivo.xlsx');
-    expect(nomeArquivoPremiacoes({ mes: '2026-08', setorNome: null })).toBe('premiacoes-comissoes-2026-08-todos-os-setores.xlsx');
+  it('nome do arquivo com o tipo do recorte, mês e setor', () => {
+    expect(nomeArquivoPremiacoes({ mes: '2026-08', setorNome: 'Receptivo', linhas: BIRIGUI }))
+      .toBe('premiacoes-2026-08-receptivo.xlsx');
+    expect(nomeArquivoPremiacoes({ mes: '2026-08', setorNome: null, linhas: LINHAS }))
+      .toBe('premiacoes-comissoes-2026-08-todos-os-setores.xlsx');
+  });
+});
+
+describe('recorte de uma cidade só', () => {
+  function abrirBirigui() {
+    const partes = unzipSync(montarPlanilhaPremiacoes({
+      empresaNome: 'BookPlay', setorNome: 'Receptivo', mes: '2026-08', parcial: false,
+      geradoEm: new Date('2026-09-17T11:39:00Z'), linhas: BIRIGUI,
+    }));
+    return {
+      folha: strFromU8(partes['xl/worksheets/sheet1.xml']),
+      livro: strFromU8(partes['xl/workbook.xml']),
+    };
+  }
+
+  it('Birigui sai só com Premiação: sem coluna nem título de comissão', () => {
+    const { folha, livro } = abrirBirigui();
+    expect(folha).toContain('>Relatório de Premiações<');
+    expect(folha).toContain('>Premiação (R$)<');
+    expect(folha).not.toContain('Comissão');
+    expect(folha).toContain('Premiação: Birigui');
+    expect(livro).toContain('<sheet name="Premiações"');
+  });
+
+  it('a coluna de valor é a D, a Obs. vem logo depois, e o total soma a D', () => {
+    const { folha } = abrirBirigui();
+    expect(folha).toMatch(/<c r="D6" s="\d+"><v>811.3<\/v>/);
+    expect(folha).toContain('>Obs.<');
+    expect(folha).toMatch(/<c r="E6" s="\d+" t="inlineStr"><is><t xml:space="preserve">2ª meta<\/t>/);
+    expect(folha).toContain('<f>SUM(D6:D7)</f><v>811.3</v>');
+    expect(folha).toContain('<autoFilter ref="A5:E7"/>');
+    expect(folha).not.toMatch(/r="F\d+"/);
   });
 });
 

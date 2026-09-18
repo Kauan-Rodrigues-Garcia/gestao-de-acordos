@@ -9,6 +9,10 @@
  * A única coisa que se escreve aqui é o CRACHÁ, com a mesma permissão de quem
  * preenche D.U. e situação (`fechamento_editar`). Ele grava na tabela do RH, e
  * chega pronto lá quando o RH Gestão entrar.
+ *
+ * Correções de 18/09/2026: o valor de quem bateu ficou grande e em destaque (era
+ * preciso esforço para ler), e o recorte de uma cidade só mostra a coluna e o
+ * card do tipo dela (`tiposNoRecorte`) — Birigui sem a coluna Comissão.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -25,7 +29,7 @@ import { formatBRL } from '@/lib/money';
 import { ehMesAtual, rotuloDoMes } from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
 import {
-  lerCracha, ROTULO_TIPO, type LinhaPremiacao, type TipoRemuneracao,
+  lerCracha, ROTULO_TIPO, tiposNoRecorte, valorDoTipo, type LinhaPremiacao, type TipoRemuneracao,
 } from '@/services/premiacoes/calculoPremiacoes';
 import { baixarPremiacoes } from '@/services/premiacoes/baixarPremiacoes';
 
@@ -52,18 +56,24 @@ function Aviso({ tom, children }: { tom: 'alerta' | 'info'; children: React.Reac
   );
 }
 
-/** Célula de valor: vazio não é zero. */
+/**
+ * Célula de valor: vazio não é zero. Quem bateu é o que a pessoa procura na
+ * tabela, então o valor dela é o maior texto da linha, num selo verde, com a
+ * meta atingida escrita ao lado.
+ */
 function Valor({ valor, faixa }: { valor: number | null; faixa: number | null }) {
-  if (valor === null) return <span className="text-muted-foreground/60">—</span>;
-  if (valor <= 0) return <span className="text-muted-foreground">{formatBRL(0)}</span>;
+  if (valor === null) return <span className="text-[13px] text-muted-foreground/60">—</span>;
+  if (valor <= 0) return <span className="text-[13px] text-muted-foreground">{formatBRL(0)}</span>;
   return (
-    <span className="inline-flex items-center justify-end gap-1.5">
+    <span className="inline-flex items-center justify-end gap-2">
       {faixa !== null && (
-        <span className="rounded-full bg-success/12 px-1.5 py-0.5 text-[9px] font-bold text-success">
-          {faixa}ª
+        <span className="whitespace-nowrap rounded-full bg-success/15 px-2 py-0.5 font-sans text-[11px] font-bold text-success ring-1 ring-success/30">
+          {faixa}ª meta
         </span>
       )}
-      <span className="font-semibold text-success">{formatBRL(valor)}</span>
+      <span className="whitespace-nowrap rounded-lg bg-success/10 px-2.5 py-1 text-[16px] font-bold leading-none text-success ring-1 ring-success/25">
+        {formatBRL(valor)}
+      </span>
     </span>
   );
 }
@@ -129,14 +139,23 @@ function CampoCracha({ linha: l, podeEditar, salvando, onSalvar, onInvalido }: P
   );
 }
 
-const CABECALHO: { rotulo: string; alinhamento: string; dica?: string }[] = [
-  { rotulo: 'CRACHÁ', alinhamento: 'text-center', dica: 'Crachá do RH — o mesmo que o RH Gestão vai ler' },
-  { rotulo: 'NOME', alinhamento: 'text-left' },
-  { rotulo: 'SETOR', alinhamento: 'text-left', dica: 'Setor de origem no mês e a cidade dele no RH' },
-  { rotulo: 'COMISSÃO (R$)', alinhamento: 'text-right', dica: 'Só setores de Marília' },
-  { rotulo: 'PREMIAÇÃO (R$)', alinhamento: 'text-right', dica: 'Só setores de Birigui' },
-  { rotulo: 'OBS.', alinhamento: 'text-left' },
-];
+interface Coluna { rotulo: string; alinhamento: string; dica?: string }
+
+const COLUNA_DO_TIPO: Record<TipoRemuneracao, Coluna> = {
+  comissao: { rotulo: 'COMISSÃO (R$)', alinhamento: 'text-right', dica: 'Setores das cidades de comissão (Marília)' },
+  premiacao: { rotulo: 'PREMIAÇÃO (R$)', alinhamento: 'text-right', dica: 'Setores das cidades de premiação (Birigui)' },
+};
+
+/** O cabeçalho do recorte: as colunas de valor são só as dos tipos presentes. */
+function cabecalho(tipos: readonly TipoRemuneracao[]): Coluna[] {
+  return [
+    { rotulo: 'CRACHÁ', alinhamento: 'text-center', dica: 'Crachá do RH — o mesmo que o RH Gestão vai ler' },
+    { rotulo: 'NOME', alinhamento: 'text-left' },
+    { rotulo: 'SETOR', alinhamento: 'text-left', dica: 'Setor de origem no mês e a cidade dele no RH' },
+    ...tipos.map(t => COLUNA_DO_TIPO[t]),
+    { rotulo: 'OBS.', alinhamento: 'text-left' },
+  ];
+}
 
 interface Props {
   empresaId: string;
@@ -180,6 +199,11 @@ export function PremiacoesComissoes({
     };
   }, [linhas]);
 
+  /** Birigui sozinha mostra só Premiação; Marília sozinha, só Comissão. */
+  const tipos = useMemo(() => tiposNoRecorte(linhas), [linhas]);
+  const colunas = useMemo(() => cabecalho(tipos), [tipos]);
+  const umTipo = tipos.length === 1;
+
   const setoresSemCidade = useMemo(
     () => [...new Set(linhas.filter(l => !l.tipo).map(l => l.setorNome))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     [linhas],
@@ -209,8 +233,8 @@ export function PremiacoesComissoes({
     if (!r.ok) toast.error('Não foi possível gerar o arquivo', { description: r.erro });
   }, [empresaId, empresaNome, setorNome, mes, linhas]);
 
-  const totalPremiacao = visiveis.reduce((t, l) => t + (l.premiacao ?? 0), 0);
-  const totalComissao = visiveis.reduce((t, l) => t + (l.comissao ?? 0), 0);
+  const totalNoFiltro = (tipo: TipoRemuneracao) =>
+    visiveis.reduce((t, l) => t + (valorDoTipo(l, tipo) ?? 0), 0);
 
   return (
     <div className="space-y-4">
@@ -244,34 +268,38 @@ export function PremiacoesComissoes({
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-[78px] rounded-xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiTile
-            rotulo={`Premiação · ${cidades.premiacao}`}
-            valor={formatBRL(resumo.premiacao.total)}
-            valorNumerico={resumo.premiacao.total}
-            formatar={formatBRL}
-            sub={`${resumo.premiacao.bateram} de ${resumo.premiacao.pessoas} bateram a meta`}
-            Icon={Award}
-            tom="primario"
-          />
-          <KpiTile
-            rotulo={`Comissão · ${cidades.comissao}`}
-            valor={formatBRL(resumo.comissao.total)}
-            valorNumerico={resumo.comissao.total}
-            formatar={formatBRL}
-            sub={`${resumo.comissao.bateram} de ${resumo.comissao.pessoas} bateram a meta`}
-            Icon={CircleDollarSign}
-            tom="primario"
-          />
-          <KpiTile
-            rotulo="Total a pagar"
-            valor={formatBRL(resumo.premiacao.total + resumo.comissao.total)}
-            valorNumerico={resumo.premiacao.total + resumo.comissao.total}
-            formatar={formatBRL}
-            sub="Premiação + comissão, sem bônus"
-            Icon={Wallet}
-            tom="sucesso"
-          />
+        <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-3', umTipo ? 'lg:grid-cols-3' : 'lg:grid-cols-4')}>
+          {tipos.map(t => (
+            <KpiTile
+              key={t}
+              rotulo={`${ROTULO_TIPO[t]} · ${cidades[t]}`}
+              valor={formatBRL(resumo[t].total)}
+              valorNumerico={resumo[t].total}
+              formatar={formatBRL}
+              sub={`${resumo[t].bateram} de ${resumo[t].pessoas} bateram a meta`}
+              Icon={t === 'premiacao' ? Award : CircleDollarSign}
+              tom="primario"
+            />
+          ))}
+          {umTipo ? (
+            <KpiTile
+              rotulo="Bateram a meta"
+              valor={`${resumo[tipos[0]].bateram} de ${resumo[tipos[0]].pessoas}`}
+              sub={`Com ${ROTULO_TIPO[tipos[0]].toLowerCase()} a receber`}
+              Icon={Trophy}
+              tom="sucesso"
+            />
+          ) : (
+            <KpiTile
+              rotulo="Total a pagar"
+              valor={formatBRL(resumo.premiacao.total + resumo.comissao.total)}
+              valorNumerico={resumo.premiacao.total + resumo.comissao.total}
+              formatar={formatBRL}
+              sub="Premiação + comissão, sem bônus"
+              Icon={Wallet}
+              tom="sucesso"
+            />
+          )}
           <KpiTile
             rotulo="Crachás"
             valor={`${resumo.comCracha} de ${resumo.total}`}
@@ -338,7 +366,7 @@ export function PremiacoesComissoes({
             <table className="w-full min-w-[980px] text-[11px]">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
-                  {CABECALHO.map(c => (
+                  {colunas.map(c => (
                     <th key={c.rotulo} scope="col" title={c.dica}
                         className={cn('px-2 py-2 font-semibold text-muted-foreground whitespace-nowrap', c.alinhamento)}>
                       {c.rotulo}
@@ -383,12 +411,11 @@ export function PremiacoesComissoes({
                         )}
                       </div>
                     </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums font-mono">
-                      <Valor valor={l.comissao} faixa={l.tipo === 'comissao' ? l.faixa : null} />
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums font-mono">
-                      <Valor valor={l.premiacao} faixa={l.tipo === 'premiacao' ? l.faixa : null} />
-                    </td>
+                    {tipos.map(t => (
+                      <td key={t} className="px-2 py-2 text-right tabular-nums font-mono">
+                        <Valor valor={valorDoTipo(l, t)} faixa={l.tipo === t ? l.faixa : null} />
+                      </td>
+                    ))}
                     <td className="px-2 py-1.5 text-muted-foreground max-w-[320px]">
                       <span className="line-clamp-2" title={l.obs}>{l.obs || '—'}</span>
                     </td>
@@ -396,7 +423,7 @@ export function PremiacoesComissoes({
                 ))}
                 {visiveis.length === 0 && (
                   <tr>
-                    <td colSpan={CABECALHO.length} className="px-2 py-6 text-center text-muted-foreground">
+                    <td colSpan={colunas.length} className="px-2 py-6 text-center text-muted-foreground">
                       Ninguém neste filtro.
                     </td>
                   </tr>
@@ -408,8 +435,11 @@ export function PremiacoesComissoes({
                     <td className="px-2 py-2" colSpan={3}>
                       Total · {visiveis.length} {visiveis.length === 1 ? 'pessoa' : 'pessoas'}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums font-mono text-primary">{formatBRL(totalComissao)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums font-mono text-primary">{formatBRL(totalPremiacao)}</td>
+                    {tipos.map(t => (
+                      <td key={t} className="px-2 py-2.5 text-right tabular-nums font-mono text-[15px] font-bold text-primary">
+                        {formatBRL(totalNoFiltro(t))}
+                      </td>
+                    ))}
                     <td className="px-2 py-2 text-[10px] font-normal text-muted-foreground">
                       O Excel sai com todas as {linhas.length} pessoas, sem o filtro.
                     </td>

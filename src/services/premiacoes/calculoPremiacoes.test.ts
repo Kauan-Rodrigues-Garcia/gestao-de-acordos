@@ -9,8 +9,8 @@ import { describe, it, expect } from 'vitest';
 import { calcularComissao, type ConfigComissao } from '@/services/comissao/comissao';
 import { montarEntradaComissao } from '@/services/comissao/entradaDoOperador';
 import {
-  lerCracha, montarLinhaPremiacao, ordenarLinhasPremiacao, resumirPremiacoes,
-  type EntradaLinhaPremiacao,
+  lerCracha, montarLinhaPremiacao, ordenarLinhasPremiacao, resumirPremiacoes, tiposNoRecorte,
+  type EntradaLinhaPremiacao, type LinhaPremiacao,
 } from './calculoPremiacoes';
 
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
@@ -141,6 +141,28 @@ describe('resumo e ordem', () => {
 
   it('ordena por setor e, dentro dele, por nome — como a planilha', () => {
     expect(ordenarLinhasPremiacao(linhas).map(l => l.nome)).toEqual(['Carla', 'Bruno', 'Bia', 'Vera']);
+  });
+});
+
+describe('tiposNoRecorte', () => {
+  const de = (...tipos: (LinhaPremiacao['tipo'])[]) => tipos.map(tipo => ({ tipo }));
+
+  it('cidade de premiação mostra só Premiação, e de comissão só Comissão', () => {
+    expect(tiposNoRecorte(de('premiacao', 'premiacao'))).toEqual(['premiacao']);
+    expect(tiposNoRecorte(de('comissao'))).toEqual(['comissao']);
+  });
+
+  it('recorte que mistura cidades mostra as duas, Comissão antes, como a planilha', () => {
+    expect(tiposNoRecorte(de('premiacao', 'comissao', null))).toEqual(['comissao', 'premiacao']);
+  });
+
+  it('quem está sem cidade não tira a coluna do tipo que está presente', () => {
+    expect(tiposNoRecorte(de('premiacao', null))).toEqual(['premiacao']);
+  });
+
+  it('sem cidade nenhuma, as duas — a tabela não fica sem coluna de valor', () => {
+    expect(tiposNoRecorte(de(null))).toEqual(['comissao', 'premiacao']);
+    expect(tiposNoRecorte([])).toEqual(['comissao', 'premiacao']);
   });
 });
 

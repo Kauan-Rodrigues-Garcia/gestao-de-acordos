@@ -158,6 +158,28 @@ export function montarLinhaPremiacao(e: EntradaLinhaPremiacao): LinhaPremiacao {
   };
 }
 
+/** A ordem do modelo: Comissão antes de Premiação. */
+const ORDEM_TIPOS: readonly TipoRemuneracao[] = ['comissao', 'premiacao'];
+
+/**
+ * As colunas de valor que o recorte mostra.
+ *
+ * Correção de 18/09/2026: cidade de premiação mostra só Premiação, e cidade de
+ * comissão só Comissão — a outra coluna, sempre vazia, só atrapalhava a
+ * leitura. As duas aparecem juntas quando o recorte mistura cidades (todos os
+ * setores). Sem cidade nenhuma, as duas: a tabela não fica sem coluna de valor.
+ */
+export function tiposNoRecorte(linhas: readonly Pick<LinhaPremiacao, 'tipo'>[]): TipoRemuneracao[] {
+  const presentes = new Set(linhas.map(l => l.tipo));
+  const tipos = ORDEM_TIPOS.filter(t => presentes.has(t));
+  return tipos.length ? tipos : [...ORDEM_TIPOS];
+}
+
+/** O valor da linha na coluna de um tipo. */
+export function valorDoTipo(l: Pick<LinhaPremiacao, 'comissao' | 'premiacao'>, tipo: TipoRemuneracao): number | null {
+  return tipo === 'comissao' ? l.comissao : l.premiacao;
+}
+
 /** Setor e nome, como a planilha: um setor só fica em ordem alfabética. */
 export function ordenarLinhasPremiacao(linhas: readonly LinhaPremiacao[]): LinhaPremiacao[] {
   return [...linhas].sort((a, b) =>
