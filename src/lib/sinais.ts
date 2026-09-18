@@ -34,6 +34,18 @@
  * O analítico tolera 30 s: é um retrato do mês, e o importador tem o próprio
  * retorno na tela de importação. Os outros sinais são raros e só ganham o
  * sorteio.
+ *
+ * ## Só UPDATE (18/09/2026)
+ *
+ * Medido em 18/09/2026 depois do portão: cada tabulação é um PATCH (~160/h), e
+ * isso bastava para manter todo dashboard aberto no teto de uma releitura a
+ * cada 30 s — 14.182 chamadas de `fn_analitico_dashboard_mes_json` em 3,4 h,
+ * 68% do tempo do banco. Tabular não muda valor nenhum, só o status.
+ *
+ * Quem relê o mês inteiro pode pedir `minimoSoUpdateMs`: enquanto tudo o que
+ * chegou for UPDATE, a espera é essa (contada também desde a assinatura, que é
+ * quando a tela acabou de ler). INSERT ou DELETE no meio encurta de volta para
+ * o `minimoMs` da regra — importação continua chegando em 30 s.
  */
 import { assinarTabela } from '@/lib/realtime';
 
@@ -52,6 +64,14 @@ export interface OuvinteSinal {
   onMudou?:       (sinal: SinalMudou) => void;
   /** O canal caiu e voltou: sinais do intervalo se perderam — releia. */
   onReconectado?: () => void;
+}
+
+export interface OpcoesSinal {
+  /**
+   * Intervalo mínimo enquanto tudo o que chegou foi UPDATE. Nunca abaixo do
+   * `minimoMs` da regra. Ver «Só UPDATE» no cabeçalho.
+   */
+  minimoSoUpdateMs?: number;
 }
 
 interface RegraPortao {
@@ -83,13 +103,15 @@ function normalizar(payload: Record<string, unknown>): SinalMudou {
 
 /**
  * Vários sinais viram um. INSERT prevalece (é o que acende o «chegou coisa
- * nova» de quem ouve), e os importadores se somam.
+ * nova» de quem ouve), depois DELETE — o junto só vira UPDATE se tudo foi
+ * UPDATE, que é o que `minimoSoUpdateMs` pergunta. Os importadores se somam.
  */
 function juntar(a: SinalMudou | null, b: SinalMudou): SinalMudou {
   if (!a) return b;
+  const ops = [a.operacao, b.operacao];
   return {
     tabela:        b.tabela,
-    operacao:      a.operacao === 'INSERT' || b.operacao === 'INSERT' ? 'INSERT' : b.operacao,
+    operacao:      ops.includes('INSERT') ? 'INSERT' : ops.includes('DELETE') ? 'DELETE' : 'UPDATE',
     importado_por: [...new Set([...a.importado_por, ...b.importado_por])],
   };
 }
@@ -104,17 +126,34 @@ function abaEscondida(): boolean {
  *
  * @returns função de cancelamento para o cleanup do `useEffect`.
  */
-export function assinarSinal(nome: NomeSinal, empresaId: string, ouvinte: OuvinteSinal): () => void {
+export function assinarSinal(
+  nome: NomeSinal,
+  empresaId: string,
+  ouvinte: OuvinteSinal,
+  opcoes: OpcoesSinal = {},
+): () => void {
   const regra = REGRAS_SINAL[nome];
+  const assinadoEm = Date.now();
 
   let pendente:      SinalMudou | null = null;
   let reconectou     = false;
   let timer:         ReturnType<typeof setTimeout> | null = null;
+  let timerEm        = Infinity;
   let ultimaEntrega  = -Infinity;
   let devendo        = false;
 
+  /** Quanto falta para poder entregar o que está pendente. */
+  function falta(): number {
+    const agora = Date.now();
+    const soUpdate = opcoes.minimoSoUpdateMs != null && !reconectou && pendente?.operacao === 'UPDATE';
+    if (!soUpdate) return Math.max(0, regra.minimoMs - (agora - ultimaEntrega));
+    const minimo = Math.max(regra.minimoMs, opcoes.minimoSoUpdateMs ?? 0);
+    return Math.max(0, minimo - (agora - Math.max(ultimaEntrega, assinadoEm)));
+  }
+
   function entregar(): void {
     timer = null;
+    timerEm = Infinity;
     if (abaEscondida()) { devendo = true; return; }
 
     const sinal = pendente;
@@ -130,10 +169,14 @@ export function assinarSinal(nome: NomeSinal, empresaId: string, ouvinte: Ouvint
   }
 
   function agendar(): void {
-    if (timer) return;
     if (abaEscondida()) { devendo = true; return; }
-    const falta = Math.max(0, regra.minimoMs - (Date.now() - ultimaEntrega));
-    timer = setTimeout(entregar, falta + Math.random() * regra.espalhamentoMs);
+    const ate = Date.now() + falta();
+    // A entrega já marcada sai a tempo (ou antes): ela leva este sinal junto.
+    // Só remarca quem esperava pelo prazo longo do «só UPDATE» e agora não precisa.
+    if (timer && timerEm <= ate + regra.espalhamentoMs) return;
+    if (timer) clearTimeout(timer);
+    timerEm = ate + Math.random() * regra.espalhamentoMs;
+    timer = setTimeout(entregar, timerEm - Date.now());
   }
 
   function aoTrocarVisibilidade(): void {
@@ -163,6 +206,7 @@ export function assinarSinal(nome: NomeSinal, empresaId: string, ouvinte: Ouvint
   return () => {
     if (timer) clearTimeout(timer);
     timer = null;
+    timerEm = Infinity;
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
     }

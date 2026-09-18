@@ -222,15 +222,13 @@ export interface UsoDesafioEmCartaz {
  *
  * ## O tempo real
  *
- * Duas escutas, e cada uma cobre uma coisa diferente:
+ * Só `desafios`: publicar, encerrar ou trocar a mídia troca o que o menu
+ * mostra, e trocar a mídia é a razão de o campo existir.
  *
- *   • `desafios` — publicar, encerrar ou trocar a mídia troca o que o menu
- *     mostra, e trocar a mídia é a razão de o campo existir;
- *   • `analitico_recebimentos` — o painel que abre dali mostra o ranking, e o
- *     pedido é que ele ande sozinho quando chega relatório novo.
- *
- * O canal do analítico é o MESMO de `useAnaliticoDashboard`, por contagem de
- * referências — o menu entra de carona em vez de abrir um segundo.
+ * O sinal do analítico saiu em 18/09/2026. A RPC só lê `desafios`, então a
+ * releitura a cada tabulação devolvia a mesma resposta — 13.838 chamadas em
+ * 3,4 h, o menu de todo mundo. O ranking que anda com o relatório é o do painel
+ * que abre dali (`useResultadoDesafio`), e ele tem a própria escuta.
  */
 export function useDesafioEmCartaz(ativo: boolean): UsoDesafioEmCartaz {
   const { empresa } = useEmpresa();
@@ -251,30 +249,15 @@ export function useDesafioEmCartaz(ativo: boolean): UsoDesafioEmCartaz {
   useEffect(() => {
     if (!habilitado || !empresaId) return;
 
-    let debounce: ReturnType<typeof setTimeout> | null = null;
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
 
-    const cancelarDesafios = assinarTabela(
+    return assinarTabela(
       {
         topico:  `desafios-${empresaId}`,
         escutas: [{ tabela: 'desafios', filtro: `empresa_id=eq.${empresaId}` }],
       },
       { onEvento: invalidar, onReconectado: invalidar },
     );
-
-    const cancelarAnalitico = assinarSinal('analitico', empresaId, {
-      onMudou: () => {
-        if (debounce) clearTimeout(debounce);
-        debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
-      },
-      onReconectado: invalidar,
-    });
-
-    return () => {
-      if (debounce) clearTimeout(debounce);
-      cancelarDesafios();
-      cancelarAnalitico();
-    };
   }, [habilitado, empresaId, queryClient, chave]);
 
   const emCartaz = query.data ?? SEM_DESAFIOS;

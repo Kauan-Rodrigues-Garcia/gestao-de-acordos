@@ -137,6 +137,12 @@ export function agregarAnalitico(
 // atualizar —, e o debounce junta tudo num disparo só.
 const DEBOUNCE_IMPORTACAO_MS = 1_500;
 
+/**
+ * Tabulação é UPDATE e não muda valor, só o card de «não tabulado». Reler o mês
+ * inteiro a cada uma era 68% do tempo do banco (ver «Só UPDATE» em sinais.ts).
+ */
+const MINIMO_SO_UPDATE_MS = 5 * 60_000;
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 interface ResultadoDashboard {
@@ -193,7 +199,7 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
       },
       // Já é uma invalidação — sem debounce, é evento único.
       onReconectado: invalidar,
-    });
+    }, { minimoSoUpdateMs: MINIMO_SO_UPDATE_MS });
 
     return () => {
       if (debounce) clearTimeout(debounce);

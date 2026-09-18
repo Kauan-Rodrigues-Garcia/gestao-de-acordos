@@ -587,4 +587,85 @@ describe('assinarSinal — portão', () => {
 
     expect(onMudou).not.toHaveBeenCalled();
   });
+
+  it('DELETE prevalece sobre UPDATE ao juntar', async () => {
+    const onMudou = vi.fn();
+    assinarSinal('analitico', 'e1', { onMudou });
+
+    sinal({ operacao: 'DELETE' });
+    sinal({ operacao: 'UPDATE' });
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+
+    expect(onMudou).toHaveBeenCalledTimes(1);
+    expect(onMudou.mock.calls[0][0].operacao).toBe('DELETE');
+  });
+
+  describe('minimoSoUpdateMs', () => {
+    const LONGO = 5 * 60_000;
+
+    it('só UPDATE espera o prazo longo, contado desde a assinatura', async () => {
+      const onMudou = vi.fn();
+      assinarSinal('analitico', 'e1', { onMudou }, { minimoSoUpdateMs: LONGO });
+
+      sinal({ operacao: 'UPDATE' });
+      await vi.advanceTimersByTimeAsync(LONGO - 1);
+      expect(onMudou).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(ESPALHA + 1);
+      expect(onMudou).toHaveBeenCalledTimes(1);
+    });
+
+    it('INSERT durante a espera longa encurta para o mínimo da regra', async () => {
+      const onMudou = vi.fn();
+      assinarSinal('analitico', 'e1', { onMudou }, { minimoSoUpdateMs: LONGO });
+
+      sinal({ operacao: 'UPDATE' });
+      await vi.advanceTimersByTimeAsync(1_000);
+      sinal({ operacao: 'INSERT' });
+      await vi.advanceTimersByTimeAsync(ESPALHA);
+
+      expect(onMudou).toHaveBeenCalledTimes(1);
+      expect(onMudou.mock.calls[0][0].operacao).toBe('INSERT');
+    });
+
+    it('DELETE também encurta, e o mínimo da regra continua valendo entre entregas', async () => {
+      const onMudou = vi.fn();
+      assinarSinal('analitico', 'e1', { onMudou }, { minimoSoUpdateMs: LONGO });
+
+      sinal({ operacao: 'DELETE' });
+      await vi.advanceTimersByTimeAsync(ESPALHA);
+      expect(onMudou).toHaveBeenCalledTimes(1);
+
+      sinal({ operacao: 'DELETE' });
+      await vi.advanceTimersByTimeAsync(MINIMO - 1);
+      expect(onMudou).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(ESPALHA + 1);
+      expect(onMudou).toHaveBeenCalledTimes(2);
+    });
+
+    it('reconexão não espera o prazo longo', async () => {
+      const onMudou = vi.fn();
+      const onReconectado = vi.fn();
+      assinarSinal('analitico', 'e1', { onMudou, onReconectado }, { minimoSoUpdateMs: LONGO });
+
+      canaisCriados[0].emitirStatus('SUBSCRIBED');
+      canaisCriados[0].emitirStatus('CHANNEL_ERROR');
+      canaisCriados[0].emitirStatus('SUBSCRIBED');
+      sinal({ operacao: 'UPDATE' });
+      await vi.advanceTimersByTimeAsync(ESPALHAMENTO_RELEITURA_MS + ESPALHA);
+
+      expect(onReconectado).toHaveBeenCalledTimes(1);
+    });
+
+    it('sem a opção, UPDATE segue no mínimo da regra', async () => {
+      const onMudou = vi.fn();
+      assinarSinal('analitico', 'e1', { onMudou });
+
+      sinal({ operacao: 'UPDATE' });
+      await vi.advanceTimersByTimeAsync(ESPALHA);
+
+      expect(onMudou).toHaveBeenCalledTimes(1);
+    });
+  });
 });
