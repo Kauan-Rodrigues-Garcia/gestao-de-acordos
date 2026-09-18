@@ -65,11 +65,24 @@ export interface RhResultado<T> {
  * pontos; o que falta é tirar o prefixo técnico e o ruído do driver. Quando o
  * prefixo não é conhecido, devolve a mensagem inteira — inventar um texto
  * genérico esconderia justamente o caso que ninguém previu.
+ *
+ * ## Por que «módulo indisponível» virou um teste estreito
+ *
+ * A primeira versão procurava `function`, `does not exist` ou `schema cache` em
+ * qualquer lugar da mensagem. A palavra `function` aparece em erro de gatilho,
+ * em coluna inexistente e em falha de tipo dentro de uma RPC que EXISTE — e
+ * todos eles passavam a dizer que o módulo não estava instalado. Quem lia a
+ * tela ia conferir a migration, achava tudo aplicado, e ficava sem pista.
+ *
+ * Agora só a recusa que o PostgREST dá quando não acha a assinatura (`PGRST202`,
+ * `PGRST203`) ou o Postgres quando a função não existe (`42883`) recebe esse
+ * texto. O resto volta cru, que é menos bonito e infinitamente mais útil.
  */
 export function mensagemRh(bruta: string): string {
   const m = /RH_[A-Z_]+:\s*(.+)$/s.exec(bruta);
   if (m) return m[1].trim();
-  if (/function|does not exist|schema cache/i.test(bruta)) {
+  if (/PGRST20[23]|Could not find the function|Could not choose the best candidate function|\b42883\b/i
+        .test(bruta)) {
     return 'O módulo RH Gestão ainda não está disponível neste banco.';
   }
   if (/permission denied|row-level security/i.test(bruta)) {
@@ -78,16 +91,49 @@ export function mensagemRh(bruta: string): string {
   return bruta;
 }
 
+/**
+ * Erro do PostgREST como ele chega: a mensagem é só a primeira linha da história.
+ *
+ * `details` costuma trazer a assinatura que o servidor procurou, e é o que
+ * distingue «a função não existe» de «faltou um argumento na chamada».
+ */
+interface ErroPostgrest {
+  message: string;
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+}
+
 async function chamar<T>(
   nome: string, args: Record<string, unknown>,
 ): Promise<RhResultado<T>> {
+  /*
+   * `undefined` some no `JSON.stringify` do driver, e a RPC chega ao PostgREST
+   * com um argumento a menos — que é uma OUTRA assinatura, e devolve o mesmo
+   * `PGRST202` de função inexistente. Falhar aqui aponta o parâmetro pelo nome
+   * em vez de acusar o módulo inteiro de não estar instalado.
+   */
+  const semValor = Object.keys(args).filter(k => args[k] === undefined);
+  if (semValor.length > 0) {
+    console.error(`[rhGestao] ${nome}: argumento sem valor`, semValor);
+    return { ok: false, erro: `Falta preencher: ${semValor.join(', ')}.` };
+  }
+
   // O cast existe porque `rpc` é tipada por união de nomes e este helper é
   // genérico de propósito — cada função exportada abaixo tem a assinatura certa.
   const { data, error } = await (supabase.rpc as unknown as (
     n: string, a: Record<string, unknown>,
-  ) => Promise<{ data: unknown; error: { message: string } | null }>)(nome, args);
+  ) => Promise<{ data: unknown; error: ErroPostgrest | null }>)(nome, args);
 
-  if (error) return { ok: false, erro: mensagemRh(error.message) };
+  if (error) {
+    // A tela recebe a frase tratada; o console guarda o erro inteiro, porque é
+    // ele que responde «por que falhou» quando a frase tratada não basta.
+    console.error(`[rhGestao] ${nome} falhou`, {
+      code: error.code, message: error.message,
+      details: error.details, hint: error.hint, args,
+    });
+    return { ok: false, erro: mensagemRh(error.message) };
+  }
   return { ok: true, dados: data as T };
 }
 
