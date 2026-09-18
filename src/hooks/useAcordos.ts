@@ -49,6 +49,15 @@ interface UseAcordosOptions extends FiltrosAcordo {
    */
   enableRealtime?: boolean;
   /**
+   * `false` não consulta nada: a lista fica vazia e o Realtime desligado.
+   *
+   * Para tela que monta o hook incondicionalmente mas só mostra a lista em
+   * parte dos casos — o Dashboard da BookPlay pagava duas consultas em
+   * `acordos_deduplicados` (com joins e `count: 'exact'`) a cada abertura para
+   * uma tabela que ele não desenha. Padrão: true.
+   */
+  habilitado?: boolean;
+  /**
    * Lista de operador_id resolvidos para filtrar por equipe no realtime.
    * Preenchido internamente quando equipe_id é fornecido.
    */
@@ -171,7 +180,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
         ...filtros,
         empresa_id: filtros?.empresa_id ?? empresaId,
       }),
-    enabled: !!perfil && !!empresaId,
+    enabled: !!perfil && !!empresaId && filtros?.habilitado !== false,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     /*
@@ -245,7 +254,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // ── Subscribe no canal central ────────────────────────────────────────────
   const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
   const instanceId    = useRef(`useAcordos-${Math.random().toString(36).slice(2, 10)}`).current;
-  const enableRealtime = filtros?.enableRealtime !== false;
+  const enableRealtime = filtros?.enableRealtime !== false && filtros?.habilitado !== false;
 
   useEffect(() => {
     if (!enableRealtime) return;

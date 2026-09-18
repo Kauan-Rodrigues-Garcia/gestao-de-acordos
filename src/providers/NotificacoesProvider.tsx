@@ -184,12 +184,13 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
     return assinarTabela(
       {
         topico:  `rt-notificacoes-${userId}`,
+        // Uma escuta só, com os três eventos. Eram três — uma por evento, com o
+        // mesmo filtro —, e cada uma é uma linha em `realtime.subscription` que
+        // o Realtime confere a cada mudança da tabela: 498 linhas para 166 abas
+        // em 18/09/2026. DELETE continua chegando pelo mesmo filtro porque
+        // `notificacoes` está em REPLICA IDENTITY FULL.
         escutas: [
-          { tabela: 'notificacoes', evento: 'INSERT', filtro: `usuario_id=eq.${userId}` },
-          { tabela: 'notificacoes', evento: 'UPDATE', filtro: `usuario_id=eq.${userId}` },
-          // DELETE só chega preenchido porque `notificacoes` está em REPLICA
-          // IDENTITY FULL — é o que permite filtrar por usuario_id aqui.
-          { tabela: 'notificacoes', evento: 'DELETE', filtro: `usuario_id=eq.${userId}` },
+          { tabela: 'notificacoes', evento: '*', filtro: `usuario_id=eq.${userId}` },
         ],
       },
       {

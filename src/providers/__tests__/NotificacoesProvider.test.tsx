@@ -101,16 +101,14 @@ beforeEach(() => {
 // ── 1. Assinatura única ─────────────────────────────────────────────────────
 
 describe('NotificacoesProvider — assinatura', () => {
-  it('abre UMA assinatura para o usuário, com as três escutas', async () => {
+  it('abre UMA assinatura para o usuário, com UMA escuta para os três eventos', async () => {
     montar();
     await waitFor(() => expect(fetchNotificacoesMock).toHaveBeenCalled());
 
     expect(assinaturas).toHaveLength(1);
     expect(assinaturas[0].topico).toBe('rt-notificacoes-user-1');
     expect(assinaturas[0].escutas).toEqual([
-      { tabela: 'notificacoes', evento: 'INSERT', filtro: 'usuario_id=eq.user-1' },
-      { tabela: 'notificacoes', evento: 'UPDATE', filtro: 'usuario_id=eq.user-1' },
-      { tabela: 'notificacoes', evento: 'DELETE', filtro: 'usuario_id=eq.user-1' },
+      { tabela: 'notificacoes', evento: '*', filtro: 'usuario_id=eq.user-1' },
     ]);
   });
 

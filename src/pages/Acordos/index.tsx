@@ -9,6 +9,7 @@ import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAcordos } from '@/hooks/useAcordos';
+import { useValorComEspera } from '@/hooks/useValorComEspera';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -62,6 +63,7 @@ export default function Acordos() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [busca, setBusca]               = useState(searchParams.get('busca') || '');
+  const buscaConsulta                   = useValorComEspera(busca);
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') || '');
   const [filtroTipo, setFiltroTipo]     = useState(searchParams.get('tipo') || '');
   const [filtroData, setFiltroData]     = useState(searchParams.get('data') || '');
@@ -291,7 +293,7 @@ export default function Acordos() {
   const bpMesFim    = (!isPP && mesFiltro) ? ultimoDiaDoMes(mesFiltro)   : undefined;
 
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos({
-    busca:        busca || undefined,
+    busca:        buscaConsulta || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
     vencimento:   filtroData || undefined,

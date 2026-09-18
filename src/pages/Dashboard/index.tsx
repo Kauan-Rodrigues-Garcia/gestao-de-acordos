@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAcordos } from '@/hooks/useAcordos';
+import { useValorComEspera } from '@/hooks/useValorComEspera';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   ROUTE_PATHS, formatDate, getTodayISO,
@@ -254,7 +255,8 @@ export default function Dashboard() {
     ? visaoFiltro.replace('equipe:', '')
     : null;
 
-  const { acordos: acordosHoje } = useAcordos({ apenas_hoje: true });
+  // Os lembretes do dia só existem na PaguePlay (`{isPP && …}` abaixo).
+  const { acordos: acordosHoje } = useAcordos({ apenas_hoje: true, habilitado: isPP });
   const hoje = getTodayISO();
   const diaSemana    = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -263,6 +265,7 @@ export default function Dashboard() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [busca,        setBusca]        = useState(searchParams.get('busca')  || '');
+  const buscaConsulta = useValorComEspera(busca);
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') || '');
   const [filtroTipo,   setFiltroTipo]   = useState(searchParams.get('tipo')   || '');
   const [filtroData,   setFiltroData]   = useState(searchParams.get('data')   || '');
@@ -356,7 +359,7 @@ export default function Dashboard() {
 
   const { acordos, totalCount, loading, atualizando, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
-      busca:        busca || undefined,
+      busca:        buscaConsulta || undefined,
       status:       statusFiltroComputed,
       tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
       vencimento:   filtroData || undefined,
@@ -370,9 +373,10 @@ export default function Dashboard() {
       prioritize_today: true,
     } : {
       // BookPlay não renderiza esta tabela (é PP-only, ver `{isPP && ...}`
-      // abaixo). Ainda assim o hook roda: limita a 1 página para NÃO disparar
-      // um fetch da empresa inteira em acordos_deduplicados (causa de 500/timeout).
-      page: 1, perPage: PER_PAGE, enableRealtime: false,
+      // abaixo). O hook monta, mas não consulta: a primeira página com joins e
+      // `count: 'exact'` em acordos_deduplicados era jogada fora a cada
+      // abertura do Dashboard.
+      page: 1, perPage: PER_PAGE, enableRealtime: false, habilitado: false,
     },
   );
 

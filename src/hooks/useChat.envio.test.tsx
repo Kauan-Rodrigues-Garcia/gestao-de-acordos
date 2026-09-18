@@ -5,11 +5,25 @@ import type { MensagemChat } from '@/services/chat/chat.service';
 const mock = vi.hoisted(() => ({
   listarMensagens: vi.fn(), enviarMensagem: vi.fn(), subirAnexo: vi.fn(),
   evento: null as null | ((p: unknown) => void), perfil: 'eu',
+  /** O que `buscarMensagem` lê: o banco depois do INSERT. */
+  banco: new Map<string, unknown>(),
 }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ perfil: { id: mock.perfil } }) }));
 vi.mock('@/hooks/useEmpresa', () => ({ useEmpresa: () => ({ empresa: { id: 'empresa' } }) }));
-vi.mock('@/lib/realtime', () => ({ assinarTabela: (_: unknown, ouvinte: { onEvento: (p: unknown) => void }) => {
-  mock.evento = ouvinte.onEvento;
+// O banco grava a linha e avisa o tópico pessoal só com ids, como o gatilho
+// da migration 20260918110000.
+vi.mock('@/lib/realtime', () => ({ assinarTabela: (
+  _: unknown,
+  ouvinte: { onSinal: (p: Record<string, unknown>, sinal: string) => void },
+) => {
+  mock.evento = (p: unknown) => {
+    const { eventType, new: linha } = p as { eventType: string; new: Record<string, unknown> };
+    mock.banco.set(String(linha.id), linha);
+    ouvinte.onSinal({
+      operacao: eventType, id: linha.id, conversa_id: linha.conversa_id, autor_id: linha.autor_id,
+      curtida_por: linha.curtida_por ?? null, curtida_em: linha.curtida_em ?? null, curtida_em_antes: null,
+    }, 'mensagem');
+  };
   return vi.fn();
 } }));
 vi.mock('@/services/chat/chat.service', () => ({
@@ -19,6 +33,7 @@ vi.mock('@/services/chat/chat.service', () => ({
   subirAnexo: (...args: unknown[]) => mock.subirAnexo(...args),
   buscarConversa: async () => null, marcarLido: async () => {}, marcarEntregue: async () => {},
   souParte: async () => true, abrirConversa: vi.fn(), esbocoDeConversa: vi.fn(),
+  buscarMensagem: async (id: string) => mock.banco.get(id) ?? null,
 }));
 import { useChat } from './useChat';
 
@@ -42,6 +57,7 @@ describe('envio imediato e abertura de conversas', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mock.perfil = 'eu';
+    mock.banco.clear();
     mock.listarMensagens.mockResolvedValue({ mensagens: [], temMais: false });
     mock.enviarMensagem.mockResolvedValue({ erro: null });
   });
@@ -55,10 +71,14 @@ describe('envio imediato e abertura de conversas', () => {
     expect(hook.result.current.mensagens).toHaveLength(1);
     expect(hook.result.current.mensagens[0]).toMatchObject({ texto: 'Olá', status_envio: 'pendente' });
     const confirmada = { ...hook.result.current.mensagens[0], status_envio: undefined, criado_em: '2026-09-08T15:00:00Z' };
-    const evento = () => mock.evento?.({ table: 'chat_mensagens', eventType: 'INSERT', new: confirmada, old: {} });
-    if (ordem === 'realtime-primeiro') act(evento);
+    // O aviso só traz o id: a mensagem entra depois de lida pela RLS.
+    const evento = async () => {
+      mock.evento?.({ table: 'chat_mensagens', eventType: 'INSERT', new: confirmada, old: {} });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    };
+    if (ordem === 'realtime-primeiro') await act(evento);
     await act(async () => { resposta.resolve({ erro: null, mensagem: confirmada }); await envio; });
-    if (ordem === 'api-primeiro') act(evento);
+    if (ordem === 'api-primeiro') await act(evento);
     expect(hook.result.current.mensagens).toHaveLength(1);
     expect(hook.result.current.mensagens[0].status_envio).toBeUndefined();
     expect(mock.enviarMensagem).toHaveBeenCalledWith(expect.objectContaining({ id: confirmada.id }));
@@ -106,7 +126,10 @@ describe('envio imediato e abertura de conversas', () => {
     const hook = renderHook(() => useChat(true));
     act(() => hook.result.current.abrir('a'));
     act(() => hook.result.current.abrir('b'));
-    act(() => mock.evento?.({ table: 'chat_mensagens', eventType: 'INSERT', new: mensagem('nova', 'b'), old: {} }));
+    await act(async () => {
+      mock.evento?.({ table: 'chat_mensagens', eventType: 'INSERT', new: mensagem('nova', 'b'), old: {} });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
     await act(async () => { b.resolve({ mensagens: [mensagem('antiga', 'b')], temMais: false }); await b.promise; });
     await act(async () => { a.resolve({ mensagens: [mensagem('errada')], temMais: true }); await a.promise; });
     expect(hook.result.current.conversaAberta).toBe('b');

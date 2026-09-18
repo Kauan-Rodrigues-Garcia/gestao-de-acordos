@@ -3,9 +3,10 @@
  *
  * ## Duas fontes, de propósito
  *
- * O que PERSISTE (conversa, mensagem, leitura) chega por `postgres_changes`,
- * pelo canal compartilhado. O que é EFÊMERO (online, digitando) não passa por
- * aqui: vive em `useChatPresenca`, e não toca o banco.
+ * O que PERSISTE (conversa, mensagem, leitura) chega por Broadcast que o banco
+ * manda ao tópico pessoal `chat:<perfil>` (ver «Tempo real» abaixo). O que é
+ * EFÊMERO (online, digitando) não passa por aqui: vive em `useChatPresenca`, e
+ * não toca o banco.
  *
  * ## Por que a lista se refaz em vez de aplicar o evento
  *
@@ -30,13 +31,25 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   listarConversas, listarMensagens, listarDisparos, buscarConversa,
   marcarEntregue, marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
-  esbocoDeConversa, souParte, subirAnexo,
+  esbocoDeConversa, souParte, subirAnexo, buscarMensagem,
   type ConversaChat, type MensagemChat, type DisparoChat, type AnexoChat,
   type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 
 /** Espera antes de refazer a lista. Junta a rajada de eventos numa consulta só. */
 const ESPERA_REFAZER = 250;
+
+/**
+ * Põe a mensagem confirmada no lugar dela pela hora do banco.
+ *
+ * O aviso traz só o id, e duas mensagens seguidas são lidas em paralelo: a
+ * segunda pode voltar antes da primeira. Pendentes (envio local em curso) não
+ * têm hora do banco e ficam onde estão, no fim.
+ */
+function inserirEmOrdem(lista: MensagemChat[], nova: MensagemChat): MensagemChat[] {
+  const i = lista.findIndex(m => !m.status_envio && m.criado_em > nova.criado_em);
+  return i === -1 ? [...lista, nova] : [...lista.slice(0, i), nova, ...lista.slice(i)];
+}
 
 /** A classificação do banco usa esta mesma zona. */
 function diaDoChat(agora = new Date()): string {
@@ -270,117 +283,115 @@ export function useChat(
   useEffect(() => () => { if (timerLido.current) clearTimeout(timerLido.current); }, [meuId, ativo]);
 
   // ── Tempo real ─────────────────────────────────────────────────────────────
+  //
+  // Broadcast privado `chat:<meu id>` desde 18/09/2026 (migration
+  // 20260918110000). Antes eram duas escutas de Postgres Changes SEM filtro —
+  // `chat_mensagens` e `chat_participantes` não têm coluna que diga «é meu», e
+  // o chat atravessa empresas —, e o Realtime avaliava a RLS de todas as abas
+  // abertas a cada leitura marcada: ~2,7 milhões de avaliações em 3 dias para
+  // entregar eventos a 2,1 pessoas por conversa, em média.
+  //
+  // Agora o banco avisa só quem participa, e só com ids. O texto não viaja: o
+  // payload de Broadcast fica gravado em `realtime.messages`, e mensagem com
+  // CPF não pode sobrar ali depois do expurgo. Quem precisa do texto lê pela
+  // RLS (`buscarMensagem`).
   useEffect(() => {
-    if (!ativo || !empresa?.id || !meuId) return;
+    if (!ativo || !meuId) return;
     const ciclo = sessao.current;
 
+    /** A mensagem, já lida pela RLS, entra na tela. */
+    const aplicar = (operacao: 'INSERT' | 'UPDATE', msg: MensagemChat, curtidaAntes: string | null) => {
+      /*
+       * O segundo check só nasce quando o cliente do destinatário recebeu de
+       * fato a mensagem.
+       *
+       * `souParte` fica mesmo com o aviso indo só para participantes: é a
+       * mesma função que autoriza escrever, e é ela que define participar.
+       * Aviso de conversa alheia tocando som na tela de quem monitora foi um
+       * defeito real, e esta pergunta é a trava dele.
+       */
+      if (operacao === 'INSERT' && msg.autor_id !== meuId) {
+        void souParte(msg.conversa_id).then(sou => {
+          if (!sou || ciclo !== sessao.current) return;
+          void marcarEntregue(msg.conversa_id, meuId);
+          aoReceberRef.current?.(msg);
+        });
+      }
+      // Mensagem da conversa aberta entra direto: aqui o evento é o dado.
+      if (operacao === 'INSERT') {
+        if (cache.current.has(msg.conversa_id) || msg.conversa_id === abertaRef.current) {
+          publicarMensagens(msg.conversa_id, atual => {
+            const confirmada: MensagemChat = { ...msg, status_envio: undefined, erro_envio: undefined };
+            return atual.some(m => m.id === msg.id)
+              ? atual.map(m => m.id === msg.id ? confirmada : m)
+              : inserirEmOrdem(atual, confirmada);
+          });
+        }
+        // Selecionada não significa visível: ao minimizar a janela ela
+        // continua selecionada, mas mensagem nova não pode virar lida.
+        if (msg.conversa_id === abertaRef.current && msg.autor_id !== meuId && visivelRef.current) agendarLido(msg.conversa_id);
+      }
+      // O expurgo de CPF reescreve o texto: sem isto a mensagem continuaria
+      // legível na tela de quem está com ela aberta.
+      if (cache.current.has(msg.conversa_id) && operacao === 'UPDATE') {
+        publicarMensagens(msg.conversa_id, atual => atual.map(m => (m.id === msg.id ? { ...m, ...msg, status_envio: undefined, erro_envio: undefined } : m)));
+      }
+      /*
+       * Curtiram a MINHA mensagem.
+       *
+       * `fn_chat_curtir` carimba `curtida_em` e grava em `curtida_por` quem
+       * curtiu. As três condições são todas necessárias. `autor_id === meuId`
+       * porque o aviso é do autor. `curtida_por` preenchido porque descurtir
+       * zera o campo, e ninguém quer «fulano curtiu» quando fulano acabou de
+       * descurtir. E `!== meuId` porque curtir a própria mensagem é uma coisa
+       * que se faz de propósito, olhando para a tela.
+       */
+      if (operacao === 'UPDATE'
+          && msg.autor_id === meuId
+          && msg.curtida_por
+          && msg.curtida_por !== meuId
+          && msg.curtida_em
+          && curtidaAntes !== msg.curtida_em) {
+        const marca = `${msg.id}:${msg.curtida_em ?? ''}`;
+        if (!curtidasAvisadas.current.has(marca)) {
+          curtidasAvisadas.current.add(marca);
+          aoCurtidaRef.current?.(msg);
+        }
+      }
+    };
+
     return assinarTabela(
+      { topico: `chat:${meuId}`, escutas: [{ sinal: 'mensagem' }, { sinal: 'participante' }] },
       {
-        topico: `rt-chat-${empresa.id}`,
-        escutas: [
-          /*
-           * SEM filtro de empresa, desde 25/08/2026.
-           *
-           * O chat é um só: quem tem multiempresa conversa com as duas
-           * operações, e um `empresa_id=eq.<atual>` cortaria exatamente as
-           * mensagens de quem está do outro lado — a conversa apareceria na
-           * lista e ficaria muda até um F5.
-           *
-           * A RLS já recorta o que chega. O filtro aqui só economizaria
-           * eventos, e economizava os errados.
-           */
-          { tabela: 'chat_mensagens' },
-          // Sem filtro: é por aqui que a conversa APARECE na lista quando
-          // alguém responde um disparo (o UPDATE que zera `oculta_em`), e a
-          // tabela não tem `empresa_id` para filtrar. A RLS já recorta o que
-          // chega, e o ouvinte descarta o que não é meu.
-          { tabela: 'chat_participantes' },
-        ],
-      },
-      {
-        onEvento: (payload) => {
+        onSinal: (payload, sinal) => {
           if (ciclo !== sessao.current) return;
-          const linha = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
 
-          if (payload.table === 'chat_mensagens') {
-            const msg = linha as unknown as MensagemChat;
-            const normalizada = {
-              ...msg,
-              anexos: Array.isArray(msg.anexos) ? msg.anexos : [],
-            };
-            /*
-             * O segundo check só nasce quando o cliente do destinatário
-             * recebeu de fato o INSERT pelo Realtime.
-             *
-             * `souParte` é a trava contra um vazamento de AVISO. A RLS deixa
-             * quem monitora LER a conversa alheia — é o objetivo da monitoria —
-             * e o Realtime respeita a RLS, então o INSERT de uma conversa de
-             * que eu não participo chega aqui. Ler é o certo; ser notificado
-             * não é. Sem esta pergunta, a conta de super admin (que alcança
-             * todo mundo) tocava som e piscava aviso de grupos do play 3 em que
-             * ela nunca esteve.
-             *
-             * Vale também para `marcarEntregue`: carimbar entrega numa conversa
-             * que não é minha é escrever a passagem do monitor onde o operador
-             * a veria.
-             */
-            if (payload.eventType === 'INSERT' && msg.autor_id !== meuId) {
-              void souParte(msg.conversa_id).then(sou => {
-                if (!sou || ciclo !== sessao.current) return;
-                void marcarEntregue(msg.conversa_id, meuId);
-                aoReceberRef.current?.(normalizada);
-              });
-            }
-            // Mensagem da conversa aberta entra direto: aqui o evento é o dado.
-            if (payload.eventType === 'INSERT') {
-              if (cache.current.has(msg.conversa_id) || msg.conversa_id === abertaRef.current) {
-                publicarMensagens(msg.conversa_id, atual => {
-                  const confirmada: MensagemChat = { ...normalizada, status_envio: undefined, erro_envio: undefined };
-                  return atual.some(m => m.id === msg.id)
-                    ? atual.map(m => m.id === msg.id ? confirmada : m)
-                    : [...atual, confirmada];
-                });
-              }
-              // Selecionada não significa visível: ao minimizar a janela ela
-              // continua selecionada, mas mensagem nova não pode virar lida.
-              if (msg.conversa_id === abertaRef.current && msg.autor_id !== meuId && visivelRef.current) agendarLido(msg.conversa_id);
-            }
-            // O expurgo de CPF reescreve o texto: sem isto a mensagem
-            // continuaria legível na tela de quem está com ela aberta.
-            if (cache.current.has(msg.conversa_id) && payload.eventType === 'UPDATE') {
-              publicarMensagens(msg.conversa_id, atual => atual.map(m => (m.id === msg.id ? { ...m, ...msg, status_envio: undefined, erro_envio: undefined } : m)));
-            }
-            /*
-             * Curtiram a MINHA mensagem.
-             *
-             * `fn_chat_curtir` carimba `curtida_em` e grava em `curtida_por`
-             * quem curtiu, e esse UPDATE já viajava pelo Realtime para acordar
-             * o selo do coração. O aviso pega carona nele: nenhuma consulta a
-             * mais, nenhuma tabela a mais.
-             *
-             * As três condições são todas necessárias. `autor_id === meuId`
-             * porque o aviso é do autor. `curtida_por` preenchido porque
-             * descurtir zera o campo, e ninguém quer «fulano curtiu» quando
-             * fulano acabou de descurtir. E `!== meuId` porque curtir a própria
-             * mensagem é uma coisa que se faz de propósito, olhando para a tela.
-             */
-            if (payload.eventType === 'UPDATE'
-                && msg.autor_id === meuId
-                && msg.curtida_por
-                && msg.curtida_por !== meuId
-                && msg.curtida_em
-                && (payload.old as Partial<MensagemChat>)?.curtida_em !== msg.curtida_em) {
-              const marca = `${msg.id}:${msg.curtida_em ?? ''}`;
-              if (!curtidasAvisadas.current.has(marca)) {
-                curtidasAvisadas.current.add(marca);
-                aoCurtidaRef.current?.(normalizada);
-              }
-            }
-            agendarRefazer();
-            return;
+          // `participante`: leitura do outro, conversa revelada, apagada.
+          if (sinal !== 'mensagem') { agendarRefazer(); return; }
+
+          const texto = (v: unknown) => (typeof v === 'string' && v ? v : null);
+          const id           = texto(payload.id);
+          const conversaId   = texto(payload.conversa_id);
+          const autorId      = texto(payload.autor_id);
+          const curtidaPor   = texto(payload.curtida_por);
+          const curtidaEm    = texto(payload.curtida_em);
+          const curtidaAntes = texto(payload.curtida_em_antes);
+          const operacao     = payload.operacao === 'UPDATE' ? 'UPDATE' : 'INSERT';
+
+          // Ler a mensagem só quando alguém vai usá-la: conversa na memória,
+          // aviso de mensagem nova, ou curtida numa mensagem minha. O resto
+          // do trabalho é da lista, que se refaz.
+          const naMemoria = !!conversaId && (cache.current.has(conversaId) || conversaId === abertaRef.current);
+          const avisa = operacao === 'INSERT' && autorId !== meuId;
+          const curtiram = operacao === 'UPDATE' && autorId === meuId
+            && !!curtidaPor && curtidaPor !== meuId && !!curtidaEm && curtidaAntes !== curtidaEm;
+
+          if (id && (naMemoria || avisa || curtiram)) {
+            void buscarMensagem(id).then(msg => {
+              if (!msg || ciclo !== sessao.current) return;
+              aplicar(operacao, msg, curtidaAntes);
+            });
           }
-
-          // `chat_participantes`: leitura do outro, conversa revelada, apagada.
           agendarRefazer();
         },
         onReconectado: () => {
@@ -391,7 +402,7 @@ export function useChat(
         },
       },
     );
-  }, [ativo, empresa?.id, meuId, agendarRefazer, agendarLido, recarregar, carregarMensagens, publicarMensagens]);
+  }, [ativo, meuId, agendarRefazer, agendarLido, recarregar, carregarMensagens, publicarMensagens]);
 
   // ── Abrir / fechar ─────────────────────────────────────────────────────────
   const abrir = useCallback((conversaId: string | null, esboco?: ConversaChat) => {

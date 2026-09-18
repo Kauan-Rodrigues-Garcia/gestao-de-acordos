@@ -247,6 +247,10 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           if (eventType === 'INSERT') {
             const newId = (payload.new as { id?: string } | null)?.id;
             if (!newId) return;
+            // O provider é global; a lista, não. Sem tela ouvindo, a leitura
+            // com joins ia para ninguém — em toda aba aberta, a cada acordo
+            // novo da empresa. Quem montar a lista depois lê do banco.
+            if (subscribersRef.current.size === 0) return;
 
             const { data: full, error } = await supabase
               .from('acordos')

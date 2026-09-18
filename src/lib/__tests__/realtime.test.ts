@@ -96,7 +96,7 @@ import {
   assinarTabela, topicosAtivos, __resetRealtimeParaTestes,
   VIGIA_MS, ESPALHAMENTO_RELEITURA_MS,
 } from '../realtime';
-import { assinarSinal } from '../sinais';
+import { assinarSinal, REGRAS_SINAL } from '../sinais';
 
 const ESCUTAS = [{ tabela: 'acordos', filtro: 'empresa_id=eq.e1' }];
 
@@ -437,7 +437,7 @@ describe('assinarSinal', () => {
     ]);
   });
 
-  it('entrega o payload normalizado', () => {
+  it('entrega o payload normalizado, depois do sorteio', async () => {
     const onMudou = vi.fn();
     assinarSinal('analitico', 'e1', { onMudou });
 
@@ -447,18 +447,22 @@ describe('assinarSinal', () => {
       'broadcast',
     );
 
+    expect(onMudou).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(REGRAS_SINAL.analitico.espalhamentoMs);
+
     expect(onMudou).toHaveBeenCalledWith({
       tabela: 'analitico_recebimentos', operacao: 'INSERT', importado_por: ['u1'],
     });
   });
 
-  it('duas telas no mesmo sinal dividem um canal', () => {
+  it('duas telas no mesmo sinal dividem um canal', async () => {
     const a = vi.fn();
     const b = vi.fn();
     assinarSinal('analitico', 'e1', { onMudou: a });
     assinarSinal('analitico', 'e1', { onMudou: b });
 
     canaisCriados[0].emitirEvento({ payload: {} }, 'broadcast');
+    await vi.advanceTimersByTimeAsync(REGRAS_SINAL.analitico.espalhamentoMs);
 
     expect(mockChannel).toHaveBeenCalledTimes(1);
     expect(a).toHaveBeenCalledTimes(1);
@@ -474,5 +478,113 @@ describe('assinarSinal', () => {
     expect(mockChannel.mock.calls[1]).toEqual(['permissoes:e1', { config: { private: true } }]);
     // E só depois de o antigo sair.
     expect(removidos).toEqual(['permissoes:e1']);
+  });
+});
+
+// ── 6. O portão entre o sinal e a tela ───────────────────────────────────────
+
+describe('assinarSinal — portão', () => {
+  const ESPALHA = REGRAS_SINAL.analitico.espalhamentoMs;
+  const MINIMO  = REGRAS_SINAL.analitico.minimoMs;
+
+  let visibilidade: DocumentVisibilityState = 'visible';
+  beforeEach(() => {
+    visibilidade = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilidade);
+  });
+
+  function trocarVisibilidade(estado: DocumentVisibilityState) {
+    visibilidade = estado;
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  function sinal(payload: Record<string, unknown>) {
+    canaisCriados[0].emitirEvento({ payload }, 'broadcast');
+  }
+
+  it('sinais na mesma espera viram UM, com INSERT prevalecendo e importadores somados', async () => {
+    const onMudou = vi.fn();
+    assinarSinal('analitico', 'e1', { onMudou });
+
+    sinal({ tabela: 'analitico_recebimentos', operacao: 'INSERT', importado_por: ['u1'] });
+    sinal({ tabela: 'analitico_recebimentos', operacao: 'UPDATE', importado_por: ['u2', 'u1'] });
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+
+    expect(onMudou).toHaveBeenCalledTimes(1);
+    expect(onMudou).toHaveBeenCalledWith({
+      tabela: 'analitico_recebimentos', operacao: 'INSERT', importado_por: ['u1', 'u2'],
+    });
+  });
+
+  it('respeita o intervalo mínimo entre duas entregas', async () => {
+    const onMudou = vi.fn();
+    assinarSinal('analitico', 'e1', { onMudou });
+
+    sinal({ operacao: 'UPDATE' });
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+    expect(onMudou).toHaveBeenCalledTimes(1);
+
+    sinal({ operacao: 'UPDATE' });
+    await vi.advanceTimersByTimeAsync(MINIMO - 1);
+    expect(onMudou).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(ESPALHA + 1);
+    expect(onMudou).toHaveBeenCalledTimes(2);
+  });
+
+  it('aba escondida não relê; paga uma vez ao voltar', async () => {
+    const onMudou = vi.fn();
+    assinarSinal('analitico', 'e1', { onMudou });
+
+    trocarVisibilidade('hidden');
+    sinal({ operacao: 'INSERT' });
+    sinal({ operacao: 'UPDATE' });
+    await vi.advanceTimersByTimeAsync(10 * MINIMO);
+    expect(onMudou).not.toHaveBeenCalled();
+
+    trocarVisibilidade('visible');
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+    expect(onMudou).toHaveBeenCalledTimes(1);
+    expect(onMudou.mock.calls[0][0].operacao).toBe('INSERT');
+  });
+
+  it('sinal que escondeu durante o sorteio espera a volta', async () => {
+    const onMudou = vi.fn();
+    assinarSinal('analitico', 'e1', { onMudou });
+
+    sinal({ operacao: 'UPDATE' });
+    trocarVisibilidade('hidden');
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+    expect(onMudou).not.toHaveBeenCalled();
+
+    trocarVisibilidade('visible');
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+    expect(onMudou).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconexão chama onReconectado, e o sinal junto dela não vira segunda releitura', async () => {
+    const onMudou = vi.fn();
+    const onReconectado = vi.fn();
+    assinarSinal('analitico', 'e1', { onMudou, onReconectado });
+
+    canaisCriados[0].emitirStatus('SUBSCRIBED');
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR');
+    canaisCriados[0].emitirStatus('SUBSCRIBED');
+    sinal({ operacao: 'INSERT' });
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_RELEITURA_MS + ESPALHA);
+
+    expect(onReconectado).toHaveBeenCalledTimes(1);
+    expect(onMudou).not.toHaveBeenCalled();
+  });
+
+  it('cancelar descarta a entrega pendente', async () => {
+    const onMudou = vi.fn();
+    const cancelar = assinarSinal('analitico', 'e1', { onMudou });
+
+    sinal({ operacao: 'UPDATE' });
+    cancelar();
+    await vi.advanceTimersByTimeAsync(ESPALHA);
+
+    expect(onMudou).not.toHaveBeenCalled();
   });
 });

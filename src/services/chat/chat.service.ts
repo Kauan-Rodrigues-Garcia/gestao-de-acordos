@@ -494,11 +494,14 @@ export const PAGINA_MENSAGENS = 30;
  *
  * `antesDe` pagina para trás — é o «ver anteriores» do topo.
  */
+const COLUNAS_MENSAGEM =
+  'id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_em, curtida_por, sistema, sistema_dados';
+
 export async function listarMensagens(
   conversaId: string, antesDe?: string,
 ): Promise<{ mensagens: MensagemChat[]; temMais: boolean; erro?: string }> {
   let q = db('chat_mensagens')
-    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_em, curtida_por, sistema, sistema_dados')
+    .select(COLUNAS_MENSAGEM)
     .eq('conversa_id', conversaId);
 
   if (antesDe) q = q.lt('criado_em', antesDe);
@@ -524,6 +527,29 @@ export async function listarMensagens(
       .reverse(),
     temMais,
   };
+}
+
+/**
+ * Uma mensagem pelo id, pela RLS de sempre.
+ *
+ * O aviso de tempo real do chat (Broadcast `chat:<perfil>`, migration
+ * 20260918110000) traz só ids: o texto não pode ficar gravado em
+ * `realtime.messages`, onde o expurgo de CPF não alcança. Quem recebe o aviso
+ * lê a mensagem aqui. `null` = não existe ou não é para mim.
+ */
+export async function buscarMensagem(id: string): Promise<MensagemChat | null> {
+  const { data, error } = await db('chat_mensagens')
+    .select(COLUNAS_MENSAGEM)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[chat] buscarMensagem:', error.message);
+    return null;
+  }
+  if (!data) return null;
+  const m = data as MensagemChat;
+  return { ...m, anexos: Array.isArray(m.anexos) ? m.anexos : [] };
 }
 
 /** Com quem eu posso INICIAR conversa, agrupado por setor e equipe. */
