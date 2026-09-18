@@ -50,12 +50,16 @@ node --version
 
 ### 2. A pasta do robô
 
-Crie `C:\robo59` e copie para lá:
+Copie esta pasta (`scripts/robo59`) inteira para `C:\robo59`. Ela já vem com o
+`robo59.mjs` pronto — não precisa rodar build nem instalar dependência. Os
+`.ts` que vão junto não atrapalham.
 
-- `robo59.mjs` (gerado por `npm run robo59:build`, sai em `scripts/robo59/dist/`)
-- `.env` (copiado do `.env.example` e preenchido)
+Falta só o `.env`, que **não está no GitHub** porque tem senha. Crie em
+`C:\robo59\.env` (passo 4).
 
-O `robo59.mjs` já traz tudo dentro — não precisa instalar nenhuma dependência.
+Confira no Prompt de Comando, dentro de `C:\robo59`, com `dir /a`: tem de
+aparecer `robo59.mjs` e `.env` — exatamente com esses nomes. Download costuma
+renomear para `.env.txt` ou `robo59 (1).mjs`.
 
 ### 3. A conta do robô
 
@@ -197,10 +201,11 @@ pareceria normal.
 ## Rebuild
 
 Quando o parser ou a importação mudarem no sistema, o robô precisa ser
-reempacotado e o `.mjs` copiado de novo para o PC:
+reempacotado, commitado, e o `.mjs` copiado de novo para o PC:
 
 ```
 npm run robo59:build
+git add scripts/robo59/robo59.mjs
 ```
 
 É o preço de ele usar o código do sistema em vez de uma cópia — e é um preço

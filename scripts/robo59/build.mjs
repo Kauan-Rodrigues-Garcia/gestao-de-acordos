@@ -28,7 +28,9 @@ const raiz = resolve(aqui, '..', '..');
 
 await build({
   entryPoints: [resolve(aqui, 'robo59.ts')],
-  outfile:     resolve(aqui, 'dist', 'robo59.mjs'),
+  // Ao lado do `.env`, e versionado: a pasta `scripts/robo59` baixada do
+  // GitHub é a pasta do robô, pronta para colar em `C:\robo59`.
+  outfile:     resolve(aqui, 'robo59.mjs'),
   bundle:   true,
   platform: 'node',
   target:   'node18',
@@ -45,7 +47,7 @@ await build({
   logLevel: 'info',
 });
 
-console.log('\nPronto: scripts/robo59/dist/robo59.mjs');
-console.log('Leve DOIS arquivos para o PC do trabalho: este .mjs e o .env preenchido.');
+console.log('\nPronto: scripts/robo59/robo59.mjs');
+console.log('Commite o .mjs: é ele que o PC do trabalho usa, e a pasta vem do GitHub.');
 console.log('Nada mais — o cliente do Supabase e o parser vão dentro do pacote, e as');
 console.log('únicas dependências externas são `node:fs`, `node:path` e `node:url`.');
