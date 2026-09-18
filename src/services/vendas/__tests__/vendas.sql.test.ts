@@ -694,6 +694,14 @@ describe('a equipe que credita vale nos DOIS caminhos', () => {
  * Fase 7 — indicações
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/*
+ * 20260918130000 SUBSTITUI `fn_indicacoes_salvar_lote` e `fn_indicacao_corrigir`
+ * (a repetida passou a ser o telefone). Como na Fase 6, as asserções sobre as
+ * duas leem daqui — ler da Fase 7 seria provar funções que o banco não tem mais.
+ */
+const TELEFONES = migration('_indicacoes_varios_telefones_por_contato.sql');
+const CT = compacto(TELEFONES);
+
 describe('indicações', () => {
   const FASE7 = migration('_vendas_fase7_indicacoes.sql');
   const C7 = compacto(FASE7);
@@ -719,9 +727,8 @@ describe('indicações', () => {
     expect(C7).toContain("chave = 'editar_metas_vendas'");
   });
 
-  it('a instituição é única por empresa — é o que faz o ranking valer', () => {
-    // Sem isto, dois operadores que visitam a mesma escola somam dois pontos
-    // por um contato, e o ranking premia quem cadastrou mais rápido.
+  it('a Fase 7 nasceu com a instituição como chave — trocada pelo telefone em 18/09', () => {
+    // Histórico: a troca está em `indicações: vários telefones por contato`.
     expect(C7).toContain(
       'CREATE UNIQUE INDEX IF NOT EXISTS uq_indicacoes_instituicao '
       + 'ON public.indicacoes(empresa_id, LOWER(BTRIM(instituicao)))',
@@ -729,7 +736,7 @@ describe('indicações', () => {
   });
 
   it('o lote não aborta no repetido — devolve quem já indicou e quando', () => {
-    const corpo = compacto(corpoDaFuncao(FASE7, 'fn_indicacoes_salvar_lote'));
+    const corpo = compacto(corpoDaFuncao(TELEFONES, 'fn_indicacoes_salvar_lote'));
     // Quem volta com oito nomes e tem o terceiro repetido quer os outros sete.
     expect(corpo).toContain("'ja_indicada_por'");
     expect(corpo).toContain("'em', v_dona.data_indicacao");
@@ -737,7 +744,7 @@ describe('indicações', () => {
   });
 
   it('cadastrar EM NOME DE OUTRO exige `editar_indicacoes`', () => {
-    const corpo = compacto(corpoDaFuncao(FASE7, 'fn_indicacoes_salvar_lote'));
+    const corpo = compacto(corpoDaFuncao(TELEFONES, 'fn_indicacoes_salvar_lote'));
     // Sem isto, um operador enche o ranking de um colega — ou esvazia o próprio.
     expect(corpo).toMatch(
       /p_operador_id <> \(SELECT auth\.uid\(\)\)[\s\S]*?NOT public\.fn_user_tem\('editar_indicacoes'\)[\s\S]*?RAISE EXCEPTION/,
@@ -745,7 +752,7 @@ describe('indicações', () => {
   });
 
   it('a equipe sai da liderança, como em vendas', () => {
-    const corpo = compacto(corpoDaFuncao(FASE7, 'fn_indicacoes_salvar_lote'));
+    const corpo = compacto(corpoDaFuncao(TELEFONES, 'fn_indicacoes_salvar_lote'));
     expect(corpo).toContain('public.fn_vendas_equipe_que_credita(p_operador_id)');
     expect(corpo).not.toMatch(/p\.equipe_id INTO/);
   });
@@ -786,18 +793,24 @@ describe('indicações', () => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 describe('corrigir indicação', () => {
-  const F7B = migration('_vendas_fase7_corrigir_indicacao.sql');
-  const corpo = compacto(corpoDaFuncao(F7B, 'fn_indicacao_corrigir'));
+  // A versão viva é a de 20260918130000 — ver o comentário de `TELEFONES`.
+  const corpo = compacto(corpoDaFuncao(TELEFONES, 'fn_indicacao_corrigir'));
 
   it('exige `editar_indicacoes` — a chave que a Fase 7 criou e nada usava para corrigir', () => {
     expect(corpo).toMatch(/NOT public\.fn_user_tem\('editar_indicacoes'\) THEN RAISE EXCEPTION/);
   });
 
-  it('nome que colide com OUTRA linha é recusado com quem e quando', () => {
-    // A própria linha, só reescrita em maiúsculas, não conta.
-    expect(corpo).toContain('AND i.id <> p_id');
-    expect(corpo).toContain('LOWER(BTRIM(i.instituicao)) = LOWER(v_nome)');
-    expect(corpo).toMatch(/IF FOUND THEN RAISE EXCEPTION '«%» já foi indicada por % em %\.'/);
+  it('telefone que colide com OUTRA linha é recusado com quem e quando', () => {
+    // A própria linha, só reescrita, não conta.
+    expect(corpo).toMatch(
+      /public\.fn_indicacao_telefone_chave\(i\.telefone\) = v_chave AND i\.id <> p_id[\s\S]*?IF FOUND THEN RAISE EXCEPTION 'O telefone % já foi indicado por % em % \(«%»\)\.'/,
+    );
+  });
+
+  it('sem telefone, colide com qualquer linha da mesma escola', () => {
+    expect(corpo).toMatch(
+      /ELSE SELECT[\s\S]*?LOWER\(BTRIM\(i\.instituicao\)\) = LOWER\(v_nome\) AND i\.id <> p_id[\s\S]*?IF FOUND THEN RAISE EXCEPTION/,
+    );
   });
 
   it('setor e equipe só mudam quando QUEM indicou muda', () => {
@@ -809,9 +822,74 @@ describe('corrigir indicação', () => {
   });
 
   it('não é executável por PUBLIC', () => {
-    expect(compacto(F7B)).toContain(
+    expect(CT).toContain(
       'REVOKE ALL ON FUNCTION public.fn_indicacao_corrigir(UUID, UUID, TEXT, TEXT, TEXT, DATE, TEXT) FROM PUBLIC',
     );
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Indicações — vários telefones por contato (18/09)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('indicações: vários telefones por contato', () => {
+  const lote = compacto(corpoDaFuncao(TELEFONES, 'fn_indicacoes_salvar_lote'));
+
+  it('a escola deixa de ser a chave — o segundo número dela era recusado', () => {
+    expect(CT).toContain('DROP INDEX IF EXISTS public.uq_indicacoes_instituicao;');
+    expect(CT).toContain("indexname = 'uq_indicacoes_instituicao') THEN RAISE EXCEPTION");
+  });
+
+  it('o telefone é a chave, pelos dígitos, em qualquer escola da empresa', () => {
+    // Dois operadores que anotam o mesmo número somam um ponto, não dois.
+    expect(CT).toContain(
+      'CREATE UNIQUE INDEX IF NOT EXISTS uq_indicacoes_telefone '
+      + 'ON public.indicacoes(empresa_id, public.fn_indicacao_telefone_chave(telefone)) '
+      + 'WHERE public.fn_indicacao_telefone_chave(telefone) IS NOT NULL;',
+    );
+  });
+
+  it('sem telefone, a escola continua única entre as sem número', () => {
+    expect(CT).toContain(
+      'CREATE UNIQUE INDEX IF NOT EXISTS uq_indicacoes_instituicao_sem_telefone '
+      + 'ON public.indicacoes(empresa_id, LOWER(BTRIM(instituicao))) '
+      + 'WHERE public.fn_indicacao_telefone_chave(telefone) IS NULL;',
+    );
+  });
+
+  it('a chave do telefone é IMMUTABLE — entra em índice', () => {
+    const f = compacto(corpoDaFuncao(TELEFONES, 'fn_indicacao_telefone_chave'));
+    expect(f).toContain('LANGUAGE sql IMMUTABLE');
+  });
+
+  it('banco e grade normalizam o telefone com a MESMA regra', () => {
+    // Se uma mudar sozinha, a grade passa a acusar o que o banco aceita (ou o
+    // contrário). A regra: só dígitos, sem zero à esquerda, sem o 55 que sobra.
+    const f = corpoDaFuncao(TELEFONES, 'fn_indicacao_telefone_chave');
+    expect(f).toContain("regexp_replace(COALESCE(p_telefone, ''), '[^0-9]', '', 'g'), '0')");
+    expect(f).toContain("'^55[0-9]{10,11}$'");
+
+    const cliente = fs.readFileSync(path.resolve(__dirname, '../../../lib/indicacoes.ts'), 'utf8');
+    expect(cliente).toContain(".replace(/[^0-9]/g, '').replace(/^0+/, '')");
+    expect(cliente).toContain('/^55[0-9]{10,11}$/');
+  });
+
+  it('os dados de hoje são conferidos ANTES de criar o índice', () => {
+    // Duas escolas com o mesmo número: escolher qual fica é decisão de gente.
+    const confere = CT.indexOf('Telefone repetido em indicacoes');
+    expect(confere).toBeGreaterThan(-1);
+    expect(confere).toBeLessThan(CT.indexOf('CREATE UNIQUE INDEX IF NOT EXISTS uq_indicacoes_telefone'));
+  });
+
+  it('o lote procura o número em qualquer escola, e a escola sem número em qualquer linha dela', () => {
+    expect(lote).toMatch(
+      /IF v_chave IS NOT NULL THEN SELECT[\s\S]*?public\.fn_indicacao_telefone_chave\(i\.telefone\) = v_chave[\s\S]*?ELSE SELECT[\s\S]*?LOWER\(BTRIM\(i\.instituicao\)\) = LOWER\(v_nome\)/,
+    );
+  });
+
+  it('a repetida diz o número recusado e a escola em que ele já estava', () => {
+    expect(lote).toContain("'telefone', v_telefone");
+    expect(lote).toContain("'na_instituicao', v_dona.instituicao");
   });
 });
 

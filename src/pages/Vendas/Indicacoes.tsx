@@ -8,11 +8,18 @@
  * ajuste fino — não o contrário. A ordem das colunas fica escrita ao lado da
  * caixa, porque adivinhar por conteúdo erraria em «Colégio 24 de Maio».
  *
+ * ## Um contato, vários telefones
+ *
+ * A gestora aponta cinco números, não um. A grade é por CONTATO — escola,
+ * gestora, data — com os números embaixo, e cada número é uma indicação.
+ * Colar a linha inteira funciona em qualquer campo da grade, e colar uma
+ * célula com vários números no campo de telefone abre um campo por número.
+ *
  * ## A repetida é avisada duas vezes, de propósito
  *
- * Antes de mandar, a grade marca em vermelho o que se repete dentro dela
- * mesma. Depois de mandar, o banco devolve as que já existiam com QUEM as
- * indicou e QUANDO — e é essa segunda que resolve a dúvida real: «essa escola
+ * Antes de mandar, a grade marca em vermelho o número que se repete dentro
+ * dela mesma. Depois de mandar, o banco devolve os que já existiam com QUEM os
+ * indicou e QUANDO — e é essa segunda que resolve a dúvida real: «esse contato
  * já é de alguém?». Só «duplicada» não responderia nada.
  *
  * ## Corrigir e cadastrar por outro são a mesma chave
@@ -28,8 +35,8 @@
  * são `oklch` — `hsl(var(--x))` apaga o gráfico sem erro nenhum, defeito que já
  * custou caro aqui. Sem biblioteca não há como cair nessa.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Handshake, Trash2, Plus, ClipboardPaste, TriangleAlert, Info, Trophy, Pencil } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react';
+import { Handshake, Trash2, Plus, ClipboardPaste, TriangleAlert, Info, Trophy, Pencil, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,8 +58,9 @@ import { supabase } from '@/lib/supabase';
 import { niveisLiberados, type NivelEscopo } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import {
-  parseColagem, itemVazio, prontosParaGravar, repetidasNaGrade,
-  type ItemIndicacao,
+  parseColagem, contatoVazio, prontosParaGravar, repetidasNaGrade, telefonesColados,
+  agruparPorContato,
+  type ContatoIndicacao, type ResultadoColagem,
 } from '@/lib/indicacoes';
 import {
   buscarIndicacoes, buscarRanking, buscarPorDia, salvarLote, excluirIndicacao,
@@ -95,6 +103,15 @@ function textoOuNulo(v: string): string | null {
   return v.trim() === '' ? null : v;
 }
 
+/** A grade sempre mostra ao menos um campo de telefone por contato. */
+function telefonesDe(c: ContatoIndicacao): string[] {
+  return c.telefones.length > 0 ? c.telefones : [''];
+}
+
+function contatoEmBranco(c: ContatoIndicacao | undefined): boolean {
+  return !!c && c.instituicao.trim() === '' && !c.gestora && c.telefones.every(t => t.trim() === '');
+}
+
 const ROTULO_DO_NIVEL: Record<NivelEscopo, string> = {
   individual:    'Só as minhas',
   equipe:        'Minha equipe',
@@ -121,9 +138,22 @@ export default function Indicacoes() {
   const [disponivel, setDisponivel] = useState(true);
   const [carregando, setCarregando] = useState(false);
 
-  const [grade, setGrade] = useState<ItemIndicacao[]>([itemVazio(hojeISO())]);
+  const [grade, setGrade] = useState<ContatoIndicacao[]>([contatoVazio(hojeISO())]);
   const [colagem, setColagem] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  /*
+   * O campo de telefone que acabou de nascer (Enter ou «+ Telefone») recebe o
+   * foco depois do render. `autoFocus` não serve: com chave por posição, o
+   * campo inserido no meio reaproveita um elemento que já existia.
+   */
+  const camposDeTelefone = useRef(new Map<string, HTMLInputElement>());
+  const [focar, setFocar] = useState<string | null>(null);
+  useEffect(() => {
+    if (focar === null) return;
+    camposDeTelefone.current.get(focar)?.focus();
+    setFocar(null);
+  }, [focar, grade]);
 
   /*
    * Em nome de quem a lista vai ser gravada. Vazio = a própria pessoa: sem
@@ -206,7 +236,12 @@ export default function Indicacoes() {
   }, [podeEditar, empresaId]);
 
   const repetidas = useMemo(() => repetidasNaGrade(grade), [grade]);
+  const contatosMarcados = useMemo(
+    () => new Set([...repetidas].map(m => Number(m.split(':')[0]))),
+    [repetidas],
+  );
   const prontas = useMemo(() => prontosParaGravar(grade), [grade]);
+  const contatosProntos = grade.filter(c => c.instituicao.trim() !== '').length;
 
   /*
    * `setor` e `todos_setores` não filtram nada aqui: a RLS já entregou
@@ -224,40 +259,92 @@ export default function Indicacoes() {
 
   const itensVisiveis   = useMemo(() => itens.filter(noAlcance), [itens, noAlcance]);
   const rankingVisivel  = useMemo(() => ranking.filter(noAlcance), [ranking, noAlcance]);
+  const gruposVisiveis  = useMemo(() => agruparPorContato(itensVisiveis), [itensVisiveis]);
+
+  function avisarIgnoradas(r: ResultadoColagem) {
+    if (r.ignoradas.length === 0) return;
+    toast.warning(
+      `${r.ignoradas.length} ${r.ignoradas.length === 1 ? 'linha ficou' : 'linhas ficaram'} de fora: `
+      + `sem instituição e sem contato acima de onde herdá-la (linha ${r.ignoradas.map(i => i.linha).join(', ')}).`,
+    );
+  }
 
   function aplicarColagem() {
     const r = parseColagem(colagem, hoje);
-    if (r.itens.length === 0) {
+    avisarIgnoradas(r);
+    if (r.contatos.length === 0) {
       toast.error('Nada para colar — a primeira coluna precisa ser a instituição.');
       return;
     }
-    // Substitui as linhas em branco e acrescenta às preenchidas: colar duas
+    // Substitui os contatos em branco e acrescenta aos preenchidos: colar duas
     // vezes seguidas deve somar, não apagar o que já estava.
-    setGrade(atual => [...prontosParaGravar(atual), ...r.itens, itemVazio(hoje)]);
+    setGrade(atual => [...atual.filter(c => c.instituicao.trim() !== ''), ...r.contatos, contatoVazio(hoje)]);
     setColagem('');
+  }
 
-    if (r.ignoradas.length > 0) {
-      toast.warning(
-        `${r.ignoradas.length} ${r.ignoradas.length === 1 ? 'linha ficou' : 'linhas ficaram'} de fora por não ter instituição `
-        + `(linha ${r.ignoradas.map(i => i.linha).join(', ')}).`,
-      );
-    }
-    if (r.repetidasNaColagem.length > 0) {
-      toast.warning(`Repetida na própria colagem: ${r.repetidasNaColagem.join(', ')}.`);
+  /*
+   * Linha inteira colada direto na grade (tem TAB, ou várias escolas numa
+   * coluna): passa pelo mesmo leitor da caixa de colar, em vez de o campo
+   * engolir tudo como um nome só. Toma o lugar do contato se ele estava em
+   * branco; senão entra logo abaixo.
+   */
+  function colarLinhas(ci: number, texto: string) {
+    const r = parseColagem(texto, hoje);
+    avisarIgnoradas(r);
+    if (r.contatos.length === 0) return;
+    setGrade(atual => {
+      const corte = contatoEmBranco(atual[ci]) ? ci : ci + 1;
+      return [...atual.slice(0, corte), ...r.contatos, ...atual.slice(ci + 1)];
+    });
+  }
+
+  function aoColarNoContato(e: ClipboardEvent<HTMLInputElement>, ci: number, aceitaColuna: boolean) {
+    const texto = e.clipboardData.getData('text/plain');
+    if (texto.includes('\t') || (aceitaColuna && texto.trim().includes('\n'))) {
+      e.preventDefault();
+      colarLinhas(ci, texto);
     }
   }
 
-  function mudar(i: number, campo: keyof ItemIndicacao, valor: string) {
-    setGrade(atual => atual.map((item, k) =>
-      k === i ? { ...item, [campo]: valor === '' && campo !== 'instituicao' ? null : valor } : item,
+  function aoColarTelefone(e: ClipboardEvent<HTMLInputElement>, ci: number, ti: number) {
+    const texto = e.clipboardData.getData('text/plain');
+    if (texto.includes('\t')) {
+      e.preventDefault();
+      colarLinhas(ci, texto);
+      return;
+    }
+    // Célula com Alt+Enter, ou a coluna de números: um campo por número.
+    const numeros = telefonesColados(texto);
+    if (numeros.length > 1) {
+      e.preventDefault();
+      mudarTelefones(ci, t => [...t.slice(0, ti), ...numeros, ...t.slice(ti + 1)]);
+    }
+  }
+
+  function mudarContato(ci: number, campo: 'instituicao' | 'gestora' | 'data_indicacao', valor: string) {
+    setGrade(atual => atual.map((c, k) =>
+      k === ci ? { ...c, [campo]: campo === 'gestora' && valor === '' ? null : valor } : c,
     ));
+  }
+
+  function mudarTelefones(ci: number, mudar: (telefones: string[]) => string[]) {
+    setGrade(atual => atual.map((c, k) => {
+      if (k !== ci) return c;
+      const novos = mudar(telefonesDe(c));
+      return { ...c, telefones: novos.length > 0 ? novos : [''] };
+    }));
+  }
+
+  function novoTelefone(ci: number, depoisDe: number) {
+    mudarTelefones(ci, t => [...t.slice(0, depoisDe + 1), '', ...t.slice(depoisDe + 1)]);
+    setFocar(`${ci}:${depoisDe + 1}`);
   }
 
   async function gravar() {
     if (!empresaId || !perfil?.id) return;
     if (prontas.length === 0) { toast.error('Nenhuma instituição preenchida.'); return; }
     if (repetidas.size > 0) {
-      toast.error('Há instituições repetidas na lista. Tire as marcadas em vermelho antes de gravar.');
+      toast.error('Há indicações repetidas na lista. Tire as marcadas em vermelho antes de gravar.');
       return;
     }
 
@@ -272,8 +359,11 @@ export default function Indicacoes() {
       toast.success(`${d.gravadas} ${d.gravadas === 1 ? 'indicação gravada' : 'indicações gravadas'}.`);
     }
     for (const rep of d.repetidas) {
+      const quando = `${rep.ja_indicada_por} em ${diaCurto(String(rep.em))}`;
       toast.warning(
-        `«${rep.instituicao}» já foi indicada por ${rep.ja_indicada_por} em ${diaCurto(String(rep.em))}.`,
+        rep.telefone
+          ? `O telefone ${rep.telefone} já foi indicado por ${quando} (${rep.na_instituicao ?? rep.instituicao}).`
+          : `«${rep.instituicao}» já foi indicada por ${quando}.`,
         { duration: 9000 },
       );
     }
@@ -281,7 +371,7 @@ export default function Indicacoes() {
       toast.info('Nada foi gravado.');
     }
 
-    setGrade([itemVazio(hoje)]);
+    setGrade([contatoVazio(hoje)]);
     void carregar();
   }
 
@@ -394,15 +484,19 @@ export default function Indicacoes() {
             Colar da planilha
           </h2>
           <p className="text-[11px] text-muted-foreground">
-            Uma linha por indicação, nesta ordem:{' '}
+            Nesta ordem:{' '}
             <strong>instituição · gestora · telefone · data · observação</strong>.
             Separador TAB (Excel) ou <code>;</code>. Sem data, vale hoje.
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Cada telefone é uma indicação. Os outros números do mesmo contato podem vir na
+            mesma célula (Alt+Enter) ou nas linhas de baixo, com instituição e gestora em branco.
           </p>
           <Textarea
             value={colagem}
             onChange={e => setColagem(e.target.value)}
-            rows={4}
-            placeholder={'Colégio São José\tMaria Fátima\t(14) 99999-0000\t03/09/2026'}
+            rows={5}
+            placeholder={'Colégio São José\tMaria Clara\t18 93505-6541\t03/09/2026\n\t\t18 93505-9999\n\t\t18 93505-8888'}
             className="font-mono text-xs"
           />
           <Button size="sm" variant="secondary" onClick={aplicarColagem} disabled={colagem.trim() === ''}>
@@ -415,7 +509,8 @@ export default function Indicacoes() {
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-[13px] font-semibold">
-              A lista ({prontas.length} {prontas.length === 1 ? 'pronta' : 'prontas'})
+              A lista ({contatosProntos} {contatosProntos === 1 ? 'contato' : 'contatos'}
+              {' · '}{prontas.length} {prontas.length === 1 ? 'indicação' : 'indicações'})
             </h2>
             <div className="flex flex-wrap items-center gap-2">
               {podeEditar && quemPodeIndicar.length > 0 && (
@@ -433,8 +528,8 @@ export default function Indicacoes() {
                 </Select>
               )}
               <Button size="sm" variant="ghost"
-                      onClick={() => setGrade(a => [...a, itemVazio(hoje)])}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Linha
+                      onClick={() => setGrade(a => [...a, contatoVazio(hoje)])}>
+                <Plus className="mr-1 h-3.5 w-3.5" /> Contato
               </Button>
               <Button size="sm" onClick={gravar}
                       disabled={salvando || prontas.length === 0 || repetidas.size > 0}>
@@ -447,33 +542,76 @@ export default function Indicacoes() {
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">
-                A mesma instituição aparece mais de uma vez na lista. As duas estão
-                marcadas — contar duas vezes é o que tornaria o ranking sem sentido.
+                Há indicação repetida na lista: o mesmo telefone duas vezes, ou uma escola
+                sem telefone que já aparece noutra linha. Estão marcadas — contar duas vezes
+                é o que tornaria o ranking sem sentido.
               </span>
             </div>
           )}
 
           <div className="space-y-2">
-            {grade.map((item, i) => (
-              <div key={i}
-                   className={cn(
-                     'grid gap-2 rounded-lg border p-2 sm:grid-cols-[2fr_1.5fr_1fr_auto_auto]',
-                     repetidas.has(i) ? 'border-destructive/50 bg-destructive/5' : 'border-border',
-                   )}>
-                <Input value={item.instituicao} placeholder="Instituição"
-                       onChange={e => mudar(i, 'instituicao', e.target.value)} />
-                <Input value={item.gestora ?? ''} placeholder="Gestora"
-                       onChange={e => mudar(i, 'gestora', e.target.value)} />
-                <Input value={item.telefone ?? ''} placeholder="Telefone"
-                       onChange={e => mudar(i, 'telefone', e.target.value)} />
-                <Input type="date" value={item.data_indicacao} className="w-[150px]"
-                       onChange={e => mudar(i, 'data_indicacao', e.target.value)} />
-                <Button size="icon" variant="ghost" aria-label="Tirar da lista"
-                        onClick={() => setGrade(a => a.length === 1 ? [itemVazio(hoje)] : a.filter((_, k) => k !== i))}>
-                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
-            ))}
+            {grade.map((contato, ci) => {
+              const telefones = telefonesDe(contato);
+              const preenchidos = telefones.filter(t => t.trim() !== '').length;
+              return (
+                <div key={ci}
+                     className={cn(
+                       'space-y-2 rounded-lg border p-2',
+                       contatosMarcados.has(ci) ? 'border-destructive/50 bg-destructive/5' : 'border-border',
+                     )}>
+                  <div className="grid gap-2 sm:grid-cols-[2fr_1.5fr_auto_auto]">
+                    <Input value={contato.instituicao} placeholder="Instituição"
+                           className={cn(repetidas.has(`${ci}:*`) && 'border-destructive')}
+                           onChange={e => mudarContato(ci, 'instituicao', e.target.value)}
+                           onPaste={e => aoColarNoContato(e, ci, true)} />
+                    <Input value={contato.gestora ?? ''} placeholder="Gestora"
+                           onChange={e => mudarContato(ci, 'gestora', e.target.value)}
+                           onPaste={e => aoColarNoContato(e, ci, false)} />
+                    <Input type="date" value={contato.data_indicacao} className="w-[150px]"
+                           onChange={e => mudarContato(ci, 'data_indicacao', e.target.value)} />
+                    <Button size="icon" variant="ghost" aria-label="Tirar o contato da lista"
+                            onClick={() => setGrade(a => a.length === 1 ? [contatoVazio(hoje)] : a.filter((_, k) => k !== ci))}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {telefones.map((tel, ti) => (
+                      <div key={ti} className="flex items-center">
+                        <Input value={tel} placeholder="Telefone"
+                               ref={el => {
+                                 if (el) camposDeTelefone.current.set(`${ci}:${ti}`, el);
+                                 else camposDeTelefone.current.delete(`${ci}:${ti}`);
+                               }}
+                               className={cn(
+                                 'h-8 w-[160px] text-xs tabular-nums',
+                                 repetidas.has(`${ci}:${ti}`) && 'border-destructive',
+                               )}
+                               onChange={e => mudarTelefones(ci, t => t.map((v, k) => (k === ti ? e.target.value : v)))}
+                               onPaste={e => aoColarTelefone(e, ci, ti)}
+                               onKeyDown={e => {
+                                 if (e.key === 'Enter') { e.preventDefault(); novoTelefone(ci, ti); }
+                               }} />
+                        {telefones.length > 1 && (
+                          <Button size="icon" variant="ghost" className="h-8 w-7" aria-label="Tirar este telefone"
+                                  onClick={() => mudarTelefones(ci, t => t.filter((_, k) => k !== ti))}>
+                            <X className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    <Button size="sm" variant="ghost" className="h-8 text-xs"
+                            onClick={() => novoTelefone(ci, telefones.length - 1)}>
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Telefone
+                    </Button>
+                    {preenchidos > 1 && (
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
+                        {preenchidos} indicações
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -550,10 +688,22 @@ export default function Indicacoes() {
                 </tr>
               </thead>
               <tbody>
-                {itensVisiveis.map(item => (
-                  <tr key={item.id} className="border-t border-border">
-                    <td className="px-3 py-2">{item.instituicao}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{item.gestora ?? '—'}</td>
+                {/* Um bloco por contato: escola e gestora uma vez, os números embaixo. */}
+                {gruposVisiveis.flatMap(grupo => grupo.map((item, k) => (
+                  <tr key={item.id} className={cn('border-border', k === 0 ? 'border-t' : 'border-t border-dashed')}>
+                    {k === 0 && (
+                      <>
+                        <td rowSpan={grupo.length} className="px-3 py-2 align-top">
+                          {item.instituicao}
+                          {grupo.length > 1 && (
+                            <Badge variant="secondary" className="ml-2 tabular-nums">{grupo.length}</Badge>
+                          )}
+                        </td>
+                        <td rowSpan={grupo.length} className="px-3 py-2 align-top text-muted-foreground">
+                          {item.gestora ?? '—'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{item.telefone ?? '—'}</td>
                     <td className="px-3 py-2 text-muted-foreground">{item.perfis?.nome ?? '—'}</td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
@@ -569,14 +719,17 @@ export default function Indicacoes() {
                         )}
                         {podeExcluir && (
                           <Button size="icon" variant="ghost" aria-label="Excluir"
-                                  onClick={() => void apagar(item.id, item.instituicao)}>
+                                  onClick={() => void apagar(
+                                    item.id,
+                                    item.telefone ? `${item.telefone} (${item.instituicao})` : item.instituicao,
+                                  )}>
                             <Trash2 className="h-4 w-4 text-muted-foreground" />
                           </Button>
                         )}
                       </td>
                     )}
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -588,8 +741,9 @@ export default function Indicacoes() {
           <DialogHeader>
             <DialogTitle>Corrigir indicação</DialogTitle>
             <DialogDescription>
-              O nome da instituição é o que impede contá-la duas vezes: se virar o nome
-              de outra já cadastrada, a correção é recusada.
+              O telefone é o que impede contar a mesma indicação duas vezes: se virar o
+              número de outra já cadastrada, a correção é recusada. Sem telefone, a
+              indicação é a própria escola — e ela não pode já ter outra linha.
             </DialogDescription>
           </DialogHeader>
           {correcao && (

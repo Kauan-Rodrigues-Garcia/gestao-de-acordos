@@ -251,6 +251,32 @@ nome de quem estava logado.
 - **Tela:** seletor «em nome de» acima da lista e lápis em cada linha, os dois
   atrás de `editar_indicacoes`. Robôs e desligados ficam fora do seletor.
 
+### Indicações — vários telefones por contato (18/09)
+
+`20260918130000`, **aplicada 18/09** (MCP `execute_sql`, bloco de verificação
+passou; versão ainda não registrada em `schema_migrations`). Pedido: a gestora de uma escola aponta
+vários números; a primeira linha vem completa (escola, gestora, telefone) e os
+outros números vêm embaixo, no mesmo contato. **Cada telefone é uma indicação**
+e um ponto no ranking.
+
+- **A chave trocou:** sai `uq_indicacoes_instituicao`; entra
+  `uq_indicacoes_telefone` (dígitos do número, único na empresa, em qualquer
+  escola) e `uq_indicacoes_instituicao_sem_telefone`. Sem número, a escola é o
+  contato — e as RPCs a recusam se ela já tiver qualquer linha.
+- **`fn_indicacao_telefone_chave`** normaliza (só dígitos, sem zero à esquerda,
+  sem o 55 do país). `chaveDoTelefone` em `src/lib/indicacoes.ts` repete a
+  regra, e há teste que prende as duas juntas.
+- **Colar:** respeita as aspas do Excel (célula com Alt+Enter não vira várias
+  escolas), herda escola/gestora/data da linha de cima quando a instituição vem
+  em branco, e trata linha só de números como mais telefones do contato. Colar
+  a linha inteira funciona também dentro da grade.
+- **Grade por contato** (escola, gestora, data + campos de telefone) e lista
+  gravada em blocos de contato.
+- A migration **para** se dois registros já tiverem o mesmo número, e lista
+  quais — escolher qual fica é decisão de gente.
+- Sem esta migration, a tela nova funciona com o banco velho, mas o 2º número
+  da mesma escola volta como «já foi indicada».
+
 ### Fase 8 — feedback e ausências
 
 `20260915220000`, aplicada. Rota `/vendas/acompanhamento`, menu
@@ -570,6 +596,10 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
       contra o banco — só os testes estáticos do SQL.
 - [x] **`supabase migration repair`** — feito 15/09, e alcançou 36 versões (as 14 do Comercial + 22 anteriores). Ver §3.
 
+- [x] `20260918130000_indicacoes_varios_telefones_por_contato.sql` — aplicada 18/09.
+- [ ] Registrar a versão `20260918130000` em `schema_migrations`, senão
+      `db push` a reaplica.
+
 Falta conferir se `pg_cron` agendou `ausencias-iniciar-ferias`
 (`SELECT jobname, schedule FROM cron.job`) — o `DO` pula o agendamento em
 silêncio quando a extensão não existe.
@@ -700,7 +730,7 @@ src/lib/vendasMeta.ts                  progresso, ritmo e a meta proporcional à
 src/lib/vendasPlacar.ts                ranking, estados, formas, destaque do dia, série diária
 src/lib/vendasDashboard.ts             ticket médio, aproveitamento, cobertura, acumulado, variação
 src/lib/vendasFechamento.ts            as 4 igualdades que têm que fechar
-src/lib/indicacoes.ts                  parse da colagem, repetidas
+src/lib/indicacoes.ts                  parse da colagem (aspas do Excel, contato com vários telefones), repetidas
 src/lib/ausencias.ts                   tipos (espelho de ausencias_tipos), dias, sobreposição
 
 src/services/vendas/

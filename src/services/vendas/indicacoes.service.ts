@@ -49,9 +49,17 @@ export interface PontoDoDia {
   quantidade: number;
 }
 
-/** Uma instituição recusada, com quem já a tinha indicado. */
+/**
+ * Uma indicação recusada, com quem já a tinha indicado.
+ *
+ * Desde 20260918130000 a repetida é o TELEFONE (ou a escola, quando vem sem
+ * número): `telefone` é o número recusado e `na_instituicao` a escola em que
+ * ele já estava. Os dois faltam enquanto essa migration não for aplicada.
+ */
 export interface Repetida {
   instituicao: string;
+  telefone?: string | null;
+  na_instituicao?: string | null;
   ja_indicada_por: string;
   em: string;
 }
@@ -115,10 +123,10 @@ export interface ResultadoLote {
 }
 
 /**
- * Grava várias de uma vez.
+ * Grava várias de uma vez — uma linha por telefone.
  *
- * Não aborta no primeiro repetido: quem volta com oito nomes e tem o terceiro
- * repetido quer os outros sete gravados, e a lista de quais bateram.
+ * Não aborta no primeiro repetido: quem volta com oito números e tem o
+ * terceiro repetido quer os outros sete gravados, e a lista de quais bateram.
  */
 export async function salvarLote(params: {
   empresaId: string;
@@ -155,8 +163,9 @@ export async function salvarLote(params: {
  * quando o líder cadastra pelo operador (migration 20260915210000).
  *
  * Setor e equipe só mudam no banco quando o operador muda: corrigir o telefone
- * de uma indicação de março não a puxa para a equipe de hoje. Nome que colide
- * com outra instituição volta recusado com quem e quando.
+ * de uma indicação de março não a puxa para a equipe de hoje. Telefone que já
+ * é de outra linha (ou escola sem telefone que já tem outra) volta recusado com
+ * quem e quando.
  */
 export async function corrigirIndicacao(params: {
   id: string;
