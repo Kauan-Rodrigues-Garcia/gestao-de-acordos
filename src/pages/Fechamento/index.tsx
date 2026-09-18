@@ -20,11 +20,18 @@
  * `ver_fechamento` abre a aba; os níveis `setor` e `todos_setores` decidem o
  * recorte, como no Painel Líder; `fechamento_editar` libera as duas colunas. A
  * RLS (`fn_fechamento_alcanca`) cumpre o mesmo recorte no banco.
+ *
+ * ## Premiações e Comissões (18/09/2026)
+ *
+ * A segunda aba (`?aba=premiacoes`) é o relatório de pagamento: crachá, setor e
+ * a premiação (Birigui) ou comissão (Marília) de quem bateu. Usa o mesmo mês,
+ * o mesmo setor em foco e o mesmo alcance desta página. Ver `PremiacoesComissoes`.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ClipboardCheck, Building2, RefreshCw, Wallet, CalendarDays, Users, TriangleAlert, Info,
-  FileSpreadsheet, FileCode2, Loader2,
+  FileSpreadsheet, FileCode2, Loader2, Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -33,6 +40,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { KpiTile } from '@/components/KpiTile';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -52,9 +60,17 @@ import {
 } from '@/services/fechamentoOperadores/baixarFechamentoOperadores';
 import { TabelaFechamento } from './TabelaFechamento';
 import { GraficosFechamento } from './GraficosFechamento';
+import { PremiacoesComissoes } from './PremiacoesComissoes';
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
+
+type AbaFechamento = 'fechamento' | 'premiacoes';
+
+const ABAS: readonly AbaSegmentada<AbaFechamento>[] = [
+  { key: 'fechamento', label: 'Fechamento', Icon: ClipboardCheck },
+  { key: 'premiacoes', label: 'Premiações e Comissões', Icon: Award },
+];
 
 function Aviso({ tom, children }: { tom: 'alerta' | 'info'; children: React.ReactNode }) {
   const Icone = tom === 'alerta' ? TriangleAlert : Info;
@@ -89,6 +105,17 @@ export default function PaginaFechamento() {
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
 
+  // A aba fica na URL: recarregar a página ou mandar o link abre na mesma.
+  const [params, setParams] = useSearchParams();
+  const aba: AbaFechamento = params.get('aba') === 'premiacoes' ? 'premiacoes' : 'fechamento';
+  const trocarAba = useCallback((k: AbaFechamento) => {
+    setParams(p => {
+      const n = new URLSearchParams(p);
+      if (k === 'fechamento') n.delete('aba'); else n.set('aba', k);
+      return n;
+    }, { replace: true });
+  }, [setParams]);
+
   /*
    * O setor em foco. Quem enxerga todos escolhe (e começa em «todos»); quem
    * enxerga só o próprio fica nele. Sem nível nenhum, nada é buscado.
@@ -100,7 +127,8 @@ export default function PaginaFechamento() {
     empresaId: empresa?.id ?? null,
     mes,
     setorId: setorEmFoco,
-    ativo: !tenant.isPaguePlay && temAlcance,
+    // Na aba de premiações a tabela do fechamento não aparece: não busca.
+    ativo: !tenant.isPaguePlay && temAlcance && aba === 'fechamento',
   });
 
   useEffect(() => {
@@ -129,6 +157,7 @@ export default function PaginaFechamento() {
 
   const [baixando, setBaixando] = useState<FormatoFechamento | null>(null);
   const nomeDoSetorEmFoco = setores.find(s => s.id === setorEmFoco)?.nome;
+  const nomesDosSetores = useMemo(() => new Map(setores.map(s => [s.id, s.nome])), [setores]);
   const baixar = useCallback(async (formato: FormatoFechamento) => {
     if (!empresa?.id) return;
     setBaixando(formato);
@@ -173,44 +202,48 @@ export default function PaginaFechamento() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Fechamento</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Fechamento mensal por operador · {rotuloDoMes(mes)}
+              {aba === 'fechamento' ? 'Fechamento mensal por operador' : 'Premiações e comissões por pessoa'} · {rotuloDoMes(mes)}
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Baixar: a mesma tabela e os mesmos cards da tela, na mesma ordem.
-              Quem vê a aba baixa — o arquivo não traz nada além do que está
-              aqui. Ver `exportarFechamento.ts`. */}
-          {(['xlsx', 'html'] as const).map(formato => (
+        {aba === 'fechamento' && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Baixar: a mesma tabela e os mesmos cards da tela, na mesma ordem.
+                Quem vê a aba baixa — o arquivo não traz nada além do que está
+                aqui. Ver `exportarFechamento.ts`. */}
+            {(['xlsx', 'html'] as const).map(formato => (
+              <Button
+                key={formato}
+                variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
+                onClick={() => void baixar(formato)}
+                disabled={carregando || !temAlcance || linhas.length === 0 || baixando !== null}
+              >
+                {baixando === formato
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : formato === 'xlsx'
+                    ? <FileSpreadsheet className="h-3.5 w-3.5" />
+                    : <FileCode2 className="h-3.5 w-3.5" />}
+                {formato === 'xlsx' ? 'Baixar Excel' : 'Baixar HTML'}
+              </Button>
+            ))}
             <Button
-              key={formato}
               variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
-              onClick={() => void baixar(formato)}
-              disabled={carregando || !temAlcance || linhas.length === 0 || baixando !== null}
+              onClick={() => void fechamento.recarregar()}
+              disabled={carregando || atualizando || !temAlcance}
             >
-              {baixando === formato
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : formato === 'xlsx'
-                  ? <FileSpreadsheet className="h-3.5 w-3.5" />
-                  : <FileCode2 className="h-3.5 w-3.5" />}
-              {formato === 'xlsx' ? 'Baixar Excel' : 'Baixar HTML'}
+              <RefreshCw className={cn('h-3.5 w-3.5', atualizando && 'animate-spin')} />
+              Atualizar
             </Button>
-          ))}
-          <Button
-            variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
-            onClick={() => void fechamento.recarregar()}
-            disabled={carregando || atualizando || !temAlcance}
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', atualizando && 'animate-spin')} />
-            Atualizar
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
+
+      <AbasSegmentadas abas={ABAS} ativa={aba} onTrocar={trocarAba} rotulo="Seção do Fechamento" />
 
       {/* Mês + setor */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2 py-1">
-          <SeletorMes mes={mes} onChange={setMes} desabilitado={carregando && temAlcance} />
+          <SeletorMes mes={mes} onChange={setMes} desabilitado={aba === 'fechamento' && carregando && temAlcance} />
         </div>
 
         {veTodosSetores && setores.length > 0 && (
@@ -249,7 +282,19 @@ export default function PaginaFechamento() {
         </div>
       )}
 
-      {temAlcance && (
+      {temAlcance && aba === 'premiacoes' && (
+        <PremiacoesComissoes
+          empresaId={empresa.id}
+          empresaNome={empresa.nome ?? ''}
+          mes={mes}
+          setorId={setorEmFoco}
+          setorNome={setorEmFoco ? (nomeDoSetor ?? 'Setor') : null}
+          nomesDosSetores={nomesDosSetores}
+          podeEditar={podeEditar}
+        />
+      )}
+
+      {temAlcance && aba === 'fechamento' && (
         <>
           {!fechamento.manuaisDisponivel && (
             <Aviso tom="alerta">

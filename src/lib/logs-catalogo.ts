@@ -304,6 +304,9 @@ export const ACAO_LABEL: Record<string, string> = {
   // Acumulado por mês do Relatório PaguePlay (pagamento e conciliação) em Excel:
   // o faturamento por estado sai do sistema (16/09/2026).
   relatorio_pagueplay_acumulado_baixado: 'Acumulado do Relatório PaguePlay baixado',
+  // Fechamento › Premiações e Comissões em Excel: crachá, nome e valor a pagar
+  // de cada pessoa saem do sistema (18/09/2026).
+  premiacoes_comissoes_baixado: 'Premiações e Comissões baixado',
   // Exclusão definitiva: a trilha do ticket some com ele, e este é o registro
   // que sobra de que ele existiu e de quem o apagou (14/09/2026).
   ticket_excluido:             'Ticket excluído',
