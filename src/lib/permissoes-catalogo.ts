@@ -1212,6 +1212,20 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Painel Líder', padrao: LIDERANCA,
   },
   /*
+   * Plantão das Elites do Receptivo (19/09/2026): o recebimento hora a hora da
+   * dupla de plantão, com o botão de copiar a imagem para o WhatsApp.
+   *
+   * Nasce SÓ no cargo Elite. A gerência fica de fora pelo cargo porque o pedido
+   * é «só a gerência do Receptivo», e cargo não tem setor: a migration
+   * 20260919100000 liga a chave por exceção em quem é gerência no setor das
+   * Elites. Os dados vêm de `fn_elite_plantao_hora`, que cobra a mesma chave.
+   */
+  {
+    key: 'painel_lider_sub_elite', label: 'Painel Líder: Plantão Elite',
+    descricao: 'Abrir a aba do plantão das Elites: recebimento da dupla hora a hora, com cópia em imagem',
+    grupo: 'Painel Líder', tenants: ['bookplay'], padrao: { elite: true },
+  },
+  /*
    * Ajuste manual de recebimento — correção TEMPORÁRIA do relatório do ERP.
    *
    * As três nascem no painel porque é a regra permanente do projeto: toda

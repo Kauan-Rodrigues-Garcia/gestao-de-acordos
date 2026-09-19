@@ -38,6 +38,7 @@ export const TELA_LABEL: Record<string, string> = {
   'lider:desempenho':          'Painel do Líder · Desempenho Equipes',
   'lider:quartis':             'Painel do Líder · Quartis',
   'lider:grafico':             'Painel do Líder · Gráfico recebimento',
+  'lider:elite':               'Painel do Líder · Plantão Elite',
   'lider/operador':            'Painel do Líder · Operador',
   'diretoria':                 'Painel Diretoria',
   'admin/usuarios':            'Usuários',

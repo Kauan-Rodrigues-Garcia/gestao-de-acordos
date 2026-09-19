@@ -5,6 +5,10 @@
  * Equipes, Quartis, Gráfico de recebimento e Ajuste de recebimento. Um único
  * recorte de setor/equipe serve as quatro — trocar de aba não troca o recorte.
  *
+ * Na BookPlay há uma quinta, «Plantão Elite» (19/09/2026): o recebimento hora
+ * a hora da dupla de plantão do Receptivo. Ela tem data e dupla próprias, e não
+ * usa o mês nem o recorte de setor/equipe.
+ *
  * A aba "Acompanhamento" foi REMOVIDA em 31/08/2026. Ela trazia todo acordo do
  * mês de todos os operadores no alcance para montar KPIs e uma lista ordenável,
  * e não era mais usada — as mesmas perguntas passaram a ser respondidas pelas
@@ -18,7 +22,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Users, Calendar, ChevronRight, ChevronLeft, RefreshCw, Loader2,
-  TrendingUp, Radio, BarChart3, LineChart, SlidersHorizontal,
+  TrendingUp, Radio, BarChart3, LineChart, SlidersHorizontal, Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase, Perfil } from '@/lib/supabase';
@@ -47,6 +51,7 @@ import { DesempenhoEquipes } from '@/pages/Dashboard/Analitico/DesempenhoEquipes
 import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores';
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
 import AjusteRecebimento from '@/pages/Dashboard/Analitico/AjusteRecebimento';
+import { PlantaoElite } from '@/pages/Dashboard/Analitico/PlantaoElite';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
 import { escopoEfetivo, niveisLiberados } from '@/lib/permissoes-escopo';
@@ -64,7 +69,7 @@ import { useMesGlobal } from '@/providers/MesProvider';
 
 /** Abas do painel. A aba Acompanhamento saiu em 31/08/2026; as demais são
  *  as antigas abas do Analítico, agora alimentadas pelo recebimento diário. */
-type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'ajuste';
+type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'elite' | 'ajuste';
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
@@ -123,6 +128,9 @@ export default function PainelLider() {
     { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3,   permissao: 'painel_lider_sub_desempenho_equipes' },
     { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp,  permissao: 'painel_lider_sub_quartis' },
     { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart,   permissao: 'painel_lider_sub_grafico_recebimento' },
+    // Plantão das Elites do Receptivo. A chave é só da BookPlay e nasce só no
+    // cargo Elite; a gerência do Receptivo a recebe por exceção na pessoa.
+    { key: 'elite',      label: 'Plantão Elite',       Icon: Clock,       permissao: 'painel_lider_sub_elite' },
     // Correção TEMPORÁRIA do relatório do ERP. Fica por último de propósito:
     // é conserto, não rotina, e não devia disputar a atenção com as quatro
     // abas que a liderança abre todo dia.
@@ -633,7 +641,8 @@ export default function PainelLider() {
       {/* Recorte de setor/equipe: um só, valendo para as três abas analíticas.
           Fica fora do conteúdo das abas de propósito — trocar de aba não deve
           trocar o recorte, que era o efeito de cada aba ter o seu. */}
-      {mostrarAbasAnaliticas && (
+      {/* O Plantão Elite tem dupla e data próprias: o recorte não vale para ele. */}
+      {mostrarAbasAnaliticas && abaVisivel !== 'elite' && (
         <FiltrosEscopo
           escopo={escopoAbas}
           setores={setoresLista}
@@ -723,6 +732,13 @@ export default function PainelLider() {
               rotuloEscopo={rotuloDoEscopo}
             />
           )}
+        </div>
+      )}
+
+      {/* ── Aba: Plantão Elite (BookPlay) ─────────────────────────────────── */}
+      {isBookplay && (abasVisitadas.has('elite') || abaVisivel === 'elite') && (
+        <div className={cn(abaVisivel !== 'elite' && 'hidden')}>
+          <PlantaoElite empresaId={empresa.id} />
         </div>
       )}
 
