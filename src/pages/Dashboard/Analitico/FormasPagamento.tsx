@@ -80,6 +80,7 @@ import {
   CHAVE_SEM_OPERADOR,
   type FiltroTabulacaoFormas, type GrupoFormas,
 } from './agregacaoFormas';
+import { corTexto } from '@/lib/temas';
 
 /** Quantas linhas da tabela cruzada aparecem antes do "carregar mais". */
 const LINHAS_PAGE = 20;
@@ -293,7 +294,7 @@ export function FormasPagamento({
   if (!atual.dbAtiva) {
     return (
       <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10">
-        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
         <p className="text-xs leading-relaxed">
           O detalhamento por forma de pagamento depende da função de agregação do
           banco (<span className="font-mono">fn_analitico_dashboard_mes_json</span>),
@@ -467,12 +468,12 @@ export function FormasPagamento({
                   }}
                 >
                   <div className="flex items-center gap-1.5">
-                    <FormaIcon className="w-3.5 h-3.5 shrink-0" style={{ color: cor }} />
+                    <FormaIcon className="w-3.5 h-3.5 shrink-0" style={{ color: corTexto(cor) }} />
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground truncate">
                       {f.rotulo}
                     </p>
                   </div>
-                  <p className="text-base font-bold font-mono leading-tight mt-1 truncate" style={{ color: cor }}>
+                  <p className="text-base font-bold font-mono leading-tight mt-1 truncate" style={{ color: corTexto(cor) }}>
                     {formatBRL(f.bruto)}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -584,7 +585,7 @@ export function FormasPagamento({
                       )}
                     </div>
                     <span className="text-xs font-mono font-semibold w-24 sm:w-28 text-right shrink-0"
-                      style={{ color: cor }}>
+                      style={{ color: corTexto(cor) }}>
                       {formatBRL(f.bruto)}
                     </span>
                     <span className="text-[11px] text-muted-foreground w-14 text-right shrink-0 tabular-nums">
@@ -736,7 +737,7 @@ export function FormasPagamento({
                           <td className="px-3 py-2 text-right">
                             {forte && (
                               <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap"
-                                style={{ borderColor: `${corDaForma(forte.rotulo)}80`, color: corDaForma(forte.rotulo) }}>
+                                style={{ borderColor: `${corDaForma(forte.rotulo)}80`, color: corTexto(corDaForma(forte.rotulo)) }}>
                                 {forte.rotulo} {formatarShare(forte.share)}
                               </Badge>
                             )}

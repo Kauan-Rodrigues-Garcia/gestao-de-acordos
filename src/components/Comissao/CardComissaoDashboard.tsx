@@ -45,6 +45,7 @@ import { SITUACAO_BONUS, diaMes } from './bonusTexto';
 import { formatarPct } from './formato';
 import { VerComissao } from './VerComissao';
 
+import { corTexto } from '@/lib/temas';
 interface CardComissaoDashboardProps {
   resultado: ResultadoComissao;
   isPaguePlay: boolean;
@@ -145,7 +146,7 @@ export function CardComissaoDashboard({
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
               style={{ background: cor + '22' }}
             >
-              <Coins className="h-3.5 w-3.5" style={{ color: cor }} aria-hidden="true" />
+              <Coins className="h-3.5 w-3.5" style={{ color: corTexto(cor) }} aria-hidden="true" />
             </div>
             Comissão
             {isPaguePlay && (
@@ -168,7 +169,7 @@ export function CardComissaoDashboard({
         <div className="shrink-0 space-y-0.5 text-center">
           <p
             className="font-mono text-2xl font-bold leading-tight tabular-nums"
-            style={r.atual || r.total > 0 ? { color: cor } : undefined}
+            style={r.atual || r.total > 0 ? { color: corTexto(cor) } : undefined}
           >
             {semFaixas ? 'Sem faixas no mês' : r.atual || r.total > 0 ? formatBRL(r.total) : 'Nenhuma faixa ainda'}
           </p>

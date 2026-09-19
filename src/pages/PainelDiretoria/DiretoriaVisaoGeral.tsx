@@ -562,7 +562,7 @@ export function DiretoriaVisaoGeral({
 
           {destaque && (
             <div className="flex items-start gap-2 border-t border-border/50 pt-3">
-              <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+              <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />
               <div className="text-xs">
                 <p className="font-semibold text-foreground">{destaque.nome}</p>
                 <p className="text-muted-foreground">
@@ -576,8 +576,8 @@ export function DiretoriaVisaoGeral({
           {atencao && atencao.cod !== destaque?.cod && (
             <div className="flex items-start gap-2">
               {atencao.v < 0
-                ? <TrendingDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                : <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />}
+                ? <TrendingDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-500" />
+                : <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />}
               <div className="text-xs">
                 <p className="font-semibold text-foreground">{atencao.nome}</p>
                 <p className="text-muted-foreground">

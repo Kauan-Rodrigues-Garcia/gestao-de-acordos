@@ -93,10 +93,10 @@ export function faixaAssiduidade(pct: number | null): {
   rotulo: string; cls: string;
 } {
   if (pct === null) return { rotulo: 'sem base', cls: 'text-muted-foreground' };
-  if (pct >= 80) return { rotulo: 'assíduo',   cls: 'text-emerald-500' };
-  if (pct >= 50) return { rotulo: 'regular',   cls: 'text-sky-500' };
-  if (pct >= 20) return { rotulo: 'esporádico', cls: 'text-amber-500' };
-  return { rotulo: 'raro', cls: 'text-red-400' };
+  if (pct >= 80) return { rotulo: 'assíduo',   cls: 'text-emerald-600 dark:text-emerald-500' };
+  if (pct >= 50) return { rotulo: 'regular',   cls: 'text-sky-600 dark:text-sky-500' };
+  if (pct >= 20) return { rotulo: 'esporádico', cls: 'text-amber-700 dark:text-amber-500' };
+  return { rotulo: 'raro', cls: 'text-red-700 dark:text-red-400' };
 }
 
 /**

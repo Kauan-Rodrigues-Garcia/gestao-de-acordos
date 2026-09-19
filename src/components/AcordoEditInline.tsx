@@ -958,7 +958,7 @@ export function AcordoEditInline({
               {/* Aviso PP: forma de pagamento/parcelas alteradas → recálculo */}
               {parcelamentoAlterado && (
                 <div className="mt-3 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     O cálculo de parcelamento será feito a partir do{' '}
                     <strong>valor total</strong> que você colocou no campo Valor.

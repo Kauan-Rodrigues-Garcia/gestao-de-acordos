@@ -237,7 +237,7 @@ export const ExtrasSection = memo(function ExtrasSection({
               </div>
               <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">H.O. recebido</p>
-                <p className="text-xl font-extrabold font-mono text-orange-500 leading-none">{formatBRL(extrasKpis.hoRecebido)}</p>
+                <p className="text-xl font-extrabold font-mono text-orange-700 dark:text-orange-500 leading-none">{formatBRL(extrasKpis.hoRecebido)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">{(PP_HO_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
               </div>
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
@@ -284,9 +284,9 @@ export const ExtrasSection = memo(function ExtrasSection({
                       >
                         <span className={cn(
                           'w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 border',
-                          i === 0 ? 'bg-yellow-400/20 text-yellow-600 border-yellow-400/30'
-                          : i === 1 ? 'bg-slate-300/20 text-slate-500 border-slate-300/30'
-                          : i === 2 ? 'bg-amber-600/20 text-amber-700 border-amber-600/30'
+                          i === 0 ? 'bg-yellow-400/20 text-yellow-700 dark:text-yellow-400 border-yellow-400/30'
+                          : i === 1 ? 'bg-slate-300/20 text-slate-600 dark:text-slate-300 border-slate-300/30'
+                          : i === 2 ? 'bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-600/30'
                           : 'bg-muted text-muted-foreground border-border/30'
                         )}>
                           {i + 1}
@@ -297,7 +297,7 @@ export const ExtrasSection = memo(function ExtrasSection({
                             <div className="flex items-center gap-3 flex-shrink-0 text-[11px]">
                               <span className="text-muted-foreground">{op.acordos} acordos</span>
                               <span className="font-mono font-bold text-success">{formatBRL(op.recebido)}</span>
-                              <span className="font-mono text-orange-500 hidden sm:inline">{formatBRL(op.recebido * PP_HO_PERCENTUAL)} H.O.</span>
+                              <span className="font-mono text-orange-700 dark:text-orange-500 hidden sm:inline">{formatBRL(op.recebido * PP_HO_PERCENTUAL)} H.O.</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">

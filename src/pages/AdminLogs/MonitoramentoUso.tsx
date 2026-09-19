@@ -149,13 +149,13 @@ function Kpi({
         <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
-        <span className={cn('text-muted-foreground', tom === 'alerta' && 'text-amber-500')}>
+        <span className={cn('text-muted-foreground', tom === 'alerta' && 'text-amber-700 dark:text-amber-500')}>
           {icone}
         </span>
       </div>
       <span className={cn(
         'text-xl font-bold font-mono tabular-nums leading-tight',
-        tom === 'alerta' && 'text-amber-500',
+        tom === 'alerta' && 'text-amber-700 dark:text-amber-500',
       )}>
         {valor}
       </span>
@@ -180,8 +180,8 @@ function SeloTendencia({ serie }: { serie: PontoDia[] }) {
   if (!t) return null;
 
   const meta = {
-    subindo: { Icone: TrendingUp,   cls: 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' },
-    caindo:  { Icone: TrendingDown, cls: 'text-red-400 border-red-500/30 bg-red-500/10' },
+    subindo: { Icone: TrendingUp,   cls: 'text-emerald-600 dark:text-emerald-500 border-emerald-500/30 bg-emerald-500/10' },
+    caindo:  { Icone: TrendingDown, cls: 'text-red-700 dark:text-red-400 border-red-500/30 bg-red-500/10' },
     estavel: { Icone: Minus,        cls: 'text-muted-foreground border-border bg-muted/40' },
   }[t.direcao];
 
@@ -801,7 +801,7 @@ export default function MonitoramentoUso({ empresas }: Props) {
 
           {nunca.length > 0 && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mb-3">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[11px] leading-snug">
                 <strong>{nunca.length}</strong> pessoa(s) não abriu esta tela nenhuma
                 vez no período:{' '}
@@ -1008,7 +1008,7 @@ function TabelaSemAcesso({
                         justamente essa linha que precisa de ação. */}
                     <span className={cn(
                       'text-[10px] font-medium',
-                      p.situacao === 'ativo' ? 'text-muted-foreground' : 'text-amber-500',
+                      p.situacao === 'ativo' ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-500',
                     )}>
                       {p.situacao === 'ativo' ? 'Ativo' : p.situacao}
                     </span>

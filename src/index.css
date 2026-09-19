@@ -2,7 +2,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * `dark:` vale para TODOS os temas escuros, não só para `.dark`.
+ *
+ * Era `(&:is(.dark *))`: Cinza Escuro e Azul Profundo não ligavam nenhum
+ * `dark:` do sistema — ~240 pares como `text-amber-700 dark:text-amber-400`
+ * ficavam com a cor do claro sobre fundo escuro. Tema escuro novo entra aqui,
+ * em `TEMAS_ESCUROS` (`src/lib/temas.ts`) e no `color-scheme` abaixo.
+ *
+ * `:is()` e não `:where()` de propósito: mantém a especificidade que os
+ * `dark:` sempre tiveram, então nenhuma disputa de cascata muda de dono.
+ */
+@custom-variant dark (&:is(.dark *, .dark-grey *, .deep-blue *));
 
 /*
 ==========================================================================
@@ -47,12 +58,14 @@
   /* Radius */
   --radius: 0.5rem;
 
-  /* Semantic Status Colors */
-  --success:             oklch(0.55 0.18 145);
+  /* Semantic Status Colors
+     success/info em L 0.52 (eram 0.55): servem de texto sobre o card E de
+     fundo sob texto branco, e em 0.55 ficavam abaixo de 4.5:1 nos dois usos. */
+  --success:             oklch(0.52 0.17 145);
   --success-foreground:  oklch(0.98 0.005 145);
   --warning:             oklch(0.62 0.18 75);
   --warning-foreground:  oklch(0.15 0.02 75);
-  --info:                oklch(0.55 0.15 200);
+  --info:                oklch(0.52 0.14 200);
   --info-foreground:     oklch(0.98 0.005 200);
 
   /* Core UI Tokens */
@@ -124,6 +137,30 @@
   --sidebar-border: oklch(0.88 0.01 220);
   --sidebar-ring: oklch(0.45 0.15 220);
 }
+
+/*
+ * `color-scheme` diz ao navegador como pintar o que é DELE: barra de rolagem,
+ * calendário do `<input type="date">`, lista aberta do `<select>`, autofill.
+ * O next-themes só sabe fazer isso para `light`/`dark` — nos outros temas
+ * escuros esses controles saíam brancos. Por isso o provider roda com
+ * `enableColorScheme={false}` e a regra mora aqui, para todos os temas.
+ */
+:root { color-scheme: light; }
+.dark, .dark-grey, .deep-blue { color-scheme: dark; }
+
+/*
+ * Faixa de luminosidade para TEXTO pintado com cor de sinal.
+ *
+ * Quartil, projeção e meta usam hex fixos (`#22c55e`, `#f59e0b`...) que servem
+ * de barra e de número ao mesmo tempo. Como barra estão certos; como número
+ * sobre o card claro davam ~2:1. `corTexto()` (src/lib/temas.ts) lê estas duas
+ * variáveis e prende o L da cor na faixa do tema: no claro, no máximo 0.52
+ * (≥ 4.5:1 sobre o card — em 0.55 o verde parava em 4.1); no escuro, no
+ * mínimo 0.70. Matiz e croma ficam — verde continua verde, só na altura em que
+ * dá para ler.
+ */
+:root { --sinal-l-min: 0; --sinal-l-max: 0.52; }
+.dark, .dark-grey, .deep-blue { --sinal-l-min: 0.70; --sinal-l-max: 1; }
 
 .dark {
   /* Semantic Status Colors - Dark Mode */
@@ -239,6 +276,37 @@
   --sidebar-ring: oklch(0.62 0.18 155);
 }
 
+/*
+ * Rosa e Verde com menu escuro: o menu escurece, mas no tom do tema — um
+ * vinho profundo e um verde-floresta, com o destaque na cor da marca do tema.
+ * Antes o menu virava o azul-marinho do Escuro padrão com item ativo azul,
+ * sem relação com a tela rosa/verde ao lado.
+ *
+ * Declarados DEPOIS do bloco da PaguePlay e com a mesma especificidade: o
+ * tema de cor manda sobre a cor da empresa, igual ao resto da tela.
+ */
+.menu-lateral-escuro:not(.dark):not(.dark-grey):not(.deep-blue).rosa {
+  --sidebar: oklch(0.17 0.022 355);
+  --sidebar-foreground: oklch(0.88 0.018 350);
+  --sidebar-primary: oklch(0.72 0.13 3);
+  --sidebar-primary-foreground: oklch(0.16 0.025 355);
+  --sidebar-accent: oklch(0.25 0.035 355);
+  --sidebar-accent-foreground: oklch(0.92 0.015 350);
+  --sidebar-border: oklch(0.28 0.035 355);
+  --sidebar-ring: oklch(0.72 0.13 3);
+}
+
+.menu-lateral-escuro:not(.dark):not(.dark-grey):not(.deep-blue).verde {
+  --sidebar: oklch(0.17 0.024 165);
+  --sidebar-foreground: oklch(0.88 0.018 160);
+  --sidebar-primary: oklch(0.72 0.14 160);
+  --sidebar-primary-foreground: oklch(0.16 0.025 165);
+  --sidebar-accent: oklch(0.25 0.035 165);
+  --sidebar-accent-foreground: oklch(0.92 0.015 160);
+  --sidebar-border: oklch(0.28 0.035 165);
+  --sidebar-ring: oklch(0.72 0.14 160);
+}
+
 .dark[data-tenant="pagueplay"] {
   --primary: oklch(0.62 0.18 155);
   --primary-foreground: oklch(0.12 0.015 155);
@@ -291,6 +359,23 @@
   --chart-4: oklch(0.65 0.18 280);
   --chart-5: oklch(0.68 0.20 10);
 
+  /* Cargos — os mesmos do Escuro. Faltavam aqui: o crachá herdava a versão do
+     claro (L 0.35–0.55), escuro demais para ler sobre o card cinza. */
+  --role-operador:      oklch(0.62 0.18 220);
+  --role-operador-fg:   oklch(0.12 0.015 220);
+  --role-lider:         oklch(0.65 0.18 280);
+  --role-lider-fg:      oklch(0.12 0.015 280);
+  --role-elite:         oklch(0.68 0.19 150);
+  --role-elite-fg:      oklch(0.12 0.015 150);
+  --role-gerencia:      oklch(0.70 0.20 55);
+  --role-gerencia-fg:   oklch(0.12 0.015 55);
+  --role-diretoria:     oklch(0.65 0.20 300);
+  --role-diretoria-fg:  oklch(0.12 0.015 300);
+  --role-admin:         oklch(0.62 0.25 10);
+  --role-admin-fg:      oklch(0.12 0.015 10);
+  --role-super:         oklch(0.55 0.15 220);
+  --role-super-fg:      oklch(0.95 0.008 220);
+
   --sidebar:             oklch(0.15 0.006 220);
   --sidebar-foreground:  oklch(0.85 0.012 220);
   --sidebar-primary:     oklch(0.62 0.18 220);
@@ -342,6 +427,22 @@
   --chart-4: oklch(0.65 0.18 280);
   --chart-5: oklch(0.68 0.20 10);
 
+  /* Cargos — os do Escuro (faltavam; ver o comentário no Cinza Escuro). */
+  --role-operador:      oklch(0.62 0.18 220);
+  --role-operador-fg:   oklch(0.12 0.015 220);
+  --role-lider:         oklch(0.65 0.18 280);
+  --role-lider-fg:      oklch(0.12 0.015 280);
+  --role-elite:         oklch(0.68 0.19 150);
+  --role-elite-fg:      oklch(0.12 0.015 150);
+  --role-gerencia:      oklch(0.70 0.20 55);
+  --role-gerencia-fg:   oklch(0.12 0.015 55);
+  --role-diretoria:     oklch(0.65 0.20 300);
+  --role-diretoria-fg:  oklch(0.12 0.015 300);
+  --role-admin:         oklch(0.62 0.25 10);
+  --role-admin-fg:      oklch(0.12 0.015 10);
+  --role-super:         oklch(0.55 0.15 220);
+  --role-super-fg:      oklch(0.95 0.008 220);
+
   --sidebar:             oklch(0.11 0.028 240);
   --sidebar-foreground:  oklch(0.88 0.015 220);
   --sidebar-primary:     oklch(0.65 0.20 220);
@@ -360,11 +461,11 @@
 
 .rosa {
   /* Status semânticos mantidos — são funcionais e universais */
-  --success:             oklch(0.55 0.18 145);
+  --success:             oklch(0.52 0.17 145);
   --success-foreground:  oklch(0.98 0.005 145);
   --warning:             oklch(0.62 0.18 75);
   --warning-foreground:  oklch(0.15 0.02 75);
-  --info:                oklch(0.55 0.15 200);
+  --info:                oklch(0.52 0.14 200);
   --info-foreground:     oklch(0.98 0.005 200);
 
   /* Paleta principal — blush rose elegante */
@@ -432,6 +533,78 @@
   --sidebar-primary-foreground: oklch(0.99 0.003 3);
   --sidebar-ring:               oklch(0.50 0.125 3);
   --chart-1:                    oklch(0.52 0.135 3);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   TEMA VERDE — Sálvia (claro, os dois tenants)
+   Irmão do Rosa: fundo quase branco com um fio de verde, cards e menu em
+   sálvia, destaque em esmeralda fechado (H 162) — sóbrio o bastante para um
+   dia inteiro de planilha, sem cara de "tema de natal".
+   Ativado via <html class="verde">.
+
+   O primary fica em L 0.47: texto branco em cima passa de 5:1, e o mesmo tom
+   lido como texto sobre o fundo claro também passa. O `--chart-2` sai do
+   verde padrão (pix) e vai para o azul-petróleo: com o `--chart-1` já verde,
+   boleto e pix virariam a mesma cor nos crachás de forma de pagamento.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.verde {
+  /* Status semânticos — os do claro. O sucesso (H 145) é mais amarelado que
+     o primary (H 162): "pago" continua distinto de botão. */
+  --success:             oklch(0.52 0.17 145);
+  --success-foreground:  oklch(0.98 0.005 145);
+  --warning:             oklch(0.62 0.18 75);
+  --warning-foreground:  oklch(0.15 0.02 75);
+  --info:                oklch(0.52 0.14 200);
+  --info-foreground:     oklch(0.98 0.005 200);
+
+  --background:          oklch(0.985 0.008 160);  /* branco com fio de verde */
+  --foreground:          oklch(0.18 0.025 165);   /* carvão esverdeado */
+  --card:                oklch(0.976 0.012 158);
+  --card-foreground:     oklch(0.18 0.025 165);
+  --popover:             oklch(0.992 0.005 160);
+  --popover-foreground:  oklch(0.18 0.025 165);
+  --primary:             oklch(0.47 0.12 162);    /* esmeralda fechado */
+  --primary-foreground:  oklch(0.99 0.004 160);
+  --secondary:           oklch(0.925 0.022 158);
+  --secondary-foreground: oklch(0.22 0.030 165);
+  --muted:               oklch(0.948 0.016 158);
+  --muted-foreground:    oklch(0.47 0.030 165);
+  --accent:              oklch(0.935 0.020 158);
+  --accent-foreground:   oklch(0.22 0.030 165);
+  --destructive:         oklch(0.55 0.22 10);
+  --destructive-foreground: oklch(0.98 0.005 10);
+  --border:              oklch(0.870 0.024 158);
+  --input:               oklch(0.870 0.024 158);
+  --ring:                oklch(0.47 0.12 162);
+
+  --chart-1: oklch(0.52 0.13 162);   /* esmeralda — cor principal */
+  --chart-2: oklch(0.55 0.13 225);   /* azul-petróleo */
+  --chart-3: oklch(0.64 0.17 60);    /* âmbar */
+  --chart-4: oklch(0.55 0.16 285);   /* roxo */
+  --chart-5: oklch(0.60 0.18 15);    /* coral */
+
+  /* Sidebar — sálvia mais presente, como o menu do Rosa */
+  --sidebar:                      oklch(0.960 0.020 158);
+  --sidebar-foreground:           oklch(0.24 0.035 165);
+  --sidebar-primary:              oklch(0.47 0.12 162);
+  --sidebar-primary-foreground:   oklch(0.99 0.004 160);
+  --sidebar-accent:               oklch(0.912 0.028 158);
+  --sidebar-accent-foreground:    oklch(0.24 0.035 165);
+  --sidebar-border:               oklch(0.870 0.024 158);
+  --sidebar-ring:                 oklch(0.47 0.12 162);
+}
+
+/* Na PaguePlay o verde da empresa cede ao do tema — mesmo acordo do Rosa. */
+.verde[data-tenant="pagueplay"],
+.verde [data-tenant="pagueplay"] {
+  --primary:                    oklch(0.47 0.12 162);
+  --primary-foreground:         oklch(0.99 0.004 160);
+  --ring:                       oklch(0.47 0.12 162);
+  --sidebar-primary:            oklch(0.47 0.12 162);
+  --sidebar-primary-foreground: oklch(0.99 0.004 160);
+  --sidebar-ring:               oklch(0.47 0.12 162);
+  --chart-1:                    oklch(0.52 0.13 162);
 }
 
 /* Suporte a PaguePay nos novos temas */

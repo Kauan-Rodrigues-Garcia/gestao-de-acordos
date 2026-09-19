@@ -39,6 +39,7 @@ import type { EstiloTema } from './tema';
 import { percentualCurto, percentualCheio } from './tema';
 import { corProjecao } from '@/lib/diasUteis';
 import { RankingDesafio } from './RankingDesafio';
+import { corTexto } from '@/lib/temas';
 
 interface Props {
   equipes: ResultadoEquipe[];
@@ -130,7 +131,7 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId, co
                     <span
                       className={cn('text-sm font-semibold tabular-nums',
                         !eq.meta && 'text-muted-foreground')}
-                      style={eq.meta ? { color: corProjecao(eq.progresso) } : undefined}
+                      style={eq.meta ? { color: corTexto(corProjecao(eq.progresso)) } : undefined}
                     >
                       {eq.meta ? percentualCheio(eq.progresso) : '—'}
                     </span>
@@ -138,7 +139,7 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId, co
                     valor={eq.recebido}
                     formatar={formatBRL}
                     className="text-sm font-semibold text-foreground"
-                    classeSubindo="text-emerald-500"
+                    classeSubindo="text-emerald-600 dark:text-emerald-500"
                   />}
                 </div>
 

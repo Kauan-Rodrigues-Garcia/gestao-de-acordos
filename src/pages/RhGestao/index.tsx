@@ -666,7 +666,7 @@ export default function RhGestao() {
                         && (eq.resumo.estado === 'enviado' || eq.resumo.estado === 'aprovado') && (
                         <Button
                           size="sm" variant="outline"
-                          className="h-7 text-[11px] gap-1 text-red-400 border-red-500/30 hover:bg-red-500/10"
+                          className="h-7 text-[11px] gap-1 text-red-700 dark:text-red-400 border-red-500/30 hover:bg-red-500/10"
                           disabled={emAcao}
                           onClick={() => setMotivoAlvo({
                             tipo: 'equipe', equipeId: eq.equipeId, equipeNome: eq.equipeNome,

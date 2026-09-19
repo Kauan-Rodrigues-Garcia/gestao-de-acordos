@@ -54,7 +54,7 @@ const SECTIONS: Section[] = [
     id: 'novo-acordo',
     icon: Plus,
     title: 'Novo Acordo',
-    color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
+    color: 'text-emerald-600 dark:text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
     faqs: [
       {
         q: 'Como criar um novo acordo?',
@@ -98,7 +98,7 @@ const SECTIONS: Section[] = [
     id: 'reagendamento',
     icon: CalendarClock,
     title: 'Reagendamento',
-    color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+    color: 'text-amber-700 dark:text-amber-500 bg-amber-500/10 border-amber-500/20',
     faqs: [
       {
         q: 'Como reagendar um acordo para outra data?',
@@ -114,7 +114,7 @@ const SECTIONS: Section[] = [
     id: 'dicas',
     icon: Zap,
     title: 'Dicas Rápidas',
-    color: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
+    color: 'text-cyan-600 dark:text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
     faqs: [
       {
         q: 'A planilha atualiza sozinha ou preciso recarregar?',

@@ -36,7 +36,7 @@ export interface EditorPremiosProps {
 
 /** Cor da medalha nas três primeiras. Da quarta em diante, o cinza da tabela. */
 const CORES = [
-  'text-amber-500',
+  'text-amber-700 dark:text-amber-500',
   'text-slate-400',
   'text-orange-600 dark:text-orange-400',
 ];

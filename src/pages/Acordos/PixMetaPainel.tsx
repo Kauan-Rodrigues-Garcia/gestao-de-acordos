@@ -33,6 +33,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/index';
 import { corProjecao } from '@/lib/diasUteis';
 import type { ConsolidadoMetaPix, ResumoMetaPix } from './pixAutomaticoView';
+import { corTexto } from '@/lib/temas';
 
 export interface EquipeOpcao { id: string; nome: string }
 
@@ -63,7 +64,7 @@ function Progresso({ r }: { r: ResumoMetaPix }) {
       </div>
       <div className="flex items-center justify-between text-[10.5px] text-muted-foreground tabular-nums">
         <span>{r.pctValor}% da meta</span>
-        <span className="inline-flex items-center gap-1" style={{ color: cor }}>
+        <span className="inline-flex items-center gap-1" style={{ color: corTexto(cor) }}>
           <TrendingUp className="w-3 h-3" /> {r.projecao}%
         </span>
       </div>
@@ -116,7 +117,7 @@ export function PixMetaPainel({
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <Target className="w-4 h-4 text-violet-400" />
+              <Target className="w-4 h-4 text-violet-700 dark:text-violet-400" />
               Meta de Pix automático{nomeSetor ? ` · ${nomeSetor}` : ''}
             </span>
             {consolidado?.setor && (
@@ -124,7 +125,7 @@ export function PixMetaPainel({
                 {formatCurrency(consolidado.setor.realizado)} de{' '}
                 <strong className="text-foreground">{formatCurrency(consolidado.setor.metaValor)}</strong>
                 {consolidado.setor.metaBatida && (
-                  <span className="ml-1.5 text-emerald-500 font-semibold inline-flex items-center gap-1">
+                  <span className="ml-1.5 text-emerald-600 dark:text-emerald-500 font-semibold inline-flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" /> batida
                   </span>
                 )}

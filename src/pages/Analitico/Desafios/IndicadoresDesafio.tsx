@@ -62,7 +62,7 @@ export function IndicadoresDesafio({ resultado, tema, carregando, corridaDeProje
             formatar={formatBRL}
             carregando={carregando}
             className={cn('mt-1 block text-lg font-bold', c.destacar ? tema.destaque : 'text-foreground')}
-            classeSubindo="text-emerald-500"
+            classeSubindo="text-emerald-600 dark:text-emerald-500"
           />
         </div>
       ))}

@@ -3,6 +3,7 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
+import { NOMES_TEMAS } from '@/lib/temas';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -210,7 +211,13 @@ export default function App() {
   return (
     <ErrorBoundary scope="App" fallbackMessage="Erro crítico na aplicação. Recarregue a página.">
     <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    {/* Dono único do tema (o ThemeToggle só chama `setTheme`). `themes` lista
+        todos os temas — é o que ele tira do <html> ao trocar. `color-scheme`
+        fica com o CSS: o do next-themes só conhece `light`/`dark`. */}
+    <ThemeProvider
+      attribute="class" defaultTheme="system" enableSystem
+      themes={NOMES_TEMAS} enableColorScheme={false}
+    >
       <AuthProvider>
         <EmpresaProvider>
           {/* Acima de tudo que desenha número: o mês escolhido vale para o

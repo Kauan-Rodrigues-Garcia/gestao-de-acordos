@@ -1,14 +1,17 @@
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, toast } from "sonner"
+import { ehTemaEscuro } from "@/lib/temas"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  // O sonner só entende light/dark/system: passar "dark-grey" ou "rosa" caía
+  // no estilo claro dele. Resolve para o par que ele conhece.
+  const { resolvedTheme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={ehTemaEscuro(resolvedTheme) ? "dark" : "light"}
       className="toaster group"
       position="top-right"
       toastOptions={{

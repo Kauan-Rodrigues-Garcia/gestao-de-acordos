@@ -63,7 +63,7 @@ export function PPMetrics({
             icon={<QrCode className="w-4 h-4" />}
             accentColor="#06b6d4"
             gradientFrom="#06b6d4"
-            value={<ValorAnimado valor={pixBruto} formatar={formatCurrency} className="text-cyan-500" />}
+            value={<ValorAnimado valor={pixBruto} formatar={formatCurrency} className="text-cyan-600 dark:text-cyan-500" />}
             sub={`H.O.: ${formatCurrency(pixHO)}`}
           />
           <MetricCard
@@ -86,7 +86,7 @@ export function PPMetrics({
               accentColor="#10b981"
               gradientFrom="#10b981"
               trend="up"
-              value={<ValorAnimado valor={valorHODireto} formatar={formatCurrency} className="text-emerald-500" />}
+              value={<ValorAnimado valor={valorHODireto} formatar={formatCurrency} className="text-emerald-600 dark:text-emerald-500" />}
               sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoDireto)}`}
             />
             <MetricCard
@@ -105,7 +105,7 @@ export function PPMetrics({
               gradientFrom="#22c55e"
               trend="up"
               value={
-                <span className="text-emerald-500">
+                <span className="text-emerald-600 dark:text-emerald-500">
                   {formatCurrency(usarAnalitico ? analiticoHO : valorHOMes)}
                 </span>
               }
@@ -122,7 +122,7 @@ export function PPMetrics({
               icon={<DollarSign className="w-4 h-4" />}
               accentColor="#22c55e"
               gradientFrom="#22c55e"
-              value={<ValorAnimado valor={valorRecebidoDireto} formatar={formatCurrency} className="text-emerald-500" />}
+              value={<ValorAnimado valor={valorRecebidoDireto} formatar={formatCurrency} className="text-emerald-600 dark:text-emerald-500" />}
               sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''}`}
             />
             <MetricCard
@@ -189,7 +189,7 @@ export function PPMetrics({
               gradientFrom="#22c55e"
               trend="up"
               value={
-                <span className="text-emerald-500">
+                <span className="text-emerald-600 dark:text-emerald-500">
                   {formatCurrency(usarAnalitico ? analiticoHO : valorHODireto)}
                 </span>
               }
@@ -212,7 +212,7 @@ export function PPMetrics({
               accentColor="#10b981"
               gradientFrom="#10b981"
               value={
-                <span className="text-emerald-400">
+                <span className="text-emerald-700 dark:text-emerald-400">
                   {formatCurrency(usarAnalitico ? analiticoBruto : valorRecebidoMes)}
                 </span>
               }

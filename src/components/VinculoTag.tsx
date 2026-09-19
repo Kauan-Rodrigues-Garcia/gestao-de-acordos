@@ -39,7 +39,7 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
     const nomeOutro = a._vinculoExtraOperadorNome || a.vinculo_operador_nome || 'outro operador';
     return (
       <span
-        className={`${TAG_BASE} ${sizeClasses} bg-sky-500/15 text-sky-700 border-sky-500/30`}
+        className={`${TAG_BASE} ${sizeClasses} bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30`}
         title={`Vínculo Direto + Extra com ${nomeOutro}`}
       >
         <Link2 className={iconSize} /> Vínculo
@@ -55,7 +55,7 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
     const nomeDireto = a._vinculoExtraOperadorNome || a.vinculo_operador_nome;
     return (
       <span
-        className={`${TAG_BASE} ${sizeClasses} bg-amber-500/15 text-amber-700 border-amber-500/30`}
+        className={`${TAG_BASE} ${sizeClasses} bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30`}
         title={nomeDireto ? `Acordo Extra — vínculo com ${nomeDireto}` : 'Acordo Extra'}
       >
         <Link2 className={iconSize} /> Extra

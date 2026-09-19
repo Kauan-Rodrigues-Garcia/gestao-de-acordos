@@ -108,7 +108,7 @@ export function UsuariosDoMesPainel({ empresaId, mes }: Props) {
       {/* O aviso do topo: por que esta tela não tem botão de editar. */}
       <Card className="border-amber-500/30 bg-amber-500/[0.06]">
         <CardContent className="p-3 flex items-start gap-2">
-          <Camera className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <Camera className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
           <div className="min-w-0 space-y-0.5">
             <p className="text-xs font-semibold">
               {rotuloDoMes(mes)} — como estava no fim do mês

@@ -127,8 +127,8 @@ export function formatarPercentual(pct: number | null | undefined): string {
  */
 export function corPercentual(pct: number | null | undefined): string {
   if (pct == null) return 'text-muted-foreground';
-  if (pct >= 100) return 'text-emerald-500';
-  if (pct >= 80)  return 'text-sky-500';
-  if (pct >= 60)  return 'text-amber-500';
-  return 'text-red-400';
+  if (pct >= 100) return 'text-emerald-600 dark:text-emerald-500';
+  if (pct >= 80)  return 'text-sky-600 dark:text-sky-500';
+  if (pct >= 60)  return 'text-amber-700 dark:text-amber-500';
+  return 'text-red-700 dark:text-red-400';
 }

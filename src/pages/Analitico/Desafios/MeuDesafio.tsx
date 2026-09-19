@@ -19,6 +19,7 @@ import { percentualCurto, percentualCheio } from './tema';
 import { corProjecao } from '@/lib/diasUteis';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
+import { corTexto } from '@/lib/temas';
 
 interface Props {
   item: ResultadoParticipante;
@@ -60,7 +61,7 @@ export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes, corri
               valor={item.recebido}
               formatar={formatBRL}
               className="text-2xl font-bold text-foreground"
-              classeSubindo="text-emerald-500"
+              classeSubindo="text-emerald-600 dark:text-emerald-500"
             />
             {item.meta ? (
               <span className="text-sm text-muted-foreground">
@@ -69,7 +70,7 @@ export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes, corri
                       {/* Mesmo quartil, mesma cor de Desempenho Equipes. Só o
                           número é pintado: o resto da frase é contexto. */}
                       <span className="font-semibold tabular-nums"
-                            style={{ color: corProjecao(item.progresso) }}>
+                            style={{ color: corTexto(corProjecao(item.progresso)) }}>
                         {percentualCheio(item.progresso)}
                       </span>
                       {' '}da projeção de {formatBRL(item.meta)} até hoje

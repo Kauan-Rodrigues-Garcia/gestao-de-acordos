@@ -46,7 +46,7 @@ test.describe('Rotas públicas acessíveis sem autenticação', () => {
 
 test('rota inexistente exibe página 404', async ({ page }) => {
   await page.goto('/#/rota-que-nao-existe');
-  // O título "404" E o texto "Oops! Page not found" casavam com o localizador
+  // O título "404" E o texto "Página não encontrada" casavam com o localizador
   // amplo, e o strict mode reprovava por ambiguidade — numa página que tinha
   // renderizado certa. Mirar no cabeçalho responde a pergunta sem empatar.
   await expect(page.getByRole('heading', { name: '404' })).toBeVisible();

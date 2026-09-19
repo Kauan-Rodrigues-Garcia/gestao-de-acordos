@@ -1,5 +1,6 @@
-import { Moon, Sun, Monitor, Circle, Flower2, PanelLeft } from 'lucide-react';
+import { Moon, Sun, Monitor, Flower2, Leaf, PanelLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,20 +10,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  DESTAQUE_PAGUEPLAY, TEMAS, ehTemaEscuro,
+  type EscolhaTema, type TemaInfo,
+} from '@/lib/temas';
 
-// Temas disponíveis para os dois tenants
-const TEMAS = [
-  { value: 'light',      label: 'Claro',              class: '' },
-  { value: 'rosa',       label: 'Rosa',               class: 'rosa' },
-  { value: 'dark',       label: 'Escuro (Padrão)',     class: 'dark' },
-  { value: 'dark-grey',  label: 'Cinza Escuro',        class: 'dark-grey' },
-  { value: 'deep-blue',  label: 'Azul Profundo',       class: 'deep-blue' },
-  { value: 'system',     label: 'Sistema',             class: '' },
-] as const;
-
-type ThemeValue = typeof TEMAS[number]['value'];
-
-const ALL_THEME_CLASSES = ['dark', 'dark-grey', 'deep-blue', 'rosa'] as const;
+/*
+ * Quem aplica o tema é o `next-themes` (ThemeProvider em App.tsx).
+ *
+ * Até 19/09/2026 este componente trocava as classes do <html> na mão e gravava
+ * a mesma chave `theme` do localStorage que o next-themes lê. Eram dois donos
+ * para o mesmo estado: o `useTheme()` dos gráficos e do toast ficava parado no
+ * tema da carga, e com «Sistema» na carga o next-themes seguia reagindo à troca
+ * do SO — punha `.dark` por cima do Rosa escolhido depois. Agora há um dono só.
+ */
 
 /**
  * Menu lateral escuro sobre tema claro.
@@ -31,7 +32,11 @@ const ALL_THEME_CLASSES = ['dark', 'dark-grey', 'deep-blue', 'rosa'] as const;
  * resto da tela claro. Quem faz o trabalho e o CSS — a classe redefine so os
  * tokens `--sidebar-*`, e o seletor dela ignora os temas que ja sao escuros,
  * para nao sobrescrever o sidebar proprio do Cinza Escuro e do Azul Profundo.
- * Ver o bloco `.menu-lateral-escuro` em `index.css`.
+ * No Rosa e no Verde o menu escurece no tom do tema. Ver o bloco
+ * `.menu-lateral-escuro` em `index.css`.
+ *
+ * A classe mora fora da lista de temas do next-themes: ele so remove do <html>
+ * as classes de tema, entao esta sobrevive a qualquer troca.
  */
 const CLASSE_MENU_ESCURO = 'menu-lateral-escuro';
 const CHAVE_MENU_ESCURO = 'menuLateralEscuro';
@@ -42,80 +47,38 @@ function aplicarMenuEscuro(ligado: boolean) {
   catch { /* modo privado */ }
 }
 
-/** `true` quando o tema em vigor ja e escuro — ai o interruptor nao tem efeito. */
-function temaEscuroEmVigor(): boolean {
-  const c = document.documentElement.classList;
-  return c.contains('dark') || c.contains('dark-grey') || c.contains('deep-blue');
+function lerMenuEscuro(): boolean {
+  try { return localStorage.getItem(CHAVE_MENU_ESCURO) === 'true'; }
+  catch { return false; }
 }
 
-function applyTheme(value: ThemeValue) {
-  const html = document.documentElement;
-  html.classList.remove(...ALL_THEME_CLASSES);
-
-  if (value === 'system') {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefersDark) html.classList.add('dark');
-  } else if (value === 'dark') {
-    html.classList.add('dark');
-  } else if (value === 'dark-grey') {
-    html.classList.add('dark-grey');
-  } else if (value === 'deep-blue') {
-    html.classList.add('deep-blue');
-  } else if (value === 'rosa') {
-    html.classList.add('rosa');
-  }
-  // 'light' não adiciona classe
-  localStorage.setItem('theme', value);
+/**
+ * Bolinha dividida: metade o fundo do tema, metade o destaque.
+ *
+ * A empresa é lida aqui, na hora em que o menu abre, e não no ThemeToggle: ele
+ * não re-renderiza quando o seletor de empresa troca o `data-tenant`.
+ */
+function Amostra({ tema }: { tema: TemaInfo }) {
+  const pagueplay = document.documentElement.getAttribute('data-tenant') === 'pagueplay';
+  const destaque = (pagueplay && DESTAQUE_PAGUEPLAY[tema.valor]) || tema.amostra.destaque;
+  return (
+    <span
+      aria-hidden
+      className="h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-border"
+      style={{ background: `linear-gradient(135deg, ${tema.amostra.fundo} 50%, ${destaque} 50%)` }}
+    />
+  );
 }
 
 export function ThemeToggle() {
-  const [current, setCurrent] = useState<ThemeValue>('light');
-  const [menuEscuro, setMenuEscuro] = useState(false);
-  // Recalculado a cada troca de tema: o interruptor fica inerte nos escuros.
-  const [escuroEmVigor, setEscuroEmVigor] = useState(false);
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const atual = (theme ?? 'system') as EscolhaTema;
+  const escuroEmVigor = ehTemaEscuro(resolvedTheme);
+  const [menuEscuro, setMenuEscuro] = useState(lerMenuEscuro);
 
-  // Inicializar tema salvo
-  useEffect(() => {
-    const saved = (localStorage.getItem('theme') as ThemeValue) ?? 'system';
-    setCurrent(saved);
-    applyTheme(saved);
-
-    let ligado = false;
-    try { ligado = localStorage.getItem(CHAVE_MENU_ESCURO) === 'true'; }
-    catch { /* modo privado */ }
-    setMenuEscuro(ligado);
-    aplicarMenuEscuro(ligado);
-    setEscuroEmVigor(temaEscuroEmVigor());
-  }, []);
-
-  /*
-   * Seguir o sistema quando o tema é «Sistema».
-   *
-   * Morava no efeito de montagem acima, com `[]`, e o handler lia `current`
-   * pela closure — congelado no valor do PRIMEIRO render, `'light'`. A
-   * condição `current === 'system'` nunca era verdadeira: quem escolhia
-   * «Sistema» não via a tela acompanhar a troca claro/escuro do SO.
-   *
-   * Efeito próprio, que só escuta enquanto o tema é `system` e se refaz a
-   * cada troca. Recalcula também `escuroEmVigor`, que decide se o interruptor
-   * do menu escuro fica inerte.
-   */
-  useEffect(() => {
-    if (current !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      applyTheme('system');
-      setEscuroEmVigor(temaEscuroEmVigor());
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [current]);
-
-  function setTheme(value: ThemeValue) {
-    setCurrent(value);
-    applyTheme(value);
-    setEscuroEmVigor(temaEscuroEmVigor());
-  }
+  // Reaplica na montagem: o script do index.html ja pos a classe antes da
+  // pintura, isto so garante o estado caso ele nao tenha rodado.
+  useEffect(() => { aplicarMenuEscuro(menuEscuro); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function alternarMenuEscuro() {
     setMenuEscuro(v => {
@@ -125,36 +88,43 @@ export function ThemeToggle() {
     });
   }
 
-  const isDarkish = current === 'dark' || current === 'dark-grey' || current === 'deep-blue';
-  const isRosa = current === 'rosa';
+  const rotuloAtual = atual === 'system' ? 'Sistema' : TEMAS.find(t => t.valor === atual)?.rotulo;
+  const claros = TEMAS.filter(t => !t.escuro);
+  const escuros = TEMAS.filter(t => t.escuro);
+
+  const itemTema = (t: TemaInfo) => (
+    <DropdownMenuItem key={t.valor} onClick={() => setTheme(t.valor)} className="gap-2">
+      <Amostra tema={t} />
+      {t.rotulo}
+      {atual === t.valor && <span className="ml-auto text-primary">✓</span>}
+    </DropdownMenuItem>
+  );
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="w-8 h-8" title={`Tema: ${TEMAS.find(t => t.value === current)?.label}`}>
-          {current === 'system' ? (
+        <Button variant="ghost" size="icon" className="w-8 h-8" title={`Tema: ${rotuloAtual ?? 'Sistema'}`}>
+          {atual === 'system' ? (
             <Monitor className="h-4 w-4" />
-          ) : isDarkish ? (
+          ) : escuroEmVigor ? (
             <Moon className="h-4 w-4" />
-          ) : isRosa ? (
-            <Flower2 className="h-4 w-4 text-pink-400" />
+          ) : atual === 'rosa' ? (
+            <Flower2 className="h-4 w-4 text-primary" />
+          ) : atual === 'verde' ? (
+            <Leaf className="h-4 w-4 text-primary" />
           ) : (
             <Sun className="h-4 w-4" />
           )}
           <span className="sr-only">Alternar tema</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[180px]">
+      <DropdownMenuContent align="end" className="min-w-[190px]">
         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Temas Claros</div>
-        <DropdownMenuItem onClick={() => setTheme('light')} className="gap-2">
-          <Sun className="h-3.5 w-3.5" />
-          Claro
-          {current === 'light' && <span className="ml-auto text-primary">✓</span>}
-        </DropdownMenuItem>
+        {itemTema(claros[0])}
         {/*
-          Interruptor, nao tema: fica ao lado do Claro porque e la que ele
-          importa. `preventDefault` no onSelect mantem o menu aberto — quem
-          liga o menu escuro quer ver o efeito e decidir na hora.
+          Interruptor, nao tema: fica logo abaixo do Claro porque e nos claros
+          que ele importa. `preventDefault` no onSelect mantem o menu aberto —
+          quem liga o menu escuro quer ver o efeito e decidir na hora.
         */}
         <DropdownMenuCheckboxItem
           checked={menuEscuro}
@@ -169,33 +139,15 @@ export function ThemeToggle() {
           <PanelLeft className="h-3.5 w-3.5" />
           Menu lateral escuro
         </DropdownMenuCheckboxItem>
-        <DropdownMenuItem onClick={() => setTheme('rosa')} className="gap-2">
-          <Flower2 className="h-3.5 w-3.5 text-pink-400" />
-          Rosa
-          {current === 'rosa' && <span className="ml-auto text-primary">✓</span>}
-        </DropdownMenuItem>
+        {claros.slice(1).map(itemTema)}
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Temas Escuros</div>
-        <DropdownMenuItem onClick={() => setTheme('dark')} className="gap-2">
-          <Moon className="h-3.5 w-3.5" />
-          Escuro (Padrão)
-          {current === 'dark' && <span className="ml-auto text-primary">✓</span>}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('dark-grey')} className="gap-2">
-          <Circle className="h-3.5 w-3.5 fill-zinc-500 text-zinc-500" />
-          Cinza Escuro
-          {current === 'dark-grey' && <span className="ml-auto text-primary">✓</span>}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('deep-blue')} className="gap-2">
-          <Circle className="h-3.5 w-3.5 fill-blue-700 text-blue-700" />
-          Azul Profundo
-          {current === 'deep-blue' && <span className="ml-auto text-primary">✓</span>}
-        </DropdownMenuItem>
+        {escuros.map(itemTema)}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setTheme('system')} className="gap-2">
           <Monitor className="h-3.5 w-3.5" />
           Sistema
-          {current === 'system' && <span className="ml-auto text-primary">✓</span>}
+          {atual === 'system' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

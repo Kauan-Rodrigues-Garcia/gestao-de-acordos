@@ -25,6 +25,7 @@ import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { ValorAnimado } from './ValorAnimado';
 import type { MetaDoDia, Variacao } from '@/lib/desempenhoDia';
 
+import { corTexto } from '@/lib/temas';
 interface ChipVariacaoProps {
   variacao: Variacao;
   rotulo: string;
@@ -88,7 +89,7 @@ export function FaixaDinheiro({
           <ValorAnimado
             valor={recebido}
             formatar={formatCurrency}
-            className="block font-mono text-2xl font-bold leading-tight tracking-tight tabular-nums text-emerald-500"
+            className="block font-mono text-2xl font-bold leading-tight tracking-tight tabular-nums text-emerald-600 dark:text-emerald-500"
           />
           {unidade && (
             <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -135,7 +136,7 @@ export function FaixaDinheiro({
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
             <span
               className="font-semibold tabular-nums"
-              style={{ color: corProjecao(meta.percentual) }}
+              style={{ color: corTexto(corProjecao(meta.percentual)) }}
             >
               {meta.percentual}% da meta do dia
             </span>

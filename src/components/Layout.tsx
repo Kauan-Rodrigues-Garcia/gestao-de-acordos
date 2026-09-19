@@ -669,7 +669,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-8 h-8 relative text-amber-500 hover:text-amber-600"
+                className="w-8 h-8 relative text-amber-700 dark:text-amber-500 hover:text-amber-800 dark:hover:text-amber-600"
                 title="Alterar minha senha"
                 aria-label="Alterar minha senha"
                 onClick={() => setSenhaModalOpen(true)}

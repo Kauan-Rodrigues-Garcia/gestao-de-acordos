@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { itemVariants } from './constants';
 
+import { corTexto } from '@/lib/temas';
 // ── CustomTooltip ─────────────────────────────────────────────────────────────
 
 export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
@@ -21,7 +22,7 @@ export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
               style={{ background: entry.color }}
             />
             <span className="text-muted-foreground">{entry.name}:</span>
-            <span className="font-semibold tabular-nums font-mono" style={{ color: entry.color }}>
+            <span className="font-semibold tabular-nums font-mono" style={{ color: corTexto(entry.color) }}>
               {formatCurrency(entry.value ?? 0)}
             </span>
           </div>
@@ -68,9 +69,9 @@ export function MetricCard({
     trend === 'up' ? ArrowUpRight : trend === 'down' ? ArrowDownRight : Minus;
   const trendColor =
     trend === 'up'
-      ? 'text-emerald-500'
+      ? 'text-emerald-600 dark:text-emerald-500'
       : trend === 'down'
-      ? 'text-red-400'
+      ? 'text-red-700 dark:text-red-400'
       : 'text-muted-foreground/60';
 
   return (

@@ -460,7 +460,7 @@ export default function CampanhaFacil() {
               {/* Banner de validação */}
               {(cf.stats.critical > 0 || cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
                   <div>
                     {cf.stats.critical > 0 ? (
                       <><strong>{cf.stats.critical.toLocaleString('pt-BR')} registros com pendência grave.</strong>{' '}

@@ -28,22 +28,22 @@ import { listarEventos, type RhEventoRow } from '@/services/rh/rhGestao.service'
 const EVENTO_META: Record<string, { label: string; cls: string }> = {
   competencia_aberta:     { label: 'Competência', cls: 'border-border text-muted-foreground' },
   competencia_finalizada: { label: 'Finalizada',  cls: 'border-border text-muted-foreground' },
-  competencia_reaberta:   { label: 'Reaberta',    cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
+  competencia_reaberta:   { label: 'Reaberta',    cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' },
   prazo_definido:         { label: 'Prazo',       cls: 'border-border text-muted-foreground' },
-  prazo_alterado:         { label: 'Prazo',       cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
-  valor_informado:        { label: 'Valor',       cls: 'border-sky-500/30 bg-sky-500/10 text-sky-400' },
-  valor_alterado:         { label: 'Valor',       cls: 'border-violet-500/30 bg-violet-500/10 text-violet-400' },
-  equipe_concluida:       { label: 'Concluída',   cls: 'border-sky-500/30 bg-sky-500/10 text-sky-400' },
-  equipe_validada:        { label: 'Validada',    cls: 'border-violet-500/30 bg-violet-500/10 text-violet-400' },
-  setor_enviado:          { label: 'Enviado',     cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
-  aprovado:               { label: 'Aprovado',    cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' },
-  devolvido_operador:     { label: 'Devolvido',   cls: 'border-red-500/30 bg-red-500/10 text-red-400' },
-  devolvido_equipe:       { label: 'Devolvida',   cls: 'border-red-500/30 bg-red-500/10 text-red-400' },
+  prazo_alterado:         { label: 'Prazo',       cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  valor_informado:        { label: 'Valor',       cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400' },
+  valor_alterado:         { label: 'Valor',       cls: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400' },
+  equipe_concluida:       { label: 'Concluída',   cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400' },
+  equipe_validada:        { label: 'Validada',    cls: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400' },
+  setor_enviado:          { label: 'Enviado',     cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  aprovado:               { label: 'Aprovado',    cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
+  devolvido_operador:     { label: 'Devolvido',   cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400' },
+  devolvido_equipe:       { label: 'Devolvida',   cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400' },
   // Os três abaixo já eram gravados pelo banco e não tinham rótulo aqui: o
   // badge mostrava o slug cru (`operador_dispensado`) no meio de uma lista em
   // português.
-  operador_dispensado:    { label: 'Fora da folha', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
-  operador_reincluido:    { label: 'De volta',    cls: 'border-sky-500/30 bg-sky-500/10 text-sky-400' },
+  operador_dispensado:    { label: 'Fora da folha', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  operador_reincluido:    { label: 'De volta',    cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400' },
   cracha_definido:        { label: 'Crachá',      cls: 'border-border text-muted-foreground' },
 };
 

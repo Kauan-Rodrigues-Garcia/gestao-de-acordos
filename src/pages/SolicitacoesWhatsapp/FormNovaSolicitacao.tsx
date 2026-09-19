@@ -147,7 +147,7 @@ export function FormNovaSolicitacao({
             />
             <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
               {buscando ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : encontrado ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                : encontrado ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
                 : <Search className="w-3.5 h-3.5" />}
             </span>
           </div>

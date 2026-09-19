@@ -31,6 +31,7 @@ import { COR_QUARTIL } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 
 import type { MetaDupla } from '@/services/metas/metaIndireta';
+import { corTexto } from '@/lib/temas';
 
 interface Props {
   dupla: MetaDupla;
@@ -59,10 +60,10 @@ function Frente({ titulo, descricao, Icone, cor, meta, recebido, pct, falta }: F
     <div className="flex-1 min-w-[190px] rounded-xl border border-border bg-card p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider"
-          style={{ color: cor }}>
+          style={{ color: corTexto(cor) }}>
           <Icone className="w-3.5 h-3.5 shrink-0" /> {titulo}
         </span>
-        <span className="text-lg font-bold font-mono tabular-nums leading-none" style={{ color: cor }}>
+        <span className="text-lg font-bold font-mono tabular-nums leading-none" style={{ color: corTexto(cor) }}>
           {pct !== null ? `${pct}%` : '—'}
         </span>
       </div>

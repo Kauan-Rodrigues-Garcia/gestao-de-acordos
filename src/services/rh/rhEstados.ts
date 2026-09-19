@@ -81,32 +81,32 @@ export const ESTADO_META: Record<StatusLancamento, EstadoMeta> = {
   preenchido: {
     label: 'Preenchido',
     ajuda: 'Valor informado, aguardando a conclusão da equipe pelo líder',
-    cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30',
+    cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/30',
   },
   concluido_lider: {
     label: 'Concluído',
     ajuda: 'Conferido pelo líder, aguardando a validação da gerência',
-    cls: 'bg-teal-500/10 text-teal-400 border-teal-500/30',
+    cls: 'bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/30',
   },
   validado_gerencia: {
     label: 'Validado',
     ajuda: 'Conferido pela gerência, aguardando envio ao RH',
-    cls: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
+    cls: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/30',
   },
   enviado_rh: {
     label: 'No RH',
     ajuda: 'Enviado ao RH, aguardando decisão',
-    cls: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
+    cls: 'bg-amber-500/10 text-amber-700 dark:text-amber-500 border-amber-500/30',
   },
   devolvido_rh: {
     label: 'Devolvido',
     ajuda: 'O RH devolveu para correção',
-    cls: 'bg-red-500/10 text-red-400 border-red-500/30',
+    cls: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30',
   },
   aprovado_rh: {
     label: 'Aprovado',
     ajuda: 'Aprovado pelo RH',
-    cls: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
+    cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/30',
   },
 };
 
@@ -244,12 +244,12 @@ export function resumirGrupo(linhas: readonly LinhaResumivel[]): ResumoGrupo {
 export const GRUPO_META: Record<EstadoGrupo, { label: string; cls: string }> = {
   vazio:            { label: 'Sem operadores',  cls: 'bg-muted text-muted-foreground border-border' },
   nao_iniciado:     { label: 'Não enviado',     cls: 'bg-muted text-muted-foreground border-border' },
-  em_preenchimento: { label: 'Em preenchimento', cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
-  concluido:        { label: 'Concluído',       cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
-  validado:         { label: 'Em conferência',  cls: 'bg-violet-500/10 text-violet-400 border-violet-500/30' },
-  enviado:          { label: 'Recebido',        cls: 'bg-amber-500/10 text-amber-500 border-amber-500/30' },
-  com_devolucao:    { label: 'Com pendência',   cls: 'bg-red-500/10 text-red-400 border-red-500/30' },
-  aprovado:         { label: 'Aprovado',        cls: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' },
+  em_preenchimento: { label: 'Em preenchimento', cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/30' },
+  concluido:        { label: 'Concluído',       cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/30' },
+  validado:         { label: 'Em conferência',  cls: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/30' },
+  enviado:          { label: 'Recebido',        cls: 'bg-amber-500/10 text-amber-700 dark:text-amber-500 border-amber-500/30' },
+  com_devolucao:    { label: 'Com pendência',   cls: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30' },
+  aprovado:         { label: 'Aprovado',        cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/30' },
 };
 
 // ── Prazo ────────────────────────────────────────────────────────────────────
@@ -292,10 +292,10 @@ export function diasEntreISO(de: string, ate: string): number {
 
 export const PRAZO_META: Record<EstadoPrazo, { label: string; cls: string }> = {
   sem_prazo: { label: 'Sem prazo definido', cls: 'text-muted-foreground' },
-  dentro:    { label: 'Dentro do prazo',    cls: 'text-emerald-500' },
-  proximo:   { label: 'Prazo próximo',      cls: 'text-amber-500' },
-  encerrado: { label: 'Prazo encerrado',    cls: 'text-red-400' },
-  enviado:   { label: 'Enviado',            cls: 'text-emerald-500' },
+  dentro:    { label: 'Dentro do prazo',    cls: 'text-emerald-600 dark:text-emerald-500' },
+  proximo:   { label: 'Prazo próximo',      cls: 'text-amber-700 dark:text-amber-500' },
+  encerrado: { label: 'Prazo encerrado',    cls: 'text-red-700 dark:text-red-400' },
+  enviado:   { label: 'Enviado',            cls: 'text-emerald-600 dark:text-emerald-500' },
 };
 
 // ── Tipo de remuneração ──────────────────────────────────────────────────────

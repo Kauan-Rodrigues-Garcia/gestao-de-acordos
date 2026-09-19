@@ -38,6 +38,8 @@
  * linha inteira do painel já fala.
  */
 
+import { corTexto } from '@/lib/temas';
+
 /** Raio do círculo no sistema de coordenadas do SVG (viewBox 100×100). */
 const RAIO = 42;
 const PERIMETRO = 2 * Math.PI * RAIO;
@@ -97,7 +99,7 @@ export function AnelProjecao({ pct, cor, tamanho = 84 }: AnelProjecaoProps) {
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <span
           className="text-lg font-bold leading-none tabular-nums tracking-tight"
-          style={{ color: cor }}
+          style={{ color: corTexto(cor) }}
         >
           {pct}%
         </span>

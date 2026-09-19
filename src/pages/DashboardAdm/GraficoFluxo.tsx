@@ -28,7 +28,8 @@ import {
 import { LineChart as IconeGrafico, Table2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAxisColors } from '@/hooks/useChartColors';
+import { useAxisColors, useChartColors } from '@/hooks/useChartColors';
+import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import type { PontoDoFluxo, TotaisDoFluxo } from './metricas';
 
@@ -41,7 +42,11 @@ const SERIES: { chave: ChaveDaSerie; rotulo: string; claro: string; escuro: stri
   { chave: 'retornos',    rotulo: 'Voltaram ao Núcleo', claro: '#6262cc', escuro: '#7f76dc' },
 ];
 
-/** O anel dos pontos: a cor da superfície do cartão, para o ponto não sumir na linha. */
+/**
+ * O anel dos pontos: a cor da superfície do cartão, para o ponto não sumir na
+ * linha. Vale o `--card` do tema em vigor; estes dois são só o chão enquanto a
+ * variável não foi lida.
+ */
 const SUPERFICIE = { claro: '#f5f9fb', escuro: '#040d10' };
 
 interface PropsTooltip {
@@ -79,9 +84,12 @@ export interface GraficoFluxoProps {
 export function GraficoFluxo({ serie, totais, atualizando }: GraficoFluxoProps) {
   const { resolvedTheme } = useTheme();
   const { tickColor, gridColor } = useAxisColors();
+  const superficie = useChartColors(['--card'])['--card'];
   const [verTabela, setVerTabela] = useState(false);
 
-  const escuro = resolvedTheme === 'dark';
+  // Todo tema escuro, não só o `dark`: no Cinza Escuro e no Azul Profundo o
+  // gráfico saía com os tons do claro.
+  const escuro = ehTemaEscuro(resolvedTheme);
   const corDa = (s: typeof SERIES[number]) => (escuro ? s.escuro : s.claro);
   const vazio = totais.cadastrados + totais.liberados + totais.retornos === 0;
 
@@ -167,7 +175,7 @@ export function GraficoFluxo({ serie, totais, atualizando }: GraficoFluxoProps) 
                     dot={false} isAnimationActive={false}
                     activeDot={{
                       r: 4, fill: corDa(s), strokeWidth: 2,
-                      stroke: escuro ? SUPERFICIE.escuro : SUPERFICIE.claro,
+                      stroke: superficie ?? (escuro ? SUPERFICIE.escuro : SUPERFICIE.claro),
                     }}
                   />
                 ))}

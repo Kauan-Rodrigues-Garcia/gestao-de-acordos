@@ -30,7 +30,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
         <div className="relative p-5">
           <div className="flex items-center gap-2.5 mb-1">
             <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
-              <Percent className="w-4 h-4 text-orange-500" />
+              <Percent className="w-4 h-4 text-orange-700 dark:text-orange-500" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-foreground">Distribuição de Receita — PaguePlay</h3>
@@ -43,14 +43,14 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
             <div className="p-4 rounded-xl border border-orange-500/25 bg-gradient-to-br from-orange-500/8 to-orange-500/3 hover:border-orange-500/40 transition-colors">
               <div className="flex items-center gap-2 mb-3">
                 <div className="p-1.5 rounded-lg bg-orange-500/15 border border-orange-500/20">
-                  <Banknote className="w-3.5 h-3.5 text-orange-500" />
+                  <Banknote className="w-3.5 h-3.5 text-orange-700 dark:text-orange-500" />
                 </div>
                 <div>
                   <p className="text-xs font-bold text-orange-600 dark:text-orange-400">H.O. PaguePlay</p>
                   <p className="text-[10px] text-muted-foreground">{(PP_HO_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
                 </div>
               </div>
-              <p className="text-2xl font-extrabold font-mono text-orange-500 leading-none">{formatBRL(valorHOMes)}</p>
+              <p className="text-2xl font-extrabold font-mono text-orange-700 dark:text-orange-500 leading-none">{formatBRL(valorHOMes)}</p>
               <div className="mt-3">
                 <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
                   <span>Agendado H.O.</span>

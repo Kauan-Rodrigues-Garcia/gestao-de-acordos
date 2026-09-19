@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import type { LiderInfo } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
 import type { EquipeDiretoria } from '@/services/mestre/equipesDiretoria';
 import { SeloQuartil } from './components';
+import { corTexto } from '@/lib/temas';
 
 const pct1 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 const iniciais = (nome: string) =>
@@ -47,7 +48,7 @@ function Numero({ icone: Icone, rotulo, valor, apoio, cor, destaque }: {
       <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         <Icone className="h-3 w-3" /> {rotulo}
       </span>
-      <p className="mt-1.5 font-mono text-xl font-bold tabular-nums text-foreground" style={cor ? { color: cor } : undefined}>
+      <p className="mt-1.5 font-mono text-xl font-bold tabular-nums text-foreground" style={cor ? { color: corTexto(cor) } : undefined}>
         {valor}
       </p>
       {apoio && <p className="mt-0.5 text-[11px] text-muted-foreground">{apoio}</p>}
@@ -293,7 +294,7 @@ export function DetalheEquipeDiretoria({
           </ul>
           <div className="mt-3 grid gap-2 border-t border-border/50 pt-3 sm:grid-cols-2">
             <div className="flex items-start gap-2 text-xs">
-              <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-500" />
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Operador destaque</p>
                 <p className="truncate font-semibold text-foreground">{d.destaque && d.destaque.recebido > 0 ? d.destaque.nome : '—'}</p>
@@ -346,13 +347,13 @@ export function DetalheEquipeDiretoria({
                           <AvatarFallback className="bg-muted text-[9px] font-semibold text-muted-foreground">{iniciais(o.nome)}</AvatarFallback>
                         </Avatar>
                         <span className="truncate font-medium text-foreground">{o.nome}</span>
-                        {d.destaque?.id === o.id && o.recebido > 0 && <Star className="h-3 w-3 shrink-0 text-amber-500" />}
+                        {d.destaque?.id === o.id && o.recebido > 0 && <Star className="h-3 w-3 shrink-0 text-amber-700 dark:text-amber-500" />}
                       </span>
                     </td>
                     <td className="py-1.5 text-right font-mono tabular-nums text-foreground">{formatBRL(o.recebido)}</td>
                     <td className="py-1.5 text-right font-mono tabular-nums text-muted-foreground">{o.meta !== null ? formatBRL(o.meta) : 'sem meta'}</td>
                     <td className="py-1.5 text-right font-mono font-semibold tabular-nums"
-                        style={o.projecaoPct !== null ? { color: corProjecao(o.projecaoPct) } : undefined}>
+                        style={o.projecaoPct !== null ? { color: corTexto(corProjecao(o.projecaoPct)) } : undefined}>
                       {o.projecaoPct !== null ? `${pct1(o.projecaoPct)}%` : '—'}
                     </td>
                     <td className="py-1.5 text-center">{o.quartil !== null ? <SeloQuartil quartil={o.quartil} /> : <span className="text-muted-foreground">—</span>}</td>

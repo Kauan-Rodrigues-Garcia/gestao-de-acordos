@@ -53,7 +53,7 @@ function SeloEstado({ estado }: { estado: Estado }) {
       estado === 'erro' ? 'text-destructive' : 'text-muted-foreground',
     )}>
       {estado === 'salvando' && (<><Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> salvando…</>)}
-      {estado === 'salvo' && (<><Check className="h-3 w-3 text-emerald-500" aria-hidden="true" /> salvo</>)}
+      {estado === 'salvo' && (<><Check className="h-3 w-3 text-emerald-600 dark:text-emerald-500" aria-hidden="true" /> salvo</>)}
       {estado === 'erro' && (<><TriangleAlert className="h-3 w-3" aria-hidden="true" /> não salvo</>)}
     </span>
   );

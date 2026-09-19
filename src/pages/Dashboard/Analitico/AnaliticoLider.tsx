@@ -1513,8 +1513,8 @@ export function AnaliticoLider({
             const formaBadge = (
               <Badge variant="outline" className={
                 linha.forma_pagamento === 'cartao'
-                  ? 'text-xs border-purple-300 text-purple-700'
-                  : 'text-xs border-blue-300 text-blue-700'
+                  ? 'text-xs border-purple-300 dark:border-purple-800/60 text-purple-700 dark:text-purple-300'
+                  : 'text-xs border-blue-300 dark:border-blue-800/60 text-blue-700 dark:text-blue-300'
               }>
                 {linha.forma_detalhe || (linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix')}
               </Badge>
@@ -2083,7 +2083,7 @@ export function AnaliticoLider({
                       <div className="flex-1 min-w-0 space-y-1.5">
                         {doDia.map(g => (
                           <div key={`${g.grupo_id ?? 'sem'}-${g.operador_id}`} className="flex items-center gap-2">
-                            <Star className="w-3.5 h-3.5 text-amber-500 shrink-0 fill-amber-400" />
+                            <Star className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500 shrink-0 fill-amber-400" />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-semibold truncate">
                                 {g.operador_nome ?? g.operador_usuario}
@@ -2104,7 +2104,7 @@ export function AnaliticoLider({
                     ) : unico ? (
                       <>
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <Star className="w-3.5 h-3.5 text-amber-500 shrink-0 fill-amber-400" />
+                          <Star className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500 shrink-0 fill-amber-400" />
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{unico.operador_nome ?? unico.operador_usuario}</p>
                             <p className="text-xs text-muted-foreground">destaque do dia</p>
@@ -2207,8 +2207,8 @@ export function AnaliticoLider({
                           <td className="px-3 py-2">
                             <Badge variant="outline" className={
                               linha.forma_pagamento === 'cartao'
-                                ? 'text-xs border-purple-300 text-purple-700'
-                                : 'text-xs border-blue-300 text-blue-700'
+                                ? 'text-xs border-purple-300 dark:border-purple-800/60 text-purple-700 dark:text-purple-300'
+                                : 'text-xs border-blue-300 dark:border-blue-800/60 text-blue-700 dark:text-blue-300'
                             }>
                               {linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
                             </Badge>

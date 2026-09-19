@@ -21,6 +21,8 @@ import {
   type EquipeAnalitico, type OperadorEquipeInfo, type LinhaRecebidaDia,
 } from '@/services/analitico/analitico.service';
 import { linhaNoEscopo, type EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
+import { useAxisColors } from '@/hooks/useChartColors';
+import { corTexto } from '@/lib/temas';
 
 interface GraficoRecebimentoProps {
   empresaId: string;
@@ -81,6 +83,10 @@ export function GraficoRecebimento({
   linhasExternas, fonteLabel = 'relatório analítico', escopo, rotuloEscopo,
 }: GraficoRecebimentoProps) {
   const [linhas, setLinhas]   = useState<LinhaRecebidaDia[]>([]);
+  // O recharts pinta o rótulo do eixo com o `stroke` do eixo — que aqui é
+  // `transparent` para sumir com a linha. Sem `fill` próprio, dias e valores
+  // do eixo ficavam invisíveis em todos os temas.
+  const { tickColor } = useAxisColors();
   const [loading, setLoading] = useState(true);
   const [erro, setErro]       = useState<string | null>(null);
   const [setorNome, setSetorNome] = useState<string | null>(null);
@@ -256,7 +262,7 @@ export function GraficoRecebimento({
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-7 h-7 rounded-md shrink-0"
             style={{ background: COR_LINHA + '22' }}>
-            <TrendingUp className="w-4 h-4" style={{ color: COR_LINHA }} />
+            <TrendingUp className="w-4 h-4" style={{ color: corTexto(COR_LINHA) }} />
           </div>
           <div>
             <p className="text-sm font-semibold">Recebimento por dia</p>
@@ -269,7 +275,7 @@ export function GraficoRecebimento({
         <div className="flex items-center gap-5 text-right">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total do mês</p>
-            <p className="text-base font-bold tabular-nums font-mono" style={{ color: COR_LINHA }}>
+            <p className="text-base font-bold tabular-nums font-mono" style={{ color: corTexto(COR_LINHA) }}>
               {formatBRL(total)}
             </p>
           </div>
@@ -304,7 +310,7 @@ export function GraficoRecebimento({
               <XAxis
                 dataKey="dia"
                 tickFormatter={rotuloEixoX}
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: tickColor, fillOpacity: 0.7 }}
                 stroke="transparent"
                 tickLine={false}
                 axisLine={false}
@@ -314,7 +320,7 @@ export function GraficoRecebimento({
                 height={52}
               />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: tickColor, fillOpacity: 0.7 }}
                 stroke="transparent"
                 tickLine={false}
                 axisLine={false}

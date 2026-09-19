@@ -55,7 +55,7 @@ function ItemHistorico(
         </div>
         {campeao && (
           <div className="hidden shrink-0 items-center gap-2 sm:flex">
-            <Trophy className="h-3.5 w-3.5 text-yellow-500" />
+            <Trophy className="h-3.5 w-3.5 text-yellow-700 dark:text-yellow-500" />
             <span className="max-w-[160px] truncate text-xs font-medium text-foreground">
               {campeao.pessoa.nome}
             </span>

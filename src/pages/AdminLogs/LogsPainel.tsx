@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { categoriaMeta, severidadeMeta, descreverAcao } from '@/lib/logs-catalogo';
 import type { ResumoLogs } from '@/services/logs.service';
 import { numeroBr, iconeDaCategoria } from './formatos';
+import { corTexto } from '@/lib/temas';
 
 interface Props {
   resumo: ResumoLogs;
@@ -142,7 +143,7 @@ export default function LogsPainel({
                     )}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <Icone className="w-3 h-3 shrink-0" style={{ color: meta.hex }} />
+                      <Icone className="w-3 h-3 shrink-0" style={{ color: corTexto(meta.hex) }} />
                       <span className="text-[11px] font-medium text-foreground flex-1 truncate">
                         {meta.label}
                       </span>

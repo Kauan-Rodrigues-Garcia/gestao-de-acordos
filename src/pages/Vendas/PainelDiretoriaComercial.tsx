@@ -85,6 +85,7 @@ import { buscarVendas, type Venda } from '@/services/vendas/vendas.service';
 import { SeloQuartil, SeloVariacao as Selo } from '@/pages/PainelDiretoria/components';
 import { FiltroDePeriodo } from '@/pages/PainelDiretoria/FiltroDePeriodo';
 import { Faixa } from './componentes';
+import { corTexto } from '@/lib/temas';
 
 /** Enquanto o tema não resolveu (primeiro quadro), a série usa isto. */
 const FALLBACK_PRIMARIA = '#3b82f6';
@@ -791,7 +792,7 @@ function VisaoGeral({
                   </span>
                   <span className="flex items-center gap-1.5">
                     {p.quartil !== null && <SeloQuartil quartil={p.quartil} />}
-                    <span className="font-mono text-xl font-bold tabular-nums" style={{ color: cor }}>
+                    <span className="font-mono text-xl font-bold tabular-nums" style={{ color: corTexto(cor) }}>
                       {pct1(p.pct)}%
                     </span>
                     <span className="text-[10px] text-muted-foreground">da projeção</span>
@@ -921,7 +922,7 @@ function VisaoGeral({
 
           {destaque && (
             <div className="flex items-start gap-2 border-t border-border/50 pt-3">
-              <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+              <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />
               <div className="text-xs">
                 <p className="font-semibold text-foreground">{destaque.e.nome}</p>
                 <p className="text-muted-foreground">
@@ -934,8 +935,8 @@ function VisaoGeral({
           {atencao && atencao.e.id !== destaque?.e.id && (
             <div className="flex items-start gap-2">
               {atencao.v < 0
-                ? <TrendingDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                : <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />}
+                ? <TrendingDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-500" />
+                : <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />}
               <div className="text-xs">
                 <p className="font-semibold text-foreground">{atencao.e.nome}</p>
                 <p className="text-muted-foreground">
@@ -1320,8 +1321,8 @@ function CardRecorte({
           <span className="text-[10px] font-medium text-muted-foreground">sem meta configurada</span>
         ) : (
           <span className="flex items-center gap-1.5">
-            <Target className="h-3 w-3" style={{ color: corProjecao(r.projecao.pct) }} />
-            <span className="font-mono text-xs font-bold tabular-nums" style={{ color: corProjecao(r.projecao.pct) }}>
+            <Target className="h-3 w-3" style={{ color: corTexto(corProjecao(r.projecao.pct)) }} />
+            <span className="font-mono text-xs font-bold tabular-nums" style={{ color: corTexto(corProjecao(r.projecao.pct)) }}>
               {pct1(r.projecao.pct)}%
             </span>
             <span className="text-[10px] text-muted-foreground">da projeção</span>
@@ -1389,7 +1390,7 @@ function DetalheDoRecorte({
           </span>
           {r.projecao ? (
             <>
-              <p className="mt-1.5 font-mono text-xl font-bold tabular-nums" style={{ color: corProjecao(r.projecao.pct) }}>
+              <p className="mt-1.5 font-mono text-xl font-bold tabular-nums" style={{ color: corTexto(corProjecao(r.projecao.pct)) }}>
                 {pct1(r.projecao.pct)}%
               </p>
               <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">

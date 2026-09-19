@@ -30,6 +30,7 @@ import { corProjecao } from '@/lib/diasUteis';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 import { PremioParticipante } from './PremioParticipante';
+import { corTexto } from '@/lib/temas';
 
 export interface CardParticipanteProps {
   item: ResultadoParticipante;
@@ -167,7 +168,7 @@ export function CardParticipante({
           <span
             className={cn('block text-base font-bold tabular-nums',
               !item.meta && 'text-muted-foreground')}
-            style={item.meta ? { color: corProjecao(item.progresso) } : undefined}
+            style={item.meta ? { color: corTexto(corProjecao(item.progresso)) } : undefined}
           >
             {item.meta ? percentualCheio(item.progresso) : '—'}
           </span>
@@ -178,7 +179,7 @@ export function CardParticipante({
             valor={item.recebido}
             formatar={formatBRL}
             className="text-sm font-semibold text-foreground"
-            classeSubindo="text-emerald-500"
+            classeSubindo="text-emerald-600 dark:text-emerald-500"
           />
           <p className="text-[10px] text-muted-foreground">
             {item.qtd} pagamento{item.qtd === 1 ? '' : 's'}

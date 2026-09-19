@@ -77,7 +77,7 @@ export function ChatplayOnboardingModal({ open, onClose, onConfirmed }: Chatplay
               <div className="flex-1 space-y-2">
                 <p>Copie o código do script abaixo:</p>
                 <Button size="sm" variant="outline" className="gap-2 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 dark:text-violet-400" onClick={handleCopy}>
-                  {copied ? <><Check className="w-3.5 h-3.5 text-green-500" /> Copiado!</> : <><Copy className="w-3.5 h-3.5" /> Copiar código do script</>}
+                  {copied ? <><Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" /> Copiado!</> : <><Copy className="w-3.5 h-3.5" /> Copiar código do script</>}
                 </Button>
               </div>
             </li>

@@ -12,6 +12,7 @@ import { formatBRL } from '@/lib/money';
 import { COR_QUARTIL } from '@/lib/diasUteis';
 import type { SetorAgendamento } from './types';
 import { TIPO_ICONS, TIPO_CORES, TIPO_LABELS_DISPLAY } from './types';
+import { corTexto } from '@/lib/temas';
 
 // ─── Tooltips ─────────────────────────────────────────────────────────────────
 
@@ -21,7 +22,7 @@ export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
     <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-3 shadow-xl text-xs text-popover-foreground min-w-[170px]">
       <p className="font-semibold mb-2 text-foreground border-b border-border/40 pb-1.5">Dia {label}</p>
       {payload.map((entry, i) => (
-        <p key={i} style={{ color: entry.color }} className="flex justify-between gap-4 mt-1">
+        <p key={i} style={{ color: corTexto(entry.color) }} className="flex justify-between gap-4 mt-1">
           <span className="text-muted-foreground">{entry.name}:</span>
           <span className="font-mono font-bold">{formatBRL(entry.value ?? 0)}</span>
         </p>
@@ -35,7 +36,7 @@ export function CustomPieTooltip({ active, payload }: PropsTooltipGrafico) {
   const d = payload[0];
   return (
     <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-3 shadow-xl text-xs text-popover-foreground">
-      <p className="font-bold mb-1" style={{ color: d.payload?.fill }}>{d.name}</p>
+      <p className="font-bold mb-1" style={{ color: corTexto(d.payload?.fill) }}>{d.name}</p>
       <p className="font-mono text-sm font-semibold">{formatBRL(d.value ?? 0)}</p>
       <p className="text-muted-foreground mt-0.5">{d.payload?.qtd} acordos</p>
     </div>
@@ -284,7 +285,7 @@ export const SetorRow = memo(function SetorRow({ setor, index, tipos }: { setor:
                             className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 border"
                             style={{ background: `${TIPO_CORES[tipo]}18`, borderColor: `${TIPO_CORES[tipo]}30` }}
                           >
-                            <TipoIcon className="w-3.5 h-3.5" style={{ color: TIPO_CORES[tipo] }} />
+                            <TipoIcon className="w-3.5 h-3.5" style={{ color: corTexto(TIPO_CORES[tipo]) }} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
@@ -331,7 +332,7 @@ export function SeloQuartil({ quartil }: { quartil: number }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-      style={{ background: `${cor}1f`, color: cor }}
+      style={{ background: `${cor}1f`, color: corTexto(cor) }}
       title={`Quartil ${quartil}`}
     >
       Q{quartil}

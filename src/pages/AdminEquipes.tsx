@@ -172,7 +172,7 @@ function OperadorChip({
         : 'bg-muted/60 border-border cursor-grab active:cursor-grabbing hover:bg-muted hover:border-primary/30'}`}
     >
       {transferido
-        ? <ArrowRightLeft className="w-3 h-3 text-amber-500 flex-shrink-0" />
+        ? <ArrowRightLeft className="w-3 h-3 text-amber-700 dark:text-amber-500 flex-shrink-0" />
         : <GripVertical className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
       <span className={`font-medium text-foreground truncate ${compact ? 'text-xs max-w-[90px]' : 'text-sm max-w-[110px]'}`}>
         {operador.nome}

@@ -65,7 +65,7 @@ export function PixBarraSetores({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
-      <Building2 className="h-4 w-4 shrink-0 text-violet-400" />
+      <Building2 className="h-4 w-4 shrink-0 text-violet-700 dark:text-violet-400" />
       <span className="shrink-0 text-xs font-medium text-muted-foreground">Setor:</span>
       <div className="flex flex-wrap gap-1.5">
         {setores.map(s => (

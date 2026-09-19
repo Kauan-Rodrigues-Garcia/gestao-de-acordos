@@ -19,6 +19,28 @@
 
     <!-- Theme Color -->
     <meta name="theme-color" content="#1e40af" />
+
+    <!--
+      Tema antes da primeira pintura. O next-themes só aplica a classe depois
+      que o React monta (o script dele não roda num app sem SSR): quem usa tema
+      escuro via um clarão branco a cada carga. Este bloco repete a decisão dele
+      — mesma chave `theme`, mesmo «Sistema» — e o next-themes assume a partir
+      daí. A lista de temas é cópia de `NOMES_TEMAS` (src/lib/temas.ts).
+    -->
+    <script>
+      (function () {
+        try {
+          var d = document.documentElement;
+          var validos = ['light', 'rosa', 'verde', 'dark', 'dark-grey', 'deep-blue'];
+          var t = localStorage.getItem('theme') || 'system';
+          if (t === 'system') {
+            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          if (validos.indexOf(t) !== -1) d.classList.add(t);
+          if (localStorage.getItem('menuLateralEscuro') === 'true') d.classList.add('menu-lateral-escuro');
+        } catch (e) { /* modo privado: fica o claro */ }
+      })();
+    </script>
   </head>
 
   <body>

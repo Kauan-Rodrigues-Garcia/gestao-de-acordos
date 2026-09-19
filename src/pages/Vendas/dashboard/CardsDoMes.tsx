@@ -44,6 +44,7 @@ import type { AndamentoDaMeta } from '@/lib/vendasMeta';
 import {
   ticketMedio, aproveitamento, coberturaDeRecebimento, variacao,
 } from '@/lib/vendasDashboard';
+import { corTexto } from '@/lib/temas';
 
 /** Um card já resolvido — o que a grade precisa saber para desenhar. */
 interface Cartao {
@@ -93,7 +94,7 @@ export function CardsDoMes({ resumo, total, andamento, anterior }: CardsDoMesPro
         icone: <DollarSign className="w-4 h-4" />,
         cor: COR_QUARTIL[1],
         valor: (
-          <ValorAnimado valor={resumo.valor} formatar={formatBRL} className="text-emerald-500" />
+          <ValorAnimado valor={resumo.valor} formatar={formatBRL} className="text-emerald-600 dark:text-emerald-500" />
         ),
         sub: [
           'confirmada e assinada',
@@ -168,7 +169,7 @@ export function CardsDoMes({ resumo, total, andamento, anterior }: CardsDoMesPro
           <ValorAnimado
             valor={resumo.valorPorGaveta.pendente_assinatura}
             formatar={formatBRL}
-            className="text-amber-500"
+            className="text-amber-700 dark:text-amber-500"
           />
         ),
         // «Falta de assinatura do contrato» é o maior motivo de cancelamento no
@@ -184,7 +185,7 @@ export function CardsDoMes({ resumo, total, andamento, anterior }: CardsDoMesPro
         label: 'Aproveitamento',
         icone: <Percent className="w-4 h-4" />,
         cor: corProjecao(pct),
-        valor: <span style={{ color: corProjecao(pct) }}>{pctTexto(aprov)}</span>,
+        valor: <span style={{ color: corTexto(corProjecao(pct)) }}>{pctTexto(aprov)}</span>,
         sub: 'do que foi confirmado ficou de pé',
       });
     }
@@ -196,7 +197,7 @@ export function CardsDoMes({ resumo, total, andamento, anterior }: CardsDoMesPro
         icone: <Wallet className="w-4 h-4" />,
         cor: '#0ea5e9',
         valor: (
-          <ValorAnimado valor={resumo.recebido} formatar={formatBRL} className="text-sky-500" />
+          <ValorAnimado valor={resumo.recebido} formatar={formatBRL} className="text-sky-600 dark:text-sky-500" />
         ),
         // Faturado e recebido são medidas diferentes, e a distância entre elas
         // assusta quem compara os dois cards sem esta linha.

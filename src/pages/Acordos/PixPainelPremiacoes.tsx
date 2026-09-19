@@ -181,7 +181,7 @@ function LinhaPremiacao({
         {podeMarcarPago ? (
           pago ? (
             <div className="flex items-center gap-1.5 shrink-0" title={carimbo || undefined}>
-              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-500">
+              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-500">
                 <Check className="w-3 h-3" /> Pago
               </span>
               <button
@@ -219,7 +219,7 @@ function LinhaPremiacao({
             className={cn(
               'shrink-0 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wider',
               pago
-                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-500'
+                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-500'
                 : 'border-border bg-muted/40 text-muted-foreground',
             )}
           >
@@ -242,7 +242,7 @@ function LinhaPremiacao({
         <Parcela
           rotulo="Premiação"
           valor={l.premiacao}
-          cls="text-amber-500"
+          cls="text-amber-700 dark:text-amber-500"
           titulo={`Comissão de ${formatCurrency(l.comissao)} dobrada por bater os dois requisitos`}
           nota={`${formatCurrency(l.comissao)} × 2`}
         />
@@ -339,7 +339,7 @@ export function PixPainelPremiacoes({
           aria-expanded={aberto}
           className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-amber-500/10"
         >
-          <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
+          <Trophy className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-foreground leading-tight">
               Premiação dobrada a pagar
@@ -353,7 +353,7 @@ export function PixPainelPremiacoes({
             <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">
               Falta pagar
             </p>
-            <p className="mt-1 text-base font-mono font-bold tabular-nums text-amber-400 leading-tight">
+            <p className="mt-1 text-base font-mono font-bold tabular-nums text-amber-700 dark:text-amber-400 leading-tight">
               {formatCurrency(faltaPagar)}
             </p>
           </div>
@@ -393,7 +393,7 @@ export function PixPainelPremiacoes({
                 className={cn(
                   'shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
                   soPendentes
-                    ? 'border-amber-500/50 bg-amber-500/20 text-amber-400'
+                    ? 'border-amber-500/50 bg-amber-500/20 text-amber-700 dark:text-amber-400'
                     : 'border-border bg-background/40 text-muted-foreground hover:text-foreground',
                 )}
               >

@@ -26,6 +26,7 @@ import {
 } from '@/services/fechamentoOperadores/situacoes';
 import type { LinhaFechamento } from '@/services/fechamentoOperadores/calculoFechamento';
 import type { ManualFechamento } from '@/services/fechamentoOperadores/fechamentoOperadores.service';
+import { corTexto } from '@/lib/temas';
 
 /** O `Select` do shadcn recusa `value=""`; «sem situação» precisa de um valor. */
 const SEM_SITUACAO = '__sem_situacao__';
@@ -177,14 +178,14 @@ function Linha({ linha: l, podeEditar, salvando, onSalvar, onInvalido }: PropsLi
       </td>
 
       <td className="px-2 py-1.5 text-right tabular-nums font-mono font-bold"
-          style={cor && l.alcance !== null ? { color: cor } : undefined}>
+          style={cor && l.alcance !== null ? { color: corTexto(cor) } : undefined}>
         {l.alcance !== null ? formatarAlcance(l.alcance) : <span className="text-muted-foreground font-normal">—</span>}
       </td>
 
       <td className="px-2 py-1.5 text-center">
         {l.quartil !== null ? (
           <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap"
-                style={{ background: (cor ?? '#6366f1') + '26', color: cor }}>
+                style={{ background: (cor ?? '#6366f1') + '26', color: corTexto(cor) }}>
             {l.quartil}º quartil
           </span>
         ) : (

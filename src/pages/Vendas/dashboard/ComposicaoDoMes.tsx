@@ -36,6 +36,7 @@ import { formatDate } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import type { LinhaDoPlacar, LinhaDaEquipe, FatiaSimples, Destaque } from '@/lib/vendasPlacar';
 import type { ReguaMeta } from '@/lib/vendasMeta';
+import { corTexto } from '@/lib/temas';
 
 /**
  * A cor da barra de cada degrau do pódio — ouro, prata e bronze.
@@ -64,7 +65,7 @@ function Cabecalho({
             className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
             style={{ background: cor + '22' }}
           >
-            <Icone className="w-3.5 h-3.5" style={{ color: cor }} />
+            <Icone className="w-3.5 h-3.5" style={{ color: corTexto(cor) }} />
           </div>
           <span className="truncate">{titulo}</span>
         </CardTitle>

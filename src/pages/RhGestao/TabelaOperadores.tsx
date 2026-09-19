@@ -159,7 +159,7 @@ export function TabelaOperadores({
                   <td className="px-4 py-3 font-medium text-foreground max-w-[200px]">
                     <span className="truncate block">{l.nome_snapshot}</span>
                     {devolvido && l.motivo_devolucao && (
-                      <p className="text-[10px] text-red-400/90 mt-0.5 inline-flex items-start gap-1">
+                      <p className="text-[10px] text-red-700/90 dark:text-red-400/90 mt-0.5 inline-flex items-start gap-1">
                         <AlertTriangle className="w-2.5 h-2.5 shrink-0 mt-[2px]" />
                         <span className="line-clamp-2">{l.motivo_devolucao}</span>
                       </p>
@@ -218,7 +218,7 @@ export function TabelaOperadores({
                       <ValorAnimado
                         valor={Number(l.valor)} formatar={formatCurrency}
                         className="font-mono font-semibold text-foreground"
-                        classeSubindo="text-emerald-400" classeDescendo="text-amber-400"
+                        classeSubindo="text-emerald-700 dark:text-emerald-400" classeDescendo="text-amber-700 dark:text-amber-400"
                       />
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -261,7 +261,7 @@ export function TabelaOperadores({
                       <div className="flex items-center justify-end gap-1">
                         <button
                           title="Salvar" disabled={salvando} onClick={() => void salvar(l)}
-                          className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
+                          className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
                         >
                           {salvando ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                           Salvar
@@ -297,7 +297,7 @@ export function TabelaOperadores({
                             className={cn(
                               'w-7 h-7 rounded-lg flex items-center justify-center',
                               l.dispensado
-                                ? 'text-sky-400 hover:bg-sky-500/10'
+                                ? 'text-sky-700 dark:text-sky-400 hover:bg-sky-500/10'
                                 : 'text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10',
                             )}
                           >
@@ -310,7 +310,7 @@ export function TabelaOperadores({
                           && status === 'enviado_rh' && onAprovar && (
                           <button
                             title="Aprovar este operador" onClick={() => onAprovar(l.id)}
-                            className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
+                            className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
                           >
                             <Check className="w-3 h-3" /> Aprovar
                           </button>
@@ -319,7 +319,7 @@ export function TabelaOperadores({
                           && (status === 'enviado_rh' || status === 'aprovado_rh') && onDevolver && (
                           <button
                             title="Devolver só este operador" onClick={() => onDevolver(l)}
-                            className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20"
+                            className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-red-700 dark:text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20"
                           >
                             <Undo2 className="w-3 h-3" /> Devolver
                           </button>

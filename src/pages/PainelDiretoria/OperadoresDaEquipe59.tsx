@@ -95,7 +95,7 @@ export function OperadoresDaEquipe59({
               <td className="px-2 py-1.5">
                 {o.perfilId ? (
                   <span className="flex items-center gap-1 text-muted-foreground">
-                    <UserCheck className="h-3 w-3 shrink-0 text-emerald-500" />
+                    <UserCheck className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-500" />
                     <span className="truncate">
                       {o.equipeAtual ?? 'sem equipe'}{o.setorAtual ? ` · ${o.setorAtual}` : ''}
                       {o.perfilAtivo === false && ' · desligado'}

@@ -42,7 +42,7 @@ function tempoRestante(expiraEm?: string): string {
 function badgeMotivo(motivo: string) {
   if (motivo === 'transferencia_nr') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border border-amber-400/30 bg-amber-400/10 text-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.12)]">
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.12)]">
         <ArrowRightLeft className="w-3 h-3" /> Transferência de NR
       </span>
     );
@@ -229,16 +229,16 @@ export default function Lixeira() {
       value: totalTransferencias,
       icon: <ArrowRightLeft className="w-4 h-4" />,
       color: 'from-amber-500/20 to-amber-600/10 border-amber-500/20',
-      iconBg: 'bg-amber-500/15 text-amber-400',
-      valueColor: 'text-amber-400',
+      iconBg: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+      valueColor: 'text-amber-700 dark:text-amber-400',
     },
     {
       label: 'Exclusões Manuais',
       value: totalExclusoes,
       icon: <FileX2 className="w-4 h-4" />,
       color: 'from-red-500/20 to-red-600/10 border-red-500/20',
-      iconBg: 'bg-red-500/15 text-red-400',
-      valueColor: 'text-red-400',
+      iconBg: 'bg-red-500/15 text-red-700 dark:text-red-400',
+      valueColor: 'text-red-700 dark:text-red-400',
     },
   ];
 
@@ -253,7 +253,7 @@ export default function Lixeira() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500/20 to-rose-600/10 border border-red-500/20 flex items-center justify-center shadow-md flex-shrink-0">
-              <Trash2 className="w-5 h-5 text-red-400" />
+              <Trash2 className="w-5 h-5 text-red-700 dark:text-red-400" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight leading-tight">
@@ -282,7 +282,7 @@ export default function Lixeira() {
               <Button
                 size="sm"
                 onClick={() => setConfirmEsvaziar(true)}
-                className="gap-1.5 h-8 text-xs rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 hover:text-red-300 shadow-none"
+                className="gap-1.5 h-8 text-xs rounded-lg bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/30 hover:bg-red-500/20 hover:text-red-800 dark:hover:text-red-300 shadow-none"
                 variant="ghost"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -400,9 +400,9 @@ export default function Lixeira() {
                   {itensFiltrados.map((item, i) => {
                     const urgencia = tempoUrgencia(item.expira_em);
                     const urgenciaColors = {
-                      green:  'text-emerald-400',
-                      yellow: 'text-amber-400',
-                      red:    'text-red-400',
+                      green:  'text-emerald-700 dark:text-emerald-400',
+                      yellow: 'text-amber-700 dark:text-amber-400',
+                      red:    'text-red-700 dark:text-red-400',
                       gray:   'text-muted-foreground',
                     };
                     return (
@@ -433,7 +433,7 @@ export default function Lixeira() {
 
                         {/* Valor */}
                         <td className="px-4 py-3 text-right">
-                          <span className="font-mono font-semibold text-emerald-400">
+                          <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">
                             {item.valor ? formatCurrency(item.valor) : '—'}
                           </span>
                         </td>
@@ -505,7 +505,7 @@ export default function Lixeira() {
                               title="Restaurar acordo"
                               disabled={restaurandoId === item.id}
                               onClick={() => handleRestaurar(item)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all duration-150 disabled:opacity-50"
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-500/10 transition-all duration-150 disabled:opacity-50"
                             >
                               {restaurandoId === item.id
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -536,7 +536,7 @@ export default function Lixeira() {
             {/* Modal header */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-border/50 bg-muted/20">
               <div className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <Trash2 className="w-4 h-4 text-red-400" />
+                <Trash2 className="w-4 h-4 text-red-700 dark:text-red-400" />
               </div>
               <div>
                 <DialogTitle className="text-sm font-semibold text-foreground leading-none">
@@ -573,7 +573,7 @@ export default function Lixeira() {
                       </div>
                       <div>
                         <p className="text-muted-foreground mb-0.5">Valor</p>
-                        <p className="font-mono font-bold text-emerald-400">{detalhe.valor ? formatCurrency(detalhe.valor) : '—'}</p>
+                        <p className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{detalhe.valor ? formatCurrency(detalhe.valor) : '—'}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground mb-0.5">Vencimento</p>
@@ -607,7 +607,7 @@ export default function Lixeira() {
                           {[
                             { label: 'Operador anterior', value: detalhe.operador_nome, color: 'bg-slate-500/15 text-slate-400 border-slate-500/20' },
                             { label: 'Transferido para', value: detalhe.transferido_para_nome, color: 'bg-primary/10 text-primary border-primary/20' },
-                            { label: 'Autorizado por', value: detalhe.autorizado_por_nome, color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+                            { label: 'Autorizado por', value: detalhe.autorizado_por_nome, color: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20' },
                           ].map((step, idx, arr) => (
                             <div key={step.label} className="flex flex-col items-start">
                               <div className={cn(
@@ -649,7 +649,7 @@ export default function Lixeira() {
                       </div>
                       <div>
                         <p className="text-muted-foreground mb-0.5">Expira em</p>
-                        <p className="font-semibold text-amber-400">
+                        <p className="font-semibold text-amber-700 dark:text-amber-400">
                           {detalhe.expira_em ? new Date(detalhe.expira_em).toLocaleString('pt-BR') : '—'}
                         </p>
                       </div>
@@ -657,9 +657,9 @@ export default function Lixeira() {
                         <p className="text-muted-foreground mb-1">Tempo restante</p>
                         <div className={cn(
                           'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-xs',
-                          tempoUrgencia(detalhe.expira_em) === 'green' && 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400',
-                          tempoUrgencia(detalhe.expira_em) === 'yellow' && 'bg-amber-500/10 border-amber-500/25 text-amber-400',
-                          tempoUrgencia(detalhe.expira_em) === 'red' && 'bg-red-500/10 border-red-500/25 text-red-400',
+                          tempoUrgencia(detalhe.expira_em) === 'green' && 'bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-400',
+                          tempoUrgencia(detalhe.expira_em) === 'yellow' && 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400',
+                          tempoUrgencia(detalhe.expira_em) === 'red' && 'bg-red-500/10 border-red-500/25 text-red-700 dark:text-red-400',
                           tempoUrgencia(detalhe.expira_em) === 'gray' && 'bg-muted border-border text-muted-foreground',
                         )}>
                           <Clock className="w-3.5 h-3.5" />
@@ -708,13 +708,13 @@ export default function Lixeira() {
             {/* Dramatic red gradient header */}
             <div className="bg-gradient-to-br from-red-600/25 via-red-500/15 to-rose-600/10 border-b border-red-500/20 px-6 py-5 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                <ShieldAlert className="w-5 h-5 text-red-400" />
+                <ShieldAlert className="w-5 h-5 text-red-700 dark:text-red-400" />
               </div>
               <div>
                 <DialogTitle className="text-sm font-bold text-foreground">
                   Esvaziar Lixeira
                 </DialogTitle>
-                <p className="text-xs text-red-400/80 mt-0.5 font-medium">
+                <p className="text-xs text-red-700/80 dark:text-red-400/80 mt-0.5 font-medium">
                   Esta ação é permanente e irreversível
                 </p>
               </div>
@@ -727,9 +727,9 @@ export default function Lixeira() {
               </DialogDescription>
 
               <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 flex items-center gap-3">
-                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-red-700 dark:text-red-400 flex-shrink-0" />
                 <p className="text-xs text-foreground/80">
-                  <span className="font-bold text-red-400 text-sm">{itens.length}</span>{' '}
+                  <span className="font-bold text-red-700 dark:text-red-400 text-sm">{itens.length}</span>{' '}
                   acordo{itens.length !== 1 ? 's' : ''} ser{itens.length !== 1 ? 'ão' : 'á'} excluído{itens.length !== 1 ? 's' : ''} permanentemente.
                 </p>
               </div>

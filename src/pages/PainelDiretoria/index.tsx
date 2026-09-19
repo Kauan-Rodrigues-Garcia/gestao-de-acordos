@@ -47,6 +47,7 @@ import { DiretoriaVisaoGeral } from './DiretoriaVisaoGeral';
 import { DiretoriaSetores } from './DiretoriaSetores';
 import { esquecerLeiturasDo59 } from '@/services/mestre/cache59';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
+import { corTexto } from '@/lib/temas';
 
 /*
  * Carregada só quando a aba é aberta. Ela traz o parser do 59 e a tabela de
@@ -745,7 +746,7 @@ export default function PainelDiretoria() {
                     <div key={d.tipo} className="group">
                       <div className="flex items-center gap-3 py-2.5 px-3 rounded-xl border border-border/30 bg-background/40 hover:border-border/60 hover:bg-background/70 transition-all">
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 border" style={{ background: `${d.fill}15`, borderColor: `${d.fill}30` }}>
-                          <FormaIcon className="w-4 h-4" style={{ color: d.fill }} />
+                          <FormaIcon className="w-4 h-4" style={{ color: corTexto(d.fill) }} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
@@ -778,7 +779,7 @@ export default function PainelDiretoria() {
         <div className="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg border" style={{ background: `${EVOL_AGENDADO}18`, borderColor: `${EVOL_AGENDADO}30` }}>
-              <Activity className="w-3.5 h-3.5" style={{ color: EVOL_AGENDADO }} />
+              <Activity className="w-3.5 h-3.5" style={{ color: corTexto(EVOL_AGENDADO) }} />
             </div>
             <div>
               <h3 className="text-sm font-bold text-foreground">Evolução diária — {mesNome}</h3>
@@ -913,7 +914,7 @@ export default function PainelDiretoria() {
                     <div className="flex gap-4 mt-2 flex-wrap">
                       {porStatus.map((entry) => {
                         const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
-                        return <span key={entry.name} className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><span className="w-2 h-2 rounded-sm inline-block flex-shrink-0" style={{ background: entry.color }} />{entry.name} <span className="font-bold" style={{ color: entry.color }}>{pct}%</span></span>;
+                        return <span key={entry.name} className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><span className="w-2 h-2 rounded-sm inline-block flex-shrink-0" style={{ background: entry.color }} />{entry.name} <span className="font-bold" style={{ color: corTexto(entry.color) }}>{pct}%</span></span>;
                       })}
                     </div>
                   </div>
@@ -929,12 +930,12 @@ export default function PainelDiretoria() {
                       <div key={entry.name} className="group">
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-2">
-                            <StatusIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: entry.color }} />
+                            <StatusIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: corTexto(entry.color) }} />
                             <span className="text-sm font-semibold text-foreground">{entry.name}</span>
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-[11px] text-muted-foreground">{entry.value} acordos</span>
-                            <span className="text-sm font-extrabold tabular-nums w-10 text-right" style={{ color: entry.color }}>{pct}%</span>
+                            <span className="text-sm font-extrabold tabular-nums w-10 text-right" style={{ color: corTexto(entry.color) }}>{pct}%</span>
                           </div>
                         </div>
                         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -957,7 +958,7 @@ export default function PainelDiretoria() {
                         const d = payload[0].payload;
                         const total = porStatus.reduce((s, e) => s + e.value, 0);
                         const pct = total > 0 ? Math.round((d.value / total) * 100) : 0;
-                        return <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-2.5 shadow-xl text-xs"><p className="font-bold text-popover-foreground mb-1" style={{ color: d.color }}>{d.name}</p><p className="text-popover-foreground">{d.value} acordos <span className="text-muted-foreground">({pct}%)</span></p></div>;
+                        return <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm p-2.5 shadow-xl text-xs"><p className="font-bold text-popover-foreground mb-1" style={{ color: corTexto(d.color) }}>{d.name}</p><p className="text-popover-foreground">{d.value} acordos <span className="text-muted-foreground">({pct}%)</span></p></div>;
                       }}
                     />
                     <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={64} isAnimationActive={false}>

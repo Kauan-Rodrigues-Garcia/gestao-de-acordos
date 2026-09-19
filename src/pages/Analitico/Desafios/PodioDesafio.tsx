@@ -10,6 +10,7 @@ import { percentualCurto, percentualCheio } from './tema';
 import { AvatarParticipante } from './AvatarParticipante';
 import { ProgressoDesafio } from './ProgressoDesafio';
 import { PremioParticipante } from './PremioParticipante';
+import { corTexto } from '@/lib/temas';
 
 const MEDALHAS = [
   { borda: 'border-amber-400/50', fundo: 'from-amber-100/70 dark:from-amber-400/10', texto: 'text-amber-700 dark:text-amber-300', selo: 'bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300' },
@@ -87,7 +88,7 @@ export function PodioDesafio({ top5, premios, tema, mostrarFotos, animar, voceId
                     corridaDeProjecao
                       ? (!item.meta && 'text-muted-foreground')
                       : estilo?.texto ?? tema.destaque)}
-                  style={corridaDeProjecao && item.meta ? { color: corProjecao(item.progresso) } : undefined}
+                  style={corridaDeProjecao && item.meta ? { color: corTexto(corProjecao(item.progresso)) } : undefined}
                 >
                   {corridaDeProjecao ? (item.meta ? percentualCheio(item.progresso) : '—') : formatBRL(item.recebido)}
                 </p>

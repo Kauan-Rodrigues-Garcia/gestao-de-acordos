@@ -59,7 +59,7 @@ function Requisito({
     <div className="flex items-start gap-2.5">
       {ok
         ? <CircleCheck className={cn('w-4 h-4 shrink-0 mt-0.5',
-            dourado ? 'text-amber-400' : 'text-emerald-400')} />
+            dourado ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400')} />
         : <Circle className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground/50" />}
 
       <div className="min-w-0 flex-1">
@@ -69,7 +69,7 @@ function Requisito({
             {titulo}
           </p>
           <p className={cn('text-[11px] font-mono tabular-nums',
-            ok ? (dourado ? 'text-amber-400' : 'text-emerald-400') : 'text-muted-foreground')}>
+            ok ? (dourado ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400') : 'text-muted-foreground')}>
             {detalhe}
           </p>
         </div>
@@ -106,8 +106,8 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5 min-w-0">
             {dobrou
-              ? <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
-              : <Zap className="w-5 h-5 text-violet-400 shrink-0" />}
+              ? <Trophy className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0" />
+              : <Zap className="w-5 h-5 text-violet-700 dark:text-violet-400 shrink-0" />}
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground leading-tight">Comissão dobrada</p>
               <p className="text-[11px] text-muted-foreground">
@@ -119,7 +119,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
           <span className={cn(
             'text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border shrink-0',
             dobrou
-              ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40'
               : 'bg-muted/50 text-muted-foreground border-border',
           )}>
             {dobra.requisitosOk}/2 requisitos
@@ -162,7 +162,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
         )}>
           {dobrou ? (
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <p className="text-xs font-semibold text-amber-400">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
                 🏆 Requisitos cumpridos — sua comissão do mês está dobrada
               </p>
               <p className="text-sm font-mono font-bold text-foreground">
@@ -178,7 +178,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
                 Comissão aprovada até agora — cumprindo os dois requisitos, você
                 recebe <strong className="text-foreground">este mesmo valor de novo</strong>.
               </p>
-              <p className="text-sm font-mono font-bold text-violet-400">
+              <p className="text-sm font-mono font-bold text-violet-700 dark:text-violet-400">
                 {formatCurrency(dobra.comissao)}
                 <span className="text-muted-foreground font-normal mx-1.5">→</span>
                 <span className="text-foreground">{formatCurrency(dobra.comissao * 2)}</span>

@@ -49,10 +49,10 @@ export function VisaoConsolidada<T extends LinhaAgregavel>({
       {/* ── Os números que respondem "como está o mês" ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Numero rotulo="Setores" valor={setores.length} sub={`${resumo.total} pessoas`} />
-        <Numero rotulo="Recebidos" valor={recebidos} cls="text-emerald-500"
+        <Numero rotulo="Recebidos" valor={recebidos} cls="text-emerald-600 dark:text-emerald-500"
                 sub={pendentes > 0 ? `${pendentes} ainda não enviaram` : 'todos enviaram'} />
         <Numero rotulo="Com pendência" valor={comErro}
-                cls={comErro > 0 ? 'text-red-400' : 'text-muted-foreground'}
+                cls={comErro > 0 ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'}
                 sub={comErro > 0 ? 'aguardando correção' : 'nenhuma devolução aberta'} />
         <Card className="border-border/70">
           <CardContent className="p-4">
@@ -112,7 +112,7 @@ export function VisaoConsolidada<T extends LinhaAgregavel>({
                           voltava a perguntar o que faltava. */}
                       {s.resumo.dispensados > 0 && ` · ${s.resumo.dispensados} fora da folha`}
                       {s.resumo.devolvidos > 0 && (
-                        <span className="text-red-400 inline-flex items-center gap-0.5 ml-1">
+                        <span className="text-red-700 dark:text-red-400 inline-flex items-center gap-0.5 ml-1">
                           <AlertTriangle className="w-2.5 h-2.5" />
                           {s.resumo.devolvidos} devolvido{s.resumo.devolvidos !== 1 ? 's' : ''}
                         </span>

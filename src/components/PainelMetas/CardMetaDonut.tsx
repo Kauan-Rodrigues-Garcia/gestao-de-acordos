@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { corDaMeta, fatiasDeForma, type FatiaForma } from './metaDonut';
 import { ALTURA_CARD_PROGRESSO } from './tamanhoCards';
 import { PontoDaLegenda } from './PontoDaLegenda';
+import { corTexto } from '@/lib/temas';
 
 function formatarPct(v: number): string {
   return v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -70,7 +71,7 @@ export function CardMetaDonut({
               className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
               style={{ background: cor + '22' }}
             >
-              <Target className="w-3.5 h-3.5" style={{ color: cor }} />
+              <Target className="w-3.5 h-3.5" style={{ color: corTexto(cor) }} />
             </div>
             <span className="truncate">{breakdownAberto ? 'Formas de pagamento' : 'Progresso da meta'}</span>
           </CardTitle>
@@ -120,7 +121,7 @@ export function CardMetaDonut({
                 </p>
                 <p className="text-[11px] text-muted-foreground/80">meta {escopoRotulo}</p>
                 {pct >= 100 && (
-                  <p className="text-xs font-semibold text-emerald-500 flex items-center justify-center gap-1">
+                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 flex items-center justify-center gap-1">
                     <ArrowUpRight className="w-3.5 h-3.5" />
                     Meta atingida!
                   </p>
@@ -206,7 +207,7 @@ function LinhaForma({
         </span>
         <span
           className="text-xs font-bold tabular-nums font-mono px-1.5 py-0.5 rounded"
-          style={{ background: cor + '18', color: cor }}
+          style={{ background: cor + '18', color: corTexto(cor) }}
         >
           {formatarPct(fatia.perc)}%
         </span>

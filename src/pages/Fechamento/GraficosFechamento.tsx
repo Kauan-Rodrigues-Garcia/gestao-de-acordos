@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAxisColors } from '@/hooks/useChartColors';
+import { ehTemaEscuro } from '@/lib/temas';
 import { COR_QUARTIL } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 import { PizzaQuartis3D } from '@/pages/Dashboard/Analitico/PizzaQuartis3D';
@@ -123,7 +124,7 @@ function BarrasHorizontais({
 
 export function GraficosFechamento({ resumo }: { resumo: ResumoFechamento }) {
   const { resolvedTheme } = useTheme();
-  const corSituacao = resolvedTheme === 'dark' ? COR_SITUACAO.escuro : COR_SITUACAO.claro;
+  const corSituacao = ehTemaEscuro(resolvedTheme) ? COR_SITUACAO.escuro : COR_SITUACAO.claro;
 
   const quartis: PontoBarra[] = resumo.porQuartil.map(q => ({
     rotulo: `${q.quartil}º quartil`,

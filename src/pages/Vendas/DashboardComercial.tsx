@@ -274,7 +274,7 @@ export default function DashboardComercial() {
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                 {rotuloDoMes(mes)}
               </span>
-              <span className="font-bold text-emerald-500 tabular-nums font-mono">
+              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono">
                 {resumo.quantidade} venda{resumo.quantidade === 1 ? '' : 's'}
               </span>
             </div>

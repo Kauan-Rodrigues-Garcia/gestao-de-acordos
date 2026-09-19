@@ -47,6 +47,7 @@ import type { QuartilConfig } from '@/lib/supabase';
  * `import { type LiderInfo } from './CardEquipe'` funcionando.
  */
 import type { LiderInfo } from './lideresDaEquipe';
+import { corTexto } from '@/lib/temas';
 
 export type { LiderInfo };
 
@@ -192,7 +193,7 @@ function Numero({
       </p>
       <p
         className={cn('tabular-nums font-mono font-bold leading-tight mt-0.5 whitespace-nowrap', fonteDoValor(valor))}
-        style={cor ? { color: cor } : undefined}
+        style={cor ? { color: corTexto(cor) } : undefined}
       >
         {valor}
       </p>
@@ -294,7 +295,7 @@ function Degrau({
     >
       <span
         className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shrink-0"
-        style={{ background: cor + '26', color: cor }}
+        style={{ background: cor + '26', color: corTexto(cor) }}
       >
         {quartil}º
       </span>
@@ -342,7 +343,7 @@ function LinhaValor({
       <span className="text-[11px] text-muted-foreground min-w-0 truncate">{label}</span>
       <span
         className="text-[11px] tabular-nums font-mono font-semibold shrink-0"
-        style={cor ? { color: cor } : undefined}
+        style={cor ? { color: corTexto(cor) } : undefined}
       >
         {valor}
       </span>
@@ -399,7 +400,7 @@ export function CardEquipe({
       <div className="shrink-0 text-center rounded-xl px-3 py-1.5"
         style={d.projecaoPct !== null ? { background: cor + '1a' } : undefined}>
         <p className="text-2xl sm:text-3xl font-extrabold tabular-nums font-mono leading-none"
-          style={{ color: cor }}>
+          style={{ color: corTexto(cor) }}>
           {d.projecaoPct !== null ? `${d.projecaoPct}%` : '—'}
         </p>
         <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
@@ -616,7 +617,7 @@ export function CardEquipe({
                           {f.quartil}º quartil
                         </span>
                         <span className="text-[11px] tabular-nums font-mono font-bold shrink-0"
-                          style={{ color: c }}>
+                          style={{ color: corTexto(c) }}>
                           {f.qtd}
                         </span>
                       </div>

@@ -185,8 +185,8 @@ interface InstantaneoPix {
 }
 
 const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
-  pendente:    { label: 'Pendente',    cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
-  aprovado:    { label: 'Aprovado',    cls: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' },
+  pendente:    { label: 'Pendente',    cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/30' },
+  aprovado:    { label: 'Aprovado',    cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/30' },
   desaprovado: { label: 'Desaprovado', cls: 'bg-red-500/10 text-red-500 border-red-500/30' },
 };
 
@@ -216,12 +216,12 @@ const PIX_LOG_LABEL: Record<PixLogItem['acao'], string> = {
  */
 const PIX_LOG_ESTILO: Record<PixLogItem['acao'], string> = {
   registrado:         'border-border text-muted-foreground',
-  restaurado:         'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-  editado:            'border-violet-500/30 bg-violet-500/10 text-violet-400',
-  aprovado:           'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-  desaprovado:        'border-red-500/30 bg-red-500/10 text-red-400',
-  voltou_pendente:    'border-amber-500/30 bg-amber-500/10 text-amber-400',
-  pago:               'border-teal-500/30 bg-teal-500/10 text-teal-400',
+  restaurado:         'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  editado:            'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400',
+  aprovado:           'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  desaprovado:        'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
+  voltou_pendente:    'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  pago:               'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-400',
   pagamento_desfeito: 'border-border text-muted-foreground',
   excluido:           'border-destructive/40 bg-destructive/10 text-destructive',
 };
@@ -1999,15 +1999,15 @@ export function PixAutomatico() {
     {
       label: 'Pendente', qtd: totais.pendente.qtd,
       valor: totais.pendente.valor, comissao: totais.pendente.comissao,
-      cls: 'from-sky-500/15 to-sky-600/5 border-sky-500/25', icon: <Clock className="w-4 h-4 text-sky-400" />,
-      comissaoCls: 'text-sky-400',
+      cls: 'from-sky-500/15 to-sky-600/5 border-sky-500/25', icon: <Clock className="w-4 h-4 text-sky-700 dark:text-sky-400" />,
+      comissaoCls: 'text-sky-700 dark:text-sky-400',
       rodape: null as string | null,
     },
     {
       label: 'Aprovado', qtd: totais.aprovado.qtd,
       valor: totais.aprovado.valor, comissao: totais.aprovado.comissao,
-      cls: 'from-emerald-500/15 to-emerald-600/5 border-emerald-500/25', icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-      comissaoCls: 'text-emerald-400',
+      cls: 'from-emerald-500/15 to-emerald-600/5 border-emerald-500/25', icon: <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />,
+      comissaoCls: 'text-emerald-700 dark:text-emerald-400',
       rodape: null as string | null,
     },
     // Pago é o que SAIU, não o que é devido. Aprovado R$ 105,49 com R$ 50,00
@@ -2015,8 +2015,8 @@ export function PixAutomatico() {
     {
       label: 'Pago', qtd: pagamento.pago.qtd,
       valor: pagamento.pago.valor, comissao: pagamento.pago.comissao,
-      cls: 'from-teal-500/15 to-teal-600/5 border-teal-500/25', icon: <Banknote className="w-4 h-4 text-teal-400" />,
-      comissaoCls: 'text-teal-400',
+      cls: 'from-teal-500/15 to-teal-600/5 border-teal-500/25', icon: <Banknote className="w-4 h-4 text-teal-700 dark:text-teal-400" />,
+      comissaoCls: 'text-teal-700 dark:text-teal-400',
       rodape: pagamento.aPagar.comissao > 0
         ? `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`
         : null,
@@ -2029,7 +2029,7 @@ export function PixAutomatico() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/10 border border-violet-500/25 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-violet-400" />
+            <Zap className="w-4 h-4 text-violet-700 dark:text-violet-400" />
           </div>
           <div>
             <h2 className="text-sm font-bold text-foreground leading-tight">Pix Automático</h2>
@@ -2072,7 +2072,7 @@ export function PixAutomatico() {
           </Button>
           {meusDesaprovados > 0 && (
             <Button variant="ghost" size="sm" onClick={limparMeusDesaprovados} disabled={limpando}
-              className="gap-1.5 h-8 text-xs rounded-lg text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 hover:text-red-300">
+              className="gap-1.5 h-8 text-xs rounded-lg text-red-700 dark:text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 hover:text-red-800 dark:hover:text-red-300">
               <Trash2 className="w-3.5 h-3.5" />
               {limpando ? 'Limpando...' : `Limpar desaprovados (${meusDesaprovados})`}
             </Button>
@@ -2101,7 +2101,7 @@ export function PixAutomatico() {
       {!noMesAtual && (
         <Card className="border-amber-500/30 bg-amber-500/[0.06]">
           <CardContent className="p-3 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
             <div className="min-w-0 space-y-0.5">
               <p className="text-xs font-semibold text-foreground">
                 Você está vendo {rotuloDoMes(mes)}
@@ -2230,7 +2230,7 @@ export function PixAutomatico() {
             {valorNovo && !isNaN(parseCurrencyInput(valorNovo)) && parseCurrencyInput(valorNovo) > 0 && (
               <p className="text-[11px] text-muted-foreground pb-2.5">
                 Comissão estimada:{' '}
-                <span className="font-mono font-semibold text-violet-400">
+                <span className="font-mono font-semibold text-violet-700 dark:text-violet-400">
                   {formatCurrency(Math.round(parseCurrencyInput(valorNovo) * pctDoMeuSetor) / 100)}
                 </span>
               </p>
@@ -2251,9 +2251,9 @@ export function PixAutomatico() {
       ) : (
       <Card className="border-amber-500/25 bg-amber-500/[0.04]">
         <CardContent className="p-4 flex items-center gap-3">
-          <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+          <Lock className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0" />
           <p className="text-xs text-muted-foreground">
-            O registro manual de acordos está <strong className="text-amber-500">desativado</strong> para
+            O registro manual de acordos está <strong className="text-amber-700 dark:text-amber-500">desativado</strong> para
             o seu setor. Você pode acompanhar seus acordos pendentes, aprovados e desaprovados abaixo.
           </p>
         </CardContent>
@@ -2388,7 +2388,7 @@ export function PixAutomatico() {
       {!loading && !podeAjustarSaldo && saldos.length > 0 && (
         <Card className="border-violet-500/25 bg-violet-500/5">
           <CardContent className="p-3 flex items-start gap-2">
-            <Scale className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+            <Scale className="w-4 h-4 text-violet-700 dark:text-violet-400 shrink-0 mt-0.5" />
             <div className="space-y-0.5 min-w-0">
               <p className="text-xs font-semibold text-foreground">
                 Há correção de valor pendente para você
@@ -2434,9 +2434,9 @@ export function PixAutomatico() {
           de que a linha some sozinha, para ele não achar que sumiu por engano. */}
       {!loading && meusDesaprovados > 0 && (
         <div className="rounded-lg border border-red-500/25 bg-red-500/[0.05] px-3 py-2 flex items-start gap-2.5">
-          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <AlertTriangle className="w-4 h-4 text-red-700 dark:text-red-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-muted-foreground">
-            Você tem <strong className="text-red-400">{meusDesaprovados}</strong> registro
+            Você tem <strong className="text-red-700 dark:text-red-400">{meusDesaprovados}</strong> registro
             {meusDesaprovados !== 1 ? 's' : ''} desaprovado{meusDesaprovados !== 1 ? 's' : ''}.
             Registro desaprovado é excluído automaticamente{' '}
             <strong className="text-foreground">{PIX_DIAS_UTEIS_EXPURGO} dias úteis</strong>{' '}
@@ -2550,15 +2550,15 @@ export function PixAutomatico() {
       {podeEditarConfig && setorConfig && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-violet-400" />
+            <Building2 className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400" />
             {setores.find(s => s.id === setorConfig)?.nome ?? 'Meu setor'}
           </span>
           <div className="flex items-center gap-1.5">
-            <Percent className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <Percent className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400 shrink-0" />
             <span className="text-[11px] text-muted-foreground shrink-0">Comissão do setor:</span>
             <Input value={pctInput} onChange={e => setPctInput(e.target.value)}
               className="h-7 w-16 text-xs text-center font-mono" />
-            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-violet-400 hover:text-violet-300"
+            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-violet-700 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300"
               onClick={pedirConfirmacaoPct} disabled={salvandoPct} title="Confirmar novo percentual do setor">
               {salvandoPct ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Confirmar
@@ -2570,7 +2570,7 @@ export function PixAutomatico() {
               mudar a meta não reescreve comissão já aprovada, só muda um
               requisito daqui pra frente. */}
           <div className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <Zap className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
             <span className="text-[11px] text-muted-foreground shrink-0">
               Acordos p/ dobrar:
             </span>
@@ -2582,7 +2582,7 @@ export function PixAutomatico() {
               title="Quantos acordos Pix o operador precisa fechar no mês"
             />
             <Button size="sm" variant="ghost"
-              className="h-7 gap-1 px-2 text-xs text-amber-400 hover:text-amber-300"
+              className="h-7 gap-1 px-2 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
               onClick={salvarMetaDobra} disabled={salvandoMetaDobra}
               title="Salvar a meta de acordos do setor">
               {salvandoMetaDobra ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
@@ -2596,7 +2596,7 @@ export function PixAutomatico() {
               aria-label="Registro manual pelos operadores" />
             <span className="text-[11px] text-muted-foreground">
               Registro manual pelos operadores:{' '}
-              <strong className={registroLigadoSetorConfig ? 'text-emerald-500' : 'text-amber-500'}>
+              <strong className={registroLigadoSetorConfig ? 'text-emerald-600 dark:text-emerald-500' : 'text-amber-700 dark:text-amber-500'}>
                 {registroLigadoSetorConfig ? 'ligado' : 'desligado'}
               </strong>
             </span>
@@ -2635,18 +2635,18 @@ export function PixAutomatico() {
           {podeAprovar && (
             <>
               <button onClick={() => avaliarSelecionados(true)} disabled={loteProcessando}
-                className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
+                className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
                 <Check className="w-3.5 h-3.5" /> Aprovar
               </button>
               <button onClick={() => avaliarSelecionados(false)} disabled={loteProcessando}
-                className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
+                className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
                 <XCircle className="w-3.5 h-3.5" /> Desaprovar
               </button>
             </>
           )}
           <button onClick={() => marcarPagosSelecionados(true)} disabled={loteProcessando}
             title="Marcar a comissão dos aprovados como paga"
-            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-teal-400 border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20 disabled:opacity-50">
+            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-400 border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20 disabled:opacity-50">
             <Banknote className="w-3.5 h-3.5" /> Marcar pago
           </button>
           <button onClick={() => marcarPagosSelecionados(false)} disabled={loteProcessando}
@@ -2775,7 +2775,7 @@ export function PixAutomatico() {
                           ) : formatCurrency(item.valor)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-violet-400')}>
+                          <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-violet-700 dark:text-violet-400')}>
                             {formatCurrency(comissao)}
                           </span>
                           <span className="text-[10px] text-muted-foreground ml-1">({fmtPct(pctLinha)})</span>
@@ -2786,7 +2786,7 @@ export function PixAutomatico() {
                             <p
                               className={cn(
                                 'text-[10px] font-mono font-semibold mt-0.5',
-                                Number(item.ajuste_valor) > 0 ? 'text-emerald-400' : 'text-amber-400',
+                                Number(item.ajuste_valor) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400',
                               )}
                               title={item.ajuste_motivo ?? 'Correção de valor divergente'}
                             >
@@ -2807,7 +2807,7 @@ export function PixAutomatico() {
                               PIX_DIAS_UTEIS_EXPURGO dias úteis, e quem registrou
                               precisa ver quanto tempo ainda tem para conferir. */}
                           {desaprovado && prazoDesaprovado(item) && (
-                            <p className="text-[10px] text-red-400/90 mt-0.5 inline-flex items-center gap-1">
+                            <p className="text-[10px] text-red-700/90 dark:text-red-400/90 mt-0.5 inline-flex items-center gap-1">
                               <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                               {prazoDesaprovado(item)}
                             </p>
@@ -2819,7 +2819,7 @@ export function PixAutomatico() {
                         <td className="px-4 py-3">
                           {item.pago ? (
                             <>
-                              <Badge variant="outline" className="text-[10px] font-semibold bg-teal-500/10 text-teal-400 border-teal-500/30">
+                              <Badge variant="outline" className="text-[10px] font-semibold bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/30">
                                 Pago
                               </Badge>
                               {item.pago_por_nome && (
@@ -2830,7 +2830,7 @@ export function PixAutomatico() {
                               )}
                             </>
                           ) : item.status === 'aprovado' ? (
-                            <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-500 border-amber-500/30">
+                            <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-500 border-amber-500/30">
                               A pagar
                             </Badge>
                           ) : (
@@ -2845,7 +2845,7 @@ export function PixAutomatico() {
                             <div className="flex items-center justify-end gap-1">
                               <button title="Salvar" disabled={salvandoEdicao}
                                 onClick={() => salvarEdicao(item)}
-                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
+                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
                                 {salvandoEdicao ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                                 Salvar
                               </button>
@@ -2868,12 +2868,12 @@ export function PixAutomatico() {
                               <>
                                 <button title="Aprovar" disabled={avaliandoId === item.id}
                                   onClick={() => avaliar(item, true)}
-                                  className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
+                                  className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
                                   <Check className="w-3 h-3" /> Aprovar
                                 </button>
                                 <button title="Desaprovar" disabled={avaliandoId === item.id}
                                   onClick={() => avaliar(item, false)}
-                                  className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
+                                  className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-red-700 dark:text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
                                   <XCircle className="w-3 h-3" /> Desaprovar
                                 </button>
                               </>
@@ -2888,7 +2888,7 @@ export function PixAutomatico() {
                                 title={`Aplicar ${formatCurrency(saldoAplicavelNa(item)!.valor)} de correção neste pagamento`}
                                 disabled={ajustandoId === item.id}
                                 onClick={() => aplicarCorrecao(item)}
-                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-violet-300 border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 disabled:opacity-50">
+                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-300 border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 disabled:opacity-50">
                                 {ajustandoId === item.id
                                   ? <RefreshCw className="w-3 h-3 animate-spin" />
                                   : <Scale className="w-3 h-3" />}
@@ -2916,7 +2916,7 @@ export function PixAutomatico() {
                                   'h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold border disabled:opacity-50',
                                   item.pago
                                     ? 'text-muted-foreground border-border hover:text-foreground hover:bg-accent/60'
-                                    : 'text-teal-400 border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20',
+                                    : 'text-teal-700 dark:text-teal-400 border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20',
                                 )}>
                                 <Banknote className="w-3 h-3" /> {item.pago ? 'Desfazer' : 'Pagar'}
                               </button>
@@ -3057,7 +3057,7 @@ export function PixAutomatico() {
                               title="Restaurar este registro"
                               disabled={restaurandoId === item.id}
                               onClick={() => restaurarDaLixeira(item)}
-                              className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
+                              className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
                             >
                               {restaurandoId === item.id
                                 ? <RefreshCw className="w-3 h-3 animate-spin" />

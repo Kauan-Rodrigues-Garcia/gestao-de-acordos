@@ -855,7 +855,7 @@ export default function Comemoracoes() {
       {agendadas.length > 0 && (
         <section className="space-y-2">
           <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-sky-500" />
+            <Clock className="h-4 w-4 text-sky-600 dark:text-sky-500" />
             <h2 className="text-sm font-semibold">Agendadas</h2>
             <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px]">{agendadas.length}</Badge>
           </div>
@@ -873,7 +873,7 @@ export default function Comemoracoes() {
       {noAr.length > 0 && (
         <section className="space-y-2">
           <div className="flex items-center gap-2">
-            <PartyPopper className="h-4 w-4 text-amber-500" />
+            <PartyPopper className="h-4 w-4 text-amber-700 dark:text-amber-500" />
             <h2 className="text-sm font-semibold">Em andamento</h2>
             <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px]">{noAr.length}</Badge>
           </div>
@@ -890,7 +890,7 @@ export default function Comemoracoes() {
       {/* ── Finalizadas ── */}
       <section className="space-y-2">
         <div className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-amber-500" />
+          <Trophy className="h-4 w-4 text-amber-700 dark:text-amber-500" />
           <h2 className="text-sm font-semibold">Finalizadas</h2>
           <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px]">{passadas.length}</Badge>
         </div>

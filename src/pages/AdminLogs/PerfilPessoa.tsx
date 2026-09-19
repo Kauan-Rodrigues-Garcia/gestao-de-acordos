@@ -248,7 +248,7 @@ export default function PerfilPessoa({
             {/* ── O dia de maior uso ── */}
             {perfil?.melhor_dia && (
               <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
-                <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <Trophy className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500 shrink-0" />
                 <p className="text-[11px] leading-snug">
                   Dia de maior uso:{' '}
                   <strong className="text-foreground">

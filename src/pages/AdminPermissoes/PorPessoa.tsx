@@ -278,7 +278,7 @@ export function PorPessoa() {
                 return (
                   <div className={cn('flex items-center gap-2', contexto.disabled && 'opacity-60')}>
                     <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-                      cargo: <strong className={doCargo ? 'text-emerald-500' : 'text-muted-foreground'}>
+                      cargo: <strong className={doCargo ? 'text-emerald-600 dark:text-emerald-500' : 'text-muted-foreground'}>
                         {doCargo ? 'sim' : 'não'}
                       </strong>
                     </span>

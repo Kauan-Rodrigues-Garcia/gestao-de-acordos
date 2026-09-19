@@ -82,7 +82,7 @@ export function FormPP({ state }: { state: SharedFormState }) {
                       <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
                     )}
                     {!profissionalLoading && profissionalEncontrado && (
-                      <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-500" />
+                      <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
                     )}
                   </div>
                 </div>

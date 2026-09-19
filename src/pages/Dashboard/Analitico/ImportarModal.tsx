@@ -111,7 +111,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             </div>
             {(resultado.colchaoInseridos > 0 || resultado.colchaoDuplicados > 0) && (
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-center">
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 text-center">
                   <p className="text-2xl font-bold text-amber-600">{resultado.colchaoInseridos}</p>
                   <p className="text-xs text-muted-foreground">Colchão fora da meta inserido</p>
                 </div>
@@ -122,10 +122,10 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
             {resultado.erros.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
-                <p className="text-xs font-semibold text-amber-700">Avisos:</p>
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Avisos:</p>
                 {resultado.erros.map((e, i) => (
-                  <p key={i} className="text-xs text-amber-600">{e}</p>
+                  <p key={i} className="text-xs text-amber-600 dark:text-amber-400">{e}</p>
                 ))}
               </div>
             )}
@@ -191,7 +191,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 <p className="text-xs text-muted-foreground">no arquivo</p>
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
-                <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-700 dark:text-amber-500' : 'text-emerald-600 dark:text-emerald-500'}`}>
                   {naoDetectados.length - vinculadosManuaisCount}
                 </p>
                 <p className="text-xs text-muted-foreground">sem operador</p>
@@ -281,7 +281,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             )}
 
             {(preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
                   <strong>{preview.colchaoNaMeta.linhas}</strong>{' '}
                   linha{preview.colchaoNaMeta.linhas !== 1 ? 's' : ''} do Colchão até 14/08/2026{' '}
@@ -298,13 +298,13 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
             {/* Operadores detectados automaticamente */}
             {detectados.length > 0 && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20">
+              <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/20">
                 <button
                   type="button"
                   onClick={() => setDetectadosExpandido(v => !v)}
                   className="w-full flex items-center justify-between px-3 py-2.5 text-left"
                 >
-                  <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Operadores detectados ({detectados.length})
                   </span>
@@ -315,7 +315,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 </button>
 
                 {detectadosExpandido && (
-                  <div className="px-3 pb-3 space-y-1 border-t border-emerald-200">
+                  <div className="px-3 pb-3 space-y-1 border-t border-emerald-200 dark:border-emerald-800/60">
                     <p className="text-[10px] text-emerald-600 py-1.5">
                       Nome no arquivo → usuário vinculado no sistema
                     </p>
@@ -328,7 +328,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                           <span className="font-mono text-emerald-800 dark:text-emerald-300 shrink-0">
                             {usuarioArquivo}
                           </span>
-                          <ArrowRight className="w-3 h-3 text-emerald-500 shrink-0" />
+                          <ArrowRight className="w-3 h-3 text-emerald-600 dark:text-emerald-500 shrink-0" />
                           <span className="font-mono text-emerald-700 dark:text-emerald-400 shrink-0">
                             {match!.usuarioDB}
                           </span>
@@ -376,15 +376,15 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
             {/* Operadores não detectados — com seleção manual */}
             {naoDetectados.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20">
                 <div className="px-3 py-2.5 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-amber-600" />
-                  <p className="text-xs font-semibold text-amber-700">
+                  <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
                     Não detectados ({naoDetectados.length}) — vincule manualmente ou deixe em branco
                   </p>
                 </div>
 
-                <div className="px-3 pb-3 border-t border-amber-200 space-y-2 max-h-64 overflow-y-auto">
+                <div className="px-3 pb-3 border-t border-amber-200 dark:border-amber-800/60 space-y-2 max-h-64 overflow-y-auto">
                   {naoDetectados.map(u => {
                     const vinculoAtual = vinculosManuais[u] ?? '';
                     return (
@@ -392,7 +392,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                         <span className="font-mono text-xs text-amber-800 dark:text-amber-300 w-44 shrink-0 truncate">
                           {u}
                         </span>
-                        <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
+                        <ArrowRight className="w-3 h-3 text-amber-700 dark:text-amber-400 shrink-0" />
                         <Select
                           value={vinculoAtual || '__nenhum__'}
                           onValueChange={val => definirVinculo(u, val === '__nenhum__' ? null : val)}
@@ -476,8 +476,8 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                           <td className="px-3 py-1.5">
                             <Badge variant="outline" className={
                               l.forma_pagamento === 'cartao'
-                                ? 'border-purple-300 text-purple-700'
-                                : 'border-blue-300 text-blue-700'
+                                ? 'border-purple-300 dark:border-purple-800/60 text-purple-700 dark:text-purple-300'
+                                : 'border-blue-300 dark:border-blue-800/60 text-blue-700 dark:text-blue-300'
                             }>
                               {l.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
                             </Badge>
@@ -487,8 +487,8 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                           <td className="px-3 py-1.5">{l.data_pagamento.toLocaleDateString('pt-BR')}</td>
                           <td className="px-3 py-1.5">
                             {vinculado
-                              ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              : <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                              ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
+                              : <AlertCircle className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                             }
                           </td>
                         </tr>

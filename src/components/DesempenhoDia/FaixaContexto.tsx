@@ -19,6 +19,7 @@ import { Zap, Tag, Link2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/index';
 import type { FatiaTag, ResumoPixDia } from '@/lib/desempenhoDia';
 
+import { corTexto } from '@/lib/temas';
 interface FaixaContextoProps {
   /** `null` quando o setor não tem a lógica Direto/Extra. */
   diretoExtra: { direto: number; extra: number } | null;
@@ -106,7 +107,7 @@ function BlocoPix({ pix }: { pix: ResumoPixDia }) {
           <Zap className="mr-1 inline h-3 w-3" />
           Pix Automático
         </p>
-        <span className="font-mono text-sm font-bold tabular-nums text-cyan-500">
+        <span className="font-mono text-sm font-bold tabular-nums text-cyan-600 dark:text-cyan-500">
           {formatCurrency(pix.comissao)}
         </span>
       </div>
@@ -118,7 +119,7 @@ function BlocoPix({ pix }: { pix: ResumoPixDia }) {
           {pix.pendentes > 0 && (
             <>
               {' · '}
-              <strong className="font-semibold text-amber-500 tabular-nums">{pix.pendentes}</strong>
+              <strong className="font-semibold text-amber-700 dark:text-amber-500 tabular-nums">{pix.pendentes}</strong>
               {' '}aguardando
             </>
           )}
@@ -162,7 +163,7 @@ function BlocoTags({ tags, semMovimento }: { tags: FatiaTag[]; semMovimento: boo
                 </span>
                 <span
                   className="rounded px-1 py-0.5 text-[10px] font-bold tabular-nums"
-                  style={{ background: t.cor + '22', color: t.cor }}
+                  style={{ background: t.cor + '22', color: corTexto(t.cor) }}
                 >
                   {t.pct}%
                 </span>

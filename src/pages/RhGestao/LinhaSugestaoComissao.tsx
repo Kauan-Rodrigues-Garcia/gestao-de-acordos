@@ -25,7 +25,7 @@ export default function LinhaSugestaoComissao({ sugestao, valor }: LinhaSugestao
     <p
       className={cn(
         'mt-0.5 text-[10px] leading-tight',
-        diverge ? 'text-amber-500' : 'text-muted-foreground',
+        diverge ? 'text-amber-700 dark:text-amber-500' : 'text-muted-foreground',
       )}
       title={diverge ? 'O valor lançado é diferente da comissão calculada' : undefined}
     >

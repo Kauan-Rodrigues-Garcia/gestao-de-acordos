@@ -291,10 +291,10 @@ export default function AdminConfiguracoes() {
                   <div className="w-4 h-4 rounded-full border-2 border-muted-foreground border-t-primary animate-spin mt-0.5 flex-shrink-0" />
                 )}
                 {schemaStatus === 'ok' && (
-                  <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-500 mt-0.5 flex-shrink-0" />
                 )}
                 {schemaStatus === 'missing' && (
-                  <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 mt-0.5 flex-shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">

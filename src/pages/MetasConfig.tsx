@@ -248,7 +248,7 @@ function SeloLinha({ estado }: { estado?: EstadoLinha }) {
       estado === "erro" ? "text-destructive" : "text-muted-foreground",
     )}>
       {estado === "salvando" && (<><Loader2 className="h-3 w-3 animate-spin" /> …</>)}
-      {estado === "salvo"    && (<><Check className="h-3 w-3 text-emerald-500" /> salvo</>)}
+      {estado === "salvo"    && (<><Check className="h-3 w-3 text-emerald-600 dark:text-emerald-500" /> salvo</>)}
       {estado === "erro"     && (<><TriangleAlert className="h-3 w-3" /> erro</>)}
     </span>
   );
@@ -1887,7 +1887,7 @@ export default function MetasConfig() {
               ) : !setorSelecionado ? (
                 <>Selecione um setor para começar.</>
               ) : (
-                <><Check className="h-3.5 w-3.5 text-emerald-500" /> Cada meta é salva
+                <><Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-500" /> Cada meta é salva
                   sozinha ao sair do campo. Campo em branco não apaga a meta de ninguém — para isso, use a lixeira da linha.</>
               )}
             </p>

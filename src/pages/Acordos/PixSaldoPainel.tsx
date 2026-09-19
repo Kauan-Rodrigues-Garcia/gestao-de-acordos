@@ -38,13 +38,13 @@ const SINAIS = {
     rotulo: 'A empresa deve',
     ajuda: 'O Pix saiu com valor a MENOS — este valor entra no próximo pagamento',
     icone: ArrowUpCircle,
-    cls: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10',
+    cls: 'text-emerald-700 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10',
   },
   descontar: {
     rotulo: 'A empresa vai descontar',
     ajuda: 'O Pix saiu com valor a MAIS — este valor sai do próximo pagamento',
     icone: ArrowDownCircle,
-    cls: 'text-amber-400 border-amber-500/40 bg-amber-500/10',
+    cls: 'text-amber-700 dark:text-amber-400 border-amber-500/40 bg-amber-500/10',
   },
 } as const;
 
@@ -149,10 +149,10 @@ export function PixSaldoPainel({
           aria-expanded={aberto}
         >
           <span className="flex items-center gap-2 min-w-0">
-            <Scale className="w-4 h-4 text-violet-400 shrink-0" />
+            <Scale className="w-4 h-4 text-violet-700 dark:text-violet-400 shrink-0" />
             <span className="text-xs font-semibold text-foreground">Corrigir valor divergente</span>
             {saldos.length > 0 && (
-              <Badge variant="outline" className="text-[10px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+              <Badge variant="outline" className="text-[10px] border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300">
                 {saldos.length} em aberto · {formatCurrency(totalAberto)}
               </Badge>
             )}
@@ -216,7 +216,7 @@ export function PixSaldoPainel({
                 entre substituir e somar. */}
             {saldoDoAlvo && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5">
-                <p className="text-[11px] text-amber-300 font-semibold">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">
                   {alvo?.nome} já tem saldo de {formatCurrency(saldoDoAlvo.valor)}
                   {saldoDoAlvo.valor > 0 ? ' a receber' : ' a descontar'}.
                 </p>
@@ -324,7 +324,7 @@ export function PixSaldoPainel({
                           <p className="text-[10px] text-muted-foreground truncate">{s.motivo}</p>
                         )}
                         {s.acordo_id && (
-                          <p className="text-[10px] text-violet-300 inline-flex items-center gap-1">
+                          <p className="text-[10px] text-violet-700 dark:text-violet-300 inline-flex items-center gap-1">
                             <Link2 className="w-2.5 h-2.5 shrink-0" />
                             aplicado no NR {nrPorAcordo[s.acordo_id] ?? '—'} — aguardando pagamento
                           </p>
@@ -333,7 +333,7 @@ export function PixSaldoPainel({
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={cn(
                           'font-mono text-xs font-bold',
-                          s.valor > 0 ? 'text-emerald-400' : 'text-amber-400',
+                          s.valor > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400',
                         )}>
                           {s.valor > 0 ? '+' : '−'}{formatCurrency(Math.abs(s.valor))}
                         </span>

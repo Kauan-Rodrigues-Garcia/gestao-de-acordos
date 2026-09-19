@@ -124,7 +124,7 @@ export function DesafioHero({
             formatar={formatBRL}
             carregando={carregando}
             className={cn('text-3xl font-bold sm:text-4xl', tema.destaque)}
-            classeSubindo="text-emerald-500"
+            classeSubindo="text-emerald-600 dark:text-emerald-500"
           />
           {desafio.regra.metaColetiva ? (
             <div className="mt-2 w-full lg:w-64">

@@ -118,6 +118,7 @@ import {
 import {
   buscarRecebimentoIndireto, type MapaRecebimentoIndireto,
 } from '@/services/metas/recebimentoIndireto.service';
+import { corTexto } from '@/lib/temas';
 
 interface QuartisOperadoresProps {
   empresaId: string;
@@ -215,7 +216,7 @@ function LinhaValor({
       <span
         className={cn('text-[11px] tabular-nums font-mono font-semibold shrink-0',
           forte && 'text-xs font-bold')}
-        style={cor ? { color: cor } : undefined}
+        style={cor ? { color: corTexto(cor) } : undefined}
       >
         {valor}
       </span>
@@ -256,12 +257,12 @@ function Degrau({
 
       {alcancado ? (
         <span className="text-[11px] tabular-nums font-mono font-semibold shrink-0"
-          style={{ color: COR_QUARTIL[1] }}>
+          style={{ color: corTexto(COR_QUARTIL[1]) }}>
           alcançado
         </span>
       ) : (
         <span className="flex items-baseline gap-2 shrink-0">
-          <span className="text-[11px] tabular-nums font-mono font-semibold" style={{ color: cor }}
+          <span className="text-[11px] tabular-nums font-mono font-semibold" style={{ color: corTexto(cor) }}
             title="Quanto falta para entrar nesta faixa hoje">
             {formatBRL(falta)}
           </span>
@@ -378,10 +379,10 @@ function DetalheOperador({
         ].map(f => (
           <div key={f.titulo} className="rounded-lg border border-border bg-card px-3 py-2">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: f.cor }}>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: corTexto(f.cor) }}>
                 Meta {f.titulo}
               </span>
-              <span className="text-sm font-mono tabular-nums font-bold" style={{ color: f.cor }}>
+              <span className="text-sm font-mono tabular-nums font-bold" style={{ color: corTexto(f.cor) }}>
                 {f.pct !== null ? `${f.pct}%` : '—'}
               </span>
             </div>
@@ -1129,7 +1130,7 @@ export function QuartisOperadores({
                 style={{
                   borderColor: (COR_QUARTIL[quartilFoco] ?? '#6366f1') + '66',
                   background: (COR_QUARTIL[quartilFoco] ?? '#6366f1') + '1f',
-                  color: COR_QUARTIL[quartilFoco] ?? '#6366f1',
+                  color: corTexto(COR_QUARTIL[quartilFoco] ?? '#6366f1'),
                 }}
               >
                 Só o {quartilFoco}º quartil
@@ -1269,18 +1270,18 @@ export function QuartisOperadores({
                             </td>
                             <td className="px-2 py-1 text-right tabular-nums font-mono font-semibold"
                               style={l.diferenca === null ? undefined
-                                : { color: l.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4] }}>
+                                : { color: corTexto(l.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]) }}>
                               {l.diferenca === null ? '—'
                                 : `${l.diferenca >= 0 ? '+' : '−'}${formatBRL(Math.abs(l.diferenca))}`}
                             </td>
                             <td className="px-2 py-1 text-right tabular-nums font-mono font-bold"
-                              style={cor ? { color: cor } : undefined}>
+                              style={cor ? { color: corTexto(cor) } : undefined}>
                               {l.projecao !== null ? `${l.projecao}%` : '—'}
                             </td>
                             <td className="px-2 py-1 text-center">
                               {l.quartil ? (
                                 <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold"
-                                  style={{ background: (cor ?? '#6366f1') + '26', color: cor }}>
+                                  style={{ background: (cor ?? '#6366f1') + '26', color: corTexto(cor) }}>
                                   {l.quartil.quartil}º
                                 </span>
                               ) : (
@@ -1368,7 +1369,7 @@ export function QuartisOperadores({
                         </td>
                         <td className="py-1 font-medium">{f.quartil}º quartil</td>
                         <td className="py-1 text-right tabular-nums font-mono text-muted-foreground">{pct}%</td>
-                        <td className="py-1 text-right tabular-nums font-mono font-bold w-8" style={{ color: cor }}>
+                        <td className="py-1 text-right tabular-nums font-mono font-bold w-8" style={{ color: corTexto(cor) }}>
                           {f.qtd}
                         </td>
                       </tr>

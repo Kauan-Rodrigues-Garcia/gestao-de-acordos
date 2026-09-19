@@ -71,8 +71,8 @@ export default function UsuariosOnline({ className }: { className?: string }) {
         formatar={v => String(Math.round(v))}
         carregando={loading}
         className="text-xs font-bold font-mono leading-none"
-        classeSubindo="text-emerald-500"
-        classeDescendo="text-amber-500"
+        classeSubindo="text-emerald-600 dark:text-emerald-500"
+        classeDescendo="text-amber-700 dark:text-amber-500"
         aria-label={`${total} usuário(s) online agora`}
       />
 

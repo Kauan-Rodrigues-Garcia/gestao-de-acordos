@@ -83,6 +83,7 @@ import {
 } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
 import { EvolucaoVendas } from './dashboard/EvolucaoVendas';
 import { Faixa } from './componentes';
+import { corTexto } from '@/lib/temas';
 
 // Desafios arrasta catálogo, detalhe e configuração das gincanas. Só baixa
 // para quem abre a aba.
@@ -817,7 +818,7 @@ function AbaPessoas({
                       <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{GAVETA_LABELS[g]}</span>
                       <span className="text-[11px] tabular-nums font-mono text-muted-foreground">{parte}%</span>
                       <span className="w-6 text-right text-[11px] tabular-nums font-mono font-bold"
-                        style={{ color: COR_DA_GAVETA[g] }}>
+                        style={{ color: corTexto(COR_DA_GAVETA[g]) }}>
                         {qtd}
                       </span>
                     </div>

@@ -36,6 +36,7 @@ import { containerVariants } from '@/components/AnalyticsPanel/constants';
 import { CardMetaDonut } from './CardMetaDonut';
 import { AnelProjecao } from './AnelProjecao';
 import type { DadosPainelMetas } from '@/hooks/usePainelMetas';
+import { corTexto } from '@/lib/temas';
 
 /** Grade que se reacomoda sozinha conforme cards entram e saem. */
 const DIAS_SEMANA = [
@@ -156,7 +157,7 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
           accentColor={COR_QUARTIL[1]}
           gradientFrom={COR_QUARTIL[1]}
           trend="up"
-          value={<span className="text-emerald-500">{formatBRL(totalRecebido)}</span>}
+          value={<span className="text-emerald-600 dark:text-emerald-500">{formatBRL(totalRecebido)}</span>}
           sub={[
             meta !== null ? `Meta ${escopoRotulo}: ${formatBRL(meta)}` : null,
             // A outra unidade fica na MESMA linha de apoio, não num card ao
@@ -192,7 +193,7 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
               accentColor="#f59e0b"
               gradientFrom="#f59e0b"
               value={
-                <span className="text-amber-500">
+                <span className="text-amber-700 dark:text-amber-500">
                   {formatBRL(extraDeTabulacao
                     ? (unidade === 'ho' ? extraDeTabulacao.ho : extraDeTabulacao.bruto)
                     : vinculo.extra)}
@@ -221,7 +222,7 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
             icon={<History className="w-4 h-4" />}
             accentColor="#0ea5e9"
             gradientFrom="#0ea5e9"
-            value={<span className="text-sky-500">{formatBRL(baixaAnterior.bruto)}</span>}
+            value={<span className="text-sky-600 dark:text-sky-500">{formatBRL(baixaAnterior.bruto)}</span>}
             sub={`${rotuloDoDia(baixaAnterior.dia, mes)} · ${baixaAnterior.qtd} registro${baixaAnterior.qtd !== 1 ? 's' : ''}`}
           />
         )}
@@ -267,7 +268,7 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
               gradientFrom={projecao.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
               trend={projecao.diferenca >= 0 ? 'up' : 'down'}
               value={(
-                <span style={{ color: projecao.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4] }}>
+                <span style={{ color: corTexto(projecao.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]) }}>
                   {projecao.diferenca >= 0 ? '+ ' : '− '}
                   {formatBRL(Math.abs(projecao.diferenca))}
                 </span>
@@ -282,7 +283,7 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
                 accentColor={corQuartil}
                 gradientFrom={corQuartil}
                 value={(
-                  <span style={{ color: corQuartil }}>
+                  <span style={{ color: corTexto(corQuartil) }}>
                     {projecao.quartil.quartil}º Quartil
                   </span>
                 )}

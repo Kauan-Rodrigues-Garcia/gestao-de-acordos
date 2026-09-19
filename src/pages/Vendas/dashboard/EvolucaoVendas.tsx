@@ -42,6 +42,7 @@ import { CHART_RECEBIDO, CHART_AGENDADO } from '@/components/AnalyticsPanel/cons
 import { OPACIDADES, opacidadeDaBarra } from '@/components/PainelMetas/opacidadeBarra';
 import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
 import type { PontoDoMes } from '@/lib/vendasDashboard';
+import { corTexto } from '@/lib/temas';
 
 /** A cor do acumulado. A mesma que a cobrança usa na série de apoio. */
 const COR_ACUMULADO = CHART_AGENDADO;
@@ -77,7 +78,7 @@ function TooltipDoDia({ active, payload, label }: PropsTooltipGrafico) {
               style={{ background: entry.color }}
             />
             <span className="text-muted-foreground">{entry.name}:</span>
-            <span className="font-semibold tabular-nums font-mono" style={{ color: entry.color }}>
+            <span className="font-semibold tabular-nums font-mono" style={{ color: corTexto(entry.color) }}>
               {formatBRL(entry.value ?? 0)}
             </span>
           </div>

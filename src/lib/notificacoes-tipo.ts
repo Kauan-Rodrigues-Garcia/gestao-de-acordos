@@ -98,12 +98,12 @@ export const CATEGORIA_ICONE: Record<CategoriaNotificacao, string> = {
  * nenhuma das duas seria lida.
  */
 export const CATEGORIA_COR: Record<CategoriaNotificacao, string> = {
-  chat:        'bg-sky-500/12 text-sky-500 ring-sky-500/25',
+  chat:        'bg-sky-500/12 text-sky-600 dark:text-sky-500 ring-sky-500/25',
   atendimento: 'bg-violet-500/12 text-violet-500 ring-violet-500/25',
-  pix:         'bg-amber-500/12 text-amber-500 ring-amber-500/25',
+  pix:         'bg-amber-500/12 text-amber-700 dark:text-amber-500 ring-amber-500/25',
   vinculo:     'bg-fuchsia-500/12 text-fuchsia-500 ring-fuchsia-500/25',
-  acordo:      'bg-emerald-500/12 text-emerald-500 ring-emerald-500/25',
-  importacao:  'bg-teal-500/12 text-teal-500 ring-teal-500/25',
+  acordo:      'bg-emerald-500/12 text-emerald-600 dark:text-emerald-500 ring-emerald-500/25',
+  importacao:  'bg-teal-500/12 text-teal-600 dark:text-teal-500 ring-teal-500/25',
   numeros:     'bg-indigo-500/12 text-indigo-500 ring-indigo-500/25',
   sistema:     'bg-muted text-muted-foreground ring-border',
 };

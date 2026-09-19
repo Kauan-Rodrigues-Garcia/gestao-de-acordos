@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import type { LiderInfo } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
 import type { EquipeDiretoria } from '@/services/mestre/equipesDiretoria';
 import { SeloQuartil } from './components';
+import { corTexto } from '@/lib/temas';
 
 const pct1 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 const iniciais = (nome: string) =>
@@ -102,7 +103,7 @@ export function CardEquipeDiretoria({
       <dl className="grid grid-cols-3 gap-2 border-t border-border/50 pt-2.5 text-[11px]">
         <div className="min-w-0">
           <dt className="text-muted-foreground">Projeção</dt>
-          <dd className="font-mono font-bold tabular-nums" style={cor ? { color: cor } : undefined}>
+          <dd className="font-mono font-bold tabular-nums" style={cor ? { color: corTexto(cor) } : undefined}>
             {d.projecaoPct !== null ? `${pct1(d.projecaoPct)}%` : '—'}
           </dd>
         </div>
@@ -126,7 +127,7 @@ export function CardEquipeDiretoria({
           <span
             key={q.quartil}
             className={cn('rounded px-1.5 py-0.5 font-semibold tabular-nums', q.qtd === 0 && 'opacity-40')}
-            style={{ background: `${COR_QUARTIL[q.quartil] ?? COR_QUARTIL[4]}1a`, color: COR_QUARTIL[q.quartil] ?? COR_QUARTIL[4] }}
+            style={{ background: `${COR_QUARTIL[q.quartil] ?? COR_QUARTIL[4]}1a`, color: corTexto(COR_QUARTIL[q.quartil] ?? COR_QUARTIL[4]) }}
             title={q.nomes.join(', ') || 'ninguém nesta faixa'}
           >
             Q{q.quartil}: {q.qtd}
@@ -137,7 +138,7 @@ export function CardEquipeDiretoria({
         </span>
         {d.destaque && d.destaque.recebido > 0 && (
           <span className="ml-auto inline-flex min-w-0 items-center gap-1 truncate text-muted-foreground" title="Maior recebimento da equipe">
-            <Star className="h-3 w-3 shrink-0 text-amber-500" />
+            <Star className="h-3 w-3 shrink-0 text-amber-700 dark:text-amber-500" />
             <span className="truncate">{d.destaque.nome}</span>
           </span>
         )}

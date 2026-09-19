@@ -200,7 +200,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
     <div className="space-y-4">
       {/* ── O aviso que impede isto de virar permanente ─────────────────── */}
       <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10">
-        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
         <div className="text-xs leading-relaxed">
           <p className="font-semibold text-foreground">Correção temporária do relatório</p>
           <p className="text-muted-foreground">

@@ -74,10 +74,10 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
               </div>
             </div>
             {resultado.erros.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
-                <p className="text-xs font-semibold text-amber-700">Avisos:</p>
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Avisos:</p>
                 {resultado.erros.map((e, i) => (
-                  <p key={i} className="text-xs text-amber-600">{e}</p>
+                  <p key={i} className="text-xs text-amber-600 dark:text-amber-400">{e}</p>
                 ))}
               </div>
             )}
@@ -170,7 +170,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                 <p className="text-xs text-muted-foreground">sem operador</p>
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
-                <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-700 dark:text-amber-500' : 'text-emerald-600 dark:text-emerald-500'}`}>
                   {naoDetectados.length - vinculadosManuaisCount}
                 </p>
                 <p className="text-xs text-muted-foreground">não identificados</p>
@@ -179,13 +179,13 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
 
             {/* Operadores detectados automaticamente */}
             {detectados.length > 0 && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20">
+              <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/20">
                 <button
                   type="button"
                   onClick={() => setDetectadosExpandido(v => !v)}
                   className="w-full flex items-center justify-between px-3 py-2.5 text-left"
                 >
-                  <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Operadores detectados ({detectados.length})
                   </span>
@@ -196,7 +196,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                 </button>
 
                 {detectadosExpandido && (
-                  <div className="px-3 pb-3 space-y-1 border-t border-emerald-200">
+                  <div className="px-3 pb-3 space-y-1 border-t border-emerald-200 dark:border-emerald-800/60">
                     <p className="text-[10px] text-emerald-600 py-1.5">
                       Nome no arquivo → usuário vinculado no sistema
                     </p>
@@ -209,7 +209,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                           <span className="font-mono text-emerald-800 dark:text-emerald-300 shrink-0">
                             {usuarioArquivo}
                           </span>
-                          <ArrowRight className="w-3 h-3 text-emerald-500 shrink-0" />
+                          <ArrowRight className="w-3 h-3 text-emerald-600 dark:text-emerald-500 shrink-0" />
                           <span className="font-mono text-emerald-700 dark:text-emerald-400 shrink-0">
                             {match!.usuarioDB}
                           </span>
@@ -226,15 +226,15 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
 
             {/* Operadores não detectados — com seleção manual */}
             {naoDetectados.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20">
                 <div className="px-3 py-2.5 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-amber-600" />
-                  <p className="text-xs font-semibold text-amber-700">
+                  <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
                     Não identificados ({naoDetectados.length}) — vincule manualmente ou deixe em branco
                   </p>
                 </div>
 
-                <div className="px-3 pb-3 border-t border-amber-200 space-y-2 max-h-64 overflow-y-auto">
+                <div className="px-3 pb-3 border-t border-amber-200 dark:border-amber-800/60 space-y-2 max-h-64 overflow-y-auto">
                   {naoDetectados.map(u => {
                     const vinculoAtual = vinculosManuais[u] ?? '';
                     return (
@@ -242,7 +242,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                         <span className="font-mono text-xs text-amber-800 dark:text-amber-300 w-44 shrink-0 truncate">
                           {u}
                         </span>
-                        <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
+                        <ArrowRight className="w-3 h-3 text-amber-700 dark:text-amber-400 shrink-0" />
                         <Select
                           value={vinculoAtual || '__nenhum__'}
                           onValueChange={val => definirVinculo(u, val === '__nenhum__' ? null : val)}
@@ -329,8 +329,8 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                           </td>
                           <td className="px-3 py-1.5">
                             {vinculado
-                              ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              : <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                              ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
+                              : <AlertCircle className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                             }
                           </td>
                         </tr>

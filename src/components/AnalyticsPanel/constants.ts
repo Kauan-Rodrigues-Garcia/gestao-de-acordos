@@ -11,9 +11,9 @@ export const CHART_RECEBIDO = '#22c55e';
 export const CHART_AGENDADO = '#6366f1';
 
 export const MEDAL_STYLES = [
-  { bg: 'bg-amber-400/20', text: 'text-amber-500', border: 'border-amber-400/40', label: '1' },
+  { bg: 'bg-amber-400/20', text: 'text-amber-700 dark:text-amber-500', border: 'border-amber-400/40', label: '1' },
   { bg: 'bg-slate-300/20', text: 'text-slate-400', border: 'border-slate-300/40', label: '2' },
-  { bg: 'bg-orange-400/20', text: 'text-orange-500', border: 'border-orange-400/40', label: '3' },
+  { bg: 'bg-orange-400/20', text: 'text-orange-700 dark:text-orange-500', border: 'border-orange-400/40', label: '3' },
 ];
 
 export const containerVariants = {

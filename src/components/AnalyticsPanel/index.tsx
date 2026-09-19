@@ -45,6 +45,7 @@ import { PPMetrics } from './PPMetrics';
 import { CHART_RECEBIDO } from './constants';
 import { ValorAnimado } from '@/components/ValorAnimado';
 
+import { corTexto } from '@/lib/temas';
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface AnalyticsPanelProps {
@@ -459,7 +460,7 @@ export function AnalyticsPanel({
         icon={<Percent className="w-4 h-4" />}
         accentColor={taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'}
         value={(
-          <span style={{ color: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444' }}>
+          <span style={{ color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444') }}>
             {taxaConversao}%
           </span>
         )}
@@ -536,7 +537,7 @@ export function AnalyticsPanel({
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                 {isPP ? 'H.O.' : 'Recebido'}
               </span>
-              <span className="font-bold text-emerald-500 tabular-nums font-mono">
+              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono">
                 {formatCurrency(valorPrincipal)}
               </span>
             </div>
@@ -552,7 +553,7 @@ export function AnalyticsPanel({
               <>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Direto</span>
-                  <span className="font-semibold tabular-nums font-mono text-emerald-500">{formatCurrency(valorHODireto)}</span>
+                  <span className="font-semibold tabular-nums font-mono text-emerald-600 dark:text-emerald-500">{formatCurrency(valorHODireto)}</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Extra</span>
@@ -569,7 +570,7 @@ export function AnalyticsPanel({
             {meta && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
-                <span className="font-bold tabular-nums font-mono" style={{ color: donutColor }}>
+                <span className="font-bold tabular-nums font-mono" style={{ color: corTexto(donutColor) }}>
                   {percMetaFinal}%
                 </span>
               </div>
@@ -693,14 +694,14 @@ export function AnalyticsPanel({
                       <Percent
                         className="w-3.5 h-3.5"
                         style={{
-                          color: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
+                          color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'),
                         }}
                       />
                     </div>
                     <span
                       className="text-2xl font-extrabold tabular-nums font-mono pl-1"
                       style={{
-                        color: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
+                        color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'),
                       }}
                     >
                       {taxaConversao}%
@@ -738,9 +739,9 @@ export function AnalyticsPanel({
                       <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                         Projeção do mês
                       </span>
-                      <Target className="w-3.5 h-3.5 text-amber-500" />
+                      <Target className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500" />
                     </div>
-                    <span className="text-xl font-bold tabular-nums font-mono text-amber-500 pl-1 leading-tight">
+                    <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight">
                       {formatCurrency(projecaoMes)}
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>

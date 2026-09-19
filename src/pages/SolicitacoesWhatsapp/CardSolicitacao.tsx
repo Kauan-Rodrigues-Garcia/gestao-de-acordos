@@ -28,15 +28,15 @@ import {
 } from './formatacao';
 
 const STATUS_ESTILO: Record<StatusSolicitacao, string> = {
-  pendente:     'bg-sky-500/10 text-sky-500 border-sky-500/30',
-  em_andamento: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
-  feito:        'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
+  pendente:     'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/30',
+  em_andamento: 'bg-amber-500/10 text-amber-700 dark:text-amber-500 border-amber-500/30',
+  feito:        'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/30',
   falta_info:   'bg-destructive/10 text-destructive border-destructive/30',
 };
 
 const ESPERA_ESTILO: Record<NivelEspera, string> = {
   normal:  'text-muted-foreground border-border',
-  atencao: 'bg-amber-500/10 text-amber-500 border-amber-500/40',
+  atencao: 'bg-amber-500/10 text-amber-700 dark:text-amber-500 border-amber-500/40',
   critico: 'bg-destructive/10 text-destructive border-destructive/40',
 };
 
@@ -74,7 +74,7 @@ function BotaoCopiarWhatsapp({ numero }: { numero: string }) {
       aria-label="Copiar o número do WhatsApp"
     >
       {copiado
-        ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copiado</>
+        ? <><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" /> Copiado</>
         : <><Copy  className="w-3.5 h-3.5" /> Copiar</>}
     </Button>
   );

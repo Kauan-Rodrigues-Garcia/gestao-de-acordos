@@ -84,6 +84,7 @@ import { useEquipesDiretoria } from './useEquipesDiretoria';
 import { CardEquipeDiretoria } from './CardEquipeDiretoria';
 import { DetalheEquipeDiretoria } from './DetalheEquipeDiretoria';
 import { OperadoresDaEquipe59 } from './OperadoresDaEquipe59';
+import { corTexto } from '@/lib/temas';
 
 const FALLBACK_PRIMARIA = '#3b82f6';
 const FALLBACK_ANTERIOR = '#94a3b8';
@@ -265,10 +266,10 @@ function CardSetor({
           </span>
         ) : (
           <span className="flex items-center gap-1.5">
-            <Target className="h-3 w-3" style={{ color: corProjecao(projecao) }} />
+            <Target className="h-3 w-3" style={{ color: corTexto(corProjecao(projecao)) }} />
             <span
               className="font-mono text-xs font-bold tabular-nums"
-              style={{ color: corProjecao(projecao) }}
+              style={{ color: corTexto(corProjecao(projecao)) }}
             >
               {pct1(projecao)}%
             </span>
@@ -627,7 +628,7 @@ export function DiretoriaSetores({
         {/* O aviso em destaque, e não uma nota de rodapé: quem abriu este card
             está prestes a somar o número dele com os outros. */}
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3">
-          <CopyPlus className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <CopyPlus className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
           <div className="text-xs leading-relaxed">
             <p className="font-semibold text-foreground">Não conta no total da empresa</p>
             <p className="text-muted-foreground">
@@ -659,7 +660,7 @@ export function DiretoriaSetores({
             {p ? (
               <>
                 <p className="mt-1.5 font-mono text-xl font-bold tabular-nums"
-                   style={{ color: corProjecao(p.projecaoPct) }}>
+                   style={{ color: corTexto(corProjecao(p.projecaoPct)) }}>
                   {pct1(p.projecaoPct)}%
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -848,7 +849,7 @@ export function DiretoriaSetores({
                   <>
                     <p
                       className="mt-1.5 font-mono text-xl font-bold tabular-nums"
-                      style={{ color: corProjecao(projecao.projecaoPct) }}
+                      style={{ color: corTexto(corProjecao(projecao.projecaoPct)) }}
                     >
                       {pct1(projecao.projecaoPct)}%
                     </p>

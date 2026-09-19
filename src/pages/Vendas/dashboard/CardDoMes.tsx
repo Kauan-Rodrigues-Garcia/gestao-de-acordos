@@ -50,6 +50,7 @@ import { GAVETAS_EM_ORDEM, type ResumoVendas } from '@/lib/vendas';
 import { fatiasDaRegua } from '@/lib/vendasDashboard';
 import type { FatiaSimples } from '@/lib/vendasPlacar';
 import type { ReguaMeta } from '@/lib/vendasMeta';
+import { corTexto } from '@/lib/temas';
 
 type Vista = 'meta' | 'regua' | 'formas';
 
@@ -136,7 +137,7 @@ export function CardDoMes({ resumo, formas, meta, podeConfigurarMeta }: CardDoMe
               className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
               style={{ background: corTopo + '22' }}
             >
-              <Icone className="w-3.5 h-3.5" style={{ color: corTopo }} />
+              <Icone className="w-3.5 h-3.5" style={{ color: corTexto(corTopo) }} />
             </div>
             <span className="truncate">{TITULO[atual]}</span>
           </CardTitle>
@@ -180,7 +181,7 @@ export function CardDoMes({ resumo, formas, meta, podeConfigurarMeta }: CardDoMe
                     meta de {meta.nome}
                   </p>
                   {pctMeta >= 100 && (
-                    <p className="text-xs font-semibold text-emerald-500 flex items-center justify-center gap-1">
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 flex items-center justify-center gap-1">
                       <ArrowUpRight className="w-3.5 h-3.5" />
                       Meta atingida!
                     </p>
@@ -308,7 +309,7 @@ function LinhaDaFatia({ fatia }: { fatia: FatiaDoAnel }) {
         <span className="text-[11px] text-muted-foreground">{fatia.qtd}</span>
         <span
           className="text-xs font-bold tabular-nums font-mono px-1.5 py-0.5 rounded"
-          style={{ background: fatia.cor + '18', color: fatia.cor }}
+          style={{ background: fatia.cor + '18', color: corTexto(fatia.cor) }}
         >
           {formatarPct(fatia.perc)}%
         </span>
