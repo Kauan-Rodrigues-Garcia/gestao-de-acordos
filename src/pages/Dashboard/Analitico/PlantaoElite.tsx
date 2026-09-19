@@ -31,10 +31,10 @@ import {
 const cor = (k: keyof typeof COR_GESTAO) => `#${COR_GESTAO[k]}`;
 
 /*
- * O tema do app pinta a borda de TODO elemento com `oklch` (`* { border-border }`)
- * e o html2canvas 1.4 não sabe ler `oklch` nem `color-mix`: a cópia morreria
- * com «unsupported color function». Esta regra fica fora de camada, então vence
- * a da base, e só vale dentro da folha.
+ * O tema pinta a borda de TODO elemento com a cor da borda do tema, que no
+ * escuro é escura. Dentro da folha (sempre clara) a borda padrão é a do Gestão.
+ * A regra fica fora de camada, então vence a da base. As cores que o
+ * html2canvas não lê (`oklch`) são tratadas em `copiarImagem`.
  */
 const CSS_FOLHA = `
 .folha-elite, .folha-elite * {
@@ -164,7 +164,7 @@ export function PlantaoElite({ empresaId }: Props) {
               value={data}
               max={hoje}
               onChange={e => { if (e.target.value) setData(e.target.value > hoje ? hoje : e.target.value); }}
-              className="bg-transparent text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              className="bg-transparent text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring rounded dark:[color-scheme:dark]"
               aria-label="Dia do plantão"
             />
           </label>
