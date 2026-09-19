@@ -26,7 +26,7 @@ export async function baixarFechamentoOperadores(
   try {
     const nome = nomeArquivoFechamentoOperadores(dados, formato);
     if (formato === 'xlsx') {
-      baixarArquivo(await montarPlanilhaFechamento(dados), nome, TIPO_XLSX);
+      baixarArquivo(montarPlanilhaFechamento(dados), nome, TIPO_XLSX);
     } else {
       baixarArquivo(montarHtmlFechamentoOperadores(dados), nome, TIPO_HTML);
     }

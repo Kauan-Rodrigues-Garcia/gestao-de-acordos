@@ -130,6 +130,14 @@ describe('a folha', () => {
     expect(folha).not.toContain('<autoFilter');
   });
 
+  it('cores do Gestão em faixa lisa: sem índigo e sem degradê (19/09/2026)', () => {
+    const estilos = strFromU8(abrir().partes['xl/styles.xml']);
+    expect(estilos).toContain('FF00648E');
+    expect(estilos).not.toContain('4F46E5');
+    expect(estilos).not.toContain('gradientFill');
+    expect(estilos).toContain('<name val="Calibri"/>');
+  });
+
   it('leva formato de moeda no styles.xml', () => {
     const { partes } = abrir();
     expect(strFromU8(partes['xl/styles.xml'])).toContain('formatCode="&quot;R$&quot; #,##0.00"');

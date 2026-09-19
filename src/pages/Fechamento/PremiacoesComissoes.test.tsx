@@ -3,6 +3,7 @@
  *
  * Recorte de Birigui mostra só Premiação (coluna e card), o de todos os setores
  * mostra as duas, e o valor de quem bateu sai em destaque com a meta escrita.
+ * 19/09/2026: o destaque é o selo verde, em tamanho médio.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -58,11 +59,13 @@ describe('<PremiacoesComissoes />', () => {
     expect(screen.queryByText('Total a pagar')).toBeNull();
   });
 
-  it('quem bateu: valor em destaque e a meta escrita ao lado', () => {
+  it('quem bateu: valor em selo verde, tamanho médio, e a meta escrita ao lado', () => {
     montar([linha({})]);
-    const valor = screen.getAllByText(/811,30/).find(e => e.className.includes('text-[16px]'));
+    const valor = screen.getAllByText(/811,30/).find(e => e.className.includes('text-success'));
     expect(valor).toBeTruthy();
-    expect(valor!.className).toContain('font-bold');
+    // 19/09/2026: médio, não grande — o destaque é o selo.
+    expect(valor!.className).toContain('text-[13px]');
+    expect(valor!.className).toContain('font-semibold');
     // O selo ao lado do valor (a Obs. também diz «2ª meta», em texto comum).
     expect(screen.getAllByText('2ª meta').some(e => e.className.includes('rounded-full'))).toBe(true);
   });

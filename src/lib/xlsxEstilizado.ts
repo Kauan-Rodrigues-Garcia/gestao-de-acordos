@@ -22,6 +22,8 @@ export type Borda = { estilo: 'thin' | 'medium'; cor: string };
 /** Cor lisa, ou degradê da esquerda (`de`) para a direita (`para`). */
 export type Fundo = string | { de: string; para: string };
 export interface Estilo {
+  /** Família da fonte; sem ela, `FONTE_PADRAO`. */
+  fonte?: string;
   tamanho?: number;
   negrito?: boolean;
   italico?: boolean;
@@ -78,7 +80,7 @@ export class Estilos {
     if (pronto !== undefined) return pronto;
 
     const fonte = this.indice(this.fontes, `<font>${e.negrito ? '<b/>' : ''}${e.italico ? '<i/>' : ''}`
-      + `<sz val="${e.tamanho ?? 10}"/><color rgb="FF${e.cor ?? TEXTO_PADRAO}"/><name val="${FONTE_PADRAO}"/><family val="2"/></font>`);
+      + `<sz val="${e.tamanho ?? 10}"/><color rgb="FF${e.cor ?? TEXTO_PADRAO}"/><name val="${escXml(e.fonte ?? FONTE_PADRAO)}"/><family val="2"/></font>`);
     const fundo = !e.fundo ? 0 : this.indice(this.fundos, typeof e.fundo === 'string'
       ? `<fill><patternFill patternType="solid"><fgColor rgb="FF${e.fundo}"/><bgColor indexed="64"/></patternFill></fill>`
       : `<fill><gradientFill degree="0"><stop position="0"><color rgb="FF${e.fundo.de}"/></stop>`

@@ -5,12 +5,16 @@
  * CSS embutido no meio das seções, mexer no donut arriscava quebrar a tabela de
  * setores. Aqui ele é lido de cima a baixo como uma folha de estilo comum.
  *
- * ## Três contextos, uma folha
+ * ## Sempre claro, na tela e no papel
  *
- * O mesmo arquivo é lido em tela clara, em tela escura e no papel. Nenhuma cor
- * é escrita direto no elemento: tudo sai de token em `:root`, redefinido sob
- * `prefers-color-scheme: dark` e sob `@media print`. É o que permite os
- * gráficos usarem `var(--borda)` e continuarem visíveis nos três.
+ * Nenhuma cor é escrita direto no elemento: tudo sai de token em `:root`,
+ * redefinido sob `@media print`. É o que permite os gráficos usarem
+ * `var(--borda)` e continuarem visíveis nos dois.
+ *
+ * Até 19/09/2026 havia também um tema escuro, sob `prefers-color-scheme: dark`:
+ * quem tinha o computador no modo escuro recebia o relatório escuro. Pedido da
+ * gerência: o arquivo abre sempre claro, em qualquer máquina. `color-scheme:
+ * light` impede o navegador de escurecer os controles por conta própria.
  *
  * ## Modo apresentação
  *
@@ -28,16 +32,7 @@ export const CSS_FECHAMENTO = `
   --sombra:0 1px 2px rgba(15,23,42,.06), 0 8px 24px -12px rgba(15,23,42,.18);
   --sombra-alta:0 2px 4px rgba(15,23,42,.08), 0 20px 40px -20px rgba(15,23,42,.28);
   --raio:14px;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --fundo:#0b1120; --papel:#111827; --papel-2:#0f172a;
-    --texto:#e5e7eb; --fraco:#94a3b8; --tenue:#64748b;
-    --borda:#1f2937; --borda-forte:#334155;
-    --acento:#818cf8; --acento-suave:#1e1b4b; --acento-forte:#a5b4fc;
-    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
-    --sombra-alta:0 2px 4px rgba(0,0,0,.5), 0 20px 40px -20px rgba(0,0,0,.8);
-  }
+  color-scheme:light;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}

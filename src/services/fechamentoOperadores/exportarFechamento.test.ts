@@ -5,10 +5,13 @@
  *   1. a ORDEM do arquivo é a da tela (quartil), e não outra;
  *   2. na planilha, número é número — a gerência soma e filtra no Excel;
  *   3. no HTML, nome digitado por gente é escapado, e nada é carregado de fora
- *      (o arquivo circula por e-mail e abre sem internet).
+ *      (o arquivo circula por e-mail e abre sem internet);
+ *   4. (19/09/2026) o HTML é sempre claro, e o Excel tem estilo — título, cards,
+ *      cabeçalho, filtro — com a tabela logo abaixo dos cards.
  */
 import { describe, it, expect } from 'vitest';
-import { read, utils } from '@e965/xlsx';
+import { read, utils, type WorkSheet } from '@e965/xlsx';
+import { strFromU8, unzipSync } from 'fflate';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
   montarLinhaFechamento, ordenarLinhasFechamento, resumirFechamento,
@@ -46,35 +49,67 @@ function dados(over: Partial<DadosExportacaoFechamento> = {}): DadosExportacaoFe
   };
 }
 
-async function lerPlanilha(d: DadosExportacaoFechamento) {
-  const buffer = await montarPlanilhaFechamento(d);
-  return read(buffer, { type: 'array' });
+function lerPlanilha(d: DadosExportacaoFechamento) {
+  return read(montarPlanilhaFechamento(d), { type: 'array' });
+}
+
+/** A linha do cabeçalho da tabela (em cima dela ficam o título e os cards). */
+function linhaDoCabecalho(aba: WorkSheet): number {
+  for (let r = 1; r <= 30; r++) if (aba[`A${r}`]?.v === 'Operador') return r;
+  throw new Error('cabeçalho não encontrado');
 }
 
 describe('montarPlanilhaFechamento', () => {
-  it('a aba Fechamento tem as colunas da tela, na ordem do quartil', async () => {
-    const wb = await lerPlanilha(dados());
-    const linhas = utils.sheet_to_json<(string | number)[]>(wb.Sheets.Fechamento, { header: 1 });
-    expect(linhas[0]).toEqual([
+  it('a aba Fechamento tem as colunas da tela, na ordem do quartil', () => {
+    const wb = lerPlanilha(dados());
+    const linhas = utils.sheet_to_json<(string | number)[]>(wb.Sheets.Fechamento, { header: 1, blankrows: false });
+    const i = linhas.findIndex(l => l[0] === 'Operador');
+    expect(linhas[i]).toEqual([
       'Operador', 'Equipe', 'Fechamento', 'Meta', 'Meta atingida', 'D.U. trabalhado',
       'Situação', 'Alcance meta', 'Quartil', 'Média fat. D.U.',
     ]);
-    expect(linhas.slice(1).map(l => l[0])).toEqual(['Primeira <b>Colocada</b>', 'Quarto Lugar', 'Sem Meta']);
+    expect(linhas.slice(i + 1).map(l => l[0])).toEqual(['Primeira <b>Colocada</b>', 'Quarto Lugar', 'Sem Meta']);
   });
 
-  it('valores são números, e não texto formatado', async () => {
-    const wb = await lerPlanilha(dados());
+  it('valores são números, e não texto formatado', () => {
+    const wb = lerPlanilha(dados());
     const aba = wb.Sheets.Fechamento;
-    expect(aba.C2.t).toBe('n');
-    expect(aba.C2.v).toBe(120_000);
-    expect(aba.H2.t).toBe('n');
-    expect(aba.H2.v).toBeCloseTo(1.2);
-    expect(aba.I2.v).toBe('1º quartil');
-    expect(aba.G2.v).toBe('ASSÍDUO');
+    const r = linhaDoCabecalho(aba) + 1;
+    expect(aba[`C${r}`].t).toBe('n');
+    expect(aba[`C${r}`].v).toBe(120_000);
+    expect(aba[`H${r}`].t).toBe('n');
+    expect(aba[`H${r}`].v).toBeCloseTo(1.2);
+    expect(aba[`I${r}`].v).toBe('1º quartil');
+    expect(aba[`G${r}`].v).toBe('ASSÍDUO');
   });
 
-  it('a aba Resumo traz os cards da tela', async () => {
-    const wb = await lerPlanilha(dados());
+  it('título, os quatro cards e a tabela com filtro e painel congelado', () => {
+    const wb = lerPlanilha(dados());
+    const aba = wb.Sheets.Fechamento;
+    expect(aba.A1.v).toBe('Fechamento · Receptivo');
+    const textos = Object.values(aba).map(c => (c as { v?: unknown })?.v);
+    for (const card of ['FATURAMENTO TOTAL', 'MÉDIA POR DIA ÚTIL', 'MÉDIA POR FUNCIONÁRIO', 'PREENCHIDOS']) {
+      expect(textos).toContain(card);
+    }
+    // O card de faturamento é número em reais, como o da tela.
+    expect(textos).toContain(140_000);
+
+    const folha = strFromU8(unzipSync(montarPlanilhaFechamento(dados()))['xl/worksheets/sheet1.xml']);
+    const cab = linhaDoCabecalho(aba);
+    expect(folha).toContain(`<autoFilter ref="A${cab}:J${cab + 3}"/>`);
+    expect(folha).toContain(`ySplit="${cab}"`);
+    expect(folha).toContain('showGridLines="0"');
+  });
+
+  it('as cores são as do Gestão, e não o índigo antigo', () => {
+    const estilos = strFromU8(unzipSync(montarPlanilhaFechamento(dados()))['xl/styles.xml']);
+    expect(estilos).toContain('FF00648E');
+    expect(estilos).not.toContain('4F46E5');
+    expect(estilos).toContain('formatCode="&quot;R$&quot; #,##0.00"');
+  });
+
+  it('a aba Resumo traz os cards da tela', () => {
+    const wb = lerPlanilha(dados());
     const resumo = utils.sheet_to_json<(string | number)[]>(wb.Sheets.Resumo, { header: 1 });
     const faturamento = resumo.find(l => l[0] === 'Faturamento total');
     expect(faturamento?.[1]).toBe(140_000);
@@ -101,6 +136,24 @@ describe('montarHtmlFechamentoOperadores', () => {
   it('é autocontido: nada de script, imagem ou folha de fora', () => {
     const html = montarHtmlFechamentoOperadores(dados());
     expect(html).not.toMatch(/<script|<link|src=|@import|https?:\/\//i);
+  });
+
+  it('é sempre claro: nada de modo escuro, e o navegador é avisado', () => {
+    const html = montarHtmlFechamentoOperadores(dados());
+    expect(html).not.toMatch(/prefers-color-scheme/);
+    expect(html).toContain('<meta name="color-scheme" content="light">');
+    expect(html).toContain('color-scheme:light');
+    // O azul do Gestão como tema, e não o índigo antigo (o índigo que sobra é
+    // o do 2º quartil, a mesma cor de `COR_QUARTIL` na tela).
+    expect(html).toContain('--primario:#00648E');
+    expect(html).not.toMatch(/--acento:#6366f1/i);
+  });
+
+  it('traz os quatro cards da tela', () => {
+    const html = montarHtmlFechamentoOperadores(dados());
+    for (const card of ['Faturamento total', 'Média por dia útil', 'Média por funcionário', 'Preenchidos']) {
+      expect(html).toContain(`<div class="rot">${card}</div>`);
+    }
   });
 
   it('diz de onde é, e avisa quando o mês ainda está aberto', () => {

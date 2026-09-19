@@ -10,13 +10,17 @@
  * preenche D.U. e situação (`fechamento_editar`). Ele grava na tabela do RH, e
  * chega pronto lá quando o RH Gestão entrar.
  *
- * Correções de 18/09/2026: o valor de quem bateu ficou grande e em destaque (era
- * preciso esforço para ler), e o recorte de uma cidade só mostra a coluna e o
- * card do tipo dela (`tiposNoRecorte`) — Birigui sem a coluna Comissão.
+ * Correções de 18/09/2026: o valor de quem bateu ficou em destaque (era preciso
+ * esforço para ler), e o recorte de uma cidade só mostra a coluna e o card do
+ * tipo dela (`tiposNoRecorte`) — Birigui sem a coluna Comissão.
+ *
+ * Correções de 19/09/2026: o valor volta a tamanho médio (13px) — o destaque
+ * fica com o selo verde, não com o tamanho —, e a aba baixa HTML além do Excel,
+ * os dois com a cara do Gestão (`relatorioGestao`).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Award, BadgeCheck, CircleDollarSign, FileSpreadsheet, IdCard, Info, List, Loader2,
+  Award, BadgeCheck, CircleDollarSign, FileCode2, FileSpreadsheet, IdCard, Info, List, Loader2,
   RefreshCw, Search, TriangleAlert, Trophy, Wallet,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,7 +35,7 @@ import { cn } from '@/lib/utils';
 import {
   lerCracha, ROTULO_TIPO, tiposNoRecorte, valorDoTipo, type LinhaPremiacao, type TipoRemuneracao,
 } from '@/services/premiacoes/calculoPremiacoes';
-import { baixarPremiacoes } from '@/services/premiacoes/baixarPremiacoes';
+import { baixarPremiacoes, type FormatoPremiacoes } from '@/services/premiacoes/baixarPremiacoes';
 
 type Filtro = 'todos' | 'bateram' | 'sem_cracha';
 
@@ -58,20 +62,20 @@ function Aviso({ tom, children }: { tom: 'alerta' | 'info'; children: React.Reac
 
 /**
  * Célula de valor: vazio não é zero. Quem bateu é o que a pessoa procura na
- * tabela, então o valor dela é o maior texto da linha, num selo verde, com a
- * meta atingida escrita ao lado.
+ * tabela: o valor vai num selo verde, em tamanho médio, com a meta atingida
+ * escrita ao lado. O destaque é a cor, não o tamanho (19/09/2026).
  */
 function Valor({ valor, faixa }: { valor: number | null; faixa: number | null }) {
-  if (valor === null) return <span className="text-[13px] text-muted-foreground/60">—</span>;
-  if (valor <= 0) return <span className="text-[13px] text-muted-foreground">{formatBRL(0)}</span>;
+  if (valor === null) return <span className="text-[12px] text-muted-foreground/60">—</span>;
+  if (valor <= 0) return <span className="text-[12px] text-muted-foreground">{formatBRL(0)}</span>;
   return (
-    <span className="inline-flex items-center justify-end gap-2">
+    <span className="inline-flex items-center justify-end gap-1.5">
       {faixa !== null && (
-        <span className="whitespace-nowrap rounded-full bg-success/15 px-2 py-0.5 font-sans text-[11px] font-bold text-success ring-1 ring-success/30">
+        <span className="whitespace-nowrap rounded-full bg-success/12 px-1.5 py-0.5 font-sans text-[10px] font-bold text-success ring-1 ring-success/25">
           {faixa}ª meta
         </span>
       )}
-      <span className="whitespace-nowrap rounded-lg bg-success/10 px-2.5 py-1 text-[16px] font-bold leading-none text-success ring-1 ring-success/25">
+      <span className="whitespace-nowrap rounded-md bg-success/10 px-2 py-0.5 text-[13px] font-semibold text-success ring-1 ring-success/20">
         {formatBRL(valor)}
       </span>
     </span>
@@ -177,7 +181,7 @@ export function PremiacoesComissoes({
 
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
-  const [baixando, setBaixando] = useState(false);
+  const [baixando, setBaixando] = useState<FormatoPremiacoes | null>(null);
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR');
@@ -224,12 +228,12 @@ export function PremiacoesComissoes({
   }, [salvarCracha]);
   const aoInvalido = useCallback((m: string) => { toast.error(m); }, []);
 
-  const baixar = useCallback(async () => {
-    setBaixando(true);
+  const baixar = useCallback(async (formato: FormatoPremiacoes) => {
+    setBaixando(formato);
     const r = await baixarPremiacoes({
       empresaNome, setorNome, mes, parcial: ehMesAtual(mes), geradoEm: new Date(), linhas,
-    }, empresaId);
-    setBaixando(false);
+    }, empresaId, formato);
+    setBaixando(null);
     if (!r.ok) toast.error('Não foi possível gerar o arquivo', { description: r.erro });
   }, [empresaId, empresaNome, setorNome, mes, linhas]);
 
@@ -327,14 +331,21 @@ export function PremiacoesComissoes({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
-            onClick={() => void baixar()}
-            disabled={carregando || linhas.length === 0 || baixando}
-          >
-            {baixando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
-            Baixar Excel
-          </Button>
+          {(['xlsx', 'html'] as const).map(formato => (
+            <Button
+              key={formato}
+              variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
+              onClick={() => void baixar(formato)}
+              disabled={carregando || linhas.length === 0 || baixando !== null}
+            >
+              {baixando === formato
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : formato === 'xlsx'
+                  ? <FileSpreadsheet className="h-3.5 w-3.5" />
+                  : <FileCode2 className="h-3.5 w-3.5" />}
+              {formato === 'xlsx' ? 'Baixar Excel' : 'Baixar HTML'}
+            </Button>
+          ))}
           <Button
             variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
             onClick={() => void dados.recarregar()}
@@ -436,12 +447,12 @@ export function PremiacoesComissoes({
                       Total · {visiveis.length} {visiveis.length === 1 ? 'pessoa' : 'pessoas'}
                     </td>
                     {tipos.map(t => (
-                      <td key={t} className="px-2 py-2.5 text-right tabular-nums font-mono text-[15px] font-bold text-primary">
+                      <td key={t} className="px-2 py-2.5 text-right tabular-nums font-mono text-[13px] font-bold text-primary">
                         {formatBRL(totalNoFiltro(t))}
                       </td>
                     ))}
                     <td className="px-2 py-2 text-[10px] font-normal text-muted-foreground">
-                      O Excel sai com todas as {linhas.length} pessoas, sem o filtro.
+                      O arquivo sai com todas as {linhas.length} pessoas, sem o filtro.
                     </td>
                   </tr>
                 </tfoot>
