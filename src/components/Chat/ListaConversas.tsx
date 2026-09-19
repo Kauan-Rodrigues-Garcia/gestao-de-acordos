@@ -23,9 +23,10 @@ import type {
   ConversaChat, DestinoDisparoChat, DisparoChat,
 } from '@/services/chat/chat.service';
 import {
-  listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, rotuloAnexo,
+  listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, precarregarContatos, rotuloAnexo,
 } from '@/services/chat/chat.service';
 import { AvatarChat, TagEmpresa, TagAdm } from './comum';
+import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
 import { horaCurta } from './formatos';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -257,10 +258,9 @@ export function ListaConversas({
   const atuais = conversas.filter(c => c.fixada || !c.em_historico);
   const historico = conversas.filter(c => c.em_historico && !c.fixada);
   const listaDaAba = aba === 'historico' ? historico : atuais;
-  const filtradas = busca.trim()
-    ? listaDaAba.filter(c =>
-        c.outro_nome.toLowerCase().includes(busca.trim().toLowerCase())
-        || (c.outro_usuario ?? '').toLowerCase().includes(busca.trim().toLowerCase()))
+  const palavras = palavrasDaBusca(busca);
+  const filtradas = palavras.length
+    ? listaDaAba.filter(c => casaBusca(chaveDeBusca(c.outro_nome, c.outro_usuario), palavras))
     : listaDaAba;
 
   return (
@@ -297,6 +297,9 @@ export function ListaConversas({
           {ABAS.map(a => (
             <button
               key={a} onClick={() => setAba(a)}
+              // A aba de disparos só serve para disparar: a lista de gente
+              // começa a descer antes do clique no «+».
+              onPointerEnter={a === 'disparos' && podeIniciar ? precarregarContatos : undefined}
               title={ROTULO_ABA[a]}
               className={cn(
                 'min-w-0 flex-1 basis-0 truncate rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors',
@@ -323,6 +326,7 @@ export function ListaConversas({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                        onPointerEnter={precarregarContatos} onFocus={precarregarContatos}
                         title="Começar" aria-label="Começar uma conversa ou um grupo">
                   <MessageSquarePlus className="w-4 h-4" />
                 </Button>
@@ -339,6 +343,7 @@ export function ListaConversas({
           ) : (
             <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
                     onClick={onNovaConversa}
+                    onPointerEnter={precarregarContatos} onFocus={precarregarContatos}
                     title="Nova conversa" aria-label="Nova conversa">
               <MessageSquarePlus className="w-4 h-4" />
             </Button>
@@ -347,6 +352,7 @@ export function ListaConversas({
         {podeIniciar && aba === 'disparos' && (
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
                   onClick={onNovoDisparo}
+                  onPointerEnter={precarregarContatos} onFocus={precarregarContatos}
                   title="Novo disparo" aria-label="Novo disparo">
             <Plus className="w-4 h-4" />
           </Button>

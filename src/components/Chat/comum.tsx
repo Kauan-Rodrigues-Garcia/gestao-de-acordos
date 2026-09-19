@@ -26,8 +26,11 @@ export function AvatarChat({
 
   return (
     <div className="relative shrink-0" style={estilo}>
+      {/* `lazy`: a lista de disparo desenha a empresa inteira, e sem isto o
+          navegador baixava centenas de fotos antes de a janela responder. */}
       {src ? (
-        <img src={src} alt="" className="rounded-full object-cover w-full h-full" />
+        <img src={src} alt="" loading="lazy" decoding="async"
+             className="rounded-full object-cover w-full h-full" />
       ) : (
         <div
           className="rounded-full bg-muted flex items-center justify-center font-semibold text-muted-foreground w-full h-full"

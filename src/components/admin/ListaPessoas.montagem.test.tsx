@@ -122,4 +122,24 @@ describe('ListaPessoas monta', () => {
     rerender(<ListaPessoas {...BASE} recolhidos={recolhidos} buscaAtiva />);
     expect(screen.getByText('Ana Souza')).toBeInTheDocument();
   });
+
+  it('dentro do setor, a gente vem separada por cargo: gerência antes, operação por último', () => {
+    const grupos: GrupoDeSetor[] = [{
+      id: 'setor-1', nomeSetor: 'Play 1',
+      lista: [
+        pessoa({ id: 'o1', nome: 'Otávio Operador' }),
+        pessoa({ id: 'g1', nome: 'Gabi Gerente', perfil: 'gerencia' }),
+        pessoa({ id: 'l1', nome: 'Léo Líder', perfil: 'lider' }),
+      ],
+    }];
+    render(<ListaPessoas {...BASE} grupos={grupos} />);
+
+    const ordem = ['Gerência', 'Gabi Gerente', 'Líderes', 'Léo Líder', 'Operação', 'Otávio Operador']
+      // O primeiro de cada: o rótulo do bloco vem antes da etiqueta de cargo da linha.
+      .map(t => screen.getAllByText(t)[0]);
+    for (let i = 1; i < ordem.length; i++) {
+      // DOCUMENT_POSITION_FOLLOWING: o seguinte vem depois do anterior na tela.
+      expect(ordem[i - 1].compareDocumentPosition(ordem[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
 });

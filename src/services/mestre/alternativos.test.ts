@@ -126,7 +126,12 @@ describe('buscarGradeDeSetores', () => {
 });
 
 describe('buscarVisaoGeralDiretoria', () => {
-  it('o alternativo vem separado, e o recebido do mês não muda', async () => {
+  /*
+   * A seção de alternativos saiu da Visão geral em 19/09/2026 («não precisam de
+   * destaque»). O que continua valendo: o recebido do mês é o do arquivo, e a
+   * aba não paga mais uma ida ao banco por uma seção que não desenha.
+   */
+  it('não busca alternativos, e o recebido do mês é o do arquivo', async () => {
     mock.porRpc = {
       fn_mestre_diretoria_visao_geral:  { data: VISAO, error: null },
       fn_mestre_diretoria_alternativos: { data: ALTERNATIVOS, error: null },
@@ -134,23 +139,7 @@ describe('buscarVisaoGeralDiretoria', () => {
 
     const v = await buscarVisaoGeralDiretoria('emp-1', '2026-09');
 
-    expect(v.alternativos).toHaveLength(1);
-    expect(v.alternativos[0].valor).toBeCloseTo(16256.13, 2);
-    expect(v.alternativos[0].pessoas).toBe(8);
-
-    // Continua sendo o total do arquivo, sem o espelho somado.
-    expect(v.recebido).toBe(1000);
-  });
-
-  it('sem alternativo, a lista é vazia e o resto segue', async () => {
-    mock.porRpc = {
-      fn_mestre_diretoria_visao_geral:  { data: VISAO, error: null },
-      fn_mestre_diretoria_alternativos: { data: [], error: null },
-    };
-
-    const v = await buscarVisaoGeralDiretoria('emp-1', '2026-09');
-
-    expect(v.alternativos).toEqual([]);
+    expect(mock.chamadas).toEqual(['fn_mestre_diretoria_visao_geral']);
     expect(v.recebido).toBe(1000);
   });
 });

@@ -593,6 +593,7 @@ export function BolhaChat() {
                 onConfigurarGrupo={
                   conversaAtual.tipo === 'grupo' ? () => setConfigGrupo(true) : undefined
                 }
+                onAbrirConversa={pedirConversa}
               />
             </div>
           )}

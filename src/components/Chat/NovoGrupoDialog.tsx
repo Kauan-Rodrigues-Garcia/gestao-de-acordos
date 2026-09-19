@@ -19,7 +19,7 @@
  * grupo porque a imagem não subiu) perderia o trabalho de escolher dez
  * participantes.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Loader2, Camera, X, Users, Check } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -32,6 +32,7 @@ import { PERFIL_COLORS } from '@/lib/index';
 import { listarContatos, type ContatoChat } from '@/services/chat/chat.service';
 import { criarGrupo, configurarGrupo, subirFotoDoGrupo } from '@/services/chat/grupos.service';
 import { AvatarChat, TagEmpresa } from './comum';
+import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
 
 interface Props {
   aberto:   boolean;
@@ -79,20 +80,27 @@ export function NovoGrupoDialog({ aberto, onFechar, onCriado }: Props) {
    * Escolher quem entra no grupo é escolher PESSOAS, e o mesmo nome duas vezes
    * viraria dois check-boxes para o mesmo participante.
    */
+  const unicas = useMemo(() => {
+    const porPessoa = new Map<string, { contato: ContatoChat; chave: string }>();
+    for (const c of contatos) {
+      if (porPessoa.has(c.perfil_id)) continue;
+      porPessoa.set(c.perfil_id, {
+        contato: c, chave: chaveDeBusca(c.nome, c.usuario, c.setor_nome, c.equipe_nome),
+      });
+    }
+    return [...porPessoa.values()];
+  }, [contatos]);
+
+  const buscaAdiada = useDeferredValue(busca);
   const pessoas = useMemo(() => {
-    const unicas = new Map<string, ContatoChat>();
-    for (const c of contatos) if (!unicas.has(c.perfil_id)) unicas.set(c.perfil_id, c);
-    const termo = busca.trim().toLowerCase();
-    const lista = [...unicas.values()];
-    const filtrada = termo
-      ? lista.filter(c =>
-          c.nome.toLowerCase().includes(termo) || (c.usuario ?? '').toLowerCase().includes(termo))
-      : lista;
+    const palavras = palavrasDaBusca(buscaAdiada);
+    const filtrada = (palavras.length ? unicas.filter(u => casaBusca(u.chave, palavras)) : unicas)
+      .map(u => u.contato);
     // Sort estável: líderes sobem, e a ordem que veio do banco permanece igual
     // dentro do bloco de líderes e dentro do restante da lista.
     return filtrada.sort((a, b) =>
       (PRIORIDADE_NO_GRUPO[a.cargo] ?? 1) - (PRIORIDADE_NO_GRUPO[b.cargo] ?? 1));
-  }, [contatos, busca]);
+  }, [unicas, buscaAdiada]);
 
   function alternar(id: string) {
     setEscolhidos(atual => {

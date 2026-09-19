@@ -16,8 +16,18 @@
  *
  * Clone aparece nas duas equipes dele — é assim que ele existe no sistema, e
  * marcar as duas não manda a mensagem duas vezes: a RPC trabalha por pessoa.
+ *
+ * ## Centenas de linhas, e a tela não pode engasgar (19/09/2026)
+ *
+ * Para quem alcança a empresa inteira a lista passa de meio milhar de linhas.
+ * Cada marcação redesenhava todas, e cada tecla da busca normalizava todos os
+ * nomes de novo. Agora a linha é memorizada (só redesenha a que mudou), o texto
+ * de busca de cada pessoa é montado uma vez, e o filtro roda com
+ * `useDeferredValue` — a digitação vem primeiro, a lista acompanha.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState,
+} from 'react';
 import {
   ArrowLeft, FileText, Image as ImageIcon, Loader2, Paperclip, Search, Send, Users, X,
 } from 'lucide-react';
@@ -33,6 +43,7 @@ import {
 } from '@/services/chat/chat.service';
 import { AvatarChat } from './comum';
 import { tamanhoLegivel } from './formatos';
+import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
 import { PERFIL_COLORS } from '@/lib/index';
 
 interface Props {
@@ -89,18 +100,25 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
     pastaDoDisparo.current = `disparos/${crypto.randomUUID()}`;
   }, [aberto]);
 
+  /** O texto de busca de cada linha, montado uma vez por lista recebida. */
+  const chaves = useMemo(
+    () => contatos.map(c => chaveDeBusca(c.nome, c.usuario, c.setor_nome, c.equipe_nome)),
+    [contatos],
+  );
+  const buscaAdiada = useDeferredValue(busca);
+
   /** Setores, e as equipes dentro de cada um. Pessoa sem equipe fica no setor. */
   const grupos = useMemo<Grupo[]>(() => {
-    const termo = busca.trim().toLowerCase();
-    const visiveis = termo
-      ? contatos.filter(c =>
-          c.nome.toLowerCase().includes(termo) || (c.usuario ?? '').toLowerCase().includes(termo))
+    const palavras = palavrasDaBusca(buscaAdiada);
+    const visiveis = palavras.length
+      ? contatos.filter((_, i) => casaBusca(chaves[i], palavras))
       : contatos;
 
     const porSetor = new Map<string, ContatoChat[]>();
     for (const c of visiveis) {
       const chave = c.setor_id ?? '__sem_setor__';
-      porSetor.set(chave, [...(porSetor.get(chave) ?? []), c]);
+      const lista = porSetor.get(chave);
+      if (lista) lista.push(c); else porSetor.set(chave, [c]);
     }
 
     const ordenar = (pessoas: ContatoChat[]) => [...pessoas].sort((a, b) => {
@@ -120,7 +138,8 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
       const porEquipe = new Map<string, ContatoChat[]>();
       for (const c of pessoas) {
         if (!c.equipe_id) continue;
-        porEquipe.set(c.equipe_id, [...(porEquipe.get(c.equipe_id) ?? []), c]);
+        const membros = porEquipe.get(c.equipe_id);
+        if (membros) membros.push(c); else porEquipe.set(c.equipe_id, [c]);
       }
       for (const [equipeId, membros] of porEquipe) {
         saida.push({
@@ -145,7 +164,7 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
       }
     }
     return saida;
-  }, [contatos, busca]);
+  }, [contatos, chaves, buscaAdiada]);
 
   const receberArquivos = useCallback((arquivos: File[]) => {
     const grandes = arquivos.filter(a => a.size > LIMITE_ANEXO);
@@ -163,13 +182,14 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
     if (arquivos.length) { e.preventDefault(); receberArquivos(arquivos); }
   }, [receberArquivos]);
 
-  const alternarPessoa = (id: string) => {
+  // Estável de propósito: é o que deixa `LinhaContato` pular o redesenho.
+  const alternarPessoa = useCallback((id: string) => {
     setMarcados(atual => {
       const novo = new Set(atual);
       if (novo.has(id)) novo.delete(id); else novo.add(id);
       return novo;
     });
-  };
+  }, []);
 
   const alternarGrupo = (g: Grupo) => {
     const ids = g.pessoas.map(p => p.perfil_id);
@@ -231,7 +251,7 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={busca} onChange={e => setBusca(e.target.value)}
-                placeholder="Procurar pessoa"
+                placeholder="Procurar pessoa, setor ou equipe"
                 className="w-full bg-muted/60 rounded-lg pl-8 pr-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
@@ -266,23 +286,12 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
                     </button>
 
                     {g.nivel === 'equipe' && g.pessoas.map(p => (
-                      <button
+                      <LinhaContato
                         key={p.perfil_id}
-                        onClick={() => alternarPessoa(p.perfil_id)}
-                        className="w-full flex items-center gap-2 pl-6 pr-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <Checkbox checked={marcados.has(p.perfil_id)} />
-                        <AvatarChat nome={p.nome} foto={p.foto_url} tamanho={24} />
-                        <span className="text-xs truncate flex-1 text-left">{p.nome}</span>
-                        {PRIORIDADE_NO_DISPARO[p.cargo] === 0 && (
-                          <span className={cn(
-                            'shrink-0 rounded border px-1.5 py-px text-[9px] font-semibold',
-                            PERFIL_COLORS.lider,
-                          )}>
-                            Líder
-                          </span>
-                        )}
-                      </button>
+                        pessoa={p}
+                        marcado={marcados.has(p.perfil_id)}
+                        onAlternar={alternarPessoa}
+                      />
                     ))}
                   </div>
                 );
@@ -425,3 +434,36 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
     </Dialog>
   );
 }
+
+/**
+ * Uma pessoa na lista do passo 1.
+ *
+ * Memorizada: marcar alguém muda UMA linha, e sem o `memo` a lista inteira —
+ * centenas de caixas, avatares e etiquetas — era redesenhada a cada clique.
+ */
+const LinhaContato = memo(function LinhaContato({
+  pessoa, marcado, onAlternar,
+}: {
+  pessoa: ContatoChat;
+  marcado: boolean;
+  onAlternar: (id: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onAlternar(pessoa.perfil_id)}
+      className="w-full flex items-center gap-2 pl-6 pr-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+    >
+      <Checkbox checked={marcado} />
+      <AvatarChat nome={pessoa.nome} foto={pessoa.foto_url} tamanho={24} />
+      <span className="text-xs truncate flex-1 text-left">{pessoa.nome}</span>
+      {PRIORIDADE_NO_DISPARO[pessoa.cargo] === 0 && (
+        <span className={cn(
+          'shrink-0 rounded border px-1.5 py-px text-[9px] font-semibold',
+          PERFIL_COLORS.lider,
+        )}>
+          Líder
+        </span>
+      )}
+    </button>
+  );
+});

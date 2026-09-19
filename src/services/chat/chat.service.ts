@@ -552,14 +552,90 @@ export async function buscarMensagem(id: string): Promise<MensagemChat | null> {
   return { ...m, anexos: Array.isArray(m.anexos) ? m.anexos : [] };
 }
 
-/** Com quem eu posso INICIAR conversa, agrupado por setor e equipe. */
+/**
+ * Com quem eu posso INICIAR conversa, agrupado por setor e equipe.
+ *
+ * Guardada por pouco tempo desde 19/09/2026. Quatro janelas pedem a mesma
+ * lista (nova conversa, disparo, novo grupo, adicionar ao grupo), e cada
+ * abertura refazia a leitura inteira — para quem alcança a empresa toda, eram
+ * segundos de «Carregando…» a cada clique. A lista muda quando alguém é
+ * cadastrado ou muda de equipe, não de um minuto para o outro.
+ *
+ * `precarregarContatos` é chamada ao passar o mouse nos botões que abrem essas
+ * janelas: o clique quase sempre encontra a lista pronta.
+ */
+const CHAVE_CONTATOS = 'chat-contatos';
+const VALIDADE_CONTATOS_MS = 3 * 60 * 1000;
+
 export async function listarContatos(): Promise<ContatoChat[]> {
-  const { data, error } = await rpcSemTipo<ContatoChat[]>('fn_chat_contatos', {});
+  const lista = await lerComCache(CHAVE_CONTATOS, VALIDADE_CONTATOS_MS, async () => {
+    const { data, error } = await rpcSemTipo<ContatoChat[]>('fn_chat_contatos', {});
+    if (error) {
+      console.warn('[chat] listarContatos:', error.message);
+      return null;
+    }
+    return data ?? [];
+  }, { guardarSe: l => l !== null });
+  // Cópia: o estado da tela é desta montagem, a lista guardada é de todas.
+  return lista ? [...lista] : [];
+}
+
+export function precarregarContatos(): void {
+  void listarContatos();
+}
+
+/**
+ * O cartão de uma pessoa, aberto pelo nome no cabeçalho da conversa direta.
+ *
+ * Vem de `fn_chat_perfil_contato` (migration 20260919150000), que só responde
+ * sobre quem está numa conversa que eu posso ver — a minha, ou uma que estou
+ * monitorando. Por isso a RPC recebe a CONVERSA junto da pessoa.
+ */
+export interface GrupoEmComum {
+  id:       string;
+  nome:     string;
+  foto_url: string | null;
+}
+
+export interface PerfilContato {
+  perfil_id:     string;
+  nome:          string;
+  usuario:       string | null;
+  foto_url:      string | null;
+  cargo:         string;
+  setor_nome:    string | null;
+  equipe_nome:   string | null;
+  /** Quem lidera a equipe dela, já sem ela mesma. */
+  lideres:       string | null;
+  empresa_nome:  string | null;
+  /** Quando o usuário foi criado — o «está na planilha desde». */
+  criado_em:     string | null;
+  situacao:      string | null;
+  ferias_ate:    string | null;
+  /** Vazio quando quem olha está monitorando: «em comum» seria com outra pessoa. */
+  grupos_em_comum: GrupoEmComum[];
+}
+
+export async function buscarPerfilContato(
+  conversaId: string, perfilId: string,
+): Promise<{ perfil: PerfilContato | null; erro: string | null }> {
+  const { data, error } = await rpcSemTipo<(Omit<PerfilContato, 'grupos_em_comum'> & {
+    grupos_em_comum: GrupoEmComum[] | null;
+  })[]>('fn_chat_perfil_contato', { p_conversa: conversaId, p_alvo: perfilId });
+
   if (error) {
-    console.warn('[chat] listarContatos:', error.message);
-    return [];
+    console.warn('[chat] buscarPerfilContato:', error.message);
+    return { perfil: null, erro: error.message };
   }
-  return data ?? [];
+  const linha = data?.[0];
+  if (!linha) return { perfil: null, erro: null };
+  return {
+    perfil: {
+      ...linha,
+      grupos_em_comum: Array.isArray(linha.grupos_em_comum) ? linha.grupos_em_comum : [],
+    },
+    erro: null,
+  };
 }
 
 /**

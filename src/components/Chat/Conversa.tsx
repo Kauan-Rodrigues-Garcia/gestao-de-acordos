@@ -44,6 +44,7 @@ import { horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta }
 import { useFotoResolvida } from './useFotoResolvida';
 import { VisualizadorMidia } from './VisualizadorMidia';
 import { InfoGrupoPainel } from './InfoGrupoPainel';
+import { PerfilContatoPainel } from './PerfilContatoPainel';
 import { StatusMensagem } from './StatusMensagem';
 import { estadoMensagem } from './estadoMensagem';
 
@@ -96,12 +97,14 @@ interface Props {
   perspectivaDe?: string | null;
   /** Abre o painel de configurações do grupo. Ausente = grupo não configurável. */
   onConfigurarGrupo?: () => void;
+  /** Abre outra conversa — os «grupos em comum» do cartão da pessoa. */
+  onAbrirConversa?: (conversaId: string) => void;
 }
 
 export function Conversa({
   conversa, mensagens, online, digitando, gravando, expandido, onVoltar, onEnviar,
   onDigitando, onGravando, temMais, carregandoMais, onVerAnteriores,
-  somenteLeitura = false, perspectivaDe, onConfigurarGrupo,
+  somenteLeitura = false, perspectivaDe, onConfigurarGrupo, onAbrirConversa,
   onReenviar, carregandoMensagens = false, erroMensagens, onRecarregarMensagens,
 }: Props) {
   const { perfil } = useAuth();
@@ -140,7 +143,7 @@ export function Conversa({
   const [arrastando, setArrastando] = useState(false);
   /** Mensagem que a próxima vai citar. Null = mensagem solta. */
   const [respondendo, setRespondendo] = useState<MensagemChat | null>(null);
-  /** O painel «dados do grupo» está por cima da conversa? */
+  /** O painel «dados do grupo» (ou «dados do contato») está por cima da conversa? */
   const [infoAberta, setInfoAberta] = useState(false);
 
   const rolagem = useRef<HTMLDivElement>(null);
@@ -663,9 +666,9 @@ export function Conversa({
    * O miolo do cabeçalho: nome, etiquetas e a linha de baixo.
    *
    * Fica numa variável porque a mesma árvore é usada em dois invólucros — um
-   * `<button>` no grupo, que abre os dados, e uma `<div>` na conversa direta,
-   * que não abre nada. Duplicar o conteúdo faria a próxima etiqueta ser
-   * acrescentada em um dos dois e esquecida no outro.
+   * `<button>`, que abre os dados do grupo ou da pessoa, e uma `<div>` para a
+   * conversa sem ninguém do outro lado. Duplicar o conteúdo faria a próxima
+   * etiqueta ser acrescentada em um dos dois e esquecida no outro.
    */
   const tituloDaConversa = (
     <>
@@ -759,19 +762,22 @@ export function Conversa({
         {/*
           No grupo, a faixa inteira do nome abre os dados — foto, participantes
           e galeria. É onde a mão vai procurar, e era o único lugar do cabeçalho
-          que não fazia nada.
+          que não fazia nada. Desde 19/09/2026 a conversa direta faz o mesmo e
+          abre a pessoa: foto, login, setor, desde quando está na planilha.
 
           São duas árvores em vez de um elemento com props variáveis: `<button>`
           e `<div>` não aceitam o mesmo conjunto de atributos, e escolher a tag
           em tempo de execução obriga a mentir para o TypeScript sobre isso. O
           conteúdo em `titulo` é o mesmo nos dois ramos.
         */}
-        {ehGrupo ? (
+        {ehGrupo || conversa.outro_id ? (
           <button
             type="button"
             onClick={() => setInfoAberta(true)}
-            title="Ver os dados do grupo"
-            aria-label={`Ver os dados do grupo ${conversa.outro_nome}`}
+            title={ehGrupo ? 'Ver os dados do grupo' : 'Ver os dados do contato'}
+            aria-label={ehGrupo
+              ? `Ver os dados do grupo ${conversa.outro_nome}`
+              : `Ver os dados de ${conversa.outro_nome}`}
             className="-mx-1 min-w-0 flex-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-muted/60"
           >
             {tituloDaConversa}
@@ -1185,6 +1191,17 @@ export function Conversa({
           meuId={euNaTela}
           aberto={infoAberta}
           onFechar={() => setInfoAberta(false)}
+        />
+      )}
+      {/* Na conversa direta, o mesmo gesto abre a pessoa — mesma camada, mesma
+          animação, mesmo «voltar». Ver `PerfilContatoPainel`. */}
+      {!ehGrupo && conversa.outro_id && (
+        <PerfilContatoPainel
+          conversa={conversa}
+          online={online}
+          aberto={infoAberta}
+          onFechar={() => setInfoAberta(false)}
+          onAbrirConversa={onAbrirConversa}
         />
       )}
     </div>

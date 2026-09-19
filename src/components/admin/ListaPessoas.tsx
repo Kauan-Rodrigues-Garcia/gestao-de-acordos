@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import type { Perfil, SituacaoUsuario } from '@/lib/supabase';
+import { separarPorCargo } from '@/lib/cargos-ordem';
 import { cn } from '@/lib/utils';
 
 /** `_cloneDe` marca quem aparece aqui por ser clone de OUTRO setor. */
@@ -189,29 +190,48 @@ export function ListaPessoas({
                   transition={{ duration: 0.18, ease: 'easeOut' }}
                   className="overflow-hidden"
                 >
+                  {/* Separado por cargo, da gerência para a operação — ver
+                      `separarPorCargo`. O cabeçalho do bloco é uma linha da
+                      própria lista, e não um cartão à parte: o setor continua
+                      sendo UM bloco, só que agora com andares. */}
                   <div className="rounded-b-xl border border-border bg-card divide-y divide-border/50">
-                    {grupo.lista.map(u => (
-                      <LinhaPessoa
-                        key={u._cloneDe ? `clone-${u.id}-${grupo.id}` : u.id}
-                        u={u}
-                        online={onlineIds.has(u.id)}
-                        souEu={u.id === perfilAtualId}
-                        selecionado={selecionados.has(u.id)}
-                        impersonando={impersonando === u.id}
-                        podeTransferir={podeTransferir}
-                        podeGerenciarSituacao={podeGerenciarSituacao}
-                        podeImpersonar={podeImpersonar}
-                        podeEditar={podeEditar(u)}
-                        mostrarEmpresa={mostrarEmpresa}
-                        nomeEmpresa={nomeEmpresa(u)}
-                        nomeEquipe={nomeEquipe(u)}
-                        onAlternarSelecao={onAlternarSelecao}
-                        onEditar={onEditar}
-                        onTransferir={onTransferir}
-                        onSituacao={onSituacao}
-                        onEntrarComo={onEntrarComo}
-                        onVerFoto={onVerFoto}
-                      />
+                    {separarPorCargo(grupo.lista).map(bloco => (
+                      <div key={bloco.chave} className="divide-y divide-border/50">
+                        <div className="flex items-center gap-2 bg-muted/25 px-3 py-1.5">
+                          <span className={cn(
+                            'rounded-full border px-2 py-px text-[10px] font-semibold',
+                            PERFIL_COLORS[bloco.cargo] ?? 'border-border text-muted-foreground',
+                          )}>
+                            {bloco.rotulo}
+                          </span>
+                          <span className="text-[10px] tabular-nums text-muted-foreground">
+                            {bloco.pessoas.length}
+                          </span>
+                        </div>
+                        {bloco.pessoas.map(u => (
+                          <LinhaPessoa
+                            key={u._cloneDe ? `clone-${u.id}-${grupo.id}` : u.id}
+                            u={u}
+                            online={onlineIds.has(u.id)}
+                            souEu={u.id === perfilAtualId}
+                            selecionado={selecionados.has(u.id)}
+                            impersonando={impersonando === u.id}
+                            podeTransferir={podeTransferir}
+                            podeGerenciarSituacao={podeGerenciarSituacao}
+                            podeImpersonar={podeImpersonar}
+                            podeEditar={podeEditar(u)}
+                            mostrarEmpresa={mostrarEmpresa}
+                            nomeEmpresa={nomeEmpresa(u)}
+                            nomeEquipe={nomeEquipe(u)}
+                            onAlternarSelecao={onAlternarSelecao}
+                            onEditar={onEditar}
+                            onTransferir={onTransferir}
+                            onSituacao={onSituacao}
+                            onEntrarComo={onEntrarComo}
+                            onVerFoto={onVerFoto}
+                          />
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </motion.div>

@@ -17,6 +17,7 @@ vi.mock('@/lib/permissoes-escopo', () => ({
 vi.mock('@/services/chat/chat.service', () => ({
   PAGINA_DESTINOS_DISPARO: 50,
   listarDestinosDisparo: (...args: unknown[]) => mockListarDestinos(...args),
+  precarregarContatos: () => {},
   rotuloAnexo: () => 'Anexo',
 }));
 

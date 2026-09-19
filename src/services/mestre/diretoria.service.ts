@@ -101,27 +101,12 @@ export interface VisaoGeralDiretoria {
   serie: DiaDaSerie[];
   formas: FormaDePagamento[];
   carteiras: CarteiraDoMes[];
-  /**
-   * Os setores que CLONAM o recebimento de gente de outros setores.
-   *
-   * Ficam FORA de `recebido`: somar contaria o mesmo dinheiro duas vezes —
-   * uma no setor que cobrou, outra no alternativo que espelha. Vêm de
-   * consulta separada, e a separação é o que impede o total de inchar.
+  /*
+   * Os setores alternativos SAÍRAM daqui em 19/09/2026 — pedido: «setores
+   * alternativos não precisam de destaque» nesta aba. Eles continuam na grade
+   * de «Setores e equipes» (`buscarGradeDeSetores`), com o selo, e continuam
+   * fora de `recebido`: o total nunca os somou.
    */
-  alternativos: SetorAlternativo[];
-}
-
-export interface SetorAlternativo {
-  setorId: string;
-  setorNome: string;
-  fotoUrl: string | null;
-  valor: number;
-  valorAnterior: number;
-  linhas: number;
-  /** Quem apareceu no 59. */
-  operadores: number;
-  /** Quantos o setor tem, tendo recebido ou não. */
-  pessoas: number;
 }
 
 /** O formato cru do `jsonb`. Existe para o `as` ficar num lugar só. */
@@ -142,12 +127,6 @@ interface RespostaCrua {
     cod: string; nome: string; valor: unknown; qtd: unknown; valor_anterior: unknown;
     setor_id: string | null; setor_nome: string | null;
   }[];
-}
-
-interface AlternativoCru {
-  setor_id: string; setor_nome: string; foto_url: string | null;
-  valor: unknown; valor_anterior: unknown; linhas: unknown;
-  operadores: unknown; pessoas: unknown;
 }
 
 /**
@@ -176,21 +155,9 @@ async function buscarVisaoGeralNoBanco(
   empresaId: string, mes: string, diaCorte?: number | null,
 ): Promise<VisaoGeralDiretoria> {
   const args = { p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null };
-  /*
-   * Duas chamadas de propósito. O alternativo espelha dinheiro que outro
-   * setor já cobrou, então ele não pode entrar no `total` que o banco soma —
-   * e mantê-lo fora daquela consulta faz do total algo que NÃO TEM COMO
-   * inchar, em vez de algo que depende de ninguém errar.
-   *
-   * Falha na segunda não derruba a primeira: uma seção a menos é melhor que
-   * a tela inteira em branco.
-   */
-  const [res, alt] = await Promise.all([
-    rpcSemTipo<RespostaCrua>('fn_mestre_diretoria_visao_geral', args),
-    rpcSemTipo<AlternativoCru[]>('fn_mestre_diretoria_alternativos', args)
-      .catch(() => ({ data: null as AlternativoCru[] | null, error: null as { message: string } | null })),
-  ]);
-  const { data, error } = res;
+  // Uma chamada só. Até 19/09/2026 havia uma segunda, para a seção de setores
+  // alternativos — que saiu da tela, e com ela a leitura. Ver o tipo acima.
+  const { data, error } = await rpcSemTipo<RespostaCrua>('fn_mestre_diretoria_visao_geral', args);
   if (error) throw new Error(error.message);
   if (!data) throw new Error('A visão geral não devolveu resultado.');
 
@@ -223,16 +190,6 @@ async function buscarVisaoGeralNoBanco(
       valor:         n(f.valor),
       qtd:           n(f.qtd),
       valorAnterior: n(f.valor_anterior),
-    })),
-    alternativos: (Array.isArray(alt.data) ? alt.data : []).map(a => ({
-      setorId:       a.setor_id,
-      setorNome:     a.setor_nome,
-      fotoUrl:       a.foto_url,
-      valor:         n(a.valor),
-      valorAnterior: n(a.valor_anterior),
-      linhas:        n(a.linhas),
-      operadores:    n(a.operadores),
-      pessoas:       n(a.pessoas),
     })),
     carteiras: (data.carteiras ?? []).map(c => ({
       cod:           c.cod,

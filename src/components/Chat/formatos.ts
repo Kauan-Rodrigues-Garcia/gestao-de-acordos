@@ -6,6 +6,7 @@
  * mas fora do arquivo de componentes: um `.tsx` que exporta funções perde o
  * Fast Refresh inteiro.
  */
+import { differenceInCalendarDays, differenceInMonths, parseISO } from 'date-fns';
 
 /**
  * Hora curta, do jeito que se lê de relance numa lista.
@@ -60,4 +61,21 @@ export function duracaoCurta(segundos: number): string {
   const m = Math.floor(segundos / 60);
   const s = Math.floor(segundos % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** «há 3 meses», «há 1 ano e 2 meses», «há 12 dias», «desde hoje». */
+export function tempoDesde(iso: string, agora: Date = new Date()): string {
+  const inicio = parseISO(iso);
+  const meses = differenceInMonths(agora, inicio);
+  if (meses < 1) {
+    const dias = differenceInCalendarDays(agora, inicio);
+    if (dias <= 0) return 'desde hoje';
+    return dias === 1 ? 'há 1 dia' : `há ${dias} dias`;
+  }
+  const anos = Math.floor(meses / 12);
+  const resto = meses % 12;
+  const partes: string[] = [];
+  if (anos) partes.push(anos === 1 ? '1 ano' : `${anos} anos`);
+  if (resto) partes.push(resto === 1 ? '1 mês' : `${resto} meses`);
+  return `há ${partes.join(' e ')}`;
 }

@@ -44,6 +44,7 @@ import {
 } from '@/services/chat/grupos.service';
 import { listarContatos, type ContatoChat, type ConversaChat } from '@/services/chat/chat.service';
 import { AvatarChat } from './comum';
+import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
 import { useFotoResolvida } from './useFotoResolvida';
 
 interface Props {
@@ -181,12 +182,12 @@ export function ConfigGrupoDialog({
   // Quem já está dentro não entra na lista de adicionar — oferecer alguém que
   // já é membro é oferecer uma ação sem efeito.
   const dentro = new Set(membros.map(m => m.perfil_id));
-  const buscaLimpa = buscaAdd.trim().toLowerCase();
+  const buscaLimpa = buscaAdd.trim();
+  const palavras = palavrasDaBusca(buscaAdd);
   const paraAdicionar = candidatos
     .filter(c => !dentro.has(c.perfil_id))
-    .filter(c => !buscaLimpa
-      || c.nome.toLowerCase().includes(buscaLimpa)
-      || (c.usuario ?? '').toLowerCase().includes(buscaLimpa));
+    .filter(c => !palavras.length
+      || casaBusca(chaveDeBusca(c.nome, c.usuario, c.setor_nome, c.equipe_nome), palavras));
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o && !salvando) onFechar(); }}>

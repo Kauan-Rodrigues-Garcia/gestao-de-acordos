@@ -5,7 +5,7 @@
  * eu consigo alcançar E que consegue receber. Oferecer alguém que o banco vai
  * recusar seria abrir uma porta para um cômodo vazio.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Search, Loader2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -14,6 +14,7 @@ import { listarContatos, type ContatoChat } from '@/services/chat/chat.service';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { AvatarChat, TagEmpresa } from './comum';
+import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
 
 interface Props {
   aberto:    boolean;
@@ -63,16 +64,23 @@ export function NovaConversaDialog({ aberto, online, onFechar, onEscolher }: Pro
    * e para o disparo isso importa. Aqui não: escolher com quem conversar é
    * escolher uma PESSOA, e ver o mesmo nome duas vezes parece defeito.
    */
+  const unicas = useMemo(() => {
+    const porPessoa = new Map<string, { contato: ContatoChat; chave: string }>();
+    for (const c of contatos) {
+      if (porPessoa.has(c.perfil_id)) continue;
+      porPessoa.set(c.perfil_id, {
+        contato: c, chave: chaveDeBusca(c.nome, c.usuario, c.setor_nome, c.equipe_nome),
+      });
+    }
+    return [...porPessoa.values()];
+  }, [contatos]);
+
+  const buscaAdiada = useDeferredValue(busca);
   const pessoas = useMemo(() => {
-    const unicas = new Map<string, ContatoChat>();
-    for (const c of contatos) if (!unicas.has(c.perfil_id)) unicas.set(c.perfil_id, c);
-    const termo = busca.trim().toLowerCase();
-    const lista = [...unicas.values()];
-    return termo
-      ? lista.filter(c =>
-          c.nome.toLowerCase().includes(termo) || (c.usuario ?? '').toLowerCase().includes(termo))
-      : lista;
-  }, [contatos, busca]);
+    const palavras = palavrasDaBusca(buscaAdiada);
+    return (palavras.length ? unicas.filter(u => casaBusca(u.chave, palavras)) : unicas)
+      .map(u => u.contato);
+  }, [unicas, buscaAdiada]);
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
@@ -88,7 +96,7 @@ export function NovaConversaDialog({ aberto, online, onFechar, onEscolher }: Pro
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             value={busca} onChange={e => setBusca(e.target.value)} autoFocus
-            placeholder="Procurar por nome ou login"
+            placeholder="Procurar por nome, login, setor ou equipe"
             className="w-full bg-muted/60 rounded-lg pl-8 pr-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
