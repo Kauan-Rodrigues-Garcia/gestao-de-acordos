@@ -177,58 +177,122 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // ── Realtime: um canal por usuário ─────────────────────────────────────────
+  // ── Realtime: broadcast por dono, com o caminho antigo como rede ──────────
+  //
+  // O Postgres Changes avaliava a RLS de CADA notificação contra TODAS as
+  // assinaturas abertas. O filtro `usuario_id=eq.<id>` não evitava a avaliação,
+  // só descartava depois dela: medido em 21/09/2026, 14.355 mudanças × 147 abas
+  // = 2.110.185 avaliações, 91% de todo o trabalho do `realtime.apply_rls` — e
+  // 99,3% delas respondendo «não é sua».
+  //
+  // Agora o banco manda um Broadcast no tópico privado do dono
+  // (`notificacoes:<usuario_id>`), e a autorização é checada UMA vez, na entrada
+  // do canal. Ver a migration 20260921120000.
+  //
+  // O `postgres_changes` continua ligado de propósito: enquanto a migration não
+  // for aplicada, é ele que serve. Quando `notificacoes` sair da publicação, ele
+  // emudece sozinho e vira no-op — sem janela sem notificação, nos dois sentidos
+  // da ordem de implantação. Pode sair numa entrega seguinte.
   useEffect(() => {
     if (!userId) return;
 
-    return assinarTabela(
+    // Ids já empilhados por QUALQUER um dos dois caminhos. Enquanto ambos estão
+    // vivos, a mesma notificação chega duas vezes, e a segunda não pode tocar o
+    // som nem vibrar de novo.
+    const vistos = new Set<string>();
+
+    const aplicar = (
+      operacao:    'INSERT' | 'UPDATE' | 'DELETE',
+      linha:       Notificacao | null,
+      idRemovida?: string,
+    ): void => {
+      if (!montadoRef.current) return;
+
+      if (operacao === 'INSERT' && linha) {
+        if (vistos.has(linha.id)) return;
+        vistos.add(linha.id);
+        // A lista mostra 200; o conjunto não precisa crescer para sempre.
+        if (vistos.size > 1000) vistos.clear();
+
+        setNotificacoes(prev =>
+          prev.some(n => n.id === linha.id) ? prev : [linha, ...prev],
+        );
+        pulsar();
+        // Vibração curta no mobile; ignorada onde não existe.
+        try { navigator.vibrate?.([50, 30, 50]); } catch { /* noop */ }
+        return;
+      }
+
+      if (operacao === 'UPDATE' && linha) {
+        setNotificacoes(prev => prev.map(n => (n.id === linha.id ? linha : n)));
+        return;
+      }
+
+      if (operacao === 'DELETE' && idRemovida) {
+        setNotificacoes(prev => prev.filter(n => n.id !== idRemovida));
+      }
+    };
+
+    // ── Caminho novo: broadcast no tópico do dono ───────────────────────────
+    const cancelarSinal = assinarTabela(
+      { topico: `notificacoes:${userId}`, escutas: [{ sinal: 'nova' }] },
+      {
+        onSinal: (payload) => {
+          const operacao = String(payload.operacao ?? '');
+
+          // Lote grande para o mesmo dono (marcar todas como lidas, por
+          // exemplo): o gatilho manda um aviso só, e a lista é relida.
+          if (operacao === 'RECARREGAR') { void refresh(); return; }
+
+          if (operacao === 'DELETE') {
+            const id = (payload.id as string | undefined) ?? undefined;
+            aplicar('DELETE', null, id);
+            return;
+          }
+
+          if (operacao !== 'INSERT' && operacao !== 'UPDATE') return;
+
+          // O payload é JSON solto (`Record<string, unknown>`), sem parentesco
+          // estrutural com a interface. A forma vem do `to_jsonb` da linha.
+          const linha = payload.notificacao as unknown as Notificacao | undefined;
+          if (linha?.id) aplicar(operacao, linha);
+        },
+        // Notificações criadas durante a queda não voltam como evento — sem
+        // isto, o sino ficaria mudo até o próximo F5.
+        onReconectado: () => { void refresh(); },
+      },
+    );
+
+    // ── Caminho antigo: fica até a migration tirar a tabela da publicação ───
+    const cancelarTabela = assinarTabela(
       {
         topico:  `rt-notificacoes-${userId}`,
         // Uma escuta só, com os três eventos. Eram três — uma por evento, com o
         // mesmo filtro —, e cada uma é uma linha em `realtime.subscription` que
         // o Realtime confere a cada mudança da tabela: 498 linhas para 166 abas
-        // em 18/09/2026. DELETE continua chegando pelo mesmo filtro porque
-        // `notificacoes` está em REPLICA IDENTITY FULL.
+        // em 18/09/2026.
         escutas: [
           { tabela: 'notificacoes', evento: '*', filtro: `usuario_id=eq.${userId}` },
         ],
       },
       {
         onEvento: (payload) => {
-          if (!montadoRef.current) return;
-
-          // Duplo cast: o payload do realtime é JSON solto
-          // (`Record<string, unknown>`), sem parentesco estrutural com a
-          // interface. É a forma do banco, validada pelo filtro da assinatura.
           if (payload.eventType === 'INSERT') {
-            const nova = payload.new as unknown as Notificacao;
-            setNotificacoes(prev =>
-              prev.some(n => n.id === nova.id) ? prev : [nova, ...prev],
-            );
-            pulsar();
-            // Vibração curta no mobile; ignorada onde não existe.
-            try { navigator.vibrate?.([50, 30, 50]); } catch { /* noop */ }
+            aplicar('INSERT', payload.new as unknown as Notificacao);
             return;
           }
-
           if (payload.eventType === 'UPDATE') {
-            const atualizada = payload.new as unknown as Notificacao;
-            setNotificacoes(prev =>
-              prev.map(n => (n.id === atualizada.id ? atualizada : n)),
-            );
+            aplicar('UPDATE', payload.new as unknown as Notificacao);
             return;
           }
-
           const removida = payload.old as { id?: string };
-          if (removida?.id) {
-            setNotificacoes(prev => prev.filter(n => n.id !== removida.id));
-          }
+          if (removida?.id) aplicar('DELETE', null, removida.id);
         },
-        // Notificações criadas durante a queda não voltam como evento — sem isto,
-        // o sino ficaria mudo até o próximo F5.
         onReconectado: () => { void refresh(); },
       },
     );
+
+    return () => { cancelarSinal(); cancelarTabela(); };
   }, [userId, refresh, pulsar]);
 
   // ── Mutações (otimistas: o realtime confirma depois) ───────────────────────
