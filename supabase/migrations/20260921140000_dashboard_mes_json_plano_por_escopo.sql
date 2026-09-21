@@ -340,11 +340,24 @@ commit;
 --    de quem pergunta: rode logado, e de preferência repita com gente de escopo
 --    diferente (operador, líder, diretoria).
 --
---   select public.fn_analitico_dashboard_mes_json('<empresa>', '2026-09')
---        = public.fn_analitico_dashboard_mes_json_antes_20260921('<empresa>', '2026-09')
---          as iguais;
---   -- esperado: true. Repita para '2026-08' e '2026-07' — julho é o mês com
---   -- `setor_id` nulo, onde o `coalesce(ar.setor_id, imp.setor_id)` vale.
+--    ATENÇÃO: compare ORDENADO. `jsonb_agg` sem `ORDER BY` devolve os elementos
+--    na ordem que o plano produziu, e trocar o plano é justamente o que esta
+--    migration faz. Medido em 21/09/2026 com os MESMOS 73 grupos e os MESMOS
+--    dados: a comparação crua (`a = b`) deu `false`, a ordenada deu `true`.
+--    Comparar cru aqui acusa defeito que não existe.
+--
+--    Nada depende da ordem: `agregarAnalitico` (useAnaliticoDashboard.ts) é um
+--    laço de acumulação em mapas por dia/operador/forma.
+--
+--   with a as (select public.fn_analitico_dashboard_mes_json('<empresa>', '2026-09') as j),
+--        b as (select public.fn_analitico_dashboard_mes_json_antes_20260921('<empresa>', '2026-09') as j)
+--   select jsonb_array_length(a.j) = jsonb_array_length(b.j)                as mesma_contagem,
+--          (select jsonb_agg(e order by e::text) from jsonb_array_elements(a.j) e)
+--        = (select jsonb_agg(e order by e::text) from jsonb_array_elements(b.j) e)
+--                                                                           as iguais
+--     from a, b;
+--   -- esperado: as duas colunas `true`. Repita para '2026-08' e '2026-07' —
+--   -- julho é o mês com `setor_id` nulo, onde o `coalesce(...)` realmente vale.
 --
 -- 2. O plano do caso do operador agora usa o índice certo:
 --
