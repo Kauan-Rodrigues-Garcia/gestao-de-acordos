@@ -191,8 +191,14 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   //
   // O `postgres_changes` continua ligado de propósito: enquanto a migration não
   // for aplicada, é ele que serve. Quando `notificacoes` sair da publicação, ele
-  // emudece sozinho e vira no-op — sem janela sem notificação, nos dois sentidos
-  // da ordem de implantação. Pode sair numa entrega seguinte.
+  // emudece sozinho e vira no-op. Pode sair numa entrega seguinte.
+  //
+  // O que esta rede NÃO cobre, e custou 2.200 erros em 8 minutos em 21/09/2026:
+  // a policy que autoriza a entrada no tópico privado vem dentro da migration.
+  // Com o deploy no ar e a migration ainda não aplicada, todo cliente leva
+  // «Unauthorized: You do not have permissions to read from this Channel topic»
+  // e retenta com backoff. A notificação não se perde — quem entrega é o
+  // postgres_changes —, mas o log enche. Ver o cabeçalho da 20260921120000.
   useEffect(() => {
     if (!userId) return;
 

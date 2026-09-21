@@ -41,18 +41,43 @@
 -- então a tela continua fazendo o que fazia (empilhar, tocar, vibrar) sem uma
 -- ida extra ao banco. Não há releitura no caminho feliz.
 --
--- ## Ordem de aplicação — importante
+-- ## Ordem de aplicação — CORRIGIDO em 21/09/2026, depois do estrago
 --
 -- O front desta mesma entrega escuta OS DOIS caminhos: o broadcast novo e o
 -- `postgres_changes` antigo. Os três tratadores são idempotentes (INSERT dedupa
 -- por id, UPDATE é map, DELETE é filter), então evento em duplicata não estraga
 -- nada.
 --
--- Por isso a ordem é livre e não existe janela sem notificação:
---   - migration antes do deploy → bundle antigo segue no postgres_changes até
---     a publicação mudar; o novo já ouve o broadcast;
---   - deploy antes da migration → o front ouve um tópico que ainda ninguém
---     escreve, e continua sendo servido pelo postgres_changes.
+-- A primeira versão deste cabeçalho dizia que «a ordem é livre» e que, no
+-- deploy-antes-da-migration, «o front ouve um tópico que ainda ninguém escreve».
+-- ERRADO, e caro: não é que ninguém escreve — é que ninguém tem PERMISSÃO DE
+-- LER, porque a policy `notificacoes_sinal_receber` vem junto nesta migration.
+-- Sem ela, todo cliente que tenta entrar no tópico leva:
+--
+--   Unauthorized: You do not have permissions to read from this Channel topic:
+--   notificacoes:<usuario_id>
+--
+-- e o `assinarTabela` trata como falha transitória e retenta com backoff. Medido
+-- na aplicação real: **2.200 erros em 8 minutos** (13:23 a 13:31), ~70 a 86
+-- tentativas por usuário, até a migration entrar e a policy passar a existir.
+--
+-- ## A ordem certa, e o porquê de cada uma
+--
+--   deploy → migration  (foi o que se fez)
+--     Sem buraco funcional: `notificacoes` ainda está na publicação, então o
+--     `postgres_changes` continua entregando. O preço é a tempestade de
+--     `Unauthorized` acima, durante a janela. Ninguém perde notificação.
+--
+--   migration → deploy
+--     Sem erro nenhum no log. O preço é o inverso: a tabela sai da publicação
+--     antes de o front saber ouvir o broadcast, e QUEM NÃO RECARREGAR fica sem
+--     notificação até recarregar. Assinar tabela fora da publicação não dá
+--     erro — fica inerte, em silêncio, que é pior de perceber.
+--
+--   o jeito sem nenhum dos dois custos, se houver uma próxima:
+--     separar a POLICY numa migration própria, aplicar ela primeiro (ela sozinha
+--     não muda comportamento nenhum), depois o deploy, depois o resto. A
+--     autorização passa a existir antes de alguém pedir para entrar.
 --
 -- Quando `notificacoes` sai da publicação (passo 5), o caminho antigo emudece
 -- sozinho e o listener vira no-op. O código do postgres_changes pode ser
