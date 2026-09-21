@@ -260,11 +260,29 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
    * (migration 20260917110000), assinado uma vez por empresa: `ouvirMudancas`
    * descarta a leitura compartilhada e cada componente relê — o primeiro busca,
    * os outros entram na mesma busca.
+   *
+   * ## Só com sessão (21/09/2026)
+   *
+   * A guarda era só `empresa?.id`, e a empresa NÃO depende de estar logado:
+   * `empresas_select` é `USING (ativo = true)` sem `TO`, então o `anon` lê, e o
+   * `EmpresaProvider` resolve a empresa pelo slug do build antes de qualquer
+   * sessão — é assim que a tela de login tem nome e logo.
+   *
+   * E este hook é chamado pelo `ProtectedRoute`, ANTES do `if (!user)`: hook não
+   * pula por causa de um `return` mais abaixo. Deslogado (ou nos milissegundos
+   * em que a sessão ainda está sendo restaurada) a assinatura saía mesmo assim,
+   * e `permissoes:<empresa>` é canal PRIVADO — o join vai com a chave anônima,
+   * `auth.uid()` é nulo, `fn_can_access_empresa` responde falso e o servidor
+   * devolve «Unauthorized: You do not have permissions to read from this Channel
+   * topic» (log do Realtime com `auth_user: null`).
+   *
+   * A mesma condição do `carregar`: sem cargo não há o que reler, e cargo só
+   * existe com perfil — que só existe com sessão.
    */
   useEffect(() => {
-    if (!empresa?.id) return;
+    if (!empresa?.id || !cargo) return;
     return ouvirMudancas(empresa.id, () => { void carregar(false); });
-  }, [empresa?.id, carregar]);
+  }, [empresa?.id, cargo, carregar]);
 
   const permissoes = useMemo(
     () => todasPermissoes.find(r => r.cargo === cargo)?.permissoes ?? {},

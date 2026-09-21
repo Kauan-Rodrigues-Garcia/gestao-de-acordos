@@ -34,12 +34,14 @@ const {
   mockPerfilRef,
   mockEmpresaRef,
   mockSupabaseFrom,
+  mockChannel,
 } = vi.hoisted(() => {
   const mockPerfilRef  = { current: null as { perfil: string; id?: string } | null };
   const mockEmpresaRef = { current: null as { id: string } | null };
   const mockSupabaseFrom = vi.fn();
+  const mockChannel = vi.fn();
 
-  return { mockPerfilRef, mockEmpresaRef, mockSupabaseFrom };
+  return { mockPerfilRef, mockEmpresaRef, mockSupabaseFrom, mockChannel };
 });
 
 // ── 2. vi.mock ANTES dos imports do SUT ───────────────────────────────────────
@@ -47,10 +49,13 @@ const {
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: mockSupabaseFrom,
-    // Realtime (Permissões 2.0): o hook assina mudanças em cargos_permissoes e
-    // perfis_permissoes para a alteração propagar sem recarregar a página. O
-    // canal é encadeável e o teste só precisa que não exploda.
-    channel: () => {
+    // Realtime (Permissões 2.0): o hook assina o sinal `permissoes:<empresa>`
+    // para a alteração propagar sem recarregar a página. O canal é encadeável e
+    // o teste só precisa que não exploda — e que dê para PERGUNTAR se foi
+    // criado: `permissoes:` é canal privado, e assinar sem sessão é o defeito
+    // que o servidor responde com «Unauthorized».
+    channel: (nome: string, opcoes?: unknown) => {
+      mockChannel(nome, opcoes);
       const canal: Record<string, unknown> = {};
       canal.on = () => canal;
       canal.subscribe = () => canal;
@@ -199,6 +204,44 @@ describe('useCargoPermissoes', () => {
     });
 
     expect(mockSupabaseFrom).not.toHaveBeenCalled();
+  });
+
+  /*
+   * A empresa chega SEM sessão: `empresas_select` é `USING (ativo = true)` sem
+   * `TO`, então o `anon` lê, e o `EmpresaProvider` resolve pelo slug do build
+   * para a tela de login ter nome e logo. O `ProtectedRoute` chama este hook
+   * antes do `if (!user)`, então a assinatura saía deslogada — e
+   * `permissoes:<empresa>` é canal privado: o join ia com a chave anônima e o
+   * servidor respondia «Unauthorized: You do not have permissions to read from
+   * this Channel topic».
+   */
+  it('não assina o canal privado sem perfil, mesmo com empresa resolvida', async () => {
+    mockPerfilRef.current  = null;
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    const { result } = renderHook(() => useCargoPermissoes());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(mockChannel).not.toHaveBeenCalled();
+  });
+
+  it('assina o canal privado assim que há cargo', async () => {
+    mockPerfilRef.current  = { perfil: 'operador' };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    const { result } = renderHook(() => useCargoPermissoes());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(mockChannel).toHaveBeenCalledWith(
+      `permissoes:${EMPRESA_ID}`,
+      { config: { private: true } },
+    );
   });
 
   // ─── Fetch bem-sucedido ────────────────────────────────────────────────

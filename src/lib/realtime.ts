@@ -33,6 +33,21 @@
  *   - CLOSED que não fomos nós: recria, com backoff e sorteio.
  *   - Callback de canal que já não é o atual: ignorado.
  *
+ * ── «Unauthorized» não é queda: é resposta (21/09/2026) ──────────────────────
+ *
+ * Canal privado que a RLS de `realtime.messages` recusa volta como
+ * `CHANNEL_ERROR` — a mesma porta por onde entra a queda de rede. Só que aqui
+ * insistir não resolve nada: a resposta vai ser a mesma na próxima tentativa, e
+ * na seguinte. O `rejoinTimer` do supabase-js reentra sozinho até ~10 s, o vigia
+ * daqui recria em cima, e uma assinatura que ninguém pode ouvir vira uma linha
+ * de erro por dezena de segundos, por aba aberta, para sempre.
+ *
+ * Então recusa de permissão SUSPENDE o tópico: o canal sai (o que zera o
+ * `rejoinTimer` da biblioteca), nenhum timer fica armado, e o registro espera.
+ * O que muda a resposta é a SESSÃO — e é ela que religa, no `onAuthStateChange`.
+ * Continua valendo o de sempre: quem não devia assinar não assina (ver a guarda
+ * de sessão em `useCargoPermissoes`); isto é a rede de baixo.
+ *
  * ── Tabela ou sinal ──────────────────────────────────────────────────────────
  *
  *   { tabela, evento?, filtro? }   Postgres Changes: o evento é a linha.
@@ -151,6 +166,11 @@ interface Registro {
   falhas:       number;
   /** Caiu desde o último SUBSCRIBED: o próximo avisa `onReconectado`. */
   caiu:         boolean;
+  /**
+   * O servidor recusou por permissão. Nada de timer nem de recriação até a
+   * sessão mudar — ver «Unauthorized» no cabeçalho.
+   */
+  barrado:      boolean;
   recriando:    boolean;
   timerRecriar: ReturnType<typeof setTimeout> | null;
   timerVigia:   ReturnType<typeof setTimeout> | null;
@@ -177,6 +197,52 @@ function limparTimers(reg: Registro): void {
 function socketConectado(): boolean {
   const rt = (supabase as { realtime?: { isConnected?: () => boolean } }).realtime;
   return rt?.isConnected?.() ?? true;
+}
+
+/**
+ * O `CHANNEL_ERROR` foi recusa de permissão?
+ *
+ * O supabase-js entrega o motivo do servidor como `Error` cuja mensagem é o
+ * texto do join recusado — «Unauthorized: You do not have permissions to read
+ * from this Channel topic: <tópico>». É o único sinal que distingue «não pode»
+ * de «caiu», e os dois chegam pelo mesmo status.
+ */
+function ehRecusaDePermissao(err?: Error): boolean {
+  return /unauthorized|not authorized|forbidden/i.test(err?.message ?? '');
+}
+
+/**
+ * Suspende o tópico: tira o canal (zera o `rejoinTimer` da biblioteca) e não
+ * arma nada. Quem religa é a troca de sessão.
+ */
+function barrar(topico: string, reg: Registro, err?: Error): void {
+  reg.barrado = true;
+  limparTimers(reg);
+  const canal = reg.channel;
+  // Antes de remover: o CLOSED que a remoção dispara encontra o registro já sem
+  // canal e é ignorado pela guarda do `subscribe`.
+  reg.channel = null;
+  logger.warn(
+    `[realtime] ${topico}: sem permissão para ouvir — assinatura suspensa até a sessão mudar`,
+    err ?? new Error('sem motivo'),
+  );
+  if (canal) void supabase.removeChannel(canal);
+}
+
+/**
+ * Sessão nova (login, renovação do token): o que estava barrado pode ter
+ * passado a ser permitido. Uma tentativa por tópico, sem backoff — a recusa
+ * anterior não é falha de rede para contar.
+ */
+function religarBarrados(): void {
+  for (const [topico, reg] of registros) {
+    if (!reg.barrado) continue;
+    reg.barrado    = false;
+    reg.tentativas = 0;
+    reg.caiu       = true;
+    if (reg.channel || reg.recriando) continue;
+    criarCanal(topico, reg);
+  }
 }
 
 function criarCanal(topico: string, reg: Registro): void {
@@ -243,6 +309,11 @@ function criarCanal(topico: string, reg: Registro): void {
 
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
       reg.caiu = true;
+      // Recusa de permissão: insistir devolve a mesma recusa. Ver o cabeçalho.
+      if (status === 'CHANNEL_ERROR' && ehRecusaDePermissao(err)) {
+        barrar(topico, reg, err);
+        return;
+      }
       /*
        * A PRIMEIRA falha de um ciclo não é defeito. Quando o WebSocket cai,
        * TODO canal aberto dispara `CHANNEL_ERROR` no mesmo instante, sempre com
@@ -337,6 +408,8 @@ function reviverCanais(): void {
 
   for (const [topico, reg] of registros) {
     if (reg.recriando) continue;
+    // Barrado não é canal caído: voltar para a aba não muda a resposta da RLS.
+    if (reg.barrado) continue;
     const estado = reg.channel?.state;
     if (estado === 'joined' || estado === 'joining' || estado === 'leaving') continue;
     if (estado === 'errored') { armarVigia(topico, reg); continue; }
@@ -366,6 +439,15 @@ function ativarSupervisor(): void {
     if (document.visibilityState === 'visible') reviverCanais();
   });
   window.addEventListener('online', reviverCanais);
+
+  // Sessão nova religa o que a RLS tinha recusado. Opcional no acesso porque os
+  // mocks de `@/lib/supabase` nos testes não trazem `auth`.
+  const auth = (supabase as {
+    auth?: { onAuthStateChange?: (cb: (evento: string) => void) => unknown };
+  }).auth;
+  auth?.onAuthStateChange?.((evento) => {
+    if (evento === 'SIGNED_IN' || evento === 'TOKEN_REFRESHED') religarBarrados();
+  });
 }
 
 // ── API pública ──────────────────────────────────────────────────────────────
@@ -389,7 +471,7 @@ export function assinarTabela(
   if (!reg) {
     reg = {
       escutas, ouvintes: new Set(), channel: null,
-      geracao: 0, tentativas: 0, falhas: 0, caiu: false, recriando: false,
+      geracao: 0, tentativas: 0, falhas: 0, caiu: false, barrado: false, recriando: false,
       timerRecriar: null, timerVigia: null, timerAviso: null,
     };
     registros.set(topico, reg);

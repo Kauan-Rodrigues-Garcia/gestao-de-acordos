@@ -11,6 +11,8 @@
  *   3. O laço de 17/09/2026: o CLOSED do canal que o próprio módulo removeu não
  *      pode agendar outra recriação.
  *   4. Sinais do banco — canal privado, nome exato, payload normalizado.
+ *   5. Recusa de permissão — «Unauthorized» não é queda: insistir devolve a
+ *      mesma resposta, então o tópico é suspenso até a sessão mudar.
  *
  * Usa timers falsos: os atrasos são de segundos e são parte do contrato. O
  * sorteio (`Math.random`) é fixado em 1 para que cada espera seja o seu teto.
@@ -43,12 +45,16 @@ function novoCanalFalso(nome: string, opcoes?: unknown) {
       return canal;
     },
 
-    /** Dispara um status como o servidor faria, ajustando `state` junto. */
-    emitirStatus(status: string) {
+    /**
+     * Dispara um status como o servidor faria, ajustando `state` junto. O `err`
+     * é o motivo que o supabase-js repassa no `CHANNEL_ERROR` — é por ele que o
+     * módulo distingue recusa de permissão de queda de rede.
+     */
+    emitirStatus(status: string, err?: Error) {
       canal.state = status === 'SUBSCRIBED' ? 'joined'
         : status === 'CLOSED' ? 'closed'
         : 'errored';
-      canal.statusCb?.(status);
+      canal.statusCb?.(status, err);
     },
     /** Dispara um evento em todos os bindings do tipo. */
     emitirEvento(payload: unknown, tipo = 'postgres_changes') {
@@ -667,5 +673,61 @@ describe('assinarSinal — portão', () => {
 
       expect(onMudou).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// ── 5. Recusa de permissão ───────────────────────────────────────────────────
+//
+// O canal privado que a RLS de `realtime.messages` nega volta como
+// `CHANNEL_ERROR`, igual a uma queda — a diferença está só na mensagem. Insistir
+// devolve a mesma recusa, então o tópico é suspenso até a sessão mudar.
+
+describe('assinarTabela — «Unauthorized» suspende o tópico', () => {
+  const RECUSA = new Error(
+    '"Unauthorized: You do not have permissions to read from this Channel topic: permissoes:e1"',
+  );
+
+  it('tira o canal e não recria nem depois do vigia', async () => {
+    assinarSinal('permissoes', 'e1', { onMudou: vi.fn() });
+    expect(mockChannel).toHaveBeenCalledTimes(1);
+
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
+
+    // Sai na hora: é a remoção que zera o `rejoinTimer` do supabase-js.
+    expect(removidos).toEqual(['permissoes:e1']);
+
+    await vi.advanceTimersByTimeAsync(VIGIA_MS * 4);
+    expect(mockChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it('voltar para a aba não tenta de novo', async () => {
+    assinarSinal('permissoes', 'e1', { onMudou: vi.fn() });
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
+    mockChannel.mockClear();
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(VIGIA_MS);
+
+    expect(mockChannel).not.toHaveBeenCalled();
+  });
+
+  it('erro sem motivo de permissão continua com a recuperação de sempre', async () => {
+    assinarSinal('permissoes', 'e1', { onMudou: vi.fn() });
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR');
+
+    // Nada sai na hora: quem reentra é a biblioteca, e o vigia só age depois.
+    expect(removidos).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(VIGIA_MS + 1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mockChannel.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('o ouvinte segue registrado: o tópico não é cancelado, só suspenso', () => {
+    const onMudou = vi.fn();
+    assinarSinal('permissoes', 'e1', { onMudou });
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
+
+    expect(topicosAtivos()).toEqual(['permissoes:e1']);
   });
 });
