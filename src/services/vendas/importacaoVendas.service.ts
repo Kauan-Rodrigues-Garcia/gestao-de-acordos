@@ -22,6 +22,7 @@
 import { rpcSemTipo, tabelaSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaProspeccao } from './prospeccaoParser';
 import type { LinhaSetor } from './prospeccaoSetorParser';
+import type { LinhaDoRelatorio } from '@/lib/vendasRelatorio';
 import { mensagemDoErro, pareceNaoInstalado } from './erroDoBanco';
 
 /**
@@ -250,6 +251,62 @@ export async function buscarLotes(empresaId: string): Promise<ListaLotes> {
     faturamento_na_regua: num(l.faturamento_na_regua),
   }));
   return { lotes, disponivel: true, erro: null };
+}
+
+/**
+ * As linhas cruas de um lote — o relatório inteiro, como foi gravado.
+ *
+ * Paginado de 1.000 em 1.000 porque o PostgREST corta a resposta nesse teto
+ * em silêncio: agosto tem 6.934 linhas, e sem as páginas o raio-x mostraria
+ * um mês com 1.000 vendas, parecendo certo.
+ *
+ * Só é chamada quando alguém abre a aba do relatório — nunca em tempo real.
+ * A policy é a mesma do histórico de cargas (`ver_importacoes_vendas`).
+ */
+export interface LinhaGravada extends Omit<LinhaDoRelatorio, 'veio_de_lead'> {
+  veio_de_lead: boolean | null;
+}
+
+const COLUNAS_RELATORIO = `
+  nr_documento, cliente, data_venda, data_confirmacao,
+  codigo_franquia, franquia, uf, nome_vendedor, login_vendedor,
+  situacao, contrato_assinado,
+  valor_total, qtde_parcela, valor_parcela, valor_recebido, valor_entrada,
+  tipo_recebimento, tipo_documento, produto, categoria, tipo_venda, tipo_produto,
+  data_cancelamento, data_devolucao, motivo, setor_cancelamento,
+  veio_de_lead, score_classe, spc_serasa
+`;
+
+const PAGINA = 1000;
+
+export async function buscarLinhasDoLote(
+  lote: Pick<Lote, 'id' | 'origem'>,
+): Promise<{ linhas: LinhaGravada[]; erro: string | null }> {
+  const linhas: LinhaGravada[] = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await tabelaSemTipo<Record<string, unknown>>('vendas_relatorio')
+      .select(COLUNAS_RELATORIO)
+      .eq('lote_id', lote.id)
+      .order('nr_documento', { ascending: true })
+      .range(desde, desde + PAGINA - 1);
+
+    if (error) return { linhas, erro: mensagemDoErro(error.message, 'O relatório do mês', '20260915110000_vendas_fase2_lote_e_depara.sql') };
+
+    for (const l of data ?? []) {
+      linhas.push({
+        ...(l as unknown as LinhaGravada),
+        valor_total:    num(l.valor_total),
+        valor_recebido: num(l.valor_recebido),
+        valor_parcela:  l.valor_parcela == null ? null : num(l.valor_parcela),
+        valor_entrada:  l.valor_entrada == null ? null : num(l.valor_entrada),
+        // O relatório do setor não tem a coluna de lead, e o banco grava o
+        // padrão `false`. Mostrar «100% prospecção própria» seria inventar.
+        veio_de_lead:   lote.origem === 'setor' ? null : l.veio_de_lead === true,
+      });
+    }
+    if ((data ?? []).length < PAGINA) break;
+  }
+  return { linhas, erro: null };
 }
 
 export interface ListaFranquias {

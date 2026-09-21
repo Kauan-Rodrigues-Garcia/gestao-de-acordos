@@ -134,6 +134,21 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     });
     if (!linkResp.ok) {
       const msg = await linkResp.text().catch(() => '');
+      /*
+       * «Database error finding user» é o GoTrue tropeçando na PRÓPRIA linha
+       * do alvo em `auth.users` — quase sempre coluna de token NULL em conta
+       * criada por INSERT direto (script SQL), que ele não sabe ler. Não é
+       * permissão nem sessão de quem clicou, e a mensagem crua não diz isso.
+       * Correção em supabase/sql_scripts/corrigir_tokens_nulos_auth_users_20260921.sql.
+       */
+      if (/database error finding user/i.test(msg)) {
+        res.status(502).json({
+          error: `Não deu para entrar como ${alvo.nome ?? alvo.email}: o cadastro de login desta conta está `
+            + 'incompleto no Supabase (conta criada por script, com campo de token vazio). '
+            + 'O administrador do banco corrige com o script corrigir_tokens_nulos_auth_users_20260921.sql.',
+        });
+        return;
+      }
       res.status(502).json({ error: `Falha ao gerar sessão do alvo (${linkResp.status}). ${msg}`.trim() });
       return;
     }

@@ -24,18 +24,19 @@ import { criarAgrupador } from '@/lib/agrupador';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import {
   resumirVendas,
-  type EixoDaVenda, type ResumoVendas, type SituacaoVenda,
+  type ResumoVendas, type SituacaoVenda,
 } from '@/lib/vendas';
 import {
   buscarVendas, buscarPendentes, salvarVenda, confirmarVenda, excluirVenda,
-  type Venda, type EntradaVenda, type Resultado,
+  type Venda, type EntradaVenda, type Resultado, type EixoDaBusca,
 } from '@/services/vendas/vendas.service';
 
 interface Params {
   empresaId: string | null;
   /** 'yyyy-MM' */
   mes: string;
-  eixo: EixoDaVenda;
+  /** `qualquer` = a venda com data de venda OU de confirmação no mês. */
+  eixo: EixoDaBusca;
   /** `false` congela: não busca nem assina. */
   ativo: boolean;
 }

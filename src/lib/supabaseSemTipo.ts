@@ -48,6 +48,11 @@ interface ConsultaSemTipo<T> extends PromiseLike<RespostaTabela<T>> {
      assinatura» é uma pergunta só, e parti-la em duas consultas faria a tela
      juntar e reordenar o que o banco já sabe ordenar. */
   or(filtro: string): ConsultaSemTipo<T>;
+  /* `range` entrou com o raio-x do relatório de vendas (21/09/2026): o
+     PostgREST corta a resposta em 1.000 linhas sem avisar, e o relatório de
+     agosto tem 6.934. Paginar é o único jeito de ler o mês inteiro. Continua
+     sendo leitura. */
+  range(de: number, ate: number): ConsultaSemTipo<T>;
 }
 
 /** Consulta de leitura numa tabela que os tipos gerados ainda não conhecem. */

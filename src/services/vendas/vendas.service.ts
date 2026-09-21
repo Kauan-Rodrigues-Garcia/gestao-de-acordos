@@ -62,6 +62,17 @@ const COLUNAS = `
   perfis:operador_id ( id, nome )
 `;
 
+/**
+ * Por qual data a busca recorta.
+ *
+ * `qualquer` traz a venda que tem **uma das duas** datas no intervalo. É o que
+ * a aba Vendas usa desde 21/09/2026: a lista precisa da venda aberta lançada
+ * hoje (que só tem data de venda) E da venda de junho confirmada hoje (que
+ * conta na meta deste mês). Duas consultas custariam o dobro para trazer
+ * quase as mesmas linhas.
+ */
+export type EixoDaBusca = 'confirmacao' | 'venda' | 'qualquer';
+
 export interface VendasDoPeriodo {
   vendas: Venda[];
   /**
@@ -104,16 +115,24 @@ export async function buscarVendas(params: {
   empresaId: string;
   de: string;
   ate: string;
-  eixo: 'confirmacao' | 'venda';
+  eixo: EixoDaBusca;
 }): Promise<VendasDoPeriodo> {
-  const coluna = params.eixo === 'venda' ? 'data_venda' : 'data_confirmacao';
-
-  const { data, error } = await tabelaSemTipo<Record<string, unknown>>('vendas')
+  let consulta = tabelaSemTipo<Record<string, unknown>>('vendas')
     .select(COLUNAS)
-    .eq('empresa_id', params.empresaId)
-    .gte(coluna, params.de)
-    .lte(coluna, params.ate)
-    .order(coluna, { ascending: false })
+    .eq('empresa_id', params.empresaId);
+
+  if (params.eixo === 'qualquer') {
+    consulta = consulta.or(
+      `and(data_venda.gte.${params.de},data_venda.lte.${params.ate}),`
+      + `and(data_confirmacao.gte.${params.de},data_confirmacao.lte.${params.ate})`,
+    );
+  } else {
+    const coluna = params.eixo === 'venda' ? 'data_venda' : 'data_confirmacao';
+    consulta = consulta.gte(coluna, params.de).lte(coluna, params.ate);
+  }
+
+  const { data, error } = await consulta
+    .order(params.eixo === 'confirmacao' ? 'data_confirmacao' : 'data_venda', { ascending: false })
     .order('criado_em', { ascending: false });
 
   if (error) {

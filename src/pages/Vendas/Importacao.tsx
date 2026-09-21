@@ -44,7 +44,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload, FileSpreadsheet, TriangleAlert, Info, CheckCircle2, Link2,
-  RefreshCw, History, Building2, X,
+  RefreshCw, History, Building2, X, FileSearch, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,8 @@ import {
 } from '@/services/vendas/importacaoVendas.service';
 import { Projecao } from './Projecao';
 import { Conciliacao } from './Conciliacao';
+import { mapaDeSetorDaFranquia } from '@/lib/vendasRelatorio';
+import { RaioXDoRelatorio } from './relatorio/RaioXDoRelatorio';
 
 /** O `Select` do shadcn recusa `value=""`. */
 const SEM_SETOR = '__sem_setor__';
@@ -143,6 +145,7 @@ export default function ImportacaoVendas() {
   const [previa, setPrevia] = useState<PreviaCarga | null>(null);
   const [gravando, setGravando] = useState(false);
   const [progresso, setProgresso] = useState<{ feitas: number; total: number } | null>(null);
+  const [raioXAberto, setRaioXAberto] = useState(true);
 
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [franquias, setFranquias] = useState<Franquia[]>([]);
@@ -272,6 +275,7 @@ export default function ImportacaoVendas() {
   }
 
   const semSetor = useMemo(() => franquias.filter(f => f.estado === 'novo'), [franquias]);
+  const setorDaFranquia = useMemo(() => mapaDeSetorDaFranquia(franquias), [franquias]);
 
   /*
    * Só o lote GERAL vigente vira venda. O do setor recorta por data da venda e
@@ -425,6 +429,31 @@ export default function ImportacaoVendas() {
                 <Aviso tom="alerta">
                   Sem um mês único, o lote não tem o que substituir. Exporte um mês por vez.
                 </Aviso>
+              )}
+
+              {/* Tudo o que o arquivo traz, ANTES de gravar: a mesma conta da
+                  aba «Relatório do mês», sobre as linhas lidas no navegador. */}
+              {previa.r.linhas.length > 0 && (
+                <div className="rounded-xl border border-border bg-muted/10">
+                  <button type="button" onClick={() => setRaioXAberto(v => !v)}
+                    aria-expanded={raioXAberto}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] font-semibold">
+                    <span className="flex items-center gap-2">
+                      <FileSearch className="h-4 w-4 text-muted-foreground" aria-hidden />
+                      O que este arquivo traz
+                    </span>
+                    <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', raioXAberto && 'rotate-180')} />
+                  </button>
+                  {raioXAberto && (
+                    <div className="border-t border-border p-3">
+                      <RaioXDoRelatorio
+                        linhas={previa.r.linhas}
+                        setorDaFranquia={setorDaFranquia}
+                        nomeDoArquivo={`previa-${origem}-${previa.r.mes ?? 'arquivo'}`}
+                      />
+                    </div>
+                  )}
+                </div>
               )}
 
               {progresso && (

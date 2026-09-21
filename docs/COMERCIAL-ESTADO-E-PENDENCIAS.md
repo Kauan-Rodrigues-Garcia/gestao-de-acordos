@@ -254,7 +254,7 @@ nome de quem estava logado.
 ### Indicações — vários telefones por contato (18/09)
 
 `20260918130000`, **aplicada 18/09** (MCP `execute_sql`, bloco de verificação
-passou; versão ainda não registrada em `schema_migrations`). Pedido: a gestora de uma escola aponta
+passou) e registrada em `schema_migrations` com a versão do nome do arquivo. Pedido: a gestora de uma escola aponta
 vários números; a primeira linha vem completa (escola, gestora, telefone) e os
 outros números vêm embaixo, no mesmo contato. **Cada telefone é uma indicação**
 e um ponto no ranking.
@@ -542,6 +542,79 @@ Testes: `src/pages/Vendas/__tests__/PaineisComercial.test.tsx` (9) e
 interna»). **Não foi visto no navegador** — abrir exige sessão no banco de
 produção.
 
+### Fase 12 — aba Vendas refeita e raio-x do relatório (21/09/2026, sem migration)
+
+Pedido de 21/09: *«o jeito que a venda é cadastrada é muito arcaico e
+complicado»*, *«fica muito espaço sobrando nas linhas»*, *«tem que ser boa
+tanto para o líder quanto para o operador»*, e *«na importação, saber tudo que
+está no relatório, igual o Painel Diretoria da BookPlay»*. **O banco não foi
+tocado** — tudo sai de RPCs e tabelas que já existiam.
+
+**Aba Vendas (`/vendas`), no desenho da aba Acordos da BookPlay:**
+
+- **Cadastro de dois campos, inline** (`lista/NovaVendaInline`): NR e valor.
+  Cliente e data opcionais; estado, forma e entrada atrás de «mais detalhes».
+  Enter salva; «continuar lançando» limpa e devolve o cursor ao NR. O
+  argumento: `fn_vendas_projetar` casa pelo NR e escreve situação, assinatura,
+  UF, forma, valor e recebido por cima do digitado — o relatório valida a
+  venda sozinho. O líder lança «em nome de» (o `p_operador_id` de
+  `fn_venda_salvar` sempre aceitou; a tela nunca tinha oferecido).
+- **Colar várias** (`lista/ColarVendas` + `lerVendasColadas`): uma venda por
+  linha, do Excel ou do WhatsApp, colunas em qualquer ordem. Prévia linha a
+  linha antes de gravar; grava uma por uma pela mesma RPC.
+- **Tabela com colunas** (`lista/TabelaVendas`): NR copiável, cliente,
+  vendedor + equipe, venda, confirmação, UF, pagamento, status, valor, **na
+  meta**, recebido, ações. O dia continua sendo a unidade: cada dia abre com
+  uma linha-título (quantas, quantas na meta, quanto).
+- **Status da linha** (`statusDaLinha`, `@/lib/vendasLista`): separa
+  «Aguardando relatório» (aberta lançada à mão) de «Em aberto» (aberta que
+  veio da prévia), além de «Falta assinatura», «Na meta», perdas.
+- **Abas** Todas · Na meta · Pendências · Perdas, busca por NR/cliente/vendedor
+  (NR casa por dígito), filtros de vendedor e equipe. A antiga **Fila do
+  líder** virou a aba Pendências — de todos os meses, como era.
+- **O líder decide na linha** (✓ confirma e assina, ✎ marca assinado) e no
+  detalhe (clique na linha): só confirmar, cancelar/devolver com motivo,
+  voltar para aberta. Excluir agora pede confirmação.
+- **Uma consulta, dois eixos.** `buscarVendas` ganhou `eixo: 'qualquer'` (data
+  de venda OU de confirmação no mês). Cards e meta usam o recorte oficial
+  (confirmação); a lista agrupa por **data da venda** por padrão — antes o
+  padrão era confirmação, e a venda recém-lançada (sem confirmação) sumia.
+- **Defeito corrigido — a meta do operador.** O operador via «Meta do mês» do
+  SETOR medida só com as vendas DELE (a RLS só entrega as dele): «R$ 40 mil de
+  R$ 900 mil · 4%». Agora ele vê `lista/MinhaParteNaMeta`: quanto da meta da
+  equipe que credita a venda dele já fez, e onde fecha no ritmo de hoje.
+- Confete ao lançar (`EfeitoComemoracao`), como nas comemorações da cobrança.
+
+`FormularioVenda.tsx` e `FilaDoLider.tsx` saíram — substituídos pelos acima.
+
+**Importar Vendas › Relatório do mês** (`relatorio/RelatorioDoMes`) e **«O
+que este arquivo traz»** na prévia da Importação: o mesmo
+`relatorio/RaioXDoRelatorio`, sobre `vendas_relatorio` (carga vigente
+escolhida) ou sobre as linhas lidas no navegador ANTES de gravar. Mostra
+linhas, bruto, na régua, ticket, recebido e cobertura, devolução,
+cancelamento, sem assinatura, lead, dias venda→confirmação; barra das
+gavetas; gráfico dia a dia; fatias por vendedor, franquia, setor (pelo
+vínculo — código no geral, nome na prévia), estado, forma, parcelas,
+produto, categoria, tipo de venda/produto/documento, lead, score, SPC, setor
+do cancelamento; motivos de perda; lista paginada; **baixar planilha** do
+recorte. Filtros (setor, franquia, situação, busca) refazem tudo. Contas em
+`@/lib/vendasRelatorio` (testadas). Leitura paginada de 1.000 em 1.000
+(`range` entrou em `supabaseSemTipo`), só quando a aba abre.
+
+**Login «entrar como» no Comercial** — `Database error finding user`: o GoTrue
+não lê coluna de token NULL em `auth.users`, e as contas do Comercial foram
+criadas por SQL. Diagnóstico e correção em
+`supabase/sql_scripts/corrigir_tokens_nulos_auth_users_20260921.sql`,
+**rodado em 21/09** com «pode» para cada bloco: o diagnóstico achou **49
+contas, todas do COMERCIAL**; a correção aplicou e a conferência interna passou.
+`api/impersonar-usuario.ts` agora traduz esse erro em vez de mostrar o JSON
+cru. Robôs e `lyra_oliveira` seguem banidas — «entrar como» nelas continua
+recusado, de propósito.
+
+Testes: `src/lib/vendasLista.test.ts`, `src/lib/vendasRelatorio.test.ts`,
+`src/pages/Vendas/__tests__/VendasLista.test.tsx`. **Não visto no navegador**
+— abrir exige sessão no banco de produção.
+
 ### Correções dentro da sessão
 
 | commit | o que |
@@ -597,8 +670,7 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
 - [x] **`supabase migration repair`** — feito 15/09, e alcançou 36 versões (as 14 do Comercial + 22 anteriores). Ver §3.
 
 - [x] `20260918130000_indicacoes_varios_telefones_por_contato.sql` — aplicada 18/09.
-- [ ] Registrar a versão `20260918130000` em `schema_migrations`, senão
-      `db push` a reaplica.
+- [x] Versão `20260918130000` registrada em `schema_migrations` — 18/09.
 
 Falta conferir se `pg_cron` agendou `ausencias-iniciar-ferias`
 (`SELECT jobname, schedule FROM cron.job`) — o `DO` pula o agendamento em
@@ -747,13 +819,18 @@ src/services/vendas/
   __tests__/vendas.sql.test.ts         contrato SQL das 9 fases
   __tests__/insertsBatem.sql.test.ts   aridade de todo INSERT
 
+src/lib/vendasLista.ts                 status da linha, abas, busca, leitura de valor e da colagem (Fase 12)
+src/lib/vendasRelatorio.ts             raio-x do relatório: todas as fatias, franquia → setor (Fase 12)
+
 src/pages/Vendas/
-  index.tsx  FormularioVenda  FilaDoLider  Importacao  Projecao
+  index.tsx  Importacao  Projecao
   Conciliacao  Metas  AndamentoDasMetas  FechamentoDoSetor  Indicacoes
   Acompanhamento  AcompanhamentoPessoa
   DashboardComercial  PainelLiderComercial  PainelDiretoriaComercial
   LixeiraVendas  DesafiosComercial  componentes.tsx (Bloco, Faixa, Barra…)
-  ImportarVendas                       Importação + Fechamento em abas (Fase 11)
+  ImportarVendas                       Importação + Relatório do mês + Fechamento em abas
+  lista/                               NovaVendaInline ColarVendas TabelaVendas MinhaParteNaMeta (Fase 12)
+  relatorio/                           RaioXDoRelatorio RelatorioDoMes (Fase 12)
 
 src/pages/Vendas/dashboard/            só a Fase 10 — nada aqui calcula
   CardsDoMes.tsx                       a grade de MetricCard
@@ -765,7 +842,7 @@ src/hooks/useVendasPlacar.ts           o cadastro + a presença de cada recorte
 src/hooks/useVendasMesAnterior.ts      só o resumo do mês passado, para as setas
 ```
 
-**Rotas:** `/` (Dashboard) · `/vendas` · `/vendas/importar` (`?tab=fechamento`) ·
+**Rotas:** `/` (Dashboard) · `/vendas` · `/vendas/importar` (`?tab=relatorio`, `?tab=fechamento`) ·
 `/vendas/indicacoes` · `/vendas/painel-lider` (`?tab=desafios`) ·
 `/vendas/painel-diretoria` · `/vendas/lixeira` · `/admin/usuarios`
 (`?tab=metas`, `?tab=acompanhamento`). `/vendas/metas`, `/vendas/fechamento`,
