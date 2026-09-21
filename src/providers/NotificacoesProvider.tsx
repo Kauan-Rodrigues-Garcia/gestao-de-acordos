@@ -245,7 +245,12 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
           if (operacao === 'RECARREGAR') { void refresh(); return; }
 
           if (operacao === 'DELETE') {
-            const id = (payload.id as string | undefined) ?? undefined;
+            // `notificacao_id`, e não `id`: `realtime.send` usa `id` para a
+            // própria mensagem, e só preserva o nosso porque hoje ele testa
+            // `payload ? 'id'` antes de injetar. O `?? payload.id` atende a aba
+            // que ainda receber o formato anterior (ver 20260921130000).
+            const id = (payload.notificacao_id as string | undefined)
+                    ?? (payload.id as string | undefined);
             aplicar('DELETE', null, id);
             return;
           }

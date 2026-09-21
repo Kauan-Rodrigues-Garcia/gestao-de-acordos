@@ -347,7 +347,25 @@ describe('NotificacoesProvider — sinal do dono', () => {
     expect(screen.getByTestId('total')).toHaveTextContent('1');
   });
 
-  it('DELETE pelo broadcast manda só o id', async () => {
+  it('DELETE pelo broadcast remove pelo `notificacao_id`', async () => {
+    listaDoBanco = [n('a'), n('b')];
+    montar();
+    await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('2'));
+
+    act(() => {
+      // `id` vem junto e é o da MENSAGEM do Realtime, não o da notificação:
+      // quem manda na remoção é `notificacao_id`. Se o provider voltar a ler
+      // `id` primeiro, este teste quebra — e era a excluída sumir só no F5.
+      sinal().ouvinte.onSinal?.({
+        operacao: 'DELETE', notificacao_id: 'a', id: 'id-da-mensagem',
+      });
+    });
+
+    expect(screen.getByTestId('total')).toHaveTextContent('1');
+  });
+
+  it('DELETE no formato anterior (só `id`) ainda funciona', async () => {
+    // Aba que ficou aberta durante a troca — ver 20260921130000.
     listaDoBanco = [n('a'), n('b')];
     montar();
     await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('2'));
