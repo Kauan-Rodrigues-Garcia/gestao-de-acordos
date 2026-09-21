@@ -2055,6 +2055,49 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'Só se devolve o número que se recebeu, e é o alcance individual que o mostra.',
     },
   },
+  /*
+   * Chips Físicos (21/09/2026): o inventário de chips que cada pessoa tem na
+   * mão, separado do caminho dos números do Núcleo. Migration 20260921160000.
+   *
+   * As três nascem em `{}` — o pedido foi não liberar ao operador antes de ver
+   * a tela. Administrador e super_admin enxergam por acesso total.
+   *
+   * Ver o SETOR inteiro não tem chave própria: é `chips_escopo_setor`, a
+   * mesma escada da aba, que a liderança já tem.
+   */
+  {
+    key: 'ver_chips_fisicos', label: 'Meus Chips: Chips Físicos',
+    descricao:
+      'Abrir a separação Chips Físicos e cadastrar os chips que a própria '
+      + 'pessoa tem, com status (Ativo, Banido, Recuperar) e tempo de até 12 horas. '
+      + 'Com «o setor inteiro», vê também os chips dos colegas do setor',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['ver_meus_chips'],
+      motivo: 'A separação mora dentro da aba Meus Chips.',
+    },
+  },
+  {
+    key: 'chips_fisicos_gerenciar_setor', label: 'Chips Físicos: cuidar dos chips dos colegas',
+    descricao:
+      'Cadastrar, alterar status, passar para outra pessoa e excluir os chips '
+      + 'físicos das pessoas que a própria pessoa enxerga',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['ver_chips_fisicos'],
+      motivo: 'Só se cuida do que se enxerga — sem a separação não há chip nenhum na tela.',
+    },
+  },
+  {
+    key: 'chips_fisicos_todos_setores', label: 'Chips Físicos: todos os setores',
+    descricao:
+      'Ver os chips físicos de todos os setores, com o filtro de setor disponível',
+    grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['ver_chips_fisicos'],
+      motivo: 'Amplia o alcance da separação, que precisa estar aberta.',
+    },
+  },
 
   // ── Fechamento ───────────────────────────────────────────────────────────
   //

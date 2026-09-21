@@ -216,6 +216,10 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
       'chips_lancar_ao_operador',
       'chips_relancar_ao_nucleo',
       'chips_devolver_a_lideranca',
+      // Chips Físicos: a separação dentro da mesma aba (21/09/2026).
+      'ver_chips_fisicos',
+      'chips_fisicos_gerenciar_setor',
+      'chips_fisicos_todos_setores',
     ],
     tenants: ['bookplay'],
   },
