@@ -111,10 +111,25 @@ export const ORIGEM_DA_LINHA: Record<OrigemVenda, { rotulo: string; dica: string
  * `pendencias` não é um recorte do mês: é a fila de quem ainda precisa de
  * alguém — aberta, ou confirmada sem assinatura —, de qualquer mês. Uma venda
  * de agosto esperando assinatura continua sendo trabalho de hoje.
+ *
+ * `fora_relatorio` também não é recorte do mês, e por um motivo diferente: são
+ * as vendas que o relatório nunca confirmou e que, um dia depois, saíram da
+ * lista principal. Elas não estão em nenhuma das outras abas — nem em `todas` —
+ * porque não somam em lugar nenhum. Ficam um mês aqui para quem lançou
+ * conferir o NR ou questionar por que ele não apareceu. Ver
+ * `buscarForaDoRelatorio` e a migration 20260921170000.
  */
-export type AbaDaLista = 'todas' | 'na_meta' | 'pendencias' | 'perdas';
+export type AbaDaLista = 'todas' | 'na_meta' | 'pendencias' | 'perdas' | 'fora_relatorio';
 
-export function abaDaVenda(venda: VendaClassificavel): Exclude<AbaDaLista, 'todas'> {
+/**
+ * A aba de uma venda que está na lista.
+ *
+ * `fora_relatorio` não sai daqui de propósito: quem está fora do relatório é
+ * decidido pelo BANCO (a coluna `fora_do_relatorio_em`), não pela situação da
+ * venda. Uma venda arquivada continua «em aberto» — classificá-la pelo estado
+ * a mandaria para Pendências, que é justamente de onde ela saiu.
+ */
+export function abaDaVenda(venda: VendaClassificavel): 'na_meta' | 'pendencias' | 'perdas' {
   const gaveta = classificarVenda(venda);
   if (gaveta === 'na_meta') return 'na_meta';
   if (gaveta === 'devolvida' || gaveta === 'cancelada') return 'perdas';

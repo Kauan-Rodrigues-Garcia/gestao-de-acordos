@@ -20,6 +20,25 @@
  *     meta». Ver `statusDaLinha` em `@/lib/vendasLista`.
  *   - **Abas por situação** — Todas, Na meta, Pendências, Perdas — e busca por
  *     NR, cliente ou vendedor, como em Acordos.
+ *
+ * ## A reforma de 21/09/2026
+ *
+ *   - **O dinheiro vem primeiro nos cards.** «Faturamento na meta» antes de «Na
+ *     meta»: a pergunta de quem abre a aba é *quanto*, e a quantidade é como
+ *     esse quanto foi feito.
+ *   - **Filtro de setor**, que não existia. Quem enxerga mais de um setor
+ *     escolhe qual olhar, e o filtro de equipe passa a oferecer só as equipes
+ *     dele. Os cinco cards e as contagens das abas seguem o recorte — um total
+ *     que não bate com a lista embaixo dele é o defeito que o Fechamento existe
+ *     para evitar.
+ *   - **A tabela cabe inteira.** Nenhuma coluna some por largura de tela; cada
+ *     uma declara a largura mínima que o conteúdo pede, e o que passa disso é
+ *     rolagem horizontal. Informação escondida não é layout, é dado perdido.
+ *   - **Aba «Fora do relatório».** A venda lançada cujo NR o ERP nunca
+ *     confirmou sai da lista em 1 dia e vive um MÊS nesta aba, em vez de ir
+ *     direto para a lixeira — onde o operador não a alcançaria, por não ter
+ *     `ver_lixeira_vendas`. Ela não soma em nada, e volta sozinha se o NR
+ *     aparecer. Ver a migration 20260921170000.
  *   - **O líder decide na linha**: ✓ confirma e assina, ✎ marca assinado, e o
  *     detalhe (clique na linha) tem cancelar, devolver e voltar para aberta.
  *     A antiga «Fila do líder» virou a aba Pendências — de todos os meses.
@@ -44,7 +63,7 @@ import { motion } from 'framer-motion';
 import {
   Plus, RefreshCw, TriangleAlert, ChevronLeft, ChevronRight, Search, X,
   ShoppingBag, DollarSign, Clock, Zap, Percent, ListChecks, Target,
-  Hourglass, Ban, ClipboardPaste, SearchX, TimerOff,
+  Hourglass, Ban, ClipboardPaste, SearchX, TimerOff, Building2, FileX2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -107,6 +126,7 @@ export default function Vendas() {
   const [aba, setAba] = useState<AbaDaLista>('todas');
   const [busca, setBusca] = useState('');
   const [filtroVendedor, setFiltroVendedor] = useState(TODOS);
+  const [filtroSetor, setFiltroSetor] = useState(TODOS);
   const [filtroEquipe, setFiltroEquipe] = useState(TODOS);
   const [novoAberto, setNovoAberto] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -118,7 +138,7 @@ export default function Vendas() {
 
   const empresaId = empresa?.id ?? null;
   const {
-    vendas, pendentes, prazos, carregando, disponivel, erro,
+    vendas, pendentes, prazos, foraDoRelatorio, carregando, disponivel, erro,
     recarregar, salvar, confirmar, excluir,
   } = useVendas({ empresaId, mes, eixo: 'qualquer', ativo: Boolean(empresaId) });
   const placar = useVendasPlacar({ empresaId, mes, ativo: Boolean(empresaId) });
@@ -131,6 +151,16 @@ export default function Vendas() {
    */
   const niveis = useMemo(() => niveisLiberados('vendas', temPermissao), [temPermissao]);
   const veAlemDeSi = niveis.some(n => n !== 'individual');
+  /*
+   * O filtro de SETOR só existe para quem enxerga além do próprio.
+   *
+   * `setor` sozinho já basta: quem tem só ele pode pertencer a mais de um
+   * setor (`fn_setores_do_operador` devolve vários), e nesse caso escolher
+   * entre os seus é recorte legítimo. Quem tem `todos_setores` escolhe entre os
+   * da empresa. Em ambos os casos a lista de opções sai do que CHEGOU na tela —
+   * oferecer um setor que o RLS recusa devolveria lista vazia sem explicação.
+   */
+  const veSetor = niveis.some(n => n === 'setor' || n === 'todos_setores');
 
   const podeCriar     = temPermissao('criar_vendas');
   const podeEditar    = temPermissao('editar_vendas');
@@ -169,6 +199,22 @@ export default function Vendas() {
   // procurar o mesmo NR em outro mês é justamente o motivo de trocar.
   useEffect(() => { setLimite(PASSO); }, [mes, aba, agrupar]);
 
+  /*
+   * `/vendas?aba=fora_relatorio` abre direto na lista das arquivadas — é para
+   * onde a notificação de «saiu da lista» aponta. Uma vez só: depois disso a
+   * pessoa navega pelas abas, e reaplicar o parâmetro a prenderia lá.
+   */
+  const [abaDaUrl] = useState(() => new URLSearchParams(window.location.search).get('aba'));
+  useEffect(() => {
+    if (abaDaUrl === 'fora_relatorio' && foraDoRelatorio.length > 0) setAba('fora_relatorio');
+  }, [abaDaUrl, foraDoRelatorio.length]);
+
+  // A aba some quando o último NR é resolvido; ficar nela mostraria uma lista
+  // vazia sem botão de saída.
+  useEffect(() => {
+    if (aba === 'fora_relatorio' && foraDoRelatorio.length === 0) setAba('todas');
+  }, [aba, foraDoRelatorio.length]);
+
   /* ── Os recortes ──────────────────────────────────────────────────────── */
 
   const noMes = (dia: string) => dia.slice(0, 7) === mes;
@@ -197,13 +243,64 @@ export default function Vendas() {
     return lista;
   }, [placar.pessoas, veAlemDeSi, perfil?.id, perfil?.nome]);
 
-  const equipes = useMemo(() => {
+  /**
+   * Os setores que aparecem no filtro.
+   *
+   * Duas fontes, porque nenhuma sozinha basta: o cadastro do placar traz o
+   * setor de quem existe (mesmo sem venda no mês), e as vendas trazem o setor
+   * de quem vendeu (mesmo que o cadastro não o alcance — venda do relatório de
+   * um setor sem gente cadastrada). A união é o que a pessoa de fato enxerga.
+   */
+  const setores = useMemo(() => {
     const mapa = new Map<string, string>();
-    for (const p of placar.pessoas) if (p.equipe_id && p.equipe_nome) mapa.set(p.equipe_id, p.equipe_nome);
+    for (const p of placar.pessoas) if (p.setor_id && p.setor_nome) mapa.set(p.setor_id, p.setor_nome);
+    for (const v of [...vendas, ...pendentes, ...foraDoRelatorio]) {
+      if (v.setor_id && !mapa.has(v.setor_id)) mapa.set(v.setor_id, 'Setor não cadastrado');
+    }
     return [...mapa].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [placar.pessoas, vendas, pendentes, foraDoRelatorio]);
+
+  /** equipe_id → setor_id, para o filtro de equipe obedecer ao de setor. */
+  const setorDaEquipe = useMemo(() => {
+    const mapa = new Map<string, string | null>();
+    for (const p of placar.pessoas) if (p.equipe_id) mapa.set(p.equipe_id, p.setor_id);
+    return mapa;
   }, [placar.pessoas]);
 
-  const nomeDaEquipe = useMemo(() => new Map(equipes.map(e => [e.id, e.nome])), [equipes]);
+  /*
+   * As equipes oferecidas são só as do setor escolhido.
+   *
+   * Cruzar «setor A» com «equipe do setor B» devolveria lista vazia, e a tela
+   * pareceria dizer que não há vendas quando quem estava impossível era o
+   * filtro. O mesmo cuidado que `escopoDoPainel` toma no Painel do Líder.
+   */
+  const equipes = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const p of placar.pessoas) {
+      if (!p.equipe_id || !p.equipe_nome) continue;
+      if (filtroSetor !== TODOS && p.setor_id !== filtroSetor) continue;
+      mapa.set(p.equipe_id, p.equipe_nome);
+    }
+    return [...mapa].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [placar.pessoas, filtroSetor]);
+
+  // Trocar de setor não pode deixar marcada a equipe do setor anterior.
+  useEffect(() => {
+    if (filtroEquipe === TODOS) return;
+    if (filtroSetor !== TODOS && setorDaEquipe.get(filtroEquipe) !== filtroSetor) setFiltroEquipe(TODOS);
+  }, [filtroSetor, filtroEquipe, setorDaEquipe]);
+
+  /*
+   * O nome da equipe sai do cadastro INTEIRO, e não de `equipes` — que o filtro
+   * de setor encolhe. A coluna da tabela tem de saber escrever «Play 5» mesmo
+   * quando o recorte é outro setor, senão a linha ficaria sem equipe por causa
+   * de um filtro que nem a alcança.
+   */
+  const nomeDaEquipe = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const p of placar.pessoas) if (p.equipe_id && p.equipe_nome) mapa.set(p.equipe_id, p.equipe_nome);
+    return mapa;
+  }, [placar.pessoas]);
   const equipeDe = (v: Venda) => {
     const id = equipeDaVenda(v, placar.indice);
     return id ? nomeDaEquipe.get(id) ?? null : null;
@@ -225,10 +322,13 @@ export default function Vendas() {
     return mapa;
   }, [vendas, pendentes]);
 
-  const filtrar = (lista: readonly Venda[]) => lista.filter(v =>
-    casaComBusca(v, busca)
+  /** O recorte sem a busca — é o que os cards usam, e a lista reaproveita. */
+  const noRecorte = (v: Venda) =>
+    (filtroSetor === TODOS || v.setor_id === filtroSetor)
     && (filtroVendedor === TODOS || v.operador_id === filtroVendedor)
-    && (filtroEquipe === TODOS || equipeDaVenda(v, placar.indice) === filtroEquipe));
+    && (filtroEquipe === TODOS || equipeDaVenda(v, placar.indice) === filtroEquipe);
+
+  const filtrar = (lista: readonly Venda[]) => lista.filter(v => casaComBusca(v, busca) && noRecorte(v));
 
   /** O mês pelo eixo escolhido para agrupar — é a lista das abas do mês. */
   const doMesNoEixo = useMemo(
@@ -239,56 +339,90 @@ export default function Vendas() {
 
   const baseDaAba = useMemo(() => {
     if (aba === 'pendencias') return pendentes;
+    // Sem recorte de mês: a venda arquivada no dia 1º é de uma venda do mês
+    // anterior, e quem a procura está olhando o mês em que ela caiu.
+    if (aba === 'fora_relatorio') return foraDoRelatorio;
     if (aba === 'todas') return doMesNoEixo;
     return doMesNoEixo.filter(v => abaDaVenda(v) === aba);
-  }, [aba, pendentes, doMesNoEixo]);
+  }, [aba, pendentes, foraDoRelatorio, doMesNoEixo]);
 
   const visiveis = useMemo(
     () => filtrar(baseDaAba),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [baseDaAba, busca, filtroVendedor, filtroEquipe, placar.indice],
+    [baseDaAba, busca, filtroSetor, filtroVendedor, filtroEquipe, placar.indice],
   );
 
   const grupos = useMemo(() => {
     const cortadas = visiveis.slice(0, limite);
-    // Pendência agrupa pela data da venda: é a idade da pendência que importa.
-    return agruparPorDia(cortadas, aba === 'pendencias' ? 'venda' : agrupar);
+    // Pendência e fora do relatório agrupam pela data da VENDA: nas duas o que
+    // importa é a idade do problema, e nenhuma delas tem confirmação.
+    const porVenda = aba === 'pendencias' || aba === 'fora_relatorio';
+    return agruparPorDia(cortadas, porVenda ? 'venda' : agrupar);
   }, [visiveis, limite, aba, agrupar]);
 
   /* ── Os números ───────────────────────────────────────────────────────── */
 
   // Os cards respondem ao filtro de pessoa e equipe: um total que não bate
   // com a lista embaixo dele é o defeito que o Fechamento existe para evitar.
-  const filtrando = filtroVendedor !== TODOS || filtroEquipe !== TODOS;
+  const filtrando = filtroSetor !== TODOS || filtroVendedor !== TODOS || filtroEquipe !== TODOS;
   const oficiaisFiltradas = useMemo(
-    () => (filtrando ? oficiais.filter(v =>
-      (filtroVendedor === TODOS || v.operador_id === filtroVendedor)
-      && (filtroEquipe === TODOS || equipeDaVenda(v, placar.indice) === filtroEquipe)) : oficiais),
-    [oficiais, filtrando, filtroVendedor, filtroEquipe, placar.indice],
+    () => (filtrando ? oficiais.filter(noRecorte) : oficiais),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [oficiais, filtrando, filtroSetor, filtroVendedor, filtroEquipe, placar.indice],
   );
   const resumo = useMemo(() => resumirVendas(oficiaisFiltradas), [oficiaisFiltradas]);
   const ticket = ticketMedio(resumo);
-  const aguardando = pendentes.filter(v => v.situacao === 'aberta');
-  const semAssinatura = pendentes.filter(v => v.situacao === 'confirmada');
+  // Pendências e «hoje» seguem o mesmo recorte dos demais cards: um número que
+  // não bate com a lista embaixo dele é o defeito que o Fechamento existe para
+  // evitar, e ele vale para os cinco cards, não só para os da meta.
+  const pendentesNoRecorte = useMemo(
+    () => (filtrando ? pendentes.filter(noRecorte) : pendentes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pendentes, filtrando, filtroSetor, filtroVendedor, filtroEquipe, placar.indice],
+  );
+  const hojeNoRecorte = useMemo(
+    () => (filtrando ? lancadasHoje.filter(noRecorte) : lancadasHoje),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lancadasHoje, filtrando, filtroSetor, filtroVendedor, filtroEquipe, placar.indice],
+  );
+  const aguardando = pendentesNoRecorte.filter(v => v.situacao === 'aberta');
+  const semAssinatura = pendentesNoRecorte.filter(v => v.situacao === 'confirmada');
   const valorParado = semAssinatura.reduce((s, v) => s + v.valor_total, 0);
-  const valorHoje = lancadasHoje.reduce((s, v) => s + v.valor_total, 0);
+  const valorHoje = hojeNoRecorte.reduce((s, v) => s + v.valor_total, 0);
   const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1).replace('.', ',')}%`);
 
+  // As contagens seguem o recorte, pelo mesmo motivo dos cards: a aba que diz
+  // «Perdas (12)» e mostra 3 linhas está mentindo sobre uma das duas coisas.
   const contagem = useMemo(() => {
-    const c = { todas: doMesNoEixo.length, na_meta: 0, pendencias: pendentes.length, perdas: 0 };
-    for (const v of doMesNoEixo) {
+    const doMes = filtrando ? doMesNoEixo.filter(noRecorte) : doMesNoEixo;
+    const c = {
+      todas: doMes.length,
+      na_meta: 0,
+      pendencias: pendentesNoRecorte.length,
+      perdas: 0,
+      fora: (filtrando ? foraDoRelatorio.filter(noRecorte) : foraDoRelatorio).length,
+    };
+    for (const v of doMes) {
       const a = abaDaVenda(v);
       if (a === 'na_meta') c.na_meta += 1;
       if (a === 'perdas') c.perdas += 1;
     }
     return c;
-  }, [doMesNoEixo, pendentes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doMesNoEixo, pendentesNoRecorte, foraDoRelatorio, filtrando,
+      filtroSetor, filtroVendedor, filtroEquipe, placar.indice]);
 
   const abas: AbaSegmentada<AbaDaLista>[] = [
     { key: 'todas',      label: `Todas (${contagem.todas})`, Icon: ListChecks },
     { key: 'na_meta',    label: `Na meta (${contagem.na_meta})`, Icon: Target },
     { key: 'pendencias', label: 'Pendências', Icon: Hourglass, badge: contagem.pendencias },
     { key: 'perdas',     label: `Perdas (${contagem.perdas})`, Icon: Ban },
+    // A aba só aparece quando há o que mostrar: sem nenhuma venda arquivada ela
+    // seria um botão que abre uma lista vazia todo dia. Some sozinha quando o
+    // último NR é resolvido — que é o desfecho desejado.
+    ...(contagem.fora > 0
+      ? [{ key: 'fora_relatorio' as const, label: `Fora do relatório (${contagem.fora})`, Icon: FileX2 }]
+      : []),
   ];
 
   const { uteis, trabalhados } = useMemo(() => {
@@ -341,7 +475,9 @@ export default function Vendas() {
   );
 
   const temFiltros = Boolean(busca.trim()) || filtrando;
-  const limparFiltros = () => { setBusca(''); setFiltroVendedor(TODOS); setFiltroEquipe(TODOS); };
+  const limparFiltros = () => {
+    setBusca(''); setFiltroSetor(TODOS); setFiltroVendedor(TODOS); setFiltroEquipe(TODOS);
+  };
   const colSpan = veAlemDeSi ? 12 : 11;
   const operadorPadrao = perfil?.id ?? '';
   const eu = placar.pessoas.find(p => p.id === perfil?.id) ?? null;
@@ -355,6 +491,7 @@ export default function Vendas() {
         <p className="text-sm font-medium text-foreground/70">
           {temFiltros ? 'Nenhuma venda com esses filtros'
             : aba === 'pendencias' ? 'Nada pendente — tudo validado'
+            : aba === 'fora_relatorio' ? 'Nenhuma venda fora do relatório'
             : `Nenhuma venda em ${rotuloDoMes(mes)}`}
         </p>
         <p className="mt-0.5 text-xs text-muted-foreground/70">
@@ -366,7 +503,7 @@ export default function Vendas() {
         <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={limparFiltros}>
           <X className="h-3.5 w-3.5" /> Limpar filtros
         </Button>
-      ) : podeCriar && disponivel && aba !== 'pendencias' && (
+      ) : podeCriar && disponivel && aba !== 'pendencias' && aba !== 'fora_relatorio' && (
         <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setNovoAberto(true)}>
           <Plus className="h-3.5 w-3.5" /> Nova venda
         </Button>
@@ -495,6 +632,14 @@ export default function Vendas() {
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
           data-tour="vendas-metricas"
         >
+          {/* O dinheiro primeiro (pedido de 21/09/2026): a pergunta de quem
+              abre a aba é «quanto», e a quantidade é como esse quanto foi feito. */}
+          <MetricCard
+            label={veAlemDeSi ? 'Faturamento na meta' : 'Seu faturamento na meta'}
+            value={formatBRL(resumo.valor)}
+            icon={<DollarSign className="h-4 w-4" />} accentColor="#6366f1" gradientFrom="#6366f1"
+            sub={ticket !== null ? `ticket médio ${formatBRL(ticket)}` : 'o que conta para a meta'}
+          />
           <MetricCard
             label={veAlemDeSi ? 'Na meta' : 'Suas vendas na meta'}
             value={resumo.quantidade}
@@ -502,17 +647,12 @@ export default function Vendas() {
             sub="confirmadas e assinadas no mês"
           />
           <MetricCard
-            label="Faturamento na meta" value={formatBRL(resumo.valor)}
-            icon={<DollarSign className="h-4 w-4" />} accentColor="#6366f1" gradientFrom="#6366f1"
-            sub={ticket !== null ? `ticket médio ${formatBRL(ticket)}` : 'o que conta para a meta'}
-          />
-          <MetricCard
-            label="Vendas de hoje" value={lancadasHoje.length}
+            label="Vendas de hoje" value={hojeNoRecorte.length}
             icon={<Zap className="h-4 w-4" />} accentColor="#0ea5e9" gradientFrom="#0ea5e9"
-            sub={lancadasHoje.length > 0 ? formatBRL(valorHoje) : 'nenhuma ainda'}
+            sub={hojeNoRecorte.length > 0 ? formatBRL(valorHoje) : 'nenhuma ainda'}
           />
           <MetricCard
-            label="Pendências" value={pendentes.length}
+            label="Pendências" value={pendentesNoRecorte.length}
             icon={<Hourglass className="h-4 w-4" />} accentColor="#f59e0b" gradientFrom="#f59e0b"
             sub={`${aguardando.length} aguardando · ${semAssinatura.length} sem assinatura${valorParado > 0 ? ` (${formatBRL(valorParado)})` : ''}`}
           />
@@ -551,6 +691,18 @@ export default function Vendas() {
               className="h-8 pl-8 text-xs" aria-label="Buscar venda"
             />
           </div>
+          {veSetor && setores.length > 1 && (
+            <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+              <SelectTrigger className="h-8 w-[190px] text-xs" aria-label="Filtrar por setor">
+                <Building2 className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Todos os setores</SelectItem>
+                {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           {veAlemDeSi && vendedoresDoFiltro.length > 1 && (
             <Select value={filtroVendedor} onValueChange={setFiltroVendedor}>
               <SelectTrigger className="h-8 w-[180px] text-xs" aria-label="Filtrar por vendedor"><SelectValue /></SelectTrigger>
@@ -569,7 +721,7 @@ export default function Vendas() {
               </SelectContent>
             </Select>
           )}
-          {aba !== 'pendencias' && (
+          {aba !== 'pendencias' && aba !== 'fora_relatorio' && (
             <Select value={agrupar} onValueChange={v => setAgrupar(v as EixoDaVenda)}>
               <SelectTrigger className="h-8 w-[190px] text-xs" aria-label="Agrupar por"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -592,6 +744,20 @@ export default function Vendas() {
           </p>
         )}
 
+        {aba === 'fora_relatorio' && (
+          <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <FileX2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <p>
+              O NR destas vendas <strong className="text-foreground">não apareceu no relatório</strong> — nem no
+              geral, nem na prévia do setor — e um dia depois elas saíram da lista principal. Elas
+              não somam em nada: nem no placar, nem na meta, nem nos cards. Ficam aqui{' '}
+              <strong className="text-foreground">um mês</strong> para você conferir o NR ou questionar por que
+              ele não veio; depois vão para a lixeira. Se o NR aparecer num relatório novo, a venda volta
+              sozinha para a lista.
+            </p>
+          </div>
+        )}
+
         {/* ── A tabela ──────────────────────────────────────────────────── */}
         <Card className="border-border" data-tour="vendas-tabela">
           <CardContent className="p-0">
@@ -600,12 +766,19 @@ export default function Vendas() {
                 {[0, 1, 2, 3, 4].map(i => <Skeleton key={i} className="h-9 w-full" />)}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+              /* A rolagem horizontal é da tabela, não da página: as colunas têm
+                 largura mínima e a barra aparece embaixo delas (`TabelaVendas`). */
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[1180px] text-xs">
                   <TabelaVendas
                     grupos={grupos} colSpan={colSpan}
                     mostrarVendedor={veAlemDeSi} equipeDe={equipeDe}
-                    podeEditar={podeEditar} podeExcluir={podeExcluir} podeDecidir={podeDecidir}
+                    podeEditar={podeEditar} podeExcluir={podeExcluir}
+                    // Decidir aqui traria a venda de volta à meta sem ela voltar
+                    // à lista — o banco só desfaz o arquivamento no próximo ciclo.
+                    // Nesta aba o caminho é corrigir o NR ou excluir.
+                    podeDecidir={podeDecidir && aba !== 'fora_relatorio'}
+                    foraDoRelatorio={aba === 'fora_relatorio'}
                     prazoDe={prazoDe}
                     editandoId={editandoId}
                     renderEdicao={v => (

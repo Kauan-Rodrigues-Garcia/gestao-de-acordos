@@ -17,11 +17,24 @@
  *
  *   Desempenho Equipes .. o mesmo nome e o mesmo card. Acumulado = vendas
  *                         confirmadas E assinadas, na régua da meta.
- *   Pessoas ............. o lugar dos Quartis: a tabela por pessoa, com a fila
- *                         de assinatura no alto, onde os Quartis põem o aviso.
+ *   Quartis ............. o mesmo nome e a mesma leitura da cobrança, com a
+ *                         fonte trocada. Entrou em 21/09/2026 («do lado do
+ *                         Desempenho Equipes ele fez a aba Pessoas, e eu quero
+ *                         uma aba de Quartis»). Ver `painel/QuartisComercial`.
+ *   Pessoas ............. a tabela por pessoa, com a fila de assinatura no
+ *                         alto. Responde QUANTO cada um fez; Quartis responde
+ *                         se esse quanto está no ritmo.
  *   Gráfico de vendas ... o lugar do Gráfico de recebimento.
  *   Desafios ............ era item de menu; na cobrança mora numa tela maior,
  *                         e aqui passou a morar nesta.
+ *
+ * ## O recorte tem setor desde 21/09/2026
+ *
+ * A tela dizia `podeFiltrarSetor: false` escrito no código, e quem enxergava a
+ * empresa inteira via os setores somados sem como olhar um. Agora quem decide é
+ * `resolverEscopoPainel`, o mesmo do Painel Líder da cobrança, lendo as chaves
+ * `painel_lider_escopo_*` — as duas telas passam a responder à mesma
+ * configuração, que era o ponto de compartilharem a chave.
  *
  * ## A régua manda na unidade
  *
@@ -42,10 +55,12 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   Users, Calendar, ChevronRight, ChevronLeft, RefreshCw, Radio, BarChart3,
   LineChart, Trophy, Building2, TriangleAlert, ChevronDown, UserMinus, Bot, Loader2,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PontoDaLegenda } from '@/components/PainelMetas/PontoDaLegenda';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useMesGlobal } from '@/providers/MesProvider';
@@ -76,11 +91,12 @@ import type { PessoaComAusencia } from '@/services/vendas/placar.service';
 import type { EquipeAnalitico } from '@/services/analitico/analitico.service';
 import { CardEquipe } from '@/pages/Dashboard/Analitico/CardEquipe';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
-import type { EscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
+import { resolverEscopoPainel, type EscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
 import type { OperadorNaEquipe } from '@/pages/Dashboard/Analitico/desempenhoEquipe';
 import {
   lideresDaEquipe, type LiderInfo, type PerfilLider,
 } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
+import { QuartisComercial } from './painel/QuartisComercial';
 import { EvolucaoVendas } from './dashboard/EvolucaoVendas';
 import { Faixa } from './componentes';
 import { corTexto } from '@/lib/temas';
@@ -89,7 +105,7 @@ import { corTexto } from '@/lib/temas';
 // para quem abre a aba.
 const DesafiosComercial = lazy(() => import('./DesafiosComercial'));
 
-type AbaPainel = 'desempenho' | 'pessoas' | 'grafico' | 'desafios';
+type AbaPainel = 'desempenho' | 'pessoas' | 'quartis' | 'grafico' | 'desafios';
 
 // ─── Unidade da régua ─────────────────────────────────────────────────────────
 
@@ -165,6 +181,7 @@ function useLideresDasEquipes(empresaId: string | null): Record<string, LiderInf
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function PainelLiderComercial() {
+  const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const { mes, setMes } = useMesGlobal();
@@ -188,6 +205,19 @@ export default function PainelLiderComercial() {
   // ── Abas ─────────────────────────────────────────────────────────────────
   const abasInternas = useMemo(() => ([
     { key: 'desempenho' as const, label: 'Desempenho Equipes', Icon: BarChart3 },
+    /*
+     * Quartis ao lado de Desempenho Equipes, como na cobrança, e ANTES de
+     * Pessoas: a ordem das abas é a da pergunta que se faz primeiro — o time
+     * está no ritmo? quem está fora? quanto cada um fez?
+     *
+     * A chave é a MESMA da cobrança (`painel_lider_sub_quartis`): «esta pessoa
+     * enxerga os quartis do painel?» é a mesma pergunta nas duas operações, e um
+     * cargo que já a tem lá não deveria precisar de outra configuração aqui —
+     * o mesmo motivo de `ver_painel_lider` ser compartilhada.
+     */
+    ...(temPermissao('painel_lider_sub_quartis')
+      ? [{ key: 'quartis' as const, label: 'Quartis', Icon: TrendingUp }]
+      : []),
     { key: 'pessoas'    as const, label: 'Pessoas',            Icon: Users },
     { key: 'grafico'    as const, label: 'Gráfico de vendas',  Icon: LineChart },
     // A chave de sempre dos Desafios, que não depende de `ver_analitico`.
@@ -255,25 +285,55 @@ export default function PainelLiderComercial() {
   }, [placar.pessoas, metas]);
 
   // ── O recorte ───────────────────────────────────────────────────────────
-  // Marcação múltipla desde 17/09/2026: lista vazia é "todas as equipes", e dá
-  // para comparar duas ou três de uma vez. Ver `FiltrosEscopo`.
+  //
+  // Marcação múltipla desde 17/09/2026: lista vazia é "todas", e dá para
+  // comparar duas ou três de uma vez. Ver `FiltrosEscopo`.
+  //
+  // O filtro de SETOR entrou em 21/09/2026, e até aqui a tela dizia
+  // `podeFiltrarSetor: false` escrito no código — quem enxergava a empresa
+  // inteira via os setores somados e não tinha como olhar um. Agora quem decide
+  // é `resolverEscopoPainel`, o mesmo do Painel Líder da cobrança, lendo as
+  // chaves `painel_lider_escopo_*`. As duas telas passam a responder à mesma
+  // configuração, que era o ponto de compartilhar a chave.
+  const [setoresMarcados, setSetoresMarcados] = useState<string[]>([]);
   const [equipesMarcadas, setEquipesMarcadas] = useState<string[]>([]);
-  // Trocar de empresa não pode deixar uma equipe de outra empresa escolhida.
-  useEffect(() => { setEquipesMarcadas([]); }, [empresaId]);
-  const equipesValidas = useMemo(() => {
-    const existe = new Set(equipes.map(e => e.id));
-    return equipesMarcadas.filter(id => existe.has(id));
-  }, [equipesMarcadas, equipes]);
-  const noRecorte = useMemo(() => new Set(equipesValidas), [equipesValidas]);
+  // Trocar de empresa não pode deixar setor nem equipe de outra empresa escolhidos.
+  useEffect(() => { setSetoresMarcados([]); setEquipesMarcadas([]); }, [empresaId]);
+  // Mexer nos setores descarta as equipes marcadas antes: elas podem ser de um
+  // setor que saiu do recorte, e o cruzamento devolveria lista vazia parecendo
+  // "não há ninguém".
+  const mudarSetores = useCallback((ids: string[]) => {
+    setSetoresMarcados(ids);
+    setEquipesMarcadas([]);
+  }, []);
 
+  const escopo: EscopoPainel = useMemo(() => resolverEscopoPainel({
+    temPermissao,
+    setorDoPerfil:     perfil?.setor_id ?? null,
+    setoresEscolhidos: setoresMarcados,
+    equipesEscolhidas: equipesMarcadas,
+    equipes,
+  }), [temPermissao, perfil?.setor_id, setoresMarcados, equipesMarcadas, equipes]);
+
+  const equipesValidas = escopo.equipeIds;
+  const noRecorte = useMemo(() => new Set(equipesValidas), [equipesValidas]);
+  const setoresNoFoco = useMemo(() => new Set(escopo.setorIds), [escopo.setorIds]);
+
+  /**
+   * As vendas do recorte.
+   *
+   * O setor corta primeiro, e pelo `setor_id` da VENDA — que é o setor onde o
+   * dinheiro entrou, e não o setor de hoje de quem vendeu. A equipe corta
+   * depois, dentro do que o setor deixou passar.
+   */
   const vendasNaTela = useMemo(
-    () => (noRecorte.size
-      ? vendas.filter(v => {
-          const eq = equipeDaVenda(v, placar.indice);
-          return eq ? noRecorte.has(eq) : false;
-        })
-      : vendas),
-    [vendas, noRecorte, placar.indice],
+    () => vendas.filter(v => {
+      if (setoresNoFoco.size > 0 && !(v.setor_id && setoresNoFoco.has(v.setor_id))) return false;
+      if (noRecorte.size === 0) return true;
+      const eq = equipeDaVenda(v, placar.indice);
+      return eq ? noRecorte.has(eq) : false;
+    }),
+    [vendas, setoresNoFoco, noRecorte, placar.indice],
   );
 
   const quemVendeu = useMemo(() => new Set(vendasNaTela.map(v => v.operador_id)), [vendasNaTela]);
@@ -288,8 +348,9 @@ export default function PainelLiderComercial() {
     () => placar.pessoas.filter(p =>
       !p.robo
       && (p.situacao !== 'desligado' || quemVendeu.has(p.id))
+      && (setoresNoFoco.size === 0 || (p.setor_id ? setoresNoFoco.has(p.setor_id) : false))
       && (noRecorte.size === 0 || (p.equipe_id ? noRecorte.has(p.equipe_id) : false))),
-    [placar.pessoas, noRecorte, quemVendeu],
+    [placar.pessoas, setoresNoFoco, noRecorte, quemVendeu],
   );
 
   const placarDaTela = useMemo(
@@ -298,6 +359,11 @@ export default function PainelLiderComercial() {
   );
   const porPessoa = useMemo(
     () => new Map(placarDaTela.map(l => [l.operadorId, l])),
+    [placarDaTela],
+  );
+  /** O mesmo placar, só o resumo — é o que a aba Quartis pede. */
+  const resumoPorPessoa = useMemo(
+    () => new Map(placarDaTela.map(l => [l.operadorId, l.resumo] as const)),
     [placarDaTela],
   );
   const automacao = useMemo(() => separarAutomacao(placarDaTela).automacao, [placarDaTela]);
@@ -324,10 +390,12 @@ export default function PainelLiderComercial() {
     })), [porPessoa, regua]);
 
   const cards = useMemo(() => {
-    const setoresComDado = setores.filter(s =>
-      equipes.some(e => e.setor_id === s.id)
-      || vendas.some(v => v.setor_id === s.id)
-      || metas.some(m => m.tipo === 'setor' && m.referencia_id === s.id));
+    const setoresComDado = setores
+      .filter(s => setoresNoFoco.size === 0 || setoresNoFoco.has(s.id))
+      .filter(s =>
+        equipes.some(e => e.setor_id === s.id)
+        || vendas.some(v => v.setor_id === s.id)
+        || metas.some(m => m.tipo === 'setor' && m.referencia_id === s.id));
 
     return setoresComDado.map(setor => {
       const vendasDoSetor = vendas.filter(v => v.setor_id === setor.id);
@@ -375,7 +443,7 @@ export default function PainelLiderComercial() {
       };
     });
   }, [setores, equipes, vendas, metas, placar.pessoas, placar.indice, presencaDe,
-      operadoresDe, regua, noRecorte]);
+      operadoresDe, regua, noRecorte, setoresNoFoco]);
 
   // ── A meta do recorte, para a régua diária do gráfico ─────────────────────
   const andamentoDoRecorte = useMemo(() => {
@@ -413,15 +481,18 @@ export default function PainelLiderComercial() {
   const carregandoTudo = atualizando && placar.pessoas.length === 0 && vendas.length === 0;
   const recarregarTudo = () => { recarregar(); placar.recarregar(); };
 
-  const nomeSetorTravado = setores.length === 1 ? setores[0].nome : null;
-  const escopo: EscopoPainel = {
-    setorIds: [],
-    equipeIds: equipesValidas,
-    setorUnico: null,
-    podeFiltrarSetor: false,
-    equipesDisponiveis: equipes,
-    temFiltroAtivo: equipesValidas.length > 0,
-  };
+  /*
+   * O nome do setor para quem NÃO pode filtrar — o rótulo travado do seletor.
+   *
+   * Duas fontes na ordem certa: o setor que o escopo fixou (o do perfil), e só
+   * então «há um setor só na tela». A segunda sozinha mentiria para quem
+   * enxerga a empresa inteira num mês em que apenas um setor vendeu.
+   */
+  const nomeSetorTravado = escopo.podeFiltrarSetor
+    ? null
+    : (escopo.setorUnico
+        ? setores.find(s => s.id === escopo.setorUnico)?.nome ?? null
+        : (setores.length === 1 ? setores[0].nome : null));
 
   if (!empresaId) return null;
 
@@ -494,7 +565,7 @@ export default function PainelLiderComercial() {
         <FiltrosEscopo
           escopo={escopo}
           setores={setores}
-          onSetores={() => undefined}
+          onSetores={mudarSetores}
           onEquipes={setEquipesMarcadas}
           nomeSetorTravado={nomeSetorTravado}
         />
@@ -612,6 +683,21 @@ export default function PainelLiderComercial() {
             regua={regua}
             carregando={carregandoTudo}
             cadastroDisponivel={placar.disponivel}
+          />
+        </div>
+      )}
+
+      {/* ── Aba: Quartis ─────────────────────────────────────────────────── */}
+      {(visitadas.has('quartis') || abaVisivel === 'quartis') && (
+        <div className={cn(abaVisivel !== 'quartis' && 'hidden')}>
+          <QuartisComercial
+            pessoas={pessoasNaTela}
+            resumoPorPessoa={resumoPorPessoa}
+            metas={metas}
+            presencaPorRecorte={placar.presencaPorRecorte}
+            regua={regua}
+            uteis={uteis}
+            trabalhados={trabalhados}
           />
         </div>
       )}

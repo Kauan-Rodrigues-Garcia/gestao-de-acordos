@@ -51,6 +51,12 @@ export interface Venda {
   valor_na_meta: number;
   /** Join parcial — só o nome, que é o que a tela mostra. */
   perfis?: { id: string; nome: string } | null;
+  /**
+   * Quando esta venda saiu da lista principal por não ter vindo no relatório
+   * (migration 20260921170000). Só vem preenchida na consulta da aba «Fora do
+   * relatório» — nas demais a coluna nem é pedida.
+   */
+  fora_do_relatorio_em?: string | null;
 }
 
 const COLUNAS = `
@@ -179,6 +185,35 @@ export async function buscarPrazosDoRelatorio(empresaId: string): Promise<Map<st
     .or('sem_relatorio_desde.not.is.null');
   if (error || !data) return new Map();
   return new Map(data.map(l => [l.id, l.sem_relatorio_desde]));
+}
+
+/**
+ * As vendas que saíram da lista principal por não terem vindo no relatório.
+ *
+ * Elas continuam em `vendas` — não foram para a lixeira —, e é por isso que o
+ * operador as lê pela mesma policy `vendas_select`, sem chave nova. O que muda
+ * é o lugar: saem da lista, dos cards e do placar, e vivem um mês nesta aba,
+ * para quem lançou conferir o NR ou questionar por que ele não apareceu.
+ *
+ * Consulta à parte, e não uma coluna a mais em `COLUNAS`: enquanto a migration
+ * 20260921170000 não estiver aplicada, a coluna não existe, e pedi-la junto
+ * derrubaria a aba inteira. Aqui o erro vira lista vazia — a aba só não aparece.
+ *
+ * Sem recorte de mês, de propósito: a venda arquivada no dia 1º de outubro é de
+ * uma venda de setembro, e quem a procura está olhando o mês em que ela caiu,
+ * não o mês em que ela foi lançada.
+ */
+export async function buscarForaDoRelatorio(empresaId: string): Promise<Venda[]> {
+  const { data, error } = await tabelaSemTipo<Record<string, unknown>>('vendas')
+    .select(`${COLUNAS}, fora_do_relatorio_em`)
+    .eq('empresa_id', empresaId)
+    // O mesmo idioma de `buscarPrazosDoRelatorio`: `tabelaSemTipo` expõe `or`,
+    // e não `not` — a fronteira do módulo é leitura simples, e este filtro cabe
+    // nela sem alargá-la.
+    .or('fora_do_relatorio_em.not.is.null')
+    .order('fora_do_relatorio_em', { ascending: false });
+  if (error || !data) return [];
+  return data.map(normalizar);
 }
 
 /**

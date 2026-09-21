@@ -27,7 +27,8 @@ import {
   type ResumoVendas, type SituacaoVenda,
 } from '@/lib/vendas';
 import {
-  buscarVendas, buscarPendentes, buscarPrazosDoRelatorio, salvarVenda, confirmarVenda, excluirVenda,
+  buscarVendas, buscarPendentes, buscarPrazosDoRelatorio, buscarForaDoRelatorio,
+  salvarVenda, confirmarVenda, excluirVenda,
   type Venda, type EntradaVenda, type Resultado, type EixoDaBusca,
 } from '@/services/vendas/vendas.service';
 
@@ -63,6 +64,15 @@ export interface VendasDaTela {
    * 20260921150000). Vazio enquanto a migration não estiver aplicada.
    */
   prazos: ReadonlyMap<string, string>;
+  /**
+   * As que já saíram da lista por não terem vindo no relatório (migration
+   * 20260921170000). Elas NÃO aparecem em `vendas` nem em `pendentes` — a lista
+   * principal, os cards e o placar não as enxergam mais, e é esse o ponto da
+   * aba: o NR continua localizável por um mês sem sujar o número de ninguém.
+   *
+   * Vazio enquanto a migration não estiver aplicada, e aí nada muda de lugar.
+   */
+  foraDoRelatorio: Venda[];
   carregando: boolean;
   /** A migration foi aplicada neste banco? */
   disponivel: boolean;
@@ -86,6 +96,7 @@ export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [pendentes, setPendentes] = useState<Venda[]>([]);
   const [prazos, setPrazos] = useState<ReadonlyMap<string, string>>(new Map());
+  const [foraDoRelatorio, setForaDoRelatorio] = useState<Venda[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [disponivel, setDisponivel] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -93,14 +104,25 @@ export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela
   const carregar = useCallback(async () => {
     if (!empresaId || !ativo) return;
     setCarregando(true);
-    const [doMes, fila, relogios] = await Promise.all([
+    const [doMes, fila, relogios, arquivadas] = await Promise.all([
       buscarVendas({ empresaId, de: primeiroDiaDoMes(mes), ate: ultimoDiaDoMes(mes), eixo }),
       buscarPendentes(empresaId),
       buscarPrazosDoRelatorio(empresaId),
+      buscarForaDoRelatorio(empresaId),
     ]);
-    setVendas(doMes.vendas);
-    setPendentes(fila.vendas);
+    /*
+     * A venda arquivada sai das duas listas AQUI, e não em cada tela.
+     *
+     * Ela continua na tabela — a consulta do mês a traz —, e deixá-la passar
+     * faria o card «na meta» e o placar contarem uma venda que a operação já
+     * considera fora. Um lugar só para tirar, e nenhuma tela precisa saber
+     * que a regra existe.
+     */
+    const fora = new Set(arquivadas.map(v => v.id));
+    setVendas(fora.size ? doMes.vendas.filter(v => !fora.has(v.id)) : doMes.vendas);
+    setPendentes(fora.size ? fila.vendas.filter(v => !fora.has(v.id)) : fila.vendas);
     setPrazos(relogios);
+    setForaDoRelatorio(arquivadas);
     setDisponivel(doMes.disponivel);
     // O erro de «tabela não existe» já virou `disponivel: false`, e a tela diz
     // isso com outras palavras. Repeti-lo aqui mostraria as duas mensagens.
@@ -153,7 +175,7 @@ export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela
   }, [carregar]);
 
   return {
-    vendas, resumo, pendentes, prazos, carregando, disponivel, erro,
+    vendas, resumo, pendentes, prazos, foraDoRelatorio, carregando, disponivel, erro,
     recarregar: () => { void carregar(); },
     salvar, confirmar, excluir,
   };

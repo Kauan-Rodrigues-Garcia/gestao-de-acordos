@@ -19,14 +19,46 @@
  * o dia 16 com agosto inteiro mostra uma queda que é do calendário. O corte
  * nasce em hoje, e muda pelo mesmo botão (`FiltroDePeriodo`).
  *
- * ## O que ficou de fora, de propósito
+ * ## O hub do Comercial (21/09/2026)
  *
- * - **Conferência.** «A conta do setor fecha?» é o Fechamento do Setor, em
- *   Importar Vendas. Repetir aqui uma versão resumida criaria dois lugares
- *   onde a conta do setor é mostrada.
- * - **Cobrança.** Nada de recebido de acordo, agendado, H.O. ou quartil de
- *   recebimento. O quartil que aparece nos cards é o da projeção de VENDAS
- *   contra a meta de vendas, com as faixas padrão.
+ * «Refaz essa parte do painel diretoria e copia o que tem aqui de útil da
+ * BookPlay no comercial. A aba de importar vendas tem que tá ali dentro do
+ * painel de diretoria — tudo que tem aí é o que eu quero lá.»
+ *
+ * O painel deixou de ser só o resultado e passou a ser as três perguntas
+ * inteiras, como o da BookPlay:
+ *
+ *   O RESULTADO ... Visão geral, Setores e equipes, Por pessoa.
+ *   A PROCEDÊNCIA . Relatório do mês, Geral × prévia, Setores a vincular,
+ *                   Pessoas do relatório, Histórico de importações, Fonte dos
+ *                   dados.
+ *   A ENTRADA ..... Importar vendas, Fechamento do setor.
+ *
+ * O Fechamento ficava de fora «para não haver dois lugares onde a conta do
+ * setor é mostrada». Continua havendo um só — ele MUDOU de lugar, e veio para
+ * cá junto com a importação, que é o que o alimenta. Quem confere o relatório é
+ * quem o importa: separá-los obrigava a ir e voltar a cada divergência.
+ *
+ * As telas hospedadas são as MESMAS de antes, montadas aqui — não cópias.
+ * `/vendas/importar` continua existindo e servindo quem tem a chave da
+ * importação sem ter a do painel.
+ *
+ * ## Por que a diretoria via «um setor só»
+ *
+ * O dinheiro de `vendas` chega ao setor pelo de-para de franquia. Franquia que
+ * ninguém vinculou produz venda com `setor_id` nulo: ela soma no total da
+ * empresa e não aparece em setor algum. O painel mostrava a parte e chamava de
+ * tudo.
+ *
+ * Agora «Onde o resultado acontece» tem a linha **Sem setor**, com quanto é e o
+ * atalho para resolver, e a aba «Setores a vincular» lista franquia por
+ * franquia. Ver `diretoria/SetoresDoRelatorio`.
+ *
+ * ## O que continua de fora, de propósito
+ *
+ * **Cobrança.** Nada de recebido de acordo, agendado, H.O. ou quartil de
+ * recebimento. O quartil que aparece nos cards é o da projeção de VENDAS
+ * contra a meta de vendas, com as faixas padrão.
  *
  * ## A régua da meta manda na projeção, não no dinheiro
  *
@@ -34,7 +66,7 @@
  * projeção e o quartil de cada card usam a régua que a meta escolheu: um
  * setor medido por quantidade é projetado em quantidade.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -45,6 +77,7 @@ import {
   TrendingUp, TrendingDown, RefreshCw, Building2, Users, Wallet, Activity,
   ShoppingBag, ArrowUpRight, ArrowLeft, ChevronRight, CheckCircle2, Target,
   CalendarClock, Bot, MapPin, Scale, Layers,
+  FileSearch, Link2, UserSearch, History, Database, Upload, Loader2, TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -85,13 +118,56 @@ import { buscarVendas, type Venda } from '@/services/vendas/vendas.service';
 import { SeloQuartil, SeloVariacao as Selo } from '@/pages/PainelDiretoria/components';
 import { FiltroDePeriodo } from '@/pages/PainelDiretoria/FiltroDePeriodo';
 import { Faixa } from './componentes';
+import { SetoresDoRelatorio } from './diretoria/SetoresDoRelatorio';
+import { PessoasDoRelatorio } from './diretoria/PessoasDoRelatorio';
+import { HistoricoImportacoes, FonteDosDados } from './diretoria/HistoricoEFonte';
 import { corTexto } from '@/lib/temas';
+
+/*
+ * As telas pesadas da procedência e da entrada, carregadas só quando a aba
+ * abre. `Importacao` arrasta os dois parsers do relatório (o CSV de 60 colunas
+ * e o XLSX de 119) e `RelatorioDoMes`, o raio-x inteiro — nada disso serve a
+ * quem entrou para ver o faturamento do mês, que é o que 99% de quem abre este
+ * painel quer.
+ */
+const Importacao = lazy(() => import('./Importacao'));
+const RelatorioDoMes = lazy(() => import('./relatorio/RelatorioDoMes'));
+// Exportação nomeada: `lazy` só aceita `default`, e trocar o export do
+// Conciliacao mexeria em quem já o importa pelo nome.
+const Conciliacao = lazy(() => import('./Conciliacao').then(m => ({ default: m.Conciliacao })));
+const FechamentoDoSetor = lazy(() => import('./FechamentoDoSetor'));
+
+function CarregandoAba() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+    </div>
+  );
+}
 
 /** Enquanto o tema não resolveu (primeiro quadro), a série usa isto. */
 const FALLBACK_PRIMARIA = '#3b82f6';
 const FALLBACK_ANTERIOR = '#94a3b8';
 
-type AbaDoPainel = 'visao' | 'setores' | 'pessoas';
+/**
+ * As abas do painel.
+ *
+ * Três grupos, na ordem em que a diretoria pergunta:
+ *
+ *   O RESULTADO ... visao, setores, pessoas — o que aconteceu no mês.
+ *   A PROCEDÊNCIA . relatorio, conferencia, vincular, quem, historico, fonte —
+ *                   de onde o número veio, e o que está faltando amarrar.
+ *   A ENTRADA ..... importar, fechamento — o que alimenta tudo acima.
+ *
+ * A entrada mora AQUI desde 21/09/2026, e não num item de menu próprio
+ * («a aba de importar vendas tem que estar dentro do painel de diretoria»). É a
+ * mesma decisão que a BookPlay tomou: quem confere o relatório é quem o importa,
+ * e separá-los em duas telas obrigava a ir e voltar a cada divergência.
+ */
+type AbaDoPainel =
+  | 'visao' | 'setores' | 'pessoas'
+  | 'relatorio' | 'conferencia' | 'vincular' | 'quem' | 'historico' | 'fonte'
+  | 'importar' | 'fechamento';
 
 const pct1 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 const iniciais = (nome: string) =>
@@ -208,14 +284,60 @@ export default function PainelDiretoriaComercial() {
   }, [empresaId, mes, temPermissao, versao]);
 
   // ── Abas ────────────────────────────────────────────────────────────────
+  /*
+   * Cada aba pede a MESMA chave que o item de menu pedia antes de ela mudar de
+   * casa. Mover a tela não pode mudar quem a lê: a rota já pede
+   * `ver_painel_diretoria`, e as de procedência e entrada somam a delas.
+   */
+  const podeVerImportacoes = temPermissao('ver_importacoes_vendas');
+  const podeImportar = temPermissao('importar_vendas');
+  const podeVerVendas = temPermissao('ver_vendas');
+
+  const abas = useMemo(() => ([
+    { key: 'visao'   as const, label: 'Visão geral',       Icon: TrendingUp, grupo: 'O resultado' },
+    { key: 'setores' as const, label: 'Setores e equipes', Icon: Building2,  grupo: 'O resultado' },
+    { key: 'pessoas' as const, label: 'Por pessoa',        Icon: Users,      grupo: 'O resultado' },
+    ...(podeVerImportacoes ? [
+      { key: 'relatorio'   as const, label: 'Relatório do mês',    Icon: FileSearch, grupo: 'A procedência' },
+      { key: 'conferencia' as const, label: 'Geral × prévia',      Icon: Scale,      grupo: 'A procedência' },
+      { key: 'vincular'    as const, label: 'Setores a vincular',  Icon: Link2,      grupo: 'A procedência' },
+      { key: 'quem'        as const, label: 'Pessoas do relatório', Icon: UserSearch, grupo: 'A procedência' },
+      { key: 'historico'   as const, label: 'Histórico de importações', Icon: History, grupo: 'A procedência' },
+      { key: 'fonte'       as const, label: 'Fonte dos dados',     Icon: Database,   grupo: 'A procedência' },
+    ] : []),
+    ...(podeImportar ? [
+      { key: 'importar' as const, label: 'Importar vendas', Icon: Upload, grupo: 'A entrada' },
+    ] : []),
+    ...(podeVerVendas ? [
+      { key: 'fechamento' as const, label: 'Fechamento do setor', Icon: Scale, grupo: 'A entrada' },
+    ] : []),
+  ]), [podeVerImportacoes, podeImportar, podeVerVendas]);
+
   const pedida = searchParams.get('tab');
-  const aba: AbaDoPainel = pedida === 'setores' || pedida === 'pessoas' ? pedida : 'visao';
+  // Aba sem chave cai na primeira: esconder o botão e servir a tela pela URL
+  // não seria permissão.
+  const aba: AbaDoPainel = abas.find(a => a.key === pedida)?.key ?? 'visao';
   useSubAbaUso(aba);
   const irPara = useCallback((k: AbaDoPainel) => {
     const p = new URLSearchParams(searchParams);
     p.set('tab', k);
     setSearchParams(p, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  /*
+   * As abas de procedência e de entrada só montam quando alguém as abre, e
+   * ficam montadas depois — o desenho da cobrança. A primeira leitura do
+   * relatório são sete mil linhas; refazê-la a cada ida e volta seria o
+   * desperdício que o painel existe para não ter.
+   */
+  const [visitadas, setVisitadas] = useState<Set<AbaDoPainel>>(() => new Set([aba]));
+  useEffect(() => {
+    setVisitadas(prev => (prev.has(aba) ? prev : new Set(prev).add(aba)));
+  }, [aba]);
+  const jaAbriu = (k: AbaDoPainel) => visitadas.has(k);
+
+  /** As abas do resultado — as únicas que dependem do corte e do mês anterior. */
+  const abaDoResultado = aba === 'visao' || aba === 'setores' || aba === 'pessoas';
 
   // ── O corte ─────────────────────────────────────────────────────────────
   // Trocar de mês zera o corte: o dia 20 de agosto e o de setembro são pontos
@@ -339,23 +461,27 @@ export default function PainelDiretoriaComercial() {
         </div>
       </motion.div>
 
-      {/* ── Abas internas ─────────────────────────────────────────────────── */}
+      {/* ── Abas internas ─────────────────────────────────────────────────
+          Onze abas em três grupos. O separador antes de cada grupo novo diz
+          que a pergunta mudou — sem ele, «Fonte dos dados» e «Importar vendas»
+          pareceriam o mesmo tipo de tela que «Visão geral». */}
       <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
-        {([
-          { key: 'visao',   label: 'Visão geral',       Icon: TrendingUp },
-          { key: 'setores', label: 'Setores e equipes', Icon: Building2 },
-          { key: 'pessoas', label: 'Por pessoa',        Icon: Users },
-        ] as const).map(({ key, label, Icon }) => (
-          <button key={key} type="button" onClick={() => irPara(key)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
-              aba === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+        {abas.map(({ key, label, Icon, grupo }, i) => (
+          <Fragment key={key}>
+            {i > 0 && abas[i - 1].grupo !== grupo && (
+              <span className="mx-1 h-5 w-px shrink-0 self-center bg-border" aria-hidden />
             )}
-          >
-            <Icon className="w-3.5 h-3.5" /> {label}
-          </button>
+            <button type="button" onClick={() => irPara(key)} title={grupo}
+              className={cn(
+                'flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
+                aba === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+              )}
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          </Fragment>
         ))}
       </div>
 
@@ -368,7 +494,52 @@ export default function PainelDiretoriaComercial() {
       )}
       {erro && <Faixa tom="alerta">{erro}</Faixa>}
 
-      {carregandoTudo ? (
+      {/* ── A procedência e a entrada ──────────────────────────────────────
+          Fora do bloco do resultado: elas não dependem do mês em foco nem do
+          corte, e prendê-las ao esqueleto de carregamento das vendas as faria
+          esperar por um dado que nem usam. */}
+      {jaAbriu('relatorio') && (
+        <div className={cn('pb-16', aba !== 'relatorio' && 'hidden')}>
+          <Suspense fallback={<CarregandoAba />}><RelatorioDoMes /></Suspense>
+        </div>
+      )}
+      {jaAbriu('conferencia') && (
+        <div className={cn('pb-16', aba !== 'conferencia' && 'hidden')}>
+          <Suspense fallback={<CarregandoAba />}>
+            <Conciliacao empresaId={empresaId} mes={mes} />
+          </Suspense>
+        </div>
+      )}
+      {jaAbriu('vincular') && (
+        <div className={cn('pb-16', aba !== 'vincular' && 'hidden')}>
+          <SetoresDoRelatorio ativo={jaAbriu('vincular')} />
+        </div>
+      )}
+      {jaAbriu('quem') && (
+        <div className={cn('pb-16', aba !== 'quem' && 'hidden')}>
+          <PessoasDoRelatorio ativo={jaAbriu('quem')} />
+        </div>
+      )}
+      {jaAbriu('historico') && (
+        <div className={cn('pb-16', aba !== 'historico' && 'hidden')}>
+          <HistoricoImportacoes ativo={jaAbriu('historico')} />
+        </div>
+      )}
+      {jaAbriu('fonte') && (
+        <div className={cn('pb-16', aba !== 'fonte' && 'hidden')}><FonteDosDados /></div>
+      )}
+      {jaAbriu('importar') && (
+        <div className={cn('-mx-4 pb-16 md:-mx-6', aba !== 'importar' && 'hidden')}>
+          <Suspense fallback={<CarregandoAba />}><Importacao /></Suspense>
+        </div>
+      )}
+      {jaAbriu('fechamento') && (
+        <div className={cn('-mx-4 pb-16 md:-mx-6', aba !== 'fechamento' && 'hidden')}>
+          <Suspense fallback={<CarregandoAba />}><FechamentoDoSetor /></Suspense>
+        </div>
+      )}
+
+      {!abaDoResultado ? null : carregandoTudo ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
@@ -420,6 +591,8 @@ export default function PainelDiretoriaComercial() {
               metas={metas}
               podeVerMetas={temPermissao('ver_metas_vendas')}
               onAbrirSetores={() => irPara('setores')}
+              onAbrirVinculo={() => irPara(podeVerImportacoes ? 'vincular' : 'setores')}
+              onAbrirFechamento={() => irPara(podeVerVendas ? 'fechamento' : 'setores')}
             />
           )}
           {aba === 'setores' && (
@@ -657,7 +830,8 @@ const GAVETAS_FORA: readonly GavetaVenda[] = ['pendente_assinatura', 'aberta', '
 
 function VisaoGeral({
   mes, mesAnterior, corte, corteAnterior, mesFechado, vendas, anteriores, temAnterior,
-  indice, pessoasNoCadastro, setores, equipes, metas, podeVerMetas, onAbrirSetores,
+  indice, pessoasNoCadastro, setores, equipes, metas, podeVerMetas,
+  onAbrirSetores, onAbrirVinculo, onAbrirFechamento,
 }: {
   mes: string; mesAnterior: string; corte: number; corteAnterior: number; mesFechado: boolean;
   vendas: Venda[]; anteriores: Venda[]; temAnterior: boolean;
@@ -665,10 +839,31 @@ function VisaoGeral({
   setores: Recorte[]; equipes: Recorte[];
   metas: MetaDeRecorte[]; podeVerMetas: boolean;
   onAbrirSetores: () => void;
+  onAbrirVinculo: () => void;
+  onAbrirFechamento: () => void;
 }) {
   const total = useMemo(() => totalDoRecorte(vendas, indice), [vendas, indice]);
   const resumo = total.resumo;
   const resumoAnterior = useMemo(() => resumirVendas(anteriores), [anteriores]);
+
+  /*
+   * O faturamento que não está em setor nenhum.
+   *
+   * Sai da venda com `setor_id` nulo, e não de uma subtração: subtrair a soma
+   * dos setores do total daria o mesmo número na maioria das vezes e mentiria
+   * quando um setor aparecesse duas vezes na lista por engano. Aqui a origem é
+   * a própria linha.
+   */
+  const semSetor = useMemo(() => {
+    const doPeriodo = vendas.filter(v => !v.setor_id && v.conta_na_meta);
+    return {
+      valor: doPeriodo.reduce((s, v) => s + v.valor_na_meta, 0),
+      vendas: doPeriodo.length,
+      anterior: anteriores
+        .filter(v => !v.setor_id && v.conta_na_meta)
+        .reduce((s, v) => s + v.valor_na_meta, 0),
+    };
+  }, [vendas, anteriores]);
   const [formaAberta, setFormaAberta] = useState<string | null>(null);
   const [formaSobre, setFormaSobre] = useState<string | null>(null);
 
@@ -968,12 +1163,15 @@ function VisaoGeral({
                 {temAnterior && ' · variação contra o mês anterior'}.
               </p>
             </div>
-            <Link to={`${ROUTE_PATHS.VENDAS_IMPORTAR}?tab=fechamento`}
+            <button type="button" onClick={onAbrirFechamento}
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:opacity-80">
               <Scale className="h-3 w-3" /> Conferir a conta do setor
-            </Link>
+            </button>
           </div>
-          <OndeAcontece setores={setores} equipes={equipes} temAnterior={temAnterior} />
+          <OndeAcontece
+            setores={setores} equipes={equipes} temAnterior={temAnterior}
+            semSetor={semSetor} onVincular={onAbrirVinculo}
+          />
         </section>
 
         <div className="space-y-4 self-start">
@@ -1108,16 +1306,21 @@ function VisaoGeral({
 
 /** Setor por setor, com as equipes abertas no clique — como na BookPlay. */
 function OndeAcontece({
-  setores, equipes, temAnterior,
-}: { setores: Recorte[]; equipes: Recorte[]; temAnterior: boolean }) {
+  setores, equipes, temAnterior, semSetor, onVincular,
+}: {
+  setores: Recorte[]; equipes: Recorte[]; temAnterior: boolean;
+  /** Faturamento do período que não está em setor nenhum. */
+  semSetor: { valor: number; anterior: number; vendas: number };
+  onVincular: () => void;
+}) {
   // Com um setor só, ele já nasce aberto: um clique para ver a única coisa
   // que há para ver é um clique a mais.
   const [abertos, setAbertos] = useState<Set<string>>(
     () => new Set(setores.length === 1 ? [setores[0].id] : []),
   );
-  const maior = setores[0]?.resumo.valor ?? 0;
+  const maior = Math.max(setores[0]?.resumo.valor ?? 0, semSetor.valor);
 
-  if (setores.length === 0) {
+  if (setores.length === 0 && semSetor.vendas === 0) {
     return <p className="text-[11px] text-muted-foreground">Nenhum setor com venda no período.</p>;
   }
 
@@ -1191,6 +1394,38 @@ function OndeAcontece({
           </div>
         );
       })}
+
+      {/* ── O que não está em setor nenhum ──────────────────────────────────
+          A linha que faltava, e a razão de a diretoria enxergar «um setor só»:
+          venda cuja franquia ninguém vinculou entra em `vendas` com `setor_id`
+          nulo. Ela soma no total da empresa e não aparece em setor algum — sem
+          esta linha, o painel mostrava a parte e chamava de tudo.
+
+          O botão leva direto para onde se resolve. */}
+      {semSetor.vendas > 0 && (
+        <div className="mt-1 border-t border-border/60 pt-1">
+          <div className="flex w-full items-center gap-3 rounded-lg bg-amber-500/5 px-1.5 py-1.5">
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              <span className="truncate text-xs font-semibold text-foreground">Sem setor</span>
+              <span className="truncate text-[11px] text-muted-foreground">
+                · {semSetor.vendas} {semSetor.vendas === 1 ? 'venda' : 'vendas'} de franquia não vinculada
+              </span>
+            </span>
+            <Barra valor={semSetor.valor} maior={maior} />
+            <span className="w-[104px] shrink-0 text-right font-mono text-xs font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+              {formatBRL(semSetor.valor)}
+            </span>
+            <span className="w-[62px] shrink-0 text-right">
+              <Selo pct={temAnterior ? variacao(semSetor.valor, semSetor.anterior) : null} />
+            </span>
+          </div>
+          <button type="button" onClick={onVincular}
+            className="ml-6 inline-flex items-center gap-1 py-0.5 text-[11px] font-semibold text-primary hover:opacity-80">
+            <Link2 className="h-3 w-3" /> Vincular as franquias a um setor
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1215,11 +1450,19 @@ function SetoresEEquipes({
     return (
       <DetalheDoRecorte
         recorte={aberto}
+        // As equipes do setor aberto, para o detalhe oferecer o próximo nível.
+        // Numa equipe a lista é vazia, e o bloco some — não há nível abaixo.
+        equipes={aberto.tipo === 'setor' ? equipes.filter(e => e.setorId === aberto.id) : []}
         mes={mes} mesAnterior={mesAnterior}
         corte={corte} corteAnterior={corteAnterior}
         temAnterior={temAnterior}
         indice={indice}
-        onVoltar={() => setAlvo(null)}
+        onVoltar={() => setAlvo(alvo?.tipo === 'equipe' && aberto.setorId
+          // Voltar de uma equipe sobe um degrau, para o setor dela — e não
+          // até o começo. Quem entrou por dois cliques espera desfazer um.
+          ? { tipo: 'setor', id: aberto.setorId }
+          : null)}
+        onAbrirEquipe={id => setAlvo({ tipo: 'equipe', id })}
       />
     );
   }
@@ -1234,41 +1477,65 @@ function SetoresEEquipes({
     );
   }
 
+  /*
+   * Só os SETORES neste nível — as equipes só aparecem ao abrir um (pedido de
+   * 21/09/2026, «aparece os setores pra mim e não as equipes; clicando no
+   * setor, quero a informação de cada equipe»).
+   *
+   * Até aqui a tela punha o card do setor e os das equipes dele lado a lado, na
+   * mesma grade: com dois setores de quatro equipes já eram dez cards de dois
+   * níveis misturados, e a participação de cada um era medida contra uma base
+   * diferente — o card do setor contra a empresa, o da equipe contra o setor —
+   * sem nada na grade dizendo isso. É o mesmo desenho em dois degraus da
+   * BookPlay (`DiretoriaSetores`), e pelo mesmo motivo.
+   */
   return (
-    <div className="space-y-6">
-      {setores.map(s => {
-        const doSetor = equipes.filter(e => e.setorId === s.id);
-        return (
-          <div key={s.id} className="space-y-3">
-            <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {s.nome}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              <CardRecorte
-                recorte={s}
-                parte={totalSetores > 0 ? (s.resumo.valor / totalSetores) * 100 : null}
-                temAnterior={temAnterior}
-                sub="Setor · participação na empresa"
-                onClick={() => setAlvo({ tipo: 'setor', id: s.id })}
-              />
-              {doSetor.map(e => (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {setores.map(s => (
+          <CardRecorte
+            key={s.id}
+            recorte={s}
+            parte={totalSetores > 0 ? (s.resumo.valor / totalSetores) * 100 : null}
+            temAnterior={temAnterior}
+            sub={(() => {
+              const n = equipes.filter(e => e.setorId === s.id).length;
+              return n > 0
+                ? `Setor · ${n} equipe${n === 1 ? '' : 's'} · participação na empresa`
+                : 'Setor · participação na empresa';
+            })()}
+            onClick={() => setAlvo({ tipo: 'setor', id: s.id })}
+          />
+        ))}
+      </div>
+
+      {/* As equipes que nenhum setor reivindica — elas existem (o cadastro as
+          tem), e escondê-las faria o dinheiro delas sumir deste nível sem
+          aparecer em nenhum outro. */}
+      {equipes.some(e => !e.setorId || !setores.some(s => s.id === e.setorId)) && (
+        <div className="space-y-2">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Equipes sem setor
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {equipes
+              .filter(e => !e.setorId || !setores.some(s => s.id === e.setorId))
+              .map(e => (
                 <CardRecorte
-                  key={e.id}
-                  recorte={e}
-                  parte={s.resumo.valor > 0 ? (e.resumo.valor / s.resumo.valor) * 100 : null}
-                  temAnterior={temAnterior}
-                  sub="Equipe · participação no setor"
+                  key={e.id} recorte={e} parte={null} temAnterior={temAnterior}
+                  sub="Equipe · sem setor no cadastro"
                   onClick={() => setAlvo({ tipo: 'equipe', id: e.id })}
                 />
               ))}
-            </div>
           </div>
-        );
-      })}
+        </div>
+      )}
+
       <p className="text-[11px] text-muted-foreground">
         Faturamento de vendas confirmadas e assinadas até o dia {corte} · a projeção compara com a meta
-        de vendas do recorte, já descontada a ausência, e com as faixas padrão de quartil · clique num
-        card para ver o ritmo e as pessoas.
+        de vendas do setor, já descontada a ausência, e com as faixas padrão de quartil ·{' '}
+        <strong className="text-foreground">clique num setor</strong> para ver as equipes dele, o ritmo
+        e as pessoas.
       </p>
     </div>
   );
@@ -1343,10 +1610,16 @@ function CardRecorte({
 }
 
 function DetalheDoRecorte({
-  recorte: r, mes, mesAnterior, corte, corteAnterior, temAnterior, indice, onVoltar,
+  recorte: r, equipes, mes, mesAnterior, corte, corteAnterior, temAnterior, indice,
+  onVoltar, onAbrirEquipe,
 }: {
-  recorte: Recorte; mes: string; mesAnterior: string; corte: number; corteAnterior: number;
-  temAnterior: boolean; indice: IndicePessoas; onVoltar: () => void;
+  recorte: Recorte;
+  /** As equipes deste setor. Vazio numa equipe — não há nível abaixo dela. */
+  equipes: Recorte[];
+  mes: string; mesAnterior: string; corte: number; corteAnterior: number;
+  temAnterior: boolean; indice: IndicePessoas;
+  onVoltar: () => void;
+  onAbrirEquipe: (equipeId: string) => void;
 }) {
   const v = temAnterior ? variacao(r.resumo.valor, r.resumoAnterior.valor) : null;
   const ticket = ticketMedio(r.resumo);
@@ -1357,7 +1630,8 @@ function DetalheDoRecorte({
       className="space-y-4">
       <button type="button" onClick={onVoltar}
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" /> Voltar para os setores
+        <ArrowLeft className="h-3.5 w-3.5" />
+        {r.tipo === 'equipe' && r.setorId ? 'Voltar para o setor' : 'Voltar para os setores'}
       </button>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -1439,6 +1713,46 @@ function DetalheDoRecorte({
           )}
         </div>
       </div>
+
+      {/* ── As equipes deste setor ─────────────────────────────────────────
+          O segundo degrau: aqui é que as equipes aparecem, e a participação
+          delas é medida contra o setor — a base certa, dita no rótulo. */}
+      {equipes.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="px-1 text-sm font-semibold text-foreground">
+            As equipes de {r.nome}
+            <span className="ml-1.5 font-normal text-muted-foreground">
+              · {equipes.length} equipe{equipes.length === 1 ? '' : 's'}
+            </span>
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {equipes.map(e => (
+              <CardRecorte
+                key={e.id} recorte={e}
+                parte={r.resumo.valor > 0 ? (e.resumo.valor / r.resumo.valor) * 100 : null}
+                temAnterior={temAnterior}
+                sub="Equipe · participação no setor"
+                onClick={() => onAbrirEquipe(e.id)}
+              />
+            ))}
+          </div>
+          {/* O que o setor tem e nenhuma equipe conta: gente sem equipe no
+              cadastro, e a automação. Sem esta linha, a soma das equipes
+              ficaria menor que o setor sem explicação. */}
+          {(() => {
+            const soma = equipes.reduce((s, e) => s + e.resumo.valor, 0);
+            const sobra = r.resumo.valor - soma;
+            if (Math.abs(sobra) < 0.005) return null;
+            return (
+              <p className="px-1 text-[11px] text-muted-foreground">
+                <strong className="font-mono text-foreground">{formatBRL(sobra)}</strong> do setor não
+                está em equipe nenhuma — quem não tem equipe no cadastro, e a automação. Soma no setor
+                e não aparece nos cards acima.
+              </p>
+            );
+          })()}
+        </section>
+      )}
 
       <GraficoRitmo
         mes={mes} mesAnterior={mesAnterior}

@@ -37,6 +37,19 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
   useCargoPermissoes: () => ({ temPermissao, permissoes: {}, loading: false }),
 }));
 
+/*
+ * O perfil de quem olha. Entrou em 21/09/2026, com o filtro de setor do Painel
+ * Líder: `resolverEscopoPainel` pergunta o setor da pessoa para travar quem não
+ * pode escolher. Aqui `setor_id: null` é a cúpula — quem enxerga tudo —, que é
+ * o ponto de vista dos testes destes painéis.
+ */
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    perfil: { id: 'quem-olha', nome: 'Quem Olha', perfil: 'diretoria', setor_id: null },
+    loading: false,
+  }),
+}));
+
 vi.mock('@/providers/MesProvider', () => ({
   useMesGlobal: () => ({ mes: '2026-09', setMes: vi.fn() }),
 }));
@@ -163,8 +176,16 @@ vi.mock('framer-motion', () => {
 import PainelLiderComercial from '../PainelLiderComercial';
 import PainelDiretoriaComercial from '../PainelDiretoriaComercial';
 
-function montar(Tela: React.ComponentType) {
-  return render(React.createElement(MemoryRouter, null, React.createElement(Tela)));
+/**
+ * `busca` é a query string da rota — as abas vivem em `?tab=`, e servir uma
+ * aba pela URL é justamente o caminho que a permissão tem de barrar.
+ */
+function montar(Tela: React.ComponentType, busca = '') {
+  return render(React.createElement(
+    MemoryRouter,
+    { initialEntries: [`/vendas/painel-diretoria${busca}`] },
+    React.createElement(Tela),
+  ));
 }
 
 const aba = (nome: RegExp) => screen.getByRole('button', { name: nome });
@@ -231,6 +252,94 @@ describe('PainelLiderComercial — o desenho da BookPlay', () => {
 
 /* ── Painel Diretoria ─────────────────────────────────────────────────────── */
 
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * O que entrou em 21/09/2026
+ *
+ * Painel Líder ganhou a aba QUARTIS ao lado de Desempenho Equipes, e o filtro
+ * de SETOR deixou de ser `podeFiltrarSetor: false` escrito no código.
+ *
+ * Painel Diretoria virou o hub do Comercial: as telas de procedência e de
+ * entrada — relatório, conferência, vínculo, pessoas, histórico, fonte,
+ * importação e fechamento — moram nele, cada uma pedindo a chave que o item de
+ * menu pedia. É a parte mais fácil de desfazer sem querer: basta alguém
+ * esquecer de somar uma chave à lista e a aba some para quem devia vê-la.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+describe('PainelLiderComercial — a reforma de 21/09/2026', () => {
+  it('Quartis fica entre Desempenho Equipes e Pessoas', () => {
+    montar(PainelLiderComercial);
+    const nomes = screen.getAllByRole('button')
+      .map(b => b.textContent ?? '')
+      .filter(t => /Desempenho Equipes|Quartis|Pessoas|Gráfico de vendas/.test(t));
+    expect(nomes.findIndex(t => t.includes('Quartis')))
+      .toBeGreaterThan(nomes.findIndex(t => t.includes('Desempenho Equipes')));
+    expect(nomes.findIndex(t => t.includes('Pessoas')))
+      .toBeGreaterThan(nomes.findIndex(t => t.includes('Quartis')));
+  });
+
+  it('sem `painel_lider_sub_quartis`, a aba não existe — a chave é a da cobrança', () => {
+    temPermissao.mockImplementation((chave: string) => chave !== 'painel_lider_sub_quartis');
+    montar(PainelLiderComercial);
+    expect(screen.queryByRole('button', { name: /^Quartis$/ })).not.toBeInTheDocument();
+  });
+
+  it('a aba Quartis diz de onde saiu a parte de cada um na meta', () => {
+    montar(PainelLiderComercial);
+    fireEvent.click(aba(/Quartis/));
+    expect(screen.getByText(/parte de cada um na meta do time/)).toBeInTheDocument();
+    // Sem meta configurada ninguém tem quartil, e a tela diz isso em vez de
+    // medir contra zero.
+    expect(screen.getByText(/fora do quartil/)).toBeInTheDocument();
+  });
+
+  it('o filtro de setor existe — não é mais `podeFiltrarSetor: false`', () => {
+    montar(PainelLiderComercial);
+    // Quem enxerga todos os setores escolhe entre eles; antes esta tela dizia
+    // `podeFiltrarSetor: false` no código e o seletor nem era desenhado.
+    expect(screen.getAllByRole('button', { name: /Todos os setores/ }).length)
+      .toBeGreaterThan(0);
+  });
+});
+
+describe('PainelDiretoriaComercial — o hub do Comercial (21/09/2026)', () => {
+  const ABAS_DA_PROCEDENCIA = [
+    /Relatório do mês/, /Geral × prévia/, /Setores a vincular/,
+    /Pessoas do relatório/, /Histórico de importações/, /Fonte dos dados/,
+  ];
+
+  it('as abas de procedência e de entrada moram no painel', () => {
+    montar(PainelDiretoriaComercial);
+    for (const nome of [...ABAS_DA_PROCEDENCIA, /Importar vendas/, /Fechamento do setor/]) {
+      expect(screen.getByRole('button', { name: nome })).toBeInTheDocument();
+    }
+  });
+
+  it('sem `ver_importacoes_vendas`, a procedência inteira some', () => {
+    temPermissao.mockImplementation((chave: string) => chave !== 'ver_importacoes_vendas');
+    montar(PainelDiretoriaComercial);
+    for (const nome of ABAS_DA_PROCEDENCIA) {
+      expect(screen.queryByRole('button', { name: nome })).not.toBeInTheDocument();
+    }
+    // O resultado continua: tirar a chave da importação não fecha o painel.
+    expect(screen.getByRole('button', { name: /Visão geral/ })).toBeInTheDocument();
+  });
+
+  it('sem `importar_vendas`, a entrada some e o resto fica', () => {
+    temPermissao.mockImplementation((chave: string) => chave !== 'importar_vendas');
+    montar(PainelDiretoriaComercial);
+    expect(screen.queryByRole('button', { name: /Importar vendas/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Relatório do mês/ })).toBeInTheDocument();
+  });
+
+  it('uma aba servida pela URL sem a chave cai na primeira — esconder o botão não é permissão', () => {
+    temPermissao.mockImplementation((chave: string) => chave !== 'importar_vendas');
+    montar(PainelDiretoriaComercial, '?tab=importar');
+    expect(screen.getByText('Onde o resultado acontece')).toBeInTheDocument();
+  });
+});
+
 describe('PainelDiretoriaComercial — o desenho da BookPlay', () => {
   it('abre na Visão geral, com as três abas da diretoria', async () => {
     montar(PainelDiretoriaComercial);
@@ -257,12 +366,31 @@ describe('PainelDiretoriaComercial — o desenho da BookPlay', () => {
     expect(screen.getByText('IA ALFA')).toBeInTheDocument();
   });
 
-  it('Setores e equipes abre o detalhe do card e volta', () => {
+  /*
+   * Dois degraus desde 21/09/2026: o primeiro nível tem só SETORES, e as
+   * equipes aparecem dentro do setor aberto. Antes os dois vinham na mesma
+   * grade, com participações medidas contra bases diferentes e nada dizendo
+   * isso. O teste prende a escada inteira — descer, descer de novo, e voltar
+   * um degrau por vez.
+   */
+  it('Setores e equipes desce do setor para a equipe e volta um degrau por vez', () => {
     montar(PainelDiretoriaComercial);
     fireEvent.click(aba(/Setores e equipes/));
+
+    // Primeiro nível: o setor existe, a equipe não.
+    expect(screen.queryByRole('button', { name: /PEC 2/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Vendas Bookplay/ }));
+    expect(screen.getByText('As pessoas de Vendas Bookplay')).toBeInTheDocument();
+    expect(screen.getByText('As equipes de Vendas Bookplay')).toBeInTheDocument();
+
+    // Segundo nível: a equipe, de dentro do setor.
     fireEvent.click(screen.getByRole('button', { name: /PEC 2/ }));
     expect(screen.getByText('As pessoas de PEC 2')).toBeInTheDocument();
+
+    // Voltar sobe UM degrau — para o setor, não para o começo.
+    fireEvent.click(screen.getByRole('button', { name: /Voltar para o setor/ }));
+    expect(screen.getByText('As pessoas de Vendas Bookplay')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Voltar para os setores/ }));
-    expect(screen.queryByText('As pessoas de PEC 2')).not.toBeInTheDocument();
+    expect(screen.queryByText('As pessoas de Vendas Bookplay')).not.toBeInTheDocument();
   });
 });

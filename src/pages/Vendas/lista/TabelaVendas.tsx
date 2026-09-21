@@ -68,6 +68,14 @@ interface Props {
    */
   podeExcluir: (venda: Venda) => boolean;
   podeDecidir: boolean;
+  /**
+   * A lista é a das vendas que saíram por não virem no relatório?
+   *
+   * Muda o que a linha DIZ, não o que ela é: no lugar do prazo entra desde
+   * quando ela está fora e quando vai para a lixeira. Ver a migration
+   * 20260921170000.
+   */
+  foraDoRelatorio?: boolean;
   /** O relógio de 1 dia do relatório, quando ligado para esta venda. */
   prazoDe?: (venda: Venda) => PrazoDaVenda | null;
   /** Linha que está sendo corrigida — a tabela a troca pelo formulário. */
@@ -128,9 +136,27 @@ function rotuloDoDia(dia: string): string {
   return `${prefixo.charAt(0).toUpperCase()}${prefixo.slice(1)} · ${formatDate(dia)}`;
 }
 
+/** «fora há 3 dias · sai em 21/10» — o relógio de um mês da aba arquivada. */
+function PilulaArquivada({ desde }: { desde: string }) {
+  const entrou = new Date(desde);
+  const sai = new Date(entrou.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const dias = Math.max(0, Math.floor((Date.now() - entrou.getTime()) / 86_400_000));
+  const quando = sai.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  return (
+    <span
+      title={`Fora da lista desde ${entrou.toLocaleDateString('pt-BR')}. Se o NR não aparecer em nenhum relatório até ${quando}, a venda vai para a lixeira.`}
+      className="mt-1 flex w-fit items-center gap-1 whitespace-nowrap rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+    >
+      <TimerOff className="h-3 w-3" aria-hidden />
+      {dias === 0 ? 'fora hoje' : `fora há ${dias} dia${dias === 1 ? '' : 's'}`} · sai em {quando}
+    </span>
+  );
+}
+
 export function TabelaVendas({
   grupos, colSpan, mostrarVendedor, equipeDe,
-  podeEditar, podeExcluir, podeDecidir, prazoDe, editandoId, renderEdicao,
+  podeEditar, podeExcluir, podeDecidir, foraDoRelatorio = false,
+  prazoDe, editandoId, renderEdicao,
   onEditar, onExcluir, onDecidir, topo, vazio,
 }: Props) {
   const [aberta, setAberta] = useState<string | null>(null);
@@ -156,19 +182,28 @@ export function TabelaVendas({
   return (
     <>
       <thead>
+        {/*
+          Nenhuma coluna some mais por largura de tela (pedido de 21/09/2026:
+          «tem que caber todas as informações, e uma barra de rolagem horizontal
+          embaixo»). Antes CONFIRMAÇÃO, PAGAMENTO e RECEBIDO desapareciam em
+          telas médias, e o líder que precisava justamente delas não tinha como
+          trazê-las de volta. Cada coluna declara a largura mínima que o
+          conteúdo pede; a soma vira o `min-w` da tabela, e o que passa disso é
+          rolagem — informação escondida não é layout, é dado perdido.
+        */}
         <tr className="border-b border-border bg-muted/30 text-[11px]">
-          <th className="px-3 py-3 text-left font-semibold text-muted-foreground">NR</th>
-          <th className="px-3 py-3 text-left font-semibold text-muted-foreground">CLIENTE</th>
-          {mostrarVendedor && <th className="px-3 py-3 text-left font-semibold text-muted-foreground">VENDEDOR</th>}
-          <th className="px-3 py-3 text-left font-semibold text-muted-foreground">VENDA</th>
-          <th className="hidden px-3 py-3 text-left font-semibold text-muted-foreground lg:table-cell">CONFIRMAÇÃO</th>
-          <th className="px-3 py-3 text-left font-semibold text-muted-foreground">UF</th>
-          <th className="hidden px-3 py-3 text-left font-semibold text-muted-foreground md:table-cell">PAGAMENTO</th>
-          <th className="px-3 py-3 text-left font-semibold text-muted-foreground">STATUS</th>
-          <th className="px-3 py-3 text-right font-semibold text-muted-foreground">VALOR</th>
-          <th className="px-3 py-3 text-right font-semibold text-muted-foreground">NA META</th>
-          <th className="hidden px-3 py-3 text-right font-semibold text-muted-foreground xl:table-cell">RECEBIDO</th>
-          <th className="px-3 py-3 text-right font-semibold text-muted-foreground">AÇÕES</th>
+          <th className="w-[110px] px-3 py-3 text-left font-semibold text-muted-foreground">NR</th>
+          <th className="min-w-[180px] px-3 py-3 text-left font-semibold text-muted-foreground">CLIENTE</th>
+          {mostrarVendedor && <th className="min-w-[150px] px-3 py-3 text-left font-semibold text-muted-foreground">VENDEDOR</th>}
+          <th className="w-[92px] px-3 py-3 text-left font-semibold text-muted-foreground">VENDA</th>
+          <th className="w-[108px] px-3 py-3 text-left font-semibold text-muted-foreground">CONFIRMAÇÃO</th>
+          <th className="w-[52px] px-3 py-3 text-left font-semibold text-muted-foreground">UF</th>
+          <th className="min-w-[120px] px-3 py-3 text-left font-semibold text-muted-foreground">PAGAMENTO</th>
+          <th className="min-w-[150px] px-3 py-3 text-left font-semibold text-muted-foreground">STATUS</th>
+          <th className="w-[110px] px-3 py-3 text-right font-semibold text-muted-foreground">VALOR</th>
+          <th className="w-[110px] px-3 py-3 text-right font-semibold text-muted-foreground">NA META</th>
+          <th className="w-[110px] px-3 py-3 text-right font-semibold text-muted-foreground">RECEBIDO</th>
+          <th className="w-[130px] px-3 py-3 text-right font-semibold text-muted-foreground">AÇÕES</th>
         </tr>
       </thead>
       <tbody>
@@ -237,16 +272,18 @@ export function TabelaVendas({
                         </td>
                       )}
                       <td className="whitespace-nowrap px-3 py-2.5 font-mono text-muted-foreground">{formatDate(v.data_venda)}</td>
-                      <td className="hidden whitespace-nowrap px-3 py-2.5 font-mono text-muted-foreground lg:table-cell">
+                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-muted-foreground">
                         {v.data_confirmacao ? formatDate(v.data_confirmacao) : '—'}
                       </td>
                       <td className="px-3 py-2.5 text-[11px] font-medium text-muted-foreground">{v.uf?.trim() || '—'}</td>
-                      <td className="hidden max-w-[150px] truncate px-3 py-2.5 text-[11px] text-muted-foreground md:table-cell">
+                      <td className="max-w-[160px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
                         {v.forma_pagamento || '—'}
                       </td>
                       <td className="px-3 py-2.5">
                         <StatusPill status={status} />
-                        {prazo && <PilulaDoPrazo prazo={prazo} />}
+                        {foraDoRelatorio && v.fora_do_relatorio_em
+                          ? <PilulaArquivada desde={v.fora_do_relatorio_em} />
+                          : prazo && <PilulaDoPrazo prazo={prazo} />}
                       </td>
                       <td className={cn(
                         'whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold',
@@ -260,7 +297,7 @@ export function TabelaVendas({
                       )}>
                         {v.conta_na_meta ? formatBRL(v.valor_na_meta) : '—'}
                       </td>
-                      <td className="hidden whitespace-nowrap px-3 py-2.5 text-right font-mono text-muted-foreground xl:table-cell">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-muted-foreground">
                         {v.valor_recebido > 0 ? formatBRL(v.valor_recebido) : '—'}
                       </td>
                       <td className="px-3 py-2.5">
@@ -302,6 +339,7 @@ export function TabelaVendas({
                     {detalhe && (
                       <DetalheDaVenda
                         venda={v} colSpan={colSpan} status={status} equipe={equipe} prazo={prazo}
+                        foraDoRelatorio={foraDoRelatorio}
                         podeDecidir={podeDecidir} travado={travado}
                         onDecidir={(s, a, motivo, msg) => void decidir(v, s, a, motivo, msg)}
                       />
@@ -327,13 +365,15 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
 }
 
 function DetalheDaVenda({
-  venda, colSpan, status, equipe, prazo, podeDecidir, travado, onDecidir,
+  venda, colSpan, status, equipe, prazo, foraDoRelatorio = false,
+  podeDecidir, travado, onDecidir,
 }: {
   venda: Venda;
   colSpan: number;
   status: StatusDaLinha;
   equipe: string | null;
   prazo: PrazoDaVenda | null;
+  foraDoRelatorio?: boolean;
   podeDecidir: boolean;
   travado: boolean;
   onDecidir: (situacao: SituacaoVenda, assinado: boolean, motivo: string | null, msg: string) => void;
@@ -365,7 +405,17 @@ function DetalheDaVenda({
           )}
         </div>
 
-        {prazo ? (
+        {foraDoRelatorio ? (
+          <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              O NR {venda.nr_documento} não apareceu no relatório e esta venda saiu da lista principal —
+              ela não soma em placar, meta nem card. Se o NR estiver errado, <strong>corrija</strong> e ela
+              volta a esperar o relatório; se a venda não existe, <strong>exclua</strong>. Se o NR aparecer
+              num relatório novo, ela volta sozinha.
+            </span>
+          </p>
+        ) : prazo ? (
           <p className="mt-3 flex items-start gap-1.5 text-[11px] text-destructive">
             <TimerOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>

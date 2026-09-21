@@ -50,10 +50,13 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Building2, RefreshCw, TrendingUp } from 'lucide-react';
+import { Building2, Layers, RefreshCw, TrendingUp } from 'lucide-react';
 import { FormaSaudacao } from '@/components/FormaSaudacao';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 import { SkeletonCard, MiniSparkline } from '@/components/AnalyticsPanel/SubComponents';
 import { CHART_RECEBIDO } from '@/components/AnalyticsPanel/constants';
@@ -62,6 +65,7 @@ import { ALTURA_CARD_PROGRESSO } from '@/components/PainelMetas/tamanhoCards';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { useVendas } from '@/hooks/useVendas';
 import { useVendasPlacar } from '@/hooks/useVendasPlacar';
@@ -72,7 +76,7 @@ import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 import { resumirVendas, type EixoDaVenda } from '@/lib/vendas';
 import {
-  placarPorOperador, placarPorEquipe, separarAutomacao, vendasPorUF,
+  equipeDaVenda, placarPorOperador, placarPorEquipe, separarAutomacao, vendasPorUF,
   vendasPorFormaDePagamento, serieDiaria, destaqueDoDia, totalDoRecorte,
 } from '@/lib/vendasPlacar';
 import {
@@ -89,6 +93,9 @@ import { CardDoMes } from './dashboard/CardDoMes';
 import { EvolucaoVendas } from './dashboard/EvolucaoVendas';
 import { Podio, Equipes, Estados, FaixaDaAutomacao } from './dashboard/ComposicaoDoMes';
 
+/** O `Select` do shadcn recusa `value=""`; o «todos» precisa de um valor. */
+const TODOS = '__todos__';
+
 export default function DashboardComercial() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
@@ -97,14 +104,74 @@ export default function DashboardComercial() {
 
   const [eixo, setEixo] = useState<EixoDaVenda>('confirmacao');
   const [metas, setMetas] = useState<MetaDeRecorte[]>([]);
+  const [filtroSetor, setFiltroSetor] = useState(TODOS);
+  const [filtroEquipe, setFiltroEquipe] = useState(TODOS);
 
   const empresaId = empresa?.id ?? null;
   const ativo = Boolean(empresaId);
 
-  const { vendas, carregando, disponivel, erro, recarregar } =
+  const { vendas: todasAsVendas, carregando, disponivel, erro, recarregar } =
     useVendas({ empresaId, mes, eixo, ativo });
   const placar = useVendasPlacar({ empresaId, mes, ativo });
   const anterior = useVendasMesAnterior({ empresaId, mes, ativo });
+
+  /*
+   * O recorte do Dashboard, e por que ele mora aqui e não em cada bloco.
+   *
+   * Até 21/09/2026 esta tela não tinha filtro nenhum: quem enxergava dois
+   * setores via os dois somados, sempre, e não havia como olhar um. Era a única
+   * tela do Comercial sem a pergunta que a BookPlay responde no cabeçalho —
+   * «isto é de quem?».
+   *
+   * Os níveis são os do DASHBOARD (`dashboard_escopo_*`), e não os de Vendas:
+   * uma aba nunca fala pela outra. Quem tem só `individual` não ganha seletor
+   * nenhum — seria um controle que não controla nada, porque o RLS já lhe
+   * entrega uma carteira só.
+   */
+  const niveis = useMemo(() => niveisLiberados('dashboard', temPermissao), [temPermissao]);
+  const veSetor  = niveis.some(n => n === 'setor' || n === 'todos_setores');
+  const veEquipe = niveis.some(n => n !== 'individual');
+
+  /** Os setores que chegaram na tela — cadastro e vendas, unidos. */
+  const setores = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const p of placar.pessoas) if (p.setor_id && p.setor_nome) mapa.set(p.setor_id, p.setor_nome);
+    for (const v of todasAsVendas) {
+      if (v.setor_id && !mapa.has(v.setor_id)) mapa.set(v.setor_id, 'Setor não cadastrado');
+    }
+    return [...mapa].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [placar.pessoas, todasAsVendas]);
+
+  /** As equipes do setor escolhido — cruzar setor A com equipe de B daria vazio. */
+  const equipesDoFiltro = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const p of placar.pessoas) {
+      if (!p.equipe_id || !p.equipe_nome) continue;
+      if (filtroSetor !== TODOS && p.setor_id !== filtroSetor) continue;
+      mapa.set(p.equipe_id, p.equipe_nome);
+    }
+    return [...mapa].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [placar.pessoas, filtroSetor]);
+
+  // Trocar de setor não pode deixar marcada a equipe do setor anterior.
+  useEffect(() => {
+    if (filtroEquipe === TODOS) return;
+    if (!equipesDoFiltro.some(e => e.id === filtroEquipe)) setFiltroEquipe(TODOS);
+  }, [equipesDoFiltro, filtroEquipe]);
+  // Trocar de empresa não pode deixar um setor de outra empresa escolhido.
+  useEffect(() => { setFiltroSetor(TODOS); setFiltroEquipe(TODOS); }, [empresaId]);
+
+  const recortado = filtroSetor !== TODOS || filtroEquipe !== TODOS;
+
+  /** TUDO abaixo desta linha lê `vendas` — que já é o recorte, não a empresa. */
+  const vendas = useMemo(
+    () => (recortado
+      ? todasAsVendas.filter(v =>
+          (filtroSetor === TODOS || v.setor_id === filtroSetor)
+          && (filtroEquipe === TODOS || equipeDaVenda(v, placar.indice) === filtroEquipe))
+      : todasAsVendas),
+    [todasAsVendas, recortado, filtroSetor, filtroEquipe, placar.indice],
+  );
 
   useEffect(() => {
     if (!empresaId || !temPermissao('ver_metas_vendas')) { setMetas([]); return; }
@@ -127,10 +194,32 @@ export default function DashboardComercial() {
    * a configuração decidiu não premiar. Sem meta configurada, valor — é a
    * leitura que a operação faz primeiro quando ninguém disse qual vale.
    */
-  const metaDoSetor = useMemo(
-    () => metas.find(m => m.tipo === 'setor' && ehRegua(m.regua)) ?? null,
-    [metas],
-  );
+  /*
+   * A meta do recorte: a do setor escolhido, quando há um; senão a primeira
+   * com régua.
+   *
+   * Sem isto, escolher um setor recortaria os NÚMEROS e deixaria a meta de
+   * outro setor no anel — o erro mais caro que um filtro pode cometer, porque
+   * o percentual continuaria parecendo certo.
+   */
+  const metaDoSetor = useMemo(() => {
+    const comRegua = metas.filter(m => m.tipo === 'setor' && ehRegua(m.regua));
+    if (filtroSetor !== TODOS) return comRegua.find(m => m.referencia_id === filtroSetor) ?? null;
+    return comRegua[0] ?? null;
+  }, [metas, filtroSetor]);
+
+  /** As metas que o recorte deixa ver — o bloco de andamento não fala de fora. */
+  const metasNoRecorte = useMemo(() => {
+    if (filtroEquipe !== TODOS) {
+      return metas.filter(m => m.tipo === 'equipe' && m.referencia_id === filtroEquipe);
+    }
+    if (filtroSetor !== TODOS) {
+      return metas.filter(m =>
+        (m.tipo === 'setor' && m.referencia_id === filtroSetor)
+        || (m.tipo === 'equipe' && m.setor_id === filtroSetor));
+    }
+    return metas;
+  }, [metas, filtroSetor, filtroEquipe]);
   const regua: ReguaMeta = (metaDoSetor?.regua as ReguaMeta | undefined) ?? 'valor';
 
   const total = useMemo(() => totalDoRecorte(vendas, placar.indice), [vendas, placar.indice]);
@@ -260,8 +349,46 @@ export default function DashboardComercial() {
               </div>
             </div>
           </div>
+          {/* ── O recorte ──────────────────────────────────────────────────
+              Setor e equipe valem para TUDO o que vem abaixo: cards, anel,
+              meta, gráfico, pódio e estados. Ficam na mesma faixa dos demais
+              controles, e não espalhados, pelo mesmo motivo que o mês fica. */}
+          {(veSetor && setores.length > 1) || (veEquipe && equipesDoFiltro.length > 1) ? (
+            <div className="flex items-center gap-2 flex-wrap ml-1 pl-3 border-l border-border/60">
+              {veSetor && setores.length > 1 && (
+                <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+                  <SelectTrigger className="h-7 w-[170px] text-[11px]" aria-label="Filtrar por setor">
+                    <Building2 className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODOS}>Todos os setores</SelectItem>
+                    {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {veEquipe && equipesDoFiltro.length > 1 && (
+                <Select value={filtroEquipe} onValueChange={setFiltroEquipe}>
+                  <SelectTrigger className="h-7 w-[170px] text-[11px]" aria-label="Filtrar por equipe">
+                    <Layers className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODOS}>Todas as equipes</SelectItem>
+                    {equipesDoFiltro.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {recortado && (
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-muted-foreground"
+                  onClick={() => { setFiltroSetor(TODOS); setFiltroEquipe(TODOS); }}>
+                  Limpar
+                </Button>
+              )}
+            </div>
+          ) : null}
           {!carregandoTudo && sparkline.length > 1 && (
-            <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
+            <div className="hidden xl:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
               <MiniSparkline data={sparkline} color={CHART_RECEBIDO} />
               <span className="text-[11px] text-muted-foreground">ritmo</span>
             </div>
@@ -357,7 +484,7 @@ export default function DashboardComercial() {
 
       {/* ── A meta, recorte a recorte, com a ausência descontada ────────── */}
       <AndamentoDasMetas
-        vendas={vendas} metas={metas} eixo={eixo}
+        vendas={vendas} metas={metasNoRecorte} eixo={eixo}
         uteis={uteis} trabalhados={trabalhados}
         pessoas={placar.disponivel ? placar.indice : undefined}
         presencaPorRecorte={placar.presencaPorRecorte}
