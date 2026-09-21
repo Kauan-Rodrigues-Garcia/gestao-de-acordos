@@ -181,7 +181,7 @@ export function TabelaVendas({
 
   return (
     <>
-      <thead>
+      <thead className="sticky top-0 z-20">
         {/*
           Nenhuma coluna some mais por largura de tela (pedido de 21/09/2026:
           «tem que caber todas as informações, e uma barra de rolagem horizontal
@@ -191,7 +191,13 @@ export function TabelaVendas({
           conteúdo pede; a soma vira o `min-w` da tabela, e o que passa disso é
           rolagem — informação escondida não é layout, é dado perdido.
         */}
-        <tr className="border-b border-border bg-muted/30 text-[11px]">
+        {/* Gruda no topo da janela de rolagem: com a tabela rolando por dentro,
+            um cabeçalho que sobe leva junto o nome das colunas justamente
+            quando a pessoa está arrastando a barra para o lado. `bg-card`
+            OPACO, e não `bg-muted/30`: translúcido deixaria as linhas passarem
+            por baixo dele. O `sticky` mora no `thead` — em `tr` o suporte é
+            recente demais para se confiar. */}
+        <tr className="border-b border-border bg-card text-[11px]">
           <th className="w-[110px] px-3 py-3 text-left font-semibold text-muted-foreground">NR</th>
           <th className="min-w-[180px] px-3 py-3 text-left font-semibold text-muted-foreground">CLIENTE</th>
           {mostrarVendedor && <th className="min-w-[150px] px-3 py-3 text-left font-semibold text-muted-foreground">VENDEDOR</th>}

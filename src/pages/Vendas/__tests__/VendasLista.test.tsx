@@ -471,10 +471,26 @@ describe('Vendas — a tabela cabe inteira e rola', () => {
     }
   });
 
-  it('a tabela tem largura mínima, e é o contêiner que rola', () => {
+  /*
+   * A barra horizontal tem de estar ao ALCANCE, e é a altura que decide isso.
+   *
+   * Com o contêiner do tamanho da tabela inteira — centenas de linhas —, a
+   * barra nasce a milhares de pixels abaixo da tela: ela existe, e ninguém a
+   * alcança sem rolar a página até o fim, perdendo o cabeçalho no caminho. Foi
+   * o defeito reclamado em 21/09/2026 («ainda está fora de enquadramento»).
+   */
+  it('a tabela rola dentro de uma janela presa ao viewport, com o cabeçalho fixo', () => {
     montar();
     const tabela = screen.getByRole('table');
     expect(tabela.className).toMatch(/min-w-\[\d+px\]/);
-    expect(tabela.parentElement!.className).toMatch(/overflow-x-auto/);
+
+    const janela = tabela.parentElement!;
+    expect(janela.className).toMatch(/overflow-auto/);
+    expect(janela.className).toMatch(/max-h-\[/);
+
+    // Cabeçalho grudado: rolar para o lado não pode levar o nome das colunas.
+    const thead = tabela.querySelector('thead')!;
+    expect(thead.className).toMatch(/sticky/);
+    expect(thead.className).toMatch(/top-0/);
   });
 });

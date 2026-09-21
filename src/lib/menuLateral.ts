@@ -171,25 +171,36 @@ export const NAV_ITEMS: NavItem[] = [
   // `ver_vendas`: quem prospecta pode precisar do ranking do setor sem ver a
   // carteira de ninguém.
   { label: 'Indicações',       icon: Handshake,       to: ROUTE_PATHS.VENDAS_INDICACOES,   produtos: SO_COMERCIAL, permissaoKey: 'ver_indicacoes' },
-  // Importar Vendas — o prospecção e o de-para de franquia. Espelha o que
-  // 'Importar Excel' é para a cobrança, com o relatório que é o do comercial.
+  // ## O menu do Comercial encolheu duas vezes
   //
-  // ## Quatro abas que viraram abas internas (16/09/2026)
-  //
-  // «Criou várias abas que não têm sentido ser separadas.» O menu do Comercial
-  // tinha 14 itens, e a BookPlay já tinha resolvido o mesmo problema dobrando
-  // telas da mesma família numa só. O Comercial passou a seguir o desenho de lá:
+  // **16/09/2026** — «criou várias abas que não têm sentido ser separadas.» O
+  // menu tinha 14 itens, e a BookPlay já havia resolvido o mesmo problema
+  // dobrando telas da mesma família numa só:
   //
   //   Metas de Vendas .. aba «Metas» de Usuários, como a Metas da BookPlay
   //   Acompanhamento ... aba de Usuários — é feedback e ausência de PESSOA
-  //   Fechamento ....... aba de Importar Vendas, depois de Projeção e
-  //                      Conciliação: é a última pergunta da importação
+  //   Fechamento ....... aba de Importar Vendas
   //   Desafios ......... aba do Painel Líder; na cobrança mora no Analítico,
   //                      que o Comercial não tem
   //
+  // **21/09/2026** — «tira a aba Importar Vendas e joga o que tem dentro, de
+  // forma estruturada, lá no painel diretoria.» O item saiu daqui, e o que
+  // havia nele virou aba do Painel Diretoria, cada pergunta na sua:
+  //
+  //   carregar o arquivo ........... aba «Importar relatório»
+  //   de qual setor é cada franquia  aba «Setores a vincular»
+  //   conferir as camadas .......... aba «Geral × prévia»
+  //   histórico de cargas .......... aba «Histórico de importações»
+  //   fechamento do setor .......... aba «Fechamento do setor»
+  //
+  // ⚠️ Consequência: importar passou a exigir `ver_painel_diretoria` ALÉM de
+  // `ver_importacoes_vendas`. Quem tinha só a segunda perdeu o caminho — a
+  // rota `/vendas/importar` redireciona para o painel, e o painel recusa quem
+  // não o pode abrir. Era o pedido: um lugar só para o relatório.
+  //
   // As rotas antigas continuam existindo e redirecionam (App.tsx), e cada aba
   // interna pede a MESMA chave que o item de menu pedia.
-  { label: 'Importar Vendas',  icon: Upload,          to: ROUTE_PATHS.VENDAS_IMPORTAR,     produtos: SO_COMERCIAL, permissaoKey: 'ver_importacoes_vendas' },
+  //
   // Fase 9 — os painéis do Comercial.
   //
   // Rota própria e CHAVE COMPARTILHADA com a cobrança. As duas decisões andam

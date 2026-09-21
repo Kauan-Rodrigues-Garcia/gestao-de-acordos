@@ -306,7 +306,7 @@ export default function PainelDiretoriaComercial() {
       { key: 'fonte'       as const, label: 'Fonte dos dados',     Icon: Database,   grupo: 'A procedência' },
     ] : []),
     ...(podeImportar ? [
-      { key: 'importar' as const, label: 'Importar vendas', Icon: Upload, grupo: 'A entrada' },
+      { key: 'importar' as const, label: 'Importar relatório', Icon: Upload, grupo: 'A entrada' },
     ] : []),
     ...(podeVerVendas ? [
       { key: 'fechamento' as const, label: 'Fechamento do setor', Icon: Scale, grupo: 'A entrada' },

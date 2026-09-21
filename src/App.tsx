@@ -84,7 +84,6 @@ const VendasPainelDiretoria = lazy(() => import('@/pages/Vendas/PainelDiretoriaC
 const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
 // Importação e Fechamento do Setor, em abas. Metas, Acompanhamento e Desafios
 // também deixaram de ser página própria — ver os redirecionamentos abaixo.
-const VendasImportar    = lazy(() => import('@/pages/Vendas/ImportarVendas'));
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
@@ -420,17 +419,14 @@ export default function App() {
                   pede a mesma chave que a rota antiga pedia. */}
               <Route path={ROUTE_PATHS.VENDAS_METAS} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=metas'} replace />} />
               <Route path={ROUTE_PATHS.VENDAS_ACOMPANHAMENTO} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=acompanhamento'} replace />} />
-              <Route path={ROUTE_PATHS.VENDAS_FECHAMENTO} element={<Navigate to={ROUTE_PATHS.VENDAS_IMPORTAR + '?tab=fechamento'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_FECHAMENTO} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA + '?tab=fechamento'} replace />} />
+              {/* Importar Vendas saiu do menu em 21/09/2026: o relatório virou
+                  abas do Painel Diretoria, uma por pergunta. */}
+              <Route path={ROUTE_PATHS.VENDAS_IMPORTAR} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA + '?tab=importar'} replace />} />
               <Route path={ROUTE_PATHS.VENDAS_DESAFIOS} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_LIDER + '?tab=desafios'} replace />} />
 
               {/* Vendas — a primeira tela própria do Comercial. */}
-              <Route path={ROUTE_PATHS.VENDAS_IMPORTAR} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_importacoes_vendas">
-                    <VendasImportar />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+
               {/* Indicações tem chave e escopo PRÓPRIOS: quem prospecta não é
                   necessariamente quem a venda pertence. Ver permissoes-escopo. */}
               <Route path={ROUTE_PATHS.VENDAS_INDICACOES} element={

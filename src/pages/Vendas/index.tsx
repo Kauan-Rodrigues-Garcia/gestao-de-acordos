@@ -766,9 +766,27 @@ export default function Vendas() {
                 {[0, 1, 2, 3, 4].map(i => <Skeleton key={i} className="h-9 w-full" />)}
               </div>
             ) : (
-              /* A rolagem horizontal é da tabela, não da página: as colunas têm
-                 largura mínima e a barra aparece embaixo delas (`TabelaVendas`). */
-              <div className="w-full overflow-x-auto">
+              /*
+               * A janela da tabela: altura limitada, rolagem nos DOIS eixos.
+               *
+               * Só `overflow-x-auto` não resolvia, e foi o defeito reclamado em
+               * 21/09/2026 («ainda está fora de enquadramento»). A barra
+               * horizontal nasce no rodapé do elemento que rola — e esse
+               * elemento tinha a altura da tabela inteira, centenas de linhas.
+               * A barra existia, a 4.000px abaixo da tela: para alcançá-la era
+               * preciso rolar a página até o fim, e no caminho o cabeçalho
+               * sumia. Na prática, as últimas colunas eram inalcançáveis.
+               *
+               * Com a altura presa ao viewport a barra fica sempre visível, o
+               * cabeçalho gruda no topo (`TabelaVendas`) e a tabela vira uma
+               * janela sobre a lista, em vez de uma faixa infinita.
+               *
+               * `100vh − 15rem` e não `100vh`: quem rola é o `<main>` do
+               * Layout, que já começa abaixo do cabeçalho do app. Uma janela de
+               * `100vh` seria mais alta que a área visível dele, e o rodapé —
+               * com a barra — voltaria a ficar fora da tela.
+               */
+              <div className="max-h-[calc(100vh-15rem)] w-full overflow-auto">
                 <table className="w-full min-w-[1180px] text-xs">
                   <TabelaVendas
                     grupos={grupos} colSpan={colSpan}

@@ -228,12 +228,16 @@ describe('abasDoMenu — por produto', () => {
     for (const rota of [
       ROUTE_PATHS.VENDAS_METAS, ROUTE_PATHS.VENDAS_ACOMPANHAMENTO,
       ROUTE_PATHS.VENDAS_FECHAMENTO, ROUTE_PATHS.VENDAS_DESAFIOS,
+      // 21/09/2026: «tira a aba Importar Vendas e joga o que tem dentro, de
+      // forma estruturada, lá no painel diretoria». O relatório virou abas do
+      // Painel Diretoria — uma por pergunta —, e `/vendas/importar` passou a
+      // redirecionar para lá.
+      ROUTE_PATHS.VENDAS_IMPORTAR,
     ]) {
       expect(noComercial, `${rota} voltou a ser item de menu`).not.toContain(rota);
     }
     expect(noComercial).toEqual(expect.arrayContaining([
-      ROUTE_PATHS.VENDAS, ROUTE_PATHS.VENDAS_IMPORTAR, ROUTE_PATHS.VENDAS_INDICACOES,
-      ROUTE_PATHS.ADMIN_USUARIOS,
+      ROUTE_PATHS.VENDAS, ROUTE_PATHS.VENDAS_INDICACOES, ROUTE_PATHS.ADMIN_USUARIOS,
     ]));
   });
 

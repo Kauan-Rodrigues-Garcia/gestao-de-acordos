@@ -1,17 +1,29 @@
 /**
- * Importação de Vendas — o relatório entra, as franquias aparecem, o placar muda.
+ * Importação de Vendas — o relatório entra e o placar muda.
  *
- * ## Cinco blocos, na ordem em que o trabalho acontece
+ * ## Dois blocos: carregar e projetar
  *
  *   1. carregar o arquivo e conferir o que ele traz ANTES de gravar;
- *   2. ligar cada franquia ao setor dela;
- *   3. lançar o relatório sobre as vendas (`Projecao`);
- *   4. conferir as três camadas (`Conciliacao`);
- *   5. olhar o histórico de cargas.
+ *   2. lançar o relatório sobre as vendas (`Projecao`).
  *
- * O bloco 3 aparece depois do 2 na tela e não por acaso: a projeção só escreve
- * o que tem franquia vinculada, então vincular é pré-requisito, não passo
- * paralelo.
+ * ## O que saiu daqui em 21/09/2026
+ *
+ * A tela tinha cinco blocos, e três deles viraram abas do Painel Diretoria do
+ * Comercial — que passou a ser o lugar único do relatório:
+ *
+ *   de qual setor é cada franquia .. aba «Setores a vincular», que além do
+ *                                    seletor mostra quanto cada franquia
+ *                                    faturou e quanto está sem setor;
+ *   conferir as três camadas ....... aba «Geral × prévia» (`Conciliacao`);
+ *   histórico de cargas ............ aba «Histórico de importações», com o que
+ *                                    o arquivo trazia e o que foi aceito.
+ *
+ * Eram blocos empilhados numa tela só, cada um resolvendo uma pergunta
+ * diferente, e a de vincular franquia é de diretoria — não de quem sobe o
+ * arquivo. Aqui ficou só o que é da importação em si.
+ *
+ * Vincular continua sendo pré-requisito da projeção: ela só escreve o que tem
+ * franquia vinculada. O que mudou é onde se vincula.
  *
  * ## Dois arquivos diferentes entram por aqui
  *
@@ -43,21 +55,18 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Upload, FileSpreadsheet, TriangleAlert, Info, CheckCircle2, Link2,
-  RefreshCw, History, Building2, X, FileSearch, ChevronDown,
+  Upload, FileSpreadsheet, TriangleAlert, Info, CheckCircle2,
+  RefreshCw, X, FileSearch, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
-import { formatDate } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import {
   parseProspeccao, type ResultadoParseProspeccao,
@@ -67,16 +76,12 @@ import {
 } from '@/services/vendas/prospeccaoSetorParser';
 import {
   abrirLote, enviarLinhas, promoverLote, descartarLote,
-  buscarLotes, buscarFranquias, vincularFranquia, hashDoArquivo,
-  type Lote, type Franquia, type OrigemLote, type EstadoFranquia,
+  buscarLotes, buscarFranquias, hashDoArquivo,
+  type Lote, type Franquia, type OrigemLote,
 } from '@/services/vendas/importacaoVendas.service';
 import { Projecao } from './Projecao';
-import { Conciliacao } from './Conciliacao';
 import { mapaDeSetorDaFranquia } from '@/lib/vendasRelatorio';
 import { RaioXDoRelatorio } from './relatorio/RaioXDoRelatorio';
-
-/** O `Select` do shadcn recusa `value=""`. */
-const SEM_SETOR = '__sem_setor__';
 
 /**
  * A prévia de qualquer um dos dois arquivos.
@@ -89,19 +94,6 @@ const SEM_SETOR = '__sem_setor__';
 type PreviaCarga =
   | { tipo: 'geral'; r: ResultadoParseProspeccao }
   | { tipo: 'setor'; r: ResultadoParseSetor };
-
-const ESTADO_LOTE_LABEL: Record<string, string> = {
-  carregando:  'Carregando',
-  vigente:     'Vigente',
-  substituido: 'Substituído',
-  descartado:  'Descartado',
-};
-
-const ESTADO_FRANQUIA_LABEL: Record<EstadoFranquia, string> = {
-  novo:      'Sem setor',
-  vinculado: 'Vinculada',
-  ignorado:  'Ignorada',
-};
 
 function Aviso({ tom, children }: { tom: 'alerta' | 'info' | 'bom'; children: React.ReactNode }) {
   const Icone = tom === 'alerta' ? TriangleAlert : tom === 'bom' ? CheckCircle2 : Info;
@@ -136,7 +128,6 @@ export default function ImportacaoVendas() {
   const empresaId = empresa?.id ?? null;
 
   const podeImportar = temPermissao('importar_vendas');
-  const podeVincular = temPermissao('vendas_vincular_franquia');
   const podeProjetar = temPermissao('projetar_vendas');
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -149,7 +140,6 @@ export default function ImportacaoVendas() {
 
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [franquias, setFranquias] = useState<Franquia[]>([]);
-  const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   const [disponivel, setDisponivel] = useState(true);
 
   const recarregar = useCallback(async () => {
@@ -161,16 +151,6 @@ export default function ImportacaoVendas() {
   }, [empresaId]);
 
   useEffect(() => { void recarregar(); }, [recarregar]);
-
-  useEffect(() => {
-    if (!empresaId) return;
-    void supabase.from('setores')
-      .select('id, nome')
-      .eq('empresa_id', empresaId)
-      .eq('ativo', true)
-      .order('nome')
-      .then(({ data }) => setSetores(data ?? []));
-  }, [empresaId]);
 
   /**
    * Cada origem tem o seu arquivo, e eles não são intercambiáveis.
@@ -268,13 +248,6 @@ export default function ImportacaoVendas() {
     await recarregar();
   }
 
-  async function mudarFranquia(f: Franquia, estado: EstadoFranquia, setorId: string | null) {
-    const r = await vincularFranquia({ id: f.id, estado, setorId, observacao: f.observacao });
-    if (!r.ok) { toast.error(r.erro ?? 'Não foi possível salvar.'); return; }
-    await recarregar();
-  }
-
-  const semSetor = useMemo(() => franquias.filter(f => f.estado === 'novo'), [franquias]);
   const setorDaFranquia = useMemo(() => mapaDeSetorDaFranquia(franquias), [franquias]);
 
   /*
@@ -287,17 +260,6 @@ export default function ImportacaoVendas() {
     [lotes],
   );
 
-  /*
-   * O mês que a conciliação compara.
-   *
-   * Sai do lote vigente mais recente, de qualquer origem — e não do calendário:
-   * no dia 1º de outubro a liderança ainda está conferindo setembro, e abrir a
-   * tela num mês sem carga nenhuma mostraria «nada a conciliar» quando há.
-   */
-  const mesDaConciliacao = useMemo(() => {
-    const vigente = lotes.find(l => l.estado === 'vigente');
-    return (vigente?.mes ?? '').slice(0, 7) || new Date().toISOString().slice(0, 7);
-  }, [lotes]);
   const podeGravar = Boolean(
     previa && previa.r.colunasFaltando.length === 0 && previa.r.mes && previa.r.linhas.length > 0,
   );
@@ -312,7 +274,7 @@ export default function ImportacaoVendas() {
           <div>
             <h1 className="text-lg font-semibold leading-tight">Importar vendas</h1>
             <p className="text-[12px] text-muted-foreground">
-              O relatório de prospecção, e de qual setor é cada franquia
+              O relatório de prospecção entra aqui, e a projeção o lança sobre o placar
             </p>
           </div>
         </div>
@@ -478,139 +440,8 @@ export default function ImportacaoVendas() {
         </section>
       )}
 
-      {/* ── 2. Franquias ────────────────────────────────────────────────── */}
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-[13px] font-semibold">
-            <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden />
-            2. De qual setor é cada franquia
-            {semSetor.length > 0 && (
-              <Badge variant="outline"
-                className="bg-warning/15 text-warning border-warning/30 text-[10px]">
-                {semSetor.length} sem setor
-              </Badge>
-            )}
-          </h2>
-          <p className="text-[11px] text-muted-foreground">
-            {franquias.length} franquia{franquias.length === 1 ? '' : 's'} vista{franquias.length === 1 ? '' : 's'}
-          </p>
-        </div>
-
-        {franquias.length === 0 ? (
-          <p className="py-6 text-center text-[12px] text-muted-foreground">
-            As franquias aparecem aqui depois da primeira importação.
-          </p>
-        ) : (
-          <>
-            <Aviso tom="info">
-              Franquia sem setor <strong>não é erro</strong> — é franquia que ninguém cadastrou
-              ainda. O faturamento dela continua visível, identificado pelo código; vincular é o
-              que o torna oficial para um setor.
-            </Aviso>
-            <div className="overflow-hidden rounded-lg border border-border">
-              {franquias.map(f => (
-                <div key={f.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 px-3 py-2 last:border-b-0">
-                  <span className="font-mono text-[12px] tabular-nums text-muted-foreground">
-                    {f.codigo}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[13px]">{f.nome || '—'}</span>
-                  <Badge variant="outline" className={cn('text-[10px]',
-                    f.estado === 'vinculado' ? 'bg-success/15 text-success border-success/30'
-                    : f.estado === 'ignorado' ? 'bg-muted text-muted-foreground border-border'
-                    : 'bg-warning/15 text-warning border-warning/30')}>
-                    {ESTADO_FRANQUIA_LABEL[f.estado]}
-                  </Badge>
-
-                  {podeVincular ? (
-                    <Select
-                      value={f.estado === 'ignorado' ? 'ignorado' : (f.setor_id ?? SEM_SETOR)}
-                      onValueChange={v => {
-                        if (v === 'ignorado') void mudarFranquia(f, 'ignorado', null);
-                        else if (v === SEM_SETOR) void mudarFranquia(f, 'novo', null);
-                        else void mudarFranquia(f, 'vinculado', v);
-                      }}>
-                      <SelectTrigger className="h-8 w-[220px] text-[12px]"
-                        aria-label={`Setor da franquia ${f.codigo}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={SEM_SETOR}>Sem setor ainda</SelectItem>
-                        {setores.map(s => (
-                          <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                        ))}
-                        <SelectItem value="ignorado">Ignorar esta franquia</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
-                      <Link2 className="h-3.5 w-3.5" aria-hidden />
-                      {f.setores?.nome ?? '—'}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* ── 4. Projeção ─────────────────────────────────────────────────── */}
+      {/* ── 2. Projeção ─────────────────────────────────────────────────── */}
       <Projecao lote={geralVigente} podeProjetar={podeProjetar} onProjetou={() => void recarregar()} />
-
-      {/* ── 5. Conciliação ──────────────────────────────────────────────── */}
-      <Conciliacao empresaId={empresaId} mes={mesDaConciliacao} />
-
-      {/* ── 3. Histórico ────────────────────────────────────────────────── */}
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <h2 className="flex items-center gap-2 text-[13px] font-semibold">
-          <History className="h-4 w-4 text-muted-foreground" aria-hidden />
-          3. Cargas
-        </h2>
-
-        {lotes.length === 0 ? (
-          <p className="py-6 text-center text-[12px] text-muted-foreground">
-            Nenhuma carga ainda.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[12px]">
-              <thead>
-                <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
-                  <th className="py-1.5 pr-3">Mês</th>
-                  <th className="py-1.5 pr-3">Origem</th>
-                  <th className="py-1.5 pr-3">Estado</th>
-                  <th className="py-1.5 pr-3 text-right">Linhas</th>
-                  <th className="py-1.5 pr-3 text-right">Na régua</th>
-                  <th className="py-1.5 pr-3">Quem</th>
-                  <th className="py-1.5">Quando</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lotes.map(l => (
-                  <tr key={l.id} className="border-b border-border/50 last:border-b-0">
-                    <td className="py-1.5 pr-3 tabular-nums">{l.mes?.slice(0, 7)}</td>
-                    <td className="py-1.5 pr-3">{l.origem === 'geral' ? 'Geral' : 'Setor'}</td>
-                    <td className="py-1.5 pr-3">
-                      <Badge variant="outline" className={cn('text-[10px]',
-                        l.estado === 'vigente' ? 'bg-success/15 text-success border-success/30'
-                                               : 'bg-muted text-muted-foreground border-border')}>
-                        {ESTADO_LOTE_LABEL[l.estado] ?? l.estado}
-                      </Badge>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{l.linhas_aceitas}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">
-                      {l.quantidade_na_regua} · {formatBRL(l.faturamento_na_regua)}
-                    </td>
-                    <td className="py-1.5 pr-3">{l.perfis?.nome ?? '—'}</td>
-                    <td className="py-1.5">{formatDate(l.importado_em?.slice(0, 10))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

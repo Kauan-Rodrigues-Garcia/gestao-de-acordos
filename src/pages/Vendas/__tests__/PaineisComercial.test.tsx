@@ -311,7 +311,7 @@ describe('PainelDiretoriaComercial — o hub do Comercial (21/09/2026)', () => {
 
   it('as abas de procedência e de entrada moram no painel', () => {
     montar(PainelDiretoriaComercial);
-    for (const nome of [...ABAS_DA_PROCEDENCIA, /Importar vendas/, /Fechamento do setor/]) {
+    for (const nome of [...ABAS_DA_PROCEDENCIA, /Importar relatório/, /Fechamento do setor/]) {
       expect(screen.getByRole('button', { name: nome })).toBeInTheDocument();
     }
   });
@@ -329,7 +329,7 @@ describe('PainelDiretoriaComercial — o hub do Comercial (21/09/2026)', () => {
   it('sem `importar_vendas`, a entrada some e o resto fica', () => {
     temPermissao.mockImplementation((chave: string) => chave !== 'importar_vendas');
     montar(PainelDiretoriaComercial);
-    expect(screen.queryByRole('button', { name: /Importar vendas/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Importar relatório/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Relatório do mês/ })).toBeInTheDocument();
   });
 
