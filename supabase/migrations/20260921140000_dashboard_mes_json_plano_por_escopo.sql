@@ -30,12 +30,40 @@
 -- O escopo vira FILTRO, aplicado depois de ler tudo. `idx_analitico_empresa_op_data`
 -- existe desde sempre e nunca é usado.
 --
--- Consequência: **358 dos 432 perfis são `operador`**, e cada um lê o mês
--- INTEIRO da empresa (15.630 linhas, 10.225 buffers ≈ 80 MB) para receber de
--- volta as próprias poucas linhas.
+-- ## CORREÇÃO (21/09/2026, depois de aplicar) — por que ela melhora de verdade
 --
--- Com os mesmos valores conhecidos pelo planejador: 49 buffers, 22,6 ms.
--- Duzentas vezes menos página lida.
+-- O texto acima dizia que «358 dos 432 perfis são operador, e cada um lê o mês
+-- inteiro para receber as próprias linhas». A primeira metade está certa; a
+-- conclusão não. Cargo não é escopo. Medindo o escopo de verdade, reimplementando
+-- `fn_user_escopos_por_aba` para todos os perfis da empresa:
+--
+--   escopo 0 (só as próprias)      4 pessoas   (assistente_adm)
+--   escopo 2 (setor)             327 pessoas   (elite, gerencia, lider, OPERADOR)
+--   escopo 3 (empresa toda)        5 pessoas   (administrador, diretoria, super_admin)
+--   escopo 1 (equipe)              0 pessoas
+--
+-- Ou seja: `operador` é escopo 2, não 0. O ramo do índice por operador atende
+-- QUATRO pessoas, e o hoisting do escopo 1 não atende ninguém hoje (fica porque
+-- está correto e é o caminho quando alguém receber esse escopo).
+--
+-- O ganho real, medido, vem de outro lugar: `EXECUTE` é plano de uma vez só,
+-- montado com os valores REAIS dos parâmetros. As estimativas deixam de estar
+-- erradas — o plano genérico estimava 141 linhas onde existem 15.630 — e o
+-- planejador troca ordenação por hash:
+--
+--   genérico (antes):  Sort + GroupAggregate
+--   custom  (agora):   HashAggregate
+--
+-- Para o escopo 2 os buffers continuam os mesmos (10.276): ele segue lendo o mês
+-- e filtrando. O que sumiu foi a ordenação de milhares de linhas.
+--
+-- ## Medido em produção
+--
+--   antes (linha de base, 71,7 h)          18.789 chamadas, 415 ms de média
+--   depois (janela 100% pós-migration)        201 chamadas,  72,9 ms de média
+--
+-- 5,7× mais rápido. Conferência de resultado idêntico feita com diretoria,
+-- dois líderes e um operador, nos meses 09, 08 e 07: `iguais = true` nas doze.
 --
 -- ## O conserto
 --
