@@ -44,7 +44,7 @@ import { motion } from 'framer-motion';
 import {
   Plus, RefreshCw, TriangleAlert, ChevronLeft, ChevronRight, Search, X,
   ShoppingBag, DollarSign, Clock, Zap, Percent, ListChecks, Target,
-  Hourglass, Ban, ClipboardPaste, SearchX,
+  Hourglass, Ban, ClipboardPaste, SearchX, TimerOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -78,10 +78,12 @@ import { cn } from '@/lib/utils';
 import {
   resumirVendas, agruparPorDia, diaDaVenda, type EixoDaVenda,
 } from '@/lib/vendas';
-import { abaDaVenda, casaComBusca, type AbaDaLista } from '@/lib/vendasLista';
+import {
+  abaDaVenda, casaComBusca, podeExcluirVenda, prazoDaVenda, type AbaDaLista,
+} from '@/lib/vendasLista';
 import { equipeDaVenda } from '@/lib/vendasPlacar';
 import { ticketMedio } from '@/lib/vendasDashboard';
-import type { Venda } from '@/services/vendas/vendas.service';
+import { contarVendasLancadasPor, type Venda } from '@/services/vendas/vendas.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
 import { buscarMetasDoMes, type MetaDeRecorte } from '@/services/vendas/metasVendas.service';
 import { AndamentoDasMetas } from './AndamentoDasMetas';
@@ -116,7 +118,7 @@ export default function Vendas() {
 
   const empresaId = empresa?.id ?? null;
   const {
-    vendas, pendentes, carregando, disponivel, erro,
+    vendas, pendentes, prazos, carregando, disponivel, erro,
     recarregar, salvar, confirmar, excluir,
   } = useVendas({ empresaId, mes, eixo: 'qualquer', ativo: Boolean(empresaId) });
   const placar = useVendasPlacar({ empresaId, mes, ativo: Boolean(empresaId) });
@@ -132,9 +134,30 @@ export default function Vendas() {
 
   const podeCriar     = temPermissao('criar_vendas');
   const podeEditar    = temPermissao('editar_vendas');
-  const podeExcluir   = temPermissao('excluir_vendas');
   const podeDecidir   = temPermissao('confirmar_vendas');
   const podeVerMetas  = temPermissao('ver_metas_vendas');
+
+  /*
+   * Excluir é por LINHA desde 21/09/2026: venda na meta pede a chave
+   * `excluir_vendas_na_meta` (operador e líder não a têm), e quem lançou
+   * exclui a própria venda manual mesmo sem `excluir_vendas`. A RPC confere a
+   * mesma regra (migration 20260921150000).
+   */
+  const quemExclui = useMemo(() => ({
+    meuId: perfil?.id ?? null,
+    temChave: temPermissao('excluir_vendas'),
+    temChaveNaMeta: temPermissao('excluir_vendas_na_meta'),
+  }), [perfil?.id, temPermissao]);
+  const podeExcluir = (v: Venda) => podeExcluirVenda(v, quemExclui);
+
+  // O relógio de 1 dia: relido a cada minuto para a pílula andar sozinha.
+  const [agora, setAgora] = useState(() => new Date());
+  useEffect(() => {
+    if (prazos.size === 0) return;
+    const t = setInterval(() => setAgora(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, [prazos.size]);
+  const prazoDe = (v: Venda) => prazoDaVenda(prazos.get(v.id), agora);
 
   useEffect(() => {
     if (!empresaId || !podeVerMetas) { setMetas([]); return; }
@@ -275,7 +298,22 @@ export default function Vendas() {
 
   /* ── Ações ────────────────────────────────────────────────────────────── */
 
-  const comemorar = () => setFesta(String(Date.now()));
+  /*
+   * Confete só na PRIMEIRA venda da vida de quem lança (pedido de 21/09/2026:
+   * «depois não soltar mais»). O banco responde se há mais vendas lançadas
+   * por esta pessoa do que as que acabaram de entrar; a resposta fica gravada
+   * no navegador, para a pergunta não se repetir a cada lançamento.
+   */
+  async function aoLancar(quantas = 1) {
+    if (!perfil?.id || !empresaId) return;
+    const chave = `vendas:primeira-venda:${perfil.id}`;
+    try { if (localStorage.getItem(chave)) return; } catch { /* sem armazenamento: pergunta ao banco */ }
+    const total = await contarVendasLancadasPor(empresaId, perfil.id, quantas + 1);
+    if (total === null) return;
+    try { localStorage.setItem(chave, '1'); } catch { /* ignora */ }
+    if (total <= quantas) setFesta(String(Date.now()));
+  }
+  const comemorar = (quantas?: number) => { void aoLancar(quantas); };
   useEffect(() => {
     if (!festa) return;
     const t = setTimeout(() => setFesta(null), 4500);
@@ -290,6 +328,17 @@ export default function Vendas() {
     if (!r.ok) { toast.error(r.erro ?? 'Não foi possível excluir a venda.'); return; }
     toast.success(`Venda ${v.nr_documento} na lixeira. Sete dias para restaurar.`);
   }
+
+  /*
+   * As que estão com o relógio ligado. Toda venda nessa situação é manual e
+   * fora da meta — então está em `pendentes`, que é de todos os meses.
+   */
+  const saindo = useMemo(
+    () => pendentes
+      .filter(v => prazos.has(v.id))
+      .sort((a, b) => (prazos.get(a.id) ?? '').localeCompare(prazos.get(b.id) ?? '')),
+    [pendentes, prazos],
+  );
 
   const temFiltros = Boolean(busca.trim()) || filtrando;
   const limparFiltros = () => { setBusca(''); setFiltroVendedor(TODOS); setFiltroEquipe(TODOS); };
@@ -377,10 +426,11 @@ export default function Vendas() {
             </Button>
             {podeCriar && disponivel && (
               <>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setColarAberto(true)}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setColarAberto(true)}
+                  data-tour="colar-vendas">
                   <ClipboardPaste className="h-3.5 w-3.5" /> Colar várias
                 </Button>
-                <Button size="sm"
+                <Button size="sm" data-tour="nova-venda"
                   onClick={() => { setEditandoId(null); setNovoAberto(v => !v); if (aba === 'pendencias') setAba('todas'); }}
                   className={cn('gap-1.5 shadow-sm',
                     novoAberto && 'border border-border bg-muted text-foreground hover:bg-muted/80')}>
@@ -408,10 +458,42 @@ export default function Vendas() {
           </div>
         )}
 
+        {/* ── O aviso do relógio de 1 dia ───────────────────────────────── */}
+        {saindo.length > 0 && (
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px]">
+            <TimerOff className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-foreground">
+                <strong>
+                  {saindo.length === 1
+                    ? '1 venda lançada não veio no relatório'
+                    : `${saindo.length} vendas lançadas não vieram no relatório`}
+                </strong>
+                {' '}— se o NR não aparecer no geral nem na prévia do setor em até 1 dia, a venda vai para a
+                lixeira. Confira o NR: se estiver errado, corrija ou exclua.
+              </p>
+              <p className="mt-1 flex flex-wrap gap-1">
+                {saindo.slice(0, 8).map(v => (
+                  <span key={v.id} className="rounded bg-destructive/10 px-1.5 py-0.5 font-mono text-[11px] text-destructive">
+                    {v.nr_documento}
+                  </span>
+                ))}
+                {saindo.length > 8 && <span className="text-[11px] text-muted-foreground">e mais {saindo.length - 8}</span>}
+              </p>
+            </div>
+            {aba !== 'pendencias' && (
+              <Button variant="ghost" size="sm" className="h-7 shrink-0 text-xs" onClick={() => setAba('pendencias')}>
+                Ver
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* ── Os números do mês ─────────────────────────────────────────── */}
         <motion.div
           variants={containerVariants} initial="hidden" animate="visible"
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+          data-tour="vendas-metricas"
         >
           <MetricCard
             label={veAlemDeSi ? 'Na meta' : 'Suas vendas na meta'}
@@ -442,22 +524,24 @@ export default function Vendas() {
         </motion.div>
 
         {/* ── A meta ────────────────────────────────────────────────────── */}
-        {veAlemDeSi ? (
-          <AndamentoDasMetas
-            vendas={oficiais} metas={metas} eixo="confirmacao"
-            uteis={uteis} trabalhados={trabalhados}
-            pessoas={placar.indice.size > 0 ? placar.indice : undefined}
-            presencaPorRecorte={placar.presencaPorRecorte}
-          />
-        ) : (
-          <MinhaParteNaMeta
-            metas={metas} eu={eu} resumo={resumirVendas(oficiais)}
-            uteis={uteis} trabalhados={trabalhados}
-          />
-        )}
+        <div data-tour="vendas-meta">
+          {veAlemDeSi ? (
+            <AndamentoDasMetas
+              vendas={oficiais} metas={metas} eixo="confirmacao"
+              uteis={uteis} trabalhados={trabalhados}
+              pessoas={placar.indice.size > 0 ? placar.indice : undefined}
+              presencaPorRecorte={placar.presencaPorRecorte}
+            />
+          ) : (
+            <MinhaParteNaMeta
+              metas={metas} eu={eu} resumo={resumirVendas(oficiais)}
+              uteis={uteis} trabalhados={trabalhados}
+            />
+          )}
+        </div>
 
         {/* ── Filtros ───────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="vendas-filtros">
           <AbasSegmentadas<AbaDaLista> abas={abas} ativa={aba} onTrocar={setAba} rotulo="Situação das vendas" />
           <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -509,7 +593,7 @@ export default function Vendas() {
         )}
 
         {/* ── A tabela ──────────────────────────────────────────────────── */}
-        <Card className="border-border">
+        <Card className="border-border" data-tour="vendas-tabela">
           <CardContent className="p-0">
             {carregando && vendas.length === 0 && pendentes.length === 0 ? (
               <div className="space-y-2 p-4">
@@ -522,6 +606,7 @@ export default function Vendas() {
                     grupos={grupos} colSpan={colSpan}
                     mostrarVendedor={veAlemDeSi} equipeDe={equipeDe}
                     podeEditar={podeEditar} podeExcluir={podeExcluir} podeDecidir={podeDecidir}
+                    prazoDe={prazoDe}
                     editandoId={editandoId}
                     renderEdicao={v => (
                       <NovaVendaInline
@@ -539,7 +624,7 @@ export default function Vendas() {
                         colSpan={colSpan} operadorPadrao={operadorPadrao}
                         vendedores={vendedores} nrsConhecidos={nrsConhecidos}
                         onSalvar={salvar} onFechar={() => setNovoAberto(false)}
-                        onColar={() => setColarAberto(true)} onLancou={comemorar}
+                        onColar={() => setColarAberto(true)} onLancou={() => comemorar(1)}
                       />
                     ) : null}
                     vazio={vazio}

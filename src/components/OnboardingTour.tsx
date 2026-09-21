@@ -18,8 +18,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { cn } from '@/lib/utils';
+import { passosDoComercial, ONBOARDING_COMERCIAL_KEY } from './tourComercial';
 
 export const ONBOARDING_STORAGE_KEY = (uid: string) => `onboarding_v3_${uid}`;
 const PAD    = 12;   // padding ao redor do elemento destacado
@@ -243,26 +247,38 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
   const [confirmSkip, setConfirmSkip] = useState(false);
   const { vw, vh } = useViewport();
 
+  const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
+  const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const produto = produtoDaEmpresa(empresa, tenantSlug);
+  const comercial = produto === 'comercial';
+
   const isPP  = tenant.isPaguePlay;
-  const STEPS = useMemo(() => (isPP ? STEPS_PP : STEPS_BOOKPLAY), [isPP]);
+  const STEPS = useMemo(
+    () => (comercial ? passosDoComercial(temPermissao) : isPP ? STEPS_PP : STEPS_BOOKPLAY),
+    [comercial, isPP, temPermissao],
+  );
+  const chaveDoTour = comercial ? ONBOARDING_COMERCIAL_KEY : ONBOARDING_STORAGE_KEY;
 
   // ── Inicialização — aguarda termos serem aceitos antes de iniciar ──────────
+  // E aguarda o produto: começar antes de saber se é Comercial mostraria o tour
+  // de acordos, e gravaria a chave errada ao terminar.
   useEffect(() => {
     if (!user?.id) return;
     if (termoLoading || precisaAceitar) return;
-    if (!localStorage.getItem(ONBOARDING_STORAGE_KEY(user.id))) {
+    if (empresaLoading || permLoading) return;
+    if (!localStorage.getItem(chaveDoTour(user.id))) {
       const t = setTimeout(() => setActive(true), 1000);
       return () => clearTimeout(t);
     }
-  }, [user?.id, precisaAceitar, termoLoading]);
+  }, [user?.id, precisaAceitar, termoLoading, empresaLoading, permLoading, chaveDoTour]);
 
   // ── Finalizar tour ─────────────────────────────────────────────────────────
   const finish = useCallback(() => {
     setActive(false);
     setConfirmSkip(false);
-    if (user?.id) localStorage.setItem(ONBOARDING_STORAGE_KEY(user.id), '1');
+    if (user?.id) localStorage.setItem(chaveDoTour(user.id), '1');
     onFinished?.();
-  }, [user?.id, onFinished]);
+  }, [user?.id, onFinished, chaveDoTour]);
 
   // ── Navegar para o passo com mudança de rota se necessário ────────────────
   const goToStep = useCallback((nextIdx: number) => {

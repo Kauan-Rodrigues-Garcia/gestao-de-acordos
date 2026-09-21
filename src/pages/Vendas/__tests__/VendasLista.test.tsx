@@ -11,6 +11,13 @@
  *      assinatura»);
  *   4. o líder decide na linha; o operador não vê o botão;
  *   5. o operador não vê a meta do setor inteiro medida só com as vendas dele.
+ *
+ * E o que entrou em 21/09/2026 (migration 20260921150000):
+ *
+ *   6. excluir é por linha — quem lançou exclui a própria; na meta, nem
+ *      operador nem líder;
+ *   7. a venda que o relatório não trouxe mostra o prazo, e a tela avisa;
+ *   8. confete só na primeira venda da vida de quem lança.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -27,8 +34,19 @@ vi.mock('@/hooks/useEmpresa', () => ({
   }),
 }));
 
+let perfilAtual: { id: string; nome: string; perfil?: string } = { id: 'ana', nome: 'Ana' };
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ perfil: { id: 'ana', nome: 'Ana' }, loading: false }),
+  useAuth: () => ({ perfil: perfilAtual, loading: false }),
+}));
+
+const contarLancadas = vi.fn(async (..._a: unknown[]): Promise<number | null> => 1);
+vi.mock('@/services/vendas/vendas.service', async (original) => ({
+  ...(await original<typeof import('@/services/vendas/vendas.service')>()),
+  contarVendasLancadasPor: (...a: unknown[]) => contarLancadas(...a),
+}));
+
+vi.mock('@/components/comemoracao/EfeitoComemoracao', () => ({
+  EfeitoComemoracao: () => React.createElement('div', { 'data-testid': 'confete' }),
 }));
 
 const temPermissao = vi.fn((_chave: string) => true);
@@ -59,7 +77,7 @@ function venda(p: Partial<Venda> & { id: string; operador_id: string }): Venda {
 }
 
 const LANCADA = venda({
-  id: '13073323', operador_id: 'ana', valor_total: 5_572, origem: 'manual',
+  id: '13073323', operador_id: 'ana', criado_por: 'ana', valor_total: 5_572, origem: 'manual',
   situacao: 'aberta', contrato_assinado: false, data_confirmacao: null,
   conta_na_meta: false, valor_na_meta: 0,
 });
@@ -72,6 +90,8 @@ const NA_META = venda({ id: '13073500', operador_id: 'bea', valor_total: 8_000 }
 const VENDAS = [LANCADA, SEM_ASSINATURA, NA_META];
 const PENDENTES = [LANCADA, SEM_ASSINATURA];
 
+let PRAZOS: Map<string, string> = new Map();
+
 const salvar = vi.fn(async () => ({ ok: true, id: 'novo', erro: null }));
 const confirmar = vi.fn(async () => ({ ok: true, id: 'x', erro: null }));
 
@@ -79,7 +99,7 @@ vi.mock('@/hooks/useVendas', async () => {
   const { resumirVendas } = await import('@/lib/vendas');
   return {
     useVendas: () => ({
-      vendas: VENDAS, resumo: resumirVendas(VENDAS), pendentes: PENDENTES,
+      vendas: VENDAS, resumo: resumirVendas(VENDAS), pendentes: PENDENTES, prazos: PRAZOS,
       carregando: false, disponivel: true, erro: null,
       recarregar: vi.fn(), salvar, confirmar, excluir: vi.fn(),
     }),
@@ -134,6 +154,11 @@ const OPERADOR = new Set([
 ]);
 
 beforeEach(() => {
+  perfilAtual = { id: 'ana', nome: 'Ana' };
+  PRAZOS = new Map();
+  contarLancadas.mockReset();
+  contarLancadas.mockResolvedValue(1);
+  localStorage.clear();
   temPermissao.mockImplementation(() => true);
   salvar.mockClear();
   confirmar.mockClear();
@@ -219,5 +244,78 @@ describe('Vendas — o operador', () => {
     expect(await screen.findByText('Sua parte no mês')).toBeInTheDocument();
     expect(screen.getByText(/da equipe/)).toHaveTextContent('PEC 2');
     expect(screen.queryByText('Meta do mês')).not.toBeInTheDocument();
+  });
+});
+
+describe('Vendas — quem exclui o quê', () => {
+  const lixeiraDa = (cliente: string) =>
+    within(screen.getByText(cliente).closest('tr')!).queryByTitle(/Excluir/);
+
+  it('o operador exclui a venda que ele lançou — e só ela', () => {
+    temPermissao.mockImplementation((c: string) => OPERADOR.has(c));
+    perfilAtual = { id: 'ana', nome: 'Ana', perfil: 'operador' };
+    montar();
+    expect(lixeiraDa('Cliente 13073323')).toBeInTheDocument();
+    expect(lixeiraDa('Cliente 13073400')).not.toBeInTheDocument();
+    expect(lixeiraDa('Cliente 13073500')).not.toBeInTheDocument();
+  });
+
+  it('o líder exclui fora da meta, mas não a venda na meta', () => {
+    perfilAtual = { id: 'leo', nome: 'Leo', perfil: 'lider' };
+    temPermissao.mockImplementation((c: string) => c !== 'excluir_vendas_na_meta');
+    montar();
+    expect(lixeiraDa('Cliente 13073400')).toBeInTheDocument();
+    expect(lixeiraDa('Cliente 13073500')).not.toBeInTheDocument();
+  });
+
+  it('a gerência exclui a venda na meta', () => {
+    perfilAtual = { id: 'gina', nome: 'Gina', perfil: 'gerencia' };
+    montar();
+    expect(lixeiraDa('Cliente 13073500')).toBeInTheDocument();
+  });
+});
+
+describe('Vendas — o prazo do relatório', () => {
+  it('a venda que o relatório não trouxe mostra quando sai, e a tela avisa', () => {
+    PRAZOS = new Map([[LANCADA.id, new Date(Date.now() - 2 * 3_600_000).toISOString()]]);
+    montar();
+    expect(screen.getByText('Cliente 13073323').closest('tr')!).toHaveTextContent('Sai em 22 h');
+    expect(screen.getByRole('alert')).toHaveTextContent('1 venda lançada não veio no relatório');
+    expect(screen.getByRole('alert')).toHaveTextContent('13073323');
+  });
+
+  it('sem relógio ligado, nem pílula nem faixa', () => {
+    montar();
+    expect(screen.queryByText(/Sai em/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('Vendas — confete só na primeira venda', () => {
+  async function lancar() {
+    fireEvent.change(screen.getByLabelText('NR *'), { target: { value: `1307${Math.floor(Math.random() * 9e4 + 1e4)}` } });
+    fireEvent.change(screen.getByLabelText('Valor *'), { target: { value: '100,00' } });
+    fireEvent.submit(screen.getByLabelText('NR *').closest('form')!);
+    await waitFor(() => expect(salvar).toHaveBeenCalled());
+    salvar.mockClear();
+  }
+
+  it('a primeira venda da vida solta confete, e a pergunta não se repete', async () => {
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /Nova venda/ }));
+    await lancar();
+    expect(await screen.findByTestId('confete')).toBeInTheDocument();
+    expect(contarLancadas).toHaveBeenCalledTimes(1);
+    await lancar();
+    expect(contarLancadas).toHaveBeenCalledTimes(1);
+  });
+
+  it('quem já tinha vendas lançadas não ganha confete', async () => {
+    contarLancadas.mockResolvedValue(2);
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /Nova venda/ }));
+    await lancar();
+    await waitFor(() => expect(contarLancadas).toHaveBeenCalled());
+    expect(screen.queryByTestId('confete')).not.toBeInTheDocument();
   });
 });

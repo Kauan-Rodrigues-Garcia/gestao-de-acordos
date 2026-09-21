@@ -309,3 +309,65 @@ export function lerVendasColadas(texto: string, anoPadrao = new Date().getFullYe
 
   return saida;
 }
+
+/* ── O prazo do relatório (migration 20260921150000) ─────────────────────── */
+
+/**
+ * Quanto tempo a venda lançada tem para o NR aparecer no relatório — geral ou
+ * prévia do setor — depois que um geral é importado sem ele. Tem que bater
+ * com o `INTERVAL '1 day'` de `fn_vendas_prazo_excluir`.
+ */
+export const PRAZO_DO_RELATORIO_MS = 24 * 60 * 60 * 1000;
+
+export interface PrazoDaVenda {
+  /** Quando a venda vai para a lixeira, se o NR não aparecer. */
+  excluiEm: Date;
+  /** Negativo = venceu, e o agendamento tira a venda em até 10 minutos. */
+  restanteMs: number;
+}
+
+export function prazoDaVenda(semRelatorioDesde: string | null | undefined, agora = new Date()): PrazoDaVenda | null {
+  if (!semRelatorioDesde) return null;
+  const desde = new Date(semRelatorioDesde).getTime();
+  if (Number.isNaN(desde)) return null;
+  const excluiEm = new Date(desde + PRAZO_DO_RELATORIO_MS);
+  return { excluiEm, restanteMs: excluiEm.getTime() - agora.getTime() };
+}
+
+/** «Sai em 5 h», «sai em 40 min» — o que cabe numa pílula. */
+export function rotuloDoPrazo(restanteMs: number): string {
+  if (restanteMs <= 60_000) return 'Saindo agora';
+  const minutos = Math.ceil(restanteMs / 60_000);
+  if (minutos < 60) return `Sai em ${minutos} min`;
+  return `Sai em ${Math.ceil(minutos / 60)} h`;
+}
+
+/* ── Quem exclui o quê ────────────────────────────────────────────────────── */
+
+export interface QuemExclui {
+  meuId: string | null;
+  /** Tem a chave `excluir_vendas`? */
+  temChave: boolean;
+  /**
+   * Tem `excluir_vendas_na_meta`? Nasce em elite e gerência — operador e
+   * líder não (pedido de 21/09/2026). Chave, e não cargo: quem manda é o
+   * painel (`painel-manda.test.ts`).
+   */
+  temChaveNaMeta: boolean;
+}
+
+/**
+ * Espelho de `fn_venda_excluir` (20260921150000), só para decidir se o botão
+ * aparece — quem decide de verdade é a RPC.
+ *
+ *   - na meta: só com `excluir_vendas_na_meta`;
+ *   - fora da meta: `excluir_vendas`, ou ter lançado a venda à mão.
+ */
+export function podeExcluirVenda(
+  venda: { conta_na_meta: boolean; origem: OrigemVenda; criado_por?: string | null },
+  quem: QuemExclui,
+): boolean {
+  if (venda.conta_na_meta) return quem.temChaveNaMeta;
+  if (quem.temChave) return true;
+  return venda.origem === 'manual' && Boolean(quem.meuId) && venda.criado_por === quem.meuId;
+}

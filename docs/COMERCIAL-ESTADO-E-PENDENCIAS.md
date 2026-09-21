@@ -124,8 +124,9 @@ catálogo atual, e redefine `fn_permissoes_catalogo()` como
 Chegar pelo elo errado **derruba as chaves do elo pulado, sem erro nenhum**.
 Já aconteceu uma vez aqui (`tickets_excluir` sumiu).
 
-Topo atual: **`fn_permissoes_catalogo_antes_acompanhamento_20260915`**
-(migration `20260915220000`, Fase 8). Chave nova encadeia a partir desta.
+Topo atual: **`fn_permissoes_catalogo_antes_venda_na_meta_20260921`**
+(migration `20260921150000`, Fase 13 — que encadeou sobre o
+`_antes_elite_20260919` do Plantão Elite). Chave nova encadeia a partir desta.
 
 A Fase 6 **não tocou** o catálogo de propósito — não havia chave nova a pedir,
 e o jeito mais seguro de não partir a cadeia é não tocá-la.
@@ -615,6 +616,74 @@ Testes: `src/lib/vendasLista.test.ts`, `src/lib/vendasRelatorio.test.ts`,
 `src/pages/Vendas/__tests__/VendasLista.test.tsx`. **Não visto no navegador**
 — abrir exige sessão no banco de produção.
 
+### Fase 13 — prazo do relatório, quem exclui, confete, tutorial, marca (21/09/2026)
+
+Cinco pedidos da mesma mensagem. **Um tem migration:**
+`20260921150000_vendas_prazo_do_relatorio_e_exclusao.sql` — ✅ **aplicada em
+21/09** pelo SQL Editor e registrada em `schema_migrations`. Conferido depois:
+coluna, gatilho, os dois agendamentos, e a chave nova ligada em elite,
+gerência, administrador e super_admin (desligada em operador e líder). O resto
+é tela.
+
+**Venda lançada tem 1 dia para o relatório conhecer o NR.** Depois que um
+relatório GERAL (o «59» do Comercial) é promovido sem trazer o NR de uma venda
+manual fora da meta, liga um relógio (`vendas.sem_relatorio_desde`). 24 h
+depois a venda vai para a lixeira (7 dias para restaurar), com motivo e
+`excluido_por_nome = 'Sistema — prazo do relatório'`. Decidido com o usuário:
+**o NR no geral OU na prévia do setor salva** — o geral só traz venda já
+confirmada, e exigir o geral apagaria venda verdadeira que demorou a
+confirmar. Sai o NR que o ERP não conhece. Só conta geral cujo mês alcança a
+venda.
+
+- Marca e desmarca: gatilho em `vendas_lotes` (lote vira vigente) e pg_cron
+  `vendas-prazo-do-relatorio` a cada 10 min, que também exclui. O gatilho
+  engole o próprio erro — a importação nunca cai por causa do aviso.
+- Aviso: notificação para quem vendeu e para quem lançou, quando o relógio
+  liga e quando a venda sai. Na aba Vendas, pílula «Sai em X h» na linha,
+  texto no detalhe, e faixa no topo com os NRs.
+- **Primeira passada:** as vendas manuais que já existem e não estão em
+  relatório nenhum são marcadas até 10 min depois de aplicar, e saem 24 h
+  depois. O `SELECT` de conferência está no cabeçalho da migration.
+- Restaurar da lixeira zera o relógio; a próxima passada o liga de novo (mais
+  24 h) se o NR continuar fora dos relatórios.
+
+**Quem exclui o quê** (`fn_venda_excluir` + `podeExcluirVenda`):
+
+| venda | quem exclui |
+|---|---|
+| na meta | só com a chave **nova** `excluir_vendas_na_meta` — nasce em elite e gerência (admin tem tudo); operador e líder, não |
+| fora da meta | `excluir_vendas` (como antes), **ou quem a lançou** (`criado_por`) enquanto for manual |
+
+Chave e não cargo porque `painel-manda.test.ts` zera decisão por cargo. Novo
+elo da cadeia: **topo agora é `fn_permissoes_catalogo_antes_venda_na_meta_20260921`**
+(§2.5). O botão de lixeira na linha segue a mesma regra.
+
+**Confete só na primeira venda da vida** de quem lança (`criado_por`). A tela
+pergunta ao banco se há mais vendas lançadas pela pessoa do que as que
+acabaram de entrar, e grava a resposta no navegador
+(`vendas:primeira-venda:<id>`) para não perguntar de novo.
+
+**Tickets no Comercial.** O menu declarava Tickets em cobrança e comercial
+desde a Fase 9; a rota em `App.tsx` ficou `SO_COBRANCA` — o vendedor via a aba
+e voltava para o Dashboard. Corrigido; `Layout.navegacao.test.ts` agora compara
+o produto da rota com o do menu. A aba ainda depende da chave `ver_tickets` no
+cargo e do interruptor `tickets_config` da empresa — **não conferidos no banco**.
+
+**Tutorial.** O Comercial caía no tour da BookPlay, que navegava para
+`/acordos` (rota que o Comercial não abre). Agora tem tour próprio na aba
+Vendas (`components/tourComercial.ts`, alvos `data-tour` em
+`pages/Vendas/index.tsx`), com chave própria no navegador
+(`onboarding_comercial_v1_<uid>`) — quem pulou o tour quebrado vê este.
+
+**Marca.** O menu lateral dizia «Gestão de Acordos» no Comercial. O nome agora
+sai do PRODUTO da empresa (`BRANDING_POR_PRODUTO` em `lib/tenant.ts`): no
+Comercial, «Gestão Comercial». O ícone de aperto de mãos ficou.
+
+Testes: `prazoDoRelatorio.sql.test.ts` (a migration rodando em PGlite),
+`vendasLista.test.ts`, `VendasLista.test.tsx`, `tourComercial.test.ts`,
+`tenant.test.ts`, `Layout.navegacao.test.ts`. Suíte: **6.928 de 6.928**,
+`typecheck`, `lint` e `build` limpos. **Não visto no navegador.**
+
 ### Correções dentro da sessão
 
 | commit | o que |
@@ -658,6 +727,22 @@ para mostrar: o geral traz vendas antigas cujo vendedor já não está no setor.
 ---
 
 ## 6. PENDENTE
+
+### 6.00 Fase 13 (21/09/2026)
+
+- [x] Conferência antes de aplicar: **2 vendas** na primeira passada — NR
+      `232` e `2323` (R$ 355.555,00), lançamentos de teste da Beatriz Sanchez
+      em 21/09. Saem 24 h depois da primeira passada do agendamento.
+- [x] **`20260921150000` aplicada** (SQL Editor) e versão registrada — 21/09.
+- [x] Tickets: `ver_tickets` e `tickets_abrir` já ligados em líder, elite,
+      gerência, diretoria e ouvidoria; operador não (igual à cobrança).
+- [ ] **Abrir Tickets para a liderança do Comercial**: não há linha em
+      `tickets_config` para a empresa, então a aba só aparece para
+      administrador e atendente. Um administrador entra em Tickets → «Aba
+      fechada» → libera. Clique, não SQL.
+- [ ] Conferir a primeira execução do `vendas-prazo-do-relatorio` em
+      `cron.job_run_details` (não tinha rodado na conferência).
+- [ ] Ver no navegador: pílula e faixa do prazo, confete, tour, «Gestão Comercial».
 
 ### 6.0 Depois de aplicar as duas migrations novas
 

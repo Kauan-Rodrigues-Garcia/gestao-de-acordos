@@ -2167,6 +2167,15 @@ export const PERMISSOES: PermissaoMeta[] = [
     padrao: { lider: true, elite: true, gerencia: true },
   },
   {
+    // 21/09/2026: «vendas que estão na meta não permitir que seja excluído por
+    // operador e nem líder». Chave própria, e não o cargo escrito na tela: o
+    // painel continua sendo quem decide (migration 20260921150000).
+    key: 'excluir_vendas_na_meta', label: 'Vendas: excluir venda na meta',
+    descricao: 'Mandar para a lixeira uma venda confirmada e assinada, que já conta no placar',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { elite: true, gerencia: true },
+  },
+  {
     key: 'ver_lixeira_vendas', label: 'Vendas: ver a lixeira',
     descricao: 'Abrir a lixeira de vendas e ver o que foi excluído',
     grupo: 'Vendas', produtos: SO_COMERCIAL,

@@ -27,7 +27,7 @@ import {
   type ResumoVendas, type SituacaoVenda,
 } from '@/lib/vendas';
 import {
-  buscarVendas, buscarPendentes, salvarVenda, confirmarVenda, excluirVenda,
+  buscarVendas, buscarPendentes, buscarPrazosDoRelatorio, salvarVenda, confirmarVenda, excluirVenda,
   type Venda, type EntradaVenda, type Resultado, type EixoDaBusca,
 } from '@/services/vendas/vendas.service';
 
@@ -58,6 +58,11 @@ export interface VendasDaTela {
    * trabalho de hoje, e escondê-la ao virar o mês seria perdê-la de vista.
    */
   pendentes: Venda[];
+  /**
+   * id → desde quando a venda espera o relatório (relógio de 1 dia, migration
+   * 20260921150000). Vazio enquanto a migration não estiver aplicada.
+   */
+  prazos: ReadonlyMap<string, string>;
   carregando: boolean;
   /** A migration foi aplicada neste banco? */
   disponivel: boolean;
@@ -80,6 +85,7 @@ const RESUMO_VAZIO = resumirVendas([]);
 export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela {
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [pendentes, setPendentes] = useState<Venda[]>([]);
+  const [prazos, setPrazos] = useState<ReadonlyMap<string, string>>(new Map());
   const [carregando, setCarregando] = useState(false);
   const [disponivel, setDisponivel] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -87,12 +93,14 @@ export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela
   const carregar = useCallback(async () => {
     if (!empresaId || !ativo) return;
     setCarregando(true);
-    const [doMes, fila] = await Promise.all([
+    const [doMes, fila, relogios] = await Promise.all([
       buscarVendas({ empresaId, de: primeiroDiaDoMes(mes), ate: ultimoDiaDoMes(mes), eixo }),
       buscarPendentes(empresaId),
+      buscarPrazosDoRelatorio(empresaId),
     ]);
     setVendas(doMes.vendas);
     setPendentes(fila.vendas);
+    setPrazos(relogios);
     setDisponivel(doMes.disponivel);
     // O erro de «tabela não existe» já virou `disponivel: false`, e a tela diz
     // isso com outras palavras. Repeti-lo aqui mostraria as duas mensagens.
@@ -145,7 +153,7 @@ export function useVendas({ empresaId, mes, eixo, ativo }: Params): VendasDaTela
   }, [carregar]);
 
   return {
-    vendas, resumo, pendentes, carregando, disponivel, erro,
+    vendas, resumo, pendentes, prazos, carregando, disponivel, erro,
     recarregar: () => { void carregar(); },
     salvar, confirmar, excluir,
   };

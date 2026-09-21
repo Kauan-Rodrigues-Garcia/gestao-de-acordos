@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   statusDaLinha, abaDaVenda, casaComBusca, lerValorDigitado, lerVendasColadas,
+  prazoDaVenda, rotuloDoPrazo, podeExcluirVenda, PRAZO_DO_RELATORIO_MS,
 } from './vendasLista';
 
 describe('statusDaLinha', () => {
@@ -111,5 +112,55 @@ describe('lerVendasColadas', () => {
     const [a, b] = lerVendasColadas('13073323 100,00 01/08/26\n13073324 100,00 31/02/2026');
     expect(a.data).toBe('2026-08-01');
     expect(b.data).toBeNull();
+  });
+});
+
+describe('prazoDaVenda — o relógio de 1 dia (migration 20260921150000)', () => {
+  const agora = new Date('2026-09-22T12:00:00Z');
+
+  it('sem relógio ligado, sem prazo', () => {
+    expect(prazoDaVenda(null, agora)).toBeNull();
+    expect(prazoDaVenda(undefined, agora)).toBeNull();
+    expect(prazoDaVenda('não é data', agora)).toBeNull();
+  });
+
+  it('sai 24 h depois de o relatório ser importado sem o NR', () => {
+    const p = prazoDaVenda('2026-09-22T02:00:00Z', agora)!;
+    expect(p.excluiEm.toISOString()).toBe('2026-09-23T02:00:00.000Z');
+    expect(p.restanteMs).toBe(14 * 60 * 60 * 1000);
+    expect(PRAZO_DO_RELATORIO_MS).toBe(86_400_000);
+  });
+
+  it('a pílula fala em horas, minutos, ou «saindo agora» quando venceu', () => {
+    expect(rotuloDoPrazo(14 * 3_600_000)).toBe('Sai em 14 h');
+    expect(rotuloDoPrazo(90 * 60_000)).toBe('Sai em 2 h');
+    expect(rotuloDoPrazo(40 * 60_000)).toBe('Sai em 40 min');
+    expect(rotuloDoPrazo(-5 * 60_000)).toBe('Saindo agora');
+  });
+});
+
+describe('podeExcluirVenda — espelho de fn_venda_excluir', () => {
+  const lancadaPorAna = { conta_na_meta: false, origem: 'manual' as const, criado_por: 'ana' };
+  const naMeta = { conta_na_meta: true, origem: 'geral' as const, criado_por: 'ana' };
+  const doRelatorio = { conta_na_meta: false, origem: 'geral' as const, criado_por: 'gina' };
+  const operadora = { meuId: 'ana', temChave: false, temChaveNaMeta: false };
+  const lider = { meuId: 'leo', temChave: true, temChaveNaMeta: false };
+  const gerencia = { meuId: 'gina', temChave: true, temChaveNaMeta: true };
+
+  it('quem lançou exclui a própria venda manual, mesmo sem a chave', () => {
+    expect(podeExcluirVenda(lancadaPorAna, operadora)).toBe(true);
+    expect(podeExcluirVenda(doRelatorio, operadora)).toBe(false);
+    expect(podeExcluirVenda(lancadaPorAna, { ...operadora, meuId: 'bia' })).toBe(false);
+  });
+
+  it('na meta: só com excluir_vendas_na_meta — nem a própria, nem com excluir_vendas', () => {
+    expect(podeExcluirVenda(naMeta, operadora)).toBe(false);
+    expect(podeExcluirVenda({ ...naMeta, origem: 'manual' }, operadora)).toBe(false);
+    expect(podeExcluirVenda(naMeta, lider)).toBe(false);
+    expect(podeExcluirVenda(naMeta, gerencia)).toBe(true);
+  });
+
+  it('fora da meta, excluir_vendas continua valendo', () => {
+    expect(podeExcluirVenda(doRelatorio, lider)).toBe(true);
   });
 });

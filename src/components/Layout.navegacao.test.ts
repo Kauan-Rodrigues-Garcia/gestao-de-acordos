@@ -75,6 +75,33 @@ describe('menu × rotas', () => {
     ).toEqual([]);
   });
 
+  /*
+   * Bug de 21/09/2026: o menu declarou Tickets em cobrança E comercial na Fase
+   * 9, e a rota ficou só em cobrança. O vendedor via a aba, clicava e voltava
+   * para o Dashboard — o mesmo defeito do teste de cima, pelo eixo do produto.
+   */
+  it('rota e item de menu declaram os MESMOS produtos', () => {
+    // O nome da constante basta: as duas pontas usam os mesmos quatro nomes.
+    const doMenu = new Map(
+      [...MENU.matchAll(/to:\s*ROUTE_PATHS\.([A-Z_]+),\s*produtos:\s*([A-Z_]+)/g)]
+        .map(m => [m[1], m[2]] as const),
+    );
+    const divergentes: string[] = [];
+    for (const trecho of APP.split('<Route ').slice(1)) {
+      const rota = /^path=\{ROUTE_PATHS\.([A-Z_]+)\}/.exec(trecho)?.[1];
+      const produtos = /produtos=\{([A-Z_]+)\}/.exec(trecho)?.[1];
+      if (!rota || !produtos || !doMenu.has(rota)) continue;
+      if (doMenu.get(rota) !== produtos) {
+        divergentes.push(`${rota}: menu ${doMenu.get(rota)} × rota ${produtos}`);
+      }
+    }
+    expect(
+      divergentes,
+      'O item aparece num produto onde a rota não abre (ou o contrário):\n  '
+      + divergentes.join('\n  '),
+    ).toEqual([]);
+  });
+
   it('as abas que o usuário reconhece estão todas na lista', () => {
     const menu = chavesDoMenu();
     for (const chave of [

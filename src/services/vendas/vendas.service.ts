@@ -41,6 +41,8 @@ export interface Venda {
   origem: OrigemVenda;
   confirmado_por: string | null;
   confirmado_em: string | null;
+  /** Quem lançou. É o que deixa o operador excluir a venda que ELE lançou. */
+  criado_por: string | null;
   criado_em: string;
   atualizado_em: string;
   /** Gerada pelo banco: a régua «confirmada E assinada». */
@@ -57,7 +59,7 @@ const COLUNAS = `
   valor_total, valor_entrada, valor_recebido, forma_pagamento,
   data_venda, data_confirmacao,
   situacao, contrato_assinado, motivo, origem,
-  confirmado_por, confirmado_em, criado_em, atualizado_em,
+  confirmado_por, confirmado_em, criado_por, criado_em, atualizado_em,
   conta_na_meta, valor_na_meta,
   perfis:operador_id ( id, nome )
 `;
@@ -160,6 +162,42 @@ export async function buscarPendentes(empresaId: string): Promise<VendasDoPeriod
     return { vendas: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
   return { vendas: (data ?? []).map(normalizar), disponivel: true, erro: null };
+}
+
+/**
+ * As vendas com o relógio de 1 dia ligado: id → desde quando esperam o
+ * relatório (migration 20260921150000).
+ *
+ * Consulta à parte, e não uma coluna a mais em `COLUNAS`: enquanto a migration
+ * não estiver aplicada, a coluna não existe, e pedi-la junto derrubaria a aba
+ * inteira. Aqui o erro vira mapa vazio — a tela só deixa de mostrar o prazo.
+ */
+export async function buscarPrazosDoRelatorio(empresaId: string): Promise<Map<string, string>> {
+  const { data, error } = await tabelaSemTipo<{ id: string; sem_relatorio_desde: string }>('vendas')
+    .select('id, sem_relatorio_desde')
+    .eq('empresa_id', empresaId)
+    .or('sem_relatorio_desde.not.is.null');
+  if (error || !data) return new Map();
+  return new Map(data.map(l => [l.id, l.sem_relatorio_desde]));
+}
+
+/**
+ * Quantas vendas esta pessoa já lançou, até `teto`.
+ *
+ * O confete da primeira venda (21/09/2026) só precisa saber se há MAIS do que
+ * as que acabaram de entrar — contar a tabela inteira seria desperdício.
+ * `null` = não deu para saber, e quem chama não comemora.
+ */
+export async function contarVendasLancadasPor(
+  empresaId: string, perfilId: string, teto: number,
+): Promise<number | null> {
+  const { data, error } = await tabelaSemTipo<{ id: string }>('vendas')
+    .select('id')
+    .eq('empresa_id', empresaId)
+    .eq('criado_por', perfilId)
+    .limit(teto);
+  if (error || !data) return null;
+  return data.length;
 }
 
 export interface EntradaVenda {

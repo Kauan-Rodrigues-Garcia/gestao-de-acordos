@@ -1,4 +1,5 @@
 import type { Empresa } from '@/lib/supabase';
+import { produtoDaEmpresa, type Produto } from '@/lib/produto';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { getEmpresaEscolhida } from '@/services/empresaAtiva.service';
 
@@ -47,6 +48,24 @@ const TENANT_OVERRIDES: Record<string, Partial<TenantBranding>> = {
   pagueplay: {
     loginSubtitle: 'Operação Pagueplay',
     registerSubtitle: 'Cadastro vinculado automaticamente à Pagueplay',
+  },
+};
+
+/**
+ * O nome do sistema por PRODUTO, e não por slug.
+ *
+ * «Gestão de Acordos» é o nome da cobrança. No Comercial ninguém faz acordo:
+ * o menu lateral abria com o aperto de mãos e «Gestão de Acordos» em cima da
+ * aba Vendas (pedido de 21/09/2026). Vai por produto porque o vendedor entra
+ * também pelo domínio da BookPlay — o slug do build diria «bookplay», e a
+ * empresa dele diz `comercial`.
+ */
+const BRANDING_POR_PRODUTO: Partial<Record<Produto, Partial<TenantBranding>>> = {
+  comercial: {
+    appName: 'Gestão Comercial',
+    tagline: 'Sistema de Gestão Comercial',
+    loginTitle: 'Gestão Comercial',
+    loginSubtitle: 'Operação Comercial',
   },
 };
 
@@ -99,11 +118,14 @@ export function buildAuthRedirectUrl(): string | undefined {
 
 export function getTenantBranding(slug: string, empresa?: Empresa | null): TenantBranding {
   const override = TENANT_OVERRIDES[normalizeSlug(slug)] ?? {};
+  const produto = produtoDaEmpresa(empresa, slug);
+  const doProduto = (produto && BRANDING_POR_PRODUTO[produto]) || {};
   const companyName = empresa?.nome?.trim();
 
   return {
     ...DEFAULT_BRANDING,
     ...override,
+    ...doProduto,
     shortName: companyName || override.shortName || DEFAULT_BRANDING.shortName,
   };
 }

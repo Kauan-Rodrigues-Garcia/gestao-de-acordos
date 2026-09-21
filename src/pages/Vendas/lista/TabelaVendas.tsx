@@ -25,7 +25,7 @@ import { Fragment, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2, ChevronDown, Edit, PenTool, Trash2, Undo2, Ban, RotateCcw,
-  CalendarDays, Info,
+  CalendarDays, Info, TimerOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,8 @@ import { formatDate, getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import type { SituacaoVenda } from '@/lib/vendas';
 import {
-  statusDaLinha, STATUS_DA_LINHA, ORIGEM_DA_LINHA, type StatusDaLinha,
+  statusDaLinha, STATUS_DA_LINHA, ORIGEM_DA_LINHA, rotuloDoPrazo,
+  type StatusDaLinha, type PrazoDaVenda,
 } from '@/lib/vendasLista';
 import type { Venda } from '@/services/vendas/vendas.service';
 
@@ -61,8 +62,14 @@ interface Props {
   /** Nome da equipe que credita cada venda, quando se sabe. */
   equipeDe: (venda: Venda) => string | null;
   podeEditar: boolean;
-  podeExcluir: boolean;
+  /**
+   * Por linha, e não por tela: venda na meta não sai pela mão de operador nem
+   * de líder, e o operador exclui só o que ele lançou. Ver `podeExcluirVenda`.
+   */
+  podeExcluir: (venda: Venda) => boolean;
   podeDecidir: boolean;
+  /** O relógio de 1 dia do relatório, quando ligado para esta venda. */
+  prazoDe?: (venda: Venda) => PrazoDaVenda | null;
   /** Linha que está sendo corrigida — a tabela a troca pelo formulário. */
   editandoId: string | null;
   renderEdicao: (venda: Venda) => React.ReactNode;
@@ -87,6 +94,30 @@ export function StatusPill({ status }: { status: StatusDaLinha }) {
   );
 }
 
+/** «22/09 às 14:30» — quando a venda sai, se o NR não aparecer. */
+function quandoSai(prazo: PrazoDaVenda): string {
+  const d = prazo.excluiEm;
+  const dia = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${dia} às ${hora}`;
+}
+
+/**
+ * O aviso do relógio de 1 dia, embaixo do status: a venda lançada não veio no
+ * relatório importado e sai da lista se o NR não aparecer.
+ */
+export function PilulaDoPrazo({ prazo }: { prazo: PrazoDaVenda }) {
+  return (
+    <span
+      title={`Não veio no relatório importado. Se o NR não aparecer até ${quandoSai(prazo)}, a venda vai para a lixeira.`}
+      className="mt-1 flex w-fit items-center gap-1 whitespace-nowrap rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
+    >
+      <TimerOff className="h-3 w-3" aria-hidden />
+      {rotuloDoPrazo(prazo.restanteMs)}
+    </span>
+  );
+}
+
 function rotuloDoDia(dia: string): string {
   const hoje = getTodayISO();
   const ontem = new Date(`${hoje}T12:00:00`);
@@ -99,7 +130,7 @@ function rotuloDoDia(dia: string): string {
 
 export function TabelaVendas({
   grupos, colSpan, mostrarVendedor, equipeDe,
-  podeEditar, podeExcluir, podeDecidir, editandoId, renderEdicao,
+  podeEditar, podeExcluir, podeDecidir, prazoDe, editandoId, renderEdicao,
   onEditar, onExcluir, onDecidir, topo, vazio,
 }: Props) {
   const [aberta, setAberta] = useState<string | null>(null);
@@ -172,6 +203,7 @@ export function TabelaVendas({
                 const travado = ocupado === v.id;
                 const equipe = equipeDe(v);
                 const podeCorrigir = podeEditar && v.origem !== 'geral';
+                const prazo = prazoDe?.(v) ?? null;
                 return (
                   <Fragment key={v.id}>
                     <motion.tr
@@ -181,6 +213,7 @@ export function TabelaVendas({
                         'cursor-pointer border-b border-border/50 text-xs transition-colors hover:bg-accent/40',
                         i % 2 === 0 && 'bg-muted/10',
                         status === 'falta_assinatura' && 'bg-warning/5',
+                        prazo && 'bg-destructive/5',
                         (status === 'devolvida' || status === 'cancelada') && 'opacity-75',
                         detalhe && 'bg-accent/50',
                       )}
@@ -211,7 +244,10 @@ export function TabelaVendas({
                       <td className="hidden max-w-[150px] truncate px-3 py-2.5 text-[11px] text-muted-foreground md:table-cell">
                         {v.forma_pagamento || '—'}
                       </td>
-                      <td className="px-3 py-2.5"><StatusPill status={status} /></td>
+                      <td className="px-3 py-2.5">
+                        <StatusPill status={status} />
+                        {prazo && <PilulaDoPrazo prazo={prazo} />}
+                      </td>
                       <td className={cn(
                         'whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold',
                         status === 'devolvida' || status === 'cancelada' ? 'text-muted-foreground line-through' : 'text-foreground',
@@ -249,7 +285,7 @@ export function TabelaVendas({
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
-                          {podeExcluir && (
+                          {podeExcluir(v) && (
                             <>
                               <span className="mx-1 h-5 w-px shrink-0 bg-border" />
                               <Button variant="ghost" size="icon"
@@ -265,7 +301,7 @@ export function TabelaVendas({
                     </motion.tr>
                     {detalhe && (
                       <DetalheDaVenda
-                        venda={v} colSpan={colSpan} status={status} equipe={equipe}
+                        venda={v} colSpan={colSpan} status={status} equipe={equipe} prazo={prazo}
                         podeDecidir={podeDecidir} travado={travado}
                         onDecidir={(s, a, motivo, msg) => void decidir(v, s, a, motivo, msg)}
                       />
@@ -291,12 +327,13 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
 }
 
 function DetalheDaVenda({
-  venda, colSpan, status, equipe, podeDecidir, travado, onDecidir,
+  venda, colSpan, status, equipe, prazo, podeDecidir, travado, onDecidir,
 }: {
   venda: Venda;
   colSpan: number;
   status: StatusDaLinha;
   equipe: string | null;
+  prazo: PrazoDaVenda | null;
   podeDecidir: boolean;
   travado: boolean;
   onDecidir: (situacao: SituacaoVenda, assinado: boolean, motivo: string | null, msg: string) => void;
@@ -328,7 +365,16 @@ function DetalheDaVenda({
           )}
         </div>
 
-        {status === 'aguardando_relatorio' && (
+        {prazo ? (
+          <p className="mt-3 flex items-start gap-1.5 text-[11px] text-destructive">
+            <TimerOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              O relatório importado não trouxe o NR {venda.nr_documento}. Se ele não aparecer no geral nem na
+              prévia do setor até <strong>{quandoSai(prazo)}</strong>, a venda vai para a lixeira. Confira o NR —
+              se estiver errado, corrija ou exclua.
+            </span>
+          </p>
+        ) : status === 'aguardando_relatorio' && (
           <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             Quando o NR {venda.nr_documento} aparecer no relatório geral importado, esta venda ganha a

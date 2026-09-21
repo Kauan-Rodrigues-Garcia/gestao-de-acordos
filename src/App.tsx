@@ -35,6 +35,15 @@ import { produtoDaEmpresa, type Produto } from '@/lib/produto';
 const SO_COBRANCA: readonly Produto[] = ['cobranca'];
 /** Mesma razão, do outro lado: o Comercial começou com uma rota e vai ter mais. */
 const SO_COMERCIAL: readonly Produto[] = ['comercial'];
+/**
+ * As telas que servem às duas operações — hoje, só Tickets.
+ *
+ * O menu declarou Tickets no Comercial na Fase 9 (15/09/2026) e a rota ficou
+ * em `SO_COBRANCA`: o item aparecia, o vendedor clicava e voltava para o
+ * Dashboard. `Layout.navegacao.test.ts` confere agora que rota e menu
+ * declaram o mesmo produto.
+ */
+const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -482,7 +491,7 @@ export default function App() {
               } />
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_tickets">
+                  <ProtectedRoute produtos={COBRANCA_E_COMERCIAL} requiredPermissao="ver_tickets">
                     <Tickets />
                   </ProtectedRoute>
                 </LayoutWrapper>
