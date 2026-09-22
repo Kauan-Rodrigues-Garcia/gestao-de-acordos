@@ -87,6 +87,87 @@ export function sugerirOperadores(ops: OperadorInfo[], busca: string): OperadorI
     .slice(0, MAX_SUGESTOES_VINCULO);
 }
 
+// ── Clones ──────────────────────────────────────────────────────────────────
+//
+// O setor Treinamento é alternativo e vive de clones: o operador continua com
+// o setor e a equipe de origem no cadastro (`perfis.setor_id`) e aparece
+// também numa equipe do Treinamento (`equipe_operadores_clones`). A aba lia só
+// `perfis.setor_id = setor do líder`, e o líder do Treinamento abria o vínculo
+// sem ninguém para escolher — não conseguia registrar Pix para os operadores
+// (queixa de 22/09/2026). O banco nunca recusou: a policy de INSERT pede
+// escopo Pix de setor, não o mesmo setor do operador.
+
+export interface CloneDeEquipe { operador_id: string; equipe_id: string }
+
+export interface OndeFoiClonado { setor_id: string; equipe_id: string }
+
+/**
+ * Onde cada pessoa foi clonada: `operador_id → [{ setor_id, equipe_id }]`.
+ *
+ * Só contam equipes de `equipes` — a lista que a tela já recortou pelo escopo.
+ * Clone numa equipe sem setor não leva a setor nenhum, e fica de fora.
+ */
+export function clonesPorOperador(
+  clones: readonly CloneDeEquipe[],
+  equipes: readonly { id: string; setor_id: string | null }[],
+): Record<string, OndeFoiClonado[]> {
+  const setorDaEquipe = new Map<string, string | null>(equipes.map(e => [e.id, e.setor_id]));
+  const m: Record<string, OndeFoiClonado[]> = {};
+  for (const c of clones) {
+    const setor = setorDaEquipe.get(c.equipe_id);
+    if (!setor) continue;
+    (m[c.operador_id] ??= []).push({ setor_id: setor, equipe_id: c.equipe_id });
+  }
+  return m;
+}
+
+/**
+ * A lista do líder preso a um setor, com os clones desse setor dentro.
+ *
+ * O clone entra com o setor e a equipe do CLONE, e não os do cadastro: para
+ * quem olha o Treinamento, é lá que a pessoa está. É isso que faz o filtro de
+ * equipe, a meta por equipe e o carimbo do registro caírem no Treinamento.
+ *
+ * `perfisDosClones` são os perfis que a consulta por setor não trouxe. Quem já
+ * está na lista não se repete.
+ */
+export function incluirClonesDoSetor<T extends OperadorInfo>(
+  ops: readonly T[],
+  perfisDosClones: readonly T[],
+  clones: Record<string, OndeFoiClonado[]>,
+  setorId: string,
+): T[] {
+  const porId = new Map<string, T>();
+  for (const o of [...ops, ...perfisDosClones]) {
+    if (porId.has(o.id)) continue;
+    const clone = o.setor_id === setorId
+      ? undefined
+      : clones[o.id]?.find(c => c.setor_id === setorId);
+    porId.set(o.id, clone ? { ...o, setor_id: setorId, equipe_id: clone.equipe_id } : o);
+  }
+  return [...porId.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/**
+ * O setor carimbado no registro feito em nome de outra pessoa.
+ *
+ * O do cadastro dela — a menos que a tela esteja olhando um setor em que ela
+ * foi clonada. Aí é o setor olhado: o registro que o Treinamento faz para um
+ * clone é do Treinamento. Carimbado com a origem, ele sumiria da lista de quem
+ * acabou de registrar, que só lê o próprio setor.
+ */
+export function setorDoRegistroPix(
+  dono: Pick<OperadorInfo, 'id' | 'setor_id'>,
+  setorFoco: string | null,
+  clones: Record<string, OndeFoiClonado[]>,
+): string | null {
+  if (setorFoco && setorFoco !== dono.setor_id
+      && clones[dono.id]?.some(c => c.setor_id === setorFoco)) {
+    return setorFoco;
+  }
+  return dono.setor_id;
+}
+
 // ── Filtro da lista ─────────────────────────────────────────────────────────
 
 /** Estado do pagamento da comissão, do ponto de vista de quem filtra. */

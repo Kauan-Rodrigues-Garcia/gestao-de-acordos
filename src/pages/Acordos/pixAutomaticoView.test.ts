@@ -20,7 +20,7 @@ import {
   calcularDobraComissao, rankingPixSetor, calcularMetaPix, calcularMetaPixPorEquipe,
   prazoExpurgoDesaprovado, textoPrazoExpurgo, dataLocalDaLinha,
   setorDaLinhaPix, pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial,
-  itensDoSetorPix,
+  itensDoSetorPix, clonesPorOperador, incluirClonesDoSetor, setorDoRegistroPix,
   MAX_SUGESTOES_VINCULO, type OperadorInfo,
 } from './pixAutomaticoView';
 
@@ -928,5 +928,57 @@ describe('ranking por setor — nunca entre setores', () => {
     );
     expect(doA.map(l => l.operadorId)).toEqual(['maria']);
     expect(doA[0].acordos).toBe(3);
+  });
+});
+
+describe('clones no Pix (setor alternativo)', () => {
+  // Treinamento vive de clones: Ana e Beto têm o cadastro no Play 5 e aparecem
+  // na equipe TreiPlay 5, do setor Treinamento.
+  const EQUIPES = [
+    { id: 'eq-play5', setor_id: 'play5' },
+    { id: 'eq-trei',  setor_id: 'trein' },
+    { id: 'eq-solta', setor_id: null },
+  ];
+  const CLONES = [
+    { operador_id: 'ana',  equipe_id: 'eq-trei' },
+    { operador_id: 'beto', equipe_id: 'eq-trei' },
+    { operador_id: 'ana',  equipe_id: 'eq-solta' },
+    { operador_id: 'cris', equipe_id: 'eq-de-outro-escopo' },
+  ];
+  const ana:  OperadorInfo = { id: 'ana',  nome: 'Ana',  equipe_id: 'eq-play5', setor_id: 'play5', perfil: 'operador' };
+  const beto: OperadorInfo = { id: 'beto', nome: 'Beto', equipe_id: 'eq-play5', setor_id: 'play5', perfil: 'operador' };
+  const lider: OperadorInfo = { id: 'lia', nome: 'Lia', equipe_id: 'eq-trei', setor_id: 'trein', perfil: 'lider' };
+
+  it('mapeia cada clone ao setor da equipe, ignorando equipe sem setor ou fora do escopo', () => {
+    expect(clonesPorOperador(CLONES, EQUIPES)).toEqual({
+      ana:  [{ setor_id: 'trein', equipe_id: 'eq-trei' }],
+      beto: [{ setor_id: 'trein', equipe_id: 'eq-trei' }],
+    });
+  });
+
+  it('o líder do Treinamento passa a ter os clones no vínculo, com setor e equipe do clone', () => {
+    const clones = clonesPorOperador(CLONES, EQUIPES);
+    const lista = incluirClonesDoSetor([lider], [beto, ana], clones, 'trein');
+    expect(lista.map(o => o.id)).toEqual(['ana', 'beto', 'lia']);
+    expect(lista.find(o => o.id === 'ana')).toMatchObject({ setor_id: 'trein', equipe_id: 'eq-trei' });
+    // Antes da correção a lista era só o líder — e `apenasOperadores` a esvaziava.
+    expect(apenasOperadores(lista).map(o => o.id)).toEqual(['ana', 'beto']);
+  });
+
+  it('não repete quem já veio pela consulta do setor', () => {
+    const clones = clonesPorOperador(CLONES, EQUIPES);
+    const lista = incluirClonesDoSetor([lider, ana], [ana], clones, 'trein');
+    expect(lista.filter(o => o.id === 'ana')).toHaveLength(1);
+  });
+
+  it('o registro em nome de um clone cai no setor olhado', () => {
+    const clones = clonesPorOperador(CLONES, EQUIPES);
+    expect(setorDoRegistroPix(ana, 'trein', clones)).toBe('trein');
+    // Olhando a origem, ou todos os setores, vale o cadastro.
+    expect(setorDoRegistroPix(ana, 'play5', clones)).toBe('play5');
+    expect(setorDoRegistroPix(ana, null, clones)).toBe('play5');
+    // Quem não foi clonado no setor olhado não muda de setor.
+    const joao: OperadorInfo = { id: 'joao', nome: 'João', equipe_id: null, setor_id: 'play5', perfil: 'operador' };
+    expect(setorDoRegistroPix(joao, 'trein', clones)).toBe('play5');
   });
 });

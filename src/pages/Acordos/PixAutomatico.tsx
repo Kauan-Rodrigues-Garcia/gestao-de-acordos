@@ -83,8 +83,8 @@ import {
   calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe,
   textoPrazoExpurgo,
   pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial, itensDoSetorPix,
-  setorDaLinhaPix,
-  type OperadorInfo, type FiltroPagamento,
+  setorDaLinhaPix, clonesPorOperador, incluirClonesDoSetor, setorDoRegistroPix,
+  type OperadorInfo, type FiltroPagamento, type CloneDeEquipe, type OndeFoiClonado,
 } from './pixAutomaticoView';
 import { PixComissaoDobrada } from './PixComissaoDobrada';
 import { PixRankingSetor, type AbaRankingPix } from './PixRankingSetor';
@@ -448,6 +448,13 @@ export function PixAutomatico() {
    */
   const [acordosSemPix, setAcordosSemPix] = useState<AcordoSemRegistroPix[]>([]);
   const [salvando, setSalvando]   = useState(false);
+  /*
+   * Onde cada operador foi clonado, dentro do escopo — para o registro em nome
+   * de um clone cair no setor que está sendo olhado. Ver `setorDoRegistroPix`.
+   * Ref, e não estado: só `registrar` lê, e nada na tela redesenha por ela.
+   */
+  const clonesRef = useRef<Record<string, OndeFoiClonado[]>>({});
+
   // Vínculo do acordo a um operador (líder+): busca por nome
   const [vinculoBusca, setVinculoBusca] = useState('');
   const [vinculoOp, setVinculoOp]       = useState<OperadorInfo | null>(null);
@@ -767,14 +774,38 @@ export function PixAutomatico() {
           qEqs  = qEqs.eq('setor_id', setorEscopo);
           qSets = qSets.eq('id', setorEscopo);
         }
-        const [{ data: ops }, { data: eqs }, { data: sets }, retrato] = await Promise.all([
+        const [{ data: ops }, { data: eqs }, { data: sets }, { data: clonesLidos }, retrato] = await Promise.all([
           qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
+          // Clone não muda o setor do cadastro — ver «Clones» em pixAutomaticoView.
+          supabase.from('equipe_operadores_clones').select('operador_id, equipe_id')
+            .eq('empresa_id', empresa.id),
           // Mês fechado tem foto. Ver `fetchRetratoPixDoMes`.
           ehMesAtual(mes) ? Promise.resolve(null) : fetchRetratoPixDoMes(empresa.id, mes),
         ]);
         listaOps  = (ops  ?? []) as OperadorInfo[];
         listaEqs  = (eqs  ?? []) as EquipeComSetor[];
         listaSets = (sets ?? []) as { id: string; nome: string }[];
+
+        const clones = clonesPorOperador((clonesLidos ?? []) as CloneDeEquipe[], listaEqs);
+        clonesRef.current = clones;
+        /*
+         * O líder preso a um setor alternativo (Treinamento) não tem operador
+         * nenhum com `setor_id` dele: são todos clones. Sem esta leitura, o
+         * vínculo abria vazio e ele não registrava Pix para ninguém.
+         */
+        if (setorEscopo) {
+          const naLista = new Set(listaOps.map(o => o.id));
+          const faltando = Object.keys(clones).filter(id =>
+            !naLista.has(id) && clones[id].some(c => c.setor_id === setorEscopo));
+          let perfisDosClones: OperadorInfo[] = [];
+          if (faltando.length > 0) {
+            const { data } = await supabase.from('perfis')
+              .select('id, nome, equipe_id, setor_id, perfil, foto_url')
+              .in('id', faltando);
+            perfisDosClones = (data ?? []) as OperadorInfo[];
+          }
+          listaOps = incluirClonesDoSetor(listaOps, perfisDosClones, clones, setorEscopo);
+        }
 
         /*
          * Mês fechado: o AGRUPAMENTO vem do retrato, não das tabelas de hoje.
@@ -1345,7 +1376,9 @@ export function PixAutomatico() {
         empresaId:    empresa.id,
         operadorId:   dono ? dono.id : perfil.id,
         operadorNome: dono ? dono.nome : (perfil.nome ?? perfil.email ?? '—'),
-        setorId:      dono ? dono.setor_id : (perfil.setor_id ?? null),
+        setorId:      dono
+          ? setorDoRegistroPix(dono, setorFoco, clonesRef.current)
+          : (perfil.setor_id ?? null),
         nrCliente:    nr,
         valor,
         extra:        extraNovo,
