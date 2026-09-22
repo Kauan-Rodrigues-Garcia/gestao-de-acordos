@@ -46,6 +46,13 @@ function base(p: Partial<Retorno>): Retorno {
   };
 }
 
+/** Abre o bloco recolhido de uma pessoa, na visão de grupo. */
+function abrirPessoa(nome: string) {
+  const botao = screen.getAllByTitle('Ver os chips').find(b => b.textContent?.includes(nome));
+  if (!botao) throw new Error(`Bloco de ${nome} não encontrado.`);
+  fireEvent.click(botao);
+}
+
 describe('Chips Físicos — liderança', () => {
   beforeEach(() => {
     estado = base({
@@ -71,13 +78,44 @@ describe('Chips Físicos — liderança', () => {
     expect(within(contadores).getByRole('button', { name: /1\s*Tempo encerrado/ })).toBeTruthy();
     expect(screen.getByText('Ana Lima')).toBeTruthy();
     expect(screen.getByText('Bruno Reis')).toBeTruthy();
+    // Recolhido, o bloco já avisa o tempo encerrado.
+    expect(screen.getByText('1 tempo encerrado')).toBeTruthy();
+    abrirPessoa('Ana Lima');
     // O selo do chip cujo tempo acabou — o status continua Banido.
     expect(screen.getByTitle(/O tempo terminou em/)).toBeTruthy();
     expect(screen.getByText('Banido')).toBeTruthy();
   });
 
+  it('cada pessoa nasce recolhida e abre no clique', () => {
+    render(<ChipsFisicos />);
+    expect(screen.queryByText('(18) 91111-0000')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Status/ })).toBeNull();
+    abrirPessoa('Ana Lima');
+    expect(screen.getByText('(18) 91111-0000')).toBeTruthy();
+    // Só a Ana abriu; o Bruno continua fechado.
+    expect(screen.queryByText('(18) 93333-0000')).toBeNull();
+    fireEvent.click(screen.getByTitle('Recolher'));
+    expect(screen.queryByText('(18) 91111-0000')).toBeNull();
+  });
+
+  it('«Expandir todos» abre todo mundo, e «Recolher todos» fecha', () => {
+    render(<ChipsFisicos />);
+    fireEvent.click(screen.getByRole('button', { name: /Expandir todos/ }));
+    expect(screen.getByText('(18) 91111-0000')).toBeTruthy();
+    expect(screen.getByText('(18) 93333-0000')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Recolher todos/ }));
+    expect(screen.queryByText('(18) 91111-0000')).toBeNull();
+  });
+
+  it('com busca, os blocos já vêm abertos', () => {
+    render(<ChipsFisicos />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar chip' }), { target: { value: 'Bruno' } });
+    expect(screen.getByText('(18) 93333-0000')).toBeTruthy();
+  });
+
   it('Restrição aceita tempo de até 24 horas', () => {
     render(<ChipsFisicos />);
+    abrirPessoa('Ana Lima');
     fireEvent.click(screen.getAllByRole('button', { name: /Status/ })[0]);
     const janela = screen.getByRole('dialog');
     fireEvent.click(within(janela).getByRole('radio', { name: /Restrição/ }));
@@ -91,6 +129,7 @@ describe('Chips Físicos — liderança', () => {
       pessoas: new Map([['ana', pessoa('ana', 'Ana Lima')]]),
     });
     render(<ChipsFisicos />);
+    abrirPessoa('Ana Lima');
     expect(screen.getByText('Chip reserva').className).toMatch(/font-bold/);
   });
 
@@ -109,6 +148,7 @@ describe('Chips Físicos — liderança', () => {
 
   it('abre a janela de status com os quatro status', () => {
     render(<ChipsFisicos />);
+    abrirPessoa('Ana Lima');
     fireEvent.click(screen.getAllByRole('button', { name: /Status/ })[0]);
     const janela = screen.getByRole('dialog');
     expect(within(janela).getByRole('radio', { name: /Ativo/ })).toBeTruthy();

@@ -15,13 +15,24 @@
  * tempo encerrado, e cada contador filtra a lista. É a primeira pergunta de
  * quem cuida do setor («quantos banidos temos?») e a resposta já leva à lista.
  *
+ * ## Na visão de grupo, cada pessoa nasce recolhida
+ *
+ * Com o setor inteiro na tela, a lista de chips de todo mundo aberta vira uma
+ * parede (pedido de 22/09/2026). Liderança e gerência veem uma linha por
+ * pessoa — nome, contagem por status e tempo encerrado — e clicam para abrir.
+ * Com filtro ou busca, o padrão se inverte: os blocos já vêm abertos, porque
+ * quem filtrou quer ver os chips que sobraram. O operador (`proprios`) não
+ * muda: a lista dele é uma só e vem aberta.
+ *
  * ## Separado dos números do Núcleo
  *
  * Nada aqui lê ou escreve `numeros_whatsapp`. Ver a migration 20260921160000.
  */
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import { Database, Plus, Search, Smartphone, UserX } from 'lucide-react';
+import {
+  ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Plus, Search, Smartphone, UserX,
+} from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -77,6 +88,15 @@ interface EstadoCadastro {
 
 const CADASTRO_FECHADO: EstadoCadastro = { aberto: false, chip: null, dono: null };
 
+const NENHUM: ReadonlySet<string> = new Set();
+
+/**
+ * Os blocos que a pessoa abriu ou fechou, relativos ao padrão do modo: sem
+ * filtro o padrão é recolhido, com filtro é aberto. `filtrando` vai junto para
+ * a troca de modo zerar as escolhas sem precisar de efeito.
+ */
+interface BlocosAlternados { filtrando: boolean; ids: ReadonlySet<string> }
+
 export function ChipsFisicos() {
   const {
     habilitado, alcance, podeCuidarColegas, chips, pessoas, setores,
@@ -128,6 +148,28 @@ export function ChipsFisicos() {
   const filtrando = filtro.status !== 'todos' || filtro.busca.trim() !== '';
 
   const blocos = useMemo(() => agruparPorPessoa(visiveis, pessoas), [visiveis, pessoas]);
+
+  const [alternados, setAlternados] =
+    useState<BlocosAlternados>({ filtrando: false, ids: NENHUM });
+  const idsAlternados = alternados.filtrando === filtrando ? alternados.ids : NENHUM;
+  const blocoAberto = (id: string) => filtrando !== idsAlternados.has(id);
+  const todosAbertos = blocos.length > 0 && blocos.every(b => blocoAberto(b.pessoa.id));
+
+  const alternarBloco = useCallback((id: string) => {
+    setAlternados(a => {
+      const ids = new Set(a.filtrando === filtrando ? a.ids : NENHUM);
+      if (ids.has(id)) ids.delete(id); else ids.add(id);
+      return { filtrando, ids };
+    });
+  }, [filtrando]);
+
+  function abrirOuRecolherTodos() {
+    const abrir = !todosAbertos;
+    setAlternados({
+      filtrando,
+      ids: abrir === filtrando ? NENHUM : new Set(blocos.map(b => b.pessoa.id)),
+    });
+  }
 
   /** O setor que a tela está olhando: o próprio, ou o escolhido no filtro. */
   const setorOlhado: string | null | undefined =
@@ -240,6 +282,9 @@ export function ChipsFisicos() {
       setorNome={mostrarSetor ? nomeDoSetor(b.pessoa.setor_id) : null}
       podeAdicionar={podeCuidarColegas || b.pessoa.id === meuId}
       onAdicionar={() => adicionar(b.pessoa.id)}
+      aberto={blocoAberto(b.pessoa.id)}
+      onAlternar={() => alternarBloco(b.pessoa.id)}
+      encerrados={b.chips.reduce((n, c) => n + (idsEncerrados.has(c.id) ? 1 : 0), 0)}
     >
       {b.chips.map(linha)}
     </BlocoPessoaChips>
@@ -301,6 +346,13 @@ export function ChipsFisicos() {
             </SelectContent>
           </Select>
         )}
+        {visaoDeGrupo && blocos.length > 1 && (
+          <Button variant="outline" onClick={abrirOuRecolherTodos}>
+            {todosAbertos
+              ? <><ChevronsDownUp className="mr-1 h-4 w-4" aria-hidden /> Recolher todos</>
+              : <><ChevronsUpDown className="mr-1 h-4 w-4" aria-hidden /> Expandir todos</>}
+          </Button>
+        )}
         <Button onClick={() => adicionar(null)}>
           <Plus className="mr-1 h-4 w-4" aria-hidden /> Adicionar chip
         </Button>
@@ -355,14 +407,14 @@ export function ChipsFisicos() {
                   {plural(g.totalChips, 'chip', 'chips')} · {plural(g.blocos.length, 'pessoa', 'pessoas')}
                 </span>
               </div>
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid items-start gap-3 lg:grid-cols-2">
                 {g.blocos.map(b => blocoDePessoa(b, false))}
               </div>
             </section>
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid items-start gap-3 lg:grid-cols-2">
           {blocos.map(b => blocoDePessoa(b, false))}
         </div>
       )}
@@ -483,40 +535,68 @@ function MiniAvatar({ nome, foto }: { nome: string; foto: string | null }) {
 }
 
 function BlocoPessoaChips({
-  bloco, setorNome, podeAdicionar, onAdicionar, children,
+  bloco, setorNome, podeAdicionar, onAdicionar, aberto, onAlternar, encerrados, children,
 }: {
   bloco: BlocoPessoa<ChipFisicoRow>;
   setorNome: string | null;
   podeAdicionar: boolean;
   onAdicionar: () => void;
+  aberto: boolean;
+  onAlternar: () => void;
+  /** Chips desta pessoa com o tempo encerrado — o aviso que aparece fechado. */
+  encerrados: number;
   children: ReactNode;
 }) {
   const { pessoa, chips } = bloco;
   const conta: Record<StatusChip, number> = { ativo: 0, restricao: 0, banido: 0, recuperar: 0 };
   for (const c of chips) conta[c.status] += 1;
+  const idConteudo = `chips-de-${pessoa.id}`;
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
-            {pessoa.foto_url && <AvatarImage src={pessoa.foto_url} alt={pessoa.nome} />}
-            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-              {iniciaisDe(pessoa.nome)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <CardTitle className="truncate text-base">{pessoa.nome}</CardTitle>
-            <p className="flex flex-wrap items-center gap-x-2.5 text-xs text-muted-foreground">
-              {setorNome && <span>{setorNome}</span>}
-              {STATUS_CHIP.filter(s => conta[s] > 0).map(s => (
-                <span key={s} className="flex items-center gap-1 tabular-nums">
-                  <span className={cn('h-1.5 w-1.5 rounded-full', PONTO_STATUS_CHIP[s])} aria-hidden />
-                  {conta[s]} {rotuloContagem(s, conta[s])}
-                </span>
-              ))}
-            </p>
-          </div>
+      <CardHeader className={aberto ? 'px-4 pb-3 pt-4' : 'px-4 py-3'}>
+        <div className="flex items-center gap-2">
+          {/* O cabeçalho inteiro abre e fecha; o «+» fica fora do botão. */}
+          <button
+            type="button"
+            onClick={onAlternar}
+            aria-expanded={aberto}
+            aria-controls={idConteudo}
+            title={aberto ? 'Recolher' : 'Ver os chips'}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronRight
+              className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', aberto && 'rotate-90')}
+              aria-hidden
+            />
+            <Avatar className="h-9 w-9">
+              {pessoa.foto_url && <AvatarImage src={pessoa.foto_url} alt="" />}
+              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                {iniciaisDe(pessoa.nome)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-base font-semibold leading-tight">{pessoa.nome}</span>
+              <span className="flex flex-wrap items-center gap-x-2.5 text-xs text-muted-foreground">
+                {setorNome && <span>{setorNome}</span>}
+                {STATUS_CHIP.filter(s => conta[s] > 0).map(s => (
+                  <span key={s} className="flex items-center gap-1 tabular-nums">
+                    <span className={cn('h-1.5 w-1.5 rounded-full', PONTO_STATUS_CHIP[s])} aria-hidden />
+                    {conta[s]} {rotuloContagem(s, conta[s])}
+                  </span>
+                ))}
+                {encerrados > 0 && (
+                  <span className="flex items-center gap-1 font-medium tabular-nums text-sky-700 dark:text-sky-300">
+                    <span className={cn('h-1.5 w-1.5 rounded-full', PONTO_TEMPO_ENCERRADO)} aria-hidden />
+                    {encerrados} tempo encerrado
+                  </span>
+                )}
+              </span>
+            </span>
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+              {plural(chips.length, 'chip', 'chips')}
+            </span>
+          </button>
           {podeAdicionar && (
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={onAdicionar}
                     aria-label={`Adicionar chip para ${pessoa.nome}`} title="Adicionar chip">
@@ -525,7 +605,9 @@ function BlocoPessoaChips({
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-2 pt-0">{children}</CardContent>
+      {aberto && (
+        <CardContent id={idConteudo} className="space-y-2 px-4 pb-4 pt-0">{children}</CardContent>
+      )}
     </Card>
   );
 }
