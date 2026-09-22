@@ -321,8 +321,13 @@ export function ChipsFisicos() {
         />
       </div>
 
-      {/* ── Busca, setor e cadastro ───────────────────────────────────────── */}
+      {/* ── Cadastro, busca e setor ───────────────────────────────────────── */}
+      {/* «Adicionar chip» abre a linha: é a ação mais usada, e na ponta direita
+          ficava longe de quem lê da esquerda (pedido de 22/09/2026). */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Button onClick={() => adicionar(null)} className="shrink-0">
+          <Plus className="mr-1 h-4 w-4" aria-hidden /> Adicionar chip
+        </Button>
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
@@ -353,9 +358,6 @@ export function ChipsFisicos() {
               : <><ChevronsUpDown className="mr-1 h-4 w-4" aria-hidden /> Expandir todos</>}
           </Button>
         )}
-        <Button onClick={() => adicionar(null)}>
-          <Plus className="mr-1 h-4 w-4" aria-hidden /> Adicionar chip
-        </Button>
       </div>
 
       {erro && <p className="text-sm text-destructive">{erro}</p>}

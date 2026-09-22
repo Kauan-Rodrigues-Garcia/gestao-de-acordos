@@ -86,6 +86,13 @@ describe('Chips Físicos — liderança', () => {
     expect(screen.getByText('Banido')).toBeTruthy();
   });
 
+  it('«Adicionar chip» vem antes da busca, no começo da linha', () => {
+    render(<ChipsFisicos />);
+    const botao = screen.getByRole('button', { name: 'Adicionar chip' });
+    const busca = screen.getByRole('searchbox', { name: 'Buscar chip' });
+    expect(botao.compareDocumentPosition(busca) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('cada pessoa nasce recolhida e abre no clique', () => {
     render(<ChipsFisicos />);
     expect(screen.queryByText('(18) 91111-0000')).toBeNull();
