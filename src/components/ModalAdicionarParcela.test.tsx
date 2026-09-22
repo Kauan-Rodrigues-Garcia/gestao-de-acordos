@@ -155,4 +155,16 @@ describe('ModalAdicionarParcela — recorrente não entra como parcela', () => {
     ));
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it('acordo que JÁ É PIX Automático não recebe parcela: sem reparcelamento', async () => {
+    const { toast } = await import('sonner');
+    const { onConfirm } = abrir({ acordo: { ...acordo, tipo: 'pix_automatico' } as Acordo });
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/não tem parcelas nem reparcelamento/),
+      expect.anything(),
+    ));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });

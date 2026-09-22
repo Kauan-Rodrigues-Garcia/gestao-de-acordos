@@ -38,7 +38,10 @@ import {
   getEstadoFromAcordo, extractLinkAcordo, formatarTelefonePP,
   INSTITUICOES_OPTIONS, getTodayISO,
 } from '@/lib/index';
-import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
+import {
+  ehFormaRecorrente, erroVencimentoRecorrente, nomeDaFormaRecorrente,
+} from '@/lib/formasRecorrentes';
+import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import {
@@ -115,6 +118,7 @@ export function AcordoEditInline({
   const { empresa } = useEmpresa();
   const { perfil }  = useAuth();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
+  const registrarPixAoPagar = useRegistrarPixAoPagar();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
@@ -210,20 +214,27 @@ export function AcordoEditInline({
       }
     }
     /*
-     * Recorrente: não se REMARCA para o passado.
+     * Recorrente: só se REMARCA para o mês atual, de hoje em diante.
      *
      * A trava é sobre a MUDANÇA, não sobre a data que já estava gravada —
-     * `vencimento !== acordo.vencimento`. Um PIX Automático antigo, anterior à
-     * regra, continua editável em tudo o mais; recusá-lo por inteiro deixaria
-     * dado histórico sem como marcar pago. Ver `lib/formasRecorrentes.ts`.
+     * `vencimento !== acordo.vencimento`, ou a forma virando recorrente agora.
+     * Um PIX Automático antigo, anterior à regra, continua editável em tudo o
+     * mais; recusá-lo por inteiro deixaria dado histórico sem como marcar pago.
+     * Ver `lib/formasRecorrentes.ts`.
      */
-    if (
-      !isPaguePlay && ehFormaRecorrente(tipo)
-      && vencimento !== acordo.vencimento && vencimento < getTodayISO()
-    ) {
+    const recorrente = !isPaguePlay && ehFormaRecorrente(tipo);
+    const virouRecorrente = recorrente && tipo !== acordo.tipo;
+    if (recorrente && (vencimento !== acordo.vencimento || virouRecorrente)) {
+      const erroData = erroVencimentoRecorrente(tipo, vencimento, getTodayISO());
+      if (erroData) { toast.error(erroData); return; }
+    }
+    // Sem reparcelamento: um acordo parcelado não vira recorrente — as outras
+    // parcelas continuariam lá, e o Pix Automático é o acordo inteiro.
+    if (virouRecorrente && (acordo.parcelas ?? 1) > 1) {
       toast.error(
-        `${nomeDaFormaRecorrente(tipo)} não pode ser remarcado para uma data passada — `
-        + 'use hoje ou uma data futura.',
+        `Um acordo parcelado não pode virar ${nomeDaFormaRecorrente(tipo)}: ele é parcela única, `
+        + 'sem reparcelamento.',
+        { duration: 8000 },
       );
       return;
     }
@@ -499,7 +510,13 @@ export function AcordoEditInline({
       // banco. Ver migration 20260810b.
 
       toast.success('Acordo atualizado!');
-      onSaved((updated ?? { ...acordo, ...payload }) as Acordo);
+      const salvo = (updated ?? { ...acordo, ...payload }) as Acordo;
+      onSaved(salvo);
+      // Recorrente que passou a contar (status ou forma mudou) entra no Pix —
+      // ver `useRegistrarPixAoPagar`. Sem mudança, nada a conferir.
+      if (!isPaguePlay && (salvo.status !== acordo.status || salvo.tipo !== acordo.tipo)) {
+        void registrarPixAoPagar(salvo);
+      }
     } catch (e) {
       toast.error(
         mensagemErroNr(e, isPaguePlay ? 'Código' : 'NR')
@@ -842,7 +859,18 @@ export function AcordoEditInline({
                 {/* Forma de Pagamento */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Forma de Pagamento</Label>
-                  <Select value={tipo} onValueChange={v => setTipo(v as Acordo['tipo'])}>
+                  <Select
+                    value={tipo}
+                    onValueChange={v => {
+                      setTipo(v as Acordo['tipo']);
+                      // Recorrente não muda a quantidade: volta ao que está
+                      // gravado, para uma digitação anterior não criar parcela.
+                      if (!isPaguePlay && ehFormaRecorrente(v)) {
+                        setParcelas(String(acordo.parcelas || 1));
+                        setEditandoParcelas(false);
+                      }
+                    }}
+                  >
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(isPaguePlay ? TIPO_LABELS_PAGUEPLAY : TIPO_LABELS).map(([value, label]) => (
@@ -873,6 +901,13 @@ export function AcordoEditInline({
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : ehFormaRecorrente(tipo) ? (
+                    // PIX Automático / Cartão Recorrente: parcela única, sem
+                    // reparcelamento — nem quantidade, nem "Editar parcelas".
+                    <div className="h-8 flex items-center px-2 rounded-md border border-input bg-muted/30">
+                      <span className="text-xs font-mono font-semibold text-foreground">{parcelas}x</span>
+                      <span className="ml-2 text-[10px] text-muted-foreground">sem reparcelamento</span>
+                    </div>
                   ) : jaParcelado && !editandoParcelas ? (
                     // Acordo que já é parcelamento: o número aparece escrito e
                     // só vira campo depois do botão. Ver `jaParcelado`.
@@ -903,7 +938,7 @@ export function AcordoEditInline({
                   {/* Editar as parcelas em si (data, valor, forma de cada uma)
                       fica ao lado da quantidade: é onde o operador já está
                       olhando quando pensa em parcela. */}
-                  {!isPaguePlay && jaParcelado && (
+                  {!isPaguePlay && jaParcelado && !ehFormaRecorrente(tipo) && (
                     <button
                       type="button"
                       onClick={() => setModalParcelasOpen(true)}

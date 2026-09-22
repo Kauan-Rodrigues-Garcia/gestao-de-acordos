@@ -97,8 +97,8 @@ export function FormBP({ state }: { state: SharedFormState }) {
                 <DatePickerField
                   label="Vencimento" required
                   value={vencimento} onChange={setVencimento}
-                  // Recorrente não se agenda para trás — ver `formasRecorrentes`.
-                  semPassado={formaRecorrente}
+                  // Recorrente só no mês atual, de hoje em diante — ver `formasRecorrentes`.
+                  soMesAtual={formaRecorrente}
                 />
                 <div className="space-y-1">
                   <Label className="text-xs">
@@ -149,7 +149,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
                     <span>
                       Lembre: o <strong>Valor</strong> tem que ser o <strong>VALOR TOTAL</strong> do acordo,
                       {' '}não o de uma parcela. <strong>{nomeDaFormaRecorrente(tipo)}</strong> entra em{' '}
-                      <strong>1 vez</strong>, com vencimento de <strong>hoje em diante</strong>, e ao salvar
+                      <strong>1 vez</strong>, com vencimento de <strong>hoje até o fim do mês</strong>, e ao salvar
                       {' '}é registrado <strong>automaticamente no Pix Automático</strong>.
                     </span>
                   </p>

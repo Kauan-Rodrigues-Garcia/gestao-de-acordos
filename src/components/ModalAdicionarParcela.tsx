@@ -179,6 +179,20 @@ export function ModalAdicionarParcela({
     const erro = validarPlano(plano);
     if (erro) { toast.error(erro); return; }
     /*
+     * Acordo recorrente não tem reparcelamento (22/09/2026).
+     *
+     * O botão já some do detalhe desse acordo; esta linha é para a porta A
+     * (NR já tabulado) e para qualquer caminho novo que abra o modal.
+     */
+    if (!isPaguePlay && acordo && ehFormaRecorrente(acordo.tipo)) {
+      toast.error(
+        `${nomeDaFormaRecorrente(acordo.tipo)} não tem parcelas nem reparcelamento — `
+        + 'não é possível adicionar parcela a este acordo.',
+        { duration: 8000 },
+      );
+      return;
+    }
+    /*
      * PIX Automático e Cartão Recorrente não entram como PARCELA.
      *
      * Como parcela, o valor é só um pedaço do acordo, e o Pix Automático paga

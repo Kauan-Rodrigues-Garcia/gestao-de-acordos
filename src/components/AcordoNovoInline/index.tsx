@@ -38,7 +38,9 @@ import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
-import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
+import {
+  ehFormaRecorrente, erroVencimentoRecorrente, nomeDaFormaRecorrente,
+} from '@/lib/formasRecorrentes';
 import { useCargoPermissoes }       from '@/hooks/useCargoPermissoes';
 import { niveisLiberados }          from '@/lib/permissoes-escopo';
 import { registrarAcordoNoPixAutomatico } from '@/services/pixAutomaticoDoAcordo.service';
@@ -264,16 +266,16 @@ export function AcordoNovoInline({
   function validar(): string | null {
     if (!vencimento)                        return 'Data de vencimento obrigatória';
     /*
-     * PIX Automático e Cartão Recorrente não se agendam para trás.
+     * PIX Automático e Cartão Recorrente: só no mês atual, de hoje em diante.
      *
-     * O calendário já fecha os dias anteriores, mas a data também entra pela
+     * O calendário já fecha os outros dias, mas a data também entra pela
      * leitura de imagem (`DropzoneImagensAcordo`), que não passa por ele. Sem
      * esta linha, um comprovante antigo lido por foto gravava a autorização com
-     * vencimento no passado.
+     * vencimento no passado (ou no mês que vem).
      */
-    if (formaRecorrente && vencimento < getTodayISO()) {
-      return `${nomeDaFormaRecorrente(tipo)} não pode ser agendado para uma data passada — `
-        + 'use hoje ou uma data futura.';
+    if (formaRecorrente) {
+      const erroData = erroVencimentoRecorrente(tipo, vencimento, getTodayISO());
+      if (erroData) return erroData;
     }
     // O mês do acordo é o do VENCIMENTO. Cadastrar hoje com vencimento em mês
     // fechado reescreveria um fechamento já apresentado — ver `lib/fechamentoMes`.
@@ -540,6 +542,18 @@ export function AcordoNovoInline({
                 .select('*, perfis(id, nome, email, perfil, setor_id)')
                 .eq('id', conflitoFinal.acordoId)
                 .maybeSingle();
+              // O caminho inverso também fica fechado: o acordo recorrente
+              // existente não recebe parcela — não há reparcelamento
+              // (22/09/2026). `ModalAdicionarParcela` recusa o mesmo.
+              if (acordoMeu && ehFormaRecorrente((acordoMeu as Acordo).tipo)) {
+                toast.error(
+                  `${label} "${nrParaVerificar}" já é seu num acordo de `
+                  + `${nomeDaFormaRecorrente((acordoMeu as Acordo).tipo)}, que não tem parcelas nem `
+                  + 'reparcelamento. Para mudar a forma de pagamento, edite o acordo existente.',
+                  { duration: 8000 },
+                );
+                return;
+              }
               if (acordoMeu) {
                 setAcordoParaParcela(acordoMeu as Acordo);
                 return;

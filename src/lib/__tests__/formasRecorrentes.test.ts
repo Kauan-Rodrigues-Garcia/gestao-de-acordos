@@ -10,8 +10,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   FORMAS_RECORRENTES, ehFormaRecorrente, nomeDaFormaRecorrente,
+  erroVencimentoRecorrente, ultimoDiaDoMesDe,
 } from '@/lib/formasRecorrentes';
 import { TIPOS_BOOKPLAY } from '@/components/AcordoNovoInline/constants';
+import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 
 describe('formasRecorrentes', () => {
   it('são exatamente duas: PIX Automático e Cartão Recorrente', () => {
@@ -51,5 +53,36 @@ describe('formasRecorrentes', () => {
   it('as duas existem no formulário da BookPlay', () => {
     const valores = TIPOS_BOOKPLAY.map(t => t.value);
     for (const forma of FORMAS_RECORRENTES) expect(valores).toContain(forma);
+  });
+
+  // Marcar pago na lista não oferece reagendar a "próxima" (22/09/2026).
+  it('nenhuma forma recorrente reagenda parcela na lista de acordos', () => {
+    for (const forma of FORMAS_RECORRENTES) expect(isTipoParcelado(forma, false)).toBe(false);
+    expect(isTipoParcelado('boleto', false)).toBe(true);
+  });
+});
+
+describe('vencimento recorrente: só o mês atual, de hoje em diante', () => {
+  const HOJE = '2026-09-22';
+
+  it('aceita de hoje até o último dia do mês', () => {
+    expect(erroVencimentoRecorrente('pix_automatico', '2026-09-22', HOJE)).toBeNull();
+    expect(erroVencimentoRecorrente('pix_automatico', '2026-09-30', HOJE)).toBeNull();
+  });
+
+  it('recusa data passada', () => {
+    expect(erroVencimentoRecorrente('pix_automatico', '2026-09-21', HOJE)).toMatch(/data passada/);
+  });
+
+  it('recusa o mês que vem', () => {
+    expect(erroVencimentoRecorrente('cartao_recorrente', '2026-10-01', HOJE))
+      .toMatch(/^Cartão Recorrente só pode ser lançado no mês atual/);
+  });
+
+  it('último dia do mês respeita mês curto e bissexto', () => {
+    expect(ultimoDiaDoMesDe('2026-09-22')).toBe('2026-09-30');
+    expect(ultimoDiaDoMesDe('2026-02-10')).toBe('2026-02-28');
+    expect(ultimoDiaDoMesDe('2028-02-10')).toBe('2028-02-29');
+    expect(ultimoDiaDoMesDe('2026-12-05')).toBe('2026-12-31');
   });
 });

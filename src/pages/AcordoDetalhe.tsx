@@ -20,6 +20,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { CadeadoMes } from '@/components/CadeadoMes';
 import { useFechamentoMes } from '@/hooks/useFechamentoMes';
+import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { mesDaData } from '@/lib/fechamentoMes';
 
 export default function AcordoDetalhe() {
@@ -34,6 +35,7 @@ export default function AcordoDetalhe() {
   const [historico, setHistorico] = useState<HistoricoAcordo[]>([]);
   const [loading, setLoading] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
+  const registrarPixAoPagar = useRegistrarPixAoPagar();
 
   /**
    * O cadeado desta tela sai do VENCIMENTO do acordo, e não de um seletor: aqui
@@ -73,6 +75,8 @@ export default function AcordoDetalhe() {
         valor_novo: novoStatus,
       });
       toast.success('Status atualizado!');
+      // Recorrente que passou a contar entra no Pix — ver `useRegistrarPixAoPagar`.
+      if (!isPP) void registrarPixAoPagar({ ...acordo, status: novoStatus });
       fetchAcordo();
     } else toast.error('Erro ao atualizar status');
     setAtualizando(false);

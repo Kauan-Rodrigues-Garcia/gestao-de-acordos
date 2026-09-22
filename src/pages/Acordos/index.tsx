@@ -13,6 +13,7 @@ import { useValorComEspera } from '@/hooks/useValorComEspera';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { useTagsEmUso } from '@/hooks/useTagsEmUso';
 import { supabase, Acordo } from '@/lib/supabase';
@@ -56,6 +57,7 @@ export default function Acordos() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
+  const registrarPixAoPagar = useRegistrarPixAoPagar();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const statusLabels = tenant.statusLabels;
@@ -486,8 +488,15 @@ export default function Acordos() {
         },
       });
 
+      // PIX Automático / Cartão Recorrente pago entra no Pix — inclusive o que
+      // nasceu "Não pago" ou antes de 14/09. Ver `useRegistrarPixAoPagar`.
+      if (!isPP) {
+        void registrarPixAoPagar({ ...a, status: 'pago', vencimento: dataPagamento });
+      }
+
       // Parcelado (incremental): se ainda falta criar a próxima parcela,
       // abre o modal de reagendamento para confirmar data + valor.
+      // Recorrente não entra aqui: `isTipoParcelado` não o conta.
       const numParcela = a.numero_parcela ?? 1;
       const totalP     = a.parcelas ?? 1;
       const empId      = empresa?.id;

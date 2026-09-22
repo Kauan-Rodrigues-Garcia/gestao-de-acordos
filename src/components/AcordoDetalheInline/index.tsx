@@ -33,6 +33,7 @@ import {
 } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
 import { datasDoLote } from '@/lib/vencimentos';
+import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
 
 // Re-export for external consumers. O detalhe não abre mais o modal de
@@ -102,14 +103,18 @@ export function AcordoDetalheInline({
 
   const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
   const totalParcelas = acordoLocal.parcelas ?? 1;
+  // PIX Automático e Cartão Recorrente não têm parcelas nem reparcelamento
+  // (`lib/formasRecorrentes.ts`). Os antigos, lançados em "10x" antes da
+  // regra, deixam de exibir o parcelamento e o botão de nova parcela.
+  const recorrente = !isPaguePlay && ehFormaRecorrente(acordoLocal.tipo);
   // BookPlay: independe da forma de pagamento — parcelas adicionadas
   // manualmente podem misturar formas (ex.: entrada no Pix + boleto do
   // restante). PaguePlay mantém a regra original por tipo parcelado.
   const deveExibirParcelas = isPaguePlay
     ? isTipoParcelado(acordoLocal.tipo, true) && totalParcelas > 1
-    : totalParcelas > 1;
+    : totalParcelas > 1 && !recorrente;
   // Adicionar parcela manual é recurso BookPlay (dono ou visão ampla).
-  const podeAdicionarParcela = !isPaguePlay &&
+  const podeAdicionarParcela = !isPaguePlay && !recorrente &&
     (perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil));
 
   // "Link do Acordo" é conceito PaguePlay (observacoes = [ESTADO]+link). Na

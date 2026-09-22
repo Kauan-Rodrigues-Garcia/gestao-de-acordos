@@ -24,7 +24,9 @@ export const _STATUS_LABELS_BK: Record<string, string> = {
   nao_pago: 'Não Pago',
 };
 
-export const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix_automatico', 'cartao_recorrente', 'pix', 'cartao'];
+// Sem PIX Automático e Cartão Recorrente: não têm reparcelamento — marcar pago
+// não oferece agendar a "próxima" (ver `lib/formasRecorrentes.ts`).
+export const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix', 'cartao'];
 export const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
 
 export function isTipoParcelado(tipo: string, isPP: boolean): boolean {
