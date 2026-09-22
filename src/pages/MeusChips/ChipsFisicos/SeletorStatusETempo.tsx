@@ -1,10 +1,10 @@
 /**
- * SeletorStatusETempo — os três status e, em Banido ou Recuperar, o tempo.
+ * SeletorStatusETempo — os quatro status e, fora de Ativo, o tempo.
  *
  * Serve às duas janelas: a do status e a do cadastro (que já deixa o chip
  * nascer banido, sem precisar de um segundo passo).
  *
- * O tempo é opcional e vai até 12 horas. Os atalhos cobrem o comum; os campos
+ * O tempo é opcional e vai até 24 horas. Os atalhos cobrem o comum; os campos
  * de hora e minuto cobrem o resto. A janela mostra QUANDO termina, e não só
  * quanto dura — «termina às 22:40» é o que a pessoa confere no relógio.
  */
@@ -51,7 +51,7 @@ export function SeletorStatusETempo({ valor, onMudar, idBase }: SeletorStatusETe
   const erro  = erroDoTempo(status, minutos);
 
   function escolherStatus(s: StatusChip) {
-    // Ativo não leva tempo; entre Banido e Recuperar o tempo escolhido fica.
+    // Ativo não leva tempo; entre os demais status o tempo escolhido fica.
     onMudar({ status: s, minutos: aceitaTempo(s) ? minutos : null });
   }
 
@@ -64,7 +64,7 @@ export function SeletorStatusETempo({ valor, onMudar, idBase }: SeletorStatusETe
     <div className="space-y-4">
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Status</legend>
-        <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup">
           {STATUS_CHIP.map(s => {
             const marcado = s === status;
             return (
@@ -96,7 +96,7 @@ export function SeletorStatusETempo({ valor, onMudar, idBase }: SeletorStatusETe
       {aceitaTempo(status) && (
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">
-            Tempo <span className="font-normal text-muted-foreground">(opcional, até 12 horas)</span>
+            Tempo <span className="font-normal text-muted-foreground">(opcional, até 24 horas)</span>
           </legend>
           <div className="flex flex-wrap gap-1.5">
             <BotaoTempo marcado={minutos === null} onClick={() => onMudar({ status, minutos: null })}>
@@ -112,7 +112,7 @@ export function SeletorStatusETempo({ valor, onMudar, idBase }: SeletorStatusETe
             <div className="w-20 space-y-1">
               <Label htmlFor={`${idBase}-horas`} className="text-xs">Horas</Label>
               <Input
-                id={`${idBase}-horas`} type="number" inputMode="numeric" min={0} max={12}
+                id={`${idBase}-horas`} type="number" inputMode="numeric" min={0} max={24}
                 value={horas} placeholder="0"
                 onChange={e => digitar(e.target.value, mins)}
                 className="h-9 tabular-nums"

@@ -11,7 +11,7 @@
  *
  * ## Os contadores são o filtro
  *
- * A faixa de cima conta Ativos, Banidos, Recuperar e — quando houver — os de
+ * A faixa de cima conta Ativos, Restrição, Banidos, Recuperar e os de
  * tempo encerrado, e cada contador filtra a lista. É a primeira pergunta de
  * quem cuida do setor («quantos banidos temos?») e a resposta já leva à lista.
  *
@@ -39,7 +39,7 @@ import { useAgora } from '@/hooks/useAgora';
 import { useChipsFisicos } from '@/hooks/useChipsFisicos';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import {
-  agruparPorPessoa, estadoDoTempo, filtrarChips, resumir,
+  STATUS_CHIP, agruparPorPessoa, estadoDoTempo, filtrarChips, resumir, rotuloContagem,
   type BlocoPessoa, type FiltroChips, type FiltroStatusChip, type StatusChip,
 } from '@/services/chipsFisicos/chipsFisicosRegras';
 import {
@@ -49,6 +49,10 @@ import { PONTO_STATUS_CHIP, PONTO_TEMPO_ENCERRADO } from './coresStatusChip';
 import { DialogoChipFisico } from './DialogoChipFisico';
 import { DialogoStatusChip } from './DialogoStatusChip';
 import { LinhaChip } from './LinhaChip';
+
+const ROTULO_CONTADOR: Record<StatusChip, string> = {
+  ativo: 'Ativos', restricao: 'Restrição', banido: 'Banidos', recuperar: 'Recuperar',
+};
 
 const TODOS_OS_SETORES = 'todos';
 const SEM_SETOR = 'sem_setor';
@@ -249,13 +253,13 @@ export function ChipsFisicos() {
   return (
     <div className="space-y-5">
       {/* ── Contadores (são o filtro) ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="group" aria-label="Filtrar por status">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="group" aria-label="Filtrar por status">
         <Contador rotulo="Todos" valor={resumo.total} marcado={filtro.status === 'todos'}
                   onClick={() => setFiltro(f => ({ ...f, status: 'todos' }))} />
-        {(['ativo', 'banido', 'recuperar'] as StatusChip[]).map(s => (
+        {STATUS_CHIP.map(s => (
           <Contador
             key={s}
-            rotulo={s === 'ativo' ? 'Ativos' : s === 'banido' ? 'Banidos' : 'Recuperar'}
+            rotulo={ROTULO_CONTADOR[s]}
             valor={resumo[s]}
             ponto={PONTO_STATUS_CHIP[s]}
             marcado={filtro.status === s}
@@ -488,7 +492,7 @@ function BlocoPessoaChips({
   children: ReactNode;
 }) {
   const { pessoa, chips } = bloco;
-  const conta = { ativo: 0, banido: 0, recuperar: 0 };
+  const conta: Record<StatusChip, number> = { ativo: 0, restricao: 0, banido: 0, recuperar: 0 };
   for (const c of chips) conta[c.status] += 1;
 
   return (
@@ -505,11 +509,10 @@ function BlocoPessoaChips({
             <CardTitle className="truncate text-base">{pessoa.nome}</CardTitle>
             <p className="flex flex-wrap items-center gap-x-2.5 text-xs text-muted-foreground">
               {setorNome && <span>{setorNome}</span>}
-              {(['ativo', 'banido', 'recuperar'] as StatusChip[]).filter(s => conta[s] > 0).map(s => (
+              {STATUS_CHIP.filter(s => conta[s] > 0).map(s => (
                 <span key={s} className="flex items-center gap-1 tabular-nums">
                   <span className={cn('h-1.5 w-1.5 rounded-full', PONTO_STATUS_CHIP[s])} aria-hidden />
-                  {conta[s]} {s === 'ativo' ? (conta[s] === 1 ? 'ativo' : 'ativos')
-                    : s === 'banido' ? (conta[s] === 1 ? 'banido' : 'banidos') : 'recuperar'}
+                  {conta[s]} {rotuloContagem(s, conta[s])}
                 </span>
               ))}
             </p>

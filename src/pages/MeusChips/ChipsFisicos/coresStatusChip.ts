@@ -3,7 +3,8 @@
  * componente que exporta constante perde o recarregamento rápido do Vite.
  *
  * Ativo e Banido usam os mesmos tons do Controle de Números — quem olha as duas
- * separações lê a mesma cor com o mesmo sentido. Recuperar fica no âmbar de
+ * separações lê a mesma cor com o mesmo sentido. Restrição usa o laranja de
+ * «Em restrição» do Controle, pelo mesmo motivo. Recuperar fica no âmbar de
  * «em andamento». «Tempo encerrado» não é status, é aviso: tom próprio, para
  * não se confundir com nenhum dos três.
  */
@@ -11,6 +12,7 @@ import type { StatusChip } from '@/services/chipsFisicos/chipsFisicosRegras';
 
 export const CORES_STATUS_CHIP: Record<StatusChip, string> = {
   ativo:     'bg-success/15 text-success border-success/30',
+  restricao: 'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/30',
   banido:    'bg-destructive/15 text-destructive border-destructive/30',
   recuperar: 'bg-warning/15 text-warning border-warning/30',
 };
@@ -18,6 +20,7 @@ export const CORES_STATUS_CHIP: Record<StatusChip, string> = {
 /** O ponto colorido dos contadores e do seletor. */
 export const PONTO_STATUS_CHIP: Record<StatusChip, string> = {
   ativo:     'bg-success',
+  restricao: 'bg-orange-500',
   banido:    'bg-destructive',
   recuperar: 'bg-warning',
 };

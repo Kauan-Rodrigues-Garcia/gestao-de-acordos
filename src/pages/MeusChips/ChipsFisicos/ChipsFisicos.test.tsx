@@ -76,6 +76,24 @@ describe('Chips Físicos — liderança', () => {
     expect(screen.getByText('Banido')).toBeTruthy();
   });
 
+  it('Restrição aceita tempo de até 24 horas', () => {
+    render(<ChipsFisicos />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Status/ })[0]);
+    const janela = screen.getByRole('dialog');
+    fireEvent.click(within(janela).getByRole('radio', { name: /Restrição/ }));
+    expect(within(janela).getByText(/até 24 horas/)).toBeTruthy();
+    expect(within(janela).getByRole('button', { name: '24 h' })).toBeTruthy();
+  });
+
+  it('a observação aparece em negrito', () => {
+    estado = base({
+      chips: [chip({ id: 'a', operador_id: 'ana', numero: '18911110000', observacao: 'Chip reserva' })],
+      pessoas: new Map([['ana', pessoa('ana', 'Ana Lima')]]),
+    });
+    render(<ChipsFisicos />);
+    expect(screen.getByText('Chip reserva').className).toMatch(/font-bold/);
+  });
+
   it('lista quem ainda não cadastrou chip', () => {
     render(<ChipsFisicos />);
     expect(screen.getByText(/Sem chip cadastrado \(2\)/)).toBeTruthy();
@@ -89,11 +107,12 @@ describe('Chips Físicos — liderança', () => {
     expect(screen.getByText('Bruno Reis')).toBeTruthy();
   });
 
-  it('abre a janela de status com os três status', () => {
+  it('abre a janela de status com os quatro status', () => {
     render(<ChipsFisicos />);
     fireEvent.click(screen.getAllByRole('button', { name: /Status/ })[0]);
     const janela = screen.getByRole('dialog');
     expect(within(janela).getByRole('radio', { name: /Ativo/ })).toBeTruthy();
+    expect(within(janela).getByRole('radio', { name: /Restrição/ })).toBeTruthy();
     expect(within(janela).getByRole('radio', { name: /Banido/ })).toBeTruthy();
     expect(within(janela).getByRole('radio', { name: /Recuperar/ })).toBeTruthy();
   });

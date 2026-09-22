@@ -1,12 +1,13 @@
 /**
  * chipsFisicosRegras — o que a separação Chips Físicos sabe, sem banco nem tela.
  *
- * ## Três status e um tempo
+ * ## Quatro status e um tempo
  *
- * Ativo, Banido e Recuperar. Banido e Recuperar podem levar um tempo de até 12
- * horas (`TEMPO_MAXIMO_MINUTOS`); Ativo nunca leva. As duas regras moram também
- * no banco (`chips_fisicos_prazo` e `fn_chips_fisicos_alterar_status`) — aqui
- * elas existem para a tela não oferecer o que a RPC vai recusar.
+ * Ativo, Restrição, Banido e Recuperar. Todo status fora de Ativo pode levar um
+ * tempo de até 24 horas (`TEMPO_MAXIMO_MINUTOS`) — o tempo para o chip voltar;
+ * Ativo nunca leva. As duas regras moram também no banco
+ * (`chips_fisicos_prazo` e `fn_chips_fisicos_alterar_status`, 20260922100000)
+ * — aqui elas existem para a tela não oferecer o que a RPC vai recusar.
  *
  * O fim do tempo NÃO troca o status, como no Controle de Números: a tela mostra
  * «Tempo encerrado» e quem cuida do chip decide.
@@ -21,18 +22,30 @@ import { estadoDoPrazo } from '@/services/numeros/numerosRegras';
 
 // ── Status ──────────────────────────────────────────────────────────────────
 
-export const STATUS_CHIP = ['ativo', 'banido', 'recuperar'] as const;
+export const STATUS_CHIP = ['ativo', 'restricao', 'banido', 'recuperar'] as const;
 export type StatusChip = typeof STATUS_CHIP[number];
 
 export const STATUS_CHIP_LABELS: Record<StatusChip, string> = {
   ativo: 'Ativo',
+  restricao: 'Restrição',
   banido: 'Banido',
   recuperar: 'Recuperar',
 };
 
+/** O rótulo dos contadores: «3 banidos», «1 em restrição». */
+export function rotuloContagem(status: StatusChip, n: number): string {
+  switch (status) {
+    case 'ativo':     return n === 1 ? 'ativo' : 'ativos';
+    case 'restricao': return 'em restrição';
+    case 'banido':    return n === 1 ? 'banido' : 'banidos';
+    case 'recuperar': return 'recuperar';
+  }
+}
+
 /** O que cada status quer dizer, na frase da janela de status. */
 export const STATUS_CHIP_DESCRICAO: Record<StatusChip, string> = {
   ativo: 'Funcionando e em uso.',
+  restricao: 'O WhatsApp restringiu este chip por um tempo.',
   banido: 'O WhatsApp baniu este chip.',
   recuperar: 'Em tentativa de recuperação.',
 };
@@ -41,7 +54,7 @@ export function eStatusChip(valor: unknown): valor is StatusChip {
   return typeof valor === 'string' && (STATUS_CHIP as readonly string[]).includes(valor);
 }
 
-/** Só Banido e Recuperar levam tempo. */
+/** Todo status fora de Ativo leva tempo. */
 export function aceitaTempo(status: StatusChip): boolean {
   return status !== 'ativo';
 }
@@ -63,11 +76,13 @@ export const OBSERVACAO_MAX = 200;
 
 // ── Tempo ───────────────────────────────────────────────────────────────────
 
-/** 12 horas — o teto do pedido, e o do banco. */
-export const TEMPO_MAXIMO_MINUTOS = 12 * 60;
+/** 24 horas — o teto do pedido de 22/09/2026, e o do banco. */
+export const TEMPO_MAXIMO_MINUTOS = 24 * 60;
 
 /** Os atalhos da janela de status. */
-export const TEMPOS_RAPIDOS_MINUTOS = [60, 2 * 60, 4 * 60, 6 * 60, 8 * 60, 12 * 60] as const;
+export const TEMPOS_RAPIDOS_MINUTOS = [
+  60, 2 * 60, 4 * 60, 6 * 60, 8 * 60, 12 * 60, 24 * 60,
+] as const;
 
 /**
  * O que há de errado com este tempo, ou `null`. Sem tempo (`null`) é válido: o
@@ -77,7 +92,7 @@ export function erroDoTempo(status: StatusChip, minutos: number | null): string 
   if (minutos === null) return null;
   if (!aceitaTempo(status)) return 'Chip ativo não leva tempo.';
   if (!Number.isInteger(minutos) || minutos < 1) return 'Informe pelo menos 1 minuto.';
-  if (minutos > TEMPO_MAXIMO_MINUTOS) return 'O tempo vai até 12 horas.';
+  if (minutos > TEMPO_MAXIMO_MINUTOS) return 'O tempo vai até 24 horas.';
   return null;
 }
 
@@ -122,14 +137,17 @@ export interface ChipParaConta {
 export interface ResumoChips {
   total: number;
   ativo: number;
+  restricao: number;
   banido: number;
   recuperar: number;
-  /** Banido ou Recuperar cujo tempo já acabou — quem precisa de atenção. */
+  /** Chip fora de Ativo cujo tempo já acabou — quem precisa de atenção. */
   tempoEncerrado: number;
 }
 
 export function resumir(chips: readonly ChipParaConta[], agora: number): ResumoChips {
-  const r: ResumoChips = { total: 0, ativo: 0, banido: 0, recuperar: 0, tempoEncerrado: 0 };
+  const r: ResumoChips = {
+    total: 0, ativo: 0, restricao: 0, banido: 0, recuperar: 0, tempoEncerrado: 0,
+  };
   for (const c of chips) {
     r.total += 1;
     r[c.status] += 1;
@@ -195,8 +213,8 @@ export interface BlocoPessoa<T extends ChipParaConta> {
 /**
  * Um bloco por pessoa, em ordem alfabética — com muita gente no setor, a
  * liderança procura a pessoa pelo nome, e a ordem não pode mudar a cada status
- * alterado. Dentro do bloco, os que pedem atenção primeiro: Banido, Recuperar,
- * Ativo; e pelo número dentro de cada status.
+ * alterado. Dentro do bloco, os que pedem atenção primeiro: Banido, Restrição,
+ * Recuperar, Ativo; e pelo número dentro de cada status.
  *
  * Chip de pessoa que a tela não conhece (saiu da empresa, por exemplo) cai num
  * bloco com o nome «Pessoa não encontrada», em vez de sumir.
@@ -205,7 +223,9 @@ export function agruparPorPessoa<T extends ChipParaConta>(
   chips: readonly T[],
   pessoas: ReadonlyMap<string, PessoaDoChip>,
 ): BlocoPessoa<T>[] {
-  const ordemStatus: Record<StatusChip, number> = { banido: 0, recuperar: 1, ativo: 2 };
+  const ordemStatus: Record<StatusChip, number> = {
+    banido: 0, restricao: 1, recuperar: 2, ativo: 3,
+  };
   const blocos = new Map<string, BlocoPessoa<T>>();
 
   for (const c of chips) {

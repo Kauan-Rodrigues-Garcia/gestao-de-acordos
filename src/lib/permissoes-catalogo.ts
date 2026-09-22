@@ -2069,7 +2069,7 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_chips_fisicos', label: 'Meus Chips: Chips Físicos',
     descricao:
       'Abrir a separação Chips Físicos e cadastrar os chips que a própria '
-      + 'pessoa tem, com status (Ativo, Banido, Recuperar) e tempo de até 12 horas. '
+      + 'pessoa tem, com status (Ativo, Restrição, Banido, Recuperar) e tempo de até 24 horas. '
       + 'Com «o setor inteiro», vê também os chips dos colegas do setor',
     grupo: 'Controle de Números', tenants: ['bookplay'], padrao: {},
     depende: {

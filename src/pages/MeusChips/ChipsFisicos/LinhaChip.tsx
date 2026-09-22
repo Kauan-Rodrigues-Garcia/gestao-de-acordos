@@ -53,7 +53,7 @@ export const LinhaChip = memo(function LinhaChip({
           {chip.status_por_nome ? ` · por ${chip.status_por_nome}` : ''}
         </p>
         {chip.observacao && (
-          <p className="break-words text-xs text-muted-foreground">{chip.observacao}</p>
+          <p className="break-words text-sm font-bold text-foreground">{chip.observacao}</p>
         )}
       </div>
 

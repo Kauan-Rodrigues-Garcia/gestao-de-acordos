@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   TEMPO_MAXIMO_MINUTOS, agruparPorPessoa, aceitaTempo, erroDoTempo, estadoDoTempo,
-  filtrarChips, formatarDuracao, resumir, type ChipParaConta, type PessoaDoChip,
+  filtrarChips, formatarDuracao, resumir, rotuloContagem, type ChipParaConta, type PessoaDoChip,
 } from '../chipsFisicosRegras';
 
 const AGORA = Date.parse('2026-09-21T15:00:00Z');
@@ -12,16 +12,18 @@ function chip(p: Partial<ChipParaConta> & { id: string }): ChipParaConta {
 }
 
 describe('tempo', () => {
-  it('só Banido e Recuperar levam tempo', () => {
+  it('todo status fora de Ativo leva tempo, Restrição inclusive', () => {
     expect(aceitaTempo('ativo')).toBe(false);
+    expect(aceitaTempo('restricao')).toBe(true);
     expect(aceitaTempo('banido')).toBe(true);
     expect(aceitaTempo('recuperar')).toBe(true);
   });
 
-  it('o teto é 12 horas, o mesmo do banco', () => {
-    expect(TEMPO_MAXIMO_MINUTOS).toBe(720);
-    expect(erroDoTempo('banido', 720)).toBeNull();
-    expect(erroDoTempo('banido', 721)).toMatch(/12 horas/);
+  it('o teto é 24 horas, o mesmo do banco', () => {
+    expect(TEMPO_MAXIMO_MINUTOS).toBe(1440);
+    expect(erroDoTempo('banido', 1440)).toBeNull();
+    expect(erroDoTempo('restricao', 1440)).toBeNull();
+    expect(erroDoTempo('recuperar', 1441)).toMatch(/24 horas/);
   });
 
   it('sem tempo é válido; ativo com tempo não; zero não', () => {
@@ -37,6 +39,7 @@ describe('tempo', () => {
     expect(formatarDuracao(60)).toBe('1 h');
     expect(formatarDuracao(90)).toBe('1 h 30 min');
     expect(formatarDuracao(720)).toBe('12 h');
+    expect(formatarDuracao(1440)).toBe('24 h');
   });
 
   it('o fim do tempo vira «encerrado», sem mexer no status', () => {
@@ -62,6 +65,7 @@ describe('resumo e filtro', () => {
     chip({ id: 'b', status: 'banido', numero: '18922220000', operador_id: 'bruno', prazo_ate: daqui(-5) }),
     chip({ id: 'c', status: 'recuperar', numero: '18933330000', operador_id: 'bruno', prazo_ate: daqui(60) }),
     chip({ id: 'd', status: 'banido', numero: '11944440000', operador_id: 'ana' }),
+    chip({ id: 'e', status: 'restricao', numero: '18955550000', operador_id: 'ana', prazo_ate: daqui(-1) }),
   ];
   const nomes: Record<string, string> = { ana: 'Ana Júlia', bruno: 'Bruno Souza' };
   const nomeDe = (id: string) => nomes[id] ?? '';
@@ -69,23 +73,24 @@ describe('resumo e filtro', () => {
 
   it('conta cada status e o tempo encerrado', () => {
     expect(resumir(chips, AGORA)).toEqual({
-      total: 4, ativo: 1, banido: 2, recuperar: 1, tempoEncerrado: 1,
+      total: 5, ativo: 1, restricao: 1, banido: 2, recuperar: 1, tempoEncerrado: 2,
     });
   });
 
   it('filtra por status e por tempo encerrado', () => {
     const ids = (s: Parameters<typeof filtrarChips>[1]['status']) =>
       filtrarChips(chips, { status: s, busca: '' }, nomeDe, encerrado).map(c => c.id);
-    expect(ids('todos')).toEqual(['a', 'b', 'c', 'd']);
+    expect(ids('todos')).toEqual(['a', 'b', 'c', 'd', 'e']);
     expect(ids('banido')).toEqual(['b', 'd']);
-    expect(ids('tempo_encerrado')).toEqual(['b']);
+    expect(ids('restricao')).toEqual(['e']);
+    expect(ids('tempo_encerrado')).toEqual(['b', 'e']);
   });
 
   it('busca pelo número em qualquer formatação e pelo nome sem acento', () => {
     const busca = (b: string) =>
       filtrarChips(chips, { status: 'todos', busca: b }, nomeDe, encerrado).map(c => c.id);
     expect(busca('(18) 92222')).toEqual(['b']);
-    expect(busca('julia')).toEqual(['a', 'd']);
+    expect(busca('julia')).toEqual(['a', 'd', 'e']);
     expect(busca('BRUNO')).toEqual(['b', 'c']);
   });
 });
@@ -102,10 +107,17 @@ describe('agrupamento por pessoa', () => {
       chip({ id: '2', operador_id: 'ana', status: 'ativo', numero: '18900000000' }),
       chip({ id: '3', operador_id: 'bruno', status: 'banido', numero: '18999990000' }),
       chip({ id: '4', operador_id: 'bruno', status: 'recuperar', numero: '18955550000' }),
+      chip({ id: '5', operador_id: 'bruno', status: 'restricao', numero: '18966660000' }),
     ], pessoas);
 
     expect(blocos.map(b => b.pessoa.nome)).toEqual(['Ana', 'Bruno']);
-    expect(blocos[1].chips.map(c => c.id)).toEqual(['3', '4', '1']);
+    expect(blocos[1].chips.map(c => c.id)).toEqual(['3', '5', '4', '1']);
+  });
+
+  it('o rótulo da contagem concorda com o número', () => {
+    expect(rotuloContagem('ativo', 1)).toBe('ativo');
+    expect(rotuloContagem('banido', 2)).toBe('banidos');
+    expect(rotuloContagem('restricao', 3)).toBe('em restrição');
   });
 
   it('chip de pessoa desconhecida não some', () => {
