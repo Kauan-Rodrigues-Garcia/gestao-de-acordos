@@ -97,7 +97,8 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $fn$
 DECLARE
-  v_pagueplay boolean;
+  v_pagueplay    boolean;
+  v_proporcional boolean := false;
 BEGIN
   SELECT e.slug = 'pagueplay' INTO v_pagueplay
     FROM public.empresas e
@@ -109,11 +110,15 @@ BEGIN
     RETURN new;
   END IF;
 
-  IF TG_OP = 'UPDATE'
-     AND new.valor_recebido IS DISTINCT FROM old.valor_recebido
-     AND new.total_ho IS NOT DISTINCT FROM old.total_ho
-     AND COALESCE(old.valor_recebido, 0) <> 0
-     AND COALESCE(old.total_ho, 0) <> 0 THEN
+  -- `old` só é lido dentro do ramo de UPDATE: no INSERT ele não existe.
+  IF TG_OP = 'UPDATE' THEN
+    v_proporcional := new.valor_recebido IS DISTINCT FROM old.valor_recebido
+                  AND new.total_ho IS NOT DISTINCT FROM old.total_ho
+                  AND COALESCE(old.valor_recebido, 0) <> 0
+                  AND COALESCE(old.total_ho, 0) <> 0;
+  END IF;
+
+  IF v_proporcional THEN
     -- Mudou o valor e ninguém mandou H.O. novo: a linha mantém a proporção
     -- que já tinha — a do relatório de onde ela veio.
     new.total_ho := round(new.valor_recebido * old.total_ho / old.valor_recebido, 2);
