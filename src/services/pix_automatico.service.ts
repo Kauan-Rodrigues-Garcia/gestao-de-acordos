@@ -1553,7 +1553,7 @@ export type PixNrPedidoStatus = 'pendente' | 'aprovado' | 'recusado';
 export interface PixNrPedido {
   id: string;
   empresa_id: string;
-  /** Quem FICA com o acordo se for aprovado — pode não ser quem pediu. */
+  /** Quem FICA com o NR se a transferência for autorizada — pode não ser quem pediu. */
   operador_id: string;
   operador_nome: string | null;
   setor_id: string | null;
@@ -1594,6 +1594,9 @@ export interface PixNrPedido {
 function mensagemPedidoNr(bruta: string): string {
   if (/PIX_NR_MESMO_OPERADOR/i.test(bruta)) {
     return MSG_NR_MESMO_OPERADOR;
+  }
+  if (/PIX_NR_TRANSFERENCIA_PAGA/i.test(bruta)) {
+    return 'A comissão deste NR já foi paga para quem tem o registro. Desfaça o pagamento antes de transferir.';
   }
   if (/PIX_NR_LADO_JA_DECIDIDO/i.test(bruta)) {
     return 'O seu setor já assinou este pedido — falta a decisão do outro setor.';
@@ -1837,7 +1840,7 @@ export async function fetchPedidosNr(
     .sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
 }
 
-/** Pede ao líder autorização para registrar um NR que já existe. */
+/** Pede aos líderes que o NR, hoje com outra pessoa, seja transferido. */
 export async function pedirAutorizacaoNr(p: {
   operadorId: string;
   nrCliente: string;
@@ -1859,14 +1862,14 @@ export async function pedirAutorizacaoNr(p: {
 /**
  * Assina UM lado do pedido.
  *
- * Aprovar não cria o acordo sozinho: quando os dois setores estão envolvidos, o
- * pedido volta `pendente` e fica esperando a outra assinatura. Só com todas as
- * assinaturas o acordo nasce — e nasce PENDENTE, porque autorizar a
- * duplicidade não é aprovar a comissão. O líder ainda vai avaliar o registro
- * como avalia qualquer outro.
+ * Aprovar é autorizar a TRANSFERÊNCIA do NR (migration 20260928190000): com
+ * todas as assinaturas, o acordo de quem tinha o NR vai para a lixeira do Pix e
+ * nasce o de quem pediu — PENDENTE, porque transferir não é aprovar a comissão.
+ * Com os dois setores envolvidos, a primeira assinatura só fica registrada; o
+ * NR não muda de dono até a segunda.
  *
- * Recusar, de qualquer lado, encerra o pedido na hora: o registro duplicado só
- * existe se todos concordarem, então um «não» já respondeu a pergunta.
+ * Recusar, de qualquer lado, encerra o pedido na hora: o NR fica com quem já
+ * tinha, então um «não» já respondeu a pergunta.
  *
  * `lado` omitido = «o lado que eu puder assinar e que ainda falta», que é o
  * caso de quem tem um lado só.

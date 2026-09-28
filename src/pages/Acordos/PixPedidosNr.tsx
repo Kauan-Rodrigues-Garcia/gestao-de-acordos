@@ -35,12 +35,27 @@
  * serve: ela não muda regra nenhuma — o pedido veio para cá do mesmo jeito —,
  * mas diz que quem lançou já sabia que podia haver duplicidade.
  *
- * ## Aprovar não é aprovar a comissão
+ * ## Autorizar TRANSFERE o NR (28/09/2026)
  *
- * O acordo nasce PENDENTE. Autorizar a duplicidade responde «este segundo
- * lançamento pode existir»; se ele merece comissão é a avaliação de sempre, na
- * lista. Duas perguntas, duas decisões — juntá-las faria o líder aprovar
- * comissão sem olhar o valor.
+ * Até aqui, autorizar criava um SEGUNDO acordo para quem pediu e deixava o de
+ * quem já tinha o NR onde estava. O cartão dizia «Já registrado por → Quer
+ * registrar» e «Autorizar», e foi lido ao contrário no NR 12139503: a diretoria
+ * conferiu que o acordo era da Juliana, autorizou achando que ele voltaria para
+ * ela, e o sistema deu um acordo novo ao Kaio sem tirar o dela.
+ *
+ * Agora a pergunta é uma só — com quem o NR fica — e o cartão a faz com os
+ * nomes: «Transferir para Kaio» tira o registro da Juliana (lixeira do Pix,
+ * recuperável) e cria o do Kaio; «Manter com Juliana» descarta o pedido. A
+ * frase completa do que cada botão faz fica escrita no cartão, e transferir
+ * pede confirmação. A regra mora em `fn_pix_nr_pedido_decidir` (migration
+ * 20260928190000).
+ *
+ * ## Transferir não é aprovar a comissão
+ *
+ * O acordo de quem recebe nasce PENDENTE. Transferir responde «de quem é este
+ * NR»; se ele merece comissão é a avaliação de sempre, na lista. Duas
+ * perguntas, duas decisões — juntá-las faria o líder aprovar comissão sem
+ * olhar o valor.
  *
  * ## Os DOIS setores assinam (09/09/2026)
  *
@@ -52,15 +67,15 @@
  * Agora cada lado assina o seu. Enquanto faltar assinatura, o cartão mostra
  * quem já assinou e quem falta — «pendente» sem explicação parece esquecimento,
  * e o operador voltava a perguntar ao líder que já tinha decidido. Uma recusa,
- * de qualquer lado, encerra: o registro duplicado só existe se todos
- * concordarem.
+ * de qualquer lado, encerra: o NR só muda de dono se todos concordarem.
  *
  * Um lado só quando não há segundo líder a ouvir: os dois no mesmo setor, ou o
  * registro antigo sem setor carimbado.
  */
 import { useState } from 'react';
 import {
-  ShieldQuestion, Check, X, ArrowRight, Loader2, Sparkles, ChevronDown, Building2,
+  ShieldQuestion, Check, X, ArrowRight, ArrowRightLeft, AlertTriangle, Loader2, Sparkles,
+  ChevronDown, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -152,6 +167,12 @@ function Lado({
   );
 }
 
+/** «Juliana Itala» → «Juliana». Para caber no botão sem perder quem é. */
+function primeiroNome(nome: string | null | undefined, reserva: string): string {
+  const n = (nome ?? '').trim();
+  return n ? n.split(/\s+/)[0] : reserva;
+}
+
 function CartaoPedido({
   p, aprovacoes, podeDecidir, meuId, meusSetores, vejoTodosOsSetores, nomeSetor,
   nomePorSetor, onMudou,
@@ -169,6 +190,8 @@ function CartaoPedido({
   const [ocupado, setOcupado] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [recusando, setRecusando] = useState(false);
+  /** Lado cuja transferência está esperando o «confirmar». */
+  const [confirmando, setConfirmando] = useState<PixNrLado | null>(null);
 
   const meu = meuId != null && (p.operador_id === meuId || p.criado_por === meuId);
 
@@ -181,11 +204,25 @@ function CartaoPedido({
   });
   const doisLados = estado.lados.length > 1;
 
+  /*
+   * Os nomes, uma vez só. O pedido pergunta COM QUEM o NR fica: quem tem hoje
+   * (o registro em conflito) ou quem pediu. Em 28/09/2026 o cartão dizia só
+   * «Já registrado por → Quer registrar» e «Autorizar», e foi lido ao
+   * contrário: autorizou-se achando que o NR voltaria para quem já o tinha.
+   */
+  const quemTem   = p.conflito_operador ?? 'quem registrou primeiro';
+  const quemPede  = p.operador_nome ?? 'quem pediu';
+  const setorTem  = p.conflito_setor_id ? nomePorSetor[p.conflito_setor_id] : undefined;
+  const setorPede = p.setor_id ? nomePorSetor[p.setor_id] : undefined;
+  const origemExiste = p.conflito_acordo_id != null;
+
   /** «Play 3», «Receptivo» — ou uma frase que não mente quando falta o setor. */
   function rotuloDoLado(lado: PixNrLado): string {
     const setor = setorDoLadoNr(p, lado);
     if (setor && nomePorSetor[setor]) return nomePorSetor[setor];
-    return lado === 'solicitante' ? 'quem está pedindo' : 'quem registrou primeiro';
+    return lado === 'solicitante'
+      ? `setor de ${primeiroNome(quemPede, 'quem pede')}`
+      : `setor de ${primeiroNome(quemTem, 'quem tem')}`;
   }
 
   async function decidir(aprovar: boolean, lado?: PixNrLado) {
@@ -195,24 +232,26 @@ function CartaoPedido({
       if (!ok) { toast.error(error ?? 'Não foi possível decidir.'); return; }
 
       if (!aprovar) {
-        toast.success(`NR ${p.nr_cliente} recusado.`);
+        toast.success(`NR ${p.nr_cliente} continua com ${quemTem}. O pedido de ${quemPede} foi descartado.`);
       } else if (pedido?.status === 'aprovado') {
         toast.success(
-          `NR ${p.nr_cliente} autorizado pelos dois setores — o registro entrou como pendente de avaliação.`,
+          origemExiste
+            ? `NR ${p.nr_cliente} transferido: saiu de ${quemTem} e passou para ${quemPede}, pendente de avaliação.`
+            : `NR ${p.nr_cliente} registrado para ${quemPede}, pendente de avaliação.`,
+          { duration: 7000 },
         );
       } else {
         /*
-         * Assinou, e o acordo não nasceu: falta o outro setor. Sem esta frase o
-         * líder clica em «Autorizar», nada muda na fila e ele clica de novo —
-         * foi o que a versão de um lado só nunca precisou dizer.
+         * Assinou, e nada mudou ainda: falta o outro setor. Sem esta frase o
+         * líder clica, nada muda na fila e ele clica de novo.
          */
         toast.success(
-          `Você autorizou pelo seu setor. O NR ${p.nr_cliente} só será registrado quando o outro setor também autorizar.`,
+          `Você autorizou a transferência pelo seu setor. O NR ${p.nr_cliente} só sai de ${quemTem} quando o outro setor também autorizar.`,
           { duration: 7000 },
         );
       }
       onMudou();
-    } finally { setOcupado(false); }
+    } finally { setOcupado(false); setConfirmando(null); }
   }
 
   async function desistir() {
@@ -246,14 +285,14 @@ function CartaoPedido({
 
       <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
         <Lado
-          titulo="Já registrado por"
+          titulo={`Hoje está com${setorTem ? ` · ${setorTem}` : ''}`}
           nome={p.conflito_operador}
           valor={p.conflito_valor}
           em={p.conflito_em}
         />
         <ArrowRight className="mx-auto hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" />
         <Lado
-          titulo="Quer registrar"
+          titulo={`Pede para ficar com o NR${setorPede ? ` · ${setorPede}` : ''}`}
           nome={p.operador_nome}
           valor={p.valor}
           em={p.criado_em}
@@ -262,13 +301,52 @@ function CartaoPedido({
         />
       </div>
 
+      {/* ── O que cada botão faz, em frase inteira ── */}
+      <div className="mt-2 space-y-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 text-[11px] leading-relaxed">
+        <p className="flex gap-1.5">
+          <ArrowRightLeft className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+          <span>
+            <strong className="text-foreground">Transferir:</strong>{' '}
+            {origemExiste ? (
+              <>
+                o NR sai de <strong className="text-foreground">{quemTem}</strong> (o registro vai para a
+                lixeira do Pix) e passa para <strong className="text-foreground">{quemPede}</strong>,
+                pendente de avaliação.
+              </>
+            ) : (
+              <>
+                o registro de {quemTem} já foi excluído; o NR é registrado para{' '}
+                <strong className="text-foreground">{quemPede}</strong>, pendente de avaliação.
+              </>
+            )}
+            {doisLados && ' Só acontece quando os dois setores autorizarem.'}
+          </span>
+        </p>
+        <p className="flex gap-1.5">
+          <X className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
+          <span>
+            <strong className="text-foreground">Manter:</strong>{' '}
+            o NR continua com <strong className="text-foreground">{quemTem}</strong> e o pedido de {quemPede} é descartado.
+          </span>
+        </p>
+        {origemExiste && p.conflito_status === 'aprovado' && (
+          <p className="flex gap-1.5 text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              O registro de {quemTem} já está <strong>aprovado</strong> — transferir tira essa aprovação
+              e o novo registro recomeça pendente.
+            </span>
+          </p>
+        )}
+      </div>
+
       {p.motivo && (
         <p className="mt-2 rounded-lg border-l-2 border-primary/40 bg-muted/40 px-2.5 py-1.5 text-[11px] leading-relaxed">
           <span className="text-muted-foreground">Justificativa: </span>{p.motivo}
         </p>
       )}
 
-      {p.conflito_acordo_id == null && (
+      {!origemExiste && (
         <p className="mt-2 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
           O registro em conflito foi excluído depois deste pedido. Os dados acima
           são a cópia guardada no momento do pedido.
@@ -293,11 +371,11 @@ function CartaoPedido({
                     : 'border-amber-500/40 text-amber-600 dark:text-amber-400',
                 )}
                 title={assinatura
-                  ? `${assinatura.aprovador_nome ?? 'Líder'} autorizou em ${quando(assinatura.criado_em)}`
+                  ? `${assinatura.aprovador_nome ?? 'Líder'} autorizou a transferência em ${quando(assinatura.criado_em)}`
                   : 'Este setor ainda não decidiu'}
               >
                 {assinatura ? <Check className="h-2.5 w-2.5" /> : <Loader2 className="h-2.5 w-2.5" />}
-                {rotuloDoLado(lado)}: {assinatura ? 'autorizou' : 'aguardando'}
+                {rotuloDoLado(lado)}: {assinatura ? 'autorizou a transferência' : 'aguardando'}
               </Badge>
             );
           })}
@@ -306,49 +384,73 @@ function CartaoPedido({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {podeDecidir && estado.meusLados.length > 0 ? (
-          <>
-            {recusando && (
-              <input
-                value={motivo}
-                onChange={e => setMotivo(e.target.value)}
-                autoFocus
-                placeholder="Por que está recusando? (opcional)"
-                className="min-w-[180px] flex-1 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-              />
-            )}
-            {/* Um botão por lado que EU posso assinar. Quem acumula os dois
-                setores (ou enxerga todos) assina em dois cliques, cada um com o
-                seu registro — é o que mantém a auditoria dizendo quem decidiu
-                pelo quê. */}
-            {estado.meusLados.map(lado => (
-              <Button
-                key={lado}
-                size="sm" className="h-7 gap-1.5 text-xs"
-                disabled={ocupado}
-                onClick={() => void decidir(true, lado)}
-              >
+          confirmando ? (
+            /* Transferir tira o NR de alguém: pede um segundo clique, com a
+               frase exata do que vai acontecer. */
+            <>
+              <span className="text-[11px] font-medium text-foreground">
+                {estado.faltam.length > 1
+                  ? `Autorizar, pelo ${rotuloDoLado(confirmando)}, que o NR saia de ${quemTem} e passe para ${quemPede}?`
+                  : origemExiste
+                    ? `Transferir o NR de ${quemTem} para ${quemPede} agora?`
+                    : `Registrar o NR para ${quemPede} agora?`}
+              </span>
+              <Button size="sm" className="h-7 gap-1.5 text-xs" disabled={ocupado}
+                      onClick={() => void decidir(true, confirmando)}>
                 {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                {doisLados ? `Autorizar por ${rotuloDoLado(lado)}` : 'Autorizar'}
+                Confirmar
               </Button>
-            ))}
-            <Button
-              size="sm" variant="outline"
-              className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
-              disabled={ocupado}
-              onClick={() => (recusando
-                ? void decidir(false, estado.meusLados[0])
-                : setRecusando(true))}
-            >
-              <X className="h-3.5 w-3.5" />
-              {recusando ? 'Confirmar recusa' : 'Recusar'}
-            </Button>
-            {recusando && (
               <Button size="sm" variant="ghost" className="h-7 text-xs"
-                      disabled={ocupado} onClick={() => { setRecusando(false); setMotivo(''); }}>
-                Cancelar
+                      disabled={ocupado} onClick={() => setConfirmando(null)}>
+                Voltar
               </Button>
-            )}
-          </>
+            </>
+          ) : (
+            <>
+              {recusando && (
+                <input
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  autoFocus
+                  placeholder="Por que manter com quem já tem? (opcional)"
+                  className="min-w-[180px] flex-1 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+              {/* Um botão por lado que EU posso assinar. Quem acumula os dois
+                  setores (ou enxerga todos) assina em dois cliques, cada um com o
+                  seu registro — é o que mantém a auditoria dizendo quem decidiu
+                  pelo quê. */}
+              {!recusando && estado.meusLados.map(lado => (
+                <Button
+                  key={lado}
+                  size="sm" className="h-7 gap-1.5 text-xs"
+                  disabled={ocupado}
+                  onClick={() => setConfirmando(lado)}
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  Transferir para {primeiroNome(quemPede, 'quem pediu')}
+                  {doisLados && <span className="opacity-80">· pelo {rotuloDoLado(lado)}</span>}
+                </Button>
+              ))}
+              <Button
+                size="sm" variant="outline"
+                className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
+                disabled={ocupado}
+                onClick={() => (recusando
+                  ? void decidir(false, estado.meusLados[0])
+                  : setRecusando(true))}
+              >
+                <X className="h-3.5 w-3.5" />
+                {recusando ? 'Confirmar: manter' : `Manter com ${primeiroNome(quemTem, 'quem tem')}`}
+              </Button>
+              {recusando && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs"
+                        disabled={ocupado} onClick={() => { setRecusando(false); setMotivo(''); }}>
+                  Voltar
+                </Button>
+              )}
+            </>
+          )
         ) : podeDecidir && estado.faltam.length > 0 ? (
           /* Aprova Pix, mas não por nenhum dos lados abertos: ou já assinou o
              seu, ou o que falta é de outro setor. Dizer isso é melhor que
@@ -356,13 +458,13 @@ function CartaoPedido({
           <span className="text-[11px] text-muted-foreground">
             {estado.lados.some(l => estado.assinado[l] && estado.meusLados.length === 0
                                     && meusSetores.includes(setorDoLadoNr(p, l) ?? ''))
-              ? 'Você já autorizou pelo seu setor — falta o outro.'
+              ? `Você já autorizou a transferência pelo seu setor — falta o outro. Até lá o NR continua com ${quemTem}.`
               : `Aguardando ${estado.faltam.map(rotuloDoLado).join(' e ')}.`}
           </span>
         ) : meu ? (
           <>
             <span className="text-[11px] text-muted-foreground">
-              Aguardando a decisão do líder.
+              Aguardando os líderes decidirem se o NR passa para {quemPede}.
             </span>
             <Button size="sm" variant="ghost" className="h-7 text-xs"
                     disabled={ocupado} onClick={() => void desistir()}>
@@ -400,11 +502,11 @@ export function PixPedidosNr({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold leading-tight">
-              {pedidos.length} {pedidos.length === 1 ? 'NR duplicado' : 'NRs duplicados'} aguardando
+              {pedidos.length} {pedidos.length === 1 ? 'NR em disputa' : 'NRs em disputa'} aguardando decisão
             </p>
             <p className="text-[11px] leading-tight text-muted-foreground">
               {podeDecidir
-                ? 'Alguém tentou registrar um NR que já existe. Veja os dois lados e decida.'
+                ? 'Alguém pediu um NR que já está com outra pessoa. Transferir tira de quem tem e passa para quem pediu; manter deixa como está.'
                 : 'Seu pedido está na fila do líder.'}
             </p>
           </div>

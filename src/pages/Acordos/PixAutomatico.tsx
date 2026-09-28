@@ -1414,11 +1414,11 @@ export function PixAutomatico() {
   }
 
   /**
-   * O NR já existe: em vez de recusar, pede autorização ao líder.
+   * O NR já está com outra pessoa: em vez de recusar, pede a transferência.
    *
-   * Quem decide é quem já decide Pix (`aprovar_pix_automatico`). Aprovado, o
-   * acordo nasce PENDENTE — autorizar a duplicidade não é aprovar a comissão,
-   * e o líder ainda vai avaliar o registro como avalia qualquer outro.
+   * Quem decide é quem já decide Pix (`aprovar_pix_automatico`). Autorizado, o
+   * NR sai de quem tinha e o acordo nasce PENDENTE para quem pediu —
+   * transferir não é aprovar a comissão. Ver 20260928190000.
    */
   async function pedirAutorizacao(nr: string, valor: number) {
     if (!perfil?.id) return;
@@ -1432,7 +1432,8 @@ export function PixAutomatico() {
     if (!ok) { toast.error(error ?? 'Não foi possível pedir autorização.'); return; }
 
     toast.success(
-      `O NR ${nr} já está registrado. Pedido enviado ao líder — ele vê os dois lançamentos e decide.`,
+      `O NR ${nr} já está com outra pessoa. Pedido de transferência enviado aos líderes — `
+        + `se autorizarem, ele passa para ${dono ? dono.nome : 'você'}.`,
       { duration: 7000 },
     );
     setNrNovo('');
