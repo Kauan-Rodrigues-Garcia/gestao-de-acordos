@@ -33,7 +33,7 @@ import type { Acordo } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { ensureAbsoluteUrl } from './helpers';
 import { podeReagendar } from '@/services/reagendamento/reagendamento';
-import { BotaoAgendarProxima } from '@/components/BotaoAgendarProxima';
+import { BotaoReagendar } from '@/components/BotaoReagendar';
 
 interface Tag { id: string; nome: string; cor: string; }
 
@@ -53,7 +53,8 @@ export function PPColunas({ visaoAmpla }: { visaoAmpla: boolean }) {
       <col className="w-[90px]" />
       <col className="w-[104px]" />
       {visaoAmpla && <col className="w-[170px]" />}
-      <col className="w-[176px]" />
+      {/* 208: pendente com calendário = 5 botões + separador + setinha. */}
+      <col className="w-[208px]" />
     </colgroup>
   );
 }
@@ -122,8 +123,8 @@ export function PPTableBody({
     const temCpf = acordoTemCpf(a);
     const rotulo = a.nome_cliente || a.instituicao || a.nr_cliente || 'acordo';
     const alternarDetalhe = () => setDetalheInlineIdTabela(isDetailThis ? null : a.id);
-    // A regra mora em `services/reagendamento`; o botão mora na coluna de
-    // status (BotaoAgendarProxima conta por quê).
+    // A regra mora em `services/reagendamento`: só aparece quando a próxima
+    // parcela ainda não foi agendada.
     const agendar = podeEditar ? podeReagendar(a, isPP, parcelasExistentes) : null;
     const donoNome = visaoAmpla
       ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
@@ -213,14 +214,9 @@ export function PPTableBody({
             ) : '—'}
           </td>
           <td className={CELULA}>
-            <div className="flex flex-col items-start gap-0.5">
-              <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
-              </span>
-              {agendar?.pode && (
-                <BotaoAgendarProxima decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
-              )}
-            </div>
+            <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+              {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
+            </span>
           </td>
           {visaoAmpla && (
             <td className={cn(CELULA, 'overflow-hidden truncate text-xs text-muted-foreground')}>
@@ -239,6 +235,9 @@ export function PPTableBody({
                 >
                   <CheckCircle className="w-4 h-4" />
                 </Button>
+              )}
+              {agendar?.pode && (
+                <BotaoReagendar decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
               )}
               {podeEditar && (
               <Button

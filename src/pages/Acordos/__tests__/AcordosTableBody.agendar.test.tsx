@@ -1,10 +1,10 @@
 /**
- * O botão de agendar na aba Acordos — o caso que o usuário testou em 29/09/2026:
- * «acordo com parcelamento no boleto, não reagendei quando abriu a caixinha, e
- * na lista de acordos não aparece nenhum botão».
+ * O calendário de reagendar na aba Acordos — o caso que o usuário testou em
+ * 29/09/2026: «acordo com parcelamento no boleto, não reagendei quando abriu a
+ * caixinha, e na lista de acordos não aparece nenhum botão».
  *
- * A aba Acordos nunca teve o botão: só o Dashboard. E o ícone que existia lá
- * morava na coluna de ações, onde num acordo pendente era o sexto de 176 px.
+ * A aba Acordos nunca teve o botão: só o Dashboard. Agora é o mesmo ícone da
+ * lista da PaguePlay, em azul, na coluna de ações.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -58,52 +58,61 @@ function montar(over: {
 }
 
 describe('aba Acordos — o botão aparece', () => {
-  it('boleto parcelado sem a parcela 2: «Agendar 2/3» na linha', () => {
+  it('boleto parcelado sem a parcela 2: o calendário aparece na linha', () => {
     montar();
-    expect(screen.getByRole('button', { name: /Agendar a parcela 2\/3/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ })).toBeTruthy();
   });
 
   it('também quando a parcela ainda está pendente', () => {
     montar({ linhas: [acordo({ status: 'verificar_pendente' })] });
-    expect(screen.getByRole('button', { name: /Agendar a parcela 2\/3/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ })).toBeTruthy();
   });
 
   it('PaguePlay também', () => {
     montar({ isPP: true });
-    expect(screen.getByRole('button', { name: /Agendar a parcela 2\/3/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ })).toBeTruthy();
   });
 
   it('o clique abre o reagendamento DAQUELE acordo', () => {
     const { setReagendar } = montar();
-    fireEvent.click(screen.getByRole('button', { name: /Agendar a parcela 2\/3/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ }));
     expect(setReagendar).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }));
   });
 
   it('na visão ampla, a dica diz em nome de quem a parcela nasce', () => {
     montar({ mostrarColunaOperador: true });
-    expect(screen.getByRole('button', { name: /nasce no nome de Usuário 1/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /no nome de Usuário 1/ })).toBeTruthy();
   });
 });
 
 describe('aba Acordos — o botão NÃO aparece', () => {
   it('quando a parcela 2 já existe', () => {
     montar({ existentes: [chaveParcela('G1', 1), chaveParcela('G1', 2)] });
-    expect(screen.queryByRole('button', { name: /Agendar a parcela/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();
   });
 
   it('sem a permissão de editar acordos', () => {
     montar({ podeAgendar: false });
-    expect(screen.queryByRole('button', { name: /Agendar a parcela/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();
   });
 
   it('em PIX Automático', () => {
     montar({ linhas: [acordo({ tipo: 'pix_automatico' as Acordo['tipo'] })] });
-    expect(screen.queryByRole('button', { name: /Agendar a parcela/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();
   });
 
   it('em acordo de parcela única', () => {
     montar({ linhas: [acordo({ parcelas: 1 })] });
-    expect(screen.queryByRole('button', { name: /Agendar a parcela/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();
+  });
+});
+
+describe('o botão é o ícone azul, não um rótulo', () => {
+  it('só o ícone: sem texto visível, em azul', () => {
+    montar();
+    const b = screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ });
+    expect(b.textContent).toBe('');
+    expect(b.className).toContain('text-blue-600');
   });
 });
 

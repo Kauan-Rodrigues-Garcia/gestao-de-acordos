@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock,
-  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus, CalendarClock,
+  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -34,8 +34,9 @@ import {
 } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
 import {
-  podeReagendar, chavesExistentes, rotuloReagendar, avisoParcelaJaAgendada,
+  podeReagendar, chavesExistentes, avisoParcelaJaAgendada,
 } from '@/services/reagendamento/reagendamento';
+import { BotaoReagendar } from '@/components/BotaoReagendar';
 import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaParcela';
 import { datasDoLote } from '@/lib/vencimentos';
 import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
@@ -711,10 +712,9 @@ export function AcordoDetalheInline({
                                     )}
                                   </td>
                                   {/* A coluna "Agendada / Não agendada" era só um rótulo, e
-                                      só aparecia na parcela PAGA. Agora o "Não agendada" é o
-                                      próprio botão de reagendar: era esta a tela em que dava
-                                      para ver que faltava agendar sem ter como fazê-lo. A
-                                      régua é a mesma dos outros dois caminhos. */}
+                                      só aparecia na parcela PAGA. Agora o "Não agendada" leva
+                                      o calendário azul ao lado — a mesma régua e o mesmo
+                                      botão das duas listas. */}
                                   <td className="px-3 py-2.5 text-center">
                                     {(() => {
                                       if (!real || index >= totalParcelas) {
@@ -736,15 +736,12 @@ export function AcordoDetalheInline({
                                         );
                                       }
                                       return (
-                                        <button
-                                          type="button"
-                                          onClick={() => setReagendarParcela(real)}
-                                          title={rotuloReagendar(d)}
-                                          aria-label={`${rotuloReagendar(d)} de ${acordoLocal.nome_cliente || acordoLocal.instituicao || acordoLocal.nr_cliente}`}
-                                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/30 hover:bg-warning/20 hover:border-warning/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning/50 transition-colors"
-                                        >
-                                          <CalendarClock className="w-2.5 h-2.5" /> Agendar
-                                        </button>
+                                        <span className="inline-flex items-center gap-1">
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/30">
+                                            <Clock className="w-2.5 h-2.5" /> Não agendada
+                                          </span>
+                                          <BotaoReagendar decisao={d} className="w-7 h-7" onClick={() => setReagendarParcela(real)} />
+                                        </span>
                                       );
                                     })()}
                                   </td>

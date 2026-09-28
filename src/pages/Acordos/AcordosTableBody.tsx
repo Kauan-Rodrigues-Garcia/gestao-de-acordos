@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { podeReagendar } from '@/services/reagendamento/reagendamento';
-import { BotaoAgendarProxima } from '@/components/BotaoAgendarProxima';
+import { BotaoReagendar } from '@/components/BotaoReagendar';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, isAtrasado,
@@ -125,7 +125,8 @@ function Colunas({ isPP, mostrarColunaOperador }: { isPP: boolean; mostrarColuna
         </>
       )}
       {mostrarColunaOperador && <col className="w-[170px]" />}
-      <col className="w-[176px]" />
+      {/* 208: pendente com calendário = 6 botões + separador + setinha. */}
+      <col className="w-[208px]" />
     </colgroup>
   );
 }
@@ -156,22 +157,12 @@ export function AcordosTableBody({
     const rotulo        = a.nome_cliente || a.nr_cliente || a.instituicao || 'acordo';
     const secundaria    = [a.instituicao, a.whatsapp].filter(Boolean).join(' · ');
     const alternarDetalhe = () => setDetalheInlineId(isDetailThis ? null : a.id);
-    // A regra mora em `services/reagendamento`; o botão mora na coluna de
-    // status (BotaoAgendarProxima conta por quê).
+    // A regra mora em `services/reagendamento`: só aparece quando a próxima
+    // parcela ainda não foi agendada.
     const agendar = podeAgendar ? podeReagendar(a, isPP, parcelasExistentes) : null;
     const donoNome = mostrarColunaOperador
       ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
       : null;
-    const celulaStatus = (rotuloStatus: string) => (
-      <div className="flex flex-col items-start gap-0.5">
-        <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-          {rotuloStatus}
-        </span>
-        {agendar?.pode && (
-          <BotaoAgendarProxima decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
-        )}
-      </div>
-    );
     return (
       <Fragment key={a.id}>
         <motion.tr
@@ -248,7 +239,9 @@ export function AcordosTableBody({
                 ) : '—'}
               </td>
               <td className={CELULA}>
-                {celulaStatus(STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status])}
+                <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+                  {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
+                </span>
               </td>
             </>
           ) : (
@@ -290,7 +283,9 @@ export function AcordosTableBody({
                 {(a.parcelas ?? 1) > 1 ? `${a.numero_parcela ?? 1}/${a.parcelas}` : '—'}
               </td>
               <td className={CELULA}>
-                {celulaStatus(STATUS_LABELS[a.status])}
+                <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+                  {STATUS_LABELS[a.status]}
+                </span>
               </td>
             </>
           )}
@@ -314,6 +309,9 @@ export function AcordosTableBody({
                 >
                   <CheckCircle className="w-4 h-4" />
                 </Button>
+              )}
+              {agendar?.pode && (
+                <BotaoReagendar decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
               )}
               <Button
                 variant="ghost" size="icon"
