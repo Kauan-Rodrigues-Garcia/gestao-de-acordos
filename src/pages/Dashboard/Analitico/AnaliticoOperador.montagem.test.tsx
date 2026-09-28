@@ -22,6 +22,12 @@ const { tenantRef } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/tenant-config', () => ({ useTenant: () => tenantRef.current }));
+// O card de mudancas chama o banco ao montar; aqui nao ha banco.
+vi.mock('@/hooks/useMudancasImportacao', () => ({
+  useMudancasImportacao: () => ({
+    mudancas: [], carregando: false, erro: null, recarregar: () => {},
+  }),
+}));
 vi.mock('@/services/analitico/analitico.service', () => ({
   buscarResumoOperadoresAnalitico: vi.fn(async () => ({ data: [], error: null })),
 }));

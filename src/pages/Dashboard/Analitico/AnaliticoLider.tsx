@@ -81,6 +81,7 @@ import { getTodayISO } from '@/lib/index';
 import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
+import { MudancasImportacao } from './MudancasImportacao';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { useRankingAnalitico } from './useRankingAnalitico';
@@ -1632,6 +1633,15 @@ export function AnaliticoLider({
             </p>
           </div>
         </div>
+      )}
+
+      {/* O histórico do mês: o que a reimportação do 59 removeu, transferiu ou
+          reavaliou no escopo desta liderança. Some quando não há nada. */}
+      {empresaId && mes && (
+        <MudancasImportacao
+          empresaId={empresaId} mes={mes}
+          operadorId={perfil?.id ?? ''} modo="lideranca"
+        />
       )}
 
       {/* ── Cards de resumo do recorte ─────────────────────────────────────── */}

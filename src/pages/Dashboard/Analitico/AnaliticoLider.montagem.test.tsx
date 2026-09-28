@@ -70,6 +70,12 @@ vi.mock('@/hooks/useDiarioImport', () => ({
 
 // O serviço inteiro em modo vazio. `importActual` não serve: ele abriria
 // conexão de verdade com o Supabase de produção na carga do módulo.
+// O card de mudancas chama o banco ao montar; aqui nao ha banco.
+vi.mock('@/hooks/useMudancasImportacao', () => ({
+  useMudancasImportacao: () => ({
+    mudancas: [], carregando: false, erro: null, recarregar: () => {},
+  }),
+}));
 vi.mock('@/services/analitico/analitico.service', () => ({
   buscarResumoOperadoresAnalitico: vi.fn(async () => ({ data: [], error: null })),
   buscarAnalitico:                 vi.fn(async () => ({ data: [], error: null })),

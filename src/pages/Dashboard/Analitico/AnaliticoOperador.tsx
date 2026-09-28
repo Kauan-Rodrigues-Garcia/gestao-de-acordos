@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { TabulacaoCell } from './TabulacaoCell';
+import { MudancasImportacao } from './MudancasImportacao';
 import { RankingView } from './RankingView';
 import type { VinculosOperador } from './agregacaoLider';
 
@@ -292,6 +293,15 @@ export function AnaliticoOperador({
                 </>
               )}
             </div>
+
+            {/* O que a reimportação do 59 mexeu na carteira DELE. Some quando
+                não há nada — ver MudancasImportacao. */}
+            {empresaId && mes && (
+              <MudancasImportacao
+                empresaId={empresaId} mes={mes}
+                operadorId={operadorId} modo="operador"
+              />
+            )}
 
             {/* Resumo */}
             <div className={cn('grid gap-3', mostrarHO ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2')}>
