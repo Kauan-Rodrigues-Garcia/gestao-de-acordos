@@ -129,30 +129,30 @@ describe('MetasConfig — metas extras', () => {
     await abrirSegundaMeta();
 
     expect(screen.getByText('2ª meta (opcional)')).toBeTruthy();
-    expect(screen.getByText('2ª meta H.O. (24,96%)')).toBeTruthy();
+    expect(screen.getByText('2ª meta H.O. (22,60%)')).toBeTruthy();
   });
 
   it('digitar a H.O. preenche o bruto, pela mesma conversão da meta principal', async () => {
     render(<MetasConfig />);
     await abrirSegundaMeta();
 
-    fireEvent.change(campoDoRotulo('2ª meta H.O. (24,96%)'), { target: { value: '1000000' } });
+    fireEvent.change(campoDoRotulo('2ª meta H.O. (22,60%)'), { target: { value: '1000000' } });
 
-    await waitFor(() => expect(campoDoRotulo('2ª meta (opcional)').value).toBe('40.064,10'));
+    await waitFor(() => expect(campoDoRotulo('2ª meta (opcional)').value).toBe('44.247,79'));
   });
 
   it('a meta extra da PaguePlay viaja no salvamento', async () => {
     render(<MetasConfig />);
     await abrirSegundaMeta();
 
-    const ho = campoDoRotulo('2ª meta H.O. (24,96%)');
+    const ho = campoDoRotulo('2ª meta H.O. (22,60%)');
     fireEvent.change(ho, { target: { value: '1000000' } });
     fireEvent.blur(ho);
 
     await waitFor(() => expect(upsertMetas).toHaveBeenCalled());
     expect(upsertMetas.mock.calls[0][0][0]).toMatchObject({
       referencia_id: 'op1',
-      metas_extras: [40_064.1],
+      metas_extras: [44_247.79],
     });
   });
 
@@ -162,6 +162,6 @@ describe('MetasConfig — metas extras', () => {
     await abrirSegundaMeta();
 
     expect(screen.getByText('2ª meta (opcional)')).toBeTruthy();
-    expect(screen.queryByText('2ª meta H.O. (24,96%)')).toBeNull();
+    expect(screen.queryByText('2ª meta H.O. (22,60%)')).toBeNull();
   });
 });

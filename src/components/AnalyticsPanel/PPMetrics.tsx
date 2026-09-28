@@ -1,6 +1,7 @@
 import { DollarSign, BarChart2, Calendar, Clock, XCircle, CreditCard, QrCode } from 'lucide-react';
 import { MetricCard } from './SubComponents';
-import { formatCurrency, calcHO } from '@/lib/index';
+import { formatCurrency } from '@/lib/index';
+import { useHoPercentual, rotuloHoPercentual, percentualImplicito } from '@/lib/hoPercentual';
 import { ValorAnimado } from '@/components/ValorAnimado';
 
 interface PPMetricsProps {
@@ -53,6 +54,11 @@ export function PPMetrics({
   valorAgendadoRestanteMes, totalAgendadoRestanteMes,
   valorNaoPago, totalNaoPagos,
 }: PPMetricsProps) {
+  // Acordos convertem pelo percentual configurado; o analítico traz o H.O.
+  // pronto, e o rótulo mostra a proporção que o PRÓPRIO relatório pratica.
+  const ho = useHoPercentual();
+  const pctConfig = rotuloHoPercentual(ho);
+  const pctRelatorio = percentualImplicito(analiticoBruto, analiticoHO);
   return (
     <div className="space-y-3">
       {/* Pix/Boleto × Cartão — direto do relatório analítico */}
@@ -87,7 +93,7 @@ export function PPMetrics({
               gradientFrom="#10b981"
               trend="up"
               value={<ValorAnimado valor={valorHODireto} formatar={formatCurrency} className="text-emerald-600 dark:text-emerald-500" />}
-              sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoDireto)}`}
+              sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · ${pctConfig} de ${formatCurrency(valorRecebidoDireto)}`}
             />
             <MetricCard
               label="H.O. Extra"
@@ -96,7 +102,7 @@ export function PPMetrics({
               gradientFrom="#7c3aed"
               trend="up"
               value={<ValorAnimado valor={valorHOExtra} formatar={formatCurrency} className="text-violet-500" />}
-              sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoExtra)}`}
+              sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''} · ${pctConfig} de ${formatCurrency(valorRecebidoExtra)}`}
             />
             <MetricCard
               label="H.O. Total recebido no mês"
@@ -153,7 +159,7 @@ export function PPMetrics({
               trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
               value={
                 <span className="text-purple-500">
-                  {formatCurrency(calcHO(valorAgendadoRestanteMes))}
+                  {formatCurrency(valorAgendadoRestanteMes * ho)}
                 </span>
               }
               sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''}`}
@@ -194,8 +200,8 @@ export function PPMetrics({
                 </span>
               }
               sub={usarAnalitico
-                ? `${analiticoQtd} pgtos no analítico · 24,96% do bruto`
-                : `${qtdDireto} diretos pagos · 24,96% do bruto`}
+                ? `${analiticoQtd} pgtos no analítico · ${pctRelatorio !== null ? rotuloHoPercentual(pctRelatorio) : pctConfig} do bruto (relatório)`
+                : `${qtdDireto} diretos pagos · ${pctConfig} do bruto`}
             />
             <MetricCard
               label="H.O. agendado no mês"
@@ -240,7 +246,7 @@ export function PPMetrics({
               trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
               value={
                 <span className="text-purple-500">
-                  {formatCurrency(calcHO(valorAgendadoRestanteMes))}
+                  {formatCurrency(valorAgendadoRestanteMes * ho)}
                 </span>
               }
               sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · bruto: ${formatCurrency(valorAgendadoRestanteMes)}`}

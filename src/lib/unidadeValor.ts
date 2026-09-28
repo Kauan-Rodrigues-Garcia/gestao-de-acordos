@@ -3,35 +3,30 @@
  *
  * ## Por que isto existe
  *
- * A PaguePlay retém 24,96% do que recebe (o H.O.); o resto é repasse para Coren
- * e Cofen. As duas leituras interessam — o bruto é o que entrou, o H.O. é o que
- * fica — e a tela precisa saber falar as duas sem manter duas contas.
+ * A PaguePlay retém uma parte do que recebe (o H.O.); o resto é repasse para
+ * Coren e Cofen. As duas leituras interessam — o bruto é o que entrou, o H.O. é
+ * o que fica — e a tela precisa saber falar as duas sem manter duas contas.
  *
  * ## A meta é gravada em BRUTO
  *
- * `docs/REGRAS-DE-NEGOCIO.md` §1.4 dizia que "o H.O. é a base de cálculo das
- * metas". O banco mostra o contrário: a meta de operador da PaguePlay em
- * agosto/2026 é R$ 72.115,38, e `72.115,38 × 24,96% = R$ 18.000,00` exatos. A
- * meta é PENSADA como 18 mil de H.O. e GRAVADA em bruto.
+ * A meta é PENSADA em H.O. e GRAVADA em bruto: a de operador de agosto/2026 é
+ * R$ 72.115,38, que a 24,96% eram R$ 18.000,00 de H.O. exatos. Comparar bruto
+ * contra `metas.meta_valor` está correto; para exibir em H.O., converte-se aqui
+ * — nunca no banco.
  *
- * Consequência: comparar bruto contra `metas.meta_valor` está correto. Para
- * exibir a meta em H.O., converte-se aqui — nunca no banco, que continua sendo
- * a fonte em bruto para a aba Metas.
+ * O percentual da conversão deixou de ser constante em 29/09/2026: vem de
+ * `empresas.config.ho_percentual` (padrão 22,60%), editável na aba Metas. Ver
+ * `lib/hoPercentual.ts`.
  *
- * ## O recebido não é convertido AQUI — ele já chega em 24,96%
+ * ## O recebido não é convertido AQUI — ele vem pronto do relatório
  *
- * `analitico_recebimentos.total_ho` tem coluna própria, e por isso não passa
- * por `metaNaUnidade`. Mas o número dessa coluna também é 24,96% do bruto: o
- * trigger `trg_analitico_recebimentos_ho` o deriva do `valor_recebido` na
- * gravação (migration `20260818280000_ho_calculado_2496.sql`).
- *
- * Isso mudou em 18/08/2026. Antes a coluna vinha copiada do relatório do ERP,
- * que manda 25,00% (divide por 4), e o percentual em H.O. aparecia ~0,16 ponto
- * acima do percentual em bruto — duas abas de recebimento discordando. Agora os
- * dois lados saem da mesma constante e fecham.
+ * `analitico_recebimentos.total_ho` tem coluna própria e não passa por
+ * `metaNaUnidade`. Desde 29/09/2026 o número dela é o da coluna HO do
+ * relatório, como veio. Entre 18/08 e 29/09/2026 foi calculado a 24,96%
+ * (migration 20260818280000), porque o relatório mandava 25,00% cravado.
  */
 
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { paraHO } from '@/lib/hoPercentual';
 
 export type UnidadeValor = 'ho' | 'bruto';
 
@@ -63,7 +58,7 @@ export function metaNaUnidade(
   unidade: UnidadeValor,
 ): number | null {
   if (meta === null || meta === undefined || !Number.isFinite(meta)) return null;
-  return unidade === 'ho' ? meta * PP_HO_PERCENTUAL : meta;
+  return unidade === 'ho' ? paraHO(meta) : meta;
 }
 
 /**

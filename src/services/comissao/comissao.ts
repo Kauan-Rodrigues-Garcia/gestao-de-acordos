@@ -34,7 +34,7 @@
  *
  * ## Unidade
  *
- * Quem chama passa `fatorUnidade`: 1 na BookPlay (bruto), 0,2496 na PaguePlay
+ * Quem chama passa `fatorUnidade`: 1 na BookPlay (bruto), o percentual de H.O. na PaguePlay
  * (H.O.). As metas e o recebido indireto chegam em bruto e são convertidos aqui;
  * o recebido direto já chega na unidade, porque o H.O. do analítico vem linha a
  * linha do relatório e não da conversão.
@@ -130,7 +130,7 @@ export interface EntradaComissao {
   recebidoDireto: number;
   /** Recebido indireto (acordos extra pagos), em BRUTO. */
   recebidoIndiretoBruto: number;
-  /** 1 na BookPlay; `PP_HO_PERCENTUAL` na PaguePlay. */
+  /** 1 na BookPlay; o percentual de H.O. configurado na PaguePlay. */
   fatorUnidade: number;
   /** A configuração que vale — ver `configDoOperador`. */
   config: ConfigComissao | null;

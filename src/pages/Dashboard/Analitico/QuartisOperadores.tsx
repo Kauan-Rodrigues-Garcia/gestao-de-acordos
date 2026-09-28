@@ -73,13 +73,13 @@
  * só. Agora há um alternador no topo — o mesmo componente do Dashboard — e ele
  * converte **tudo**, inclusive o detalhe que abre no clique.
  *
- * A META é convertida aqui (só existe gravada em bruto). O RECEBIDO já vem em
- * H.O. na coluna `total_ho`, que o banco deriva do bruto pelos mesmos 24,96%
- * desde a migration `20260818280000_ho_calculado_2496.sql`. Os dois lados saem
- * da mesma constante, então a % em H.O. e a % em bruto batem.
+ * A META é convertida aqui (só existe gravada em bruto), pelo percentual de
+ * H.O. configurado na aba Metas. O RECEBIDO vem em H.O. pronto, na coluna
+ * `total_ho` — desde 29/09/2026, o número da coluna HO do relatório, sem conta.
  *
- * O QUARTIL, portanto, não muda com o alternador — é o mesmo número nas duas
- * unidades, e o mesmo que o Dashboard mostra.
+ * A % em H.O. e a % em bruto batem enquanto o percentual configurado for o
+ * mesmo que o relatório pratica (Total HO ÷ Recebido, que o Analítico mostra).
+ * Se o ERP mudar a proporção, é aquele campo da aba Metas que se ajusta.
  */
 
 import { Fragment, useState, useEffect, useMemo, useId, useCallback } from 'react';
@@ -96,8 +96,9 @@ import {
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { cn } from '@/lib/utils';
 import {
-  getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PP_HO_PERCENTUAL,
+  getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO,
 } from '@/lib/index';
+import { useHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
@@ -554,6 +555,8 @@ export function QuartisOperadores({
   empresaId, mes, setorIds, equipeIds = VAZIO, equipes, resumos,
   operadorEquipeMap, equipesExtrasPorOperador = {}, loading,
 }: QuartisOperadoresProps) {
+  // Meta e indireto convertem pelo percentual configurado; o recebido não.
+  const ho = useHoPercentual();
   // O recorte vem do pai, resolvido por `resolverEscopoPainel`. Nada aqui o
   // completa nem o reinterpreta — ver o cabeçalho do arquivo.
   const setoresFoco = useMemo(() => new Set(setorIds), [setorIds]);
@@ -884,8 +887,8 @@ export function QuartisOperadores({
        *
        * A META passa por `metaNaUnidade`: ela só existe gravada em bruto.
        * O RECEBIDO não passa — `analitico_recebimentos.total_ho` já É o H.O.,
-       * derivado do bruto pelo trigger do banco com a mesma constante de
-       * 24,96%. Multiplicar de novo aqui daria 6,23% do bruto.
+       * como veio da coluna do relatório. Multiplicar de novo aqui daria o
+       * H.O. do H.O.
        *
        * A frente INDIRETA vem de acordos, que não têm coluna de H.O.: ali o
        * percentual é aplicado na hora, em `combinarMetaDupla`.
@@ -911,7 +914,7 @@ export function QuartisOperadores({
         metaDireta: meta,
         metaIndireta: emHO ? metaNaUnidade(metaIndBruta, 'ho') : metaIndBruta,
         recebidoDireto: recebido,
-        recebidoIndireto: emHO ? indiretoBruto * PP_HO_PERCENTUAL : indiretoBruto,
+        recebidoIndireto: emHO ? indiretoBruto * ho : indiretoBruto,
       });
 
       // Sem `limitePct`: esta tabela nunca saturou a %, ao contrário do header
@@ -960,7 +963,7 @@ export function QuartisOperadores({
   // não recalcularia linha nenhuma — a tabela ficaria na unidade anterior e só
   // o rótulo mudaria.
   }, [anoNum, mesNum, mes, feriados, contarHoje, quartis, resumos, operadores, metasOp,
-      metasIndiretas, indiretoMap, emHO,
+      metasIndiretas, indiretoMap, emHO, ho,
       setorIds, setoresFoco, equipesFoco, operadorEquipeMap, equipesExtrasPorOperador,
       setorDaEquipe, nomeDaEquipe, treinoMap]);
 
@@ -1402,9 +1405,9 @@ export function QuartisOperadores({
         {isPP && ' A meta diária ficou dentro da linha expandida.'}
         {emHO && (
           <>
-            {' '}A meta em H.O. é 24,96% da gravada; o recebimento em H.O. vem
-            do relatório, linha a linha, e não da conversão — por isso a % em
-            H.O. fica pouco acima da % em bruto.
+            {' '}A meta em H.O. é {rotuloHoPercentual(ho)} da gravada (aba Metas);
+            o recebimento em H.O. vem do relatório, linha a linha. Quando os
+            dois percentuais coincidem, a % em H.O. e a % em bruto são iguais.
           </>
         )}
       </p>

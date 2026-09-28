@@ -260,6 +260,11 @@ export function resolveCols(headers: unknown[]): Record<ColKeys, number> | null 
       }
     }
   });
+  // O H.O. agora é LIDO, não calculado: pegar a coluna errada gravaria o
+  // número errado. O casamento por prefixo aceitaria uma «Hora…» que viesse
+  // antes; o nome exato, quando existe, manda.
+  const hoExato = headers.findIndex(h => COL_ALIASES.ho.includes(norm(h)));
+  if (hoExato >= 0) map.ho = hoExato;
   const required: ColKeys[] = ['op', 'cli', 'tp', 'dt', 'rec'];
   if (required.every(k => k in map)) return map as Record<ColKeys, number>;
   return null;

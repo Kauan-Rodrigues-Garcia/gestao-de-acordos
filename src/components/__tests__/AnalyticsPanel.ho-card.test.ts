@@ -4,7 +4,7 @@
  * Regressão do bug #4 (PaguePlay Dashboard):
  *   Card "Agendado restante no mês" deve:
  *     - PaguePlay: exibir label "H.O. Restante agendado no mês" e valor
- *                  = 24,96% do total (regra H.O.).
+ *                  = percentual de H.O. configurado (padrão 22,60%).
  *     - Bookplay:  manter label "Agendado restante no mês" e valor bruto.
  *
  * Este teste valida a LÓGICA numérica e de rotulagem aplicada no card,
@@ -14,7 +14,8 @@
  * pura com o mesmo helper calcHO garante o contrato sem flakiness.
  */
 import { describe, it, expect } from 'vitest';
-import { calcHO, PP_HO_PERCENTUAL, formatCurrency } from '@/lib/index';
+import { calcHO, formatCurrency } from '@/lib/index';
+import { getHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 
 // Replica fiel da lógica aplicada em AnalyticsPanel.tsx no card 5b
 function resolveCardHoRestante(
@@ -31,7 +32,7 @@ function resolveCardHoRestante(
     : valorAgendadoRestanteMes;
   const plural = totalAgendadoRestanteMes !== 1 ? 's' : '';
   const sub = isPP
-    ? `${totalAgendadoRestanteMes} pendente${plural} · H.O. 24,96% de ${formatCurrency(valorAgendadoRestanteMes)}`
+    ? `${totalAgendadoRestanteMes} pendente${plural} · H.O. ${rotuloHoPercentual()} de ${formatCurrency(valorAgendadoRestanteMes)}`
     : `${totalAgendadoRestanteMes} pendente${plural} · exclui pago/não pago`;
   return { label, valorExibido, sub };
 }
@@ -47,11 +48,11 @@ describe('AnalyticsPanel — card H.O. Restante agendado no mês (#4)', () => {
     expect(label).toBe('Agendado restante no mês');
   });
 
-  it('PaguePlay: valor exibido = 24,96% do total (regra H.O.)', () => {
+  it('PaguePlay: valor exibido = percentual configurado do total (regra H.O.)', () => {
     const valorBruto = 10_000;
     const { valorExibido } = resolveCardHoRestante('pagueplay', valorBruto, 5);
-    expect(valorExibido).toBeCloseTo(2_496, 5);
-    expect(valorExibido / valorBruto).toBeCloseTo(PP_HO_PERCENTUAL, 5);
+    expect(valorExibido).toBeCloseTo(2_260, 5);
+    expect(valorExibido / valorBruto).toBeCloseTo(getHoPercentual(), 5);
   });
 
   it('Bookplay: valor exibido = valor bruto (sem transformação)', () => {
@@ -60,9 +61,9 @@ describe('AnalyticsPanel — card H.O. Restante agendado no mês (#4)', () => {
     expect(valorExibido).toBe(valorBruto);
   });
 
-  it('PaguePlay: subtítulo expõe a regra "H.O. 24,96% de {bruto}" para rastreabilidade', () => {
+  it('PaguePlay: subtítulo expõe a regra "H.O. {percentual} de {bruto}" para rastreabilidade', () => {
     const { sub } = resolveCardHoRestante('pagueplay', 1_000, 3);
-    expect(sub).toContain('H.O. 24,96% de');
+    expect(sub).toContain('H.O. 22,60% de');
     expect(sub).toContain('3 pendentes');
   });
 
@@ -87,7 +88,7 @@ describe('AnalyticsPanel — card H.O. Restante agendado no mês (#4)', () => {
   it('Valores decimais: H.O. aplicado sem arredondamento errôneo', () => {
     const valorBruto = 1234.56;
     const { valorExibido } = resolveCardHoRestante('pagueplay', valorBruto, 7);
-    // 1234.56 * 0.2496 = 308.146176
-    expect(valorExibido).toBeCloseTo(308.146176, 5);
+    // 1234.56 * 0.2260 = 279.01056
+    expect(valorExibido).toBeCloseTo(279.01056, 5);
   });
 });

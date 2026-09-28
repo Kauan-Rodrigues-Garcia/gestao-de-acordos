@@ -19,7 +19,6 @@
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
-import { calcHO } from '@/lib/index';
 import {
   consolidar,
   colchaoContaNaMeta,
@@ -126,14 +125,15 @@ export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
     const tp = tpInformado || 'NÃO INFORMADO';
     const dt  = toDate(row[cols.dt]);
     const rec = parsearValor(row[cols.rec]);
-    // O H.O. é CALCULADO, não lido. O relatório traz uma coluna "Total HO", mas
-    // o número dela é 25,00% do recebido — o ERP divide por 4, e a PaguePlay
-    // retém 24,96%. Ver a migration `20260818280000_ho_calculado_2496.sql`.
+    // O H.O. vem da coluna do relatório, como está (29/09/2026). Entre 18/08 e
+    // 29/09/2026 ele era CALCULADO (24,96% do recebido) porque a coluna
+    // trazia 25,00% cravado; o ERP passou a mandar o valor certo, e o sistema
+    // parou de fazer conta. O percentual que o relatório pratica aparece na
+    // prévia e no Analítico (Total HO ÷ Recebido).
     //
-    // A coluna continua sendo procurada porque a PRESENÇA dela é o que separa o
-    // relatório da PaguePlay (tem H.O.) do da BookPlay (não tem). O que se
-    // descarta é o valor, não a coluna.
-    const ho  = cols.ho != null ? round2(calcHO(rec)) : 0;
+    // A PRESENÇA da coluna continua sendo o que separa o relatório da
+    // PaguePlay (tem H.O.) do da BookPlay (não tem).
+    const ho  = cols.ho != null ? round2(parsearValor(row[cols.ho])) : 0;
     const eq  = cols.eq != null ? String(row[cols.eq] ?? '').trim() : '';
 
     // Retenção não é Receptivo: a linha sai antes de virar recebimento.

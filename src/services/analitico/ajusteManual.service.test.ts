@@ -17,7 +17,7 @@ import {
   ajustesComoLinhas, ajustesComoRecebimentos, ehLinhaDeAjuste,
   primeiroDiaDaCompetencia, LOTE_AJUSTE_MANUAL, ROTULO_AJUSTE, traduzir,
 } from './ajusteManual.service';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { getHoPercentual } from '@/lib/hoPercentual';
 
 type Somas = Map<string, { valor: number; setorId: string | null; equipeId: string | null }>;
 
@@ -61,9 +61,9 @@ describe('ajustesComoLinhas', () => {
     expect(linhas[0].qtd).toBe(0);
   });
 
-  it('calcula H.O. na PaguePlay com a constante do projeto', () => {
+  it('calcula H.O. na PaguePlay pelo percentual configurado — ajuste não vem de relatório', () => {
     const linhas = ajustesComoLinhas(somas([['op-1', 1_000, null]]), '2026-08', true);
-    expect(linhas[0].total_ho).toBeCloseTo(1_000 * PP_HO_PERCENTUAL, 6);
+    expect(linhas[0].total_ho).toBeCloseTo(1_000 * getHoPercentual(), 6);
   });
 
   it('H.O. é zero na BookPlay — lá nenhuma linha do relatório tem H.O.', () => {
@@ -143,7 +143,7 @@ describe('ajustesComoRecebimentos', () => {
   });
 
   it('H.O. só na PaguePlay — na BookPlay toda linha do relatório é zero', () => {
-    expect(linhaDe(1_000, true).total_ho).toBeCloseTo(1_000 * PP_HO_PERCENTUAL, 2);
+    expect(linhaDe(1_000, true).total_ho).toBeCloseTo(1_000 * getHoPercentual(), 2);
     expect(linhaDe(1_000, false).total_ho).toBe(0);
   });
 

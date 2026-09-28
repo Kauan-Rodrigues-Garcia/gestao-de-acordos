@@ -41,10 +41,10 @@ describe('montarEntradaComissao', () => {
     expect(e.recebidoIndiretoBruto).toBe(1_200);
   });
 
-  it('PaguePlay mede em H.O., fator 24,96%', () => {
+  it('PaguePlay mede em H.O., no percentual configurado (padrão 22,60%)', () => {
     const e = montarEntradaComissao({ ...BASE, isPaguePlay: true });
     expect(e.recebidoDireto).toBe(37_440);
-    expect(e.fatorUnidade).toBe(0.2496);
+    expect(e.fatorUnidade).toBe(0.2260);
   });
 
   it('sem linha de meta, não há meta', () => {

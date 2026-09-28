@@ -19,7 +19,7 @@
  * real é eles divergirem.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { getHoPercentual } from '@/lib/hoPercentual';
 
 type Resposta = { data: unknown; error: { message: string } | null };
 
@@ -93,7 +93,7 @@ describe('buscarResumoMensalDiario — pela RPC', () => {
     expect(r.resumos[0].total_recebido).toBe(1500);
     expect(r.resumos[0].total_pagamentos).toBe(5);
     // O relatório diário não traz coluna de H.O. — ele é derivado.
-    expect(r.resumos[0].total_ho).toBeCloseTo(1500 * PP_HO_PERCENTUAL, 6);
+    expect(r.resumos[0].total_ho).toBeCloseTo(1500 * getHoPercentual(), 6);
   });
 
   it('linha fora do vínculo sai do placar do operador e vai para o geral do setor', async () => {

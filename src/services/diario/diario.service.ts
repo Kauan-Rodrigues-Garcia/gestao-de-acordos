@@ -16,7 +16,7 @@
 import { supabase } from '@/lib/supabase';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { registrarLog } from '@/services/logs.service';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { paraHO } from '@/lib/hoPercentual';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { ROTA_DIARIO } from '@/lib/notificacoes-rota';
 import type {
@@ -577,7 +577,7 @@ export async function notificarImportacaoDiario(
 export interface ResumoMensalDiario {
   /** Acumulado do mês por operador vinculado, SEM os fora do vínculo — mesmo
    *  formato do analítico, para reusar DesempenhoEquipes/QuartisOperadores
-   *  sem alteração. total_ho é calculado (recebido × PP_HO_PERCENTUAL): o
+   *  sem alteração. total_ho é calculado (recebido × percentual configurado): o
    *  relatório diário não traz a coluna de H.O. */
   resumos: ResumoOperadorAnalitico[];
   /** Valores que contam SÓ no geral, somados por setor: órfãos,
@@ -676,7 +676,7 @@ async function buscarResumoMensalDiarioRpc(
   }
 
   const resumos = [...porOperador.values()]
-    .map(r => ({ ...r, total_ho: r.total_recebido * PP_HO_PERCENTUAL }))
+    .map(r => ({ ...r, total_ho: paraHO(r.total_recebido) }))
     .sort((a, b) => b.total_recebido - a.total_recebido);
 
   return { resumos, orfaosPorSetor, linhasDia, error: null };
@@ -780,7 +780,7 @@ async function buscarResumoMensalDiarioLinhas(
   }
 
   const resumos = [...porOperador.values()]
-    .map(r => ({ ...r, total_ho: r.total_recebido * PP_HO_PERCENTUAL }))
+    .map(r => ({ ...r, total_ho: paraHO(r.total_recebido) }))
     .sort((a, b) => b.total_recebido - a.total_recebido);
 
   return { resumos, orfaosPorSetor, linhasDia, error: null };

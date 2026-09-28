@@ -32,7 +32,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { paraHO } from '@/lib/hoPercentual';
 import { classificarComissao } from '@/services/analitico/analiticoComum';
 import type { EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
 
@@ -228,7 +228,7 @@ export async function buscarAgendadoPorDia(params: {
 export interface ExtraTabulado {
   /** Soma de `acordos.valor`. */
   bruto: number;
-  /** A parcela que fica na PaguePlay — ver `PP_HO_PERCENTUAL`. */
+  /** A parcela que fica na PaguePlay — ver `lib/hoPercentual`. */
   ho: number;
   qtd: number;
 }
@@ -284,7 +284,8 @@ export async function buscarExtraTabuladoDoMes(params: {
   // derivado, com a mesma constante que `useAnalytics`, `AnalyticsPanel` e
   // `EvolucaoDiaria` usam. Régua nova aqui faria o mesmo dinheiro valer duas
   // coisas diferentes em duas telas.
-  return { bruto, ho: bruto * PP_HO_PERCENTUAL, qtd };
+  // Valor de ACORDO, não de relatório: não há H.O. pronto, então converte.
+  return { bruto, ho: paraHO(bruto), qtd };
 }
 
 export async function buscarDiretoExtraDoMes(params: {

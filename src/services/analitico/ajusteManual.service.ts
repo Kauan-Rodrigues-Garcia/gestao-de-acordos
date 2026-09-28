@@ -51,7 +51,8 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supabase';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+// O ajuste manual não vem de relatório: H.O. no percentual configurado.
+import { paraHO } from '@/lib/hoPercentual';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 /**
@@ -277,7 +278,7 @@ export function ajustesComoLinhas(
       // jogaria no aviso de "recebimento sem acordo", que é outra conversa.
       status_tabulacao: 'tabulado',
       total: info.valor,
-      total_ho: isPaguePlay ? info.valor * PP_HO_PERCENTUAL : 0,
+      total_ho: isPaguePlay ? paraHO(info.valor) : 0,
       // Zero pagamentos: o ajuste não é um pagamento, e contá-lo estragaria o
       // ticket médio — que é `recebido ÷ pagamentos`.
       qtd: 0,
@@ -323,7 +324,7 @@ export function ajustesComoRecebimentos(
       forma_pagamento:   'boleto_pix',
       forma_detalhe:     ROTULO_AJUSTE,
       valor_recebido:    info.valor,
-      total_ho:          isPaguePlay ? info.valor * PP_HO_PERCENTUAL : 0,
+      total_ho:          isPaguePlay ? paraHO(info.valor) : 0,
       data_pagamento:    dia,
       mes_referencia:    dia,
       acordo_id:         null,

@@ -4,6 +4,7 @@ import { fetchEmpresaBySlug, fetchEmpresaAtual } from '@/services/empresas.servi
 import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from '@/lib/tenant';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { resolverEmpresaEscolhida } from '@/services/empresaAtiva.service';
+import { hoPercentualDaConfig, setHoPercentual } from '@/lib/hoPercentual';
 
 interface EmpresaContextType {
   empresa: Empresa | null;
@@ -99,6 +100,12 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
    * não.
    */
   const usuarioCarregado = useRef<string | null>(null);
+
+  // O percentual de H.O. da PaguePlay mora em `empresas.config` e é lido fora
+  // do React (metas, comissão, serviços do analítico). Ver lib/hoPercentual.
+  useEffect(() => {
+    setHoPercentual(hoPercentualDaConfig(empresa?.config));
+  }, [empresa]);
 
   useEffect(() => {
     load();

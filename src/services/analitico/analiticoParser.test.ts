@@ -307,21 +307,61 @@ describe('total_ho', () => {
   const linha = (recebido: number, hoDaPlanilha: number) =>
     ['OPERADOR_A', '123 - CLIENTE TESTE', 'PIX', '13/08/2026', recebido, hoDaPlanilha];
 
-  it('ignora o valor da coluna e usa 24,96% do recebido', () => {
-    // 269,02 é o caso real da planilha de 18/08/2026: o ERP mandou 67,2550
-    // (divisão por 4 = 25,00%); o certo é 67,15 (24,96%).
-    const r = parseRelatorioRows([headers, linha(269.02, 67.2550)]);
+  /*
+   * Desde 29/09/2026 o H.O. é LIDO da coluna, não calculado. Entre 18/08 e
+   * 29/09/2026 o parser ignorava a coluna (o ERP mandava 25,00% cravado) e
+   * aplicava 24,96%; o ERP passou a mandar o valor certo (~22,60%), e o
+   * sistema parou de fazer conta.
+   */
+  it('usa o valor da coluna, como veio', () => {
+    const r = parseRelatorioRows([headers, linha(1000, 226.0)]);
     expect(r.linhas).toHaveLength(1);
-    expect(r.linhas[0].total_ho).toBe(67.15);
+    expect(r.linhas[0].total_ho).toBe(226);
   });
 
-  it('não se importa com o que vem na coluna — nem zero, nem lixo', () => {
+  it('não aplica percentual nenhum: cada linha tem o H.O. dela', () => {
     const r = parseRelatorioRows([
       headers,
-      ['OPERADOR_A', '111 - CLIENTE UM',  'PIX', '13/08/2026', 1000, 0],
-      ['OPERADOR_A', '222 - CLIENTE DOIS', 'PIX', '13/08/2026', 1000, 999999],
+      ['OPERADOR_A', '111 - CLIENTE UM',  'PIX', '13/08/2026', 1000, 226.0],
+      ['OPERADOR_A', '222 - CLIENTE DOIS', 'PIX', '13/08/2026', 500, 120.55],
     ]);
-    expect(r.linhas.map(l => l.total_ho)).toEqual([249.6, 249.6]);
+    expect(r.linhas.map(l => l.total_ho)).toEqual([226, 120.55]);
+  });
+
+  it('arredonda em centavos, como o banco grava', () => {
+    const r = parseRelatorioRows([headers, linha(269.02, 60.79852)]);
+    expect(r.linhas[0].total_ho).toBe(60.8);
+  });
+
+  it('aceita o número como texto brasileiro («1.234,56»)', () => {
+    const r = parseRelatorioRows([headers, linha(5000, '1.130,00' as unknown as number)]);
+    expect(r.linhas[0].total_ho).toBe(1130);
+  });
+
+  it('coluna chamada só «HO» também vale', () => {
+    const r = parseRelatorioRows([
+      ['Cobradora', 'Cliente', 'TpDoc', 'DtPgto', 'Recebido', 'HO'],
+      ['OPERADOR_A', '123 - CLIENTE TESTE', 'PIX', '13/08/2026', 1000, 226],
+    ]);
+    expect(r.linhas[0].total_ho).toBe(226);
+  });
+
+  it('o nome exato vence o prefixo: uma «Hora…» antes não rouba a coluna', () => {
+    const r = parseRelatorioRows([
+      ['Cobradora', 'Hora Ligação', 'Cliente', 'TpDoc', 'DtPgto', 'Recebido', 'Total HO'],
+      ['OPERADOR_A', '10:32', '123 - CLIENTE TESTE', 'PIX', '13/08/2026', 1000, 226],
+    ]);
+    expect(r.linhas[0].total_ho).toBe(226);
+  });
+
+  it('cartão consolidado soma o H.O. das linhas', () => {
+    const r = parseRelatorioRows([
+      headers,
+      ['OPERADOR_A', '777 - CLIENTE CARTAO', 'CARTÃO DE CRÉDITO', '13/08/2026', 300, 67.8],
+      ['OPERADOR_A', '777 - CLIENTE CARTAO', 'CARTÃO DE CRÉDITO', '13/08/2026', 200, 45.2],
+    ]);
+    const soma = r.linhas.reduce((t, l) => t + l.total_ho, 0);
+    expect(soma).toBeCloseTo(113, 2);
   });
 
   it('sem coluna de H.O. o valor é zero — é o relatório da BookPlay', () => {

@@ -17,6 +17,7 @@ import { remocaoPreocupa } from '@/services/analitico/remocaoPrevista';
 import { supabase } from '@/lib/supabase';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import type { UseAnaliticoImport } from './types';
+import { percentualImplicito, rotuloHoPercentual } from '@/lib/hoPercentual';
 
 interface ImportarModalProps {
   aberto: boolean;
@@ -197,6 +198,24 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 <p className="text-xs text-muted-foreground">sem operador</p>
               </div>
             </div>
+
+            {/* PaguePlay: o H.O. entra como está na coluna do relatório, sem
+                conta. Mostrar a proporção do arquivo deixa ver, antes de
+                confirmar, se o ERP mudou o percentual. */}
+            {(() => {
+              const rec = preview.linhas.reduce((s, l) => s + (Number(l.valor_recebido) || 0), 0);
+              const ho  = preview.linhas.reduce((s, l) => s + (Number(l.total_ho) || 0), 0);
+              const pct = percentualImplicito(rec, ho);
+              if (pct === null) return null;
+              return (
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  H.O. deste relatório: <strong className="text-foreground">{formatBRL(ho)}</strong>
+                  {' '}sobre {formatBRL(rec)} recebidos —{' '}
+                  <strong className="text-foreground">{rotuloHoPercentual(pct)}</strong>.
+                  {' '}Entra como está na coluna, sem cálculo.
+                </div>
+              );
+            })()}
 
             {/* Retenção descartada: o relatório do Receptivo vem com as linhas
                 da equipe de Retenção, e esse recebimento não é do Receptivo.

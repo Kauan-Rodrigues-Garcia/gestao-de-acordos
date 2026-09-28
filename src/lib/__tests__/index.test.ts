@@ -43,9 +43,6 @@ import {
   ESTADOS_BRASIL,
   STATUS_LABELS_PAGUEPLAY,
   TIPO_LABELS_PAGUEPLAY,
-  PP_HO_PERCENTUAL,
-  PP_COREN_PERCENTUAL,
-  PP_COFEN_PERCENTUAL,
   calcHO,
   calcCoren,
   calcCofen,
@@ -58,6 +55,7 @@ import {
   extractLinkAcordo,
   buildObservacoesComEstado,
 } from '@/lib/index';
+import { getHoPercentual, repassePercentuais, setHoPercentual, HO_PERCENTUAL_PADRAO } from '@/lib/hoPercentual';
 
 describe('lib/index constantes', () => {
   it('expõe ROUTE_PATHS completos e imutáveis', () => {
@@ -112,8 +110,8 @@ describe('lib/index constantes', () => {
   });
 
   it('percentuais PaguePlay somam 1.0 (aprox.)', () => {
-    const total = PP_HO_PERCENTUAL + PP_COREN_PERCENTUAL + PP_COFEN_PERCENTUAL;
-    expect(total).toBeCloseTo(1.0, 4);
+    const { coren, cofen } = repassePercentuais();
+    expect(getHoPercentual() + coren + cofen).toBeCloseTo(1.0, 4);
   });
 
   it('arrays de perfis contêm os valores esperados', () => {
@@ -341,16 +339,25 @@ describe('isPaguePlay', () => {
 });
 
 describe('calc HO/Coren/Cofen', () => {
-  it('calcHO = 24,96%', () => {
-    expect(calcHO(1000)).toBeCloseTo(249.6, 5);
+  // O percentual virou configuração (29/09/2026); o padrão é 22,60%.
+  it('calcHO usa o percentual configurado — padrão 22,60%', () => {
+    expect(HO_PERCENTUAL_PADRAO).toBe(0.2260);
+    expect(calcHO(1000)).toBeCloseTo(226.0, 5);
   });
 
-  it('calcCoren = 56,28%', () => {
-    expect(calcCoren(1000)).toBeCloseTo(562.8, 5);
+  it('Coren e Cofen dividem o resto em 3:1', () => {
+    expect(calcCoren(1000)).toBeCloseTo(580.5, 5);
+    expect(calcCofen(1000)).toBeCloseTo(193.5, 5);
   });
 
-  it('calcCofen = 18,76%', () => {
-    expect(calcCofen(1000)).toBeCloseTo(187.6, 5);
+  it('com o H.O. antigo (24,96%) a divisão volta a ser 56,28 / 18,76', () => {
+    setHoPercentual(0.2496);
+    try {
+      expect(calcCoren(1000)).toBeCloseTo(562.8, 5);
+      expect(calcCofen(1000)).toBeCloseTo(187.6, 5);
+    } finally {
+      setHoPercentual(HO_PERCENTUAL_PADRAO);
+    }
   });
 
   it('HO + Coren + Cofen ≈ valor bruto', () => {

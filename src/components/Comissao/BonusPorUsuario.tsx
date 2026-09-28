@@ -32,7 +32,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { useHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { ultimoDiaDoMes, type BonusComissao, type TipoBonus } from '@/services/comissao/bonus';
@@ -65,6 +65,7 @@ function DialogBonus({ aberto, inicial, props, onFechar }: {
   props: BonusPorUsuarioProps;
   onFechar: () => void;
 }) {
+  const ho = useHoPercentual();
   const { empresaId, setorId, ano, mes, isPaguePlay, pessoas, quantasMetas, onMudou } = props;
   const [r, setR] = useState<RascunhoBonus>(inicial);
   const [salvando, setSalvando] = useState(false);
@@ -76,12 +77,12 @@ function DialogBonus({ aberto, inicial, props, onFechar }: {
   function mudarAlvo(texto: string) {
     const v = mascararReais(texto);
     const n = lerReais(v);
-    mudar({ valorAlvo: v, valorAlvoHO: reaisParaCampo(n !== null ? n * PP_HO_PERCENTUAL : null) });
+    mudar({ valorAlvo: v, valorAlvoHO: reaisParaCampo(n !== null ? n * ho : null) });
   }
   function mudarAlvoHO(texto: string) {
     const v = mascararReais(texto);
     const n = lerReais(v);
-    mudar({ valorAlvoHO: v, valorAlvo: reaisParaCampo(n !== null ? Math.round((n / PP_HO_PERCENTUAL) * 100) / 100 : null) });
+    mudar({ valorAlvoHO: v, valorAlvo: reaisParaCampo(n !== null ? Math.round((n / ho) * 100) / 100 : null) });
   }
 
   async function confirmar() {
@@ -168,7 +169,7 @@ function DialogBonus({ aberto, inicial, props, onFechar }: {
               </div>
               {isPaguePlay && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Em H.O. (24,96%)</Label>
+                  <Label className="text-xs">Em H.O. ({rotuloHoPercentual(ho)})</Label>
                   <Input inputMode="numeric" className="h-9 w-44" placeholder="0,00" value={r.valorAlvoHO} onChange={e => mudarAlvoHO(e.target.value)} />
                 </div>
               )}
@@ -214,6 +215,7 @@ function DialogBonus({ aberto, inicial, props, onFechar }: {
 }
 
 export function BonusPorUsuario(props: BonusPorUsuarioProps) {
+  const ho = useHoPercentual();
   const { bonus, pessoas, bloqueado, isPaguePlay, onMudou } = props;
   const [escolhidas, setEscolhidas] = useState<string[]>([]);
   const [editando, setEditando] = useState<{ chave: number; rascunho: RascunhoBonus } | null>(null);
@@ -256,7 +258,7 @@ export function BonusPorUsuario(props: BonusPorUsuarioProps) {
                   {`${formatBRL(b.valorBonus)} ${condicaoDoBonus({ ...b, alvo: b.valorAlvo })}`}
                   {isPaguePlay && b.tipo !== 'meta' && b.valorAlvo !== null && (
                     <span className="ml-1 text-xs font-normal text-muted-foreground">
-                      {`(${formatBRL(b.valorAlvo * PP_HO_PERCENTUAL)} H.O.)`}
+                      {`(${formatBRL(b.valorAlvo * ho)} H.O.)`}
                     </span>
                   )}
                 </p>

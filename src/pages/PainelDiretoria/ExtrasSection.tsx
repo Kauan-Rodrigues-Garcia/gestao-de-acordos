@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import { formatBRL, safeNum, sumSafe } from '@/lib/money';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { useHoPercentual } from '@/lib/hoPercentual';
 
 interface ExtrasSectionProps {
   extrasAcordos: AcordoExtra[];
@@ -27,6 +27,8 @@ export const ExtrasSection = memo(function ExtrasSection({
   loadingExtras,
   setores,
 }: ExtrasSectionProps) {
+  // Extra é ACORDO, não relatório: o H.O. sai do percentual configurado.
+  const ho = useHoPercentual();
   const [extraSetorFiltro, setExtraSetorFiltro] = useState<string | null>(null);
   const [extraEquipeFiltro, setExtraEquipeFiltro] = useState<string | null>(null);
   const [extraOperadorFiltro, setExtraOperadorFiltro] = useState<string | null>(null);
@@ -100,14 +102,14 @@ export const ExtrasSection = memo(function ExtrasSection({
     const totalNaoPago = sumSafe(naoPagos.map(a => a.valor));
     return {
       totalAgendado, totalRecebido,
-      hoAgendado: totalAgendado * PP_HO_PERCENTUAL,
-      hoRecebido: totalRecebido * PP_HO_PERCENTUAL,
+      hoAgendado: totalAgendado * ho,
+      hoRecebido: totalRecebido * ho,
       totalNaoPago,
-      hoNaoPago: totalNaoPago * PP_HO_PERCENTUAL,
+      hoNaoPago: totalNaoPago * ho,
       totalAcordos: extrasFiltrados.length,
       totalPagos: pagos.length,
     };
-  }, [extrasFiltrados]);
+  }, [extrasFiltrados, ho]);
 
   const extrasPorOperador = useMemo(() => {
     const map = new Map<string, { nome: string; acordos: number; recebido: number; agendado: number; pagos: number }>();
@@ -238,7 +240,7 @@ export const ExtrasSection = memo(function ExtrasSection({
               <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">H.O. recebido</p>
                 <p className="text-xl font-extrabold font-mono text-orange-700 dark:text-orange-500 leading-none">{formatBRL(extrasKpis.hoRecebido)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">{(PP_HO_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{(ho * 100).toFixed(2)}% do bruto</p>
               </div>
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Total agendado</p>
@@ -297,7 +299,7 @@ export const ExtrasSection = memo(function ExtrasSection({
                             <div className="flex items-center gap-3 flex-shrink-0 text-[11px]">
                               <span className="text-muted-foreground">{op.acordos} acordos</span>
                               <span className="font-mono font-bold text-success">{formatBRL(op.recebido)}</span>
-                              <span className="font-mono text-orange-700 dark:text-orange-500 hidden sm:inline">{formatBRL(op.recebido * PP_HO_PERCENTUAL)} H.O.</span>
+                              <span className="font-mono text-orange-700 dark:text-orange-500 hidden sm:inline">{formatBRL(op.recebido * ho)} H.O.</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">

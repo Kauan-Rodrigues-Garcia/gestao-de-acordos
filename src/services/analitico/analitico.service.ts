@@ -24,7 +24,8 @@ import {
   type FantasmaTransferencia, type MarcaTransferido,
 } from './fantasmaTransferencia';
 import { equipeUnicaPorLider, equipeQueCredita } from '@/services/equipes/equipeDoLider';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+// Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
+import { paraHO } from '@/lib/hoPercentual';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import {
   somasPorOperador, ajustesComoLinhas, ajustesComoRecebimentos,
@@ -774,9 +775,15 @@ export async function importarLoteAnalitico(
     const doBanco = dbPorGrupo.get(k) ?? [];
     if (!doBanco.length) continue; // linha nem inseriu (erro já reportado no chunk)
 
-    const somaDb = doBanco.reduce((s, x) => s + (Number(x.valor_recebido) || 0), 0);
-    const delta  = agg.valor - somaDb;    // SOMA do relatório no grupo vs soma do banco
-    if (Math.abs(delta) <= 0.005) continue;
+    const somaDb   = doBanco.reduce((s, x) => s + (Number(x.valor_recebido) || 0), 0);
+    const somaDbHo = doBanco.reduce((s, x) => s + (Number(x.total_ho) || 0), 0);
+    const delta    = agg.valor - somaDb;    // SOMA do relatório no grupo vs soma do banco
+    // O H.O. também é conferido: desde 29/09/2026 ele vem do relatório, e a
+    // linha que já estava no banco (gravada a 24,96%) só se corrige aqui —
+    // o upsert com `ignoreDuplicates` não a toca. Sem isto, reimportar o mês
+    // mudaria só as linhas novas.
+    const deltaHo  = agg.ho - somaDbHo;
+    if (Math.abs(delta) <= 0.005 && Math.abs(deltaHo) <= 0.005) continue;
 
     const chaveIgual = doBanco.find(x =>
       x.data_pagamento === alvo.data_pagamento && x.forma_pagamento === alvo.forma_pagamento);
@@ -784,6 +791,7 @@ export async function importarLoteAnalitico(
       ?? doBanco.reduce((a, b) => (Number(a.valor_recebido) >= Number(b.valor_recebido) ? a : b));
 
     const novoValor = round2((Number(linha.valor_recebido) || 0) + delta);
+    const novoHo    = round2((Number(linha.total_ho) || 0) + deltaHo);
     if (novoValor < 0) {
       erros.push(
         `NR ${alvo.codigo} (${alvo.operador_usuario}): banco tem ${somaDb.toFixed(2)} em ` +
@@ -792,12 +800,9 @@ export async function importarLoteAnalitico(
       );
       continue;
     }
-    // O H.O. deriva do valor, não do relatório: reconciliar os dois em paralelo
-    // deixaria de bater a cada centavo de arredondamento. Quem grava de verdade
-    // é o trigger `trg_analitico_recebimentos_ho`; mandar o mesmo número daqui
-    // evita que uma leitura otimista mostre o valor velho por um instante.
-    // `agg.ho > 0` distingue a PaguePlay da BookPlay, que não tem H.O.
-    const novoHo = agg.ho > 0 ? round2(novoValor * PP_HO_PERCENTUAL) : 0;
+    // O H.O. segue o relatório, pela mesma diferença que o valor: a soma do
+    // grupo no banco passa a bater com a soma do grupo no relatório. Na
+    // BookPlay os dois lados são zero e o trigger mantém zero.
 
     const { error: errUp } = await supabase
       .from('analitico_recebimentos')
@@ -1016,7 +1021,7 @@ export async function buscarResumoOperadoresAnalitico(
     const atual = porId.get(operadorId);
     if (atual) {
       atual.total_recebido = (Number(atual.total_recebido) || 0) + info.valor;
-      atual.total_ho = (Number(atual.total_ho) || 0) + (pp ? info.valor * PP_HO_PERCENTUAL : 0);
+      atual.total_ho = (Number(atual.total_ho) || 0) + (pp ? paraHO(info.valor) : 0);
       atual.ajuste_manual = (Number(atual.ajuste_manual) || 0) + info.valor;
     } else {
       porId.set(operadorId, {
@@ -1024,7 +1029,7 @@ export async function buscarResumoOperadoresAnalitico(
         operador_usuario: '',
         operador_nome:    null,
         total_recebido:   info.valor,
-        total_ho:         pp ? info.valor * PP_HO_PERCENTUAL : 0,
+        total_ho:         pp ? paraHO(info.valor) : 0,
         total_pagamentos: 0,
         ajuste_manual:    info.valor,
       });
@@ -1724,7 +1729,7 @@ async function linhasDeAjusteDoMes(
         setor_id:         info.setorId ?? setorDoPerfil.get(operadorId) ?? null,
         importado_por_id: null,
         valor_recebido:   info.valor,
-        total_ho:         pp ? info.valor * PP_HO_PERCENTUAL : 0,
+        total_ho:         pp ? paraHO(info.valor) : 0,
         data_pagamento:   dia,
         qtd:              0,
         ajuste:           true,

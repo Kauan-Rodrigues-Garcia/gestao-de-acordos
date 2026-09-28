@@ -6,6 +6,7 @@
  * quebrar, o painel passa a cobrar do operador uma meta que não existe.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { setHoPercentual, HO_PERCENTUAL_PADRAO } from '@/lib/hoPercentual';
 import {
   metaNaUnidade, rotuloUnidade, unidadeOposta, ehUnidadeValida,
   chaveUnidade, lerUnidade, gravarUnidade, UNIDADE_PADRAO,
@@ -15,8 +16,18 @@ import {
 const META_PP = 72115.38;
 
 describe('metaNaUnidade', () => {
-  it('converte a meta gravada para H.O. — 72.115,38 vira 18.000', () => {
-    expect(metaNaUnidade(META_PP, 'ho')).toBeCloseTo(18000, 2);
+  it('converte a meta gravada para H.O. — a 24,96%, 72.115,38 vira 18.000', () => {
+    setHoPercentual(0.2496);
+    try {
+      expect(metaNaUnidade(META_PP, 'ho')).toBeCloseTo(18000, 2);
+    } finally {
+      setHoPercentual(HO_PERCENTUAL_PADRAO);
+    }
+  });
+
+  it('no padrão novo (22,60%), a mesma meta bruta lê 16.298,08 de H.O.', () => {
+    // A meta é gravada em bruto: trocar o percentual muda a LEITURA em H.O.
+    expect(metaNaUnidade(META_PP, 'ho')).toBeCloseTo(72115.38 * 0.2260, 2);
   });
 
   it('devolve a meta intacta em bruto', () => {

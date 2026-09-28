@@ -40,6 +40,6 @@ describe('<SeletorUnidade />', () => {
   it('explica o que cada unidade significa', () => {
     render(<SeletorUnidade valor="ho" onChange={() => {}} />);
     expect(screen.getByRole('button', { name: 'H.O.' }))
-      .toHaveAttribute('title', expect.stringContaining('24,96%'));
+      .toHaveAttribute('title', expect.stringContaining('22,60%'));
   });
 });

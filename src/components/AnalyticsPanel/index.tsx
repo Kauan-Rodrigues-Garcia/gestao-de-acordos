@@ -23,7 +23,8 @@ import { niveisLiberados, veAlemDeSi } from '@/lib/permissoes-escopo';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo, receptivoSomaPorCima,
 } from '@/services/analitico/contribuicaoReceptivo.service';
-import { formatCurrency, PP_HO_PERCENTUAL } from '@/lib/index';
+import { formatCurrency } from '@/lib/index';
+import { useHoPercentual } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
@@ -61,6 +62,8 @@ export function AnalyticsPanel({
   operadorFiltroExterno,
   temLogicaDiretoExtra = false,
 }: AnalyticsPanelProps = {}) {
+  // Direto/Extra pagos são ACORDOS: sem H.O. de relatório, converte.
+  const ho = useHoPercentual();
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -163,12 +166,12 @@ export function AnalyticsPanel({
     return {
       valorRecebidoDireto: vDireto,
       valorRecebidoExtra:  vExtra,
-      valorHODireto:  vDireto * PP_HO_PERCENTUAL,
-      valorHOExtra:   vExtra  * PP_HO_PERCENTUAL,
+      valorHODireto:  vDireto * ho,
+      valorHOExtra:   vExtra  * ho,
       qtdDireto: direto.length,
       qtdExtra:  extra.length,
     };
-  }, [acordosMes, isPP]);
+  }, [acordosMes, isPP, ho]);
 
   // ── Recebimento via relatório ANALÍTICO (fonte certeira — PP) ──────────────
   // O recebido no mês, o gráfico por dia, Pix/Cartão e a % da meta passam a

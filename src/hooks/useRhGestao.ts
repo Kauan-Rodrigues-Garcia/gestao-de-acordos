@@ -22,11 +22,11 @@
  *
  * ## Bruto, e não H.O. — e por que dá no mesmo
  *
- * O percentual é `recebido ÷ esperado`, e `esperado` sai da meta. Desde a
- * migration `20260818280000`, `analitico_recebimentos.total_ho` é exatamente
- * 24,96% de `valor_recebido`, a mesma constante que `metaNaUnidade` aplica à
- * meta. Converter os dois lados multiplica e divide pelo mesmo número: a razão
- * não muda. Na BookPlay, `total_ho` é zero e só o bruto existe.
+ * O percentual é `recebido ÷ esperado`, e `esperado` sai da meta. Em bruto, a
+ * razão não depende de conversão nenhuma — por isso o RH lê bruto. Desde
+ * 29/09/2026 o `total_ho` vem da coluna do relatório, e a meta em H.O. usa o
+ * percentual configurado na aba Metas; ler em H.O. só daria a mesma razão se
+ * os dois percentuais coincidissem. Na BookPlay, `total_ho` é zero.
  *
  * Então o hook usa sempre o bruto. Não é uma escolha de unidade — é a única que
  * responde certo nas duas operações.

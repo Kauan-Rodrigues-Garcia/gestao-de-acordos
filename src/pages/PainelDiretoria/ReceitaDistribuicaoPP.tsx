@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Percent, Banknote, PiggyBank } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
-import { PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
+import { useHoPercentual, repassePercentuais } from '@/lib/hoPercentual';
 
 interface ReceitaDistribuicaoPPProps {
   valorRecebidoMes: number;
@@ -23,6 +23,9 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
   valorCorenMes, valorCofenMes, valorCorenAge, valorCofenAge,
   meta, percMeta,
 }: ReceitaDistribuicaoPPProps) {
+  // H.O. configurável (aba Metas); Coren e Cofen dividem o resto em 3:1.
+  const ho = useHoPercentual();
+  const { coren, cofen } = repassePercentuais(ho);
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
       <div className="relative rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden">
@@ -47,7 +50,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
                 </div>
                 <div>
                   <p className="text-xs font-bold text-orange-600 dark:text-orange-400">H.O. PaguePlay</p>
-                  <p className="text-[10px] text-muted-foreground">{(PP_HO_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                  <p className="text-[10px] text-muted-foreground">{(ho * 100).toFixed(2)}% do bruto</p>
                 </div>
               </div>
               <p className="text-2xl font-extrabold font-mono text-orange-700 dark:text-orange-500 leading-none">{formatBRL(valorHOMes)}</p>
@@ -83,7 +86,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
                 </div>
                 <div>
                   <p className="text-xs font-bold text-blue-600 dark:text-blue-400">Repasse Coren</p>
-                  <p className="text-[10px] text-muted-foreground">{(PP_COREN_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                  <p className="text-[10px] text-muted-foreground">{(coren * 100).toFixed(2)}% do bruto</p>
                 </div>
               </div>
               <p className="text-2xl font-extrabold font-mono text-blue-500 leading-none">{formatBRL(valorCorenMes)}</p>
@@ -102,7 +105,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
                 </div>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground">
-                Não pago: <span className="font-mono font-semibold text-destructive">{formatBRL(valorNaoPago * PP_COREN_PERCENTUAL)}</span>
+                Não pago: <span className="font-mono font-semibold text-destructive">{formatBRL(valorNaoPago * coren)}</span>
               </p>
             </div>
 
@@ -114,7 +117,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
                 </div>
                 <div>
                   <p className="text-xs font-bold text-violet-600 dark:text-violet-400">Repasse Cofen</p>
-                  <p className="text-[10px] text-muted-foreground">{(PP_COFEN_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                  <p className="text-[10px] text-muted-foreground">{(cofen * 100).toFixed(2)}% do bruto</p>
                 </div>
               </div>
               <p className="text-2xl font-extrabold font-mono text-violet-500 leading-none">{formatBRL(valorCofenMes)}</p>
@@ -133,7 +136,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
                 </div>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground">
-                Não pago: <span className="font-mono font-semibold text-destructive">{formatBRL(valorNaoPago * PP_COFEN_PERCENTUAL)}</span>
+                Não pago: <span className="font-mono font-semibold text-destructive">{formatBRL(valorNaoPago * cofen)}</span>
               </p>
             </div>
           </div>
@@ -142,9 +145,9 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-2">Distribuição percentual do bruto recebido</p>
             <div className="flex h-5 rounded-xl overflow-hidden gap-px bg-muted/50">
               {[
-                { pct: PP_HO_PERCENTUAL, color: 'bg-orange-500' },
-                { pct: PP_COREN_PERCENTUAL, color: 'bg-blue-500' },
-                { pct: PP_COFEN_PERCENTUAL, color: 'bg-violet-500' },
+                { pct: ho, color: 'bg-orange-500' },
+                { pct: coren, color: 'bg-blue-500' },
+                { pct: cofen, color: 'bg-violet-500' },
               ].map(({ pct, color }, i) => (
                 <motion.div
                   key={i}
@@ -159,9 +162,9 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
               ))}
             </div>
             <div className="flex gap-5 mt-2 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />H.O. {(PP_HO_PERCENTUAL * 100).toFixed(2)}%</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" />Coren {(PP_COREN_PERCENTUAL * 100).toFixed(2)}%</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block" />Cofen {(PP_COFEN_PERCENTUAL * 100).toFixed(2)}%</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />H.O. {(ho * 100).toFixed(2)}%</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" />Coren {(coren * 100).toFixed(2)}%</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block" />Cofen {(cofen * 100).toFixed(2)}%</span>
             </div>
           </div>
         </div>

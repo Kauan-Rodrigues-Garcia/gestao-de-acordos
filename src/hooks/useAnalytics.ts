@@ -36,7 +36,8 @@ import { useAuth } from './useAuth';
 import { useEquipesDoPerfil } from './useEquipesDoPerfil';
 import { useEmpresa } from './useEmpresa';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
-import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
+import { getTodayISO } from '@/lib/index';
+import { paraHO } from '@/lib/hoPercentual';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
@@ -91,7 +92,7 @@ export interface AnalyticsData {
   valorAgendadoRestanteMes: number;
   totalAgendadoRestanteMes: number;
 
-  // H.O. — Honorários Operacionais PaguePlay (24,96% do bruto recebido)
+  // H.O. — Honorários Operacionais PaguePlay (percentual configurado, sobre o bruto)
   // Disponível para todos, mas só relevante para PaguePlay
   valorHOMes: number;        // H.O. do total recebido no mês
   valorHOAgendado: number;   // H.O. do total agendado no mês
@@ -910,17 +911,18 @@ export function useAnalytics(
     const valorAgendadoRestanteMes = pendentes.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const totalAgendadoRestanteMes = pendentes.length;
 
-    // H.O. — Honorários Operacionais (24,96% do bruto)
-    const valorHOMes      = valorRecebidoMes * PP_HO_PERCENTUAL;
-    const valorHOAgendado = valorAgendadoMes * PP_HO_PERCENTUAL;
-    const valorHONaoPago  = valorNaoPago * PP_HO_PERCENTUAL;
+    // H.O. dos ACORDOS — não há coluna de relatório aqui, então converte pelo
+    // percentual configurado da empresa (aba Metas).
+    const valorHOMes      = paraHO(valorRecebidoMes);
+    const valorHOAgendado = paraHO(valorAgendadoMes);
+    const valorHONaoPago  = paraHO(valorNaoPago);
 
     /**
      * A meta é comparada com o BRUTO recebido — nos dois tenants.
      *
      * A versão anterior usava o H.O. na PaguePlay ("meta é baseada em H.O."),
      * mas `metas.meta_valor` guarda o campo **Meta R$** da aba Metas, que é o
-     * total. O campo "Meta H.O. (24,96%)" ao lado é só um conversor de tela:
+     * total. O campo "Meta H.O." ao lado é só um conversor de tela:
      * `MetasConfig` o recalcula a partir do total ao carregar e NUNCA o
      * persiste. Dividir o H.O. por uma meta em bruto devolvia ~1/4 do
      * percentual real — a PaguePlay via 20% onde tinha 80%.
@@ -949,7 +951,7 @@ export function useAnalytics(
         dia: String(i + 1),
         recebido: recDia,
         agendado: doDia.reduce((s, a) => s + (Number(a.valor) || 0), 0),
-        ho:       recDia * PP_HO_PERCENTUAL,
+        ho:       paraHO(recDia),
       };
     });
 

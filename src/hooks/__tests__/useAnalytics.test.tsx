@@ -588,7 +588,7 @@ describe('useAnalytics', () => {
 
     it('PaguePlay compara o BRUTO com a meta, não o H.O.', async () => {
       // `metas.meta_valor` guarda o campo "Meta R$" da aba Metas, que é o
-      // total. O campo "Meta H.O. (24,96%)" ao lado é só um conversor de tela e
+      // total. O campo "Meta H.O." ao lado é só um conversor de tela e
       // nunca é gravado. A versão anterior dividia o H.O. por essa meta em
       // bruto e devolvia ~1/4 do percentual real — a PaguePlay via 12% onde
       // tinha 50%, enquanto MetaProgressoHeader e Desempenho Equipes, na mesma
@@ -607,7 +607,7 @@ describe('useAnalytics', () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.percMeta).toBe(50);          // 500 / 1000
-      expect(result.current.valorHOMes).toBeCloseTo(124.8, 2); // H.O. segue exposto
+      expect(result.current.valorHOMes).toBeCloseTo(113.0, 2); // H.O. segue exposto
     });
 
     it('percMetaAcordos calculado sobre total de pagos', async () => {
@@ -955,7 +955,7 @@ describe('useAnalytics', () => {
       mockTenantSlugValue.current = 'pagueplay';
     });
 
-    it('valorHOMes = valorRecebidoMes * 0.2496', async () => {
+    it('valorHOMes = valorRecebidoMes × percentual configurado (22,60%)', async () => {
       const acordos = [
         makeAcordo({ status: 'pago', valor: 1000, vencimento: '2026-04-05' }),
       ];
@@ -964,10 +964,10 @@ describe('useAnalytics', () => {
       const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      expect(result.current.valorHOMes).toBeCloseTo(249.6, 2);
+      expect(result.current.valorHOMes).toBeCloseTo(226.0, 2);
     });
 
-    it('valorHONaoPago = valorNaoPago * 0.2496', async () => {
+    it('valorHONaoPago = valorNaoPago × percentual configurado', async () => {
       const acordos = [
         makeAcordo({ status: 'nao_pago', valor: 500, vencimento: '2026-04-10' }),
       ];
@@ -976,10 +976,10 @@ describe('useAnalytics', () => {
       const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      expect(result.current.valorHONaoPago).toBeCloseTo(124.8, 2);
+      expect(result.current.valorHONaoPago).toBeCloseTo(113.0, 2);
     });
 
-    it('valorHOAgendado = valorAgendadoMes * 0.2496', async () => {
+    it('valorHOAgendado = valorAgendadoMes × percentual configurado', async () => {
       const acordos = [
         makeAcordo({ status: 'verificar_pendente', valor: 400, vencimento: '2026-04-12' }),
       ];
@@ -988,7 +988,7 @@ describe('useAnalytics', () => {
       const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      expect(result.current.valorHOAgendado).toBeCloseTo(99.84, 2);
+      expect(result.current.valorHOAgendado).toBeCloseTo(90.4, 2);
     });
   });
 
@@ -1123,7 +1123,7 @@ describe('useAnalytics', () => {
       mockTenantSlugValue.current = 'pagueplay';
     });
 
-    it('campo ho em porDia = recebido_dia * 0.2496', async () => {
+    it('campo ho em porDia = recebido_dia × percentual configurado', async () => {
       const acordos = [
         makeAcordo({ vencimento: '2026-04-15', valor: 1000, status: 'pago' }),
       ];
@@ -1133,7 +1133,7 @@ describe('useAnalytics', () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const dia15 = result.current.porDia.find(d => d.dia === '15');
-      expect(dia15?.ho).toBeCloseTo(249.6, 2);
+      expect(dia15?.ho).toBeCloseTo(226.0, 2);
     });
   });
 });

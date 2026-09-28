@@ -60,7 +60,9 @@ import { useCargoPermissoes } from "@/hooks/useCargoPermissoes";
 import { supabase } from "@/lib/supabase";
 import type { QuartilConfig } from "@/lib/supabase";
 import { useTenant } from "@/lib/tenant-config";
-import { PP_HO_PERCENTUAL, getTodayISO } from "@/lib/index";
+import { getTodayISO } from "@/lib/index";
+import { getHoPercentual, useHoPercentual, rotuloHoPercentual } from "@/lib/hoPercentual";
+import { CardPercentualHO } from "@/components/PainelMetas/CardPercentualHO";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
 import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
 import {
@@ -273,13 +275,13 @@ interface MetaRowProps {
   aviso?: React.ReactNode;
   input: MetaInput;
   onChangeValor: (v: string) => void;
-  /** PaguePlay: campo Meta H.O. (24,96% do total, conversão bidirecional). */
+  /** PaguePlay: campo Meta H.O. (percentual configurado, conversão bidirecional). */
   mostrarHO?: boolean;
   onChangeHO?: (v: string) => void;
   /** Quantidade de campos de metas extras (2ª, 3ª…) — as duas empresas. */
   numExtras?: number;
   onChangeExtra?: (idx: number, v: string) => void;
-  /** PaguePlay: a mesma meta extra em H.O. (24,96%, conversão bidirecional). */
+  /** PaguePlay: a mesma meta extra em H.O. (percentual configurado, conversão bidirecional). */
   onChangeExtraHO?: (idx: number, v: string) => void;
   disabled?: boolean;
   /** Meta proporcional: operador recém-chegado/retorno de férias, meta menor
@@ -309,6 +311,8 @@ function MetaRow({
   permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
   onGravar, estado, selecao, onExcluir,
 }: MetaRowProps) {
+  // O percentual é configurável (card «Percentual de H.O.»): o rótulo acompanha.
+  const pctHO = rotuloHoPercentual(useHoPercentual());
   return (
     <div className={cn("py-2.5 border-b border-border last:border-0", selecao?.marcado && "bg-primary/5 -mx-2 px-2 rounded-md")}>
     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -350,7 +354,7 @@ function MetaRow({
         {mostrarHO && (
           <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
             <Label className="text-xs text-muted-foreground">
-              {input.indiretaAtiva ? "Meta DIRETA H.O." : "Meta H.O."} (24,96%)
+              {input.indiretaAtiva ? "Meta DIRETA H.O." : "Meta H.O."} ({pctHO})
             </Label>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
@@ -384,7 +388,7 @@ function MetaRow({
             {/* PaguePlay: a meta é pensada em H.O., e a meta extra também. */}
             {mostrarHO && (
               <div className="flex flex-col gap-1 min-w-[130px] max-w-[180px]">
-                <Label className="text-xs text-muted-foreground">{i + 2}ª meta H.O. (24,96%)</Label>
+                <Label className="text-xs text-muted-foreground">{i + 2}ª meta H.O. ({pctHO})</Label>
                 <div className="relative">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
                   <Input
@@ -470,7 +474,7 @@ function MetaRow({
           </div>
           {mostrarHO && (
             <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
-              <Label className="text-xs text-primary font-medium">Meta INDIRETA H.O. (24,96%)</Label>
+              <Label className="text-xs text-primary font-medium">Meta INDIRETA H.O. ({pctHO})</Label>
               <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
                 <Input
@@ -610,6 +614,27 @@ export default function MetasConfig() {
   // Meta em lote: quem está marcado e o formulário que vai para todos eles.
   const [selecionadosOp, setSelecionadosOp] = useState<string[]>([]);
   const [metaLote, setMetaLote] = useState<MetaInput>(emptyInput);
+
+  /*
+   * O percentual de H.O. mudou (card «Percentual de H.O.»): os campos em H.O.
+   * são leitura do bruto, e o bruto é o que está gravado. Refazê-los a partir
+   * dele mantém a tela coerente sem tocar no banco — e não marca linha como
+   * alterada, porque o H.O. fica fora de `assinaturaDaLinha`.
+   */
+  const hoPercentual = useHoPercentual();
+  const hoAnterior = useRef(hoPercentual);
+  useEffect(() => {
+    if (hoAnterior.current === hoPercentual) return;
+    hoAnterior.current = hoPercentual;
+    const refazer = (i: MetaInput): MetaInput => ({
+      ...i,
+      meta_ho: i.meta_valor ? fmtNum(parseBRL(i.meta_valor) * hoPercentual) : i.meta_ho,
+      extras_ho: i.extras.map(e => (e ? fmtNum(parseBRL(e) * hoPercentual) : '')),
+      meta_indireta_ho: i.meta_indireta ? fmtNum(parseBRL(i.meta_indireta) * hoPercentual) : i.meta_indireta_ho,
+    });
+    setInputMetas(atual => Object.fromEntries(Object.entries(atual).map(([k, v]) => [k, refazer(v)])));
+    setMetaLote(atual => refazer(atual));
+  }, [hoPercentual]);
   const [extrasLote, setExtrasLote] = useState(0);
   const [aplicandoLote, setAplicandoLote] = useState(false);
 
@@ -624,15 +649,16 @@ export default function MetasConfig() {
     setInputMetas(prev => ({ ...prev, [id]: { ...(prev[id] ?? emptyInput()), ...patch } }));
   }
 
-  // Conversão bidirecional Meta total ⇄ Meta H.O. (24,96%)
+  // Conversão bidirecional Meta total ⇄ Meta H.O. (percentual configurado,
+  // lido na hora do clique — sem closure presa ao valor antigo)
   function onChangeValor(id: string, v: string) {
     if (!isPP) { setInput(id, { meta_valor: v }); return; }
     const total = parseBRL(v);
-    setInput(id, { meta_valor: v, meta_ho: fmtNum(total * PP_HO_PERCENTUAL) });
+    setInput(id, { meta_valor: v, meta_ho: fmtNum(total * getHoPercentual()) });
   }
   function onChangeHO(id: string, v: string) {
     const ho = parseBRL(v);
-    setInput(id, { meta_ho: v, meta_valor: fmtNum(ho / PP_HO_PERCENTUAL) });
+    setInput(id, { meta_ho: v, meta_valor: fmtNum(ho / getHoPercentual()) });
   }
   // Metas extras: na PaguePlay cada uma tem o par H.O., com a mesma conversão
   // bidirecional da meta principal. Quem vai ao banco é sempre o bruto.
@@ -642,7 +668,7 @@ export default function MetasConfig() {
     extras[idx] = v;
     if (!isPP) { setInput(id, { extras }); return; }
     const extrasHO = [...(atual.extras_ho ?? [])];
-    extrasHO[idx] = fmtNum(parseBRL(v) * PP_HO_PERCENTUAL);
+    extrasHO[idx] = fmtNum(parseBRL(v) * getHoPercentual());
     setInput(id, { extras, extras_ho: extrasHO });
   }
   function onChangeExtraHO(id: string, idx: number, v: string) {
@@ -650,7 +676,7 @@ export default function MetasConfig() {
     const extrasHO = [...(atual.extras_ho ?? [])];
     extrasHO[idx] = v;
     const extras = [...atual.extras];
-    extras[idx] = fmtNum(parseBRL(v) / PP_HO_PERCENTUAL);
+    extras[idx] = fmtNum(parseBRL(v) / getHoPercentual());
     setInput(id, { extras, extras_ho: extrasHO });
   }
   function onChangeProporcional(id: string, v: boolean) {
@@ -667,11 +693,11 @@ export default function MetasConfig() {
   }
   function onChangeIndireta(id: string, v: string) {
     const total = parseBRL(v);
-    setInput(id, { meta_indireta: v, meta_indireta_ho: fmtNum(total * PP_HO_PERCENTUAL) });
+    setInput(id, { meta_indireta: v, meta_indireta_ho: fmtNum(total * getHoPercentual()) });
   }
   function onChangeIndiretaHO(id: string, v: string) {
     const ho = parseBRL(v);
-    setInput(id, { meta_indireta_ho: v, meta_indireta: fmtNum(ho / PP_HO_PERCENTUAL) });
+    setInput(id, { meta_indireta_ho: v, meta_indireta: fmtNum(ho / getHoPercentual()) });
   }
 
   /**
@@ -825,16 +851,16 @@ export default function MetasConfig() {
         const ind = Number(m.meta_indireta_valor) || 0;
         newInputs[m.referencia_id] = {
           meta_valor: fmtNum(v),
-          meta_ho:    fmtNum(v * PP_HO_PERCENTUAL),
+          meta_ho:    fmtNum(v * getHoPercentual()),
           extras:     extras.map(fmtNum),
-          extras_ho:  extras.map(e => fmtNum(e * PP_HO_PERCENTUAL)),
+          extras_ho:  extras.map(e => fmtNum(e * getHoPercentual())),
           proporcional: m.meta_proporcional === true,
           // `ativa && valor > 0` e não só a flag: a constraint do banco garante
           // o par, mas uma linha gravada antes da migration vem com a coluna no
           // default e a leitura tem de sobreviver a isso.
           indiretaAtiva:    m.meta_indireta_ativa === true && ind > 0,
           meta_indireta:    fmtNum(ind),
-          meta_indireta_ho: fmtNum(ind * PP_HO_PERCENTUAL),
+          meta_indireta_ho: fmtNum(ind * getHoPercentual()),
         };
         if (m.tipo && extras.length > maxExtras[m.tipo]) maxExtras[m.tipo] = extras.length;
       }
@@ -1119,10 +1145,10 @@ export default function MetasConfig() {
     setMetaLote(atual => ({ ...atual, ...patch }));
   }
   function loteValor(v: string) {
-    mudarLote(isPP ? { meta_valor: v, meta_ho: fmtNum(parseBRL(v) * PP_HO_PERCENTUAL) } : { meta_valor: v });
+    mudarLote(isPP ? { meta_valor: v, meta_ho: fmtNum(parseBRL(v) * getHoPercentual()) } : { meta_valor: v });
   }
   function loteHO(v: string) {
-    mudarLote({ meta_ho: v, meta_valor: fmtNum(parseBRL(v) / PP_HO_PERCENTUAL) });
+    mudarLote({ meta_ho: v, meta_valor: fmtNum(parseBRL(v) / getHoPercentual()) });
   }
   function loteExtra(idx: number, v: string) {
     setMetaLote(atual => {
@@ -1130,7 +1156,7 @@ export default function MetasConfig() {
       extras[idx] = v;
       if (!isPP) return { ...atual, extras };
       const extrasHO = [...atual.extras_ho];
-      extrasHO[idx] = fmtNum(parseBRL(v) * PP_HO_PERCENTUAL);
+      extrasHO[idx] = fmtNum(parseBRL(v) * getHoPercentual());
       return { ...atual, extras, extras_ho: extrasHO };
     });
   }
@@ -1139,7 +1165,7 @@ export default function MetasConfig() {
       const extrasHO = [...atual.extras_ho];
       extrasHO[idx] = v;
       const extras = [...atual.extras];
-      extras[idx] = fmtNum(parseBRL(v) / PP_HO_PERCENTUAL);
+      extras[idx] = fmtNum(parseBRL(v) / getHoPercentual());
       return { ...atual, extras, extras_ho: extrasHO };
     });
   }
@@ -1166,9 +1192,9 @@ export default function MetasConfig() {
       const indireta = comDiretoExtra.has(id) && metaLote.indiretaAtiva;
       return {
         meta_valor: fmtNum(parseBRL(metaLote.meta_valor)),
-        meta_ho: fmtNum(parseBRL(metaLote.meta_valor) * PP_HO_PERCENTUAL),
+        meta_ho: fmtNum(parseBRL(metaLote.meta_valor) * getHoPercentual()),
         extras: extrasPreenchidas.map(fmtNum),
-        extras_ho: extrasPreenchidas.map(v => fmtNum(v * PP_HO_PERCENTUAL)),
+        extras_ho: extrasPreenchidas.map(v => fmtNum(v * getHoPercentual())),
         proporcional: metaLote.proporcional,
         indiretaAtiva: indireta,
         meta_indireta: indireta ? metaLote.meta_indireta : "",
@@ -1416,6 +1442,12 @@ export default function MetasConfig() {
         )}
 
         <TabsContent value="metas" className="mt-0 space-y-6">
+      {isPP && (
+        <CardPercentualHO
+          mes={`${ano}-${String(mes).padStart(2, '0')}`}
+          podeEditar={podeGerenciarMetas}
+        />
+      )}
       {/* ── Config do mês (PP + BookPlay): dias úteis + feriados + quartis ── */}
       {temConfigMes && configDbAtiva && configCarregada && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1789,8 +1821,8 @@ export default function MetasConfig() {
                   onChangeIndiretaAtiva={v => mudarLote(v
                     ? { indiretaAtiva: true }
                     : { indiretaAtiva: false, meta_indireta: "", meta_indireta_ho: "" })}
-                  onChangeIndireta={v => mudarLote({ meta_indireta: v, meta_indireta_ho: fmtNum(parseBRL(v) * PP_HO_PERCENTUAL) })}
-                  onChangeIndiretaHO={v => mudarLote({ meta_indireta_ho: v, meta_indireta: fmtNum(parseBRL(v) / PP_HO_PERCENTUAL) })}
+                  onChangeIndireta={v => mudarLote({ meta_indireta: v, meta_indireta_ho: fmtNum(parseBRL(v) * getHoPercentual()) })}
+                  onChangeIndiretaHO={v => mudarLote({ meta_indireta_ho: v, meta_indireta: fmtNum(parseBRL(v) / getHoPercentual()) })}
                 />
                 <div className="flex flex-wrap items-center gap-2 pt-2">
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground"

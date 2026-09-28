@@ -1,3 +1,4 @@
+import { getHoPercentual, repassePercentuais } from './hoPercentual';
 export const ROUTE_PATHS = {
   LOGIN: '/login',
   REGISTRO: '/registro',
@@ -486,31 +487,29 @@ export function isPaguePlay(slug: string): boolean {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PaguePlay — Distribuição de receita (Cofen/Coren/H.O.)
-// A empresa Pagueplay retém apenas 24,96% do valor total recebido.
-// Os outros 75,04% são repassados: 56,28% para o Coren e 18,76% para o Cofen.
-// O H.O. (Honorários Operacionais) é a base para cálculo de metas.
+//
+// O H.O. (Honorários Operacionais) é o que fica na PaguePlay e é a base das
+// metas. O percentual deixou de ser constante em 29/09/2026: mora em
+// `empresas.config.ho_percentual` (padrão 22,60%) — ver `lib/hoPercentual.ts`.
+// No analítico ele nem é usado: o H.O. vem pronto da coluna do relatório.
+//
+// Coren/Cofen são o restante, na proporção 3:1 de sempre — ver
+// `repassePercentuais`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Percentual retido pela PaguePlay (Honorários Operacionais) */
-export const PP_HO_PERCENTUAL = 0.2496;
-/** Percentual repassado ao Coren */
-export const PP_COREN_PERCENTUAL = 0.5628;
-/** Percentual repassado ao Cofen */
-export const PP_COFEN_PERCENTUAL = 0.1876;
-
-/** Calcula o valor de H.O. a partir do valor bruto de um acordo */
+/** H.O. de um valor bruto, no percentual configurado da empresa. */
 export function calcHO(valorBruto: number): number {
-  return valorBruto * PP_HO_PERCENTUAL;
+  return valorBruto * getHoPercentual();
 }
 
-/** Calcula o valor do repasse ao Coren a partir do valor bruto */
+/** Repasse ao Coren a partir do valor bruto. */
 export function calcCoren(valorBruto: number): number {
-  return valorBruto * PP_COREN_PERCENTUAL;
+  return valorBruto * repassePercentuais().coren;
 }
 
-/** Calcula o valor do repasse ao Cofen a partir do valor bruto */
+/** Repasse ao Cofen a partir do valor bruto. */
 export function calcCofen(valorBruto: number): number {
-  return valorBruto * PP_COFEN_PERCENTUAL;
+  return valorBruto * repassePercentuais().cofen;
 }
 
 export function getStatusLabels(slug: string): Record<string, string> {

@@ -19,7 +19,7 @@ import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDas
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
+import { useHoPercentual, repassePercentuais } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { formatBRL } from '@/lib/money';
 import {
@@ -94,6 +94,9 @@ type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencia
  * tabulado, que é justamente o que o dashboard já denunciava num aviso.
  */
 export default function PainelDiretoria() {
+  // H.O. configurado (aba Metas): só onde não há relatório — tabulação e agendado.
+  const ho = useHoPercentual();
+  const repasse = repassePercentuais(ho);
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
   const tenant = useTenant();
@@ -212,9 +215,10 @@ export default function PainelDiretoria() {
 
   // ── Recebido: SEMPRE do relatório quando ele existe ───────────────────────
   const recebidoBruto = usarAnalitico ? anal.bruto : recebidoTabulado;
-  // H.O. vem da coluna "Total HO" do próprio relatório, não de 24,96% aplicado
-  // aqui: o ERP já faz a conta e é o número dele que a diretoria confere.
-  const recebidoHO    = usarAnalitico ? anal.ho : recebidoTabulado * (1 - PP_COREN_PERCENTUAL - PP_COFEN_PERCENTUAL);
+  // H.O. vem da coluna do próprio relatório: o ERP já faz a conta e é o
+  // número dele que a diretoria confere. Sem relatório, a tabulação converte
+  // pelo percentual configurado.
+  const recebidoHO    = usarAnalitico ? anal.ho : recebidoTabulado * ho;
   const recebidoQtd   = usarAnalitico ? anal.qtd : totalPagosMes;
   const recebidoPrev  = usarAnalitico ? analPrev.bruto : (mesAnterior?.valorRecebido ?? 0);
 
@@ -222,25 +226,28 @@ export default function PainelDiretoria() {
    * Percentual da meta sobre o BRUTO recebido.
    *
    * `metas.meta_valor` guarda o campo "Meta R$" da aba Metas, que é o total —
-   * o "Meta H.O. (24,96%)" ao lado é conversor de tela e não é persistido.
+   * o "Meta H.O." ao lado é conversor de tela e não é persistido.
    * Com o relatório no ar, a base é o bruto DELE.
    */
   const percMetaFinal = usarAnalitico && meta && meta.meta_valor > 0
     ? Math.min(Math.round((recebidoBruto / meta.meta_valor) * 100), 999)
     : percMeta;
 
-  const valorCorenMes = recebidoBruto * PP_COREN_PERCENTUAL;
-  const valorCofenMes = recebidoBruto * PP_COFEN_PERCENTUAL;
+  // O repasse do recebido é o que o relatório NÃO reteve: bruto − H.O. da
+  // coluna, dividido 3:1 entre Coren e Cofen. Assim os três fecham com o
+  // relatório, em vez de um percentual fixo sobre o bruto.
+  const repasseMes    = recebidoBruto - recebidoHO;
+  const valorCorenMes = repasseMes * 0.75;
+  const valorCofenMes = repasseMes * 0.25;
   // Agendado é compromisso, não caixa: continua saindo da tabulação.
-  const valorCorenAge = valorAgendadoMes * PP_COREN_PERCENTUAL;
-  const valorCofenAge = valorAgendadoMes * PP_COFEN_PERCENTUAL;
+  const valorCorenAge = valorAgendadoMes * repasse.coren;
+  const valorCofenAge = valorAgendadoMes * repasse.cofen;
 
   // Mês anterior, para o comparativo: recebido do RELATÓRIO daquele mês.
   const recebidoHOPrev = usarAnalitico
     ? analPrev.ho
-    : recebidoPrev * (1 - PP_COREN_PERCENTUAL - PP_COFEN_PERCENTUAL);
-  const valorHOAnteriorAgendado =
-    (mesAnterior?.valorAgendado ?? 0) * (1 - PP_COREN_PERCENTUAL - PP_COFEN_PERCENTUAL);
+    : recebidoPrev * ho;
+  const valorHOAnteriorAgendado = (mesAnterior?.valorAgendado ?? 0) * ho;
 
   // ── Recebido por setor (relatório), com a MESMA regra da aba Analítico ────
   const recebidoPorSetor = useMemo(() => {

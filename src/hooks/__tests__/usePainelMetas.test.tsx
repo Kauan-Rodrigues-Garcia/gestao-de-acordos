@@ -9,6 +9,7 @@
  * `contar_dia_atual = false`, que é o cenário da print de referência.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { setHoPercentual, HO_PERCENTUAL_PADRAO } from '@/lib/hoPercentual';
 import { renderHook, waitFor } from '@testing-library/react';
 import { permissoesDoCargo } from '@/test/permissoesDoCargo';
 
@@ -458,6 +459,15 @@ describe('usePainelMetas — relatório ausente', () => {
  * são fatos do mês — não podem depender do botão.
  */
 describe('usePainelMetas — unidade H.O. × bruto', () => {
+  /*
+   * A CONCORDÂNCIA entre H.O. e bruto vale quando o percentual configurado
+   * (aba Metas) é o mesmo que o relatório pratica. Estas linhas e a meta de
+   * agosto são da época dos 24,96% — então o bloco roda com 24,96%. Desde
+   * 29/09/2026 o percentual é configurável, e o padrão é 22,60%.
+   */
+  beforeEach(() => { setHoPercentual(0.2496); });
+  afterEach(() => { setHoPercentual(HO_PERCENTUAL_PADRAO); });
+
   /** Meta real de operador da PaguePlay em agosto/2026. */
   const META_PP = 72_115.38;
 

@@ -15,13 +15,16 @@
 
 import { rotuloUnidade, type UnidadeValor } from '@/lib/unidadeValor';
 import { cn } from '@/lib/utils';
+import { useHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 
 const OPCOES: UnidadeValor[] = ['ho', 'bruto'];
 
-const TITULO: Record<UnidadeValor, string> = {
-  ho:    'H.O. — a parte que fica na Pague Play (24,96% do recebido)',
-  bruto: 'Bruto — o valor cheio recebido, antes do repasse',
-};
+/** O percentual do H.O. é configurável (aba Metas) — o título acompanha. */
+function titulo(op: UnidadeValor, ho: number): string {
+  return op === 'ho'
+    ? `H.O. — a parte que fica na Pague Play (${rotuloHoPercentual(ho)} do recebido)`
+    : 'Bruto — o valor cheio recebido, antes do repasse';
+}
 
 interface SeletorUnidadeProps {
   valor: UnidadeValor;
@@ -29,6 +32,7 @@ interface SeletorUnidadeProps {
 }
 
 export function SeletorUnidade({ valor, onChange }: SeletorUnidadeProps) {
+  const ho = useHoPercentual();
   return (
     <div
       role="group"
@@ -43,7 +47,7 @@ export function SeletorUnidade({ valor, onChange }: SeletorUnidadeProps) {
             type="button"
             onClick={() => onChange(op)}
             aria-pressed={ativo}
-            title={TITULO[op]}
+            title={titulo(op, ho)}
             className={cn(
               'px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors',
               ativo

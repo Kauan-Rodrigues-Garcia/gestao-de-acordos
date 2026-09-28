@@ -29,7 +29,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { formatBRL } from '@/lib/money';
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { useHoPercentual } from '@/lib/hoPercentual';
 import { diasNoMes } from '@/lib/mesReferencia';
 import type { UnidadeValor } from '@/lib/unidadeValor';
 import { CHART_RECEBIDO, CHART_AGENDADO } from '@/components/AnalyticsPanel/constants';
@@ -68,6 +68,8 @@ function formatYAxis(valor: number): string {
 export function EvolucaoDiaria({
   porDia, agendadoPorDia = [], mes, metaDiaria, diaDeHoje, unidade = 'bruto',
 }: EvolucaoDiariaProps) {
+  // O agendado é ACORDO: em H.O. converte pelo percentual configurado.
+  const ho = useHoPercentual();
   const { tickColor, gridColor } = useAxisColors();
 
   const agendadoMap = useMemo(() => {
@@ -94,10 +96,10 @@ export function EvolucaoDiaria({
         dia: String(dia).padStart(2, '0'),
         diaNum: dia,
         recebido: (emHO ? porDia[dia]?.ho : porDia[dia]?.bruto) ?? 0,
-        agendado: emHO ? agendadoBruto * PP_HO_PERCENTUAL : agendadoBruto,
+        agendado: emHO ? agendadoBruto * ho : agendadoBruto,
       };
     });
-  }, [porDia, agendadoMap, mes, unidade]);
+  }, [porDia, agendadoMap, mes, unidade, ho]);
 
   const { diasComRecebimento, totalMes, melhorDia } = useMemo(() => {
     let dias = 0, soma = 0, melhor = 0;

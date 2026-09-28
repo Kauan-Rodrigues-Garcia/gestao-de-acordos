@@ -6,14 +6,15 @@
  * pelo resumo por operador. Os dois passam por aqui, e é aqui que ficam as duas
  * decisões que não podem divergir entre as telas:
  *
- *   • a unidade — PaguePlay em H.O. (`PP_HO_PERCENTUAL`), BookPlay em bruto;
+ *   • a unidade — PaguePlay em H.O. (`getHoPercentual`), BookPlay em bruto;
  *   • a origem — a configuração é a do setor e da equipe do usuário ORIGINAL,
  *     também para o clone; a exceção por usuário é achada pela pessoa;
  *   • os bônus — só os que têm a pessoa entre os usuários.
  *
  * Sem React, sem fetch.
  */
-import { PP_HO_PERCENTUAL, getTodayISO } from '@/lib/index';
+import { getTodayISO } from '@/lib/index';
+import { getHoPercentual } from '@/lib/hoPercentual';
 import { lerMetaIndiretaDaLinha } from '@/services/metas/metaIndireta';
 import type { BonusComissao } from './bonus';
 import { configDoOperador, type ConfigComissao, type EntradaComissao } from './comissao';
@@ -76,7 +77,7 @@ export function montarEntradaComissao(params: {
     // passam pelo fator.
     recebidoDireto: isPaguePlay ? params.recebidoHO : params.recebidoBruto,
     recebidoIndiretoBruto: params.recebidoIndiretoBruto,
-    fatorUnidade: isPaguePlay ? PP_HO_PERCENTUAL : 1,
+    fatorUnidade: isPaguePlay ? getHoPercentual() : 1,
     config,
     doSetor,
     origemConfig: origem,

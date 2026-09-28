@@ -7,7 +7,7 @@
  *
  * Sem React; os casos estão em `rascunhoBonus.test.ts`.
  */
-import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { paraHO } from '@/lib/hoPercentual';
 import { ultimoDiaDoMes, type BonusComissao, type TipoBonus } from '@/services/comissao/bonus';
 import type { PayloadBonus } from '@/services/comissao/comissao.service';
 import { lerReais, reaisParaCampo } from './formato';
@@ -36,7 +36,7 @@ export function rascunhoDoBonus(b: BonusComissao | null, pessoas: string[]): Ras
     tipo: b?.tipo ?? 'meta',
     metaOrdem: b?.metaOrdem ? String(b.metaOrdem) : '',
     valorAlvo: reaisParaCampo(alvo),
-    valorAlvoHO: reaisParaCampo(alvo !== null ? alvo * PP_HO_PERCENTUAL : null),
+    valorAlvoHO: reaisParaCampo(alvo !== null ? paraHO(alvo) : null),
     inicio: b?.periodoInicio ?? '',
     fim: b?.periodoFim ?? '',
     valorBonus: reaisParaCampo(b?.valorBonus ?? null),

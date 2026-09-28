@@ -50,8 +50,9 @@ import {
   type TotaisDiretoExtra, type PontoAgendadoDia, type ExtraTabulado,
 } from '@/services/analitico/diretoExtra.service';
 import {
-  getTodayISO, PP_HO_PERCENTUAL,
+  getTodayISO,
 } from '@/lib/index';
+import { useHoPercentual } from '@/lib/hoPercentual';
 import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
@@ -238,6 +239,8 @@ function useEquipesDisponiveis(
 
 export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas {
   const { setorId, equipeId, operadorId, temLogicaDiretoExtra } = params;
+  // Muda na aba Metas: as conversões de meta e do indireto se refazem.
+  const ho = useHoPercentual();
   const mes = normalizarMes(params.mes);
   const { ano, mes: mesNum } = partesDoMes(mes);
 
@@ -604,13 +607,13 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       metaDireta: metaNaUnidadeAtiva,
       metaIndireta: metaNaUnidade(metaIndireta, unidade),
       recebidoDireto: recebidoNaUnidade,
-      // O extra pago rende os mesmos 24,96% de qualquer recebimento da
-      // PaguePlay — o H.O. dele é derivado, não vem de coluna própria.
+      // O extra pago é ACORDO, sem H.O. de relatório: converte pelo
+      // percentual configurado da empresa.
       recebidoIndireto: unidade === 'ho'
-        ? recebidoIndiretoBruto * PP_HO_PERCENTUAL
+        ? recebidoIndiretoBruto * ho
         : recebidoIndiretoBruto,
     }),
-    [metaNaUnidadeAtiva, metaIndireta, unidade, recebidoNaUnidade, recebidoIndiretoBruto],
+    [metaNaUnidadeAtiva, metaIndireta, unidade, recebidoNaUnidade, recebidoIndiretoBruto, ho],
   );
 
   // A projeção e o quartil passam pelo TOTAL — a mesma decisão da aba Quartis.

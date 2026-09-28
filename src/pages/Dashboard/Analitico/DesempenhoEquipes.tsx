@@ -30,7 +30,8 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
-import { getTodayISO, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { useHoPercentual } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { assinarTabela } from '@/lib/realtime';
 import { reconciliarMapa } from '@/lib/dadosVivos';
@@ -292,6 +293,8 @@ export function DesempenhoEquipes({
   fonteLabel = 'relatório analítico',
   conciliacaoVersao = 0,
 }: DesempenhoEquipesProps) {
+  // A meta é gravada em bruto; em H.O. converte pelo percentual configurado.
+  const ho = useHoPercentual();
   const { perfil } = useAuth();
   const isPP = useTenant().isPaguePlay;
   const usarConciliacao = isPP && setorConciliacao;
@@ -796,7 +799,7 @@ export function DesempenhoEquipes({
                 rotulo: 'Foto do setor',
               }}
               mostrarHO={isPP}
-              metaHO={metaSetor !== null ? metaSetor * PP_HO_PERCENTUAL : null}
+              metaHO={metaSetor !== null ? metaSetor * ho : null}
               // Só o ACUMULADO do Receptivo soma aqui (dentro de
               // `acumuladoDoSetor`); a meta do setor segue sendo a da aba Metas
               // (decisão do usuário em 30/07/2026).
@@ -873,7 +876,7 @@ export function DesempenhoEquipes({
                   ].filter(Boolean).join(' · ') || undefined}
                   lideres={lideres[eq.id] ?? []}
                   mostrarHO={isPP}
-                  metaHO={metaEquipe !== null ? metaEquipe * PP_HO_PERCENTUAL : null}
+                  metaHO={metaEquipe !== null ? metaEquipe * ho : null}
                   acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
                   acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
                   ajusteManual={dados.porEquipe[eq.id]?.ajuste ?? 0}

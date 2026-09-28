@@ -82,6 +82,7 @@ import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { MudancasImportacao } from './MudancasImportacao';
+import { percentualImplicito, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { useRankingAnalitico } from './useRankingAnalitico';
@@ -1674,7 +1675,13 @@ export function AnaliticoLider({
             {mostrarTileHO && (
               <KpiTile rotulo="Total HO" Icon={CreditCard} tom="neutro"
                 valor={formatBRL(metricas.totalHo)}
-                valorNumerico={metricas.totalHo} formatar={formatBRL} />
+                valorNumerico={metricas.totalHo} formatar={formatBRL}
+                // O H.O. vem pronto do relatório; este é o percentual que o
+                // ERP praticou no recorte (Total HO ÷ Recebido).
+                sub={(() => {
+                  const pct = percentualImplicito(metricas.totalRecebido, metricas.totalHo);
+                  return pct !== null ? `${rotuloHoPercentual(pct)} do recebido (relatório)` : undefined;
+                })()} />
             )}
             <KpiTile rotulo="Operadores" Icon={Users} tom="neutro"
               valor={recorte.modo === 'dia'
