@@ -21,7 +21,10 @@ export async function importarRelatorio(
       await operar('adicionar', { lote, linhas: relatorio.linhas.slice(i, i + 1500) });
       progresso(Math.min(95, Math.round((i + 1500) / relatorio.linhas.length * 95)));
     }
-    const resultado = await operar<{ inseridos: number; ignorados: number }>('concluir', { lote });
+    // `atualizados`: Id.Baixa já salvo que voltou com outro conteúdo — vale o
+    // arquivo mais novo (migration 20260928170000). Lote concluído antes dela
+    // devolve o resultado antigo, sem o campo.
+    const resultado = await operar<{ inseridos: number; atualizados?: number; ignorados: number }>('concluir', { lote });
     progresso(100);
     return resultado;
   } catch (e) {

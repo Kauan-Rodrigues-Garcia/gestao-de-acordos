@@ -21,7 +21,7 @@ async function abrir(modalidade='pagamento',inicio=ontem,fim=hoje,quantidade=1,t
 async function importar(id: string,modalidade='pagamento',data=hoje,inicio=ontem,fim=hoje) {
   const lote=await abrir(modalidade,inicio,fim);
   await op('adicionar',{lote,linhas:[linha(id,data)]});
-  return op<{inseridos:number;ignorados:number}>('concluir',{lote});
+  return op<{inseridos:number;atualizados:number;ignorados:number}>('concluir',{lote});
 }
 
 beforeAll(async()=>{
@@ -39,6 +39,7 @@ beforeAll(async()=>{
     select set_config('test.uid','${usuario}',false);
   `);
   await db.exec(readFileSync('supabase/migrations/20260911222903_relatorio_pagueplay_diretoria.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260928170000_pp_relatorio_atualiza_id_baixa_existente.sql','utf8'));
   await db.exec('set role authenticated');
   const d=await db.query<{hoje:string;ontem:string}>("select ((now() at time zone 'America/Sao_Paulo')::date)::text hoje, ((now() at time zone 'America/Sao_Paulo')::date-1)::text ontem");
   hoje=d.rows[0].hoje;ontem=d.rows[0].ontem;
@@ -77,23 +78,38 @@ describe('migração executada em Postgres isolado (sem rede)',{concurrent:false
     expect((await resumo()).quantidade).toBe(0);await op('cancelar',{lote});
   });
   it('grava uma vez, ignora reimportação idêntica e separa conciliação',async()=>{
-    expect(await importar('1')).toEqual({inseridos:1,ignorados:0});
-    expect(await importar('1')).toEqual({inseridos:0,ignorados:1});
+    expect(await importar('1')).toEqual({inseridos:1,atualizados:0,ignorados:0});
+    expect(await importar('1')).toEqual({inseridos:0,atualizados:0,ignorados:1});
     expect((await resumo()).grupos[0]).toMatchObject(valores);
     expect((await resumo()).primeiraImportacaoPendente).toBe(false);
     expect((await resumo('conciliacao')).quantidade).toBe(0);
     expect((await resumo('conciliacao')).primeiraImportacaoPendente).toBe(true);
   });
   it('permite só hoje após primeira conclusão e não exclui pagamentos anteriores',async()=>{
-    expect(await importar('2','pagamento',hoje,hoje,hoje)).toEqual({inseridos:1,ignorados:0});
+    expect(await importar('2','pagamento',hoje,hoje,hoje)).toEqual({inseridos:1,atualizados:0,ignorados:0});
     expect((await resumo()).quantidade).toBe(2);
   });
-  it('rejeita dados divergentes para Id.Baixa existente, inclusive só um centavo',async()=>{
+  // Até 28/09/2026 isto recusava o lote inteiro e mandava limpar o mês. O
+  // relatório é reexportado todo dia e a PaguePlay reajusta linhas antigas:
+  // o arquivo mais novo prevalece. Ver 20260928170000.
+  it('atualiza Id.Baixa existente que volta diferente, inclusive só um centavo',async()=>{
     const alterados={...valores,total:valores.total+1};
     const lote=await abrir('pagamento',hoje,hoje,1,alterados);
     await op('adicionar',{lote,linhas:[{...linha('1',hoje),...alterados}]});
-    await expect(op('concluir',{lote})).rejects.toThrow('já salvo com dados diferentes');
-    expect((await resumo()).quantidade).toBe(2);await op('cancelar',{lote});
+    expect(await op('concluir',{lote})).toEqual({inseridos:0,atualizados:1,ignorados:0});
+    const r=await resumo();
+    expect(r.quantidade).toBe(2);
+    const total=r.grupos.reduce((s,g)=>s+Number(g.total),0);
+    expect(total).toBe(valores.total*2+1);
+    // Voltar ao conteúdo original também é atualização, não conflito.
+    expect(await importar('1','pagamento',hoje,hoje,hoje)).toEqual({inseridos:0,atualizados:1,ignorados:0});
+  });
+  it('mesmo acordo em meses diferentes são pagamentos diferentes',async()=>{
+    const lote=await abrir('pagamento','2026-02-01','2026-03-31',2,{total:valores.total*2,pp:valores.pp*2,coren:valores.coren*2,cofen:valores.cofen*2});
+    await op('adicionar',{lote,linhas:[linha('50','2026-02-10'),{...linha('51','2026-03-10'),parcela:'2'}]});
+    expect(await op('concluir',{lote})).toEqual({inseridos:2,atualizados:0,ignorados:0});
+    await op('excluir',{empresa,modalidade:'pagamento',mes:'2026-02'});
+    await op('excluir',{empresa,modalidade:'pagamento',mes:'2026-03'});
   });
   it('um bloco repetido e uma confirmação repetida são idempotentes',async()=>{
     const lote=await abrir('conciliacao');const linhas=[linha('1',hoje)];

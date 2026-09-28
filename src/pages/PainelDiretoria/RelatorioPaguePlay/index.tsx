@@ -106,7 +106,8 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
       if (arquivo.dados.inicio < inicio || arquivo.dados.fim > fim) throw new Error('Há pagamentos fora do período informado. Confira as datas.');
       const r = await importarRelatorio(empresaId, modo, arquivo.nome, arquivo.dados, inicio, fim, setProgresso);
       setArquivo(null); setPrevia(null);
-      setAviso(`${r.inseridos} pagamentos novos salvos; ${r.ignorados + arquivo.dados.duplicadas} repetidos ignorados.`);
+      const atualizados = r.atualizados ?? 0;
+      setAviso(`${r.inseridos} pagamentos novos salvos; ${atualizados ? `${atualizados} já salvos foram atualizados pelo arquivo novo; ` : ''}${r.ignorados + arquivo.dados.duplicadas} repetidos ignorados.`);
       await atualizar();
     } catch (e) { setAviso(mensagemErro(e)); }
     finally { setOcupado(false); }
