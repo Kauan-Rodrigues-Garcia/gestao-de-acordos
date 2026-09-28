@@ -94,6 +94,26 @@
  * CLOSED recria; o canal novo só nasce depois que o antigo saiu; e o `track` da
  * reentrada é sorteado em `ESPALHAMENTO_RETRACK_MS`, porque quando o servidor
  * cai todo mundo reentra no mesmo segundo.
+ *
+ * ── Como o servidor conta, e por que a volta do limite espera (28/09/2026) ───
+ * Lido no fonte do Realtime (`presence_handler.ex`, `tenants.ex`):
+ *
+ *   - conta DOIS eventos por entrada neste canal: o `presence_state` que o
+ *     servidor empurra na entrada (sync) e o nosso `track`;
+ *   - mede em baldes de 5 s e compara a MÉDIA DO ÚLTIMO MINUTO com o teto do
+ *     projeto;
+ *   - estourado, ele manda uma mensagem `system` de erro e FECHA o canal de
+ *     quem estava entrando — do nosso lado, um CLOSED.
+ *
+ * Os estouros que sobraram (19 em 28/09/2026) vieram todos em minutos de
+ * deploy: ~150 abas recarregando juntas. E o CLOSED do limite caía na mesma
+ * recriação de 1,5–3 s de uma queda comum — a aba voltava enquanto a média do
+ * minuto ainda estava no teto, era derrubada de novo, e a média não descia.
+ *
+ * Agora a mensagem `system` do limite é reconhecida, e a volta espera
+ * `ESPERA_APOS_LIMITE_MS` com sorteio — tempo de a janela de um minuto
+ * esvaziar, com as abas voltando espalhadas. Voltar para a aba nesse meio-tempo
+ * também respeita a espera.
  */
 import {
   createContext, useContext, useEffect, useRef,
@@ -175,6 +195,19 @@ const ESPALHAMENTO_RETRACK_MS = 10_000;
 const VIGIA_MS = 45_000;
 
 /**
+ * Espera mínima depois que o servidor fechou o canal por excesso de eventos de
+ * presence; a espera real vai do mínimo ao dobro, sorteada. O servidor julga
+ * pela média do último minuto — ver o cabeçalho.
+ */
+const ESPERA_APOS_LIMITE_MS = 30_000;
+
+/** A mensagem `system` com que o Realtime avisa que fechou o canal pelo limite. */
+function ehAvisoDeLimite(payload: unknown): boolean {
+  const p = payload as { status?: unknown; message?: unknown } | null;
+  return p?.status === 'error' && /presence|rate ?limit|too many/i.test(String(p?.message ?? ''));
+}
+
+/**
  * Backoff exponencial com "equal jitter": metade fixa, metade sorteada.
  *
  * A metade fixa garante que a espera cresce de verdade a cada tentativa (com
@@ -212,6 +245,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const mountedRef          = useRef(true);
   /** Remoção do canal anterior ainda em curso — o próximo espera por ela. */
   const saindoRef           = useRef<Promise<unknown> | null>(null);
+  /**
+   * Até quando não adianta tentar entrar: o servidor fechou o canal pelo teto
+   * de eventos de presence. Vale também para a volta à aba.
+   */
+  const bloqueadoAteRef     = useRef(0);
 
   // ── Extrai os DOIS conjuntos do mesmo presenceState ───────────────────────
   // `Object.keys(state)` devolve a `key` do canal — que definimos como o
@@ -258,9 +296,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       // Sem espera fixa e sem espera longa: só o bastante para que o turno
       // inteiro voltando do intervalo não peça `track` no mesmo instante.
+      // Se o servidor acabou de fechar o canal pelo limite, espera ele liberar.
+      const bloqueio = Math.max(0, bloqueadoAteRef.current - Date.now());
       reconnectTimerRef.current = setTimeout(() => {
         if (mountedRef.current) setReconnectKey(k => k + 1);
-      }, Math.random() * ESPALHAMENTO_RETOMADA_MS);
+      }, bloqueio + Math.random() * ESPALHAMENTO_RETOMADA_MS);
     };
     const aoTrocarVisibilidade = () => {
       if (document.visibilityState === 'visible') reviver();
@@ -289,8 +329,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta deve
     // continuar tentando. O limite antigo de 5 tentativas fazia a presença
     // morrer de vez depois de suspender a máquina.
-    const agendarRecriacao = () => {
-      const delay = esperaComJitter(reconnectAttemptsRef.current);
+    const agendarRecriacao = (minimoMs = 0) => {
+      const delay = Math.max(esperaComJitter(reconnectAttemptsRef.current), minimoMs);
       reconnectAttemptsRef.current += 1;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = setTimeout(() => {
@@ -319,6 +359,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
       /** SUBSCRIBED já veio uma vez neste canal: o próximo é reentrada. */
       let jaInscrito = false;
+      /** O servidor avisou que vai fechar este canal pelo teto de presence. */
+      let limiteAtingido = false;
 
       /**
        * Anuncia esta pessoa no canal. Chamado UMA vez por SUBSCRIBED.
@@ -363,6 +405,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       };
 
       ch
+        // O servidor avisa por aqui ANTES de fechar o canal pelo teto de eventos
+        // de presence. O CLOSED que vem em seguida precisa saber disso.
+        .on('system', {}, (payload: unknown) => {
+          if (!ehAvisoDeLimite(payload)) return;
+          limiteAtingido = true;
+          console.info('[Realtime] presence: limite de eventos do projeto atingido — voltando em até um minuto');
+        })
         .on('presence', { event: 'sync' }, () => {
           aplicarEstado();
           if (vivo && mountedRef.current) setLoading(false);
@@ -419,7 +468,14 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           // CLOSED que não fomos nós (o servidor encerrou o canal): a biblioteca
           // não reentra canal fechado. Sem isso a presença ficava morta em
           // silêncio e todo mundo aparecia offline.
-          if (status === 'CLOSED') agendarRecriacao();
+          if (status === 'CLOSED') {
+            if (!limiteAtingido) { agendarRecriacao(); return; }
+            // Fechado pelo limite: a média do servidor é do último minuto.
+            // Voltar em 1,5 s era ser derrubado de novo — ver o cabeçalho.
+            const espera = ESPERA_APOS_LIMITE_MS * (1 + Math.random());
+            bloqueadoAteRef.current = Date.now() + espera;
+            agendarRecriacao(espera);
+          }
         });
     };
 

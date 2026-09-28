@@ -39,10 +39,9 @@ const {
   /**
    * TODAS as escutas registradas no canal, com a config de cada uma.
    *
-   * O provider passou a registrar DUAS: uma só de DELETE, sem filtro (o payload
-   * de DELETE não carrega `empresa_id`, então um filtro por essa coluna nunca
-   * casa e o evento não chega), e a filtrada por empresa para INSERT/UPDATE.
-   * Guardar só o último handler fazia o teste de DELETE bater na escuta errada.
+   * Hoje é UMA, filtrada por empresa, que recebe também o DELETE (a tabela tem
+   * `REPLICA IDENTITY FULL`). Entre 23/08 e 28/09/2026 foram duas — uma de
+   * DELETE sem filtro —, e o teste guarda todas para pegar a volta disso.
    */
   const capturedEscutasRef: {
     current: { config: { event?: string }; handler: (payload: unknown) => void }[];
@@ -229,10 +228,8 @@ function makeWrapper() {
 /**
  * Dispara um evento de postgres_changes nas escutas que o pediram.
  *
- * Roteia por `event` como o próprio Supabase faz: a escuta de DELETE só recebe
- * DELETE, e a escuta `*` recebe tudo. Sem o roteamento, o teste de DELETE caía
- * na escuta filtrada — que hoje ignora DELETE de propósito, porque quem trata
- * esse evento é a escuta dedicada.
+ * Roteia por `event` como o próprio Supabase faz: uma escuta de DELETE só
+ * receberia DELETE, e a escuta `*` recebe tudo.
  */
 async function simulateEvent(payload: unknown) {
   const tipo = (payload as { eventType?: string } | null)?.eventType;
@@ -296,30 +293,22 @@ describe('RealtimeAcordosProvider', () => {
     });
 
     /*
-     * A escuta que faltava — e o defeito que ela desfaz.
+     * Uma escuta só, e é ela que recebe o DELETE.
      *
-     * O payload de DELETE carrega apenas a replica identity da linha, que por
-     * padrão é só a chave primária. `empresa_id` não está lá, então o filtro
-     * `empresa_id=eq.…` nunca casa e o evento não é entregue. Medido em
-     * 23/08/2026: excluir um acordo não mexia em nada do Dashboard — nem nos
-     * cartões, nem no gráfico, nem na tela das outras pessoas.
-     *
-     * Este caso trava a correção: se alguém voltar a pôr filtro no DELETE, ou
-     * unificar as duas escutas de novo, o teste cai aqui.
+     * Até 28/09/2026 havia uma segunda, só de DELETE e SEM filtro: com a
+     * replica identity padrão o `old` do DELETE trazia só a chave primária, e
+     * o filtro por empresa nunca casava. Com `REPLICA IDENTITY FULL` (migration
+     * 20260823140000, aplicada) o Realtime testa o filtro contra o registro
+     * antigo inteiro. A escuta extra dobrava as assinaturas de toda aba e
+     * entregava o DELETE de uma empresa às abas de todas.
      */
-    it('escuta DELETE SEM filtro — com filtro o evento nunca chega', () => {
+    it('registra UMA escuta, filtrada por empresa — o DELETE chega por ela', () => {
       renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
 
-      const doDelete = mockChannelOnSpy.mock.calls.find(
-        ([, config]) => (config as { event?: string }).event === 'DELETE',
-      );
-      expect(doDelete).toBeDefined();
-      expect(doDelete![1]).toMatchObject({
-        event:  'DELETE',
-        schema: 'public',
-        table:  'acordos',
-      });
-      expect((doDelete![1] as { filter?: string }).filter).toBeUndefined();
+      const escutas = mockChannelOnSpy.mock.calls.filter(([tipo]) => tipo === 'postgres_changes');
+      expect(escutas).toHaveLength(1);
+      expect((escutas[0][1] as { event?: string }).event).toBe('*');
+      expect((escutas[0][1] as { filter?: string }).filter).toBe(`empresa_id=eq.${EMPRESA_ID}`);
     });
 
     it('chama subscribe no canal após configurar o listener', () => {

@@ -177,7 +177,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // ── Realtime: broadcast por dono, com o caminho antigo como rede ──────────
+  // ── Realtime: broadcast por dono ─────────────────────────────────────────
   //
   // O Postgres Changes avaliava a RLS de CADA notificação contra TODAS as
   // assinaturas abertas. O filtro `usuario_id=eq.<id>` não evitava a avaliação,
@@ -189,22 +189,14 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   // (`notificacoes:<usuario_id>`), e a autorização é checada UMA vez, na entrada
   // do canal. Ver a migration 20260921120000.
   //
-  // O `postgres_changes` continua ligado de propósito: enquanto a migration não
-  // for aplicada, é ele que serve. Quando `notificacoes` sair da publicação, ele
-  // emudece sozinho e vira no-op. Pode sair numa entrega seguinte.
-  //
-  // O que esta rede NÃO cobre, e custou 2.200 erros em 8 minutos em 21/09/2026:
-  // a policy que autoriza a entrada no tópico privado vem dentro da migration.
-  // Com o deploy no ar e a migration ainda não aplicada, todo cliente leva
-  // «Unauthorized: You do not have permissions to read from this Channel topic»
-  // e retenta com backoff. A notificação não se perde — quem entrega é o
-  // postgres_changes —, mas o log enche. Ver o cabeçalho da 20260921120000.
+  // O `postgres_changes` que ficou de rede durante a troca saiu em 28/09/2026:
+  // `notificacoes` já estava fora da publicação desde a 20260921120000, e ele
+  // era só um canal a mais por aba, sem nada a entregar.
   useEffect(() => {
     if (!userId) return;
 
-    // Ids já empilhados por QUALQUER um dos dois caminhos. Enquanto ambos estão
-    // vivos, a mesma notificação chega duas vezes, e a segunda não pode tocar o
-    // som nem vibrar de novo.
+    // Ids já empilhados. Um aviso repetido (reentrada do canal, por exemplo)
+    // não pode tocar o som nem vibrar de novo.
     const vistos = new Set<string>();
 
     const aplicar = (
@@ -239,8 +231,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // ── Caminho novo: broadcast no tópico do dono ───────────────────────────
-    const cancelarSinal = assinarTabela(
+    return assinarTabela(
       { topico: `notificacoes:${userId}`, escutas: [{ sinal: 'nova' }] },
       {
         onSinal: (payload) => {
@@ -273,37 +264,6 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
         onReconectado: () => { void refresh(); },
       },
     );
-
-    // ── Caminho antigo: fica até a migration tirar a tabela da publicação ───
-    const cancelarTabela = assinarTabela(
-      {
-        topico:  `rt-notificacoes-${userId}`,
-        // Uma escuta só, com os três eventos. Eram três — uma por evento, com o
-        // mesmo filtro —, e cada uma é uma linha em `realtime.subscription` que
-        // o Realtime confere a cada mudança da tabela: 498 linhas para 166 abas
-        // em 18/09/2026.
-        escutas: [
-          { tabela: 'notificacoes', evento: '*', filtro: `usuario_id=eq.${userId}` },
-        ],
-      },
-      {
-        onEvento: (payload) => {
-          if (payload.eventType === 'INSERT') {
-            aplicar('INSERT', payload.new as unknown as Notificacao);
-            return;
-          }
-          if (payload.eventType === 'UPDATE') {
-            aplicar('UPDATE', payload.new as unknown as Notificacao);
-            return;
-          }
-          const removida = payload.old as { id?: string };
-          if (removida?.id) aplicar('DELETE', null, removida.id);
-        },
-        onReconectado: () => { void refresh(); },
-      },
-    );
-
-    return () => { cancelarSinal(); cancelarTabela(); };
   }, [userId, refresh, pulsar]);
 
   // ── Mutações (otimistas: o realtime confirma depois) ───────────────────────

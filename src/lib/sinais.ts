@@ -49,8 +49,11 @@
  */
 import { assinarTabela } from '@/lib/realtime';
 
-/** Os tópicos que a migration 20260917110000 escreve. */
-export type NomeSinal = 'analitico' | 'permissoes' | 'vendas' | 'rh';
+/**
+ * Os tópicos que o banco escreve: migration 20260917110000, e `diario`
+ * (recebimento diário da PaguePlay) na 20260928180000.
+ */
+export type NomeSinal = 'analitico' | 'permissoes' | 'vendas' | 'rh' | 'diario';
 
 export interface SinalMudou {
   /** Tabela que mudou (`rh` cobre duas, `permissoes` também). */
@@ -86,6 +89,9 @@ export const REGRAS_SINAL: Record<NomeSinal, RegraPortao> = {
   permissoes: { minimoMs: 0,      espalhamentoMs: 3_000 },
   vendas:     { minimoMs: 0,      espalhamentoMs: 2_000 },
   rh:         { minimoMs: 0,      espalhamentoMs: 3_000 },
+  // Importação em blocos: um sinal por bloco. O mínimo junta a importação
+  // inteira numa releitura, como fazia o antigo debounce de 1,5 s por linha.
+  diario:     { minimoMs: 5_000,  espalhamentoMs: 3_000 },
 };
 
 export function topicoDoSinal(nome: NomeSinal, empresaId: string): string {

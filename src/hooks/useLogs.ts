@@ -15,13 +15,15 @@
  * "ao vivo" desligado (padrão), as chegadas são contadas e mostradas num botão
  * — quem quiser vê-las, clica.
  *
+ * **As chegadas vêm de consulta, não de Postgres Changes (28/09/2026).** Ver
+ * `INTERVALO_CHEGADAS_MS`.
+ *
  * **Números vêm do banco.** `fetchResumoLogs` agrega o filtro inteiro; a lista
  * é só a página visível. Contar no navegador descreveria 50 linhas e chamaria o
  * resultado de total.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LogSistema } from '@/lib/supabase';
-import { assinarTabela, type EscutaTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
@@ -88,6 +90,30 @@ export function intervaloDoPeriodo(
       return { de, ate };
     }
   }
+}
+
+/**
+ * De quanto em quanto tempo a tela pergunta ao banco o que entrou.
+ *
+ * `logs_sistema` estava na publicação do Realtime só para esta tela, e é a
+ * terceira tabela mais escrita do sistema (11 mil linhas em 10 dias, medido em
+ * 28/09/2026): cada linha passava pelo leitor do WAL do Realtime, com esta tela
+ * aberta em alguma aba ou não. Agora ela pergunta, com o MESMO filtro da lista
+ * — busca livre incluída, o que o realtime nunca conseguiu —, só o que entrou
+ * depois da linha mais nova já vista. Aba escondida não pergunta; ao voltar,
+ * pergunta na hora.
+ */
+const INTERVALO_CHEGADAS_MS = 15_000;
+
+/** A linha mais nova já vista, e os ids que dividem esse mesmo instante. */
+interface Marcador { em: string; ids: Set<string> }
+
+function marcadorDe(logs: readonly LogSistema[], anterior: Marcador | null): Marcador | null {
+  const em = logs[0]?.criado_em;
+  if (!em) return anterior;
+  const ids = new Set(logs.filter(l => l.criado_em === em).map(l => l.id));
+  if (anterior?.em === em) for (const id of anterior.ids) ids.add(id);
+  return { em, ids };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -166,6 +192,8 @@ export function useLogs(): UseLogsReturn {
   const [novosDesdeCarga, setNovosDesdeCarga] = useState(0);
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const [gatilho, setGatilho] = useState(0);
+  /** Onde as chegadas começam a contar. `null` enquanto a lista carrega. */
+  const marcadorRef = useRef<Marcador | null>(null);
 
   // Empresa efetiva: super_admin escolhe; os demais ficam na própria, e o
   // seletor de empresa nem aparece na tela.
@@ -217,6 +245,8 @@ export function useLogs(): UseLogsReturn {
     setCarregandoResumo(true);
     setPagina(0);
     setNovosDesdeCarga(0);
+    marcadorRef.current = null;
+    const pedidoEm = new Date().toISOString();
 
     (async () => {
       const [pag, res] = await Promise.all([
@@ -224,6 +254,8 @@ export function useLogs(): UseLogsReturn {
         fetchResumoLogs(filtrosEfetivos),
       ]);
       if (!vivo) return;
+      // Lista vazia: conta a partir da hora do pedido.
+      marcadorRef.current = marcadorDe(pag.logs, { em: pedidoEm, ids: new Set() });
       setLogs(pag.logs);
       setTotal(pag.total);
       setTemMais(pag.temMais);
@@ -248,9 +280,9 @@ export function useLogs(): UseLogsReturn {
     return () => { vivo = false; };
   }, [empresaEfetiva, filtros.periodo, filtros.customDe, filtros.customAte]);
 
-  // ── Tempo real ────────────────────────────────────────────────────────────
-  // Um canal só, ligado enquanto a tela vive. Com "ao vivo" ligado a linha nova
-  // entra no topo; desligado, só o contador sobe.
+  // ── Chegadas ──────────────────────────────────────────────────────────────
+  // Com "ao vivo" ligado a linha nova entra no topo; desligado, só o contador
+  // sobe. Ver `INTERVALO_CHEGADAS_MS`.
   const filtrosRef = useRef(filtrosEfetivos);
   filtrosRef.current = filtrosEfetivos;
   const aoVivoRef = useRef(aoVivo);
@@ -258,39 +290,54 @@ export function useLogs(): UseLogsReturn {
 
   useEffect(() => {
     if (!empresaEfetiva && !isSuperAdmin) return;
+    // Período que já terminou: nada que entre agora cabe nele.
+    if (filtrosEfetivos.ate && new Date(filtrosEfetivos.ate) < new Date()) return;
 
-    // Com empresa escolhida, o filtro vai para o servidor: o Realtime descarta a
-    // linha das outras empresas antes de avaliar a RLS para esta pessoa.
-    const escuta: EscutaTabela = { tabela: 'logs_sistema', evento: 'INSERT' };
-    if (empresaEfetiva) escuta.filtro = `empresa_id=eq.${empresaEfetiva}`;
+    let vivo = true;
+    let emCurso = false;
 
-    return assinarTabela(
-      { topico: `logs-sistema-${empresaEfetiva ?? 'todas'}`, escutas: [escuta] },
-      {
-        onEvento: (payload) => {
-          if (payload.eventType !== 'INSERT') return;
-          const novo = payload.new as unknown as LogSistema;
+    const perguntar = async () => {
+      if (emCurso || document.visibilityState === 'hidden') return;
+      const marcador = marcadorRef.current;
+      if (!marcador) return;
+      emCurso = true;
+      try {
+        const pag = await fetchLogs({ ...filtrosRef.current, de: marcador.em }, 0);
+        // O filtro mudou (ou a lista recarregou) enquanto a resposta vinha.
+        if (!vivo || marcadorRef.current !== marcador) return;
+        const novos = pag.logs.filter(l => !marcador.ids.has(l.id));
+        // `>=` no banco: as linhas do instante do marcador voltam e não contam.
+        const quantos = Math.max(0, pag.total - (pag.logs.length - novos.length));
+        if (quantos === 0) return;
+        marcadorRef.current = marcadorDe(pag.logs, marcador);
 
-          // O realtime não aplica os filtros da tela — só o RLS. Uma linha de
-          // outra empresa ou fora do recorte não pode entrar na lista.
-          if (empresaEfetiva && novo.empresa_id !== empresaEfetiva) return;
-          if (!combinaComFiltro(novo, filtrosRef.current)) return;
+        setNovosDesdeCarga((n) => n + quantos);
+        if (aoVivoRef.current) {
+          setLogs((atuais) => {
+            const conhecidos = new Set(atuais.map(l => l.id));
+            const entram = novos.filter(l => !conhecidos.has(l.id));
+            if (entram.length === 0) return atuais;
+            // Mantém o tamanho da página: a lista não cresce sem limite numa
+            // aba aberta a manhã inteira.
+            return [...entram, ...atuais].slice(0, Math.max(LOGS_POR_PAGINA, atuais.length));
+          });
+          setTotal((t) => t + quantos);
+        }
+      } finally {
+        emCurso = false;
+      }
+    };
 
-          setNovosDesdeCarga((n) => n + 1);
-
-          if (aoVivoRef.current) {
-            setLogs((atuais) => {
-              if (atuais.some((l) => l.id === novo.id)) return atuais;
-              // Mantém o tamanho da página: a lista não cresce sem limite numa
-              // aba aberta a manhã inteira.
-              return [novo, ...atuais].slice(0, Math.max(LOGS_POR_PAGINA, atuais.length));
-            });
-            setTotal((t) => t + 1);
-          }
-        },
-      },
-    );
-  }, [empresaEfetiva, isSuperAdmin]);
+    const intervalo = setInterval(() => { void perguntar(); }, INTERVALO_CHEGADAS_MS);
+    const aoVoltar = () => { if (document.visibilityState === 'visible') void perguntar(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      vivo = false;
+      clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chaveFiltro serializa filtrosEfetivos; o filtro corrente é lido por ref.
+  }, [empresaEfetiva, isSuperAdmin, chaveFiltro]);
 
   // ── Ações ─────────────────────────────────────────────────────────────────
   const setFiltro = useCallback(
@@ -345,27 +392,4 @@ export function useLogs(): UseLogsReturn {
     aoVivo, setAoVivo, novosDesdeCarga, atualizadoEm,
     filtrosServico: filtrosEfetivos,
   };
-}
-
-/**
- * A linha que chegou pelo realtime pertence ao recorte da tela?
- *
- * Repete no cliente o `WHERE` que o serviço manda ao banco. Só os critérios
- * baratos: a busca livre por texto fica de fora de propósito — reimplementar
- * `ILIKE` aqui daria resultado diferente do banco em acento e caixa, e uma
- * lista que discorda do seu próprio filtro é pior do que uma que espera o
- * próximo recarregamento.
- */
-export function combinaComFiltro(log: LogSistema, f: FiltrosLogs): boolean {
-  if (f.categoria && log.categoria !== f.categoria) return false;
-  if (f.severidade && log.severidade !== f.severidade) return false;
-  if (f.acao && log.acao !== f.acao) return false;
-  if (f.usuarioId && log.usuario_id !== f.usuarioId) return false;
-  if (f.tabela && log.tabela !== f.tabela) return false;
-  if (f.origem && log.origem !== f.origem) return false;
-  if (f.campo && !(log.campos ?? []).includes(f.campo)) return false;
-  if (f.de && new Date(log.criado_em) < new Date(f.de)) return false;
-  if (f.ate && new Date(log.criado_em) > new Date(f.ate)) return false;
-  if (f.busca?.trim()) return false;
-  return true;
 }

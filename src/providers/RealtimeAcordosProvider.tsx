@@ -167,48 +167,24 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     const channelName = `rt-acordos-${empresaId}-${reconnectTick}`;
 
     /*
-     * ── Por que o DELETE tem escuta PRÓPRIA, e sem filtro ────────────────────
+     * ── O DELETE chega pela MESMA escuta filtrada (28/09/2026) ──────────────
      *
-     * O payload de DELETE do Postgres carrega apenas a *replica identity* da
-     * linha — com a identidade padrão, só a chave primária. `empresa_id` não
-     * está lá, então o filtro `empresa_id=eq.…` NUNCA casa e o evento
-     * simplesmente não chega. A consequência, medida em 23/08/2026: excluir um
-     * acordo não mexia em nada do painel de quem estava olhando, e não mexia em
-     * nada NENHUM na tela das outras pessoas. Só a aba de quem clicou parecia
-     * funcionar, porque ela remove o item localmente (`removeAcordo`).
+     * Até aqui havia uma segunda escuta, só de DELETE e SEM filtro, porque o
+     * payload de DELETE carregava apenas a chave primária e o filtro
+     * `empresa_id=eq.…` nunca casava (defeito medido em 23/08/2026).
      *
-     * A armadilha já estava escrita em `src/lib/realtime.ts` e este provider,
-     * que é anterior a ela, nunca foi corrigido.
+     * A migration `20260823140000_acordos_replica_identity_full.sql` resolveu
+     * isso na origem, e está aplicada (conferido em 28/09/2026:
+     * `relreplident = 'f'`). O `realtime.apply_rls` testa o filtro do DELETE
+     * contra o registro ANTIGO inteiro — `empresa_id` incluído — e entrega só
+     * a chave primária no `old`, porque a RLS não protege DELETE.
      *
-     * A escuta sem filtro resolve hoje, sem depender de migration. O preço é
-     * receber também o DELETE da outra empresa: sobra um id que não está na
-     * lista local (remoção vira no-op) e, no pior caso, uma releitura agrupada
-     * cujo resultado a RLS recorta do mesmo jeito. Nenhum dado atravessa — um
-     * UUID solto não diz nada, e toda leitura continua passando pelo banco.
-     *
-     * A migration `20260823140000_acordos_replica_identity_full.sql` completa o
-     * conserto: com `REPLICA IDENTITY FULL` o registro antigo vem inteiro, o
-     * que permite à RLS avaliar o DELETE e nos deixa saber de que empresa ele
-     * era. A escuta segue sem filtro de propósito — ela funciona nos dois
-     * mundos, e é o que evita que a tela volte a depender de uma migration
-     * aplicada para o básico funcionar.
+     * A escuta extra custava uma assinatura a mais por aba aberta em
+     * `realtime.subscription` (328 assinaturas para 164 abas) e fazia cada DELETE de
+     * qualquer empresa ser entregue a TODAS as abas das quatro operações.
      */
     const channel: RealtimeChannel = supabase
       .channel(channelName)
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'acordos' },
-        (payload) => {
-          if (!mountedRef.current) return;
-          const deletedId = (payload.old as { id?: string } | null)?.id;
-          if (!deletedId) return;
-          const event: AcordoRealtimeEvent = {
-            eventType: 'DELETE',
-            oldRecord: { id: deletedId },
-          };
-          subscribersRef.current.forEach(cb => cb(event));
-        },
-      )
       .on(
         'postgres_changes',
         {
@@ -235,11 +211,17 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           }
 
           // ── DELETE ──────────────────────────────────────────────────────────
-          // Já tratado pela escuta dedicada acima. Com a identidade padrão ele
-          // nem chega aqui (o filtro não casa); depois de `REPLICA IDENTITY
-          // FULL` ele passa a chegar, e sem esta saída o mesmo id seria
-          // despachado duas vezes.
-          if (eventType === 'DELETE') return;
+          // Só a chave primária vem no `old` — é o que basta para tirar da lista.
+          if (eventType === 'DELETE') {
+            const deletedId = (payload.old as { id?: string } | null)?.id;
+            if (!deletedId) return;
+            const event: AcordoRealtimeEvent = {
+              eventType: 'DELETE',
+              oldRecord: { id: deletedId },
+            };
+            subscribersRef.current.forEach(cb => cb(event));
+            return;
+          }
 
           // ── INSERT ──────────────────────────────────────────────────────────
           // Busca o registro COMPLETO com joins antes de notificar os subscribers.

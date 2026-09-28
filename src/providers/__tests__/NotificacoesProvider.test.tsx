@@ -9,12 +9,12 @@
  *   • mutações otimistas, e `limparTodas` que DESFAZ quando o banco recusa;
  *   • reconexão do canal relê a lista (eventos perdidos não voltam).
  *
- * ── A transição de 21/09/2026 (migration 20260921120000) ────────────────────
- * O provider passou a ouvir DOIS caminhos ao mesmo tempo: o broadcast novo no
- * tópico do dono (`notificacoes:<id>`) e o `postgres_changes` antigo, que fica
- * até a tabela sair da publicação. O que estes testes travam é a consequência
- * que importa: a mesma notificação chegando pelos dois caminhos NÃO pode
- * duplicar na lista nem pulsar o badge duas vezes.
+ * ── Um caminho só: o broadcast no tópico do dono ────────────────────────────
+ * Entre 21 e 28/09/2026 o provider ouviu dois caminhos (o broadcast de
+ * `notificacoes:<id>` e o `postgres_changes` antigo). A tabela saiu da
+ * publicação na migration 20260921120000 e o caminho antigo saiu do código em
+ * 28/09. Continua travado: o mesmo aviso chegando duas vezes (reentrada do
+ * canal) NÃO pode duplicar na lista nem pulsar o badge duas vezes.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
@@ -95,8 +95,6 @@ const n = (id: string, lida = false) => ({
 
 /** O canal de broadcast no tópico do dono (caminho novo). */
 const sinal  = () => assinaturas.find(a => a.topico === 'notificacoes:user-1')!;
-/** O canal de postgres_changes (caminho antigo, até sair da publicação). */
-const tabela = () => assinaturas.find(a => a.topico === 'rt-notificacoes-user-1')!;
 
 beforeEach(() => {
   assinaturas.length = 0;
@@ -113,28 +111,20 @@ beforeEach(() => {
 // ── 1. Assinatura única ─────────────────────────────────────────────────────
 
 describe('NotificacoesProvider — assinatura', () => {
-  it('ouve o broadcast do dono e o postgres_changes, um canal cada', async () => {
+  it('ouve só o broadcast do dono — nenhum postgres_changes', async () => {
     montar();
     await waitFor(() => expect(fetchNotificacoesMock).toHaveBeenCalled());
 
-    expect(assinaturas).toHaveLength(2);
-
-    // Caminho novo: tópico privado do dono, um sinal só.
+    expect(assinaturas).toHaveLength(1);
+    // Tópico privado do dono, um sinal só.
     expect(sinal().escutas).toEqual([{ sinal: 'nova' }]);
-
-    // Caminho antigo: uma escuta para os três eventos. Eram três, uma por
-    // evento, e cada uma é uma linha em `realtime.subscription`.
-    expect(tabela().escutas).toEqual([
-      { tabela: 'notificacoes', evento: '*', filtro: 'usuario_id=eq.user-1' },
-    ]);
   });
 
-  it('cancela os dois canais ao desmontar', async () => {
+  it('cancela o canal ao desmontar', async () => {
     const { unmount } = montar();
-    await waitFor(() => expect(assinaturas).toHaveLength(2));
+    await waitFor(() => expect(assinaturas).toHaveLength(1));
     unmount();
     expect(cancelamentos).toHaveBeenCalledWith('notificacoes:user-1');
-    expect(cancelamentos).toHaveBeenCalledWith('rt-notificacoes-user-1');
   });
 
   it('carrega a lista do banco no mount', async () => {
@@ -156,10 +146,10 @@ describe('NotificacoesProvider — contagem de não lidas', () => {
 
   it('INSERT entra na lista e sobe a contagem', async () => {
     montar();
-    await waitFor(() => expect(assinaturas).toHaveLength(2));
+    await waitFor(() => expect(assinaturas).toHaveLength(1));
 
     act(() => {
-      tabela().ouvinte.onEvento?.({ eventType: 'INSERT', new: n('nova') });
+      sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('nova') });
     });
 
     expect(screen.getByTestId('total')).toHaveTextContent('1');
@@ -168,11 +158,11 @@ describe('NotificacoesProvider — contagem de não lidas', () => {
 
   it('INSERT repetido do mesmo id não duplica', async () => {
     montar();
-    await waitFor(() => expect(assinaturas).toHaveLength(2));
+    await waitFor(() => expect(assinaturas).toHaveLength(1));
 
     act(() => {
-      tabela().ouvinte.onEvento?.({ eventType: 'INSERT', new: n('x') });
-      tabela().ouvinte.onEvento?.({ eventType: 'INSERT', new: n('x') });
+      sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('x') });
+      sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('x') });
     });
 
     expect(screen.getByTestId('total')).toHaveTextContent('1');
@@ -184,7 +174,7 @@ describe('NotificacoesProvider — contagem de não lidas', () => {
     await waitFor(() => expect(screen.getByTestId('nao-lidas')).toHaveTextContent('1'));
 
     act(() => {
-      tabela().ouvinte.onEvento?.({ eventType: 'UPDATE', new: n('a', true) });
+      sinal().ouvinte.onSinal?.({ operacao: 'UPDATE', notificacao: n('a', true) });
     });
 
     expect(screen.getByTestId('nao-lidas')).toHaveTextContent('0');
@@ -197,7 +187,7 @@ describe('NotificacoesProvider — contagem de não lidas', () => {
     await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('2'));
 
     act(() => {
-      tabela().ouvinte.onEvento?.({ eventType: 'DELETE', old: { id: 'a' } });
+      sinal().ouvinte.onSinal?.({ operacao: 'DELETE', notificacao_id: 'a' });
     });
 
     expect(screen.getByTestId('total')).toHaveTextContent('1');
@@ -213,10 +203,10 @@ describe('NotificacoesProvider — pulso do badge', () => {
       montar();
       // fetch inicial resolve nos microtasks
       await act(async () => { await Promise.resolve(); });
-      expect(assinaturas).toHaveLength(2);
+      expect(assinaturas).toHaveLength(1);
 
       act(() => {
-        tabela().ouvinte.onEvento?.({ eventType: 'INSERT', new: n('x') });
+        sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('x') });
       });
       expect(screen.getByTestId('pulso')).toHaveTextContent('sim');
 
@@ -233,7 +223,7 @@ describe('NotificacoesProvider — pulso do badge', () => {
     await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('1'));
 
     act(() => {
-      tabela().ouvinte.onEvento?.({ eventType: 'UPDATE', new: n('a', true) });
+      sinal().ouvinte.onSinal?.({ operacao: 'UPDATE', notificacao: n('a', true) });
     });
 
     expect(screen.getByTestId('pulso')).toHaveTextContent('nao');
@@ -311,7 +301,7 @@ describe('NotificacoesProvider — reconexão', () => {
     // Chegou notificação enquanto o canal estava caído: não vem como evento.
     listaDoBanco = [n('a'), n('nova-durante-a-queda')];
 
-    await act(async () => { tabela().ouvinte.onReconectado?.(); });
+    await act(async () => { sinal().ouvinte.onReconectado?.(); });
 
     expect(fetchNotificacoesMock).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('2'));
@@ -323,7 +313,7 @@ describe('NotificacoesProvider — reconexão', () => {
 describe('NotificacoesProvider — sinal do dono', () => {
   it('INSERT pelo broadcast entra na lista e pulsa', async () => {
     montar();
-    await waitFor(() => expect(assinaturas).toHaveLength(2));
+    await waitFor(() => expect(assinaturas).toHaveLength(1));
 
     act(() => {
       sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('b1') });
@@ -391,7 +381,7 @@ describe('NotificacoesProvider — sinal do dono', () => {
 
   it('payload sem notificação não derruba nada', async () => {
     montar();
-    await waitFor(() => expect(assinaturas).toHaveLength(2));
+    await waitFor(() => expect(assinaturas).toHaveLength(1));
 
     act(() => {
       sinal().ouvinte.onSinal?.({ operacao: 'INSERT' });
@@ -403,16 +393,15 @@ describe('NotificacoesProvider — sinal do dono', () => {
   });
 
   /*
-   * O invariante da transição. Enquanto a migration não tirar `notificacoes` da
-   * publicação, os dois caminhos entregam a MESMA notificação. Se isto quebrar,
-   * o usuário vê a notificação duplicada na lista e ouve o som duas vezes.
+   * O mesmo aviso pode chegar de novo (reentrada do canal). Se isto quebrar, o
+   * usuário vê a notificação duplicada na lista e ouve o som duas vezes.
    */
-  it('a mesma notificação pelos dois caminhos não duplica nem pulsa duas vezes', async () => {
+  it('o mesmo aviso repetido não duplica nem pulsa duas vezes', async () => {
     vi.useFakeTimers();
     try {
       montar();
       await act(async () => { await Promise.resolve(); });
-      expect(assinaturas).toHaveLength(2);
+      expect(assinaturas).toHaveLength(1);
 
       act(() => {
         sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('dupla') });
@@ -420,12 +409,12 @@ describe('NotificacoesProvider — sinal do dono', () => {
       expect(screen.getByTestId('total')).toHaveTextContent('1');
       expect(screen.getByTestId('pulso')).toHaveTextContent('sim');
 
-      // O pulso apaga sozinho; se o segundo caminho pulsasse de novo, voltaria.
+      // O pulso apaga sozinho; se o aviso repetido pulsasse de novo, voltaria.
       act(() => { vi.advanceTimersByTime(900); });
       expect(screen.getByTestId('pulso')).toHaveTextContent('nao');
 
       act(() => {
-        tabela().ouvinte.onEvento?.({ eventType: 'INSERT', new: n('dupla') });
+        sinal().ouvinte.onSinal?.({ operacao: 'INSERT', notificacao: n('dupla') });
       });
 
       expect(screen.getByTestId('total')).toHaveTextContent('1');

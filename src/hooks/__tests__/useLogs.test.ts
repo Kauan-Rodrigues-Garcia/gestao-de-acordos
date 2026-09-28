@@ -1,40 +1,19 @@
 /**
  * src/hooks/__tests__/useLogs.test.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Testa as duas funções puras do hook de Logs, que são onde os erros de fuso e
- * de recorte se esconderiam:
+ * Testa a função pura do hook de Logs onde os erros de fuso se esconderiam:
+ * `intervaloDoPeriodo` — "Hoje" tem de começar à meia-noite LOCAL, e o
+ * período personalizado não pode andar um dia por causa de UTC.
  *
- *   • `intervaloDoPeriodo` — "Hoje" tem de começar à meia-noite LOCAL, e o
- *     período personalizado não pode andar um dia por causa de UTC.
- *   • `combinaComFiltro` — decide se a linha que chegou pelo realtime pertence ao
- *     recorte da tela. Errar para o lado permissivo mostra evento de fora do
- *     filtro; errar para o restritivo faz a lista parecer parada.
+ * `combinaComFiltro` saiu em 28/09/2026: as chegadas passaram a vir de uma
+ * consulta com o mesmo filtro da lista, e o recorte é do banco.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { intervaloDoPeriodo, combinaComFiltro, PERIODO_LABEL } from '@/hooks/useLogs';
-import type { LogSistema } from '@/lib/supabase';
+import { intervaloDoPeriodo, PERIODO_LABEL } from '@/hooks/useLogs';
 
 afterEach(() => {
   vi.useRealTimers();
 });
-
-function log(parcial: Partial<LogSistema> = {}): LogSistema {
-  return {
-    id: 'l1',
-    usuario_id: 'u1',
-    acao: 'acordo_alterado',
-    tabela: 'acordos',
-    registro_id: 'a1',
-    empresa_id: 'emp-1',
-    detalhes: null,
-    criado_em: '2026-08-12T12:00:00.000Z',
-    categoria: 'acordo',
-    severidade: 'info',
-    origem: 'trigger',
-    campos: ['valor'],
-    ...parcial,
-  };
-}
 
 describe('intervaloDoPeriodo', () => {
   it('"hoje" começa à meia-noite local, não 24 horas atrás', () => {
@@ -106,57 +85,5 @@ describe('intervaloDoPeriodo', () => {
     for (const p of ['hoje', '24h', '7d', '30d', '90d', 'tudo', 'custom'] as const) {
       expect(PERIODO_LABEL[p]?.length ?? 0).toBeGreaterThan(0);
     }
-  });
-});
-
-describe('combinaComFiltro', () => {
-  it('aceita a linha quando não há filtro nenhum', () => {
-    expect(combinaComFiltro(log(), {})).toBe(true);
-  });
-
-  it('recusa linha fora de cada critério', () => {
-    expect(combinaComFiltro(log(), { categoria: 'seguranca' })).toBe(false);
-    expect(combinaComFiltro(log(), { severidade: 'critico' })).toBe(false);
-    expect(combinaComFiltro(log(), { acao: 'usuario_criado' })).toBe(false);
-    expect(combinaComFiltro(log(), { usuarioId: 'outro' })).toBe(false);
-    expect(combinaComFiltro(log(), { tabela: 'perfis' })).toBe(false);
-    expect(combinaComFiltro(log(), { origem: 'ui' })).toBe(false);
-    expect(combinaComFiltro(log(), { campo: 'status' })).toBe(false);
-  });
-
-  it('aceita linha que casa com todos os critérios ao mesmo tempo', () => {
-    expect(combinaComFiltro(log(), {
-      categoria: 'acordo',
-      severidade: 'info',
-      acao: 'acordo_alterado',
-      usuarioId: 'u1',
-      tabela: 'acordos',
-      origem: 'trigger',
-      campo: 'valor',
-    })).toBe(true);
-  });
-
-  it('respeita os limites de data', () => {
-    const l = log({ criado_em: '2026-08-12T12:00:00.000Z' });
-    expect(combinaComFiltro(l, { de: '2026-08-13T00:00:00.000Z' })).toBe(false);
-    expect(combinaComFiltro(l, { ate: '2026-08-11T00:00:00.000Z' })).toBe(false);
-    expect(combinaComFiltro(l, {
-      de: '2026-08-01T00:00:00.000Z',
-      ate: '2026-08-31T00:00:00.000Z',
-    })).toBe(true);
-  });
-
-  it('recusa TODA linha quando há busca livre ativa', () => {
-    // Deliberado: reimplementar `ILIKE` no cliente daria resultado diferente do
-    // banco em acento e caixa, e uma lista que discorda do próprio filtro é pior
-    // do que uma que espera o próximo recarregamento.
-    expect(combinaComFiltro(log(), { busca: 'silva' })).toBe(false);
-    // Busca só com espaço não conta como busca ativa.
-    expect(combinaComFiltro(log(), { busca: '   ' })).toBe(true);
-  });
-
-  it('trata campo ausente na linha sem estourar', () => {
-    expect(combinaComFiltro(log({ campos: null }), { campo: 'valor' })).toBe(false);
-    expect(combinaComFiltro(log({ categoria: undefined }), { categoria: 'acordo' })).toBe(false);
   });
 });

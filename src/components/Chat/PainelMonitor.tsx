@@ -53,7 +53,7 @@ import {
   type PessoaMonitoravel, type ConversaMonitorada, type ConversaRecente,
 } from '@/services/chat/monitor.service';
 import {
-  listarMensagens, type MensagemChat, type ConversaChat,
+  listarMensagens, buscarMensagem, type MensagemChat, type ConversaChat,
 } from '@/services/chat/chat.service';
 import { Conversa } from './Conversa';
 import { AvatarChat, TagEmpresa, TagAdm } from './comum';
@@ -69,6 +69,17 @@ interface Props {
 
 /** Espera antes de refazer a lista. Junta a rajada de eventos numa consulta só. */
 const ESPERA_REFAZER = 300;
+
+/**
+ * De quanto em quanto tempo o card «Chats recentes» se refaz.
+ *
+ * Ele ouvia `chat_mensagens` inteira por Postgres Changes — e por ele a
+ * tabela ficava na publicação do Realtime, com cada mensagem de cada pessoa
+ * passando pelo leitor do WAL, painel aberto ou não. O card responde «o que
+ * está acontecendo agora»; vinte segundos respondem isso. Aba escondida não
+ * pergunta; ao voltar, pergunta na hora.
+ */
+const INTERVALO_RECENTES_MS = 20_000;
 
 /**
  * O card «Chats recentes do setor»: cinco por vez, até quinze.
@@ -152,28 +163,19 @@ export function PainelMonitor({ expandido, onSair }: Props) {
    * O card se refaz sozinho enquanto o monitor está aberto na primeira tela.
    *
    * Foi pedido explicitamente: mensagem nova durante o acompanhamento tem de
-   * reordenar a lista sem F5. A assinatura só existe enquanto NÃO há alvo
-   * escolhido — com alguém escolhido o card sai de cena, e manter o canal vivo
-   * seria refazer, a cada mensagem da empresa, uma consulta que ninguém vê.
-   *
-   * Tópico próprio pelo mesmo motivo dos outros dois: ciclos de vida
-   * diferentes não devem compartilhar canal.
+   * reordenar a lista sem F5. A consulta só roda enquanto NÃO há alvo
+   * escolhido — com alguém escolhido o card sai de cena, e refazê-lo seria uma
+   * consulta que ninguém vê. Ver `INTERVALO_RECENTES_MS`.
    */
-  const timerRecentes = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timerRecentes.current) clearTimeout(timerRecentes.current); }, []);
-
   useEffect(() => {
     if (alvo) return;
-    return assinarTabela(
-      { topico: 'rt-chat-monitor-recentes', escutas: [{ tabela: 'chat_mensagens' }] },
-      {
-        onEvento: () => {
-          if (timerRecentes.current) clearTimeout(timerRecentes.current);
-          timerRecentes.current = setTimeout(() => { void recarregarRecentes(); }, ESPERA_REFAZER);
-        },
-        onReconectado: () => { void recarregarRecentes(); },
-      },
-    );
+    const perguntar = () => { if (document.visibilityState !== 'hidden') void recarregarRecentes(); };
+    const intervalo = setInterval(perguntar, INTERVALO_RECENTES_MS);
+    document.addEventListener('visibilitychange', perguntar);
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', perguntar);
+    };
   }, [alvo, recarregarRecentes]);
 
   // ── A lista de conversas do alvo ──────────────────────────────────────────
@@ -191,10 +193,15 @@ export function PainelMonitor({ expandido, onSair }: Props) {
 
   // ── Tempo real ────────────────────────────────────────────────────────────
   //
-  // Canal PRÓPRIO, separado do `rt-chat-<empresa>` que `useChat` usa. Os dois
-  // escutam a mesma tabela, e é de propósito: juntá-los faria a lista do
-  // monitor refazer a cada mensagem do chat pessoal de quem está monitorando,
-  // e vice-versa. Tópicos distintos, ciclos de vida distintos.
+  // O tópico de sinais da PESSOA acompanhada — `chat:<perfil_id>`, o mesmo
+  // que o chat dela ouve. O banco manda ali um aviso por mensagem (só ids,
+  // nunca o texto) para cada participante; a policy deixa entrar quem
+  // `fn_chat_posso_monitorar` autoriza (migration 20260928180000).
+  //
+  // Até 28/09/2026 o monitor ouvia `chat_mensagens` inteira por Postgres
+  // Changes, e era o último motivo para a tabela estar na publicação do
+  // Realtime. O aviso chega só com as mensagens das conversas DELA, que é
+  // exatamente o que o painel mostra.
   const alvoRef = useRef<string | null>(null);
   alvoRef.current = alvo?.perfil_id ?? null;
   const abertaRef = useRef<string | null>(null);
@@ -206,30 +213,38 @@ export function PainelMonitor({ expandido, onSair }: Props) {
   useEffect(() => {
     if (!alvo) return;
 
-    return assinarTabela(
-      { topico: `rt-chat-monitor-${alvo.perfil_id}`, escutas: [{ tabela: 'chat_mensagens' }] },
-      {
-        onEvento: (payload) => {
-          const msg = (payload.new ?? payload.old ?? {}) as unknown as MensagemChat;
+    // A lista é um agregado (última mensagem, ordem): refazer é uma consulta
+    // pequena, e aplicar o evento sobre ela repetiria no cliente as regras que
+    // a RPC já resolve.
+    const refazerLista = () => {
+      const id = alvoRef.current;
+      if (!id) return;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => { void recarregarConversas(id); }, ESPERA_REFAZER);
+    };
 
-          // A conversa aberta recebe a mensagem direto: ali o evento É o dado,
-          // e reler a página inteira faria a rolagem pular a cada linha.
-          if (msg.conversa_id === abertaRef.current) {
-            const normalizada = { ...msg, anexos: Array.isArray(msg.anexos) ? msg.anexos : [] };
-            if (payload.eventType === 'INSERT') {
-              setMensagens(atual => atual.some(m => m.id === msg.id) ? atual : [...atual, normalizada]);
-            } else if (payload.eventType === 'UPDATE') {
-              setMensagens(atual => atual.map(m => (m.id === msg.id ? { ...m, ...msg } : m)));
+    return assinarTabela(
+      { topico: `chat:${alvo.perfil_id}`, escutas: [{ sinal: 'mensagem' }, { sinal: 'participante' }] },
+      {
+        onSinal: (payload, sinal) => {
+          if (sinal === 'mensagem') {
+            const id = typeof payload.id === 'string' ? payload.id : null;
+            const conversaId = typeof payload.conversa_id === 'string' ? payload.conversa_id : null;
+            // A conversa aberta recebe a mensagem direto: reler a página
+            // inteira faria a rolagem pular a cada linha. O texto não viaja no
+            // aviso — busca pela RLS de sempre, que admite o monitor.
+            if (id && conversaId && conversaId === abertaRef.current) {
+              const operacao = payload.operacao === 'UPDATE' ? 'UPDATE' : 'INSERT';
+              void buscarMensagem(id).then(msg => {
+                if (!msg || msg.conversa_id !== abertaRef.current) return;
+                const normalizada = { ...msg, anexos: Array.isArray(msg.anexos) ? msg.anexos : [] };
+                setMensagens(atual => operacao === 'INSERT'
+                  ? (atual.some(m => m.id === msg.id) ? atual : [...atual, normalizada])
+                  : atual.map(m => (m.id === msg.id ? { ...m, ...normalizada } : m)));
+              });
             }
           }
-
-          // A lista é um agregado (última mensagem, ordem): refazer é uma
-          // consulta pequena, e aplicar o evento sobre ela repetiria no cliente
-          // as regras que a RPC já resolve.
-          const id = alvoRef.current;
-          if (!id) return;
-          if (timer.current) clearTimeout(timer.current);
-          timer.current = setTimeout(() => { void recarregarConversas(id); }, ESPERA_REFAZER);
+          refazerLista();
         },
         onReconectado: () => {
           const id = alvoRef.current;

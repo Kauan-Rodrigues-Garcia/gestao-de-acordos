@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import type { DiarioRecebimento } from '@/lib/supabase';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -93,14 +93,16 @@ export function useDiario(options: UseDiarioOptions) {
     void fetchDados();
   }, [fetchDados]);
 
-  // Realtime: refetch em INSERT/DELETE (UPDATE de "visto" não altera a lista).
-  // A importação insere EM LOTE (1 evento por linha) → refetch/toast debounced:
-  // um único aviso por importação, e nunca para quem importou.
-  const rtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rtToastRef    = useRef(false);
-
-  // Lidos por ref: `fetchDados` muda a cada troca de filtro, e o canal não
-  // precisa ser derrubado por isso. O tópico passa a depender só de (empresa, dia).
+  // Tempo real: um SINAL por comando, e não um evento por linha (28/09/2026).
+  //
+  // A importação do diário grava em lote, e a tabela estava no Postgres
+  // Changes: cada linha passava pelo leitor do WAL do Realtime, com ou sem
+  // tela aberta — 23 mil mudanças em 10 dias, a segunda tabela mais escrita da
+  // publicação. Ninguém usava a linha: a tela só relê. Agora um gatilho por
+  // comando manda `diario:<empresa>` (migration 20260928180000), e o portão de
+  // `assinarSinal` junta a rajada de uma importação numa releitura só.
+  //
+  // UPDATE (a marca de «visto») não muda a lista e é ignorado, como antes.
   const fetchRef    = useRef(fetchDados);
   fetchRef.current  = fetchDados;
   const perfilRef   = useRef(perfil?.id);
@@ -108,13 +110,13 @@ export function useDiario(options: UseDiarioOptions) {
 
   useEffect(() => {
     if (!empresa?.id || !options.dia) return;
-    const empresaId = empresa.id;
 
-    const agendarRefetch = () => {
-      if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
-      rtDebounceRef.current = setTimeout(() => {
-        if (rtToastRef.current) {
-          rtToastRef.current = false;
+    return assinarSinal('diario', empresa.id, {
+      onMudou: (sinal) => {
+        if (sinal.operacao === 'UPDATE') return;
+        // Um único aviso por importação, e nunca para quem importou.
+        const deOutraPessoa = sinal.importado_por.some(id => id !== perfilRef.current);
+        if (sinal.operacao === 'INSERT' && hasLoadedOnce.current && deOutraPessoa) {
           toast.info('Recebimento diário atualizado!', {
             id: 'diario-atualizado',   // mesmo id → substitui, não empilha
             description: 'Novos pagamentos foram importados.',
@@ -122,48 +124,11 @@ export function useDiario(options: UseDiarioOptions) {
           });
         }
         void fetchRef.current(true);   // silencioso: a tabela fica na tela
-      }, 1500);
-    };
-
-    return assinarTabela(
-      {
-        topico:  `diario-${empresaId}-${options.dia}`,
-        escutas: [
-          {
-            tabela: 'diario_recebimentos',
-            evento: 'INSERT',
-            filtro: `empresa_id=eq.${empresaId}`,
-          },
-          {
-            // DELETE sem filtro de propósito: o payload de DELETE só traz a
-            // replica identity, então `empresa_id=eq.…` nunca casaria e o evento
-            // não chegaria. O custo é um refetch a mais quando a OUTRA empresa
-            // apaga linhas — a RLS garante que o dado em si não cruza.
-            tabela: 'diario_recebimentos',
-            evento: 'DELETE',
-          },
-        ],
       },
-      {
-        onEvento: (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const importadoPorMim =
-              (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id
-                === perfilRef.current;
-            if (hasLoadedOnce.current && !importadoPorMim) rtToastRef.current = true;
-          }
-          agendarRefetch();
-        },
-        // Sem toast: reconexão não é "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(true); },
-      },
-    );
+      // Sem toast: reconexão não é "chegou importação nova".
+      onReconectado: () => { void fetchRef.current(true); },
+    });
   }, [empresa?.id, options.dia]);
-
-  // Debounce pendente não deve sobreviver ao unmount do hook.
-  useEffect(() => () => {
-    if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
-  }, []);
 
   return { dados, loading, error, novosIds, refetch: fetchDados };
 }

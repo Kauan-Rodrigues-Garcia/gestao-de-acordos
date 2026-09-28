@@ -89,6 +89,9 @@ vi.mock('@/lib/supabase', () => {
         if (type === 'presence') {
           capturedPresenceHandlers.current[config.event] = handler;
         }
+        if (type === 'system') {
+          capturedPresenceHandlers.current.system = handler;
+        }
         return fakeChannel;
       },
     ),
@@ -161,6 +164,9 @@ describe('PresenceProvider + useOnlineUsers', () => {
         (type: string, config: { event: string }, handler: () => void) => {
           if (type === 'presence') {
             capturedPresenceHandlers.current[config.event] = handler;
+          }
+          if (type === 'system') {
+            capturedPresenceHandlers.current.system = handler;
           }
           return fakeChannel;
         },
@@ -623,6 +629,73 @@ describe('PresenceProvider + useOnlineUsers', () => {
     });
 
     expect(mockRemoveChannelSpy).toHaveBeenCalledTimes(1);
+    expect(mockChannelSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  // O Realtime mede a média do último minuto e FECHA o canal de quem entra
+  // quando ela estoura. Voltar em 1,5 s era ser derrubado de novo — foi o que
+  // manteve os estouros em sequência nos minutos de deploy (28/09/2026).
+  it('CLOSED pelo limite de presence espera a janela do servidor antes de voltar', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    mockPerfilRef.current  = { id: USER_ID };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    renderHook(() => useOnlineUsers(), { wrapper });
+
+    await act(async () => {
+      simulateSubscribeStatus('SUBSCRIBED');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      (capturedPresenceHandlers.current.system as unknown as (p: unknown) => void)({
+        status: 'error', extension: 'system',
+        message: 'Too many presence messages per second',
+      });
+      simulateSubscribeStatus('CLOSED');
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    // Uma queda comum já teria recriado o canal a esta altura.
+    expect(mockChannelSpy).toHaveBeenCalledTimes(1);
+
+    // Voltar para a aba nesse meio-tempo também não fura a espera.
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(mockChannelSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(mockChannelSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  it('mensagem system que não é do limite não muda a volta do CLOSED', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(1);
+
+    mockPerfilRef.current  = { id: USER_ID };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+
+    renderHook(() => useOnlineUsers(), { wrapper });
+
+    await act(async () => {
+      simulateSubscribeStatus('SUBSCRIBED');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      (capturedPresenceHandlers.current.system as unknown as (p: unknown) => void)({
+        status: 'ok', extension: 'postgres_changes', message: 'Subscribed to PostgreSQL',
+      });
+      simulateSubscribeStatus('CLOSED');
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
     expect(mockChannelSpy).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
