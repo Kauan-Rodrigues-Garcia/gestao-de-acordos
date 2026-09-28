@@ -70,7 +70,6 @@ interface AnaliticoOperadorProps {
   empresaId: string;
   /** O recorte da lente. O mês sai dele; o intervalo limita o filtro de data. */
   recorte: Recorte;
-  liderId?: string | null;
   podeVerRanking: boolean;
   /** `analitico_sub_formas_pagamento` — a aba das PRÓPRIAS formas. */
   podeVerFormas: boolean;
@@ -102,7 +101,7 @@ function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: str
 }
 
 export function AnaliticoOperador({
-  dados, loading, operadorId, operadorNome, empresaId, recorte, liderId, podeVerRanking,
+  dados, loading, operadorId, operadorNome, empresaId, recorte, podeVerRanking,
   podeVerFormas, onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
@@ -418,7 +417,6 @@ export function AnaliticoOperador({
                                   <TabulacaoCell
                                     linha={linha} empresaId={empresaId}
                                     operadorId={operadorId} operadorNome={operadorNome}
-                                    liderId={liderId}
                                     onAbrirNovoAcordo={onAbrirNovoAcordo}
                                     onVerAcordo={onVerAcordo}
                                     onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
@@ -464,7 +462,6 @@ export function AnaliticoOperador({
                                   <TabulacaoCell
                                     linha={linha} empresaId={empresaId}
                                     operadorId={operadorId} operadorNome={operadorNome}
-                                    liderId={liderId}
                                     onAbrirNovoAcordo={onAbrirNovoAcordo}
                                     onVerAcordo={onVerAcordo}
                                     onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}

@@ -4,7 +4,11 @@
  * Estados:
  *   NÃO TABULADO → botão "Tabular acordo"
  *   TABULADO     → botão "Ver acordo" (abre detalhe no Dashboard)
- *   DIVERGENTE   → botão "Tabular" com alerta do outro operador
+ *   DIVERGENTE   → botão "Divergente": o acordo do código é de outra pessoa.
+ *                  Confirmar passa o acordo DIRETO para o operador da linha —
+ *                  o pagamento já entrou em nome dele, então não há autorização
+ *                  de líder. Quem decide e executa é o servidor
+ *                  (`fn_analitico_status_tabulacao` / `fn_analitico_tabular_divergente`).
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -18,7 +22,6 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
-import { useTenant } from '@/lib/tenant-config';
 import type { AnaliticoRecebimento, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import {
   verificarStatusTabulacao,
@@ -30,9 +33,9 @@ import { ehLinhaDeAjuste } from '@/services/analitico/ajusteManual.service';
 interface TabulacaoCellProps {
   linha: AnaliticoRecebimento;
   empresaId: string;
+  /** Operador DA LINHA — é para ele que o acordo vai num Divergente. */
   operadorId: string;
   operadorNome: string;
-  liderId?: string | null;
   /** Chamado para abrir AcordoNovoInline pré-preenchido */
   onAbrirNovoAcordo: (dados: {
     instituicao: string;
@@ -47,19 +50,14 @@ interface TabulacaoCellProps {
 }
 
 export function TabulacaoCell({
-  linha, empresaId, operadorId, operadorNome, liderId,
+  linha, empresaId, operadorId, operadorNome,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: TabulacaoCellProps) {
   const [carregando,       setCarregando]       = useState(false);
   const [statusLocal,      setStatusLocal]      = useState<StatusTabulacaoAnalitico>(linha.status_tabulacao);
   const [acordoIdLocal,    setAcordoIdLocal]    = useState<string | null>(linha.acordo_id);
-  const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; outroId: string; acordoId: string } | null>(null);
+  const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; acordoId: string } | null>(null);
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
-
-  // PaguePlay casa o código do relatório com acordos.instituicao;
-  // BookPlay casa o NR (código do relatório) com acordos.nr_cliente.
-  const tenant = useTenant();
-  const campoTabulacao: 'instituicao' | 'nr_cliente' = tenant.isPaguePlay ? 'instituicao' : 'nr_cliente';
 
   // Ref para evitar usar status stale dentro do setTimeout
   const statusRef = useRef(statusLocal);
@@ -68,64 +66,37 @@ export function TabulacaoCell({
   // Auto-verifica tabulação ao montar, sem exigir clique manual.
   // Stagger aleatório de até 600 ms para não sobrecarregar o banco com
   // centenas de queries simultâneas quando muitas linhas renderizam juntas.
+  //
+  // Linha gravada como 'divergente' também é conferida: o nome do outro
+  // operador não fica no banco, e sem ele o botão amarelo não aparece.
   useEffect(() => {
     // Ajuste manual não tem acordo para casar: a linha é sintética e o
     // `codigo` dela é um rótulo, não um NR. A consulta acharia qualquer coisa.
     if (ehLinhaDeAjuste(linha)) return;
-    if (linha.status_tabulacao !== 'nao_tabulado') return;
+    if (linha.status_tabulacao === 'tabulado') return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      if (cancelled || statusRef.current !== 'nao_tabulado') return;
-      const { status, acordoId, outroOperadorId, outroOperadorNome } =
-        await verificarStatusTabulacao(empresaId, linha.codigo, operadorId, campoTabulacao);
+      if (cancelled || statusRef.current === 'tabulado') return;
+      const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacao(linha.id);
       if (cancelled) return;
 
-      if (status === 'tabulado' && acordoId) {
-        await atualizarTabulacao(linha.id, 'tabulado', acordoId);
-        if (!cancelled) { setStatusLocal('tabulado'); setAcordoIdLocal(acordoId); }
-      } else if (status === 'divergente' && acordoId && outroOperadorId && outroOperadorNome) {
-        await atualizarTabulacao(linha.id, 'divergente', acordoId);
-        if (!cancelled) {
-          setStatusLocal('divergente');
-          setAcordoIdLocal(acordoId);
-          setDivergenteInfo({ outroNome: outroOperadorNome, outroId: outroOperadorId, acordoId });
-        }
+      if (status !== linha.status_tabulacao || acordoId !== linha.acordo_id) {
+        await atualizarTabulacao(linha.id, status, acordoId);
+        if (cancelled) return;
       }
+      setStatusLocal(status);
+      setAcordoIdLocal(acordoId);
+      setDivergenteInfo(
+        status === 'divergente' && acordoId
+          ? { outroNome: outroOperadorNome ?? 'outro operador', acordoId }
+          : null,
+      );
     }, Math.random() * 600);
     return () => { cancelled = true; clearTimeout(timer); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linha.id, operadorId, empresaId]);
 
-  async function handleTabular() {
-    setCarregando(true);
-    const { status, acordoId, outroOperadorId, outroOperadorNome } = await verificarStatusTabulacao(
-      empresaId, linha.codigo, operadorId, campoTabulacao,
-    );
-
-    if (status === 'tabulado' && acordoId) {
-      await atualizarTabulacao(linha.id, 'tabulado', acordoId);
-      setStatusLocal('tabulado');
-      setAcordoIdLocal(acordoId);
-      toast.success('Acordo já tabulado para você. Registro atualizado.');
-      onRefetch();
-      setCarregando(false);
-      return;
-    }
-
-    if (status === 'divergente' && acordoId && outroOperadorId && outroOperadorNome) {
-      await atualizarTabulacao(linha.id, 'divergente', acordoId);
-      setStatusLocal('divergente');
-      setAcordoIdLocal(acordoId);
-      setDivergenteInfo({ outroNome: outroOperadorNome, outroId: outroOperadorId, acordoId });
-      setConfirmandoDiv(true);
-      setCarregando(false);
-      return;
-    }
-
-    // Não tabulado — abrir formulário pré-preenchido
-    await atualizarTabulacao(linha.id, 'nao_tabulado', null);
-    setStatusLocal('nao_tabulado');
-    setCarregando(false);
+  function abrirFormulario() {
     onAbrirNovoAcordo({
       instituicao:    linha.codigo,
       nomeCliente:    linha.nome_cliente ?? '',
@@ -135,40 +106,70 @@ export function TabulacaoCell({
     });
   }
 
+  async function handleTabular() {
+    setCarregando(true);
+    const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacao(linha.id);
+
+    if (status === 'tabulado' && acordoId) {
+      await atualizarTabulacao(linha.id, 'tabulado', acordoId);
+      setStatusLocal('tabulado');
+      setAcordoIdLocal(acordoId);
+      toast.success('Acordo já tabulado para este operador. Registro atualizado.');
+      onRefetch();
+      setCarregando(false);
+      return;
+    }
+
+    if (status === 'divergente' && acordoId) {
+      await atualizarTabulacao(linha.id, 'divergente', acordoId);
+      setStatusLocal('divergente');
+      setAcordoIdLocal(acordoId);
+      setDivergenteInfo({ outroNome: outroOperadorNome ?? 'outro operador', acordoId });
+      setConfirmandoDiv(true);
+      setCarregando(false);
+      return;
+    }
+
+    // Não tabulado — abrir formulário pré-preenchido
+    await atualizarTabulacao(linha.id, 'nao_tabulado', null);
+    setStatusLocal('nao_tabulado');
+    setCarregando(false);
+    abrirFormulario();
+  }
+
   async function confirmarDivergente() {
     if (!divergenteInfo) return;
     setConfirmandoDiv(false);
     setCarregando(true);
 
-    const { error } = await tabularDivergente({
-      linhaId:          linha.id,
-      empresaId,
-      codigo:           linha.codigo,
-      acordoExistenteId: divergenteInfo.acordoId,
-      outroOperadorId:  divergenteInfo.outroId,
-      outroOperadorNome: divergenteInfo.outroNome,
-      novoOperadorId:   operadorId,
-      novoOperadorNome: operadorNome,
-      liderId,
-    });
+    const r = await tabularDivergente(linha.id);
+    setCarregando(false);
 
-    if (error) {
-      toast.error(`Erro ao transferir: ${error}`);
-    } else {
-      toast.success(`Acordo transferido de ${divergenteInfo.outroNome}. Agora tabule o seu.`);
+    if ('error' in r) {
+      toast.error(`Não foi possível transferir: ${r.error}`);
+      return;
+    }
+
+    setDivergenteInfo(null);
+
+    if (r.resultado === 'livre') {
+      // O acordo do outro sumiu entre a checagem e o clique: código livre.
       setStatusLocal('nao_tabulado');
       setAcordoIdLocal(null);
-      setDivergenteInfo(null);
+      toast.info('O código ficou livre. Tabule o acordo.');
       onRefetch();
-      // Abrir formulário para registrar o novo acordo
-      onAbrirNovoAcordo({
-        instituicao: linha.codigo,
-        nomeCliente: linha.nome_cliente ?? '',
-        forma:       linha.forma_pagamento,
-        valor:       linha.valor_recebido,
-      });
+      abrirFormulario();
+      return;
     }
-    setCarregando(false);
+
+    setStatusLocal('tabulado');
+    setAcordoIdLocal(r.acordoId);
+    toast.success(
+      r.resultado === 'transferido'
+        ? `Acordo transferido de ${r.operadorAnteriorNome ?? divergenteInfo.outroNome} para ${r.operadorNovoNome ?? operadorNome}.`
+        : 'Este acordo já era deste operador. Registro atualizado.',
+    );
+    onRefetch();
   }
 
   /*
@@ -216,25 +217,27 @@ export function TabulacaoCell({
           onClick={() => setConfirmandoDiv(true)}
           disabled={carregando}
         >
-          <AlertTriangle className="w-3 h-3" />
-          Divergente
+          {carregando ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />}
+          {carregando ? 'Transferindo…' : 'Divergente'}
         </Button>
 
         <AlertDialog open={confirmandoDiv} onOpenChange={setConfirmandoDiv}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
-                <AlertTriangle className="w-5 h-5" /> Acordo já tabulado para outro operador
+                <AlertTriangle className="w-5 h-5" /> Acordo registrado por outro operador
               </AlertDialogTitle>
               <AlertDialogDescription className="space-y-2 text-left">
                 <p>
-                  O código <strong>{linha.codigo}</strong> já está tabulado para{' '}
-                  <strong>{divergenteInfo.outroNome}</strong>.
+                  O código <strong>{linha.codigo}</strong> está registrado para{' '}
+                  <strong>{divergenteInfo.outroNome}</strong>, mas o pagamento entrou no
+                  Analítico em nome de <strong>{operadorNome}</strong>.
                 </p>
                 <p>
-                  Ao confirmar, o acordo será <strong>removido</strong> de{' '}
-                  <strong>{divergenteInfo.outroNome}</strong> (enviado para a Lixeira) e você
-                  poderá registrar o seu acordo. O operador e o líder serão notificados.
+                  Ao confirmar, o acordo <strong>sai</strong> de{' '}
+                  <strong>{divergenteInfo.outroNome}</strong> e <strong>passa direto</strong>{' '}
+                  para <strong>{operadorNome}</strong>, com os mesmos dados, sem autorização
+                  de líder. {divergenteInfo.outroNome} e os líderes serão notificados.
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Recebido: <strong>{formatBRL(linha.valor_recebido)}</strong> · Forma:{' '}

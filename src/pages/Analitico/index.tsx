@@ -243,8 +243,6 @@ export default function PaginaAnalitico() {
 
   if (!empresa?.id || !perfil?.id) return null;
 
-  const liderId = perfil?.lider_id ?? null;
-
   function onAbrirNovoAcordo(dados: {
     instituicao: string;
     nomeCliente: string;
@@ -501,7 +499,6 @@ export default function PaginaAnalitico() {
           operadorNome={perfil.nome}
           empresaId={empresa.id}
           recorte={recorte}
-          liderId={liderId}
           podeVerRanking={temPermissao('analitico_sub_ranking')}
           podeVerFormas={temPermissao('analitico_sub_formas_pagamento')}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
@@ -519,7 +516,6 @@ export default function PaginaAnalitico() {
           temPermissaoImportar={temPermissao('importar_analitico')}
           operadorId={perfil.id}
           operadorNome={perfil.nome}
-          liderId={liderId}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}

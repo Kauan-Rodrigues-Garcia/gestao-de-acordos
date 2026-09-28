@@ -151,7 +151,6 @@ describe('AnaliticoLider monta', () => {
     temPermissaoImportar: true,
     operadorId: 'perfil-1',
     operadorNome: 'Líder Um',
-    liderId: null,
     onAbrirNovoAcordo: vi.fn(),
     onVerAcordo: vi.fn(),
     onRefetch: vi.fn(),

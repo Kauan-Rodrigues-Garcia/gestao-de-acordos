@@ -12,9 +12,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabulacaoAnalitico } from '@/lib/supabase';
-import { criarNotificacao } from '@/services/notificacoes.service';
-import { enviarParaLixeira } from '@/services/lixeira.service';
+import type { AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import { registrarLog } from '@/services/logs.service';
 import { mesReferencia } from './analiticoComum';
 import {
@@ -2593,47 +2591,59 @@ export async function sincronizarCartoesPagos(
 
 // ── Verificar e atualizar status de tabulação ─────────────────────────────────
 
+export interface StatusTabulacaoResultado {
+  status: StatusTabulacaoAnalitico;
+  acordoId: string | null;
+  outroOperadorId: string | null;
+  outroOperadorNome: string | null;
+}
+
 /**
- * Verifica o status de tabulação de uma linha de recebimento.
- * Cruza com a tabela `acordos` usando campo `instituicao == codigo`.
- * Retorna:
+ * Status de tabulação de uma linha do Analítico, decidido no servidor
+ * (`fn_analitico_status_tabulacao`).
+ *
  *   - 'nao_tabulado': nenhum acordo com esse código
- *   - 'tabulado': há acordo do mesmo operador
- *   - 'divergente': há acordo de outro operador
+ *   - 'tabulado':     o dono da linha tem acordo desse código (DIRETO ou EXTRA)
+ *   - 'divergente':   o acordo DIRETO do código é de outra pessoa
+ *
+ * Era uma consulta do navegador, com a RLS de quem olha: para o operador com
+ * alcance «próprios» o acordo do colega não existia, e a linha nunca virava
+ * Divergente. Quem é o EXTRA do NR também caía em Divergente — e confirmar
+ * arrancaria o DIRETO do parceiro. Ver migration 20260928111922.
  */
 export async function verificarStatusTabulacao(
-  empresaId: string,
-  codigo: string,
-  operadorId: string,
-  /** Campo do acordo que casa com o código do relatório.
-   *  PaguePlay usa 'instituicao'; BookPlay usa 'nr_cliente' (o NR). */
-  campo: 'instituicao' | 'nr_cliente' = 'instituicao',
-): Promise<{ status: StatusTabulacaoAnalitico; acordoId: string | null; outroOperadorId: string | null; outroOperadorNome: string | null }> {
-  const { data } = await supabase
-    .from('acordos')
-    .select('id, operador_id, tipo_vinculo, perfis(nome)')
-    .eq('empresa_id', empresaId)
-    .eq(campo, normCodigo(codigo))
-    .in('tipo_vinculo', ['direto'])
-    .limit(1)
-    .maybeSingle();
+  linhaId: string,
+): Promise<StatusTabulacaoResultado> {
+  const vazio: StatusTabulacaoResultado = {
+    status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
+  };
 
-  if (!data) return { status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null };
+  const { data, error } = await rpcSemTipo<{
+    status?: StatusTabulacaoAnalitico;
+    acordo_id?: string | null;
+    outro_operador_id?: string | null;
+    outro_operador_nome?: string | null;
+    erro?: string;
+  }>('fn_analitico_status_tabulacao', { p_linha_id: linhaId });
 
-  if (data.operador_id === operadorId) {
-    return { status: 'tabulado', acordoId: data.id, outroOperadorId: null, outroOperadorNome: null };
+  // Falha aqui não trava ninguém: «Tabular acordo» abre o formulário, e a
+  // escada de conflito de NR da planilha continua valendo por trás dele.
+  if (error || !data || data.erro || !data.status) {
+    if (error || data?.erro) {
+      console.warn('[verificarStatusTabulacao]', error?.message ?? data?.erro);
+    }
+    return vazio;
   }
 
-  const nomeOutro = (data.perfis as { nome?: string } | null)?.nome ?? null;
   return {
-    status:           'divergente',
-    acordoId:         data.id,
-    outroOperadorId:  data.operador_id,
-    outroOperadorNome: nomeOutro,
+    status:            data.status,
+    acordoId:          data.acordo_id ?? null,
+    outroOperadorId:   data.outro_operador_id ?? null,
+    outroOperadorNome: data.outro_operador_nome ?? null,
   };
 }
 
-/** Atualiza status_tabulacao e accord_id de uma linha */
+/** Atualiza status_tabulacao e acordo_id de uma linha */
 export async function atualizarTabulacao(
   id: string,
   status: StatusTabulacaoAnalitico,
@@ -2648,112 +2658,67 @@ export async function atualizarTabulacao(
 
 // ── Caso divergente: transferir sem autorização do líder ─────────────────────
 
-export interface TabularDivergenteParams {
-  linhaId: string;
-  empresaId: string;
-  codigo: string;
-  acordoExistenteId: string;
-  outroOperadorId: string;
-  outroOperadorNome: string;
-  novoOperadorId: string;
-  novoOperadorNome: string;
-  liderId?: string | null;
-}
+export type TabularDivergenteResultado =
+  /** O acordo saiu do outro operador e entrou no dono da linha. */
+  | { ok: true; resultado: 'transferido'; acordoId: string; operadorAnteriorNome: string | null; operadorNovoNome: string | null }
+  /** O dono da linha já tinha o acordo (DIRETO ou EXTRA) — nada a transferir. */
+  | { ok: true; resultado: 'ja_era_seu'; acordoId: string }
+  /** O acordo sumiu desde que a tela olhou: o código está livre para tabular. */
+  | { ok: true; resultado: 'livre' }
+  | { ok: false; error: string };
+
+const MENSAGEM_ERRO_DIVERGENTE: Record<string, string> = {
+  sem_sessao:             'Sua sessão expirou. Entre de novo.',
+  linha_inexistente:      'Esta linha não existe mais no Analítico. Recarregue a página.',
+  empresa_negada:         'Esta linha é de outra empresa.',
+  linha_sem_operador:     'Esta linha não tem operador vinculado.',
+  linha_sem_codigo:       'Esta linha não tem código.',
+  destinatario_invalido:  'O operador desta linha não foi encontrado.',
+  destinatario_desligado: 'O operador desta linha está desligado — o acordo não pode passar para ele.',
+  nao_autorizado:
+    'Você não tem permissão sobre o acordo do outro operador. '
+    + 'O próprio operador da linha pode confirmar pela tela dele.',
+};
 
 /**
- * Remove o acordo existente do outro operador (para lixeira, motivo transferencia_nr)
- * e atualiza a linha analítica para status 'tabulado'.
- * NÃO exige autorização do líder — diferença vs. fluxo normal.
- * Notifica o outro operador e o líder. Registra em logs_sistema.
+ * Divergente no Analítico: o acordo passa DIRETO, numa transação no servidor
+ * (`fn_analitico_tabular_divergente`), do outro operador para o operador da
+ * linha — o pagamento já entrou em nome dele. Sem lixeira, sem formulário novo
+ * e sem autorização de líder. O servidor re-aponta o EXTRA do par, atualiza as
+ * linhas do Analítico, notifica quem perdeu e os líderes, e registra o log.
+ *
+ * Antes era lixeira + DELETE pelo navegador: a RLS só deixa o operador apagar
+ * o próprio acordo, o DELETE afetava zero linhas sem erro e o acordo ficava
+ * com o dono antigo.
  */
-export async function tabularDivergente(
-  params: TabularDivergenteParams,
-): Promise<{ error: string | null }> {
-  const {
-    linhaId, empresaId, codigo, acordoExistenteId,
-    outroOperadorId, outroOperadorNome,
-    novoOperadorId, novoOperadorNome, liderId,
-  } = params;
+export async function tabularDivergente(linhaId: string): Promise<TabularDivergenteResultado> {
+  const { data, error } = await rpcSemTipo<{
+    ok: boolean;
+    erro?: string;
+    resultado?: 'transferido' | 'ja_era_seu' | 'livre';
+    acordo_id?: string;
+    operador_anterior_nome?: string | null;
+    operador_novo_nome?: string | null;
+  }>('fn_analitico_tabular_divergente', { p_linha_id: linhaId });
 
-  // 1. Buscar o acordo completo para enviar à lixeira
-  const { data: acordo, error: errAcordo } = await supabase
-    .from('acordos')
-    .select('*')
-    .eq('id', acordoExistenteId)
-    .maybeSingle();
-
-  if (errAcordo || !acordo) {
-    return { error: errAcordo?.message ?? 'Acordo não encontrado.' };
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: 'O servidor não respondeu.' };
+  if (!data.ok) {
+    return { ok: false, error: MENSAGEM_ERRO_DIVERGENTE[data.erro ?? ''] ?? data.erro ?? 'Falha ao transferir.' };
   }
 
-  // 2. Enviar para a lixeira (transferência sem autorização)
-  const resultLixeira = await enviarParaLixeira({
-    acordo: acordo as unknown as Acordo,
-    motivo: 'transferencia_nr',
-    operadorNome:        outroOperadorNome,
-    transferidoParaId:   novoOperadorId,
-    transferidoParaNome: novoOperadorNome,
-  });
-
-  if (!resultLixeira.ok) {
-    return { error: resultLixeira.error ?? 'Falha ao enviar acordo para lixeira.' };
+  if (data.resultado === 'livre') return { ok: true, resultado: 'livre' };
+  if (!data.acordo_id) return { ok: false, error: 'O servidor não devolveu o acordo.' };
+  if (data.resultado === 'ja_era_seu') {
+    return { ok: true, resultado: 'ja_era_seu', acordoId: data.acordo_id };
   }
-
-  // 3. Deletar o acordo do outro operador
-  await supabase.from('acordos').delete().eq('id', acordoExistenteId);
-
-  // 4. Atualizar a linha analítica para 'nao_tabulado' (operador tabula na sequência)
-  await atualizarTabulacao(linhaId, 'nao_tabulado', null);
-
-  // 5. Notificar o outro operador
-  await criarNotificacao({
-    usuario_id: outroOperadorId,
-    empresa_id: empresaId,
-    titulo:     'Acordo transferido — Analítico',
-    mensagem:
-      `Seu acordo do código ${codigo} foi transferido para ${novoOperadorNome} ` +
-      `via lançamento no Analítico. Verifique a Lixeira para detalhes.`,
-  });
-
-  // 6. Notificar o líder (impacto em comissão)
-  if (liderId) {
-    await criarNotificacao({
-      usuario_id: liderId,
-      empresa_id: empresaId,
-      titulo:     `Transferência automática — cód. ${codigo}`,
-      mensagem:
-        `O operador ${novoOperadorNome} reivindicou o código ${codigo} via Analítico. ` +
-        `O acordo foi removido de ${outroOperadorNome} e transferido. Verifique o impacto em comissão.`,
-    });
-  }
-
-  // 7. Registrar na trilha de auditoria.
-  //
-  // A trigger do banco registra o acordo que saiu, mas não sabe que ele saiu
-  // POR CAUSA de uma tabulação divergente no analítico, nem de quem para quem a
-  // titularidade passou — que é a informação que resolve disputa de comissão.
-  await registrarLog({
-    acao:        'acordo_transferido',
-    categoria:   'acordo',
-    severidade:  'aviso',
-    descricao:
-      `Reivindicou o código ${codigo} pelo Analítico — o acordo saiu de `
-      + `${outroOperadorNome ?? 'outro operador'} para ${novoOperadorNome ?? 'este operador'}`,
-    empresaId:   empresaId,
-    tabela:      'acordos',
-    registroId:  acordoExistenteId,
-    alvoTipo:    'acordo',
-    alvoRotulo:  `Código ${codigo}`,
-    detalhes: {
-      codigo,
-      de_operador_id:     outroOperadorId,
-      de_operador_nome:   outroOperadorNome,
-      para_operador_id:   novoOperadorId,
-      para_operador_nome: novoOperadorNome,
-    },
-  });
-
-  return { error: null };
+  return {
+    ok: true,
+    resultado:            'transferido',
+    acordoId:             data.acordo_id,
+    operadorAnteriorNome: data.operador_anterior_nome ?? null,
+    operadorNovoNome:     data.operador_novo_nome ?? null,
+  };
 }
 
 // ── Notificar todos os usuários após importação ───────────────────────────────

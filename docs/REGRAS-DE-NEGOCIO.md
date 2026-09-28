@@ -1155,17 +1155,43 @@ diferentes, e nenhuma das duas linhas era o total da pessoa.
 ### 10.2 Status de tabulação
 
 Cruzamento entre o relatório e a tabela `acordos` — pelo campo `instituicao`
-`[PP]` ou `nr_cliente` `[BP]`, considerando apenas acordos `tipo_vinculo =
-'direto'`:
+`[PP]` ou `nr_cliente` `[BP]`. Decidido **no servidor**
+(`fn_analitico_status_tabulacao`, migration `20260928111922`), olhando todos os
+acordos da empresa, independente do alcance de quem olha:
 
 | Status | Significado |
 |---|---|
 | `nao_tabulado` | Nenhum acordo com esse código |
-| `tabulado` | Existe acordo **do mesmo operador** |
-| `divergente` | Existe acordo **de outro operador** |
+| `tabulado` | O operador da linha tem acordo desse código — **DIRETO ou EXTRA** |
+| `divergente` | O acordo **DIRETO** do código é de outro operador |
 
-Resolver um `divergente` remove o acordo do outro operador (via lixeira),
-notifica e registra em log.
+#### Divergente: o acordo muda de dono direto, sem líder
+
+A linha do Analítico prova que o pagamento **já entrou** em nome do operador
+dela. Por isso, diferente da planilha (§ 7.3), resolver um `divergente` **não
+pede autorização de líder**: `fn_analitico_tabular_divergente` passa o acordo
+do outro operador para o operador da linha, numa transação só.
+
+- O acordo **troca de `operador_id`** (e o `setor_id` segue o novo dono). Nada
+  vai para a lixeira e nada é redigitado: valor, vencimento, parcelas, estado e
+  histórico continuam. O `trg_sync_nr_registros` move a titularidade do NR.
+- Muda de dono o acordo **titular** do NR em `nr_registros`. Parcelas antigas
+  do mesmo grupo ficam com quem estavam — já contaram no mês delas.
+- Se o acordo é o DIRETO de um par, o **EXTRA é re-apontado** para o novo dono.
+- As linhas do Analítico do novo dono com esse código viram `tabulado`; as de
+  quem perdeu voltam a `nao_tabulado`, para a tela conferir de novo.
+- Notifica quem perdeu o acordo e o líder de cada lado; registra
+  `acordo_transferido` no log com `origem = analitico_divergente`.
+
+**Quem confirma:** o próprio operador da linha (o pagamento é dele), ou quem o
+painel deixa **alterar** o acordo que sai — a mesma escada da policy
+`acordos_update`. Operador desligado não recebe acordo.
+
+> Até 28/09/2026 isso rodava no navegador e não funcionava: com alcance
+> «próprios» a checagem não via o acordo do colega (a linha nunca virava
+> Divergente), e o `DELETE` do acordo alheio batia na RLS, afetava zero linhas
+> sem erro e deixava o acordo com o dono antigo. Quem era EXTRA do NR via a
+> própria linha como Divergente, e confirmar desfaria o par.
 
 ### 10.3 Totais
 

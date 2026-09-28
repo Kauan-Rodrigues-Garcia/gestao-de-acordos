@@ -187,7 +187,6 @@ interface AnaliticoLiderProps {
   temPermissaoImportar: boolean;
   operadorId: string;
   operadorNome: string;
-  liderId?: string | null;
   onAbrirNovoAcordo: (dados: {
     instituicao: string; nomeCliente: string;
     forma: 'boleto_pix' | 'cartao'; valor: number; dataPagamento?: string;
@@ -198,7 +197,7 @@ interface AnaliticoLiderProps {
 
 export function AnaliticoLider({
   empresaId, recorte, setorId, podeVerTodosSetores = true,
-  temPermissaoImportar, liderId,
+  temPermissaoImportar,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
@@ -1543,7 +1542,6 @@ export function AnaliticoLider({
                       linha={linha} empresaId={empresaId}
                       operadorId={l.operador_id}
                       operadorNome={l.nome ?? l.usuario}
-                      liderId={liderId}
                       onAbrirNovoAcordo={onAbrirNovoAcordo}
                       onVerAcordo={onVerAcordo}
                       onRefetch={onRefetch}
@@ -1578,7 +1576,6 @@ export function AnaliticoLider({
                       linha={linha} empresaId={empresaId}
                       operadorId={l.operador_id}
                       operadorNome={l.nome ?? l.usuario}
-                      liderId={liderId}
                       onAbrirNovoAcordo={onAbrirNovoAcordo}
                       onVerAcordo={onVerAcordo}
                       onRefetch={onRefetch}

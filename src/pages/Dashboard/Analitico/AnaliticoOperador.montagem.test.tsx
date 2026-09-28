@@ -49,7 +49,6 @@ describe('AnaliticoOperador monta', () => {
     operadorId: 'op-1',
     operadorNome: 'Ana Silva',
     empresaId: 'empresa-1',
-    liderId: null,
     podeVerRanking: false,
     podeVerFormas: false,
     onAbrirNovoAcordo: vi.fn(),
