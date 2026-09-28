@@ -139,6 +139,11 @@ export interface Perfil {
    */
   chat_boas_vindas_em?: string | null;
   /**
+   * Quando a pessoa viu o tutorial de boas-vindas (migration 20260928113233).
+   * `null` = ainda não viu, e o tour aparece no próximo acesso.
+   */
+  tour_visto_em?: string | null;
+  /**
    * Liberado pelo super_admin para enxergar as duas empresas (migration
    * 20260818300000). Só vale junto com cargo `gerencia`/`diretoria` — use
    * `perfilVeDuasEmpresas` em vez de ler a flag crua.

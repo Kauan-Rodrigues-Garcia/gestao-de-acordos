@@ -6,7 +6,9 @@
  * Bookplay: navega automaticamente entre Dashboard (/) e Acordos (/acordos).
  * PaguePLAY: tudo no Dashboard — tabela de acordos fica dentro do {isPP && …}.
  *
- * Controlado por localStorage: key = `onboarding_v3_${userId}`.
+ * Aparece UMA vez por usuário: `perfis.tour_visto_em` (migration 20260928113233)
+ * é quem manda, gravado quando o tour abre. O localStorage
+ * (`onboarding_v3_${userId}`) fica só como atalho para não reperguntar.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -24,6 +26,8 @@ import { useTenant } from '@/lib/tenant-config';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { cn } from '@/lib/utils';
 import { passosDoComercial, ONBOARDING_COMERCIAL_KEY } from './tourComercial';
+import { registrarTourVisto } from '@/services/tourVisto.service';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 
 export const ONBOARDING_STORAGE_KEY = (uid: string) => `onboarding_v3_${uid}`;
 const PAD    = 12;   // padding ao redor do elemento destacado
@@ -237,7 +241,7 @@ interface OnboardingTourProps {
 }
 
 export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: OnboardingTourProps) {
-  const { user }  = useAuth();
+  const { user, perfil } = useAuth();
   const tenant    = useTenant();
   const navigate  = useNavigate();
   const location       = useLocation();
@@ -262,15 +266,31 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
   // ── Inicialização — aguarda termos serem aceitos antes de iniciar ──────────
   // E aguarda o produto: começar antes de saber se é Comercial mostraria o tour
   // de acordos, e gravaria a chave errada ao terminar.
+  //
+  // Uma vez por usuário, em qualquer máquina: quem já tem `tour_visto_em` não
+  // vê de novo. A data é gravada quando o tour ABRE — fechar a aba no meio não
+  // faz o tutorial voltar no próximo login.
+  const perfilId   = perfil?.id ?? null;
+  const tourVistoEm = perfil?.tour_visto_em ?? null;
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !perfilId) return;
     if (termoLoading || precisaAceitar) return;
     if (empresaLoading || permLoading) return;
-    if (!localStorage.getItem(chaveDoTour(user.id))) {
-      const t = setTimeout(() => setActive(true), 1000);
-      return () => clearTimeout(t);
+    // Quem entra como outra pessoa não gasta o tutorial dela.
+    if (getImpersonacaoAtiva()) return;
+    const chave = chaveDoTour(user.id);
+    if (localStorage.getItem(chave)) return;
+    if (tourVistoEm) {
+      localStorage.setItem(chave, '1');
+      return;
     }
-  }, [user?.id, precisaAceitar, termoLoading, empresaLoading, permLoading, chaveDoTour]);
+    const t = setTimeout(() => {
+      setActive(true);
+      localStorage.setItem(chave, '1');
+      void registrarTourVisto(perfilId);
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [user?.id, perfilId, tourVistoEm, precisaAceitar, termoLoading, empresaLoading, permLoading, chaveDoTour]);
 
   // ── Finalizar tour ─────────────────────────────────────────────────────────
   const finish = useCallback(() => {
