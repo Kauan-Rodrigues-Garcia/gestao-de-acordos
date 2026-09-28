@@ -28,7 +28,7 @@
  *
  * Nada aqui lê ou escreve `numeros_whatsapp`. Ver a migration 20260921160000.
  */
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import {
   ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Plus, Search, Smartphone, UserX,
@@ -409,16 +409,12 @@ export function ChipsFisicos() {
                   {plural(g.totalChips, 'chip', 'chips')} · {plural(g.blocos.length, 'pessoa', 'pessoas')}
                 </span>
               </div>
-              <div className="grid items-start gap-3 lg:grid-cols-2">
-                {g.blocos.map(b => blocoDePessoa(b, false))}
-              </div>
+              <ColunasDeBlocos blocos={g.blocos} render={b => blocoDePessoa(b, false)} />
             </section>
           ))}
         </div>
       ) : (
-        <div className="grid items-start gap-3 lg:grid-cols-2">
-          {blocos.map(b => blocoDePessoa(b, false))}
-        </div>
+        <ColunasDeBlocos blocos={blocos} render={b => blocoDePessoa(b, false)} />
       )}
 
       {/* ── Quem ainda não cadastrou ──────────────────────────────────────── */}
@@ -611,6 +607,54 @@ function BlocoPessoaChips({
         <CardContent id={idConteudo} className="space-y-2 px-4 pb-4 pt-0">{children}</CardContent>
       )}
     </Card>
+  );
+}
+
+/**
+ * As duas colunas da visão de grupo — cada uma com a sua própria altura.
+ *
+ * Com `grid-cols-2` as duas células de uma linha dividem a mesma altura: abrir
+ * uma pessoa com muitos chips esticava a linha inteira e deixava um vazio ao
+ * lado do colega, que é o que parecia um bloco quebrado (pedido de 28/09/2026).
+ * Aqui cada coluna é uma pilha independente e as pessoas se alternam entre elas
+ * — 0 à esquerda, 1 à direita, 2 à esquerda —, então a leitura continua a mesma
+ * da grade e abrir um bloco só empurra para baixo quem está na mesma coluna.
+ *
+ * Abaixo de `lg` volta a ser uma coluna só, na ordem corrida. A escolha é em
+ * JavaScript, e não por classe, porque dividir em duas pilhas no HTML embaralha
+ * a ordem quando elas se empilham na tela estreita.
+ */
+const TELA_DE_DUAS_COLUNAS = '(min-width: 1024px)'; // o `lg` do Tailwind
+
+function useDuasColunas() {
+  const [duas, setDuas] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia(TELA_DE_DUAS_COLUNAS);
+    const ver = () => setDuas(mq.matches);
+    ver();
+    mq.addEventListener('change', ver);
+    return () => mq.removeEventListener('change', ver);
+  }, []);
+  return duas;
+}
+
+function ColunasDeBlocos({ blocos, render }: {
+  blocos: BlocoPessoa<ChipFisicoRow>[];
+  render: (b: BlocoPessoa<ChipFisicoRow>) => ReactNode;
+}) {
+  const duasColunas = useDuasColunas();
+
+  if (!duasColunas) return <div className="space-y-3">{blocos.map(render)}</div>;
+
+  return (
+    <div className="grid grid-cols-2 items-start gap-3">
+      {[0, 1].map(coluna => (
+        <div key={coluna} className="space-y-3">
+          {blocos.filter((_, i) => i % 2 === coluna).map(render)}
+        </div>
+      ))}
+    </div>
   );
 }
 
