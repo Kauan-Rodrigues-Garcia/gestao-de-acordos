@@ -40,7 +40,7 @@ import {
 } from './helpers';
 import { TableSkeleton } from './TableSkeleton';
 import { PPTableFilters } from './PPTableFilters';
-import { PPTableBody } from './PPTableBody';
+import { PPTableBody, PPColunas } from './PPTableBody';
 import { PPModals } from './PPModals';
 
 export default function Dashboard() {
@@ -956,10 +956,14 @@ export default function Dashboard() {
               <CardContent className="p-0">
                 {loading ? <TableSkeleton /> : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    {/* `table-fixed` + `PPColunas`: toda linha com a mesma
+                        largura de coluna, sem esticar por nome ou código
+                        comprido. Abaixo da largura mínima, rola para o lado. */}
+                    <table className="w-full min-w-[1000px] table-fixed text-xs">
+                      <PPColunas visaoAmpla={visaoAmpla} />
                       <thead>
                         <tr className="border-b border-border bg-muted/30">
-                          <th className="px-3 py-3 w-8">
+                          <th className="px-3 py-3">
                             <input type="checkbox" className="rounded border-border"
                               checked={selecionados.length === acordos.length && acordos.length > 0}
                               onChange={selecionarTodos}

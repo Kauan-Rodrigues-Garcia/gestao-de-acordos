@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/input';
 import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { formatBRL } from '@/lib/money';
 import { formatDate, getTodayISO } from '@/lib/index';
+import { rotuloDoDia } from '@/lib/rotuloDoDia';
 import { cn } from '@/lib/utils';
 import type { SituacaoVenda } from '@/lib/vendas';
 import {
@@ -124,16 +125,6 @@ export function PilulaDoPrazo({ prazo }: { prazo: PrazoDaVenda }) {
       {rotuloDoPrazo(prazo.restanteMs)}
     </span>
   );
-}
-
-function rotuloDoDia(dia: string): string {
-  const hoje = getTodayISO();
-  const ontem = new Date(`${hoje}T12:00:00`);
-  ontem.setDate(ontem.getDate() - 1);
-  const ontemIso = ontem.toISOString().slice(0, 10);
-  const semana = new Date(`${dia}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'long' });
-  const prefixo = dia === hoje ? 'Hoje' : dia === ontemIso ? 'Ontem' : semana;
-  return `${prefixo.charAt(0).toUpperCase()}${prefixo.slice(1)} · ${formatDate(dia)}`;
 }
 
 /**

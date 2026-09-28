@@ -1,3 +1,12 @@
+/**
+ * Corpo da tabela de acordos da PaguePlay.
+ *
+ * Mesmo desenho do BookPlay desde 28/09/2026 (ver `AcordosTableBody`): blocos
+ * por dia de vencimento com hoje primeiro, a setinha do detalhe ao lado da
+ * lixeira, e toda linha com a mesma altura — as larguras moram em `PPColunas`,
+ * e cada célula corta o excesso com reticências.
+ */
+import { Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +19,7 @@ import {
   getEstadoFromAcordo, extractLinkAcordo, isAtrasado,
 } from '@/lib/index';
 import { acordoTemCpf } from '@/lib/cpf';
+import { agruparAcordosPorDia } from '@/lib/acordosPorDia';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { VinculoTag } from '@/components/VinculoTag';
@@ -18,11 +28,33 @@ import { OperadorCell } from '@/components/OperadorCell';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
+import { LinhaDoDiaAcordos, SetaDetalhe } from '@/components/AcordosDoDia';
 import type { Acordo } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { ensureAbsoluteUrl, TIPOS_PARCELADOS_PP } from './helpers';
 
 interface Tag { id: string; nome: string; cor: string; }
+
+const ALTURA_LINHA = 'h-[52px]';
+const CELULA = 'px-3 py-2 align-middle';
+
+/** As larguras da tabela. Só o código/nome do cliente divide o que sobra. */
+export function PPColunas({ visaoAmpla }: { visaoAmpla: boolean }) {
+  return (
+    <colgroup>
+      <col className="w-[40px]" />
+      <col />
+      <col className="w-[80px]" />
+      <col className="w-[100px]" />
+      <col className="w-[110px]" />
+      <col className="w-[160px]" />
+      <col className="w-[90px]" />
+      <col className="w-[104px]" />
+      {visaoAmpla && <col className="w-[170px]" />}
+      <col className="w-[176px]" />
+    </colgroup>
+  );
+}
 
 interface PPTableBodyProps {
   acordos: AcordoComVinculo[];
@@ -71,7 +103,195 @@ export function PPTableBody({
   empresaTags, operadoresMap,
   temFiltros, limparFiltros,
 }: PPTableBodyProps) {
-  const colSpan = visaoAmpla ? 11 : 10;
+  // checkbox, código, estado, vencimento, valor, tipo, link, status, [operador], ações
+  const colSpan = visaoAmpla ? 10 : 9;
+  const grupos = agruparAcordosPorDia<AcordoComVinculo>(acordosOrdenados, acordoTemCpf);
+  /** Índice na lista inteira: a entrada escalonada continua uma fila só. */
+  let posicao = 0;
+
+  function linha(a: AcordoComVinculo, i: number, noDia: number) {
+    const atrasado = isAtrasado(a.vencimento, a.status);
+    const venceHoje = a.vencimento === hoje;
+    const sel = selecionados.includes(a.id);
+    const isEditingThis = editandoInlineIdTabela === a.id;
+    const isDetailThis = detalheInlineIdTabela === a.id;
+    /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
+    const temCpf = acordoTemCpf(a);
+    const rotulo = a.nome_cliente || a.instituicao || a.nr_cliente || 'acordo';
+    const alternarDetalhe = () => setDetalheInlineIdTabela(isDetailThis ? null : a.id);
+    return (
+      <Fragment key={a.id}>
+        <motion.tr
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: Math.min(i * 0.015, 0.3) }}
+          className={cn(
+            ALTURA_LINHA,
+            'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
+            noDia % 2 === 0 && 'bg-muted/10',
+            atrasado && 'bg-destructive/5',
+            venceHoje && a.status !== 'pago' && 'bg-warning/10 border-l-2 border-l-warning',
+            sel && 'bg-primary/5 border-primary/20',
+            isEditingThis && 'bg-primary/5',
+            isDetailThis && 'bg-accent/50',
+            highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
+            // Por último: vence os demais estados. Um acordo com CPF em
+            // atraso continua vermelho de CPF, que é o que urge resolver.
+            temCpf && 'bg-destructive/15 border-l-4 border-l-destructive hover:bg-destructive/20',
+          )}
+          onClick={(e) => {
+            const t = e.target as HTMLElement;
+            if (t.closest('button') || t.closest('a') || t.closest('input')) return;
+            if (!isEditingThis) alternarDetalhe();
+          }}
+        >
+          <td className={CELULA}>
+            <input
+              type="checkbox"
+              className="rounded border-border"
+              checked={sel}
+              onChange={() => toggleSelecionado(a.id)}
+            />
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" className="max-w-full" />
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+              <p className="min-w-0 truncate font-mono text-[10px] font-medium text-muted-foreground" title={a.nome_cliente}>{a.nome_cliente}</p>
+              <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
+              <VinculoTag acordo={a} />
+            </div>
+          </td>
+          <td className={CELULA}>
+            {getEstadoFromAcordo(a) ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                <MapPin className="w-2.5 h-2.5" />{getEstadoFromAcordo(a)}
+              </span>
+            ) : '—'}
+          </td>
+          <td className={cn(CELULA, 'whitespace-nowrap')}>
+            <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-semibold', venceHoje && a.status !== 'pago' && 'text-warning font-semibold')}>
+              {formatDate(a.vencimento)}
+            </span>
+          </td>
+          <td className={cn(CELULA, 'text-right font-mono font-semibold text-foreground whitespace-nowrap')}>
+            {formatCurrency(a.valor)}
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
+              <span className={cn('inline-flex min-w-0 truncate px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
+                {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
+              </span>
+              {(a.parcelas ?? 1) > 1 && (
+                <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 tabular-nums tracking-tight">
+                  {a.numero_parcela ?? 1}/{a.parcelas}
+                </span>
+              )}
+            </div>
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            {extractLinkAcordo(a.observacoes) ? (
+              <a
+                href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-center gap-1 text-[11px] text-primary hover:underline"
+                title={extractLinkAcordo(a.observacoes)!}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate">ver link</span>
+              </a>
+            ) : '—'}
+          </td>
+          <td className={CELULA}>
+            <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+              {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
+            </span>
+          </td>
+          {visaoAmpla && (
+            <td className={cn(CELULA, 'overflow-hidden truncate text-xs text-muted-foreground')}>
+              <OperadorCell acordo={a} operadoresMap={operadoresMap} />
+            </td>
+          )}
+          <td className={CELULA}>
+            <div className="flex items-center justify-end gap-0.5">
+              {a.status !== 'pago' && (
+                <Button
+                  variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
+                  title="Marcar como Pago"
+                  aria-label={`Marcar acordo de ${a.nome_cliente || a.instituicao || a.nr_cliente} como Pago`}
+                  disabled={atualizandoStatus === a.id}
+                  onClick={() => marcarComoPago(a)}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                </Button>
+              )}
+              {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && !gruposJaReagendados.has(a.acordo_grupo_id ?? '') && (
+                <Button
+                  variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
+                  title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}
+                  aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
+                  onClick={() => setReagendarAcordo(a)}
+                >
+                  <CalendarClock className="w-4 h-4" />
+                </Button>
+              )}
+              {podeEditar && (
+              <Button
+                variant="ghost" size="icon"
+                className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
+                title={isEditingThis ? 'Fechar editor' : 'Editar'}
+                aria-label={isEditingThis ? 'Fechar editor inline' : `Editar acordo de ${a.nome_cliente || a.instituicao}`}
+                onClick={() => setEditandoInlineIdTabela(isEditingThis ? null : a.id)}
+              >
+                <Edit className="w-4 h-4" />
+              </Button>
+              )}
+              {podeExcluir && (
+              <>
+              <span className="w-px h-5 bg-border mx-1 shrink-0" aria-hidden="true" />
+              <Button
+                variant="ghost" size="icon"
+                className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                title="Excluir acordo"
+                aria-label={`Excluir acordo de ${a.nome_cliente || a.instituicao}`}
+                disabled={excluindoId === a.id}
+                onClick={() => setConfirmandoExclusao(a)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+              </>
+              )}
+              <SetaDetalhe aberto={isDetailThis && !isEditingThis} disabled={isEditingThis} rotulo={rotulo} onClick={alternarDetalhe} />
+            </div>
+          </td>
+        </motion.tr>
+        {temCpf && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpan} />}
+        {isEditingThis && (
+          <AcordoEditInline
+            key={`inline-${a.id}`}
+            acordo={a}
+            isPaguePlay={isPP}
+            onSaved={(atualizado) => {
+              setEditandoInlineIdTabela(null);
+              patchAcordo(atualizado.id, atualizado);
+            }}
+            onCancel={() => setEditandoInlineIdTabela(null)}
+          />
+        )}
+        {isDetailThis && !isEditingThis && (
+          <AcordoDetalheInline
+            key={`detalhe-${a.id}`}
+            acordo={a}
+            isPaguePlay={isPP}
+            colSpan={colSpan}
+            onClose={() => setDetalheInlineIdTabela(null)}
+            onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
+          />
+        )}
+      </Fragment>
+    );
+  }
 
   return (
     <tbody>
@@ -111,188 +331,12 @@ export function PPTableBody({
             </div>
           </td>
         </tr>
-      ) : acordosOrdenados.map((a, i) => {
-        const atrasado = isAtrasado(a.vencimento, a.status);
-        const venceHoje = a.vencimento === hoje;
-        const sel = selecionados.includes(a.id);
-        const isEditingThis = editandoInlineIdTabela === a.id;
-        const isDetailThis = detalheInlineIdTabela === a.id;
-        /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
-        const temCpf = acordoTemCpf(a);
-        return (
-          <>
-            <motion.tr
-              key={a.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: Math.min(i * 0.015, 0.3) }}
-              className={cn(
-                'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
-                i % 2 === 0 && 'bg-muted/10',
-                atrasado && 'bg-destructive/5',
-                venceHoje && a.status !== 'pago' && 'bg-warning/10 border-l-2 border-l-warning',
-                sel && 'bg-primary/5 border-primary/20',
-                isEditingThis && 'bg-primary/5',
-                isDetailThis && 'bg-accent/50',
-                highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
-                // Por último: vence os demais estados. Um acordo com CPF em
-                // atraso continua vermelho de CPF, que é o que urge resolver.
-                temCpf && 'bg-destructive/15 border-l-4 border-l-destructive hover:bg-destructive/20',
-              )}
-              onClick={(e) => {
-                const t = e.target as HTMLElement;
-                if (t.closest('button') || t.closest('a') || t.closest('input')) return;
-                if (!isEditingThis) setDetalheInlineIdTabela(detalheInlineIdTabela === a.id ? null : a.id);
-              }}
-            >
-              <td className="px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  className="rounded border-border"
-                  checked={sel}
-                  onChange={() => toggleSelecionado(a.id)}
-                />
-              </td>
-              <td className="px-3 py-2.5">
-                <div>
-                  <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" />
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <p className="font-medium text-foreground leading-none text-[10px] text-muted-foreground font-mono">{a.nome_cliente}</p>
-                    <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
-                    <VinculoTag acordo={a} />
-                  </div>
-                </div>
-              </td>
-              <td className="px-3 py-2.5">
-                {getEstadoFromAcordo(a) ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                    <MapPin className="w-2.5 h-2.5" />{getEstadoFromAcordo(a)}
-                  </span>
-                ) : '—'}
-              </td>
-              <td className="px-3 py-2.5">
-                <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-semibold', venceHoje && a.status !== 'pago' && 'text-warning font-semibold')}>
-                  {formatDate(a.vencimento)}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
-                {formatCurrency(a.valor)}
-              </td>
-              <td className="px-3 py-2.5">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
-                    {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
-                  </span>
-                  {(a.parcelas ?? 1) > 1 && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 tabular-nums tracking-tight">
-                      {a.numero_parcela ?? 1}/{a.parcelas}
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="px-3 py-2.5 max-w-[120px]">
-                {extractLinkAcordo(a.observacoes) ? (
-                  <a
-                    href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"
-                    title={extractLinkAcordo(a.observacoes)!}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-                    <span className="truncate">ver link</span>
-                  </a>
-                ) : '—'}
-              </td>
-              <td className="px-3 py-2.5">
-                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                  {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
-                </span>
-              </td>
-              {visaoAmpla && (
-                <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[140px]">
-                  <OperadorCell acordo={a} operadoresMap={operadoresMap} />
-                </td>
-              )}
-              <td className="px-3 py-2.5">
-                <div className="flex items-center justify-end gap-0.5">
-                  {a.status !== 'pago' && (
-                    <Button
-                      variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
-                      title="Marcar como Pago"
-                      aria-label={`Marcar acordo de ${a.nome_cliente || a.instituicao || a.nr_cliente} como Pago`}
-                      disabled={atualizandoStatus === a.id}
-                      onClick={() => marcarComoPago(a)}
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && !gruposJaReagendados.has(a.acordo_grupo_id ?? '') && (
-                    <Button
-                      variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
-                      title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}
-                      aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
-                      onClick={() => setReagendarAcordo(a)}
-                    >
-                      <CalendarClock className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {podeEditar && (
-                  <Button
-                    variant="ghost" size="icon"
-                    className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
-                    title={isEditingThis ? 'Fechar editor' : 'Editar'}
-                    aria-label={isEditingThis ? 'Fechar editor inline' : `Editar acordo de ${a.nome_cliente || a.instituicao}`}
-                    onClick={() => setEditandoInlineIdTabela(isEditingThis ? null : a.id)}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  )}
-                  {podeExcluir && (
-                  <>
-                  <span className="w-px h-5 bg-border mx-1 shrink-0" aria-hidden="true" />
-                  <Button
-                    variant="ghost" size="icon"
-                    className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                    title="Excluir acordo"
-                    aria-label={`Excluir acordo de ${a.nome_cliente || a.instituicao}`}
-                    disabled={excluindoId === a.id}
-                    onClick={() => setConfirmandoExclusao(a)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                  </>
-                  )}
-                </div>
-              </td>
-            </motion.tr>
-            {temCpf && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpan} />}
-            {isEditingThis && (
-              <AcordoEditInline
-                key={`inline-${a.id}`}
-                acordo={a}
-                isPaguePlay={isPP}
-                onSaved={(atualizado) => {
-                  setEditandoInlineIdTabela(null);
-                  patchAcordo(atualizado.id, atualizado);
-                }}
-                onCancel={() => setEditandoInlineIdTabela(null)}
-              />
-            )}
-            {isDetailThis && !isEditingThis && (
-              <AcordoDetalheInline
-                key={`detalhe-${a.id}`}
-                acordo={a}
-                isPaguePlay={isPP}
-                colSpan={colSpan}
-                onClose={() => setDetalheInlineIdTabela(null)}
-                onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
-              />
-            )}
-          </>
-        );
-      })}
+      ) : grupos.map(g => (
+        <Fragment key={g.chave}>
+          <LinhaDoDiaAcordos dia={g.dia} acordos={g.acordos} colSpan={colSpan} hoje={hoje} />
+          {g.acordos.map((a, noDia) => linha(a, posicao++, noDia))}
+        </Fragment>
+      ))}
     </tbody>
   );
 }

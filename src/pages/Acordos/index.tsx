@@ -944,7 +944,11 @@ export default function Acordos() {
           <CardContent className="p-0">
             {loading ? <TableSkeleton /> : (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                {/* `table-fixed`: as larguras vêm do `<colgroup>` do corpo, e
+                    nenhuma linha estica por causa de um nome ou NR comprido.
+                    Abaixo da largura mínima, rola para o lado em vez de
+                    espremer as colunas. */}
+                <table className="w-full min-w-[1000px] table-fixed text-xs">
                   <AcordosTableBody
                     acordosParaExibir={acordosParaExibir}
                     acordosCount={acordos.length}
