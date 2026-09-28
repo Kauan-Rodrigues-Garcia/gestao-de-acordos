@@ -10,8 +10,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { supabase, type Acordo, type Perfil } from '@/lib/supabase';
+import { supabase, type Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
@@ -73,6 +74,7 @@ export function AcordoNovoInline({
   isPaguePlay, colSpan, onSaved, onCancel, onAcordoRemovido,
 }: AcordoNovoInlineProps) {
   const { perfil }  = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const navigate    = useNavigate();
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
@@ -82,7 +84,7 @@ export function AcordoNovoInline({
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
-    (perfil as (typeof perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+    equipePrincipal,
   );
 
   const storageKey = `acordo-inline-draft::${empresa?.id ?? 'noemp'}::${perfil?.id ?? 'nouser'}::${isPaguePlay ? 'pp' : 'bp'}`;
@@ -614,7 +616,7 @@ export function AcordoNovoInline({
 
           const euTemLogica = isAtivoParaUsuario(
             perfil.id, perfil.setor_id ?? null,
-            (perfil as Perfil & { equipe_id?: string | null }).equipe_id ?? null,
+            equipePrincipal,
           );
 
           let opConflitoData: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null = null;

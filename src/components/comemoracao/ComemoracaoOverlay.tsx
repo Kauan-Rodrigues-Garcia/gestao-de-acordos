@@ -10,10 +10,11 @@
  *   • dá para silenciar, e a preferência fica no navegador de cada um;
  *   • uma comemoração por vez — duas sobrepostas seriam ilegíveis.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Volume2, VolumeX, PartyPopper, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   useComemoracoes, useComemoracaoNoAr, useParabens, useMinhasEquipes,
@@ -28,6 +29,7 @@ import { BaloesParabens } from './BaloesParabens';
 
 export function ComemoracaoOverlay() {
   const { perfil }  = useAuth();
+  const { todas: equipesDaPessoa } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
 
   const empresaId = empresa?.id ?? perfil?.empresa_id ?? null;
@@ -37,7 +39,12 @@ export function ComemoracaoOverlay() {
   const { comemoracoes, agoraCorrigido } = useComemoracoes(empresaId, !!usuarioId);
   // Inclui as equipes em que sou clone: quem trabalha em dois times comemora
   // com os dois.
-  const minhasEquipes = useMinhasEquipes(usuarioId, perfil?.equipe_id ?? null);
+  const minhasEquipesBase = useMinhasEquipes(usuarioId, perfil?.equipe_id ?? null);
+  // As que lidero entram também: comemoração da equipe é para o líder dela.
+  const minhasEquipes = useMemo(
+    () => [...new Set([...minhasEquipesBase, ...equipesDaPessoa])],
+    [minhasEquipesBase, equipesDaPessoa],
+  );
   const { atual, fechar } = useComemoracaoNoAr({
     comemoracoes,
     meuSetorId:   setorId,

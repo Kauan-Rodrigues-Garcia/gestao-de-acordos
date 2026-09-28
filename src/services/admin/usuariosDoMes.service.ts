@@ -91,6 +91,7 @@ interface LinhaPessoa {
 }
 interface LinhaSetor  { setor_id: string; nome: string; ativo: boolean | null; alternativo: boolean | null }
 interface LinhaEquipe { equipe_id: string; nome: string; setor_id: string | null }
+interface LinhaLider  { equipe_id: string; lider_id: string }
 
 /** Como está HOJE, para a comparação. Só o que decide uma tag. */
 interface HojeResumo {
@@ -133,7 +134,7 @@ export async function buscarUsuariosDoMes(
 ): Promise<RetratoUsuarios | null> {
   if (ehMesAtual(mes)) return null;
 
-  const [pessoas, setoresRet, equipesRet] = await Promise.all([
+  const [pessoas, setoresRet, equipesRet, lideresRet] = await Promise.all([
     tabelaSemTipo<LinhaPessoa>('composicao_mes')
       .select('operador_id, nome, usuario, email, cargo, foto_url, ativo, situacao, setor_id, equipe_id, equipe_nome')
       .eq('empresa_id', empresaId).eq('mes', mes),
@@ -142,6 +143,11 @@ export async function buscarUsuariosDoMes(
       .eq('empresa_id', empresaId).eq('mes', mes),
     tabelaSemTipo<LinhaEquipe>('composicao_mes_equipe')
       .select('equipe_id, nome, setor_id')
+      .eq('empresa_id', empresaId).eq('mes', mes),
+    // Quem liderava o quê naquele mês. O líder não está em `equipe_id` do
+    // retrato (é resíduo do cadastro), e sem isto aparecia «sem equipe».
+    tabelaSemTipo<LinhaLider>('composicao_mes_lider')
+      .select('equipe_id, lider_id')
       .eq('empresa_id', empresaId).eq('mes', mes),
   ]);
 
@@ -153,6 +159,12 @@ export async function buscarUsuariosDoMes(
   for (const s of setoresRet.data ?? []) nomeSetorDoMes.set(s.setor_id, s.nome);
   const nomeEquipeDoMes = new Map<string, string>();
   for (const e of equipesRet.data ?? []) nomeEquipeDoMes.set(e.equipe_id, e.nome);
+  const lideradasNoMes = new Map<string, string[]>();
+  for (const l of lideresRet.data ?? []) {
+    const nome = nomeEquipeDoMes.get(l.equipe_id);
+    if (!nome) continue;
+    lideradasNoMes.set(l.lider_id, [...(lideradasNoMes.get(l.lider_id) ?? []), nome]);
+  }
 
   const usuarios: UsuarioDoMes[] = (pessoas.data ?? []).map(p => {
     const agora = hoje.perfis.get(p.operador_id);
@@ -201,7 +213,9 @@ export async function buscarUsuariosDoMes(
       setor_id: p.setor_id,
       setor_nome: p.setor_id ? (nomeSetorDoMes.get(p.setor_id) ?? null) : null,
       equipe_id: p.equipe_id,
-      equipe_nome: p.equipe_nome ?? (p.equipe_id ? nomeEquipeDoMes.get(p.equipe_id) ?? null : null),
+      equipe_nome: p.equipe_nome
+        ?? (p.equipe_id ? nomeEquipeDoMes.get(p.equipe_id) ?? null : null)
+        ?? (lideradasNoMes.has(p.operador_id) ? `Lidera ${lideradasNoMes.get(p.operador_id)!.join(', ')}` : null),
       mudancas,
     };
   }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));

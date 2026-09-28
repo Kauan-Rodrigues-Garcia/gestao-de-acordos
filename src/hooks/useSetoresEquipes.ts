@@ -21,6 +21,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
+import { useEquipesDoPerfil } from './useEquipesDoPerfil';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { niveisLiberados, type NivelEscopo } from '@/lib/permissoes-escopo';
@@ -71,6 +72,7 @@ export interface SetoresEquipes {
 
 export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
   const { perfil }  = useAuth();
+  const { todas: equipesDaPessoa } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   /*
@@ -126,8 +128,10 @@ export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
   const cargo    = perfil?.perfil ?? null;
   const setorId  = perfil?.setor_id ?? null;
   const empresaId = empresa?.id ?? null;
-  const minhaEquipeId =
-    (perfil as (typeof perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null;
+  // As equipes por onde respondo — para líder, as que lidera (o cadastro dele
+  // é vazio). Ver `useEquipesDoPerfil`. Em texto, para a dependência ser
+  // primitiva (ver o comentário acima).
+  const chaveMinhasEquipes = equipesDaPessoa.join(',');
 
   const carregar = useCallback(async () => {
     if (!cargo || !empresaId) { setLoading(false); return; }
@@ -201,8 +205,8 @@ export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
        * `useAuth`, então `equipe_id` já está em mãos.
        */
       setMinhasEquipes(
-        podeEquipe && !podeTodasEquipes && minhaEquipeId
-          ? new Set([minhaEquipeId])
+        podeEquipe && !podeTodasEquipes && chaveMinhasEquipes
+          ? new Set(chaveMinhasEquipes.split(','))
           : new Set(),
       );
     } catch (err) {
@@ -211,7 +215,7 @@ export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
       setLoading(false);
     }
   }, [cargo, setorId, empresaId, podeTodosSetores, podeEquipe, podeTodasEquipes,
-      minhaEquipeId, mes]);
+      chaveMinhasEquipes, mes]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 

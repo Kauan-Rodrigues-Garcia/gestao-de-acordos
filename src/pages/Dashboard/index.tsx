@@ -5,6 +5,7 @@ import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useValorComEspera } from '@/hooks/useValorComEspera';
@@ -20,7 +21,6 @@ import {
 import { useMesGlobal } from '@/providers/MesProvider';
 import { cn } from '@/lib/utils';
 import { supabase, type Acordo } from '@/lib/supabase';
-import type { Perfil } from '@/lib/supabase';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
@@ -45,6 +45,7 @@ import { PPModals } from './PPModals';
 
 export default function Dashboard() {
   const { perfil } = useAuth();
+  const { principal: equipePrincipal, todas: minhasEquipes } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
@@ -86,8 +87,9 @@ export default function Dashboard() {
    * Declarado AQUI, e não junto do resto dos filtros: o efeito logo abaixo o lê
    * na lista de dependências, que é avaliada durante o render.
    */
-  const equipeDoPerfil =
-    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null;
+  // Líder: a equipe que ele lidera (o cadastro dele é vazio). Quem lidera
+  // várias abre na primeira delas. Ver `useEquipesDoPerfil`.
+  const equipeDoPerfil = equipePrincipal ?? minhasEquipes[0] ?? null;
 
   /*
    * Eu respondo por um GRUPO, ou só por mim?
@@ -277,7 +279,7 @@ export default function Dashboard() {
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
-    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+    equipePrincipal,
   );
   const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
     (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos'

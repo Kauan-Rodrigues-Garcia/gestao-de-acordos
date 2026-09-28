@@ -5,7 +5,7 @@
  * em `analitico/composicaoLiderEquipe.test.ts`. Aqui só a decisão.
  */
 import { describe, it, expect } from 'vitest';
-import { equipeUnicaPorLider, equipeQueCredita } from './equipeDoLider';
+import { equipeUnicaPorLider, equipeQueCredita, equipesDoPerfil } from './equipeDoLider';
 
 const MATHEUS = 'lider-matheus';
 const AMAURI  = 'lider-amauri';
@@ -88,5 +88,31 @@ describe('equipeQueCredita', () => {
   it('sem cadastro e sem liderança devolve null', () => {
     expect(equipeQueCredita('lider', null, null)).toBeNull();
     expect(equipeQueCredita(null, null, undefined)).toBeNull();
+  });
+});
+
+// A pergunta «qual é a minha equipe?» feita pelas telas (28/09/2026). Tem de
+// dizer o mesmo que fn_equipes_de_alcance / fn_equipe_principal no banco.
+describe('equipesDoPerfil', () => {
+  it('líder só com liderança (cadastro vazio — 33 dos 50 líderes) TEM equipe', () => {
+    expect(equipesDoPerfil('lider', null, [EQ_A])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [EQ_A] });
+  });
+  it('líder que lidera: o cadastro é resíduo e fica de fora (caso Maria Oliveira)', () => {
+    expect(equipesDoPerfil('lider', 'eq-antiga', [EQ_A])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [EQ_A] });
+  });
+  it('líder de várias: todas contam, e não há principal', () => {
+    const r = equipesDoPerfil('lider', null, [EQ_A, 'eq-b', EQ_A]);
+    expect(r.principal).toBeNull();
+    expect(r.todas).toEqual([EQ_A, 'eq-b']);
+  });
+  it('líder sem liderança fica com o cadastro', () => {
+    expect(equipesDoPerfil('lider', EQ_A, [])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [] });
+  });
+  it('membro: o cadastro manda, e a liderança soma', () => {
+    expect(equipesDoPerfil('elite', EQ_A, ['eq-b'])).toEqual({ principal: EQ_A, todas: ['eq-b', EQ_A], lideradas: ['eq-b'] });
+    expect(equipesDoPerfil('operador', EQ_A, [])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [] });
+  });
+  it('sem nada, nada', () => {
+    expect(equipesDoPerfil('operador', null, [])).toEqual({ principal: null, todas: [], lideradas: [] });
   });
 });

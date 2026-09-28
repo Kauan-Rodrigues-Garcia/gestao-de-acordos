@@ -43,6 +43,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
@@ -106,6 +107,7 @@ function CabecalhoGrupo({ grupo }: { grupo: GrupoPessoa }) {
 
 export default function SolicitacoesWhatsapp() {
   const { perfil }  = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const tenant      = useTenant();
@@ -340,7 +342,7 @@ export default function SolicitacoesWhatsapp() {
         // Congela o setor/equipe da abertura para o filtro do líder não mudar
         // quando o operador trocar de equipe depois.
         setorId:  setorDoPerfil,
-        equipeId: perfil?.equipe_id ?? null,
+        equipeId: equipePrincipal,
         codigoCliente: dados.codigoCliente,
         nomeCliente:   dados.nomeCliente,
         estadoUf:      dados.estadoUf,

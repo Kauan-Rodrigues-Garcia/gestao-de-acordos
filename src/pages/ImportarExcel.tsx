@@ -28,6 +28,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
 import {
@@ -161,6 +162,7 @@ function formatTipo(tipo: string): string {
 
 export default function ImportarExcel() {
   const { perfil }                      = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa }                     = useEmpresa();
   const { isPaguePlay }                 = useTenant();
   const navigate                        = useNavigate();
@@ -234,7 +236,7 @@ export default function ImportarExcel() {
         registros:             inputs,
         operadorAtualId:       perfil.id,
         operadorAtualSetorId:  perfil.setor_id  ?? null,
-        operadorAtualEquipeId: perfil.equipe_id ?? null,
+        operadorAtualEquipeId: equipePrincipal,
         configsDiretoExtra,
         duplicados,
         resolverDadosOperador: async (operadorId: string) => {
@@ -295,7 +297,7 @@ export default function ImportarExcel() {
         const temFuncaoExtra = resolverDiretoExtraAtivo({
           userId:       perfil?.id ?? '',
           userSetorId:  perfil?.setor_id  ?? null,
-          userEquipeId: perfil?.equipe_id ?? null,
+          userEquipeId: equipePrincipal,
           configs:      configsDiretoExtra,
         });
         if (extraIdx >= 0) {

@@ -31,6 +31,7 @@ import {
   BarChart2, RefreshCw, X, Users, ChevronLeft, ChevronRight, CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { useDesempenhoDia } from '@/hooks/useDesempenhoDia';
@@ -43,7 +44,6 @@ import {
 import { getTodayISO } from '@/lib/index';
 import { lerUnidade, gravarUnidade, type UnidadeValor } from '@/lib/unidadeValor';
 import { cn } from '@/lib/utils';
-import type { Perfil } from '@/lib/supabase';
 import { FaixaDinheiro } from './FaixaDinheiro';
 import { FaixaOperacao } from './FaixaOperacao';
 import { FaixaContexto } from './FaixaContexto';
@@ -62,6 +62,7 @@ function deslocarDia(iso: string, delta: number): string {
 
 export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const { perfil } = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { tags } = useEmpresaTags();
   const tenant = useTenant();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
@@ -76,7 +77,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const temLogicaDiretoExtra = tenant.isPaguePlay && isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
-    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+    equipePrincipal,
   );
 
   const dados = useDesempenhoDia({

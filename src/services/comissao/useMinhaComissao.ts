@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
@@ -65,6 +66,7 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
   const { ano, mes: mesNum } = partesDoMes(mes);
 
   const { perfil } = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const isPaguePlay = useTenant().isPaguePlay;
@@ -74,7 +76,8 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
   const empresaId = empresa?.id ?? null;
   const operadorId = perfil?.id ?? null;
   const setorId = perfil?.setor_id ?? null;
-  const equipeId = (perfil as { equipe_id?: string | null } | null)?.equipe_id ?? null;
+  // Para líder, a equipe que ele lidera — ver `useEquipesDoPerfil`.
+  const equipeId = equipePrincipal;
   const chave = `${empresaId ?? ''}|${operadorId ?? ''}|${mes}`;
 
   const configs = useConfigsComissao({ empresaId, ano, mes: mesNum, ativo });

@@ -16,10 +16,10 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { converterParaExtra } from '@/services/diretoExtraRpc';
-import type { Perfil } from '@/lib/supabase';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   coletarFatosConflitoNr, decidirConflitoNr, type DecisaoConflitoNr,
@@ -117,12 +117,15 @@ export function AcordoEditInline({
 }: AcordoEditInlineProps) {
   const { empresa } = useEmpresa();
   const { perfil }  = useAuth();
+  // A equipe que vale para a config de Direto/Extra — para líder, a que ele
+  // lidera, e não o cadastro vazio. Ver `useEquipesDoPerfil`.
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const registrarPixAoPagar = useRegistrarPixAoPagar();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
-    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+    equipePrincipal,
   );
   const [saving, setSaving] = useState(false);
 

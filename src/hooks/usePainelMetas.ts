@@ -36,6 +36,7 @@ import { criarAgrupador } from '@/lib/agrupador';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
@@ -241,6 +242,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { ano, mes: mesNum } = partesDoMes(mes);
 
   const { perfil }  = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { temPermissao } = useCargoPermissoes();
   const { empresa } = useEmpresa();
   const tenant = useTenant();
@@ -255,7 +257,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     ? (params.unidade ?? UNIDADE_PADRAO)
     : 'bruto';
 
-  const perfilEquipeId = (perfil as { equipe_id?: string | null } | null)?.equipe_id ?? null;
+  // Para líder, a equipe que ele lidera — ver `useEquipesDoPerfil`.
+  const perfilEquipeId = equipePrincipal;
 
   /**
    * O usuário enxerga gente além dele mesmo?

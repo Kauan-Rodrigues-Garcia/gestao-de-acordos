@@ -33,6 +33,7 @@ import { PREFIXO_METAS, VALIDADE_METAS_MS } from '@/services/metas/metasCache';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
+import { useEquipesDoPerfil } from './useEquipesDoPerfil';
 import { useEmpresa } from './useEmpresa';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
@@ -238,6 +239,7 @@ export function useAnalytics(
   opcoes: OpcoesAnalytics,
 ): AnalyticsData {
   const { perfil } = useAuth();
+  const equipesDaPessoa = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { niveis, podeTodasEquipes = true } = opcoes;
   const ativo = opcoes.ativo !== false;
@@ -467,9 +469,6 @@ export function useAnalytics(
        */
       let operadoresDoAlcanceEquipe: string[] | null = null;
       if (podeEquipe && !podeSetor && !podeTodosSetores && !operadorFiltro && !equipeFiltro) {
-        const minhaEquipe =
-          (perfil as (typeof perfil & { equipe_id?: string | null }))?.equipe_id ?? null;
-
         let equipesAlvo: string[];
         if (podeTodasEquipes && perfil.setor_id) {
           equipesAlvo = composicao.equipes
@@ -484,8 +483,13 @@ export function useAnalytics(
           // equipe depois continua vendo, em agosto, o que agosto era.
           equipesAlvo = (() => {
             const noMes = composicao.operadorEquipeMap[perfil.id]?.equipe_id ?? null;
-            const alvo = noMes ?? minhaEquipe;
-            return alvo ? [alvo] : [];
+            // Líder: as equipes que lidera, que não estão no cadastro dele (vazio
+            // em 33 dos 50 líderes) — ver `useEquipesDoPerfil` e
+            // `fn_equipes_de_alcance`, que recorta o mesmo no banco.
+            if (equipesDaPessoa.lideradas.length > 0) {
+              return [...new Set([...equipesDaPessoa.lideradas, ...(noMes ? [noMes] : [])])];
+            }
+            return noMes ? [noMes] : equipesDaPessoa.todas;
           })();
         }
 
@@ -648,8 +652,8 @@ export function useAnalytics(
            * degrau abaixo. A referência certa é a equipe da pessoa; sem equipe
            * cadastrada não há meta principal, e o painel mostra o card sem %.
            */
-          const minhaEquipe =
-            (perfil as (typeof perfil & { equipe_id?: string | null }))?.equipe_id ?? null;
+          // Para líder, a equipe que ele lidera — ver `useEquipesDoPerfil`.
+          const minhaEquipe = equipesDaPessoa.principal;
           if (minhaEquipe) {
             tipoMeta = 'equipe';
             refId    = minhaEquipe;
@@ -781,7 +785,8 @@ export function useAnalytics(
       }
     }
   }, [perfil, empresa, mes, ano, mesRef, setorFiltro, equipeFiltro, operadorFiltro,
-      podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache]);
+      podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache,
+      equipesDaPessoa]);
 
   /*
    * Recorte novo — outro mês, outro filtro, outra empresa.

@@ -52,6 +52,7 @@ import { TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
+import { equipesDoPerfil } from '@/services/equipes/equipeDoLider';
 
 // Lazy: a aba Comemorações arrasta o editor de layout, o catálogo de sons e a
 // biblioteca de mídia. Enquanto era rota própria, só baixava para quem a abria;
@@ -333,6 +334,12 @@ export default function AdminUsuarios() {
    * causa de uma coluna. `equipes` é tabela pequena.
    */
   const [equipes, setEquipes] = useState<{ id: string; nome: string }[]>([]);
+  /**
+   * Quem lidera o quê (`equipe_lideres`). O líder não está em
+   * `perfis.equipe_id` — e a coluna lia só dali, então todo líder aparecia sem
+   * equipe (queixa de 28/09/2026). Ver `equipesDoPerfil`.
+   */
+  const [lideradasPor, setLideradasPor] = useState<Map<string, string[]>>(() => new Map());
 
   const alternarSetor = (sid: string) => setSetoresRecolhidos(atual => {
     const proximo = new Set(atual);
@@ -954,6 +961,17 @@ export default function AdminUsuarios() {
         if (error) { console.warn('[AdminUsuarios] equipes:', error.message); setEquipes([]); return; }
         setEquipes((data as { id: string; nome: string }[]) ?? []);
       });
+    void supabase.from('equipe_lideres').select('lider_id, equipe_id').eq('empresa_id', empresaId)
+      .then(({ data, error }) => {
+        if (cancel) return;
+        if (error) { console.warn('[AdminUsuarios] equipe_lideres:', error.message); setLideradasPor(new Map()); return; }
+        const mapa = new Map<string, string[]>();
+        for (const v of (data as { lider_id: string; equipe_id: string }[]) ?? []) {
+          if (!v.lider_id || !v.equipe_id) continue;
+          mapa.set(v.lider_id, [...(mapa.get(v.lider_id) ?? []), v.equipe_id]);
+        }
+        setLideradasPor(mapa);
+      });
     return () => { cancel = true; };
   }, [empresaAtual?.id]);
 
@@ -1078,8 +1096,22 @@ export default function AdminUsuarios() {
   /** Os perfis por trás dos ids marcados — o que vai para a transferência. */
   const perfisSelecionados = usuariosFiltrados.filter(u => selecionados.has(u.id));
 
-  const nomeEquipe = (u: Perfil) =>
-    (u.equipe_id ? equipes.find(e => e.id === u.equipe_id)?.nome : null) ?? null;
+  /**
+   * «Lidera Equipe X», «Equipe Y», ou os dois — pela mesma regra do resto do
+   * sistema (`equipesDoPerfil`): para `lider` que lidera alguma, o cadastro é
+   * resíduo e não aparece.
+   */
+  const nomeEquipe = (u: Perfil) => {
+    const nome = (id: string) => equipes.find(e => e.id === id)?.nome ?? null;
+    const { todas, lideradas } = equipesDoPerfil(u.perfil, u.equipe_id ?? null, lideradasPor.get(u.id) ?? []);
+    const nomesLideradas = lideradas.map(nome).filter((n): n is string => !!n);
+    const membroDe = todas.filter(id => !lideradas.includes(id)).map(nome).filter((n): n is string => !!n);
+    const partes = [
+      ...membroDe,
+      ...(nomesLideradas.length ? [`Lidera ${nomesLideradas.join(', ')}`] : []),
+    ];
+    return partes.length ? partes.join(' · ') : null;
+  };
 
   return (
     <div className="h-full flex flex-col">

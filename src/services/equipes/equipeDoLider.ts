@@ -105,3 +105,44 @@ export function equipeQueCredita(
     ? (lideranca ?? cadastro ?? null)
     : (cadastro ?? lideranca ?? null);
 }
+
+
+/**
+ * As equipes de uma pessoa, do jeito que o resto do sistema deve perguntar.
+ *
+ * ## Por que existe (28/09/2026)
+ *
+ * «Os líderes do comercial estão configurados numa equipe, e na lista de
+ * usuários aparece que a liderança não está em nenhuma.» O líder mora em
+ * `equipe_lideres`; o `perfis.equipe_id` dele é resíduo, e em 33 dos 50
+ * líderes ativos está vazio. Toda tela que perguntava «qual é a minha equipe?»
+ * ao cadastro respondia «nenhuma» para eles.
+ *
+ * É a mesma regra das funções do banco `fn_equipes_de_alcance` e
+ * `fn_equipe_principal` (migration 20260928210000) — se discordarem, a tela
+ * mostra uma equipe e o banco recorta outra.
+ *
+ *   principal — UMA equipe, para o que só aceita uma (config de Direto/Extra,
+ *               comissão, meta da equipe, carimbo de solicitação). Ver
+ *               `equipeQueCredita`: quem lidera várias não tem principal.
+ *   todas     — as equipes por onde a pessoa responde: as que lidera, mais a
+ *               do cadastro — exceto para `lider` que já lidera alguma, em
+ *               quem o cadastro é resíduo (o caso Maria Oliveira, acima).
+ */
+export interface EquipesDoPerfil {
+  principal: string | null;
+  todas: string[];
+  lideradas: string[];
+}
+
+export function equipesDoPerfil(
+  perfil: string | null | undefined,
+  cadastro: string | null | undefined,
+  lideradas: ReadonlyArray<string>,
+): EquipesDoPerfil {
+  const unicas = [...new Set(lideradas.filter(Boolean))];
+  const principal = equipeQueCredita(perfil, cadastro, unicas.length === 1 ? unicas[0] : null);
+  const cadastroConta = !!cadastro && (perfil !== CARGO_DE_LIDERANCA || unicas.length === 0);
+  const todas = cadastroConta && !unicas.includes(cadastro!) ? [...unicas, cadastro!] : unicas;
+  return { principal, todas, lideradas: unicas };
+}

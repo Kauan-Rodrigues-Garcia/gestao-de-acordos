@@ -62,10 +62,19 @@ import { limparCacheCurto } from '@/lib/cacheCurto';
  */
 const RELEITURA_PERFIL_NO_FOCO_MS = 5 * 60 * 1000;
 
+/** Identidade estável para «não lidero nada» — evita render à toa. */
+const SEM_EQUIPES: string[] = [];
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   perfil: Perfil | null;
+  /**
+   * As equipes que a pessoa lidera (`equipe_lideres`). O líder mora ali, e não
+   * em `perfis.equipe_id` — leia a equipe de alguém por `useEquipesDoPerfil`,
+   * nunca pelo cadastro sozinho. Ver `equipesDoPerfil`.
+   */
+  equipesLideradas: string[];
   empresa: Empresa | null;
   loading: boolean;
   perfilLoading: boolean;
@@ -81,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]               = useState<User | null>(null);
   const [session, setSession]         = useState<Session | null>(null);
   const [perfil, setPerfil]           = useState<Perfil | null>(null);
+  const [equipesLideradas, setEquipesLideradas] = useState<string[]>(SEM_EQUIPES);
   const [empresa, setEmpresa]         = useState<Empresa | null>(null);
   const [loading, setLoading]         = useState(true);
   const [perfilLoading, setPerfilLoading] = useState(false);
@@ -516,8 +526,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [perfil?.id, perfil?.usuario, perfil?.perfil]);
 
+  /*
+   * As equipes que eu lidero, relidas junto com o perfil (o objeto só muda
+   * quando o conteúdo muda — ver `aplicarPerfil`, e é na releitura do perfil,
+   * no foco da aba, que uma liderança nova passa a valer).
+   *
+   * Falha de leitura deixa a lista vazia: a pessoa segue com a equipe do
+   * cadastro, que é o comportamento de antes.
+   */
+  useEffect(() => {
+    const id = perfil?.id;
+    if (!id) { setEquipesLideradas(SEM_EQUIPES); return; }
+    let ativo = true;
+    void supabase.from('equipe_lideres').select('equipe_id').eq('lider_id', id)
+      .then(({ data, error }) => {
+        if (!ativo) return;
+        if (error) { console.warn('[useAuth] equipes lideradas:', error.message); return; }
+        const ids = [...new Set(((data ?? []) as { equipe_id: string | null }[])
+          .map(l => l.equipe_id).filter((e): e is string => !!e))].sort();
+        setEquipesLideradas(atual => (atual.length === ids.length && atual.every((e, i) => e === ids[i]) ? atual : ids));
+      });
+    return () => { ativo = false; };
+  }, [perfil]);
+
   const value: AuthContextType = {
-    user, session, perfil, empresa, loading, perfilLoading, authError, signIn, signOut, refreshPerfil,
+    user, session, perfil, equipesLideradas, empresa, loading, perfilLoading, authError,
+    signIn, signOut, refreshPerfil,
   };
 
   return (

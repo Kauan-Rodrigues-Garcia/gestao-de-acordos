@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useValorComEspera } from '@/hooks/useValorComEspera';
 import { useAuth } from '@/hooks/useAuth';
+import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
@@ -36,7 +37,6 @@ import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
-import type { Perfil } from '@/lib/supabase';
 import { PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
 import { useMensagensWhatsapp } from '@/hooks/useMensagensWhatsapp';
 import {
@@ -62,6 +62,7 @@ const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
 
 export default function Acordos() {
   const { perfil } = useAuth();
+  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const registrarPixAoPagar = useRegistrarPixAoPagar();
@@ -179,7 +180,7 @@ export default function Acordos() {
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
-    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+    equipePrincipal,
   );
   const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
     (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos',
