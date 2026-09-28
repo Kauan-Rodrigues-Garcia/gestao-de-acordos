@@ -102,13 +102,15 @@ describe('o antes e o depois', () => {
     expect(LISO).toContain('r.restaurado_em IS NULL');
   });
 
-  it('o depois agrega por NR + data e toma o dono da maior linha', () => {
+  it('o depois casa na MESMA chave do snapshot: NR + data + forma', () => {
     /*
-     * O mesmo NR na mesma data pode ter mais de uma linha (formas diferentes).
-     * O desempate por operador_id existe para a resposta não variar entre duas
-     * chamadas iguais.
+     * A chave de analitico_recebimentos e (empresa, codigo, data, forma,
+     * operador_usuario). Agrupar so por NR + data somava as formas de um mesmo
+     * pagamento contra o valor de UMA linha de snapshot — medido em produção
+     * em 29/09/2026, toda conta de valor saía errada por isso.
      */
-    expect(LISO).toContain('GROUP BY ar.codigo, ar.data_pagamento');
+    expect(LISO).toContain('GROUP BY ar.codigo, ar.data_pagamento, ar.forma_pagamento');
+    expect(LISO).toContain("r.conteudo->>'forma_pagamento'");
     expect(LISO).toMatch(
       /ARRAY_AGG\(ar\.operador_id ORDER BY ar\.valor_recebido DESC, ar\.operador_id\)\)\[1\]/,
     );
@@ -117,14 +119,46 @@ describe('o antes e o depois', () => {
   it('o LEFT JOIN é o que faz «sumiu» ser representável', () => {
     // Sem linha em `depois`, valor_depois vem NULL — e o TS lê isso como
     // 'removido'. Um INNER JOIN esconderia justamente o caso mais grave.
-    expect(LISO).toMatch(/LEFT JOIN depois d ON d\.codigo = a\.codigo AND d\.data_pagamento = a\.data_pagamento/);
+    expect(LISO).toMatch(
+      /LEFT JOIN depois d ON d\.codigo = a\.codigo AND d\.data_pagamento = a\.data_pagamento AND d\.forma IS NOT DISTINCT FROM a\.forma/,
+    );
   });
 
   it('um NR mexido várias vezes aparece uma vez, na mudança mais recente', () => {
     expect(LISO).toMatch(
-      /ROW_NUMBER\(\) OVER \( PARTITION BY a\.codigo, a\.data_pagamento ORDER BY a\.removido_em DESC\)/,
+      /ROW_NUMBER\(\) OVER \( PARTITION BY a\.codigo, a\.data_pagamento, a\.forma ORDER BY a\.removido_em DESC\)/,
     );
     expect(LISO).toContain('WHERE p.ordem = 1');
+  });
+});
+
+describe('o 58 nao entra — e e isto que separa noticia de ruido', () => {
+  /*
+   * O 58 e previa por contrato; o 59 e que manda. Promover uma linha do 58 ao
+   * 59, ou descarta-la quando o 59 nunca confirma (a guarda de dois dias da
+   * 20260928200000), e o pipeline funcionando — nao «mexeram no meu
+   * recebimento».
+   *
+   * Medido em produção no mes corrente, 29/09/2026:
+   *
+   *                       saindo do 58     ja definitivo
+   *     removido ............. 689 ............. 12
+   *     transferido .......... 739 ............. 91
+   *     valor alterado ...... 2804 ............ 105
+   *
+   * Sem o corte sao 4.232 avisos por mes, 96% deles rotina, e ninguem le os
+   * 5% que importam. Este teste existe para o corte nao cair sem querer: se
+   * cair, o card volta a ser um firehose e nada quebra avisando.
+   */
+  it('corta a linha cuja procedencia era relatorio_58', () => {
+    expect(LISO).toContain("COALESCE(r.conteudo->>'procedencia', '') <> 'relatorio_58'");
+  });
+
+  it('o corte usa COALESCE — snapshot antigo sem procedencia nao some', () => {
+    // `conteudo` e jsonb de uma linha que pode ser anterior a coluna
+    // `procedencia` (adicionada na 20260914010002). Sem o COALESCE, `null <>
+    // 'relatorio_58'` daria NULL e a linha seria descartada em silencio.
+    expect(LISO).not.toMatch(/r\.conteudo->>'procedencia' <> 'relatorio_58'/);
   });
 });
 

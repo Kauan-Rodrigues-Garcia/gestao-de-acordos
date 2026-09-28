@@ -37,12 +37,29 @@
 -- equipes de alcance + a própria linha), inclusive a correção de 28/09/2026
 -- que faz o líder ter equipe (`fn_equipes_de_alcance`).
 --
--- ## O «depois» é por NR + data, agregado
+-- ## O «depois» casa por NR + data + FORMA
 --
--- O mesmo NR na mesma data pode ter mais de uma linha (formas diferentes). O
--- depois soma o valor das linhas de hoje e toma como dono o da linha de maior
--- valor — desempate por `operador_id` para a resposta não variar entre
--- chamadas. Quando não sobra nenhuma linha, o NR sumiu: `valor_depois` nulo.
+-- A chave de `analitico_recebimentos` é (empresa, codigo, data, forma,
+-- operador_usuario). Agrupar só por NR + data somava as formas de um mesmo
+-- pagamento contra o valor de UMA linha de snapshot, e toda conta de valor
+-- saía errada. Dentro da chave o dono é o da linha de maior valor, com
+-- desempate por `operador_id` para a resposta não variar entre chamadas.
+-- Quando não sobra nenhuma linha, o NR sumiu: `valor_depois` nulo.
+--
+-- ## O 58 não entra — e é isto que separa notícia de ruído
+--
+-- O 58 é prévia por contrato: o 59 é que manda. Promover uma linha do 58 ao 59
+-- é o pipeline funcionando, e descartá-la quando o 59 nunca confirma é a
+-- guarda de dois dias da 20260928200000. Nenhum dos dois é «mexeram no meu
+-- recebimento». Medido no mês corrente em 29/09/2026:
+--
+--                        saindo do 58      já definitivo
+--     removido ............. 689 ................ 12
+--     transferido .......... 739 ................ 91
+--     valor alterado ...... 2804 ............... 105
+--
+-- Sem o corte, 4.232 avisos por mês, 96% deles rotina — e ninguém lê os 5% que
+-- importam. Com ele, 208 no mês: um histórico que dá para conferir.
 --
 -- ## O que a função NÃO filtra
 --
@@ -133,6 +150,7 @@ BEGIN
            r.lote_id,
            r.removido_em,
            r.conteudo->>'nome_cliente'                       AS nome_cliente,
+           r.conteudo->>'forma_pagamento'                    AS forma,
            NULLIF(r.conteudo->>'operador_id', '')::UUID      AS operador_id,
            COALESCE((r.conteudo->>'valor_recebido')::NUMERIC, 0) AS valor,
            NULLIF(r.conteudo->>'importado_em', '')::TIMESTAMPTZ  AS desde
@@ -143,17 +161,33 @@ BEGIN
        AND r.restaurado_em IS NULL
        AND r.codigo IS NOT NULL
        AND r.data_pagamento IS NOT NULL
+       -- O 58 é PRÉVIA, por contrato. Promovê-lo ao 59 (ou descartá-lo quando
+       -- o 59 nunca confirma) é o pipeline funcionando, não alguém mexendo no
+       -- recebimento de ninguém. Medido em 29/09/2026, no mês corrente:
+       --
+       --                      saindo do 58     já definitivo
+       --   removido .............. 689 .............. 12
+       --   transferido ........... 739 .............. 91
+       --   valor alterado ....... 2804 ............. 105
+       --
+       -- Sem este corte o card entrega 4.232 avisos por mês, 96% deles rotina,
+       -- e ninguém lê o 5% que importa. Com ele, 208 — um histórico.
+       AND COALESCE(r.conteudo->>'procedencia', '') <> 'relatorio_58'
   ),
-  -- O retrato de agora, por NR + data. O dono é o da linha de maior valor.
+  -- O retrato de agora, na MESMA chave do snapshot: NR + data + forma. A chave
+  -- de `analitico_recebimentos` inclui a forma, e agrupar só por NR + data
+  -- somava as formas de um mesmo pagamento contra o valor de uma linha só —
+  -- toda conta de valor saía errada.
   depois AS (
     SELECT ar.codigo,
            ar.data_pagamento,
+           ar.forma_pagamento AS forma,
            SUM(ar.valor_recebido) AS valor,
            (ARRAY_AGG(ar.operador_id ORDER BY ar.valor_recebido DESC, ar.operador_id))[1] AS operador_id
       FROM public.analitico_recebimentos ar
      WHERE ar.empresa_id     = p_empresa_id
        AND ar.mes_referencia = v_mes
-     GROUP BY ar.codigo, ar.data_pagamento
+     GROUP BY ar.codigo, ar.data_pagamento, ar.forma_pagamento
   ),
   par AS (
     SELECT a.codigo, a.nome_cliente, a.data_pagamento, a.lote_id,
@@ -162,11 +196,13 @@ BEGIN
            -- Um NR pode ter sido mexido várias vezes no mês; a tela mostra a
            -- mais recente de cada, não a história inteira de cada um.
            ROW_NUMBER() OVER (
-             PARTITION BY a.codigo, a.data_pagamento
+             PARTITION BY a.codigo, a.data_pagamento, a.forma
              ORDER BY a.removido_em DESC) AS ordem
       FROM antes a
       LEFT JOIN depois d
-        ON d.codigo = a.codigo AND d.data_pagamento = a.data_pagamento
+        ON d.codigo = a.codigo
+       AND d.data_pagamento = a.data_pagamento
+       AND d.forma IS NOT DISTINCT FROM a.forma
   )
   SELECT p.codigo,
          p.nome_cliente,
