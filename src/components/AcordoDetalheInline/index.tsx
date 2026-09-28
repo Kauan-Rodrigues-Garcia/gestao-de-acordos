@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock,
-  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus,
+  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus, CalendarClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -33,6 +33,10 @@ import {
   calcularParcelas, foiUsadoQuarentaPct, valorDemaisParcelas, calcularParcelasComEntrada,
 } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
+import {
+  podeReagendar, chavesExistentes, rotuloReagendar,
+  ehParcelaDuplicada, avisoParcelaJaAgendada,
+} from '@/services/reagendamento/reagendamento';
 import { datasDoLote } from '@/lib/vencimentos';
 import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
@@ -118,6 +122,11 @@ export function AcordoDetalheInline({
   const podeAdicionarParcela = !isPaguePlay && !recorrente &&
     (perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil));
 
+  // Reagendar a próxima parcela vale nos dois tenants, com a mesma régua de
+  // quem: o dono do acordo ou quem tem visão ampla.
+  const podeMexerNasParcelas =
+    perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil);
+
   // "Link do Acordo" é conceito PaguePlay (observacoes = [ESTADO]+link). Na
   // BookPlay observacoes é texto livre e extractLinkAcordo devolveria o texto
   // inteiro, duplicando o bloco de Observações como "Link do Acordo".
@@ -177,10 +186,9 @@ export function AcordoDetalheInline({
       // Reagenda a próxima parcela de acordos parcelados — vale para os dois
       // tenants (PaguePlay e BookPlay usam a mesma lógica em handleReagendar).
       // Se a próxima parcela já existe (adicionada manualmente), não reabre.
-      const proximaJaExiste = registrosReais.some(
-        r => (r.numero_parcela ?? 1) === (p.numero_parcela ?? 1) + 1,
-      );
-      if (deveExibirParcelas && (p.numero_parcela ?? 1) < totalParcelas && !proximaJaExiste) {
+      // Mesma regra do botão de calendário (`services/reagendamento`): a
+      // decisão é por PARCELA e leva em conta a que já existe no grupo.
+      if (podeReagendar(p, isPaguePlay, chavesExistentes(registrosReais)).pode) {
         setReagendarParcela(parcelaAtualizada);
       }
     }
@@ -205,7 +213,7 @@ export function AcordoDetalheInline({
           .eq('numero_parcela', proximaNumero)
           .maybeSingle();
         if (jaExiste) {
-          toast.info(`Parcela ${proximaNumero}/${totalParcelas} já foi reagendada.`);
+          toast.info(avisoParcelaJaAgendada(proximaNumero, totalParcelas));
           setReagendarParcela(null);
           return;
         }
@@ -261,7 +269,14 @@ export function AcordoDetalheInline({
           .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc, valor: valorI })
           .select('*')
           .single();
-        if (errIns) { toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return; }
+        if (errIns) {
+          // Ver nota igual no Dashboard: a trava do banco chegou na frente.
+          if (ehParcelaDuplicada(errIns)) {
+            toast.info(avisoParcelaJaAgendada(numero, totalParcelas));
+            setReagendarParcela(null); return;
+          }
+          toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return;
+        }
         novasParcelas.push(novo as Acordo);
       }
 
@@ -814,22 +829,43 @@ export function AcordoDetalheInline({
                                       </span>
                                     )}
                                   </td>
+                                  {/* A coluna "Agendada / Não agendada" era só um rótulo, e
+                                      só aparecia na parcela PAGA. Agora o "Não agendada" é o
+                                      próprio botão de reagendar: era esta a tela em que dava
+                                      para ver que faltava agendar sem ter como fazê-lo. A
+                                      régua é a mesma dos outros dois caminhos. */}
                                   <td className="px-3 py-2.5 text-center">
-                                    {index >= totalParcelas ? (
-                                      <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>
-                                    ) : real && real.status === 'pago' ? (
-                                      linhas[index]?.real ? (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
-                                          <CheckCircle2 className="w-2.5 h-2.5" /> Agendada
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/30">
-                                          <Clock className="w-2.5 h-2.5" /> Não agendada
-                                        </span>
-                                      )
-                                    ) : (
-                                      <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>
-                                    )}
+                                    {(() => {
+                                      if (!real || index >= totalParcelas) {
+                                        return <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>;
+                                      }
+                                      if (linhas[index]?.real) {
+                                        return (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                                            <CheckCircle2 className="w-2.5 h-2.5" /> Agendada
+                                          </span>
+                                        );
+                                      }
+                                      const d = podeReagendar(real, isPaguePlay, chavesExistentes(registrosReais));
+                                      if (!d.pode || !podeMexerNasParcelas) {
+                                        return (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/30">
+                                            <Clock className="w-2.5 h-2.5" /> Não agendada
+                                          </span>
+                                        );
+                                      }
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => setReagendarParcela(real)}
+                                          title={rotuloReagendar(d)}
+                                          aria-label={`${rotuloReagendar(d)} de ${acordoLocal.nome_cliente || acordoLocal.instituicao || acordoLocal.nr_cliente}`}
+                                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/30 hover:bg-warning/20 hover:border-warning/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning/50 transition-colors"
+                                        >
+                                          <CalendarClock className="w-2.5 h-2.5" /> Agendar
+                                        </button>
+                                      );
+                                    })()}
                                   </td>
                                 </tr>
                               );

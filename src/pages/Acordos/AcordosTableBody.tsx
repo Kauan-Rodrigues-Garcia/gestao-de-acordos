@@ -20,9 +20,10 @@ import { Fragment } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle, MessageSquare, Edit, Trash2,
-  MapPin, Link2, FileX, Plus, X,
+  MapPin, Link2, FileX, Plus, X, CalendarClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { podeReagendar, rotuloReagendar } from '@/services/reagendamento/reagendamento';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, isAtrasado,
@@ -79,6 +80,9 @@ export interface AcordosTableBodyProps {
   setEditandoInlineId: (id: string | null) => void;
   setDetalheInlineId: (id: string | null) => void;
   marcarComoPago: (a: Acordo) => void;
+  /** Chaves `grupo#numero` das parcelas que já existem (useParcelasExistentes). */
+  parcelasExistentes: ReadonlySet<string>;
+  setReagendarAcordo: (a: Acordo | null) => void;
   enviarUmWhatsapp: (a: Acordo) => void;
   setConfirmandoExclusao: (a: Acordo | null) => void;
   limparFiltros: () => void;
@@ -126,7 +130,8 @@ export function AcordosTableBody({
   selecionarTodos, toggleSelecionado, setNovoInlineAberto,
   addAcordo, removeAcordo, patchAcordo,
   setEditandoInlineId, setDetalheInlineId,
-  marcarComoPago, enviarUmWhatsapp, setConfirmandoExclusao,
+  marcarComoPago, parcelasExistentes, setReagendarAcordo,
+  enviarUmWhatsapp, setConfirmandoExclusao,
   limparFiltros,
 }: AcordosTableBodyProps) {
   const grupos = agruparAcordosPorDia<AcordoComVinculo>(acordosParaExibir, acordoTemCpf);
@@ -288,6 +293,24 @@ export function AcordosTableBody({
                   <CheckCircle className="w-4 h-4" />
                 </Button>
               )}
+              {/* O botão de reagendar faltava nesta tabela: só a do Dashboard o
+                  tinha. Quem fechava o modal que abre ao marcar pago ficava sem
+                  porta para agendar a próxima parcela daqui. Mesma regra dos
+                  outros dois caminhos (`services/reagendamento`). */}
+              {podeEditar && (() => {
+                const d = podeReagendar(a, isPP, parcelasExistentes);
+                if (!d.pode) return null;
+                return (
+                  <Button
+                    variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
+                    title={rotuloReagendar(d)}
+                    aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
+                    onClick={() => setReagendarAcordo(a)}
+                  >
+                    <CalendarClock className="w-4 h-4" />
+                  </Button>
+                );
+              })()}
               <Button
                 variant="ghost" size="icon"
                 className={cn(

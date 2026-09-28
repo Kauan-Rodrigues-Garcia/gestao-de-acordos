@@ -21,7 +21,10 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { valorDemaisParcelas } from '@/lib/money';
-import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
+import {
+  podeReagendar, ehParcelaDuplicada, avisoParcelaJaAgendada,
+} from '@/services/reagendamento/reagendamento';
+import { useParcelasExistentes } from '@/hooks/useParcelasExistentes';
 import { toast } from 'sonner';
 import { formatDate, getTodayISO } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
@@ -329,6 +332,10 @@ export default function Acordos() {
     perPage:      PER_PAGE,
   });
 
+  // Quais parcelas de cada grupo já existem — é o que decide o botão de
+  // reagendar e o modal que abre ao marcar pago. Ver `useParcelasExistentes`.
+  const parcelasExistentes = useParcelasExistentes(acordos, empresa?.id);
+
   /*
    * As opções do filtro de tag saem do MESMO escopo da lista — empresa,
    * operador, equipe e o recorte de mês da BookPlay —, mas sem busca, status,
@@ -505,14 +512,17 @@ export default function Acordos() {
       // Parcelado (incremental): se ainda falta criar a próxima parcela,
       // abre o modal de reagendamento para confirmar data + valor.
       // Recorrente não entra aqui: `isTipoParcelado` não o conta.
+      // `isTipoParcelado(a.tipo, false)` morava aqui: o `false` fixo mandava
+      // usar a lista da BookPlay nos dois tenants, e ela tem 'cartao' — o
+      // cartão à vista da PaguePlay abria o modal de reagendar sem ser
+      // parcelado. A regra agora é a mesma dos outros caminhos.
       const numParcela = a.numero_parcela ?? 1;
-      const totalP     = a.parcelas ?? 1;
       const empId      = empresa?.id;
-      if (empId && isTipoParcelado(a.tipo, false) && numParcela < totalP && a.acordo_grupo_id) {
+      if (empId && podeReagendar(a, isPP, parcelasExistentes).pode) {
         const { data: proxima } = await supabase
           .from('acordos').select('id')
           .eq('empresa_id', empId)
-          .eq('acordo_grupo_id', a.acordo_grupo_id)
+          .eq('acordo_grupo_id', a.acordo_grupo_id!)
           .eq('numero_parcela', numParcela + 1)
           .maybeSingle();
         if (!proxima) setReagendarAcordo({ ...a, status: 'pago' });
@@ -543,7 +553,7 @@ export default function Acordos() {
           .eq('numero_parcela', proximaNumero)
           .maybeSingle();
         if (jaExiste) {
-          toast.info(`Parcela ${proximaNumero}/${totalP} já foi reagendada.`);
+          toast.info(avisoParcelaJaAgendada(proximaNumero, totalP));
           setReagendarAcordo(null);
           return;
         }
@@ -571,7 +581,14 @@ export default function Acordos() {
         vencimento:            params.novoVencimento,
       }).select('*, perfis(id, nome, email, perfil, setor_id)').single();
 
-      if (error) { toast.error(`Erro ao criar parcela ${proximaNumero}: ${error.message}`); return; }
+      if (error) {
+        // Ver nota igual no Dashboard: a trava do banco chegou na frente.
+        if (ehParcelaDuplicada(error)) {
+          toast.info(avisoParcelaJaAgendada(proximaNumero, totalP));
+          setReagendarAcordo(null); return;
+        }
+        toast.error(`Erro ao criar parcela ${proximaNumero}: ${error.message}`); return;
+      }
       addAcordo(novo as Acordo);
       setReagendarAcordo(null);
       toast.success(`Parcela ${proximaNumero}/${totalP} agendada para ${formatDate(params.novoVencimento)}!`);
@@ -978,6 +995,8 @@ export default function Acordos() {
                     setEditandoInlineId={setEditandoInlineId}
                     setDetalheInlineId={setDetalheInlineId}
                     marcarComoPago={marcarComoPago}
+                    parcelasExistentes={parcelasExistentes}
+                    setReagendarAcordo={setReagendarAcordo}
                     enviarUmWhatsapp={enviarUmWhatsapp}
                     setConfirmandoExclusao={setConfirmandoExclusao}
                     limparFiltros={limparFiltros}

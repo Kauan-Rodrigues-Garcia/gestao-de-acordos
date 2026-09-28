@@ -31,7 +31,8 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { LinhaDoDiaAcordos, SetaDetalhe } from '@/components/AcordosDoDia';
 import type { Acordo } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
-import { ensureAbsoluteUrl, TIPOS_PARCELADOS_PP } from './helpers';
+import { ensureAbsoluteUrl } from './helpers';
+import { podeReagendar, rotuloReagendar } from '@/services/reagendamento/reagendamento';
 
 interface Tag { id: string; nome: string; cor: string; }
 
@@ -77,7 +78,8 @@ interface PPTableBodyProps {
   toggleSelecionado: (id: string) => void;
   atualizandoStatus: string | null;
   marcarComoPago: (a: AcordoComVinculo) => void;
-  gruposJaReagendados: Set<string>;
+  /** Chaves `grupo#numero` das parcelas que já existem (useParcelasExistentes). */
+  parcelasExistentes: ReadonlySet<string>;
   setReagendarAcordo: (a: AcordoComVinculo | null) => void;
   excluindoId: string | null;
   setConfirmandoExclusao: (a: Acordo | null) => void;
@@ -98,7 +100,7 @@ export function PPTableBody({
   highlightedId, hoje,
   selecionados, toggleSelecionado,
   atualizandoStatus, marcarComoPago,
-  gruposJaReagendados, setReagendarAcordo,
+  parcelasExistentes, setReagendarAcordo,
   excluindoId, setConfirmandoExclusao,
   empresaTags, operadoresMap,
   temFiltros, limparFiltros,
@@ -226,16 +228,23 @@ export function PPTableBody({
                   <CheckCircle className="w-4 h-4" />
                 </Button>
               )}
-              {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && !gruposJaReagendados.has(a.acordo_grupo_id ?? '') && (
-                <Button
-                  variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
-                  title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}
-                  aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
-                  onClick={() => setReagendarAcordo(a)}
-                >
-                  <CalendarClock className="w-4 h-4" />
-                </Button>
-              )}
+              {podeEditar && (() => {
+                // A regra mora em `services/reagendamento`: mesma resposta aqui,
+                // na aba Acordos e no detalhe. Por PARCELA, não por grupo — num
+                // acordo de 3x a parcela 2 precisa do botão para criar a 3.
+                const d = podeReagendar(a, isPP, parcelasExistentes);
+                if (!d.pode) return null;
+                return (
+                  <Button
+                    variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
+                    title={rotuloReagendar(d)}
+                    aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
+                    onClick={() => setReagendarAcordo(a)}
+                  >
+                    <CalendarClock className="w-4 h-4" />
+                  </Button>
+                );
+              })()}
               {podeEditar && (
               <Button
                 variant="ghost" size="icon"

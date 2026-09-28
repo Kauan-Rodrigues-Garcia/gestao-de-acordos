@@ -27,6 +27,7 @@ import {
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { solicitarAutorizacao } from '@/services/autorizacaoPedidos.service';
 import { montarPayloadEdicao } from '@/components/payloadEdicaoAcordo';
+import { TIPOS_QUE_PARCELAM_PAGUEPLAY } from '@/services/reagendamento/reagendamento';
 import {
   transferirAcordoDeDesligado,
 } from '@/services/desligamento.service';
@@ -69,7 +70,8 @@ import {
  * Formas que geram parcelamento na PaguePlay. Na BookPlay a trava não existe
  * mais desde 05/08/2026 — qualquer forma parcela, Pix inclusive.
  */
-const TIPOS_PARCELADOS_PP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
+// A lista mora em `services/reagendamento` — ver a nota em payloadEdicaoAcordo.
+const TIPOS_PARCELADOS_PP: readonly string[] = TIPOS_QUE_PARCELAM_PAGUEPLAY;
 
 /**
  * Valor sentinela do "sem instituição" no Select.

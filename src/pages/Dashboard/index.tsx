@@ -15,9 +15,7 @@ import {
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
-import {
-  deslocarMes, primeiroDiaDoMes, ultimoDiaDoMes,
-} from '@/lib/mesReferencia';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { cn } from '@/lib/utils';
 import { supabase, type Acordo } from '@/lib/supabase';
@@ -35,8 +33,12 @@ import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
 import { useLideroEquipe } from '@/hooks/useLideroEquipe';
 import { FiltroEscopo } from './FiltroEscopo';
 import type { ReagendarParams } from '@/components/ModalReagendar';
+import { useParcelasExistentes } from '@/hooks/useParcelasExistentes';
 import {
-  PER_PAGE, TIPOS_PARCELADOS_PP, VisaoFiltro, addMesesDash, buildMensagem, saudacao, getPageNumbers,
+  podeReagendar, ehParcelaDuplicada, avisoParcelaJaAgendada,
+} from '@/services/reagendamento/reagendamento';
+import {
+  PER_PAGE, VisaoFiltro, addMesesDash, buildMensagem, saudacao, getPageNumbers,
 } from './helpers';
 import { TableSkeleton } from './TableSkeleton';
 import { PPTableFilters } from './PPTableFilters';
@@ -303,7 +305,6 @@ export default function Dashboard() {
   const [salvandoReagendar,       setSalvandoReagendar]       = useState(false);
   const [confirmarPgtoAcordo,     setConfirmarPgtoAcordo]     = useState<AcordoComVinculo | null>(null);
   const [salvandoConfirmarPgto,   setSalvandoConfirmarPgto]   = useState(false);
-  const [gruposReagendadosBD, setGruposReagendadosBD] = useState<Set<string>>(new Set());
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
   const [detalheInlineIdTabela,   setDetalheInlineIdTabela]   = useState<string | null>(null);
   const [novoInlineAbertoTabela,  setNovoInlineAbertoTabela]  = useState(false);
@@ -324,32 +325,6 @@ export default function Dashboard() {
 
   const mesFiltroInicio = mesFiltro ? primeiroDiaDoMes(mesFiltro) : undefined;
   const mesFiltroFim    = mesFiltro ? ultimoDiaDoMes(mesFiltro)   : undefined;
-
-  const nextMonthRange = useMemo(() => {
-    if (!mesFiltro) return null;
-    // `deslocarMes` já cuida da virada de ano — a conta manual de mês 12 → 1
-    // que morava aqui era a quarta cópia da mesma aritmética no projeto.
-    const proximo = deslocarMes(mesFiltro, 1);
-    return { start: primeiroDiaDoMes(proximo), end: ultimoDiaDoMes(proximo) };
-  }, [mesFiltro]);
-
-  useEffect(() => {
-    if (!isPP || !nextMonthRange || !empresa?.id) { setGruposReagendadosBD(new Set()); return; }
-    supabase
-      .from('acordos')
-      .select('acordo_grupo_id')
-      .eq('empresa_id', empresa.id)
-      .gte('vencimento', nextMonthRange.start)
-      .lte('vencimento', nextMonthRange.end)
-      .gt('numero_parcela', 1)
-      .then(({ data }) => {
-        if (data) setGruposReagendadosBD(new Set(
-          (data as { acordo_grupo_id: string | null }[])
-            .map(d => d.acordo_grupo_id)
-            .filter((v): v is string => !!v),
-        ));
-      });
-  }, [isPP, nextMonthRange, empresa?.id]);
 
   useEffect(() => { setCurrentPage(1); }, [colFiltroEstado]);
 
@@ -387,18 +362,11 @@ export default function Dashboard() {
     [acordosHoje, hoje],
   );
 
-  const gruposComProximaParcela = useMemo(() => {
-    const s = new Set<string>();
-    for (const a of acordos) {
-      if ((a.numero_parcela ?? 1) > 1 && a.acordo_grupo_id) s.add(a.acordo_grupo_id);
-    }
-    return s;
-  }, [acordos]);
-
-  const gruposJaReagendados = useMemo(
-    () => new Set([...gruposComProximaParcela, ...gruposReagendadosBD]),
-    [gruposComProximaParcela, gruposReagendadosBD],
-  );
+  // Quais parcelas já existem, por grupo. Substitui o par de meias-respostas
+  // que vivia aqui (um Set da página visível + uma consulta só do mês seguinte,
+  // só na PaguePlay): as duas escondiam ou mostravam o botão na hora errada.
+  // Ver `hooks/useParcelasExistentes`.
+  const parcelasExistentes = useParcelasExistentes(acordos, empresa?.id);
 
   const acordosOrdenados = useMemo<AcordoComVinculo[]>(() => {
     let base: AcordoComVinculo[] = acordos;
@@ -612,9 +580,10 @@ export default function Dashboard() {
           if (rpcErr) console.warn('[marcarComoPago] sync par falhou:', rpcErr.message);
         });
       }
-      const numParcela = acordo.numero_parcela ?? 1;
-      const deveReagendar = isPP && (acordo.parcelas ?? 1) > 1 && TIPOS_PARCELADOS_PP.includes(acordo.tipo) && numParcela < (acordo.parcelas ?? 1);
-      if (deveReagendar) {
+      // Mesma regra do botão (`services/reagendamento`), inclusive a conferência
+      // de que a próxima parcela ainda não existe. Antes daqui o gate era
+      // `isPP && ...`: na BookPlay marcar pago nunca oferecia o reagendamento.
+      if (podeReagendar(acordo, isPP, parcelasExistentes).pode) {
         setReagendarAcordo(acordo);
       } else {
         toast.success('Acordo marcado como Pago!', {
@@ -649,7 +618,7 @@ export default function Dashboard() {
           .eq('empresa_id', empresa.id).eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
           .eq('numero_parcela', proximaNumero).maybeSingle();
         if (jaExiste) {
-          toast.info(`Parcela ${proximaNumero}/${totalParcelas} já foi reagendada.`);
+          toast.info(avisoParcelaJaAgendada(proximaNumero, totalParcelas));
           setReagendarAcordo(null); return;
         }
       }
@@ -688,7 +657,15 @@ export default function Dashboard() {
           .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc } as never)
           .select('*, perfis(id, nome, email, perfil, setor_id)')
           .single();
-        if (errIns) { toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return; }
+        if (errIns) {
+          // A trava do banco (uq_acordos_grupo_parcela) chegou na frente: outra
+          // aba criou esta parcela entre o `select` acima e este insert.
+          if (ehParcelaDuplicada(errIns)) {
+            toast.info(avisoParcelaJaAgendada(numero, totalParcelas));
+            setReagendarAcordo(null); return;
+          }
+          toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return;
+        }
         ultimoInserido = data as Acordo;
       }
 
@@ -1003,7 +980,7 @@ export default function Dashboard() {
                         toggleSelecionado={toggleSelecionado}
                         atualizandoStatus={atualizandoStatus}
                         marcarComoPago={marcarComoPago}
-                        gruposJaReagendados={gruposJaReagendados}
+                        parcelasExistentes={parcelasExistentes}
                         setReagendarAcordo={setReagendarAcordo}
                         excluindoId={excluindoId}
                         setConfirmandoExclusao={setConfirmandoExclusao}

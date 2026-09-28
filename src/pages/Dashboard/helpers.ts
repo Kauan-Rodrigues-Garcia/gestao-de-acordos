@@ -4,7 +4,6 @@ import { formatCurrency, formatDate } from '@/lib/index';
 export type VisaoFiltro = 'setor' | `equipe:${string}` | 'individual';
 
 export const PER_PAGE = 60;
-export const TIPOS_PARCELADOS_PP = ['boleto', 'pix'];
 export const stagger = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.07 } },

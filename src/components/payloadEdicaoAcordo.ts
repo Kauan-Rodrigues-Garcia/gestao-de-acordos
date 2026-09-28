@@ -20,9 +20,19 @@ import {
   buildObservacoesComEstado, formatarTelefonePP,
 } from '@/lib/index';
 import { calcularParcelas } from '@/lib/money';
+import { TIPOS_QUE_PARCELAM_PAGUEPLAY } from '@/services/reagendamento/reagendamento';
 
-/** Formas que aceitam parcelamento na PaguePlay. */
-export const TIPOS_PARCELADOS_PP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
+/**
+ * Formas que aceitam parcelamento na PaguePlay.
+ *
+ * Era uma lista própria — `['boleto', 'cartao_recorrente', 'pix_automatico']`,
+ * com duas formas que nem existem na PaguePlay e que, na BookPlay, são
+ * justamente as que NÃO parcelam. O efeito prático era só um: o 'pix' legado
+ * (anterior à consolidação do form em "Boleto / PIX") caía como não parcelado
+ * aqui, enquanto o detalhe do acordo o mostrava parcelado. Agora a lista é a
+ * mesma de `services/reagendamento`, que é a de todo mundo.
+ */
+export const TIPOS_PARCELADOS_PP: readonly string[] = TIPOS_QUE_PARCELAM_PAGUEPLAY;
 
 export interface EntradaPayloadEdicao {
   isPaguePlay: boolean;
