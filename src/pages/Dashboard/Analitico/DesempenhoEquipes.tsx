@@ -31,7 +31,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
-import { useHoPercentual } from '@/lib/hoPercentual';
+import { useHoPercentual, fatorDoRecebido } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { assinarTabela } from '@/lib/realtime';
 import { reconciliarMapa } from '@/lib/dadosVivos';
@@ -293,8 +293,9 @@ export function DesempenhoEquipes({
   fonteLabel = 'relatório analítico',
   conciliacaoVersao = 0,
 }: DesempenhoEquipesProps) {
-  // A meta é gravada em bruto; em H.O. converte pelo percentual configurado.
-  const ho = useHoPercentual();
+  // Sem acumulado ainda, a meta em H.O. cai no percentual configurado; o
+  // hook re-renderiza quando ele muda na aba Metas.
+  useHoPercentual();
   const { perfil } = useAuth();
   const isPP = useTenant().isPaguePlay;
   const usarConciliacao = isPP && setorConciliacao;
@@ -799,7 +800,10 @@ export function DesempenhoEquipes({
                 rotulo: 'Foto do setor',
               }}
               mostrarHO={isPP}
-              metaHO={metaSetor !== null ? metaSetor * ho : null}
+              // A meta em H.O. usa a proporção do próprio acumulado (H.O. ÷
+              // bruto) — ver `fatorDoRecebido`. Com o percentual configurado,
+              // um mês gravado a 24,96% sairia com a % em H.O. descolada.
+              metaHO={metaSetor !== null ? metaSetor * fatorDoRecebido(acumuladoSetor.bruto, acumuladoSetor.ho) : null}
               // Só o ACUMULADO do Receptivo soma aqui (dentro de
               // `acumuladoDoSetor`); a meta do setor segue sendo a da aba Metas
               // (decisão do usuário em 30/07/2026).
@@ -876,7 +880,9 @@ export function DesempenhoEquipes({
                   ].filter(Boolean).join(' · ') || undefined}
                   lideres={lideres[eq.id] ?? []}
                   mostrarHO={isPP}
-                  metaHO={metaEquipe !== null ? metaEquipe * ho : null}
+                  metaHO={metaEquipe !== null
+                    ? metaEquipe * fatorDoRecebido(dados.porEquipe[eq.id]?.bruto ?? 0, dados.porEquipe[eq.id]?.ho ?? 0)
+                    : null}
                   acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
                   acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
                   ajusteManual={dados.porEquipe[eq.id]?.ajuste ?? 0}

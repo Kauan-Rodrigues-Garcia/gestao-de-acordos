@@ -56,9 +56,15 @@ export function unidadeOposta(unidade: UnidadeValor): UnidadeValor {
 export function metaNaUnidade(
   meta: number | null | undefined,
   unidade: UnidadeValor,
+  /**
+   * A proporção H.O. ÷ bruto do recebido que esta meta vai medir — ver
+   * `fatorDoRecebido`. Sem ela, o percentual configurado da empresa.
+   */
+  fatorHO?: number,
 ): number | null {
   if (meta === null || meta === undefined || !Number.isFinite(meta)) return null;
-  return unidade === 'ho' ? paraHO(meta) : meta;
+  if (unidade !== 'ho') return meta;
+  return fatorHO !== undefined ? meta * fatorHO : paraHO(meta);
 }
 
 /**

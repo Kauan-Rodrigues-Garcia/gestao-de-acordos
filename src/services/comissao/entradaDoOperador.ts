@@ -6,7 +6,7 @@
  * pelo resumo por operador. Os dois passam por aqui, e é aqui que ficam as duas
  * decisões que não podem divergir entre as telas:
  *
- *   • a unidade — PaguePlay em H.O. (`getHoPercentual`), BookPlay em bruto;
+ *   • a unidade — PaguePlay em H.O. (proporção do próprio recebido), BookPlay em bruto;
  *   • a origem — a configuração é a do setor e da equipe do usuário ORIGINAL,
  *     também para o clone; a exceção por usuário é achada pela pessoa;
  *   • os bônus — só os que têm a pessoa entre os usuários.
@@ -14,7 +14,7 @@
  * Sem React, sem fetch.
  */
 import { getTodayISO } from '@/lib/index';
-import { getHoPercentual } from '@/lib/hoPercentual';
+import { fatorDoRecebido } from '@/lib/hoPercentual';
 import { lerMetaIndiretaDaLinha } from '@/services/metas/metaIndireta';
 import type { BonusComissao } from './bonus';
 import { configDoOperador, type ConfigComissao, type EntradaComissao } from './comissao';
@@ -77,7 +77,12 @@ export function montarEntradaComissao(params: {
     // passam pelo fator.
     recebidoDireto: isPaguePlay ? params.recebidoHO : params.recebidoBruto,
     recebidoIndiretoBruto: params.recebidoIndiretoBruto,
-    fatorUnidade: isPaguePlay ? getHoPercentual() : 1,
+    // O fator é a proporção do PRÓPRIO recebido da pessoa (H.O. ÷ bruto), não
+    // o percentual configurado. Meta e recebido na mesma escala: a faixa da
+    // comissão sai igual à que sairia em bruto, em qualquer mês. Com o
+    // configurado (22,60%) contra um mês gravado a 24,96%, todo mundo subiria
+    // ~10% na régua sem ter recebido um real a mais. Ver `fatorDoRecebido`.
+    fatorUnidade: isPaguePlay ? fatorDoRecebido(params.recebidoBruto, params.recebidoHO) : 1,
     config,
     doSetor,
     origemConfig: origem,

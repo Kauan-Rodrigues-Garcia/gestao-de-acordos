@@ -52,7 +52,7 @@ import {
 import {
   getTodayISO,
 } from '@/lib/index';
-import { useHoPercentual } from '@/lib/hoPercentual';
+import { useHoPercentual, fatorDoRecebido } from '@/lib/hoPercentual';
 import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
@@ -239,8 +239,9 @@ function useEquipesDisponiveis(
 
 export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas {
   const { setorId, equipeId, operadorId, temLogicaDiretoExtra } = params;
-  // Muda na aba Metas: as conversões de meta e do indireto se refazem.
-  const ho = useHoPercentual();
+  // Sem recebido ainda, a conversão cai no percentual da aba Metas; o hook
+  // re-renderiza quando ele muda.
+  useHoPercentual();
   const mes = normalizarMes(params.mes);
   const { ano, mes: mesNum } = partesDoMes(mes);
 
@@ -585,11 +586,14 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
   // ── Unidade ────────────────────────────────────────────────────────────────
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.
-  // Meta: convertida, porque só existe gravada em bruto.
+  // Meta: convertida, porque só existe gravada em bruto — e pela proporção do
+  // próprio recebido (H.O. ÷ bruto), para a % não mudar com a unidade em mês
+  // nenhum. Ver `fatorDoRecebido`.
+  const fatorHO = fatorDoRecebido(agregado.bruto, agregado.ho);
   const recebidoNaUnidade = unidade === 'ho' ? agregado.ho : agregado.bruto;
   const recebidoOposto    = unidade === 'ho' ? agregado.bruto : agregado.ho;
-  const metaNaUnidadeAtiva = metaNaUnidade(meta, unidade);
-  const metaOposta         = metaNaUnidade(meta, unidade === 'ho' ? 'bruto' : 'ho');
+  const metaNaUnidadeAtiva = metaNaUnidade(meta, unidade, fatorHO);
+  const metaOposta         = metaNaUnidade(meta, unidade === 'ho' ? 'bruto' : 'ho', fatorHO);
 
   /**
    * As duas frentes, já na unidade ativa.
@@ -605,15 +609,15 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const metaDupla = useMemo(
     () => combinarMetaDupla({
       metaDireta: metaNaUnidadeAtiva,
-      metaIndireta: metaNaUnidade(metaIndireta, unidade),
+      metaIndireta: metaNaUnidade(metaIndireta, unidade, fatorHO),
       recebidoDireto: recebidoNaUnidade,
-      // O extra pago é ACORDO, sem H.O. de relatório: converte pelo
-      // percentual configurado da empresa.
+      // O extra pago é ACORDO, sem H.O. de relatório: converte pelo mesmo
+      // fator da meta, para as duas metades somarem na mesma escala.
       recebidoIndireto: unidade === 'ho'
-        ? recebidoIndiretoBruto * ho
+        ? recebidoIndiretoBruto * fatorHO
         : recebidoIndiretoBruto,
     }),
-    [metaNaUnidadeAtiva, metaIndireta, unidade, recebidoNaUnidade, recebidoIndiretoBruto, ho],
+    [metaNaUnidadeAtiva, metaIndireta, unidade, recebidoNaUnidade, recebidoIndiretoBruto, fatorHO],
   );
 
   // A projeção e o quartil passam pelo TOTAL — a mesma decisão da aba Quartis.

@@ -6,7 +6,7 @@ import { renderHook, act } from '@testing-library/react';
 import {
   HO_PERCENTUAL_PADRAO, getHoPercentual, setHoPercentual, normalizarHoPercentual,
   hoPercentualDaConfig, useHoPercentual, paraHO, deHO, rotuloHoPercentual,
-  percentualImplicito, repassePercentuais,
+  percentualImplicito, repassePercentuais, fatorDoRecebido,
 } from './hoPercentual';
 
 afterEach(() => setHoPercentual(HO_PERCENTUAL_PADRAO));
@@ -96,5 +96,20 @@ describe('repasse', () => {
     const { coren, cofen } = repassePercentuais(0.2496);
     expect(coren).toBeCloseTo(0.5628, 6);
     expect(cofen).toBeCloseTo(0.1876, 6);
+  });
+});
+
+describe('fatorDoRecebido — a meta na escala do recebido que ela mede', () => {
+  it('é a proporção H.O. ÷ bruto do próprio recebido', () => {
+    expect(fatorDoRecebido(150_000, 37_440)).toBeCloseTo(0.2496, 10);
+  });
+  it('não depende do percentual configurado quando há recebido', () => {
+    setHoPercentual(0.2260);
+    expect(fatorDoRecebido(1000, 249.6)).toBeCloseTo(0.2496, 10);
+  });
+  it('sem recebido (ou sem H.O.), o configurado', () => {
+    setHoPercentual(0.2315);
+    expect(fatorDoRecebido(0, 0)).toBe(0.2315);
+    expect(fatorDoRecebido(1000, 0)).toBe(0.2315);
   });
 });

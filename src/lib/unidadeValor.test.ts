@@ -25,6 +25,11 @@ describe('metaNaUnidade', () => {
     }
   });
 
+  it('com fator explícito (a proporção do recebido), ele manda', () => {
+    expect(metaNaUnidade(META_PP, 'ho', 0.2496)).toBeCloseTo(18000, 2);
+    expect(metaNaUnidade(META_PP, 'bruto', 0.2496)).toBe(META_PP);
+  });
+
   it('no padrão novo (22,60%), a mesma meta bruta lê 16.298,08 de H.O.', () => {
     // A meta é gravada em bruto: trocar o percentual muda a LEITURA em H.O.
     expect(metaNaUnidade(META_PP, 'ho')).toBeCloseTo(72115.38 * 0.2260, 2);

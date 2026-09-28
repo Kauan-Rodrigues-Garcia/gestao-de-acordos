@@ -109,3 +109,22 @@ export function repassePercentuais(ho: number = atual): { coren: number; cofen: 
   const resto = 1 - ho;
   return { coren: resto * 0.75, cofen: resto * 0.25 };
 }
+
+/**
+ * O fator que converte a META quando o H.O. do outro lado veio de RELATÓRIO.
+ *
+ * A comparação «recebido em H.O. ÷ meta em H.O.» só é honesta se os dois lados
+ * usarem a mesma proporção. O recebido vem da coluna do relatório (hoje ~22,60%,
+ * até 29/09/2026 gravado a 24,96%); se a meta fosse convertida pelo percentual
+ * CONFIGURADO, qualquer mês em que os dois diferem — agosto inteiro, setembro
+ * antes da reimportação — sairia com a % em H.O. descolada da % em bruto, e a
+ * comissão subiria de faixa sem ninguém ter recebido um real a mais.
+ *
+ * Então a meta usa a proporção do PRÓPRIO recebido que ela está medindo
+ * (H.O. ÷ bruto do operador, da equipe, do setor). Com isso a % em H.O. é a %
+ * em bruto em qualquer mês — como sempre foi até aqui. Sem recebido ainda
+ * (começo do mês), vale o percentual configurado.
+ */
+export function fatorDoRecebido(bruto: number, ho: number): number {
+  return percentualImplicito(bruto, ho) ?? atual;
+}

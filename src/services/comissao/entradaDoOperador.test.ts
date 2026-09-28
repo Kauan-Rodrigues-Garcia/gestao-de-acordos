@@ -41,9 +41,33 @@ describe('montarEntradaComissao', () => {
     expect(e.recebidoIndiretoBruto).toBe(1_200);
   });
 
-  it('PaguePlay mede em H.O., no percentual configurado (padrão 22,60%)', () => {
+  /*
+   * O fator da PaguePlay é a proporção do PRÓPRIO recebido (H.O. ÷ bruto),
+   * não o percentual configurado. BASE tem 37.440 de H.O. sobre 150.000 de
+   * bruto — 24,96%, um mês gravado antes de 29/09/2026. Com o configurado
+   * (22,60%) a meta encolheria 10% contra um recebido que não encolheu, e a
+   * pessoa subiria de faixa sem ter recebido um real a mais.
+   */
+  it('PaguePlay mede em H.O., com o fator do próprio recebido', () => {
     const e = montarEntradaComissao({ ...BASE, isPaguePlay: true });
     expect(e.recebidoDireto).toBe(37_440);
+    expect(e.fatorUnidade).toBeCloseTo(0.2496, 10);
+  });
+
+  it('mês gravado a 24,96% com o configurado em 22,60%: a % é a mesma do bruto', () => {
+    const e = montarEntradaComissao({ ...BASE, isPaguePlay: true });
+    const pctEmHO    = e.recebidoDireto / ((e.metaBruta ?? 0) * e.fatorUnidade);
+    const pctEmBruto = BASE.recebidoBruto / BASE.meta.meta_valor;
+    expect(pctEmHO).toBeCloseTo(pctEmBruto, 10);
+  });
+
+  it('mês do relatório novo (22,60%) também', () => {
+    const e = montarEntradaComissao({ ...BASE, isPaguePlay: true, recebidoHO: 33_900 });
+    expect(e.fatorUnidade).toBeCloseTo(0.226, 10);
+  });
+
+  it('sem recebido ainda, o fator é o percentual configurado', () => {
+    const e = montarEntradaComissao({ ...BASE, isPaguePlay: true, recebidoBruto: 0, recebidoHO: 0 });
     expect(e.fatorUnidade).toBe(0.2260);
   });
 
