@@ -19,7 +19,7 @@
 import { useMemo, useState } from 'react';
 import {
   AlertTriangle, ArrowRightLeft, ChevronDown, ChevronUp, History,
-  MinusCircle, RefreshCw, Scale,
+  MinusCircle, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -31,15 +31,13 @@ import {
 } from '@/services/analitico/mudancasImportacao';
 
 const ICONE: Record<TipoMudanca, typeof MinusCircle> = {
-  removido:       MinusCircle,
-  transferido:    ArrowRightLeft,
-  valor_alterado: Scale,
+  removido:    MinusCircle,
+  transferido: ArrowRightLeft,
 };
 
 const COR: Record<TipoMudanca, string> = {
-  removido:       'text-destructive bg-destructive/10 border-destructive/25',
-  transferido:    'text-primary bg-primary/10 border-primary/25',
-  valor_alterado: 'text-warning bg-warning/10 border-warning/30',
+  removido:    'text-destructive bg-destructive/10 border-destructive/25',
+  transferido: 'text-primary bg-primary/10 border-primary/25',
 };
 
 interface Props {
@@ -114,8 +112,9 @@ export function MudancasImportacao({ empresaId, mes, operadorId, modo, className
           {modo === 'operador' && (
             <p className="px-4 pt-3 text-xs text-muted-foreground">
               <AlertTriangle className="mr-1 inline h-3 w-3 align-[-2px] text-warning" />
-              O relatório do ERP é reimportado ao longo do dia. Quando um NR muda de
-              valor, sai da sua carteira ou vai para outra pessoa, o aviso fica aqui.
+              O relatório do ERP é reimportado ao longo do dia. Quando um NR que estava
+              com você há mais de 24 horas sai da sua carteira ou vai para outra pessoa,
+              o aviso fica aqui.
             </p>
           )}
 
@@ -182,9 +181,6 @@ function resumoEmTexto(
   if (r.removidos) partes.push(`${r.removidos} ${r.removidos === 1 ? 'removido' : 'removidos'}`);
   if (r.transferidos) {
     partes.push(`${r.transferidos} ${r.transferidos === 1 ? 'transferido' : 'transferidos'}`);
-  }
-  if (r.valorAlterado) {
-    partes.push(`${r.valorAlterado} com valor alterado`);
   }
   const alvo = modo === 'operador' ? 'na sua carteira' : 'no escopo';
   return `${partes.join(', ')} ${alvo} desde o início do mês.`;

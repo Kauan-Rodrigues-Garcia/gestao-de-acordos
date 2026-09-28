@@ -51,8 +51,9 @@ describe('classificar', () => {
     expect(classificar(crua({ operador_depois_id: BIA }))).toBe('transferido');
   });
 
-  it('mesmo dono, outro valor: valor alterado', () => {
-    expect(classificar(crua({ valor_depois: 800 }))).toBe('valor_alterado');
+  it('mesmo dono, outro valor: NÃO é notícia (saiu em 29/09/2026)', () => {
+    // A leitura de valor entre retratos dava números errados; foi retirada.
+    expect(classificar(crua({ valor_depois: 800 }))).toBeNull();
   });
 
   it('mesmo dono e mesmo valor: não é notícia', () => {
@@ -72,7 +73,7 @@ describe('classificar', () => {
     expect(classificar(crua({ valor_depois: null, operador_depois_id: BIA }))).toBe('removido');
   });
 
-  it('trocar de dono vence mudar de valor', () => {
+  it('trocou de dono e de valor: é transferência', () => {
     expect(classificar(crua({ operador_depois_id: BIA, valor_depois: 750 }))).toBe('transferido');
   });
 
@@ -84,27 +85,26 @@ describe('classificar', () => {
 describe('classificarTodas', () => {
   it('descarta o que não é notícia e calcula a diferença', () => {
     const r = classificarTodas([
-      crua(),                                    // nada
-      crua({ codigo: 'A', valor_depois: 800 }),  // -200
+      crua(),                                                 // nada
+      crua({ codigo: 'V', valor_depois: 800 }),               // só valor: fora
       crua({ codigo: 'B', valor_depois: null, operador_depois_id: null }), // -1000
     ]);
-    expect(r.map(m => m.codigo)).toEqual(['A', 'B']);
-    expect(r.find(m => m.codigo === 'A')?.diferenca).toBe(-200);
-    expect(r.find(m => m.codigo === 'B')?.diferenca).toBe(-1000);
+    expect(r.map(m => m.codigo)).toEqual(['B']);
+    expect(r[0].diferenca).toBe(-1000);
   });
 
   it('a mais recente vem primeiro', () => {
     const r = classificarTodas([
-      crua({ codigo: 'velha', ocorrido_em: '2026-09-20T10:00:00Z', valor_depois: 1 }),
-      crua({ codigo: 'nova',  ocorrido_em: '2026-09-28T10:00:00Z', valor_depois: 1 }),
+      crua({ codigo: 'velha', ocorrido_em: '2026-09-20T10:00:00Z', operador_depois_id: BIA }),
+      crua({ codigo: 'nova',  ocorrido_em: '2026-09-28T10:00:00Z', operador_depois_id: BIA }),
     ]);
     expect(r.map(m => m.codigo)).toEqual(['nova', 'velha']);
   });
 
   it('empate de horário desempata pelo NR, para a ordem não dançar', () => {
     const r = classificarTodas([
-      crua({ codigo: 'B', valor_depois: 1 }),
-      crua({ codigo: 'A', valor_depois: 1 }),
+      crua({ codigo: 'B', operador_depois_id: BIA }),
+      crua({ codigo: 'A', operador_depois_id: BIA }),
     ]);
     expect(r.map(m => m.codigo)).toEqual(['A', 'B']);
   });
@@ -138,11 +138,6 @@ describe('a frase do operador', () => {
     expect(f).toContain('vindo de Bia Lima');
   });
 
-  it('a mudança de valor diz o de antes e o de agora', () => {
-    const f = fraseParaOperador(um({ valor_depois: 800 }), ANA);
-    expect(txt(f)).toContain('mudou de R$ 1.000,00 para R$ 800,00');
-  });
-
   it('sem data de entrada, a frase não inventa "desde"', () => {
     const f = fraseParaOperador(um({ com_ele_desde: null, valor_depois: null, operador_depois_id: null }), ANA);
     expect(f).not.toContain('desde');
@@ -150,7 +145,7 @@ describe('a frase do operador', () => {
 
   it('o horário sai no fuso de São Paulo', () => {
     // 14:07 UTC = 11:07 em Brasília — a hora em que o robô do 59 rodou.
-    const f = fraseParaOperador(um({ valor_depois: 800 }), ANA);
+    const f = fraseParaOperador(um({ valor_depois: null, operador_depois_id: null }), ANA);
     expect(f).toContain('28/09/2026 às 11:07');
   });
 });
@@ -165,22 +160,19 @@ describe('a frase da liderança', () => {
     );
   });
 
-  it('na transferência com valor diferente, mostra os dois valores', () => {
+  it('na transferência, só o valor que passou — sem «de X para Y» de valor', () => {
     const f = fraseParaLideranca(um({
       operador_depois_id: BIA, operador_depois_nome: 'Bia Lima', valor_depois: 750,
     }));
-    expect(txt(f)).toContain('R$ 1.000,00 → R$ 750,00');
+    expect(txt(f)).toContain('R$ 1.000,00.');
+    expect(f).not.toContain('→');
+    expect(txt(f)).not.toContain('R$ 750,00');
   });
 
   it('o removido nomeia quem perdeu', () => {
     const f = fraseParaLideranca(um({ valor_depois: null, operador_depois_id: null }));
     expect(f).toContain('saiu do relatório');
     expect(f).toContain('Estava com Ana Souza');
-  });
-
-  it('a mudança de valor nomeia o dono — «o acordo tal do operador tal»', () => {
-    const f = fraseParaLideranca(um({ valor_depois: 800 }));
-    expect(txt(f)).toBe('NR 13061983 (01/09/2026), com Ana Souza, mudou de R$ 1.000,00 para R$ 800,00.');
   });
 
   it('linha sem operador não vira nome vazio', () => {
@@ -207,12 +199,10 @@ describe('resumir — o cabeçalho do card', () => {
   it('conta por tipo e soma o saldo', () => {
     const r = resumir(classificarTodas([
       crua({ codigo: 'A', valor_depois: null, operador_depois_id: null }), // -1000
-      crua({ codigo: 'B', valor_depois: 800 }),                            //  -200
+      crua({ codigo: 'B', valor_depois: 800 }),                            // fora
       crua({ codigo: 'C', operador_depois_id: BIA }),                      //     0
     ]));
-    expect(r).toEqual({
-      removidos: 1, transferidos: 1, valorAlterado: 1, saldo: -1200, total: 3,
-    });
+    expect(r).toEqual({ removidos: 1, transferidos: 1, saldo: -1000, total: 2 });
   });
 
   it('lista vazia não quebra', () => {
@@ -243,9 +233,9 @@ describe('saldoDoOperador', () => {
     expect(saldoDoOperador(ms, ANA)).toBe(-1000);
   });
 
-  it('mudança de valor conta só a diferença', () => {
+  it('mudança só de valor nem entra na conta', () => {
     const ms = classificarTodas([crua({ valor_depois: 800 })]);
-    expect(saldoDoOperador(ms, ANA)).toBe(-200);
+    expect(saldoDoOperador(ms, ANA)).toBe(0);
   });
 });
 

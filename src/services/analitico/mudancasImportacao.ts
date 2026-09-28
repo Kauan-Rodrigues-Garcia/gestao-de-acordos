@@ -32,12 +32,17 @@
  * SQL faz o que só ele pode fazer (juntar as duas tabelas e aplicar o escopo);
  * a leitura do que aquilo significa é deste arquivo.
  *
- * ## O que NÃO é mudança
+ * ## O que NÃO é notícia
  *
  * A sincronização grava o retrato antigo quando QUALQUER campo difere —
  * inclusive `nome_cliente`, `forma_detalhe` e `procedencia`, que mudam sozinhos
- * quando o 58 vira 59. Isso não é notícia para ninguém. Só entram aqui as três
- * que mexem com dinheiro ou com dono.
+ * quando o 58 vira 59. Só entram aqui duas notícias: o NR saiu da pessoa, ou
+ * foi para outra.
+ *
+ * «Valor alterado» existiu até 29/09/2026 e saiu: algumas leituras de valor
+ * entre retratos estavam erradas, e a decisão foi retirar, não corrigir. E
+ * desde o mesmo dia só conta o que estava há mais de 24 horas com a pessoa —
+ * quem corta é o banco (migration 20260929020000).
  */
 import { formatCurrency, formatDate } from '@/lib/index';
 
@@ -61,7 +66,7 @@ export interface MudancaCrua {
   valor_depois: number | null;
 }
 
-export type TipoMudanca = 'removido' | 'transferido' | 'valor_alterado';
+export type TipoMudanca = 'removido' | 'transferido';
 
 export interface Mudanca extends MudancaCrua {
   tipo: TipoMudanca;
@@ -69,22 +74,15 @@ export interface Mudanca extends MudancaCrua {
   diferenca: number;
 }
 
-/** Centavos: `0.1 + 0.2` não pode virar «mudou de valor». */
-function mesmoValor(a: number, b: number): boolean {
-  return Math.round(a * 100) === Math.round(b * 100);
-}
-
 /**
  * O que houve com esta linha — ou `null` quando nada que interesse.
  *
- * A ordem importa: sumir vence trocar de dono, e trocar de dono vence mudar de
- * valor. Um NR que foi para outra pessoa E mudou de valor é contado como
- * transferência; o valor aparece na frase, mas a notícia é a troca.
+ * Sumir vence trocar de dono. Mesmo dono com outro valor não é notícia: a
+ * leitura de «valor alterado» saiu em 29/09/2026.
  */
 export function classificar(c: MudancaCrua): TipoMudanca | null {
   if (c.valor_depois === null) return 'removido';
   if ((c.operador_depois_id ?? null) !== (c.operador_antes_id ?? null)) return 'transferido';
-  if (!mesmoValor(c.valor_antes, c.valor_depois)) return 'valor_alterado';
   return null;
 }
 
@@ -143,22 +141,18 @@ export function fraseParaOperador(m: Mudanca, euSouId: string): string {
       + 'Se precisar entender o motivo, fale com a liderança.';
   }
 
-  if (m.tipo === 'transferido') {
-    if (saiuDeMim) {
-      return `O NR ${m.codigo}, de ${formatDate(m.data_pagamento)}${desde}, `
-        + `saiu dos seus recebimentos na importação de ${quando} `
-        + `e agora consta com ${nome(m.operador_depois_nome)}. `
-        + `Eram ${formatCurrency(m.valor_antes)}.`;
-    }
-    return `O NR ${m.codigo}, de ${formatDate(m.data_pagamento)}, `
-      + `entrou nos seus recebimentos na importação de ${quando}, `
-      + `vindo de ${nome(m.operador_antes_nome)}. `
-      + `${formatCurrency(m.valor_depois ?? 0)}.`;
+  // Transferência: a frase depende de que lado da troca a pessoa está.
+  if (saiuDeMim) {
+    return `O NR ${m.codigo}, de ${formatDate(m.data_pagamento)}${desde}, `
+      + `saiu dos seus recebimentos na importação de ${quando} `
+      + `e agora consta com ${nome(m.operador_depois_nome)}. `
+      + `Eram ${formatCurrency(m.valor_antes)}.`;
   }
 
   return `O NR ${m.codigo}, de ${formatDate(m.data_pagamento)}, `
-    + `mudou de ${formatCurrency(m.valor_antes)} para ${formatCurrency(m.valor_depois ?? 0)} `
-    + `na importação de ${quando}.`;
+    + `entrou nos seus recebimentos na importação de ${quando}, `
+    + `vindo de ${nome(m.operador_antes_nome)}. `
+    + `${formatCurrency(m.valor_depois ?? 0)}.`;
 }
 
 /** A frase para LIDERANÇA — nomes dos dois lados, sem «você». */
@@ -171,17 +165,9 @@ export function fraseParaLideranca(m: Mudanca): string {
       + `${formatCurrency(m.valor_antes)}.`;
   }
 
-  if (m.tipo === 'transferido') {
-    const valor = mesmoValor(m.valor_antes, m.valor_depois ?? 0)
-      ? formatCurrency(m.valor_antes)
-      : `${formatCurrency(m.valor_antes)} → ${formatCurrency(m.valor_depois ?? 0)}`;
-    return `NR ${m.codigo} (${formatDate(m.data_pagamento)}) passou de `
-      + `${nome(m.operador_antes_nome)}${desde} para ${nome(m.operador_depois_nome)}. ${valor}.`;
-  }
-
-  return `NR ${m.codigo} (${formatDate(m.data_pagamento)}), com `
-    + `${nome(m.operador_antes_nome)}, mudou de ${formatCurrency(m.valor_antes)} `
-    + `para ${formatCurrency(m.valor_depois ?? 0)}.`;
+  return `NR ${m.codigo} (${formatDate(m.data_pagamento)}) passou de `
+    + `${nome(m.operador_antes_nome)}${desde} para ${nome(m.operador_depois_nome)}. `
+    + `${formatCurrency(m.valor_antes)}.`;
 }
 
 /**
@@ -197,7 +183,6 @@ export function minhasMudancas(ms: readonly Mudanca[], euSouId: string): Mudanca
 export interface ResumoMudancas {
   removidos: number;
   transferidos: number;
-  valorAlterado: number;
   /** Quanto o conjunto tirou (negativo) ou somou ao total. */
   saldo: number;
   total: number;
@@ -206,12 +191,11 @@ export interface ResumoMudancas {
 /** O cabeçalho do card: quantas e quanto. */
 export function resumir(ms: readonly Mudanca[]): ResumoMudancas {
   const r: ResumoMudancas = {
-    removidos: 0, transferidos: 0, valorAlterado: 0, saldo: 0, total: ms.length,
+    removidos: 0, transferidos: 0, saldo: 0, total: ms.length,
   };
   for (const m of ms) {
     if (m.tipo === 'removido') r.removidos += 1;
-    else if (m.tipo === 'transferido') r.transferidos += 1;
-    else r.valorAlterado += 1;
+    else r.transferidos += 1;
     r.saldo += m.diferenca;
   }
   r.saldo = Math.round(r.saldo * 100) / 100;
@@ -235,7 +219,6 @@ export function saldoDoOperador(ms: readonly Mudanca[], euSouId: string): number
 }
 
 export const ROTULO_TIPO: Record<TipoMudanca, string> = {
-  removido:       'Removido',
-  transferido:    'Transferido',
-  valor_alterado: 'Valor alterado',
+  removido:    'Removido',
+  transferido: 'Transferido',
 };
