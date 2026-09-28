@@ -36,7 +36,7 @@ import { formatDate, getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import type { SituacaoVenda } from '@/lib/vendas';
 import {
-  statusDaLinha, STATUS_DA_LINHA, ORIGEM_DA_LINHA, rotuloDoPrazo,
+  statusDaLinha, STATUS_DA_LINHA, ORIGEM_DA_LINHA, rotuloDoPrazo, saidaDaAbaFora,
   type StatusDaLinha, type PrazoDaVenda,
 } from '@/lib/vendasLista';
 import type { Venda } from '@/services/vendas/vendas.service';
@@ -136,19 +136,23 @@ function rotuloDoDia(dia: string): string {
   return `${prefixo.charAt(0).toUpperCase()}${prefixo.slice(1)} · ${formatDate(dia)}`;
 }
 
-/** «fora há 3 dias · sai em 21/10» — o relógio de um mês da aba arquivada. */
+/**
+ * «fora há 3 dias · sai 30/09» — o relógio de 2 dias úteis da aba arquivada.
+ * A data é a de `saidaDaAbaFora`, o mesmo cálculo do agendamento no banco.
+ */
 function PilulaArquivada({ desde }: { desde: string }) {
   const entrou = new Date(desde);
-  const sai = new Date(entrou.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const sai = saidaDaAbaFora(desde) ?? entrou;
   const dias = Math.max(0, Math.floor((Date.now() - entrou.getTime()) / 86_400_000));
   const quando = sai.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const hora = sai.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   return (
     <span
-      title={`Fora da lista desde ${entrou.toLocaleDateString('pt-BR')}. Se o NR não aparecer em nenhum relatório até ${quando}, a venda vai para a lixeira.`}
-      className="mt-1 flex w-fit items-center gap-1 whitespace-nowrap rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+      title={`Fora da lista desde ${entrou.toLocaleDateString('pt-BR')}. Se o NR não aparecer em nenhum relatório até ${quando} às ${hora} (2 dias úteis), a venda vai para a lixeira.`}
+      className="mt-1 flex w-fit max-w-full items-center gap-1 truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
     >
-      <TimerOff className="h-3 w-3" aria-hidden />
-      {dias === 0 ? 'fora hoje' : `fora há ${dias} dia${dias === 1 ? '' : 's'}`} · sai em {quando}
+      <TimerOff className="h-3 w-3 shrink-0" aria-hidden />
+      {dias === 0 ? 'fora hoje' : `fora há ${dias} dia${dias === 1 ? '' : 's'}`} · sai {quando}
     </span>
   );
 }
@@ -181,16 +185,32 @@ export function TabelaVendas({
 
   return (
     <>
+      {/*
+        As larguras moram no `<colgroup>`, com a tabela em `table-fixed`.
+
+        Nenhuma coluna some por largura de tela (pedido de 21/09/2026: «tem que
+        caber todas as informações»). Em 28/09/2026 a barra horizontal que
+        resolvia isso virou o defeito: «tem um scroll para ir para o lado,
+        acredito ser inútil». Com `table-fixed` o que é número ou data tem
+        largura certa, e só o texto — cliente, vendedor, pagamento — divide o
+        que sobra, cortado com reticências e com o texto inteiro no `title`.
+        As datas e a UF viraram DUAS linhas numa coluna só: a venda em cima, a
+        confirmação embaixo; a forma em cima, o estado embaixo. Nada saiu da
+        linha, só deixou de precisar de uma coluna própria.
+      */}
+      <colgroup>
+        <col className="w-[96px]" />
+        <col />
+        {mostrarVendedor && <col />}
+        <col className="w-[92px]" />
+        <col className="w-[112px]" />
+        <col className="w-[140px]" />
+        <col className="w-[96px]" />
+        <col className="w-[96px]" />
+        <col className="w-[96px]" />
+        <col className="w-[120px]" />
+      </colgroup>
       <thead className="sticky top-0 z-20">
-        {/*
-          Nenhuma coluna some mais por largura de tela (pedido de 21/09/2026:
-          «tem que caber todas as informações, e uma barra de rolagem horizontal
-          embaixo»). Antes CONFIRMAÇÃO, PAGAMENTO e RECEBIDO desapareciam em
-          telas médias, e o líder que precisava justamente delas não tinha como
-          trazê-las de volta. Cada coluna declara a largura mínima que o
-          conteúdo pede; a soma vira o `min-w` da tabela, e o que passa disso é
-          rolagem — informação escondida não é layout, é dado perdido.
-        */}
         {/* Gruda no topo da janela de rolagem: com a tabela rolando por dentro,
             um cabeçalho que sobe leva junto o nome das colunas justamente
             quando a pessoa está arrastando a barra para o lado. `bg-card`
@@ -198,18 +218,18 @@ export function TabelaVendas({
             por baixo dele. O `sticky` mora no `thead` — em `tr` o suporte é
             recente demais para se confiar. */}
         <tr className="border-b border-border bg-card text-[11px]">
-          <th className="w-[110px] px-3 py-3 text-left font-semibold text-muted-foreground">NR</th>
-          <th className="min-w-[180px] px-3 py-3 text-left font-semibold text-muted-foreground">CLIENTE</th>
-          {mostrarVendedor && <th className="min-w-[150px] px-3 py-3 text-left font-semibold text-muted-foreground">VENDEDOR</th>}
-          <th className="w-[92px] px-3 py-3 text-left font-semibold text-muted-foreground">VENDA</th>
-          <th className="w-[108px] px-3 py-3 text-left font-semibold text-muted-foreground">CONFIRMAÇÃO</th>
-          <th className="w-[52px] px-3 py-3 text-left font-semibold text-muted-foreground">UF</th>
-          <th className="min-w-[120px] px-3 py-3 text-left font-semibold text-muted-foreground">PAGAMENTO</th>
-          <th className="min-w-[150px] px-3 py-3 text-left font-semibold text-muted-foreground">STATUS</th>
-          <th className="w-[110px] px-3 py-3 text-right font-semibold text-muted-foreground">VALOR</th>
-          <th className="w-[110px] px-3 py-3 text-right font-semibold text-muted-foreground">NA META</th>
-          <th className="w-[110px] px-3 py-3 text-right font-semibold text-muted-foreground">RECEBIDO</th>
-          <th className="w-[130px] px-3 py-3 text-right font-semibold text-muted-foreground">AÇÕES</th>
+          <th className="px-2.5 py-3 text-left font-semibold text-muted-foreground">NR</th>
+          <th className="px-2.5 py-3 text-left font-semibold text-muted-foreground">CLIENTE</th>
+          {mostrarVendedor && <th className="px-2.5 py-3 text-left font-semibold text-muted-foreground">VENDEDOR</th>}
+          <th className="px-2.5 py-3 text-left font-semibold text-muted-foreground"
+            title="Data da venda, e embaixo a data de confirmação">DATAS</th>
+          <th className="px-2.5 py-3 text-left font-semibold text-muted-foreground"
+            title="Forma de pagamento, e embaixo o estado (UF)">PAGAMENTO</th>
+          <th className="px-2.5 py-3 text-left font-semibold text-muted-foreground">STATUS</th>
+          <th className="px-2.5 py-3 text-right font-semibold text-muted-foreground">VALOR</th>
+          <th className="px-2.5 py-3 text-right font-semibold text-muted-foreground">NA META</th>
+          <th className="px-2.5 py-3 text-right font-semibold text-muted-foreground">RECEBIDO</th>
+          <th className="px-2.5 py-3 text-right font-semibold text-muted-foreground">AÇÕES</th>
         </tr>
       </thead>
       <tbody>
@@ -264,81 +284,83 @@ export function TabelaVendas({
                         setAberta(detalhe ? null : v.id);
                       }}
                     >
-                      <td className="px-3 py-2.5"><CodigoAcordoCopiavel codigo={v.nr_documento} label="NR" /></td>
-                      <td className="max-w-[240px] px-3 py-2.5">
-                        <p className="truncate font-medium text-foreground">
+                      <td className="overflow-hidden px-2.5 py-2.5"><CodigoAcordoCopiavel codigo={v.nr_documento} label="NR" /></td>
+                      <td className="px-2.5 py-2.5">
+                        <p className="truncate font-medium text-foreground" title={v.cliente ?? undefined}>
                           {v.cliente || <span className="font-normal text-muted-foreground">sem cliente</span>}
                         </p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground" title={origem.dica}>{origem.rotulo}</p>
+                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={origem.dica}>{origem.rotulo}</p>
                       </td>
                       {mostrarVendedor && (
-                        <td className="max-w-[180px] px-3 py-2.5">
-                          <p className="truncate text-foreground">{v.perfis?.nome ?? 'Sem nome'}</p>
+                        <td className="px-2.5 py-2.5">
+                          <p className="truncate text-foreground" title={v.perfis?.nome ?? undefined}>{v.perfis?.nome ?? 'Sem nome'}</p>
                           {equipe && <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{equipe}</p>}
                         </td>
                       )}
-                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-muted-foreground">{formatDate(v.data_venda)}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-muted-foreground">
-                        {v.data_confirmacao ? formatDate(v.data_confirmacao) : '—'}
+                      <td className="whitespace-nowrap px-2.5 py-2.5 font-mono text-muted-foreground">
+                        <p title="Data da venda">{formatDate(v.data_venda)}</p>
+                        <p className="mt-0.5 text-[10px]" title="Data de confirmação">
+                          {v.data_confirmacao ? `conf. ${formatDate(v.data_confirmacao).slice(0, 5)}` : 'sem confirmação'}
+                        </p>
                       </td>
-                      <td className="px-3 py-2.5 text-[11px] font-medium text-muted-foreground">{v.uf?.trim() || '—'}</td>
-                      <td className="max-w-[160px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
-                        {v.forma_pagamento || '—'}
+                      <td className="px-2.5 py-2.5 text-[11px] text-muted-foreground">
+                        <p className="truncate" title={v.forma_pagamento ?? undefined}>{v.forma_pagamento || '—'}</p>
+                        <p className="mt-0.5 text-[10px] font-medium" title="Estado (UF)">{v.uf?.trim() || '—'}</p>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-2.5 py-2.5">
                         <StatusPill status={status} />
                         {foraDoRelatorio && v.fora_do_relatorio_em
                           ? <PilulaArquivada desde={v.fora_do_relatorio_em} />
                           : prazo && <PilulaDoPrazo prazo={prazo} />}
                       </td>
                       <td className={cn(
-                        'whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold',
+                        'truncate px-2.5 py-2.5 text-right font-mono text-[11px] font-semibold',
                         status === 'devolvida' || status === 'cancelada' ? 'text-muted-foreground line-through' : 'text-foreground',
                       )}>
                         {formatBRL(v.valor_total)}
                       </td>
                       <td className={cn(
-                        'whitespace-nowrap px-3 py-2.5 text-right font-mono',
+                        'truncate px-2.5 py-2.5 text-right font-mono text-[11px]',
                         v.conta_na_meta ? 'font-semibold text-success' : 'text-muted-foreground/60',
                       )}>
                         {v.conta_na_meta ? formatBRL(v.valor_na_meta) : '—'}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-muted-foreground">
+                      <td className="truncate px-2.5 py-2.5 text-right font-mono text-[11px] text-muted-foreground">
                         {v.valor_recebido > 0 ? formatBRL(v.valor_recebido) : '—'}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center justify-end gap-0.5">
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center justify-end">
                           {podeDecidir && (status === 'aguardando_relatorio' || status === 'em_aberto') && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-success hover:bg-success/10"
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10"
                               title="Confirmar e assinar — entra na meta" disabled={travado}
                               onClick={() => void decidir(v, 'confirmada', true, null, 'Confirmada e assinada. A venda entrou na meta.')}>
                               <CheckCircle2 className="h-4 w-4" />
                             </Button>
                           )}
                           {podeDecidir && status === 'falta_assinatura' && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-warning hover:bg-warning/10"
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-warning hover:bg-warning/10"
                               title="Marcar contrato assinado — entra na meta" disabled={travado}
                               onClick={() => void decidir(v, 'confirmada', true, v.motivo, 'Contrato assinado. A venda entrou na meta.')}>
                               <PenTool className="h-4 w-4" />
                             </Button>
                           )}
                           {podeCorrigir && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Corrigir"
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Corrigir"
                               onClick={() => onEditar(v)}>
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
                           {podeExcluir(v) && (
                             <>
-                              <span className="mx-1 h-5 w-px shrink-0 bg-border" />
+                              <span className="mx-0.5 h-5 w-px shrink-0 bg-border" />
                               <Button variant="ghost" size="icon"
-                                className="h-8 w-8 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
+                                className="h-7 w-7 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
                                 title="Excluir (vai para a lixeira)" onClick={() => onExcluir(v)}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </>
                           )}
-                          <ChevronDown className={cn('ml-1 h-3.5 w-3.5 text-muted-foreground transition-transform', detalhe && 'rotate-180')} aria-hidden />
+                          <ChevronDown className={cn('ml-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', detalhe && 'rotate-180')} aria-hidden />
                         </div>
                       </td>
                     </motion.tr>

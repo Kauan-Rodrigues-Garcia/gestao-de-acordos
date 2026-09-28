@@ -44,6 +44,10 @@
  * e o total, sem abrir menu nenhum — é o gesto que o líder já tenta fazer ao
  * olhar a tela. A cor de cada forma é a de `lib/formasPagamento`, a mesma do
  * Painel Diretoria, para que "Pix" seja o mesmo verde em qualquer painel.
+ *
+ * Desde 28/09/2026 cada card é uma FAMÍLIA (`familiaDaForma`), como no card do
+ * Dashboard: «PIX AUTOMATICO» e «Pix Automático» somam no mesmo Pix automático,
+ * e «PIX BOLETO» em Boleto. Ver `agregarFormas`.
  */
 
 import { useMemo, useState } from 'react';
@@ -499,6 +503,16 @@ export function FormasPagamento({
                       H.O. {formatBRL(f.ho)}
                     </p>
                   )}
+                  {/* O que o ERP escreveu de jeitos diferentes e virou um card
+                      só — «PIX AUTOMATICO» e «Pix Automático», por exemplo. */}
+                  {f.variacoes.length > 1 && (
+                    <p
+                      className="text-[10px] text-muted-foreground mt-0.5 truncate"
+                      title={f.variacoes.map(v => `${v.rotulo}: ${formatBRL(v.bruto)}`).join('\n')}
+                    >
+                      junta {f.variacoes.length} rótulos do ERP
+                    </p>
+                  )}
                 </button>
               );
             })}
@@ -558,7 +572,12 @@ export function FormasPagamento({
                 const parteNaoTabulada = f.bruto > 0 ? (f.naoTabulado / f.bruto) * 100 : 0;
                 return (
                   <div key={f.rotulo} className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-28 sm:w-36 shrink-0 truncate text-right">
+                    <span
+                      className="text-xs text-muted-foreground w-28 sm:w-36 shrink-0 truncate text-right"
+                      title={f.variacoes.length > 1
+                        ? `${f.rotulo} junta: ${f.variacoes.map(v => v.rotulo).join(', ')}`
+                        : undefined}
+                    >
                       {f.rotulo}
                     </span>
                     <div className="flex-1 h-4 rounded-full bg-muted/60 overflow-hidden relative">

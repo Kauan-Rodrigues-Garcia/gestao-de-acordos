@@ -115,9 +115,10 @@ export const ORIGEM_DA_LINHA: Record<OrigemVenda, { rotulo: string; dica: string
  * `fora_relatorio` também não é recorte do mês, e por um motivo diferente: são
  * as vendas que o relatório nunca confirmou e que, um dia depois, saíram da
  * lista principal. Elas não estão em nenhuma das outras abas — nem em `todas` —
- * porque não somam em lugar nenhum. Ficam um mês aqui para quem lançou
- * conferir o NR ou questionar por que ele não apareceu. Ver
- * `buscarForaDoRelatorio` e a migration 20260921170000.
+ * porque não somam em lugar nenhum. Ficam 2 dias úteis aqui para quem lançou
+ * conferir o NR ou questionar por que ele não apareceu (era um mês até
+ * 28/09/2026). Ver `buscarForaDoRelatorio`, `saidaDaAbaFora` e as migrations
+ * 20260921170000 e 20260928150000.
  */
 export type AbaDaLista = 'todas' | 'na_meta' | 'pendencias' | 'perdas' | 'fora_relatorio';
 
@@ -347,6 +348,37 @@ export function prazoDaVenda(semRelatorioDesde: string | null | undefined, agora
   if (Number.isNaN(desde)) return null;
   const excluiEm = new Date(desde + PRAZO_DO_RELATORIO_MS);
   return { excluiEm, restanteMs: excluiEm.getTime() - agora.getTime() };
+}
+
+/* ── A aba «Fora do relatório» (migration 20260928150000) ─────────────────── */
+
+/**
+ * Quantos dias úteis a venda fica na aba «Fora do relatório» antes da lixeira.
+ * Era um mês (20260921170000); em 28/09/2026 virou 2 dias úteis — «ele tem que
+ * ser retirado no período informado e não ficar 1 mês».
+ */
+export const DIAS_UTEIS_FORA_DO_RELATORIO = 2;
+
+/**
+ * Quando a venda arquivada vai para a lixeira.
+ *
+ * Espelho de `fn_pix_dias_uteis_apos(fora_do_relatorio_em, 2)`: soma um dia de
+ * cada vez e só conta os que não caem em sábado nem domingo. O dia da semana é
+ * lido em UTC porque é assim que o banco o lê (`EXTRACT(DOW FROM timestamptz)`
+ * no fuso da sessão, que é UTC) — ler no fuso do navegador faria a tela
+ * prometer uma data e o agendamento cumprir outra perto da meia-noite.
+ */
+export function saidaDaAbaFora(desde: string, dias = DIAS_UTEIS_FORA_DO_RELATORIO): Date | null {
+  const base = new Date(desde);
+  if (Number.isNaN(base.getTime())) return null;
+  const d = new Date(base.getTime());
+  let faltam = dias;
+  while (faltam > 0) {
+    d.setTime(d.getTime() + 86_400_000);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) faltam -= 1;
+  }
+  return d;
 }
 
 /** «Sai em 5 h», «sai em 40 min» — o que cabe numa pílula. */

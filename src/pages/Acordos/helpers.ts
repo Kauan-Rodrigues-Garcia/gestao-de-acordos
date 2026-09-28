@@ -1,16 +1,10 @@
-import { formatCurrency, formatDate } from '@/lib/index';
-import type { Acordo } from '@/lib/supabase';
-
 export type VisaoFiltroAcordos = 'setor' | `equipe:${string}` | 'individual';
 
 export const PER_PAGE = 60;
 
-export function buildMensagem(a: Acordo): string {
-  if (a.status === 'nao_pago') {
-    return `Olá *${a.nome_cliente}*, identificamos que o seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*, encontra-se em atraso. Por favor, entre em contato conosco o mais breve possível para regularizar sua situação. Estamos à disposição para ajudar.`;
-  }
-  return `Olá *${a.nome_cliente}*, passando para lembrar do seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*. Qualquer dúvida, estamos à disposição.`;
-}
+// A mensagem de WhatsApp saiu daqui em 28/09/2026: o texto de sempre virou
+// `MENSAGEM_DO_SISTEMA` em `@/lib/mensagensWhatsapp`, e cada pessoa pode
+// escrever as suas por status.
 
 export function getPageNumbers(current: number, total: number): (number | '...')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);

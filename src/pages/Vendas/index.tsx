@@ -31,14 +31,15 @@
  *     dele. Os cinco cards e as contagens das abas seguem o recorte — um total
  *     que não bate com a lista embaixo dele é o defeito que o Fechamento existe
  *     para evitar.
- *   - **A tabela cabe inteira.** Nenhuma coluna some por largura de tela; cada
- *     uma declara a largura mínima que o conteúdo pede, e o que passa disso é
- *     rolagem horizontal. Informação escondida não é layout, é dado perdido.
+ *   - **A tabela cabe inteira.** Nenhuma coluna some por largura de tela.
+ *     Desde 28/09/2026 ela também não rola de lado: `table-fixed`, datas e
+ *     UF em duas linhas, e o texto cortado com reticências. Ver `TabelaVendas`.
  *   - **Aba «Fora do relatório».** A venda lançada cujo NR o ERP nunca
- *     confirmou sai da lista em 1 dia e vive um MÊS nesta aba, em vez de ir
- *     direto para a lixeira — onde o operador não a alcançaria, por não ter
- *     `ver_lixeira_vendas`. Ela não soma em nada, e volta sozinha se o NR
- *     aparecer. Ver a migration 20260921170000.
+ *     confirmou sai da lista em 1 dia e fica 2 DIAS ÚTEIS nesta aba (era um
+ *     mês até 28/09/2026), em vez de ir direto para a lixeira — onde o
+ *     operador não a alcançaria, por não ter `ver_lixeira_vendas`. Ela não
+ *     soma em nada, e volta sozinha se o NR aparecer. Ver as migrations
+ *     20260921170000 e 20260928150000.
  *   - **O líder decide na linha**: ✓ confirma e assina, ✎ marca assinado, e o
  *     detalhe (clique na linha) tem cancelar, devolver e voltar para aberta.
  *     A antiga «Fila do líder» virou a aba Pendências — de todos os meses.
@@ -478,7 +479,7 @@ export default function Vendas() {
   const limparFiltros = () => {
     setBusca(''); setFiltroSetor(TODOS); setFiltroVendedor(TODOS); setFiltroEquipe(TODOS);
   };
-  const colSpan = veAlemDeSi ? 12 : 11;
+  const colSpan = veAlemDeSi ? 10 : 9;
   const operadorPadrao = perfil?.id ?? '';
   const eu = placar.pessoas.find(p => p.id === perfil?.id) ?? null;
 
@@ -750,10 +751,10 @@ export default function Vendas() {
             <p>
               O NR destas vendas <strong className="text-foreground">não apareceu no relatório</strong> — nem no
               geral, nem na prévia do setor — e um dia depois elas saíram da lista principal. Elas
-              não somam em nada: nem no placar, nem na meta, nem nos cards. Ficam aqui{' '}
-              <strong className="text-foreground">um mês</strong> para você conferir o NR ou questionar por que
-              ele não veio; depois vão para a lixeira. Se o NR aparecer num relatório novo, a venda volta
-              sozinha para a lista.
+              não somam em nada: nem no placar, nem na meta, nem nos cards. Ficam aqui por até{' '}
+              <strong className="text-foreground">2 dias úteis</strong> para você conferir o NR ou questionar
+              por que ele não veio; depois vão para a lixeira. Se o NR aparecer num relatório novo, a venda
+              volta sozinha para a lista.
             </p>
           </div>
         )}
@@ -785,9 +786,14 @@ export default function Vendas() {
                * Layout, que já começa abaixo do cabeçalho do app. Uma janela de
                * `100vh` seria mais alta que a área visível dele, e o rodapé —
                * com a barra — voltaria a ficar fora da tela.
+               *
+               * Desde 28/09/2026 a tabela CABE na largura da tela (`table-fixed`,
+               * ver `TabelaVendas`) e a barra horizontal não aparece mais num
+               * monitor de escritório. O `min-w` baixo só segura celular e
+               * tablet, onde espremer dez colunas seria pior que rolar.
                */
               <div className="max-h-[calc(100vh-15rem)] w-full overflow-auto">
-                <table className="w-full min-w-[1180px] text-xs">
+                <table className="w-full min-w-[860px] table-fixed text-xs">
                   <TabelaVendas
                     grupos={grupos} colSpan={colSpan}
                     mostrarVendedor={veAlemDeSi} equipeDe={equipeDe}

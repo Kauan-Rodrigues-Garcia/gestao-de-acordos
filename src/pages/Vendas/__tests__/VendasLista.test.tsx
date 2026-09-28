@@ -459,10 +459,10 @@ describe('Vendas — a aba Fora do relatório', () => {
   });
 });
 
-describe('Vendas — a tabela cabe inteira e rola', () => {
+describe('Vendas — a tabela cabe inteira', () => {
   it('nenhuma coluna some por largura de tela', () => {
     montar();
-    for (const col of ['NR', 'CLIENTE', 'VENDEDOR', 'VENDA', 'CONFIRMAÇÃO', 'UF',
+    for (const col of ['NR', 'CLIENTE', 'VENDEDOR', 'DATAS',
       'PAGAMENTO', 'STATUS', 'VALOR', 'NA META', 'RECEBIDO', 'AÇÕES']) {
       const th = screen.getByRole('columnheader', { name: col });
       // A regressão a evitar: `hidden md:table-cell` de volta, que tira a
@@ -479,10 +479,27 @@ describe('Vendas — a tabela cabe inteira e rola', () => {
    * alcança sem rolar a página até o fim, perdendo o cabeçalho no caminho. Foi
    * o defeito reclamado em 21/09/2026 («ainda está fora de enquadramento»).
    */
+  // 28/09/2026: «tem um scroll para ir para o lado, acredito ser inútil». A
+  // tabela passou a caber: `table-fixed`, e o `min-w` só segura o celular.
+  it('cabe na largura da tela: table-fixed, sem o min-w largo de antes', () => {
+    montar();
+    const tabela = screen.getByRole('table');
+    expect(tabela.className).toMatch(/\btable-fixed\b/);
+    const minW = Number(/min-w-\[(\d+)px\]/.exec(tabela.className)?.[1] ?? 0);
+    expect(minW).toBeLessThanOrEqual(900);
+  });
+
+  it('as datas e a UF continuam na linha, em duas linhas da mesma célula', () => {
+    montar();
+    const linha = screen.getByText('Cliente 13073500').closest('tr')!;
+    expect(within(linha).getByTitle('Data da venda')).toBeInTheDocument();
+    expect(within(linha).getByTitle('Data de confirmação')).toBeInTheDocument();
+    expect(within(linha).getByTitle('Estado (UF)')).toBeInTheDocument();
+  });
+
   it('a tabela rola dentro de uma janela presa ao viewport, com o cabeçalho fixo', () => {
     montar();
     const tabela = screen.getByRole('table');
-    expect(tabela.className).toMatch(/min-w-\[\d+px\]/);
 
     const janela = tabela.parentElement!;
     expect(janela.className).toMatch(/overflow-auto/);

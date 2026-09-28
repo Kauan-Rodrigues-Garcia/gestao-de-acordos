@@ -37,7 +37,14 @@ import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
-import { buildMensagem, PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
+import { PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
+import { useMensagensWhatsapp } from '@/hooks/useMensagensWhatsapp';
+import {
+  grupoDoStatus, mensagemParaAcordo, mensagensDoGrupo,
+} from '@/lib/mensagensWhatsapp';
+import {
+  EditorMensagensWhatsapp, EscolherMensagemWhatsapp, type OpcaoDeMensagem,
+} from './MensagensWhatsapp';
 import { TableSkeleton } from './TableSkeleton';
 import { AcordosFilters } from './AcordosFilters';
 import { PixAutomatico } from './PixAutomatico';
@@ -574,23 +581,38 @@ export default function Acordos() {
     }
   }
 
+  /*
+   * As mensagens de WhatsApp da pessoa (pedido de 28/09/2026). Sem mensagem
+   * própria, `mensagemParaAcordo` devolve o texto de sempre do sistema.
+   */
+  const mensagensWpp = useMensagensWhatsapp(perfil?.id);
+  const [editorMensagensAberto, setEditorMensagensAberto] = useState(false);
+  const [escolhendoMensagem, setEscolhendoMensagem] = useState<{ acordo: Acordo; opcoes: OpcaoDeMensagem[] } | null>(null);
+  const textoWhatsapp = (a: Acordo, modeloId?: string | null) =>
+    mensagemParaAcordo(a, mensagensWpp.mensagens, perfil?.nome, modeloId);
+
   function prepararFila(listaAcordos: Acordo[]) {
     if (fechamento.impedir('disparar WhatsApp')) return;
     const comWhats = listaAcordos.filter(a => a.whatsapp);
     const semWhats = listaAcordos.filter(a => !a.whatsapp);
     if (comWhats.length === 0) { toast.warning('Nenhum acordo selecionado possui WhatsApp cadastrado'); return; }
     if (semWhats.length > 0)   toast.info(`${semWhats.length} acordo(s) sem WhatsApp serão ignorados`);
-    const fila: ItemFila[] = comWhats.map(a => ({
-      id: a.id,
-      nome_cliente:  a.nome_cliente,
-      nr_cliente:    a.nr_cliente,
-      whatsapp:      a.whatsapp!,
-      valor:         a.valor,
-      vencimento:    a.vencimento,
-      mensagem:      buildMensagem(a),
-      link:          `https://wa.me/55${a.whatsapp!.replace(/\D/g, '')}?text=${encodeURIComponent(buildMensagem(a))}`,
-      enviado:       false,
-    }));
+    // No lote vai a mensagem PADRÃO de cada status — perguntar uma por uma
+    // desfaria o motivo de mandar em lote.
+    const fila: ItemFila[] = comWhats.map(a => {
+      const mensagem = textoWhatsapp(a);
+      return {
+        id: a.id,
+        nome_cliente:  a.nome_cliente,
+        nr_cliente:    a.nr_cliente,
+        whatsapp:      a.whatsapp!,
+        valor:         a.valor,
+        vencimento:    a.vencimento,
+        mensagem,
+        link:          `https://wa.me/55${a.whatsapp!.replace(/\D/g, '')}?text=${encodeURIComponent(mensagem)}`,
+        enviado:       false,
+      };
+    });
     setFilaWhatsApp(fila);
     setFilaAberta(true);
   }
@@ -683,10 +705,22 @@ export default function Acordos() {
     if (failedCount  > 0) toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
   }
 
-  function enviarUmWhatsapp(a: Acordo) {
+  /*
+   * Com mais de uma mensagem para o status do acordo, pergunta qual mandar;
+   * com uma (ou nenhuma, e vale a do sistema), abre direto.
+   */
+  function enviarUmWhatsapp(a: Acordo, modeloId?: string) {
     if (fechamento.impedirData(a.vencimento, 'enviar WhatsApp')) return;
     if (!a.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
-    const mensagem = buildMensagem(a);
+    const doGrupo = mensagensDoGrupo(mensagensWpp.mensagens, grupoDoStatus(a.status));
+    if (!modeloId && doGrupo.length > 1) {
+      setEscolhendoMensagem({
+        acordo: a,
+        opcoes: doGrupo.map(m => ({ id: m.id, titulo: m.titulo, texto: textoWhatsapp(a, m.id) })),
+      });
+      return;
+    }
+    const mensagem = textoWhatsapp(a, modeloId);
     window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(mensagem)}`, '_blank');
     if (perfil?.id) {
       void registrarLog({
@@ -893,6 +927,7 @@ export default function Acordos() {
           temPermissao={temPermissao}
           setCurrentPage={setCurrentPage} limparFiltros={limparFiltros}
           pixAbaAtiva={pixAba} setPixAbaAtiva={setPixAba}
+          onAbrirMensagens={() => setEditorMensagensAberto(true)}
         />
 
         {/* Aba Pix Automático substitui a lista inteira. A permissão vale para
@@ -1021,6 +1056,25 @@ export default function Acordos() {
         usuarioId={perfil?.id} empresaId={empresa?.id}
         temPermissao={temPermissao} prepararFila={prepararFila} acordos={acordos}
         mesBloqueado={fechamento.bloqueado} mensagemFechamento={fechamento.mensagem}
+      />
+
+      <EditorMensagensWhatsapp
+        aberto={editorMensagensAberto}
+        onFechar={() => setEditorMensagensAberto(false)}
+        mensagens={mensagensWpp.mensagens}
+        disponivel={mensagensWpp.disponivel}
+        operador={perfil?.nome}
+        onSalvar={mensagensWpp.salvar}
+      />
+      <EscolherMensagemWhatsapp
+        cliente={escolhendoMensagem?.acordo.nome_cliente ?? null}
+        opcoes={escolhendoMensagem?.opcoes ?? []}
+        onFechar={() => setEscolhendoMensagem(null)}
+        onEscolher={id => {
+          const a = escolhendoMensagem?.acordo;
+          setEscolhendoMensagem(null);
+          if (a) enviarUmWhatsapp(a, id);
+        }}
       />
     </div>
   );

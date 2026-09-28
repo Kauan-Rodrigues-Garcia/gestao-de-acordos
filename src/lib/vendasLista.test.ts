@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   statusDaLinha, abaDaVenda, casaComBusca, lerValorDigitado, lerVendasColadas,
   prazoDaVenda, rotuloDoPrazo, podeExcluirVenda, PRAZO_DO_RELATORIO_MS,
+  saidaDaAbaFora, DIAS_UTEIS_FORA_DO_RELATORIO,
 } from './vendasLista';
 
 describe('statusDaLinha', () => {
@@ -162,5 +163,26 @@ describe('podeExcluirVenda — espelho de fn_venda_excluir', () => {
 
   it('fora da meta, excluir_vendas continua valendo', () => {
     expect(podeExcluirVenda(doRelatorio, lider)).toBe(true);
+  });
+});
+
+// 28/09/2026: a aba «Fora do relatório» deixou de guardar a venda um mês.
+describe('saidaDaAbaFora — espelho de fn_pix_dias_uteis_apos(…, 2)', () => {
+  it('são 2 dias úteis, e não mais 30 dias', () => {
+    expect(DIAS_UTEIS_FORA_DO_RELATORIO).toBe(2);
+    // Segunda 28/09 15:00 UTC → quarta 30/09 15:00 UTC.
+    expect(saidaDaAbaFora('2026-09-28T15:00:00Z')!.toISOString()).toBe('2026-09-30T15:00:00.000Z');
+  });
+
+  it('pula o fim de semana: arquivada na quinta, sai na segunda', () => {
+    expect(saidaDaAbaFora('2026-10-01T15:00:00Z')!.toISOString()).toBe('2026-10-05T15:00:00.000Z');
+  });
+
+  it('arquivada no sábado conta a partir da segunda', () => {
+    expect(saidaDaAbaFora('2026-10-03T12:00:00Z')!.toISOString()).toBe('2026-10-06T12:00:00.000Z');
+  });
+
+  it('data inválida não inventa prazo', () => {
+    expect(saidaDaAbaFora('não é data')).toBeNull();
   });
 });

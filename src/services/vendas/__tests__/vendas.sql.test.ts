@@ -1220,3 +1220,29 @@ describe('o setor é resolvido do mesmo jeito em toda a função', () => {
     );
   });
 });
+
+describe('20260928150000 — a aba «Fora do relatório» dura 2 dias úteis, não um mês', () => {
+  const sql = migration('_vendas_fora_do_relatorio_dois_dias_uteis.sql');
+
+  it('a lixeira pega a venda 2 dias úteis depois do arquivamento', () => {
+    const excluir = compacto(corpoDaFuncao(sql, 'fn_vendas_prazo_excluir'));
+    expect(excluir).toContain('public.fn_pix_dias_uteis_apos(fora_do_relatorio_em, 2) <= NOW()');
+    expect(excluir).not.toMatch(/30 days/);
+  });
+
+  it('nenhum aviso promete mais «um mês»', () => {
+    for (const nome of ['fn_vendas_prazo_marcar', 'fn_vendas_prazo_arquivar', 'fn_vendas_prazo_excluir']) {
+      const corpo = semComentarios(corpoDaFuncao(sql, nome));
+      expect(corpo, nome).not.toMatch(/um mês/);
+    }
+  });
+
+  it('o aviso de arquivamento dá a MESMA data que a exclusão usa', () => {
+    const arquivar = compacto(corpoDaFuncao(sql, 'fn_vendas_prazo_arquivar'));
+    expect(arquivar).toContain('public.fn_pix_dias_uteis_apos(a.fora_do_relatorio_em, 2)');
+  });
+
+  it('confere que a régua de dia útil existe antes de trocar as funções', () => {
+    expect(sql).toMatch(/to_regprocedure\('public\.fn_pix_dias_uteis_apos\(timestamptz, integer\)'\) IS NULL/);
+  });
+});

@@ -23,9 +23,16 @@
  * outro sistema — e o interruptor não parecia um pagamento, parecia uma
  * preferência.
  *
- * O painel passa a falar a língua do resto da aba (a mesma de
- * `PixComissaoDobrada`): moldura âmbar com gradiente, troféu, valores em mono, e
- * uma linha por pessoa que se empilha no celular em vez de rolar de lado.
+ * ## 28/09/2026: sem o âmbar, e em colunas
+ *
+ * A moldura âmbar com gradiente (e o botão amarelo de pagar) gritava mais que
+ * tudo na aba — «muito amarelo, destoando do Pix automático e da página». O
+ * painel passou a ser um `Card` neutro com o violeta que as outras seções do
+ * Pix usam (`PixMetaPainel`, `PixSaldoPainel`), e as pessoas viraram LINHAS de
+ * uma tabela: Premiação, Já pago e Falta pagar alinhados em coluna, para o olho
+ * descer a lista comparando valor com valor. O cabeçalho resume o que importa
+ * para quem paga: quanto falta, quanto já saiu e quantos estão quitados.
+ * Verde continua sendo «pago»; o âmbar saiu de vez.
  *
  * **Pagar virou botão.** «Pagar R$ 412,30» diz o que vai acontecer e quanto —
  * um interruptor não dizia nem uma coisa nem outra. Pago, a linha mostra o
@@ -72,6 +79,7 @@ import { motion } from 'framer-motion';
 import {
   Trophy, ChevronDown, Check, Search, Loader2, Wallet, Undo2, X,
 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
 import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
@@ -105,18 +113,27 @@ interface Props {
   ) => void | Promise<void>;
 }
 
-/** Uma parcela da conta: rótulo pequeno em cima, número em mono embaixo. */
+/**
+ * As colunas da tabela. Uma constante só para o cabeçalho e as linhas: se as
+ * duas grades divergirem, os números deixam de ficar embaixo do título deles.
+ */
+const GRADE = 'md:grid md:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))_minmax(150px,auto)] md:items-center md:gap-4';
+
+/**
+ * Uma parcela da conta. No computador o título é o da coluna; no celular a
+ * linha empilha, e o rótulo aparece em cima do número.
+ */
 function Parcela({
   rotulo, valor, cls, titulo, nota,
 }: {
   rotulo: string; valor: number; cls?: string; titulo?: string; nota?: string;
 }) {
   return (
-    <div className="min-w-0" title={titulo}>
-      <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">
+    <div className="min-w-0 md:text-right" title={titulo}>
+      <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none md:hidden">
         {rotulo}
       </p>
-      <p className={cn('text-sm font-mono font-bold tabular-nums leading-tight mt-1', cls)}>
+      <p className={cn('text-sm font-mono font-semibold tabular-nums leading-tight mt-1 md:mt-0', cls)}>
         {formatCurrency(valor)}
       </p>
       {nota && (
@@ -124,6 +141,16 @@ function Parcela({
           {nota}
         </p>
       )}
+    </div>
+  );
+}
+
+/** Um número do resumo do cabeçalho. */
+function Resumo({ rotulo, children, cls }: { rotulo: string; children: React.ReactNode; cls?: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">{rotulo}</p>
+      <p className={cn('mt-1 text-sm font-mono font-bold tabular-nums leading-tight', cls)}>{children}</p>
     </div>
   );
 }
@@ -157,92 +184,40 @@ function LinhaPremiacao({
 
   return (
     <div className={cn(
-      'rounded-lg border px-3 py-2.5 space-y-2.5 transition-colors',
-      pago
-        ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
-        : 'border-border bg-background/40 hover:bg-background/70',
+      'px-3 py-3 space-y-2.5 md:space-y-0 transition-colors',
+      GRADE,
+      pago ? 'bg-emerald-500/[0.04]' : 'hover:bg-muted/30',
     )}>
-      {/* ── Nome, estado e a barra do que já saiu ── */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-foreground truncate">{l.nome}</p>
-          <p className="text-[10.5px] text-muted-foreground">
+      {/* ── Pessoa: nome, situação e a barra do que já saiu ── */}
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-foreground truncate">{l.nome}</p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="h-1 flex-1 max-w-[140px] rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all duration-500',
+                quitado || pago ? 'bg-emerald-500' : 'bg-violet-500')}
+              style={{ width: `${pctPago}%` }}
+            />
+          </div>
+          <span className={cn(
+            'text-[10.5px] tabular-nums',
+            deve ? 'text-destructive' : 'text-muted-foreground',
+          )}>
             {quitado
-              ? 'Premiação quitada'
+              ? 'quitada'
               : deve
-                ? 'Já saiu mais do que era devido'
-                : `${formatCurrency(l.falta)} ainda por sair`}
-          </p>
-        </div>
-
-        {/* ── O botão de pagar ──────────────────────────────────────────────
-            Diz o valor porque é ele que vai sair. Um rótulo genérico obrigaria
-            a olhar outra coluna antes de clicar. */}
-        {podeMarcarPago ? (
-          pago ? (
-            <div className="flex items-center gap-1.5 shrink-0" title={carimbo || undefined}>
-              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-500">
-                <Check className="w-3 h-3" /> Pago
-              </span>
-              <button
-                type="button"
-                disabled={alterando}
-                onClick={() => void onMarcarPago?.(l.operadorId, false, 0)}
-                title="Desfazer o pagamento desta premiação"
-                aria-label={`Desfazer o pagamento da premiação de ${l.nome}`}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                {alterando
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Undo2 className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              disabled={alterando}
-              /* Marcar quita o que falta AGORA; negativo (pagou demais) vira
-                 zero — esse acerto é do saldo de divergência, não daqui. */
-              onClick={() => void onMarcarPago?.(l.operadorId, true, Math.max(l.falta, 0))}
-              aria-label={`Marcar a premiação de ${l.nome} como paga`}
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 h-8 text-[11px] font-bold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
-            >
-              {alterando
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <Wallet className="w-3.5 h-3.5" />}
-              Pagar {formatCurrency(Math.max(l.falta, 0))}
-            </button>
-          )
-        ) : (
-          <span
-            title={carimbo || undefined}
-            className={cn(
-              'shrink-0 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wider',
-              pago
-                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-500'
-                : 'border-border bg-muted/40 text-muted-foreground',
-            )}
-          >
-            {pago ? <Check className="w-3 h-3" /> : null}
-            {pago ? 'Pago' : 'Não pago'}
+                ? 'saiu a mais'
+                : `${Math.round(pctPago)}% pago`}
           </span>
-        )}
+        </div>
       </div>
 
-      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn('h-full rounded-full transition-all duration-500',
-            quitado || pago ? 'bg-emerald-400' : 'bg-amber-400')}
-          style={{ width: `${pctPago}%` }}
-        />
-      </div>
-
-      {/* ── As três parcelas ── */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* ── As três parcelas: uma coluna cada no computador ── */}
+      <div className="grid grid-cols-3 gap-3 md:contents">
         <Parcela
           rotulo="Premiação"
           valor={l.premiacao}
-          cls="text-amber-700 dark:text-amber-500"
+          cls="text-foreground"
           titulo={`Comissão de ${formatCurrency(l.comissao)} dobrada por bater os dois requisitos`}
           nota={`${formatCurrency(l.comissao)} × 2`}
         />
@@ -266,9 +241,65 @@ function LinhaPremiacao({
         <Parcela
           rotulo="Falta pagar"
           valor={l.falta}
-          cls={deve ? 'text-destructive' : quitado || pago ? 'text-muted-foreground' : 'text-foreground'}
+          cls={deve
+            ? 'text-destructive'
+            : quitado || pago ? 'text-muted-foreground' : 'text-violet-700 dark:text-violet-400'}
           titulo={deve ? 'Negativo: já saiu mais do que era devido' : undefined}
         />
+      </div>
+
+      {/* ── Ação ──────────────────────────────────────────────────────────
+          O botão diz o valor porque é ele que vai sair. Pago, a linha mostra
+          quem pagou e quando — por escrito, e não só no passar do mouse. */}
+      <div className="flex items-center gap-1.5 md:justify-end">
+        {podeMarcarPago && !pago ? (
+          <button
+            type="button"
+            disabled={alterando}
+            /* Marcar quita o que falta AGORA; negativo (pagou demais) vira
+               zero — esse acerto é do saldo de divergência, não daqui. */
+            onClick={() => void onMarcarPago?.(l.operadorId, true, Math.max(l.falta, 0))}
+            aria-label={`Marcar a premiação de ${l.nome} como paga`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 h-8 text-[11px] font-semibold text-white hover:bg-violet-500 transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            {alterando
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Wallet className="w-3.5 h-3.5" />}
+            Pagar {formatCurrency(Math.max(l.falta, 0))}
+          </button>
+        ) : (
+          <div className="min-w-0 md:text-right" title={carimbo || undefined}>
+            <span className={cn(
+              'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+              pago
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                : 'border-border bg-muted/40 text-muted-foreground',
+            )}>
+              {pago ? <Check className="w-3 h-3" /> : null}
+              {pago ? 'Pago' : 'Não pago'}
+            </span>
+            {pago && pagamento?.pago_por_nome && (
+              <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
+                {pagamento.pago_por_nome}
+                {pagamento.pago_em ? ` · ${new Date(pagamento.pago_em).toLocaleDateString('pt-BR')}` : ''}
+              </p>
+            )}
+          </div>
+        )}
+        {podeMarcarPago && pago && (
+          <button
+            type="button"
+            disabled={alterando}
+            onClick={() => void onMarcarPago?.(l.operadorId, false, 0)}
+            title="Desfazer o pagamento desta premiação"
+            aria-label={`Desfazer o pagamento da premiação de ${l.nome}`}
+            className="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {alterando
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Undo2 className="w-3.5 h-3.5" />}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -311,6 +342,10 @@ export function PixPainelPremiacoes({
   const total = useMemo(() => totalDoPainel(linhas), [linhas]);
   // O «falta» de cada linha já desconta o carimbo mensal — somar é o bastante.
   const faltaPagar = total.falta;
+  const quitadas = useMemo(
+    () => linhas.filter(l => Math.abs(l.falta) < 0.005 || l.premiacaoPaga).length,
+    [linhas],
+  );
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -331,31 +366,48 @@ export function PixPainelPremiacoes({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-500/20 to-orange-600/5 overflow-hidden">
-        {/* ── Cabeçalho ────────────────────────────────────────────────────── */}
+      <Card className="border-border overflow-hidden">
+        {/* ── Cabeçalho: o que é, e o resumo de quem paga ─────────────────── */}
         <button
           type="button"
           onClick={() => setAberto(!aberto)}
           aria-expanded={aberto}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-amber-500/10"
+          className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-left transition-colors hover:bg-muted/30"
         >
-          <Trophy className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-foreground leading-tight">
-              Premiação dobrada a pagar
-            </p>
-            <p className="text-[11px] leading-tight text-muted-foreground">
-              {linhas.length} {linhas.length === 1 ? 'pessoa dobrou' : 'pessoas dobraram'} a
-              comissão neste mês · bônus de {formatCurrency(total.bonus)}
-            </p>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/25 bg-violet-500/10">
+              <Trophy className="h-4 w-4 text-violet-700 dark:text-violet-400" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground leading-tight">
+                Premiação dobrada a pagar
+              </p>
+              <p className="text-[11px] leading-tight text-muted-foreground">
+                {linhas.length} {linhas.length === 1 ? 'pessoa dobrou' : 'pessoas dobraram'} a
+                comissão · {quitadas} de {linhas.length} {quitadas === 1 ? 'quitada' : 'quitadas'} ·
+                bônus de {formatCurrency(total.bonus)}
+              </p>
+            </div>
           </div>
-          <div className="hidden shrink-0 text-right sm:block">
-            <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">
-              Falta pagar
-            </p>
-            <p className="mt-1 text-base font-mono font-bold tabular-nums text-amber-700 dark:text-amber-400 leading-tight">
-              {formatCurrency(faltaPagar)}
-            </p>
+
+          {/* O que o pagador quer saber antes de abrir: quanto sai, quanto já
+              saiu. A premiação cheia fica em texto corrido, embaixo do pago —
+              o número grande é um só, o que falta. */}
+          <div className="hidden items-center gap-6 sm:flex">
+            <div className="min-w-0 text-right">
+              <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground leading-none">Já pago</p>
+              <p className="mt-1 text-[11px] font-mono tabular-nums text-muted-foreground leading-tight">
+                {formatCurrency(total.jaPago)} de {formatCurrency(total.premiacao)}
+              </p>
+            </div>
+            <div className="text-right">
+              <Resumo
+                rotulo="Falta pagar"
+                cls={faltaPagar > 0.005 ? 'text-violet-700 dark:text-violet-400' : 'text-muted-foreground'}
+              >
+                {formatCurrency(faltaPagar)}
+              </Resumo>
+            </div>
           </div>
           <ChevronDown className={cn(
             'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
@@ -364,15 +416,15 @@ export function PixPainelPremiacoes({
         </button>
 
         {aberto && (
-          <div className="border-t border-amber-500/25 p-3 space-y-2.5">
+          <div className="border-t border-border p-3 space-y-2.5">
             {/* ── Busca e recorte ── */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[160px] flex-1">
+              <div className="relative min-w-[160px] flex-1 sm:max-w-xs">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Procurar pessoa"
-                  className="w-full rounded-lg border border-border bg-background/60 py-1.5 pl-8 pr-7 text-xs outline-none focus:ring-1 focus:ring-amber-400"
+                  className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-7 text-xs outline-none focus:ring-1 focus:ring-ring"
                 />
                 {busca && (
                   <button
@@ -393,8 +445,8 @@ export function PixPainelPremiacoes({
                 className={cn(
                   'shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
                   soPendentes
-                    ? 'border-amber-500/50 bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                    : 'border-border bg-background/40 text-muted-foreground hover:text-foreground',
+                    ? 'border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                    : 'border-border bg-background text-muted-foreground hover:text-foreground',
                 )}
               >
                 Só quem falta
@@ -402,24 +454,38 @@ export function PixPainelPremiacoes({
             </div>
 
             {visiveis.length === 0 ? (
-              <p className="rounded-lg border border-border bg-background/40 px-4 py-6 text-center text-xs text-muted-foreground">
+              <p className="rounded-lg border border-border px-4 py-6 text-center text-xs text-muted-foreground">
                 {busca.trim() ? 'Ninguém com esse nome.' : 'Tudo quitado por aqui.'}
               </p>
             ) : (
-              visiveis.map(l => (
-                <LinhaPremiacao
-                  key={l.operadorId}
-                  l={l}
-                  pagamento={pagamentoPorOperador.get(l.operadorId)}
-                  podeMarcarPago={podeMarcarPago}
-                  alterando={alterandoOperadorId === l.operadorId}
-                  onMarcarPago={onMarcarPago}
-                />
-              ))
+              <div className="rounded-lg border border-border divide-y divide-border">
+                {/* Títulos das colunas — só no computador; no celular cada
+                    número leva o próprio rótulo. */}
+                <div className={cn(
+                  'hidden bg-muted/30 px-3 py-2 text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground',
+                  GRADE,
+                )}>
+                  <span>Pessoa</span>
+                  <span className="text-right">Premiação</span>
+                  <span className="text-right">Já pago</span>
+                  <span className="text-right">Falta pagar</span>
+                  <span className="text-right">Situação</span>
+                </div>
+                {visiveis.map(l => (
+                  <LinhaPremiacao
+                    key={l.operadorId}
+                    l={l}
+                    pagamento={pagamentoPorOperador.get(l.operadorId)}
+                    podeMarcarPago={podeMarcarPago}
+                    alterando={alterandoOperadorId === l.operadorId}
+                    onMarcarPago={onMarcarPago}
+                  />
+                ))}
+              </div>
             )}
           </div>
         )}
-      </div>
+      </Card>
     </motion.div>
   );
 }

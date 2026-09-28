@@ -26,11 +26,20 @@
  * escolhidas (`somaDasFormas`), não refazer a agregação: assim os cards por
  * forma continuam mostrando o recorte inteiro — é neles que se clica para
  * filtrar — e a soma das partes sempre fecha com o total.
+ *
+ * ## A forma é a FAMÍLIA, igual ao card do Dashboard
+ *
+ * Até 28/09/2026 cada rótulo cru do ERP virava um card: «PIX AUTOMATICO»,
+ * «Pix Automático», «PIX BOLETO», «Boleto Bancário»… O mesmo dinheiro aparecia
+ * em cinco cartões aqui e em dois no Dashboard, que já agrupava por
+ * `familiaDaForma`. Agora as duas telas usam a mesma régua: a família é o
+ * rótulo, e as variações do ERP ficam em `variacoes`, para quem quiser ver o
+ * que foi juntado. «PIX BOLETO» cai em Boleto — é a regra do Dashboard.
  */
 
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import { linhaNoEscopo, type EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
-import { rotuloDaForma, ROTULO_SEM_OPERADOR } from '@/lib/formasPagamento';
+import { rotuloDaForma, familiaDaForma, ROTULO_SEM_OPERADOR } from '@/lib/formasPagamento';
 import { diasNoMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { formatBRL } from '@/lib/money';
 
@@ -77,6 +86,23 @@ export interface FatiaForma {
   share: number;
   /** Valor médio por registro do relatório. */
   ticket: number;
+  /**
+   * Os rótulos crus do ERP que caíram nesta família, do maior para o menor.
+   * Uma variação só = o rótulo do ERP já era o da família, ou quase.
+   */
+  variacoes: { rotulo: string; bruto: number; qtd: number }[];
+}
+
+/**
+ * O rótulo que a tela mostra: a família (Pix, Pix automático, Boleto…) e,
+ * quando o ERP inventa algo que não casa com nenhuma, o próprio rótulo cru.
+ */
+export function rotuloDaFamilia(
+  forma: AnaliticoDashboardLinha['forma_pagamento'],
+  detalhe?: string | null,
+): { familia: string; cru: string } {
+  const cru = rotuloDaForma(forma, detalhe);
+  return { familia: familiaDaForma(cru)?.rotulo ?? cru, cru };
 }
 
 export interface GrupoFormas {
@@ -181,7 +207,10 @@ export function agregarFormas(
   rotulos: RotulosFormas,
   mes: string,
 ): DetalhamentoFormas {
-  const porForma     = new Map<string, { bruto: number; ho: number; qtd: number; naoTabulado: number }>();
+  const porForma     = new Map<string, {
+    bruto: number; ho: number; qtd: number; naoTabulado: number;
+    variacoes: Map<string, { bruto: number; qtd: number }>;
+  }>();
   const porDiaMap    = new Map<number, Acumulador>();
   const porOperador  = new Map<string, Acumulador>();
   const porEquipe    = new Map<string, Acumulador>();
@@ -195,16 +224,19 @@ export function agregarFormas(
     const valor = Number(l.total) || 0;
     const valorHo = Number(l.total_ho) || 0;
     const registros = Number(l.qtd) || 0;
-    const rotulo = rotuloDaForma(l.forma_pagamento, l.forma_detalhe);
+    const { familia: rotulo, cru } = rotuloDaFamilia(l.forma_pagamento, l.forma_detalhe);
     const semTabulacao = l.status_tabulacao === 'nao_tabulado';
 
     total += valor; ho += valorHo; qtd += registros;
     if (semTabulacao) { naoTabulado += valor; naoTabuladoQtd += registros; }
 
     const forma = porForma.get(rotulo)
-      ?? { bruto: 0, ho: 0, qtd: 0, naoTabulado: 0 };
+      ?? { bruto: 0, ho: 0, qtd: 0, naoTabulado: 0, variacoes: new Map() };
     forma.bruto += valor; forma.ho += valorHo; forma.qtd += registros;
     if (semTabulacao) forma.naoTabulado += valor;
+    const variacao = forma.variacoes.get(cru) ?? { bruto: 0, qtd: 0 };
+    variacao.bruto += valor; variacao.qtd += registros;
+    forma.variacoes.set(cru, variacao);
     porForma.set(rotulo, forma);
 
     const dia = Number(l.dia.slice(8, 10));
@@ -234,6 +266,9 @@ export function agregarFormas(
       naoTabulado: f.naoTabulado,
       share:  total > 0 ? Math.round((f.bruto / total) * 1000) / 10 : 0,
       ticket: f.qtd  > 0 ? f.bruto / f.qtd : 0,
+      variacoes: [...f.variacoes.entries()]
+        .map(([r, v]) => ({ rotulo: r, bruto: v.bruto, qtd: v.qtd }))
+        .sort((a, b) => b.bruto - a.bruto || a.rotulo.localeCompare(b.rotulo, 'pt-BR')),
     }))
     .sort((a, b) => b.bruto - a.bruto || a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
 

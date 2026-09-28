@@ -70,12 +70,45 @@ describe('agregarFormas', () => {
     expect(d.formas[1].ticket).toBe(250);
   });
 
-  it('sem forma detalhada (PaguePlay) cai no rótulo consolidado do enum', () => {
+  it('sem forma detalhada (PaguePlay) cai no consolidado, com o nome da família do Dashboard', () => {
     const d = agregar([
       linha({ forma_detalhe: null, forma_pagamento: 'cartao', total: 90 }),
       linha({ forma_detalhe: null, forma_pagamento: 'boleto_pix', total: 10 }),
     ]);
-    expect(d.rotulos).toEqual(['Cartão', 'Pix/Boleto']);
+    expect(d.rotulos).toEqual(['Cartão', 'Boleto/Pix Cofen']);
+  });
+
+  // Pedido de 28/09/2026: a aba separava o mesmo dinheiro em vários cards,
+  // enquanto o card do Dashboard já juntava por família.
+  it('junta as variações do ERP na família, como o card do Dashboard', () => {
+    const d = agregar([
+      linha({ forma_detalhe: 'PIX AUTOMATICO', total: 300 }),
+      linha({ forma_detalhe: 'Pix Automático', total: 200 }),
+      linha({ forma_detalhe: 'PIX BOLETO', total: 150 }),
+      linha({ forma_detalhe: 'Boleto Bancário', total: 50 }),
+      linha({ forma_detalhe: 'PIX', total: 100 }),
+    ]);
+
+    expect(d.rotulos).toEqual(['Pix automático', 'Boleto', 'Pix']);
+    expect(d.formas[0]).toMatchObject({ rotulo: 'Pix automático', bruto: 500, qtd: 2 });
+    expect(d.formas[0].variacoes.map(v => v.rotulo)).toEqual(['PIX AUTOMATICO', 'Pix Automático']);
+    // «PIX BOLETO» é boleto — a mesma regra do Dashboard.
+    expect(d.formas[1]).toMatchObject({ rotulo: 'Boleto', bruto: 200 });
+    expect(d.total).toBe(800);
+  });
+
+  it('a quebra por dia e por operador usa a família, e a soma fecha', () => {
+    const d = agregar([
+      linha({ forma_detalhe: 'PIX AUTOMATICO', total: 300 }),
+      linha({ forma_detalhe: 'Pix Automático', total: 200 }),
+    ]);
+    expect(d.porOperador[0].porForma).toEqual({ 'Pix automático': 500 });
+    expect(d.porDia.find(p => p.dia === 5)?.porForma).toEqual({ 'Pix automático': 500 });
+  });
+
+  it('rótulo que não casa com família nenhuma fica com o nome do ERP', () => {
+    const d = agregar([linha({ forma_detalhe: 'CRIPTO XYZ', total: 10 })]);
+    expect(d.rotulos).toEqual(['CRIPTO XYZ']);
   });
 
   it('período filtra inclusive nas duas pontas', () => {

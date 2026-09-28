@@ -8,6 +8,7 @@ import {
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import type { VisaoFiltroAcordos } from './helpers';
+import { BotaoMensagensWhatsapp } from './MensagensWhatsapp';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import type { AcordoTag } from '@/lib/supabase';
 
@@ -57,6 +58,8 @@ export interface AcordosFiltersProps {
    *  página troca para o painel Pix e os filtros da lista somem. */
   pixAbaAtiva: boolean;
   setPixAbaAtiva: (v: boolean) => void;
+  /** Abre o editor das mensagens de WhatsApp (botão ao lado de «Filtrar data»). */
+  onAbrirMensagens?: () => void;
 }
 
 export function AcordosFilters({
@@ -70,7 +73,7 @@ export function AcordosFilters({
   statusLabels, tipoLabels, operadoresMap,
   filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
   setCurrentPage, limparFiltros,
-  pixAbaAtiva, setPixAbaAtiva,
+  pixAbaAtiva, setPixAbaAtiva, onAbrirMensagens,
 }: AcordosFiltersProps) {
   const mostrarEquipes = niveis.includes('equipe') && equipesDoSetor.length > 0;
   // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
@@ -329,6 +332,8 @@ export function AcordosFilters({
                   <X className="w-3 h-3" />
                 </button>
               )}
+              {/* Pedido de 28/09/2026: pequeno, colado no filtro de data. */}
+              {onAbrirMensagens && <BotaoMensagensWhatsapp onClick={onAbrirMensagens} />}
             </div>
             {temFiltros && (
               <Button variant="ghost" size="sm" onClick={limparFiltros} className="h-8 text-xs gap-1">
