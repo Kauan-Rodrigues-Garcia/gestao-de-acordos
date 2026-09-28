@@ -374,7 +374,10 @@ export interface Notificacao {
 
 // 'troca_extra' é gravado pelo fluxo de troca de vínculo EXTRA (AcordoNovoInline
 // e AcordoForm) — o union estava desatualizado em relação ao runtime.
-export type MotivoLixeira = 'exclusao_manual' | 'transferencia_nr' | 'troca_extra';
+// 'autorizacao_solicitada' é gravado por `fn_autorizacao_decidir` (transferência
+// aprovada pelo pedido de autorização). Sem ele no union, a Lixeira o mostrava
+// como «Exclusão Manual» (28/09/2026).
+export type MotivoLixeira = 'exclusao_manual' | 'transferencia_nr' | 'troca_extra' | 'autorizacao_solicitada';
 
 export interface LixeiraAcordo {
   id: string;
@@ -396,6 +399,9 @@ export interface LixeiraAcordo {
   autorizado_por_nome?: string;
   transferido_para_id?: string;
   transferido_para_nome?: string;
+  /** Quem mandou para a lixeira (migration 20260928220000). Decide quem restaura. */
+  excluido_por_id?: string | null;
+  excluido_por_nome?: string | null;
   excluido_em: string;
   expira_em?: string;
 }

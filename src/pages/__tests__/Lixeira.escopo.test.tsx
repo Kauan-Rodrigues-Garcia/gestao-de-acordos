@@ -28,6 +28,8 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
     loading: mock.permissoesCarregando,
     // Enquanto carrega, o hook real nega tudo a quem não tem acesso total.
     temPermissao: (chave: string) => !mock.permissoesCarregando && mock.liberadas.has(chave),
+    // O cadeado de mês fechado (useFechamentoMes) pergunta pela explícita.
+    temPermissaoExplicita: () => false,
   }),
 }));
 vi.mock('@/lib/permissoes-escopo', () => ({
@@ -41,6 +43,9 @@ vi.mock('@/services/lixeira.service', () => ({
   purgarExpirados: vi.fn(async () => undefined),
   esvaziarLixeira: vi.fn(),
   restaurarItemLixeira: vi.fn(),
+  ehTransferenciaLixeira: (m: string) => ['transferencia_nr', 'autorizacao_solicitada', 'troca_extra'].includes(m),
+  podeRestaurarItemLixeira: () => false,
+  ROTULO_MOTIVO_LIXEIRA: {},
 }));
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

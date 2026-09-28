@@ -21,7 +21,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { fetchLixeira, esvaziarLixeira, purgarExpirados, restaurarItemLixeira, LixeiraAcordo } from '@/services/lixeira.service';
+import {
+  fetchLixeira, esvaziarLixeira, purgarExpirados, restaurarItemLixeira, LixeiraAcordo,
+  ehTransferenciaLixeira, podeRestaurarItemLixeira, ROTULO_MOTIVO_LIXEIRA,
+} from '@/services/lixeira.service';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
@@ -39,11 +43,16 @@ function tempoRestante(expiraEm?: string): string {
   return 'Menos de 1h';
 }
 
+/**
+ * O selo do motivo. Até 28/09/2026 só `transferencia_nr` era reconhecido, e a
+ * transferência aprovada por pedido (`autorizacao_solicitada`) e a troca
+ * Extra → Direto (`troca_extra`) apareciam como «Exclusão Manual».
+ */
 function badgeMotivo(motivo: string) {
-  if (motivo === 'transferencia_nr') {
+  if (ehTransferenciaLixeira(motivo)) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.12)]">
-        <ArrowRightLeft className="w-3 h-3" /> Transferência de NR
+        <ArrowRightLeft className="w-3 h-3" /> {ROTULO_MOTIVO_LIXEIRA[motivo] ?? 'Transferência'}
       </span>
     );
   }
@@ -107,6 +116,17 @@ export default function Lixeira() {
   const escopo = escopoEfetivo('lixeira', temPermissao);
   const soOsProprios = escopo === 'individual' || escopo === null;
 
+  /*
+   * Quem restaura o quê — a mesma regra de `fn_lixeira_restaurar` no banco:
+   * transferência nunca; quem vê só os próprios restaura só o que ELE
+   * excluiu; a liderança devolve o acordo à pessoa (o banco confere o alcance).
+   */
+  const podeRestaurarItem = (item: LixeiraAcordo) =>
+    podeRestaurarItemLixeira(item, { meuId: perfil?.id, temChave: podeRestaurar, soOsProprios });
+
+  // O mesmo cadeado de mês fechado da exclusão: devolver um acordo mexe no mês dele.
+  const fechamento = useFechamentoMes(null);
+
   const carregar = useCallback(async () => {
     if (!empresa?.id) return;
     setLoading(true);
@@ -164,15 +184,20 @@ export default function Lixeira() {
 
   async function handleRestaurar(item: LixeiraAcordo) {
     if (restaurandoId) return;
+    if (!podeRestaurarItem(item)) return;
+    if (fechamento.impedirData(item.vencimento, 'restaurar o acordo')) return;
     setRestaurandoId(item.id);
-    const { ok, error } = await restaurarItemLixeira(item);
+    const { ok, error, operadorNome } = await restaurarItemLixeira(item);
     setRestaurandoId(null);
     if (ok) {
       setItens(prev => prev.filter(i => i.id !== item.id));
       setDetalhe(d => (d?.id === item.id ? null : d));
-      toast.success('Acordo restaurado com sucesso!');
+      const dono = operadorNome ?? item.operador_nome;
+      toast.success(dono && dono !== perfil?.nome
+        ? `Acordo restaurado — voltou para ${dono}, que foi avisado.`
+        : 'Acordo restaurado — voltou para a sua lista.');
     } else {
-      toast.error('Erro ao restaurar acordo: ' + error);
+      toast.error(error ?? 'Não foi possível restaurar o acordo.', { duration: 7000 });
     }
   }
 
@@ -212,8 +237,8 @@ export default function Lixeira() {
     );
   }
 
-  const totalTransferencias = itens.filter(i => i.motivo === 'transferencia_nr').length;
-  const totalExclusoes = itens.filter(i => i.motivo === 'exclusao_manual').length;
+  const totalTransferencias = itens.filter(i => ehTransferenciaLixeira(i.motivo)).length;
+  const totalExclusoes = itens.filter(i => !ehTransferenciaLixeira(i.motivo)).length;
 
   const statsCards = [
     {
@@ -500,9 +525,9 @@ export default function Lixeira() {
                         {/* Ações */}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150">
-                            {podeRestaurar && (
+                            {podeRestaurarItem(item) && (
                             <button
-                              title="Restaurar acordo"
+                              title={`Restaurar acordo — volta para ${item.operador_nome ?? 'o operador'}`}
                               disabled={restaurandoId === item.id}
                               onClick={() => handleRestaurar(item)}
                               className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-500/10 transition-all duration-150 disabled:opacity-50"
@@ -601,7 +626,21 @@ export default function Lixeira() {
                     <div className="p-4 space-y-3">
                       <div>{badgeMotivo(detalhe.motivo)}</div>
 
-                      {detalhe.motivo === 'transferencia_nr' && (
+                      {ehTransferenciaLixeira(detalhe.motivo) && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Transferência não se restaura pela lixeira: o acordo já é de outra pessoa.
+                        </p>
+                      )}
+                      {!ehTransferenciaLixeira(detalhe.motivo) && detalhe.excluido_por_nome && (
+                        <p className="text-xs text-muted-foreground">
+                          Excluído por <strong className="text-foreground">{detalhe.excluido_por_nome}</strong>
+                          {detalhe.excluido_por_nome !== detalhe.operador_nome && detalhe.operador_nome
+                            ? <> · o acordo é de <strong className="text-foreground">{detalhe.operador_nome}</strong></>
+                            : null}
+                        </p>
+                      )}
+
+                      {ehTransferenciaLixeira(detalhe.motivo) && (
                         /* Visual transfer chain */
                         <div className="mt-2 space-y-0">
                           {[
@@ -683,7 +722,7 @@ export default function Lixeira() {
                 >
                   Fechar
                 </Button>
-                {podeRestaurar && (
+                {podeRestaurarItem(detalhe) && (
                 <Button
                   size="sm"
                   onClick={() => handleRestaurar(detalhe)}

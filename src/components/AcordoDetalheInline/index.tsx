@@ -21,6 +21,7 @@ import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parc
 import { autenticarLider } from '@/services/autorizacao_lider.service';
 import { temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
+import { enviarParaLixeira } from '@/services/lixeira.service';
 import {
   formatCurrency, formatDate,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -432,6 +433,16 @@ export function AcordoDetalheInline({
       }
 
       if (acordoDiretoOriginal) {
+        // Vai para a lixeira como TRANSFERÊNCIA (`troca_extra`), e não some sem
+        // rastro: o acordo saiu de uma pessoa para outra, e a lixeira mostra de
+        // quem para quem — sem opção de restaurar (20260928220000).
+        await enviarParaLixeira({
+          acordo:              acordoDiretoOriginal as Acordo,
+          motivo:              'troca_extra',
+          autorizadoPorNome:   liderNomeAutorizador ?? undefined,
+          transferidoParaId:   perfil.id,
+          transferidoParaNome: perfil.nome ?? undefined,
+        });
         const { error: errDel } = await supabase.from('acordos').delete().eq('id', acordoDiretoOriginal.id);
         if (errDel) {
           console.error(errDel);

@@ -969,6 +969,12 @@ export interface PixLixeiraItem {
   excluido_por_nome: string | null;
   excluido_em: string;
   expira_em: string;
+  /**
+   * `transferencia` quando saiu pelo pedido de NR autorizado (20260928220000):
+   * não se restaura. Opcional para a lixeira antiga, sem a coluna.
+   */
+  motivo?: 'exclusao' | 'transferencia' | string;
+  transferido_para_nome?: string | null;
 }
 
 /**
@@ -1006,7 +1012,9 @@ export async function restaurarItemLixeiraPix(
 ): Promise<{ ok: boolean; acordoId?: string; error?: string }> {
   const { data, error } = await supabase.rpc('fn_pix_restaurar_lixeira', { p_item_id: itemId });
   if (error) {
-    const msg = error.message.includes('SEM_PERMISSAO_RESTAURAR')
+    const msg = error.message.includes('LIXEIRA_TRANSFERENCIA')
+      ? 'Este NR foi transferido para outra pessoa — transferência não se desfaz pela lixeira.'
+      : error.message.includes('SEM_PERMISSAO_RESTAURAR')
       ? 'Só líder ou superior pode restaurar registros do Pix automático.'
       : error.message.includes('LIXEIRA_ITEM_NAO_ENCONTRADO')
         ? 'Este item já saiu da lixeira — recarregue a lista.'

@@ -3086,7 +3086,14 @@ export function PixAutomatico() {
                         <div className="flex items-center justify-end gap-1">
                           {/* Restaurar é líder+ — a RPC confere no servidor, o
                               botão só evita o clique que ia falhar. */}
-                          {podeAgirSobreOutros && (
+                          {/* Transferência não volta: o NR já é de outra
+                              pessoa (20260928220000). */}
+                          {item.motivo === 'transferencia' && (
+                            <span className="text-[10px] text-muted-foreground" title="Transferência não se restaura pela lixeira">
+                              Transferido{item.transferido_para_nome ? ` para ${item.transferido_para_nome}` : ''}
+                            </span>
+                          )}
+                          {podeAgirSobreOutros && item.motivo !== 'transferencia' && (
                             <button
                               title="Restaurar este registro"
                               disabled={restaurandoId === item.id}

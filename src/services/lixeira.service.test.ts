@@ -93,6 +93,9 @@ vi.mock('@/lib/supabase', () => ({
 
 // SUT depois do vi.mock.
 import {
+  ehTransferenciaLixeira,
+  podeRestaurarItemLixeira,
+  mensagemRestaurarLixeira,
   enviarParaLixeira,
   fetchLixeira,
   esvaziarLixeira,
@@ -384,5 +387,48 @@ describe('purgarExpirados (#9 lixeira — purga automática)', () => {
     nextResult = { data: null, error: null };
     const r = await purgarExpirados('emp-4');
     expect(r).toEqual({ ok: true, deletedCount: 0 });
+  });
+});
+
+// ── Quem restaura o quê (28/09/2026, migration 20260928220000) ─────────────
+describe('regras de restaurar', () => {
+  it('as três transferências são transferência — e nenhuma é «exclusão manual»', () => {
+    expect(ehTransferenciaLixeira('transferencia_nr')).toBe(true);
+    expect(ehTransferenciaLixeira('autorizacao_solicitada')).toBe(true);
+    expect(ehTransferenciaLixeira('troca_extra')).toBe(true);
+    expect(ehTransferenciaLixeira('exclusao_manual')).toBe(false);
+  });
+
+  const lider = { meuId: 'eu', temChave: true, soOsProprios: false };
+  const operador = { meuId: 'eu', temChave: true, soOsProprios: true };
+
+  it('transferência nunca tem botão, nem para a liderança', () => {
+    expect(podeRestaurarItemLixeira({ motivo: 'autorizacao_solicitada', excluido_por_id: 'eu' }, lider)).toBe(false);
+    expect(podeRestaurarItemLixeira({ motivo: 'transferencia_nr', excluido_por_id: 'eu' }, operador)).toBe(false);
+  });
+
+  it('operador restaura só o que ELE excluiu', () => {
+    expect(podeRestaurarItemLixeira({ motivo: 'exclusao_manual', excluido_por_id: 'eu' }, operador)).toBe(true);
+    expect(podeRestaurarItemLixeira({ motivo: 'exclusao_manual', excluido_por_id: 'lider' }, operador)).toBe(false);
+    expect(podeRestaurarItemLixeira({ motivo: 'exclusao_manual', excluido_por_id: null }, operador)).toBe(false);
+  });
+
+  it('a liderança devolve à pessoa — o banco confere o alcance', () => {
+    expect(podeRestaurarItemLixeira({ motivo: 'exclusao_manual', excluido_por_id: 'operador' }, lider)).toBe(true);
+  });
+
+  it('sem a chave, ninguém', () => {
+    expect(podeRestaurarItemLixeira({ motivo: 'exclusao_manual', excluido_por_id: 'eu' }, { ...lider, temChave: false })).toBe(false);
+  });
+
+  it('traduz a recusa de NR retomado com quem e quando', () => {
+    const m = mensagemRestaurarLixeira(
+      'LIXEIRA_NR_OCUPADO: o Codigo 2664524 foi registrado pelo proprio operador em 28/09 09:28 enquanto este acordo estava na lixeira. Restaurar duplicaria.');
+    expect(m).toBe('O Código 2664524 foi registrado pelo próprio operador em 28/09 09:28, enquanto este acordo estava na lixeira. Restaurar duplicaria o acordo.');
+  });
+
+  it('traduz a recusa de transferência com o destino', () => {
+    expect(mensagemRestaurarLixeira('LIXEIRA_TRANSFERENCIA: este acordo foi transferido para Kenay Cazarini. Transferencia nao se desfaz pela lixeira.'))
+      .toBe('Este acordo foi transferido para Kenay Cazarini — transferência não se desfaz pela lixeira.');
   });
 });

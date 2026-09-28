@@ -39,6 +39,7 @@
  */
 
 import { supabase, Acordo, LixeiraAcordo, MotivoLixeira } from '@/lib/supabase';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 
 // LixeiraAcordo e MotivoLixeira sao definidos em @/lib/supabase.
 // Re-exportados aqui para compatibilidade.
@@ -148,38 +149,94 @@ export async function esvaziarLixeira(empresaId: string): Promise<{ ok: boolean;
   return { ok: true };
 }
 
+// ── Quem restaura o quê (28/09/2026) ────────────────────────────────────────
+
 /**
- * Restaura um acordo da lixeira: reinsere o snapshot (dados_completos) na
- * tabela `acordos` e, se der certo, remove o item da lixeira.
- *
- * O snapshot vem de um select('*, perfis(...)'), então o join `perfis` (e
- * qualquer outra chave que não seja coluna) precisa ser removido antes do
- * insert. O id original é mantido — o acordo volta como era; se um acordo com
- * o mesmo id ainda existir (não deveria: a exclusão sempre deleta antes), o
- * insert falha e o item permanece na lixeira.
+ * Motivos que são TRANSFERÊNCIA: o acordo saiu de uma pessoa e entrou para
+ * outra. Até 28/09/2026 a tela só reconhecia `transferencia_nr`, e os outros
+ * dois apareciam como «Exclusão Manual».
  */
-export async function restaurarItemLixeira(item: LixeiraAcordo): Promise<{ ok: boolean; error?: string }> {
-  const snap = (item.dados_completos ?? null) as Record<string, unknown> | null;
-  if (!snap || !snap.id) {
-    return { ok: false, error: 'Este item não possui o snapshot completo do acordo.' };
+export const MOTIVOS_TRANSFERENCIA: ReadonlySet<string> = new Set([
+  'transferencia_nr', 'autorizacao_solicitada', 'troca_extra',
+]);
+
+export function ehTransferenciaLixeira(motivo: string | null | undefined): boolean {
+  return MOTIVOS_TRANSFERENCIA.has(String(motivo ?? ''));
+}
+
+export const ROTULO_MOTIVO_LIXEIRA: Record<string, string> = {
+  exclusao_manual:        'Exclusão Manual',
+  transferencia_nr:       'Transferência de NR',
+  autorizacao_solicitada: 'Transferência autorizada',
+  troca_extra:            'Troca Extra → Direto',
+};
+
+/**
+ * O botão de restaurar aparece? A mesma regra de `fn_lixeira_restaurar`, para
+ * a tela não oferecer o que o banco recusa:
+ *
+ *   - transferência não se restaura, nunca;
+ *   - precisa da chave `lixeira_restaurar`;
+ *   - quem vê só os próprios itens (escopo individual) restaura só o que ELE
+ *     excluiu; a liderança (escopo equipe/setor/todos) devolve o acordo à
+ *     pessoa — o banco confere se o dono está no alcance dela.
+ */
+export function podeRestaurarItemLixeira(
+  item: Pick<LixeiraAcordo, 'motivo' | 'excluido_por_id'>,
+  quem: { meuId: string | null | undefined; temChave: boolean; soOsProprios: boolean },
+): boolean {
+  if (!quem.temChave || ehTransferenciaLixeira(item.motivo)) return false;
+  if (!quem.soOsProprios) return true;
+  return !!quem.meuId && item.excluido_por_id === quem.meuId;
+}
+
+/** Traduz a recusa do banco (`LIXEIRA_*`) para a frase da tela. */
+export function mensagemRestaurarLixeira(bruta: string): string {
+  if (/LIXEIRA_TRANSFERENCIA/.test(bruta)) {
+    const para = /transferido para (.+?)\. /.exec(bruta)?.[1];
+    return `Este acordo foi transferido${para ? ` para ${para}` : ''} — transferência não se desfaz pela lixeira.`;
   }
+  if (/LIXEIRA_NR_OCUPADO/.test(bruta)) {
+    const m = /o (.+?) foi registrado (.+?) em (\d\d\/\d\d \d\d:\d\d)/.exec(bruta);
+    if (m) {
+      const quem = m[2].replace('proprio', 'próprio');
+      return `O ${m[1].replace('Codigo', 'Código')} foi registrado ${quem} em ${m[3]}, enquanto este acordo estava na lixeira. Restaurar duplicaria o acordo.`;
+    }
+    return 'O NR deste acordo já foi registrado de novo enquanto ele estava na lixeira. Restaurar duplicaria o acordo.';
+  }
+  if (/LIXEIRA_NAO_FOI_VOCE/.test(bruta)) {
+    return 'Só restaura quem excluiu o acordo, ou a liderança de quem é o acordo.';
+  }
+  if (/LIXEIRA_SEM_PERMISSAO/.test(bruta)) return 'Você não tem a permissão de restaurar da lixeira.';
+  if (/LIXEIRA_EXPIRADO/.test(bruta)) return 'O prazo de 3 dias deste item já acabou.';
+  if (/LIXEIRA_JA_VOLTOU/.test(bruta)) return 'Este acordo já está de volta na lista.';
+  if (/LIXEIRA_ITEM_NAO_ENCONTRADO/.test(bruta)) return 'Este item já saiu da lixeira — recarregue a lista.';
+  if (/LIXEIRA_SEM_SNAPSHOT/.test(bruta)) return 'Este item não guardou o acordo completo e não pode ser restaurado.';
+  if (/LIXEIRA_SEM_ACESSO/.test(bruta)) return 'Este item é de outra empresa.';
+  return bruta;
+}
 
-  const { perfis: _perfis, ...colunas } = snap;
-
-  // Snapshot é dinâmico (Record) — o insert tipado do client não aceita; o
-  // shape real é o próprio acordo que saiu desta tabela.
-  const { error } = await supabase.from('acordos').insert(colunas as never);
+/**
+ * Restaura um acordo da lixeira pelo banco (`fn_lixeira_restaurar`,
+ * migration 20260928220000).
+ *
+ * Era um insert do snapshot feito daqui, sem regra: restaurava transferência
+ * (o NR voltava para quem o perdeu, e ficava em duas mãos), restaurava por
+ * cima de um NR que outra pessoa já tinha registrado, e qualquer um com a
+ * chave restaurava qualquer item. O acordo volta como era — mesmo id, mesmo
+ * operador —, e o dono é avisado quando foi outra pessoa que o devolveu.
+ */
+export async function restaurarItemLixeira(
+  item: Pick<LixeiraAcordo, 'id'>,
+): Promise<{ ok: boolean; error?: string; operadorNome?: string | null }> {
+  const { data, error } = await rpcSemTipo<{ operador_nome?: string | null }>(
+    'fn_lixeira_restaurar', { p_item_id: item.id },
+  );
   if (error) {
     console.warn('[lixeira.service] restaurarItemLixeira error:', error.message);
-    return { ok: false, error: error.message };
+    return { ok: false, error: mensagemRestaurarLixeira(error.message) };
   }
-
-  const { error: delError } = await supabase.from('lixeira_acordos').delete().eq('id', item.id);
-  if (delError) {
-    // Acordo já voltou; só não saiu da lixeira. Reporta mas considera ok.
-    console.warn('[lixeira.service] restaurarItemLixeira delete error:', delError.message);
-  }
-  return { ok: true };
+  return { ok: true, operadorNome: (data as { operador_nome?: string | null } | null)?.operador_nome ?? null };
 }
 
 /** Remove um item específico da lixeira (exclusão permanente) */
