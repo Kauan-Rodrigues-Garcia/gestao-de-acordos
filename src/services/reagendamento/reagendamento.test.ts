@@ -5,6 +5,8 @@
  * 28/09/2026 — a ordem é a do cabeçalho de `reagendamento.ts`.
  */
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   podeReagendar, chaveParcela, chavesExistentes, tipoParcela, rotuloReagendar,
   ehParcelaDuplicada, avisoParcelaJaAgendada,
@@ -18,6 +20,7 @@ const VAZIO = new Set<string>();
 function parcela(over: Partial<Parameters<typeof podeReagendar>[0]> = {}) {
   return {
     tipo: 'boleto',
+    status: 'pago',
     parcelas: 3,
     numero_parcela: 1,
     acordo_grupo_id: 'G1',
@@ -160,15 +163,33 @@ describe('o que nunca reagenda', () => {
   });
 });
 
-describe('o status deixou de pesar (28/09/2026)', () => {
+describe('só depois de pago (29/09/2026)', () => {
   /*
-   * Pedido textual: «tem que aparecer para qualquer acordo que seja
-   * parcelamento e não esteja agendado». A parcela criada nasce
-   * `verificar_pendente`, então agendar antes de receber não inventa
-   * recebimento — só adianta a tabulação.
+   * «Se tenho um acordo em 10x, com a primeira agendada para hoje, em
+   * verificar ou pendente, não é para aparecer o botão. Só aparece ao marcar
+   * como pago, e se a próxima parcela for agendada, o botão some.»
    */
-  it('parcela pendente também oferece o botão', () => {
-    expect(podeReagendar(parcela(), false, VAZIO).pode).toBe(true);
+  it('10x com a 1ª ainda em Verificar: sem botão', () => {
+    const d = podeReagendar(parcela({ parcelas: 10, status: 'verificar_pendente' }), false, VAZIO);
+    expect(d.pode).toBe(false);
+    expect(d.motivo).toBe('nao_paga');
+  });
+
+  it('Não pago também não', () => {
+    expect(podeReagendar(parcela({ status: 'nao_pago' }), false, VAZIO).motivo).toBe('nao_paga');
+  });
+
+  it('marcou pago: aparece', () => {
+    expect(podeReagendar(parcela({ parcelas: 10, status: 'pago' }), false, VAZIO).pode).toBe(true);
+  });
+
+  it('pago e a próxima já agendada: some', () => {
+    const ja = chavesExistentes([{ acordo_grupo_id: 'G1', numero_parcela: 2 }]);
+    expect(podeReagendar(parcela({ parcelas: 10, status: 'pago' }), false, ja).motivo).toBe('ja_agendada');
+  });
+
+  it('vale nos dois tenants', () => {
+    expect(podeReagendar(parcela({ status: 'verificar_pendente' }), true, VAZIO).motivo).toBe('nao_paga');
   });
 });
 
@@ -212,5 +233,29 @@ describe('a corrida com a trava do banco', () => {
 
   it('a frase é a mesma nas três telas', () => {
     expect(avisoParcelaJaAgendada(3, 5)).toBe('Parcela 3/5 já foi reagendada.');
+  });
+});
+
+describe('o modal que abre ao marcar pago continua abrindo', () => {
+  /*
+   * Os três «marcar como pago» consultam a regra com o objeto de ANTES do
+   * update. Com a exigência de parcela paga, passar o objeto cru faria o modal
+   * nunca mais abrir — silenciosamente. Cada um tem de entregar a parcela já
+   * como paga.
+   */
+  const raiz = path.resolve(__dirname, '../../');
+  const ler = (f: string) => fs.readFileSync(path.join(raiz, f), 'utf8');
+
+  it('Dashboard', () => {
+    expect(ler('pages/Dashboard/index.tsx'))
+      .toContain("podeReagendar({ ...acordo, status: 'pago' }, isPP, parcelasExistentes)");
+  });
+  it('aba Acordos', () => {
+    expect(ler('pages/Acordos/index.tsx'))
+      .toContain("podeReagendar({ ...a, status: 'pago' }, isPP, parcelasExistentes)");
+  });
+  it('detalhe do acordo', () => {
+    expect(ler('components/AcordoDetalheInline/index.tsx'))
+      .toContain('podeReagendar(parcelaAtualizada, isPaguePlay, chavesExistentes(registrosReais))');
   });
 });

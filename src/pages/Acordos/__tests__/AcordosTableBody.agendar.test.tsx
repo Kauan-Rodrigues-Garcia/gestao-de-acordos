@@ -63,10 +63,6 @@ describe('aba Acordos — o botão aparece', () => {
     expect(screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ })).toBeTruthy();
   });
 
-  it('também quando a parcela ainda está pendente', () => {
-    montar({ linhas: [acordo({ status: 'verificar_pendente' })] });
-    expect(screen.getByRole('button', { name: /^Reagendar parcela 2\/3/ })).toBeTruthy();
-  });
 
   it('PaguePlay também', () => {
     montar({ isPP: true });
@@ -86,6 +82,16 @@ describe('aba Acordos — o botão aparece', () => {
 });
 
 describe('aba Acordos — o botão NÃO aparece', () => {
+  it('10x com a parcela atual ainda em Verificar', () => {
+    montar({ linhas: [acordo({ parcelas: 10, status: 'verificar_pendente' })] });
+    expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();
+  });
+
+  it('parcela atual Não paga', () => {
+    montar({ linhas: [acordo({ status: 'nao_pago' })] });
+    expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();
+  });
+
   it('quando a parcela 2 já existe', () => {
     montar({ existentes: [chaveParcela('G1', 1), chaveParcela('G1', 2)] });
     expect(screen.queryByRole('button', { name: /Reagendar parcela/ })).toBeNull();

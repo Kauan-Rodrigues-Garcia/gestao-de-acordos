@@ -582,7 +582,8 @@ export default function Dashboard() {
       // Mesma regra do botão (`services/reagendamento`), inclusive a conferência
       // de que a próxima parcela ainda não existe. Antes daqui o gate era
       // `isPP && ...`: na BookPlay marcar pago nunca oferecia o reagendamento.
-      if (podeReagendar(acordo, isPP, parcelasExistentes).pode) {
+      // `acordo` é o de antes do update; a regra exige a parcela paga.
+      if (podeReagendar({ ...acordo, status: 'pago' }, isPP, parcelasExistentes).pode) {
         setReagendarAcordo(acordo);
       } else {
         toast.success('Acordo marcado como Pago!', {

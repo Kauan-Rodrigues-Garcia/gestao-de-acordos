@@ -189,7 +189,7 @@ export function AcordoDetalheInline({
       // Se a próxima parcela já existe (adicionada manualmente), não reabre.
       // Mesma regra do botão de calendário (`services/reagendamento`): a
       // decisão é por PARCELA e leva em conta a que já existe no grupo.
-      if (podeReagendar(p, isPaguePlay, chavesExistentes(registrosReais)).pode) {
+      if (podeReagendar(parcelaAtualizada, isPaguePlay, chavesExistentes(registrosReais)).pode) {
         setReagendarParcela(parcelaAtualizada);
       }
     }
@@ -717,7 +717,8 @@ export function AcordoDetalheInline({
                                       botão das duas listas. */}
                                   <td className="px-3 py-2.5 text-center">
                                     {(() => {
-                                      if (!real || index >= totalParcelas) {
+                                      // Como era: a coluna só fala da parcela PAGA.
+                                      if (!real || index >= totalParcelas || real.status !== 'pago') {
                                         return <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>;
                                       }
                                       if (linhas[index]?.real) {

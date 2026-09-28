@@ -43,12 +43,13 @@
  * se lança é a autorização. Ver `lib/formasRecorrentes.ts` — a regra é de
  * 05/09/2026 e vale nos dois tenants.
  *
- * ## O que mudou em 28/09/2026
+ * ## Só depois de pago (29/09/2026)
  *
- * O botão deixou de exigir `status = 'pago'`. O pedido foi textual: «tem que
- * aparecer para qualquer acordo que seja parcelamento e não esteja agendado».
- * A parcela criada nasce `verificar_pendente`, então agendar antes de receber
- * não inventa recebimento — só adianta a tabulação.
+ * Em 28/09 o botão chegou a aparecer para qualquer parcela, paga ou não. Não
+ * era isso: num acordo de 10x com a 1ª vencendo hoje, ainda em «Verificar», o
+ * calendário não tem o que fazer ali. A próxima parcela se agenda quando a
+ * atual é PAGA — é o mesmo momento em que o modal abre sozinho — e o botão
+ * some assim que a próxima existe.
  */
 import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 
@@ -83,6 +84,8 @@ export function tipoParcela(tipo: string | null | undefined, isPaguePlay: boolea
 /** O mínimo que precisamos saber de uma linha para decidir o botão. */
 export interface ParcelaReagendavel {
   tipo?: string | null;
+  /** Só a parcela PAGA agenda a próxima. */
+  status?: string | null;
   parcelas?: number | null;
   numero_parcela?: number | null;
   acordo_grupo_id?: string | null;
@@ -98,6 +101,8 @@ export type MotivoSemReagendar =
   | 'parcela_unica'
   /** Esta já é a última parcela do acordo. */
   | 'ultima_parcela'
+  /** A parcela atual ainda não foi paga: a próxima se agenda depois. */
+  | 'nao_paga'
   /** Sem grupo não há como ligar a próxima parcela a esta. */
   | 'sem_grupo'
   /** A próxima parcela já existe — foi agendada ou adicionada à mão. */
@@ -155,6 +160,7 @@ export function podeReagendar(
   if (!tipoParcela(parcela.tipo, isPaguePlay))    return { ...base, motivo: 'tipo_nao_parcela' };
   if (total <= 1)                                 return { ...base, motivo: 'parcela_unica' };
   if (numero >= total)                            return { ...base, motivo: 'ultima_parcela' };
+  if (parcela.status !== 'pago')                  return { ...base, motivo: 'nao_paga' };
   if (!parcela.acordo_grupo_id)                   return { ...base, motivo: 'sem_grupo' };
   if (existentes.has(chaveParcela(parcela.acordo_grupo_id, numero + 1))) {
     return { ...base, motivo: 'ja_agendada' };

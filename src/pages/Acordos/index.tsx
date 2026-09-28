@@ -517,7 +517,8 @@ export default function Acordos() {
       // parcelado. A regra agora é a mesma dos outros caminhos.
       const numParcela = a.numero_parcela ?? 1;
       const empId      = empresa?.id;
-      if (empId && podeReagendar(a, isPP, parcelasExistentes).pode) {
+      // `a` é o de antes do update; a regra exige a parcela paga.
+      if (empId && podeReagendar({ ...a, status: 'pago' }, isPP, parcelasExistentes).pode) {
         const { data: proxima } = await supabase
           .from('acordos').select('id')
           .eq('empresa_id', empId)
