@@ -4,9 +4,9 @@
  *
  * Pedido de 28/09/2026: um botão pequeno ao lado de «Filtrar data» que abre
  * uma caixinha de edição, com mensagens separadas por Pendente, Pago e Não
- * pago — até 3, 2 e 5 — e «fórmulas» que puxam os dados do cliente. As regras
- * (grupos, limites, variáveis) moram em `@/lib/mensagensWhatsapp`; aqui só o
- * desenho.
+ * pago — quantas a pessoa quiser em cada um — e «fórmulas» que puxam os dados
+ * do cliente. As regras (grupos, variáveis) moram em `@/lib/mensagensWhatsapp`;
+ * aqui só o desenho.
  *
  * O editor trabalha num RASCUNHO e grava tudo no «Salvar»: mexer em três
  * mensagens e desistir não pode deixar metade gravada.
@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import {
-  GRUPOS_MENSAGEM, ROTULO_DO_GRUPO, LIMITE_DO_GRUPO, VARIAVEIS_MENSAGEM, MENSAGEM_DO_SISTEMA,
+  GRUPOS_MENSAGEM, ROTULO_DO_GRUPO, VARIAVEIS_MENSAGEM, MENSAGEM_DO_SISTEMA,
   mensagensDoGrupo, preencherMensagem, valoresDeExemplo, variaveisDesconhecidas,
   type GrupoMensagem, type MensagemWhatsapp,
 } from '@/lib/mensagensWhatsapp';
@@ -87,14 +87,12 @@ export function EditorMensagensWhatsapp({
   }, [aberto, mensagens]);
 
   const doGrupo = rascunho.filter(r => r.status === grupo);
-  const limite = LIMITE_DO_GRUPO[grupo];
   const exemplo = useMemo(() => valoresDeExemplo(operador), [operador]);
 
   const alterar = (chave: string, campo: 'titulo' | 'conteudo', valor: string) =>
     setRascunho(rs => rs.map(r => (r.chave === chave ? { ...r, [campo]: valor } : r)));
 
   function adicionar(conteudo = '') {
-    if (doGrupo.length >= limite) return;
     const chave = novaChave();
     setRascunho(rs => [...rs, {
       chave, id: null, status: grupo,
@@ -190,7 +188,7 @@ export function EditorMensagensWhatsapp({
                 )}
               >
                 {ROTULO_DO_GRUPO[g]}
-                <span className="ml-1.5 tabular-nums text-muted-foreground">{n}/{LIMITE_DO_GRUPO[g]}</span>
+                {n > 0 && <span className="ml-1.5 tabular-nums text-muted-foreground">{n}</span>}
               </button>
             );
           })}
@@ -294,11 +292,9 @@ export function EditorMensagensWhatsapp({
 
           {doGrupo.length > 0 && (
             <Button size="sm" variant="outline" className="h-8 w-full gap-1.5 text-xs"
-              disabled={doGrupo.length >= limite} onClick={() => adicionar()}>
+              onClick={() => adicionar()}>
               <Plus className="h-3.5 w-3.5" />
-              {doGrupo.length >= limite
-                ? `Limite de ${limite} mensagens em ${ROTULO_DO_GRUPO[grupo]}`
-                : `Nova mensagem de ${ROTULO_DO_GRUPO[grupo]} (${doGrupo.length}/${limite})`}
+              Nova mensagem de {ROTULO_DO_GRUPO[grupo]}
             </Button>
           )}
         </div>

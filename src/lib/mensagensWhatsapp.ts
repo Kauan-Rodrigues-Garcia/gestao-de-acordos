@@ -4,15 +4,15 @@
  * Pedido de 28/09/2026: cada pessoa escreve as próprias mensagens, separadas
  * por Pendente, Pago e Não pago, com «fórmulas» que puxam os dados do cliente.
  * As mensagens moram em `acordos_mensagens_whatsapp` (migration
- * 20260928160000); aqui fica o que não depende do banco — os grupos, os
- * limites, as variáveis e a troca delas pelo dado do acordo. Puro, para o
- * teste alcançar.
+ * 20260928160000); aqui fica o que não depende do banco — os grupos, as
+ * variáveis e a troca delas pelo dado do acordo. Puro, para o teste alcançar.
  *
  * ## Sem mensagem própria, nada muda
  *
  * `MENSAGEM_DO_SISTEMA` é, palavra por palavra, o que `buildMensagem` sempre
- * mandou — agora escrito com as variáveis. Quem nunca abrir o editor continua
- * mandando o mesmo texto de antes.
+ * mandou para pendente e não pago — agora escrito com as variáveis. O pago
+ * ganhou texto próprio em 28/09/2026 (novos descontos), no lugar do lembrete
+ * de vencimento que ele herdava.
  */
 import { formatCurrency, formatDate, TIPO_LABELS } from '@/lib/index';
 import type { Acordo, StatusAcordo } from '@/lib/supabase';
@@ -28,16 +28,11 @@ export const ROTULO_DO_GRUPO: Record<GrupoMensagem, string> = {
   nao_pago: 'Não pago',
 };
 
-/**
- * Quantas mensagens cada grupo guarda — os números do pedido: «três mensagens
- * para pendente, duas para pago e cinco para não pagos». Regra de tela, não
- * do banco: mudar aqui não pede migration.
+/*
+ * Sem limite de quantidade por grupo. O «três para pendente, duas para pago e
+ * cinco para não pagos» do pedido era EXEMPLO, e não teto (correção de
+ * 28/09/2026): cada pessoa guarda quantas mensagens quiser em cada status.
  */
-export const LIMITE_DO_GRUPO: Record<GrupoMensagem, number> = {
-  pendente: 3,
-  pago:     2,
-  nao_pago: 5,
-};
 
 export function grupoDoStatus(status: StatusAcordo | string): GrupoMensagem {
   if (status === 'pago') return 'pago';
@@ -72,10 +67,13 @@ export const MENSAGEM_DO_SISTEMA: Record<GrupoMensagem, string> = {
   pendente:
     'Olá *{{nome_cliente}}*, passando para lembrar do seu acordo *NR {{nr_cliente}}*, no valor de '
     + '*{{valor}}*, com vencimento em *{{vencimento}}*. Qualquer dúvida, estamos à disposição.',
-  // O sistema nunca teve texto próprio para o pago: mandava o lembrete.
+  // Até 28/09/2026 o pago mandava o lembrete de vencimento — sem sentido para
+  // quem já pagou. O texto é o que o usuário pediu, palavra por palavra.
   pago:
-    'Olá *{{nome_cliente}}*, passando para lembrar do seu acordo *NR {{nr_cliente}}*, no valor de '
-    + '*{{valor}}*, com vencimento em *{{vencimento}}*. Qualquer dúvida, estamos à disposição.',
+    'Olá *{{nome_cliente}}*! 😊\n\n'
+    + 'Passando para informar que temos *novos descontos liberados especialmente para você*. '
+    + 'Caso tenha interesse, podemos verificar as condições disponíveis e te apresentar as opções.\n\n'
+    + 'Qualquer dúvida, estamos à disposição!',
   nao_pago:
     'Olá *{{nome_cliente}}*, identificamos que o seu acordo *NR {{nr_cliente}}*, no valor de '
     + '*{{valor}}*, com vencimento em *{{vencimento}}*, encontra-se em atraso. Por favor, entre em '

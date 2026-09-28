@@ -24,8 +24,8 @@
 -- duplas ({{nome_cliente}}, {{valor}}…) — quem as troca é o front
 -- (`src/lib/mensagensWhatsapp.ts`), na hora de abrir o WhatsApp.
 --
--- Quantas mensagens cabem por status (3 / 2 / 5) é regra de TELA, e não do
--- banco: é um limite de conforto, e mudar o número não deve pedir migration.
+-- Não há limite de quantidade por status: o «3 / 2 / 5» do pedido era exemplo,
+-- e cada pessoa guarda quantas mensagens quiser.
 --
 -- ## Segurança
 --

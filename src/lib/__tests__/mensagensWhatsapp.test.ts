@@ -11,7 +11,7 @@ import { buildMensagem } from '@/pages/Dashboard/helpers';
 import { formatCurrency } from '@/lib/index';
 import {
   grupoDoStatus, preencherMensagem, valoresDoAcordo, mensagemParaAcordo,
-  mensagensDoGrupo, variaveisDesconhecidas, LIMITE_DO_GRUPO,
+  mensagensDoGrupo, variaveisDesconhecidas,
   type MensagemWhatsapp,
 } from '../mensagensWhatsapp';
 
@@ -31,22 +31,35 @@ const msg = (p: Partial<MensagemWhatsapp>): MensagemWhatsapp => ({
   id: 'm', status: 'pendente', titulo: 'M', conteudo: 'x', ordem: 0, ...p,
 });
 
-describe('sem mensagem própria, nada muda', () => {
-  it.each(['verificar_pendente', 'pago', 'nao_pago'] as const)('status %s manda o texto de sempre', status => {
+describe('sem mensagem própria', () => {
+  it.each(['verificar_pendente', 'nao_pago'] as const)('status %s manda o texto de sempre', status => {
     const a = acordo({ status });
     expect(mensagemParaAcordo(a, [])).toBe(buildMensagem(a));
   });
+
+  // Pedido de 28/09/2026: o pago deixou de mandar o lembrete de vencimento.
+  it('pago manda o texto dos novos descontos, com o nome do cliente', () => {
+    expect(mensagemParaAcordo(acordo({ status: 'pago' }), [])).toBe(
+      'Olá *Maria da Silva*! 😊\n\n'
+      + 'Passando para informar que temos *novos descontos liberados especialmente para você*. '
+      + 'Caso tenha interesse, podemos verificar as condições disponíveis e te apresentar as opções.\n\n'
+      + 'Qualquer dúvida, estamos à disposição!',
+    );
+  });
 });
 
-describe('grupos e limites', () => {
+describe('grupos', () => {
   it('pendente junta tudo que não é pago nem não pago', () => {
     expect(grupoDoStatus('verificar_pendente')).toBe('pendente');
     expect(grupoDoStatus('pago')).toBe('pago');
     expect(grupoDoStatus('nao_pago')).toBe('nao_pago');
   });
 
-  it('os limites do pedido: 3 pendente, 2 pago, 5 não pago', () => {
-    expect(LIMITE_DO_GRUPO).toEqual({ pendente: 3, pago: 2, nao_pago: 5 });
+  // O «3 / 2 / 5» do pedido era exemplo: não existe teto por status.
+  it('guarda quantas mensagens a pessoa quiser em cada status', () => {
+    const muitas = Array.from({ length: 12 }, (_, i) =>
+      msg({ id: `p${i}`, status: 'pendente', titulo: `P${i}`, ordem: i }));
+    expect(mensagensDoGrupo(muitas, 'pendente')).toHaveLength(12);
   });
 });
 
@@ -92,7 +105,8 @@ describe('qual mensagem sai', () => {
 
   it('pago sem mensagem própria cai no texto do sistema, mesmo com outras salvas', () => {
     const a = acordo({ status: 'pago' });
-    expect(mensagemParaAcordo(a, mensagens)).toBe(buildMensagem(a));
+    expect(mensagemParaAcordo(a, mensagens)).toBe(mensagemParaAcordo(a, []));
+    expect(mensagemParaAcordo(a, mensagens)).toContain('novos descontos');
   });
 
   it('mensagensDoGrupo ordena e filtra', () => {
