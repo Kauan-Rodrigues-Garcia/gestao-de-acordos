@@ -10,7 +10,7 @@ import { Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
-  CalendarClock, CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, X,
+  CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -32,7 +32,8 @@ import { LinhaDoDiaAcordos, SetaDetalhe } from '@/components/AcordosDoDia';
 import type { Acordo } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { ensureAbsoluteUrl } from './helpers';
-import { podeReagendar, rotuloReagendar } from '@/services/reagendamento/reagendamento';
+import { podeReagendar } from '@/services/reagendamento/reagendamento';
+import { BotaoAgendarProxima } from '@/components/BotaoAgendarProxima';
 
 interface Tag { id: string; nome: string; cor: string; }
 
@@ -121,6 +122,12 @@ export function PPTableBody({
     const temCpf = acordoTemCpf(a);
     const rotulo = a.nome_cliente || a.instituicao || a.nr_cliente || 'acordo';
     const alternarDetalhe = () => setDetalheInlineIdTabela(isDetailThis ? null : a.id);
+    // A regra mora em `services/reagendamento`; o botão mora na coluna de
+    // status (BotaoAgendarProxima conta por quê).
+    const agendar = podeEditar ? podeReagendar(a, isPP, parcelasExistentes) : null;
+    const donoNome = visaoAmpla
+      ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
+      : null;
     return (
       <Fragment key={a.id}>
         <motion.tr
@@ -206,9 +213,14 @@ export function PPTableBody({
             ) : '—'}
           </td>
           <td className={CELULA}>
-            <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-              {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
-            </span>
+            <div className="flex flex-col items-start gap-0.5">
+              <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+                {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
+              </span>
+              {agendar?.pode && (
+                <BotaoAgendarProxima decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
+              )}
+            </div>
           </td>
           {visaoAmpla && (
             <td className={cn(CELULA, 'overflow-hidden truncate text-xs text-muted-foreground')}>
@@ -228,23 +240,6 @@ export function PPTableBody({
                   <CheckCircle className="w-4 h-4" />
                 </Button>
               )}
-              {podeEditar && (() => {
-                // A regra mora em `services/reagendamento`: mesma resposta aqui,
-                // na aba Acordos e no detalhe. Por PARCELA, não por grupo — num
-                // acordo de 3x a parcela 2 precisa do botão para criar a 3.
-                const d = podeReagendar(a, isPP, parcelasExistentes);
-                if (!d.pode) return null;
-                return (
-                  <Button
-                    variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
-                    title={rotuloReagendar(d)}
-                    aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
-                    onClick={() => setReagendarAcordo(a)}
-                  >
-                    <CalendarClock className="w-4 h-4" />
-                  </Button>
-                );
-              })()}
               {podeEditar && (
               <Button
                 variant="ghost" size="icon"

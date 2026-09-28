@@ -34,11 +34,10 @@ import { useLideroEquipe } from '@/hooks/useLideroEquipe';
 import { FiltroEscopo } from './FiltroEscopo';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import { useParcelasExistentes } from '@/hooks/useParcelasExistentes';
+import { podeReagendar, avisoParcelaJaAgendada } from '@/services/reagendamento/reagendamento';
+import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaParcela';
 import {
-  podeReagendar, ehParcelaDuplicada, avisoParcelaJaAgendada,
-} from '@/services/reagendamento/reagendamento';
-import {
-  PER_PAGE, VisaoFiltro, addMesesDash, buildMensagem, saudacao, getPageNumbers,
+  PER_PAGE, VisaoFiltro, buildMensagem, saudacao, getPageNumbers,
 } from './helpers';
 import { TableSkeleton } from './TableSkeleton';
 import { PPTableFilters } from './PPTableFilters';
@@ -607,112 +606,18 @@ export default function Dashboard() {
     if (!reagendarAcordo || !empresa?.id) return;
     setSalvandoReagendar(true);
     try {
-      const parcelaAtual  = reagendarAcordo;
-      const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
-      const totalParcelas = parcelaAtual.parcelas ?? 1;
-      const quantToCreate = 1;
-
-      if (parcelaAtual.acordo_grupo_id) {
-        const { data: jaExiste } = await supabase
-          .from('acordos').select('id')
-          .eq('empresa_id', empresa.id).eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
-          .eq('numero_parcela', proximaNumero).maybeSingle();
-        if (jaExiste) {
-          toast.info(avisoParcelaJaAgendada(proximaNumero, totalParcelas));
-          setReagendarAcordo(null); return;
-        }
-      }
-
-      const basePayload = {
-        nome_cliente:          parcelaAtual.nome_cliente,
-        nr_cliente:            parcelaAtual.nr_cliente,
-        tipo:                  parcelaAtual.tipo,
-        parcelas:              parcelaAtual.parcelas,
-        whatsapp:              parcelaAtual.whatsapp ?? null,
-        instituicao:           parcelaAtual.instituicao ?? null,
-        observacoes:           parcelaAtual.observacoes ?? null,
-        // A UF viaja explicitamente. Antes só o prefixo [ESTADO:XX] dentro de
-        // `observacoes` a carregava — e a fase 2 da migration 20260506 prevê
-        // remover esse prefixo, o que faria a parcela reagendada nascer sem
-        // estado (agora recusada pelo gatilho da 20260802c).
-        estado_uf:             parcelaAtual.estado_uf ?? null,
-        operador_id:           parcelaAtual.operador_id,
-        empresa_id:            parcelaAtual.empresa_id,
-        setor_id:              parcelaAtual.setor_id ?? null,
-        data_cadastro:         getTodayISO(),
-        acordo_grupo_id:       parcelaAtual.acordo_grupo_id ?? null,
-        tipo_vinculo:          parcelaAtual.tipo_vinculo ?? null,
-        vinculo_operador_id:   parcelaAtual.vinculo_operador_id ?? null,
-        vinculo_operador_nome: parcelaAtual.vinculo_operador_nome ?? null,
-        status:                'verificar_pendente',
-        valor:                 params.novoValor,
-      };
-
-      let ultimoInserido: Acordo | null = null;
-      for (let i = 0; i < quantToCreate; i++) {
-        const numero   = proximaNumero + i;
-        const vencCalc = i === 0 ? params.novoVencimento : addMesesDash(params.novoVencimento, i);
-        const { data, error: errIns } = await supabase
-          .from('acordos')
-          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc } as never)
-          .select('*, perfis(id, nome, email, perfil, setor_id)')
-          .single();
-        if (errIns) {
-          // A trava do banco (uq_acordos_grupo_parcela) chegou na frente: outra
-          // aba criou esta parcela entre o `select` acima e este insert.
-          if (ehParcelaDuplicada(errIns)) {
-            toast.info(avisoParcelaJaAgendada(numero, totalParcelas));
-            setReagendarAcordo(null); return;
-          }
-          toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return;
-        }
-        ultimoInserido = data as Acordo;
-      }
-
-      if (parcelaAtual.vinculo_operador_id && parcelaAtual.acordo_grupo_id) {
-        const valorChave = parcelaAtual.instituicao;
-        if (valorChave) {
-          const { data: parInstall } = await supabase
-            .from('acordos').select('*')
-            .eq('empresa_id', empresa.id).eq('operador_id', parcelaAtual.vinculo_operador_id)
-            .eq('instituicao', valorChave).eq('numero_parcela', parcelaAtual.numero_parcela ?? 1)
-            .maybeSingle();
-
-          if (parInstall) {
-            for (let i = 0; i < quantToCreate; i++) {
-              const numero   = proximaNumero + i;
-              const vencCalc = i === 0 ? params.novoVencimento : addMesesDash(params.novoVencimento, i);
-              await supabase.from('acordos').insert({
-                nome_cliente:          (parInstall as Acordo).nome_cliente,
-                nr_cliente:            (parInstall as Acordo).nr_cliente,
-                tipo:                  (parInstall as Acordo).tipo,
-                parcelas:              (parInstall as Acordo).parcelas,
-                whatsapp:              (parInstall as Acordo).whatsapp ?? null,
-                instituicao:           (parInstall as Acordo).instituicao ?? null,
-                observacoes:           (parInstall as Acordo).observacoes ?? null,
-                // Ver nota em basePayload: a UF viaja explicitamente.
-                estado_uf:             (parInstall as Acordo).estado_uf ?? null,
-                operador_id:           (parInstall as Acordo).operador_id,
-                empresa_id:            (parInstall as Acordo).empresa_id,
-                setor_id:              (parInstall as Acordo).setor_id ?? null,
-                data_cadastro:         getTodayISO(),
-                acordo_grupo_id:       (parInstall as Acordo).acordo_grupo_id ?? null,
-                tipo_vinculo:          (parInstall as Acordo).tipo_vinculo ?? null,
-                vinculo_operador_id:   (parInstall as Acordo).vinculo_operador_id ?? null,
-                vinculo_operador_nome: (parInstall as Acordo).vinculo_operador_nome ?? null,
-                status:                'verificar_pendente',
-                valor:                 params.novoValor,
-                numero_parcela:        numero,
-                vencimento:            vencCalc,
-              });
-            }
-          }
-        }
-      }
-
-      if (ultimoInserido) addAcordo(ultimoInserido);
+      // A parcela nasce do DONO do acordo, pelo servidor — inclusive quando
+      // quem clica é o líder, que a RLS de insert barrava. O par Direto/Extra
+      // vem junto, na mesma transação. Ver agendarProximaParcela.
+      const r = await agendarProximaParcela(reagendarAcordo, {
+        vencimento: params.novoVencimento,
+        valor:      params.novoValor,
+      });
+      if ('erro' in r) { toast.error(r.erro); return; }
       setReagendarAcordo(null);
-      toast.success(`Parcela ${proximaNumero}/${totalParcelas} reagendada para ${formatDate(params.novoVencimento)}!`);
+      if (r.jaExistia) { toast.info(avisoParcelaJaAgendada(r.numero, r.total)); return; }
+      if (r.parcela) addAcordo(r.parcela);
+      toast.success(`Parcela ${r.numero}/${r.total} reagendada para ${formatDate(params.novoVencimento)}!`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
     } finally {

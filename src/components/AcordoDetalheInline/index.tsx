@@ -26,7 +26,7 @@ import {
   formatCurrency, formatDate,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
-  extractLinkAcordo, getEstadoFromAcordo, isAtrasado, getTodayISO,
+  extractLinkAcordo, getEstadoFromAcordo, isAtrasado,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
 import {
@@ -34,9 +34,9 @@ import {
 } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
 import {
-  podeReagendar, chavesExistentes, rotuloReagendar,
-  ehParcelaDuplicada, avisoParcelaJaAgendada,
+  podeReagendar, chavesExistentes, rotuloReagendar, avisoParcelaJaAgendada,
 } from '@/services/reagendamento/reagendamento';
+import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaParcela';
 import { datasDoLote } from '@/lib/vencimentos';
 import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
@@ -202,22 +202,6 @@ export function AcordoDetalheInline({
     try {
       const parcelaAtual  = reagendarParcela;
       const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
-      const quantToCreate = 1;
-
-      // Evita criar a próxima parcela em duplicado (ex.: reagendar duas vezes)
-      if (parcelaAtual.acordo_grupo_id) {
-        const { data: jaExiste } = await supabase
-          .from('acordos').select('id')
-          .eq('empresa_id', empresa.id)
-          .eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
-          .eq('numero_parcela', proximaNumero)
-          .maybeSingle();
-        if (jaExiste) {
-          toast.info(avisoParcelaJaAgendada(proximaNumero, totalParcelas));
-          setReagendarParcela(null);
-          return;
-        }
-      }
 
       const usou40Base = parcelaAtual.usou_quarenta_pct ?? foiUsadoQuarentaPct(parcelaAtual);
       let valorProximaParcela = params.novoValor;
@@ -227,123 +211,20 @@ export function AcordoDetalheInline({
         valorProximaParcela = todas[idx] ?? params.novoValor;
       }
 
-      const basePayload = {
-        nome_cliente:          parcelaAtual.nome_cliente,
-        nr_cliente:            parcelaAtual.nr_cliente,
-        tipo:                  parcelaAtual.tipo,
-        parcelas:              parcelaAtual.parcelas,
-        whatsapp:              parcelaAtual.whatsapp,
-        instituicao:           parcelaAtual.instituicao,
-        observacoes:           parcelaAtual.observacoes,
-        operador_id:           parcelaAtual.operador_id,
-        empresa_id:            parcelaAtual.empresa_id,
-        setor_id:              parcelaAtual.setor_id ?? null,
-        data_cadastro:         getTodayISO(),
-        acordo_grupo_id:       parcelaAtual.acordo_grupo_id,
-        tipo_vinculo:          parcelaAtual.tipo_vinculo,
-        vinculo_operador_id:   parcelaAtual.vinculo_operador_id,
-        vinculo_operador_nome: parcelaAtual.vinculo_operador_nome,
-        valor_total:           parcelaAtual.valor_total ?? null,
-        usou_quarenta_pct:     usou40Base,
-        // A entrada viaja com o grupo: sem ela a parcela 3 não teria como
-        // derivar o valor das demais e voltaria a repetir o valor anterior.
-        // Omitido (não nulo) quando a coluna não existe — migration pendente.
-        ...(parcelaAtual.valor_entrada != null
-          ? { valor_entrada: parcelaAtual.valor_entrada }
-          : {}),
-        status:                'verificar_pendente' as const,
-        valor:                 valorProximaParcela,
-      };
-
-      const todasPP = (isPaguePlay && parcelaAtual.valor_total != null && parcelaAtual.parcelas)
-        ? calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, usou40Base)
-        : null;
-
-      const novasParcelas: Acordo[] = [];
-      for (let i = 0; i < quantToCreate; i++) {
-        const numero   = proximaNumero + i;
-        const vencCalc = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
-        const valorI   = todasPP ? (todasPP[(parcelaAtual.numero_parcela ?? 1) + i] ?? valorProximaParcela) : valorProximaParcela;
-        const { data: novo, error: errIns } = await supabase
-          .from('acordos')
-          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc, valor: valorI })
-          .select('*')
-          .single();
-        if (errIns) {
-          // Ver nota igual no Dashboard: a trava do banco chegou na frente.
-          if (ehParcelaDuplicada(errIns)) {
-            toast.info(avisoParcelaJaAgendada(numero, totalParcelas));
-            setReagendarParcela(null); return;
-          }
-          toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return;
-        }
-        novasParcelas.push(novo as Acordo);
+      // A parcela nasce do DONO do acordo, pelo servidor — o líder que a
+      // abre daqui também consegue. O par Direto/Extra vem junto. Ver
+      // agendarProximaParcela.
+      const r = await agendarProximaParcela(parcelaAtual, {
+        vencimento: params.novoVencimento,
+        valor:      valorProximaParcela,
+      });
+      if ('erro' in r) { toast.error(r.erro); return; }
+      if (r.jaExistia) {
+        toast.info(avisoParcelaJaAgendada(r.numero, r.total));
+        setReagendarParcela(null);
+        return;
       }
-
-      if (parcelaAtual.vinculo_operador_id && parcelaAtual.acordo_grupo_id) {
-        const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
-        const valorChave = isPaguePlay ? parcelaAtual.instituicao : parcelaAtual.nr_cliente;
-        if (valorChave) {
-          const { data: parInstall } = await supabase
-            .from('acordos')
-            .select('*')
-            .eq('empresa_id', empresa.id)
-            .eq('operador_id', parcelaAtual.vinculo_operador_id)
-            .eq(campoChave, valorChave)
-            .eq('numero_parcela', parcelaAtual.numero_parcela ?? 1)
-            .maybeSingle();
-
-          if (parInstall) {
-            const parInst = parInstall as Acordo;
-            const usou40p = parInst.usou_quarenta_pct ?? foiUsadoQuarentaPct(parInst);
-            let valorParcelaParc = params.novoValor;
-            if (isPaguePlay && parInst.valor_total != null && parInst.parcelas) {
-              const todasP  = calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p);
-              const idxP    = (parInst.numero_parcela ?? 1);
-              valorParcelaParc = todasP[idxP] ?? params.novoValor;
-            }
-            const todasPInst = (isPaguePlay && parInst.valor_total != null && parInst.parcelas)
-              ? calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p)
-              : null;
-            for (let i = 0; i < quantToCreate; i++) {
-              const numero   = proximaNumero + i;
-              const vencCalc = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
-              const valorI   = (todasPInst && i > 0)
-                ? (todasPInst[(parInst.numero_parcela ?? 1) + i] ?? valorParcelaParc)
-                : valorParcelaParc;
-              await supabase.from('acordos').insert({
-                nome_cliente:          parInst.nome_cliente,
-                nr_cliente:            parInst.nr_cliente,
-                tipo:                  parInst.tipo,
-                parcelas:              parInst.parcelas,
-                whatsapp:              parInst.whatsapp,
-                instituicao:           parInst.instituicao,
-                observacoes:           parInst.observacoes,
-                // A UF viaja explicitamente — ver 20260802c.
-                estado_uf:             parInst.estado_uf ?? null,
-                operador_id:           parInst.operador_id,
-                empresa_id:            parInst.empresa_id,
-                setor_id:              parInst.setor_id ?? null,
-                data_cadastro:         getTodayISO(),
-                acordo_grupo_id:       parInst.acordo_grupo_id,
-                tipo_vinculo:          parInst.tipo_vinculo,
-                vinculo_operador_id:   parInst.vinculo_operador_id,
-                vinculo_operador_nome: parInst.vinculo_operador_nome,
-                valor_total:           parInst.valor_total ?? null,
-                usou_quarenta_pct:     usou40p,
-                ...(parInst.valor_entrada != null
-                  ? { valor_entrada: parInst.valor_entrada }
-                  : {}),
-                status:                'verificar_pendente',
-                valor:                 valorI,
-                numero_parcela:        numero,
-                vencimento:            vencCalc,
-              });
-            }
-          }
-        }
-      }
-
+      const novasParcelas: Acordo[] = r.parcela ? [r.parcela] : [];
       setRegistrosReais(prev => [...prev, ...novasParcelas]);
       setReagendarParcela(null);
       toast.success(`Parcela ${proximaNumero}/${totalParcelas} agendada para ${formatDate(params.novoVencimento)}!`);

@@ -21,9 +21,8 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { valorDemaisParcelas } from '@/lib/money';
-import {
-  podeReagendar, ehParcelaDuplicada, avisoParcelaJaAgendada,
-} from '@/services/reagendamento/reagendamento';
+import { podeReagendar, avisoParcelaJaAgendada } from '@/services/reagendamento/reagendamento';
+import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaParcela';
 import { useParcelasExistentes } from '@/hooks/useParcelasExistentes';
 import { toast } from 'sonner';
 import { formatDate, getTodayISO } from '@/lib/index';
@@ -541,57 +540,17 @@ export default function Acordos() {
     }
     setSalvandoReagendar(true);
     try {
-      const parcelaAtual  = reagendarAcordo;
-      const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
-      const totalP        = parcelaAtual.parcelas ?? 1;
-
-      if (parcelaAtual.acordo_grupo_id) {
-        const { data: jaExiste } = await supabase
-          .from('acordos').select('id')
-          .eq('empresa_id', empresa.id)
-          .eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
-          .eq('numero_parcela', proximaNumero)
-          .maybeSingle();
-        if (jaExiste) {
-          toast.info(avisoParcelaJaAgendada(proximaNumero, totalP));
-          setReagendarAcordo(null);
-          return;
-        }
-      }
-
-      const { data: novo, error } = await supabase.from('acordos').insert({
-        nome_cliente:          parcelaAtual.nome_cliente,
-        nr_cliente:            parcelaAtual.nr_cliente,
-        tipo:                  parcelaAtual.tipo,
-        parcelas:              parcelaAtual.parcelas,
-        whatsapp:              parcelaAtual.whatsapp ?? null,
-        instituicao:           parcelaAtual.instituicao ?? null,
-        observacoes:           parcelaAtual.observacoes ?? null,
-        operador_id:           parcelaAtual.operador_id,
-        empresa_id:            parcelaAtual.empresa_id,
-        setor_id:              parcelaAtual.setor_id ?? null,
-        data_cadastro:         getTodayISO(),
-        acordo_grupo_id:       parcelaAtual.acordo_grupo_id ?? null,
-        tipo_vinculo:          parcelaAtual.tipo_vinculo ?? null,
-        vinculo_operador_id:   parcelaAtual.vinculo_operador_id ?? null,
-        vinculo_operador_nome: parcelaAtual.vinculo_operador_nome ?? null,
-        status:                'verificar_pendente',
-        valor:                 params.novoValor,
-        numero_parcela:        proximaNumero,
-        vencimento:            params.novoVencimento,
-      }).select('*, perfis(id, nome, email, perfil, setor_id)').single();
-
-      if (error) {
-        // Ver nota igual no Dashboard: a trava do banco chegou na frente.
-        if (ehParcelaDuplicada(error)) {
-          toast.info(avisoParcelaJaAgendada(proximaNumero, totalP));
-          setReagendarAcordo(null); return;
-        }
-        toast.error(`Erro ao criar parcela ${proximaNumero}: ${error.message}`); return;
-      }
-      addAcordo(novo as Acordo);
+      // A parcela nasce do DONO do acordo, pelo servidor — o líder de equipe
+      // que a RLS de insert barrava também consegue. Ver agendarProximaParcela.
+      const r = await agendarProximaParcela(reagendarAcordo, {
+        vencimento: params.novoVencimento,
+        valor:      params.novoValor,
+      });
+      if ('erro' in r) { toast.error(r.erro); return; }
       setReagendarAcordo(null);
-      toast.success(`Parcela ${proximaNumero}/${totalP} agendada para ${formatDate(params.novoVencimento)}!`);
+      if (r.jaExistia) { toast.info(avisoParcelaJaAgendada(r.numero, r.total)); return; }
+      if (r.parcela) addAcordo(r.parcela);
+      toast.success(`Parcela ${r.numero}/${r.total} agendada para ${formatDate(params.novoVencimento)}!`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
     } finally {
@@ -995,6 +954,7 @@ export default function Acordos() {
                     setEditandoInlineId={setEditandoInlineId}
                     setDetalheInlineId={setDetalheInlineId}
                     marcarComoPago={marcarComoPago}
+                    podeAgendar={temPermissao('editar_acordos')}
                     parcelasExistentes={parcelasExistentes}
                     setReagendarAcordo={setReagendarAcordo}
                     enviarUmWhatsapp={enviarUmWhatsapp}

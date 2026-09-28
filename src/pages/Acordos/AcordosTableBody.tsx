@@ -20,10 +20,11 @@ import { Fragment } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle, MessageSquare, Edit, Trash2,
-  MapPin, Link2, FileX, Plus, X, CalendarClock,
+  MapPin, Link2, FileX, Plus, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { podeReagendar, rotuloReagendar } from '@/services/reagendamento/reagendamento';
+import { podeReagendar } from '@/services/reagendamento/reagendamento';
+import { BotaoAgendarProxima } from '@/components/BotaoAgendarProxima';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, isAtrasado,
@@ -80,6 +81,12 @@ export interface AcordosTableBodyProps {
   setEditandoInlineId: (id: string | null) => void;
   setDetalheInlineId: (id: string | null) => void;
   marcarComoPago: (a: Acordo) => void;
+  /**
+   * Agendar a próxima parcela. Separado de `podeEditar` de propósito: editar
+   * é travado pelo mês fechado, e agendar não — a parcela NOVA nasce no mês
+   * da data escolhida, e é essa data que o fechamento confere.
+   */
+  podeAgendar: boolean;
   /** Chaves `grupo#numero` das parcelas que já existem (useParcelasExistentes). */
   parcelasExistentes: ReadonlySet<string>;
   setReagendarAcordo: (a: Acordo | null) => void;
@@ -130,7 +137,7 @@ export function AcordosTableBody({
   selecionarTodos, toggleSelecionado, setNovoInlineAberto,
   addAcordo, removeAcordo, patchAcordo,
   setEditandoInlineId, setDetalheInlineId,
-  marcarComoPago, parcelasExistentes, setReagendarAcordo,
+  marcarComoPago, podeAgendar, parcelasExistentes, setReagendarAcordo,
   enviarUmWhatsapp, setConfirmandoExclusao,
   limparFiltros,
 }: AcordosTableBodyProps) {
@@ -149,6 +156,22 @@ export function AcordosTableBody({
     const rotulo        = a.nome_cliente || a.nr_cliente || a.instituicao || 'acordo';
     const secundaria    = [a.instituicao, a.whatsapp].filter(Boolean).join(' · ');
     const alternarDetalhe = () => setDetalheInlineId(isDetailThis ? null : a.id);
+    // A regra mora em `services/reagendamento`; o botão mora na coluna de
+    // status (BotaoAgendarProxima conta por quê).
+    const agendar = podeAgendar ? podeReagendar(a, isPP, parcelasExistentes) : null;
+    const donoNome = mostrarColunaOperador
+      ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
+      : null;
+    const celulaStatus = (rotuloStatus: string) => (
+      <div className="flex flex-col items-start gap-0.5">
+        <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+          {rotuloStatus}
+        </span>
+        {agendar?.pode && (
+          <BotaoAgendarProxima decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
+        )}
+      </div>
+    );
     return (
       <Fragment key={a.id}>
         <motion.tr
@@ -225,9 +248,7 @@ export function AcordosTableBody({
                 ) : '—'}
               </td>
               <td className={CELULA}>
-                <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                  {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
-                </span>
+                {celulaStatus(STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status])}
               </td>
             </>
           ) : (
@@ -263,12 +284,13 @@ export function AcordosTableBody({
                 </span>
               </td>
               <td className={cn(CELULA, 'text-center font-mono text-muted-foreground')}>
-                {['boleto', 'cartao_recorrente', 'pix_automatico'].includes(a.tipo) ? a.parcelas : '—'}
+                {/* Era `['boleto','cartao_recorrente','pix_automatico'].includes(tipo)`:
+                    Pix e Cartão parcelados apareciam como «—», e as duas formas
+                    recorrentes — que não parcelam — mostravam número. */}
+                {(a.parcelas ?? 1) > 1 ? `${a.numero_parcela ?? 1}/${a.parcelas}` : '—'}
               </td>
               <td className={CELULA}>
-                <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                  {STATUS_LABELS[a.status]}
-                </span>
+                {celulaStatus(STATUS_LABELS[a.status])}
               </td>
             </>
           )}
@@ -293,24 +315,6 @@ export function AcordosTableBody({
                   <CheckCircle className="w-4 h-4" />
                 </Button>
               )}
-              {/* O botão de reagendar faltava nesta tabela: só a do Dashboard o
-                  tinha. Quem fechava o modal que abre ao marcar pago ficava sem
-                  porta para agendar a próxima parcela daqui. Mesma regra dos
-                  outros dois caminhos (`services/reagendamento`). */}
-              {podeEditar && (() => {
-                const d = podeReagendar(a, isPP, parcelasExistentes);
-                if (!d.pode) return null;
-                return (
-                  <Button
-                    variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
-                    title={rotuloReagendar(d)}
-                    aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
-                    onClick={() => setReagendarAcordo(a)}
-                  >
-                    <CalendarClock className="w-4 h-4" />
-                  </Button>
-                );
-              })()}
               <Button
                 variant="ghost" size="icon"
                 className={cn(
