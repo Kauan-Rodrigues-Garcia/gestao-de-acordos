@@ -40,6 +40,30 @@
 -- Cada grupo repetido precisa de decisão humana (qual linha vale, o que fazer
 -- com a tabulação e a comissão da outra) — por isso nada é apagado aqui.
 --
+-- ## O que havia em produção quando isto entrou (29/09/2026)
+--
+-- Dois pares, e a corrida era real — não hipótese:
+--
+-- 1. Grupo 2d6c1cf6…, parcela 2 (LILIA M. DOS SANTOS, BookPlay). Duas linhas
+--    IDÊNTICAS — R$ 6.000,00, vence 08/10, pendente — criadas em 08/09 às
+--    11:41:28 com ONZE MILISSEGUNDOS de diferença. É o duplo clique passando
+--    pelos dois lados do "confere e insere". Nenhuma paga, nenhuma tabulada, e
+--    só `fcfb7d93…` tinha NR registrado.
+--    → `dc15355d…`, a órfã, foi APAGADA. Nada apontava para ela.
+--    (De quebra: o acordo é `pix_automatico` com 28 parcelas, o que já viola a
+--    regra de recorrente. Com o `podeReagendar` de 28/09 o botão não aparece
+--    mais nele.)
+--
+-- 2. Grupo 7b692bdd…, parcela 3 (MARIA SIMONE L. DE OLIVEIRA). Duas linhas
+--    DIFERENTES e as DUAS `pago`: R$ 124,96 (5x, venc 07/07, pago em 07/07) e
+--    R$ 205,49 (3x, venc 31/08). Discordavam até do tamanho do acordo.
+--    → NÃO foi apagada nenhuma: apagar qualquer uma tiraria recebimento e
+--      comissão de julho/agosto de uma pessoa real. `987fa825…` recebeu um
+--      `acordo_grupo_id` NOVO (fa0e4576…) e virou grupo próprio. O grupo já
+--      nascia na parcela 3, sem 1 nem 2 — a forma "nasceu no meio do plano"
+--      que o detalhe do acordo já sabe mostrar. Os dois recebimentos seguem
+--      de pé; se um dia se decidir que só um vale, é um DELETE de uma linha.
+--
 -- Reexecutável.
 -- ============================================================================
 
