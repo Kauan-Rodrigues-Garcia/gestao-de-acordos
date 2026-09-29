@@ -138,6 +138,9 @@ const TODOS = '__todos__';
 const TODAS_EMPRESAS = '__todas__';
 
 type AbaUso = 'geral' | 'pessoas' | 'ausentes' | 'adocao';
+
+/** As abas que a Auditoria desenha na régua dela (Mapa de Abas, 29/09/2026). */
+export type AbaUsoFixa = 'geral' | 'pessoas' | 'adocao';
 type Metrica = 'segundos' | 'aberturas' | 'pessoas';
 
 const METRICAS: { key: Metrica; label: string; formatar: (n: number) => string }[] = [
@@ -227,15 +230,26 @@ interface Props {
    * o gate: a policy de `uso_telas` recusa a empresa alheia de todo jeito.
    */
   empresas: { id: string; nome: string }[];
+  /**
+   * A aba escolhida por quem embute (Administração › Auditoria). A régua daqui
+   * some, e «Pessoas» e «Sem acesso» viram UMA aba com um filtro — são a mesma
+   * lista de gente, uma com acesso e outra sem.
+   */
+  aba?: AbaUsoFixa;
 }
 
 interface SetorOpcao { id: string; nome: string }
 interface EquipeOpcao { id: string; nome: string; setor_id: string | null }
 
-export default function MonitoramentoUso({ empresas }: Props) {
-  const [aba, setAba] = useState<AbaUso>('geral');
-  // Monitoramento de uso do próprio monitoramento: nível 3, dentro de Logs › Uso.
-  useSubAbaUso(aba, 3);
+export default function MonitoramentoUso({ empresas, aba: abaFixa }: Props) {
+  const [abaPropria, setAba] = useState<AbaUso>('geral');
+  // Filtro de «Uso por pessoa» na Auditoria: quem acessou × quem não acessou.
+  const [soSemAcesso, setSoSemAcesso] = useState(false);
+  const aba: AbaUso = abaFixa === 'pessoas' ? (soSemAcesso ? 'ausentes' : 'pessoas')
+    : abaFixa ?? abaPropria;
+  // Monitoramento de uso do próprio monitoramento. Embutido, a aba é da régua
+  // de fora; aqui fica só o filtro de pessoas, um nível abaixo.
+  useSubAbaUso(abaFixa ? (abaFixa === 'pessoas' ? aba : null) : aba, abaFixa ? 1 : 3);
 
   // ── Filtros ────────────────────────────────────────────────────────────────
   const [dias, setDias]   = useState<number>(30);
@@ -549,7 +563,29 @@ export default function MonitoramentoUso({ empresas }: Props) {
       </div>
 
       {/* ── Abas internas ───────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
+      {abaFixa === 'pessoas' && (
+        <div role="group" aria-label="Quem mostrar" className="inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
+          {([
+            [false, 'Acessaram', Users, pessoas.length],
+            [true, 'Sem acesso', UserX, ausentes.length],
+          ] as const).map(([valor, label, Icone, contador]) => (
+            <button
+              key={label} type="button" aria-pressed={soSemAcesso === valor}
+              onClick={() => setSoSemAcesso(valor)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
+                soSemAcesso === valor
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/60',
+              )}
+            >
+              <Icone className="w-3.5 h-3.5" /> {label}
+              {contador > 0 && <span className="rounded-full bg-muted px-1.5 text-[10px] font-mono tabular-nums">{contador}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={cn('flex items-center gap-1 border-b border-border overflow-x-auto', abaFixa && 'hidden')}>
         {ABAS.map(({ key, label, Icone, contador }) => (
           <button
             key={key} onClick={() => setAba(key)}

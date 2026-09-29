@@ -59,7 +59,7 @@ import LogsFiltros from './LogsFiltros';
 import LogsTimeline from './LogsTimeline';
 import LogsTabela from './LogsTabela';
 import LogDetalhe from './LogDetalhe';
-import MonitoramentoUso from './MonitoramentoUso';
+import MonitoramentoUso, { type AbaUsoFixa } from './MonitoramentoUso';
 import UsuariosOnline from './UsuariosOnline';
 import { numeroBr, tempoRelativo } from './formatos';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
@@ -71,7 +71,14 @@ type Vista = 'timeline' | 'tabela';
 /** Trilha = o que mudou. Uso = quem está usando. Ver o comentário nas abas. */
 type AbaInterna = 'trilha' | 'uso';
 
-export default function AdminLogs() {
+/**
+ * `aba`: a Administração › Auditoria escolhe a aba e desenha a régua (Mapa de
+ * Abas, 29/09/2026). Aqui somem o título e a régua própria; a barra de ações da
+ * trilha continua.
+ */
+export type AbaAuditoria = 'trilha' | 'uso' | 'pessoas' | 'adocao';
+
+export default function AdminLogs({ aba }: { aba?: AbaAuditoria } = {}) {
   const { perfil } = useAuth();
   const { empresa: tenantEmpresa } = useEmpresa();
   const isSuperAdmin = perfil?.perfil === 'super_admin';
@@ -88,7 +95,11 @@ export default function AdminLogs() {
   const { temPermissao } = useCargoPermissoes();
 
   const [vista, setVista] = useState<Vista>('timeline');
-  const [abaInterna, setAbaInterna] = useState<AbaInterna>('trilha');
+  const [abaPropria, setAbaInterna] = useState<AbaInterna>('trilha');
+  const embutida = aba !== undefined;
+  const abaInterna: AbaInterna = aba === undefined ? abaPropria : aba === 'trilha' ? 'trilha' : 'uso';
+  const abaUso: AbaUsoFixa | undefined = aba === 'uso' ? 'geral'
+    : aba === 'pessoas' ? 'pessoas' : aba === 'adocao' ? 'adocao' : undefined;
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [selecionado, setSelecionado] = useState<LogSistema | null>(null);
   const [exportando, setExportando] = useState(false);
@@ -111,7 +122,7 @@ export default function AdminLogs() {
   // A própria tela é medida, no nível 2 — abaixo da aba «Logs» de Configurações:
   // `admin/configuracoes:logs/trilha` ou `:logs/uso`. Até 29/09/2026 eram
   // `admin/configuracoes:logs` e `:uso`; o histórico com esses nomes fica.
-  useSubAbaUso(abaInterna === 'uso' ? 'uso' : 'trilha', 2);
+  useSubAbaUso(embutida ? null : abaInterna === 'uso' ? 'uso' : 'trilha', 2);
 
   // Lista de empresas só para super_admin — os demais nem veem o seletor, e
   // buscar a lista para eles seria uma chamada que o RLS recusa.
@@ -184,7 +195,7 @@ export default function AdminLogs() {
     <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto">
       {/* ══ Cabeçalho ═══════════════════════════════════════════════════════ */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className={cn(embutida && 'hidden')}>
           <h2 className="text-base font-bold text-foreground flex items-center gap-2">
             <ClipboardList className="w-4 h-4 text-primary" />
             Logs do Sistema
@@ -301,7 +312,7 @@ export default function AdminLogs() {
           exigia cargo `administrador` dentro da policy. Quem tinha `ver_logs` e
           não era admin via esta aba e recebia zero linhas, sem explicação. Foi
           o exemplo que originou a conversão. */}
-      <div className="flex items-center gap-1 border-b border-border">
+      <div className={cn('flex items-center gap-1 border-b border-border', embutida && 'hidden')}>
         {([
           { key: 'trilha', label: 'Trilha de auditoria', Icon: ClipboardList, chave: 'ver_logs' },
           { key: 'uso',    label: 'Monitoramento de uso', Icon: Activity, chave: 'ver_monitoramento_uso' },
@@ -326,7 +337,7 @@ export default function AdminLogs() {
           traz seletor próprio. Passar o filtro da trilha para cá acoplaria duas
           perguntas diferentes ao mesmo controle. */}
       {abaInterna === 'uso' && temPermissao('ver_monitoramento_uso') && (
-        <MonitoramentoUso empresas={empresas.map(e => ({ id: e.id, nome: e.nome }))} />
+        <MonitoramentoUso empresas={empresas.map(e => ({ id: e.id, nome: e.nome }))} aba={abaUso} />
       )}
 
       {abaInterna === 'trilha' && (

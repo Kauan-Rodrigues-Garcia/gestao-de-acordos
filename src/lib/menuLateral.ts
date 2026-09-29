@@ -31,12 +31,16 @@
  */
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
-  BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
-  Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
+  BarChart3, BarChart2, Megaphone, MessageSquarePlus, Database, Zap,
+  Ticket, ClipboardList, ClipboardCheck, Tv, MessageCircle, Gauge,
   ShoppingBag, Handshake,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
+import {
+  abasDoDesempenho, abasDoFechamentoDoMes, abasDoNucleo, abasDosDados, algumaAba,
+  type ContextoAbas,
+} from '@/lib/mapaAbas';
 
 export interface NavItem {
   label: string;
@@ -67,6 +71,14 @@ export interface NavItem {
   hiddenForBookplay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
+  /**
+   * Para as telas que o Mapa de Abas juntou: basta UMA destas chaves. Quais
+   * abas a tela desenha — e se sobra alguma — é refinado em `abasDoMenu` pela
+   * mesma régua da tela (`lib/mapaAbas.ts`).
+   */
+  permissoes?: readonly string[];
+  /** Em que seção do menu o item mora. */
+  secao?: SecaoMenu;
 }
 
 /**
@@ -109,133 +121,149 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
 
+/**
+ * As seções do menu, na ordem em que aparecem (Mapa de Abas, 29/09/2026).
+ *
+ * O menu era uma lista corrida de dezoito itens, e o que era trabalho do dia
+ * ficava misturado com ferramenta técnica. As seções agrupam pelo TRABALHO:
+ * o que se faz todo dia, o que a gestão faz, as ferramentas, a área do Núcleo e
+ * a administração. Cada cargo continua vendo só o que a permissão libera — e
+ * uma seção sem item liberado não desenha nem o título.
+ */
+export const SECOES_MENU = [
+  { chave: 'operacao',      rotulo: 'Operação' },
+  { chave: 'gestao',        rotulo: 'Gestão' },
+  { chave: 'ferramentas',   rotulo: 'Ferramentas' },
+  { chave: 'nucleo',        rotulo: 'Núcleo ADM' },
+  { chave: 'administracao', rotulo: 'Administração' },
+] as const;
+
+export type SecaoMenu = typeof SECOES_MENU[number]['chave'];
+
 export const NAV_ITEMS: NavItem[] = [
-  // A única aba que existe em todo produto por necessidade: é a rota `/`, a
-  // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, permissaoKey: 'ver_dashboard' },
-  // Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão, separado do
-  // da cobrança. `hiddenForPaguePay` porque o Núcleo existe só na BookPlay. Quem
-  // abre é a chave, que nasce só no Assistente ADM; para ele é também a tela
-  // inicial — ver a `alternativa` da rota `/`, em App.tsx.
-  { label: 'Dashboard – ADM',  icon: Gauge,           to: ROUTE_PATHS.DASHBOARD_ADM,       produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_dashboard_adm' },
-  // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
-  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, produtos: SO_COBRANCA, permissaoKey: 'ver_solicitacoes_whatsapp' },
-  // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o
-  // cadastro de atendentes decidem quando ela abre. Ate 23/08 nao havia chave
-  // nenhuma aqui, e o cargo escrito na rota era o unico dono da decisao.
-  // Tickets — nas DUAS operações desde a Fase 9 (15/09/2026). Nada na tela é
-  // de cobrança: ela é chamado, fila, atendente e chat, tudo por empresa. O que
-  // era de cobrança eram duas CATEGORIAS do formulário, e elas ganharam
-  // `produtos` em `Tickets/categorias.ts` — quem vende escolhe «erro em venda»
-  // e «divergência no fechamento» no lugar delas.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             produtos: COBRANCA_E_COMERCIAL, permissaoKey: 'ver_tickets' },
-  // RH Gestão. Sem lista de cargo: quem abre é a chave, e o alcance de dentro
-  // vem dos níveis da aba. É o padrão das abas já convertidas.
+  // ── Operação ──────────────────────────────────────────────────────────────
   //
-  // Fica em `cobranca` e NÃO no produto `rh`: esta aba é a gestão de pessoal
-  // DA cobrança (célula, fechamento, lançamento), construída sobre os setores
-  // e equipes dela. O produto `rh`, quando tiver tela, terá a sua — com a
-  // visão das quatro empresas, que esta não tem.
-  { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           produtos: SO_COBRANCA, permissaoKey: 'ver_rh_gestao' },
-  // Fechamento — a planilha de fechamento da gerência. Só BookPlay. A chave
-  // nasce desligada para todo cargo configurável: hoje o item aparece só para
-  // quem tem acesso total, e a gerência entra quando alguém ligar no painel.
-  { label: 'Fechamento',       icon: ClipboardCheck,  to: ROUTE_PATHS.FECHAMENTO,          produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_fechamento' },
-  // Modo TV. Sem lista de cargo, como as demais: quem abre é a chave. Ela nasce
-  // desligada para todo cargo configurável, então hoje o item só aparece para
-  // quem tem acesso total — que é o pedido enquanto a fase 1 está sendo provada
-  // na parede. O palco (`/tv/:slug`) não entra em menu nenhum: ele é endereço
-  // de TV, não tela de gente.
-  // Controle de Números — a área do Núcleo de Inteligência e Gestão.
-  // `hiddenForPaguePay` porque o setor existe só na BookPlay. Quem abre é a
-  // chave, e ela nasce só no cargo do Núcleo, `assistente_adm` (11/09/2026). A
-  // RLS ainda exige o setor apontado em `numeros_config`, então a chave ligada
-  // por engano em outro cargo abre uma tela vazia, e não o módulo.
-  { label: 'Controle de Números', icon: Smartphone,     to: ROUTE_PATHS.CONTROLE_NUMEROS,  produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_controle_numeros' },
-  // Meus Chips — a outra ponta, e esta nasce LIGADA: todo cargo de setor
-  // enxerga a aba, e o escopo de dentro decide se ela mostra o setor ou só o que
-  // foi lançado para a pessoa. Operador sem número nenhum vê a tela vazia, com a
-  // explicação. O Assistente ADM também a recebe, com a visão do setor, para
-  // acompanhar a distribuição.
-  { label: 'Meus Chips',       icon: MessageCircle,  to: ROUTE_PATHS.MEUS_CHIPS,        produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_meus_chips' },
-  { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, permissaoKey: 'ver_modo_tv' },
-  // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
-  // item de menu. A rota antiga redireciona para lá.
-  // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
-  // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  // A aba Vendas — Comercial. O que Acordos é para a cobrança, ela é para o
-  // comercial: a tela do dia a dia de quem produz. E, como Acordos, é uma aba
-  // de produto só — venda não significa nada em cobrança nem em RH.
-  { label: 'Vendas',           icon: ShoppingBag,     to: ROUTE_PATHS.VENDAS,              produtos: SO_COMERCIAL, permissaoKey: 'ver_vendas' },
+  // A única aba que existe em todo produto por necessidade: é a rota `/`, a
+  // porta de entrada. Era «Dashboard»; virou «Início» e absorveu a Visão geral
+  // da Diretoria, o Gráfico recebimento e a gaveta Desempenho do Dia.
+  { label: 'Início',           icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, secao: 'operacao', permissaoKey: 'ver_dashboard' },
+  // Acordos nas DUAS empresas. Na PaguePlay a lista morava dentro do Dashboard
+  // e abria com `ver_dashboard`; a chave veio junto, e por isso são dois itens
+  // com a mesma rota — um por empresa, nunca os dois ao mesmo tempo.
+  // «Novo acordo» deixou de ser item: é o botão fixo no topo do menu. A
+  // Lixeira virou a aba Excluídos, e Importar Excel um botão da tela.
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, secao: 'operacao', roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, secao: 'operacao', hiddenForBookplay: true, permissaoKey: 'ver_dashboard' },
+  // O Pix Automático era a quinta aba de Acordos e tinha virado um módulo
+  // inteiro escondido. Só BookPlay, pela mesma chave.
+  { label: 'Pix Automático',   icon: Zap,             to: ROUTE_PATHS.PIX_AUTOMATICO,      produtos: SO_COBRANCA, secao: 'operacao', hiddenForPaguePay: true, permissaoKey: 'ver_pix_automatico' },
+  // Estes eram renderizados À MÃO abaixo do laço, com condição só de slug e
+  // cargo, e escapavam do filtro de permissão. Dentro da lista, todo item
+  // passa pelo mesmo filtro.
+  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           produtos: SO_COBRANCA, secao: 'operacao', permissaoKey: 'ver_analitico' },
+  // Painel Líder, a parte de desempenho do Painel Diretoria, Ranking e
+  // Desafios. Qualquer uma das chaves abre; quais abas aparecem sai de
+  // `abasDoDesempenho`.
+  { label: 'Desempenho',       icon: BarChart3,       to: ROUTE_PATHS.DESEMPENHO,          produtos: SO_COBRANCA, secao: 'operacao', permissoes: ['ver_painel_lider', 'ver_painel_diretoria', 'ver_analitico'] },
+
+  // ── Gestão ────────────────────────────────────────────────────────────────
+  //
+  // Cadastrar gente é necessidade de qualquer operação. Era «Usuários».
+  { label: 'Pessoas',          icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: TODOS_OS_PRODUTOS, secao: 'gestao', roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
+  // Fechamento + RH Gestão: os dois calculavam a mesma premiação e comissão
+  // por operador. Fica em `cobranca` e NÃO no produto `rh`: é a gestão de
+  // pessoal DA cobrança, construída sobre os setores e equipes dela.
+  { label: 'Fechamento do mês', icon: ClipboardCheck, to: ROUTE_PATHS.FECHAMENTO,          produtos: SO_COBRANCA, secao: 'gestao', permissoes: ['ver_fechamento', 'ver_rh_gestao'] },
+
+  // ── Ferramentas ───────────────────────────────────────────────────────────
+  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, secao: 'ferramentas', hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
+  // Meus Chips nasce LIGADA: todo cargo de setor enxerga a aba, e o escopo de
+  // dentro decide se ela mostra o setor ou só o que foi lançado para a pessoa.
+  { label: 'Meus Chips',       icon: MessageCircle,   to: ROUTE_PATHS.MEUS_CHIPS,          produtos: SO_COBRANCA, secao: 'ferramentas', hiddenForPaguePay: true, permissaoKey: 'ver_meus_chips' },
+  // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo.
+  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, produtos: SO_COBRANCA, secao: 'ferramentas', permissaoKey: 'ver_solicitacoes_whatsapp' },
+  // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e
+  // o cadastro de atendentes decidem quando ela abre. Nas DUAS operações desde
+  // a Fase 9 (15/09/2026): nada na tela é de cobrança.
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             produtos: COBRANCA_E_COMERCIAL, secao: 'ferramentas', permissaoKey: 'ver_tickets' },
+  // A chave nasce desligada para todo cargo configurável. O palco
+  // (`/tv/:slug`) não entra em menu nenhum: é endereço de TV, não tela de gente.
+  { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, secao: 'ferramentas', permissaoKey: 'ver_modo_tv' },
+
+  // ── Núcleo ADM ────────────────────────────────────────────────────────────
+  //
+  // Dashboard – ADM e Controle de Números eram a mesma área, com os mesmos
+  // quatro usuários. Viraram um item, com o painel como primeira aba. Só
+  // BookPlay; as chaves nascem só no Assistente ADM (11/09/2026).
+  { label: 'Núcleo',           icon: Gauge,           to: ROUTE_PATHS.NUCLEO,              produtos: SO_COBRANCA, secao: 'nucleo', hiddenForPaguePay: true, permissoes: ['ver_dashboard_adm', 'ver_controle_numeros'] },
+
+  // ── Administração ─────────────────────────────────────────────────────────
+  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, produtos: TODOS_OS_PRODUTOS, secao: 'administracao', roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
+  // Relatório 59, vínculos, códigos, fontes, restaurar tabulações e banco.
+  // Estavam espalhados pelo Painel Diretoria e por Configurações › Geral.
+  { label: 'Dados e importações', icon: Database,     to: ROUTE_PATHS.ADMIN_DADOS,         produtos: SO_COBRANCA, secao: 'administracao', permissoes: ['ver_banco_dados', 'ver_painel_diretoria'] },
+  // Trilha e monitoramento de uso. Eram Configurações › Logs, a cinco níveis
+  // de profundidade no pior caminho.
+  { label: 'Auditoria',        icon: ClipboardList,   to: ROUTE_PATHS.ADMIN_AUDITORIA,     produtos: TODOS_OS_PRODUTOS, secao: 'administracao', permissaoKey: 'ver_logs' },
+
+  // ── Comercial ─────────────────────────────────────────────────────────────
+  //
+  // A aba Vendas: o que Acordos é para a cobrança, ela é para o comercial.
+  { label: 'Vendas',           icon: ShoppingBag,     to: ROUTE_PATHS.VENDAS,              produtos: SO_COMERCIAL, secao: 'operacao', permissaoKey: 'ver_vendas' },
   // Indicações — o que acontece ANTES da venda. Chave própria, e não
   // `ver_vendas`: quem prospecta pode precisar do ranking do setor sem ver a
   // carteira de ninguém.
-  { label: 'Indicações',       icon: Handshake,       to: ROUTE_PATHS.VENDAS_INDICACOES,   produtos: SO_COMERCIAL, permissaoKey: 'ver_indicacoes' },
-  // ## O menu do Comercial encolheu duas vezes
-  //
-  // **16/09/2026** — «criou várias abas que não têm sentido ser separadas.» O
-  // menu tinha 14 itens, e a BookPlay já havia resolvido o mesmo problema
-  // dobrando telas da mesma família numa só:
-  //
-  //   Metas de Vendas .. aba «Metas» de Usuários, como a Metas da BookPlay
-  //   Acompanhamento ... aba de Usuários — é feedback e ausência de PESSOA
-  //   Fechamento ....... aba de Importar Vendas
-  //   Desafios ......... aba do Painel Líder; na cobrança mora no Analítico,
-  //                      que o Comercial não tem
-  //
-  // **21/09/2026** — «tira a aba Importar Vendas e joga o que tem dentro, de
-  // forma estruturada, lá no painel diretoria.» O item saiu daqui, e o que
-  // havia nele virou aba do Painel Diretoria, cada pergunta na sua:
-  //
-  //   carregar o arquivo ........... aba «Importar relatório»
-  //   de qual setor é cada franquia  aba «Setores a vincular»
-  //   conferir as camadas .......... aba «Geral × prévia»
-  //   histórico de cargas .......... aba «Histórico de importações»
-  //   fechamento do setor .......... aba «Fechamento do setor»
-  //
-  // ⚠️ Consequência: importar passou a exigir `ver_painel_diretoria` ALÉM de
-  // `ver_importacoes_vendas`. Quem tinha só a segunda perdeu o caminho — a
-  // rota `/vendas/importar` redireciona para o painel, e o painel recusa quem
-  // não o pode abrir. Era o pedido: um lugar só para o relatório.
-  //
-  // As rotas antigas continuam existindo e redirecionam (App.tsx), e cada aba
-  // interna pede a MESMA chave que o item de menu pedia.
-  //
-  // Fase 9 — os painéis do Comercial.
-  //
-  // Rota própria e CHAVE COMPARTILHADA com a cobrança. As duas decisões andam
-  // juntas: a tela é outra (aqui não há recebimento, acordo nem quartil), mas
-  // a pergunta que a chave faz — «esta pessoa enxerga o painel da liderança?»
-  // — é a mesma nas duas operações, e um cargo que já a tem lá não deveria
-  // precisar de outra configuração aqui.
-  //
-  // Criar chave nova também custaria encostar na cadeia de
-  // `fn_permissoes_catalogo()`, que congela o catálogo a cada elo e já se
-  // partiu uma vez neste projeto (`tickets_excluir` sumiu).
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.VENDAS_PAINEL_LIDER,     produtos: SO_COMERCIAL, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA, produtos: SO_COMERCIAL, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
+  { label: 'Indicações',       icon: Handshake,       to: ROUTE_PATHS.VENDAS_INDICACOES,   produtos: SO_COMERCIAL, secao: 'operacao', permissaoKey: 'ver_indicacoes' },
+  // Fase 9 — os painéis do Comercial. Rota própria e CHAVE COMPARTILHADA com a
+  // cobrança: a tela é outra, mas a pergunta que a chave faz é a mesma. Metas,
+  // Acompanhamento, Fechamento, Importar Vendas e Desafios viraram abas
+  // internas em 16 e 21/09/2026 — as rotas antigas redirecionam (App.tsx).
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.VENDAS_PAINEL_LIDER,     produtos: SO_COMERCIAL, secao: 'operacao', roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA, produtos: SO_COMERCIAL, secao: 'operacao', roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   // A lixeira do Comercial é outra TABELA (`lixeira_vendas`), não outro filtro.
-  // `ver_lixeira` abre; `restaurar_vendas` é que deixa mexer.
-  { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira' },
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
-  // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre
-  // pessoa, setor e equipe — vocabulário que Vendas e RH também usam.
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: TODOS_OS_PRODUTOS, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
-  // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  produtos: SO_COBRANCA, roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
-  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, produtos: TODOS_OS_PRODUTOS, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: SO_COBRANCA, roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
-  // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
-  // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
-  // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
-  // no menu. Dentro da lista, todo item passa pelo mesmo filtro.
-  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           produtos: SO_COBRANCA, permissaoKey: 'ver_analitico' },
-  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
-  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             produtos: SO_COBRANCA, permissaoKey: 'importar_excel' },
+  { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, secao: 'operacao', permissaoKey: 'ver_lixeira' },
 ];
+
+/**
+ * O botão fixo «Novo acordo», no topo do menu.
+ *
+ * Era item de menu, e 240 operadores o abriam em 60 dias: precisa continuar a
+ * um clique de qualquer tela. Não entra em `NAV_ITEMS` porque não é uma seção
+ * do sistema — é uma ação —, mas passa pela mesma régua de produto, cargo e
+ * chave que o item antigo passava.
+ *
+ * Na PaguePlay o acordo nasce na própria lista (formulário em linha), e o
+ * botão leva até ela com o formulário aberto.
+ */
+export const NOVO_ACORDO = {
+  label: 'Novo acordo',
+  icon: Plus,
+  produtos: SO_COBRANCA,
+  permissaoKey: 'criar_acordos',
+} as const;
+
+export function destinoNovoAcordo(isPaguePlay: boolean): string {
+  return isPaguePlay ? `${ROUTE_PATHS.ACORDOS}?novoInline=1` : ROUTE_PATHS.ACORDO_NOVO;
+}
+
+/** O botão fixo aparece para este contexto? */
+export function mostrarNovoAcordo(ctx: ContextoMenu): boolean {
+  if (!produtoPermite(NOVO_ACORDO.produtos, ctx.produto)) return false;
+  if (!ctx.temPermissao(NOVO_ACORDO.permissaoKey)) return false;
+  // Na PaguePlay quem cria acordo é quem vê a lista — que lá abre com
+  // `ver_dashboard`, como abria dentro do Dashboard. A lista de cargos que o
+  // item antigo carregava nunca era lida: item com chave obedece só à chave.
+  return !ctx.isPaguePlay || ctx.temPermissao('ver_dashboard');
+}
+
+/** Os itens já filtrados, agrupados nas seções, na ordem das seções. */
+export function agruparPorSecao<T extends { secao?: SecaoMenu }>(
+  itens: T[],
+): { chave: SecaoMenu; rotulo: string; itens: T[] }[] {
+  return SECOES_MENU
+    .map(s => ({ chave: s.chave, rotulo: s.rotulo, itens: itens.filter(i => (i.secao ?? 'operacao') === s.chave) }))
+    .filter(s => s.itens.length > 0);
+}
 
 /**
  * Tudo o que a decisão «esta aba aparece?» precisa saber.
@@ -296,6 +324,26 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
     // — então Solicitar Atendimento nunca chegava a consultá-la, e o menu
     // continuava mostrando a aba de quem tinha a permissão desligada.
     if (item.permissaoKey && !ctx.temPermissao(item.permissaoKey)) return false;
+    if (item.permissoes && !item.permissoes.some(ctx.temPermissao)) return false;
+
+    // As telas que juntam outras aparecem quando sobra ao menos UMA aba — a
+    // mesma régua que a tela usa para desenhá-las.
+    //
+    // `superAdmin: false` de propósito: as abas do 59 são de super_admin por
+    // cargo, e o super_admin já tem `ver_banco_dados` — a de Dados aparece
+    // para ele de qualquer forma. O menu não precisa perguntar o cargo.
+    const emp: ContextoAbas = {
+      isPaguePlay: ctx.isPaguePlay,
+      isBookplay: ctx.isBookplay,
+      superAdmin: false,
+    };
+    if (item.to === ROUTE_PATHS.DESEMPENHO) {
+      const a = abasDoDesempenho(ctx.temPermissao, emp);
+      return a.equipes || a.pessoas || a.desafios || a.elite;
+    }
+    if (item.to === ROUTE_PATHS.FECHAMENTO)  return abasDoFechamentoDoMes(ctx.temPermissao, emp).premiacao;
+    if (item.to === ROUTE_PATHS.NUCLEO)      return algumaAba(abasDoNucleo(ctx.temPermissao, emp));
+    if (item.to === ROUTE_PATHS.ADMIN_DADOS) return algumaAba(abasDosDados(ctx.temPermissao, emp));
 
     // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
     // e quem garante isso é a RLS, não este filtro.
@@ -312,7 +360,7 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
       return ctx.acessoTickets;
     }
 
-    if (item.permissaoKey) return true;
+    if (item.permissaoKey || item.permissoes) return true;
 
     return !item.roles || item.roles.includes(ctx.cargo) || ctx.cargo === 'super_admin';
   });

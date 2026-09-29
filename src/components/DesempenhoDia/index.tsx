@@ -51,6 +51,12 @@ import { FaixaContexto } from './FaixaContexto';
 interface DesempenhoDiaProps {
   aberto: boolean;
   onClose: () => void;
+  /**
+   * Desenha o painel dentro da página (Início › Hoje), sem véu, sem posição
+   * fixa, sem botão de fechar e sem atalhos de teclado — na página as setas
+   * são da página. É o mesmo painel da gaveta, com os mesmos números.
+   */
+  embutido?: boolean;
 }
 
 /** Anda `delta` dias a partir de uma data ISO. */
@@ -60,7 +66,8 @@ function deslocarDia(iso: string, delta: number): string {
   return `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, '0')}-${String(alvo.getDate()).padStart(2, '0')}`;
 }
 
-export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
+export function DesempenhoDia({ aberto: abertoProp, onClose, embutido = false }: DesempenhoDiaProps) {
+  const aberto = embutido || abertoProp;
   const { perfil } = useAuth();
   const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { tags } = useEmpresaTags();
@@ -119,7 +126,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
 
   // ── Teclado ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!aberto) return;
+    if (!aberto || embutido) return;
 
     function aoPressionar(e: KeyboardEvent) {
       // Não sequestra as setas de quem está digitando numa caixa de texto ou
@@ -138,7 +145,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
 
     window.addEventListener('keydown', aoPressionar);
     return () => window.removeEventListener('keydown', aoPressionar);
-  }, [aberto, onClose, andar]);
+  }, [aberto, embutido, onClose, andar]);
 
   /** Entrada escalonada por faixa. Com movimento reduzido, tudo aparece junto. */
   const faixa = (indice: number) => (semMovimento ? {} : {
@@ -146,6 +153,222 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
     animate: { opacity: 1, y: 0 },
     transition: { delay: 0.06 + indice * 0.05, duration: 0.25 },
   });
+
+  const cartao = (
+    <motion.div
+      role={embutido ? 'region' : 'dialog'}
+      aria-label="Desempenho do dia"
+      initial={semMovimento ? { opacity: 0 } : { opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      // Saída mais rápida que a entrada: fechar deve parecer imediato.
+      exit={semMovimento ? { opacity: 0 } : { opacity: 0, y: 10 }}
+      // Só `y` e `opacity`. O `scale` que havia aqui obrigava o navegador a
+      // rasterizar de novo, a cada quadro, um painel de 420px com sombra
+      // grande e cantos arredondados — caro, e imperceptível ao lado do
+      // deslizamento.
+      transition={{ type: 'spring', stiffness: 400, damping: 34, mass: 0.7 }}
+      style={{ willChange: 'transform, opacity' }}
+      /*
+       * Altura FIXA, e não «a que o conteúdo pedir».
+       *
+       * O painel é ancorado embaixo (`bottom-4`), então toda mudança de
+       * altura empurra o conteúdo para cima: o esqueleto encolhia a caixa,
+       * o conteúdo a esticava de volta, e o número que a pessoa estava
+       * lendo saltava de lugar a cada consulta.
+       *
+       * Não existe altura de conteúdo que sirva sempre — as três faixas
+       * variam por natureza (meta que existe ou não, tags que são zero ou
+       * seis). Com altura fixa a caixa não se mexe nunca, e o que passar
+       * dela rola na área de conteúdo, que já é `overflow-y-auto`.
+       *
+       * O `max-h` continua: em tela baixa ele é quem manda, e aí os dois
+       * limites concordam.
+       */
+      className={cn(
+        embutido
+          ? 'flex w-full max-w-[520px]'
+          : 'fixed bottom-4 left-4 z-40 flex h-[620px] max-h-[85vh] w-[420px] max-w-[calc(100vw-2rem)] shadow-xl',
+        'flex-col overflow-hidden rounded-2xl border border-border/80 bg-card',
+      )}
+    >
+      {/* ── Cabeçalho ── */}
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/10">
+            <BarChart2 className="h-4 w-4 text-violet-500" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-none">Desempenho do Dia</p>
+            {/*
+              O escopo é dito, não escolhido. Ele sai do cargo — equipe
+              para líder, setor para gerência — e a regra inteira mora em
+              `resolverEscopoDoDia`.
+            */}
+            <p className="mt-1 flex items-center gap-1 truncate text-[11px] leading-none text-muted-foreground">
+              <Users className="h-3 w-3 shrink-0" />
+              {dados.escopoRotulo || '—'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
+            onClick={() => void dados.refetch()}
+            disabled={dados.carregando}
+            title="Atualizar"
+          >
+            <RefreshCw className={cn(
+              'h-3.5 w-3.5 text-muted-foreground',
+              dados.carregando && 'animate-spin',
+            )} />
+          </Button>
+          {!embutido && (
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
+              onClick={onClose}
+              title="Fechar (Esc)"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          )}
+        </div>
+      </header>
+
+      {/* ── Controles ── */}
+      {/*
+        Data e, para quem alcança mais de uma, equipe. O seletor de PESSOA
+        que havia aqui não volta: obrigava a responder «o dia de quem?»
+        toda vez, para uma resposta quase sempre igual, e quem precisa
+        desse recorte tem a aba Analítico.
+      */}
+      <div className="shrink-0 space-y-2 border-b border-border/60 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline" size="icon" className="h-7 w-7 shrink-0 rounded-lg"
+            onClick={() => andar(-1)} title="Dia anterior (←)"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <div className="flex-1">
+            <DatePickerField value={dia} onChange={setDia} size="sm" />
+          </div>
+          <Button
+            variant="outline" size="icon" className="h-7 w-7 shrink-0 rounded-lg"
+            onClick={() => andar(1)} disabled={ehHoje} title="Próximo dia (→)"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          {!ehHoje && (
+            <Button
+              variant="outline" size="sm"
+              className="h-7 shrink-0 gap-1 rounded-lg border-violet-500/30 px-2.5 text-xs text-violet-500 hover:bg-violet-500/10"
+              onClick={() => setDia(getTodayISO())}
+            >
+              <CalendarDays className="h-3 w-3" /> Hoje
+            </Button>
+          )}
+        </div>
+
+        {/*
+          Com uma equipe só não há escolha a fazer, e um seletor de opção
+          única é um controle que promete recorte e não entrega.
+        */}
+        {dados.equipes.length > 1 && (
+          <Select
+            value={equipeId ?? '__todas'}
+            onValueChange={v => setEquipeId(v === '__todas' ? null : v)}
+          >
+            <SelectTrigger className="h-7 w-full rounded-lg border-border/70 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__todas">Todas as equipes</SelectItem>
+              {dados.equipes.map(e => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome}
+                  <span className="ml-1.5 text-muted-foreground">
+                    · {e.membros.length}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {/* ── Conteúdo ── */}
+      <div className="flex-1 overflow-y-auto px-4 py-3.5">
+        <AnimatePresence mode="wait">
+          {mostrarEsqueleto ? (
+            <motion.div
+              key="carregando"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="space-y-3.5"
+            >
+              {/* Do tamanho das faixas de verdade, e com o mesmo espaço
+                  entre elas: um esqueleto menor que o conteúdo é a
+                  própria troca de altura, em miniatura. */}
+              <div className="h-[176px] animate-pulse rounded-xl bg-muted/30" />
+              <div className="h-[136px] animate-pulse rounded-xl bg-muted/30" />
+              <div className="h-[112px] animate-pulse rounded-xl bg-muted/30" />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="conteudo"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className={cn(
+                'space-y-3.5 transition-opacity',
+                // Releitura: o conteúdo antigo fica no lugar, apagado.
+                dados.carregando && 'opacity-50',
+              )}
+            >
+              <motion.div {...faixa(0)}>
+                <FaixaDinheiro
+                  recebido={dados.recebido}
+                  recebidoOposto={dados.recebidoOposto}
+                  meta={dados.meta}
+                  vsOntem={dados.vsOntem}
+                  vsMedia={dados.vsMedia}
+                  unidade={tenant.isPaguePlay ? unidade : null}
+                  onUnidade={trocarUnidade}
+                />
+              </motion.div>
+
+              <motion.div {...faixa(1)}>
+                <FaixaOperacao
+                  estados={dados.barra}
+                  formalizados={dados.formalizados}
+                  valorPago={dados.valorPagoAcordos}
+                />
+              </motion.div>
+
+              <motion.div {...faixa(2)}>
+                <FaixaContexto
+                  diretoExtra={dados.diretoExtra}
+                  pix={dados.pix}
+                  tags={dados.tags}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {!embutido && <footer className="shrink-0 border-t border-border/60 px-4 py-1.5">
+        <p className="text-center text-[10px] text-muted-foreground">
+          <kbd className="rounded border border-border px-1">←</kbd>
+          {' '}
+          <kbd className="rounded border border-border px-1">→</kbd>
+          {' muda o dia · '}
+          <kbd className="rounded border border-border px-1">Esc</kbd>
+          {' fecha'}
+        </p>
+      </footer>}
+    </motion.div>
+  );
+
+  if (embutido) return cartao;
 
   return (
     <AnimatePresence>
@@ -172,213 +395,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
             onClick={onClose}
           />
 
-          <motion.div
-            role="dialog"
-            aria-label="Desempenho do dia"
-            initial={semMovimento ? { opacity: 0 } : { opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            // Saída mais rápida que a entrada: fechar deve parecer imediato.
-            exit={semMovimento ? { opacity: 0 } : { opacity: 0, y: 10 }}
-            // Só `y` e `opacity`. O `scale` que havia aqui obrigava o navegador a
-            // rasterizar de novo, a cada quadro, um painel de 420px com sombra
-            // grande e cantos arredondados — caro, e imperceptível ao lado do
-            // deslizamento.
-            transition={{ type: 'spring', stiffness: 400, damping: 34, mass: 0.7 }}
-            style={{ willChange: 'transform, opacity' }}
-            /*
-             * Altura FIXA, e não «a que o conteúdo pedir».
-             *
-             * O painel é ancorado embaixo (`bottom-4`), então toda mudança de
-             * altura empurra o conteúdo para cima: o esqueleto encolhia a caixa,
-             * o conteúdo a esticava de volta, e o número que a pessoa estava
-             * lendo saltava de lugar a cada consulta.
-             *
-             * Não existe altura de conteúdo que sirva sempre — as três faixas
-             * variam por natureza (meta que existe ou não, tags que são zero ou
-             * seis). Com altura fixa a caixa não se mexe nunca, e o que passar
-             * dela rola na área de conteúdo, que já é `overflow-y-auto`.
-             *
-             * O `max-h` continua: em tela baixa ele é quem manda, e aí os dois
-             * limites concordam.
-             */
-            className={cn(
-              'fixed bottom-4 left-4 z-40 flex h-[620px] max-h-[85vh] w-[420px] max-w-[calc(100vw-2rem)]',
-              'flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xl',
-            )}
-          >
-            {/* ── Cabeçalho ── */}
-            <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/10">
-                  <BarChart2 className="h-4 w-4 text-violet-500" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold leading-none">Desempenho do Dia</p>
-                  {/*
-                    O escopo é dito, não escolhido. Ele sai do cargo — equipe
-                    para líder, setor para gerência — e a regra inteira mora em
-                    `resolverEscopoDoDia`.
-                  */}
-                  <p className="mt-1 flex items-center gap-1 truncate text-[11px] leading-none text-muted-foreground">
-                    <Users className="h-3 w-3 shrink-0" />
-                    {dados.escopoRotulo || '—'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
-                  onClick={() => void dados.refetch()}
-                  disabled={dados.carregando}
-                  title="Atualizar"
-                >
-                  <RefreshCw className={cn(
-                    'h-3.5 w-3.5 text-muted-foreground',
-                    dados.carregando && 'animate-spin',
-                  )} />
-                </Button>
-                <Button
-                  variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
-                  onClick={onClose}
-                  title="Fechar (Esc)"
-                >
-                  <X className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </div>
-            </header>
-
-            {/* ── Controles ── */}
-            {/*
-              Data e, para quem alcança mais de uma, equipe. O seletor de PESSOA
-              que havia aqui não volta: obrigava a responder «o dia de quem?»
-              toda vez, para uma resposta quase sempre igual, e quem precisa
-              desse recorte tem a aba Analítico.
-            */}
-            <div className="shrink-0 space-y-2 border-b border-border/60 px-4 py-2.5">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline" size="icon" className="h-7 w-7 shrink-0 rounded-lg"
-                  onClick={() => andar(-1)} title="Dia anterior (←)"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <div className="flex-1">
-                  <DatePickerField value={dia} onChange={setDia} size="sm" />
-                </div>
-                <Button
-                  variant="outline" size="icon" className="h-7 w-7 shrink-0 rounded-lg"
-                  onClick={() => andar(1)} disabled={ehHoje} title="Próximo dia (→)"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-                {!ehHoje && (
-                  <Button
-                    variant="outline" size="sm"
-                    className="h-7 shrink-0 gap-1 rounded-lg border-violet-500/30 px-2.5 text-xs text-violet-500 hover:bg-violet-500/10"
-                    onClick={() => setDia(getTodayISO())}
-                  >
-                    <CalendarDays className="h-3 w-3" /> Hoje
-                  </Button>
-                )}
-              </div>
-
-              {/*
-                Com uma equipe só não há escolha a fazer, e um seletor de opção
-                única é um controle que promete recorte e não entrega.
-              */}
-              {dados.equipes.length > 1 && (
-                <Select
-                  value={equipeId ?? '__todas'}
-                  onValueChange={v => setEquipeId(v === '__todas' ? null : v)}
-                >
-                  <SelectTrigger className="h-7 w-full rounded-lg border-border/70 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__todas">Todas as equipes</SelectItem>
-                    {dados.equipes.map(e => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.nome}
-                        <span className="ml-1.5 text-muted-foreground">
-                          · {e.membros.length}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            {/* ── Conteúdo ── */}
-            <div className="flex-1 overflow-y-auto px-4 py-3.5">
-              <AnimatePresence mode="wait">
-                {mostrarEsqueleto ? (
-                  <motion.div
-                    key="carregando"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="space-y-3.5"
-                  >
-                    {/* Do tamanho das faixas de verdade, e com o mesmo espaço
-                        entre elas: um esqueleto menor que o conteúdo é a
-                        própria troca de altura, em miniatura. */}
-                    <div className="h-[176px] animate-pulse rounded-xl bg-muted/30" />
-                    <div className="h-[136px] animate-pulse rounded-xl bg-muted/30" />
-                    <div className="h-[112px] animate-pulse rounded-xl bg-muted/30" />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="conteudo"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className={cn(
-                      'space-y-3.5 transition-opacity',
-                      // Releitura: o conteúdo antigo fica no lugar, apagado.
-                      dados.carregando && 'opacity-50',
-                    )}
-                  >
-                    <motion.div {...faixa(0)}>
-                      <FaixaDinheiro
-                        recebido={dados.recebido}
-                        recebidoOposto={dados.recebidoOposto}
-                        meta={dados.meta}
-                        vsOntem={dados.vsOntem}
-                        vsMedia={dados.vsMedia}
-                        unidade={tenant.isPaguePlay ? unidade : null}
-                        onUnidade={trocarUnidade}
-                      />
-                    </motion.div>
-
-                    <motion.div {...faixa(1)}>
-                      <FaixaOperacao
-                        estados={dados.barra}
-                        formalizados={dados.formalizados}
-                        valorPago={dados.valorPagoAcordos}
-                      />
-                    </motion.div>
-
-                    <motion.div {...faixa(2)}>
-                      <FaixaContexto
-                        diretoExtra={dados.diretoExtra}
-                        pix={dados.pix}
-                        tags={dados.tags}
-                      />
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <footer className="shrink-0 border-t border-border/60 px-4 py-1.5">
-              <p className="text-center text-[10px] text-muted-foreground">
-                <kbd className="rounded border border-border px-1">←</kbd>
-                {' '}
-                <kbd className="rounded border border-border px-1">→</kbd>
-                {' muda o dia · '}
-                <kbd className="rounded border border-border px-1">Esc</kbd>
-                {' fecha'}
-              </p>
-            </footer>
-          </motion.div>
+          {cartao}
         </>
       )}
     </AnimatePresence>

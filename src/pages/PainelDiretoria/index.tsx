@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ROUTE_PATHS } from '@/lib/index';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
@@ -72,8 +74,26 @@ const RelatorioPaguePlay = lazy(() => import('./RelatorioPaguePlay'));
  * conferência de super_admin, e `codigos` é onde o código do ERP amarra cada
  * setor à sua carteira do 59.
  */
-type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencias'
+export type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencias'
   | 'historico' | 'fontes' | 'painel' | 'mestre' | 'codigos' | 'relatorioPP';
+
+/**
+ * Como o painel é embutido desde o Mapa de Abas (29/09/2026). O item «Painel
+ * Diretoria» saiu do menu; as abas foram morar onde a pergunta delas mora:
+ *
+ *   visao / painel ........ Início › Empresa
+ *   setores / operadores .. Desempenho › Equipes e › Pessoas (diretoria)
+ *   as técnicas ........... Administração › Dados
+ *
+ * `abas` limita o que este painel pode desenhar; `abaFixa` é a aba que quem o
+ * embute escolheu (a régua dele manda, e a daqui some); `compacto` troca o
+ * cartão de título por uma linha só com o mês e o «Atualizar».
+ */
+export interface PainelDiretoriaProps {
+  abas?: readonly AbaDoPainel[];
+  abaFixa?: AbaDoPainel;
+  compacto?: boolean;
+}
 
 /**
  * Painel Diretoria.
@@ -94,9 +114,10 @@ type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencia
  * do que a empresa recebeu — a diferença sendo exatamente o que ainda não foi
  * tabulado, que é justamente o que o dashboard já denunciava num aviso.
  */
-export default function PainelDiretoria() {
+export default function PainelDiretoria({ abas: abasPermitidas, abaFixa, compacto = false }: PainelDiretoriaProps = {}) {
   // H.O. configurado (aba Metas): só onde não há relatório — tabulação e agendado.
   const ho = useHoPercentual();
+  const navigate = useNavigate();
   const repasse = repassePercentuais(ho);
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
@@ -142,7 +163,10 @@ export default function PainelDiretoria() {
    * virando esta chave, sem reescrever nada.
    */
   const usaPainel59 = tenant.slug === 'bookplay';
-  const [aba, setAba] = useState<AbaDoPainel>(usaPainel59 ? 'visao' : 'painel');
+  const [abaPropria, setAba] = useState<AbaDoPainel>(
+    abasPermitidas?.[0] ?? (usaPainel59 ? 'visao' : 'painel'),
+  );
+  const aba = abaFixa ?? abaPropria;
 
   /*
    * O painel antigo só busca onde ele aparece (17/09/2026).
@@ -390,7 +414,7 @@ export default function PainelDiretoria() {
    * Perder a permissão com a aba aberta não pode deixar o conteúdo no ar, e
    * cair numa aba que não existe naquele tenant também não.
    */
-  const abaVisivel: AbaDoPainel =
+  const abaVisivelBruta: AbaDoPainel =
     !usaPainel59            ? (aba === 'relatorioPP' && podeVerRelatorioPP ? 'relatorioPP' : 'painel')
     : aba === 'mestre'      ? (podeVerMestre ? 'mestre' : 'visao')
     : aba === 'codigos'     ? (podeVerMestre ? 'codigos' : 'visao')
@@ -402,8 +426,13 @@ export default function PainelDiretoria() {
     : aba === 'historico'    ? (podeVerMestre ? 'historico' : 'visao')
     : aba === 'fontes'       ? (podeVerMestre ? 'fontes' : 'visao')
     : 'visao';
-  // Monitoramento de uso: a aba aberta do painel.
-  useSubAbaUso(abaVisivel);
+  // Embutido, só as abas que quem embute liberou: a primeira delas é o chão.
+  const abaVisivel: AbaDoPainel = !abasPermitidas || abasPermitidas.includes(abaVisivelBruta)
+    ? abaVisivelBruta
+    : abasPermitidas[0];
+  // Monitoramento de uso: a aba aberta do painel. Com a aba fixada de fora,
+  // quem mede é a régua de fora.
+  useSubAbaUso(abaFixa ? null : abaVisivel);
   // Na BookPlay toda aba lê o 59 (ou a conferência dele), e o «Atualizar»
   // recarrega todas por contador — inclusive «Códigos», que recebe `versao` e
   // antes ficava de fora da lista.
@@ -415,11 +444,22 @@ export default function PainelDiretoria() {
 
       {/* ── Cabeçalho ─────────────────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-        className="relative rounded-2xl border border-border/40 bg-card/95 shadow-sm overflow-hidden"
+        className={cn(
+          'relative overflow-hidden',
+          !compacto && 'rounded-2xl border border-border/40 bg-card/95 shadow-sm',
+        )}
       >
-        <div className="h-1 w-full bg-gradient-to-r from-primary via-chart-3 to-chart-5" />
-        <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+        {!compacto && <div className="h-1 w-full bg-gradient-to-r from-primary via-chart-3 to-chart-5" />}
+        <div className={cn(
+          'flex flex-col sm:flex-row sm:items-center justify-between gap-4',
+          compacto ? 'py-0' : 'px-5 py-4',
+        )}>
+          {compacto ? (
+            <p className="text-[11px] text-muted-foreground">
+              <span className="capitalize font-medium text-foreground/70">{mesNome}</span>
+              {' · '}atualizado às <span className="font-semibold text-foreground/80">{agora}</span>
+            </p>
+          ) : <div>
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-1">
               <span className="font-semibold uppercase tracking-widest">Painel Executivo</span>
               <span className="opacity-40">›</span>
@@ -435,7 +475,7 @@ export default function PainelDiretoria() {
               <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
               <p className="text-[11px] text-muted-foreground">Atualizado às <span className="font-semibold text-foreground/80">{agora}</span></p>
             </div>
-          </div>
+          </div>}
           <div className="flex items-center gap-2 flex-wrap">
             {abaVisivel !== 'relatorioPP' && <div className="rounded-xl border border-border/50 bg-background/60 px-1.5 h-9 flex items-center">
               <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
@@ -484,7 +524,7 @@ export default function PainelDiretoria() {
       {/* ── Abas internas ────────────────────────────────────────────────────
           A barra só existe para quem tem mais de uma aba. Um seletor com uma
           opção só é ruído — mesma regra do filtro de setor no Painel Líder. */}
-      {(usaPainel59 || podeVerRelatorioPP) && (
+      {!abaFixa && (usaPainel59 || podeVerRelatorioPP) && (abasPermitidas?.length ?? 2) > 1 && (
         <div className="flex items-center gap-1 border-b border-border/40 overflow-x-auto">
           {(podeVerRelatorioPP ? [
             { key: 'painel' as const, label: 'Painel', Icon: TrendingUp },
@@ -515,7 +555,7 @@ export default function PainelDiretoria() {
                  { key: 'fontes' as const, label: 'Fonte dos dados', Icon: Database },
                  { key: 'codigos' as const, label: 'Códigos',      Icon: Link2 }]
               : []),
-          ]).map(({ key, label, Icon }) => (
+          ]).filter(({ key }) => !abasPermitidas || abasPermitidas.includes(key)).map(({ key, label, Icon }) => (
             <button key={key} type="button" onClick={() => setAba(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
@@ -604,7 +644,11 @@ export default function PainelDiretoria() {
           empresaId={empresa?.id ?? ''}
           mes={mesAnalise}
           versao={versaoVisao}
-          onAbrirSetores={() => setAba('setores')}
+          /* Embutido sem a aba de setores (Início › Empresa), o atalho leva
+             para onde ela mora agora: Desempenho › Equipes. */
+          onAbrirSetores={() => (abasPermitidas && !abasPermitidas.includes('setores')
+            ? navigate(`${ROUTE_PATHS.DESEMPENHO}?tab=equipes`)
+            : setAba('setores'))}
         />
       ) : abaVisivel === 'setores' ? (
         <DiretoriaSetores

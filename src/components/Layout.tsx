@@ -37,7 +37,9 @@ import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
-import { abasDoMenu } from '@/lib/menuLateral';
+import {
+  abasDoMenu, agruparPorSecao, mostrarNovoAcordo, destinoNovoAcordo, NOVO_ACORDO,
+} from '@/lib/menuLateral';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { Separator } from '@/components/ui/separator';
@@ -84,13 +86,9 @@ import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
  * carrega: um único import estático devolve o módulo ao pacote de entrada, e o
  * build só avisa com uma linha no meio do log.
  */
-const carregarDesempenhoDia  = comNovaTentativa(() => import('./DesempenhoDia'));
-const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/PainelDesafio'));
 const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
 const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
 
-const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ default: m.DesempenhoDia })));
-const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
 const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
 const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
 
@@ -110,8 +108,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [painelDiaAberto, setPainelDiaAberto] = useState(false);
-  const [painelDesafioAberto, setPainelDesafioAberto] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
@@ -283,17 +279,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    */
   const produto = produtoDaEmpresa(empresa, tenant.slug);
 
-  const navItems = useMemo(() => abasDoMenu({
+  const contextoMenu = useMemo(() => ({
     cargo: userRole,
     produto,
     isPaguePlay: isPP,
     isBookplay: tenant.slug === 'bookplay',
-    temPermissao: chave => !permLoading && temPermissao(chave),
+    temPermissao: (chave: string) => !permLoading && temPermissao(chave),
     acessoTickets: acessoTickets.podeVerAba,
   }), [
     userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
     acessoTickets.podeVerAba,
   ]);
+  const navItems = useMemo(() => abasDoMenu(contextoMenu), [contextoMenu]);
+  const temNovoAcordo = mostrarNovoAcordo(contextoMenu);
 
   /*
    * Ordem configuravel, aplicada DEPOIS do filtro de permissao.
@@ -305,15 +303,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const {
     ordem: ordemMenu, ordens: ordensMenu, aplicar: aplicarOrdemMenu,
   } = useMenuLateralOrdem(empresa?.id, userRole);
-  const navItensOrdenados = useMemo(
-    () => ordenarMenu(navItems, ordemMenu),
+  /*
+   * A ordem salva vale DENTRO de cada seção: arrastar Tickets para cima não o
+   * tira de Ferramentas. As seções têm ordem fixa (`SECOES_MENU`).
+   */
+  const secoesMenu = useMemo(
+    () => agruparPorSecao(ordenarMenu(navItems, ordemMenu)),
     [navItems, ordemMenu],
   );
   const [editorMenuAberto, setEditorMenuAberto] = useState(false);
 
   // As gavetas tapam a tela: enquanto abertas, o tempo é delas no monitoramento.
-  useSobreposicaoUso('gaveta/desempenho-dia', painelDiaAberto);
-  useSobreposicaoUso('gaveta/desafio', painelDesafioAberto);
+  // Desempenho do Dia e Desafio deixaram de ser gaveta (Mapa de Abas): viraram
+  // Início › Hoje e Desempenho › Desafios, telas que o rastreio já mede.
   useSobreposicaoUso('gaveta/editor-menu', editorMenuAberto);
   const podeEditarMenu = perfil?.perfil === 'super_admin';
 
@@ -323,12 +325,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * seriam download sem clique possível. O recorte de foto fica de fora — abre
    * depois de escolher um arquivo, e essa espera não se nota.
    */
-  const temDesafio = !!desafioDestaque;
   const precarregarPaineis = useMemo(() => [
-    carregarDesempenhoDia,
-    ...(temDesafio ? [carregarPainelDesafio] : []),
     ...(podeEditarMenu ? [carregarEditorMenu] : []),
-  ], [temDesafio, podeEditarMenu]);
+  ], [podeEditarMenu]);
   usePrecarregarQuandoOcioso(precarregarPaineis);
 
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
@@ -424,11 +423,43 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </AnimatePresence>
       </div>
 
-      {/* Nav */}
+      {/*
+        Novo acordo — fixo no topo, fora das seções. Era item de menu, e 240
+        operadores o abriam: tem que continuar a um clique de qualquer tela.
+      */}
+      {temNovoAcordo && (
+        <div className="px-2 pt-3">
+          <button
+            type="button"
+            onClick={() => { setMobileOpen(false); navigate(destinoNovoAcordo(isPP)); }}
+            title={NOVO_ACORDO.label}
+            data-tour="novo-acordo-menu"
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-150',
+              'bg-primary/10 text-primary hover:bg-primary/15',
+            )}
+          >
+            <NOVO_ACORDO.icon className="w-4 h-4 flex-shrink-0" />
+            <AnimatePresence>
+              {(sidebarOpen || mobileOpen) && (
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate text-left">
+                  {NOVO_ACORDO.label}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        </div>
+      )}
+
+      {/* Nav — por seção. A seção sem item liberado não desenha nem o título. */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItensOrdenados.map(item => (
+        {secoesMenu.map(secao => (<div key={secao.chave} className="pb-2">
+          {(sidebarOpen || mobileOpen)
+            ? <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">{secao.rotulo}</p>
+            : <Separator className="my-1.5 bg-sidebar-border/60" />}
+          {secao.itens.map(item => (
           <NavLink
-            key={item.to}
+            key={item.to + item.label}
             to={item.to}
             end={item.to === '/'}
             onClick={() => setMobileOpen(false)}
@@ -448,7 +479,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </AnimatePresence>
           </NavLink>
-        ))}
+          ))}
+        </div>))}
 
         {/*
           Editar a ordem do menu. So super_admin, e dentro do <nav> de
@@ -496,29 +528,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <DesafioMenu
           desafio={desafioDestaque}
           expandido={sidebarOpen || mobileOpen}
-          aberto={painelDesafioAberto}
-          onToggle={() => setPainelDesafioAberto(v => !v)}
+          aberto={false}
+          onToggle={() => { setMobileOpen(false); navigate(`${ROUTE_PATHS.DESEMPENHO}?tab=desafios`); }}
         />
       )}
 
       {/*
-        Desempenho do Dia — nas DUAS operações desde a versão 2.0.
-        Era exclusivo da PaguePlay porque só ela tinha H.O.; o painel agora lê o
-        analítico, que a BookPlay também alimenta, e o alternador de unidade é
-        que fica escondido lá.
-
-        Gate por permissão e não por slug: é a mesma fonte da aba Analítico, e
-        quem não pode ver o Analítico não deveria ver o dia dele por outra porta.
+        Desempenho do Dia — era uma gaveta por cima da tela; virou Início ›
+        Hoje (Mapa de Abas). O atalho fica, porque é assim que a pessoa chega
+        nele: um clique de qualquer tela. Mesmo gate de antes, `ver_analitico`.
       */}
-      {temPermissao('ver_analitico') && (
+      {temPermissao('ver_analitico') && produto === 'cobranca' && (
         <div className="px-2 pt-2">
           <button
-            onClick={() => setPainelDiaAberto(v => !v)}
+            onClick={() => { setMobileOpen(false); navigate(`${ROUTE_PATHS.DASHBOARD}?vista=hoje`); }}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-              painelDiaAberto
-                ? 'bg-violet-500/15 text-violet-500'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+              'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
             )}
             title="Desempenho do Dia"
           >
@@ -837,23 +863,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           termoLoading={termoLoading}
         />
       </div>
-
-      <PainelSobDemanda aberto={painelDiaAberto} nome="Desempenho do dia">
-        <DesempenhoDia
-          aberto={painelDiaAberto}
-          onClose={() => setPainelDiaAberto(false)}
-        />
-      </PainelSobDemanda>
-
-      {/* O andamento da campanha, na gaveta que o campo do menu abre. */}
-      <PainelSobDemanda aberto={painelDesafioAberto} nome="Desafio">
-        <PainelDesafio
-          desafio={desafioDestaque}
-          aberto={painelDesafioAberto}
-          onClose={() => setPainelDesafioAberto(false)}
-        />
-      </PainelSobDemanda>
-
 
       {isPP && (
         <ChatplayOnboardingModal

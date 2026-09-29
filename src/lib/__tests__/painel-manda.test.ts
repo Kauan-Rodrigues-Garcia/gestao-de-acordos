@@ -122,6 +122,13 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',
   },
+  'pages/AdminDados/index.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo:
+      'as abas do relatório 59 vieram do Painel Diretoria (Mapa de Abas, 29/09/2026) com a '
+      + 'regra delas: super_admin por cargo, enquanto o 59 não vira fonte de verdade — ver a '
+      + 'entrada do Painel Diretoria abaixo.',
+  },
   'lib/menuLateral.ts': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'fallback do item sem chave de permissão: só o Dashboard cai nele, e super_admin sempre passa.',

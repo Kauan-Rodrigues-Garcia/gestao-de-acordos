@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
-import { copiarTexto } from '@/lib/clipboard';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
+import { ROUTE_PATHS } from '@/lib/index';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Building2, ShieldCheck, ArrowLeftRight, Tag, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,20 +19,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminPermissoes from '@/pages/AdminPermissoes';
-import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
-import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
-
-const MIGRATION_SQL = `ALTER TABLE public.acordos
-  ADD COLUMN IF NOT EXISTS instituicao TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_acordos_instituicao
-  ON public.acordos(instituicao)
-  WHERE instituicao IS NOT NULL;`;
 
 export default function AdminConfiguracoes() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -46,10 +37,6 @@ export default function AdminConfiguracoes() {
   const { empresa, tenantSlug } = useEmpresa();
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
-  // Card "Banco de Dados / Migrations". Era `isPerfilAdmin`; agora sai do
-  // painel, como o resto. Continua sendo defesa em profundidade — o
-  // `ProtectedRoute` da rota já barra quem não tem `ver_configuracoes`.
-  const podeVerBancoDados = temPermissao('ver_banco_dados');
   // Aba "Multiempresa": só super_admin. Esconder aqui é conveniência — quem
   // decide são as RPCs e o trigger em `perfis` (migration 20260818300000).
   const ehSuperAdmin = perfil?.perfil === 'super_admin';
@@ -72,19 +59,27 @@ export default function AdminConfiguracoes() {
   const podeVerPermissoes = temPermissao('config_sub_permissoes');
   const podeVerDiretoExtra = ehCobranca && temPermissao('config_sub_direto_extra');
   const podeVerTags = ehCobranca && temPermissao('config_sub_tags');
-  const podeVerLogs = temPermissao('ver_logs');
   const podeVerDocumentacoes = temPermissao('config_sub_documentacoes');
   const podeVerMultiempresa = temPermissao('config_sub_multiempresa');
+  /*
+   * Mapa de Abas (29/09/2026): Geral, Tags e Multiempresa viraram a aba
+   * «Empresa» — são todas configuração da empresa, e três abas para isso
+   * era a régua mais longa do sistema. Cada seção de dentro continua atrás da
+   * chave dela. Logs saiu para Administração › Auditoria, e o banco de dados e
+   * a restauração de tabulações para Administração › Dados.
+   *
+   * A chave de URL da aba continua `geral`, e `tags`/`multiempresa` caem nela:
+   * link antigo não vira aba vazia.
+   */
+  const podeVerEmpresa = podeVerGeral || podeVerTags || podeVerMultiempresa;
   const abasVisiveis = [
-    podeVerGeral && 'geral',
-    podeVerPermissoes && 'permissoes',
+    podeVerEmpresa && 'geral',
     podeVerDiretoExtra && 'direto_extra',
-    podeVerTags && 'tags',
-    podeVerLogs && 'logs',
+    podeVerPermissoes && 'permissoes',
     podeVerDocumentacoes && 'documentacoes',
-    podeVerMultiempresa && 'multiempresa',
   ].filter((aba): aba is string => Boolean(aba));
-  const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
+  const tabPedida = tabFromUrl === 'tags' || tabFromUrl === 'multiempresa' ? 'geral' : tabFromUrl;
+  const tabAtiva = abasVisiveis.includes(tabPedida) ? tabPedida : abasVisiveis[0];
   // Monitoramento de uso: a aba aberta. As de dentro (Logs, Permissões…) vêm no nível 2.
   useSubAbaUso(tabAtiva);
   const selecionarAba = (aba: string) => {
@@ -93,38 +88,6 @@ export default function AdminConfiguracoes() {
     novosParametros.set('tab', aba);
     setSearchParams(novosParametros, { replace: true });
   };
-
-  // ── Schema status ─────────────────────────────────────────────────────────
-  const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
-  const [sqlCopiado, setSqlCopiado] = useState(false);
-
-  useEffect(() => {
-    // Evita probe desnecessário quando o usuário nem verá o card
-    if (!podeVerBancoDados) return;
-    (async () => {
-      const { error } = await supabase.from('acordos').select('instituicao').limit(0);
-      setSchemaStatus(!error ? 'ok' : 'missing');
-    })();
-  }, [podeVerBancoDados]);
-
-  // Timer guardado em ref: antes era um setTimeout solto que dava setState depois
-  // de sair da página, e o `.then()` sem catch deixava o botão mudo quando a
-  // cópia falhava.
-  const timerCopiadoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (timerCopiadoRef.current) clearTimeout(timerCopiadoRef.current);
-  }, []);
-
-  async function copiarSQL() {
-    const ok = await copiarTexto(MIGRATION_SQL, 'SQL copiado', 'Não foi possível copiar o SQL.');
-    if (!ok) return;
-    setSqlCopiado(true);
-    if (timerCopiadoRef.current) clearTimeout(timerCopiadoRef.current);
-    timerCopiadoRef.current = setTimeout(() => {
-      timerCopiadoRef.current = null;
-      setSqlCopiado(false);
-    }, 3000);
-  }
 
   async function fetchModelos(empresaId?: string) {
     if (!empresaId) {
@@ -191,6 +154,9 @@ export default function AdminConfiguracoes() {
 
   const variaveis = ['{{nome_cliente}}', '{{nr_cliente}}', '{{valor}}', '{{vencimento}}'];
 
+  // Logs virou Administração › Auditoria. Link antigo continua caindo lá.
+  if (tabFromUrl === 'logs') return <Navigate to={ROUTE_PATHS.ADMIN_AUDITORIA} replace />;
+
   return (
     <div className="h-full flex flex-col">
       {/* Cabeçalho */}
@@ -200,7 +166,7 @@ export default function AdminConfiguracoes() {
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <Settings className="w-5 h-5 text-primary" /> Configurações
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Configurações do sistema, permissões e logs</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Empresa, Direto e Extra, permissões e documentações</p>
             {empresa && (
               <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
                 <Building2 className="w-3 h-3" />
@@ -215,62 +181,25 @@ export default function AdminConfiguracoes() {
       {tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            {podeVerGeral && <TabsTrigger
-              value="geral"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Settings className="w-4 h-4" /> Geral
+            {podeVerEmpresa && <TabsTrigger value="geral" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2">
+              <Building2 className="w-4 h-4" /> Empresa
             </TabsTrigger>}
-            {podeVerPermissoes && <TabsTrigger
-              value="permissoes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <ShieldCheck className="w-4 h-4" /> Permissões
-            </TabsTrigger>}
-            {podeVerDiretoExtra && (
-            <TabsTrigger
-              value="direto_extra"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
+            {podeVerDiretoExtra && <TabsTrigger value="direto_extra" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2">
               <ArrowLeftRight className="w-4 h-4" /> Direto e Extra
-            </TabsTrigger>
-            )}
-            {podeVerTags && (
-            <TabsTrigger
-              value="tags"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Tag className="w-4 h-4" /> Tags
-            </TabsTrigger>
-            )}
-            {podeVerLogs && (
-            <TabsTrigger
-              value="logs"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <ClipboardList className="w-4 h-4" /> Logs
-            </TabsTrigger>
-            )}
-            {podeVerDocumentacoes && <TabsTrigger
-              value="documentacoes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
+            </TabsTrigger>}
+            {podeVerPermissoes && <TabsTrigger value="permissoes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2">
+              <ShieldCheck className="w-4 h-4" /> Permissões e menu
+            </TabsTrigger>}
+            {podeVerDocumentacoes && <TabsTrigger value="documentacoes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2">
               <FileText className="w-4 h-4" /> Documentações
             </TabsTrigger>}
-            {podeVerMultiempresa && (
-            <TabsTrigger
-              value="multiempresa"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Building2 className="w-4 h-4" /> Multiempresa
-            </TabsTrigger>
-            )}
           </TabsList>
         </div>
 
         {/* ─── Aba: Geral ──────────────────────────────────────────────── */}
-        {podeVerGeral && <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
+        {podeVerEmpresa && <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
           <div className="max-w-4xl mx-auto space-y-6">
+          {podeVerGeral && <>
 
           {/* ── Chat interno ─────────────────────────────────────────────
               A trava de LANÇAMENTO, que é outra coisa das permissões: ela
@@ -279,72 +208,9 @@ export default function AdminConfiguracoes() {
               `chat_config_update` confere de novo no banco. */}
           {ehSuperAdmin && <LiberacaoChat />}
 
-          {/* ── Status do Banco de Dados ─────────────────────────────── */}
-          {/* Gate: visível apenas para Admin e Super Admin (item #8) */}
-          {podeVerBancoDados && (
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Database className="w-4 h-4 text-primary" /> Banco de Dados / Migrations
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-start gap-3 p-3 rounded-lg border border-border">
-                {schemaStatus === 'checking' && (
-                  <div className="w-4 h-4 rounded-full border-2 border-muted-foreground border-t-primary animate-spin mt-0.5 flex-shrink-0" />
-                )}
-                {schemaStatus === 'ok' && (
-                  <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-500 mt-0.5 flex-shrink-0" />
-                )}
-                {schemaStatus === 'missing' && (
-                  <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 mt-0.5 flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">
-                    Coluna <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">acordos.instituicao</code>
-                    {schemaStatus === 'ok'   && <span className="ml-2 text-xs text-green-600 font-normal">✓ Disponível</span>}
-                    {schemaStatus === 'missing' && <span className="ml-2 text-xs text-amber-600 font-normal">⚠ Pendente</span>}
-                  </p>
-                  {schemaStatus === 'missing' && (
-                    <div className="mt-2 space-y-2">
-                      <p className="text-xs text-muted-foreground">
-                        A coluna <code className="font-mono">instituicao</code> ainda não existe na tabela.
-                        Execute o SQL abaixo no <strong>Supabase Dashboard → SQL Editor</strong>.
-                        Até lá, a instituição será salva em "Observações" como fallback.
-                      </p>
-                      <div className="relative">
-                        <pre className="text-xs bg-muted/60 rounded p-3 font-mono overflow-x-auto whitespace-pre-wrap border border-border">
-{MIGRATION_SQL}
-                        </pre>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="absolute top-2 right-2 h-7 text-xs gap-1.5"
-                          onClick={copiarSQL}
-                        >
-                          {sqlCopiado ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                          {sqlCopiado ? 'Copiado!' : 'Copiar SQL'}
-                        </Button>
-                      </div>
-                      <a
-                        href="https://supabase.com/dashboard/project/vfrvvoetidtsqbbhdkmj/sql/new"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-2"
-                      >
-                        Abrir SQL Editor do projeto →
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          )}
-
-          {/* Importar acordos de volta a um operador. Mesmo gate do card acima:
-              só Admin/Super Admin, porque grava tabulação no nome de terceiros. */}
-          {podeVerBancoDados && <ImportarAcordosCard />}
+          {/* O card do banco de dados (migrations) e o «Importar acordos» foram
+              para Administração › Dados (Mapa de Abas, 29/09/2026): são
+              ferramentas de dado, não configuração da empresa. */}
 
           {/* Modelos de mensagem */}
           <Card className="border-border">
@@ -404,6 +270,21 @@ export default function AdminConfiguracoes() {
               )}
             </CardContent>
           </Card>
+          </>}
+
+          {/* Tags e Multiempresa — eram abas próprias. */}
+          {podeVerTags && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><Tag className="w-4 h-4 text-primary" /> Tags</h2>
+              <AdminTags />
+            </section>
+          )}
+          {podeVerMultiempresa && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><Building2 className="w-4 h-4 text-primary" /> Multiempresa</h2>
+              <AcessoMultiempresa />
+            </section>
+          )}
 
           </div>
         </TabsContent>}
@@ -420,31 +301,10 @@ export default function AdminConfiguracoes() {
         </TabsContent>
         )}
 
-        {/* ─── Aba: Tags ───────────────────────────────────────────────── */}
-        {podeVerTags && (
-        <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
-          <AdminTags />
-        </TabsContent>
-        )}
-
-        {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
-        {podeVerLogs && (
-        <TabsContent value="logs" className="flex-1 overflow-y-auto mt-0">
-          <AdminLogs />
-        </TabsContent>
-        )}
-
         {/* ─── Aba: Documentações LGPD ─────────────────────────────────── */}
         {podeVerDocumentacoes && <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
           <AdminDocumentacoes />
         </TabsContent>}
-
-        {/* ─── Aba: Multiempresa (só super_admin) ──────────────────────── */}
-        {podeVerMultiempresa && (
-        <TabsContent value="multiempresa" className="flex-1 overflow-y-auto p-6 mt-0">
-          <AcessoMultiempresa />
-        </TabsContent>
-        )}
 
       </Tabs> : (
         <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">

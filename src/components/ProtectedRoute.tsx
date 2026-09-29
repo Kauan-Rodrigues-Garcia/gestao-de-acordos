@@ -76,10 +76,18 @@ interface ProtectedRouteProps {
    * cargo ou setor —, e a rota de destino exige `permissao`, então não há laço.
    */
   alternativa?: { permissao: string; rota: string };
+  /**
+   * Basta UMA destas chaves. Para as telas que o Mapa de Abas (29/09/2026)
+   * juntou — Desempenho, Núcleo, Fechamento do mês, Dados: cada aba de dentro
+   * pede a chave da tela de onde veio, e a porta abre para quem tem alguma.
+   * Quais abas aparecem é a tela que decide (`lib/mapaAbas.ts`).
+   */
+  algumaPermissao?: readonly string[];
 }
 
 export function ProtectedRoute({
   children, roles, allowedProfiles, requiredPermissao, produtos, mostrarSemAcesso = false,
+  algumaPermissao,
   alternativa,
 }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
@@ -103,7 +111,8 @@ export function ProtectedRoute({
    * carregamento diferentes desembocando neste único `if`.
    */
   const jaMostrou = useRef(false);
-  const carregando = loading || (requiredPermissao && permLoading) || (produtos && empresaLoading);
+  const carregando = loading || ((requiredPermissao || algumaPermissao) && permLoading)
+    || (produtos && empresaLoading);
 
   if (carregando && !jaMostrou.current) {
     return (
@@ -136,6 +145,10 @@ export function ProtectedRoute({
    * nenhuma permissão faz virar.
    */
   if (produtos && !produtoPermite(produtos, produtoDaEmpresa(empresa, tenantSlug))) {
+    return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+  }
+
+  if (algumaPermissao && !algumaPermissao.some(temPermissao)) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
 

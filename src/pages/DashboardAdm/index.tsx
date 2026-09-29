@@ -209,7 +209,7 @@ export default function DashboardAdm() {
             ))}
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link to={ROUTE_PATHS.CONTROLE_NUMEROS}>
+            <Link to={`${ROUTE_PATHS.NUCLEO}?tab=numeros`}>
               Controle de Números <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </Button>
@@ -264,7 +264,7 @@ export default function DashboardAdm() {
               <p className="text-xs text-muted-foreground">e mais {esperando.length - 5}.</p>
             )}
             <Button asChild size="sm" variant="outline">
-              <Link to={ROUTE_PATHS.CONTROLE_NUMEROS}>Tratar agora</Link>
+              <Link to={`${ROUTE_PATHS.NUCLEO}?tab=numeros`}>Tratar agora</Link>
             </Button>
           </CardContent>
         </Card>

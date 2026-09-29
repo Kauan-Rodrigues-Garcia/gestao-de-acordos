@@ -1,4 +1,4 @@
-import { Building2, Layers, Search, X, Zap } from 'lucide-react';
+import { Building2, Layers, Search, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -49,15 +49,15 @@ export interface AcordosFiltersProps {
   operadoresMap: Record<string, string>;
   filtrosAtivosCount: number;
   temFiltros: boolean;
-  isPP: boolean;
   usuarioTemLogicaDiretoExtra: boolean;
   temPermissao: (p: string) => boolean;
   setCurrentPage: (n: number) => void;
   limparFiltros: () => void;
-  /** Aba destacada Pix Automático (BookPlay): quando ativa, o conteúdo da
-   *  página troca para o painel Pix e os filtros da lista somem. */
-  pixAbaAtiva: boolean;
-  setPixAbaAtiva: (v: boolean) => void;
+  /** Aba Excluídos (a antiga Lixeira): quando ativa, o conteúdo da página
+   *  troca para a lixeira e os filtros da lista somem. Ocupa o lugar que era
+   *  do Pix Automático, que virou item de menu (Mapa de Abas, 29/09/2026). */
+  excluidosAtiva: boolean;
+  setExcluidosAtiva: (v: boolean) => void;
   /** Abre o editor das mensagens de WhatsApp (botão ao lado de «Filtrar data»). */
   onAbrirMensagens?: () => void;
 }
@@ -71,9 +71,9 @@ export function AcordosFilters({
   filtroVinculo, setFiltroVinculo,
   filtroTag, setFiltroTag, tagsDisponiveis,
   statusLabels, tipoLabels, operadoresMap,
-  filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
+  filtrosAtivosCount, temFiltros, usuarioTemLogicaDiretoExtra, temPermissao,
   setCurrentPage, limparFiltros,
-  pixAbaAtiva, setPixAbaAtiva, onAbrirMensagens,
+  excluidosAtiva, setExcluidosAtiva, onAbrirMensagens,
 }: AcordosFiltersProps) {
   const mostrarEquipes = niveis.includes('equipe') && equipesDoSetor.length > 0;
   // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
@@ -85,16 +85,16 @@ export function AcordosFilters({
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {([
           { key: 'todos',     label: 'Todos' },
-          { key: 'analitico', label: 'Verificar' },
-          { key: 'pagos',     label: 'Pagos / Quitados' },
-          { key: 'nao_pagos', label: 'Não Pagos' },
+          { key: 'analitico', label: 'A verificar' },
+          { key: 'pagos',     label: 'Pagos' },
+          { key: 'nao_pagos', label: 'Não pagos' },
         ] as const).map(tab => (
           <button
             key={tab.key}
-            onClick={() => { setPixAbaAtiva(false); setActiveTab(tab.key); setCurrentPage(1); }}
+            onClick={() => { setExcluidosAtiva(false); setActiveTab(tab.key); setCurrentPage(1); }}
             className={cn(
               'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              !pixAbaAtiva && activeTab === tab.key
+              !excluidosAtiva && activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
@@ -103,24 +103,24 @@ export function AcordosFilters({
           </button>
         ))}
 
-        {/* Aba Pix Automático (BookPlay) — mesmo padrão underline das demais abas */}
-        {!isPP && (
+        {/* Excluídos — a Lixeira, mesma chave (`ver_lixeira`). */}
+        {temPermissao('ver_lixeira') && (
           <button
-            onClick={() => setPixAbaAtiva(!pixAbaAtiva)}
+            onClick={() => setExcluidosAtiva(true)}
             className={cn(
               'ml-auto flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              pixAbaAtiva
+              excluidosAtiva
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
-            <Zap className="w-3.5 h-3.5" /> Pix Automático
+            <Trash2 className="w-3.5 h-3.5" /> Excluídos
           </button>
         )}
       </div>
 
-      {/* Aba Pix ativa: some com os filtros da lista padrão */}
-      {pixAbaAtiva ? null : (
+      {/* Excluídos: somem os filtros da lista padrão */}
+      {excluidosAtiva ? null : (
       <>
 
       {/* Seletor de visão — as opções saem dos NÍVEIS da aba Acordos.

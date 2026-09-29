@@ -126,6 +126,21 @@ export const ROUTE_PATHS = {
    * existir não é falha de segurança: não há dado do Gestão nela.
    */
   CREATORS_LAB: '/creators',
+  /*
+   * Os endereços do Mapa de Abas (29/09/2026). Cada um junta telas que já
+   * existiam; as rotas antigas redirecionam para cá (App.tsx) e as chaves de
+   * cada aba são as mesmas de antes — ver `lib/mapaAbas.ts`.
+   */
+  /** Painel Líder + a parte de desempenho do Painel Diretoria + Desafios. */
+  DESEMPENHO: '/desempenho',
+  /** O Pix Automático, que era a quinta aba de Acordos. */
+  PIX_AUTOMATICO: '/pix-automatico',
+  /** Dashboard – ADM + Controle de Números. */
+  NUCLEO: '/nucleo',
+  /** As abas técnicas do Painel Diretoria e os cards de dado de Configurações. */
+  ADMIN_DADOS: '/admin/dados',
+  /** Trilha de auditoria e monitoramento de uso, que eram Configurações › Logs. */
+  ADMIN_AUDITORIA: '/admin/auditoria',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

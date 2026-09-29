@@ -69,7 +69,26 @@ import { useMesGlobal } from '@/providers/MesProvider';
 
 /** Abas do painel. A aba Acompanhamento saiu em 31/08/2026; as demais são
  *  as antigas abas do Analítico, agora alimentadas pelo recebimento diário. */
-type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'elite' | 'ajuste';
+export type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'elite' | 'ajuste';
+
+/**
+ * O Painel Líder deixou de ser item de menu no Mapa de Abas (29/09/2026). As
+ * abas foram para onde a pergunta delas mora, e esta tela é embutida lá:
+ *
+ *   desempenho ... Desempenho › Equipes
+ *   quartis ...... Desempenho › Pessoas
+ *   elite ........ Desempenho › Plantão Elite
+ *   ajuste ....... Analítico › Ajustes (é correção do recebimento)
+ *   grafico ...... saiu: repetia a evolução diária do Início
+ *
+ * `abas` limita o que esta montagem desenha, e com uma aba só a régua some.
+ * `compacto` tira o título e deixa o navegador de mês e o recorte, que continuam
+ * valendo para o conteúdo. As chaves de cada aba são as mesmas de antes.
+ */
+export interface PainelLiderProps {
+  abas?: readonly AbaPainel[];
+  compacto?: boolean;
+}
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
@@ -92,7 +111,7 @@ function periodoDoMes(mes: MesRef) {
 
 // ─── Componente principal ─────────────────────────────────────────────────
 
-export default function PainelLider() {
+export default function PainelLider({ abas: abasPermitidas, compacto = false }: PainelLiderProps = {}) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -135,7 +154,8 @@ export default function PainelLider() {
     // é conserto, não rotina, e não devia disputar a atenção com as quatro
     // abas que a liderança abre todo dia.
     { key: 'ajuste',     label: 'Ajuste de recebimento', Icon: SlidersHorizontal, permissao: 'painel_lider_sub_ajuste_recebimento' },
-  ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
+  ] as const).filter(a => temPermissao(a.permissao)
+    && (!abasPermitidas || abasPermitidas.includes(a.key))), [temPermissao, abasPermitidas]);
 
   /*
    * «Fico preso ao meu setor nesta aba?»
@@ -179,10 +199,10 @@ export default function PainelLider() {
   // Alimentadas pelo relatório de RECEBIMENTO DIÁRIO (diario_recebimentos):
   // soma-se o mês inteiro (dia_referencia). Antes moravam no Analítico e
   // liam o relatório analítico — na PaguePlay a fonte agora é o diário.
-  const [abaAtiva, setAbaAtiva] = useState<AbaPainel>('desempenho');
+  const [abaAtiva, setAbaAtiva] = useState<AbaPainel>(abasPermitidas?.[0] ?? 'desempenho');
   // Abas já visitadas ficam MONTADAS (escondidas com CSS): trocar de aba não
   // remonta o componente nem refaz os fetches internos (metas, líderes, etc.)
-  const [abasVisitadas, setAbasVisitadas] = useState<Set<AbaPainel>>(() => new Set(['desempenho']));
+  const [abasVisitadas, setAbasVisitadas] = useState<Set<AbaPainel>>(() => new Set([abasPermitidas?.[0] ?? 'desempenho']));
   const mudarAba = useCallback((k: AbaPainel) => {
     setAbaAtiva(k);
     setAbasVisitadas(prev => (prev.has(k) ? prev : new Set(prev).add(k)));
@@ -205,7 +225,8 @@ export default function PainelLider() {
   // abas apareceriam somadas como um único `/lider`.
   // Aceita `null` — nenhuma aba liberada é um fato a registrar, e não uma aba
   // inventada que sujaria a contagem.
-  useSubAbaUso(abaVisivel);
+  // Embutido numa aba só, quem mede é a régua de fora.
+  useSubAbaUso(abasPermitidas && abasPermitidas.length === 1 ? null : abaVisivel);
   const mesStr = mesRef;
 
   // ── Recorte das abas analíticas: setor + equipe, um só para as três ────────
@@ -578,7 +599,7 @@ export default function PainelLider() {
 
       {/* ── Cabeçalho + navegador de mês ─────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
+        <div className={cn('flex items-center gap-3', compacto && 'hidden')}>
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
             <Users className="w-5 h-5 text-primary" />
           </div>
@@ -621,7 +642,7 @@ export default function PainelLider() {
       </div>
 
       {/* ── Abas: acompanhamento × desempenho × quartis × gráfico ───────── */}
-      {mostrarAbasAnaliticas && (
+      {mostrarAbasAnaliticas && abasInternas.length > 1 && (
         <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
           {abasInternas.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => mudarAba(key)}

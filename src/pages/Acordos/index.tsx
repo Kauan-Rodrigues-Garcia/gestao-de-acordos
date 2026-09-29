@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { lazy, Suspense, useState, useEffect, useMemo, useRef } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import {
-  Plus, MessageSquare, RefreshCw,
+  Plus, MessageSquare, RefreshCw, Upload,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { CadeadoMes } from '@/components/CadeadoMes';
@@ -25,7 +25,7 @@ import { podeReagendar, avisoParcelaJaAgendada } from '@/services/reagendamento/
 import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaParcela';
 import { useParcelasExistentes } from '@/hooks/useParcelasExistentes';
 import { toast } from 'sonner';
-import { formatDate, getTodayISO } from '@/lib/index';
+import { formatDate, getTodayISO, ROUTE_PATHS } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -50,9 +50,11 @@ import {
 } from './MensagensWhatsapp';
 import { TableSkeleton } from './TableSkeleton';
 import { AcordosFilters } from './AcordosFilters';
-import { PixAutomatico } from './PixAutomatico';
 import { AcordosTableBody } from './AcordosTableBody';
 import { AcordosModals } from './AcordosModals';
+
+// A Lixeira é a aba Excluídos desde o Mapa de Abas; só baixa quem abre a aba.
+const Lixeira = lazy(() => import('@/pages/Lixeira'));
 
 /**
  * A aba Verificar mostra o que ainda NAO foi resolvido: nem pago, nem nao_pago.
@@ -177,10 +179,12 @@ export default function Acordos() {
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
   // Aba destacada Pix Automático (BookPlay): substitui o conteúdo da lista
-  const [pixAba, setPixAba] = useState(searchParams.get('tab') === 'pix');
+  // Aba Excluídos (a antiga Lixeira). Fica fora da união de `activeTab` porque
+  // troca a página inteira, como fazia o Pix Automático no mesmo lugar.
+  const [excluidosAba, setExcluidosAba] = useState(searchParams.get('tab') === 'excluidos');
   // Monitoramento de uso: 'analitico' é o nome interno da aba Verificar.
   useSubAbaUso(
-    pixAba && temPermissao('ver_pix_automatico') ? 'pix'
+    excluidosAba && temPermissao('ver_lixeira') ? 'excluidos'
       : activeTab === 'analitico' ? 'verificar'
       : activeTab,
   );
@@ -281,13 +285,12 @@ export default function Acordos() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
-      // O Pix Automático é uma aba como as outras para quem olha a tela, mas
-      // mora em `pixAba`, fora da união de `activeTab`. Enquanto só `activeTab`
-      // alimentava a URL, entrar no Pix APAGAVA o `tab=pix` 400 ms depois — e
-      // qualquer remontagem (voltar de outro app, refresh do token, realtime
-      // reconectando) relia a URL sem `pix` e devolvia a pessoa para "Todos"
-      // sozinha. A aba agora só sai quando alguém clica em outra.
-      if (pixAba)                    params.set('tab', 'pix');
+      // Excluídos é uma aba como as outras para quem olha a tela, mas mora em
+      // `excluidosAba`, fora da união de `activeTab`. Enquanto só `activeTab`
+      // alimentava a URL (quando este lugar era do Pix), entrar na aba APAGAVA
+      // o `tab=` 400 ms depois, e qualquer remontagem devolvia a pessoa para
+      // "Todos" sozinha. A aba só sai quando alguém clica em outra.
+      if (excluidosAba)              params.set('tab', 'excluidos');
       else if (activeTab !== 'todos') params.set('tab', activeTab);
       else                            params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
@@ -296,7 +299,7 @@ export default function Acordos() {
       return params;
     }), 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, pixAba, filtroVinculo, filtroTag, currentPage]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, excluidosAba, filtroVinculo, filtroTag, currentPage]);
 
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
     ? filtroStatus
@@ -761,7 +764,14 @@ export default function Acordos() {
     });
   }, [acordos, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
+  // Esta é a lista da BookPlay; a da PaguePlay é outra tela na mesma rota
+  // (ver `RotaAcordos` em App.tsx). Chegar aqui na PaguePlay é estado de
+  // transição — a empresa trocou com a tela aberta.
   if (isPP) return <Navigate to="/" replace />;
+
+  // O Pix Automático era a aba `?tab=pix` daqui; virou item de menu. Link antigo
+  // (notificação, favorito) segue para o endereço novo.
+  if (searchParams.get('tab') === 'pix') return <Navigate to={ROUTE_PATHS.PIX_AUTOMATICO} replace />;
 
   // Coluna "Operador" só para cargos que veem todos os acordos (líder/elite+);
   // para operador (só vê os próprios) a coluna é removida.
@@ -858,6 +868,15 @@ export default function Acordos() {
                 realtimeStatus === 'off'        && 'bg-muted-foreground/40',
               )} />
             </Button>
+            {/* Importar planilha — era o item «Importar Excel» do menu. Mesma
+                chave, mesma tela; agora a partir de onde os acordos moram. */}
+            {temPermissao('importar_excel') && (
+              <Button asChild variant="outline" size="sm" className="gap-1.5">
+                <Link to={ROUTE_PATHS.IMPORTAR_EXCEL}>
+                  <Upload className="w-3.5 h-3.5" /> Importar planilha
+                </Link>
+              </Button>
+            )}
             <Button
               size="sm"
               data-tour="novo-acordo"
@@ -908,17 +927,19 @@ export default function Acordos() {
           tagsDisponiveis={tagsDisponiveis}
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}
-          isPP={isPP} usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
+          usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
           temPermissao={temPermissao}
           setCurrentPage={setCurrentPage} limparFiltros={limparFiltros}
-          pixAbaAtiva={pixAba} setPixAbaAtiva={setPixAba}
+          excluidosAtiva={excluidosAba} setExcluidosAtiva={setExcluidosAba}
           onAbrirMensagens={() => setEditorMensagensAberto(true)}
         />
 
-        {/* Aba Pix Automático substitui a lista inteira. A permissão vale para
-            a aba inteira: quem não pode ver o painel cai de volta na lista, em
-            vez de abrir uma tela vazia. */}
-        {pixAba && temPermissao('ver_pix_automatico') ? <PixAutomatico /> : (
+        {/* Excluídos substitui a lista inteira. A permissão vale para a aba
+            inteira: quem não pode ver a lixeira cai de volta na lista, em vez
+            de abrir uma tela vazia. */}
+        {excluidosAba && temPermissao('ver_lixeira') ? (
+          <Suspense fallback={<TableSkeleton />}><Lixeira embutida /></Suspense>
+        ) : (
         <>
 
         {/* Âncora de scroll */}

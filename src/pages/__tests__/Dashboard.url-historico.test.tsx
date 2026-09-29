@@ -238,14 +238,16 @@ async function esperarEscritas() {
   }
 }
 
+// A tabela da PaguePlay é a metade `acordos` do Dashboard desde o Mapa de Abas
+// (29/09/2026): o Início ficou só com o painel, e a lista virou `/acordos`.
 describe('Dashboard PaguePlay — filtros na URL', () => {
   it('digitar na busca grava a URL uma vez só', async () => {
     historico.pushes = 0;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/dashboard']}>
-          <Dashboard />
+        <MemoryRouter initialEntries={['/acordos']}>
+          <Dashboard secao="acordos" />
           <Sonda />
         </MemoryRouter>
       </QueryClientProvider>,

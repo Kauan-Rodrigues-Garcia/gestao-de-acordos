@@ -37,7 +37,9 @@
 
 /** Rótulo humano de cada tela conhecida. Chave = identificador em `uso_telas`. */
 export const TELA_LABEL: Record<string, string> = {
-  'dashboard':                 'Dashboard',
+  // O antigo Dashboard virou o Início no Mapa de Abas (29/09/2026). Mesma rota,
+  // mesmo identificador: o histórico gravado continua somando na mesma linha.
+  'dashboard':                 'Início',
   'acordos':                   'Acordos',
   'acordos/novo':              'Novo acordo',
   'acordos/detalhe':           'Detalhe do acordo',
@@ -54,7 +56,7 @@ export const TELA_LABEL: Record<string, string> = {
   'lider:elite':               'Painel do Líder · Plantão Elite',
   'lider/operador':            'Painel do Líder · Operador',
   'diretoria':                 'Painel Diretoria',
-  'admin/usuarios':            'Usuários',
+  'admin/usuarios':            'Pessoas',
   'admin/usuarios:usuarios':   'Usuários · Lista',
   'admin/usuarios:setores':    'Usuários · Setores',
   'admin/usuarios:equipes':    'Usuários · Equipes',
@@ -66,7 +68,9 @@ export const TELA_LABEL: Record<string, string> = {
   'admin/configuracoes:uso':   'Configurações · Monitoramento de uso',
   'admin/configuracoes:permissoes': 'Configurações · Permissões',
   'rh-gestao':                 'RH Gestão',
-  'fechamento':                'Fechamento',
+  // Fechamento + RH Gestão desde o Mapa de Abas. O que foi gravado antes é o
+  // Fechamento antigo, e as abas dele (`fechamento`, `premiacoes`) ficam.
+  'fechamento':                'Fechamento do mês',
   // Aba arquivada em 05/09/2026 (`arquivo-morto/ouvidoria/`). O rótulo fica:
   // `uso_telas` guarda o que foi aberto enquanto ela existia, e sem ele o
   // histórico vira uma chave crua no Monitoramento de uso.
@@ -87,6 +91,12 @@ export const TELA_LABEL: Record<string, string> = {
   'vendas/painel-lider':       'Painel Líder (Comercial)',
   'vendas/painel-diretoria':   'Painel Diretoria (Comercial)',
   'vendas/lixeira':            'Lixeira (Comercial)',
+  // As telas do Mapa de Abas (29/09/2026).
+  'desempenho':                'Desempenho',
+  'nucleo':                    'Núcleo',
+  'pix-automatico':            'Pix Automático',
+  'admin/dados':               'Dados e importações',
+  'admin/auditoria':           'Auditoria',
   // Por cima da tela: contam enquanto estão em uso, e não somam na tela de baixo.
   'chat':                      'Chat',
   'gaveta/desempenho-dia':     'Desempenho do Dia (painel do topo)',
@@ -103,8 +113,9 @@ export const TELA_LABEL: Record<string, string> = {
  * a Visão geral do Monitoramento de uso. Vale o mais específico.
  */
 export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
+  'dashboard': { hoje: 'Hoje', formas: 'Formas', empresa: 'Empresa' },
   'analitico': {
-    analitico: 'Analítico', colchao: 'Colchão', desafios: 'Desafios',
+    analitico: 'Analítico', colchao: 'Colchão', desafios: 'Desafios', ajustes: 'Ajustes',
   },
   'analitico:analitico': {
     mes: 'Mês', periodo: 'Período', dia: 'Dia',
@@ -130,7 +141,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'diretoria:mestre': { vinculos: 'Vínculos', comparacao: 'Comparação' },
   'acordos': {
     todos: 'Todos', verificar: 'Verificar', pagos: 'Pagos / Quitados',
-    nao_pagos: 'Não pagos', pix: 'Pix Automático',
+    nao_pagos: 'Não pagos', pix: 'Pix Automático', excluidos: 'Excluídos',
   },
   'admin/usuarios': {
     usuarios: 'Lista', setores: 'Setores', equipes: 'Equipes', metas: 'Metas',
@@ -148,7 +159,27 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'admin/configuracoes:logs/uso': {
     geral: 'Visão geral', pessoas: 'Pessoas', ausentes: 'Sem acesso', adocao: 'Adoção de tela',
   },
-  'fechamento': { fechamento: 'Fechamento', premiacoes: 'Premiações e Comissões' },
+  'fechamento': {
+    fechamento: 'Fechamento', premiacoes: 'Premiações e Comissões', premiacao: 'Premiação e comissão',
+  },
+  'fechamento:premiacao': { fluxo: 'Conferência e aprovação', relatorio: 'Relatório de pagamento' },
+  'desempenho': {
+    equipes: 'Equipes', pessoas: 'Pessoas', desafios: 'Desafios', elite: 'Plantão Elite',
+  },
+  'desempenho:pessoas': { quartis: 'Quartis', ranking: 'Ranking', relatorio59: 'Relatório 59' },
+  'nucleo': {
+    painel: 'Painel', celulares: 'Celulares', numeros: 'Números', lixeira: 'Lixeira',
+    configuracao: 'Configuração',
+  },
+  'admin/dados': {
+    relatorio59: 'Relatório 59', conferencia: 'Conferência 58 × 59', equipes: 'Equipes a vincular',
+    fontes: 'Fonte dos dados', codigos: 'Códigos', historico: 'Histórico de importações',
+    relatoriospp: 'Relatórios PaguePlay', restaurar: 'Restaurar tabulações', banco: 'Banco de dados',
+  },
+  'admin/auditoria': {
+    trilha: 'Trilha', uso: 'Uso por tela', pessoas: 'Uso por pessoa', adocao: 'Adoção',
+  },
+  'admin/auditoria:pessoas': { pessoas: 'Acessaram', ausentes: 'Sem acesso' },
   'controle-numeros': {
     celulares: 'Celulares', numeros: 'Números', lixeira: 'Lixeira', configuracao: 'Configuração',
   },

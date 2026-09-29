@@ -51,7 +51,7 @@
  */
 
 import {
-  createContext, useContext, useEffect, useRef, useState, useCallback,
+  createContext, useContext, useEffect, useMemo, useRef, useState, useCallback,
   type ReactNode, type RefObject,
 } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -307,12 +307,40 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useSubAbaUso(aba: string | null | undefined, nivel = 1): void {
   const ctx = useContext(Ctx);
-  const definir = ctx?.definirNivel;
+  const { base, ativo } = useContext(NivelBaseCtx);
+  const definir = ativo ? ctx?.definirNivel : undefined;
+  const nivelReal = base + nivel;
   useEffect(() => {
     if (!definir) return;
-    definir(nivel, aba ?? null);
-    return () => definir(nivel, null);
-  }, [definir, aba, nivel]);
+    definir(nivelReal, aba ?? null);
+    return () => definir(nivelReal, null);
+  }, [definir, aba, nivelReal]);
+}
+
+/**
+ * Quantos níveis de aba já existem ACIMA desta tela.
+ *
+ * Desde o Mapa de Abas (29/09/2026) uma tela pode morar dentro de outra: o
+ * Controle de Números é aba do Núcleo, o Fechamento é aba do Fechamento do mês.
+ * A tela de dentro continua chamando `useSubAbaUso(aba)` no nível 1 dela, sem
+ * saber onde foi posta, e quem a embute diz quantos níveis somar. Sem isto as
+ * duas brigariam pelo nível 1, que é o defeito que os níveis vieram resolver.
+ */
+const NivelBaseCtx = createContext<{ base: number; ativo: boolean }>({ base: 0, ativo: true });
+
+/**
+ * `ativo: false` é a aba montada e escondida: ela continua viva para a volta
+ * ser instantânea, mas não é onde a pessoa está, e não pode escrever nível.
+ */
+export function NivelBaseUso({ acima, ativo = true, children }: {
+  acima: number; ativo?: boolean; children: ReactNode;
+}) {
+  const pai = useContext(NivelBaseCtx);
+  const valor = useMemo(
+    () => ({ base: pai.base + acima, ativo: pai.ativo && ativo }),
+    [pai.base, pai.ativo, acima, ativo],
+  );
+  return <NivelBaseCtx.Provider value={valor}>{children}</NivelBaseCtx.Provider>;
 }
 
 /**

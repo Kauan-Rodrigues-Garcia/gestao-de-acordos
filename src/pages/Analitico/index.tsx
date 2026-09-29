@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BarChart2, User, Users, Building2, Layers3, Trophy } from 'lucide-react';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { BarChart2, User, Users, Building2, Layers3, Trophy, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -32,13 +32,55 @@ import { useMesGlobal } from '@/providers/MesProvider';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 import { SeletorRecorte } from './SeletorRecorte';
 import { mesDoRecorte, recorteDaQuery, type Recorte } from './recorte';
+import { ajustesNoAnalitico } from '@/lib/mapaAbas';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { AbaInterna as AbaDetalheLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
+import type { AbaOperador as AbaDetalheOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
+
+// O Ajuste de recebimento é a aba do Painel Líder, embutida: ele depende da
+// lista de operadores e líderes que só o painel carrega.
+const PainelLider = lazy(() => import('@/pages/PainelLider'));
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
 
-type AbaPrincipal = 'analitico' | 'colchao' | 'desafios';
+type AbaPrincipal = 'analitico' | 'colchao' | 'desafios' | 'ajustes';
 
-export default function PaginaAnalitico() {
+/**
+ * Qual parte do Analítico esta montagem desenha (Mapa de Abas, 29/09/2026).
+ *
+ * O Analítico ficou com as linhas do relatório — o que precisa ser tabulado,
+ * o que está sem dono, o colchão e os ajustes (`recebimentos`, a rota
+ * `/analitico`). Os números de desempenho foram para Início e Desempenho, e
+ * são desenhados lá por esta mesma página, com a mesma lente e o mesmo filtro
+ * de setor, sem título nem régua própria:
+ *
+ *   ranking ..... Desempenho › Pessoas
+ *   desafios .... Desempenho › Desafios
+ *   formas ...... Início › Formas
+ *   destaques ... Início › Hoje
+ *
+ * As chaves são as mesmas: `analitico_sub_ranking` continua abrindo o ranking.
+ */
+export type SecaoAnalitico = 'recebimentos' | 'ranking' | 'desafios' | 'formas' | 'destaques';
+
+const DETALHE_LIDER: Record<SecaoAnalitico, readonly AbaDetalheLider[]> = {
+  recebimentos: ['operadores', 'orfaos'],
+  ranking:      ['ranking'],
+  formas:       ['formas'],
+  destaques:    ['destaques'],
+  desafios:     [],
+};
+const DETALHE_OPERADOR: Record<SecaoAnalitico, readonly AbaDetalheOperador[]> = {
+  recebimentos: ['meus'],
+  ranking:      ['ranking'],
+  formas:       ['formas'],
+  destaques:    [],
+  desafios:     [],
+};
+
+export default function PaginaAnalitico({ secao = 'recebimentos' }: { secao?: SecaoAnalitico } = {}) {
+  const embutida = secao !== 'recebimentos';
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
   const { perfil }       = useAuth();
   const { empresa }      = useEmpresa();
@@ -81,7 +123,8 @@ export default function PaginaAnalitico() {
   const [abaPrincipal,  setAbaPrincipal]  = useState<AbaPrincipal>(
     () => {
       const aba = searchParams.get('aba');
-      if (aba === 'colchao' || aba === 'desafios') return aba;
+      if (secao === 'desafios') return 'desafios';
+      if (aba === 'colchao' || aba === 'ajustes') return aba;
       return 'analitico';
     },
   );
@@ -110,14 +153,25 @@ export default function PaginaAnalitico() {
    * duas operações; na PaguePlay ele não tem efeito.
    */
   const abasPrincipais = useMemo(() => ([
-    { key: 'analitico', label: 'Analítico', Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
+    // «Recebimentos»: as linhas do relatório. Era «Analítico», o mesmo nome da
+    // tela; a chave continua `analitico_sub_analitico`.
+    { key: 'analitico', label: 'Recebimentos', Icon: BarChart2, permissao: 'analitico_sub_analitico',
+      extra: secao !== 'desafios' },
     // A aba "Recebimento diário" virou o recorte Dia da lente, logo abaixo. A
     // chave `analitico_sub_recebimento_diario` continua existindo e continua
     // querendo dizer a mesma coisa — ela agora libera o recorte, não uma aba.
-    { key: 'colchao',   label: 'Colchão',   Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: !tenant.isPaguePlay },
-    { key: 'desafios',  label: 'Desafios',  Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
+    { key: 'colchao',   label: 'Colchão',   Icon: Layers3,   permissao: 'analitico_sub_colchao',
+      extra: secao === 'recebimentos' && !tenant.isPaguePlay },
+    // Desafios mudou para Desempenho (Mapa de Abas); aqui só quando esta
+    // página é desenhada lá.
+    { key: 'desafios',  label: 'Desafios',  Icon: Trophy,    permissao: 'analitico_sub_desafios',
+      extra: secao === 'desafios' && desafiosNoMeuSetor },
+    // O Ajuste de recebimento era a última aba do Painel Líder. É correção do
+    // recebimento, e mora onde o recebimento mora; a chave é a mesma.
+    { key: 'ajustes',   label: 'Ajustes',   Icon: SlidersHorizontal, permissao: 'painel_lider_sub_ajuste_recebimento',
+      extra: secao === 'recebimentos' && ajustesNoAnalitico(temPermissao) },
   ] as const).filter(a => a.extra && temPermissao(a.permissao)),
-  [temPermissao, desafiosNoMeuSetor, tenant.isPaguePlay]);
+  [temPermissao, desafiosNoMeuSetor, tenant.isPaguePlay, secao]);
 
   /*
    * A aba que a tela realmente mostra.
@@ -177,8 +231,9 @@ export default function PaginaAnalitico() {
 
   // Monitoramento de uso: aba principal e, dentro do Analítico, o recorte. A
   // aba de dentro (Por operador, Ranking…) é declarada pela visão, no nível 3.
-  useSubAbaUso(abaVisivel);
-  useSubAbaUso(abaVisivel === 'analitico' ? recorte.modo : null, 2);
+  // Embutida, quem mede é a régua de fora.
+  useSubAbaUso(embutida ? null : abaVisivel);
+  useSubAbaUso(!embutida && abaVisivel === 'analitico' ? recorte.modo : null, 2);
 
   const mesDaLente = mesDoRecorte(recorte);
 
@@ -195,6 +250,7 @@ export default function PaginaAnalitico() {
     if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
     if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
     if (abaDaUrl === 'desafios')  setAbaPrincipal('desafios');
+    if (abaDaUrl === 'ajustes')   setAbaPrincipal('ajustes');
   }, [abaDaUrl, searchParams, setRecorte]);
 
   // PP: janela que completa parcelamento/estado antes de abrir o Novo Acordo
@@ -248,6 +304,12 @@ export default function PaginaAnalitico() {
   }
 
   if (!empresa?.id || !perfil?.id) return null;
+
+  // Desafios mudou para Desempenho (Mapa de Abas). Notificação e favorito com
+  // `?aba=desafios` seguem para lá.
+  if (!embutida && abaDaUrl === 'desafios') {
+    return <Navigate to={`${ROUTE_PATHS.DESEMPENHO}?tab=desafios`} replace />;
+  }
 
   function onAbrirNovoAcordo(dados: {
     instituicao: string;
@@ -331,7 +393,7 @@ export default function PaginaAnalitico() {
     if (r.estado) draft['estadoSel'] = r.estado;
     if (dados.dataPagamento) draft['vencimento'] = dados.dataPagamento;
     try { sessionStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* noop */ }
-    navigate(ROUTE_PATHS.DASHBOARD + '?novoInline=1');
+    navigate(ROUTE_PATHS.ACORDOS + '?novoInline=1');
   }
 
   async function confirmarTabularAnalitico(r: RespostaTabulacaoAnalitico) {
@@ -374,15 +436,15 @@ export default function PaginaAnalitico() {
     }
     const qs = new URLSearchParams({ verAcordo: acordoId });
     if (codigo) qs.set('busca', codigo);
-    navigate(ROUTE_PATHS.DASHBOARD + '?' + qs.toString());
+    navigate(ROUTE_PATHS.ACORDOS + '?' + qs.toString());
   }
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
 
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className={cn('flex items-center justify-between', embutida && !podeAlternarVisao && 'hidden')}>
+        <div className={cn('flex items-center gap-3', embutida && 'hidden')}>
           <BarChart2 className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold text-foreground">Analítico</h1>
@@ -428,12 +490,14 @@ export default function PaginaAnalitico() {
       </div>
 
       {/* Abas internas: Analítico × Colchão × Desafios */}
-      <AbasSegmentadas
-        abas={abasDaRegua}
-        ativa={abaVisivel}
-        onTrocar={(k: AbaPrincipal) => setAbaPrincipal(k)}
-        rotulo="Seção do Analítico"
-      />
+      {!embutida && (
+        <AbasSegmentadas
+          abas={abasDaRegua}
+          ativa={abaVisivel}
+          onTrocar={(k: AbaPrincipal) => setAbaPrincipal(k)}
+          rotulo="Seção do Analítico"
+        />
+      )}
 
       {/* Nenhuma aba interna liberada: dizer isso é melhor do que uma página
           em branco, que se lê como defeito. */}
@@ -443,8 +507,8 @@ export default function PaginaAnalitico() {
         </div>
       )}
 
-      {/* A lente + filtro de setor */}
-      <div className="flex items-center gap-4 flex-wrap">
+      {/* A lente + filtro de setor. Os Ajustes têm mês e recorte próprios. */}
+      <div className={cn('flex items-center gap-4 flex-wrap', abaVisivel === 'ajustes' && 'hidden')}>
         {/* A lente não vale para Desafios: o recorte de lá é o PERÍODO da
             campanha, que pode atravessar a virada do mês. O filtro de setor
             logo abaixo continua valendo — ele é o recorte de quem olha. */}
@@ -487,7 +551,7 @@ export default function PaginaAnalitico() {
       </div>
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
-      {abaVisivel === 'analitico' && podeValidarRelatorio && (
+      {abaVisivel === 'analitico' && !embutida && podeValidarRelatorio && (
         <ValidacaoRelatorioSetor
           empresaId={empresa.id}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}
@@ -497,7 +561,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Conteúdo por cargo — aba Analítico */}
-      {abaVisivel === 'analitico' && mostrarVisaoIndividual && (
+      {abaVisivel === 'analitico' && mostrarVisaoIndividual && DETALHE_OPERADOR[secao].length > 0 && (
         <AnaliticoOperador
           dados={dadosProprios}
           loading={loadingProprios}
@@ -510,6 +574,7 @@ export default function PaginaAnalitico() {
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}
+          abas={DETALHE_OPERADOR[secao]}
         />
       )}
 
@@ -525,7 +590,15 @@ export default function PaginaAnalitico() {
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}
+          abas={DETALHE_LIDER[secao]}
+          enxuto={embutida}
         />
+      )}
+
+      {abaVisivel === 'ajustes' && (
+        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+          <div className="-m-4 md:-m-6"><PainelLider abas={['ajuste']} compacto /></div>
+        </Suspense>
       )}
 
       {/* Aba aberta e nenhum alcance liberado. Acontece se alguém desligar os
@@ -534,7 +607,7 @@ export default function PaginaAnalitico() {
 
           Desafios fica de fora: o placar da gincana não é recortado pelos
           níveis do Analítico, e sim pela própria chave da aba. */}
-      {abaVisivel !== null && abaVisivel !== 'desafios' && !carregandoPermissoes
+      {abaVisivel !== null && abaVisivel !== 'desafios' && abaVisivel !== 'ajustes' && !carregandoPermissoes
         && !mostrarVisaoGeral && !mostrarVisaoIndividual && (
         <div className="p-6 text-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
           Nenhum alcance de dados está liberado para o seu cargo no Analítico.

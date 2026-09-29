@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FormaSaudacao } from '@/components/FormaSaudacao';
 import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
@@ -44,13 +44,30 @@ import { PPTableFilters } from './PPTableFilters';
 import { PPTableBody, PPColunas } from './PPTableBody';
 import { PPModals } from './PPModals';
 
-export default function Dashboard() {
+// Excluídos da PaguePlay: a mesma Lixeira da BookPlay, só para quem abre a aba.
+const Lixeira = lazy(() => import('@/pages/Lixeira'));
+
+/**
+ * Qual metade do antigo Dashboard esta montagem desenha.
+ *
+ * Na PaguePlay o Dashboard carregava a tabela inteira de acordos embaixo do
+ * painel, e a BookPlay tinha Acordos como item próprio: o mesmo sistema com
+ * duas portas de entrada diferentes. O Mapa de Abas (29/09/2026) separou as
+ * duas coisas — `inicio` é o painel, igual nas duas empresas, e `acordos` é a
+ * lista da PaguePlay, agora no item Acordos (`/acordos`), com a mesma chave de
+ * sempre (`ver_dashboard`) e os mesmos filtros de escopo.
+ */
+export type SecaoDashboard = 'inicio' | 'acordos';
+
+export default function Dashboard({ secao = 'inicio' }: { secao?: SecaoDashboard } = {}) {
   const { perfil } = useAuth();
   const { principal: equipePrincipal, todas: minhasEquipes } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
+  // A tabela só existe na lista da PaguePlay; no Início ela não monta consulta.
+  const mostraTabela = isPP && secao === 'acordos';
   const statusLabels = tenant.statusLabels;
   const tipoLabels   = tenant.tipoLabels;
 
@@ -259,7 +276,7 @@ export default function Dashboard() {
     : null;
 
   // Os lembretes do dia só existem na PaguePlay (`{isPP && …}` abaixo).
-  const { acordos: acordosHoje } = useAcordos({ apenas_hoje: true, habilitado: isPP });
+  const { acordos: acordosHoje } = useAcordos({ apenas_hoje: true, habilitado: mostraTabela });
   const hoje = getTodayISO();
   const diaSemana    = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -289,8 +306,13 @@ export default function Dashboard() {
   const { tags: empresaTags } = useEmpresaTags();
 
   const [activeTab, setActiveTab] = useState<'todos' | 'pendentes' | 'pagos' | 'nao_pagos'>(
-    (searchParams.get('tab') as 'todos' | 'pendentes' | 'pagos' | 'nao_pagos') || 'todos',
+    () => {
+      const t = searchParams.get('tab');
+      return t === 'pendentes' || t === 'pagos' || t === 'nao_pagos' ? t : 'todos';
+    },
   );
+  // Excluídos — a Lixeira, como aba da lista (mesma chave, `ver_lixeira`).
+  const [excluidos, setExcluidos] = useState(searchParams.get('tab') === 'excluidos');
 
   const [selecionados,            setSelecionados]            = useState<string[]>([]);
   useEffect(() => { setSelecionados([]); }, [currentPage, filtroStatus, filtroTipo, activeTab]);
@@ -334,7 +356,7 @@ export default function Dashboard() {
   }, [novoInlineAbertoTabela]);
 
   const { acordos, totalCount, loading, atualizando, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
-    isPP ? {
+    mostraTabela ? {
       busca:        buscaConsulta || undefined,
       status:       statusFiltroComputed,
       tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -348,8 +370,8 @@ export default function Dashboard() {
       perPage:      PER_PAGE,
       prioritize_today: true,
     } : {
-      // BookPlay não renderiza esta tabela (é PP-only, ver `{isPP && ...}`
-      // abaixo). O hook monta, mas não consulta: a primeira página com joins e
+      // Fora da lista da PaguePlay esta tabela não é desenhada (o Início e a
+      // BookPlay não a têm). O hook monta, mas não consulta: a primeira página com joins e
       // `count: 'exact'` em acordos_deduplicados era jogada fora a cada
       // abertura do Dashboard.
       page: 1, perPage: PER_PAGE, enableRealtime: false, habilitado: false,
@@ -402,7 +424,7 @@ export default function Dashboard() {
   }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje, isPP]);
 
   useEffect(() => {
-    if (!isPP) return;
+    if (!mostraTabela) return;
     if (!niveis.includes('setor')) return;
     const ids = [...new Set([...acordosDeHoje, ...acordos].map(a => a.operador_id).filter(Boolean))];
     if (ids.length === 0) return;
@@ -413,7 +435,7 @@ export default function Dashboard() {
         setOperadoresMap(prev => ({ ...prev, ...map }));
       }
     });
-  }, [acordosDeHoje, acordos, isPP, niveis]);
+  }, [acordosDeHoje, acordos, mostraTabela, niveis]);
 
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {
@@ -477,24 +499,25 @@ export default function Dashboard() {
   useEffect(() => { setSearchParamsRef.current = setSearchParams; });
 
   useEffect(() => {
-    if (!isPP) return;
+    if (!mostraTabela) return;
     const timer = setTimeout(() => setSearchParamsRef.current(atual => {
       const params = new URLSearchParams(atual);
       if (busca)        params.set('busca',  busca);        else params.delete('busca');
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
-      if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
+      if (excluidos) params.set('tab', 'excluidos');
+      else if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
       return params;
     }), 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, filtroVinculo, currentPage, isPP]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, excluidos, filtroVinculo, currentPage, mostraTabela]);
 
 
   useEffect(() => {
-    if (!isPP) return;
+    if (!mostraTabela) return;
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -507,7 +530,7 @@ export default function Dashboard() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPP]);
+  }, [mostraTabela]);
 
   async function findAcordoPage(acordoId: string) {
     if (!empresa?.id) return;
@@ -717,6 +740,16 @@ export default function Dashboard() {
 
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
+        {secao === 'acordos' ? (
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Acordos</h1>
+            {empresa && (
+              <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+                <Building2 className="w-3 h-3" /> {empresa.nome}
+              </p>
+            )}
+          </div>
+        ) : (
         <div>
           {/* O 👋 virou o sólido do CreatorsLab, com as cores do tema e da
               empresa. Ver `FormaSaudacao` para o porquê das cores saírem de
@@ -739,6 +772,7 @@ export default function Dashboard() {
            * Painel de Metas já mostra com mais espaço e melhor recorte.
            */}
         </div>
+        )}
         <div className="flex gap-2 flex-wrap items-center">
           {/* O recorte de setor/equipe/pessoa mora num controle so, logo acima
               do painel — ver <FiltroEscopo />. Ficava aqui, partido em dois
@@ -765,16 +799,45 @@ export default function Dashboard() {
           setorDoPerfil={perfil?.setor_id ?? null}
           equipeDoPerfil={equipeDoPerfil}
         />
-        <AnalyticsPanel
-          setorFiltro={setorFiltroAtivo}
-          equipeFiltroExterno={equipeFiltroAtivo}
-          operadorFiltroExterno={operadorFiltroAtivo}
-          temLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
-        />
+        {secao === 'inicio' && (
+          <AnalyticsPanel
+            setorFiltro={setorFiltroAtivo}
+            equipeFiltroExterno={equipeFiltroAtivo}
+            operadorFiltroExterno={operadorFiltroAtivo}
+            temLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
+          />
+        )}
       </div>
 
-      {/* PaguePLAY section */}
-      {isPP && (
+      {/* Excluídos (PaguePlay) — a aba troca a lista inteira, como na BookPlay. */}
+      {mostraTabela && (
+        <div className="mb-4 flex items-center gap-1 border-b border-border">
+          {([
+            [false, 'Acordos'],
+            ...(temPermissao('ver_lixeira') ? [[true, 'Excluídos'] as const] : []),
+          ] as const).map(([valor, rotulo]) => (
+            <button
+              key={rotulo}
+              type="button"
+              onClick={() => setExcluidos(valor)}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+                excluidos === valor
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+              )}
+            >
+              {valor && <Trash2 className="w-3.5 h-3.5" />} {rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+      {mostraTabela && excluidos && temPermissao('ver_lixeira') && (
+        <Suspense fallback={<TableSkeleton />}><Lixeira embutida /></Suspense>
+      )}
+
+      {/* PaguePLAY — a lista */}
+      {mostraTabela && !(excluidos && temPermissao('ver_lixeira')) && (
         <div className="space-y-6">
           <div>
             {/* Cabeçalho da seção */}
@@ -953,8 +1016,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Bookplay — link para acordos */}
-      {!isPP && (
+      {/* Link para a lista, nas duas empresas */}
+      {secao === 'inicio' && (
         <div className="flex items-center justify-end text-xs">
           <Button asChild variant="link" size="sm" className="text-xs h-auto p-0">
             <Link to={ROUTE_PATHS.ACORDOS}>Ver todos os acordos ↗</Link>

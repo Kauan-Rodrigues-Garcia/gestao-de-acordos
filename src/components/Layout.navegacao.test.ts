@@ -26,27 +26,40 @@ const LAYOUT = fs.readFileSync(path.join(RAIZ, 'components/Layout.tsx'), 'utf8')
 const MENU   = fs.readFileSync(path.join(RAIZ, 'lib/menuLateral.ts'), 'utf8');
 const APP    = fs.readFileSync(path.join(RAIZ, 'App.tsx'), 'utf8');
 
-/** As permissões declaradas no NAV_ITEMS. */
+/**
+ * As permissões declaradas no NAV_ITEMS (e no botão fixo «Novo acordo», que
+ * mora logo abaixo dele): a chave única de cada item e as listas «basta uma»
+ * das telas que o Mapa de Abas juntou.
+ */
 function chavesDoMenu(): string[] {
   const bloco = MENU.slice(
     MENU.indexOf('export const NAV_ITEMS'),
     MENU.indexOf('export interface ContextoMenu'),
   );
-  return [...bloco.matchAll(/permissaoKey:\s*'([a-z_]+)'/g)].map(m => m[1]);
+  const unicas = [...bloco.matchAll(/permissaoKey:\s*'([a-z_]+)'/g)].map(m => m[1]);
+  const listas = [...bloco.matchAll(/permissoes:\s*\[([^\]]*)\]/g)]
+    .flatMap(m => [...m[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]));
+  return [...unicas, ...listas];
 }
 
-/** As permissões exigidas pelas rotas em App.tsx. */
+/** As permissões exigidas pelas rotas em App.tsx — uma só, ou «basta uma». */
 function chavesDasRotas(): string[] {
-  return [...APP.matchAll(/requiredPermissao="([a-z_]+)"/g)].map(m => m[1]);
+  const unicas = [...APP.matchAll(/requiredPermissao="([a-z_]+)"/g)].map(m => m[1]);
+  const listas = [...APP.matchAll(/algumaPermissao=\{\[([^\]]*)\]\}/g)]
+    .flatMap(m => [...m[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]));
+  return [...unicas, ...listas];
 }
 
 describe('menu × rotas', () => {
   it('toda rota com permissão tem item de menu com a MESMA chave', () => {
     const menu = new Set(chavesDoMenu());
-    // `editar_acordos` fica de fora: a rota de edição é aberta a partir de um
-    // acordo da lista, não por um item de menu próprio.
+    // Ficam de fora as rotas que se abrem de DENTRO de uma tela, e não por um
+    // item de menu: `editar_acordos` (a partir de um acordo da lista) e
+    // `importar_excel` (o botão «Importar planilha» de Acordos, desde o Mapa
+    // de Abas). As duas telas conferem a mesma chave no botão que leva lá.
+    const PELA_TELA = new Set(['editar_acordos', 'importar_excel']);
     const semItem = [...new Set(chavesDasRotas())]
-      .filter(k => k !== 'editar_acordos')
+      .filter(k => !PELA_TELA.has(k))
       .filter(k => !menu.has(k));
 
     expect(
@@ -62,7 +75,9 @@ describe('menu × rotas', () => {
     // seção. Qualquer NavLink apontando para ROUTE_PATHS fora da lista é o
     // defeito que este teste existe para pegar.
     const corpo = LAYOUT.slice(LAYOUT.indexOf('export default function Layout'));
-    const dentroDoLaco = corpo.indexOf('navItems.map');
+    // O laço é por seção desde o Mapa de Abas (29/09/2026).
+    const dentroDoLaco = corpo.indexOf('secoesMenu.map');
+    expect(dentroDoLaco).toBeGreaterThan(-1);
     const nav = corpo.slice(dentroDoLaco, corpo.indexOf('</nav>'));
 
     const linksSoltos = [...nav.matchAll(/to=\{ROUTE_PATHS\.([A-Z_]+)\}/g)].map(m => m[1]);
@@ -104,10 +119,13 @@ describe('menu × rotas', () => {
 
   it('as abas que o usuário reconhece estão todas na lista', () => {
     const menu = chavesDoMenu();
+    // `ver_lixeira` e `importar_excel` saíram do menu da cobrança: a Lixeira é
+    // a aba Excluídos e Importar Excel é um botão, ambos dentro de Acordos. A
+    // Lixeira continua no menu do Comercial, que é outra tabela.
     for (const chave of [
       'ver_acordos', 'ver_analitico', 'ver_painel_lider', 'ver_painel_diretoria',
       'ver_campanha_facil', 'ver_solicitacoes_whatsapp',
-      'ver_lixeira', 'ver_configuracoes', 'importar_excel',
+      'ver_configuracoes', 'criar_acordos', 'ver_pix_automatico', 'ver_logs',
     ]) {
       expect(menu, `${chave} sumiu do NAV_ITEMS`).toContain(chave);
     }

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
@@ -24,6 +24,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
+import { useTenant } from '@/lib/tenant-config';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -58,19 +59,23 @@ const queryClient = new QueryClient({
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
+// Mapa de Abas (29/09/2026): as telas que juntam outras. Ver `lib/mapaAbas.ts`.
+const Inicio            = lazy(() => import('@/pages/Inicio'));
+const Desempenho        = lazy(() => import('@/pages/Desempenho'));
+const FechamentoDoMes   = lazy(() => import('@/pages/FechamentoDoMes'));
+const Nucleo            = lazy(() => import('@/pages/Nucleo'));
+const AdminDados        = lazy(() => import('@/pages/AdminDados'));
+const AdminAuditoria    = lazy(() => import('@/pages/AdminAuditoria'));
+const PixAutomatico     = lazy(() => import('@/pages/PixAutomatico'));
 const ProdutoEmMontagem = lazy(() => import('@/pages/ProdutoEmMontagem'));
 const Acordos           = lazy(() => import('@/pages/Acordos'));
 const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
 const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
-const PainelLider       = lazy(() => import('@/pages/PainelLider'));
 const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
-const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
-const Lixeira           = lazy(() => import('@/pages/Lixeira'));
-const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
@@ -85,13 +90,7 @@ const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
 // Importação e Fechamento do Setor, em abas. Metas, Acompanhamento e Desafios
 // também deixaram de ser página própria — ver os redirecionamentos abaixo.
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
-const RhGestao          = lazy(() => import('@/pages/RhGestao'));
-const Fechamento        = lazy(() => import('@/pages/Fechamento'));
-const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
-// O painel do Nucleo. Lazy como o resto, e aqui isso poupa o bundle de quase
-// todo mundo: um cargo so nasce com a chave.
-const DashboardAdm      = lazy(() => import('@/pages/DashboardAdm'));
 const ModoTV            = lazy(() => import('@/pages/ModoTV'));
 // O palco. Lazy como o resto, e aqui isso importa por um motivo extra: o PC da
 // TV baixa SÓ este pedaço, e não a mesa nem o Gestão inteiro.
@@ -129,6 +128,40 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
           <ChatNotificacoes />
         </TermoUsoGate>
       </TermoUsoProvider>
+    </ProtectedRoute>
+  );
+}
+
+/**
+ * Redireciona para o endereço novo levando a busca do antigo.
+ *
+ * As rotas que o Mapa de Abas (29/09/2026) aposentou continuam valendo: um
+ * favorito, uma notificação antiga ou um link colado no grupo não pode virar
+ * «página não encontrada». A busca vai junto porque carrega o que a tela
+ * precisa — `/rh-gestao?fechamento=…&setor=…` abre o mesmo setor lá.
+ */
+function Redirecionar({ para }: { para: string }): React.ReactElement {
+  const { search } = useLocation();
+  const [caminho, busca = ''] = para.split('?');
+  const juntos = new URLSearchParams(busca);
+  new URLSearchParams(search).forEach((v, k) => { if (!juntos.has(k)) juntos.set(k, v); });
+  const q = juntos.toString();
+  return <Navigate to={q ? `${caminho}?${q}` : caminho} replace />;
+}
+
+/**
+ * `/acordos` nas duas empresas. Na PaguePlay a lista morava dentro do
+ * Dashboard e abria com `ver_dashboard`; a chave veio junto com a lista.
+ */
+function RotaAcordos(): React.ReactElement {
+  const { isPaguePlay } = useTenant();
+  return isPaguePlay ? (
+    <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard">
+      <Dashboard secao="acordos" />
+    </ProtectedRoute>
+  ) : (
+    <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">
+      <Acordos />
     </ProtectedRoute>
   );
 }
@@ -172,7 +205,7 @@ function PainelDeEntrada(): React.ReactElement {
 
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
-  if (loading || produto === 'cobranca') return <Dashboard />;
+  if (loading || produto === 'cobranca') return <Inicio />;
   if (produto === 'comercial') return <DashboardComercial />;
   return <ProdutoEmMontagem produto={produto} />;
 }
@@ -263,27 +296,34 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute
                     requiredPermissao="ver_dashboard" mostrarSemAcesso
-                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
+                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.NUCLEO }}
                   >
                     <PainelDeEntrada />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.
-                  Quem abre é a chave, que nasce só no Assistente ADM; o dado
-                  passa pela RLS do Controle de Números. */}
-              <Route path={ROUTE_PATHS.DASHBOARD_ADM} element={
+              {/* Núcleo — Dashboard – ADM + Controle de Números num item só.
+                  Cada aba pede a chave da tela de onde veio; o dado continua
+                  passando pela RLS do Controle de Números. */}
+              <Route path={ROUTE_PATHS.NUCLEO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard_adm">
-                    <DashboardAdm />
+                  <ProtectedRoute produtos={SO_COBRANCA} algumaPermissao={['ver_dashboard_adm', 'ver_controle_numeros']}>
+                    <Nucleo />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
+              <Route path={ROUTE_PATHS.DASHBOARD_ADM} element={<Redirecionar para={`${ROUTE_PATHS.NUCLEO}?tab=painel`} />} />
+              <Route path={ROUTE_PATHS.CONTROLE_NUMEROS} element={<Redirecionar para={`${ROUTE_PATHS.NUCLEO}?tab=celulares`} />} />
+              {/* A lista de acordos, nas duas empresas desde o Mapa de Abas —
+                  ver `RotaAcordos`. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
+                <LayoutWrapper><RotaAcordos /></LayoutWrapper>
+              } />
+              {/* O Pix Automático era a quinta aba de Acordos. */}
+              <Route path={ROUTE_PATHS.PIX_AUTOMATICO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">
-                    <Acordos />
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_pix_automatico">
+                    <PixAutomatico />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
@@ -321,20 +361,18 @@ export default function App() {
                 </LayoutWrapper>
               } />
 
-              <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
+              {/* Desempenho — Painel Líder, a parte de desempenho do Painel
+                  Diretoria, Ranking e Desafios. Qualquer uma das chaves abre;
+                  as abas saem de `abasDoDesempenho`. */}
+              <Route path={ROUTE_PATHS.DESEMPENHO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
-                    <PainelLider />
+                  <ProtectedRoute produtos={SO_COBRANCA} algumaPermissao={['ver_painel_lider', 'ver_painel_diretoria', 'ver_analitico']}>
+                    <Desempenho />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
-                    <PainelLider />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              <Route path={ROUTE_PATHS.PAINEL_LIDER} element={<Redirecionar para={`${ROUTE_PATHS.DESEMPENHO}?tab=equipes`} />} />
+              <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={<Redirecionar para={`${ROUTE_PATHS.DESEMPENHO}?tab=pessoas`} />} />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_usuarios">
@@ -353,32 +391,30 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* /admin/logs agora é aba dentro de /admin/configuracoes */}
-              <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
-              <Route path={ROUTE_PATHS.ADMIN_METAS} element={
+              {/* Administração › Dados e importações e › Auditoria. */}
+              <Route path={ROUTE_PATHS.ADMIN_DADOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
-                    <MetasConfig />
+                  <ProtectedRoute produtos={SO_COBRANCA} algumaPermissao={['ver_banco_dados', 'ver_painel_diretoria']}>
+                    <AdminDados />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
+              <Route path={ROUTE_PATHS.ADMIN_AUDITORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
-                    <Lixeira />
+                  <ProtectedRoute requiredPermissao="ver_logs">
+                    <AdminAuditoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-
-              {/* Painel Diretoria */}
-              <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['diretoria','administrador']}
-                                  requiredPermissao="ver_painel_diretoria">
-                    <PainelDiretoria />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/logs era aba de Configurações; virou Auditoria. */}
+              <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_AUDITORIA} replace />} />
+              {/* A rota solta /admin/metas saiu (1 abertura em 60 dias): a
+                  tela é a aba Metas de Pessoas. A Lixeira é a aba Excluídos
+                  de Acordos, e o Painel Diretoria foi repartido — a Visão
+                  geral é o Início › Empresa. */}
+              <Route path={ROUTE_PATHS.ADMIN_METAS} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=metas'} replace />} />
+              <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={<Redirecionar para={`${ROUTE_PATHS.ACORDOS}?tab=excluidos`} />} />
+              <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={<Navigate to={`${ROUTE_PATHS.DASHBOARD}?vista=empresa`} replace />} />
 
               {/* Analítico (PaguePlay + BookPlay — o gate por slug continua
                   dentro da página; a permissão decide QUEM abre) */}
@@ -493,44 +529,17 @@ export default function App() {
                 </LayoutWrapper>
               } />
 
-              {/* RH Gestão — Controle de Premiação e Comissão. O cargo não
-                  entra na rota: quem abre é `ver_rh_gestao`, e o que a pessoa
-                  enxerga dentro sai do escopo da aba (equipe que ela lidera,
-                  setor, ou a empresa). A RLS cumpre o mesmo recorte no banco. */}
-              <Route path={ROUTE_PATHS.RH_GESTAO} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_rh_gestao">
-                    <RhGestao />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
-
-              {/* Fechamento [BP] — a planilha de fechamento da gerência. Quem
-                  abre é `ver_fechamento`; o setor que aparece sai do escopo da
-                  aba, e `fn_fechamento_alcanca` cumpre o mesmo recorte no banco. */}
+              {/* Fechamento do mês — Fechamento + RH Gestão. Qualquer uma das
+                  chaves abre; `/rh-gestao` cai na aba de premiação, com a
+                  busca junto (setor e lançamento das notificações). */}
               <Route path={ROUTE_PATHS.FECHAMENTO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_fechamento">
-                    <Fechamento />
+                  <ProtectedRoute produtos={SO_COBRANCA} algumaPermissao={['ver_fechamento', 'ver_rh_gestao']}>
+                    <FechamentoDoMes />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-
-              {/* Controle de Números — o Núcleo de Inteligência e Gestão.
-
-                  Sem `allowedProfiles`: quem abre é a chave, como nas abas já
-                  convertidas, e ela nasce só no cargo do Núcleo, Assistente ADM.
-                  A chave sozinha não basta — `fn_numeros_visivel` ainda exige que
-                  a pessoa esteja no setor apontado por `numeros_config`, então
-                  um cargo com a chave ligada num setor qualquer abre a tela e
-                  não recebe uma linha. */}
-              <Route path={ROUTE_PATHS.CONTROLE_NUMEROS} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_controle_numeros">
-                    <ControleNumeros />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              <Route path={ROUTE_PATHS.RH_GESTAO} element={<Redirecionar para={`${ROUTE_PATHS.FECHAMENTO}?tab=premiacao`} />} />
 
               {/* Meus Chips — a outra ponta. O que a pessoa enxerga aqui sai do
                   escopo da aba `chips`: individual (o operador vê o que foi

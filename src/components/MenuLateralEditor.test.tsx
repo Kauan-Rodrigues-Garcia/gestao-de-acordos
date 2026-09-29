@@ -50,29 +50,35 @@ describe('<MenuLateralEditor />', () => {
     montar();
     // Com `valorDoCargo` respondendo sim para tudo e a visão de super_admin, a
     // prévia da ordem geral mostra o menu inteiro.
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Início')).toBeInTheDocument();
     expect(screen.getByText('Configurações')).toBeInTheDocument();
+    // E as seções, como a barra as desenha.
+    expect(screen.getByText('Operação')).toBeInTheDocument();
+    expect(screen.getByText('Administração')).toBeInTheDocument();
   });
 
-  it('respeita a ordem salva da empresa', () => {
-    montar({ ordens: { [CARGO_GERAL]: ['/admin/configuracoes', '/'] } });
-    const rotulos = screen.getAllByText(/Dashboard|Configurações/)
+  it('respeita a ordem salva da empresa, dentro da seção', () => {
+    montar({ ordens: { [CARGO_GERAL]: ['/analitico', '/admin/configuracoes', '/'] } });
+    const rotulos = screen.getAllByText(/^(Início|Analítico|Configurações)$/)
       .map(n => n.textContent);
-    expect(rotulos.indexOf('Configurações')).toBeLessThan(rotulos.indexOf('Dashboard'));
+    // Analítico passa à frente de Início: os dois são da Operação.
+    expect(rotulos.indexOf('Analítico')).toBeLessThan(rotulos.indexOf('Início'));
+    // Configurações não sobe para fora da Administração, mesmo salva primeiro.
+    expect(rotulos.indexOf('Configurações')).toBeGreaterThan(rotulos.indexOf('Início'));
   });
 
   it('com todas as permissões negadas, nenhuma aba fica presa na ordem geral', () => {
     /*
      * Não é falha da prévia — é a régua respondendo certo.
      *
-     * O Dashboard agora declara `ver_dashboard`, como qualquer outra aba.
+     * O Início (antigo Dashboard) declara `ver_dashboard`, como qualquer outra aba.
      * Portanto também desaparece da prévia quando a chave é negada.
      *
      * O estado «este cargo não enxerga nenhuma aba» existe e está coberto em
      * `lib/menuLateral.test.ts`, no nível em que ele é decidido.
      */
     montar({ valorDoCargo: () => false });
-    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
+    expect(screen.queryByText('Início')).not.toBeInTheDocument();
     expect(screen.queryByText('Configurações')).not.toBeInTheDocument();
   });
 

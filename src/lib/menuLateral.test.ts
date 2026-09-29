@@ -11,7 +11,10 @@
  * CARGO, com a operação e com os dois gates que não são permissão.
  */
 import { describe, it, expect } from 'vitest';
-import { abasDoMenu, ticketsVisivelParaCargo, NAV_ITEMS, type ContextoMenu } from './menuLateral';
+import {
+  abasDoMenu, agruparPorSecao, mostrarNovoAcordo, destinoNovoAcordo, ticketsVisivelParaCargo,
+  NAV_ITEMS, SECOES_MENU, type ContextoMenu,
+} from './menuLateral';
 import { ROUTE_PATHS } from './index';
 import { ordemDoCargo, CARGO_GERAL } from '@/services/menuLateral.service';
 
@@ -39,20 +42,33 @@ describe('abasDoMenu', () => {
     expect(rotulos(semAcordos)).not.toContain('Acordos');
   });
 
-  it('a permissão do Dashboard decide a tela inicial em qualquer cargo', () => {
-    const semDashboard = abasDoMenu(ctx({
+  it('a permissão do Início decide a tela inicial em qualquer cargo', () => {
+    const semInicio = abasDoMenu(ctx({
       cargo: 'rh',
       temPermissao: chave => chave !== 'ver_dashboard',
     }));
-    expect(rotulos(semDashboard)).not.toContain('Dashboard');
-    expect(rotulos(abasDoMenu(ctx({ cargo: 'rh' })))).toContain('Dashboard');
+    expect(rotulos(semInicio)).not.toContain('Início');
+    expect(rotulos(abasDoMenu(ctx({ cargo: 'rh' })))).toContain('Início');
   });
 
-  it('PaguePlay não tem Acordos, Novo Acordo nem Campanha Fácil', () => {
-    const pp = rotulos(abasDoMenu(ctx({ isPaguePlay: true, isBookplay: false })));
-    expect(pp).not.toContain('Acordos');
-    expect(pp).not.toContain('Novo Acordo');
-    expect(pp).not.toContain('Campanha Fácil');
+  /*
+   * Mapa de Abas (29/09/2026): a lista da PaguePlay morava dentro do
+   * Dashboard e abria com `ver_dashboard`. Virou o item Acordos, com a mesma
+   * chave — quem via a lista continua vendo, e quem não via continua sem.
+   */
+  it('PaguePlay tem Acordos pela chave do antigo Dashboard, e não tem Campanha Fácil nem Pix', () => {
+    const pp = abasDoMenu(ctx({
+      isPaguePlay: true, isBookplay: false,
+      temPermissao: chave => chave !== 'ver_acordos',
+    }));
+    expect(pp.filter(i => i.label === 'Acordos')).toHaveLength(1);
+    expect(pp.find(i => i.label === 'Acordos')?.permissaoKey).toBe('ver_dashboard');
+    expect(rotulos(pp)).not.toContain('Campanha Fácil');
+    expect(rotulos(pp)).not.toContain('Pix Automático');
+
+    const bp = abasDoMenu(ctx());
+    expect(bp.filter(i => i.label === 'Acordos')).toHaveLength(1);
+    expect(bp.find(i => i.label === 'Acordos')?.permissaoKey).toBe('ver_acordos');
   });
 
   it('Solicitar Atendimento só existe na PaguePlay', () => {
@@ -185,7 +201,7 @@ describe('abasDoMenu — por produto', () => {
 
   it('o Comercial vê o que toda operação precisa', () => {
     const abas = rotulos(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
-    expect(abas).toEqual(expect.arrayContaining(['Dashboard', 'Usuários', 'Configurações']));
+    expect(abas).toEqual(expect.arrayContaining(['Início', 'Pessoas', 'Configurações']));
   });
 
   /*
@@ -263,9 +279,10 @@ describe('abasDoMenu — por produto', () => {
   it('o RH se comporta igual ao Comercial — nenhum privilégio sobre a cobrança', () => {
     const abas = rotulos(abasDoMenu(ctx({ produto: 'rh', isBookplay: false })));
     expect(abas).not.toContain('Acordos');
-    // `RH Gestão` é a gestão de pessoal DA cobrança, não a tela do produto RH.
-    expect(abas).not.toContain('RH Gestão');
-    expect(abas).toContain('Usuários');
+    // `Fechamento do mês` (que trouxe o RH Gestão) é a gestão de pessoal DA
+    // cobrança, não a tela do produto RH.
+    expect(abas).not.toContain('Fechamento do mês');
+    expect(abas).toContain('Pessoas');
   });
 
   it('produto desconhecido não mostra NADA', () => {
@@ -274,11 +291,31 @@ describe('abasDoMenu — por produto', () => {
     expect(rotulos(abasDoMenu(ctx({ produto: null })))).toEqual([]);
   });
 
-  it('a cobrança continua exatamente como era', () => {
-    const abas = rotulos(abasDoMenu(ctx({ produto: 'cobranca', isBookplay: true, isPaguePlay: false })));
-    expect(abas).toEqual(expect.arrayContaining([
-      'Dashboard', 'Acordos', 'Novo Acordo', 'Painel Líder', 'Analítico', 'Usuários',
-    ]));
+  /*
+   * O menu da cobrança depois do Mapa de Abas: 18 itens viraram 15, em cinco
+   * seções, para quem pode tudo na BookPlay. Solicitar Atendimento é da
+   * PaguePlay, e por isso não conta aqui.
+   */
+  it('a cobrança tem os 15 itens do Mapa de Abas, nas cinco seções', () => {
+    const abas = abasDoMenu(ctx({ produto: 'cobranca', isBookplay: true, isPaguePlay: false }));
+    expect(agruparPorSecao(abas).map(s => [s.rotulo, s.itens.map(i => i.label)])).toEqual([
+      ['Operação', ['Início', 'Acordos', 'Pix Automático', 'Analítico', 'Desempenho']],
+      ['Gestão', ['Pessoas', 'Fechamento do mês']],
+      ['Ferramentas', ['Campanha Fácil', 'Meus Chips', 'Tickets', 'Modo TV']],
+      ['Núcleo ADM', ['Núcleo']],
+      ['Administração', ['Configurações', 'Dados e importações', 'Auditoria']],
+    ]);
+  });
+
+  it('o que virou aba, botão ou redirecionamento não é mais item de menu', () => {
+    const rotas = abasDoMenu(ctx()).map(i => i.to);
+    for (const rota of [
+      ROUTE_PATHS.ACORDO_NOVO, ROUTE_PATHS.IMPORTAR_EXCEL, ROUTE_PATHS.ADMIN_LIXEIRA,
+      ROUTE_PATHS.PAINEL_LIDER, ROUTE_PATHS.PAINEL_DIRETORIA, ROUTE_PATHS.RH_GESTAO,
+      ROUTE_PATHS.DASHBOARD_ADM, ROUTE_PATHS.CONTROLE_NUMEROS, ROUTE_PATHS.ADMIN_METAS,
+    ]) {
+      expect(rotas, `${rota} voltou a ser item de menu`).not.toContain(rota);
+    }
   });
 
   it('toda aba declara em que produto vive', () => {
@@ -306,21 +343,109 @@ describe('abasDoMenu — o cargo do Núcleo', () => {
   ].includes(chave);
 
   it('o Assistente ADM recebe o Núcleo, e não a cobrança', () => {
-    const abas = rotulos(abasDoMenu(ctx({ cargo: 'assistente_adm', temPermissao: doAssistenteAdm })));
-    // O painel dele é a aba própria desde 11/09/2026; o Dashboard da cobrança saiu.
-    expect(abas).toContain('Dashboard – ADM');
-    expect(abas).toContain('Controle de Números');
-    expect(abas).toContain('Meus Chips');
-    for (const proibida of [
-      'Dashboard', 'Acordos', 'Novo Acordo', 'Analítico', 'Lixeira',
-      'Importar Excel', 'Campanha Fácil', 'Painel Líder', 'Painel Diretoria',
-    ]) {
-      expect(abas, `${proibida} não é do Núcleo`).not.toContain(proibida);
+    const contexto = ctx({ cargo: 'assistente_adm', temPermissao: doAssistenteAdm });
+    const abas = rotulos(abasDoMenu(contexto));
+    // Dashboard – ADM e Controle de Números viraram um item só (Mapa de Abas).
+    expect(abas).toEqual(['Meus Chips', 'Núcleo']);
+    expect(mostrarNovoAcordo(contexto)).toBe(false);
+  });
+
+  it('o Núcleo aparece com qualquer uma das duas chaves, e some sem as duas', () => {
+    const so = (chave: string) => rotulos(abasDoMenu(ctx({ temPermissao: c => c === chave })));
+    expect(so('ver_dashboard_adm')).toContain('Núcleo');
+    expect(so('ver_controle_numeros')).toContain('Núcleo');
+    const semAsDuas = rotulos(abasDoMenu(ctx({
+      temPermissao: c => c !== 'ver_dashboard_adm' && c !== 'ver_controle_numeros',
+    })));
+    expect(semAsDuas).not.toContain('Núcleo');
+  });
+
+  it('o Núcleo não existe na PaguePlay', () => {
+    expect(rotulos(abasDoMenu(ctx({ isPaguePlay: true, isBookplay: false })))).not.toContain('Núcleo');
+  });
+});
+
+/**
+ * As telas que o Mapa de Abas juntou aparecem quando sobra UMA aba — a mesma
+ * régua que a tela usa (`lib/mapaAbas.ts`). O que se trava aqui é que cada
+ * chave antiga continua abrindo o que abria, sem ninguém reconfigurar cargo.
+ */
+describe('abasDoMenu — as telas do Mapa de Abas', () => {
+  const com = (...chaves: string[]) => (c: string) => chaves.includes(c);
+  const menu = (...chaves: string[]) => rotulos(abasDoMenu(ctx({ cargo: 'operador', temPermissao: com(...chaves) })));
+
+  it('o operador chega a Desempenho pelo Ranking do Analítico', () => {
+    expect(menu('ver_analitico', 'analitico_sub_ranking')).toContain('Desempenho');
+    expect(menu('ver_analitico', 'analitico_sub_desafios')).toContain('Desempenho');
+    // O Analítico sozinho não tem nada de desempenho para mostrar.
+    expect(menu('ver_analitico')).not.toContain('Desempenho');
+  });
+
+  it('o líder chega a Desempenho pelas abas do Painel Líder', () => {
+    expect(menu('ver_painel_lider', 'painel_lider_sub_quartis')).toContain('Desempenho');
+    expect(menu('ver_painel_lider', 'painel_lider_sub_desempenho_equipes')).toContain('Desempenho');
+    expect(menu('ver_painel_lider')).not.toContain('Desempenho');
+  });
+
+  it('a diretoria da BookPlay chega a Desempenho pelo Painel Diretoria', () => {
+    expect(menu('ver_painel_diretoria')).toContain('Desempenho');
+  });
+
+  it('Fechamento do mês abre com a chave do Fechamento OU a do RH Gestão', () => {
+    expect(menu('ver_fechamento')).toContain('Fechamento do mês');
+    expect(menu('ver_rh_gestao')).toContain('Fechamento do mês');
+    expect(menu()).not.toContain('Fechamento do mês');
+    // O Fechamento é da BookPlay; na PaguePlay só o RH abre a tela.
+    const pp = (...chaves: string[]) => rotulos(abasDoMenu(ctx({
+      isPaguePlay: true, isBookplay: false, temPermissao: com(...chaves),
+    })));
+    expect(pp('ver_fechamento')).not.toContain('Fechamento do mês');
+    expect(pp('ver_rh_gestao')).toContain('Fechamento do mês');
+  });
+
+  it('Dados e importações precisa de uma aba de verdade, e não só de uma chave', () => {
+    expect(menu('ver_banco_dados')).toContain('Dados e importações');
+    // A diretoria da BookPlay tem `ver_painel_diretoria`, mas as abas técnicas
+    // do 59 são de super_admin: ela não ganha um item vazio.
+    expect(menu('ver_painel_diretoria')).not.toContain('Dados e importações');
+  });
+
+  it('Pix Automático e Auditoria obedecem às chaves de antes', () => {
+    expect(menu('ver_pix_automatico')).toContain('Pix Automático');
+    expect(menu('ver_logs')).toContain('Auditoria');
+    expect(menu()).not.toContain('Pix Automático');
+    expect(menu()).not.toContain('Auditoria');
+  });
+});
+
+describe('o botão fixo «Novo acordo»', () => {
+  it('obedece a `criar_acordos`, e só existe na cobrança', () => {
+    expect(mostrarNovoAcordo(ctx())).toBe(true);
+    expect(mostrarNovoAcordo(ctx({ temPermissao: c => c !== 'criar_acordos' }))).toBe(false);
+    expect(mostrarNovoAcordo(ctx({ produto: 'comercial', isBookplay: false }))).toBe(false);
+  });
+
+  it('na PaguePlay leva à lista com o formulário aberto, e pede a chave da lista', () => {
+    expect(destinoNovoAcordo(true)).toBe(`${ROUTE_PATHS.ACORDOS}?novoInline=1`);
+    expect(destinoNovoAcordo(false)).toBe(ROUTE_PATHS.ACORDO_NOVO);
+    expect(mostrarNovoAcordo(ctx({
+      isPaguePlay: true, isBookplay: false, temPermissao: c => c !== 'ver_dashboard',
+    }))).toBe(false);
+  });
+});
+
+describe('as seções', () => {
+  it('toda aba mora numa seção que existe', () => {
+    const chaves = SECOES_MENU.map(s => s.chave) as readonly string[];
+    for (const item of NAV_ITEMS) {
+      expect(chaves, `«${item.label}» sem seção`).toContain(item.secao);
     }
   });
 
-  it('a chave desligada continua mandando', () => {
-    const semAba = rotulos(abasDoMenu(ctx({ temPermissao: chave => chave !== 'ver_controle_numeros' })));
-    expect(semAba).not.toContain('Controle de Números');
+  it('seção sem item liberado não aparece', () => {
+    const doOperador = abasDoMenu(ctx({
+      cargo: 'operador', temPermissao: c => ['ver_dashboard', 'ver_acordos'].includes(c),
+    }));
+    expect(agruparPorSecao(doOperador).map(s => s.rotulo)).toEqual(['Operação']);
   });
 });

@@ -66,7 +66,7 @@ import { PremiacoesComissoes } from './PremiacoesComissoes';
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
 
-type AbaFechamento = 'fechamento' | 'premiacoes';
+export type AbaFechamento = 'fechamento' | 'premiacoes';
 
 const ABAS: readonly AbaSegmentada<AbaFechamento>[] = [
   { key: 'fechamento', label: 'Fechamento', Icon: ClipboardCheck },
@@ -89,7 +89,12 @@ function Aviso({ tom, children }: { tom: 'alerta' | 'info'; children: React.Reac
   );
 }
 
-export default function PaginaFechamento() {
+/**
+ * `aba`: o Fechamento do mês escolhe a aba e desenha a régua (Mapa de Abas,
+ * 29/09/2026). Aqui somem o título e a régua própria; o mês, o setor e os
+ * botões de baixar continuam, porque valem para o conteúdo.
+ */
+export default function PaginaFechamento({ aba: abaFixa }: { aba?: AbaFechamento } = {}) {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
@@ -108,8 +113,8 @@ export default function PaginaFechamento() {
 
   // A aba fica na URL: recarregar a página ou mandar o link abre na mesma.
   const [params, setParams] = useSearchParams();
-  const aba: AbaFechamento = params.get('aba') === 'premiacoes' ? 'premiacoes' : 'fechamento';
-  useSubAbaUso(aba);
+  const aba: AbaFechamento = abaFixa ?? (params.get('aba') === 'premiacoes' ? 'premiacoes' : 'fechamento');
+  useSubAbaUso(abaFixa ? null : aba);
   const trocarAba = useCallback((k: AbaFechamento) => {
     setParams(p => {
       const n = new URLSearchParams(p);
@@ -199,7 +204,7 @@ export default function PaginaFechamento() {
 
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className={cn('flex items-center gap-3', abaFixa && 'hidden')}>
           <ClipboardCheck className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold text-foreground">Fechamento</h1>
@@ -240,7 +245,7 @@ export default function PaginaFechamento() {
         )}
       </div>
 
-      <AbasSegmentadas abas={ABAS} ativa={aba} onTrocar={trocarAba} rotulo="Seção do Fechamento" />
+      {!abaFixa && <AbasSegmentadas abas={ABAS} ativa={aba} onTrocar={trocarAba} rotulo="Seção do Fechamento" />}
 
       {/* Mês + setor */}
       <div className="flex flex-wrap items-center gap-4">

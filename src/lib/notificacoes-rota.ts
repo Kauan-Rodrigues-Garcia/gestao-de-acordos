@@ -107,15 +107,16 @@ export function envioCampanhaDaNotificacao(n: Pick<Notificacao, 'rota'>): string
 /**
  * Caminho interno para onde a notificação leva, ou `null` se não houver destino.
  *
- * @param isPaguePlay muda só o destino de acordo: na PaguePlay a lista de
- *   acordos é o próprio dashboard, no BookPlay é `/acordos`.
+ * @param isPaguePlay mudava o destino de acordo: na PaguePlay a lista morava
+ *   dentro do Dashboard. Desde o Mapa de Abas (29/09/2026) as duas empresas
+ *   têm a lista em `/acordos`, e o parâmetro ficou sem efeito — mantido para
+ *   não mexer em quem chama. Links antigos para `/?highlight=` são levados à
+ *   lista pelo Início.
  */
-export function rotaDaNotificacao(n: Alvo, isPaguePlay: boolean): string | null {
+export function rotaDaNotificacao(n: Alvo, _isPaguePlay: boolean): string | null {
   if (n.acordo_id) {
     const id = encodeURIComponent(n.acordo_id);
-    return isPaguePlay
-      ? `${ROUTE_PATHS.DASHBOARD}?highlight=${id}`
-      : `${ROUTE_PATHS.ACORDOS}?highlight=${id}`;
+    return `${ROUTE_PATHS.ACORDOS}?highlight=${id}`;
   }
   // Campanha liberada baixa, não navega — ver `envioCampanhaDaNotificacao`.
   if (n.rota?.startsWith(PREFIXO_ROTA_ENVIO_CAMPANHA)) return null;

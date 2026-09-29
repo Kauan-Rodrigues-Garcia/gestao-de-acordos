@@ -62,7 +62,7 @@ const FormasPagamento = lazy(() =>
   import('./FormasPagamento').then(m => ({ default: m.FormasPagamento })),
 );
 
-type AbaOperador = 'meus' | 'ranking' | 'formas';
+export type AbaOperador = 'meus' | 'ranking' | 'formas';
 
 interface AnaliticoOperadorProps {
   dados: AnaliticoRecebimento[];
@@ -84,6 +84,12 @@ interface AnaliticoOperadorProps {
   }) => void;
   onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
+  /**
+   * Quais abas esta montagem desenha. O Analítico mostra «Meus recebimentos»;
+   * Ranking foi para Desempenho › Pessoas e Formas para Início › Formas (Mapa
+   * de Abas, 29/09/2026). Com uma aba só, a régua some.
+   */
+  abas?: readonly AbaOperador[];
 }
 
 function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: string | null) {
@@ -104,7 +110,7 @@ function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: str
 
 export function AnaliticoOperador({
   dados, loading, operadorId, operadorNome, empresaId, recorte, podeVerRanking,
-  podeVerFormas, onAbrirNovoAcordo, onVerAcordo, onRefetch,
+  podeVerFormas, onAbrirNovoAcordo, onVerAcordo, onRefetch, abas,
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
@@ -113,9 +119,11 @@ export function AnaliticoOperador({
   const [, setForceRender] = useState(0);
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
-  const [abaOp, setAbaOp] = useState<AbaOperador>('meus');
-  // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
-  useSubAbaUso(abaOp, 3);
+  const abaInicial: AbaOperador = abas?.[0] ?? 'meus';
+  const [abaOp, setAbaOp] = useState<AbaOperador>(abaInicial);
+  // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte. Com
+  // uma aba só, quem mede é a tela de fora.
+  useSubAbaUso(abas && abas.length === 1 ? null : abaOp, 3);
 
   // ── Ranking (carregado sob demanda ao abrir a aba / trocar de mês) ──────────
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);
@@ -139,17 +147,17 @@ export function AnaliticoOperador({
 
   useEffect(() => {
     if (!podeVerRanking && abaOp === 'ranking') {
-      setAbaOp('meus');
+      setAbaOp(abaInicial);
       return;
     }
     // Mesma guarda do ranking: revogar a chave com a aba aberta deixaria a
     // pessoa parada num painel que ela já não pode ver.
     if (!podeVerFormas && abaOp === 'formas') {
-      setAbaOp('meus');
+      setAbaOp(abaInicial);
       return;
     }
     if (podeVerRanking && abaOp === 'ranking') void carregarRanking();
-  }, [abaOp, carregarRanking, podeVerRanking, podeVerFormas]);
+  }, [abaOp, abaInicial, carregarRanking, podeVerRanking, podeVerFormas]);
 
   /*
    * A posição já é sabida por quem tem o ranking liberado. Mostrá-la no topo
@@ -206,13 +214,13 @@ export function AnaliticoOperador({
 
   // Tipado aqui, e não com genérico no JSX: o `lovable-tagger` (só em dev) não
   // entende `<Componente<T>` e o SWC recusa o arquivo.
-  const abasDoOperador: AbaSegmentada<AbaOperador>[] = [
+  const abasDoOperador: AbaSegmentada<AbaOperador>[] = ([
     { key: 'meus', label: 'Meus recebimentos', Icon: ListChecks },
     ...(podeVerRanking ? [{ key: 'ranking' as const, label: 'Ranking', Icon: Trophy }] : []),
     ...(podeVerFormas
       ? [{ key: 'formas' as const, label: 'Formas de pagamento', Icon: Wallet }]
       : []),
-  ];
+  ] as AbaSegmentada<AbaOperador>[]).filter(a => !abas || abas.includes(a.key));
 
   /*
    * O «resumo» de uma pessoa só.
@@ -246,12 +254,14 @@ export function AnaliticoOperador({
   return (
     <div className="space-y-4">
       {/* Abas internas: Meus recebimentos × Ranking × Formas de pagamento */}
-      <AbasSegmentadas
-        abas={abasDoOperador}
-        ativa={abaOp}
-        onTrocar={(k: AbaOperador) => setAbaOp(k)}
-        rotulo="Visão do operador"
-      />
+      {abasDoOperador.length > 1 && (
+        <AbasSegmentadas
+          abas={abasDoOperador}
+          ativa={abaOp}
+          onTrocar={(k: AbaOperador) => setAbaOp(k)}
+          rotulo="Visão do operador"
+        />
+      )}
 
       {/* ── Aba: Meus recebimentos ────────────────────────────────────────── */}
       {abaOp === 'meus' && (

@@ -155,7 +155,7 @@ const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
  * alargaria a chave para `string`, e aí `setAbaAtiva` não encaixaria em
  * `onTrocar`. Com o tipo declarado, a instanciação explícita fecha a conta.
  */
-type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques' | 'orfaos';
+export type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques' | 'orfaos';
 
 /**
  * Os dois formatos da MESMA lista de operadores.
@@ -196,13 +196,26 @@ interface AnaliticoLiderProps {
   }) => void;
   onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
+  /**
+   * Quais detalhamentos esta montagem desenha (Mapa de Abas, 29/09/2026):
+   * o Analítico fica com Por operador e Sem operador — as linhas do relatório —,
+   * e Formas, Ranking e Destaques são desenhados no Início e em Desempenho por
+   * esta mesma tela. Com um só, a régua some.
+   */
+  abas?: readonly AbaInterna[];
+  /**
+   * Sem as ações de relatório (importar, limpar, composição do acumulado, o
+   * histórico de reimportação). Fora do Analítico ninguém importa relatório.
+   */
+  enxuto?: boolean;
 }
 
 export function AnaliticoLider({
   empresaId, recorte, setorId, podeVerTodosSetores = true,
-  temPermissaoImportar,
-  onAbrirNovoAcordo, onVerAcordo, onRefetch,
+  temPermissaoImportar: temPermissaoImportarProp,
+  onAbrirNovoAcordo, onVerAcordo, onRefetch, abas, enxuto = false,
 }: AnaliticoLiderProps) {
+  const temPermissaoImportar = temPermissaoImportarProp && !enxuto;
   const importHook = useAnaliticoImport();
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
@@ -220,7 +233,7 @@ export function AnaliticoLider({
   const { inicio: pisoDoRecorte, fim: tetoDoRecorte } = intervaloDoRecorte(recorte);
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<AbaInterna>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<AbaInterna>(abas?.[0] ?? 'operadores');
   // Lista × Mapa do mês. Estado da tela, não da URL: é escolha de leitura, não
   // de recorte — o que o link precisa carregar é o recorte, e ele já carrega.
   const [visaoOperadores, setVisaoOperadores] = useState<VisaoOperadores>('lista');
@@ -233,7 +246,7 @@ export function AnaliticoLider({
    * `importar_analitico` e responde pelo MÊS; ler uma como se fosse a outra
    * daria a alguém um poder que ninguém lhe deu.
    */
-  const podeImportarDiario = temPermissao('importar_diario');
+  const podeImportarDiario = temPermissao('importar_diario') && !enxuto;
   const importDiarioHook = useDiarioImport();
   const [modalImportarDiario,   setModalImportarDiario]   = useState(false);
   const [confirmandoLimpezaDia, setConfirmandoLimpezaDia] = useState(false);
@@ -265,14 +278,16 @@ export function AnaliticoLider({
     // Desempenho Equipes / Quartis / Gráfico mudaram para o Painel Líder nos
     // dois tenants (BookPlay 2026-07). Aqui ficam só as de conferência.
     { key: 'orfaos',     label: 'Sem operador',        Icon: AlertCircle, permissao: 'analitico_sub_sem_operador' },
-  ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
+  ] as const).filter(a => temPermissao(a.permissao) && (!abas || abas.includes(a.key))),
+  [temPermissao, abas]);
 
   const abaVisivel = abasInternas.some(a => a.key === abaAtiva)
     ? abaAtiva
     : (abasInternas[0]?.key ?? null);
 
   // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
-  useSubAbaUso(abaVisivel, 3);
+  // Com uma aba só (embutido), quem mede é a tela de fora.
+  useSubAbaUso(abas && abas.length === 1 ? null : abaVisivel, 3);
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -1642,7 +1657,7 @@ export function AnaliticoLider({
 
       {/* O histórico do mês: o que a reimportação do 59 removeu, transferiu ou
           reavaliou no escopo desta liderança. Some quando não há nada. */}
-      {empresaId && mes && (
+      {!enxuto && empresaId && mes && (
         <MudancasImportacao
           empresaId={empresaId} mes={mes}
           operadorId={perfil?.id ?? ''} modo="lideranca"
@@ -1722,7 +1737,7 @@ export function AnaliticoLider({
       {/* Composição do acumulado — de onde vieram os reais do card acima.
           Só com um setor em foco: sem filtro, o número é o da empresa, e a
           empresa soma tudo por definição — não há origem a tirar. */}
-      {setorId && exclusoesAtivas && !loadingResumos && (
+      {!enxuto && setorId && exclusoesAtivas && !loadingResumos && (
         <ComposicaoAcumulado
           origens={totalPorSetor[setorId]?.origens ?? []}
           nomeDoSetor={id => nomeDoSetor.get(id)}
@@ -1734,12 +1749,14 @@ export function AnaliticoLider({
 
       {/* Tabs + botão importar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <AbasSegmentadas
-          abas={abasDaRegua}
-          ativa={abaVisivel}
-          onTrocar={(k: AbaInterna) => setAbaAtiva(k)}
-          rotulo="Detalhamento do Analítico"
-        />
+        {abasDaRegua.length > 1 ? (
+          <AbasSegmentadas
+            abas={abasDaRegua}
+            ativa={abaVisivel}
+            onTrocar={(k: AbaInterna) => setAbaAtiva(k)}
+            rotulo="Detalhamento do Analítico"
+          />
+        ) : <span />}
         {temPermissaoImportar && recorte.modo !== 'dia' && (
           <div className="flex items-center gap-2">
             <Button

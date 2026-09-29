@@ -73,7 +73,13 @@ function tempoUrgencia(expiraEm?: string): 'green' | 'yellow' | 'red' | 'gray' {
 }
 
 
-export default function Lixeira() {
+/**
+ * `embutida`: a Lixeira é a aba Excluídos de Acordos desde o Mapa de Abas
+ * (29/09/2026) — 136 operadores a abriam, e ela precisava estar a um clique da
+ * lista. Embutida, some a faixa do topo e o respiro de página, porque a página
+ * é a de Acordos. A rota antiga redireciona para lá.
+ */
+export default function Lixeira({ embutida = false }: { embutida?: boolean } = {}) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao, loading: permissoesCarregando } = useCargoPermissoes();
@@ -268,11 +274,11 @@ export default function Lixeira() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className={embutida ? undefined : 'min-h-screen'}>
       {/* Gradient accent strip at top */}
-      <div className="h-1 w-full bg-gradient-to-r from-red-500 via-rose-400 to-orange-400 opacity-80" />
+      {!embutida && <div className="h-1 w-full bg-gradient-to-r from-red-500 via-rose-400 to-orange-400 opacity-80" />}
 
-      <div className="p-6 max-w-[1280px] mx-auto space-y-6">
+      <div className={embutida ? 'space-y-6' : 'p-6 max-w-[1280px] mx-auto space-y-6'}>
 
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

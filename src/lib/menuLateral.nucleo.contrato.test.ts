@@ -46,10 +46,11 @@ describe('o recorte por setor saiu', () => {
     expect(APP).toMatch(/alternativa=\{\{\s*permissao: 'ver_dashboard_adm'/);
   });
 
-  it('Controle de Números, Meus Chips e Dashboard – ADM são abertos pela chave, como toda aba', () => {
-    for (const label of ['Controle de Números', 'Meus Chips', 'Dashboard – ADM']) {
-      const item = NAV_ITEMS.find(i => i.label === label);
-      expect(item?.permissaoKey, `${label} sem chave`).toBeTruthy();
-    }
+  it('o Núcleo e Meus Chips são abertos pela chave, como toda aba', () => {
+    // Dashboard – ADM e Controle de Números viraram o item Núcleo no Mapa de
+    // Abas (29/09/2026), aberto por qualquer uma das duas chaves de antes.
+    expect(NAV_ITEMS.find(i => i.label === 'Núcleo')?.permissoes)
+      .toEqual(['ver_dashboard_adm', 'ver_controle_numeros']);
+    expect(NAV_ITEMS.find(i => i.label === 'Meus Chips')?.permissaoKey).toBe('ver_meus_chips');
   });
 });

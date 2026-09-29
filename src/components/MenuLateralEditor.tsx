@@ -48,7 +48,9 @@ import {
 import { cn } from '@/lib/utils';
 import { PERFIL_LABELS } from '@/lib/index';
 import { CARGOS_ACESSO_TOTAL, CARGOS_CONFIGURAVEIS } from '@/lib/permissoes-catalogo';
-import { abasDoMenu, ticketsVisivelParaCargo, type NavItem } from '@/lib/menuLateral';
+import {
+  abasDoMenu, agruparPorSecao, ticketsVisivelParaCargo, SECOES_MENU, type NavItem,
+} from '@/lib/menuLateral';
 import { type Produto } from '@/lib/produto';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import {
@@ -140,7 +142,9 @@ export function MenuLateralEditor({
         ticketsLiberadoParaLideranca,
       ),
     });
-    return ordenarMenu(visiveis, ordemDoCargo(ordens, cargo));
+    // Na ordem das seções, como a barra desenha (Mapa de Abas, 29/09/2026).
+    return agruparPorSecao(ordenarMenu(visiveis, ordemDoCargo(ordens, cargo)))
+      .flatMap(s => s.itens);
   }, [cargo, produto, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, ordens]);
 
   // Reabrir, ou trocar de cargo, descarta o rascunho anterior: quem fechou sem
@@ -153,8 +157,15 @@ export function MenuLateralEditor({
   const temOrdemPropria = (c: string) => !!ordens[c]?.length;
   const herdaDaGeral = cargo !== CARGO_GERAL && !temOrdemPropria(cargo);
 
+  /** A ordem vale dentro da seção: arrastar Tickets para cima não o tira de Ferramentas. */
+  const mesmaSecao = (a: number, b: number) =>
+    (rascunho[a]?.secao ?? 'operacao') === (rascunho[b]?.secao ?? 'operacao');
+  const rotuloSecao = (secao: NavItem['secao']) =>
+    SECOES_MENU.find(x => x.chave === (secao ?? 'operacao'))?.rotulo ?? '';
+
   function mover(de: number, para: number) {
     if (para < 0 || para >= rascunho.length || de === para) return;
+    if (!mesmaSecao(de, para)) return;
     setRascunho(atual => {
       const copia = [...atual];
       const [item] = copia.splice(de, 1);
@@ -292,8 +303,13 @@ export function MenuLateralEditor({
                   Configurações › Permissões — a ordem não liga aba nenhuma.
                 </p>
               ) : rascunho.map((aba, i) => (
+                <div key={aba.to + aba.label}>
+                {(i === 0 || !mesmaSecao(i - 1, i)) && (
+                  <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+                    {rotuloSecao(aba.secao)}
+                  </p>
+                )}
                 <div
-                  key={aba.to}
                   draggable
                   onDragStart={() => setArrastando(i)}
                   onDragEnter={() => aoEntrarEm(i)}
@@ -318,14 +334,14 @@ export function MenuLateralEditor({
                       e celular. */}
                   <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     <button
-                      type="button" disabled={i === 0} onClick={() => mover(i, i - 1)}
+                      type="button" disabled={i === 0 || !mesmaSecao(i - 1, i)} onClick={() => mover(i, i - 1)}
                       aria-label={`Subir ${aba.label}`}
                       className="w-6 h-6 rounded flex items-center justify-center hover:bg-sidebar-accent disabled:opacity-30"
                     >
                       <ArrowUp className="w-3 h-3" />
                     </button>
                     <button
-                      type="button" disabled={i === rascunho.length - 1} onClick={() => mover(i, i + 1)}
+                      type="button" disabled={i === rascunho.length - 1 || !mesmaSecao(i, i + 1)} onClick={() => mover(i, i + 1)}
                       aria-label={`Descer ${aba.label}`}
                       className="w-6 h-6 rounded flex items-center justify-center hover:bg-sidebar-accent disabled:opacity-30"
                     >
@@ -333,12 +349,13 @@ export function MenuLateralEditor({
                     </button>
                   </span>
                 </div>
+                </div>
               ))}
             </div>
 
             <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
-              Aba criada depois de um deploy entra no fim da lista deste cargo, e
-              não some por não estar na ordem salva.
+              A ordem vale dentro de cada seção. Aba criada depois de um deploy
+              entra no fim da seção dela, e não some por não estar na ordem salva.
             </p>
           </div>
         </div>

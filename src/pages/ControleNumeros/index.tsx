@@ -70,7 +70,15 @@ import { DialogoNumero } from './DialogoNumero';
 import { PainelConfiguracao } from './PainelConfiguracao';
 import { PainelLixeira } from './PainelLixeira';
 
-export default function ControleNumeros() {
+/**
+ * `aba`: quem embute a tela (o Núcleo, desde o Mapa de Abas) escolhe a aba e
+ * desenha a régua. Aqui somem o cabeçalho e a régua própria — o aviso de
+ * relançados continua, porque é a única coisa da tela que alguém espera.
+ */
+export type AbaControleNumeros = 'celulares' | 'numeros' | 'lixeira' | 'configuracao';
+
+export default function ControleNumeros({ aba }: { aba?: AbaControleNumeros } = {}) {
+  const embutida = aba !== undefined;
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao, temPermissaoExplicita } = useCargoPermissoes();
@@ -139,8 +147,10 @@ export default function ControleNumeros() {
   const emTratamento = relancados.length - aguardando.length;
 
   // Controlada só para o monitoramento de uso saber em que aba a pessoa está.
-  const [abaAtiva, setAbaAtiva] = useState('celulares');
-  useSubAbaUso(loading ? null : abaAtiva);
+  const [abaPropria, setAbaAtiva] = useState<string>('celulares');
+  const abaAtiva = aba ?? abaPropria;
+  // Embutida, quem mede a aba é a tela de fora (é a régua dela).
+  useSubAbaUso(loading || embutida ? null : abaAtiva);
 
   if (loading) {
     return (
@@ -153,12 +163,14 @@ export default function ControleNumeros() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <header>
-        <h1 className="text-2xl font-semibold">Controle de Números</h1>
-        <p className="text-sm text-muted-foreground">
-          Celulares, números de WhatsApp, aquecimento e liberação aos setores.
-        </p>
-      </header>
+      {!embutida && (
+        <header>
+          <h1 className="text-2xl font-semibold">Controle de Números</h1>
+          <p className="text-sm text-muted-foreground">
+            Celulares, números de WhatsApp, aquecimento e liberação aos setores.
+          </p>
+        </header>
+      )}
 
       {erro && (
         <Card className="border-destructive/40">
@@ -220,7 +232,7 @@ export default function ControleNumeros() {
       )}
 
       <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
-        <TabsList>
+        <TabsList className={embutida ? 'hidden' : undefined}>
           <TabsTrigger value="celulares">
             <Smartphone className="mr-1.5 h-4 w-4" /> Celulares
           </TabsTrigger>

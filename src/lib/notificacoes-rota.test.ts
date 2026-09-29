@@ -29,9 +29,11 @@ describe('rotaDaNotificacao — coluna `rota` (produtores novos)', () => {
 });
 
 describe('rotaDaNotificacao — acordo tem precedência', () => {
-  it('PaguePlay manda para o dashboard com highlight', () => {
+  // Desde o Mapa de Abas (29/09/2026) a PaguePlay também tem a lista em
+  // `/acordos`; antes ela morava dentro do Dashboard.
+  it('PaguePlay também manda para /acordos', () => {
     expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }, true))
-      .toBe('/?highlight=abc');
+      .toBe('/acordos?highlight=abc');
   });
   it('BookPlay manda para /acordos', () => {
     expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }, false))
@@ -39,7 +41,7 @@ describe('rotaDaNotificacao — acordo tem precedência', () => {
   });
   it('acordo vence a rota gravada — é o destino mais específico', () => {
     expect(rotaDaNotificacao({ titulo: 'x', rota: ROTA_ANALITICO, acordo_id: 'abc' }, true))
-      .toBe('/?highlight=abc');
+      .toBe('/acordos?highlight=abc');
   });
 });
 
