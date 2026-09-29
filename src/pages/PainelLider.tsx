@@ -34,10 +34,11 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import {
   buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarSetoresDoRetrato,
-  buscarTotalOrfaosPorSetor, buscarTotalPorSetor,
+  buscarTotalOrfaosPorSetor, buscarTotalPorSetor, buscarCreditosDeOrigem,
   mapaSetorDaEquipe, operadoresDoSetor, operadoresDaEquipe,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
+import type { CreditoDeOrigem } from '@/services/analitico/fantasmaTransferencia';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
 import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
@@ -318,6 +319,8 @@ export default function PainelLider() {
   // total do relatório por setor + setores alternativos. (PP: Gráfico = diário.)
   const [analiticoResumos, setAnaliticoResumos] = useState<ResumoOperadorAnalitico[]>([]);
   const [analiticoOrfaos,  setAnaliticoOrfaos]  = useState<Record<string, { total: number; qtd: number }>>({});
+  // BookPlay: o que fica na equipe de origem de quem mudou de setor no mês.
+  const [creditosDeOrigem, setCreditosDeOrigem] = useState<CreditoDeOrigem[]>([]);
   const [analiticoTotalPorSetor, setAnaliticoTotalPorSetor] = useState<Record<string, { total: number; ho: number; qtd: number }>>({});
   const [analiticoSetoresAlt, setAnaliticoSetoresAlt] = useState<Set<string>>(new Set());
   // Origens fora do acumulado (migration 20260812e). Guardadas em estado porque
@@ -364,7 +367,7 @@ export default function PainelLider() {
   // alternativos. Roda nos dois tenants.
   useEffect(() => {
     if (!mostrarAbasAnaliticas || !empresa?.id) {
-      setAnaliticoResumos([]); setAnaliticoOrfaos({});
+      setAnaliticoResumos([]); setAnaliticoOrfaos({}); setCreditosDeOrigem([]);
       setAnaliticoTotalPorSetor({}); setAnaliticoSetoresAlt(new Set());
       return;
     }
@@ -377,15 +380,17 @@ export default function PainelLider() {
       return Promise.all([
         buscarResumoOperadoresAnalitico(empresa.id, mesStr),
         buscarTotalOrfaosPorSetor(empresa.id, mesStr),
+        buscarCreditosDeOrigem(empresa.id, mesStr),
         buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
         // `nome` entrou junto: o seletor de setor do cabeçalho precisa dele, e
         // uma segunda query para a mesma tabela no mesmo efeito seria desperdício.
         supabase.from('setores').select('id, nome, alternativo').eq('empresa_id', empresa.id),
       ]);
-    }).then(([{ data }, orfaos, totSetor, setoresRes]) => {
+    }).then(([{ data }, orfaos, creditos, totSetor, setoresRes]) => {
       if (cancel) return;
       setAnaliticoResumos(data);
       setAnaliticoOrfaos(orfaos);
+      setCreditosDeOrigem(creditos);
       setAnaliticoTotalPorSetor(totSetor);
       const alt = new Set<string>();
       const lista: { id: string; nome: string }[] = [];
@@ -679,6 +684,7 @@ export default function PainelLider() {
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
             equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
             orfaosPorSetor={analiticoOrfaos}
+            creditosDeOrigem={creditosDeOrigem}
             totalPorSetor={isPP ? undefined : analiticoTotalPorSetor}
             setoresAlternativos={isPP ? undefined : analiticoSetoresAlt}
             setorSomaMembros={isPP}

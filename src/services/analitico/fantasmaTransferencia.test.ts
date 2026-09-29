@@ -16,7 +16,7 @@
  * `empresa_id`), então não há entrada para corrigir — é preciso criar uma.
  */
 import { describe, it, expect } from 'vitest';
-import { aplicarFantasmas, type FantasmaTransferencia } from './fantasmaTransferencia';
+import { aplicarFantasmas, creditosDeOrigem, type FantasmaTransferencia } from './fantasmaTransferencia';
 import type { ComposicaoEquipes } from './analitico.service';
 
 const EQUIPE_A = 'eq-play4-manha';
@@ -221,5 +221,53 @@ describe('aplicarFantasmas — bordas', () => {
     expect(r.operadorEquipeMap['bruno'].equipe_id).toBe(EQUIPE_A);
     expect(r.operadorEquipeMap['carla'].equipe_id).toBe(EQUIPE_A);
     expect(Object.keys(r.transferidos ?? {})).toEqual(['bruno', 'carla']);
+  });
+});
+
+/*
+ * BookPlay, 29/09/2026 — o fantasma de SETOR não leva a pessoa inteira de volta.
+ *
+ * Stella e Camilly vieram do Play 1 para o Play 2 (equipe Luan/ Gaby) em 15/09,
+ * com fantasma de pé. O fantasma as recolocava INTEIRAS no Play 1, e o card do
+ * Luan perdia R$ 15.339,12 recebidos no Play 2. Agora a pessoa fica onde está
+ * (o resumo já só traz as linhas do setor dela) e a equipe de origem recebe só
+ * as linhas do setor de origem.
+ */
+describe('aplicarFantasmas — setorFicaNoLugar (BookPlay)', () => {
+  it('fantasma de setor não reescreve a pessoa; a equipe de origem continua listada', () => {
+    const base = composicaoBase();
+    // A origem ficou vazia: sem o fantasma, ela sumiria da lista.
+    base.equipes = base.equipes.filter(e => e.id !== EQUIPE_A);
+    const r = aplicarFantasmas(base, [FANTASMA_BRUNO], nomeDaEquipe, { setorFicaNoLugar: true });
+    expect(r.operadorEquipeMap.bruno).toEqual(base.operadorEquipeMap.bruno);
+    expect(r.transferidos).toEqual({});
+    expect(r.equipes.map(e => e.id)).toContain(EQUIPE_A);
+  });
+
+  it('fantasma de empresa segue recolocando na origem', () => {
+    const r = aplicarFantasmas(composicaoBase(), [{ ...FANTASMA_BRUNO, tipo: 'empresa' }], nomeDaEquipe,
+      { setorFicaNoLugar: true });
+    expect(r.operadorEquipeMap.bruno.equipe_id).toBe(EQUIPE_A);
+    expect(r.transferidos.bruno).toBeDefined();
+  });
+});
+
+describe('creditosDeOrigem — só as linhas do setor de origem', () => {
+  const fora = [
+    { operador_id: 'bruno', setor_id: SETOR_A, total_recebido: 4447.74, total_ho: 0 },
+    // Linha de um terceiro setor: não é origem de fantasma nenhum.
+    { operador_id: 'bruno', setor_id: 'setor-manutencao', total_recebido: 999, total_ho: 0 },
+    { operador_id: 'ana',   setor_id: SETOR_B, total_recebido: 100, total_ho: 0 },
+  ];
+
+  it('credita a equipe de origem com o recebido carimbado no setor de origem', () => {
+    expect(creditosDeOrigem([FANTASMA_BRUNO], fora)).toEqual([{
+      perfilId: 'bruno', nome: 'Bruno Silva', equipeId: EQUIPE_A, setorId: SETOR_A, bruto: 4447.74, ho: 0,
+    }]);
+  });
+
+  it('sem equipe de origem, ou fantasma de empresa, não há crédito de equipe', () => {
+    expect(creditosDeOrigem([{ ...FANTASMA_BRUNO, origemEquipeId: null }], fora)).toEqual([]);
+    expect(creditosDeOrigem([{ ...FANTASMA_BRUNO, tipo: 'empresa' }], fora)).toEqual([]);
   });
 });

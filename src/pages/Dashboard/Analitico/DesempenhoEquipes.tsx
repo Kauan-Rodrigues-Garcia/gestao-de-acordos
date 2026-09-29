@@ -53,6 +53,7 @@ import {
 } from '@/services/analitico/acumuladoDoSetor';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { CardEquipe, type LiderInfo } from './CardEquipe';
+import type { CreditoDeOrigem } from '@/services/analitico/fantasmaTransferencia';
 import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
 import { lideresDaEquipe, type PerfilLider } from './lideresDaEquipe';
 import { ehMesAtual } from '@/lib/mesReferencia';
@@ -77,6 +78,12 @@ interface DesempenhoEquipesProps {
   equipesExtrasPorOperador?: Record<string, string[]>;
   /** Total dos órfãos (sem operador) por setor — entram no card do setor. */
   orfaosPorSetor?: Record<string, { total: number; qtd: number }>;
+  /**
+   * BookPlay: o que a equipe de ORIGEM recebe de quem foi transferido de setor
+   * no mês — só as linhas do setor de origem (20260929210000). Ver
+   * `buscarCreditosDeOrigem`.
+   */
+  creditosDeOrigem?: CreditoDeOrigem[];
   /** Total do RELATÓRIO por setor (soma das linhas carimbadas). Fonte do card
    *  do setor NORMAL — clones não afetam. `contribuicao` é quanto dele é
    *  Contribuição Receptivo gravada pelo 59 — o valor do card do Receptivo. */
@@ -284,12 +291,13 @@ function CardContribuicaoReceptivo({
  * ter mudado.
  */
 const VAZIO: string[] = [];
+const SEM_CREDITOS: CreditoDeOrigem[] = [];
 
 // ── Aba ───────────────────────────────────────────────────────────────────────
 
 export function DesempenhoEquipes({
   empresaId, mes, setorIds, equipeIds = VAZIO, equipes, resumos, operadorEquipeMap,
-  equipesExtrasPorOperador = {}, orfaosPorSetor = {},
+  equipesExtrasPorOperador = {}, orfaosPorSetor = {}, creditosDeOrigem = SEM_CREDITOS,
   totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, setorConciliacao = false, loading,
   fonteLabel = 'relatório analítico',
   conciliacaoVersao = 0,
@@ -617,6 +625,14 @@ export function DesempenhoEquipes({
         if (eqId !== info?.equipe_id) somar(eqId, r);
       }
     }
+    // Quem saiu da equipe por transferência de setor deixa nela o que recebeu
+    // no setor de origem, e só isso — o resto já está no resumo, onde a pessoa
+    // está agora.
+    for (const c of creditosDeOrigem) {
+      if (!porEquipe[c.equipeId]) porEquipe[c.equipeId] = { bruto: 0, ho: 0, ajuste: 0 };
+      porEquipe[c.equipeId].bruto += c.bruto;
+      porEquipe[c.equipeId].ho    += c.ho;
+    }
 
     // Setores: o próprio + os das equipes clonadas, e os órfãos da importação.
     // A regra mora em `acumuladoDoSetor.ts` desde a comissão por meta — a aba
@@ -660,7 +676,7 @@ export function DesempenhoEquipes({
       recebidoPorOperador, metaPorOperador, setorDaEquipe,
     };
   }, [anoNum, mesNum, feriados, contarHoje, resumos, operadorEquipeMap, equipesExtrasPorOperador,
-      orfaosPorSetor, equipes, metas, setoresFoco, equipesFoco]);
+      orfaosPorSetor, creditosDeOrigem, equipes, metas, setoresFoco, equipesFoco]);
 
   /**
    * Operadores de um card, prontos para a área expandida.

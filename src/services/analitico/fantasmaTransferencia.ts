@@ -89,6 +89,21 @@ export function aplicarFantasmas(
   fantasmas: readonly FantasmaTransferencia[],
   /** Nome da equipe de origem, para a entrada criada do caso cross-empresa. */
   nomeDaEquipe: (equipeId: string) => string | undefined,
+  opcoes: {
+    /**
+     * BookPlay, 29/09/2026: no fantasma de SETOR a pessoa fica onde está.
+     *
+     * Recolocá-la inteira na origem tirava da equipe NOVA o que ela já recebeu
+     * no setor novo (Stella e Camilly, Play 1 → Play 2 em 15/09: R$ 15.339,12
+     * fora do card do Luan). Agora cada linha conta no setor do carimbo: o
+     * resumo por operador só traz as do setor onde a pessoa está, e a equipe de
+     * origem recebe as do setor de origem por `creditosDeOrigem`. Aqui só a
+     * equipe de origem volta para a lista, para o card dela existir.
+     *
+     * Transferência de EMPRESA segue como era: lá todas as linhas são da origem.
+     */
+    setorFicaNoLugar?: boolean;
+  } = {},
 ): ComposicaoEquipes {
   if (!fantasmas.length) return { ...composicao, transferidos: {} };
 
@@ -100,6 +115,10 @@ export function aplicarFantasmas(
   const equipesQueVoltam = new Set<string>();
 
   for (const f of fantasmas) {
+    if (opcoes.setorFicaNoLugar && f.tipo === 'setor') {
+      if (f.origemEquipeId) equipesQueVoltam.add(f.origemEquipeId);
+      continue;
+    }
     // A ida zerou `equipe_id`, então a origem é a única fonte da equipe antiga.
     operadorEquipeMap[f.perfilId] = {
       equipe_id:   f.origemEquipeId,
@@ -138,4 +157,52 @@ export function aplicarFantasmas(
     situacaoPorOperador,
     transferidos,
   };
+}
+
+/** O que a equipe de origem recebe de quem saiu dela por transferência de setor. */
+export interface CreditoDeOrigem {
+  perfilId: string;
+  nome: string | null;
+  equipeId: string;
+  setorId: string | null;
+  bruto: number;
+  ho: number;
+}
+
+/** Uma linha de `fn_analitico_recebido_fora_do_setor`. */
+export interface RecebidoForaDoSetor {
+  operador_id: string;
+  setor_id: string;
+  total_recebido: number;
+  total_ho: number;
+}
+
+/**
+ * Casa o que ficou fora do setor da pessoa com o fantasma de SETOR dela.
+ *
+ * Só a linha carimbada no setor de ORIGEM vira crédito da equipe de origem —
+ * «delas só vai aparecer para o Luan o recebimento que receberam para o Play 2»
+ * (29/09/2026). Fantasma sem equipe de origem não gera crédito de equipe: o
+ * setor de origem já soma essas linhas pelo carimbo.
+ */
+export function creditosDeOrigem(
+  fantasmas: readonly FantasmaTransferencia[],
+  fora: readonly RecebidoForaDoSetor[],
+): CreditoDeOrigem[] {
+  const saida: CreditoDeOrigem[] = [];
+  for (const f of fantasmas) {
+    if (f.tipo !== 'setor' || !f.origemEquipeId || !f.origemSetorId) continue;
+    for (const r of fora) {
+      if (r.operador_id !== f.perfilId || r.setor_id !== f.origemSetorId) continue;
+      saida.push({
+        perfilId: f.perfilId,
+        nome:     f.nome,
+        equipeId: f.origemEquipeId,
+        setorId:  f.origemSetorId,
+        bruto:    Number(r.total_recebido) || 0,
+        ho:       Number(r.total_ho) || 0,
+      });
+    }
+  }
+  return saida;
 }

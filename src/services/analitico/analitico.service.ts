@@ -20,8 +20,9 @@ import {
   type ExclusoesPorSetor, type OrigemDoAcumulado,
 } from './composicaoAcumulado';
 import {
-  aplicarFantasmas,
+  aplicarFantasmas, creditosDeOrigem,
   type FantasmaTransferencia, type MarcaTransferido,
+  type CreditoDeOrigem, type RecebidoForaDoSetor,
 } from './fantasmaTransferencia';
 import { equipesLideradasPorPessoa, equipesDaPessoa } from '@/services/equipes/equipeDoLider';
 // Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
@@ -2131,15 +2132,22 @@ export async function buscarFantasmasDoMes(
  */
 export async function buscarValorDoFantasma(
   empresaId: string, mes: string, perfilId: string,
+  /**
+   * Fantasma de SETOR na BookPlay: só as linhas carimbadas no setor de origem
+   * estão na equipe de origem (20260929210000), e só elas saem ao tirá-lo.
+   */
+  setorOrigemId?: string | null,
 ): Promise<{ total: number; linhas: number }> {
   const { primeiro, fim } = limitesDoMes(mes);
-  const { data, error } = await supabase
+  let q = supabase
     .from('analitico_recebimentos')
     .select('valor_recebido')
     .eq('empresa_id', empresaId)
     .eq('operador_id', perfilId)
     .gte('data_pagamento', primeiro)
     .lte('data_pagamento', fim);
+  if (setorOrigemId && !ehPaguePlay()) q = q.eq('setor_id', setorOrigemId);
+  const { data, error } = await q;
 
   if (error || !data) return { total: 0, linhas: 0 };
   const total = data.reduce((s, l) => s + (Number(l.valor_recebido) || 0), 0);
@@ -2454,7 +2462,37 @@ async function buscarComposicaoAoVivo(
   if (!fantasmas.length) return viva;
 
   const nomes = new Map(todasAsEquipes.map(e => [e.id, e.nome]));
-  return aplicarFantasmas(viva, fantasmas, id => nomes.get(id));
+  // BookPlay: no fantasma de setor a pessoa fica onde está e o dinheiro segue o
+  // carimbo da linha — ver `aplicarFantasmas` e `buscarCreditosDeOrigem`.
+  return aplicarFantasmas(viva, fantasmas, id => nomes.get(id), {
+    setorFicaNoLugar: !ehPaguePlay(),
+  });
+}
+
+/**
+ * O que cada equipe de origem recebe de quem foi transferido de SETOR no mês.
+ *
+ * BookPlay (29/09/2026): a pessoa conta, onde está, só as linhas do setor
+ * dela (`fn_analitico_resumo_por_operador`). As linhas do setor de onde saiu
+ * vêm de `fn_analitico_recebido_fora_do_setor` e vão para a equipe de origem,
+ * enquanto o fantasma estiver de pé. PaguePlay não tem esta divisão: lista vazia.
+ */
+export async function buscarCreditosDeOrigem(
+  empresaId: string, mes: string,
+  periodo?: { inicio: string; fim: string } | null,
+): Promise<CreditoDeOrigem[]> {
+  if (ehPaguePlay()) return [];
+  const fantasmas = (await buscarFantasmasDoMes(empresaId, mes)).filter(f => f.tipo === 'setor');
+  if (!fantasmas.length) return [];
+  const { data, error } = await rpcSemTipo<RecebidoForaDoSetor[]>('fn_analitico_recebido_fora_do_setor', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+    p_inicio:     periodo?.inicio ?? null,
+    p_fim:        periodo?.fim ?? null,
+  });
+  // Migration 20260929210000 pendente: sem crédito, e o resto da tela segue.
+  if (error || !data) return [];
+  return creditosDeOrigem(fantasmas, data);
 }
 
 /** Congela o retrato do mês. Chamado depois de importar o analítico daquele

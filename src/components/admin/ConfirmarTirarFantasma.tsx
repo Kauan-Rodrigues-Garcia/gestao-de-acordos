@@ -36,7 +36,7 @@ const formatBRL = (v: number) =>
 
 interface Props {
   /** `null` = fechado. Preenchido = confirmando a saída desta pessoa. */
-  alvo: { perfilId: string; nome: string; equipeNome: string } | null;
+  alvo: { perfilId: string; nome: string; equipeNome: string; setorId?: string | null } | null;
   empresaId: string;
   mes: string;
   removendo: boolean;
@@ -54,7 +54,7 @@ export function ConfirmarTirarFantasma({
     if (!alvo) { setValor(null); return; }
     let cancelado = false;
     setCarregando(true);
-    void buscarValorDoFantasma(empresaId, mes, alvo.perfilId).then(v => {
+    void buscarValorDoFantasma(empresaId, mes, alvo.perfilId, alvo.setorId).then(v => {
       if (!cancelado) { setValor(v); setCarregando(false); }
     });
     return () => { cancelado = true; };

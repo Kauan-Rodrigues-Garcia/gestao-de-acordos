@@ -363,7 +363,7 @@ export default function AdminEquipes() {
   /** Tirados nesta sessão — somem antes do próximo recarregamento. */
   const [fantasmasTirados, setFantasmasTirados] = useState<Set<string>>(new Set());
   const [confirmandoFantasma, setConfirmandoFantasma] =
-    useState<{ perfilId: string; nome: string; equipeNome: string } | null>(null);
+    useState<{ perfilId: string; nome: string; equipeNome: string; setorId?: string | null } | null>(null);
   const [tirandoFantasma, setTirandoFantasma] = useState(false);
 
   /** Mês corrente: é o único em que o fantasma vale (os fechados têm retrato). */
@@ -631,6 +631,11 @@ export default function AdminEquipes() {
   };
 
   /** Este id é um fantasma nesta tela? Decide o visual e o que o X faz. */
+  // Fantasma de SETOR: só as linhas do setor de origem saem ao tirá-lo
+  // (20260929210000). Os de empresa levam o mês inteiro, como sempre.
+  const setorDoFantasmaDeSetor = (operadorId: string) =>
+    fantasmas.find(f => f.perfilId === operadorId && f.tipo === 'setor')?.origemSetorId ?? null;
+
   const ehFantasma = (operadorId: string) =>
     fantasmas.some(f => f.perfilId === operadorId);
 
@@ -1820,6 +1825,7 @@ export default function AdminEquipes() {
                                                       perfilId:   op.id,
                                                       nome:       op.nome,
                                                       equipeNome: equipe.nome,
+                                                      setorId:    setorDoFantasmaDeSetor(op.id),
                                                     })
                                                   : handleRemoverDaEquipe
                                             }
@@ -1869,6 +1875,7 @@ export default function AdminEquipes() {
                                                   perfilId:   op.id,
                                                   nome:       op.nome,
                                                   equipeNome: equipe.nome,
+                                                  setorId:    setorDoFantasmaDeSetor(op.id),
                                                 })
                                               : handleRemoverDaEquipe
                                         }
