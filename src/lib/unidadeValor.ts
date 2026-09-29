@@ -52,19 +52,24 @@ export function unidadeOposta(unidade: UnidadeValor): UnidadeValor {
  *
  * Serve para tudo que deriva da meta: esperado até hoje, meta diária e quanto
  * falta. Não serve para o recebido — esse tem coluna própria.
+ *
+ * Em H.O. é EXATAMENTE o número que a aba Metas mostra: bruto × percentual
+ * configurado, arredondado ao centavo (`fmtNum` de MetasConfig). Quem digitou
+ * R$ 5.000,00 lá vê R$ 5.000,00 aqui — não R$ 4.999,98.
+ *
+ * Até 29/09/2026 as telas do Painel Líder convertiam pela proporção H.O. ÷
+ * bruto do próprio recebido (`fatorDoRecebido`, commit d9804a5). Isso fazia a
+ * meta mudar de valor conforme o recebido e descolar da aba Metas (setor com
+ * R$ 1.500.000,00 configurado aparecia com R$ 1.532.895,71). O usuário vetou:
+ * meta no painel é a meta configurada, sem conversão própria.
  */
 export function metaNaUnidade(
   meta: number | null | undefined,
   unidade: UnidadeValor,
-  /**
-   * A proporção H.O. ÷ bruto do recebido que esta meta vai medir — ver
-   * `fatorDoRecebido`. Sem ela, o percentual configurado da empresa.
-   */
-  fatorHO?: number,
 ): number | null {
   if (meta === null || meta === undefined || !Number.isFinite(meta)) return null;
   if (unidade !== 'ho') return meta;
-  return fatorHO !== undefined ? meta * fatorHO : paraHO(meta);
+  return Math.round(paraHO(meta) * 100) / 100;
 }
 
 /**

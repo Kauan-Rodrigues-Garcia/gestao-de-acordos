@@ -25,9 +25,13 @@ describe('metaNaUnidade', () => {
     }
   });
 
-  it('com fator explícito (a proporção do recebido), ele manda', () => {
-    expect(metaNaUnidade(META_PP, 'ho', 0.2496)).toBeCloseTo(18000, 2);
-    expect(metaNaUnidade(META_PP, 'bruto', 0.2496)).toBe(META_PP);
+  it('é o número da aba Metas, ao centavo: R$ 5.000,00 digitado lê R$ 5.000,00', () => {
+    // A aba Metas grava 5000 ÷ 0,2260 = 22.123,89 (centavos) e mostra
+    // 22.123,89 × 0,2260 = 4.999,99914 como «5.000,00». O painel tem de mostrar
+    // o mesmo — antes, pela proporção do recebido, saía 4.999,98.
+    expect(metaNaUnidade(22123.89, 'ho')).toBe(5000);
+    // Setor: R$ 1.500.000,00 na aba Metas, e não R$ 1.532.895,71.
+    expect(metaNaUnidade(Math.round((1_500_000 / 0.2260) * 100) / 100, 'ho')).toBe(1_500_000);
   });
 
   it('no padrão novo (22,60%), a mesma meta bruta lê 16.298,08 de H.O.', () => {

@@ -98,7 +98,7 @@ import { cn } from '@/lib/utils';
 import {
   getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO,
 } from '@/lib/index';
-import { useHoPercentual, rotuloHoPercentual, percentualImplicito } from '@/lib/hoPercentual';
+import { useHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
@@ -555,8 +555,8 @@ export function QuartisOperadores({
   empresaId, mes, setorIds, equipeIds = VAZIO, equipes, resumos,
   operadorEquipeMap, equipesExtrasPorOperador = {}, loading,
 }: QuartisOperadoresProps) {
-  // Fallback da conversão (quem ainda não recebeu) e rótulo do rodapé. A
-  // meta de quem já recebeu converte pela proporção do próprio recebido.
+  // O percentual da aba Metas: converte a frente indireta (acordos) e rotula o
+  // rodapé. A meta converte por ele também, dentro de `metaNaUnidade`.
   const ho = useHoPercentual();
   // O recorte vem do pai, resolvido por `resolverEscopoPainel`. Nada aqui o
   // completa nem o reinterpreta — ver o cabeçalho do arquivo.
@@ -891,19 +891,15 @@ export function QuartisOperadores({
        * como veio da coluna do relatório. Multiplicar de novo aqui daria o
        * H.O. do H.O.
        *
-       * A meta converte pela proporção do PRÓPRIO recebido da pessoa (H.O. ÷
-       * bruto), não pelo percentual configurado: agosto foi gravado a 24,96%,
-       * setembro vem do relatório, e com o configurado a % em H.O. descolaria
-       * da % em bruto — e o quartil mudaria com o alternador. Ver
-       * `fatorDoRecebido` em lib/hoPercentual.
+       * A meta em H.O. é a MESMA da aba Metas (bruto × percentual configurado,
+       * ao centavo) — ver `metaNaUnidade`. Não converte pela proporção do
+       * recebido de cada pessoa: isso fazia R$ 5.000,00 virar R$ 4.999,98.
        *
        * A frente INDIRETA vem de acordos, sem coluna de H.O.: converte pelo
-       * mesmo fator, para as duas metades somarem na mesma escala.
+       * percentual configurado, o mesmo da meta.
        */
-      // Sem recebido ainda: o percentual da aba Metas (`ho`, do hook).
-      const fatorOp = percentualImplicito(recebidoMap[op.id] ?? 0, hoMap[op.id] ?? 0) ?? ho;
       const metaBruta = metasOp[op.id] ?? null;
-      const meta = emHO ? metaNaUnidade(metaBruta, 'ho', fatorOp) : metaBruta;
+      const meta = emHO ? metaNaUnidade(metaBruta, 'ho') : metaBruta;
       const recebido = emHO ? (hoMap[op.id] ?? 0) : (recebidoMap[op.id] ?? 0);
 
       const metaIndBruta = metasIndiretas[op.id] ?? null;
@@ -921,9 +917,9 @@ export function QuartisOperadores({
        */
       const dupla = combinarMetaDupla({
         metaDireta: meta,
-        metaIndireta: emHO ? metaNaUnidade(metaIndBruta, 'ho', fatorOp) : metaIndBruta,
+        metaIndireta: emHO ? metaNaUnidade(metaIndBruta, 'ho') : metaIndBruta,
         recebidoDireto: recebido,
-        recebidoIndireto: emHO ? indiretoBruto * fatorOp : indiretoBruto,
+        recebidoIndireto: emHO ? indiretoBruto * ho : indiretoBruto,
       });
 
       // Sem `limitePct`: esta tabela nunca saturou a %, ao contrário do header
@@ -1414,10 +1410,8 @@ export function QuartisOperadores({
         {isPP && ' A meta diária ficou dentro da linha expandida.'}
         {emHO && (
           <>
-            {' '}O recebimento em H.O. vem do relatório; a meta em H.O. usa a
-            mesma proporção do recebido de cada pessoa (sem recebido ainda,
-            {' '}{rotuloHoPercentual(ho)}, o percentual da aba Metas). Por isso a
-            % e o quartil são os mesmos nas duas unidades.
+            {' '}O recebimento em H.O. vem do relatório; a meta em H.O. é a da
+            aba Metas ({rotuloHoPercentual(ho)} da meta bruta).
           </>
         )}
       </p>
