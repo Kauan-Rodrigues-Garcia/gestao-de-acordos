@@ -380,10 +380,10 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* /admin/setores agora é aba dentro de /admin/usuarios */}
-              <Route path={ROUTE_PATHS.ADMIN_SETORES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=setores'} replace />} />
+              {/* /admin/setores e /admin/equipes são a aba Estrutura de Pessoas */}
+              <Route path={ROUTE_PATHS.ADMIN_SETORES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=estrutura'} replace />} />
               {/* /admin/equipes agora é aba dentro de /admin/usuarios */}
-              <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
+              <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=estrutura'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador']} requiredPermissao="ver_configuracoes">

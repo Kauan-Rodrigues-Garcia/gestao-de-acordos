@@ -175,19 +175,24 @@ export function rotuloCategoria(key: string): string {
  *
  * `permissao` é a chave de `cargos_permissoes`: a lista é recortada pelo que
  * quem está abrindo enxerga, para o líder do Play 5 não relatar erro numa aba
- * que ele nunca abriu. Sem chave = todo mundo vê aquela tela.
+ * que ele nunca abriu. Sem chave = todo mundo vê aquela tela; `permissoes` =
+ * basta uma.
  */
-export const ABAS_DO_SISTEMA: { valor: string; permissao?: string }[] = [
-  { valor: 'Dashboard' },
+export const ABAS_DO_SISTEMA: { valor: string; permissao?: string; permissoes?: readonly string[] }[] = [
+  // Os nomes do Mapa de Abas (29/09/2026). Ticket antigo guarda o nome que a
+  // tela tinha quando foi aberto — o campo é texto, não chave.
+  { valor: 'Início' },
   { valor: 'Acordos',            permissao: 'ver_acordos' },
-  { valor: 'Novo Acordo',        permissao: 'criar_acordos' },
-  { valor: 'Importar Excel',     permissao: 'importar_excel' },
+  { valor: 'Novo acordo',        permissao: 'criar_acordos' },
+  { valor: 'Acordos › Importar planilha', permissao: 'importar_excel' },
+  { valor: 'Acordos › Excluídos', permissao: 'ver_lixeira' },
+  { valor: 'Pix Automático',     permissao: 'ver_pix_automatico' },
   { valor: 'Analítico',          permissao: 'ver_analitico' },
-  { valor: 'Painel Líder',       permissao: 'ver_painel_lider' },
-  { valor: 'Painel Diretoria',   permissao: 'ver_painel_diretoria' },
-  { valor: 'Usuários',           permissao: 'ver_usuarios' },
-  { valor: 'Metas',              permissao: 'ver_metas' },
-  { valor: 'Lixeira',            permissao: 'ver_lixeira' },
+  // Telas que juntam outras: aparecem para quem abre alguma das partes.
+  { valor: 'Desempenho',         permissoes: ['ver_painel_lider', 'ver_painel_diretoria', 'ver_analitico'] },
+  { valor: 'Pessoas',            permissao: 'ver_usuarios' },
+  { valor: 'Pessoas › Metas e comissão', permissao: 'ver_metas' },
+  { valor: 'Fechamento do mês',  permissoes: ['ver_fechamento', 'ver_rh_gestao'] },
   { valor: 'Campanha Fácil',     permissao: 'ver_campanha_facil' },
   { valor: 'Solicitar Atendimento', permissao: 'ver_solicitacoes_whatsapp' },
   { valor: 'Configurações',      permissao: 'ver_configuracoes' },

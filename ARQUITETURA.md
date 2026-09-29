@@ -92,15 +92,21 @@ src/
 │
 ├── pages/                # Uma pasta por módulo
 │   ├── Login.tsx · Registro.tsx
-│   ├── Dashboard/            # Lista + filtros + métricas + fila WhatsApp
-│   ├── Acordos/              # Lista, Pix Automático, ranking e metas de Pix
+│   ├── Dashboard/            # Início (painel) e a lista de acordos da PaguePlay
+│   ├── Inicio/               # A porta de entrada: Mês, Hoje, Formas, Empresa
+│   ├── Acordos/              # Lista (com Excluídos) e o componente do Pix Automático
+│   ├── PixAutomatico/        # Página do Pix Automático (item próprio)
 │   ├── AcordoForm/           # Cadastro/edição (FormPP / FormBP)
 │   ├── AcordoDetalhe.tsx     # Detalhes + histórico
-│   ├── Analitico/            # Aba Analítico + aba Recebimento diário
+│   ├── Analitico/            # Recebimentos, Colchão, Ajustes (e o Ranking/Formas/Destaques/Desafios embutidos)
 │   ├── ImportarExcel.tsx     # Importação via planilha (Bookplay + PaguePLAY)
-│   ├── Lixeira.tsx           # Acordos excluídos (soft delete, 3 dias)
-│   ├── PainelLider.tsx       # Gestão da equipe + analítico
-│   ├── PainelDiretoria/      # KPIs estratégicos para diretoria
+│   ├── Lixeira.tsx           # Acordos › Excluídos (soft delete, 3 dias)
+│   ├── Desempenho/           # Equipes, Pessoas, Desafios, Plantão Elite
+│   ├── FechamentoDoMes/      # Fechamento + RH Gestão
+│   ├── Nucleo/               # Dashboard – ADM + Controle de Números
+│   ├── AdminDados/ · AdminAuditoria/  # Administração › Dados e › Auditoria
+│   ├── PainelLider.tsx       # Abas embutidas em Desempenho e Analítico › Ajustes
+│   ├── PainelDiretoria/      # Abas embutidas em Início, Desempenho e Dados
 │   ├── Ouvidoria/            # Reclamações e sugestões [PP]
 │   ├── CampanhaFacil/        # Campanhas de cobrança [BP]
 │   ├── SolicitacoesWhatsapp/ # Chat interno de solicitação
@@ -117,7 +123,10 @@ src/
 > As telas de administração foram consolidadas em abas: `/admin/setores`,
 > `/admin/equipes`, `/admin/logs`, `/admin/cargos` e `/comemoracoes` continuam
 > existindo como **redirects** para a aba correspondente — link antigo, favorito
-> e notificação já enviada continuam caindo na tela certa.
+> e notificação já enviada continuam caindo na tela certa. O Mapa de Abas
+> (29/09/2026) somou `/lider`, `/diretoria`, `/rh-gestao`, `/dashboard-adm`,
+> `/controle-numeros`, `/admin/lixeira` e `/admin/metas` à lista — ver
+> [Mapa de Abas](#mapa-de-abas--telas-que-juntam-outras).
 
 ---
 
@@ -1465,12 +1474,78 @@ menos), então «desfazer» é gravar `[]` — e desfazer a ordem de um cargo te
 devolvê-lo à geral, não deixá-lo com um menu sem abas. Na linha geral, `[]`
 devolve à ordem do código.
 
+### As seções (Mapa de Abas, 29/09/2026)
+
+O menu da cobrança é agrupado em cinco seções fixas — Operação, Gestão,
+Ferramentas, Núcleo ADM e Administração (`SECOES_MENU`). A ordem salva vale
+**dentro** de cada seção: arrastar Tickets para cima não o tira de Ferramentas,
+e o editor mostra as seções e só deixa mover dentro delas. Rota salva de uma
+tela que deixou de ser item (Painel Líder, Lixeira…) é ignorada, como sempre.
+
+«Novo acordo» não é item: é um botão fixo acima das seções (`NOVO_ACORDO`), com
+a mesma chave de antes. Ver [Mapa de Abas](#mapa-de-abas--telas-que-juntam-outras).
+
 ### O que a tabela não guarda
 
 Rótulo, ícone, permissão e quais abas existem: isso é do código. A ordem é só
 apresentação, e é aplicada **depois** do filtro de permissão — reordenar nunca
 traz de volta uma aba que a permissão escondeu. Inverter os dois passos
 transformaria uma preferência visual em concessão de acesso.
+
+---
+
+## Mapa de Abas — telas que juntam outras
+
+> Proposta: «Mapa de Abas do Gestão», 29/09/2026 · régua: `src/lib/mapaAbas.ts` ·
+> moldura: `src/components/TelaComAbas.tsx` · detalhes: `docs/MAPA-DE-ABAS.md`.
+
+O menu da cobrança passou de 18 itens para 15, em cinco seções, e as telas que
+respondiam a mesma pergunta em lugares diferentes viraram uma. **Nenhuma
+tabela, número ou regra de cálculo mudou, e nenhuma chave de permissão nasceu.**
+
+| Tela nova | Juntou | Chaves que abrem |
+|---|---|---|
+| Início (`/`) | Dashboard, gaveta Desempenho do Dia, Destaques e Formas do Analítico, Visão geral da Diretoria | `ver_dashboard`; as leituras Hoje/Formas/Empresa pelas chaves de onde vieram |
+| Acordos (`/acordos`) | Acordos, Lixeira (aba Excluídos), Importar Excel (botão); na PaguePlay, a lista que morava no Dashboard | BookPlay `ver_acordos`; PaguePlay `ver_dashboard` |
+| Pix Automático | a 5ª aba de Acordos | `ver_pix_automatico` |
+| Analítico | Recebimentos, Colchão e o Ajuste de recebimento do Painel Líder | `ver_analitico`, `painel_lider_sub_ajuste_recebimento` |
+| Desempenho | Painel Líder, parte de desempenho do Painel Diretoria, Ranking e Desafios | qualquer de `ver_painel_lider`, `ver_painel_diretoria`, `ver_analitico` + a sub-chave de cada aba |
+| Fechamento do mês | Fechamento + RH Gestão | `ver_fechamento` ou `ver_rh_gestao` |
+| Núcleo | Dashboard – ADM + Controle de Números | `ver_dashboard_adm` ou `ver_controle_numeros` |
+| Dados e importações | abas técnicas do Painel Diretoria, cards de banco e restauração | super_admin (59), `ver_banco_dados`, relatórios PP |
+| Auditoria | Configurações › Logs | `ver_logs`, `ver_monitoramento_uso` |
+
+### Como uma tela entra em outra
+
+A tela de dentro não foi reescrita: ganhou props opcionais (`abas`, `abaFixa`,
+`compacto`, `embutida`, `secao`) que tiram o título e a régua própria e deixam o
+resto — mês, filtros, botões. Quem embute desenha a régua com `TelaComAbas`,
+que lê a aba de `?tab=`, recusa a aba sem permissão e mantém montadas as abas já
+visitadas. Abas com a mesma `instancia` dividem um componente (as quatro do
+Controle de Números são uma montagem só).
+
+### Uma régua para menu, rota e tela
+
+`lib/mapaAbas.ts` responde quais abas cada tela desenha. O menu mostra o item
+quando sobra **alguma** aba (`abasDoMenu` refina por ela); a rota usa
+`ProtectedRoute algumaPermissao={[…]}`; a tela desenha exatamente as mesmas.
+Escrever a regra em dois lugares faria o menu oferecer uma tela vazia na
+primeira chave mexida.
+
+### Monitoramento de uso
+
+Tela embutida mede as abas dela a partir do nível de quem a embute
+(`NivelBaseUso`): o Controle de Números dentro do Núcleo grava
+`nucleo:celulares`, e não briga pelo nível 1. Aba montada e escondida não
+escreve nível nenhum.
+
+### Rotas antigas
+
+Todas redirecionam, com a busca junto (`Redirecionar` em `App.tsx`):
+`/lider` → Desempenho, `/diretoria` → Início › Empresa, `/rh-gestao` →
+Fechamento do mês › Premiação, `/dashboard-adm` e `/controle-numeros` → Núcleo,
+`/admin/lixeira` → Acordos › Excluídos, `/admin/logs` → Auditoria,
+`/admin/metas` → Pessoas › Metas, `/acordos?tab=pix` → Pix Automático.
 
 ---
 

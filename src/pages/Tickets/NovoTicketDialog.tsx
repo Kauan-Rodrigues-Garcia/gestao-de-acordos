@@ -100,7 +100,8 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
   }, [aberto, empresaId, precisaPessoas, precisaSetores, pessoas.length, setores.length]);
 
   const abasVisiveis = useMemo(
-    () => ABAS_DO_SISTEMA.filter(a => !a.permissao || temPermissao(a.permissao)),
+    () => ABAS_DO_SISTEMA.filter(a => (a.permissao ? temPermissao(a.permissao) : true)
+      && (a.permissoes ? a.permissoes.some(temPermissao) : true)),
     [temPermissao],
   );
 

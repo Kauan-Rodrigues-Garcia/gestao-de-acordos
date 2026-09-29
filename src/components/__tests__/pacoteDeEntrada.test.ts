@@ -41,8 +41,10 @@ describe('pacote de entrada', () => {
   it('o Layout não importa estaticamente os painéis sob demanda', () => {
     const imports = importsEstaticos(ler('components/Layout.tsx'));
     for (const painel of [
+      // Desempenho do Dia e o painel do Desafio deixaram de ser gaveta (Mapa de
+      // Abas): o primeiro é Início › Hoje, o segundo saiu. A trava continua
+      // para o Desempenho do Dia não voltar ao pacote de entrada.
       './DesempenhoDia',
-      './DesafioMenu/PainelDesafio',
       './ModalRecortarFoto',
       '@/components/MenuLateralEditor',
     ]) {

@@ -144,7 +144,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
     nao_pagos: 'Não pagos', pix: 'Pix Automático', excluidos: 'Excluídos',
   },
   'admin/usuarios': {
-    usuarios: 'Lista', setores: 'Setores', equipes: 'Equipes', metas: 'Metas',
+    usuarios: 'Lista', setores: 'Setores', equipes: 'Equipes', estrutura: 'Estrutura', metas: 'Metas',
     acompanhamento: 'Acompanhamento', comemoracoes: 'Comemorações',
   },
   'admin/usuarios:metas': { metas: 'Metas', comissao: 'Comissão' },

@@ -21,7 +21,7 @@
  * </Layout>
  * ```
  */
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { lazy, useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -105,6 +105,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { empresa, branding } = useEmpresa();
   const tenant = useTenant();
   const navigate = useNavigate();
+  const local = useLocation();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -452,7 +453,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Nav — por seção. A seção sem item liberado não desenha nem o título. */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto" data-tour="menu-lateral">
         {secoesMenu.map(secao => (<div key={secao.chave} className="pb-2">
           {(sidebarOpen || mobileOpen)
             ? <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">{secao.rotulo}</p>
@@ -528,8 +529,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <DesafioMenu
           desafio={desafioDestaque}
           expandido={sidebarOpen || mobileOpen}
-          aberto={false}
-          onToggle={() => { setMobileOpen(false); navigate(`${ROUTE_PATHS.DESEMPENHO}?tab=desafios`); }}
+          ativo={local.pathname === ROUTE_PATHS.DESEMPENHO && local.search.includes('tab=desafios')}
+          onAbrir={() => { setMobileOpen(false); navigate(`${ROUTE_PATHS.DESEMPENHO}?tab=desafios`); }}
         />
       )}
 

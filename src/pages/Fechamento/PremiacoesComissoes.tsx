@@ -153,7 +153,7 @@ const COLUNA_DO_TIPO: Record<TipoRemuneracao, Coluna> = {
 /** O cabeçalho do recorte: as colunas de valor são só as dos tipos presentes. */
 function cabecalho(tipos: readonly TipoRemuneracao[]): Coluna[] {
   return [
-    { rotulo: 'CRACHÁ', alinhamento: 'text-center', dica: 'Crachá do RH — o mesmo que o RH Gestão vai ler' },
+    { rotulo: 'CRACHÁ', alinhamento: 'text-center', dica: 'Crachá do RH — o mesmo que a conferência do RH vai ler' },
     { rotulo: 'NOME', alinhamento: 'text-left' },
     { rotulo: 'SETOR', alinhamento: 'text-left', dica: 'Setor de origem no mês e a cidade dele no RH' },
     ...tipos.map(t => COLUNA_DO_TIPO[t]),

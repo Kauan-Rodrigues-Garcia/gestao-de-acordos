@@ -1,6 +1,10 @@
 /**
  * A mídia mantém 40 px nos dois estados do menu.
  * Ao expandir, aparece apenas o rótulo de navegação "Desafios".
+ *
+ * Era o gatilho de uma gaveta por cima da tela; desde o Mapa de Abas
+ * (29/09/2026) é atalho para Desempenho › Desafios, onde o placar mora. Por
+ * isso é um link de navegação e não anuncia mais um diálogo.
  */
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -10,25 +14,25 @@ import type { Desafio } from '@/services/desafios/types';
 export interface DesafioMenuProps {
   desafio: Desafio;
   expandido: boolean;
-  aberto: boolean;
-  onToggle: () => void;
+  /** A pessoa já está em Desempenho › Desafios. */
+  ativo: boolean;
+  onAbrir: () => void;
 }
 
-export function DesafioMenu({ desafio, expandido, aberto, onToggle }: DesafioMenuProps) {
+export function DesafioMenu({ desafio, expandido, ativo, onAbrir }: DesafioMenuProps) {
   const { Icone, destaque } = estiloDaCampanha(desafio.visual);
   return (
     <div className="px-2 pt-2">
       <button
         type="button"
-        onClick={onToggle}
+        onClick={onAbrir}
         title="Desafios"
         aria-label="Desafios"
-        aria-expanded={aberto}
-        aria-haspopup="dialog"
+        aria-current={ativo ? 'page' : undefined}
         className={cn(
           'flex h-12 w-full items-center gap-2 overflow-hidden rounded-lg px-1 text-left text-sm font-medium transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          aberto ? 'text-sidebar-foreground' : 'text-sidebar-foreground/70 hover:text-sidebar-foreground',
+          ativo ? 'text-sidebar-foreground' : 'text-sidebar-foreground/70 hover:text-sidebar-foreground',
         )}
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center">

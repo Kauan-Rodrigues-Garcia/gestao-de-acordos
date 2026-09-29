@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound } from 'lucide-react';
+import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
@@ -102,7 +102,11 @@ type PerfilComClone = Perfil & { _cloneDe?: string | null };
 
 export default function AdminUsuarios() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabFromUrl = searchParams.get('tab') ?? 'usuarios';
+  // Setores e Equipes viraram a aba Estrutura (Mapa de Abas, 29/09/2026): as
+  // duas mostravam a mesma árvore. Link antigo com `?tab=setores|equipes`
+  // cai nela.
+  const tabBruta = searchParams.get('tab') ?? 'usuarios';
+  const tabFromUrl = tabBruta === 'setores' || tabBruta === 'equipes' ? 'estrutura' : tabBruta;
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -242,8 +246,7 @@ export default function AdminUsuarios() {
   const podeVerAcompanhamento = ehComercial && temPermissao('ver_acompanhamento');
   const abasVisiveis = [
     podeVerUsuarios && 'usuarios',
-    podeVerSetores && 'setores',
-    podeVerEquipes && 'equipes',
+    (podeVerSetores || podeVerEquipes) && 'estrutura',
     (podeVerMetas || podeVerMetasVendas) && 'metas',
     podeVerAcompanhamento && 'acompanhamento',
     podeVerComemoracoes && 'comemoracoes',
@@ -271,9 +274,9 @@ export default function AdminUsuarios() {
    */
   const ROTULO_ABA: Record<string, { label: string; Icon: typeof Users }> = {
     usuarios:     { label: 'Usuários',     Icon: Users },
-    setores:      { label: 'Setores',      Icon: Building2 },
-    equipes:      { label: 'Equipes',      Icon: Users2 },
-    metas:        { label: 'Metas',        Icon: Target },
+    estrutura:    { label: 'Estrutura',    Icon: Building2 },
+    // Na cobrança a aba traz a regra de comissão junto (Metas › Comissão).
+    metas:        { label: ehCobranca ? 'Metas e comissão' : 'Metas', Icon: Target },
     acompanhamento: { label: 'Acompanhamento', Icon: UsersRound },
     comemoracoes: { label: 'Comemorações', Icon: PartyPopper },
     desligados:   { label: 'Desligados',   Icon: UserX },
@@ -1123,9 +1126,9 @@ export default function AdminUsuarios() {
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" /> Usuários
+              <Users className="w-5 h-5 text-primary" /> Pessoas
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e equipes</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Usuários, setores e equipes, metas e comemorações</p>
           </div>
 
           {/*
@@ -1180,7 +1183,7 @@ export default function AdminUsuarios() {
             abas={abasInternas}
             ativa={tabAtiva ?? null}
             onTrocar={selecionarAba}
-            rotulo="Seção de Usuários"
+            rotulo="Seção de Pessoas"
           />
         </div>
 
@@ -1418,18 +1421,24 @@ export default function AdminUsuarios() {
         </TabsContent>}
 
 
-        {/* ─── Aba: Setores ──────────────────────────────────────────── */}
-        {podeVerSetores && (
-          <TabsContent value="setores" className="flex-1 overflow-y-auto mt-0">
-            <AdminSetoresAba />
+        {/* ─── Aba: Estrutura (Setores + Equipes) ─────────────────────────
+            Eram duas abas para a mesma árvore. Cada metade continua atrás da
+            chave dela (`ver_setores`, `ver_equipes`). */}
+        {(podeVerSetores || podeVerEquipes) && (
+          <TabsContent value="estrutura" className="flex-1 overflow-y-auto mt-0">
+            {podeVerSetores && (
+              <section aria-label="Setores">
+                <h2 className="px-6 pt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setores</h2>
+                <AdminSetoresAba />
+              </section>
+            )}
+            {podeVerEquipes && (
+              <section aria-label="Equipes" className={podeVerSetores ? 'border-t border-border mt-4 pt-2' : undefined}>
+                <h2 className="px-6 pt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Equipes</h2>
+                <AdminEquipes />
+              </section>
+            )}
           </TabsContent>
-        )}
-
-        {/* ─── Aba: Equipes ──────────────────────────────────────────── */}
-        {podeVerEquipes && (
-        <TabsContent value="equipes" className="flex-1 overflow-y-auto mt-0">
-          <AdminEquipes />
-        </TabsContent>
         )}
 
         {/* ─── Aba: Metas (BookPlay) ─────────────────────────────────── */}

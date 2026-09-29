@@ -67,7 +67,7 @@ export function CabecalhoCompetencia({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold leading-tight">RH Gestão</h1>
+          <h1 className="text-lg font-semibold leading-tight">Conferência e aprovação do RH</h1>
           <p className="text-xs text-muted-foreground">
             Controle de Premiação e Comissão
           </p>

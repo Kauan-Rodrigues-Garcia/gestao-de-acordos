@@ -82,7 +82,7 @@ export default function Mestre59Fontes({ empresaId, mes, versao, aoTrocar }: Pro
       + `Hoje: ${formatBRL(l.valorHoje)} em ${l.linhasHoje} linhas\n`
       + `Depois: ${formatBRL(l.valorProjetado)} em ${l.linhasProjetado} linhas\n`
       + `Diferença: ${d >= 0 ? '+' : ''}${formatBRL(d)}\n\n`
-      + 'Isso muda o número deste setor no Dashboard, no Painel Líder, no Analítico '
+      + 'Isso muda o número deste setor no Início, em Desempenho, no Analítico '
       + 'e na comissão — para todo mundo. O retrato atual fica guardado e dá para '
       + 'voltar.',
     );
@@ -151,7 +151,7 @@ export default function Mestre59Fontes({ empresaId, mes, versao, aoTrocar }: Pro
             </h3>
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
               Trocar a fonte de um setor grava o 59 dentro do analítico — a tabela que o
-              Dashboard, o Painel Líder, o Analítico, a comissão e os desafios já leem.
+              Início, o Desempenho, o Analítico, a comissão e os desafios já leem.
               Nenhuma dessas telas muda; todas passam a mostrar o número do 59.
               {resumo.deltaTotal !== 0 && (
                 <>

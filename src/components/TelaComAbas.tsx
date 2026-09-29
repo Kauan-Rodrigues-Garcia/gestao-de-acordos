@@ -83,9 +83,11 @@ export function TelaComAbas({
     setVisitadas(prev => (prev.has(inst) ? prev : new Set(prev).add(inst)));
   }, [ativaAba]);
 
-  // A última aba vista de cada instância: escondida, ela fica como estava.
-  const ultimaDe = useRef(new Map<string, AbaDaTela>());
-  if (ativaAba) ultimaDe.current.set(instanciaDe(ativaAba), ativaAba);
+  // A última aba vista de cada instância: escondida, ela fica como estava. Só a
+  // CHAVE é guardada — a aba em si é relida da lista atual, para o conteúdo
+  // escondido não desenhar com as permissões de uma renderização antiga.
+  const ultimaDe = useRef(new Map<string, string>());
+  if (ativaAba) ultimaDe.current.set(instanciaDe(ativaAba), ativaAba.chave);
 
   useSubAbaUso(carregando ? null : ativa);
 
@@ -159,7 +161,9 @@ export function TelaComAbas({
       {ativaAba && instancias.map(([inst, dona]) => {
         const ehAtiva = instanciaDe(ativaAba) === inst;
         if (!ehAtiva && !visitadas.has(inst)) return null;
-        const quem = ehAtiva ? ativaAba : (ultimaDe.current.get(inst) ?? dona);
+        const quem = ehAtiva
+          ? ativaAba
+          : (visiveis.find(a => a.chave === ultimaDe.current.get(inst)) ?? dona);
         return (
           <div key={inst} className={cn(!ehAtiva && 'hidden')}>
             <NivelBaseUso acima={1} ativo={ehAtiva}>

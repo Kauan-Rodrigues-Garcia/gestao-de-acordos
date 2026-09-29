@@ -6,7 +6,7 @@ import { DesafioMenu } from './index';
 describe('DesafioMenu', () => {
   it('mantém apenas a mídia recolhida e acrescenta só Desafios ao expandir', () => {
     const onToggle = vi.fn();
-    const { container, rerender } = render(<DesafioMenu desafio={desafioFixture} expandido={false} aberto={false} onToggle={onToggle} />);
+    const { container, rerender } = render(<DesafioMenu desafio={desafioFixture} expandido={false} ativo={false} onAbrir={onToggle} />);
     const imagem = container.querySelector('img')!;
     expect(imagem).toHaveAttribute('width', '40');
     expect(imagem).toHaveAttribute('height', '40');
@@ -14,16 +14,17 @@ describe('DesafioMenu', () => {
     expect(screen.queryByText(desafioFixture.nome)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Desafios' }));
     expect(onToggle).toHaveBeenCalledOnce();
-    rerender(<DesafioMenu desafio={desafioFixture} expandido aberto onToggle={onToggle} />);
+    rerender(<DesafioMenu desafio={desafioFixture} expandido ativo onAbrir={onToggle} />);
     expect(screen.getByText('Desafios')).toBeInTheDocument();
     expect(screen.queryByText(desafioFixture.nome)).not.toBeInTheDocument();
     expect(container.querySelector('img')).toBe(imagem);
     expect(imagem).toHaveAttribute('width', '40');
-    expect(screen.getByRole('button', { name: 'Desafios' })).toHaveAttribute('aria-expanded', 'true');
+    // Atalho para Desempenho › Desafios: já estando lá, diz que é a página atual.
+    expect(screen.getByRole('button', { name: 'Desafios' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('continua acessível sem mídia cadastrada', () => {
-    const { container } = render(<DesafioMenu desafio={{ ...desafioFixture, midiaUrl: null }} expandido={false} aberto={false} onToggle={vi.fn()} />);
+    const { container } = render(<DesafioMenu desafio={{ ...desafioFixture, midiaUrl: null }} expandido={false} ativo={false} onAbrir={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Desafios' })).toBeInTheDocument();
     expect(container.querySelector('img')).toBeNull();
   });

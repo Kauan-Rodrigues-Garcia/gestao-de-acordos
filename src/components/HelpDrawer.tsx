@@ -122,7 +122,7 @@ const SECTIONS: Section[] = [
       },
       {
         q: 'Excluí um acordo por engano. É possível recuperar?',
-        a: 'Sim. Acesse "Lixeira" no menu lateral — acordos excluídos ficam disponíveis por 3 dias para restauração.',
+        a: 'Sim. Em Acordos, abra a aba "Excluídos" — acordos excluídos ficam disponíveis por 3 dias para restauração.',
       },
       {
         q: 'Como mudar o tema do sistema?',

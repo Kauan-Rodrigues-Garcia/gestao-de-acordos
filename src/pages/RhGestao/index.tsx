@@ -468,7 +468,7 @@ export default function RhGestao() {
     return (
       <div className="max-w-md mx-auto text-center py-16 px-6 space-y-2">
         <ClipboardList className="w-8 h-8 mx-auto opacity-40" />
-        <p className="text-sm font-medium">O RH Gestão não está liberado para você.</p>
+        <p className="text-sm font-medium">A conferência do RH não está liberada para você.</p>
         <p className="text-xs text-muted-foreground">
           Peça a um administrador para ligar a aba e o alcance em
           Configurações › Permissões.

@@ -54,44 +54,23 @@ interface DefinicaoModulo {
 /**
  * Ordem igual à navegação. Pix e Chat não são itens comuns do menu, mas têm
  * escopo próprio e por isso permanecem como módulos independentes e claros.
+ *
+ * ## O Mapa de Abas (29/09/2026)
+ *
+ * As CHAVES não mudaram, e por isso o `id` e o `interruptor` de cada card
+ * também não: `ver_painel_lider` continua sendo a porta do que era o Painel
+ * Líder. O que mudou é onde essas portas levam, e o rótulo de cada card diz o
+ * endereço novo — quem configura procura o interruptor pelo nome da tela que
+ * vê no menu, e não pelo da tela que deixou de existir.
  */
 export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
-    id: 'dashboard', rotulo: 'Dashboard', interruptor: 'ver_dashboard', escopo: 'dashboard',
-    descricao: 'Tela inicial e os dados exibidos nela.', grupos: ['Dashboard'],
+    id: 'dashboard', rotulo: 'Início', interruptor: 'ver_dashboard', escopo: 'dashboard',
+    descricao: 'Tela inicial: as leituras Mês, Hoje e Formas. Na PaguePlay, também a lista de Acordos.', grupos: ['Dashboard'],
     // Na PaguePlay, cadastrar e administrar acordos acontece dentro do próprio
     // Dashboard. As chaves continuam estáveis; só aparecem no card da tela em
     // que a pessoa realmente executa essas ações.
     gruposPorTenant: { pagueplay: ['Acordos'] },
-  },
-  {
-    /*
-     * O painel do Núcleo, separado do Dashboard da cobrança (11/09/2026). Sem
-     * `escopo`: o que ele mostra é recortado pela RLS do Controle de Números, e
-     * não por níveis de alcance.
-     */
-    id: 'dashboard_adm', rotulo: 'Dashboard – ADM', interruptor: 'ver_dashboard_adm',
-    descricao:
-      'O painel do Núcleo de Inteligência e Gestão: indicadores, evolução e '
-      + 'aparelhos do Controle de Números.',
-    grupos: ['Dashboard ADM'], tenants: ['bookplay'],
-  },
-  {
-    id: 'solicitacoes_whatsapp', rotulo: 'Solicitar Atendimento',
-    interruptor: 'ver_solicitacoes_whatsapp',
-    descricao: 'Solicitações internas de atendimento por WhatsApp.',
-    chaves: [
-      'criar_solicitacao_whatsapp', 'solicitacoes_ver_todas',
-      'solicitacoes_definir_responsavel',
-    ],
-  },
-  {
-    id: 'tickets', rotulo: 'Tickets', interruptor: 'ver_tickets',
-    descricao: 'Abertura de chamados e administração da fila.', grupos: ['Tickets'],
-  },
-  {
-    id: 'rh', rotulo: 'RH Gestão', interruptor: 'ver_rh_gestao', escopo: 'rh',
-    descricao: 'Premiação, comissão, validação e fechamento do RH.', grupos: ['RH Gestão'],
   },
   {
     id: 'acordos', rotulo: 'Acordos', interruptor: 'ver_acordos', escopo: 'acordos',
@@ -99,19 +78,38 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     chaves: ['filtrar_por_usuario'], tenants: ['bookplay'],
   },
   {
+    id: 'lixeira', rotulo: 'Acordos › Excluídos', interruptor: 'ver_lixeira', escopo: 'lixeira',
+    descricao: 'A aba Excluídos de Acordos: consulta, restauração e limpeza.', grupos: ['Lixeira'],
+  },
+  {
+    id: 'importar_excel', rotulo: 'Acordos › Importar planilha', interruptor: 'importar_excel',
+    descricao: 'O botão Importar planilha de Acordos.',
+  },
+  {
     id: 'pix', rotulo: 'Pix Automático', interruptor: 'ver_pix_automatico', escopo: 'pix',
     descricao: 'Registros, comissão, aprovação e configuração do Pix.',
     grupos: ['Pix Automático'], chaves: ['aprovar_pix_automatico'], tenants: ['bookplay'],
   },
   {
-    id: 'painel_lider', rotulo: 'Painel Líder', interruptor: 'ver_painel_lider',
-    escopo: 'painel_lider', descricao: 'Acompanhamento operacional da liderança.',
+    id: 'analitico', rotulo: 'Analítico', interruptor: 'ver_analitico', escopo: 'analitico',
+    descricao: 'Recebimentos do relatório, Colchão e recorte diário; o Ranking, as Formas, os Destaques e os Desafios são desenhados em Início e Desempenho.',
+    grupos: ['Analítico', 'Filtros e visão'],
+    chaves: [
+      'importar_analitico', 'importar_diario',
+      'ajuste_recebimento_lancar', 'ajuste_recebimento_administrar',
+      'desafios_configurar_setor', 'desafios_configurar',
+      'desafios_excluir', 'desafios_multiempresa',
+    ],
+  },
+  {
+    id: 'painel_lider', rotulo: 'Desempenho (liderança)', interruptor: 'ver_painel_lider',
+    escopo: 'painel_lider', descricao: 'Desempenho › Equipes, Pessoas (Quartis) e Plantão Elite, e o Ajuste de recebimento no Analítico. Era o Painel Líder.',
     grupos: ['Painel Líder'],
   },
   {
-    id: 'painel_diretoria', rotulo: 'Painel Diretoria',
+    id: 'painel_diretoria', rotulo: 'Início › Empresa e Desempenho (diretoria)',
     interruptor: 'ver_painel_diretoria', escopo: 'painel_diretoria',
-    descricao: 'Indicadores estratégicos e alcance da diretoria.', grupos: ['Painel Diretoria'],
+    descricao: 'Início › Empresa, e Desempenho › Equipes e Pessoas pelo relatório 59. Era o Painel Diretoria.', grupos: ['Painel Diretoria'],
     /*
      * A chave do robô mora aqui porque o relatório 59 mora aqui — é desta aba
      * que ele é importado à mão, e é ela que mostra o histórico das
@@ -124,82 +122,30 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     chaves: ['mestre_importar_automatico'],
   },
   {
-    id: 'usuarios', rotulo: 'Usuários', interruptor: 'ver_usuarios', escopo: 'usuarios',
-    descricao: 'Usuários e as abas internas Setores, Equipes, Metas e Comemorações.',
+    id: 'usuarios', rotulo: 'Pessoas', interruptor: 'ver_usuarios', escopo: 'usuarios',
+    descricao: 'Pessoas: Usuários, Estrutura (setores e equipes), Metas e comissão, Comemorações.',
     grupos: ['Gestão de pessoas', 'Metas'], chaves: ['comemoracoes_gerenciar'],
   },
   {
-    id: 'configuracoes', rotulo: 'Configurações', interruptor: 'ver_configuracoes',
-    descricao: 'Configuração da empresa, permissões, logs e recursos administrativos.',
-    chaves: [
-      'config_sub_geral', 'config_sub_permissoes', 'config_sub_direto_extra',
-      'config_sub_tags', 'ver_logs', 'config_sub_documentacoes',
-      'config_sub_multiempresa', 'ver_monitoramento_uso', 'ver_banco_dados',
-      'administrar_sistema', 'ignorar_fechamento_mes',
-    ],
+    /*
+     * A planilha de fechamento da gerência, como aba. O que ela calcula vem do
+     * Analítico e das Metas; o que ela guarda é só D.U. trabalhado e situação,
+     * e quem preenche é `fechamento_editar`.
+     */
+    id: 'fechamento', rotulo: 'Fechamento do mês › Fechamento', interruptor: 'ver_fechamento',
+    escopo: 'fechamento',
+    descricao:
+      'Fechamento mensal por operador: fechamento, meta, alcance, quartil, D.U. '
+      + 'trabalhado e situação.',
+    grupos: ['Fechamento'], tenants: ['bookplay'],
   },
   {
-    id: 'lixeira', rotulo: 'Lixeira', interruptor: 'ver_lixeira', escopo: 'lixeira',
-    descricao: 'Consulta, restauração e limpeza de acordos excluídos.', grupos: ['Lixeira'],
-  },
-  {
-    id: 'analitico', rotulo: 'Analítico', interruptor: 'ver_analitico', escopo: 'analitico',
-    descricao: 'Relatórios, ranking, recebimento diário e conferências.',
-    grupos: ['Analítico', 'Filtros e visão'],
-    chaves: [
-      'importar_analitico', 'importar_diario',
-      'ajuste_recebimento_lancar', 'ajuste_recebimento_administrar',
-      'desafios_configurar_setor', 'desafios_configurar',
-      'desafios_excluir', 'desafios_multiempresa',
-    ],
+    id: 'rh', rotulo: 'Fechamento do mês › Premiação (RH)', interruptor: 'ver_rh_gestao', escopo: 'rh',
+    descricao: 'Fechamento do mês › Premiação e comissão: conferência, envio, validação e aprovação do RH.', grupos: ['RH Gestão'],
   },
   {
     id: 'campanha_facil', rotulo: 'Campanha Fácil', interruptor: 'ver_campanha_facil',
     descricao: 'Campanhas de cobrança da BookPlay.', tenants: ['bookplay'],
-  },
-  {
-    id: 'importar_excel', rotulo: 'Importar Excel', interruptor: 'importar_excel',
-    descricao: 'Importação de acordos pela planilha do menu.',
-  },
-  {
-    id: 'chat', rotulo: 'Chat', interruptor: 'ver_chat', escopo: 'chat',
-    descricao: 'Conversas internas, alcance e cargos disponíveis.', grupos: ['Chat'],
-  },
-  {
-    /*
-     * Sem `escopo`: o alcance do Modo TV não vem de níveis por aba, vem da
-     * TELA. Cada tela pertence a um setor, e a cena só vai para a tela do
-     * próprio setor — a regra mora em `fn_tv_cortar`, não numa escala de
-     * "equipe / setor / todos".
-     */
-    id: 'modo_tv', rotulo: 'Modo TV', interruptor: 'ver_modo_tv',
-    descricao: 'A apresentação na TV do setor: cenas, quem monta e quem manda ao ar.',
-    grupos: ['Modo TV'], tenants: ['bookplay'],
-  },
-  {
-    /*
-     * O Controle de Números é UM grupo de catálogo e DOIS cards, e a divisão
-     * não é cosmética: são as duas pontas do mesmo caminho, e quem configura
-     * uma quase nunca configura a outra.
-     *
-     * Este card é o do Núcleo. Sem `escopo`: quem é do Núcleo enxerga a
-     * empresa inteira por estar no setor apontado em `numeros_config`, e não
-     * por um nível de alcance. A regra mora em `fn_numeros_visivel`.
-     *
-     * As chaves vêm nomeadas em vez de por grupo, justamente porque o grupo
-     * tem as duas metades — declarar `grupos` aqui engoliria as chaves de
-     * Meus Chips antes de o card seguinte existir.
-     */
-    id: 'controle_numeros', rotulo: 'Controle de Números',
-    interruptor: 'ver_controle_numeros',
-    descricao:
-      'A área do Núcleo de Inteligência e Gestão: celulares, números de '
-      + 'WhatsApp, aquecimento e liberação aos setores.',
-    chaves: [
-      'numeros_administrar', 'numeros_liberar_ao_setor', 'numeros_configurar',
-      'numeros_lixeira_esvaziar',
-    ],
-    tenants: ['bookplay'],
   },
   {
     /*
@@ -224,17 +170,79 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     tenants: ['bookplay'],
   },
   {
+    id: 'solicitacoes_whatsapp', rotulo: 'Solicitar Atendimento',
+    interruptor: 'ver_solicitacoes_whatsapp',
+    descricao: 'Solicitações internas de atendimento por WhatsApp.',
+    chaves: [
+      'criar_solicitacao_whatsapp', 'solicitacoes_ver_todas',
+      'solicitacoes_definir_responsavel',
+    ],
+  },
+  {
+    id: 'tickets', rotulo: 'Tickets', interruptor: 'ver_tickets',
+    descricao: 'Abertura de chamados e administração da fila.', grupos: ['Tickets'],
+  },
+  {
     /*
-     * A planilha de fechamento da gerência, como aba. O que ela calcula vem do
-     * Analítico e das Metas; o que ela guarda é só D.U. trabalhado e situação,
-     * e quem preenche é `fechamento_editar`.
+     * Sem `escopo`: o alcance do Modo TV não vem de níveis por aba, vem da
+     * TELA. Cada tela pertence a um setor, e a cena só vai para a tela do
+     * próprio setor — a regra mora em `fn_tv_cortar`, não numa escala de
+     * "equipe / setor / todos".
      */
-    id: 'fechamento', rotulo: 'Fechamento', interruptor: 'ver_fechamento',
-    escopo: 'fechamento',
+    id: 'modo_tv', rotulo: 'Modo TV', interruptor: 'ver_modo_tv',
+    descricao: 'A apresentação na TV do setor: cenas, quem monta e quem manda ao ar.',
+    grupos: ['Modo TV'], tenants: ['bookplay'],
+  },
+  {
+    /*
+     * O painel do Núcleo, separado do Dashboard da cobrança (11/09/2026). Sem
+     * `escopo`: o que ele mostra é recortado pela RLS do Controle de Números, e
+     * não por níveis de alcance.
+     */
+    id: 'dashboard_adm', rotulo: 'Núcleo › Painel', interruptor: 'ver_dashboard_adm',
     descricao:
-      'Fechamento mensal por operador: fechamento, meta, alcance, quartil, D.U. '
-      + 'trabalhado e situação.',
-    grupos: ['Fechamento'], tenants: ['bookplay'],
+      'O painel do Núcleo de Inteligência e Gestão: indicadores, evolução e '
+      + 'aparelhos do Controle de Números.',
+    grupos: ['Dashboard ADM'], tenants: ['bookplay'],
+  },
+  {
+    /*
+     * O Controle de Números é UM grupo de catálogo e DOIS cards, e a divisão
+     * não é cosmética: são as duas pontas do mesmo caminho, e quem configura
+     * uma quase nunca configura a outra.
+     *
+     * Este card é o do Núcleo. Sem `escopo`: quem é do Núcleo enxerga a
+     * empresa inteira por estar no setor apontado em `numeros_config`, e não
+     * por um nível de alcance. A regra mora em `fn_numeros_visivel`.
+     *
+     * As chaves vêm nomeadas em vez de por grupo, justamente porque o grupo
+     * tem as duas metades — declarar `grupos` aqui engoliria as chaves de
+     * Meus Chips antes de o card seguinte existir.
+     */
+    id: 'controle_numeros', rotulo: 'Núcleo › Celulares e Números',
+    interruptor: 'ver_controle_numeros',
+    descricao:
+      'A área do Núcleo de Inteligência e Gestão: celulares, números de '
+      + 'WhatsApp, aquecimento e liberação aos setores.',
+    chaves: [
+      'numeros_administrar', 'numeros_liberar_ao_setor', 'numeros_configurar',
+      'numeros_lixeira_esvaziar',
+    ],
+    tenants: ['bookplay'],
+  },
+  {
+    id: 'chat', rotulo: 'Chat', interruptor: 'ver_chat', escopo: 'chat',
+    descricao: 'Conversas internas, alcance e cargos disponíveis.', grupos: ['Chat'],
+  },
+  {
+    id: 'configuracoes', rotulo: 'Configurações, Dados e Auditoria', interruptor: 'ver_configuracoes',
+    descricao: 'Configurações da empresa e permissões, Administração › Dados e importações e › Auditoria.',
+    chaves: [
+      'config_sub_geral', 'config_sub_permissoes', 'config_sub_direto_extra',
+      'config_sub_tags', 'ver_logs', 'config_sub_documentacoes',
+      'config_sub_multiempresa', 'ver_monitoramento_uso', 'ver_banco_dados',
+      'administrar_sistema', 'ignorar_fechamento_mes',
+    ],
   },
 ] as const;
 
@@ -281,47 +289,65 @@ const SECOES_USUARIOS: Record<string, string> = {
   // faz efeito, ou quem configura procura o interruptor na tela errada.
   usuarios_transferir: 'Aba interna Usuários',
   usuarios_desfazer_transferencia: 'Aba interna Usuários',
-  ver_setores: 'Aba interna Setores',
-  setores_criar_editar: 'Aba interna Setores',
-  setores_ativar_desativar: 'Aba interna Setores',
-  setores_reordenar: 'Aba interna Setores',
-  ver_equipes: 'Aba interna Equipes',
-  equipes_criar_editar: 'Aba interna Equipes',
-  equipes_excluir: 'Aba interna Equipes',
-  equipes_gerenciar_composicao: 'Aba interna Equipes',
-  ver_metas: 'Aba interna Metas',
-  metas_editar: 'Aba interna Metas',
-  metas_excluir: 'Aba interna Metas',
-  metas_editar_dias_uteis: 'Aba interna Metas',
-  metas_excluir_dias_uteis: 'Aba interna Metas',
+  // Setores e Equipes viraram a aba Estrutura, e Metas a aba Metas e comissão
+  // (Mapa de Abas, 29/09/2026). Cada chave continua abrindo a sua parte.
+  ver_setores: 'Aba interna Estrutura › Setores',
+  setores_criar_editar: 'Aba interna Estrutura › Setores',
+  setores_ativar_desativar: 'Aba interna Estrutura › Setores',
+  setores_reordenar: 'Aba interna Estrutura › Setores',
+  ver_equipes: 'Aba interna Estrutura › Equipes',
+  equipes_criar_editar: 'Aba interna Estrutura › Equipes',
+  equipes_excluir: 'Aba interna Estrutura › Equipes',
+  equipes_gerenciar_composicao: 'Aba interna Estrutura › Equipes',
+  ver_metas: 'Aba interna Metas e comissão',
+  metas_editar: 'Aba interna Metas e comissão',
+  metas_excluir: 'Aba interna Metas e comissão',
+  metas_editar_dias_uteis: 'Aba interna Metas e comissão',
+  metas_excluir_dias_uteis: 'Aba interna Metas e comissão',
   ver_comemoracoes: 'Aba interna Comemorações',
   comemoracoes_gerenciar: 'Aba interna Comemorações',
 };
 
 const SECOES_CONFIG: Record<string, string> = {
-  config_sub_geral: 'Abas internas',
-  config_sub_permissoes: 'Abas internas',
-  config_sub_direto_extra: 'Abas internas',
-  config_sub_tags: 'Abas internas',
-  ver_logs: 'Abas internas',
-  config_sub_documentacoes: 'Abas internas',
-  config_sub_multiempresa: 'Abas internas',
-  ver_monitoramento_uso: 'Logs',
-  ver_banco_dados: 'Geral',
+  // Geral, Tags e Multiempresa são seções da aba Empresa desde o Mapa de Abas.
+  config_sub_geral: 'Configurações › Empresa',
+  config_sub_tags: 'Configurações › Empresa',
+  config_sub_multiempresa: 'Configurações › Empresa',
+  config_sub_permissoes: 'Configurações › outras abas',
+  config_sub_direto_extra: 'Configurações › outras abas',
+  config_sub_documentacoes: 'Configurações › outras abas',
+  // Logs virou o item Auditoria; o banco e a restauração, Dados e importações.
+  ver_logs: 'Administração › Auditoria',
+  ver_monitoramento_uso: 'Administração › Auditoria',
+  ver_banco_dados: 'Administração › Dados e importações',
   administrar_sistema: 'Administração',
   ignorar_fechamento_mes: 'Administração',
+};
+
+/** Onde cada aba do antigo Painel Líder mora agora. */
+const SECOES_PAINEL_LIDER: Record<string, string> = {
+  painel_lider_sub_desempenho_equipes: 'Desempenho › Equipes',
+  painel_lider_sub_quartis: 'Desempenho › Pessoas (Quartis)',
+  painel_lider_sub_elite: 'Desempenho › Plantão Elite',
+  painel_lider_sub_ajuste_recebimento: 'Analítico › Ajustes',
+  // A aba saiu: repetia a evolução diária que o Início mostra. A chave fica
+  // até o catálogo do banco perdê-la — tirá-la é migration, e migration em
+  // produção é decisão de gente (CLAUDE.md).
+  painel_lider_sub_grafico_recebimento: 'Saiu do menu (a evolução diária está no Início)',
 };
 
 const SECOES_ANALITICO: Record<string, string> = {
   analitico_sub_analitico: 'Abas principais',
   analitico_sub_recebimento_diario: 'Abas principais',
   analitico_sub_colchao: 'Abas principais',
-  analitico_sub_desafios: 'Abas principais',
-  analitico_sub_por_operador: 'Dentro do relatório Analítico',
-  analitico_sub_formas_pagamento: 'Dentro do relatório Analítico',
-  analitico_sub_ranking: 'Dentro do relatório Analítico',
-  analitico_sub_destaques_dia: 'Dentro do relatório Analítico',
-  analitico_sub_sem_operador: 'Dentro do relatório Analítico',
+  // Os números de desempenho saíram do Analítico no Mapa de Abas; a chave é a
+  // mesma, e a seção diz onde ela abre agora.
+  analitico_sub_desafios: 'Desempenho › Desafios',
+  analitico_sub_por_operador: 'Dentro de Recebimentos',
+  analitico_sub_formas_pagamento: 'Início › Formas',
+  analitico_sub_ranking: 'Desempenho › Pessoas (Ranking)',
+  analitico_sub_destaques_dia: 'Início › Hoje (Destaques)',
+  analitico_sub_sem_operador: 'Dentro de Recebimentos',
   analitico_validar_relatorio: 'Ações e importações',
   importar_analitico: 'Ações e importações',
   importar_diario: 'Ações e importações',
@@ -355,6 +381,7 @@ function secaoDaPermissao(modulo: ModuloPermissaoId, chave: string): string {
   if (modulo === 'usuarios') return SECOES_USUARIOS[chave] ?? 'Usuários';
   if (modulo === 'configuracoes') return SECOES_CONFIG[chave] ?? 'Configurações';
   if (modulo === 'analitico') return SECOES_ANALITICO[chave] ?? 'Relatório';
+  if (modulo === 'painel_lider') return SECOES_PAINEL_LIDER[chave] ?? 'O que pode fazer';
   if (modulo === 'chat' && chave.startsWith('chat_cargo_')) return 'Cargos disponíveis';
   return 'O que pode fazer';
 }

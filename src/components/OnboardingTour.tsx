@@ -3,8 +3,9 @@
  * Tour guiado exibido apenas no primeiro login.
  * Implementação 100% customizada — sem bibliotecas externas de tour.
  *
- * Bookplay: navega automaticamente entre Dashboard (/) e Acordos (/acordos).
- * PaguePLAY: tudo no Dashboard — tabela de acordos fica dentro do {isPP && …}.
+ * As duas empresas navegam entre o Início (/) e Acordos (/acordos). Até o Mapa
+ * de Abas (29/09/2026) a PaguePlay fazia tudo no Dashboard, porque a tabela de
+ * acordos morava embaixo do painel; hoje ela é o item Acordos, como na BookPlay.
  *
  * Aparece UMA vez por usuário: `perfis.tour_visto_em` (migration 20260928113233)
  * é quem manda, gravado quando o tour abre. O localStorage
@@ -16,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   X, ChevronRight, ChevronLeft,
-  BarChart3, Filter, FileText, Plus, CheckCircle2, AlertTriangle,
+  BarChart3, Filter, FileText, Plus, CheckCircle2, AlertTriangle, LayoutList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -57,9 +58,28 @@ const WELCOME: TourStep = {
   body:   'Vamos fazer um tour rápido pelas principais funcionalidades. Leva menos de 1 minuto.',
 };
 
-// PaguePLAY — tudo na tela Dashboard (/)
+/**
+ * O menu por seções e o botão fixo — os dois lugares que mudaram para todo
+ * mundo no Mapa de Abas. Comum às duas empresas.
+ */
+const MENU: TourStep[] = [
+  {
+    target: '[data-tour="menu-lateral"]', placement: 'right', Icon: LayoutList, route: '/',
+    spotMaxH: 360,
+    title: 'O menu, por seções',
+    body:  'Operação é o trabalho do dia: Início, Acordos, Analítico e Desempenho. Gestão, Ferramentas e Administração ficam logo abaixo — cada cargo vê só o que é dele.',
+  },
+  {
+    target: '[data-tour="novo-acordo-menu"]', placement: 'right', Icon: Plus, route: '/',
+    title: 'Novo acordo, de qualquer tela',
+    body:  'O botão fica fixo no topo do menu. Um clique e o formulário abre, esteja você onde estiver.',
+  },
+];
+
+// PaguePLAY — métricas no Início (/), filtros/tabela/novo em Acordos (/acordos)
 const STEPS_PP: TourStep[] = [
   WELCOME,
+  ...MENU,
   {
     target: '[data-tour="metricas"]', placement: 'bottom', Icon: BarChart3, route: '/',
     spotMaxH: 210,
@@ -67,27 +87,28 @@ const STEPS_PP: TourStep[] = [
     body:  'Resumo em tempo real: acordos de hoje, pagos, pendentes e vencidos — com os valores previstos e já recebidos.',
   },
   {
-    target: '[data-tour="filtros"]', placement: 'bottom', Icon: Filter, route: '/',
+    target: '[data-tour="filtros"]', placement: 'bottom', Icon: Filter, route: '/acordos',
     title: 'Busca e filtros',
     body:  'Encontre acordos pelo Código ou nome. Combine filtros de status, forma de pagamento e data para resultados precisos.',
   },
   {
-    target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/',
+    target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/acordos',
     spotMaxH: 140,
     scrollPx: 320,
     title: 'Tabela de acordos',
     body:  'Cada linha é um acordo. Use os botões de ação: marcar como pago, reagendar, editar ou excluir. Clique na linha para detalhes.',
   },
   {
-    target: '[data-tour="novo-acordo"]', placement: 'left', Icon: Plus, route: '/',
+    target: '[data-tour="novo-acordo"]', placement: 'left', Icon: Plus, route: '/acordos',
     title: 'Novo acordo',
     body:  'Cadastre um novo acordo diretamente na lista. O Código é validado automaticamente para evitar duplicatas.',
   },
 ];
 
-// Bookplay — métricas no Dashboard (/), filtros/tabela/novo no Acordos (/acordos)
+// Bookplay — métricas no Início (/), filtros/tabela/novo em Acordos (/acordos)
 const STEPS_BOOKPLAY: TourStep[] = [
   WELCOME,
+  ...MENU,
   {
     target: '[data-tour="metricas"]', placement: 'bottom', Icon: BarChart3, route: '/',
     spotMaxH: 210,
