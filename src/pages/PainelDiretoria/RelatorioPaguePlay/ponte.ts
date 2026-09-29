@@ -59,8 +59,13 @@ applyCorenFilters=function(){
 window.addEventListener('message',event=>{
   if(event.source!==parent||event.origin!==origemIntegracao||event.data?.type!=='pp-relatorio-dados')return;
   relatorioAtual=event.data.resumo;
+  // O dia é a coluna Data, a mesma do filtro de período do ERP: o relatório
+  // de conciliação de hoje (Data = hoje) soma inteiro no "recebido no dia",
+  // e picado ou de uma vez dá o mesmo número. Por Dt.Pagamento, o cartão
+  // parcelado conciliado hoje caía em abril, maio... (29/09/2026: R$ 249.779,33
+  // no arquivo, R$ 211.935,06 na tela). No pagamento as duas colunas são iguais.
   todasTransacoes=relatorioAtual.grupos.map(t=>({sigla:t.uf,total:t.total,coren:t.coren,cofen:t.cofen,pp:t.pp,
-    d:t.data_pagamento,dAcumuladoMes:t.data,forma:t.forma,ia:t.ia}));
+    d:t.data,dAcumuladoMes:t.data,forma:t.forma,ia:t.ia}));
   COREN_ORDER=[...new Set(todasTransacoes.map(t=>t.sigla))].sort();
   window.__hasDate=true;window.__hasIA=true;
   setMode(event.data.modalidade);

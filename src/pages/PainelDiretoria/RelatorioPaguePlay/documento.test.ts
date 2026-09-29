@@ -21,4 +21,10 @@ describe('fidelidade do HTML da diretoria',()=>{
     expect(documento).not.toContain('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx');
     expect(documento).toContain('const origemIntegracao=window.origin');
   });
+  it('o dia e o mês seguem a coluna Data, como o filtro do ERP, e não Dt.Pagamento',()=>{
+    // Conciliação de 29/09/2026: R$ 249.779,33 com Data = hoje, só R$ 211.935,06
+    // com Dt.Pagamento = hoje. O "recebido no dia" tem de mostrar o arquivo inteiro.
+    expect(documento).toContain('d:t.data,dAcumuladoMes:t.data');
+    expect(documento).not.toContain('d:t.data_pagamento');
+  });
 });
