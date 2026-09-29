@@ -290,3 +290,48 @@ describe('relógio que anda para trás', () => {
     expect(a.descarregar()?.segundos).toBe(10);
   });
 });
+
+describe('pausa com corte no passado (ociosidade)', () => {
+  /**
+   * A ociosidade só é percebida minutos depois do último gesto. Sem o corte, a
+   * pessoa que saiu para o almoço com a tela em foco ganhava os minutos até a
+   * detecção como uso.
+   */
+  it('credita só até o corte, e não até agora', () => {
+    const r = relogio();
+    const a = new AcumuladorUso(r.agora);
+    const inicio = r.agora();
+
+    a.trocarTela('acordos');
+    r.avancar(6 * 60_000);
+    a.pausar(inicio + 60_000);
+
+    expect(a.descarregar()?.segundos).toBe(60);
+  });
+
+  it('corte antes do início da janela não subtrai nada', () => {
+    const r = relogio();
+    const a = new AcumuladorUso(r.agora);
+
+    a.trocarTela('acordos');
+    r.avancar(10_000);
+    a.pausar();
+    a.retomar();
+    const retomada = r.agora();
+    r.avancar(30_000);
+    a.pausar(retomada - 5_000);
+
+    expect(a.descarregar()?.segundos).toBe(10);
+  });
+
+  it('corte no futuro vale como agora', () => {
+    const r = relogio();
+    const a = new AcumuladorUso(r.agora);
+
+    a.trocarTela('acordos');
+    r.avancar(10_000);
+    a.pausar(r.agora() + 60_000);
+
+    expect(a.descarregar()?.segundos).toBe(10);
+  });
+});

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
@@ -401,6 +402,8 @@ export default function PainelDiretoria() {
     : aba === 'historico'    ? (podeVerMestre ? 'historico' : 'visao')
     : aba === 'fontes'       ? (podeVerMestre ? 'fontes' : 'visao')
     : 'visao';
+  // Monitoramento de uso: a aba aberta do painel.
+  useSubAbaUso(abaVisivel);
   // Na BookPlay toda aba lê o 59 (ou a conferência dele), e o «Atualizar»
   // recarrega todas por contador — inclusive «Códigos», que recebe `versao` e
   // antes ficava de fora da lista.

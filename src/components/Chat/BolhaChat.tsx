@@ -42,6 +42,7 @@ import { IconeChat } from './comum';
 import { PainelSobDemanda } from '@/components/PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
+import { useAreaDeUso } from '@/providers/RastreioUsoProvider';
 import { toast } from 'sonner';
 import { toast as toastFlutuante } from '@/components/ui/sonner';
 import { NotificacaoMensagem } from './NotificacaoMensagem';
@@ -324,6 +325,15 @@ export function BolhaChat() {
 
   const conversaAtual = chat.aberta;
 
+  // No monitoramento de uso, o chat conta enquanto a pessoa mexe NA janela —
+  // aberta num canto enquanto ela trabalha nos Acordos, o tempo é dos Acordos.
+  const janelaRef = useRef<HTMLDivElement>(null);
+  useAreaDeUso(
+    janelaRef,
+    modoMonitor ? 'chat:monitor' : conversaAtual ? 'chat:conversa' : 'chat:lista',
+    aberto,
+  );
+
   const abrirJanela = useCallback(() => {
     abertoRef.current = true;
     setAberto(true);
@@ -481,6 +491,7 @@ export function BolhaChat() {
       onFalha={() => { abertoRef.current = false; setAberto(false); }}
     >
       <div
+        ref={janelaRef}
         className={cn(
           'fixed bottom-6 right-6 z-40 flex flex-col bg-background border border-border rounded-2xl shadow-2xl overflow-hidden transition-[width,height] duration-200',
           expandido ? 'w-[720px] h-[560px]' : 'w-[360px] h-[520px]',

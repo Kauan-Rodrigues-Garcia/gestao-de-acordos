@@ -31,6 +31,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
 import { deslocarMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { cn } from '@/lib/utils';
 import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
@@ -177,6 +178,12 @@ export default function Acordos() {
   );
   // Aba destacada Pix Automático (BookPlay): substitui o conteúdo da lista
   const [pixAba, setPixAba] = useState(searchParams.get('tab') === 'pix');
+  // Monitoramento de uso: 'analitico' é o nome interno da aba Verificar.
+  useSubAbaUso(
+    pixAba && temPermissao('ver_pix_automatico') ? 'pix'
+      : activeTab === 'analitico' ? 'verificar'
+      : activeTab,
+  );
 
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(

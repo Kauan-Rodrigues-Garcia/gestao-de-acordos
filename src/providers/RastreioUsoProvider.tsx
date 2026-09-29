@@ -28,23 +28,66 @@
  * que têm abas chamam `useSubAbaUso(...)` para dizer em qual estão, e o
  * identificador vira `lider:desempenho`. Sem isso, a pergunta que originou o
  * painel ficaria sem resposta.
+ *
+ * Aba dentro de aba declara o NÍVEL (`useSubAbaUso(aba, 2)`): cada tela diz só
+ * a própria aba, e o identificador junta os níveis — `analitico:analitico/dia/
+ * ranking`. Antes havia um nível só, e a tela de fora e a de dentro brigavam
+ * pelo mesmo lugar.
+ *
+ * ## O que fica por cima da tela
+ *
+ * As gavetas do topo (Desempenho do Dia, Desafio) e a janela do chat não são
+ * rota. Enquanto estão em uso, o tempo é DELAS, e não da tela de baixo —
+ * `useSobreposicaoUso` para as gavetas, que tapam a tela, e `useAreaDeUso` para
+ * o chat, que fica ao lado: ele conta enquanto a pessoa clica ou digita dentro
+ * da janela, e devolve o tempo à tela ao primeiro clique fora.
+ *
+ * ## Pessoa parada não é pessoa usando (29/09/2026)
+ *
+ * A aba em foco com ninguém na frente contava o dia inteiro. Agora, sem mouse,
+ * teclado, toque ou rolagem por `LIMITE_OCIOSO_MS`, o relógio para — e para
+ * no passado: no último gesto mais `TOLERANCIA_LEITURA_MS`, o tempo razoável de
+ * ler o que estava na tela. O primeiro gesto seguinte volta a contar.
  */
 
 import {
-  createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode,
+  createContext, useContext, useEffect, useRef, useState, useCallback,
+  type ReactNode, type RefObject,
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { registrarUso, registrarSessao } from '@/services/uso.service';
-import { telaDaRota, telaComAba } from '@/lib/telas-catalogo';
+import { telaDaRota, telaComAbas } from '@/lib/telas-catalogo';
 import { AcumuladorUso, type EnvioUso } from '@/lib/acumulador-uso';
 
 /** De quanto em quanto tempo o acumulado sobe, para quem fica parado na tela. */
 const INTERVALO_ENVIO_MS = 180_000;
 
+/** Sem nenhum gesto por este tempo, a pessoa não está mais usando. */
+export const LIMITE_OCIOSO_MS = 5 * 60_000;
+
+/** O que se credita depois do último gesto: o tempo de ler a tela. */
+export const TOLERANCIA_LEITURA_MS = 60_000;
+
+/** De quanto em quanto tempo a ociosidade é conferida. */
+const VERIFICAR_OCIOSO_MS = 15_000;
+
+/**
+ * Gestos que provam que há alguém usando.
+ *
+ * `scroll` fica de fora de propósito: a tela também rola sozinha (a conversa do
+ * chat descendo para a mensagem nova), e isso contaria como pessoa. Quem rola
+ * de verdade usa roda (`wheel`), teclado, toque ou arrasta a barra (`pointerdown`).
+ */
+const EVENTOS_DE_ATIVIDADE = [
+  'pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart',
+] as const;
+
 interface RastreioUsoContexto {
-  /** A tela informa em qual sub-aba está. `null` limpa. */
-  definirSubAba: (aba: string | null) => void;
+  /** A tela informa em qual aba está, no nível dela. `null` limpa. */
+  definirNivel: (nivel: number, aba: string | null) => void;
+  /** Liga ou desliga uma camada por cima da tela (gaveta, janela). */
+  definirSobreposicao: (chave: symbol, tela: string | null) => void;
 }
 
 const Ctx = createContext<RastreioUsoContexto | undefined>(undefined);
@@ -52,12 +95,18 @@ const Ctx = createContext<RastreioUsoContexto | undefined>(undefined);
 export function RastreioUsoProvider({ children }: { children: ReactNode }) {
   const { perfil } = useAuth();
   const { pathname } = useLocation();
-  const [subAba, setSubAba] = useState<string | null>(null);
+  /** Aba de cada nível: 1 é a aba da tela, 2 a aba dentro dela, e assim por diante. */
+  const [niveis, setNiveis] = useState<Record<number, string>>({});
+  /** Camadas por cima da tela, na ordem em que abriram. A última manda. */
+  const [camadas, setCamadas] = useState<{ chave: symbol; tela: string }[]>([]);
 
   const telaBase = telaDaRota(pathname);
+  const abas = Object.keys(niveis).map(Number).sort((a, b) => a - b).map(n => niveis[n]);
+  const camada = camadas.length ? camadas[camadas.length - 1].tela : null;
   // Sem sessão não há a quem atribuir, e `fn_uso_registrar` devolveria em
   // silêncio de qualquer forma — não vale gastar a requisição.
-  const telaAtual = perfil && telaBase ? telaComAba(telaBase, subAba) : null;
+  const telaAtual = !perfil ? null
+    : camada ?? (telaBase ? telaComAbas(telaBase, abas) : null);
 
   // ── Acumulador ────────────────────────────────────────────────────────────
   // Em ref, e não em estado: nada aqui deve provocar render. O provider embrulha
@@ -78,9 +127,19 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
 
   const pausar = useCallback(() => { acRef.current!.pausar(); }, []);
 
+  // ── Ociosidade ─────────────────────────────────────────────────────────────
+  // Em ref: um gesto por pixel de mouse não pode virar render.
+  const ultimoGestoRef = useRef(Date.now());
+  const ociosoRef = useRef(false);
+  // A janela visível mas sem foco (outra janela por cima, na mesma tela) não
+  // conta. Guardado aqui, e não só pausado no `blur`: a batida periódica e a
+  // troca de aba chamam `retomar`, e sem isto religavam o relógio.
+  const focadaRef = useRef(typeof document === 'undefined' || document.hasFocus());
+
   const retomar = useCallback(() => {
     // A visibilidade é decisão de quem chama: o acumulador não conhece `document`.
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    if (ociosoRef.current || !focadaRef.current) return;
     acRef.current!.retomar();
   }, []);
 
@@ -114,8 +173,41 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
     // `trocarTela` já pausa, devolve o pendente da anterior e recomeça na nova —
     // inclusive o no-op quando a tela não mudou de fato.
     subir(acRef.current!.trocarTela(telaAtual));
-    retomar();
+    // Ela recomeça sem perguntar se há alguém olhando. Uma aba que muda sozinha
+    // (carga que escolhe a aba padrão, gaveta que fecha) com a pessoa longe ou
+    // a janela escondida não pode voltar a contar.
+    const escondida = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+    if (ociosoRef.current || escondida) acRef.current!.pausar();
+    else retomar();
   }, [telaAtual, subir, retomar]);
+
+  // ── Gestos e ociosidade ────────────────────────────────────────────────────
+  useEffect(() => {
+    function aoGesto() {
+      ultimoGestoRef.current = Date.now();
+      if (!ociosoRef.current) return;
+      ociosoRef.current = false;
+      retomar();
+    }
+    for (const ev of EVENTOS_DE_ATIVIDADE) {
+      document.addEventListener(ev, aoGesto, { capture: true, passive: true });
+    }
+    const id = setInterval(() => {
+      if (ociosoRef.current) return;
+      const parado = Date.now() - ultimoGestoRef.current;
+      if (parado < LIMITE_OCIOSO_MS) return;
+      ociosoRef.current = true;
+      // Corta no passado: o que passou do tempo de leitura não foi uso.
+      acRef.current!.pausar(ultimoGestoRef.current + TOLERANCIA_LEITURA_MS);
+      subir(acRef.current!.descarregar());
+    }, VERIFICAR_OCIOSO_MS);
+    return () => {
+      for (const ev of EVENTOS_DE_ATIVIDADE) {
+        document.removeEventListener(ev, aoGesto, { capture: true });
+      }
+      clearInterval(id);
+    };
+  }, [retomar, subir]);
 
   // ── Foco e visibilidade ───────────────────────────────────────────────────
   useEffect(() => {
@@ -134,9 +226,21 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === 'hidden') aoEsconder(); else aoMostrar();
     }
 
+    // Voltar para a janela é gesto: quem clica nela de volta está usando.
+    function aoFocar() {
+      focadaRef.current = true;
+      ultimoGestoRef.current = Date.now();
+      ociosoRef.current = false;
+      retomar();
+    }
+    function aoDesfocar() {
+      focadaRef.current = false;
+      pausar();
+    }
+
     document.addEventListener('visibilitychange', aoTrocarVisibilidade);
-    window.addEventListener('blur', pausar);
-    window.addEventListener('focus', retomar);
+    window.addEventListener('blur', aoDesfocar);
+    window.addEventListener('focus', aoFocar);
     // `pagehide` cobre o fechamento da aba em navegadores que não disparam
     // `visibilitychange` a tempo. `unload` não é usado: é ignorado no iOS e
     // desencoraja o cache de retorno do navegador.
@@ -144,8 +248,8 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
 
     return () => {
       document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
-      window.removeEventListener('blur', pausar);
-      window.removeEventListener('focus', retomar);
+      window.removeEventListener('blur', aoDesfocar);
+      window.removeEventListener('focus', aoFocar);
       window.removeEventListener('pagehide', aoEsconder);
     };
   }, [pausar, descarregar, retomar]);
@@ -156,6 +260,10 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
   // à força perderia tudo.
   useEffect(() => {
     const id = setInterval(() => {
+      // Em silêncio além da tolerância, a janela fica aberta: se a pessoa não
+      // voltar, a ociosidade corta no último gesto — e não pode cortar antes de
+      // um envio que já tivesse creditado o silêncio como uso.
+      if (Date.now() - ultimoGestoRef.current > TOLERANCIA_LEITURA_MS) return;
       descarregar();
       retomar();
     }, INTERVALO_ENVIO_MS);
@@ -165,11 +273,29 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
   // ── Desmontagem ───────────────────────────────────────────────────────────
   useEffect(() => () => { descarregar(); }, [descarregar]);
 
-  const definirSubAba = useCallback((aba: string | null) => {
-    setSubAba(prev => (prev === aba ? prev : aba));
+  const definirNivel = useCallback((nivel: number, aba: string | null) => {
+    setNiveis(prev => {
+      if ((prev[nivel] ?? null) === aba) return prev;
+      const prox = { ...prev };
+      if (aba) prox[nivel] = aba; else delete prox[nivel];
+      return prox;
+    });
   }, []);
 
-  return <Ctx.Provider value={{ definirSubAba }}>{children}</Ctx.Provider>;
+  const definirSobreposicao = useCallback((chave: symbol, tela: string | null) => {
+    setCamadas(prev => {
+      const sem = prev.filter(c => c.chave !== chave);
+      if (!tela) return sem.length === prev.length ? prev : sem;
+      const atual = prev.find(c => c.chave === chave);
+      if (atual?.tela === tela) return prev;
+      // Reativar leva a camada para o topo: é nela que a pessoa está agora.
+      return [...sem, { chave, tela }];
+    });
+  }, []);
+
+  const valor = useRef<RastreioUsoContexto>({ definirNivel, definirSobreposicao }).current;
+
+  return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }
 
 /**
@@ -179,12 +305,58 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
  * aba não vazar para a tela seguinte.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
-export function useSubAbaUso(aba: string | null | undefined): void {
+export function useSubAbaUso(aba: string | null | undefined, nivel = 1): void {
   const ctx = useContext(Ctx);
-  const definir = ctx?.definirSubAba;
+  const definir = ctx?.definirNivel;
   useEffect(() => {
     if (!definir) return;
-    definir(aba ?? null);
-    return () => definir(null);
-  }, [definir, aba]);
+    definir(nivel, aba ?? null);
+    return () => definir(nivel, null);
+  }, [definir, aba, nivel]);
+}
+
+/**
+ * Uma camada que TAPA a tela enquanto está aberta — as gavetas do topo.
+ *
+ * Aberta, o tempo é dela (`tela`); fechada, volta para a tela de baixo.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- idem.
+export function useSobreposicaoUso(tela: string, aberta: boolean): void {
+  const ctx = useContext(Ctx);
+  const definir = ctx?.definirSobreposicao;
+  const chave = useRef(Symbol(tela)).current;
+  useEffect(() => {
+    if (!definir) return;
+    definir(chave, aberta ? tela : null);
+    return () => definir(chave, null);
+  }, [definir, chave, tela, aberta]);
+}
+
+/**
+ * Uma janela que fica AO LADO da tela — o chat.
+ *
+ * Aberta não basta: a pessoa pode deixá-la num canto e seguir nos Acordos. Ela
+ * conta a partir do clique ou do foco dentro de `ref`, e devolve o tempo à tela
+ * no primeiro clique ou foco fora dela.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- idem.
+export function useAreaDeUso(
+  ref: RefObject<HTMLElement | null>, tela: string, aberta: boolean,
+): void {
+  const [dentro, setDentro] = useState(false);
+  useSobreposicaoUso(tela, aberta && dentro);
+
+  useEffect(() => {
+    if (!aberta) { setDentro(false); return; }
+    function aoInteragir(ev: Event) {
+      const alvo = ev.target as Node | null;
+      setDentro(!!alvo && !!ref.current?.contains(alvo));
+    }
+    document.addEventListener('pointerdown', aoInteragir, true);
+    document.addEventListener('focusin', aoInteragir, true);
+    return () => {
+      document.removeEventListener('pointerdown', aoInteragir, true);
+      document.removeEventListener('focusin', aoInteragir, true);
+    };
+  }, [aberta, ref]);
 }

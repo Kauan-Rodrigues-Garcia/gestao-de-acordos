@@ -1789,6 +1789,24 @@ a URL não muda ao trocar — sem esse nível, a pergunta que originou o painel
 ficaria sem resposta. O identificador fica `lider:desempenho`
 (`src/lib/telas-catalogo.ts`).
 
+**Medição exata do tempo (29/09/2026).** «Contabilize exatamente o que a pessoa
+está fazendo durante todo o tempo.» O que mudou:
+
+| Regra | Como fica |
+|---|---|
+| **Abas dentro de abas** | cada nível entra no identificador, separado por `/`: `analitico:analitico/dia/ranking`, `diretoria:mestre/vinculos`, `admin/configuracoes:logs/uso/pessoas`. Instrumentadas: Analítico (aba, recorte, abas do líder/operador, Desafios), Painel Diretoria (e Relatório 59), Usuários (e Metas), Configurações (Permissões, Direto e Extra, Logs e o Monitoramento), Acordos (Todos, Verificar, Pagos, Não pagos, Pix), Fechamento, Controle de Números, Meus Chips, RH Gestão. O rótulo é montado por partes (`ROTULO_SEGMENTO`) |
+| **Parado não é uso** | 5 minutos sem mouse, teclado, toque ou roda param o relógio, **no passado**: no último gesto + 60 s (o tempo de ler a tela). O próximo gesto volta a contar. Rolagem sozinha (`scroll`) não é gesto — o chat rola sem ninguém |
+| **Janela sem foco não conta** | outra janela por cima, na mesma tela, para o relógio; a batida de 3 min não o religa |
+| **Gavetas do topo contam à parte** | Desempenho do Dia, Desafio e o editor do menu têm tela própria (`gaveta/…`) enquanto abertos, e o tempo não soma na tela de baixo |
+| **Chat conta pela interação** | a janela aberta num canto não conta; conta do clique/foco dentro dela até o primeiro clique fora (`chat:lista`, `chat:conversa`, `chat:monitor`) |
+| **TV não é pessoa** | o palco `/tv/:slug` fica fora da medição; a mesa de corte (`/modo-tv`) segue medida |
+| **Endereço quebrado não vira tela** | segmento fora de `[a-z0-9_-]` descarta a rota (o banco tinha as «telas» `,` e `]`) |
+
+Os nomes antigos de Logs (`admin/configuracoes:logs` e `:uso`) ficam no histórico,
+com rótulo. O painel agrupa **Telas mais usadas** pela tela do menu, com as abas
+embaixo; pessoas não somam entre abas (a mesma pessoa em três abas contaria três
+vezes), então o grupo mostra «ao menos N».
+
 **Escrita só por `fn_uso_registrar`.** `uso_telas` não tem policy de
 INSERT/UPDATE, e a RPC resolve a identidade por `auth.uid()` — nunca por
 parâmetro. Um painel de uso que aceitasse números vindos do cliente não mediria
@@ -1866,9 +1884,18 @@ três voltarem, o que disfarçou o defeito de "card quebrado".
 **Telas sem uso.** O card "Telas mais usadas" diz onde o tempo vai; o vizinho diz
 o oposto, e é a metade acionável — tela que ninguém abre em 30 dias ou não serve,
 ou ninguém sabe que existe. Sai do **catálogo** (`TELA_LABEL`), não do banco,
-pelo mesmo motivo da adoção: tela sem uso não tem linha em `uso_telas`. Módulos
-exclusivos de uma operação (Campanha Fácil `[BP]`) e removidos (Ouvidoria) ficam fora —
-na outra empresa não é abandono, é módulo que o tenant não tem.
+pelo mesmo motivo da adoção: tela sem uso não tem linha em `uso_telas`. Uma tela
+conta como usada quando qualquer aba dela foi aberta. Módulos exclusivos de uma
+operação (Campanha Fácil, Dashboard – ADM, Fechamento, Controle de Números e Meus
+Chips `[BP]`; Solicitar Atendimento `[PP]`; Vendas e as telas do Comercial) e
+removidos (Ouvidoria, a aba Acompanhamento do Líder) ficam fora — na outra empresa
+não é abandono, é módulo que o tenant não tem.
+
+**Adoção conta a tela com as abas de dentro** (`20260929180000`). Com a aba no
+identificador ninguém mais grava `analitico` puro; a comparação por igualdade
+responderia «ninguém abriu». `analitico` vale por `analitico` e `analitico:*`;
+`lider:desempenho` vale por `lider:desempenho/*`. `acordos/novo` não conta como
+`acordos` — é outra tela do menu.
 
 **Adoção.** O seletor oferece as telas de gestão fixas **mais** as que tiveram
 uso no período: sem isso, perguntar pela adoção de uma tela fora da lista era

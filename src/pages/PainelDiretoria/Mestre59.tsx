@@ -53,6 +53,7 @@
  * dinheiro inteiro está fora de qualquer setor.
  */
 
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload, RefreshCw, Loader2, Link2, Link2Off, History,
@@ -114,6 +115,8 @@ type SubAba = 'vinculos' | 'comparacao';
 
 export function Mestre59({ empresaId, mes }: Props) {
   const [subAba, setSubAba]     = useState<SubAba>('vinculos');
+  // Monitoramento de uso: nível 2, dentro da aba «Relatório 59».
+  useSubAbaUso(subAba, 2);
   const [grupos, setGrupos]     = useState<GrupoDoMestre[]>([]);
   const [lotes, setLotes]       = useState<LoteDoMestre[]>([]);
   const [eventos, setEventos]   = useState<EventoDoMestre[]>([]);

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound } from 'lucide-react';
@@ -250,6 +251,8 @@ export default function AdminUsuarios() {
     podeAdministrarContas && 'desligados',
   ].filter((aba): aba is string => Boolean(aba));
   const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
+  // Monitoramento de uso: a aba aberta (Lista, Setores, Equipes, Metas…).
+  useSubAbaUso(tabAtiva);
   const selecionarAba = (aba: string) => {
     if (!abasVisiveis.includes(aba)) return;
     const novosParametros = new URLSearchParams(searchParams);

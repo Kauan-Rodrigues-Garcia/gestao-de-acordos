@@ -36,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useMeusChips } from '@/hooks/useMeusChips';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { HistoricoNumero } from '@/components/numeros/HistoricoNumero';
 import { listarOperadoresDosSetores, type OperadorDoSetor } from '@/services/numeros/numeros.service';
 import { VisaoLideranca } from './VisaoLideranca';
@@ -67,6 +68,8 @@ export default function MeusChips() {
       return p;
     }, { replace: true });
   }
+  // Sem a permissão de chips físicos não há abas: a tela fica sem sufixo.
+  useSubAbaUso(temFisicos && !loading ? aba : null);
 
   const empresaId = empresa?.id ?? '';
   /*

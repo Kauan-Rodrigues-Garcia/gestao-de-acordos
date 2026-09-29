@@ -15,6 +15,7 @@
  * exibida para todas as empresas, pois a tabela é isolada por empresa_id
  * e o service simplesmente retorna vazio nas empresas onde não é usada.
  */
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Users, Building2, Briefcase, Loader2, ArrowLeftRight } from 'lucide-react';
@@ -51,6 +52,9 @@ export default function AdminDiretoExtra() {
   const [equipes,    setEquipes]    = useState<EquipeItem[]>([]);
   const [usuarios,   setUsuarios]   = useState<UsuarioItem[]>([]);
   const [loading,    setLoading]    = useState(true);
+  // Controlada só para o monitoramento de uso saber a aba aberta (nível 2).
+  const [abaAtiva, setAbaAtiva] = useState('setor');
+  useSubAbaUso(abaAtiva, 2);
 
   // busca por usuário
   const [buscaUsuario, setBuscaUsuario] = useState('');
@@ -258,7 +262,7 @@ export default function AdminDiretoExtra() {
           <CardTitle className="text-base">Configuração de ativação</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="setor" className="w-full">
+          <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full">
             <TabsList className="grid grid-cols-3 mb-4 w-full max-w-lg">
               <TabsTrigger value="setor" className="gap-2 text-xs">
                 <Building2 className="w-3.5 h-3.5" />

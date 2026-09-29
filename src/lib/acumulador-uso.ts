@@ -24,6 +24,9 @@
  *    volta por mais 5s tem os 6s creditados, não zerados.
  * 4. **A abertura acompanha o primeiro envio da tela.** Se a tela nunca alcançar
  *    o mínimo, nenhuma abertura é contada — nem os segundos.
+ * 5. **Pessoa parada não é pessoa usando.** Quem percebe a ociosidade (o
+ *    provider) pausa com um corte no passado — o instante do último gesto mais
+ *    a tolerância de leitura —, e o tempo depois dele não entra.
  */
 
 /** O que subir para `fn_uso_registrar`. */
@@ -55,10 +58,18 @@ export class AcumuladorUso {
     return this.desde !== null;
   }
 
-  /** Fecha a janela aberta e soma ao acumulado. Chamar duas vezes não dobra. */
-  pausar(): void {
+  /**
+   * Fecha a janela aberta e soma ao acumulado. Chamar duas vezes não dobra.
+   *
+   * `ate` corta a janela num instante anterior a agora — a ociosidade é
+   * descoberta minutos depois de começar, e o que passou dela não é uso. O corte
+   * nunca vai antes do início da janela nem depois de agora.
+   */
+  pausar(ate?: number): void {
     if (this.desde === null) return;
-    this.acumuladoMs += Math.max(0, this.agora() - this.desde);
+    const agora = this.agora();
+    const fim = ate === undefined ? agora : Math.min(agora, Math.max(this.desde, ate));
+    this.acumuladoMs += Math.max(0, fim - this.desde);
     this.desde = null;
   }
 

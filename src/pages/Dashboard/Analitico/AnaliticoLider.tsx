@@ -9,6 +9,7 @@
  * • Filtro de data por operador expandido (client-side)
  */
 
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { lazy, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle,
@@ -269,6 +270,9 @@ export function AnaliticoLider({
   const abaVisivel = abasInternas.some(a => a.key === abaAtiva)
     ? abaAtiva
     : (abasInternas[0]?.key ?? null);
+
+  // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
+  useSubAbaUso(abaVisivel, 3);
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);

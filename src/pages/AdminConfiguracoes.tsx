@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { copiarTexto } from '@/lib/clipboard';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -84,6 +85,8 @@ export default function AdminConfiguracoes() {
     podeVerMultiempresa && 'multiempresa',
   ].filter((aba): aba is string => Boolean(aba));
   const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
+  // Monitoramento de uso: a aba aberta. As de dentro (Logs, Permissões…) vêm no nível 2.
+  useSubAbaUso(tabAtiva);
   const selecionarAba = (aba: string) => {
     if (!abasVisiveis.includes(aba)) return;
     const novosParametros = new URLSearchParams(searchParams);

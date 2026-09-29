@@ -68,6 +68,7 @@ import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
+import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
 
 /*
  * Painéis que só aparecem com um clique — fora do pacote de entrada.
@@ -309,6 +310,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     [navItems, ordemMenu],
   );
   const [editorMenuAberto, setEditorMenuAberto] = useState(false);
+
+  // As gavetas tapam a tela: enquanto abertas, o tempo é delas no monitoramento.
+  useSobreposicaoUso('gaveta/desempenho-dia', painelDiaAberto);
+  useSobreposicaoUso('gaveta/desafio', painelDesafioAberto);
+  useSobreposicaoUso('gaveta/editor-menu', editorMenuAberto);
   const podeEditarMenu = perfil?.perfil === 'super_admin';
 
   /*

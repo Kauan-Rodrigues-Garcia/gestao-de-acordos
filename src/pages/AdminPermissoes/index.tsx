@@ -12,6 +12,7 @@
  * O diagnóstico completo está em
  * `docs/superpowers/specs/2026-08-15-permissoes-2-0-design.md`.
  */
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useState } from 'react';
 import { ShieldCheck, Users, Info } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -22,6 +23,8 @@ import { PorPessoa } from './PorPessoa';
 export default function AdminPermissoes() {
   const { temPermissao, loading } = useCargoPermissoes();
   const [aba, setAba] = useState('cargo');
+  // Monitoramento de uso: nível 2, dentro da aba «Permissões» de Configurações.
+  useSubAbaUso(aba, 2);
 
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Carregando permissões...</div>;

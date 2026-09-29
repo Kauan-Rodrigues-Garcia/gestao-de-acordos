@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useRhGestao, comPercentual, type LancamentoComPercentual } from '@/hooks/useRhGestao';
 import { useComissaoRh } from '@/hooks/useComissaoRh';
 import { montarArvore } from '@/services/rh/rhAgregacao';
@@ -162,6 +163,9 @@ export default function RhGestao() {
 
   /** O RH começa consolidado; quem tem alcance menor já cai no detalhe. */
   const modoConsolidado = permissoes.escopoTodos && !setorAberto;
+  useSubAbaUso(modoConsolidado ? 'consolidado' : 'setor');
+  // Os painéis laterais tapam a tela: o tempo neles é deles.
+  useSubAbaUso(historicoAberto ? 'historico' : configAberta ? 'configuracao' : null, 2);
 
   const setoresVisiveis = useMemo(
     () => arvore.celulas.flatMap(c => c.setores),

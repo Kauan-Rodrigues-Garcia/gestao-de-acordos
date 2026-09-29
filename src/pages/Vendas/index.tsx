@@ -86,6 +86,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useMesGlobal } from '@/providers/MesProvider';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useVendas } from '@/hooks/useVendas';
 import { useVendasPlacar } from '@/hooks/useVendasPlacar';
@@ -125,6 +126,7 @@ export default function Vendas() {
 
   const [agrupar, setAgrupar] = useState<EixoDaVenda>('venda');
   const [aba, setAba] = useState<AbaDaLista>('todas');
+  useSubAbaUso(aba);
   const [busca, setBusca] = useState('');
   const [filtroVendedor, setFiltroVendedor] = useState(TODOS);
   const [filtroSetor, setFiltroSetor] = useState(TODOS);

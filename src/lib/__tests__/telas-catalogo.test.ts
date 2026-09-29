@@ -6,7 +6,9 @@
  * cada, e um painel que não responde nada.
  */
 import { describe, it, expect } from 'vitest';
-import { telaDaRota, telaComAba, telaRaiz, rotuloDaTela, TELA_LABEL } from '../telas-catalogo';
+import {
+  telaDaRota, telaComAba, telaComAbas, telaRaiz, rotuloDaTela, TELA_LABEL,
+} from '../telas-catalogo';
 
 const UUID = '8f3e1c2a-4b5d-4e6f-9a8b-7c6d5e4f3a2b';
 
@@ -127,5 +129,72 @@ describe('rótulos', () => {
     for (const t of ['lider', 'lider:time', 'lider:desempenho', 'lider:quartis', 'lider:grafico']) {
       expect(TELA_LABEL[t], `falta rótulo para ${t}`).toBeTruthy();
     }
+  });
+});
+
+describe('abas dentro de abas (29/09/2026)', () => {
+  it('cada nível entra, separado por barra, na ordem da tela', () => {
+    expect(telaComAbas('analitico', ['analitico', 'dia', 'ranking']))
+      .toBe('analitico:analitico/dia/ranking');
+  });
+
+  it('nível vazio é pulado, e nenhum nível devolve a tela pura', () => {
+    expect(telaComAbas('analitico', ['colchao', null, undefined])).toBe('analitico:colchao');
+    expect(telaComAbas('analitico', [null, ''])).toBe('analitico');
+    expect(telaComAbas('analitico', [])).toBe('analitico');
+  });
+
+  /** A barra separa nível: dentro de um nível ela quebraria a leitura do rótulo. */
+  it('o nível não carrega separador nem caractere estranho', () => {
+    expect(telaComAbas('x', ['a/b'])).toBe('x:ab');
+    expect(telaComAbas('x', ['a:b'])).toBe('x:ab');
+    expect(telaComAbas('x', ['Nao Pagos'])).toBe('x:nao-pagos');
+    expect(telaComAbas('x', ['nao_pagos'])).toBe('x:nao_pagos');
+  });
+
+  it('o rótulo é montado por partes', () => {
+    expect(rotuloDaTela('analitico:analitico/dia/ranking'))
+      .toBe('Analítico · Analítico · Dia · Ranking');
+    expect(rotuloDaTela('diretoria:mestre/vinculos'))
+      .toBe('Painel Diretoria · Relatório 59 · Vínculos');
+    expect(rotuloDaTela('acordos:pix')).toBe('Acordos · Pix Automático');
+  });
+
+  /** «geral» é a aba Geral de Configurações E a Visão geral do Monitoramento. */
+  it('o mesmo segmento tem nomes diferentes em lugares diferentes', () => {
+    expect(rotuloDaTela('admin/configuracoes:geral')).toBe('Configurações · Geral');
+    expect(rotuloDaTela('admin/configuracoes:logs/uso/geral'))
+      .toBe('Configurações · Logs · Monitoramento de uso · Visão geral');
+  });
+
+  it('o recorte do Analítico não muda o nome das abas de dentro', () => {
+    for (const recorte of ['mes', 'periodo', 'dia']) {
+      expect(rotuloDaTela(`analitico:analitico/${recorte}/orfaos`)).toMatch(/Sem operador$/);
+    }
+  });
+
+  it('parte sem nome conhecido entra crua, em vez de sumir', () => {
+    expect(rotuloDaTela('analitico:novaaba')).toBe('Analítico · novaaba');
+    expect(rotuloDaTela('modulo:aba')).toBe('modulo · aba');
+  });
+
+  it('o rótulo direto do catálogo ganha do montado', () => {
+    expect(rotuloDaTela('lider:time')).toBe(TELA_LABEL['lider:time']);
+  });
+});
+
+describe('o que não é pessoa usando', () => {
+  /** O palco da TV fica ligado o dia inteiro na parede. */
+  it('o palco da TV não é medido; a mesa de corte é', () => {
+    expect(telaDaRota('/tv/clebertv')).toBeNull();
+    expect(telaDaRota('/tv/teste')).toBeNull();
+    expect(telaDaRota('/modo-tv')).toBe('modo-tv');
+  });
+
+  /** O banco tinha as «telas» `,` e `]`: endereço quebrado não vira linha. */
+  it('endereço com caractere estranho não vira tela', () => {
+    expect(telaDaRota('/,')).toBeNull();
+    expect(telaDaRota('/]')).toBeNull();
+    expect(telaDaRota('/acordos/a%20b')).toBeNull();
   });
 });

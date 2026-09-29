@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { telaComAba, TELA_LABEL } from '../telas-catalogo';
+import { telaComAba, telaComAbas, rotuloDaTela, TELA_LABEL } from '../telas-catalogo';
 
 const RAIZ = path.resolve(__dirname, '../../..');
 const MIGRATIONS = path.join(RAIZ, 'supabase/migrations');
@@ -353,10 +353,50 @@ describe('as telas que o painel existe para medir', () => {
     }
   });
 
+  /**
+   * Até 29/09/2026 a aba de dentro de Logs entrava no lugar da aba de fora
+   * (`admin/configuracoes:logs` e `admin/configuracoes:uso`). Hoje as duas vão
+   * no identificador, na ordem da tela. Os nomes antigos têm histórico gravado
+   * e seguem com rótulo.
+   */
   it('as duas abas internas de Logs se distinguem', () => {
-    expect(telaComAba('admin/configuracoes', 'logs'))
-      .not.toBe(telaComAba('admin/configuracoes', 'uso'));
+    const trilha = telaComAbas('admin/configuracoes', ['logs', 'trilha']);
+    const uso    = telaComAbas('admin/configuracoes', ['logs', 'uso']);
+    expect(trilha).toBe('admin/configuracoes:logs/trilha');
+    expect(uso).toBe('admin/configuracoes:logs/uso');
+    expect(rotuloDaTela(trilha)).toBe('Configurações · Logs · Trilha de auditoria');
+    expect(rotuloDaTela(uso)).toBe('Configurações · Logs · Monitoramento de uso');
     expect(TELA_LABEL['admin/configuracoes:logs']).toBeTruthy();
     expect(TELA_LABEL['admin/configuracoes:uso']).toBeTruthy();
+  });
+});
+
+/**
+ * ## A adoção conta a tela junto com as abas de dentro
+ *
+ * Com a aba no identificador, ninguém mais grava `analitico` puro — grava
+ * `analitico:analitico/mes/…`. Uma adoção por igualdade responderia «ninguém
+ * abriu o Analítico» com todo mundo usando. Migration 20260929180000.
+ */
+describe('adoção de tela inclui as abas', () => {
+  function ultimaDefinicao(fn: string): string {
+    const defs = [...SQL.matchAll(
+      new RegExp(`create or replace function public\\.${fn}[\\s\\S]*?\\$function\\$;`, 'gi'),
+    )].map(m => m[0]);
+    expect(defs.length, `${fn} não encontrada`).toBeGreaterThan(0);
+    return defs[defs.length - 1];
+  }
+
+  it('a última versão compara por prefixo, e não só por igualdade', () => {
+    const corpo = ultimaDefinicao('fn_uso_adocao_tela');
+    expect(corpo).toMatch(/starts_with\(\s*u\.tela/i);
+    // `_` é curinga no LIKE e aparece nos nomes (`nao_pagos`).
+    expect(corpo).not.toMatch(/u\.tela\s+like/i);
+    expect(corpo).toMatch(/security invoker/i);
+  });
+
+  it('o separador segue o do front: `:` depois da tela, `/` depois da aba', () => {
+    const corpo = ultimaDefinicao('fn_uso_adocao_tela');
+    expect(corpo).toMatch(/strpos\(p_tela, ':'\) > 0 THEN '\/' ELSE ':'/i);
   });
 });

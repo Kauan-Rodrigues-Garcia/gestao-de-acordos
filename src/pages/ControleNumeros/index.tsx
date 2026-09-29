@@ -53,6 +53,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useControleNumeros, type CelularComNumeros } from '@/hooks/useControleNumeros';
 import { useLixeiraNumeros } from '@/hooks/useLixeiraNumeros';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { HistoricoNumero } from '@/components/numeros/HistoricoNumero';
 import { DialogoExcluirNumero } from '@/components/numeros/DialogoExcluirNumero';
 import { DialogoExcluirCelular } from '@/components/numeros/DialogoExcluirCelular';
@@ -137,6 +138,10 @@ export default function ControleNumeros() {
   );
   const emTratamento = relancados.length - aguardando.length;
 
+  // Controlada só para o monitoramento de uso saber em que aba a pessoa está.
+  const [abaAtiva, setAbaAtiva] = useState('celulares');
+  useSubAbaUso(loading ? null : abaAtiva);
+
   if (loading) {
     return (
       <div className="space-y-4 p-4 md:p-6">
@@ -214,7 +219,7 @@ export default function ControleNumeros() {
         </Card>
       )}
 
-      <Tabs defaultValue="celulares">
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
         <TabsList>
           <TabsTrigger value="celulares">
             <Smartphone className="mr-1.5 h-4 w-4" /> Celulares

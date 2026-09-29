@@ -22,6 +22,7 @@
  * setor porque o setor não chega até ela.
  */
 
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { CalendarDays, X, ListChecks, Trophy, TrendingUp, CreditCard, Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -113,6 +114,8 @@ export function AnaliticoOperador({
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
   const [abaOp, setAbaOp] = useState<AbaOperador>('meus');
+  // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
+  useSubAbaUso(abaOp, 3);
 
   // ── Ranking (carregado sob demanda ao abrir a aba / trocar de mês) ──────────
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);

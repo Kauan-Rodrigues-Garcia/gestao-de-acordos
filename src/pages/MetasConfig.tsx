@@ -45,6 +45,7 @@
  * cada selecionado — a mesma gravação de digitar a linha dele — num `upsert` só.
  */
 
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -548,6 +549,9 @@ export default function MetasConfig() {
 
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
+  // Controlada só para o monitoramento de uso saber a aba aberta (nível 2).
+  const [abaMetas, setAbaMetas] = useState('metas');
+  useSubAbaUso(abaMetas, 2);
   const [ano, setAno] = useState(hoje.getFullYear());
   const [setorSelecionado, setSetorSelecionado] = useState<string>("");
 
@@ -1433,7 +1437,7 @@ export default function MetasConfig() {
         </div>
       )}
 
-      <Tabs defaultValue="metas" className="space-y-6">
+      <Tabs value={abaMetas} onValueChange={setAbaMetas} className="space-y-6">
         {podeVerComissao && (
           <TabsList>
             <TabsTrigger value="metas">Metas</TabsTrigger>

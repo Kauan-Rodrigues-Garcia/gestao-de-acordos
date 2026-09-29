@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart2, User, Users, Building2, Layers3, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -173,6 +174,11 @@ export default function PaginaAnalitico() {
     const m = mesDoRecorte(r);
     if (m !== mesFiltro) setMesFiltro(m);
   }, [mesFiltro, setMesFiltro]);
+
+  // Monitoramento de uso: aba principal e, dentro do Analítico, o recorte. A
+  // aba de dentro (Por operador, Ranking…) é declarada pela visão, no nível 3.
+  useSubAbaUso(abaVisivel);
+  useSubAbaUso(abaVisivel === 'analitico' ? recorte.modo : null, 2);
 
   const mesDaLente = mesDoRecorte(recorte);
 

@@ -48,6 +48,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useFechamentoOperadores } from '@/hooks/useFechamentoOperadores';
 import { useTenant } from '@/lib/tenant-config';
 import { useMesGlobal } from '@/providers/MesProvider';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { supabase } from '@/lib/supabase';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
@@ -108,6 +109,7 @@ export default function PaginaFechamento() {
   // A aba fica na URL: recarregar a página ou mandar o link abre na mesma.
   const [params, setParams] = useSearchParams();
   const aba: AbaFechamento = params.get('aba') === 'premiacoes' ? 'premiacoes' : 'fechamento';
+  useSubAbaUso(aba);
   const trocarAba = useCallback((k: AbaFechamento) => {
     setParams(p => {
       const n = new URLSearchParams(p);

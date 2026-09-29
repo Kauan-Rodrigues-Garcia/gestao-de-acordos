@@ -108,9 +108,10 @@ export default function AdminLogs() {
     return () => { ativo = false; };
   }, [ipsVisiveis]);
 
-  // A própria tela é medida: `admin/configuracoes:logs` ou `:uso`. Sem isto, as
-  // duas abas internas apareceriam somadas como uma só no monitoramento.
-  useSubAbaUso(abaInterna === 'uso' ? 'uso' : 'logs');
+  // A própria tela é medida, no nível 2 — abaixo da aba «Logs» de Configurações:
+  // `admin/configuracoes:logs/trilha` ou `:logs/uso`. Até 29/09/2026 eram
+  // `admin/configuracoes:logs` e `:uso`; o histórico com esses nomes fica.
+  useSubAbaUso(abaInterna === 'uso' ? 'uso' : 'trilha', 2);
 
   // Lista de empresas só para super_admin — os demais nem veem o seletor, e
   // buscar a lista para eles seria uma chamada que o RLS recusa.

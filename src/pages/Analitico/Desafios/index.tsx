@@ -29,6 +29,7 @@
  * recorte para quem está olhando — uma lista curta sem explicação se lê como
  * defeito.
  */
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Settings2 } from 'lucide-react';
@@ -158,6 +159,8 @@ export function AbaDesafios({
     useDesafios(true);
 
   const [vista, setVista] = useState<Vista>({ modo: 'catalogo' });
+  // Monitoramento de uso: lista, placar ou configuração, abaixo de «Desafios».
+  useSubAbaUso(vista.modo, 2);
 
   const ativos = useMemo(
     () => desafios.filter(d => d.status === 'ativo'),

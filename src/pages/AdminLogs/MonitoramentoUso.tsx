@@ -43,6 +43,7 @@
  *   • **Adoção de tela** — de UMA tela escolhida, quem abriu e quem não.
  */
 
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, Users, Clock, MousePointerClick, CalendarDays, AlertTriangle,
@@ -62,7 +63,7 @@ import { cn } from '@/lib/utils';
 import { PERFIL_LABELS } from '@/lib/index';
 import { supabase } from '@/lib/supabase';
 import { useChartColors } from '@/hooks/useChartColors';
-import { rotuloDaTela, TELA_LABEL } from '@/lib/telas-catalogo';
+import { rotuloDaTela, telaRaiz, TELA_LABEL } from '@/lib/telas-catalogo';
 import {
   buscarUsoPorPessoa, buscarUsoPorTela, buscarUsoPorDia, buscarAdocaoTela,
   buscarSemAcesso,
@@ -72,6 +73,7 @@ import {
 import ListaUsuariosUso from './ListaUsuariosUso';
 import { numeroBr, tempoRelativo, formatarDuracao } from './formatos';
 import { montarSerieDiaria, tendencia, type PontoDia } from './serieDiaria';
+import { agruparPorTela, telaTeveUso } from './agruparTelas';
 
 /** Períodos oferecidos. 30 dias é o padrão: 7 é curto demais para tendência. */
 const PERIODOS = [
@@ -106,13 +108,31 @@ const TELAS_ADOCAO = [
  * Aparecem em "sem uso nenhum" na outra empresa e não significam nada ali — não
  * é abandono, é módulo que aquele tenant não tem. Ficam de fora do card.
  *
- * `ouvidoria` continua na lista por outro motivo: a aba foi arquivada em
- * 05/09/2026 (`arquivo-morto/ouvidoria/`) e nunca mais terá uso novo. O
- * histórico em `uso_telas` fica, e o rótulo dela em `telas-catalogo` também —
- * senão o passado vira uma chave crua na tela. O que não pode é ela aparecer
- * como tela abandonada: ela não foi abandonada, foi removida.
+ * Só BookPlay: Campanha Fácil, Dashboard – ADM, Fechamento, Controle de Números
+ * e Meus Chips. Só PaguePlay: Solicitar Atendimento. Só o Comercial: Vendas e
+ * as telas dele.
  */
-const TELAS_EXCLUSIVAS = new Set(['ouvidoria', 'campanha-facil']);
+const TELAS_EXCLUSIVAS = new Set([
+  'campanha-facil', 'dashboard-adm', 'fechamento', 'controle-numeros', 'meus-chips',
+  'solicitacoes-whatsapp',
+  'vendas', 'vendas/indicacoes', 'vendas/painel-lider', 'vendas/painel-diretoria', 'vendas/lixeira',
+]);
+
+/**
+ * Identificadores que não são mais gravados.
+ *
+ * O histórico em `uso_telas` fica, e o rótulo em `telas-catalogo` também —
+ * senão o passado vira uma chave crua na tela. O que não pode é aparecerem como
+ * tela abandonada: não foram abandonadas, foram removidas ou renomeadas.
+ *
+ *   ouvidoria ................ aba arquivada em 05/09/2026
+ *   lider:time ............... aba Acompanhamento, removida em 31/08/2026
+ *   admin/configuracoes:uso .. hoje `admin/configuracoes:logs/uso/…` (29/09/2026)
+ */
+const TELAS_APOSENTADAS = new Set(['ouvidoria', 'lider:time', 'admin/configuracoes:uso']);
+
+/** Quantas abas cada tela mostra antes do «e mais». */
+const ABAS_POR_GRUPO = 4;
 
 const TODOS = '__todos__';
 const TODAS_EMPRESAS = '__todas__';
@@ -214,6 +234,8 @@ interface EquipeOpcao { id: string; nome: string; setor_id: string | null }
 
 export default function MonitoramentoUso({ empresas }: Props) {
   const [aba, setAba] = useState<AbaUso>('geral');
+  // Monitoramento de uso do próprio monitoramento: nível 3, dentro de Logs › Uso.
+  useSubAbaUso(aba, 3);
 
   // ── Filtros ────────────────────────────────────────────────────────────────
   const [dias, setDias]   = useState<number>(30);
@@ -352,21 +374,32 @@ export default function MonitoramentoUso({ empresas }: Props) {
   const pararam        = useMemo(() => ausentes.filter(a => !!a.ultimo_em), [ausentes]);
 
   const nunca = adocao.filter(a => Number(a.aberturas) === 0);
-  const maxSegTela    = Math.max(...telas.map(t => Number(t.segundos)), 1);
-  const segTotalTelas = telas.reduce((s, t) => s + Number(t.segundos), 0);
+  const grupos        = useMemo(() => agruparPorTela(telas), [telas]);
+  const maxSegTela    = Math.max(...grupos.map(g => g.segundos), 1);
+  const segTotalTelas = grupos.reduce((s, g) => s + g.segundos, 0);
+  const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(() => new Set());
+  function alternarGrupo(raiz: string) {
+    setGruposAbertos(atual => {
+      const novo = new Set(atual);
+      if (novo.has(raiz)) novo.delete(raiz); else novo.add(raiz);
+      return novo;
+    });
+  }
 
   const telasSemUso = useMemo(() => {
-    const usadas = new Set(telas.map(t => t.tela));
+    const usadas = telas.map(t => t.tela);
     return Object.keys(TELA_LABEL)
-      .filter(t => !usadas.has(t) && !TELAS_EXCLUSIVAS.has(t))
+      .filter(t => !TELAS_EXCLUSIVAS.has(t) && !TELAS_APOSENTADAS.has(t))
+      .filter(t => !telaTeveUso(t, usadas))
       .sort((a, b) => rotuloDaTela(a).localeCompare(rotuloDaTela(b), 'pt-BR'));
   }, [telas]);
 
   const opcoesAdocao = useMemo(() => {
-    const fixas = [...TELAS_ADOCAO];
-    const extras = telas
-      .map(t => t.tela)
-      .filter(t => !fixas.includes(t as typeof TELAS_ADOCAO[number]))
+    const fixas = [...TELAS_ADOCAO] as string[];
+    // A tela do menu entra junto das abas: a adoção dela soma as abas de dentro.
+    const vistas = new Set(telas.flatMap(t => [telaRaiz(t.tela), t.tela]));
+    const extras = [...vistas]
+      .filter(t => !fixas.includes(t))
       .sort((a, b) => rotuloDaTela(a).localeCompare(rotuloDaTela(b), 'pt-BR'));
     const todas = [...fixas, ...extras] as string[];
     return todas.includes(telaAdocao) ? todas : [...todas, telaAdocao];
@@ -633,45 +666,86 @@ export default function MonitoramentoUso({ empresas }: Props) {
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                 Telas mais usadas{recorte && ` · ${recorte}`}
               </p>
-              {telas.length === 0 ? (
+              {grupos.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">
                   Nenhuma tela com uso registrado neste recorte.
                 </p>
               ) : (
                 <div className="space-y-2.5">
-                  {telas.slice(0, 12).map((t, i) => {
-                    const seg = Number(t.segundos);
+                  {grupos.slice(0, 12).map((g, i) => {
                     // A fatia do tempo total responde "quanto do dia das pessoas
                     // esta tela ocupa" — a barra sozinha só compara com a
                     // primeira colocada e não diz peso nenhum.
                     const fatia = segTotalTelas > 0
-                      ? Math.round((seg / segTotalTelas) * 100) : 0;
+                      ? Math.round((g.segundos / segTotalTelas) * 100) : 0;
+                    // Tela sem aba nenhuma: a única linha é a própria tela.
+                    const temAbas = g.abas.some(a => a.tela !== g.raiz);
+                    const aberto = gruposAbertos.has(g.raiz);
+                    const abasVisiveis = aberto ? g.abas : g.abas.slice(0, ABAS_POR_GRUPO);
                     return (
-                      <div key={t.tela} className="min-w-0">
+                      <div key={g.raiz} className="min-w-0">
                         <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-xs font-medium truncate" title={t.tela}>
+                          <span className="text-xs font-medium truncate" title={g.raiz}>
                             <span className="text-muted-foreground tabular-nums font-mono mr-1">
                               {i + 1}.
                             </span>
-                            {rotuloDaTela(t.tela)}
+                            {rotuloDaTela(g.raiz)}
                           </span>
                           <span className="text-[11px] font-mono tabular-nums font-semibold shrink-0">
-                            {formatarDuracao(seg)}
+                            {formatarDuracao(g.segundos)}
                           </span>
                         </div>
-                        <Barra valor={seg} maximo={maxSegTela} cor="#6366f1" />
+                        <Barra valor={g.segundos} maximo={maxSegTela} cor="#6366f1" />
                         <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {numeroBr(Number(t.aberturas))} aberturas · {t.pessoas} pessoa(s)
+                          {numeroBr(g.aberturas)} aberturas
+                          {' · '}{g.pessoasExato ? '' : 'ao menos '}{g.pessoasMinimo} pessoa(s)
                           {' · '}{fatia}% do tempo
                         </span>
+                        {temAbas && (
+                          <ul className="mt-1 ml-3 border-l border-border pl-2 space-y-0.5">
+                            {abasVisiveis.map(a => {
+                              const segAba = Number(a.segundos);
+                              const pctAba = g.segundos > 0
+                                ? Math.round((segAba / g.segundos) * 100) : 0;
+                              return (
+                                <li key={a.tela}
+                                  className="flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground">
+                                  <span className="truncate" title={a.tela}>
+                                    {a.tela === g.raiz
+                                      ? 'Sem aba registrada'
+                                      : rotuloDaTela(a.tela).replace(`${rotuloDaTela(g.raiz)} · `, '')}
+                                  </span>
+                                  <span className="shrink-0 tabular-nums font-mono">
+                                    {formatarDuracao(segAba)} · {pctAba}% · {a.pessoas} pessoa(s)
+                                  </span>
+                                </li>
+                              );
+                            })}
+                            {g.abas.length > ABAS_POR_GRUPO && (
+                              <li>
+                                <button type="button" onClick={() => alternarGrupo(g.raiz)}
+                                  className="text-[10px] text-primary hover:underline">
+                                  {aberto
+                                    ? 'mostrar menos'
+                                    : `e mais ${g.abas.length - ABAS_POR_GRUPO} aba(s)`}
+                                </button>
+                              </li>
+                            )}
+                          </ul>
+                        )}
                       </div>
                     );
                   })}
-                  {telas.length > 12 && (
+                  {grupos.length > 12 && (
                     <p className="text-[10px] text-muted-foreground pt-1">
-                      e mais {telas.length - 12} tela(s) com menos uso.
+                      e mais {grupos.length - 12} tela(s) com menos uso.
                     </p>
                   )}
+                  <p className="text-[10px] text-muted-foreground pt-1 leading-snug">
+                    O tempo conta só com a pessoa ativa: 5 minutos sem mexer no
+                    mouse ou no teclado param o relógio. Painéis do topo e o chat
+                    contam à parte, sem somar na tela de baixo.
+                  </p>
                 </div>
               )}
             </Card>
@@ -701,9 +775,10 @@ export default function MonitoramentoUso({ empresas }: Props) {
               )}
               <p className="text-[10px] text-muted-foreground mt-3 leading-snug">
                 Sai do catálogo de telas, não do banco: tela sem uso não tem linha
-                em <code>uso_telas</code>. Módulos exclusivos de uma operação
-                (Campanha Fácil) e módulos já removidos (Ouvidoria) ficam de
-                fora — não é abandono.
+                em <code>uso_telas</code>. Uma tela conta como usada quando
+                qualquer aba dela foi aberta. Módulos exclusivos de uma operação
+                (Campanha Fácil, Meus Chips, Vendas…) e módulos já removidos
+                (Ouvidoria) ficam de fora — não é abandono.
               </p>
             </Card>
           </div>
@@ -754,6 +829,7 @@ export default function MonitoramentoUso({ empresas }: Props) {
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Inclui quem <strong>não</strong> abriu — é a lista acionável.
+                A tela conta junto com as abas de dentro dela.
               </p>
             </div>
             <div className="flex items-center gap-2">
