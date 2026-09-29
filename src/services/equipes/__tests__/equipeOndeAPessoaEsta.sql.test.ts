@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * equipeOndeAPessoaEsta.sql.test.ts — a migration 20260929120000 num Postgres
+ * equipeOndeAPessoaEsta.sql.test.ts — a migration 20260929141516 num Postgres
  * de verdade (PGlite).
  *
  * A regra de 29/09/2026: a pessoa está nas equipes em que a tela de Equipes a
@@ -24,7 +24,7 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const MIGRATION = readFileSync(
-  resolve(__dirname, '../../../../supabase/migrations/20260929120000_equipe_e_onde_a_pessoa_esta.sql'),
+  resolve(__dirname, '../../../../supabase/migrations/20260929141516_equipe_e_onde_a_pessoa_esta.sql'),
   'utf8',
 );
 

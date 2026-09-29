@@ -689,7 +689,7 @@ três caminhos, e nenhum outro:
 - Uma regra só, nos dois lados: `src/services/equipes/equipeDoLider.ts` no app
   e `fn_equipes_do_operador` / `fn_pessoas_das_equipes` /
   `fn_equipes_de_alcance` / `fn_equipe_principal` no banco (migration
-  `20260929120000`).
+  `20260929141516`).
 
 ### 5.2 Líder por equipe `[BP]`
 

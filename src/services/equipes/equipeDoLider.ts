@@ -33,7 +33,7 @@
  * Daniele com 2).
  *
  * A mesma regra vive no banco em `fn_equipes_do_operador` (migration
- * 20260929120000). Se as duas discordarem, a tela mostra uma equipe e o banco
+ * 20260929141516). Se as duas discordarem, a tela mostra uma equipe e o banco
  * recorta outra.
  */
 
@@ -103,7 +103,7 @@ export function equipesDaPessoa(
  * As equipes de uma pessoa, do jeito que o resto do sistema deve perguntar.
  *
  * Mesma regra das funções do banco `fn_equipes_de_alcance` e
- * `fn_equipe_principal` (migration 20260929120000).
+ * `fn_equipe_principal` (migration 20260929141516).
  *
  *   todas      — as equipes em que a pessoa está (membro ou líder).
  *   principal  — UMA equipe, para o que só aceita uma (config de Direto/Extra,
