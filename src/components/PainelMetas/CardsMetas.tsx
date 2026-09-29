@@ -70,7 +70,7 @@ interface CardsMetasProps {
 export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
   const {
     totalRecebido, totalRecebidoOposto, diretoExtra, extraTabulado, meta, metaOposta,
-    projecao, escopoRotulo, modoAgregado, setorTemReceptivo,
+    projecao, escopoRotulo,
     diasUteisTotal, diasUteisPassados, baixaAnterior, porForma, unidade,
   } = dados;
 
@@ -166,9 +166,6 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
             mostraOposta
               ? `Bruto: ${formatBRL(totalRecebidoOposto)}${metaOposta !== null ? ` de ${formatBRL(metaOposta)}` : ''}`
               : null,
-            // Só no setor que recebe do Receptivo: nos outros não há o que
-            // excluir, e a frase só confundia (29/09/2026).
-            modoAgregado && setorTemReceptivo ? 'Receptivo não entra: é por setor' : null,
           ].filter(Boolean).join(' · ') || undefined}
         />
 

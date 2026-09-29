@@ -38,7 +38,6 @@ function dados(over: Partial<DadosPainelMetas> = {}): DadosPainelMetas {
     podeVerSetor: false,
     escopoRotulo: 'individual',
     modoAgregado: false,
-    setorTemReceptivo: false,
     noMesAtual: true,
     ...over,
   };
@@ -62,22 +61,12 @@ describe('CardsMetas — recebimento', () => {
     expect(screen.queryByText(/Meta individual/i)).not.toBeInTheDocument();
   });
 
-  it('no escopo agregado de setor com Receptivo nomeia a equipe e avisa', () => {
-    render0(daEquipe({ setorTemReceptivo: true }));
+  it('no escopo agregado nomeia a equipe, sem aviso do Receptivo', () => {
+    render0(daEquipe());
     // Com dois-pontos: o subtexto do Total recebido, e não o rodapé do donut
     // ("meta da equipe Matheus"), que casaria igual num regex sem âncora.
     expect(screen.getByText(/Meta da equipe Matheus: R\$/)).toBeInTheDocument();
-    expect(screen.getByText(/Receptivo não entra/i)).toBeInTheDocument();
-  });
-
-  it('setor sem Receptivo não mostra o aviso (29/09/2026)', () => {
-    render0(daEquipe());
-    expect(screen.getByText(/Meta da equipe Matheus: R\$/)).toBeInTheDocument();
-    expect(screen.queryByText(/Receptivo não entra/i)).not.toBeInTheDocument();
-  });
-
-  it('escopo individual nunca mostra o aviso', () => {
-    render0(dados({ setorTemReceptivo: true }));
+    // Retirado a pedido em 29/09/2026: não era útil na tela.
     expect(screen.queryByText(/Receptivo não entra/i)).not.toBeInTheDocument();
   });
 });
