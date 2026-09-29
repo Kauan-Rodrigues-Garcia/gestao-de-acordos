@@ -350,8 +350,11 @@ async function paginarTudo<T>(
  */
 export async function fetchAcordosPix(
   empresaId: string,
-  opts?: { operadorId?: string; setorId?: string | null },
+  opts?: { operadorId?: string; setorId?: string | null; operadorIds?: string[] },
 ): Promise<PixAutoAcordo[]> {
+  // Lista pedida e vazia é "ninguém", não "todo mundo": sem esta volta, o
+  // `.in` sumiria e a consulta traria a empresa inteira.
+  if (opts?.operadorIds && opts.operadorIds.length === 0) return [];
   const { linhas } = await paginarTudo<PixAutoAcordo>('fetchAcordosPix', (de, ate) => {
     let q = supabase
       .from('pix_automatico_acordos')
@@ -364,6 +367,7 @@ export async function fetchAcordosPix(
       .order('id', { ascending: false });
     if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
     if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
+    if (opts?.operadorIds) q = q.in('operador_id', opts.operadorIds);
     return q.range(de, ate);
   });
   return linhas;
@@ -450,7 +454,9 @@ export async function marcarComissaoPaga(p: {
     .from('pix_automatico_acordos')
     .update(payload)
     .in('id', p.ids);
-  if (p.pago) q = q.eq('status', 'aprovado').eq('pago', false);
+  // Desfazer também só vale para o que ESTÁ pago: com a tela velha, desfazer
+  // o que outra pessoa já desfez reescreveria o rastro à toa.
+  q = p.pago ? q.eq('status', 'aprovado').eq('pago', false) : q.eq('pago', true);
   const { data, error } = await q.select('id');
   if (error) return { ok: false, count: 0, error: error.message };
   return { ok: true, count: (data ?? []).length };
@@ -839,6 +845,14 @@ export async function criarAcordosPixLote(
 /**
  * Aprova ou desaprova. Na aprovação, trava o % vigente do setor na linha
  * (pct_comissao) — mudanças futuras de configuração não alteram o aprovado.
+ *
+ * Só decide o que ainda está PENDENTE. O acordo de um operador clonado aparece
+ * para dois líderes (o do setor de origem e o do setor do clone), e os dois
+ * podem estar com a tela aberta: sem o `.eq('status', 'pendente')`, a
+ * desaprovação de um, clicada numa tela velha, apagava por cima a aprovação
+ * que o outro acabou de dar. O filtro vai no MESMO UPDATE, então o Postgres
+ * reavalia a condição sobre a linha já gravada — o segundo clique chega a
+ * zero linhas, e `jaDecidido` diz por quê.
  */
 export async function avaliarAcordoPix(p: {
   id: string;
@@ -846,8 +860,8 @@ export async function avaliarAcordoPix(p: {
   pctAtual: number;
   avaliadorId: string;
   avaliadorNome: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase
+}): Promise<{ ok: boolean; error?: string; jaDecidido?: boolean }> {
+  const { data, error } = await supabase
     .from('pix_automatico_acordos')
     .update({
       status:            p.aprovar ? 'aprovado' : 'desaprovado',
@@ -856,9 +870,53 @@ export async function avaliarAcordoPix(p: {
       avaliado_por_nome: p.avaliadorNome,
       avaliado_em:       new Date().toISOString(),
     })
-    .eq('id', p.id);
+    .eq('id', p.id)
+    .eq('status', 'pendente')
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, jaDecidido: true, error: await quemJaDecidiuPix(p.id) };
+  }
   return { ok: true };
+}
+
+/**
+ * A frase para quem clicou numa tela velha: quem já decidiu, e o quê.
+ *
+ * Vale para aprovar e para pagar. Zero linhas afetadas sozinho não explica
+ * nada — o líder do Treinamento precisa ler que foi o líder do Receptivo que
+ * pagou, senão acha que o botão falhou e tenta de novo.
+ */
+export async function quemJaDecidiuPix(id: string): Promise<string> {
+  const { data } = await supabase
+    .from('pix_automatico_acordos')
+    .select('status, avaliado_por_nome, avaliado_em, pago, pago_por_nome, pago_em')
+    .eq('id', id)
+    .maybeSingle();
+  return fraseJaDecidido(data as Pick<PixAutoAcordo,
+    'status' | 'avaliado_por_nome' | 'avaliado_em' | 'pago' | 'pago_por_nome' | 'pago_em'> | null);
+}
+
+/** Pura, para teste. `null` = a linha não existe mais (excluída). */
+export function fraseJaDecidido(
+  l: Pick<PixAutoAcordo,
+    'status' | 'avaliado_por_nome' | 'avaliado_em' | 'pago' | 'pago_por_nome' | 'pago_em'> | null,
+): string {
+  if (!l) return 'Este acordo não existe mais — foi excluído por outra pessoa.';
+  const quando = (iso: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return ' em ' + d.toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+  };
+  if (l.pago) {
+    return `A comissão já foi paga${l.pago_por_nome ? ` por ${l.pago_por_nome}` : ''}${quando(l.pago_em)}.`;
+  }
+  if (l.status === 'pendente') return 'Este acordo voltou para pendente. A lista foi atualizada.';
+  const verbo = l.status === 'aprovado' ? 'aprovado' : 'desaprovado';
+  return `Este acordo já foi ${verbo}${l.avaliado_por_nome ? ` por ${l.avaliado_por_nome}` : ''}${quando(l.avaliado_em)}.`;
 }
 
 /**

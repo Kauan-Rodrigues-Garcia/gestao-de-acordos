@@ -81,6 +81,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import {
   fetchNrsBloqueados, excluirAcordoPix, reavaliarAcordoPix, marcarComissaoPaga,
+  avaliarAcordoPix, fraseJaDecidido,
 } from './pix_automatico.service';
 
 const LINHA_PAGA = {
@@ -192,6 +193,17 @@ describe('marcarComissaoPaga', () => {
     expect(colunas).not.toContain('status');
   });
 
+  // Tela velha: o outro líder já desfez. Sem a trava, o segundo "Desfazer"
+  // gravaria de novo, à toa.
+  it('desfazer só atinge o que está pago', async () => {
+    fila = [{ data: [], error: null }];
+    const r = await marcarComissaoPaga({
+      ids: ['ac-1'], pago: false, responsavelId: 'lid-1', responsavelNome: 'Bryan',
+    });
+    expect(calls[0].filters).toContainEqual(['eq', 'pago', true]);
+    expect(r).toEqual({ ok: true, count: 0 });
+  });
+
   it('lista vazia não chega a consultar o banco', async () => {
     const r = await marcarComissaoPaga({
       ids: [], pago: true, responsavelId: 'lid-1', responsavelNome: 'Bryan',
@@ -258,5 +270,54 @@ describe('reavaliarAcordoPix', () => {
     const r = await reavaliarAcordoPix('ac-1');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/desfaça o pagamento/i);
+  });
+});
+
+// ── Aprovar: quem decide primeiro vale ──────────────────────────────────────
+//
+// O Pix de uma pessoa clonada aparece para dois líderes (origem e clone). O
+// segundo clique, dado numa tela velha, não pode passar por cima do primeiro.
+
+describe('avaliarAcordoPix', () => {
+  it('só decide o que ainda está pendente', async () => {
+    fila = [{ data: [{ id: 'ac-2' }], error: null }];
+    const r = await avaliarAcordoPix({
+      id: 'ac-2', aprovar: true, pctAtual: 0.25, avaliadorId: 'lid-1', avaliadorNome: 'Samara',
+    });
+    expect(r).toEqual({ ok: true });
+    expect(calls[0].operation).toBe('update');
+    expect(calls[0].filters).toContainEqual(['eq', 'status', 'pendente']);
+  });
+
+  it('zero linhas: diz quem já decidiu, sem gravar nada', async () => {
+    fila = [
+      { data: [], error: null },
+      { data: { ...LINHA_A_PAGAR, avaliado_por_nome: 'Beatriz', avaliado_em: '2026-09-29T13:05:00Z' }, error: null },
+    ];
+    const r = await avaliarAcordoPix({
+      id: 'ac-2', aprovar: false, pctAtual: 0.25, avaliadorId: 'lid-2', avaliadorNome: 'Samara',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.jaDecidido).toBe(true);
+    expect(r.error).toMatch(/já foi aprovado por Beatriz em 29\/09/);
+    // Só o UPDATE que não pegou e a leitura: nenhuma segunda escrita.
+    expect(calls.map(c => c.operation)).toEqual(['update', 'select']);
+  });
+});
+
+describe('fraseJaDecidido', () => {
+  it('pago fala de quem pagou', () => {
+    expect(fraseJaDecidido({ ...LINHA_PAGA, pago_em: null } as never))
+      .toBe('A comissão já foi paga por Bryan.');
+  });
+
+  it('linha excluída', () => {
+    expect(fraseJaDecidido(null)).toMatch(/excluído/);
+  });
+
+  it('desaprovado sem nome', () => {
+    expect(fraseJaDecidido({
+      ...LINHA_A_PAGAR, status: 'desaprovado', avaliado_por_nome: null, avaliado_em: null,
+    } as never)).toBe('Este acordo já foi desaprovado.');
   });
 });

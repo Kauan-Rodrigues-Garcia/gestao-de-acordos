@@ -84,7 +84,8 @@ import {
   textoPrazoExpurgo,
   pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial, itensDoSetorPix,
   setorDaLinhaPix, clonesPorOperador, incluirClonesDoSetor, setorDoRegistroPix,
-  type OperadorInfo, type FiltroPagamento, type CloneDeEquipe, type OndeFoiClonado,
+  setoresPorPessoaClonada, pessoasCompartilhadasCom, juntarLinhasCompartilhadas,
+  type OperadorInfo, type FiltroPagamento, type OndeFoiClonado, type VinculoDeClone,
 } from './pixAutomaticoView';
 import { PixComissaoDobrada } from './PixComissaoDobrada';
 import { PixRankingSetor, type AbaRankingPix } from './PixRankingSetor';
@@ -103,7 +104,7 @@ import {
   fetchLogPix, type PixLogItem,
   setPermiteRegistroOperador, normalizarNr,
   comissaoDe, valorAPagarDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
-  marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
+  marcarComissaoPaga, quemJaDecidiuPix, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
   fetchPedidosNr, pedirAutorizacaoNr, type PixNrPedido,
@@ -159,6 +160,44 @@ function donosIguais(
 interface EquipeComSetor { id: string; nome: string; setor_id: string | null }
 
 /**
+ * Os clones da empresa, cada um com o setor da equipe e o do cadastro.
+ *
+ * Numa ida só, pelos dois vínculos da tabela: as consultas de equipes e perfis
+ * da tela vêm presas ao setor do líder e não dizem onde a pessoa dele foi
+ * clonada. Falha aqui não derruba a aba: sem clones, vale só o carimbo, que é
+ * o comportamento de antes.
+ */
+async function lerVinculosDeClone(empresaId: string): Promise<VinculoDeClone[]> {
+  const { data, error } = await supabase
+    .from('equipe_operadores_clones')
+    .select('operador_id, equipe_id, equipe:equipes!equipe_operadores_clones_equipe_id_fkey(setor_id), '
+      + 'operador:perfis!equipe_operadores_clones_operador_id_fkey(setor_id)')
+    .eq('empresa_id', empresaId);
+  if (error) {
+    console.warn('[PixAutomatico] clones:', error.message);
+    return [];
+  }
+  type Linha = {
+    operador_id: string; equipe_id: string;
+    equipe: { setor_id: string | null } | null;
+    operador: { setor_id: string | null } | null;
+  };
+  return ((data ?? []) as unknown as Linha[]).map(l => ({
+    operador_id:       l.operador_id,
+    equipe_id:         l.equipe_id,
+    setor_da_equipe:   l.equipe?.setor_id ?? null,
+    setor_do_cadastro: l.operador?.setor_id ?? null,
+  }));
+}
+
+/** Mesmo conteúdo — para não redesenhar a tela a cada `carregar`. */
+function mapasDeSetoresIguais(a: Record<string, string[]>, b: Record<string, string[]>): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every(k => b[k] && a[k].length === b[k].length && a[k].every((s, i) => s === b[k][i]));
+}
+
+/**
  * «Todos os setores» ESCOLHIDO, que não é o mesmo que ninguém ter escolhido.
  *
  * `filtroSetor` guardava `''` para os dois casos, e enquanto «todos» era o
@@ -182,6 +221,8 @@ interface InstantaneoPix {
   setores: { id: string; nome: string }[];
   saldos: PixAutoSaldo[];
   pagamentos: PixPremiacaoPagamento[];
+  /** Sem ele, a linha compartilhada sumiria da tabela até a releitura. */
+  setoresDaPessoa?: Record<string, string[]>;
 }
 
 const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
@@ -454,6 +495,14 @@ export function PixAutomatico() {
    * Ref, e não estado: só `registrar` lê, e nada na tela redesenha por ela.
    */
   const clonesRef = useRef<Record<string, OndeFoiClonado[]>>({});
+  /*
+   * Os setores de cada pessoa clonada (cadastro + clones). Estado, e não ref:
+   * o filtro da tabela lê, e a linha compartilhada precisa aparecer no foco de
+   * setor da diretoria também. Ver `linhaVisivelNoSetor`.
+   */
+  const [setoresDaPessoa, setSetoresDaPessoa] = useState<Record<string, string[]>>(
+    () => guardado?.setoresDaPessoa ?? {},
+  );
 
   // Vínculo do acordo a um operador (líder+): busca por nome
   const [vinculoBusca, setVinculoBusca] = useState('');
@@ -706,18 +755,30 @@ export function PixAutomatico() {
       // exceção abortava o `carregar` inteiro e a aba aparecia VAZIA — com 73
       // pendentes e 148 aprovados intactos no banco. Nada aqui pode impedir a
       // lista de carregar.
-      if (podeVerDeOutros) {
-        try {
-          await expurgarDesaprovadosVencidos(empresa.id);
-        } catch (e) {
-          console.warn('[PixAutomatico] expurgo dos desaprovados:', e);
-        }
-      }
+      //
+      // Os clones vêm junto, ANTES da lista: é deles que sai quem tem Pix
+      // compartilhado entre dois setores. Ver «Linha compartilhada» em
+      // pixAutomaticoView.
+      const [, vinculos] = await Promise.all([
+        podeVerDeOutros
+          ? expurgarDesaprovadosVencidos(empresa.id).catch(e => {
+              console.warn('[PixAutomatico] expurgo dos desaprovados:', e);
+            })
+          : Promise.resolve(),
+        podeVerDeOutros ? lerVinculosDeClone(empresa.id) : Promise.resolve([]),
+      ]);
+      const setoresDaPessoa = setoresPorPessoaClonada(vinculos);
+      const compartilhadas = setorEscopo
+        ? pessoasCompartilhadasCom(setoresDaPessoa, setorEscopo)
+        : [];
 
-      const [lista, cfgs, bloqueados, saldosDoEscopo, pedidos, pagamentos] = await Promise.all([
+      const [listaDoSetor, listaCompartilhada, cfgs, bloqueados, saldosDoEscopo, pedidos, pagamentos] = await Promise.all([
         fetchAcordosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
+        // O Pix das pessoas clonadas carimbado no OUTRO setor delas — o que a
+        // consulta por carimbo acima não alcança. Lista vazia não vai ao banco.
+        fetchAcordosPix(empresa.id, { operadorIds: compartilhadas }),
         fetchConfigsPix(empresa.id),
         fetchDonosDeNrPix(empresa.id),
         // Mesmo recorte da lista: o operador vê o próprio saldo (ele precisa
@@ -734,6 +795,10 @@ export function PixAutomatico() {
           ? fetchPremiacoesPagamento(empresa.id, mes)
           : Promise.resolve([]),
       ]);
+      const lista = setorEscopo
+        ? juntarLinhasCompartilhadas(listaDoSetor, listaCompartilhada, setorEscopo, setoresDaPessoa)
+        : listaDoSetor;
+      setSetoresDaPessoa(atual => mapasDeSetoresIguais(atual, setoresDaPessoa) ? atual : setoresDaPessoa);
       // Reconciliação: a linha que não mudou volta com a MESMA referência, e
       // uma releitura sem novidade devolve o array anterior — nesse caso o
       // React não renderiza nada. Ver `lib/dadosVivos`.
@@ -774,11 +839,8 @@ export function PixAutomatico() {
           qEqs  = qEqs.eq('setor_id', setorEscopo);
           qSets = qSets.eq('id', setorEscopo);
         }
-        const [{ data: ops }, { data: eqs }, { data: sets }, { data: clonesLidos }, retrato] = await Promise.all([
+        const [{ data: ops }, { data: eqs }, { data: sets }, retrato] = await Promise.all([
           qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
-          // Clone não muda o setor do cadastro — ver «Clones» em pixAutomaticoView.
-          supabase.from('equipe_operadores_clones').select('operador_id, equipe_id')
-            .eq('empresa_id', empresa.id),
           // Mês fechado tem foto. Ver `fetchRetratoPixDoMes`.
           ehMesAtual(mes) ? Promise.resolve(null) : fetchRetratoPixDoMes(empresa.id, mes),
         ]);
@@ -786,7 +848,14 @@ export function PixAutomatico() {
         listaEqs  = (eqs  ?? []) as EquipeComSetor[];
         listaSets = (sets ?? []) as { id: string; nome: string }[];
 
-        const clones = clonesPorOperador((clonesLidos ?? []) as CloneDeEquipe[], listaEqs);
+        // Clone não muda o setor do cadastro — ver «Clones» em pixAutomaticoView.
+        // O setor de cada equipe vem do próprio vínculo, e não de `listaEqs`:
+        // esta já está presa ao setor do líder, e o líder do Receptivo perderia
+        // de vista onde a pessoa dele foi clonada.
+        const clones = clonesPorOperador(
+          vinculos,
+          vinculos.map(v => ({ id: v.equipe_id, setor_id: v.setor_da_equipe })),
+        );
         clonesRef.current = clones;
         /*
          * O líder preso a um setor alternativo (Treinamento) não tem operador
@@ -851,6 +920,7 @@ export function PixAutomatico() {
         equipes: listaEqs,
         setores: listaSets,
         saldos: saldosDoEscopo,
+        setoresDaPessoa,
         pagamentos: pagamentos as PixPremiacaoPagamento[],
       });
     } finally {
@@ -1046,10 +1116,11 @@ export function PixAutomatico() {
       { busca, status: filtroStatus, operadorId: filtroOperador,
         equipeId: filtroEquipe, setorId: setorEscopo ?? setorFoco,
         pagamento: filtroPagamento, de: dataDe, ate: dataAte, mes },
-      { porEquipe: operadorEquipe, porSetor: operadorSetor },
+      { porEquipe: operadorEquipe, porSetor: operadorSetor, setoresDaPessoa },
     ),
     [itens, busca, filtroStatus, filtroOperador, filtroEquipe, setorFoco,
-     filtroPagamento, dataDe, dataAte, mes, setorEscopo, operadorEquipe, operadorSetor],
+     filtroPagamento, dataDe, dataAte, mes, setorEscopo, operadorEquipe, operadorSetor,
+     setoresDaPessoa],
   );
 
   // ── Paginação da tabela ─────────────────────────────────────────────────
@@ -1184,6 +1255,20 @@ export function PixAutomatico() {
   }, [operadores]);
 
   /**
+   * Os acordos do líder que CONTAM para o setor dele: os carimbados nele.
+   *
+   * A lista do líder também traz o Pix das pessoas clonadas carimbado no outro
+   * setor delas — para ele ver, aprovar e pagar. Mas o dinheiro conta para um
+   * setor só: somado no ranking e na meta dos dois, o mesmo acordo apareceria
+   * duas vezes na empresa. A consulta por carimbo nunca trouxe linha sem
+   * carimbo, então isto é exatamente o conjunto de antes.
+   */
+  const itensDoCarimbo = useMemo(
+    () => (setorEscopo ? itens.filter(i => i.setor_id === setorEscopo) : itens),
+    [itens, setorEscopo],
+  );
+
+  /**
    * Um ranking por setor — nunca um que os misture.
    *
    * Comparar operadores de setores diferentes não responde pergunta nenhuma: a
@@ -1204,7 +1289,7 @@ export function PixAutomatico() {
       return [{
         setorId: setorEscopo,
         nome: setores.find(s => s.id === setorEscopo)?.nome ?? 'Meu setor',
-        linhas: linhasDe(itens),
+        linhas: linhasDe(itensDoCarimbo),
       }];
     }
     return setoresComMovimento.map(s => ({
@@ -1212,7 +1297,7 @@ export function PixAutomatico() {
       nome: s.nome,
       linhas: linhasDe(itensDoSetorPix(itens, s.id, operadorSetor)),
     }));
-  }, [itens, pctPorSetor, nomePorOperador, metaPorSetor, mes,
+  }, [itens, itensDoCarimbo, pctPorSetor, nomePorOperador, metaPorSetor, mes,
       setorEscopo, setores, setoresComMovimento, operadorSetor]);
 
   /**
@@ -1318,7 +1403,7 @@ export function PixAutomatico() {
         // cru, o «Total do setor» deste painel não fechava com a lista embaixo.
         itens: recortarPorSetor
           ? itens.filter(i => setorDaLinhaPix(i, operadorSetor) === sid)
-          : itens,
+          : itensDoCarimbo,
         metas: metasPix
           .filter(m => m.setor_id === sid && m.equipe_id)
           .map(m => ({
@@ -1332,7 +1417,7 @@ export function PixAutomatico() {
         mes, hojeISO: getTodayISO(),
       }),
     }));
-  }, [podeVerDeOutros, itens, metasPix, equipes, setores, setorFoco, setorEscopo,
+  }, [podeVerDeOutros, itens, itensDoCarimbo, metasPix, equipes, setores, setorFoco, setorEscopo,
       operadorEquipe, operadorSetor, configMes, mes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
@@ -1454,14 +1539,20 @@ export function PixAutomatico() {
       const pctDaLinha = item.setor_id != null
         ? (pctPorSetor[item.setor_id] ?? PIX_AUTO_PCT_PADRAO)
         : PIX_AUTO_PCT_PADRAO;
-      const { ok, error } = await avaliarAcordoPix({
+      const { ok, error, jaDecidido } = await avaliarAcordoPix({
         id: item.id,
         aprovar,
         pctAtual: pctDaLinha,
         avaliadorId: perfil.id,
         avaliadorNome: perfil.nome ?? perfil.email ?? '—',
       });
-      if (!ok) { toast.error('Erro ao avaliar: ' + error); return; }
+      if (!ok) {
+        // Outro líder (o do setor de origem ou o do clone) decidiu antes: a
+        // frase diz quem, e a lista se atualiza para o botão sumir.
+        if (jaDecidido) { toast.error(error); await carregar(); return; }
+        toast.error('Erro ao avaliar: ' + error);
+        return;
+      }
       toast.success(aprovar ? 'Acordo aprovado!' : 'Acordo desaprovado.');
       await carregar();
     } finally {
@@ -1540,7 +1631,10 @@ export function PixAutomatico() {
       });
       if (!ok) { toast.error('Erro ao marcar pagamento: ' + error); return; }
       if (count === 0) {
-        toast.error('Só acordos aprovados podem ser marcados como pagos.');
+        // A tela estava velha: outro líder pagou, desfez ou mudou a avaliação
+        // no meio do caminho. Nada foi gravado; a frase diz quem mexeu.
+        toast.error(await quemJaDecidiuPix(item.id));
+        await carregar();
         return;
       }
       toast.success(item.pago ? 'Pagamento desfeito.' : 'Comissão marcada como paga.');
@@ -1606,7 +1700,11 @@ export function PixAutomatico() {
         responsavelNome: perfil.nome ?? perfil.email ?? '—',
       });
       if (!ok) { toast.error('Erro ao marcar pagamento: ' + error); return; }
-      toast.success(`${count} comissão(ões) ${pago ? 'marcada(s) como paga(s)' : 'desmarcada(s)'}.`);
+      const deFora = alvos.length - count;
+      toast.success(`${count} comissão(ões) ${pago ? 'marcada(s) como paga(s)' : 'desmarcada(s)'}.`
+        + (deFora > 0
+          ? ` ${deFora} já tinha(m) sido ${pago ? 'paga(s)' : 'desmarcada(s)'} por outra pessoa e ficou(aram) como estava(m).`
+          : ''));
       setSelecionados(new Set());
       await carregar();
     } finally {
@@ -1898,16 +1996,28 @@ export function PixAutomatico() {
     if (alvos.length === 0) { toast.error('Nenhum acordo pendente selecionado.'); return; }
     setLoteProcessando(true);
     try {
+      // Conta o que de fato gravou: a linha que outro líder decidiu enquanto a
+      // seleção estava aberta volta zero linhas e não pode entrar no total.
+      let feitos = 0, jaDecididos = 0, falhas = 0;
       for (const item of alvos) {
         const pctDaLinha = item.setor_id != null
           ? (pctPorSetor[item.setor_id] ?? PIX_AUTO_PCT_PADRAO)
           : PIX_AUTO_PCT_PADRAO;
-        await avaliarAcordoPix({
+        const r = await avaliarAcordoPix({
           id: item.id, aprovar, pctAtual: pctDaLinha,
           avaliadorId: perfil.id, avaliadorNome: perfil.nome ?? perfil.email ?? '—',
         });
+        if (r.ok) feitos += 1;
+        else if (r.jaDecidido) jaDecididos += 1;
+        else falhas += 1;
       }
-      toast.success(`${alvos.length} acordo(s) ${aprovar ? 'aprovado(s)' : 'desaprovado(s)'}.`);
+      const resto = [
+        jaDecididos > 0 ? `${jaDecididos} já tinha(m) sido avaliado(s) por outra pessoa` : '',
+        falhas > 0 ? `${falhas} com erro` : '',
+      ].filter(Boolean).join(', ');
+      const msg = `${feitos} acordo(s) ${aprovar ? 'aprovado(s)' : 'desaprovado(s)'}.`
+        + (resto ? ` ${resto}.` : '');
+      if (feitos === 0) toast.error(msg); else toast.success(msg);
       setSelecionados(new Set());
       await carregar();
     } finally {

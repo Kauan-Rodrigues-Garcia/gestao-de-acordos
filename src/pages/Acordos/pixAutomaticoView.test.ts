@@ -21,7 +21,9 @@ import {
   prazoExpurgoDesaprovado, textoPrazoExpurgo, dataLocalDaLinha,
   setorDaLinhaPix, pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial,
   itensDoSetorPix, clonesPorOperador, incluirClonesDoSetor, setorDoRegistroPix,
-  MAX_SUGESTOES_VINCULO, type OperadorInfo,
+  setoresPorPessoaClonada, pessoasCompartilhadasCom, linhaVisivelNoSetor,
+  juntarLinhasCompartilhadas,
+  MAX_SUGESTOES_VINCULO, type OperadorInfo, type VinculoDeClone,
 } from './pixAutomaticoView';
 
 const OPERADORES: OperadorInfo[] = [
@@ -980,5 +982,70 @@ describe('clones no Pix (setor alternativo)', () => {
     // Quem não foi clonado no setor olhado não muda de setor.
     const joao: OperadorInfo = { id: 'joao', nome: 'João', equipe_id: null, setor_id: 'play5', perfil: 'operador' };
     expect(setorDoRegistroPix(joao, 'trein', clones)).toBe('play5');
+  });
+});
+
+// ── Linha compartilhada entre origem e clone ────────────────────────────────
+//
+// Queixa de 29/09/2026: o Pix da Cibele (Receptivo, clonada no Treinamento) não
+// aparecia para a líder do Treinamento. Agora aparece nos dois setores dela.
+
+describe('linha compartilhada entre origem e clone', () => {
+  const VINCULOS: VinculoDeClone[] = [
+    { operador_id: 'cibele', equipe_id: 'eq-t1', setor_da_equipe: 'trein', setor_do_cadastro: 'recep' },
+    // Clonada numa equipe do PRÓPRIO setor: não compartilha com ninguém.
+    { operador_id: 'bia', equipe_id: 'eq-r2', setor_da_equipe: 'recep', setor_do_cadastro: 'recep' },
+    // Equipe sem setor não leva a lugar nenhum.
+    { operador_id: 'davi', equipe_id: 'eq-x', setor_da_equipe: null, setor_do_cadastro: 'play3' },
+  ];
+  const m = setoresPorPessoaClonada(VINCULOS);
+
+  it('setores da pessoa clonada: cadastro + clone, só de quem tem dois', () => {
+    expect(m).toEqual({ cibele: ['recep', 'trein'] });
+  });
+
+  it('a pessoa compartilhada aparece para os DOIS setores', () => {
+    expect(pessoasCompartilhadasCom(m, 'trein')).toEqual(['cibele']);
+    expect(pessoasCompartilhadasCom(m, 'recep')).toEqual(['cibele']);
+    expect(pessoasCompartilhadasCom(m, 'play3')).toEqual([]);
+  });
+
+  it('carimbo da origem aparece no clone, e vice-versa', () => {
+    const daOrigem = item({ operador_id: 'cibele', setor_id: 'recep' });
+    const doClone  = item({ operador_id: 'cibele', setor_id: 'trein' });
+    expect(linhaVisivelNoSetor(daOrigem, 'trein', {}, m)).toBe(true);
+    expect(linhaVisivelNoSetor(doClone,  'recep', {}, m)).toBe(true);
+    expect(linhaVisivelNoSetor(daOrigem, 'play3', {}, m)).toBe(false);
+  });
+
+  it('Pix feito num setor de onde a pessoa já saiu não segue para o novo', () => {
+    const antigo = item({ operador_id: 'cibele', setor_id: 'play3' });
+    expect(linhaVisivelNoSetor(antigo, 'trein', {}, m)).toBe(false);
+    expect(linhaVisivelNoSetor(antigo, 'recep', {}, m)).toBe(false);
+  });
+
+  it('quem não é clonado segue só pelo carimbo', () => {
+    const daMaria = item({ operador_id: 'maria', setor_id: 'recep' });
+    expect(linhaVisivelNoSetor(daMaria, 'recep', {}, m)).toBe(true);
+    expect(linhaVisivelNoSetor(daMaria, 'trein', {}, m)).toBe(false);
+  });
+
+  it('filtrarItensPix usa a mesma regra no recorte de setor', () => {
+    const daOrigem = item({ operador_id: 'cibele', setor_id: 'recep' });
+    const daMaria  = item({ operador_id: 'maria',  setor_id: 'recep' });
+    const r = filtrarItensPix([daOrigem, daMaria], { setorId: 'trein' },
+      { porEquipe: {}, porSetor: {}, setoresDaPessoa: m });
+    expect(r).toEqual([daOrigem]);
+  });
+
+  it('junta sem repetir, ordena e descarta o que não é do setor', () => {
+    const doSetor = [item({ id: 'a', operador_id: 'cibele', setor_id: 'trein', criado_em: '2026-09-10T10:00:00Z' })];
+    const dasPessoas = [
+      doSetor[0],
+      item({ id: 'b', operador_id: 'cibele', setor_id: 'recep', criado_em: '2026-09-12T10:00:00Z' }),
+      item({ id: 'c', operador_id: 'cibele', setor_id: 'play3', criado_em: '2026-09-11T10:00:00Z' }),
+    ];
+    const r = juntarLinhasCompartilhadas(doSetor, dasPessoas, 'trein', m);
+    expect(r.map(i => i.id)).toEqual(['b', 'a']);
   });
 });

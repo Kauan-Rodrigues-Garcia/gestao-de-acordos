@@ -168,6 +168,100 @@ export function setorDoRegistroPix(
   return dono.setor_id;
 }
 
+// ── Linha compartilhada entre origem e clone ────────────────────────────────
+//
+// Queixa de 29/09/2026: o Pix Automático da Cibele (Receptivo, clonada no
+// Treinamento) não aparecia para a Samara, líder do Treinamento. A consulta do
+// líder recorta pelo setor CARIMBADO na linha, e o carimbo é um só: quem
+// registra em nome próprio carimba o cadastro (Receptivo), quem registra pelo
+// Treinamento carimba o Treinamento. Cada lado via metade.
+//
+// A regra agora: a linha de uma pessoa clonada aparece nos DOIS setores dela —
+// o do cadastro e o de cada clone —, e os dois líderes podem aprovar e pagar.
+// Quem decide primeiro vale; o segundo clique esbarra na trava do UPDATE
+// (`avaliarAcordoPix`, `marcarComissaoPaga`) e lê quem já decidiu.
+//
+// A META e o RANKING continuam pelo carimbo: o dinheiro conta para um setor só,
+// senão o mesmo acordo somaria duas vezes na empresa.
+
+/** Clone lido com o setor da equipe e o setor do cadastro da pessoa. */
+export interface VinculoDeClone {
+  operador_id: string;
+  equipe_id: string;
+  setor_da_equipe: string | null;
+  setor_do_cadastro: string | null;
+}
+
+/**
+ * Os setores de cada pessoa CLONADA: o do cadastro e os dos clones, sem
+ * repetição. Quem não tem clone não entra — para ela vale só o carimbo.
+ */
+export function setoresPorPessoaClonada(
+  vinculos: readonly VinculoDeClone[],
+): Record<string, string[]> {
+  const m: Record<string, Set<string>> = {};
+  for (const v of vinculos) {
+    if (!v.setor_da_equipe) continue;
+    const s = (m[v.operador_id] ??= new Set());
+    if (v.setor_do_cadastro) s.add(v.setor_do_cadastro);
+    s.add(v.setor_da_equipe);
+  }
+  const saida: Record<string, string[]> = {};
+  for (const [id, s] of Object.entries(m)) if (s.size > 1) saida[id] = [...s];
+  return saida;
+}
+
+/** As pessoas clonadas que respondem também pelo setor `setorId`. */
+export function pessoasCompartilhadasCom(
+  setoresDaPessoa: Record<string, string[]>,
+  setorId: string,
+): string[] {
+  return Object.keys(setoresDaPessoa).filter(id => setoresDaPessoa[id].includes(setorId));
+}
+
+/**
+ * A linha aparece no setor `setorId`?
+ *
+ * Pelo carimbo (a regra de sempre, `setorDaLinhaPix`), ou por ser de uma
+ * pessoa clonada cujo carimbo é um dos setores dela e `setorId` é outro. O
+ * segundo ramo exige o carimbo DENTRO dos setores atuais da pessoa: o Pix que
+ * ela fez num setor de onde já saiu não segue para o setor novo.
+ */
+export function linhaVisivelNoSetor(
+  item: Pick<PixAutoAcordo, 'setor_id' | 'operador_id'>,
+  setorId: string,
+  porSetor: Record<string, string | null> = {},
+  setoresDaPessoa: Record<string, string[]> = {},
+): boolean {
+  if (setorDaLinhaPix(item, porSetor) === setorId) return true;
+  const dela = setoresDaPessoa[item.operador_id];
+  return !!dela && item.setor_id != null
+    && dela.includes(item.setor_id) && dela.includes(setorId);
+}
+
+/**
+ * Junta a consulta do setor com a das pessoas clonadas, sem repetir linha e
+ * mantendo a ordem da consulta (mais novo primeiro, `id` desempata).
+ *
+ * `dasPessoas` vem sem recorte de setor; é aqui que fica só o que
+ * `linhaVisivelNoSetor` aceita.
+ */
+export function juntarLinhasCompartilhadas(
+  doSetor: readonly PixAutoAcordo[],
+  dasPessoas: readonly PixAutoAcordo[],
+  setorId: string,
+  setoresDaPessoa: Record<string, string[]>,
+): PixAutoAcordo[] {
+  const vistos = new Set(doSetor.map(i => i.id));
+  const extras = dasPessoas.filter(i =>
+    !vistos.has(i.id) && linhaVisivelNoSetor(i, setorId, {}, setoresDaPessoa));
+  if (extras.length === 0) return [...doSetor];
+  return [...doSetor, ...extras].sort((a, b) =>
+    a.criado_em === b.criado_em
+      ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+      : (a.criado_em < b.criado_em ? 1 : -1));
+}
+
 // ── Filtro da lista ─────────────────────────────────────────────────────────
 
 /** Estado do pagamento da comissão, do ponto de vista de quem filtra. */
@@ -215,6 +309,8 @@ export const mesDaLinhaPix = mesLocalPix;
 export interface MapasOperador {
   porEquipe: Record<string, string | null>;
   porSetor: Record<string, string | null>;
+  /** Setores de cada pessoa clonada. Ver `setoresPorPessoaClonada`. */
+  setoresDaPessoa?: Record<string, string[]>;
 }
 
 /**
@@ -238,8 +334,13 @@ export function filtrarItensPix(
     if (filtros.status && filtros.status !== 'todos' && i.status !== filtros.status) return false;
     if (filtros.operadorId && i.operador_id !== filtros.operadorId) return false;
     if (filtros.equipeId && mapas.porEquipe[i.operador_id] !== filtros.equipeId) return false;
-    // Mesma regra do ranking e dos painéis — ver `setorDaLinhaPix`.
-    if (filtros.setorId && setorDaLinhaPix(i, mapas.porSetor) !== filtros.setorId) return false;
+    // Mesma regra do ranking e dos painéis — ver `setorDaLinhaPix` —, mais a
+    // linha da pessoa clonada, que aparece nos setores dela todos. Ver
+    // `linhaVisivelNoSetor`.
+    if (filtros.setorId
+        && !linhaVisivelNoSetor(i, filtros.setorId, mapas.porSetor, mapas.setoresDaPessoa)) {
+      return false;
+    }
     // "A pagar" é aprovado e ainda não pago: pendente não é dívida, é fila de
     // avaliação, e desaprovado não gera comissão nenhuma.
     if (filtros.pagamento === 'pago'    && !i.pago) return false;
