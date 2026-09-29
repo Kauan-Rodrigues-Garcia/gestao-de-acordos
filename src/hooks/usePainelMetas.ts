@@ -58,6 +58,9 @@ import {
 } from '@/services/metas/metaIndireta';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import {
+  buscarContribuicoesReceptivo, receptivoPreenchido,
+} from '@/services/analitico/contribuicaoReceptivo.service';
+import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO,
 } from '@/lib/diasUteis';
 import {
@@ -158,6 +161,12 @@ export interface DadosPainelMetas {
   /** true quando o escopo soma mais de uma pessoa (setor ou equipe). */
   modoAgregado: boolean;
   /**
+   * O setor em tela recebe contribuição do Receptivo no mês — é só nele que o
+   * aviso «Receptivo não entra» faz sentido. Pedido de 29/09/2026: na maioria
+   * dos setores a frase aparecia sem ter Receptivo nenhum para excluir.
+   */
+  setorTemReceptivo: boolean;
+  /**
    * A pessoa cujos números estão na tela. `null` nos escopos de equipe e setor.
    *
    * O card de comissão só aparece quando é a PRÓPRIA pessoa: «individual» vale
@@ -171,6 +180,8 @@ export interface EquipeInfo {
   id: string;
   nome: string;
   treinamentoInicio: string | null;
+  /** Dá o setor do escopo de equipe quando o filtro de setor está vazio. */
+  setorId?: string | null;
 }
 
 interface LinhaEquipe {
@@ -222,6 +233,7 @@ function useEquipesDisponiveis(
           id: e.id,
           nome: e.nome,
           treinamentoInicio: e.treinamento ? (e.treinamento_inicio ?? null) : null,
+          setorId: e.setor_id,
         })));
       } catch {
         if (!cancelado) setEquipes([]);
@@ -326,6 +338,28 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     subscribe(idAssinatura, () => grupo.avisar());
     return () => { grupo.cancelar(); unsubscribe(idAssinatura); };
   }, [ativo, subscribe, unsubscribe, idAssinatura]);
+
+  // ── Receptivo do setor em tela ─────────────────────────────────────────────
+  // Só a BookPlay tem contribuição do Receptivo, e só o escopo agregado mostra
+  // o aviso. Setores com contribuição no mês: o resto não lê a frase.
+  const [setoresComReceptivo, setSetoresComReceptivo] = useState<ReadonlySet<string>>(new Set());
+  const buscaReceptivo = tenant.slug === 'bookplay' && modo !== 'eu' && !!empresa?.id;
+  useEffect(() => {
+    if (!buscaReceptivo || !empresa?.id) { setSetoresComReceptivo(new Set()); return; }
+    let cancelado = false;
+    buscarContribuicoesReceptivo(empresa.id, mes)
+      .then(({ porSetor }) => {
+        if (cancelado) return;
+        setSetoresComReceptivo(new Set(
+          Object.entries(porSetor).filter(([, v]) => receptivoPreenchido(v)).map(([sid]) => sid),
+        ));
+      })
+      .catch(() => { if (!cancelado) setSetoresComReceptivo(new Set()); });
+    return () => { cancelado = true; };
+  }, [buscaReceptivo, empresa?.id, mes]);
+
+  const setorEmTela = setorId ?? equipeSelecionada?.setorId ?? null;
+  const setorTemReceptivo = !!setorEmTela && setoresComReceptivo.has(setorEmTela);
 
   // ── Analítico + escopo — a MESMA base do AnalyticsPanel ────────────────────
   const analitico = useAnaliticoDashboard(ativo, mes);
@@ -746,6 +780,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
     escopoRotulo,
     modoAgregado: modo !== 'eu',
+    setorTemReceptivo,
     operadorEmTela: modo === 'eu' ? (operadorEfetivo ?? perfil?.id ?? null) : null,
     noMesAtual,
   };
