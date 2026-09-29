@@ -1098,8 +1098,8 @@ export default function AdminUsuarios() {
 
   /**
    * «Lidera Equipe X», «Equipe Y», ou os dois — pela mesma regra do resto do
-   * sistema (`equipesDoPerfil`): para `lider` que lidera alguma, o cadastro é
-   * resíduo e não aparece.
+   * sistema (`equipesDoPerfil`): para `lider`, o `perfis.equipe_id` é resíduo e
+   * nunca aparece.
    */
   const nomeEquipe = (u: Perfil) => {
     const nome = (id: string) => equipes.find(e => e.id === id)?.nome ?? null;

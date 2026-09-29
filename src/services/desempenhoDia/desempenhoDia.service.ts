@@ -31,6 +31,7 @@ import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
+import { equipesDaPessoa } from '@/services/equipes/equipeDoLider';
 
 /** Uma linha do analítico, com o mínimo que o painel usa. */
 export interface LinhaAnaliticoDia {
@@ -508,15 +509,23 @@ async function escopoDeSetorInteiro(
   };
 }
 
+/**
+ * Membros por equipe, pelo `perfis.equipe_id`.
+ *
+ * O cargo `lider` fica de fora: nele esse campo é resíduo que a tela de Equipes
+ * não mostra, e o líder entra nas equipes que lidera por `juntarLideres`
+ * (regra de 29/09/2026, ver `equipeDoLider.ts`).
+ */
 function agruparPorEquipe(
-  pessoas: readonly { id: string; equipe_id: string | null }[],
+  pessoas: readonly { id: string; perfil?: string | null; equipe_id: string | null }[],
 ): Map<string, string[]> {
   const mapa = new Map<string, string[]>();
   for (const p of pessoas) {
-    if (!p.equipe_id) continue;
-    const atual = mapa.get(p.equipe_id);
+    const [membro] = equipesDaPessoa(p.perfil, p.equipe_id);
+    if (!membro) continue;
+    const atual = mapa.get(membro);
     if (atual) atual.push(p.id);
-    else mapa.set(p.equipe_id, [p.id]);
+    else mapa.set(membro, [p.id]);
   }
   return mapa;
 }
@@ -548,12 +557,12 @@ async function membrosPorEquipe(
 
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id')
+    .select('id, perfil, equipe_id')
     .eq('empresa_id', empresaId)
     .in('equipe_id', equipeIds);
 
   const mapa = agruparPorEquipe(
-    (data as { id: string; equipe_id: string | null }[] | null) ?? [],
+    (data as { id: string; perfil: string | null; equipe_id: string | null }[] | null) ?? [],
   );
   return juntarLideres(mapa, await lideresPorEquipe(empresaId, equipeIds));
 }
@@ -597,8 +606,9 @@ async function lideresPorEquipe(
  * mostrava um número para «todas» e outro, menor, para a única equipe da
  * pessoa — a mesma produção, dois valores.
  *
- * O acordo que o líder tabula é produção da equipe dele; é a mesma regra que o
- * Desempenho Equipes usa no analítico (`equipeQueCredita`).
+ * O acordo que o líder tabula é produção da equipe dele — de TODAS as que ele
+ * lidera; é a mesma regra que o Desempenho Equipes usa no analítico
+ * (`equipesDaPessoa`).
  */
 function juntarLideres(
   membros: Map<string, string[]>, lideres: Map<string, string[]>,
@@ -613,13 +623,13 @@ function juntarLideres(
 
 async function pessoasDoSetor(
   empresaId: string, setorId: string,
-): Promise<{ id: string; equipe_id: string | null }[]> {
+): Promise<{ id: string; perfil: string | null; equipe_id: string | null }[]> {
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id')
+    .select('id, perfil, equipe_id')
     .eq('empresa_id', empresaId)
     .eq('setor_id', setorId);
-  return (data as { id: string; equipe_id: string | null }[] | null) ?? [];
+  return (data as { id: string; perfil: string | null; equipe_id: string | null }[] | null) ?? [];
 }
 
 async function equipesDoSetor(

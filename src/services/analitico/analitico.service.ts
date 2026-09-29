@@ -23,7 +23,7 @@ import {
   aplicarFantasmas,
   type FantasmaTransferencia, type MarcaTransferido,
 } from './fantasmaTransferencia';
-import { equipeUnicaPorLider, equipeQueCredita } from '@/services/equipes/equipeDoLider';
+import { equipesLideradasPorPessoa, equipesDaPessoa } from '@/services/equipes/equipeDoLider';
 // Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
 import { paraHO } from '@/lib/hoPercentual';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
@@ -2330,8 +2330,8 @@ async function buscarComposicaoAoVivo(
    */
   const { data } = await supabase
     .from('perfis')
-    // `perfil` entrou por causa de `equipeQueCredita`: é o cargo que decide se
-    // manda o cadastro ou o vínculo de liderança. Ver `equipeDoLider.ts`.
+    // `perfil` entrou por causa de `equipesDaPessoa`: no cargo `lider` o
+    // `equipe_id` é resíduo que a tela de Equipes não mostra. Ver `equipeDoLider.ts`.
     .select('id, perfil, equipe_id, setor_id, situacao, ativo, arquivado, desligado_em, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId);
 
@@ -2357,16 +2357,17 @@ async function buscarComposicaoAoVivo(
       .eq('empresa_id', empresaId)).data as { equipe_id: string; operador_id: string }[] | null)
       ?.map(c => ({ ...c, conta_recebimento: true })) ?? null;
   }
-  // Líder por equipe (migration 20260725b). É a fonte EXPLÍCITA de quem lidera
-  // o quê — e a única que a maioria dos líderes tem: quem foi vinculado pela
-  // tela de Equipes continua com `perfis.equipe_id` NULO, e o recebimento dele
-  // não entrava em card de equipe nenhum. Ver `equipeDoLider.ts`.
+  // Líder por equipe (migration 20260725b). É onde a tela de Equipes grava o
+  // líder — TODAS as equipes que ele lidera, e o recebimento dele conta em cada
+  // uma (regra de 29/09/2026, ver `equipeDoLider.ts`).
   // Tabela ausente (migration pendente) → mapa vazio, comportamento de antes.
+  // `criado_em` ordena: a primeira liderança dá o rótulo da linha da pessoa.
   const lideresExplicitos = (await supabase
     .from('equipe_lideres')
-    .select('equipe_id, lider_id')
-    .eq('empresa_id', empresaId)).data as { equipe_id: string; lider_id: string }[] | null;
-  const equipeDoLider = equipeUnicaPorLider(lideresExplicitos ?? []);
+    .select('equipe_id, lider_id, criado_em')
+    .eq('empresa_id', empresaId)
+    .order('criado_em', { ascending: true })).data as { equipe_id: string; lider_id: string }[] | null;
+  const lideradasPorPessoa = equipesLideradasPorPessoa(lideresExplicitos ?? []);
 
   const equipesExtrasPorOperador: Record<string, string[]> = {};
   // Equipes que têm gente: membro de verdade OU clone. Sem isso, equipe vazia
@@ -2387,7 +2388,7 @@ async function buscarComposicaoAoVivo(
     id: string; nome: string; setor_id: string | null;
   }[]);
   // Nome/setor da equipe resolvida por `equipe_lideres`: o embed `p.equipes` só
-  // responde pela equipe do CADASTRO, e o líder explícito não tem uma.
+  // responde por `perfis.equipe_id`, e o líder não tem um que valha.
   const equipePorId = new Map(todasAsEquipes.map(e => [e.id, e]));
 
   for (const p of (data ?? []) as {
@@ -2403,14 +2404,26 @@ async function buscarComposicaoAoVivo(
     // Ver o comentário no SELECT: só o arquivado e o desativado-à-mão saem.
     if (p.arquivado === true) continue;
     if (p.ativo === false && (p.situacao ?? 'ativo') !== 'desligado') continue;
-    // Quem é membro segue o cadastro; quem tem cargo `lider` segue a equipe que
-    // LIDERA. Sem a segunda metade, o recebimento do líder ficava na equipe
-    // antiga depois de uma troca de liderança — o `perfis.equipe_id` dele é
-    // resíduo que a tela de Equipes nem mostra. Ver `equipeDoLider.ts`.
-    const equipeId = equipeQueCredita(p.perfil, p.equipe_id, equipeDoLider[p.id]);
-    // O catálogo primeiro, o embed só como reserva. O embed responde pela
-    // equipe do CADASTRO, e para o líder a equipe resolvida pode ser outra —
-    // usá-lo antes gravaria o nome e o setor da equipe errada.
+    // Todas as equipes em que a pessoa está — membro, líder ou clone — e o
+    // recebimento conta em cada uma. Uma vai para `operadorEquipeMap` (rótulo e
+    // setor da linha); as demais, para `equipesExtrasPorOperador`, que já é o
+    // caminho por onde o clone soma nas equipes sem duplicar setor
+    // (`setoresDoOperador`) nem o geral. Ver `equipeDoLider.ts`.
+    //
+    // A do mapa sai de membro/liderança, nunca de clone: quem é SÓ clone segue
+    // «Sem equipe» com o setor do perfil, e continua contando no setor de
+    // origem sem sair dele — a regra do clone de sempre.
+    const lideradas = lideradasPorPessoa[p.id] ?? [];
+    const propria = equipesDaPessoa(p.perfil, p.equipe_id, lideradas);
+    const todas = equipesDaPessoa(p.perfil, p.equipe_id, lideradas, equipesExtrasPorOperador[p.id]);
+    const equipeId = propria[0] ?? null;
+    const extras = todas.filter(id => id !== equipeId);
+    if (extras.length) equipesExtrasPorOperador[p.id] = extras;
+    else delete equipesExtrasPorOperador[p.id];
+    for (const eqId of todas) comGente.add(eqId);
+    // O catálogo primeiro, o embed só como reserva. O embed responde pelo
+    // `perfis.equipe_id`, e a equipe resolvida pode ser outra — usá-lo antes
+    // gravaria o nome e o setor da equipe errada.
     const eq = equipeId
       ? (equipePorId.get(equipeId) ?? (equipeId === p.equipe_id ? p.equipes : null) ?? null)
       : null;
@@ -2421,7 +2434,6 @@ async function buscarComposicaoAoVivo(
       setor_id:    eq?.setor_id ?? p.setor_id ?? null,
     };
     situacaoPorOperador[p.id] = p.situacao ?? 'ativo';
-    if (equipeId) comGente.add(equipeId);
   }
 
   const equipes: EquipeAnalitico[] = todasAsEquipes

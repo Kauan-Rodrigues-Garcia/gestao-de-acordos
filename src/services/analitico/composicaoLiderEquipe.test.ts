@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * `buscarEquipesComOperadores` e o líder — a LIGAÇÃO, não a regra pura.
  *
- * `equipes/equipeDoLider.test.ts` cobre `equipeUnicaPorLider` isolada. Estes
+ * `equipes/equipeDoLider.test.ts` cobre `equipesDaPessoa` isolada. Estes
  * testes cobrem o que aquele não alcança: a composição realmente CONSULTA
  * `equipe_lideres` e usa o resultado para dar equipe, nome e setor a quem tem
  * `perfis.equipe_id` nulo. Um fio solto aqui não quebra nenhum teste puro e o
@@ -109,7 +109,9 @@ describe('buscarEquipesComOperadores — líder conta na equipe que lidera', () 
     });
   });
 
-  it('não credita equipe a quem lidera DUAS — o dinheiro contaria em dobro', async () => {
+  it('quem lidera DUAS conta nas duas (regra de 29/09/2026)', async () => {
+    // «Se tem 2 equipes, soma em todas que faz parte, não só em uma.» O setor
+    // e o geral não duplicam: `setoresDoOperador` é um conjunto.
     montarBanco([
       { equipe_id: EQ_MATHEUS, lider_id: MATHEUS },
       { equipe_id: EQ_OUTRA,   lider_id: MATHEUS },
@@ -118,20 +120,55 @@ describe('buscarEquipesComOperadores — líder conta na equipe que lidera', () 
     const c = await buscarEquipesComOperadores(BOOKPLAY, null);
 
     expect(c.operadorEquipeMap[MATHEUS]).toEqual({
-      equipe_id:   null,
-      equipe_nome: 'Sem equipe',
-      setor_id:    RECEPTIVO,   // continua contando no setor, como antes
+      equipe_id:   EQ_MATHEUS,
+      equipe_nome: 'Matheus',
+      setor_id:    RECEPTIVO,
     });
+    expect(c.equipesExtrasPorOperador[MATHEUS]).toEqual([EQ_OUTRA]);
+    expect(c.equipes.map(e => e.id).sort()).toEqual([EQ_MATHEUS, EQ_OUTRA].sort());
   });
 
-  it('o cadastro manda: equipe_id preenchido não é trocado pelo vínculo', async () => {
-    // Renata tem EQ_MATHEUS no cadastro; um vínculo de líder apontando para
-    // outra equipe não pode movê-la.
+  it('membro que também lidera outra: fica na dele e soma na que lidera', async () => {
+    // Renata é membro de EQ_MATHEUS e lidera EQ_OUTRA — está nas duas.
     montarBanco([{ equipe_id: EQ_OUTRA, lider_id: RENATA }]);
 
     const c = await buscarEquipesComOperadores(BOOKPLAY, null);
 
     expect(c.operadorEquipeMap[RENATA].equipe_id).toBe(EQ_MATHEUS);
+    expect(c.equipesExtrasPorOperador[RENATA]).toEqual([EQ_OUTRA]);
+  });
+
+  it('líder de várias soma nas clonadas também, sem repetir', async () => {
+    montarBanco([
+      { equipe_id: EQ_MATHEUS, lider_id: MATHEUS },
+      { equipe_id: EQ_OUTRA,   lider_id: MATHEUS },
+    ]);
+    respostas.set('equipe_operadores_clones', {
+      data: [{ equipe_id: EQ_OUTRA, operador_id: MATHEUS, conta_recebimento: true }],
+      error: null,
+    });
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    expect(c.operadorEquipeMap[MATHEUS].equipe_id).toBe(EQ_MATHEUS);
+    expect(c.equipesExtrasPorOperador[MATHEUS]).toEqual([EQ_OUTRA]);
+  });
+
+  it('quem é SÓ clone segue sem equipe própria e no setor do perfil', async () => {
+    // A regra do clone de sempre: conta na equipe que o tomou emprestado sem
+    // sair do setor de origem.
+    montarBanco([]);
+    respostas.set('equipe_operadores_clones', {
+      data: [{ equipe_id: EQ_OUTRA, operador_id: MATHEUS, conta_recebimento: true }],
+      error: null,
+    });
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    expect(c.operadorEquipeMap[MATHEUS]).toEqual({
+      equipe_id: null, equipe_nome: 'Sem equipe', setor_id: RECEPTIVO,
+    });
+    expect(c.equipesExtrasPorOperador[MATHEUS]).toEqual([EQ_OUTRA]);
   });
 
   it('tabela ausente (migration pendente) mantém o comportamento antigo', async () => {
@@ -213,13 +250,36 @@ describe('buscarEquipesComOperadores — troca de liderança leva o recebimento 
     });
   });
 
-  it('membro que lidera outra equipe continua contando onde é membro', async () => {
-    // A outra metade da regra: tirar o recebimento dele da equipe de que ele
-    // faz parte esvaziaria aquele card.
+  it('cargo lider: o resíduo não soma em lugar nenhum', async () => {
+    // «A equipe do cadastro não existe.» O dinheiro dela não pode voltar para
+    // o card do Brunno por outro caminho.
+    montarTroca('lider');
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    expect(c.equipesExtrasPorOperador[MARIA]).toBeUndefined();
+  });
+
+  it('cargo lider que não lidera nada não tem equipe, mesmo com resíduo', async () => {
+    // Caso Tamires Valentin: nenhuma liderança, resíduo numa equipe.
+    montarTroca('lider');
+    respostas.set('equipe_lideres', { data: [], error: null });
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    expect(c.operadorEquipeMap[MARIA]).toEqual({
+      equipe_id: null, equipe_nome: 'Sem equipe', setor_id: RECEPTIVO,
+    });
+  });
+
+  it('membro que lidera outra equipe conta nas duas', async () => {
+    // Para quem não é `lider`, o `equipe_id` é a equipe de membro de verdade:
+    // o dinheiro fica nela E soma na que lidera.
     montarTroca('operador');
 
     const c = await buscarEquipesComOperadores(BOOKPLAY, null);
 
     expect(c.operadorEquipeMap[MARIA].equipe_id).toBe(EQ_ANTIGA);
+    expect(c.equipesExtrasPorOperador[MARIA]).toEqual([EQ_NOVA]);
   });
 });

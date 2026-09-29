@@ -661,9 +661,35 @@ A migration só adiciona a flag; as duas agregações vivem no frontend
 
 ## 5. Equipes, líderes e clones
 
-### 5.1 Equipe do operador
+### 5.1 Em que equipes a pessoa está (regra de 29/09/2026)
 
-Vínculo simples: `perfis.equipe_id`. Cada operador pertence a uma equipe.
+> «Ou a pessoa está em uma equipe e tem uma equipe, ou a pessoa não está em uma
+> equipe e ela não tem uma equipe, isso para líderes ou operadores.»
+> «Se tem 2 equipes, soma em todas que faz parte, não só em uma, só não
+> duplica o recebimento no geral.»
+
+A pessoa está nas equipes em que a tela de Equipes a mostra — por um destes
+três caminhos, e nenhum outro:
+
+| caminho | onde | quem |
+|---|---|---|
+| membro | `perfis.equipe_id` | quem **não** tem cargo `lider` |
+| líder  | `equipe_lideres` | todas as equipes que lidera |
+| clone  | `equipe_operadores_clones` | ver 5.3 |
+
+- No cargo `lider`, o `perfis.equipe_id` **não existe**: a tela o esconde das
+  listas de membros e nunca o edita. É resíduo do modelo antigo e não decide
+  nada — nem dinheiro, nem escopo, nem «minha equipe».
+- O recebimento conta **inteiro em cada equipe**: R$ 4 mil e três equipes são
+  R$ 4 mil em cada card. Setor e geral **não** duplicam — o setor é um
+  conjunto (`setoresDoOperador`) e o geral soma a pessoa uma vez.
+- Quando só cabe uma equipe (config de Direto/Extra, comissão, meta da equipe):
+  a única em que a pessoa está; havendo várias, a de membro; líder de várias
+  não tem principal.
+- Uma regra só, nos dois lados: `src/services/equipes/equipeDoLider.ts` no app
+  e `fn_equipes_do_operador` / `fn_pessoas_das_equipes` /
+  `fn_equipes_de_alcance` / `fn_equipe_principal` no banco (migration
+  `20260929120000`).
 
 ### 5.2 Líder por equipe `[BP]`
 
@@ -672,7 +698,8 @@ deixou de "morar" numa equipe via `perfis.equipe_id`. Agora **a equipe declara
 quem a lidera**.
 
 - Uma equipe pode ter **vários** líderes.
-- Um líder pode liderar **várias** equipes — inclusive de outros setores.
+- Um líder pode liderar **várias** equipes — inclusive de outros setores — e o
+  recebimento dele conta em **todas** (5.1).
 - Restrição: `UNIQUE (equipe_id, lider_id)`.
 - Leitura liberada a qualquer usuário da empresa (os painéis exibem os líderes
   para todos).

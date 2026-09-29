@@ -1,61 +1,46 @@
 /**
- * equipeDoLider.ts — a equipe que o recebimento do líder credita.
+ * equipeDoLider.ts — em que equipes uma pessoa está.
  *
- * ## O defeito que isto corrige
+ * ## A regra (29/09/2026)
  *
- * Um líder também atende: as linhas dele entram no relatório analítico como as
- * de qualquer um, com `operador_id` preenchido. Mas o card da equipe soma por
- * `operadorEquipeMap`, que monta a equipe a partir de `perfis.equipe_id` — e
- * esse campo é o modelo LEGADO. Quem foi vinculado pela tela de Equipes está em
- * `equipe_lideres` (migration `20260725b`) e continua com `perfis.equipe_id`
- * NULO.
+ * «Ou a pessoa está em uma equipe e tem uma equipe, ou a pessoa não está em uma
+ * equipe e ela não tem uma equipe, isso para líderes ou operadores.»
+ * «Se tem 2 equipes, soma em todas que faz parte, não só em uma, só não
+ * duplica o recebimento no geral.»
  *
- * Resultado medido na BookPlay em 2026-08: R$ 4.597,92 recebidos por cargos de
- * liderança no mês, dos quais os R$ 1.316,17 de Matheus Costa — líder explícito
- * da equipe "Matheus" — não entravam em card de equipe nenhum. O dinheiro
- * aparecia no total do SETOR (que sai do carimbo do relatório) e sumia da
- * equipe, então setor ≠ soma das equipes dele.
+ * Está numa equipe quem a tela de Equipes mostra nela, por um destes três
+ * caminhos — e nenhum outro:
  *
- * ## A regra
+ *   membro  `perfis.equipe_id` de quem NÃO tem cargo `lider`. A tela esconde o
+ *           líder de toda lista de membros, então no líder esse campo é resíduo
+ *           do modelo antigo, invisível e ineditável — e deixa de existir aqui.
+ *           Era ele que mandava os R$ 7.916,99 de agosto da Maria Oliveira
+ *           (lidera «Maria - Capitã») para o card do Brunno («Digital Bruno»).
+ *   líder   `equipe_lideres`, todas as equipes que a pessoa lidera.
+ *   clone   `equipe_operadores_clones` com `conta_recebimento`.
  *
- * Vale o legado quando existe; na falta dele, o vínculo explícito — e só quando
- * ele é ÚNICO. Um líder que comanda três equipes não tem "a sua equipe": somar
- * o recebimento dele nas três contaria o mesmo dinheiro três vezes no mesmo
- * setor, e escolher uma no escuro seria pior que não escolher. Esse caso fica
- * como está (conta no setor, não na equipe), que é o comportamento de hoje.
+ * Quem está em várias recebe o dinheiro INTEIRO em cada uma: R$ 4 mil e três
+ * equipes são R$ 4 mil em cada card. O que não duplica é o setor e o geral —
+ * `setoresDoOperador` devolve um conjunto, e o total da empresa soma a pessoa
+ * uma vez.
  *
- * É a mesma forma de `lideresDaEquipe.ts`: quando há dois níveis de
- * configuração, o mais específico decide — não se somam os dois.
+ * ## O que isto substitui
+ *
+ * `equipeQueCredita`/`equipeUnicaPorLider` davam UMA equipe por pessoa: o
+ * cadastro mandava no membro, a liderança mandava no líder, e quem liderava
+ * várias não contava em nenhuma. Em setembro de 2026 eram quatro líderes da
+ * BookPlay nessa situação (Brunno com 6 equipes, Samara com 5, Yann com 4,
+ * Daniele com 2).
+ *
+ * A mesma regra vive no banco em `fn_equipes_do_operador` (migration
+ * 20260929120000). Se as duas discordarem, a tela mostra uma equipe e o banco
+ * recorta outra.
  */
 
 /** Vínculo de `equipe_lideres`. */
 export interface VinculoLiderEquipe {
   equipe_id: string;
   lider_id: string;
-}
-
-/**
- * `lider_id` → `equipe_id`, só para quem lidera EXATAMENTE uma equipe.
- *
- * Quem lidera duas ou mais fica de fora do mapa — ver o cabeçalho. Vínculo
- * repetido para a mesma equipe (a tabela permite) não conta como duas.
- */
-export function equipeUnicaPorLider(
-  vinculos: ReadonlyArray<VinculoLiderEquipe>,
-): Record<string, string> {
-  const equipesPorLider = new Map<string, Set<string>>();
-  for (const v of vinculos) {
-    if (!v?.lider_id || !v?.equipe_id) continue;
-    const atual = equipesPorLider.get(v.lider_id);
-    if (atual) atual.add(v.equipe_id);
-    else equipesPorLider.set(v.lider_id, new Set([v.equipe_id]));
-  }
-
-  const saida: Record<string, string> = {};
-  for (const [liderId, equipes] of equipesPorLider) {
-    if (equipes.size === 1) saida[liderId] = [...equipes][0];
-  }
-  return saida;
 }
 
 /**
@@ -70,64 +55,62 @@ export function equipeUnicaPorLider(
 const CARGO_DE_LIDERANCA = 'lider';
 
 /**
- * A equipe em que o recebimento desta pessoa credita.
+ * `lider_id` → equipes que ele lidera, sem repetição e na ordem do vínculo.
  *
- * ## Por que o cargo decide a precedência
- *
- * Para quem é MEMBRO, o cadastro (`perfis.equipe_id`) é a verdade: a pessoa
- * pertence àquela equipe, e um vínculo de liderança em outra não a muda de
- * lugar — mover o recebimento dela tiraria dinheiro da equipe de que ela faz
- * parte.
- *
- * Para quem tem cargo `lider` é o contrário. A tela de Equipes esconde o líder
- * de toda lista de membros e só edita `equipe_lideres`; o `perfis.equipe_id`
- * dele é resíduo do modelo antigo, invisível e ineditável pela interface. Ao
- * trocar a liderança entre duas equipes, esse resíduo fica apontando para a
- * equipe ANTIGA e continua mandando no dinheiro.
- *
- * Medido na BookPlay, setor Play 4, em 02/09/2026: Maria Oliveira lidera
- * "Maria - Capitã" e tem `perfis.equipe_id` = "Digital Bruno" (que hoje é do
- * Brunno Piccolo). Os R$ 7.916,99 dela em agosto contavam no card do Brunno.
- * Na mesma troca, Tamires Valentin ficou presa em "Maria - Capitã" sem liderar
- * nada — é a "foto do líder antigo" que reaparece assim que a equipe perde o
- * vínculo explícito.
- *
- * @param perfil     cargo da pessoa (`perfis.perfil`)
- * @param cadastro   `perfis.equipe_id`
- * @param lideranca  equipe do vínculo ÚNICO de `equipe_lideres`, se houver
+ * Vínculo repetido para a mesma equipe (a tabela permite) não conta como dois.
  */
-export function equipeQueCredita(
-  perfil: string | null | undefined,
-  cadastro: string | null | undefined,
-  lideranca: string | null | undefined,
-): string | null {
-  return perfil === CARGO_DE_LIDERANCA
-    ? (lideranca ?? cadastro ?? null)
-    : (cadastro ?? lideranca ?? null);
+export function equipesLideradasPorPessoa(
+  vinculos: ReadonlyArray<VinculoLiderEquipe>,
+): Record<string, string[]> {
+  const saida: Record<string, string[]> = {};
+  for (const v of vinculos) {
+    if (!v?.lider_id || !v?.equipe_id) continue;
+    const atual = (saida[v.lider_id] ??= []);
+    if (!atual.includes(v.equipe_id)) atual.push(v.equipe_id);
+  }
+  return saida;
 }
 
+/**
+ * Todas as equipes em que a pessoa está, sem repetição.
+ *
+ * A ordem é estável e diz qual vem primeiro quando a tela precisa de UMA para
+ * rotular (nome e setor da linha da pessoa): a de membro, depois as que lidera,
+ * depois os clones. Para o dinheiro a ordem não importa — ele entra em todas.
+ *
+ * @param perfil     cargo da pessoa (`perfis.perfil`)
+ * @param membro     `perfis.equipe_id` — ignorado para cargo `lider`
+ * @param lideradas  equipes de `equipe_lideres`
+ * @param clones     equipes de `equipe_operadores_clones` que contam
+ */
+export function equipesDaPessoa(
+  perfil: string | null | undefined,
+  membro: string | null | undefined,
+  lideradas: ReadonlyArray<string> = [],
+  clones: ReadonlyArray<string> = [],
+): string[] {
+  const saida: string[] = [];
+  const incluir = (id: string | null | undefined) => {
+    if (id && !saida.includes(id)) saida.push(id);
+  };
+  if (perfil !== CARGO_DE_LIDERANCA) incluir(membro);
+  for (const id of lideradas) incluir(id);
+  for (const id of clones) incluir(id);
+  return saida;
+}
 
 /**
  * As equipes de uma pessoa, do jeito que o resto do sistema deve perguntar.
  *
- * ## Por que existe (28/09/2026)
+ * Mesma regra das funções do banco `fn_equipes_de_alcance` e
+ * `fn_equipe_principal` (migration 20260929120000).
  *
- * «Os líderes do comercial estão configurados numa equipe, e na lista de
- * usuários aparece que a liderança não está em nenhuma.» O líder mora em
- * `equipe_lideres`; o `perfis.equipe_id` dele é resíduo, e em 33 dos 50
- * líderes ativos está vazio. Toda tela que perguntava «qual é a minha equipe?»
- * ao cadastro respondia «nenhuma» para eles.
- *
- * É a mesma regra das funções do banco `fn_equipes_de_alcance` e
- * `fn_equipe_principal` (migration 20260928210000) — se discordarem, a tela
- * mostra uma equipe e o banco recorta outra.
- *
- *   principal — UMA equipe, para o que só aceita uma (config de Direto/Extra,
- *               comissão, meta da equipe, carimbo de solicitação). Ver
- *               `equipeQueCredita`: quem lidera várias não tem principal.
- *   todas     — as equipes por onde a pessoa responde: as que lidera, mais a
- *               do cadastro — exceto para `lider` que já lidera alguma, em
- *               quem o cadastro é resíduo (o caso Maria Oliveira, acima).
+ *   todas      — as equipes em que a pessoa está (membro ou líder).
+ *   principal  — UMA equipe, para o que só aceita uma (config de Direto/Extra,
+ *                comissão, meta da equipe, carimbo de solicitação): a única,
+ *                quando só há uma; havendo várias, a de membro. Líder de várias
+ *                não tem principal — escolher uma no escuro seria pior.
+ *   lideradas  — as que lidera.
  */
 export interface EquipesDoPerfil {
   principal: string | null;
@@ -140,9 +123,9 @@ export function equipesDoPerfil(
   cadastro: string | null | undefined,
   lideradas: ReadonlyArray<string>,
 ): EquipesDoPerfil {
-  const unicas = [...new Set(lideradas.filter(Boolean))];
-  const principal = equipeQueCredita(perfil, cadastro, unicas.length === 1 ? unicas[0] : null);
-  const cadastroConta = !!cadastro && (perfil !== CARGO_DE_LIDERANCA || unicas.length === 0);
-  const todas = cadastroConta && !unicas.includes(cadastro!) ? [...unicas, cadastro!] : unicas;
+  const unicas = equipesDaPessoa(null, null, lideradas);
+  const todas = equipesDaPessoa(perfil, cadastro, unicas);
+  const membro = perfil !== CARGO_DE_LIDERANCA ? (cadastro ?? null) : null;
+  const principal = todas.length === 1 ? todas[0] : membro;
   return { principal, todas, lideradas: unicas };
 }

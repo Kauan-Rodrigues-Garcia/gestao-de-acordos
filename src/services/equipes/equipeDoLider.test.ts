@@ -1,43 +1,35 @@
 /**
- * equipeDoLider.test.ts — a regra pura de qual equipe o líder credita.
+ * equipeDoLider.test.ts — em que equipes a pessoa está (regra de 29/09/2026).
+ *
+ * «Ou a pessoa está em uma equipe e tem uma equipe, ou não está e não tem.»
+ * «Se tem 2 equipes, soma em todas que faz parte.»
  *
  * A ligação com o banco (a composição realmente lê `equipe_lideres`) é coberta
  * em `analitico/composicaoLiderEquipe.test.ts`. Aqui só a decisão.
  */
 import { describe, it, expect } from 'vitest';
-import { equipeUnicaPorLider, equipeQueCredita, equipesDoPerfil } from './equipeDoLider';
+import { equipesLideradasPorPessoa, equipesDaPessoa, equipesDoPerfil } from './equipeDoLider';
 
 const MATHEUS = 'lider-matheus';
-const AMAURI  = 'lider-amauri';
+const BRUNNO  = 'lider-brunno';
 const EQ_A    = 'eq-a';
 const EQ_B    = 'eq-b';
+const EQ_C    = 'eq-c';
 
-describe('equipeUnicaPorLider', () => {
-  it('mapeia quem lidera exatamente UMA equipe', () => {
-    expect(equipeUnicaPorLider([{ equipe_id: EQ_A, lider_id: MATHEUS }]))
-      .toEqual({ [MATHEUS]: EQ_A });
+describe('equipesLideradasPorPessoa', () => {
+  it('lista TODAS as equipes que cada um lidera', () => {
+    expect(equipesLideradasPorPessoa([
+      { equipe_id: EQ_A, lider_id: BRUNNO },
+      { equipe_id: EQ_B, lider_id: BRUNNO },
+      { equipe_id: EQ_C, lider_id: MATHEUS },
+    ])).toEqual({ [BRUNNO]: [EQ_A, EQ_B], [MATHEUS]: [EQ_C] });
   });
 
-  it('deixa de FORA quem lidera mais de uma', () => {
-    // Creditar as duas contaria o mesmo recebimento duas vezes no setor, e
-    // escolher uma seria inventar. O caso segue contando só no setor.
-    const mapa = equipeUnicaPorLider([
-      { equipe_id: EQ_A, lider_id: AMAURI },
-      { equipe_id: EQ_B, lider_id: AMAURI },
-    ]);
-    expect(mapa[AMAURI]).toBeUndefined();
-  });
-
-  it('vínculo repetido para a MESMA equipe não conta como duas', () => {
-    const mapa = equipeUnicaPorLider([
+  it('vínculo repetido para a MESMA equipe não conta como dois', () => {
+    expect(equipesLideradasPorPessoa([
       { equipe_id: EQ_A, lider_id: MATHEUS },
       { equipe_id: EQ_A, lider_id: MATHEUS },
-    ]);
-    expect(mapa).toEqual({ [MATHEUS]: EQ_A });
-  });
-
-  it('lista vazia devolve mapa vazio', () => {
-    expect(equipeUnicaPorLider([])).toEqual({});
+    ])).toEqual({ [MATHEUS]: [EQ_A] });
   });
 
   it('ignora linha sem equipe ou sem líder', () => {
@@ -45,73 +37,73 @@ describe('equipeUnicaPorLider', () => {
       { equipe_id: '', lider_id: MATHEUS },
       { equipe_id: EQ_A, lider_id: '' },
     ] as { equipe_id: string; lider_id: string }[];
-    expect(equipeUnicaPorLider(sujo)).toEqual({});
+    expect(equipesLideradasPorPessoa(sujo)).toEqual({});
   });
 });
 
-/*
- * `equipeQueCredita` — de quem é o dinheiro depois de uma troca de liderança.
- *
- * Cenário do banco (BookPlay, Play 4, 02/09/2026): trocaram a liderança de duas
- * equipes e só `equipe_lideres` acompanhou. Maria Oliveira passou a liderar
- * "Maria - Capitã" mas continuou com `perfis.equipe_id` = "Digital Bruno", e os
- * R$ 7.916,99 dela em agosto contavam no card do outro líder.
- */
-describe('equipeQueCredita', () => {
-  it('cargo lider: a equipe que ele LIDERA ganha, não a do cadastro', () => {
-    expect(equipeQueCredita('lider', EQ_A, EQ_B)).toBe(EQ_B);
+describe('equipesDaPessoa', () => {
+  it('líder de três equipes está nas três', () => {
+    expect(equipesDaPessoa('lider', null, [EQ_A, EQ_B, EQ_C])).toEqual([EQ_A, EQ_B, EQ_C]);
   });
 
-  it('cargo lider sem vínculo explícito: cai no cadastro', () => {
-    // Não é caso raro — a maioria dos líderes nunca foi para `equipe_lideres`.
-    expect(equipeQueCredita('lider', EQ_A, null)).toBe(EQ_A);
+  it('líder: o `perfis.equipe_id` não existe (caso Maria Oliveira)', () => {
+    // Lidera «Maria - Capitã», resíduo em «Digital Bruno» — que é do Brunno.
+    expect(equipesDaPessoa('lider', 'digital-bruno', ['maria-capita'])).toEqual(['maria-capita']);
   });
 
-  it('cargo lider que lidera DUAS equipes: `lideranca` já veio nulo, vale o cadastro', () => {
-    expect(equipeQueCredita('lider', EQ_A, undefined)).toBe(EQ_A);
+  it('líder que não lidera nada não está em equipe nenhuma, mesmo com resíduo', () => {
+    // Caso Tamires Valentin: nenhuma liderança, resíduo em «Maria - Capitã».
+    expect(equipesDaPessoa('lider', 'maria-capita', [])).toEqual([]);
   });
 
-  it('membro: o cadastro manda, mesmo liderando outra equipe', () => {
-    // Tirar o recebimento dele daqui esvaziaria a equipe de que ele faz parte.
-    expect(equipeQueCredita('operador', EQ_A, EQ_B)).toBe(EQ_A);
+  it('membro: a equipe de membro vem primeiro, e a que lidera soma', () => {
+    expect(equipesDaPessoa('elite', EQ_A, [EQ_B])).toEqual([EQ_A, EQ_B]);
   });
 
-  it('membro sem cadastro: o vínculo de liderança serve de reserva', () => {
-    expect(equipeQueCredita('operador', null, EQ_B)).toBe(EQ_B);
+  it('operador clonado está na própria e nas clonadas', () => {
+    expect(equipesDaPessoa('operador', EQ_A, [], [EQ_B, EQ_C])).toEqual([EQ_A, EQ_B, EQ_C]);
   });
 
-  it('elite e gerencia seguem sendo membros — a tela de Equipes os trata assim', () => {
-    expect(equipeQueCredita('elite', EQ_A, EQ_B)).toBe(EQ_A);
-    expect(equipeQueCredita('gerencia', EQ_A, EQ_B)).toBe(EQ_A);
+  it('líder clonado como operador: lideradas e clones, sem repetir', () => {
+    expect(equipesDaPessoa('lider', null, [EQ_A], [EQ_A, EQ_B])).toEqual([EQ_A, EQ_B]);
   });
 
-  it('sem cadastro e sem liderança devolve null', () => {
-    expect(equipeQueCredita('lider', null, null)).toBeNull();
-    expect(equipeQueCredita(null, null, undefined)).toBeNull();
+  it('sem vínculo nenhum, nenhuma equipe', () => {
+    expect(equipesDaPessoa('operador', null, [], [])).toEqual([]);
+    expect(equipesDaPessoa(null, null)).toEqual([]);
   });
 });
 
-// A pergunta «qual é a minha equipe?» feita pelas telas (28/09/2026). Tem de
-// dizer o mesmo que fn_equipes_de_alcance / fn_equipe_principal no banco.
+// A pergunta «quais são as minhas equipes?» feita pelas telas. Tem de dizer o
+// mesmo que fn_equipes_de_alcance / fn_equipe_principal no banco.
 describe('equipesDoPerfil', () => {
-  it('líder só com liderança (cadastro vazio — 33 dos 50 líderes) TEM equipe', () => {
+  it('líder só com liderança TEM equipe', () => {
     expect(equipesDoPerfil('lider', null, [EQ_A])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [EQ_A] });
   });
-  it('líder que lidera: o cadastro é resíduo e fica de fora (caso Maria Oliveira)', () => {
+
+  it('líder com resíduo: o resíduo some de todas e da principal', () => {
     expect(equipesDoPerfil('lider', 'eq-antiga', [EQ_A])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [EQ_A] });
   });
+
+  it('líder sem liderança não tem equipe, mesmo com resíduo', () => {
+    expect(equipesDoPerfil('lider', EQ_A, [])).toEqual({ principal: null, todas: [], lideradas: [] });
+  });
+
   it('líder de várias: todas contam, e não há principal', () => {
-    const r = equipesDoPerfil('lider', null, [EQ_A, 'eq-b', EQ_A]);
+    const r = equipesDoPerfil('lider', null, [EQ_A, EQ_B, EQ_A]);
     expect(r.principal).toBeNull();
-    expect(r.todas).toEqual([EQ_A, 'eq-b']);
+    expect(r.todas).toEqual([EQ_A, EQ_B]);
+    expect(r.lideradas).toEqual([EQ_A, EQ_B]);
   });
-  it('líder sem liderança fica com o cadastro', () => {
-    expect(equipesDoPerfil('lider', EQ_A, [])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [] });
+
+  it('membro que também lidera: está nas duas, e a principal é a de membro', () => {
+    expect(equipesDoPerfil('elite', EQ_A, [EQ_B])).toEqual({ principal: EQ_A, todas: [EQ_A, EQ_B], lideradas: [EQ_B] });
   });
-  it('membro: o cadastro manda, e a liderança soma', () => {
-    expect(equipesDoPerfil('elite', EQ_A, ['eq-b'])).toEqual({ principal: EQ_A, todas: ['eq-b', EQ_A], lideradas: ['eq-b'] });
+
+  it('membro comum', () => {
     expect(equipesDoPerfil('operador', EQ_A, [])).toEqual({ principal: EQ_A, todas: [EQ_A], lideradas: [] });
   });
+
   it('sem nada, nada', () => {
     expect(equipesDoPerfil('operador', null, [])).toEqual({ principal: null, todas: [], lideradas: [] });
   });
