@@ -1,5 +1,5 @@
 /**
- * Migration 20260929210000: o recebimento conta só no setor onde a pessoa está.
+ * Migration 20260929211916: o recebimento conta só no setor onde a pessoa está.
  *
  * «Se eu faço parte do Play 1 e recebi 5 mil pro Play 1 e 4 mil pro Play 2, os
  * 4 mil vão lá pro Play 2. Pra mim consta que recebi só 5 mil.» (29/09/2026)

@@ -80,7 +80,7 @@ interface DesempenhoEquipesProps {
   orfaosPorSetor?: Record<string, { total: number; qtd: number }>;
   /**
    * BookPlay: o que a equipe de ORIGEM recebe de quem foi transferido de setor
-   * no mês — só as linhas do setor de origem (20260929210000). Ver
+   * no mês — só as linhas do setor de origem (20260929211916). Ver
    * `buscarCreditosDeOrigem`.
    */
   creditosDeOrigem?: CreditoDeOrigem[];

@@ -632,7 +632,7 @@ export default function AdminEquipes() {
 
   /** Este id é um fantasma nesta tela? Decide o visual e o que o X faz. */
   // Fantasma de SETOR: só as linhas do setor de origem saem ao tirá-lo
-  // (20260929210000). Os de empresa levam o mês inteiro, como sempre.
+  // (20260929211916). Os de empresa levam o mês inteiro, como sempre.
   const setorDoFantasmaDeSetor = (operadorId: string) =>
     fantasmas.find(f => f.perfilId === operadorId && f.tipo === 'setor')?.origemSetorId ?? null;
 

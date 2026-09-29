@@ -2134,7 +2134,7 @@ export async function buscarValorDoFantasma(
   empresaId: string, mes: string, perfilId: string,
   /**
    * Fantasma de SETOR na BookPlay: só as linhas carimbadas no setor de origem
-   * estão na equipe de origem (20260929210000), e só elas saem ao tirá-lo.
+   * estão na equipe de origem (20260929211916), e só elas saem ao tirá-lo.
    */
   setorOrigemId?: string | null,
 ): Promise<{ total: number; linhas: number }> {
@@ -2490,7 +2490,7 @@ export async function buscarCreditosDeOrigem(
     p_inicio:     periodo?.inicio ?? null,
     p_fim:        periodo?.fim ?? null,
   });
-  // Migration 20260929210000 pendente: sem crédito, e o resto da tela segue.
+  // Migration 20260929211916 pendente: sem crédito, e o resto da tela segue.
   if (error || !data) return [];
   return creditosDeOrigem(fantasmas, data);
 }

@@ -103,7 +103,7 @@ AS $function$
 $function$;
 
 COMMENT ON FUNCTION public.fn_analitico_setores_no_mes(uuid, text, uuid[]) IS
-  'Setores onde cada pessoa está no mês: perfil, equipes que lidera e clones. Mês fechado pelo retrato (composicao_mes*), corrente ao vivo (fn_setores_do_operador). Só é chamada de dentro das RPCs do analítico (20260929210000).';
+  'Setores onde cada pessoa está no mês: perfil, equipes que lidera e clones. Mês fechado pelo retrato (composicao_mes*), corrente ao vivo (fn_setores_do_operador). Só é chamada de dentro das RPCs do analítico (20260929211916).';
 
 REVOKE ALL ON FUNCTION public.fn_analitico_setores_no_mes(uuid, text, uuid[]) FROM PUBLIC, anon, authenticated;
 
@@ -125,7 +125,7 @@ DECLARE
   v_setores UUID[] := '{}';
   v_de      DATE;
   v_ate     DATE;
-  -- A linha só conta no setor onde a pessoa está (20260929210000).
+  -- A linha só conta no setor onde a pessoa está (20260929211916).
   v_por_setor BOOLEAN;
 BEGIN
   IF NOT public.fn_can_access_empresa(p_empresa_id)
@@ -302,7 +302,7 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public.fn_analitico_recebido_fora_do_setor(uuid, text, date, date) IS
-  'Linhas do analítico carimbadas num setor onde a pessoa NÃO está no mês, somadas por (pessoa, setor). BookPlay, de 2026-09 em diante. A equipe de origem de um fantasma de setor recebe daqui as linhas do setor de origem (20260929210000).';
+  'Linhas do analítico carimbadas num setor onde a pessoa NÃO está no mês, somadas por (pessoa, setor). BookPlay, de 2026-09 em diante. A equipe de origem de um fantasma de setor recebe daqui as linhas do setor de origem (20260929211916).';
 
 REVOKE ALL ON FUNCTION public.fn_analitico_recebido_fora_do_setor(uuid, text, date, date) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.fn_analitico_recebido_fora_do_setor(uuid, text, date, date) TO authenticated;
