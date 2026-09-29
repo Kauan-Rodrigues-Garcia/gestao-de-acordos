@@ -1891,7 +1891,7 @@ Chips `[BP]`; Solicitar Atendimento `[PP]`; Vendas e as telas do Comercial) e
 removidos (Ouvidoria, a aba Acompanhamento do Líder) ficam fora — na outra empresa
 não é abandono, é módulo que o tenant não tem.
 
-**Adoção conta a tela com as abas de dentro** (`20260929180000`). Com a aba no
+**Adoção conta a tela com as abas de dentro** (`20260929170518`). Com a aba no
 identificador ninguém mais grava `analitico` puro; a comparação por igualdade
 responderia «ninguém abriu». `analitico` vale por `analitico` e `analitico:*`;
 `lider:desempenho` vale por `lider:desempenho/*`. `acordos/novo` não conta como

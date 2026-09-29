@@ -376,7 +376,7 @@ describe('as telas que o painel existe para medir', () => {
  *
  * Com a aba no identificador, ninguém mais grava `analitico` puro — grava
  * `analitico:analitico/mes/…`. Uma adoção por igualdade responderia «ninguém
- * abriu o Analítico» com todo mundo usando. Migration 20260929180000.
+ * abriu o Analítico» com todo mundo usando. Migration 20260929170518.
  */
 describe('adoção de tela inclui as abas', () => {
   function ultimaDefinicao(fn: string): string {

@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * usoAdocaoAbas.sql.test.ts — a migration 20260929180000 num Postgres de
+ * usoAdocaoAbas.sql.test.ts — a migration 20260929170518 num Postgres de
  * verdade (PGlite).
  *
  * Com as abas no identificador (29/09/2026), ninguém mais grava `analitico`
@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const MIGRATION = readFileSync(
-  resolve(__dirname, '../../../supabase/migrations/20260929180000_uso_adocao_inclui_abas.sql'),
+  resolve(__dirname, '../../../supabase/migrations/20260929170518_uso_adocao_inclui_abas.sql'),
   'utf8',
 );
 
