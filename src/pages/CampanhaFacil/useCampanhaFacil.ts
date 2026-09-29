@@ -15,6 +15,7 @@ import { CampaignCore, type Discounts, type ParsedResult, type Template, type Ca
 import { CampaignXlsx } from './lib/xlsx-export';
 import { parseSpreadsheetReport } from './lib/readSpreadsheet';
 import { idsDeMensagensBloqueadas } from './regras-mensagem';
+import { useEnviosCampanha } from './useEnviosCampanha';
 import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
   fetchDescontos, salvarDesconto, excluirDesconto,
@@ -94,17 +95,15 @@ export function useCampanhaFacil() {
 
   // ── Configuração (form) ────────────────────────────────────────────────────
   const [templateId, setTemplateId] = useState<string>(CampaignCore.TEMPLATES[0].id);
-  const [sendersInput, setSendersInput] = useState('');
   const [discountsInput, setDiscountsInput] = useState<Discounts>({ ...CampaignCore.DEFAULT_DISCOUNTS });
 
+  // Quem encaminha: operadores do setor marcados pelo líder (29/09/2026 — antes
+  // era um campo de nomes digitados). Ver `useEnviosCampanha`.
+  const envios = useEnviosCampanha(empresaId, perfil ?? null);
+
   // Valores "aplicados" (debounced) que alimentam a geração da campanha.
-  const [sendersApplied, setSendersApplied] = useState('');
   const [discountsApplied, setDiscountsApplied] = useState<Discounts>({ ...CampaignCore.DEFAULT_DISCOUNTS });
 
-  useEffect(() => {
-    const t = setTimeout(() => setSendersApplied(sendersInput), 250);
-    return () => clearTimeout(t);
-  }, [sendersInput]);
   useEffect(() => {
     const t = setTimeout(() => setDiscountsApplied(discountsInput), 250);
     return () => clearTimeout(t);
@@ -205,16 +204,30 @@ export function useCampanhaFacil() {
   }, [templatesBloqueados]);
 
   // ── Geração da campanha (pura, memoizada) ──────────────────────────────────
-  const sendersList = useMemo(() => CampaignCore.normalizeSenders(sendersApplied), [sendersApplied]);
+  const { operadoresSelecionados } = envios;
+  const sendersList = useMemo(() => operadoresSelecionados.map((o) => o.nome), [operadoresSelecionados]);
 
-  const campaign = useMemo<CampaignItem[]>(() => {
+  /**
+   * A campanha com o ID do operador em `sender`.
+   *
+   * O rodízio roda sobre IDs, não nomes: `normalizeSenders` tira repetidos, e
+   * dois operadores homônimos virariam um só. É desta versão que sai a parte de
+   * cada um na liberação (`repartirPorOperador`).
+   */
+  const campanhaPorId = useMemo<CampaignItem[]>(() => {
     if (!parsed) return [];
     return CampaignCore.buildCampaign(parsed.records, {
       discounts: discountsApplied,
-      senders: sendersList,
+      senders: operadoresSelecionados.map((o) => o.id),
       template: selectedTemplateBody,
     });
-  }, [parsed, discountsApplied, sendersList, selectedTemplateBody]);
+  }, [parsed, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+
+  /** A mesma campanha, com o NOME em `sender` — é o que a tela e o Excel mostram. */
+  const campaign = useMemo<CampaignItem[]>(() => {
+    const nomePorId = new Map(operadoresSelecionados.map((o) => [o.id, o.nome]));
+    return campanhaPorId.map((i) => (i.sender ? { ...i, sender: nomePorId.get(i.sender) ?? i.sender } : i));
+  }, [campanhaPorId, operadoresSelecionados]);
 
   // ── Seleção ────────────────────────────────────────────────────────────────
   const selectedIndex = useMemo(() => {
@@ -515,7 +528,7 @@ export function useCampanhaFacil() {
    */
   const exportCampaign = useCallback((rawFileName: string): boolean => {
     if (!campaign.length) return false;
-    if (sendersList.length === 0) { toast.error('Informe quem encaminhará a campanha antes de exportar.'); return false; }
+    if (sendersList.length === 0) { toast.error('Marque ao menos um operador antes de exportar.'); return false; }
     const nome = normalizeExportFileName(rawFileName);
     const pendentes = campaign.filter((i) => i.status !== 'Pronto').length;
     try {
@@ -541,6 +554,13 @@ export function useCampanhaFacil() {
     return base ? `campanha-${base}-${date}.xlsx` : `campanha-pronta-${date}.xlsx`;
   }, [fileName]);
 
+  /** Grava a parte de cada operador marcado e notifica. Ver `useEnviosCampanha`. */
+  const { liberar } = envios;
+  const liberarCampanha = useCallback(async (): Promise<boolean> => {
+    if (!campanhaPorId.length) return false;
+    return liberar(campanhaPorId, selectedTemplate.name, defaultExportFileName());
+  }, [campanhaPorId, liberar, selectedTemplate, defaultExportFileName]);
+
   const copyMessage = useCallback(async (item: CampaignItem | null) => {
     if (!item) return;
     // O fallback duplicado que existia aqui virou `copiarTexto`. De passagem
@@ -564,13 +584,13 @@ export function useCampanhaFacil() {
     isUserTemplate, hiddenCount: hiddenIds.size,
     templatesBloqueados, mensagemBloqueada,
     // config
-    sendersInput, setSendersInput, sendersList,
+    sendersList, envios,
     discountsInput, setDiscount, discountPresets, selectedDiscountPresetId,
     // ações
     processFile, removeMailing, downloadExcluded,
     saveTemplateBody, resetTemplateBody, addMessage, deleteSelectedMessage, restoreDefaults,
     applyDiscountPreset, saveDiscountPreset, deleteDiscountPreset,
-    exportCampaign, defaultExportFileName, copyMessage,
+    exportCampaign, defaultExportFileName, copyMessage, liberarCampanha,
   };
 }
 

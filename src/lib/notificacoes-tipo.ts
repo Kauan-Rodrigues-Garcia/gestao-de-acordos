@@ -41,6 +41,7 @@ export type CategoriaNotificacao =
   | 'acordo'      // o acordo em si: status, atraso, transferência
   | 'importacao'  // planilha, analítico, recebimento diário
   | 'numeros'     // Controle de Números e Meus Chips: prazo de espera vencido
+  | 'campanha'    // Campanha Fácil: a parte do operador está pronta para baixar
   | 'sistema';    // o que não se encaixa — ver o cabeçalho
 
 /**
@@ -69,6 +70,7 @@ export const CATEGORIA_LABEL: Record<CategoriaNotificacao, string> = {
   acordo:      'Acordos',
   importacao:  'Importações',
   numeros:     'Números',
+  campanha:    'Campanhas',
   sistema:     'Sistema',
 };
 
@@ -87,6 +89,7 @@ export const CATEGORIA_ICONE: Record<CategoriaNotificacao, string> = {
   acordo:      'FileText',
   importacao:  'Upload',
   numeros:     'Smartphone',
+  campanha:    'Megaphone',
   sistema:     'Info',
 };
 
@@ -105,6 +108,7 @@ export const CATEGORIA_COR: Record<CategoriaNotificacao, string> = {
   acordo:      'bg-emerald-500/12 text-emerald-600 dark:text-emerald-500 ring-emerald-500/25',
   importacao:  'bg-teal-500/12 text-teal-600 dark:text-teal-500 ring-teal-500/25',
   numeros:     'bg-indigo-500/12 text-indigo-500 ring-indigo-500/25',
+  campanha:    'bg-rose-500/12 text-rose-600 dark:text-rose-500 ring-rose-500/25',
   sistema:     'bg-muted text-muted-foreground ring-border',
 };
 
@@ -169,6 +173,15 @@ interface Regra {
  * o esquecimento aparece na suíte.
  */
 const REGRAS: readonly Regra[] = [
+  // ── Campanha Fácil (BookPlay) — campanhaFacilEnvios.service, 20260929100000
+  // PRIMEIRA, e pela rota: o título leva o nome da mensagem escolhida pelo
+  // líder (texto livre), que pode conter «pix», «acordo», «extra»… e cairia em
+  // qualquer regra abaixo.
+  {
+    casa: (_t, r) => r.startsWith('/campanha-facil/envio/'),
+    tipo: { categoria: 'campanha', urgencia: 'atencao' },
+  },
+
   // ── Números (BookPlay) — fn_numeros_avisar_prazos, 20260911170000 ────────
   // O prazo de espera acabou e o número está pronto para voltar a ser usado.
   // Pede olho, mas ninguém perdeu nada: atenção, e não crítica.

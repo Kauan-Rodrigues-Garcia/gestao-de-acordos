@@ -74,6 +74,36 @@ function palpitePeloTitulo(titulo: string): string | null {
   return null;
 }
 
+// ── Campanha Fácil ───────────────────────────────────────────────────────────
+
+/**
+ * Prefixo da `rota` da notificação de campanha liberada (20260929100000).
+ *
+ * Não é página: o operador não tem a aba. O clique BAIXA a planilha — quem
+ * decide isso é `envioCampanhaDaNotificacao`, e `rotaDaNotificacao` devolve
+ * `null` para ela não navegar para um caminho que não existe.
+ */
+export const PREFIXO_ROTA_ENVIO_CAMPANHA = '/campanha-facil/envio/';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function rotaDoEnvioCampanha(envioId: string): string {
+  return `${PREFIXO_ROTA_ENVIO_CAMPANHA}${envioId}`;
+}
+
+/**
+ * O envio que a notificação carrega, ou `null` se ela não é de campanha.
+ *
+ * Só aceita UUID depois do prefixo: a rota vem do banco, e o id segue para uma
+ * consulta.
+ */
+export function envioCampanhaDaNotificacao(n: Pick<Notificacao, 'rota'>): string | null {
+  const rota = n.rota;
+  if (typeof rota !== 'string' || !rota.startsWith(PREFIXO_ROTA_ENVIO_CAMPANHA)) return null;
+  const id = rota.slice(PREFIXO_ROTA_ENVIO_CAMPANHA.length);
+  return UUID.test(id) ? id : null;
+}
+
 /**
  * Caminho interno para onde a notificação leva, ou `null` se não houver destino.
  *
@@ -87,6 +117,8 @@ export function rotaDaNotificacao(n: Alvo, isPaguePlay: boolean): string | null 
       ? `${ROUTE_PATHS.DASHBOARD}?highlight=${id}`
       : `${ROUTE_PATHS.ACORDOS}?highlight=${id}`;
   }
+  // Campanha liberada baixa, não navega — ver `envioCampanhaDaNotificacao`.
+  if (n.rota?.startsWith(PREFIXO_ROTA_ENVIO_CAMPANHA)) return null;
   // A rota do banco só vale se for interna; sendo externa, ainda resta o
   // palpite pelo título, que sai de constantes do próprio código.
   const interna = caminhoInternoSeguro(n.rota);

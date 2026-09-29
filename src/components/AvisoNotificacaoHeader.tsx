@@ -46,7 +46,8 @@ import { X } from 'lucide-react';
 import type { Notificacao } from '@/lib/supabase';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
-import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
+import { rotaDaNotificacao, envioCampanhaDaNotificacao } from '@/lib/notificacoes-rota';
+import { baixarCampanhaDaNotificacao } from '@/pages/CampanhaFacil/baixarDaNotificacao';
 import {
   tipoDaNotificacao, apresentacaoDaNotificacao,
   DURACAO_POR_URGENCIA, URGENCIA_BARRA,
@@ -209,10 +210,13 @@ export function AvisoNotificacaoHeader() {
 
   const abrir = useCallback((n: Notificacao) => {
     const destino = rotaDaNotificacao(n, tenant.isPaguePlay);
+    const envio = envioCampanhaDaNotificacao(n);
     if (!n.lida) void marcarLida(n.id);
     setAtivo(null);
     setPausado(false);
-    if (destino) navigate(destino);
+    // Campanha Fácil não tem página para o operador: o clique baixa.
+    if (envio) void baixarCampanhaDaNotificacao(envio);
+    else if (destino) navigate(destino);
   }, [marcarLida, navigate, tenant.isPaguePlay]);
 
   /** Quantas ainda esperam, somando as que nem entraram na fila. */
@@ -239,7 +243,8 @@ export function AvisoNotificacaoHeader() {
         {ativo && (() => {
           const { notificacao: n, tipo, restanteMs, duracaoMs } = ativo;
           const vis = apresentacaoDaNotificacao(n);
-          const temDestino = rotaDaNotificacao(n, tenant.isPaguePlay) !== null;
+          const temDestino = rotaDaNotificacao(n, tenant.isPaguePlay) !== null
+            || envioCampanhaDaNotificacao(n) !== null;
 
           return (
             <motion.div

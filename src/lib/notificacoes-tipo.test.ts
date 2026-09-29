@@ -63,6 +63,10 @@ const INVENTARIO: Caso[] = [
   ['Importação de acordos concluída', null, 'importacao', 'info'],
   // useMarcarAtrasados.ts
   ['Acordo movido para Não Pago', null, 'acordo', 'atencao'],
+  // campanhaFacilEnvios.service.ts — o nome da mensagem é livre; «Pix» e
+  // «acordo» aqui provam que a rota vence o título.
+  ['Campanha pronta — Pix do acordo', '/campanha-facil/envio/0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
+  ['Campanha repassada — Preventivo', '/campanha-facil/envio/0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
 ];
 
 describe('inventário de produtores', () => {

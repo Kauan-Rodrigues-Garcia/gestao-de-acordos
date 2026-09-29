@@ -37,7 +37,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   X, Check, CheckCheck, Trash2, Bell, BellOff, ArrowLeft,
   Clock, CheckCircle2, ExternalLink, Maximize2, Minimize2, Volume2, VolumeX,
-  Inbox,
+  Inbox, Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -45,7 +45,8 @@ import type { Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
-import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
+import { rotaDaNotificacao, envioCampanhaDaNotificacao } from '@/lib/notificacoes-rota';
+import { baixarCampanhaDaNotificacao } from '@/pages/CampanhaFacil/baixarDaNotificacao';
 import {
   tipoDaNotificacao, apresentacaoDaNotificacao, categoriasPresentes,
   grupoDaData, tempoRelativo,
@@ -86,10 +87,12 @@ interface ModalDetalheProps {
   onMarcarLida: (id: string) => Promise<void>;
   onExcluir: (id: string) => Promise<void>;
   onNavigate?: () => void;
+  /** Campanha Fácil: a notificação não leva a página, baixa a planilha. */
+  onBaixar?: () => void;
 }
 
 export function ModalDetalhe({
-  notificacao: n, onClose, onMarcarLida, onExcluir, onNavigate,
+  notificacao: n, onClose, onMarcarLida, onExcluir, onNavigate, onBaixar,
 }: ModalDetalheProps) {
   const tipo = tipoDaNotificacao(n);
   const vis  = apresentacaoDaNotificacao(n);
@@ -162,6 +165,11 @@ export function ModalDetalhe({
         {onNavigate && (
           <Button size="sm" variant="default" className="flex-1 h-8 text-xs gap-1.5" onClick={onNavigate}>
             <ExternalLink className="w-3.5 h-3.5" /> Ver acordo
+          </Button>
+        )}
+        {onBaixar && (
+          <Button size="sm" variant="default" className="flex-1 h-8 text-xs gap-1.5" onClick={onBaixar}>
+            <Download className="w-3.5 h-3.5" /> Baixar planilha
           </Button>
         )}
         {!n.lida && (
@@ -495,6 +503,10 @@ export function ChatNotificacoes() {
                     onMarcarLida={marcarLida}
                     onExcluir={excluirNotificacao}
                     onNavigate={detalhe.acordo_id ? () => { navegarPara(detalhe); } : undefined}
+                    onBaixar={(() => {
+                      const envio = envioCampanhaDaNotificacao(detalhe);
+                      return envio ? () => { void baixarCampanhaDaNotificacao(envio); } : undefined;
+                    })()}
                   />
                 )}
               </AnimatePresence>

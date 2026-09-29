@@ -3,7 +3,8 @@
  *
  * Transforma arquivos exportados do sistema (mailing CSV/TXT, relatório 245 ou
  * 247 em Excel) em campanhas de cobrança: aplica descontos, substitui variáveis
- * da mensagem, distribui os responsáveis em rodízio e exporta um Excel pronto.
+ * da mensagem, distribui os operadores marcados em rodízio e exporta um Excel
+ * pronto — ou libera a parte de cada um, que chega pela notificação.
  *
  * A lógica de negócio é a mesma do app original (campaign-core / xlsx-export,
  * portados verbatim); esta página é a interface reescrita com o design system
@@ -40,6 +41,8 @@ import {
 import { cn } from '@/lib/utils';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
 import { useCampanhaFacil, type WorkspaceState } from './useCampanhaFacil';
+import { SeletorOperadores } from './SeletorOperadores';
+import { CampanhasLiberadas } from './CampanhasLiberadas';
 
 const VARIABLE_LABELS: [string, string][] = [
   ['primeiro_nome', 'Primeiro nome'], ['nome', 'Nome completo'], ['cpf', 'CPF'],
@@ -108,6 +111,7 @@ export default function CampanhaFacil() {
   const [deleteMsgOpen, setDeleteMsgOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportName, setExportName] = useState('');
+  const [liberarOpen, setLiberarOpen] = useState(false);
   const [saveDiscountOpen, setSaveDiscountOpen] = useState(false);
   const [discountName, setDiscountName] = useState('');
   const [deleteDiscountOpen, setDeleteDiscountOpen] = useState(false);
@@ -161,7 +165,12 @@ export default function CampanhaFacil() {
     setExportOpen(true);
   }
   function openSendersHint() {
-    document.getElementById('cf-senders')?.focus();
+    document.getElementById('cf-senders')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function openLiberar() {
+    if (!cf.campaign.length) return;
+    if (cf.sendersList.length === 0) { openSendersHint(); return; }
+    setLiberarOpen(true);
   }
 
   const reviewCount = cf.stats.review;
@@ -341,28 +350,15 @@ export default function CampanhaFacil() {
             </CardContent>
           </Card>
 
-          {/* Passo 3 — Responsáveis */}
-          <Card>
+          {/* Passo 3 — Responsáveis: operadores do setor, marcados */}
+          <Card id="cf-senders">
             <CardContent className="space-y-2 p-4">
-              <StepTitle n={3} title="Quem encaminhará" subtitle="Informe os usuários responsáveis" />
-              <Textarea
-                id="cf-senders"
-                rows={2}
-                spellCheck={false}
-                placeholder="Ex.: Bianca, Rafaela, Bruna"
-                value={cf.sendersInput}
-                onChange={(e) => cf.setSendersInput(e.target.value)}
-                aria-invalid={!!cf.parsed && cf.sendersList.length === 0}
-              />
-              <p className={cn('text-xs', !!cf.parsed && cf.sendersList.length === 0 ? 'text-destructive' : 'text-muted-foreground')}>
-                {cf.sendersList.length === 0
-                  ? 'Informe ao menos um nome. Ele aparecerá somente na coluna “Encaminhada por”.'
-                  : cf.sendersList.length === 1
-                    ? '1 usuário informado · distribuído na coluna “Encaminhada por”.'
-                    : `${cf.sendersList.length} usuários informados · distribuição automática em rodízio.`}
-              </p>
+              <StepTitle n={3} title="Quem encaminhará" subtitle="Marque os operadores do setor" />
+              <SeletorOperadores envios={cf.envios} destacarVazio={!!cf.parsed} />
             </CardContent>
           </Card>
+
+          <CampanhasLiberadas envios={cf.envios} />
 
           {/* Descontos (ocultos no relatório 245) */}
           {!cf.relatorioSemValores && (
@@ -426,7 +422,7 @@ export default function CampanhaFacil() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-primary">Comece por aqui</p>
                 <h2 className="mt-1 text-lg font-bold">Importe o mailing para criar a campanha</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Os dados e mensagens são organizados automaticamente. “Encaminhada por” usa apenas os nomes informados por você.
+                  Os dados e mensagens são organizados automaticamente e divididos entre os operadores marcados. Cada um recebe a parte dele pela notificação.
                 </p>
                 <Button className="mt-4 gap-2" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="h-4 w-4" /> Selecionar mailing
@@ -452,9 +448,14 @@ export default function CampanhaFacil() {
                 </div>
                 {/* Sem `disabled` por pendência: a exportação segue liberada e as
                     linhas problemáticas saem marcadas na planilha. */}
-                <Button className="gap-2" onClick={openExport}>
-                  <Download className="h-4 w-4" /> Exportar Excel
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className="gap-2" onClick={openExport}>
+                    <Download className="h-4 w-4" /> Exportar Excel
+                  </Button>
+                  <Button className="gap-2" onClick={openLiberar} disabled={cf.envios.liberando}>
+                    <Send className="h-4 w-4" /> {cf.envios.liberando ? 'Liberando…' : 'Liberar para os operadores'}
+                  </Button>
+                </div>
               </div>
 
               {/* Banner de validação */}
@@ -469,8 +470,8 @@ export default function CampanhaFacil() {
                           coluna PENDÊNCIAS.
                         </span></>
                     ) : cf.sendersList.length === 0 ? (
-                      <><strong>Informe quem encaminhará a campanha.</strong>{' '}
-                        <span className="text-muted-foreground">O mailing não fornece esses nomes.</span></>
+                      <><strong>Marque quem encaminhará a campanha.</strong>{' '}
+                        <span className="text-muted-foreground">Escolha os operadores do setor no passo 3.</span></>
                     ) : (
                       <><strong>Alguns campos esperados não foram encontrados.</strong>{' '}
                         <span className="text-muted-foreground">Colunas: {cf.parsed.missingHeaders.join(', ')}.</span></>
@@ -718,6 +719,31 @@ export default function CampanhaFacil() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ══ Dialog: liberar para os operadores ══════════════════════════════ */}
+      <AlertDialog open={liberarOpen} onOpenChange={setLiberarOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Liberar a campanha?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cf.stats.total.toLocaleString('pt-BR')} contatos com a mensagem “{cf.selectedTemplate.name}”, divididos
+              entre {cf.sendersList.length} {cf.sendersList.length === 1 ? 'operador' : 'operadores'}. Cada um recebe
+              uma notificação e baixa a planilha com a parte dele. Fica disponível por 2 dias.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {reviewCount > 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              {reviewCount.toLocaleString('pt-BR')} registros precisam de atenção e saem marcados na planilha de quem recebê-los.
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { void cf.liberarCampanha(); }}>
+              Liberar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ══ Dialog: salvar configuração de desconto ═════════════════════════ */}
       <Dialog open={saveDiscountOpen} onOpenChange={setSaveDiscountOpen}>

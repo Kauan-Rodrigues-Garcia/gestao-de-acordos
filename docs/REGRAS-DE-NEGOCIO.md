@@ -1626,6 +1626,22 @@ Excel) em campanhas de cobrança: aplica descontos, substitui variáveis da
 mensagem, distribui responsáveis em **rodízio** e exporta um Excel pronto.
 Mensagens e descontos são compartilhados por empresa.
 
+**Quem encaminha (29/09/2026).** Não se digita mais nome: o líder marca os
+operadores do **próprio setor** (clones do setor alternativo entram; gerência
+para cima escolhe o setor). Todos nascem marcados. O rodízio corre por **id**,
+então homônimos continuam sendo duas pessoas.
+
+**Liberar.** Grava a parte de cada operador em `campanha_facil_envios` (as
+linhas prontas, não o arquivo) e cria uma notificação com
+`rota = /campanha-facil/envio/<id>`. O operador **não tem aba**: o clique na
+notificação monta e baixa a planilha. Vale **2 dias** — a policy esconde o
+vencido e um pg_cron apaga de hora em hora.
+
+**Repasse.** Se alguém faltou, o líder marca quem faltou e quem recebe: um
+recebedor leva tudo, vários dividem em rodízio. «Encaminhada por» vira o nome
+de quem recebeu; o envio de quem faltou é apagado e o download dele para de
+funcionar. Migration `20260929100000`.
+
 ### 13.4 Pet — REMOVIDO
 
 Desligado em 09/08/2026, arquivado em 05/09/2026. O código está em
