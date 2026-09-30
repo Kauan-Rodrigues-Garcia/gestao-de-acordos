@@ -3,12 +3,16 @@
  *
  * Spec: docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md §3–§5.
  *
- * Etapa 2 (esta): `{ acao: 'teste' }`, chamada pela tela do celular logo depois
- * de a pessoa ativar os avisos. Só manda para os aparelhos DE QUEM CHAMOU — o
- * JWT decide quem é, não o corpo da requisição.
+ * `{ acao: 'teste' }` — a tela do celular chama logo depois de a pessoa ativar
+ * os avisos. Só manda para os aparelhos DE QUEM CHAMOU: a sessão (getUser)
+ * decide quem é, não o corpo da requisição.
  *
- * Etapa 3 (depois): `{ acao: 'rodada' }`, chamada pelo pg_cron para drenar a
- * fila `push_fila`.
+ * `{ acao: 'rodada' }` — o pg_cron chama (fn_push_disparar, via pg_net) quando
+ * há pendente em `push_fila`. Exige o cabeçalho `x-push-segredo` igual a
+ * `push_config.segredo`. Migration 20260930140000.
+ *
+ * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
+ * usuário, e as duas ações autenticam por conta própria (acima).
  *
  * Secrets (Supabase → Edge Functions → Secrets), NUNCA no repositório:
  *   VAPID_PUBLIC_KEY   a mesma de VITE_VAPID_PUBLIC_KEY na Vercel
@@ -18,10 +22,11 @@
  */
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
+import { montarAvisos, type Aviso, type ItemFila, type PessoaLote } from './texto.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-push-segredo',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -32,8 +37,6 @@ function resposta(status: number, corpo: unknown): Response {
 }
 
 interface Inscricao { id: string; endpoint: string; p256dh: string; auth: string }
-
-export interface Aviso { titulo: string; corpo: string; tag?: string; url?: string }
 
 /**
  * Manda um aviso para uma lista de aparelhos. 404/410 = a inscrição morreu
@@ -66,6 +69,61 @@ async function enviarPara(
     }
   }));
   return { enviados, removidos, falhas };
+}
+
+/** Mês corrente em São Paulo, `yyyy-MM` — entra na `tag` do aviso de meta. */
+function mesAtual(): string {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date());
+  return `${p.find(x => x.type === 'year')?.value}-${p.find(x => x.type === 'month')?.value}`;
+}
+
+/**
+ * Uma rodada da fila: pega o lote, monta os avisos por pessoa (texto.ts), manda
+ * para cada aparelho e fecha. A pessoa conta como «saiu» se ao menos um aparelho
+ * recebeu ou se todos morreram (404/410); só falha de rede/servidor volta para
+ * a fila (até a 3ª tentativa — fn_push_concluir).
+ */
+async function rodada(admin: ReturnType<typeof createClient>) {
+  const { data: lote, error } = await admin.rpc('fn_push_pegar_lote', { p_limite: 500 });
+  if (error) return { erro: error.message };
+  const itens = ((lote as { itens?: ItemFila[] })?.itens ?? []);
+  if (!itens.length) return { pessoas: 0, avisos: 0 };
+  const pessoas = (lote as { pessoas?: Record<string, PessoaLote> }).pessoas ?? {};
+  const corte = Number((lote as { corte?: number }).corte) || 3;
+
+  const porPessoa = montarAvisos(itens, pessoas, corte, mesAtual());
+  const { data: insc } = await admin
+    .from('push_inscricoes').select('id, perfil_id, endpoint, p256dh, auth')
+    .in('perfil_id', porPessoa.map(p => p.perfilId));
+  const aparelhos = new Map<string, Inscricao[]>();
+  for (const i of (insc ?? []) as (Inscricao & { perfil_id: string })[]) {
+    const l = aparelhos.get(i.perfil_id) ?? [];
+    l.push(i);
+    aparelhos.set(i.perfil_id, l);
+  }
+
+  const ok: number[] = [];
+  const falha: number[] = [];
+  let avisos = 0;
+  for (const p of porPessoa) {
+    const lista = aparelhos.get(p.perfilId) ?? [];
+    if (!lista.length) { ok.push(...p.ids); continue; }
+    let algumSaiu = false, soFalhaDeRede = true;
+    // Em ordem: os avisos de pagamento antes do de meta.
+    for (const aviso of p.avisos) {
+      const r = await enviarPara(admin, lista, aviso);
+      avisos += r.enviados;
+      if (r.enviados > 0) algumSaiu = true;
+      if (r.removidos > 0 && r.falhas === 0) soFalhaDeRede = false;
+    }
+    if (algumSaiu || !soFalhaDeRede) ok.push(...p.ids);
+    else falha.push(...p.ids);
+  }
+
+  await admin.rpc('fn_push_concluir', { p_ok: ok, p_falha: falha });
+  return { pessoas: porPessoa.length, avisos, ok: ok.length, falha: falha.length };
 }
 
 Deno.serve(async (req) => {
@@ -105,6 +163,14 @@ Deno.serve(async (req) => {
       url: '/#/m',
     });
     return resposta(200, r);
+  }
+
+  if (corpo.acao === 'rodada') {
+    const { data: confere } = await admin.rpc('fn_push_segredo_confere', {
+      p_segredo: req.headers.get('x-push-segredo'),
+    });
+    if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
+    return resposta(200, await rodada(admin));
   }
 
   return resposta(400, { error: 'Ação desconhecida.' });

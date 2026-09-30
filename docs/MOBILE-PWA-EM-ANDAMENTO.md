@@ -265,11 +265,19 @@ tudo certo»).**
 - **Falta o usuário testar no aparelho:** «Ativar» na `/#/m` → permitir →
   chegar «Pronto! 🔔». iPhone só com o app instalado.
 
-**Próximo: Etapa 3 (aviso automático a cada pagamento).** Antes, pedir «pode»
-para ler `SELECT extname FROM pg_extension WHERE extname IN ('pg_net','pg_cron');`.
-Depois: `push_fila`, gatilho por comando, `fn_push_disparar`, jobs do
-`pg_cron`, ação `rodada` na `enviar-push` (a chamada do cron precisa de
-autenticação própria — `verify_jwt` está ligado).
+**Etapa 3 (aviso automático) — código escrito e testado em 30/09/2026, NADA
+aplicado.** Leitura autorizada: `pg_cron` ativo, **`pg_net` NÃO** (a migration
+cria).
+- `supabase/migrations/20260930140000_push_fila.sql`: `push_config` (uma linha:
+  liga/desliga, URL, segredo, corte 3, janela 3 dias), `push_fila` (único na
+  chave natural), gatilho por comando `trg_analitico_push_fila`,
+  `fn_push_disparar` (cron a cada minuto, só com pendente), `fn_push_pegar_lote`
+  (expira > 6 h, tira inativo/sem aparelho, soma do mês + degraus da meta),
+  `fn_push_concluir`, faxina diária de 7 dias. Testada num Postgres local.
+- `enviar-push`: ação `rodada` (segredo `x-push-segredo`) e `texto.ts` (textos,
+  corte, resumo, meta). **Republicar com verify_jwt DESLIGADO** — o cron não
+  tem sessão; `teste` continua exigindo a sessão do usuário (getUser).
+- Pedir «pode» para: (1) aplicar a migration; (2) republicar a função.
 
 **Fora do mobile (30/09/2026): projeção do Desafio ≠ Painel do Líder — RESOLVIDO.**
 Código na main (`67b4632`); migration aplicada em produção com «pode» e
