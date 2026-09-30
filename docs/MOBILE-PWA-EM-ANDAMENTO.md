@@ -157,8 +157,36 @@ paridade ou calcular a família no banco. Proposta:
   vibração no Android. Som: o do sistema — Web Push não permite som próprio.
 - Toque abre `/m` com os pagamentos novos destacados.
 - `tag` por lote para não empilhar duplicado se reenviar.
-- Pergunta em aberto: horário de silêncio (ex.: 21h–8h acumula num resumo de
-  manhã) ou avisar a qualquer hora?
+- Horário de silêncio: **não** — avisa a qualquer hora, por enquanto.
+
+**Seção 4 — APROVADA em 30/09/2026**, com o aviso de meta batida incluído.
+
+**Seção 5 (erros e casos-limite) apresentada em 30/09/2026, aguardando
+aprovação.** Ponto de desenho novo: o push de meta batida roda no servidor, e a
+comissão hoje só é calculada no navegador (`useMinhaComissao` junta meta,
+extras, indireta, config por setor/equipe/exceção, confirmação do setor,
+bônus; PaguePlay em H.O. com degrau = meta × 24,96%). Proposta: o servidor só
+detecta a faixa cruzada (acumulado antes × depois do lote contra
+`metas.meta_valor` / `metas_extras`, com a mesma unidade do Dashboard) e o
+texto diz «🎯 Você bateu a 2ª meta! Toque para ver sua comissão» — sem valor,
+para não criar uma segunda conta de comissão que pode divergir. O valor
+aparece na `/m`. Demais pontos:
+
+- Envio falhou com 404/410 (inscrição morta): apaga a linha do aparelho.
+- Outro erro (rede, 5xx): até 3 tentativas nas rodadas seguintes; depois
+  descarta e registra. Push atrasado mais de 6 h é descartado (aviso velho
+  confunde).
+- Falha no envio nunca trava nem desfaz a importação (a fila é só gravada
+  pelo gatilho).
+- Reimportação / sincronização do 59: só INSERT com `operador_id` entra na
+  fila; UPDATE/transferência não. Linha apagada e reinserida pela mesma
+  importação (se o importador fizer delete+insert) precisa de chave de
+  deduplicação — conferir no código do importador na spec.
+- Fila com 22 mil linhas: a Edge Function processa em blocos e agrupa por
+  pessoa; lote grande de uma pessoa vira um resumo só.
+- Pessoa sem nenhuma inscrição: a linha sai da fila sem envio.
+- Operador desligado/férias: não recebe.
+- Limpeza: fila processada apagada após 7 dias (pg_cron).
 
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco
