@@ -47,6 +47,21 @@ function aplicarMenuEscuro(ligado: boolean) {
   catch { /* modo privado */ }
 }
 
+/**
+ * Troca de cor sem animação — o mesmo que o `disableTransitionOnChange` do
+ * next-themes faz na troca de tema. O menu escuro não passa pelo next-themes,
+ * e sem isto cada item do menu animaria a cor ao mesmo tempo.
+ */
+function semTransicoes(aplicar: () => void) {
+  const estilo = document.createElement('style');
+  estilo.appendChild(document.createTextNode('*,*::before,*::after{transition:none!important}'));
+  document.head.appendChild(estilo);
+  aplicar();
+  // Força o navegador a aplicar as cores novas ANTES de devolver as transições.
+  void window.getComputedStyle(document.body).opacity;
+  setTimeout(() => estilo.remove(), 1);
+}
+
 function lerMenuEscuro(): boolean {
   try { return localStorage.getItem(CHAVE_MENU_ESCURO) === 'true'; }
   catch { return false; }
@@ -83,7 +98,7 @@ export function ThemeToggle() {
   function alternarMenuEscuro() {
     setMenuEscuro(v => {
       const novo = !v;
-      aplicarMenuEscuro(novo);
+      semTransicoes(() => aplicarMenuEscuro(novo));
       return novo;
     });
   }

@@ -42,11 +42,27 @@ function normalizarCor(raw: string, fallback = '#94a3b8'): string {
  * cinza (14/09/2026). O canvas 2D não tem essa escolha: o pixel pintado sempre
  * volta em RGB. O `<span>` fica como segunda tentativa, para ambiente sem canvas.
  */
-function viaCanvas(cor: string): string | null {
+/**
+ * Um canvas só para o app inteiro.
+ *
+ * Cada gráfico montado resolvia as cores criando um canvas NOVO por cor, e
+ * repetia isso a cada troca de tema — com 15 componentes que usam este hook,
+ * a troca de tema criava dezenas de canvas no mesmo quadro.
+ */
+let ctxCompartilhado: CanvasRenderingContext2D | null = null;
+function contexto(): CanvasRenderingContext2D | null {
+  // Só guarda o contexto que existe: sem canvas (ambiente de teste, navegador
+  // travado) tenta de novo na próxima vez em vez de desistir para sempre.
+  if (ctxCompartilhado) return ctxCompartilhado;
   const canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 1;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctxCompartilhado = canvas.getContext('2d', { willReadFrequently: true });
+  return ctxCompartilhado;
+}
+
+function viaCanvas(cor: string): string | null {
+  const ctx = contexto();
   if (!ctx) return null;
 
   // Cor inválida não troca o `fillStyle` — sem a sentinela, ela pintaria a cor
@@ -63,7 +79,29 @@ function viaCanvas(cor: string): string | null {
   return `rgba(${r}, ${g}, ${b}, ${Math.round((a / 255) * 1000) / 1000})`;
 }
 
+/**
+ * Conversões já feitas, por cor de entrada.
+ *
+ * A cor de entrada é o valor da variável CSS no tema do momento
+ * (`oklch(0.65 0.03 220)`), então a chave já muda sozinha quando o tema muda —
+ * e a mesma cor pedida por dez gráficos é convertida uma vez só.
+ */
+const cacheRgb = new Map<string, string>();
+
 function toRgbCompativelComSvg(cor: string, fallback = '#1f2937'): string {
+  const chave = `${cor}|${fallback}`;
+  const pronta = cacheRgb.get(chave);
+  if (pronta) return pronta;
+  const convertida = converterParaRgb(cor, fallback);
+  // O fallback não entra: é «não consegui», e a próxima tentativa pode conseguir.
+  if (convertida !== fallback) {
+    if (cacheRgb.size > 500) cacheRgb.clear();
+    cacheRgb.set(chave, convertida);
+  }
+  return convertida;
+}
+
+function converterParaRgb(cor: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
   try {
     // Atalho: hex e rgb() já funcionam em SVG
@@ -97,7 +135,13 @@ export function useChartColors(vars: string[]): Record<string, string> {
         const normalizada = normalizarCor(style.getPropertyValue(v));
         resolved[v] = toRgbCompativelComSvg(normalizada, '#94a3b8');
       }
-      setColors(resolved);
+      // Mesmas cores (o <html> mudou outra classe, ex.: menu lateral escuro):
+      // devolve o objeto anterior e o gráfico não redesenha à toa.
+      setColors(prev => {
+        const iguais = vars.every(v => prev[v] === resolved[v])
+          && Object.keys(prev).length === vars.length;
+        return iguais ? prev : resolved;
+      });
     }
 
     resolve();

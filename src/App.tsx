@@ -232,9 +232,18 @@ export default function App() {
     {/* Dono único do tema (o ThemeToggle só chama `setTheme`). `themes` lista
         todos os temas — é o que ele tira do <html> ao trocar. `color-scheme`
         fica com o CSS: o do next-themes só conhece `light`/`dark`. */}
+    {/*
+      `disableTransitionOnChange` (30/09/2026): trocar de tema muda a cor de
+      TODOS os elementos de uma vez, e o `index.css` dá `transition-all` a todo
+      botão e link, além dos `transition-colors` espalhados. Eram centenas de
+      animações de cor disparando no mesmo quadro — era isso que derrubava o FPS
+      na troca de tema, não o backend. O next-themes desliga as transições só
+      durante a troca e devolve em seguida.
+    */}
     <ThemeProvider
       attribute="class" defaultTheme="system" enableSystem
       themes={NOMES_TEMAS} enableColorScheme={false}
+      disableTransitionOnChange
     >
       <AuthProvider>
         <EmpresaProvider>
