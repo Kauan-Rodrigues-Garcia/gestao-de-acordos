@@ -254,18 +254,22 @@ amarela ou «Voltar à minha conta» retornam. Super admin não é redirecionado
 **Etapa 1 publicada na main em 30/09/2026 e testada pelo usuário («por enquanto
 tudo certo»).**
 
-**Etapa 2 (avisos) — código escrito em 30/09/2026, NADA aplicado no banco:**
-- `supabase/migrations/20260930120624_push_inscricoes.sql` (tabela + RLS +
-  `fn_push_inscrever`) — **APLICADA em produção em 30/09/2026 com «pode»**,
-  registrada como `20260930120624`. RLS ligada, 4 políticas, anon sem acesso.
-- `supabase/functions/enviar-push/index.ts` (ação `teste`) — **falta deploy**
-  (com «pode») e os secrets VAPID.
-- Cliente: `src/lib/mobile/push.ts`, `src/pages/Mobile/Avisos.tsx`,
-  `useAvisos.ts`; logout apaga o aparelho. Desligado sem `VITE_VAPID_PUBLIC_KEY`.
-- Ordem para ligar: ~~aplicar a migration~~ (feito) → gerar par VAPID (`npx web-push
-  generate-vapid-keys`) → secrets na função (`VAPID_PUBLIC_KEY`,
-  `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) → deploy da função →
-  `VITE_VAPID_PUBLIC_KEY` na Vercel (os dois projetos) e redeploy.
+**Etapa 2 (avisos) — NO AR em 30/09/2026 (aviso de teste):**
+- Migration `20260930120624_push_inscricoes.sql` aplicada com «pode» (RLS
+  ligada, 4 políticas, anon sem acesso).
+- Edge Function `enviar-push` publicada (v1, `verify_jwt` ligado). Secrets
+  VAPID cadastrados pelo usuário; teste de fumaça: sem login 401, ação vazia
+  400 (chaves presentes), `teste` com anon 401.
+- `VITE_VAPID_PUBLIC_KEY` cadastrada pelo usuário na Vercel (PaguePlay e
+  BookPlay); branch mandada para a main para o deploy ler a chave.
+- **Falta o usuário testar no aparelho:** «Ativar» na `/#/m` → permitir →
+  chegar «Pronto! 🔔». iPhone só com o app instalado.
+
+**Próximo: Etapa 3 (aviso automático a cada pagamento).** Antes, pedir «pode»
+para ler `SELECT extname FROM pg_extension WHERE extname IN ('pg_net','pg_cron');`.
+Depois: `push_fila`, gatilho por comando, `fn_push_disparar`, jobs do
+`pg_cron`, ação `rodada` na `enviar-push` (a chamada do cron precisa de
+autenticação própria — `verify_jwt` está ligado).
 
 **Fora do mobile (30/09/2026): projeção do Desafio ≠ Painel do Líder — RESOLVIDO.**
 Código na main (`67b4632`); migration aplicada em produção com «pode» e
