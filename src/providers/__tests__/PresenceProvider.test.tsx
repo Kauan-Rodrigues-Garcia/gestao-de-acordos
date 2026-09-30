@@ -125,6 +125,7 @@ vi.mock('@/hooks/useEmpresa', () => ({
 // ── 3. Import do SUT ──────────────────────────────────────────────────────────
 
 import { PresenceProvider, useOnlineUsers } from '../PresenceProvider';
+import { __entradaInicialParaTestes } from '../presenceEntradaInicial';
 
 // ── 4. Helpers ────────────────────────────────────────────────────────────────
 
@@ -154,6 +155,9 @@ function simulatePresenceEvent(
 describe('PresenceProvider + useOnlineUsers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A primeira entrada da página é sorteada (até 12 s); os testes abaixo
+    // tratam da vida do canal, não da espera — ela tem o próprio teste.
+    __entradaInicialParaTestes(true);
     capturedPresenceHandlers.current = {};
     capturedSubscribeCallback.current = null;
     mockPresenceState.current = {};
@@ -237,6 +241,23 @@ describe('PresenceProvider + useOnlineUsers', () => {
   // de presence que existiam gastavam dois eventos por pessoa logada do mesmo
   // orçamento do tenant. O recorte por empresa mudou de lugar — saiu do tópico
   // e virou filtro sobre o payload, aqui no cliente.
+  it('a primeira entrada da página espera um sorteio (deploy não vira onda)', () => {
+    vi.useFakeTimers();
+    try {
+      __entradaInicialParaTestes(false);
+      mockPerfilRef.current  = { id: USER_ID };
+      mockEmpresaRef.current = { id: EMPRESA_ID };
+
+      renderHook(() => useOnlineUsers(), { wrapper });
+      expect(mockChannelSpy).not.toHaveBeenCalled();
+
+      act(() => { vi.advanceTimersByTime(12_000); });
+      expect(mockChannelSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('cria UM canal global e privado, não um por empresa', () => {
     mockPerfilRef.current  = { id: USER_ID };
     mockEmpresaRef.current = { id: EMPRESA_ID };
