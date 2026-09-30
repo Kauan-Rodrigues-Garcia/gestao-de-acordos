@@ -122,6 +122,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { tomarEntradaInicial } from './presenceEntradaInicial';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,18 @@ const ESPALHAMENTO_RETOMADA_MS = 1_500;
  * inteiro em poucos eventos por segundo.
  */
 const ESPALHAMENTO_RETRACK_MS = 10_000;
+
+/**
+ * Espalhamento da PRIMEIRA entrada no canal, ao carregar a página (30/09/2026).
+ *
+ * As reentradas já eram sorteadas, mas a entrada inicial não: num deploy, o
+ * «Nova versão — Recarregar» faz dezenas de abas recarregarem no mesmo minuto,
+ * e cada uma entrava na hora — dois eventos de presence por aba, todos juntos.
+ * Os `PresenceRateLimitReached` que sobraram vinham nessas ondas. Doze segundos
+ * sorteados não se percebem (o contador de online só aparece um pouco depois) e
+ * transformam a onda em chuvisco. Vale uma vez por carga de página.
+ */
+const ESPALHAMENTO_INICIAL_MS = 12_000;
 
 /** Quanto esperar a reentrada da biblioteca antes de recriar o canal. */
 const VIGIA_MS = 45_000;
@@ -482,13 +495,19 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // O tópico é fixo, e `supabase.channel(nome)` devolve o canal que ainda
     // estiver saindo com o mesmo nome — um canal morto. O novo espera o antigo.
     const saindo = saindoRef.current;
+    let atrasoInicial: ReturnType<typeof setTimeout> | null = null;
     if (saindo) void saindo.then(iniciar, iniciar);
-    else iniciar();
+    else if (tomarEntradaInicial()) {
+      // Primeira entrada desta carga de página: sorteada — ver
+      // `ESPALHAMENTO_INICIAL_MS`.
+      atrasoInicial = setTimeout(iniciar, Math.random() * ESPALHAMENTO_INICIAL_MS);
+    } else iniciar();
 
     // ── Cleanup ───────────────────────────────────────────────────────────
     return () => {
       vivo = false;
       mountedRef.current = false;
+      if (atrasoInicial) { clearTimeout(atrasoInicial); atrasoInicial = null; }
       if (vigia) { clearTimeout(vigia); vigia = null; }
       if (retryTrackRef.current) {
         clearTimeout(retryTrackRef.current);
