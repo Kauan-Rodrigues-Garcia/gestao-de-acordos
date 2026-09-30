@@ -1,5 +1,5 @@
 /**
- * Migration 20260930120000: o desafio mede a equipe como o Painel do Líder.
+ * Migration 20260930115849: o desafio mede a equipe como o Painel do Líder.
  *
  * Conferida também executando num Postgres 16 local com um cenário de
  * transferido de setor, clone, líder e PaguePlay (30/09/2026).

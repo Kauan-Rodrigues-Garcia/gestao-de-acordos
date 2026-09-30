@@ -380,7 +380,7 @@ export async function buscarContextoEquipe(
     setor_empresa?: Record<string, string>;
     setores_alternativos?: string[];
     recebido_mes_setor?: Record<string, { total?: number | string; total_ho?: number | string; qtd?: number | string }>;
-    /** Empresa → percentual de H.O., só as que medem em H.O. (20260930120000). */
+    /** Empresa → percentual de H.O., só as que medem em H.O. (20260930115849). */
     empresas_ho?: Record<string, number | string>;
   }>('fn_desafio_contexto_equipe', { p_desafio_id: desafioId });
 
@@ -454,7 +454,7 @@ export async function buscarContextoEquipe(
 
   /*
    * A unidade do Painel do Líder: equipe e setor da PaguePlay em H.O. — ver
-   * `contextoEmHO.ts`. Sem `empresas_ho` (migration 20260930120000 pendente),
+   * `contextoEmHO.ts`. Sem `empresas_ho` (migration 20260930115849 pendente),
    * tudo segue em bruto, como antes.
    */
   const empresasHO = data.empresas_ho
