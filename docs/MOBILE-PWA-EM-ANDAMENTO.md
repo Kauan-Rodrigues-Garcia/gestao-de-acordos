@@ -255,13 +255,14 @@ amarela ou «Voltar à minha conta» retornam. Super admin não é redirecionado
 tudo certo»).**
 
 **Etapa 2 (avisos) — código escrito em 30/09/2026, NADA aplicado no banco:**
-- `supabase/migrations/20260930130000_push_inscricoes.sql` (tabela + RLS +
-  `fn_push_inscrever`) — testada num Postgres 16 local; **falta o «pode»**.
+- `supabase/migrations/20260930120624_push_inscricoes.sql` (tabela + RLS +
+  `fn_push_inscrever`) — **APLICADA em produção em 30/09/2026 com «pode»**,
+  registrada como `20260930120624`. RLS ligada, 4 políticas, anon sem acesso.
 - `supabase/functions/enviar-push/index.ts` (ação `teste`) — **falta deploy**
   (com «pode») e os secrets VAPID.
 - Cliente: `src/lib/mobile/push.ts`, `src/pages/Mobile/Avisos.tsx`,
   `useAvisos.ts`; logout apaga o aparelho. Desligado sem `VITE_VAPID_PUBLIC_KEY`.
-- Ordem para ligar: aplicar a migration → gerar par VAPID (`npx web-push
+- Ordem para ligar: ~~aplicar a migration~~ (feito) → gerar par VAPID (`npx web-push
   generate-vapid-keys`) → secrets na função (`VAPID_PUBLIC_KEY`,
   `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) → deploy da função →
   `VITE_VAPID_PUBLIC_KEY` na Vercel (os dois projetos) e redeploy.

@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS push_inscricoes_perfil_idx ON public.push_inscricoes 
 COMMENT ON TABLE public.push_inscricoes IS
   'Aparelhos inscritos no aviso de pagamento (Web Push). Uma linha por endpoint. '
   'A pessoa ve e mexe so nas proprias; a Edge Function enviar-push le todas com '
-  'service_role (20260930130000).';
+  'service_role (20260930120624).';
 
 ALTER TABLE public.push_inscricoes ENABLE ROW LEVEL SECURITY;
 
