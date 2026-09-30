@@ -38,6 +38,8 @@ import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { TabulacaoCell } from './TabulacaoCell';
 import { MudancasImportacao } from './MudancasImportacao';
 import { RankingView } from './RankingView';
+import { CampoBuscaAnalitico } from './CampoBuscaAnalitico';
+import { recebimentoCasaBusca } from './buscaAnalitico';
 import type { VinculosOperador } from './agregacaoLider';
 
 import {
@@ -85,6 +87,8 @@ interface AnaliticoOperadorProps {
   }) => void;
   onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
+  /** Avisa a página qual aba interna está aberta (o Ranking não usa Dia/Período). */
+  onAbaMudou?: (aba: AbaOperador) => void;
 }
 
 function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: string | null) {
@@ -105,7 +109,7 @@ function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: str
 
 export function AnaliticoOperador({
   dados, loading, operadorId, operadorNome, empresaId, recorte, podeVerRanking,
-  podeVerFormas, onAbrirNovoAcordo, onVerAcordo, onRefetch,
+  podeVerFormas, onAbrirNovoAcordo, onVerAcordo, onRefetch, onAbaMudou,
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
@@ -115,8 +119,11 @@ export function AnaliticoOperador({
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
   const [abaOp, setAbaOp] = useState<AbaOperador>('meus');
+  // NR, cliente ou empresa — só filtra a tabela; os cards seguem o período.
+  const [busca, setBusca] = useState('');
   // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
   useSubAbaUso(abaOp, 3);
+  useEffect(() => { onAbaMudou?.(abaOp); }, [abaOp, onAbaMudou]);
 
   // ── Ranking (carregado sob demanda ao abrir a aba / trocar de mês) ──────────
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);
@@ -185,6 +192,15 @@ export function AnaliticoOperador({
       return true;
     });
   }, [dados, filtroInicio, filtroFim, recorte]);
+
+  /*
+   * A busca recorta só a TABELA. Os cards continuam dizendo quanto a pessoa
+   * recebeu no período: procurar um NR não muda o total do mês dela.
+   */
+  const linhasDaTabela = useMemo(
+    () => (busca.trim() ? dadosFiltrados.filter(d => recebimentoCasaBusca(d, busca)) : dadosFiltrados),
+    [dadosFiltrados, busca],
+  );
 
   function limparFiltro() {
     setFiltroInicio('');
@@ -286,6 +302,11 @@ export function AnaliticoOperador({
                   </span>
                 </>
               )}
+              <CampoBuscaAnalitico
+                valor={busca} onMudar={setBusca}
+                placeholder={tenant.isPaguePlay ? 'Buscar código ou cliente...' : 'Buscar NR, cliente ou empresa...'}
+                className="sm:ml-auto"
+              />
             </div>
 
             {/* O que a reimportação do 59 mexeu na carteira DELE. Some quando
@@ -368,8 +389,17 @@ export function AnaliticoOperador({
               </div>
             )}
 
+            {dadosFiltrados.length > 0 && linhasDaTabela.length === 0 && (
+              <div className="rounded-xl border border-dashed border-border py-8 text-center text-muted-foreground">
+                <p className="text-sm">Nenhum recebimento com «{busca.trim()}» neste período.</p>
+                <Button size="sm" variant="ghost" className="mt-2 h-8 gap-1 text-xs" onClick={() => setBusca('')}>
+                  <X className="h-3 w-3" /> Limpar busca
+                </Button>
+              </div>
+            )}
+
             {/* Tabela */}
-            {dadosFiltrados.length > 0 && (
+            {linhasDaTabela.length > 0 && (
               <div className="overflow-hidden rounded-xl border border-border">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
@@ -384,7 +414,7 @@ export function AnaliticoOperador({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {dadosFiltrados.flatMap(linha => {
+                        {linhasDaTabela.flatMap(linha => {
                           const rowClass = cn('hover:bg-muted/30 transition-colors', !linha.visto && 'bg-primary/3');
                           const pagamentos = linha.pagamentos_detalhados;
 

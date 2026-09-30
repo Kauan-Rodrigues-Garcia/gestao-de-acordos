@@ -1155,6 +1155,44 @@ export interface FiltrosAnalitico {
   apenasNaoVistos?: boolean;
 }
 
+/** Quantas linhas a busca do líder traz de uma vez. */
+export const LIMITE_BUSCA_ANALITICO = 100;
+
+/**
+ * A busca do líder no Analítico (30/09/2026): NR/código, cliente ou empresa,
+ * dentro da janela da lente.
+ *
+ * Vai ao banco em vez de filtrar em memória porque a lista do líder chega por
+ * RESUMO — as linhas de cada operador só descem quando o card abre. Trazer o
+ * mês inteiro para procurar um NR seria milhares de linhas por tecla.
+ *
+ * A RLS de `analitico_recebimentos` é a mesma da tela (escopo ≥ 2 vê a
+ * empresa); quem recorta por setor e equipe é o chamador, com a lista que ele
+ * já desenha. `termo` já vem limpo de `termoParaBanco`.
+ */
+export async function buscarRecebimentosPorTermo(params: {
+  empresaId: string;
+  inicio: string;
+  fim: string;
+  termo: string;
+}): Promise<{ data: AnaliticoRecebimento[]; error: string | null }> {
+  const padrao = `%${params.termo}%`;
+  const { data, error } = await supabase
+    .from('analitico_recebimentos')
+    .select('*, perfis(id, nome, usuario)')
+    .eq('empresa_id', params.empresaId)
+    .gte('data_pagamento', params.inicio)
+    .lte('data_pagamento', params.fim)
+    .or(`codigo.ilike.${padrao},nome_cliente.ilike.${padrao},instituicao.ilike.${padrao}`)
+    .order('data_pagamento', { ascending: false })
+    .order('id', { ascending: true })
+    .limit(LIMITE_BUSCA_ANALITICO);
+  return {
+    data:  (data as unknown as AnaliticoRecebimento[]) ?? [],
+    error: error?.message ?? null,
+  };
+}
+
 export async function buscarAnalitico(
   filtros: FiltrosAnalitico,
 ): Promise<{ data: AnaliticoRecebimento[]; error: string | null }> {

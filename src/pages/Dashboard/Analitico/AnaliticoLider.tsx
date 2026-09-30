@@ -33,6 +33,8 @@ import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
   buscarResumoOperadoresAnalitico,
   buscarAnalitico,
+  buscarRecebimentosPorTermo,
+  LIMITE_BUSCA_ANALITICO,
   buscarDestaquesDoMes,
   buscarDestaquesPorGrupo,
   buscarEquipesComOperadores,
@@ -79,13 +81,17 @@ import { useMetaDiariaOperadores } from './useMetaDiariaOperadores';
 import { operadoresEmDia, type AvaliacaoEmDia } from './emDiaOperador';
 import { montarMensagemEmDia } from './mensagemEmDia';
 import { getTodayISO } from '@/lib/index';
-import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
+import { diasNoMes as diasDoMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { MudancasImportacao } from './MudancasImportacao';
 import { percentualImplicito, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
+import { CampoBuscaAnalitico } from './CampoBuscaAnalitico';
+import {
+  filtrarGruposPorBusca, operadorCasaBusca, recebimentoCasaBusca, termoParaBanco,
+} from './buscaAnalitico';
 import { useRankingAnalitico } from './useRankingAnalitico';
 import { ConfigurarRankingDialog } from './ConfigurarRankingDialog';
 import { LABEL_CRITERIO, estadoBotaoConfigRanking } from './rankingCriterio';
@@ -196,12 +202,14 @@ interface AnaliticoLiderProps {
   }) => void;
   onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
+  /** Avisa a página qual aba interna está aberta (o Ranking não usa Dia/Período). */
+  onAbaMudou?: (aba: AbaInterna | null) => void;
 }
 
 export function AnaliticoLider({
   empresaId, recorte, setorId, podeVerTodosSetores = true,
   temPermissaoImportar,
-  onAbrirNovoAcordo, onVerAcordo, onRefetch,
+  onAbrirNovoAcordo, onVerAcordo, onRefetch, onAbaMudou,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
   const { perfil } = useAuth();
@@ -273,6 +281,40 @@ export function AnaliticoLider({
 
   // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
   useSubAbaUso(abaVisivel, 3);
+  useEffect(() => { onAbaMudou?.(abaVisivel); }, [abaVisivel, onAbaMudou]);
+
+  /*
+   * ── Busca (30/09/2026) ────────────────────────────────────────────────────
+   *
+   * Uma caixa só para Por operador e Sem operador: nome/login do operador, NR
+   * ou código, cliente e empresa do relatório. O nome se resolve em memória; o
+   * código vai ao banco (`buscarRecebimentosPorTermo`), porque a lista chega
+   * por resumo e as linhas de cada pessoa só descem quando o card abre.
+   */
+  const [busca, setBusca] = useState('');
+  const [achados, setAchados] = useState<AnaliticoRecebimento[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const termoBanco = termoParaBanco(busca);
+  useEffect(() => {
+    if (!termoBanco) { setAchados([]); setBuscando(false); return; }
+    let vivo = true;
+    setBuscando(true);
+    // Espera a pessoa parar de digitar: uma ida por busca, não por tecla.
+    const t = setTimeout(async () => {
+      const { data, error } = await buscarRecebimentosPorTermo({
+        empresaId,
+        // Período ainda sem as pontas escolhidas: o mês da lente.
+        inicio: pisoDoRecorte || primeiroDiaDoMes(mes),
+        fim:    tetoDoRecorte || ultimoDiaDoMes(mes),
+        termo:  termoBanco,
+      });
+      if (!vivo) return;
+      if (error) toast.error(`Erro na busca: ${error}`);
+      setAchados(data);
+      setBuscando(false);
+    }, 350);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [termoBanco, empresaId, pisoDoRecorte, tetoDoRecorte, mes]);
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -608,6 +650,14 @@ export function AnaliticoLider({
   const orfaosVisiveisSetor = useMemo(
     () => filtrarOrfaosDoSetor(orfaos, restritoAoSetor, operadorEquipeMap, setorId),
     [orfaos, restritoAoSetor, operadorEquipeMap, setorId],
+  );
+  // Órfão já está todo em memória: a busca filtra aqui mesmo, e também pelo
+  // login da cobradora, que é o que a linha sem operador tem de nome.
+  const orfaosDaBusca = useMemo(
+    () => (busca.trim()
+      ? orfaosVisiveisSetor.filter(o => recebimentoCasaBusca(o, busca) || operadorCasaBusca({ nome: null, usuario: o.operador_usuario }, busca))
+      : orfaosVisiveisSetor),
+    [orfaosVisiveisSetor, busca],
   );
 
   // ── Filtro de equipe ──────────────────────────────────────────────────────
@@ -1147,6 +1197,23 @@ export function AnaliticoLider({
   }, [recorte.modo, pulsoDoDia, resumosPorEquipe, linhasDashboard, operadorEquipeMap]);
 
   /*
+   * A busca recortada pelo que a tela já desenha: o banco devolve a empresa
+   * inteira (escopo ≥ 2), e a lista é do setor e da equipe em foco. Recebimento
+   * de quem não está na lista não aparece — nem na tabela de achados.
+   */
+  const achadosDoPainel = useMemo(() => {
+    if (!termoBanco) return [];
+    const noPainel = new Set(gruposDoPainel.flatMap(g => g.itens.map(i => i.operador_id)));
+    return achados.filter(a => !!a.operador_id && noPainel.has(a.operador_id));
+  }, [achados, gruposDoPainel, termoBanco]);
+  const gruposVisiveis = useMemo(
+    () => filtrarGruposPorBusca(
+      gruposDoPainel, busca, new Set(achadosDoPainel.map(a => a.operador_id as string)),
+    ),
+    [gruposDoPainel, busca, achadosDoPainel],
+  );
+
+  /*
    * ── Quem está EM DIA com a média diária ──────────────────────────────────
    *
    * A liderança pediu para bater o olho na lista e ver quem mantém a média
@@ -1422,6 +1489,68 @@ export function AnaliticoLider({
     );
   }
 
+  /**
+   * Os recebimentos que casaram com a busca, com o dono de cada um. Clicar abre
+   * o card da pessoa logo abaixo — já filtrado pelo mesmo termo.
+   */
+  function resultadosDaBusca() {
+    const nomeDe = new Map(gruposDoPainel.flatMap(g => g.itens.map(i => [i.operador_id, i.nome ?? i.usuario] as const)));
+    return (
+      <div className="overflow-hidden rounded-xl border border-primary/30 bg-primary/[0.03]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs">
+          <span className="font-semibold text-foreground">
+            {achadosDoPainel.length} recebimento{achadosDoPainel.length !== 1 ? 's' : ''} com «{busca.trim()}»
+          </span>
+          {achados.length >= LIMITE_BUSCA_ANALITICO && (
+            <span className="text-muted-foreground">
+              Mostrando os {LIMITE_BUSCA_ANALITICO} mais recentes — refine a busca para achar o resto.
+            </span>
+          )}
+        </div>
+        <div className="max-h-72 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground">{mostrarNR ? 'NR' : 'CÓDIGO'}</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground">OPERADOR</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground">FORMA</th>
+                <th className="px-3 py-2 text-right font-semibold text-muted-foreground">RECEBIDO</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground">DATA</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {achadosDoPainel.map(a => {
+                const opId = a.operador_id as string;
+                const aberto = expandidos.has(opId);
+                return (
+                  <tr key={a.id}
+                    className={cn('cursor-pointer hover:bg-muted/30', aberto && 'bg-primary/5')}
+                    title={aberto ? 'Card do operador aberto abaixo' : 'Abrir o card do operador'}
+                    onClick={() => { if (!aberto) void toggleExpandido(opId); }}>
+                    <td className="px-3 py-2">
+                      <span className="font-semibold">{a.codigo}</span>
+                      {a.nome_cliente && (
+                        <span className="block max-w-[200px] truncate text-muted-foreground">{a.nome_cliente}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">{nomeDe.get(opId) ?? a.perfis?.nome ?? a.operador_usuario}</td>
+                    <td className="px-3 py-2">
+                      {a.forma_detalhe || (a.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix')}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{formatBRL(a.valor_recebido)}</td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {new Date(a.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   /** O conteúdo de dentro do operador aberto: filtro de data e a lista. */
   function detalheDoOperador(l: LinhaOperadorPainel) {
     // No recorte Dia a fonte é o diário, e ele tem tabela própria. Nada aqui
@@ -1430,7 +1559,12 @@ export function AnaliticoLider({
     if (recorte.modo === 'dia') return detalheDoDia(l);
 
     const carregando  = loadingLinhas.has(l.operador_id);
-    const linhas      = getLinhasOp(l.operador_id);
+    // Com busca que não é o nome dele, o card aberto mostra só o que casou —
+    // é o NR procurado, e não a lista inteira da pessoa.
+    const doPeriodo   = getLinhasOp(l.operador_id);
+    const linhas      = busca.trim() && !operadorCasaBusca(l, busca)
+      ? doPeriodo.filter(r => recebimentoCasaBusca(r, busca))
+      : doPeriodo;
     const todasLinhas = linhasMap.get(l.operador_id) ?? [];
     const filtro      = filtrosDatas.get(l.operador_id);
     const temFiltro   = !!(filtro?.inicio || filtro?.fim);
@@ -1817,16 +1951,24 @@ export function AnaliticoLider({
           {/* Dois formatos da MESMA lista — não duas fontes: desde a Task 12 o
               mapa soma do analítico, como a lista. Some no recorte Dia; ver
               `visaoEfetiva`. */}
-          {recorte.modo !== 'dia' && (
-            <div className="flex items-center justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* A busca é da lista; o mapa é operador × dia e não tem NR. */}
+            {visaoEfetiva === 'lista' ? (
+              <CampoBuscaAnalitico
+                valor={busca} onMudar={setBusca} buscando={buscando}
+                placeholder={isPP ? 'Buscar operador, código ou cliente...' : 'Buscar operador, NR, cliente ou empresa...'}
+              />
+            ) : <span />}
+            {recorte.modo !== 'dia' && (
               <AbasSegmentadas
                 abas={ABAS_VISAO}
                 ativa={visaoEfetiva}
                 onTrocar={(k: VisaoOperadores) => setVisaoOperadores(k)}
                 rotulo="Formato da lista"
               />
-            </div>
-          )}
+            )}
+          </div>
+          {visaoEfetiva === 'lista' && achadosDoPainel.length > 0 && resultadosDaBusca()}
           {carregandoConteudo && (
             <div className="animate-pulse space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -1849,9 +1991,15 @@ export function AnaliticoLider({
               Nenhum dado para este recorte.
             </div>
           )}
-          {!carregandoConteudo && visaoEfetiva === 'lista' && gruposDoPainel.length > 0 && (
+          {!carregandoConteudo && visaoEfetiva === 'lista' && gruposDoPainel.length > 0
+            && gruposVisiveis.length === 0 && !buscando && (
+            <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+              Nenhum operador ou recebimento com «{busca.trim()}» neste recorte.
+            </div>
+          )}
+          {!carregandoConteudo && visaoEfetiva === 'lista' && gruposVisiveis.length > 0 && (
             <ListaOperadores
-              grupos={gruposDoPainel}
+              grupos={gruposVisiveis}
               mostrarHO={mostrarHO}
               fotos={fotos}
               expandidos={expandidos}
@@ -2192,17 +2340,28 @@ export function AnaliticoLider({
           )}
           {!loadingOrfaos && orfaosVisiveisSetor.length > 0 && (
             <>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {orfaosVisiveisSetor.length} linha{orfaosVisiveisSetor.length !== 1 ? 's' : ''} não vinculada{orfaosVisiveisSetor.length !== 1 ? 's' : ''}.
-                </p>
-                <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs"
-                  onClick={() => void removerTodosOrfaos()} disabled={removendoTodos}>
-                  {removendoTodos
-                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                    : <Trash2 className="w-3 h-3" />}
-                  Remover todos
-                </Button>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <CampoBuscaAnalitico
+                    valor={busca} onMudar={setBusca}
+                    placeholder={isPP ? 'Buscar código ou cobradora...' : 'Buscar NR, cliente ou cobradora...'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {busca.trim() ? `${orfaosDaBusca.length} de ` : ''}
+                    {orfaosVisiveisSetor.length} linha{orfaosVisiveisSetor.length !== 1 ? 's' : ''} não vinculada{orfaosVisiveisSetor.length !== 1 ? 's' : ''}.
+                  </p>
+                </div>
+                {/* Some durante a busca: «todos» apaga a lista INTEIRA, e com
+                    ela filtrada o botão pareceria apagar só o que está na tela. */}
+                {!busca.trim() && (
+                  <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs"
+                    onClick={() => void removerTodosOrfaos()} disabled={removendoTodos}>
+                    {removendoTodos
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Trash2 className="w-3 h-3" />}
+                    Remover todos
+                  </Button>
+                )}
               </div>
               <Card className="border-border">
                 <CardContent className="p-0">
@@ -2218,7 +2377,14 @@ export function AnaliticoLider({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {orfaosVisiveisSetor.slice(0, orfaosVisiveis).map(linha => (
+                      {orfaosDaBusca.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                            Nenhuma linha com «{busca.trim()}».
+                          </td>
+                        </tr>
+                      )}
+                      {orfaosDaBusca.slice(0, orfaosVisiveis).map(linha => (
                         <tr key={linha.id} className="hover:bg-muted/20">
                           <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
                           <td className="px-3 py-2 font-semibold">{linha.codigo}</td>
@@ -2251,11 +2417,11 @@ export function AnaliticoLider({
                   </table>
                 </CardContent>
               </Card>
-              {orfaosVisiveis < orfaosVisiveisSetor.length && (
+              {orfaosVisiveis < orfaosDaBusca.length && (
                 <div className="flex justify-center pt-1">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs"
                     onClick={() => setOrfaosVisiveis(prev => prev + ORFAOS_PAGE)}>
-                    Carregar mais ({orfaosVisiveisSetor.length - orfaosVisiveis} restantes)
+                    Carregar mais ({orfaosDaBusca.length - orfaosVisiveis} restantes)
                   </Button>
                 </div>
               )}

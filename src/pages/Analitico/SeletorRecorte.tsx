@@ -27,16 +27,21 @@ interface SeletorRecorteProps {
   onMudar: (r: Recorte) => void;
   /** `analitico_sub_recebimento_diario` — sem ela, não há modo Dia. */
   podeVerDia: boolean;
+  /**
+   * Só o Mês (30/09/2026): o Ranking é o retrato do mês, sempre atualizado —
+   * não existe «ranking de um dia» nem de um período para escolher.
+   */
+  somenteMes?: boolean;
 }
 
-export function SeletorRecorte({ recorte, onMudar, podeVerDia }: SeletorRecorteProps) {
+export function SeletorRecorte({ recorte, onMudar, podeVerDia, somenteMes = false }: SeletorRecorteProps) {
   const hoje = getTodayISO();
   const mes  = mesDoRecorte(recorte);
 
   const modos: AbaSegmentada<ModoRecorte>[] = [
     { key: 'mes',     label: 'Mês',     Icon: Calendar },
-    ...(podeVerDia ? [{ key: 'dia' as const, label: 'Dia', Icon: CalendarDays }] : []),
-    { key: 'periodo', label: 'Período', Icon: CalendarRange },
+    ...(podeVerDia && !somenteMes ? [{ key: 'dia' as const, label: 'Dia', Icon: CalendarDays }] : []),
+    ...(!somenteMes ? [{ key: 'periodo' as const, label: 'Período', Icon: CalendarRange }] : []),
   ];
 
   return (

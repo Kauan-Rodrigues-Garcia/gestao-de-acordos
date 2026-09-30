@@ -180,6 +180,20 @@ export default function PaginaAnalitico() {
   useSubAbaUso(abaVisivel);
   useSubAbaUso(abaVisivel === 'analitico' ? recorte.modo : null, 2);
 
+  /*
+   * A aba aberta DENTRO da visão (Por operador, Ranking, Meus recebimentos…).
+   *
+   * Existe por causa do Ranking (30/09/2026): ele é o retrato do mês, sempre
+   * atualizado, e não tem como voltar a um dia ou a um período. Com ele aberto
+   * a lente fica só no Mês — e quem estava em Dia ou Período volta para o mês
+   * daquele recorte, senão a régua diria «Mês» e os números seriam de um dia.
+   */
+  const [abaDaVisao, setAbaDaVisao] = useState<string | null>(null);
+  const lenteSoMes = abaVisivel === 'analitico' && abaDaVisao === 'ranking';
+  useEffect(() => {
+    if (lenteSoMes && recorte.modo !== 'mes') setRecorte({ modo: 'mes', mes: mesDoRecorte(recorte) });
+  }, [lenteSoMes, recorte, setRecorte]);
+
   const mesDaLente = mesDoRecorte(recorte);
 
   // Clicar noutra notificação já estando na página só troca a query; o estado
@@ -453,6 +467,7 @@ export default function PaginaAnalitico() {
             recorte={recorte}
             onMudar={setRecorte}
             podeVerDia={temPermissao('analitico_sub_recebimento_diario')}
+            somenteMes={lenteSoMes}
           />
         )}
 
@@ -510,6 +525,7 @@ export default function PaginaAnalitico() {
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}
+          onAbaMudou={setAbaDaVisao}
         />
       )}
 
@@ -525,6 +541,7 @@ export default function PaginaAnalitico() {
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}
+          onAbaMudou={setAbaDaVisao}
         />
       )}
 
