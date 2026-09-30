@@ -1,5 +1,5 @@
 /**
- * Migration 20260930140000: fila do aviso automático.
+ * Migration 20260930124757: fila do aviso automático.
  * Executada também num Postgres 16 local (30/09/2026) com o cenário de limpar e
  * reimportar, data antiga, sem aparelho, upsert, cron sem pendente e meta.
  */

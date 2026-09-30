@@ -73,7 +73,7 @@ REVOKE ALL ON public.push_config FROM anon, authenticated;
 COMMENT ON TABLE public.push_config IS
   'Configuracao do aviso automatico de pagamento: liga/desliga, URL da Edge '
   'Function, segredo da rodada, corte do resumo e janela de dias. Fechada: so '
-  'funcoes DEFINER e service_role leem (20260930140000).';
+  'funcoes DEFINER e service_role leem (20260930124757).';
 
 -- ── A fila ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.push_fila (
@@ -110,7 +110,7 @@ REVOKE ALL ON public.push_fila FROM anon, authenticated;
 COMMENT ON TABLE public.push_fila IS
   'Fila do aviso automatico de pagamento. Gravada so pelo gatilho de '
   'analitico_recebimentos; lida so pela Edge Function enviar-push. A chave '
-  'natural unica impede avisar de novo apos limpar e reimportar (20260930140000).';
+  'natural unica impede avisar de novo apos limpar e reimportar (20260930124757).';
 
 -- ── O gatilho: um por comando ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_push_enfileirar()

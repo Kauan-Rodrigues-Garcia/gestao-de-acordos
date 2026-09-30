@@ -1975,6 +1975,16 @@ Spec: `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md`.
   cada um só vê e apaga os próprios. Sair da conta apaga o aparelho
   (`esquecerAparelhoAoSair`, em `useAuth.signOut`). Durante a impersonação o
   card não aparece. Sem `VITE_VAPID_PUBLIC_KEY` nada disso aparece.
+- **Aviso automático (Etapa 3).** Gatilho por comando em
+  `analitico_recebimentos` grava em `push_fila` só linha nova, com operador,
+  com aparelho inscrito e `data_pagamento` nos últimos `janela_dias` (3). A
+  fila é única na chave natural e sobrevive ao «Limpar dados»: reimportar não
+  avisa de novo. `pg_cron` (`push-disparar`, a cada minuto) chama a Edge
+  Function `enviar-push` só com pendente; ela manda até `corte` (3) avisos por
+  pessoa, acima disso um resumo, e «🎯 Você bateu a Nª meta!» (sem valor de
+  comissão) quando o lote cruza uma faixa — soma do mês + ajustes, H.O. na
+  PaguePlay. Aviso com mais de 6 h não sai. Desligar:
+  `UPDATE public.push_config SET ativo = false;`. Migration 20260930124757.
 - **Números.** Nenhuma conta própria. Recebido, meta e faixas vêm de
   `usePainelMetas` (escopo «eu», H.O. na PaguePlay); a comissão de
   `useMinhaComissao`, com a mesma regra de exibição do Dashboard

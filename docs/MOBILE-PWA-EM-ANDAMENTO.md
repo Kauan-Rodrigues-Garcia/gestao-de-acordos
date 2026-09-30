@@ -265,19 +265,20 @@ tudo certo»).**
 - **Falta o usuário testar no aparelho:** «Ativar» na `/#/m` → permitir →
   chegar «Pronto! 🔔». iPhone só com o app instalado.
 
-**Etapa 3 (aviso automático) — código escrito e testado em 30/09/2026, NADA
-aplicado.** Leitura autorizada: `pg_cron` ativo, **`pg_net` NÃO** (a migration
-cria).
-- `supabase/migrations/20260930140000_push_fila.sql`: `push_config` (uma linha:
-  liga/desliga, URL, segredo, corte 3, janela 3 dias), `push_fila` (único na
-  chave natural), gatilho por comando `trg_analitico_push_fila`,
-  `fn_push_disparar` (cron a cada minuto, só com pendente), `fn_push_pegar_lote`
-  (expira > 6 h, tira inativo/sem aparelho, soma do mês + degraus da meta),
-  `fn_push_concluir`, faxina diária de 7 dias. Testada num Postgres local.
-- `enviar-push`: ação `rodada` (segredo `x-push-segredo`) e `texto.ts` (textos,
-  corte, resumo, meta). **Republicar com verify_jwt DESLIGADO** — o cron não
-  tem sessão; `teste` continua exigindo a sessão do usuário (getUser).
-- Pedir «pode» para: (1) aplicar a migration; (2) republicar a função.
+**Etapa 3 (aviso automático) — NO AR em 30/09/2026.**
+- Migration `20260930124757_push_fila.sql` aplicada com «pode»: `pg_net`
+  ligado, `push_config` (segredo gerado no banco), `push_fila`, gatilho
+  `trg_analitico_push_fila`, agendas `push-disparar` (a cada minuto) e
+  `push-faxina` (03:40 UTC). Config e fila fechadas para a API.
+- `enviar-push` v2 publicada com `verify_jwt` desligado (ações `teste` e
+  `rodada`). Fumaça: `teste` sem sessão 401; `rodada` sem/errado segredo 401;
+  corrente banco → pg_net → função com o segredo certo: 200, fila vazia.
+- Desligar tudo: `UPDATE public.push_config SET ativo = false;`
+- Diferença conhecida: o comentário do topo de `index.ts` no repositório cita
+  `20260930124757`; a v2 publicada cita `20260930140000` (só comentário).
+
+**Falta:** o usuário ativar os avisos no celular e acompanhar a primeira
+importação (robô do 59 de hora em hora / importação da PaguePlay).
 
 **Fora do mobile (30/09/2026): projeção do Desafio ≠ Painel do Líder — RESOLVIDO.**
 Código na main (`67b4632`); migration aplicada em produção com «pode» e

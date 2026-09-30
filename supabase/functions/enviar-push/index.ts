@@ -9,7 +9,7 @@
  *
  * `{ acao: 'rodada' }` — o pg_cron chama (fn_push_disparar, via pg_net) quando
  * há pendente em `push_fila`. Exige o cabeçalho `x-push-segredo` igual a
- * `push_config.segredo`. Migration 20260930140000.
+ * `push_config.segredo`. Migration 20260930124757.
  *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
