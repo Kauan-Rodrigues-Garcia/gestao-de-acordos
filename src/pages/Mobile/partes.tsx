@@ -5,6 +5,7 @@
 import { formatBRL } from '@/lib/money';
 import { formaDoPagamento, nomeDoCliente } from '@/lib/mobile/formato';
 import { BarraMeta, DinheiroAnimado, PctAnimado } from './comum/partesComuns';
+import { useDuracaoDaSubida } from './comum/numeroAnimado';
 import { formatarPct } from '@/components/Comissao/formato';
 import type { MinhaComissao } from '@/services/comissao/useMinhaComissao';
 import type { PosicaoNoRanking } from '@/services/analitico/posicaoNoRanking';
@@ -30,6 +31,8 @@ export function CartaoRecebido({ recebido, meta, faixas, pctMeta, unidadeHO, sem
   const batidas = faixas.filter(f => f.batida);
   const maior = batidas[batidas.length - 1];
   const escala = escalaDaRegua(recebido, faixas.map(f => f.valor));
+  // Número, % e barra sobem juntos, no ritmo lento de «aposta» (30/09/2026).
+  const duracao = useDuracaoDaSubida(recebido);
 
   let linha: React.ReactNode;
   if (!meta) linha = 'Sem meta cadastrada neste mês';
@@ -39,14 +42,15 @@ export function CartaoRecebido({ recebido, meta, faixas, pctMeta, unidadeHO, sem
   return (
     <section className="v-cartao" aria-label="Recebido no mês">
       <div className="v-rotulo">Recebido no mês{unidadeHO ? ' · H.O.' : ''}</div>
-      <div className="v-valor"><DinheiroAnimado valor={recebido} /></div>
+      <div className="v-valor"><DinheiroAnimado valor={recebido} aposta duracaoMs={duracao} /></div>
       <div className="v-linha">
         <span>{linha}</span>
-        {pctMeta !== null && <span className="v-pct"><PctAnimado valor={pctMeta} /></span>}
+        {pctMeta !== null && <span className="v-pct"><PctAnimado valor={pctMeta} aposta duracaoMs={duracao} /></span>}
       </div>
       {faixas.length > 0 && (
         <BarraMeta
           pct={escala.cheio}
+          duracaoMs={duracao}
           marcos={escala.marcos.map((m, i) => ({ pct: m.pct, rotulo: `${m.ordem}ª`, ok: faixas[i].batida }))}
         />
       )}
@@ -127,7 +131,7 @@ export function CartaoComissao({ comissao }: { comissao: MinhaComissao }) {
           <span className="m-selo">{r.atual.ordem}ª meta · {formatarPct(r.atual.pctEfetivo)}</span>
         )}
       </div>
-      <div className="m-valor m-num"><DinheiroAnimado valor={r.total + r.totalBonus} /></div>
+      <div className="m-valor m-num"><DinheiroAnimado valor={r.total + r.totalBonus} aposta /></div>
       {semFaixa && primeira ? (
         <p>Você ainda não chegou na 1ª meta. Faltam <b>{formatBRL(Math.max(0, primeira.meta - r.recebido))}</b>.</p>
       ) : (
@@ -159,7 +163,7 @@ export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking }: {
     <div className={mostraRanking ? 'm-dupla' : 'm-dupla m-uma'}>
       <section className="m-cartao">
         <div className="m-rot">Recebido hoje</div>
-        <div className="m-v m-num"><DinheiroAnimado valor={hoje} /></div>
+        <div className="m-v m-num"><DinheiroAnimado valor={hoje} aposta /></div>
         <div className="m-d">{qtdHoje === 1 ? '1 pagamento' : `${qtdHoje} pagamentos`}</div>
       </section>
       {mostraRanking && ranking && (

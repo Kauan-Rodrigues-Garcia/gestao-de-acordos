@@ -9,17 +9,20 @@
  */
 import { useEffect, useState } from 'react';
 import { formatBRL } from '@/lib/money';
-import { useNumeroAnimado } from './numeroAnimado';
+import { useNumeroAnimado, CURVA_APOSTA_CSS } from './numeroAnimado';
 import './comum.css';
 
 /** «R$ 38.420,50» com o «R$» menor, rolando do valor antigo para o novo. */
-export function DinheiroAnimado({ valor, semCor = false }: {
+export function DinheiroAnimado({ valor, semCor = false, aposta = false, duracaoMs }: {
   valor: number;
   /** Sem o verde/vermelho da mudança — para quando a troca não é subida nem
    *  descida (ex.: tocar outro dia no gráfico). */
   semCor?: boolean;
+  /** A subida lenta dos cards principais do operador (`subirDevagar`). */
+  aposta?: boolean;
+  duracaoMs?: number;
 }) {
-  const { valor: quadro, direcao: d } = useNumeroAnimado(valor);
+  const { valor: quadro, direcao: d } = useNumeroAnimado(valor, { aposta, duracaoMs });
   const direcao = semCor ? null : d;
   const texto = formatBRL(quadro).replace(/^R\$\s?/, '');
   return (
@@ -30,8 +33,10 @@ export function DinheiroAnimado({ valor, semCor = false }: {
 }
 
 /** Porcentagem que sobe junto com a barra. */
-export function PctAnimado({ valor }: { valor: number }) {
-  const { valor: quadro } = useNumeroAnimado(valor);
+export function PctAnimado({ valor, aposta = false, duracaoMs }: {
+  valor: number; aposta?: boolean; duracaoMs?: number;
+}) {
+  const { valor: quadro } = useNumeroAnimado(valor, { aposta, duracaoMs });
   return <>{Math.floor(quadro).toLocaleString('pt-BR')}%</>;
 }
 
@@ -44,11 +49,13 @@ export interface MarcoBarra { pct: number; rotulo: string; ok: boolean }
  *
  * `pct` é a posição na escala da barra (0..100); a escala é de quem chama.
  */
-export function BarraMeta({ pct, marcos = [], esperado = null, rotuloEsperado }: {
+export function BarraMeta({ pct, marcos = [], esperado = null, rotuloEsperado, duracaoMs }: {
   pct: number;
   marcos?: MarcoBarra[];
   esperado?: number | null;
   rotuloEsperado?: string;
+  /** Com duração, a barra cresce no ritmo da subida do número (`aposta`). */
+  duracaoMs?: number;
 }) {
   // Nasce vazia e cresce no primeiro quadro — a animação de entrada.
   const [largura, setLargura] = useState(0);
@@ -63,7 +70,9 @@ export function BarraMeta({ pct, marcos = [], esperado = null, rotuloEsperado }:
     <div className={['v-barra', marcos.length ? 'v-com-marcos' : '', esperado !== null && rotuloEsperado ? 'v-com-rotulo' : '']
       .filter(Boolean).join(' ')} aria-hidden="true">
       <div className="v-trilho">
-        <div className="v-cheio" style={{ width: `${largura}%` }}>
+        <div className="v-cheio" style={duracaoMs
+          ? { width: `${largura}%`, transitionDuration: `${duracaoMs}ms`, transitionTimingFunction: CURVA_APOSTA_CSS }
+          : { width: `${largura}%` }}>
           <i className="v-brilho" />
         </div>
         {esperado !== null && (
