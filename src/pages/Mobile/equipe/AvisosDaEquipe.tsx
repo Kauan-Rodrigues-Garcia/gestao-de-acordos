@@ -1,5 +1,5 @@
 /**
- * Os avisos na visão Equipe — L2 da liderança (migration 20260930200000).
+ * Os avisos na visão Equipe — L2 da liderança (migration 20260930192744).
  *
  *   • «Equipe bateu a meta»: sempre, para quem lidera e para a equipe;
  *   • resumo por hora do recebido da equipe — pedido de 30/09/2026: o líder

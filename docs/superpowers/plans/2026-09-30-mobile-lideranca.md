@@ -173,8 +173,8 @@ feita uma vez por mês/empresa.
 
 ## L2 — Aviso «equipe bateu a meta» (roteiro)
 
-> **Código pronto em 30/09/2026, falta aplicar com «pode».** Migration
-> `20260930200000_push_avisos_da_equipe.sql` (validada num Postgres 16 local — ver
+> **No ar em 30/09/2026** (aplicada com «pode», `enviar-push` v4). Migration
+> `20260930192744_push_avisos_da_equipe.sql` (validada num Postgres 16 local — ver
 > `src/lib/mobile/pushEquipe.sql.test.ts`), `enviar-push` com as rodadas novas e a
 > chave na visão Equipe (`AvisosDaEquipe`). Desvios do roteiro:
 > - a função extraída é `fn_recebido_por_equipe(empresas, mês, de, até, com_ajustes)`

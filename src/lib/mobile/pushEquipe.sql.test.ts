@@ -1,5 +1,5 @@
 /**
- * Migration 20260930200000: avisos da EQUIPE (meta batida e resumo por hora).
+ * Migration 20260930192744: avisos da EQUIPE (meta batida e resumo por hora).
  * Executada num Postgres 16 local descartável (30/09/2026) com duas empresas
  * (BookPlay e PaguePlay), líder explícito e de reserva, elite, clone, fantasma
  * de setor e ajuste manual:

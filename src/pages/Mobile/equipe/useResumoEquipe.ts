@@ -1,6 +1,6 @@
 /**
  * A chave do resumo por hora da equipe — `fn_push_resumo_equipe_ligado` e
- * `fn_push_definir_resumo_equipe` (migration 20260930200000). Por pessoa, não
+ * `fn_push_definir_resumo_equipe` (migration 20260930192744). Por pessoa, não
  * por aparelho. Sem a migration no banco, a chave não aparece (`disponivel`).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

@@ -266,7 +266,7 @@ export function montarAvisosDeSaida(
   return saida;
 }
 
-// ── Avisos da EQUIPE (20260930200000) ───────────────────────────────────────
+// ── Avisos da EQUIPE (20260930192744) ───────────────────────────────────────
 
 /** Uma equipe que acabou de bater a meta do mês — `fn_push_metas_equipe_batidas`. */
 export interface EquipeNaMeta {

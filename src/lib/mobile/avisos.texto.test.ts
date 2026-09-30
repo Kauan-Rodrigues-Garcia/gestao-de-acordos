@@ -96,7 +96,7 @@ describe('montarAvisosDeSaida', () => {
   });
 });
 
-describe('avisos da equipe (20260930200000)', () => {
+describe('avisos da equipe (20260930192744)', () => {
   it('meta batida: líder abre a equipe, operador a própria tela; sem valores; um aviso por pessoa', () => {
     const r = montarAvisosMetaEquipe([{
       equipe_id: 'e1', equipe_nome: 'Equipe Bryan', mes: '2026-09',

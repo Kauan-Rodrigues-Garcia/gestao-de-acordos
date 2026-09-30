@@ -16,7 +16,7 @@
  * (fn_push_resumo_disparar): o recebido de cada equipe desde o último resumo,
  * para quem lidera e para quem ligou o resumo. Mesmo segredo da rodada.
  * A rodada também confere a META das equipes (marca do gatilho da importação).
- * Migration 20260930200000.
+ * Migration 20260930192744.
  *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
@@ -106,7 +106,7 @@ async function rodada(admin: ReturnType<typeof createClient>) {
 /**
  * A META das equipes: o banco confere as empresas marcadas pela importação,
  * grava o marco (uma vez por equipe por mês) e devolve só quem bateu agora,
- * com líderes e membros. Sem a migration 20260930200000 a RPC não existe e só
+ * com líderes e membros. Sem a migration 20260930192744 a RPC não existe e só
  * registra — o resto da rodada segue.
  */
 async function rodadaMetasEquipe(admin: ReturnType<typeof createClient>) {

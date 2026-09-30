@@ -260,7 +260,7 @@ COMMENT ON FUNCTION public.fn_recebido_por_equipe(UUID[], TEXT, DATE, DATE, BOOL
   'Recebido por equipe no periodo, pelas regras do Painel do Lider (Desempenho '
   'Equipes): lider unico, clones que contam, fantasma de setor, setor da pessoa '
   'na BookPlay. Bruto e H.O.; ajuste manual so com p_com_ajustes. Usada pelo '
-  'desafio (mes, sem ajuste) e pelos avisos da equipe (20260930200000).';
+  'desafio (mes, sem ajuste) e pelos avisos da equipe (20260930192744).';
 
 -- ── O desafio passa a chamar a conta extraída ──────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_desafio_contexto_equipe(p_desafio_id UUID)
@@ -369,7 +369,7 @@ BEGIN
      AND c.ano = v_ano;
 
   -- ── O recebido do mês POR EQUIPE ──────────────────────────────────────────
-  -- A conta saiu para `fn_recebido_por_equipe` (20260930200000), que os avisos
+  -- A conta saiu para `fn_recebido_por_equipe` (20260930192744), que os avisos
   -- da equipe também usam. O mês inteiro, SEM ajuste manual: o mesmo corpo de
   -- antes, o mesmo resultado.
   SELECT COALESCE(jsonb_object_agg(r.equipe_id, jsonb_build_object(
@@ -565,7 +565,7 @@ CREATE POLICY push_preferencias_select
 COMMENT ON TABLE public.push_preferencias IS
   'Preferencias de aviso da pessoa. resumo_equipe NULL = padrao (ligado para '
   'lider, desligado para os outros). Gravada so por fn_push_definir_resumo_equipe '
-  '(20260930200000).';
+  '(20260930192744).';
 
 CREATE OR REPLACE FUNCTION public.fn_push_resumo_equipe_ligado()
 RETURNS BOOLEAN
@@ -644,13 +644,13 @@ REVOKE ALL ON public.push_resumo_equipe     FROM anon, authenticated;
 
 COMMENT ON TABLE public.push_marcos_equipe IS
   'Um aviso de meta batida por equipe por mes. Semente ao ligar para quem ja '
-  'estava em 100% (20260930200000).';
+  'estava em 100% (20260930192744).';
 COMMENT ON TABLE public.push_equipes_verificar IS
   'Marca do gatilho da importacao: conferir a meta das equipes desta empresa '
-  'neste mes na proxima rodada (20260930200000).';
+  'neste mes na proxima rodada (20260930192744).';
 COMMENT ON TABLE public.push_resumo_equipe IS
   'Resumo por hora do recebido da equipe: o maior total do dia ja avisado. '
-  'Limpar e reimportar volta ao mesmo total e nao avisa (20260930200000).';
+  'Limpar e reimportar volta ao mesmo total e nao avisa (20260930192744).';
 
 -- ── Equipes em 100% ou mais da meta do mês ──────────────────────────────────
 -- Na unidade do card do Painel: H.O. na PaguePlay (recebido `total_ho`, meta ×

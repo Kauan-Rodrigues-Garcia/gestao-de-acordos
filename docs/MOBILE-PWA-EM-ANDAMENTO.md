@@ -443,14 +443,16 @@ longo quanto maior o salto), numa curva quase constante; % e barra acompanham
 botão só existia no rodapé da `/m`. Agora o rodapé da equipe tem o mesmo botão (convite
 do Android, passo a passo do iPhone), e o bloco de avisos oferece «Como instalar».
 
-**L2 — avisos da equipe (30/09/2026): código pronto, migration ESPERANDO «pode».**
+**L2 — avisos da equipe (30/09/2026): NO AR.** Migration aplicada com «pode» e registrada
+como `20260930192744` (arquivo renomeado para bater); 8 equipes já em 100% entraram como
+semente; agendas `push-resumo-equipes` (0 * * * *) e `push-faxina-equipes` criadas;
+`enviar-push` v4 publicada (verify_jwt desligado; sem segredo → 401 nas três ações).
 - Meta da equipe batida (uma vez por equipe/mês, líderes + equipe, sem valores).
 - **Resumo por hora** do recebido da equipe (pedido do usuário): líder ligado por
   padrão; elite escolhe na visão Equipe (desligado por padrão); a qualquer hora.
-- Migration `supabase/migrations/20260930200000_push_avisos_da_equipe.sql`; validada
+- Migration `supabase/migrations/20260930192744_push_avisos_da_equipe.sql`; validada
   num Postgres 16 local descartável (cenários no cabeçalho de
   `src/lib/mobile/pushEquipe.sql.test.ts`). `enviar-push` precisa de novo deploy.
-- Cliente já na main: sem a migration a chave do resumo simplesmente não aparece.
 
 **Correções da tela da equipe (30/09/2026, pedido após teste no iPhone):**
 - **Folha de detalhe dos Quartis presa na tela** (`equipe/FolhaInferior.tsx`): abria

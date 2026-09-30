@@ -1,4 +1,4 @@
-/** A chave do resumo por hora na visão Equipe (migration 20260930200000). */
+/** A chave do resumo por hora na visão Equipe (migration 20260930192744). */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
