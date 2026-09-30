@@ -3,6 +3,7 @@ import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { EVENTO_ACORDO_SALVO, type CenaHalloween } from './tema';
+import { FANTASMA, sortearEsconderijo, type Esconderijo } from './esconderijo';
 import './halloween.css';
 
 /*
@@ -326,13 +327,14 @@ function FantasmaSvg() {
 }
 
 /**
- * De tempos em tempos um fantasma sobe de trás de uma tabela visível, olha
- * para os lados e volta a se esconder. O «atrás» é um recorte: a caixa termina
- * na borda de cima da tabela, então só aparece o que passou dela.
+ * De tempos em tempos um fantasma espia de trás de uma tabela visível — por
+ * cima, por baixo (de cabeça para baixo) ou por um dos lados —, com tamanho,
+ * ponto, tempo e direção do olhar sorteados. O «atrás» é um recorte encostado
+ * na borda: só aparece o que passou dela. Ver `esconderijo.ts`.
  */
 function FantasmasDasTabelas() {
   const camada = useRef<HTMLDivElement>(null);
-  const [aparicao, setAparicao] = useState<{ id: number; left: number; top: number } | null>(null);
+  const [aparicao, setAparicao] = useState<(Esconderijo & { id: number; escala: number; dur: number; espelho: boolean }) | null>(null);
   const [some, setSome] = useState(false);
   useEffect(() => {
     let t: number, id = 0;
@@ -342,13 +344,11 @@ function FantasmasDasTabelas() {
       const base = camada.current?.getBoundingClientRect();
       const main = camada.current?.closest('main');
       if (base && main) {
-        const tela = main.getBoundingClientRect();
-        const visiveis = [...main.querySelectorAll('table')].map(tb => tb.getBoundingClientRect())
-          .filter(r => r.width > 120 && r.top > tela.top + 70 && r.top < tela.bottom - 80);
-        const r = visiveis[Math.floor(Math.random() * visiveis.length)];
-        if (r) {
+        const escala = acaso(0.8, 1.25);
+        const e = sortearEsconderijo([...main.querySelectorAll('table')].map(tb => tb.getBoundingClientRect()), main.getBoundingClientRect(), escala);
+        if (e) {
           setSome(false);
-          setAparicao({ id: id++, left: r.left - base.left + acaso(0.08, 0.85) * (r.width - 48), top: r.top - base.top - 64 });
+          setAparicao({ ...e, left: e.left - base.left, top: e.top - base.top, id: id++, escala, dur: acaso(4.5, 7), espelho: Math.random() < 0.5 });
         }
       }
       t = window.setTimeout(tentar, acaso(15000, 40000));
@@ -359,8 +359,10 @@ function FantasmasDasTabelas() {
   return (
     <div ref={camada} className="absolute left-0 top-0 h-0 w-full">
       {aparicao && (
-        <div key={aparicao.id} className="hw-esconderijo" style={{ left: aparicao.left, top: aparicao.top }}>
-          <div className={cn('hw-fantasma', some && 'some')} onMouseEnter={() => setSome(true)}
+        <div key={aparicao.id} className={cn('hw-esconderijo', aparicao.lado)}
+          style={{ left: aparicao.left, top: aparicao.top, width: aparicao.largura, height: aparicao.altura }}>
+          <div className={cn('hw-fantasma', some && 'some', aparicao.espelho && 'espelho')} onMouseEnter={() => setSome(true)}
+            style={{ ['--gw' as string]: `${FANTASMA.largura * aparicao.escala}px`, ['--gh' as string]: `${FANTASMA.altura * aparicao.escala}px`, ['--dur' as string]: `${aparicao.dur}s` }}
             onAnimationEnd={() => setAparicao(null)}><FantasmaSvg /></div>
         </div>
       )}
