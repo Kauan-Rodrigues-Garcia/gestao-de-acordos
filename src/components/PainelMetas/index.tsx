@@ -22,6 +22,7 @@ import { usePainelMetas } from '@/hooks/usePainelMetas';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/lib/tenant-config';
 import { useMinhaComissao } from '@/services/comissao/useMinhaComissao';
+import { temCardComissao } from '@/services/comissao/temCardComissao';
 import { CardComissaoDashboard } from '@/components/Comissao/CardComissaoDashboard';
 import type { UnidadeValor } from '@/lib/unidadeValor';
 import { FaixaDiasUteis } from './FaixaDiasUteis';
@@ -88,10 +89,7 @@ export function PainelMetas({
   const comissaoDaPessoa = !!perfil?.id && dados.operadorEmTela === perfil.id;
   const comissao = useMinhaComissao({ aberto: comissaoDaPessoa && !dados.carregando, mes });
   const resultadoComissao = comissao.podeVer && comissaoDaPessoa ? comissao.resultado : null;
-  const temCardComissao = !!resultadoComissao && (
-    (resultadoComissao.motivo !== 'sem_meta' && resultadoComissao.motivo !== 'sem_config')
-    || resultadoComissao.bonus.length > 0
-  );
+  const mostraComissao = temCardComissao(resultadoComissao);
 
   if (dados.carregando) {
     return (
@@ -144,7 +142,7 @@ export function PainelMetas({
           <CardsMetas
             dados={dados}
             mes={mes}
-            slotComissao={temCardComissao && resultadoComissao ? (
+            slotComissao={mostraComissao && resultadoComissao ? (
               <CardComissaoDashboard
                 resultado={resultadoComissao}
                 isPaguePlay={isPaguePlay}

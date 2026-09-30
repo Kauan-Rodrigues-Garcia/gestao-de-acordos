@@ -70,6 +70,7 @@ import {
 import {
   metaNaUnidade, UNIDADE_PADRAO, type UnidadeValor,
 } from '@/lib/unidadeValor';
+import { lerMetasExtras } from '@/services/comissao/entradaDoOperador';
 
 export interface ParametrosPainelMetas {
   /** Mês em análise ('yyyy-MM'). */
@@ -134,6 +135,12 @@ export interface DadosPainelMetas {
 
   /** Meta na unidade ativa (a gravada é sempre bruta — ver `unidadeValor`). */
   meta: number | null;
+  /**
+   * 2ª meta em diante (`metas.metas_extras`), na unidade ativa e em ordem.
+   * Só no escopo individual; vazio em equipe/setor e em quem não tem extras.
+   * A tela mínima do celular desenha a régua das faixas com isto.
+   */
+  metasExtras: number[];
   /** A mesma meta na unidade oposta, para a linha secundária. */
   metaOposta: number | null;
   /**
@@ -382,6 +389,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const [meta, setMeta] = useState<number | null>(null);
   /** Meta INDIRETA `[PP]`, em BRUTO. `null` = a opção está desligada. */
   const [metaIndireta, setMetaIndireta] = useState<number | null>(null);
+  /** `metas_extras` da pessoa, em BRUTO. Só no escopo "eu". */
+  const [metasExtrasBrutas, setMetasExtrasBrutas] = useState<number[]>([]);
   /** Recebimento indireto do mês, em BRUTO — acordos extra pagos. */
   const [recebidoIndiretoBruto, setRecebidoIndiretoBruto] = useState(0);
   const [metaCarregada, setMetaCarregada] = useState(false);
@@ -406,11 +415,13 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
             .maybeSingle();
           const linha = data as {
             meta_valor: number;
+            metas_extras?: unknown;
             meta_indireta_ativa?: boolean | null;
             meta_indireta_valor?: number | null;
           } | null;
           if (!cancelado) {
             setMeta(Number(linha?.meta_valor) || null);
+            setMetasExtrasBrutas(lerMetasExtras(linha?.metas_extras));
             // Meta indireta é INDIVIDUAL: só existe no escopo "eu". Nos escopos
             // de equipe e setor ela é zerada de propósito — somar ali contaria o
             // mesmo dinheiro duas vezes, porque o extra já entra no recebimento
@@ -419,7 +430,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
           }
           return;
         }
-        if (!cancelado) setMetaIndireta(null);
+        if (!cancelado) { setMetaIndireta(null); setMetasExtrasBrutas([]); }
 
         // Escopo agregado: a meta própria do grupo manda, quando existir.
         // 'setor' procura meta de setor; equipe procura meta de equipe.
@@ -592,6 +603,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const recebidoOposto    = unidade === 'ho' ? agregado.bruto : agregado.ho;
   const metaNaUnidadeAtiva = metaNaUnidade(meta, unidade);
   const metaOposta         = metaNaUnidade(meta, unidade === 'ho' ? 'bruto' : 'ho');
+  const metasExtras = metasExtrasBrutas
+    .map(v => metaNaUnidade(v, unidade) ?? 0)
+    .filter(v => v > 0);
 
   /**
    * As duas frentes, já na unidade ativa.
@@ -733,6 +747,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     porForma: porFormaNaUnidade,
 
     meta: metaNaUnidadeAtiva,
+    metasExtras,
     metaOposta,
     metaDupla,
     quartis,

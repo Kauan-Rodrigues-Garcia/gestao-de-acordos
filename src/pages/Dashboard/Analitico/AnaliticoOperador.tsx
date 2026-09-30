@@ -45,6 +45,7 @@ import {
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
 import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
+import { posicaoNoRanking } from '@/services/analitico/posicaoNoRanking';
 import {
   intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
 } from '@/pages/Analitico/recorte';
@@ -161,17 +162,7 @@ export function AnaliticoOperador({
 
   const minhaPosicao = useMemo(() => {
     if (!podeVerRanking || ranking.length === 0) return null;
-    const visiveis = ranking
-      .filter(r => !operadoresOcultos.has(r.operador_id))
-      .sort((a, b) => b.total_recebido - a.total_recebido);
-    const i = visiveis.findIndex(r => r.operador_id === operadorId);
-    if (i < 0) return null;
-    return {
-      posicao: i + 1,
-      de:      visiveis.length,
-      // Quanto falta para o degrau de cima. `null` no primeiro lugar.
-      faltam:  i === 0 ? null : visiveis[i - 1].total_recebido - visiveis[i].total_recebido,
-    };
+    return posicaoNoRanking(ranking, operadoresOcultos, operadorId);
   }, [podeVerRanking, ranking, operadoresOcultos, operadorId]);
 
   /*
