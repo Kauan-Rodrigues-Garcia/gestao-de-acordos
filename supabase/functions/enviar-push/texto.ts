@@ -147,7 +147,7 @@ export function faixasBatidas(valor: number, degraus: number[]): number {
  * O valor do pagamento é BRUTO (o que o cliente pagou); o «no mês» está na
  * unidade do Dashboard (H.O. na PaguePlay) — vem pronto do banco.
  *
- * A meta alcançada saiu daqui (20260930210000): é conferida por estado no
+ * A meta alcançada saiu daqui (20260930195304): é conferida por estado no
  * banco, para avisar também quem lidera — ver `montarAvisosMetaOperador`.
  */
 export function montarAvisos(
@@ -266,7 +266,7 @@ export function montarAvisosDeSaida(
   return saida;
 }
 
-// ── Avisos de META e da EQUIPE (20260930192744, 20260930210000) ─────────────
+// ── Avisos de META e da EQUIPE (20260930192744, 20260930195304) ─────────────
 
 /** Junta os avisos por pessoa (alguém pode receber de várias equipes). */
 function porPessoa(): { add: (perfilId: string, aviso: Aviso) => void; lista: () => AvisosDaPessoa[] } {

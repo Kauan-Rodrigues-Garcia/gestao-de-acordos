@@ -17,7 +17,7 @@
  * para quem lidera e para quem ligou o resumo. Mesmo segredo da rodada.
  * A rodada também confere as METAS (marca do gatilho da importação): a equipe
  * que alcançou a meta e cada operador que alcançou faixa nova — para a pessoa e
- * para quem lidera. Migrations 20260930192744 e 20260930210000.
+ * para quem lidera. Migrations 20260930192744 e 20260930195304.
  *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
@@ -99,7 +99,7 @@ async function rodada(admin: ReturnType<typeof createClient>) {
 /**
  * As METAS: o banco consome as marcas da importação, grava os marcos (uma vez
  * por equipe/mês e por pessoa/mês/faixa) e devolve só o que foi alcançado
- * agora, já com quem recebe — fn_push_metas_da_rodada (20260930210000). Sem a
+ * agora, já com quem recebe — fn_push_metas_da_rodada (20260930195304). Sem a
  * migration a RPC não existe e só registra: o resto da rodada segue.
  */
 async function rodadaMetas(admin: ReturnType<typeof createClient>) {

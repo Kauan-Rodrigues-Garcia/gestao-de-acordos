@@ -1,5 +1,5 @@
 /**
- * Migration 20260930210000: avisos de META por cargo. Executada num Postgres 16
+ * Migration 20260930195304: avisos de META por cargo. Executada num Postgres 16
  * local descartável (30/09/2026):
  *   • semente: a faixa já alcançada ao ligar não avisou;
  *   • 2ª faixa da operadora → ela e o líder; 1ª do outro → líder e a elite que

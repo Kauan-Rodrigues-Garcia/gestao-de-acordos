@@ -1,5 +1,5 @@
 /**
- * Os avisos na visão Equipe — migrations 20260930192744 e 20260930210000.
+ * Os avisos na visão Equipe — migrations 20260930192744 e 20260930195304.
  *
  * Pedido de 30/09/2026:
  *   • líder: recebe sempre (com o aparelho ativo) o resumo da equipe a cada

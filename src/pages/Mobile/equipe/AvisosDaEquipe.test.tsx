@@ -1,4 +1,4 @@
-/** As chaves dos avisos da equipe (migration 20260930210000). */
+/** As chaves dos avisos da equipe (migration 20260930195304). */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 

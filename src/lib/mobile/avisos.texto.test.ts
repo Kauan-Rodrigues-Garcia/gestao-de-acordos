@@ -87,7 +87,7 @@ describe('montarAvisosDeSaida', () => {
   });
 });
 
-describe('metas alcançadas (20260930210000)', () => {
+describe('metas alcançadas (20260930195304)', () => {
   const op = (faixa: number, extra: Partial<OperadorNaMeta> = {}): OperadorNaMeta => ({
     perfil_id: 'maria', nome: 'MARIA DA SILVA', mes: '2026-09', faixa, proprio: true,
     equipes: [{ equipe_id: 'e1', equipe_nome: 'Equipe Bryan', destinatarios: ['lider', 'elite'] }],

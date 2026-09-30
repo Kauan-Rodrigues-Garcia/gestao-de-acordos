@@ -278,7 +278,7 @@ REVOKE ALL ON public.push_marcos_operador FROM anon, authenticated;
 
 COMMENT ON TABLE public.push_marcos_operador IS
   'Uma linha por faixa de meta alcancada pelo operador no mes: so as novas '
-  'avisam (a pessoa e quem lidera). Semente ao ligar (20260930210000).';
+  'avisam (a pessoa e quem lidera). Semente ao ligar (20260930195304).';
 
 /*
  * A rodada das METAS: consome as marcas da importação e devolve, de uma vez,

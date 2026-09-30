@@ -439,6 +439,20 @@ um valor alto». Recebido no mês, comissão e recebido hoje sobem por ~2 a 3,2 
 longo quanto maior o salto), numa curva quase constante; % e barra acompanham
 (`numeroAnimado.ts`: `duracaoDaSubida`, `subirDevagar`, `useDuracaoDaSubida`).
 
+**Avisos profissionais e metas por cargo (30/09/2026) — NO AR.** Exemplo aprovado
+(sem emoji; ícone próprio por tipo em `public/icons/avisos/`, escolhido no `sw.js`; o
+iPhone mostra sempre o ícone do app). Regras:
+- operação: pagamentos + a própria meta (1ª faixa «Parabéns, Nome / Você alcançou a 1ª
+  meta do mês.»; da 2ª em diante «Você alcançou a 2ª meta!»);
+- elite: o mesmo + três chaves à parte na visão Equipe (resumo por hora, metas dos
+  operadores, equipe alcançou a meta), desligadas por padrão;
+- líder: sempre (com aparelho e `ver_painel_lider`) resumo por hora, meta de cada
+  operador e meta da equipe. «Equipe alcançou a meta» não vai mais para a equipe toda.
+- Meta do operador conferida por estado (`push_marcos_operador`, uma linha por pessoa/
+  mês/faixa) na mesma marca da importação. Migration aplicada com «pode» e registrada
+  como `20260930195304` (176 faixas de 94 pessoas como semente); `enviar-push` v5
+  publicada (sem segredo → 401).
+
 **«Instalar app» na visão Equipe (30/09/2026):** o líder cai direto na `/m/equipe` e o
 botão só existia no rodapé da `/m`. Agora o rodapé da equipe tem o mesmo botão (convite
 do Android, passo a passo do iPhone), e o bloco de avisos oferece «Como instalar».

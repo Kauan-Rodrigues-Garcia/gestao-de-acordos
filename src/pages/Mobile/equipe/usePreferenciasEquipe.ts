@@ -1,6 +1,6 @@
 /**
  * As chaves dos avisos da equipe — `fn_push_minhas_preferencias` e
- * `fn_push_definir_preferencia` (migration 20260930210000). Por pessoa, não
+ * `fn_push_definir_preferencia` (migration 20260930195304). Por pessoa, não
  * por aparelho.
  *
  * Quem decide se a pessoa escolhe é o banco (`fixo`): quem só lidera recebe
