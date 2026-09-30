@@ -22,6 +22,7 @@ import { AbaQuartis } from './AbaQuartis';
 import { AbaGrafico } from './AbaGrafico';
 import { AbaHoje } from './AbaHoje';
 import { IconeAba, Seta } from './partes';
+import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
 import './equipe.css';
 
 type Aba = 'equipe' | 'quartis' | 'grafico' | 'hoje';
@@ -92,8 +93,10 @@ function TelaDaEquipe() {
 
   return (
     <div className="tela-equipe">
+      <FundoVivo />
       <div className="e-conteudo">
         <header className="e-topo">
+          <FotoOuLogo foto={tela.fotoUrl} nome={tela.nomePessoa} />
           <div className="e-quem">
             <div className="e-eq">
               <span>{equipe?.nome ?? (tela.carregando ? ' ' : 'Minha equipe')}</span>
@@ -140,7 +143,7 @@ function TelaDaEquipe() {
             {rodape}
           </>
         ) : (
-          <main>
+          <main className="v-entra" key={aba}>
             {aba === 'equipe' && <AbaEquipe equipe={equipe} rodape={rodape} />}
             {aba === 'quartis' && <AbaQuartis equipe={equipe} mes={tela.mes} />}
             {aba === 'grafico' && (

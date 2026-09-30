@@ -8,11 +8,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap');
 
 .tela-mobile {
-  --m-tinta: #0c1f2e;
-  --m-tinta-2: #5b6b78;
-  --m-papel: #f3f6f5;
+  --m-tinta: #0e1b26;
+  --m-tinta-2: #6a7784;
+  --m-papel: #f4f6f7;
   --m-cartao: #ffffff;
-  --m-linha: #e3e9e7;
+  --m-linha: #e7ebee;
   --m-azul-esc: #0a2a4a;
   --m-verde-esc: #0b3a1e;
   --m-azul: #38bdf8;
@@ -28,7 +28,9 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.tela-mobile .m-conteudo { max-width: 480px; margin: 0 auto; }
+.tela-mobile { position: relative; isolation: isolate; }
+/* O conteúdo acima do fundo vivo (`FundoVivo`, fixo, z-index 0). */
+.tela-mobile .m-conteudo { max-width: 480px; margin: 0 auto; position: relative; z-index: 1; }
 .tela-mobile .m-num {
   font-family: 'Bricolage Grotesque', Figtree, sans-serif;
   font-variant-numeric: tabular-nums;
@@ -42,7 +44,6 @@
   display: flex; align-items: center; gap: 12px;
   padding: calc(16px + env(safe-area-inset-top)) 22px 16px;
 }
-.tela-mobile .m-topo img { width: 36px; height: 36px; border-radius: 10px; }
 .tela-mobile .m-quem { flex: 1; min-width: 0; line-height: 1.2; }
 .tela-mobile .m-nome { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tela-mobile .m-sub { font-size: 12.5px; color: var(--m-tinta-2); }
@@ -66,56 +67,11 @@
   color: var(--m-tinta-2);
 }
 
-/* ── Cartão principal: recebido + régua das faixas ───────────────────── */
-.tela-mobile .m-hero {
-  margin: 0 16px; border-radius: 28px; padding: 22px 22px 18px; color: #fff;
-  position: relative; overflow: hidden;
-  background: linear-gradient(135deg, var(--m-azul-esc) 0%, #0b3237 55%, var(--m-verde-esc) 100%);
-}
-.tela-mobile .m-hero::after {
-  content: ''; position: absolute; right: -40px; bottom: -70px; width: 220px; height: 220px;
-  border-radius: 50%; pointer-events: none;
-  background: radial-gradient(circle, rgba(74, 222, 90, 0.22), transparent 65%);
-}
-.tela-mobile .m-hero .m-rot { color: rgba(255, 255, 255, 0.7); }
-.tela-mobile .m-valor { font-size: 44px; font-weight: 800; margin-top: 6px; line-height: 1; }
-.tela-mobile .m-valor small { font-size: 0.5em; font-weight: 700; opacity: 0.75; margin-right: 4px; }
-.tela-mobile .m-meta-linha {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
-  margin-top: 14px; font-size: 13.5px;
-}
-.tela-mobile .m-meta-linha b {
-  font-family: 'Bricolage Grotesque', Figtree, sans-serif; font-size: 18px; white-space: nowrap;
-  background: linear-gradient(90deg, var(--m-azul), var(--m-verde));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.tela-mobile .m-regua { margin-top: 16px; position: relative; height: 34px; }
-.tela-mobile .m-trilho {
-  position: absolute; top: 8px; left: 0; right: 0; height: 8px; border-radius: 8px;
-  background: rgba(255, 255, 255, 0.12);
-}
-.tela-mobile .m-cheio {
-  position: absolute; top: 8px; left: 0; height: 8px; border-radius: 8px;
-  background: linear-gradient(90deg, var(--m-azul), var(--m-verde));
-  box-shadow: 0 0 14px rgba(74, 222, 90, 0.5);
-  transition: width 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.tela-mobile .m-marco {
-  position: absolute; top: 4px; width: 2px; height: 16px; border-radius: 2px;
-  background: rgba(255, 255, 255, 0.35); transform: translateX(-1px);
-}
-.tela-mobile .m-marco.ok { background: #fff; }
-.tela-mobile .m-marco span {
-  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-  font-size: 11px; white-space: nowrap; opacity: 0.65;
-}
-.tela-mobile .m-marco.ok span { opacity: 1; font-weight: 600; }
-.tela-mobile .m-hero-aviso { margin-top: 12px; font-size: 13px; opacity: 0.75; }
-
 /* ── Cartões brancos ──────────────────────────────────────────────────── */
 .tela-mobile .m-cartao {
-  background: var(--m-cartao); border: 1px solid var(--m-linha); border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86); border-radius: 20px;
   margin: 12px 16px 0; padding: 18px 20px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
 .tela-mobile .m-comissao-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .tela-mobile .m-selo {
@@ -148,23 +104,52 @@
 .tela-mobile .m-titulo h2 { font-size: 16px; font-weight: 700; }
 .tela-mobile .m-titulo button { font-size: 13px; color: var(--m-tinta-2); background: none; border: 0; padding: 4px 0; }
 .tela-mobile .m-lista {
-  margin: 0 16px; background: var(--m-cartao); border: 1px solid var(--m-linha);
-  border-radius: 22px; padding: 4px 16px;
+  margin: 0 16px; background: rgba(255, 255, 255, 0.86); border-radius: 20px; padding: 2px 16px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
 .tela-mobile .m-pg { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--m-linha); }
 .tela-mobile .m-pg:last-child { border-bottom: 0; }
-.tela-mobile .m-forma {
-  width: 44px; height: 40px; border-radius: 12px; display: grid; place-items: center;
-  font-size: 10.5px; font-weight: 700; flex: none;
-}
-.tela-mobile .m-forma-longa { font-size: 8.5px; letter-spacing: -0.02em; }
 .tela-mobile .m-pg-q { flex: 1; min-width: 0; }
 .tela-mobile .m-pg-c { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tela-mobile .m-pg-h { font-size: 12.5px; color: var(--m-tinta-2); }
-.tela-mobile .m-pg .m-num { font-weight: 700; font-size: 16px; white-space: nowrap; }
-.tela-mobile .m-pg.m-novo .m-num { color: var(--m-verde-texto); }
-.tela-mobile .m-pg.m-novo .m-pg-h b { color: var(--m-verde-texto); font-weight: 600; }
+.tela-mobile .m-pg-h { font-size: 12.5px; color: var(--m-tinta-2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tela-mobile .m-pg-h .m-nr { font-weight: 600; color: var(--m-tinta); font-variant-numeric: tabular-nums; }
+.tela-mobile .m-pg-h .m-novo-tag { color: var(--m-verde-texto); font-weight: 600; }
+.tela-mobile .m-pg-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.tela-mobile .m-pg-v { font-weight: 700; font-size: 15.5px; white-space: nowrap; }
+.tela-mobile .m-pg.m-novo .m-pg-v { color: var(--m-verde-texto); }
+.tela-mobile .m-pg-f { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--m-tinta-2); white-space: nowrap; }
+.tela-mobile .m-pg-f i { width: 7px; height: 7px; border-radius: 50%; }
 .tela-mobile .m-vazio { padding: 18px 0; font-size: 14px; color: var(--m-tinta-2); text-align: center; }
+
+/* ── Quartil ──────────────────────────────────────────────────────────── */
+.tela-mobile .m-quartil-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tela-mobile .m-selo-q {
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--m-papel);
+}
+.tela-mobile .m-selo-q i { width: 7px; height: 7px; border-radius: 50%; }
+.tela-mobile .m-faixas { margin-top: 10px; }
+.tela-mobile .m-faixa {
+  display: grid; grid-template-columns: 8px 1fr 84px 84px; gap: 10px; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid var(--m-linha); font-size: 14px;
+}
+.tela-mobile .m-faixa:last-child { border-bottom: 0; }
+.tela-mobile .m-faixa > i { width: 8px; height: 8px; border-radius: 50%; }
+.tela-mobile .m-faixa > span:nth-child(3), .tela-mobile .m-faixa > span:nth-child(4) { text-align: right; white-space: nowrap; }
+.tela-mobile .m-faixa-n { font-weight: 600; }
+.tela-mobile .m-faixa-n small { font-weight: 500; color: var(--m-tinta-2); }
+.tela-mobile .m-faixa-cab { padding: 4px 0 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--m-tinta-2); }
+.tela-mobile .m-verde-txt { color: var(--m-verde-texto); font-weight: 600; }
+.tela-mobile .m-cinza { color: var(--m-tinta-2); }
+.tela-mobile .m-quartil-nota { font-size: 12px; color: var(--m-tinta-2); margin-top: 8px; line-height: 1.4; }
+
+/* ── Pagamento que saiu ───────────────────────────────────────────────── */
+.tela-mobile .m-saida { background: #fbf1ef; }
+.tela-mobile .m-saida-topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.tela-mobile .m-saida-topo button { font-size: 13px; font-weight: 600; background: none; border: 0; color: var(--m-tinta-2); padding: 4px 0; }
+.tela-mobile .m-saida-linha { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; margin-top: 8px; }
+.tela-mobile .m-saida-linha .m-num { color: #c0453b; font-weight: 700; white-space: nowrap; }
+.tela-mobile .m-saida p { font-size: 12.5px; color: var(--m-tinta-2); margin-top: 8px; }
 
 /* ── Card de ação (ativar avisos / instalar) e rodapé ─────────────────── */
 .tela-mobile .m-acao { display: flex; gap: 14px; align-items: center; }
@@ -197,7 +182,6 @@
 @keyframes m-pulsa { 50% { opacity: 0.55; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .tela-mobile .m-cheio { transition: none; }
   .tela-mobile .m-esq { animation: none; }
 }
 

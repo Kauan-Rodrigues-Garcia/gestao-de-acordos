@@ -7,6 +7,7 @@ import { formatBRL } from '@/lib/money';
 import { valorCurto } from '@/lib/mobile/formato';
 import type { EquipeNaTela } from './montarEquipe';
 import { Linha, TabelaFaixas } from './partes';
+import { BarraMeta, DinheiroAnimado, PctAnimado } from '../comum/partesComuns';
 
 function inteiro(v: number): string {
   return `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
@@ -23,26 +24,19 @@ export function AbaEquipe({ equipe, rodape }: { equipe: EquipeNaTela; rodape: Re
 
   return (
     <>
-      <section className="e-hero" aria-label="Recebido da equipe no mês">
-        <div className="e-olho">Recebido no mês{unidade}</div>
-        <div className="e-hero-valor e-num">
-          <small>R$</small>{formatBRL(acumulado).replace(/^R\$\s?/, '')}
-        </div>
+      <section className="v-cartao" aria-label="Recebido da equipe no mês">
+        <div className="v-rotulo">Recebido no mês{unidade}</div>
+        <div className="v-valor"><DinheiroAnimado valor={acumulado} /></div>
         {meta ? (
           <>
-            <div className="e-hero-de">
-              de <b>{formatBRL(meta)}</b> · {pctMeta!.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% da meta
+            <div className="v-linha">
+              <span>de <b>{formatBRL(meta)}</b>{metaBatida ? ' · meta batida' : ''}</span>
+              <span className="v-pct"><PctAnimado valor={pctMeta ?? 0} /></span>
             </div>
-            <div className="e-regua" aria-hidden="true">
-              <div className="e-regua-fill" style={{ width: `${fill}%` }} />
-              {marcaEsperado !== null && !metaBatida && (
-                <div className="e-hero-esperado" style={{ left: `${marcaEsperado}%` }}><b>esperado hoje</b></div>
-              )}
-            </div>
-            <div className="e-hero-escala"><span>0</span><span>{metaBatida ? 'meta batida' : 'meta'}</span></div>
+            <BarraMeta pct={fill} esperado={metaBatida ? null : marcaEsperado} rotuloEsperado="esperado hoje" />
           </>
         ) : (
-          <div className="e-hero-de">Sem meta configurada para a equipe neste mês.</div>
+          <div className="v-linha">Sem meta configurada para a equipe neste mês.</div>
         )}
       </section>
 

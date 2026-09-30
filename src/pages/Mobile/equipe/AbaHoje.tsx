@@ -9,7 +9,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { formatBRL } from '@/lib/money';
-import { abreviarCliente, formaDoPagamento, valorCurto } from '@/lib/mobile/formato';
+import { abreviarCliente, formaDoPagamento, nomeDoCliente, valorCurto } from '@/lib/mobile/formato';
+import { DinheiroAnimado } from '../comum/partesComuns';
 import { linhaNoEscopo } from '@/services/analitico/escopoAnalitico';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 import type { EquipeNaTela } from './montarEquipe';
@@ -77,7 +78,7 @@ export function AbaHoje({ equipe, hojeISO, linhas, carregando, pagamentos, carre
     <>
       <section className="e-leitura">
         <div className="e-olho">Recebido hoje</div>
-        <div className="e-leitura-valor e-num"><small>R$</small>{formatBRL(hoje.total).replace(/^R\$\s?/, '')}</div>
+        <div className="e-leitura-valor e-num"><DinheiroAnimado valor={hoje.total} /></div>
         <div className="e-leitura-de">
           {hoje.lista.length} de {totalPessoas} {totalPessoas === 1 ? 'operador recebeu' : 'operadores receberam'}
           {isPaguePlay && ' · valores brutos'}
@@ -124,18 +125,21 @@ export function AbaHoje({ equipe, hojeISO, linhas, carregando, pagamentos, carre
             const forma = formaDoPagamento(p.forma === 'cartao' ? 'cartao' : 'boleto_pix', p.detalhe);
             const novo = !!vistoAte && p.importadoEm > vistoAte;
             const [, m, dd] = p.data.split('-');
+            const nr = (p.codigo ?? '').trim();
             return (
               <div key={p.id} className="e-pg">
-                <span className="e-pg-fm" title={forma.rotulo}>{forma.curto}</span>
                 <div className="e-pg-q">
-                  <div className="e-pg-c">
-                    {abreviarCliente(p.cliente)} · {abreviarCliente(equipe.nomes[p.operadorId ?? ''] ?? '')}
-                  </div>
+                  <div className="e-pg-c">{nomeDoCliente(p.cliente, nr)}</div>
                   <div className="e-pg-h">
-                    {p.data === hojeISO ? 'Hoje' : `${dd}/${m}`}{novo && <> · <em>novo</em></>}
+                    {nr && <>NR <b>{nr}</b> · </>}
+                    {abreviarCliente(equipe.nomes[p.operadorId ?? ''] ?? '')} · {p.data === hojeISO ? 'Hoje' : `${dd}/${m}`}
+                    {novo && <> · <em>novo</em></>}
                   </div>
                 </div>
-                <span className="e-pg-v e-num">{formatBRL(p.valor)}</span>
+                <div className="e-pg-dir">
+                  <span className="e-pg-v e-num">{formatBRL(p.valor)}</span>
+                  <span className="e-pg-f"><i style={{ background: forma.cor }} />{forma.rotulo}</span>
+                </div>
               </div>
             );
           })}

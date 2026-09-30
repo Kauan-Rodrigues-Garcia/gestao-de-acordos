@@ -5,7 +5,7 @@
  * inicial do último. A forma segue o vocabulário de `lib/formasPagamento`.
  */
 import { describe, it, expect } from 'vitest';
-import { abreviarCliente, formaDoPagamento, valorCurto } from './formato';
+import { abreviarCliente, formaDoPagamento, limparNomeCliente, nomeDoCliente, valorCurto } from './formato';
 
 describe('abreviarCliente', () => {
   it('primeiro nome + inicial do último, com maiúscula só na inicial', () => {
@@ -79,5 +79,31 @@ describe('valorCurto', () => {
   it('sinal para sobra e falta', () => {
     expect(valorCurto(9_200, { sinal: true })).toBe('+R$ 9,2 mil');
     expect(valorCurto(-1_564, { sinal: true })).toBe('−R$ 1,6 mil');
+  });
+});
+
+describe('limparNomeCliente', () => {
+  it('tira o código grudado na frente do nome, nas formas que aparecem', () => {
+    expect(limparNomeCliente('123456 - MARIA SILVA')).toBe('MARIA SILVA');
+    expect(limparNomeCliente('98765-JOAO SOUZA')).toBe('JOAO SOUZA');
+    expect(limparNomeCliente('4455 ANA LIMA')).toBe('ANA LIMA');
+    expect(limparNomeCliente('12/345 : CARLA DIAS')).toBe('CARLA DIAS');
+  });
+  it('tira o NR da própria linha mesmo curto', () => {
+    expect(limparNomeCliente('77 PEDRO ALVES', '77')).toBe('PEDRO ALVES');
+  });
+  it('nome sem código fica como está', () => {
+    expect(limparNomeCliente('MARIA SILVA')).toBe('MARIA SILVA');
+    expect(limparNomeCliente('Ana 2ª via')).toBe('Ana 2ª via');
+  });
+});
+
+describe('nomeDoCliente', () => {
+  it('nome completo, com partículas em minúscula', () => {
+    expect(nomeDoCliente('123 - MARIA DA SILVA')).toBe('Maria da Silva');
+    expect(nomeDoCliente(null)).toBe('Cliente');
+  });
+  it('abreviado também limpa o código', () => {
+    expect(abreviarCliente('123456 - MARIA SILVA OLIVEIRA')).toBe('Maria O.');
   });
 });

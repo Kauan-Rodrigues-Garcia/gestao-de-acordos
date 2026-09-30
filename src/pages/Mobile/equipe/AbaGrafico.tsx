@@ -12,6 +12,7 @@ import { valorCurto } from '@/lib/mobile/formato';
 import { montarGraficoDoMes, type DiaDoGrafico } from '@/lib/mobile/graficoDia';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 import type { EquipeNaTela } from './montarEquipe';
+import { DinheiroAnimado } from '../comum/partesComuns';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto',
@@ -75,7 +76,7 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
       <section className="e-leitura" aria-live="polite">
         <div className="e-olho">{sel ? rotuloDia(sel) : ''}{sel?.hoje ? ' · hoje' : ''}</div>
         <div className="e-leitura-valor e-num">
-          {sel?.valor ? <><small>R$</small>{formatBRL(sel.valor).replace(/^R\$\s?/, '')}</> : 'Sem recebimento'}
+          {sel?.valor ? <DinheiroAnimado valor={sel.valor} /> : 'Sem recebimento'}
         </div>
         {sel?.hoje && sel.valor !== null && (
           <div className="e-leitura-de">Parcial — o dia ainda está correndo.</div>

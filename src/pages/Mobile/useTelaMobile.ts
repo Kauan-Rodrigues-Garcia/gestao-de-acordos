@@ -33,6 +33,7 @@ import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/s
 import { useMinhaComissao, type MinhaComissao } from '@/services/comissao/useMinhaComissao';
 import { temCardComissao } from '@/services/comissao/temCardComissao';
 import { ouvirAvisosDoServiceWorker } from '@/lib/mobile/sw';
+import { degrausComAmanha, type DegrauComAmanha } from '@/lib/projecaoMetas';
 
 const CHAVE_VISTO_ATE = 'mobile:visto-ate';
 
@@ -46,6 +47,8 @@ function gravarVistoAte(v: string): void {
 export interface Pagamento {
   id: string;
   cliente: string | null;
+  /** NR do pagamento (`codigo` do analítico). */
+  codigo: string | null;
   forma: AnaliticoRecebimento['forma_pagamento'];
   detalhe: string | null;
   /** Bruto — o que o cliente pagou (decisão da revisão da spec, 30/09/2026). */
@@ -85,8 +88,35 @@ export interface TelaMobile {
 
   pagamentos: Pagamento[];
   carregandoPagamentos: boolean;
+  /**
+   * Pagamentos que estavam na lista e sumiram numa atualização com o app
+   * aberto — saíram do recebimento da pessoa (transferência, exclusão). Chave
+   * natural (NR + dia + forma), não o id: limpar e reimportar troca os ids e
+   * não pode parecer saída.
+   */
+  saidas: Pagamento[];
+  dispensarSaidas: () => void;
+
+  /** Faixa de quartil e quanto falta para cada uma, hoje e amanhã. `null` sem meta. */
+  quartil: {
+    atual: number | null;
+    projecaoPct: number;
+    degraus: DegrauComAmanha[];
+  } | null;
+  fotoUrl: string | null;
 
   recarregar: () => void;
+}
+
+/** A chave natural do pagamento — sobrevive a «limpar e reimportar». */
+export function chavePagamento(p: Pick<Pagamento, 'codigo' | 'data' | 'forma'>): string {
+  return `${p.codigo ?? ''}|${p.data}|${p.forma}`;
+}
+
+/** O que estava antes e não está agora, pela chave natural. */
+export function pagamentosQueSairam(antes: readonly Pagamento[], agora: readonly Pagamento[]): Pagamento[] {
+  const atuais = new Set(agora.map(chavePagamento));
+  return antes.filter(p => !atuais.has(chavePagamento(p)));
 }
 
 export function useTelaMobile(): TelaMobile {
@@ -150,6 +180,7 @@ export function useTelaMobile(): TelaMobile {
       .map(l => ({
         id: l.id,
         cliente: l.nome_cliente,
+        codigo: l.codigo ?? null,
         forma: l.forma_pagamento,
         detalhe: l.forma_detalhe ?? null,
         valor: Number(l.valor_recebido) || 0,
@@ -158,6 +189,19 @@ export function useTelaMobile(): TelaMobile {
         novo: !!vistoAte && l.importado_em > vistoAte,
       }));
   }, [linhas, vistoAte]);
+
+  // ── Saídas: o que sumiu da lista entre uma leitura e outra ─────────────
+  const anteriores = useRef<Pagamento[] | null>(null);
+  const [saidas, setSaidas] = useState<Pagamento[]>([]);
+  useEffect(() => {
+    if (!linhas) return;
+    if (anteriores.current) {
+      const sairam = pagamentosQueSairam(anteriores.current, pagamentos);
+      if (sairam.length) setSaidas(s => [...sairam, ...s].slice(0, 5));
+    }
+    anteriores.current = pagamentos;
+  }, [linhas, pagamentos]);
+  const dispensarSaidas = useCallback(() => setSaidas([]), []);
 
   // Relatório novo chegou pelo sinal que `usePainelMetas` já escuta → relê a
   // lista. A primeira carga não conta: a lista já está buscando.
@@ -214,6 +258,20 @@ export function useTelaMobile(): TelaMobile {
     : [];
   const pctMeta = painel.meta ? (recebidoMes / painel.meta) * 100 : null;
 
+  // Quartil: a MESMA projeção do card «Progresso da meta» do Dashboard.
+  const proj = painel.projecao;
+  const quartil = proj ? {
+    atual: proj.quartil?.quartil ?? null,
+    projecaoPct: proj.projecaoPct,
+    degraus: degrausComAmanha({
+      recebido: painel.metaDupla.recebidoTotal,
+      esperado: proj.esperado,
+      metaDiaria: proj.metaDiaria,
+      diasRestantes: painel.diasUteisRestantes,
+      quartis: painel.quartis,
+    }),
+  } : null;
+
   const dia = Number(hoje.slice(8, 10));
   const doDia = painel.porDia[dia];
   const recebidoHoje = doDia ? (painel.unidade === 'ho' ? doDia.ho : doDia.bruto) : 0;
@@ -236,6 +294,10 @@ export function useTelaMobile(): TelaMobile {
     ranking,
     pagamentos,
     carregandoPagamentos: pagamentosQuery.isLoading,
+    saidas,
+    dispensarSaidas,
+    quartil,
+    fotoUrl: perfil?.foto_url ?? null,
     recarregar,
   };
 }

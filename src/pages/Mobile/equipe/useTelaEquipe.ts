@@ -8,8 +8,11 @@
  * O gráfico e os pagamentos são outras consultas, feitas só quando a aba abre
  * (`useGraficoEquipe`, `usePagamentosEquipe`).
  *
- * Sem canal Realtime próprio: recarrega ao voltar para o app e quando chega
- * um aviso pelo service worker — o mesmo combinado da `/m`.
+ * Tempo real: ouve o MESMO sinal do analítico que a `/m` e o Dashboard ouvem
+ * (`assinarSinal`, um canal por empresa dividido entre quem assina — nenhum
+ * canal novo) e, na PaguePlay, o do diário. Chegou importação, apagou ou
+ * transferiu linha → relê. Também relê ao voltar para o app e quando chega um
+ * aviso pelo service worker.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,8 +33,9 @@ import { lerMetaIndiretaDaLinha } from '@/services/metas/metaIndireta';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import type { PerfilLider } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
 import type { PerfilOp } from '@/pages/Dashboard/Analitico/linhasQuartil';
-import { equipesQueLidero } from '@/lib/mobile/equipesQueLidero';
+import { equipesDaVisao } from '@/lib/mobile/equipesQueLidero';
 import { ouvirAvisosDoServiceWorker } from '@/lib/mobile/sw';
+import { assinarSinal } from '@/lib/sinais';
 import { montarEquipe, type EquipeNaTela, type FontesEquipe } from './montarEquipe';
 
 const CHAVE_EQUIPE = 'mobile:equipe';
@@ -137,8 +141,10 @@ export interface TelaEquipe {
   hojeISO: string;
   isPaguePlay: boolean;
   empresaId: string | null;
-  /** Equipes que a pessoa lidera (o seletor do topo). */
+  /** Equipes que a pessoa lidera ou de que faz parte (o seletor do topo). */
   opcoes: OpcaoEquipe[];
+  fotoUrl: string | null;
+  nomePessoa: string;
   equipe: EquipeNaTela | null;
   escolherEquipe: (id: string) => void;
   recarregar: () => void;
@@ -178,7 +184,7 @@ export function useTelaEquipe(): TelaEquipe {
 
   const opcoes = useMemo<OpcaoEquipe[]>(() => {
     if (!bruto || !perfil?.id) return [];
-    const ids = equipesQueLidero({ id: perfil.id }, bruto.lideranca);
+    const ids = equipesDaVisao({ id: perfil.id }, bruto.lideranca, bruto);
     return ids
       .map(id => bruto.equipes.find(e => e.id === id))
       .filter((e): e is NonNullable<typeof e> => !!e)
@@ -206,6 +212,15 @@ export function useTelaEquipe(): TelaEquipe {
     void queryClient.invalidateQueries({ queryKey: ['mobile-equipe-pagamentos', empresaId, mes] });
   }, [queryClient, empresaId, mes]);
 
+  // O sinal do banco: um aviso por comando (importar, apagar, transferir).
+  useEffect(() => {
+    if (!empresaId) return;
+    const ouvinte = { onMudou: recarregar, onReconectado: recarregar };
+    const cancelarAnalitico = assinarSinal('analitico', empresaId, ouvinte, { minimoSoUpdateMs: 5 * 60_000 });
+    const cancelarDiario = tenant.isPaguePlay ? assinarSinal('diario', empresaId, ouvinte) : () => {};
+    return () => { cancelarAnalitico(); cancelarDiario(); };
+  }, [empresaId, recarregar, tenant.isPaguePlay]);
+
   useEffect(() => {
     const aoVoltar = () => { if (document.visibilityState === 'visible') recarregar(); };
     document.addEventListener('visibilitychange', aoVoltar);
@@ -223,6 +238,8 @@ export function useTelaEquipe(): TelaEquipe {
     isPaguePlay: tenant.isPaguePlay,
     empresaId,
     opcoes,
+    fotoUrl: perfil?.foto_url ?? null,
+    nomePessoa: perfil?.nome ?? '',
     equipe,
     escolherEquipe,
     recarregar,
@@ -261,6 +278,8 @@ export interface PagamentoEquipe {
   id: string;
   operadorId: string | null;
   cliente: string | null;
+  /** NR (`codigo` do analítico). */
+  codigo: string | null;
   forma: string;
   detalhe: string | null;
   valor: number;
@@ -286,7 +305,7 @@ export function usePagamentosEquipe(params: {
     queryFn: async (): Promise<PagamentoEquipe[]> => {
       const { data, error } = await supabase
         .from('analitico_recebimentos')
-        .select('id, operador_id, nome_cliente, forma_pagamento, forma_detalhe, valor_recebido, data_pagamento, importado_em')
+        .select('id, operador_id, codigo, nome_cliente, forma_pagamento, forma_detalhe, valor_recebido, data_pagamento, importado_em')
         .eq('empresa_id', empresaId as string)
         .in('operador_id', [...operadorIds])
         .gte('data_pagamento', `${mes}-01`)
@@ -295,11 +314,11 @@ export function usePagamentosEquipe(params: {
         .limit(20);
       if (error) throw new Error(error.message);
       return ((data as {
-        id: string; operador_id: string | null; nome_cliente: string | null;
+        id: string; operador_id: string | null; codigo: string | null; nome_cliente: string | null;
         forma_pagamento: string; forma_detalhe: string | null; valor_recebido: number;
         data_pagamento: string; importado_em: string;
       }[] | null) ?? []).map(l => ({
-        id: l.id, operadorId: l.operador_id, cliente: l.nome_cliente,
+        id: l.id, operadorId: l.operador_id, cliente: l.nome_cliente, codigo: l.codigo ?? null,
         forma: l.forma_pagamento, detalhe: l.forma_detalhe ?? null,
         valor: Number(l.valor_recebido) || 0, data: l.data_pagamento, importadoEm: l.importado_em,
       }));

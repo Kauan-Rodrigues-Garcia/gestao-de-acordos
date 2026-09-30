@@ -19,8 +19,9 @@ import { ehLider, ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { useInstalacao } from '@/lib/mobile/instalar';
 import {
-  CartaoComissao, CartaoRecebido, ListaPagamentos, ParHojeRanking,
+  AvisoSaidas, CartaoComissao, CartaoQuartil, CartaoRecebido, ListaPagamentos, ParHojeRanking,
 } from './partes';
+import { FotoOuLogo, FundoVivo } from './comum/partesComuns';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
 import { useTelaMobile } from './useTelaMobile';
 import { EscolherOperador } from './EscolherOperador';
@@ -43,18 +44,19 @@ export default function Mobile() {
 }
 
 /**
- * Quem recebe em nome próprio e lidera alguma equipe (o elite) ganha a troca
- * Eu / Equipe. Quem abre a visão da equipe é a chave `ver_painel_lider` — a
- * mesma da rota. Para quem recebe, vale só o vínculo explícito de
- * `equipe_lideres` — ver `equipesQueLidero`.
+ * Quem tem a visão da equipe ganha a troca Eu / Equipe: a chave
+ * `ver_painel_lider` (a mesma da rota) e uma equipe para mostrar — a de que a
+ * pessoa faz parte ou uma que ela lidera. Pedido de 30/09/2026: o elite não
+ * precisa estar em `equipe_lideres`, basta pertencer à equipe.
  */
-function useEliteLidera(): boolean {
+function useTemVisaoEquipe(): boolean {
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   const podeVerEquipe = temPermissao('ver_painel_lider');
+  const temEquipePropria = !!perfil?.equipe_id;
   const { data } = useQuery({
-    queryKey: ['mobile-elite-lidera', perfil?.id],
-    enabled: podeVerEquipe && !!perfil?.id,
+    queryKey: ['mobile-lidera-alguma', perfil?.id],
+    enabled: podeVerEquipe && !temEquipePropria && !!perfil?.id,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data: linhas, error } = await supabase
@@ -63,7 +65,7 @@ function useEliteLidera(): boolean {
       return (linhas ?? []).length > 0;
     },
   });
-  return podeVerEquipe && data === true;
+  return podeVerEquipe && (temEquipePropria || data === true);
 }
 
 function TelaDoOperador() {
@@ -76,7 +78,7 @@ function TelaDoOperador() {
   const { empresa } = useEmpresa();
   const avisos = useAvisos(empresa?.id ?? null);
   const [passoIPhone, setPassoIPhone] = useState(false);
-  const lideraEquipe = useEliteLidera();
+  const lideraEquipe = useTemVisaoEquipe();
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -94,9 +96,10 @@ function TelaDoOperador() {
 
   return (
     <div className="tela-mobile">
+      <FundoVivo />
       <div className="m-conteudo">
         <header className="m-topo">
-          <img src="/icons/app-192.png" alt="" />
+          <FotoOuLogo foto={tela.fotoUrl} nome={tela.nome} />
           <div className="m-quem">
             <div className="m-nome">{tela.nome || ' '}</div>
             <div className="m-sub">
@@ -115,7 +118,7 @@ function TelaDoOperador() {
         </header>
 
         {tela.carregando ? <Esqueleto /> : (
-          <>
+          <div className="v-entra">
             <CartaoRecebido
               recebido={tela.recebidoMes}
               meta={tela.meta}
@@ -131,8 +134,11 @@ function TelaDoOperador() {
               podeVerRanking={tela.podeVerRanking}
               ranking={tela.ranking}
             />
-          </>
+            {tela.quartil && <CartaoQuartil quartil={tela.quartil} />}
+          </div>
         )}
+
+        <AvisoSaidas saidas={tela.saidas} onDispensar={tela.dispensarSaidas} />
 
         {/* No teste do super admin (impersonação) o card some: ativar ali
             inscreveria o celular do admin nos pagamentos do operador. */}

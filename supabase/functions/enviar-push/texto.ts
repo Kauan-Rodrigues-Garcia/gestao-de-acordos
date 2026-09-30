@@ -16,8 +16,18 @@ function capitalizar(palavra: string): string {
   return minusc.charAt(0).toLocaleUpperCase('pt-BR') + minusc.slice(1);
 }
 
-export function abreviarCliente(nome: string | null | undefined): string {
-  const partes = (nome ?? '').trim().split(/\s+/).filter(Boolean);
+export function limparNomeCliente(nome: string | null | undefined, codigo?: string | null): string {
+  let s = String(nome ?? '').trim();
+  const c = String(codigo ?? '').trim();
+  if (c && s.startsWith(c)) s = s.slice(c.length);
+  s = s.replace(/^\s*[-–—:|.]\s*/, '');
+  s = s.replace(/^\d[\d./]*\s*[-–—:|]\s*/, '');
+  s = s.replace(/^\d{4,}\s+/, '');
+  return s.trim();
+}
+
+export function abreviarCliente(nome: string | null | undefined, codigo?: string | null): string {
+  const partes = limparNomeCliente(nome, codigo).split(/\s+/).filter(Boolean);
   if (partes.length === 0) return 'Cliente';
   const primeiro = capitalizar(partes[0]);
   const resto = partes.slice(1).filter(p => !PARTICULAS.has(p.toLocaleLowerCase('pt-BR')));
@@ -67,6 +77,8 @@ export interface ItemFila {
   forma_pagamento: string;
   forma_detalhe: string | null;
   nome_cliente: string | null;
+  /** NR do pagamento (`codigo` do analítico). Ausente em fila de antes de 20260930170000. */
+  codigo?: string | null;
 }
 
 export interface PessoaLote {
@@ -97,6 +109,21 @@ const NOMES: Record<string, [string, string]> = {
   ajuste: ['ajuste', 'ajustes'],
 };
 
+/**
+ * O corpo do aviso de UM pagamento — pedido de 30/09/2026: o nome, embaixo o
+ * NR, depois o valor. Duas linhas (o Android e o iPhone mostram as duas na
+ * notificação recolhida):
+ *
+ *   Maria S.
+ *   NR 12345 · Pix de R$ 350,00
+ */
+export function linhasDoPagamento(i: Pick<ItemFila, 'valor' | 'forma_pagamento' | 'forma_detalhe' | 'nome_cliente' | 'codigo'>): string {
+  const f = formaDoPagamento(i.forma_pagamento, i.forma_detalhe);
+  const nr = String(i.codigo ?? '').trim();
+  const valor = `${f.rotulo} de ${brl(Number(i.valor) || 0)}`;
+  return `${abreviarCliente(i.nome_cliente, nr)}\n${nr ? `NR ${nr} · ` : ''}${valor}`;
+}
+
 /** Quantas faixas estão batidas com `valor`. Degraus em ordem (1ª, 2ª…). */
 export function faixasBatidas(valor: number, degraus: number[]): number {
   return degraus.filter(d => d > 0 && valor >= d).length;
@@ -125,10 +152,9 @@ export function montarAvisos(
     const avisos: Aviso[] = [];
     if (lista.length <= corte) {
       for (const i of lista) {
-        const f = formaDoPagamento(i.forma_pagamento, i.forma_detalhe);
         avisos.push({
           titulo: '💰 Pagamento recebido!',
-          corpo: `${f.rotulo} de ${brl(Number(i.valor) || 0)} · ${abreviarCliente(i.nome_cliente)}`,
+          corpo: linhasDoPagamento(i),
           tag: `pgto:${i.id}`,
           url: '/#/m?novos=1',
         });

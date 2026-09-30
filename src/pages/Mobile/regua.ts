@@ -1,10 +1,14 @@
 /**
- * A régua das faixas de meta do cartão principal da tela mínima.
+ * A barra das faixas de meta do cartão principal da tela mínima.
  *
- * Com a escala começando em zero, faixas de 34, 37, 40 e 43 mil ficariam
- * amontoadas no último quinto da barra. A escala começa um pouco abaixo da 1ª
- * faixa e termina um pouco acima da maior entre a última faixa e o recebido:
- * cada degrau ganha espaço para ser lido. O cheio é travado entre 0 e 100.
+ * A escala começa em ZERO e vai até a maior entre a última faixa e o recebido
+ * (com uma folga de 4%). O preenchimento é a % do caminho — aparece desde o
+ * primeiro real recebido.
+ *
+ * Correção de 30/09/2026: a versão anterior começava a escala um pouco abaixo da
+ * 1ª faixa para espalhar os marcos; quem estava abaixo desse ponto via a barra
+ * VAZIA até quase bater a 1ª meta. «Quero que apareça conforme a % que a pessoa
+ * atingiu.»
  */
 
 export interface EscalaRegua {
@@ -15,11 +19,9 @@ export interface EscalaRegua {
 
 export function escalaDaRegua(recebido: number, faixas: readonly number[]): EscalaRegua {
   if (faixas.length === 0) return { cheio: 0, marcos: [] };
-  const primeira = faixas[0];
   const ultima = faixas[faixas.length - 1];
-  const inicio = Math.max(0, primeira - Math.max((ultima - primeira) * 0.4, primeira * 0.1));
-  const fim = Math.max(ultima, recebido) * 1.06;
-  const pct = (v: number) => Math.min(100, Math.max(0, ((v - inicio) / (fim - inicio)) * 100));
+  const fim = Math.max(ultima, recebido) * 1.04;
+  const pct = (v: number) => (fim > 0 ? Math.min(100, Math.max(0, (v / fim) * 100)) : 0);
   return {
     cheio: recebido <= 0 ? 0 : pct(recebido),
     marcos: faixas.map((v, i) => ({ ordem: i + 1, pct: pct(v) })),

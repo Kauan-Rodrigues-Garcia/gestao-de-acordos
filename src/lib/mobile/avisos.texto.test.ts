@@ -2,18 +2,22 @@
 import { describe, it, expect } from 'vitest';
 import { faixasBatidas, montarAvisos, type ItemFila } from '../../../supabase/functions/enviar-push/texto';
 
-const it_ = (id: number, valor: number, detalhe: string | null, cliente = 'MARIA SILVA', forma = 'boleto_pix', perfil = 'ana'): ItemFila =>
-  ({ id, perfil_id: perfil, valor, forma_pagamento: forma, forma_detalhe: detalhe, nome_cliente: cliente });
+const it_ = (id: number, valor: number, detalhe: string | null, cliente = 'MARIA SILVA', forma = 'boleto_pix', perfil = 'ana', codigo: string | null = null): ItemFila =>
+  ({ id, perfil_id: perfil, valor, forma_pagamento: forma, forma_detalhe: detalhe, nome_cliente: cliente, codigo });
 
 const nbsp = (s: string) => s.replace(/\u00a0/g, ' ');
 
 describe('montarAvisos', () => {
-  it('até o corte: um aviso por pagamento, com forma, valor bruto e cliente abreviado', () => {
-    const [r] = montarAvisos([it_(1, 350, 'Pix'), it_(2, 520, 'Boleto', 'JOAO SOUZA')], {}, 3, '2026-09');
+  it('até o corte: um aviso por pagamento — nome, embaixo NR e valor', () => {
+    const [r] = montarAvisos([
+      it_(1, 350, 'Pix', 'MARIA SILVA', 'boleto_pix', 'ana', '12345'),
+      it_(2, 520, 'Boleto', '98765 - JOAO SOUZA', 'boleto_pix', 'ana', '98765'),
+    ], {}, 3, '2026-09');
     expect(r.avisos).toHaveLength(2);
     expect(r.avisos[0].titulo).toBe('💰 Pagamento recebido!');
-    expect(nbsp(r.avisos[0].corpo)).toBe('Pix de R$ 350,00 · Maria S.');
-    expect(nbsp(r.avisos[1].corpo)).toBe('Boleto de R$ 520,00 · Joao S.');
+    expect(nbsp(r.avisos[0].corpo)).toBe('Maria S.\nNR 12345 · Pix de R$ 350,00');
+    // O código grudado no nome sai do nome; fica só no NR.
+    expect(nbsp(r.avisos[1].corpo)).toBe('Joao S.\nNR 98765 · Boleto de R$ 520,00');
     expect(r.ids).toEqual([1, 2]);
   });
 
@@ -28,7 +32,8 @@ describe('montarAvisos', () => {
 
   it('PaguePlay sem detalhe: «Pix/Boleto»', () => {
     const [r] = montarAvisos([it_(1, 1000, null)], {}, 3, '2026-09');
-    expect(nbsp(r.avisos[0].corpo)).toBe('Pix/Boleto de R$ 1.000,00 · Maria S.');
+    // Fila antiga, sem o NR: a segunda linha fica só com o valor.
+    expect(nbsp(r.avisos[0].corpo)).toBe('Maria S.\nPix/Boleto de R$ 1.000,00');
   });
 
   it('cruzou faixas no lote: um aviso de meta, só com a maior', () => {

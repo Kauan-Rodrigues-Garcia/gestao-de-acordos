@@ -1,0 +1,99 @@
+/*
+ * Acabamento comum às telas do celular (pedido de 30/09/2026): cartão pastel,
+ * barra animada, números que rolam, fundo vivo e foto no cabeçalho. Classes
+ * com prefixo `v-`, carregadas só com as rotas do celular (chunks lazy).
+ */
+
+/* ── Cartão pastel ───────────────────────────────────────────────────── */
+.v-cartao {
+  --v-cartao: #dde7e2;          /* sálvia névoa: neutro, pastel, sólido */
+  --v-tinta: #14261f;
+  --v-tinta-2: #4f625a;
+  --v-cheio: #1f6b5c;           /* verde-petróleo: o degradê do ícone, assentado */
+  --v-trilho: rgba(20, 38, 31, 0.10);
+  margin: 0 16px; border-radius: 24px; padding: 20px 20px 18px;
+  background: var(--v-cartao); color: var(--v-tinta);
+  position: relative; overflow: hidden;
+}
+.v-cartao .v-rotulo {
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--v-tinta-2);
+}
+.v-cartao .v-valor {
+  font-family: 'Bricolage Grotesque', Figtree, sans-serif; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em; font-size: 40px; font-weight: 700; line-height: 1; margin-top: 8px;
+}
+.v-cartao .v-valor small { font-size: 0.48em; font-weight: 600; color: var(--v-tinta-2); margin-right: 4px; }
+.v-cartao .v-linha {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  margin-top: 10px; font-size: 13.5px; color: var(--v-tinta-2);
+}
+.v-cartao .v-linha b { color: var(--v-tinta); font-weight: 600; }
+.v-cartao .v-pct {
+  font-family: 'Bricolage Grotesque', Figtree, sans-serif; font-variant-numeric: tabular-nums;
+  font-size: 20px; font-weight: 700; color: var(--v-cheio); white-space: nowrap;
+}
+.v-cartao .v-aviso { margin-top: 12px; font-size: 13px; color: var(--v-tinta-2); }
+
+/* ── Números que rolam ───────────────────────────────────────────────── */
+.v-num { font-variant-numeric: tabular-nums; transition: color 600ms ease; }
+.v-num.v-subiu { color: #1f8a5b; }
+.v-num.v-desceu { color: #c0453b; }
+
+/* ── A barra ─────────────────────────────────────────────────────────── */
+.v-barra { position: relative; margin-top: 18px; }
+.v-barra.v-com-marcos { padding-bottom: 18px; }
+.v-trilho { position: relative; height: 10px; border-radius: 10px; background: var(--v-trilho, rgba(14, 27, 38, 0.1)); }
+.v-cheio {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 10px; overflow: hidden;
+  background: var(--v-cheio, #1f6b5c);
+  transition: width 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* O brilho que passa pelo preenchimento — a «vida» da barra. */
+.v-brilho {
+  position: absolute; top: 0; bottom: 0; width: 40%; left: -40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: v-passa 2.8s ease-in-out 1.2s infinite;
+}
+@keyframes v-passa { 0% { left: -40%; } 60%, 100% { left: 110%; } }
+.v-esperado {
+  position: absolute; top: -5px; width: 2px; height: 20px; border-radius: 2px;
+  background: var(--v-tinta, #0e1b26); transform: translateX(-1px);
+}
+.v-esperado b {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--v-tinta-2, #4f625a);
+}
+.v-marco {
+  position: absolute; top: 16px; transform: translateX(-50%);
+  font-size: 11px; font-weight: 500; color: var(--v-tinta-2, #4f625a); white-space: nowrap;
+}
+.v-marco::before {
+  content: ''; position: absolute; top: -12px; left: 50%; width: 2px; height: 6px;
+  transform: translateX(-1px); border-radius: 2px; background: rgba(20, 38, 31, 0.25);
+}
+.v-marco.v-ok { color: var(--v-cheio, #1f6b5c); font-weight: 700; }
+.v-marco.v-ok::before { background: var(--v-cheio, #1f6b5c); }
+
+/* ── Fundo vivo ──────────────────────────────────────────────────────── */
+.v-fundo { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.v-mancha { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; will-change: transform; }
+.v-m1 { width: 340px; height: 340px; top: -120px; left: -110px; background: #bfe3f4; animation: v-deriva1 26s ease-in-out infinite alternate; }
+.v-m2 { width: 300px; height: 300px; top: 34%; right: -140px; background: #c9ecd6; animation: v-deriva2 32s ease-in-out infinite alternate; }
+.v-m3 { width: 280px; height: 280px; bottom: -120px; left: 10%; background: #e4e0f3; opacity: 0.5; animation: v-deriva3 38s ease-in-out infinite alternate; }
+@keyframes v-deriva1 { to { transform: translate(60px, 50px) scale(1.08); } }
+@keyframes v-deriva2 { to { transform: translate(-50px, -40px) scale(1.12); } }
+@keyframes v-deriva3 { to { transform: translate(40px, -60px) scale(0.94); } }
+
+/* ── Foto no cabeçalho ───────────────────────────────────────────────── */
+.v-foto, .v-logo { width: 38px; height: 38px; border-radius: 12px; flex: none; object-fit: cover; }
+.v-foto { border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(14, 27, 38, 0.12); }
+
+/* ── Entrada suave do conteúdo (troca o «piscar» do carregamento) ────── */
+.v-entra { animation: v-surge 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes v-surge { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .v-cheio { transition: none; }
+  .v-brilho, .v-mancha, .v-entra { animation: none; }
+}

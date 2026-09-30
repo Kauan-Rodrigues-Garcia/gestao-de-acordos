@@ -37,3 +37,29 @@ export function equipesQueLidero(
   }
   return saida;
 }
+
+/**
+ * As equipes da visão «Equipe» no celular: as que a pessoa lidera MAIS a
+ * equipe de que ela FAZ PARTE (principal + clones que contam).
+ *
+ * Pedido de 30/09/2026: o elite não precisa estar em `equipe_lideres` para ter
+ * a visão da equipe — basta pertencer a ela. O líder segue pela regra do
+ * Painel (`equipesQueLidero`); quem recebe em nome próprio ganha também a
+ * própria equipe. Quem pode abrir a visão continua sendo a chave
+ * `ver_painel_lider`, na rota.
+ */
+export function equipesDaVisao(
+  pessoa: { id: string },
+  entrada: EntradaLideres,
+  composicao: {
+    operadorEquipeMap: Record<string, { equipe_id: string | null }>;
+    equipesExtrasPorOperador: Record<string, string[]>;
+  },
+): string[] {
+  const saida = equipesQueLidero(pessoa, entrada);
+  const principal = composicao.operadorEquipeMap[pessoa.id]?.equipe_id ?? null;
+  for (const id of [principal, ...(composicao.equipesExtrasPorOperador[pessoa.id] ?? [])]) {
+    if (id && !saida.includes(id)) saida.push(id);
+  }
+  return saida;
+}

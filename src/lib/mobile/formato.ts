@@ -25,8 +25,40 @@ function capitalizar(palavra: string): string {
   return minusc.charAt(0).toLocaleUpperCase('pt-BR') + minusc.slice(1);
 }
 
-export function abreviarCliente(nome: string | null | undefined): string {
-  const partes = (nome ?? '').trim().split(/\s+/).filter(Boolean);
+/**
+ * O nome do cliente sem o código na frente.
+ *
+ * Relato de 30/09/2026: «algumas [linhas] têm o nome correto e outras aparecem
+ * com um código na frente do nome». O parser da tela já separa «123 - NOME»
+ * (`extrairNome`), mas nem toda origem passa por ele — o robô, a sincronização e
+ * importações antigas gravaram o texto como veio. Aqui a limpeza é na leitura,
+ * então vale para o que já está no banco:
+ *
+ *   • tira o próprio `codigo` (NR) da linha quando o nome começa por ele;
+ *   • tira «12345 - », «12345-», «12345: », «12345 | » e «12345 » (4+ dígitos).
+ */
+export function limparNomeCliente(nome: string | null | undefined, codigo?: string | null): string {
+  let s = String(nome ?? '').trim();
+  const c = String(codigo ?? '').trim();
+  if (c && s.startsWith(c)) s = s.slice(c.length);
+  s = s.replace(/^\s*[-–—:|.]\s*/, '');
+  s = s.replace(/^\d[\d./]*\s*[-–—:|]\s*/, '');
+  s = s.replace(/^\d{4,}\s+/, '');
+  return s.trim();
+}
+
+/** Nome completo para a lista do app: «MARIA DA SILVA» → «Maria da Silva». */
+export function nomeDoCliente(nome: string | null | undefined, codigo?: string | null): string {
+  const partes = limparNomeCliente(nome, codigo).split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return 'Cliente';
+  return partes
+    .map((p, i) => (i > 0 && PARTICULAS.has(p.toLocaleLowerCase('pt-BR'))
+      ? p.toLocaleLowerCase('pt-BR') : capitalizar(p)))
+    .join(' ');
+}
+
+export function abreviarCliente(nome: string | null | undefined, codigo?: string | null): string {
+  const partes = limparNomeCliente(nome, codigo).split(/\s+/).filter(Boolean);
   if (partes.length === 0) return 'Cliente';
   const primeiro = capitalizar(partes[0]);
   const resto = partes.slice(1).filter(p => !PARTICULAS.has(p.toLocaleLowerCase('pt-BR')));
