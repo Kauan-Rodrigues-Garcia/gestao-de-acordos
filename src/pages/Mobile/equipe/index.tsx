@@ -21,6 +21,7 @@ import { AbaEquipe } from './AbaEquipe';
 import { AbaQuartis } from './AbaQuartis';
 import { AbaGrafico } from './AbaGrafico';
 import { AbaHoje } from './AbaHoje';
+import { AvisosDaEquipe } from './AvisosDaEquipe';
 import { IconeAba, Seta } from './partes';
 import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
 import './equipe.css';
@@ -146,7 +147,9 @@ function TelaDaEquipe() {
           </>
         ) : (
           <main className="v-entra" key={aba}>
-            {aba === 'equipe' && <AbaEquipe equipe={equipe} rodape={rodape} />}
+            {aba === 'equipe' && (
+              <AbaEquipe equipe={equipe} rodape={<><AvisosDaEquipe empresaId={tela.empresaId} />{rodape}</>} />
+            )}
             {aba === 'quartis' && <AbaQuartis equipe={equipe} mes={tela.mes} />}
             {aba === 'grafico' && (
               <AbaGrafico equipe={equipe} mes={tela.mes} hojeISO={tela.hojeISO}

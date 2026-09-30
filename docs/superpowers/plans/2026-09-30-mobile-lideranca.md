@@ -173,6 +173,15 @@ feita uma vez por mês/empresa.
 
 ## L2 — Aviso «equipe bateu a meta» (roteiro)
 
+> **Código pronto em 30/09/2026, falta aplicar com «pode».** Migration
+> `20260930200000_push_avisos_da_equipe.sql` (validada num Postgres 16 local — ver
+> `src/lib/mobile/pushEquipe.sql.test.ts`), `enviar-push` com as rodadas novas e a
+> chave na visão Equipe (`AvisosDaEquipe`). Desvios do roteiro:
+> - a função extraída é `fn_recebido_por_equipe(empresas, mês, de, até, com_ajustes)`
+>   — o período serve o resumo de hoje; o ajuste manual entra só no aviso de meta
+>   (o card do Painel o soma), e o desafio chama sem ele (resultado idêntico, conferido);
+> - entrou o **resumo por hora** (spec §3.1) e a preferência `push_preferencias`.
+
 - Migration: `fn_recebido_mes_por_equipe(p_empresas uuid[], p_mes text)` extraída de
   `fn_desafio_contexto_equipe` (que passa a chamá-la); `push_marcos_equipe`
   `(equipe_id, mes)` único + semente das equipes já em 100%;

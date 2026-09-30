@@ -434,6 +434,20 @@ a média, não a meta diária.
 - **Tempo real de acordos** desligado nas rotas `/m*` (nenhuma tela do celular usa;
   era uma assinatura por aparelho). Volta ao sair para a versão completa.
 
+**Números dos cards do operador mais lentos (30/09/2026):** «tipo aposta quando ganha
+um valor alto». Recebido no mês, comissão e recebido hoje sobem por ~2 a 3,2 s (mais
+longo quanto maior o salto), numa curva quase constante; % e barra acompanham
+(`numeroAnimado.ts`: `duracaoDaSubida`, `subirDevagar`, `useDuracaoDaSubida`).
+
+**L2 — avisos da equipe (30/09/2026): código pronto, migration ESPERANDO «pode».**
+- Meta da equipe batida (uma vez por equipe/mês, líderes + equipe, sem valores).
+- **Resumo por hora** do recebido da equipe (pedido do usuário): líder ligado por
+  padrão; elite escolhe na visão Equipe (desligado por padrão); a qualquer hora.
+- Migration `supabase/migrations/20260930200000_push_avisos_da_equipe.sql`; validada
+  num Postgres 16 local descartável (cenários no cabeçalho de
+  `src/lib/mobile/pushEquipe.sql.test.ts`). `enviar-push` precisa de novo deploy.
+- Cliente já na main: sem a migration a chave do resumo simplesmente não aparece.
+
 **Correções da tela da equipe (30/09/2026, pedido após teste no iPhone):**
 - **Folha de detalhe dos Quartis presa na tela** (`equipe/FolhaInferior.tsx`): abria
   no fim da aba e não aparecia no iPhone. Causa: o conteúdo da aba entra com a

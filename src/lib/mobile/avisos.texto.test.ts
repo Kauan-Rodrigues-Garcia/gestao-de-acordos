@@ -1,6 +1,9 @@
 /** Os textos do aviso de pagamento — spec §4 (corte, resumo, meta batida). */
 import { describe, it, expect } from 'vitest';
-import { faixasBatidas, montarAvisos, montarAvisosDeSaida, type ItemFila } from '../../../supabase/functions/enviar-push/texto';
+import {
+  faixasBatidas, horaCheia, montarAvisos, montarAvisosDeSaida, montarAvisosMetaEquipe, montarResumosEquipe,
+  type ItemFila,
+} from '../../../supabase/functions/enviar-push/texto';
 
 const it_ = (id: number, valor: number, detalhe: string | null, cliente = 'MARIA SILVA', forma = 'boleto_pix', perfil = 'ana', codigo: string | null = null): ItemFila =>
   ({ id, perfil_id: perfil, valor, forma_pagamento: forma, forma_detalhe: detalhe, nome_cliente: cliente, codigo });
@@ -90,5 +93,53 @@ describe('montarAvisosDeSaida', () => {
     expect(r.avisos).toHaveLength(1);
     expect(r.avisos[0].titulo).toBe('↩️ 4 pagamentos saíram do seu recebimento');
     expect(nbsp(r.avisos[0].corpo)).toBe('−R$ 400,00 · hoje: R$ 50,00 · no mês: R$ 900,00');
+  });
+});
+
+describe('avisos da equipe (20260930200000)', () => {
+  it('meta batida: líder abre a equipe, operador a própria tela; sem valores; um aviso por pessoa', () => {
+    const r = montarAvisosMetaEquipe([{
+      equipe_id: 'e1', equipe_nome: 'Equipe Bryan', mes: '2026-09',
+      lideres: ['lider', 'elite-que-lidera'], membros: ['ana', 'bruno', 'elite-que-lidera'],
+    }]);
+    const de = (id: string) => r.find(p => p.perfilId === id)!.avisos;
+    expect(r).toHaveLength(4);
+    expect(de('lider')).toEqual([{
+      titulo: '🎯 Equipe Bryan bateu a meta!',
+      corpo: 'Meta do mês batida hoje · toque para ver a equipe',
+      tag: 'meta-equipe:e1:2026-09',
+      url: '/#/m/equipe?equipe=e1',
+    }]);
+    // Líder e membro da mesma equipe: só o aviso de líder.
+    expect(de('elite-que-lidera')).toHaveLength(1);
+    expect(de('elite-que-lidera')[0].titulo).toBe('🎯 Equipe Bryan bateu a meta!');
+    expect(de('ana')[0]).toMatchObject({ titulo: '🎯 Sua equipe bateu a meta!', url: '/#/m' });
+    for (const p of r) for (const a of p.avisos) expect(a.corpo).not.toMatch(/R\$/);
+  });
+
+  it('resumo por hora: quanto entrou, a janela e o total de hoje', () => {
+    const [r] = montarResumosEquipe([{
+      equipe_id: 'e1', equipe_nome: 'Equipe Bryan', dia: '2026-09-30',
+      novo: 3200, qtd_novos: 8, hoje: '12400.5',
+      desde: '2026-09-30T17:00:04Z', ate: '2026-09-30T18:00:03Z', destinatarios: ['lider', 'lider'],
+    }]);
+    expect(r.perfilId).toBe('lider');
+    expect(r.avisos).toHaveLength(1);
+    expect(nbsp(r.avisos[0].titulo)).toBe('💰 Equipe Bryan · +R$ 3.200,00');
+    expect(nbsp(r.avisos[0].corpo)).toBe('8 pagamentos das 14h às 15h\nHoje: R$ 12.400,50');
+    expect(r.avisos[0].url).toBe('/#/m/equipe?equipe=e1&aba=hoje');
+  });
+
+  it('primeiro resumo do dia, um pagamento; nada quando não entrou nada', () => {
+    const base = { equipe_id: 'e1', equipe_nome: 'Equipe Bryan', dia: '2026-09-30', hoje: 350, ate: '2026-09-30T12:59:40Z', destinatarios: ['l'] };
+    const [r] = montarResumosEquipe([{ ...base, novo: 350, qtd_novos: 1, desde: null }]);
+    expect(nbsp(r.avisos[0].corpo)).toBe('1 pagamento até as 10h\nHoje: R$ 350,00');
+    expect(montarResumosEquipe([{ ...base, novo: 0, qtd_novos: 0, desde: null }])).toEqual([]);
+  });
+
+  it('hora cheia em São Paulo, arredondada', () => {
+    expect(horaCheia('2026-09-30T17:29:00Z')).toBe('14h');
+    expect(horaCheia('2026-09-30T17:31:00Z')).toBe('15h');
+    expect(horaCheia('2026-10-01T02:45:00Z')).toBe('0h');
   });
 });

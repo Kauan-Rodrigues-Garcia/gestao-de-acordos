@@ -265,3 +265,121 @@ export function montarAvisosDeSaida(
   }
   return saida;
 }
+
+// ── Avisos da EQUIPE (20260930200000) ───────────────────────────────────────
+
+/** Uma equipe que acabou de bater a meta do mês — `fn_push_metas_equipe_batidas`. */
+export interface EquipeNaMeta {
+  equipe_id: string;
+  equipe_nome: string;
+  mes: string;
+  /** Quem lidera (a regra do Painel + o elite que lidera). */
+  lideres: string[];
+  /** Quem trabalha nela e conta no recebimento, sem quem já está em `lideres`. */
+  membros: string[];
+}
+
+/** Junta os avisos de várias equipes por pessoa (alguém pode estar em duas). */
+function porPessoa(): { add: (perfilId: string, aviso: Aviso) => void; lista: () => AvisosDaPessoa[] } {
+  const mapa = new Map<string, Aviso[]>();
+  return {
+    add: (perfilId, aviso) => {
+      const l = mapa.get(perfilId) ?? [];
+      l.push(aviso);
+      mapa.set(perfilId, l);
+    },
+    lista: () => [...mapa.entries()].map(([perfilId, avisos]) => ({ perfilId, ids: [], avisos })),
+  };
+}
+
+/**
+ * «Equipe bateu a meta» — spec da liderança §3. SEM valores (a tela de
+ * bloqueio é pública). Líder abre a equipe; operador abre a própria tela.
+ *
+ *   líder:    🎯 Equipe Bryan bateu a meta!
+ *             Meta do mês batida hoje · toque para ver a equipe
+ *   operador: 🎯 Sua equipe bateu a meta!
+ *             Equipe Bryan bateu a meta do mês. Parabéns!
+ */
+export function montarAvisosMetaEquipe(equipes: EquipeNaMeta[]): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const e of equipes) {
+    const tag = `meta-equipe:${e.equipe_id}:${e.mes}`;
+    for (const id of new Set(e.lideres)) {
+      saida.add(id, {
+        titulo: `🎯 ${e.equipe_nome} bateu a meta!`,
+        corpo: 'Meta do mês batida hoje · toque para ver a equipe',
+        tag,
+        url: `/#/m/equipe?equipe=${e.equipe_id}`,
+      });
+    }
+    const lideres = new Set(e.lideres);
+    for (const id of new Set(e.membros)) {
+      if (lideres.has(id)) continue;
+      saida.add(id, {
+        titulo: '🎯 Sua equipe bateu a meta!',
+        corpo: `${e.equipe_nome} bateu a meta do mês. Parabéns!`,
+        tag,
+        url: '/#/m',
+      });
+    }
+  }
+  return saida.lista();
+}
+
+/** O recebido de uma equipe desde o último resumo — `fn_push_resumo_equipes`. */
+export interface ResumoEquipe {
+  equipe_id: string;
+  equipe_nome: string;
+  /** Dia (São Paulo), `yyyy-MM-dd`. */
+  dia: string;
+  /** Quanto entrou desde o último resumo (bruto). */
+  novo: number | string;
+  /** Quantos pagamentos entraram (pode ser 0 quando só o valor mudou). */
+  qtd_novos: number | string;
+  /** Recebido da equipe hoje (bruto, como a aba Hoje). */
+  hoje: number | string;
+  /** Hora do resumo anterior de hoje; `null` = o primeiro do dia. */
+  desde: string | null;
+  ate: string;
+  destinatarios: string[];
+}
+
+/** A hora cheia mais próxima, em São Paulo: «14h». */
+export function horaCheia(iso: string): string {
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const h = Number(p.find(x => x.type === 'hour')?.value ?? 0);
+  const m = Number(p.find(x => x.type === 'minute')?.value ?? 0);
+  return `${(h + (m >= 30 ? 1 : 0)) % 24}h`;
+}
+
+/**
+ * O resumo por hora da equipe — pedido de 30/09/2026: «o líder recebe quanto a
+ * equipe dele recebeu por horário». Só sai quando entrou pagamento.
+ *
+ *   💰 Equipe Bryan · +R$ 3.200,00
+ *   8 pagamentos das 14h às 15h
+ *   Hoje: R$ 12.400,00
+ */
+export function montarResumosEquipe(itens: ResumoEquipe[]): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const r of itens) {
+    const novo = Number(r.novo) || 0;
+    if (novo <= 0) continue;
+    const qtd = Number(r.qtd_novos) || 0;
+    const ate = horaCheia(r.ate);
+    const de = r.desde ? horaCheia(r.desde) : null;
+    const janela = de && de !== ate ? `das ${de} às ${ate}` : `até as ${ate}`;
+    const quantos = qtd === 1 ? '1 pagamento' : qtd > 1 ? `${qtd} pagamentos` : 'Recebido';
+    const aviso: Aviso = {
+      titulo: `💰 ${r.equipe_nome} · +${brl(novo)}`,
+      corpo: `${quantos} ${janela}\nHoje: ${brl(Number(r.hoje) || 0)}`,
+      tag: `resumo-equipe:${r.equipe_id}:${r.dia}:${ate}`,
+      url: `/#/m/equipe?equipe=${r.equipe_id}&aba=hoje`,
+    };
+    for (const id of new Set(r.destinatarios)) saida.add(id, aviso);
+  }
+  return saida.lista();
+}

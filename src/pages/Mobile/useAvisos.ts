@@ -5,7 +5,7 @@ import {
   ativarPush, desativarPush, estadoPush, lerAmbientePush, type EstadoPush,
 } from '@/lib/mobile/push';
 
-export function useAvisos(empresaId: string | null) {
+export function useAvisos(empresaId: string | null, contexto?: 'equipe') {
   const [estado, setEstado] = useState<EstadoPush>('desligado');
   const [ocupado, setOcupado] = useState(false);
 
@@ -18,7 +18,7 @@ export function useAvisos(empresaId: string | null) {
     if (!empresaId || ocupado) return;
     setOcupado(true);
     try {
-      await ativarPush(empresaId);
+      await ativarPush(empresaId, contexto);
       toast.success('Avisos ativados. Um aviso de teste está a caminho.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível ativar os avisos.');
@@ -26,7 +26,7 @@ export function useAvisos(empresaId: string | null) {
       setOcupado(false);
       void reler();
     }
-  }, [empresaId, ocupado, reler]);
+  }, [empresaId, contexto, ocupado, reler]);
 
   const desativar = useCallback(async () => {
     setOcupado(true);

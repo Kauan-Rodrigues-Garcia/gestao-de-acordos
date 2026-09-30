@@ -338,3 +338,28 @@
   .tela-equipe .e-esq, .tela-equipe .e-regua-fill, .tela-equipe .e-regua-ponto, .tela-equipe .e-rosca-g { animation: none; }
   .tela-equipe .e-veu, .tela-equipe .e-folha { transition: none; }
 }
+
+/* ── Avisos no celular (AvisosDaEquipe) ──────────────────────────────── */
+.tela-equipe .e-aviso-ativar { padding: 14px 0 12px; font-size: 13.5px; color: var(--e-grafite); line-height: 1.45; }
+.tela-equipe .e-aviso-ativar b { display: block; color: var(--e-tinta); font-size: 15px; margin-bottom: 3px; }
+.tela-equipe .e-chave {
+  display: flex; align-items: center; gap: 14px; padding: 13px 0;
+  border-bottom: 1px solid var(--e-traco); cursor: pointer;
+}
+.tela-equipe .e-chave > span { flex: 1; min-width: 0; font-size: 14px; }
+.tela-equipe .e-chave b { display: block; font-weight: 600; }
+.tela-equipe .e-chave small { display: block; font-size: 12px; color: var(--e-grafite); margin-top: 3px; line-height: 1.4; }
+/* O interruptor: o checkbox nativo vira uma chave, sem biblioteca. */
+.tela-equipe .e-chave input {
+  appearance: none; -webkit-appearance: none; flex: none; margin: 0;
+  width: 46px; height: 28px; border-radius: 28px; background: #d5dde2; position: relative;
+  transition: background-color 200ms ease; cursor: pointer;
+}
+.tela-equipe .e-chave input::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(14, 27, 38, 0.25); transition: transform 200ms ease;
+}
+.tela-equipe .e-chave input:checked { background: var(--e-pos); }
+.tela-equipe .e-chave input:checked::after { transform: translateX(18px); }
+.tela-equipe .e-chave input:disabled { opacity: 0.6; }
+.tela-equipe .e-desativar { font-size: 13.5px; font-weight: 600; color: var(--e-neg); }

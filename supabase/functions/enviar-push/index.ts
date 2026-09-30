@@ -12,6 +12,12 @@
  * cabeçalho `x-push-segredo` igual a `push_config.segredo`. Migrations
  * 20260930124757 (entradas) e 20260930175642 (saídas, NR e «hoje»).
  *
+ * `{ acao: 'resumo_equipes' }` — o pg_cron chama de hora em hora
+ * (fn_push_resumo_disparar): o recebido de cada equipe desde o último resumo,
+ * para quem lidera e para quem ligou o resumo. Mesmo segredo da rodada.
+ * A rodada também confere a META das equipes (marca do gatilho da importação).
+ * Migration 20260930200000.
+ *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
  *
@@ -24,8 +30,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
 import {
-  montarAvisos, montarAvisosDeSaida,
-  type Aviso, type AvisosDaPessoa, type ItemFila, type ItemSaida, type PessoaLote, type PessoaSaida,
+  montarAvisos, montarAvisosDeSaida, montarAvisosMetaEquipe, montarResumosEquipe,
+  type Aviso, type AvisosDaPessoa, type EquipeNaMeta, type ItemFila, type ItemSaida,
+  type PessoaLote, type PessoaSaida, type ResumoEquipe,
 } from './texto.ts';
 
 const CORS = {
@@ -92,7 +99,33 @@ function mesAtual(): string {
 async function rodada(admin: ReturnType<typeof createClient>) {
   const entradas = await rodadaEntradas(admin);
   const saidas = await rodadaSaidas(admin);
-  return { entradas, saidas };
+  const metasEquipe = await rodadaMetasEquipe(admin);
+  return { entradas, saidas, metasEquipe };
+}
+
+/**
+ * A META das equipes: o banco confere as empresas marcadas pela importação,
+ * grava o marco (uma vez por equipe por mês) e devolve só quem bateu agora,
+ * com líderes e membros. Sem a migration 20260930200000 a RPC não existe e só
+ * registra — o resto da rodada segue.
+ */
+async function rodadaMetasEquipe(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc('fn_push_metas_equipe_batidas');
+  if (error) return { erro: error.message };
+  const equipes = (data ?? []) as EquipeNaMeta[];
+  if (!equipes.length) return { equipes: 0, avisos: 0 };
+  const { avisos } = await entregar(admin, montarAvisosMetaEquipe(equipes));
+  return { equipes: equipes.length, avisos };
+}
+
+/** O resumo por hora do recebido de cada equipe. */
+async function rodadaResumoEquipes(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc('fn_push_resumo_equipes');
+  if (error) return { erro: error.message };
+  const itens = (data ?? []) as ResumoEquipe[];
+  if (!itens.length) return { equipes: 0, avisos: 0 };
+  const { avisos } = await entregar(admin, montarResumosEquipe(itens));
+  return { equipes: itens.length, avisos };
 }
 
 /** Manda os avisos de cada pessoa para os aparelhos dela; devolve o que fechar. */
@@ -185,7 +218,7 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  let corpo: { acao?: string };
+  let corpo: { acao?: string; contexto?: string };
   try { corpo = await req.json(); } catch { corpo = {}; }
 
   if (corpo.acao === 'teste') {
@@ -197,11 +230,15 @@ Deno.serve(async (req) => {
       .from('push_inscricoes').select('id, endpoint, p256dh, auth').eq('perfil_id', user.id);
     if (erroLeitura) return resposta(500, { error: erroLeitura.message });
 
+    // Ativado na tela da equipe (o líder não recebe aviso de pagamento próprio).
+    const daEquipe = corpo.contexto === 'equipe';
     const r = await enviarPara(admin, (data ?? []) as Inscricao[], {
       titulo: 'Pronto! 🔔',
-      corpo: 'Você vai ser avisado a cada pagamento que cair.',
+      corpo: daEquipe
+        ? 'Você vai receber o aviso quando a equipe bater a meta e, se ligado, o resumo de cada hora.'
+        : 'Você vai ser avisado a cada pagamento que cair.',
       tag: 'teste',
-      url: '/#/m',
+      url: daEquipe ? '/#/m/equipe' : '/#/m',
     });
     return resposta(200, r);
   }
@@ -212,6 +249,14 @@ Deno.serve(async (req) => {
     });
     if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
     return resposta(200, await rodada(admin));
+  }
+
+  if (corpo.acao === 'resumo_equipes') {
+    const { data: confere } = await admin.rpc('fn_push_segredo_confere', {
+      p_segredo: req.headers.get('x-push-segredo'),
+    });
+    if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
+    return resposta(200, await rodadaResumoEquipes(admin));
   }
 
   return resposta(400, { error: 'Ação desconhecida.' });

@@ -248,6 +248,27 @@ CONFLICT DO NOTHING`, só quando o lote tem linha do mês corrente.
 
 ---
 
+## 3.1 Resumo por hora do recebido da equipe (pedido de 30/09/2026)
+
+«O líder recebe notificação de quanto a equipe dele recebeu por horário; o elite, que
+tem as duas visões, escolhe se quer.» Decisões (30/09/2026):
+
+| # | Pergunta | Decisão |
+|---|---|---|
+| R1 | Frequência | **Resumo a cada hora**, só se entrou pagamento |
+| R2 | Janela | **A qualquer hora** (como o aviso do operador) |
+| R3 | Elite | **Desligado por padrão**; liga na visão Equipe |
+
+- Texto: «💰 Equipe Bryan · +R$ 3.200,00» / «8 pagamentos das 14h às 15h» / «Hoje:
+  R$ 12.400,00». Valor bruto, como a aba Hoje. Toque → `/m/equipe?equipe=<id>&aba=hoje`.
+- Quem recebe: quem lidera (a regra do Painel + o elite que lidera) e quem trabalha na
+  equipe e conta no recebimento, com `ver_painel_lider`, ativo, com aparelho e com a
+  preferência ligada (`push_preferencias.resumo_equipe`; NULL = ligado só para `lider`).
+- Por estado: guarda o maior total do dia já avisado (`push_resumo_equipe`); a hora só
+  avisa o que passou dele. Limpar e reimportar não avisa.
+- Cron `push-resumo-equipes` (`0 * * * *`) → `enviar-push {acao:'resumo_equipes'}`.
+  Chave de desligar: `push_config.resumo_equipe`.
+
 ## 4. Erros e casos-limite
 
 - Líder sem equipe: tela explica e oferece «Versão completa». Nenhum erro.
