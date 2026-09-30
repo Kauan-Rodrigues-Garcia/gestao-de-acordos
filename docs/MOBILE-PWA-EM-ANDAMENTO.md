@@ -1,0 +1,153 @@
+# Versão mobile (PWA) + push de pagamento — brainstorm em andamento
+
+> **Para quem retoma isto** (o Cleber ou um agente numa sessão nova). Escrito em
+> **29/09/2026**, no meio do brainstorm. **Nada foi implementado.** Não existe
+> design aprovado nem spec: o processo está na etapa de perguntas. Leia a §4
+> («Onde paramos») e continue dali. No fim há outras pendências da mesma sessão
+> (§7), que não têm relação com o mobile.
+
+---
+
+## 1. O pedido, nas palavras do usuário
+
+«Aprimorar o projeto para funcionar 100% no celular — acessando hoje tá tudo
+bagunçado. Uma versão para mobile, mais minimalista, **só com dashboard**. O
+pessoal baixa o app, aqueles apps simples que são o próprio site, e tem acesso às
+suas informações: se teve algum pagamento novo, com **notificações chamativas
+tipo aplicativo de vendas (Hotmart)**, dizendo que recebeu tanto via Pix,
+boleto ou cartão.»
+
+Dúvida que ele levantou e já foi respondida: **«isso vai ter que fazer um
+app?»** Não. É um **PWA**: o mesmo site, instalado pelo navegador («Adicionar à
+tela inicial»), com ícone e tela cheia, atualizado a cada deploy da Vercel, sem
+loja. Se um dia precisar de loja, dá para embrulhar o mesmo site depois
+(Capacitor / TWA) sem refazer.
+
+---
+
+## 2. O que existe hoje (levantado em 29/09/2026)
+
+| | Estado |
+|---|---|
+| `manifest.webmanifest` | **não existe** (`public/` só tem logos, `sounds/`, `version.json`) |
+| Service worker | **não existe**; `vite-plugin-pwa`, `workbox` e `web-push` não estão no `package.json` |
+| Push de verdade | **não existe**. O único aviso nativo é `new Notification()` em `src/hooks/useSolicitacoesWhatsapp.ts` — só funciona com a aba aberta |
+| Notificação interna | tabela `public.notificacoes` + `src/providers/NotificacoesProvider.tsx` (um canal Realtime, lista de 200) |
+| Mobile | só **1** componente usa `isMobile`; as telas são de desktop espremidas |
+| Servidor | Vercel (`api/*.ts`, funções serverless com `service_role`) e **1** Edge Function do Supabase |
+| Recebimento BookPlay | o **robô do 59** (`scripts/robo59/`) sobe o relatório **sozinho, de hora em hora**, no PC do trabalho → linhas em `analitico_recebimentos` (tem `valor_recebido`, `forma_pagamento`, `data_pagamento`, `operador_id`) |
+| Recebimento PaguePlay | **sem robô**: o analítico só entra quando alguém importa o 58 pela tela |
+
+**Limitação que pesa em tudo:** no **iPhone**, Web Push só funciona com o PWA
+**instalado na tela inicial** e iOS **16.4+**. Aberto no Safari, não recebe. No
+Android funciona direto.
+
+---
+
+## 3. Decisões já tomadas (com o usuário, uma a uma)
+
+1. **Formato:** PWA, não app de loja.
+2. **Público da primeira versão: só OPERADORES** — dashboard pessoal (o meu
+   recebido, a minha meta, os meus pagamentos). Líder e diretoria ficam para
+   depois.
+3. **Gatilho do push: linha NOVA no analítico** (dinheiro confirmado pelo ERP),
+   não «acordo marcado como pago». BookPlay: de hora em hora, sozinho, pelo
+   robô. PaguePlay: quando alguém importar. Se a PaguePlay ganhar robô, o push
+   vem junto sem mudar nada.
+4. **Volume: híbrido** — até **3** pagamentos novos da pessoa no mesmo lote, um
+   push por pagamento («💰 Pix de R$ 350,00 — Maria S.»); de **4** em diante,
+   um push só com o resumo («💰 Você recebeu 6 pagamentos — R$ 2.140,00 · 4 Pix,
+   2 boletos»). O corte (3) fica **configurável**.
+
+---
+
+## 4. Onde paramos — pergunta em aberto
+
+**«O que acontece quando o operador abre o sistema no celular?»**
+
+- **A)** O celular **sempre** abre a versão mínima (dashboard + lista de
+  pagamentos), com um link «Versão completa» para o site de sempre (para
+  registrar acordo). Vale para o app instalado e para o navegador.
+- **B)** Só o **app instalado** abre a versão mínima; o navegador do celular
+  segue com o site completo de hoje.
+- **C)** Sem versão separada: tornar as telas atuais responsivas (todas).
+
+**Recomendação dada: A.** Resolve o «tá bagunçado» sem refazer ~280 telas; C
+seria meses; B deixa quem não instalou com a tela quebrada.
+
+**A resposta ainda não veio.** Retome perguntando isto.
+
+---
+
+## 5. Próximos passos do processo (skill `brainstorming`)
+
+Depois da resposta da §4:
+
+1. **Propor 2–3 abordagens para o envio do push**, com recomendação. As que
+   estavam na mesa:
+   - **(recomendada) Fila no banco:** gatilho em `analitico_recebimentos`
+     (só INSERT com `operador_id`, nunca UPDATE — a sincronização do 59 mexe e
+     transfere linhas, e isso não pode virar push) grava em `push_fila`; o
+     `pg_cron` (já ativo no projeto) chama a cada minuto uma Edge Function via
+     `pg_net`, que agrupa por pessoa e por lote, aplica a regra do corte (§3.4)
+     e envia com `web-push` + VAPID. Independe de quem importou (robô ou tela).
+   - **API na Vercel chamada por Database Webhook** do Supabase a cada insert —
+     mais simples, mas um lote de 22 mil linhas dispara 22 mil chamadas.
+   - **O robô chama o envio depois de importar** — mais simples ainda, mas só
+     cobre a BookPlay e esquece quem importa pela tela.
+2. **Apresentar o design em seções**, aprovando cada uma:
+   - PWA: manifest, ícones por empresa (BookPlay / PaguePlay), service worker,
+     botão «Instalar app», instrução específica para iPhone.
+   - Rota mobile (ex.: `/m`): recebido do mês, meta e %, projeção/quartil,
+     recebido hoje, últimos pagamentos com forma (Pix/boleto/cartão).
+   - Inscrição de push: tabela `push_inscricoes` (perfil, aparelho, endpoint,
+     chaves), RLS «só a própria», permissão pedida por clique (nunca ao abrir).
+   - Envio: fila, agrupamento, texto, som/ícone, deep-link para `/m`.
+   - Erros: inscrição expirada (410) apaga a linha; falha não trava a
+     importação.
+   - Testes.
+3. **Escrever a spec** em `docs/superpowers/specs/2026-09-29-mobile-pwa-push-design.md`,
+   revisar, pedir aprovação do usuário, e só então o plano de implementação.
+
+**Regras que valem aqui:** banco é produção (CLAUDE.md) — nenhuma leitura ou
+escrita sem «pode». Chaves VAPID: a privada vai para variável de ambiente
+(Vercel/Supabase secrets), nunca para o repositório. Canais Realtime novos
+passam por `assinarTabela` (ver memória do projeto).
+
+---
+
+## 6. Ordem de entrega combinada
+
+1. App instalável + tela mobile mínima (não depende de nada).
+2. Infra de push (VAPID, inscrições, envio).
+3. Gatilho «caiu pagamento» a partir do analítico.
+
+---
+
+## 7. Outras pendências da mesma sessão (29/09/2026) — sem relação com o mobile
+
+- **«Manutenção» na regra do setor da pessoa.** Desde a migration
+  `20260929211916` (aplicada), recebimento carimbado num setor onde a pessoa não
+  está sai dela (BookPlay, set/2026+). Linhas «Manutenção» saem de José
+  Casavechia (Playmix, ~R$ 7,2 mil) e Giovanna Carvalho (Play 3, ~R$ 7,1 mil).
+  O usuário ainda não disse se Manutenção deve contar para o setor da pessoa.
+- **Comercial — Visão Geral e Dashboard travados em ~R$ 740–790 mil.** Causa: a
+  etapa «4. Lançar sobre as vendas» (projeção, `fn_vendas_projetar`, permissão
+  `projetar_vendas`) não roda desde 15/09; o relatório importa certo. Falta a
+  decisão: projetar automaticamente depois de importar o geral, ou manter o
+  clique manual.
+- **Setor Extreme (Comercial)** — conferido contra `Prospeccao_202609.csv`:
+  franquias 7161, 7661 e 8441 precisam ser vinculadas ao setor; confirmar o
+  login de `santos_maria`, se `larissa_bonatti` entra, quem é o «Agente de IA-
+  Bianca» (só existe `ia_bianca_mara`) e se o Kevin (vende na 7661) fica sem
+  equipe. Perfis de IA precisam do login exato do arquivo (`ia_...`).
+- **Comissão PaguePlay** ainda converte a meta pela proporção do recebido
+  (`fatorDoRecebido`, `entradaDoOperador.ts`); Quartis/Desempenho/Painel de
+  metas já usam a meta da aba Metas. O usuário mandou **deixar como está por
+  enquanto**.
+- **Diário (PaguePlay)** dos 3 fantasmas religados na equipe Digital
+  (helton_roldon, karolaine_silva, matheus_souza) não foi conferido — só o
+  analítico foi repontado.
+- **16 linhas de R$ 0,00** gravadas pela importação do 58 do Play 2 (29/09,
+  17h32) na equipe Luan/ Gaby. Sem efeito em total; origem provável na mescla
+  58×59. Não investigado.
