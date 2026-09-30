@@ -9,10 +9,13 @@
  * versão completa e sair. O card «Ativar notificações» entra na Etapa 2.
  */
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
-import { ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
+import { ehLider, ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { useInstalacao } from '@/lib/mobile/instalar';
 import {
@@ -34,7 +37,31 @@ export default function Mobile() {
   const { perfil } = useAuth();
   // Super admin testa entrando como um operador — ver `EscolherOperador`.
   if (ehSuperAdmin(perfil?.perfil)) return <EscolherOperador />;
+  // Líder não recebe em nome próprio: a tela dele é a da equipe.
+  if (ehLider(perfil?.perfil)) return <Navigate to={ROUTE_PATHS.MOBILE_EQUIPE} replace />;
   return <TelaDoOperador />;
+}
+
+/**
+ * O elite que lidera alguma equipe ganha a troca Eu / Equipe. Para o elite
+ * vale só o vínculo explícito de `equipe_lideres` — ver `equipesQueLidero`.
+ */
+function useEliteLidera(): boolean {
+  const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
+  const elite = perfil?.perfil === 'elite' && temPermissao('ver_painel_lider');
+  const { data } = useQuery({
+    queryKey: ['mobile-elite-lidera', perfil?.id],
+    enabled: elite && !!perfil?.id,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data: linhas, error } = await supabase
+        .from('equipe_lideres').select('equipe_id').eq('lider_id', perfil!.id).limit(1);
+      if (error) return false;
+      return (linhas ?? []).length > 0;
+    },
+  });
+  return elite && data === true;
 }
 
 function TelaDoOperador() {
@@ -47,6 +74,7 @@ function TelaDoOperador() {
   const { empresa } = useEmpresa();
   const avisos = useAvisos(empresa?.id ?? null);
   const [passoIPhone, setPassoIPhone] = useState(false);
+  const lideraEquipe = useEliteLidera();
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -73,6 +101,13 @@ function TelaDoOperador() {
               {[tela.empresaNome, mesPorExtenso(tela.mes)].filter(Boolean).join(' · ')}
             </div>
           </div>
+          {lideraEquipe && (
+            <div className="m-troca" role="group" aria-label="Visão">
+              <button type="button" aria-pressed={true}>Eu</button>
+              <button type="button" aria-pressed={false}
+                onClick={() => navigate(ROUTE_PATHS.MOBILE_EQUIPE)}>Equipe</button>
+            </div>
+          )}
           <SinoAvisos ativo={avisos.estado === 'ativo'} ocupado={avisos.ocupado}
             onDesativar={() => { void avisos.desativar(); }} />
         </header>

@@ -8,6 +8,9 @@
  * `logs_sistema`, e a faixa amarela (`ImpersonacaoBanner`) para voltar.
  *
  * A página recarrega em `/#/m`, agora com a sessão do operador.
+ *
+ * Líderes entram na lista desde a versão da liderança (30/09/2026): entrando
+ * como um líder, a `/m` leva à tela da equipe (`/m/equipe`).
  */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -23,6 +26,7 @@ interface Operador {
   id: string;
   nome: string | null;
   usuario: string | null;
+  perfil: string | null;
 }
 
 function semAcento(t: string): string {
@@ -43,9 +47,9 @@ export function EscolherOperador() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('perfis')
-        .select('id, nome, usuario')
+        .select('id, nome, usuario, perfil')
         .eq('empresa_id', empresaId as string)
-        .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
+        .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO, 'lider'])
         .eq('ativo', true)
         .order('nome');
       if (error) throw new Error(error.message);
@@ -84,10 +88,10 @@ export function EscolherOperador() {
 
         <section className="m-cartao" style={{ marginTop: 0 }}>
           <div className="m-acao-txt">
-            <b>Escolha um operador</b>
+            <b>Escolha um operador ou líder</b>
             Esta tela mostra os números de quem está logado. Para testar, você entra
-            como o operador escolhido — fica registrado na auditoria — e volta para
-            a sua conta pela faixa amarela no rodapé.
+            como a pessoa escolhida — fica registrado na auditoria — e volta para
+            a sua conta pela faixa amarela no rodapé. Líder abre a tela da equipe.
           </div>
           <input
             className="m-busca"
@@ -95,15 +99,15 @@ export function EscolherOperador() {
             placeholder="Buscar por nome ou usuário"
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            aria-label="Buscar operador"
+            aria-label="Buscar operador ou líder"
           />
         </section>
 
         <section className="m-lista" style={{ marginTop: 12 }}>
-          {isLoading && <div className="m-vazio">Carregando operadores…</div>}
+          {isLoading && <div className="m-vazio">Carregando…</div>}
           {isError && <div className="m-vazio">Não foi possível carregar os operadores.</div>}
           {!isLoading && !isError && filtrados.length === 0 && (
-            <div className="m-vazio">Nenhum operador encontrado.</div>
+            <div className="m-vazio">Ninguém encontrado.</div>
           )}
           {filtrados.map(o => (
             <button
@@ -113,7 +117,12 @@ export function EscolherOperador() {
             >
               <div className="m-pg-q">
                 <div className="m-pg-c">{o.nome ?? o.usuario ?? 'Sem nome'}</div>
-                {o.usuario && <div className="m-pg-h">{o.usuario}</div>}
+                {(o.usuario || o.perfil === 'lider') && (
+                  <div className="m-pg-h">
+                    {[o.usuario, o.perfil === 'lider' ? 'líder' : o.perfil === 'elite' ? 'elite' : null]
+                      .filter(Boolean).join(' · ')}
+                  </div>
+                )}
               </div>
               <span className="m-pg-h">{entrando === o.id ? 'Entrando…' : 'Ver como'}</span>
             </button>

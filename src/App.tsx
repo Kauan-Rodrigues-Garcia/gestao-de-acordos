@@ -78,6 +78,7 @@ const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
 const Mobile            = lazy(() => import('@/pages/Mobile'));
+const MobileEquipe      = lazy(() => import('@/pages/Mobile/equipe'));
 // A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
 // este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
 const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'));
@@ -294,6 +295,13 @@ export default function App() {
               <Route path={ROUTE_PATHS.MOBILE} element={
                 <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard">
                   <Mobile />
+                </ProtectedRoute>
+              } />
+              {/* A visão da equipe no celular (liderança). Mesma chave do Painel
+                  do Líder, que é de onde vêm os números dela. */}
+              <Route path={ROUTE_PATHS.MOBILE_EQUIPE} element={
+                <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                  <MobileEquipe />
                 </ProtectedRoute>
               } />
               {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.

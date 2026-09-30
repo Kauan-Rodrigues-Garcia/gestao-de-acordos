@@ -55,6 +55,11 @@
   background: var(--m-verde); box-shadow: 0 0 0 2px #fff;
 }
 
+/* Troca Eu / Equipe do elite que lidera (visão da equipe: /m/equipe) */
+.tela-mobile .m-troca { display: flex; background: #e6ebe9; border-radius: 10px; padding: 3px; flex: none; }
+.tela-mobile .m-troca button { font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 8px; color: var(--m-tinta-2); background: none; border: 0; }
+.tela-mobile .m-troca button[aria-pressed='true'] { background: var(--m-cartao); color: var(--m-tinta); box-shadow: 0 1px 2px rgba(12, 31, 46, 0.12); }
+
 /* ── Rótulo em caixa alta ─────────────────────────────────────────────── */
 .tela-mobile .m-rot {
   font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
