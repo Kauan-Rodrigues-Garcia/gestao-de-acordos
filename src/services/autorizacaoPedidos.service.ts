@@ -23,7 +23,11 @@
 
 import { supabase } from '@/lib/supabase';
 
-export type ModoPedido = 'transferencia_completa' | 'troca_extra';
+/**
+ * `tornar_direto` (20260930150000): o próprio EXTRA vira DIRETO e o DIRETO do
+ * colega sai. Nasce por `fn_tornar_direto`, não por `solicitarAutorizacao`.
+ */
+export type ModoPedido = 'transferencia_completa' | 'troca_extra' | 'tornar_direto';
 export type StatusPedido = 'pendente' | 'aprovado' | 'recusado' | 'cancelado' | 'falhou';
 
 /** O que a gaveta mostra sem precisar abrir o acordo. */

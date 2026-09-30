@@ -718,6 +718,17 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Acordos', padrao: LIDERANCA,
   },
   {
+    key: 'acordos_autorizar_tornar_direto', label: 'Autorizar: tornar vínculo direto',
+    descricao: 'Aprovar o pedido de um acordo EXTRA virar DIRETO — o DIRETO da outra pessoa vai para a lixeira',
+    /*
+     * Chave própria, e não a de tabulação, a pedido (30/09/2026): quem
+     * autoriza transferência não precisa ser quem autoriza inverter um par.
+     * O servidor confere a MESMA chave em `fn_pode_tornar_direto`
+     * (20260930150000) — desligar aqui tira o botão da gaveta E a execução.
+     */
+    grupo: 'Acordos', padrao: LIDERANCA,
+  },
+  {
     key: 'acordos_capturar_erp', label: 'Capturar relatório do ERP',
     descricao: 'Disparar a captura automática do relatório do ERP',
     grupo: 'Acordos', tenants: ['pagueplay'], padrao: {},

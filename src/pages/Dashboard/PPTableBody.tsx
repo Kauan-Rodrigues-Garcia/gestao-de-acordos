@@ -279,6 +279,11 @@ export function PPTableBody({
               setEditandoInlineIdTabela(null);
               patchAcordo(atualizado.id, atualizado);
             }}
+            // Parcelas gravadas pelo modal: atualiza a lista sem fechar
+            // a edição, que continua aberta com o resto dos campos.
+            onParcelasAtualizadas={(linhas) => {
+              linhas.forEach(l => patchAcordo(l.id, l));
+            }}
             onCancel={() => setEditandoInlineIdTabela(null)}
           />
         )}

@@ -2,7 +2,7 @@
  * AcordoEditInline.tsx
  * Inline expandable row editor for agreements in the Acordos list.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle, Pencil, Wallet, Layers } from 'lucide-react';
 
@@ -20,6 +20,9 @@ import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { converterParaExtra } from '@/services/diretoExtraRpc';
+import { tornarExtra, type ResultadoTornarDireto } from '@/services/tornarDireto.service';
+import { temVisaoAmpla } from '@/lib/deduplicarVinculados';
+import { ModalExtraParaDireto } from '@/components/AcordoDetalheInline/ModalExtraParaDireto';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   coletarFatosConflitoNr, decidirConflitoNr, type DecisaoConflitoNr,
@@ -61,6 +64,7 @@ import {
 } from '@/services/quantidadeParcelas';
 import { carregarLinhasDoGrupo, aplicarQuantidade } from '@/services/quantidadeParcelas.service';
 import { ModalEditarAcordoParcelado } from '@/components/AcordoDetalheInline/ModalEditarAcordoParcelado';
+import { ModalEditarParcelasPP } from '@/components/AcordoDetalheInline/ModalEditarParcelasPP';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
@@ -157,6 +161,16 @@ export function AcordoEditInline({
   const [observacoes, setObservacoes] = useState(initialObservacoes);
   const [status,      setStatus]      = useState<Acordo['status']>(acordo.status);
   const [isExtra,     setIsExtra]     = useState(acordo.tipo_vinculo === 'extra');
+  // ── Vínculo Direto/Extra ──────────────────────────────────────────────────
+  // O seletor da tela NÃO vai no payload: mudar o vínculo passa pelo servidor
+  // (`fn_tornar_direto` / `fn_tornar_extra`, migration 20260930150000), que
+  // enxerga o par e decide se precisa de líder. O payload grava o vínculo que
+  // ficou valendo DEPOIS dessa etapa — o original, se virou pedido.
+  const extraOriginal = acordo.tipo_vinculo === 'extra';
+  const extraGravavel = useRef(extraOriginal);
+  const [modalVinculo, setModalVinculo] = useState<'direto' | 'extra' | null>(null);
+  const [mudandoVinculo, setMudandoVinculo] = useState(false);
+  const mostrarVinculo = usuarioTemLogicaDiretoExtra || extraOriginal || temVisaoAmpla(perfil?.perfil);
   const [tagIds,      setTagIds]      = useState<string[]>(acordo.tag_ids ?? []);
   const { tags: empresaTags }         = useEmpresaTags();
 
@@ -206,7 +220,9 @@ export function AcordoEditInline({
     ? parseCurrencyInput(valor)
     : Number(acordo.valor_entrada ?? 0);
 
-  async function handleSave(confirmouRemocao = false) {
+  async function handleSave(
+    { confirmouRemocao = false, vinculoOk = false }: { confirmouRemocao?: boolean; vinculoOk?: boolean } = {},
+  ) {
     if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
     if (!vencimento)         { toast.error('Vencimento é obrigatório'); return; }
     // Os DOIS meses precisam estar abertos: o de origem (o mês que perderia o
@@ -259,6 +275,14 @@ export function AcordoEditInline({
       toast.error(`${ERRO_CPF_NO_CODIGO} Encontrado em: ${comCpf.join(', ')}.`);
       return;
     }
+    // ─── Vínculo mudou: confirmação e servidor ANTES do resto ──────────────
+    // A janela decide o caminho (manual, pedido ao líder, ou volta a EXTRA) e,
+    // ao concluir, chama o salvar de novo com `vinculoOk`.
+    if (!vinculoOk && isExtra !== extraOriginal) {
+      setModalVinculo(isExtra ? 'extra' : 'direto');
+      return;
+    }
+
     const parcelasNum = parseInt(parcelas || '1', 10);
 
     // ─── BookPlay: a quantidade de parcelas é do GRUPO, não desta linha ────
@@ -444,7 +468,7 @@ export function AcordoEditInline({
       tipo,
       parcelasNum: parseInt(parcelas || '1', 10),
       whatsapp, status, observacoes, estado,
-      isExtra, tagIds,
+      isExtra: extraGravavel.current, tagIds,
       parcelamentoAlterado,
       usouQuarentaPct: Boolean(acordo.usou_quarenta_pct),
       numeroParcela:   acordo.numero_parcela ?? 1,
@@ -700,6 +724,44 @@ export function AcordoEditInline({
     }
   }
 
+  /** EXTRA → DIRETO resolvido pela janela: segue salvando o resto. */
+  function aoTornarDireto(r: Extract<ResultadoTornarDireto, { ok: true }>) {
+    setModalVinculo(null);
+    if (r.resultado === 'pedido') {
+      // Continua EXTRA até o líder decidir; o resto do que foi digitado salva.
+      extraGravavel.current = true;
+      setIsExtra(true);
+      toast.info(
+        r.repetido ? 'Você já tem um pedido em análise para este acordo.' : 'Pedido enviado ao líder.',
+        { description: 'Quando for aprovado, o acordo vira DIRETO e você recebe a notificação.', duration: 8000 },
+      );
+    } else {
+      extraGravavel.current = false;
+      toast.success(
+        r.vinculado
+          ? `Acordo agora é DIRETO. ${r.donoAnterior ?? 'O outro operador'} foi notificado.`
+          : 'Acordo agora é DIRETO.',
+      );
+    }
+    void handleSave({ vinculoOk: true });
+  }
+
+  /** DIRETO → EXTRA (acompanhamento). Com EXTRA vinculado o servidor recusa. */
+  async function confirmarTornarExtra() {
+    setMudandoVinculo(true);
+    const r = await tornarExtra(acordo.id);
+    setMudandoVinculo(false);
+    setModalVinculo(null);
+    if ('erro' in r) {
+      toast.error(r.erro, { duration: 8000 });
+      setIsExtra(false);
+      return;
+    }
+    extraGravavel.current = true;
+    toast.success('Acordo marcado como EXTRA.');
+    void handleSave({ vinculoOk: true });
+  }
+
   function cancelarPendencia() {
     setPendencia(null);
   }
@@ -943,6 +1005,20 @@ export function AcordoEditInline({
                   {/* Editar as parcelas em si (data, valor, forma de cada uma)
                       fica ao lado da quantidade: é onde o operador já está
                       olhando quando pensa em parcela. */}
+                  {/* PaguePlay: não remonta o parcelamento (regra dos 40 %),
+                      mas corrige o que já foi registrado — situação, valor e
+                      dia do pagamento de cada parcela. */}
+                  {isPaguePlay && jaParcelado && TIPOS_PARCELADOS_PP.includes(acordo.tipo) && (
+                    <button
+                      type="button"
+                      onClick={() => setModalParcelasOpen(true)}
+                      disabled={saving}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                    >
+                      <Layers className="w-3 h-3" /> Editar parcelas (situação, valor, pagamento)
+                    </button>
+                  )}
+
                   {!isPaguePlay && jaParcelado && !ehFormaRecorrente(tipo) && (
                     <button
                       type="button"
@@ -1041,22 +1117,41 @@ export function AcordoEditInline({
 
               {/* Actions */}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-primary/15">
-                {usuarioTemLogicaDiretoExtra && (
-                  <button
-                    type="button"
-                    onClick={() => setIsExtra(v => !v)}
-                    disabled={saving}
-                    title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
-                    className={cn(
-                      'h-8 flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer whitespace-nowrap',
-                      isExtra
-                        ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
-                        : 'bg-background text-foreground border-input hover:bg-accent/50',
+                {mostrarVinculo && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Label className="text-xs font-medium">Vínculo</Label>
+                    <div className="inline-flex rounded-md border border-input overflow-hidden" role="radiogroup" aria-label="Vínculo do acordo">
+                      {([['direto', 'Direto'], ['extra', 'Extra']] as const).map(([valorOp, rotulo]) => {
+                        const ativo = (valorOp === 'extra') === isExtra;
+                        return (
+                          <button
+                            key={valorOp}
+                            type="button" role="radio" aria-checked={ativo}
+                            onClick={() => setIsExtra(valorOp === 'extra')}
+                            disabled={saving || mudandoVinculo}
+                            className={cn(
+                              'h-8 px-3 flex items-center gap-1.5 text-xs font-medium transition-colors cursor-pointer',
+                              ativo
+                                ? valorOp === 'extra'
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                                  : 'bg-primary/10 text-primary'
+                                : 'bg-background text-muted-foreground hover:bg-accent/50',
+                            )}
+                          >
+                            <Link2 className="w-3 h-3 shrink-0" />
+                            {rotulo}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {isExtra !== extraOriginal && (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                        {isExtra
+                          ? 'Ao salvar, vira Extra (só acompanhamento).'
+                          : 'Ao salvar, confirma a troca para Direto — se o NR for de outra pessoa, vai para o líder.'}
+                      </span>
                     )}
-                  >
-                    <Link2 className="w-3 h-3 shrink-0" />
-                    {isExtra ? 'Extra' : 'Direto'}
-                  </button>
+                  </div>
                 )}
                 <div className="flex gap-2 ml-auto">
                   <Button
@@ -1102,6 +1197,26 @@ export function AcordoEditInline({
             />
           )}
 
+          {isPaguePlay && jaParcelado && (
+            <ModalEditarParcelasPP
+              acordo={acordo}
+              open={modalParcelasOpen}
+              onClose={() => setModalParcelasOpen(false)}
+              onSaved={(linhas) => {
+                // A linha aberta aqui pode ter mudado: o formulário passa a
+                // mostrar o que foi gravado, para o Salvar de baixo não
+                // regravar o valor antigo por cima.
+                const minha = linhas.find(l => l.id === acordo.id);
+                if (minha) {
+                  setVencimento(minha.vencimento);
+                  setValor(Number(minha.valor).toFixed(2).replace('.', ','));
+                  setStatus(minha.status);
+                }
+                onParcelasAtualizadas?.(linhas);
+              }}
+            />
+          )}
+
           {/* Reduzir parcelas apaga linha do banco: confirmação explícita,
               com os números que vão sumir escritos na frente. */}
           <AlertDialog
@@ -1120,9 +1235,45 @@ export function AcordoEditInline({
                 <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
                 <AlertDialogAction
                   disabled={saving}
-                  onClick={() => { setRemocaoPendente(null); void handleSave(true); }}
+                  onClick={() => { setRemocaoPendente(null); void handleSave({ confirmouRemocao: true, vinculoOk: true }); }}
                 >
                   Apagar e salvar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Vínculo: EXTRA → DIRETO (mesma janela do detalhe do acordo). */}
+          <ModalExtraParaDireto
+            open={modalVinculo === 'direto'}
+            acordoId={acordo.id}
+            nrLabel={isPaguePlay ? `Código ${acordo.instituicao ?? '—'}` : `NR ${acordo.nr_cliente ?? '—'}`}
+            rotuloConfirmar="Tornar Direto e salvar"
+            onClose={() => { setModalVinculo(null); setIsExtra(extraOriginal); }}
+            onConcluido={aoTornarDireto}
+          />
+
+          {/* Vínculo: DIRETO → EXTRA. */}
+          <AlertDialog
+            open={modalVinculo === 'extra'}
+            onOpenChange={(aberto) => { if (!aberto && !mudandoVinculo) { setModalVinculo(null); setIsExtra(extraOriginal); } }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Marcar este acordo como EXTRA?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  O acordo deixa de ser Direto e passa a Extra, só para acompanhamento — o recebimento
+                  dele conta como indireto, e o {isPaguePlay ? 'Código' : 'NR'} fica livre. Parcelas
+                  já pagas continuam como estavam.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={mudandoVinculo}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={mudandoVinculo}
+                  onClick={(e) => { e.preventDefault(); void confirmarTornarExtra(); }}
+                >
+                  {mudandoVinculo ? 'Salvando...' : 'Marcar como Extra e salvar'}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

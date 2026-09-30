@@ -13,15 +13,11 @@ import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { criarNotificacao } from '@/services/notificacoes.service';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
-import { autenticarLider } from '@/services/autorizacao_lider.service';
 import { temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
-import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
-import { enviarParaLixeira } from '@/services/lixeira.service';
 import {
   formatCurrency, formatDate,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -41,6 +37,7 @@ import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaPa
 import { datasDoLote } from '@/lib/vencimentos';
 import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
+import type { ResultadoTornarDireto } from '@/services/tornarDireto.service';
 
 // Re-export for external consumers. O detalhe não abre mais o modal de
 // parcelas — quem abre é a área de editar acordo (AcordoEditInline).
@@ -100,7 +97,6 @@ export function AcordoDetalheInline({
   const [confirmarPgtoParc,     setConfirmarPgtoParc]      = useState<Acordo | null>(null);
   const [salvandoConfirmarPgto, setSalvandoConfirmarPgto]  = useState(false);
   const [modalExtraDiretoOpen,  setModalExtraDiretoOpen]   = useState(false);
-  const [executandoExtraDireto, setExecutandoExtraDireto]  = useState(false);
   const [reagendarParcela,      setReagendarParcela]       = useState<Acordo | null>(null);
   const [salvandoReagendar,     setSalvandoReagendar]      = useState(false);
   const [modalAddParcela,       setModalAddParcela]        = useState(false);
@@ -126,6 +122,11 @@ export function AcordoDetalheInline({
   // Reagendar a próxima parcela vale nos dois tenants, com a mesma régua de
   // quem: o dono do acordo ou quem tem visão ampla.
   const podeMexerNasParcelas =
+    perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil);
+
+  // Tornar DIRETO: o dono do EXTRA, ou quem enxerga a operação (o servidor
+  // confere de novo e só deixa executar quem tem a chave de autorizar).
+  const podeTornarDireto =
     perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil);
 
   // "Link do Acordo" é conceito PaguePlay (observacoes = [ESTADO]+link). Na
@@ -287,127 +288,34 @@ export function AcordoDetalheInline({
   }
 
   // ── Extra → Direto ────────────────────────────────────────────────────────
-  async function handleExtraDireto(liderCreds: { email: string; senha: string } | null) {
-    if (!perfil || !empresa) return;
-    setExecutandoExtraDireto(true);
-    try {
-      let liderNomeAutorizador: string | null = null;
-      if (liderCreds) {
-        // Mesmo caminho de autenticação das outras telas. A cópia inline que
-        // morava aqui não resolvia usuário→e-mail, então o líder que digitasse
-        // o próprio USUÁRIO levava "credenciais inválidas" com a senha certa.
-        const auth = await autenticarLider({ email: liderCreds.email, senha: liderCreds.senha });
-        if ('erro' in auth) {
-          toast.error(auth.erro);
-          setExecutandoExtraDireto(false);
-          return;
-        }
-        liderNomeAutorizador = auth.autorizador.nome;
-      }
-
-      const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
-      const valorChave = isPaguePlay ? acordoLocal.instituicao : acordoLocal.nr_cliente;
-      if (!valorChave || !String(valorChave).trim()) {
-        toast.error('Não foi possível identificar o registro deste acordo (chave de vínculo vazia).');
-        setExecutandoExtraDireto(false);
-        return;
-      }
-
-      const { data: acordoDiretoOriginal, error: errBuscaDireto } = await supabase
-        .from('acordos')
-        .select('*')
-        .eq('empresa_id', empresa.id)
-        .eq(campoChave, valorChave)
-        .eq('tipo_vinculo', 'direto')
-        .neq('id', acordoLocal.id)
-        .maybeSingle();
-
-      if (errBuscaDireto) {
-        console.error(errBuscaDireto);
-        toast.error('Erro ao localizar o acordo direto original.');
-        setExecutandoExtraDireto(false);
-        return;
-      }
-
-      if (acordoDiretoOriginal) {
-        // Vai para a lixeira como TRANSFERÊNCIA (`troca_extra`), e não some sem
-        // rastro: o acordo saiu de uma pessoa para outra, e a lixeira mostra de
-        // quem para quem — sem opção de restaurar (20260928220000).
-        await enviarParaLixeira({
-          acordo:              acordoDiretoOriginal as Acordo,
-          motivo:              'troca_extra',
-          autorizadoPorNome:   liderNomeAutorizador ?? undefined,
-          transferidoParaId:   perfil.id,
-          transferidoParaNome: perfil.nome ?? undefined,
-        });
-        const { error: errDel } = await supabase.from('acordos').delete().eq('id', acordoDiretoOriginal.id);
-        if (errDel) {
-          console.error(errDel);
-          toast.error('Erro ao remover o acordo original do outro operador.');
-          setExecutandoExtraDireto(false);
-          return;
-        }
-        try {
-          await criarNotificacao({
-            usuario_id: acordoDiretoOriginal.operador_id,
-            empresa_id: empresa.id,
-            titulo: 'Acordo convertido em direto',
-            mensagem:
-              `O operador ${perfil.nome} assumiu como direto o acordo do ` +
-              `${isPaguePlay ? `Código ${valorChave}` : `NR ${valorChave}`}. ` +
-              `O acordo foi removido do seu painel.` +
-              (liderNomeAutorizador ? ` (Autorizado por ${liderNomeAutorizador})` : ''),
-          });
-        } catch (e) {
-          console.warn('Falha ao notificar operador original', e);
-        }
-      }
-
-      const { data: acordoAtualizado, error: errUpdate } = await supabase
-        .from('acordos')
-        .update({ tipo_vinculo: 'direto', vinculo_operador_id: null, vinculo_operador_nome: null })
-        .eq('id', acordoLocal.id)
-        .select()
-        .single();
-
-      if (errUpdate) {
-        console.error(errUpdate);
-        toast.error('Erro ao converter acordo para direto.');
-        setExecutandoExtraDireto(false);
-        return;
-      }
-
-      try {
-        await transferirNr({
-          empresaId:        empresa.id,
-          nrValue:          String(valorChave).trim(),
-          campo:            campoChave,
-          novoOperadorId:   perfil.id,
-          novoOperadorNome: perfil.nome ?? '',
-          novoAcordoId:     acordoLocal.id,
-        });
-      } catch (e) {
-        console.warn('[extra->direto] falha ao transferir nr_registros', e);
-      }
-
-      if (acordoDiretoOriginal) {
-        try {
-          await liberarNrPorAcordoId(acordoDiretoOriginal.id);
-        } catch (e) {
-          console.warn('[extra->direto] falha ao liberar nr_registros antigo', e);
-        }
-      }
-
-      setAcordoLocal(acordoAtualizado as Acordo);
-      onSaved?.(acordoAtualizado as Acordo);
-      if (acordoDiretoOriginal) onAcordoRemovido?.(acordoDiretoOriginal.id);
-      setModalExtraDiretoOpen(false);
-    } catch (e) {
-      console.error(e);
-      toast.error('Erro inesperado ao converter para direto.');
-    } finally {
-      setExecutandoExtraDireto(false);
+  // Quem decide e executa é o servidor (`fn_tornar_direto`, migration
+  // 20260930150000). O caminho antigo rodava aqui, com a RLS de quem clica: o
+  // DELETE do DIRETO do colega afetava zero linhas sem erro e o UPDATE para
+  // DIRETO batia em NR_JA_REGISTRADO. O modal pergunta antes o que vai
+  // acontecer — manual confirma e pronto; vinculado pede líder.
+  function aoTornarDireto(r: Extract<ResultadoTornarDireto, { ok: true }>) {
+    setModalExtraDiretoOpen(false);
+    if (r.resultado === 'pedido') {
+      toast.info(
+        r.repetido ? 'Você já tem um pedido em análise para este acordo.' : 'Pedido enviado ao líder.',
+        {
+          description: 'Quando for aprovado, o acordo vira DIRETO e você recebe a notificação.',
+          duration: 8000,
+        },
+      );
+      return;
     }
+    const atualizado: Acordo = {
+      ...acordoLocal, tipo_vinculo: 'direto', vinculo_operador_id: null, vinculo_operador_nome: null,
+    };
+    setAcordoLocal(atualizado);
+    onSaved?.(atualizado);
+    if (r.diretoRemovidoId) onAcordoRemovido?.(r.diretoRemovidoId);
+    toast.success(
+      r.vinculado
+        ? `Acordo agora é DIRETO. ${r.donoAnterior ?? 'O outro operador'} foi notificado.`
+        : 'Acordo agora é DIRETO.',
+    );
   }
 
   // ── Valores calculados para parcelas virtuais ─────────────────────────────
@@ -527,14 +435,14 @@ export function AcordoDetalheInline({
                       </Button>
                     )
                   )}
-                  {acordoLocal.tipo_vinculo === 'extra' && perfil?.id === acordoLocal.operador_id && (
+                  {acordoLocal.tipo_vinculo === 'extra' && podeTornarDireto && (
                     <Button
                       variant="outline" size="sm"
                       className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
                       onClick={() => setModalExtraDiretoOpen(true)}
                     >
                       <ArrowLeftRight className="w-3 h-3" />
-                      Acordo direto
+                      Tornar vínculo direto
                     </Button>
                   )}
                   {podeAdicionarParcela && (
@@ -816,12 +724,10 @@ export function AcordoDetalheInline({
 
       <ModalExtraParaDireto
         open={modalExtraDiretoOpen}
-        onClose={() => setModalExtraDiretoOpen(false)}
-        executando={executandoExtraDireto}
-        operadorDiretoNome={acordoLocal.vinculo_operador_nome || 'outro operador'}
+        acordoId={acordoLocal.id}
         nrLabel={isPaguePlay ? `Código ${acordoLocal.instituicao ?? '—'}` : `NR ${acordoLocal.nr_cliente ?? '—'}`}
-        precisaAutorizacao={!perfil || !['administrador', 'super_admin', 'lider', 'elite', 'gerencia', 'diretoria'].includes(String(perfil.perfil || '').toLowerCase())}
-        onConfirmar={handleExtraDireto}
+        onClose={() => setModalExtraDiretoOpen(false)}
+        onConcluido={aoTornarDireto}
       />
     </>
   );

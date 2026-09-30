@@ -1,23 +1,14 @@
 /**
  * AcordoDetalheInline.test.tsx
  * ─────────────────────────────────────────────────────────────────────────
- * Cobre o fluxo de CONVERSÃO Extra → Direto, que foi o bug mais grave
- * já corrigido neste projeto (bug do campo "inscricao" inexistente em
- * AcordoDetalheInline — o SELECT retornava null, o acordo direto original
- * NUNCA era removido → tabulações duplicadas orgânicas).
+ * Cobre o botão «Tornar vínculo direto» do detalhe.
  *
- * Cenários cobertos:
- *  (a) Usuário privilegiado (admin) + acordo Extra + par direto existente
- *      → deleta direto antigo, atualiza extra p/ direto, notifica antigo,
- *        transfere nr_registros, libera registro antigo.
- *  (b) Usuário privilegiado + par direto NÃO encontrado → atualiza somente
- *      este (promove Extra órfão) sem notificar/deletar.
- *  (c) Usuário comum (operador) → precisa de autorização, modal mostra
- *      campos de e-mail/senha (mas não prosseguimos a autenticação aqui —
- *      apenas verificamos que os campos aparecem, confirmando o estado
- *      `precisaAutorizacao=true`).
- *  (d) Cancelar o modal sem confirmar → nenhum efeito lateral.
- *  (e) Chave de vínculo vazia → alerta e não faz nada.
+ * Desde 30/09/2026 a conversão é do SERVIDOR (`fn_tornar_direto`, migration
+ * 20260930150000). O fluxo antigo apagava o DIRETO do colega pelo navegador,
+ * e com a RLS de quem clica o DELETE afetava zero linhas sem erro. O que se
+ * testa aqui é a TELA: quem vê o botão, o que a janela diz em cada caso
+ * (manual, vinculado com autorizador, vinculado sem autorizador) e o que o
+ * componente faz com a resposta — e que ele não escreve mais em `acordos`.
  *
  * Estratégia de mocks: mesma do AcordoNovoInline.test — Supabase com rotas
  * por tabela+operação, Dialog/Popover/Calendar inline, services stubados.
@@ -31,28 +22,27 @@ import { AcordoDetalheInline } from './AcordoDetalheInline';
 
 // ── Mocks (ANTES do SUT) ────────────────────────────────────────────────────
 
-// 1) nr_registros.service
-const transferirNrMock = vi.fn().mockResolvedValue({ ok: true });
-const liberarNrPorAcordoIdMock = vi.fn().mockResolvedValue({ ok: true });
-vi.mock('@/services/nr_registros.service', () => ({
-  verificarNrRegistro:  vi.fn().mockResolvedValue(null),
-  registrarNr:          vi.fn().mockResolvedValue({ ok: true }),
-  transferirNr:         (...a: unknown[]) => transferirNrMock(...a),
-  liberarNr:            vi.fn().mockResolvedValue({ ok: true }),
-  liberarNrPorAcordoId: (...a: unknown[]) => liberarNrPorAcordoIdMock(...a),
+// 1) o serviço que fala com o servidor
+type Previa = {
+  vinculado: boolean; donoId: string | null; donoNome: string | null;
+  nrLabel: string; nrValor: string | null; souDono: boolean;
+  souAutorizador: boolean; pedidoPendenteId: string | null;
+};
+const PREVIA_MANUAL: Previa = {
+  vinculado: false, donoId: null, donoNome: null, nrLabel: 'NR', nrValor: '777',
+  souDono: true, souAutorizador: false, pedidoPendenteId: null,
+};
+let previaValue: Previa | { erro: string } = PREVIA_MANUAL;
+const previaMock = vi.fn(async () => previaValue);
+const tornarDiretoMock = vi.fn();
+vi.mock('@/services/tornarDireto.service', () => ({
+  previaTornarDireto: () => previaMock(),
+  tornarDireto:       (...a: unknown[]) => tornarDiretoMock(...a),
 }));
 
-// 2) notificações
-const criarNotificacaoMock = vi.fn().mockResolvedValue(undefined);
-vi.mock('@/services/notificacoes.service', () => ({
-  criarNotificacao: (...a: unknown[]) => criarNotificacaoMock(...a),
-}));
-
-// 3) hooks
+// 2) hooks
 let perfilValue: { id: string; nome: string; perfil?: string } | null = {
-  id: 'me-1',
-  nome: 'Eu Operador',
-  perfil: 'administrador', // privilegiado por padrão → não precisa autorização
+  id: 'me-1', nome: 'Eu Operador', perfil: 'operador',
 };
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ perfil: perfilValue }),
@@ -63,20 +53,8 @@ vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: empresaValue }),
 }));
 
-// 4) Supabase
+// 3) Supabase — só registra o que o componente pede.
 type R = { data: unknown; error: { message: string; code?: string } | null };
-
-const routes: {
-  selectAcordoDiretoOriginal: R;
-  deleteAcordo: R;
-  updateAcordo: R;
-  selectGrupoParcelas: R;
-} = {
-  selectAcordoDiretoOriginal: { data: null, error: null },
-  deleteAcordo:               { data: null, error: null },
-  updateAcordo:               { data: null, error: null },
-  selectGrupoParcelas:        { data: [], error: null },
-};
 
 interface SupabaseCall { table: string; op: string; payload?: unknown; id?: unknown; filters: Array<[string, unknown]>; }
 const supabaseCalls: SupabaseCall[] = [];
@@ -86,16 +64,7 @@ vi.mock('@/lib/supabase', () => {
     const state: { op?: string; payload?: unknown; id?: unknown; filters: Array<[string, unknown]> } = { filters: [] };
     const terminal = async (kind: string): Promise<R> => {
       supabaseCalls.push({ table, op: state.op ?? kind, payload: state.payload, id: state.id, filters: [...state.filters] });
-      // Matriz de rotas.
-      if (table === 'acordos' && state.op === 'delete') return routes.deleteAcordo;
-      if (table === 'acordos' && state.op === 'update') return routes.updateAcordo;
-      if (table === 'acordos' && state.op === 'select') {
-        // Diferencia entre "buscar par direto" vs "buscar grupo de parcelas".
-        const hasTipoVinculo = state.filters.some(([c]) => c === 'tipo_vinculo');
-        if (hasTipoVinculo) return routes.selectAcordoDiretoOriginal;
-        return routes.selectGrupoParcelas;
-      }
-      return { data: null, error: null };
+      return { data: state.op === 'select' ? [] : null, error: null };
     };
     const builder: Record<string, unknown> = {
       insert:      vi.fn((payload: unknown) => { state.op = 'insert'; state.payload = payload; return builder; }),
@@ -114,23 +83,24 @@ vi.mock('@/lib/supabase', () => {
   return { supabase: { from: vi.fn((t: string) => makeBuilder(t)) } };
 });
 
-// 5) toast
+// 4) toast
 const toastError = vi.fn();
 const toastSuccess = vi.fn();
+const toastInfo = vi.fn();
 vi.mock('@/components/ui/sonner', () => ({
   toast: {
     error:   (...a: unknown[]) => toastError(...a),
     success: (...a: unknown[]) => toastSuccess(...a),
+    info:    (...a: unknown[]) => toastInfo(...a),
     warning: vi.fn(),
   },
 }));
 
-// 6) alert nativo NAO deve mais ser usado pelo componente (migrado para toast).
-//    Mantemos um spy apenas para garantir que ninguem voltou a chamá-lo.
+// 5) alert nativo NÃO deve ser usado pelo componente.
 const alertSpy = vi.fn();
 vi.stubGlobal('alert', alertSpy);
 
-// 7) framer-motion
+// 6) framer-motion
 vi.mock('framer-motion', () => ({
   motion: new Proxy({}, { get: (_t, prop: string) => (props: Record<string, unknown>) => {
     const Tag = prop as keyof JSX.IntrinsicElements;
@@ -139,7 +109,7 @@ vi.mock('framer-motion', () => ({
   } }),
 }));
 
-// 8) Dialog → inline visível quando open.
+// 7) Dialog → inline visível quando open.
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
     open ? <div role="dialog">{children}</div> : null,
@@ -150,14 +120,14 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogFooter:      ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-// 9) Select → inline.
+// 8) Select → inline.
 vi.mock('@/components/ui/select', () => {
   const Select = ({ value, children }: { value?: string; children?: React.ReactNode }) => <div data-value={value}>{children}</div>;
   const Noop = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
   return { Select, SelectContent: Noop, SelectItem: Noop, SelectTrigger: Noop, SelectValue: Noop };
 });
 
-// 10) DatePickerField → não precisamos interagir aqui.
+// 9) DatePickerField → não precisamos interagir aqui.
 vi.mock('@/components/DatePickerField', () => ({
   DatePickerField: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
     <input aria-label="date" value={value} onChange={e => onChange(e.target.value)} />
@@ -184,7 +154,7 @@ function makeAcordoExtra(overrides: Partial<Acordo> = {}): Acordo {
     vinculo_operador_id: 'op-direto',
     vinculo_operador_nome: 'Operador Direto',
     empresa_id: 'emp-1',
-    perfis: { id: 'me-1', nome: 'Eu Operador', email: 'eu@x.com', perfil: 'administrador' } as unknown as Acordo['perfis'],
+    perfis: { id: 'me-1', nome: 'Eu Operador', email: 'eu@x.com', perfil: 'operador' } as unknown as Acordo['perfis'],
     numero_parcela: 1,
     acordo_grupo_id: 'grupo-1',
     ...overrides,
@@ -207,290 +177,165 @@ function renderDetalhe(props: Partial<React.ComponentProps<typeof AcordoDetalheI
   );
 }
 
+/** O componente não escreve mais em `acordos` para mudar o vínculo. */
+function semEscritaEmAcordos() {
+  expect(supabaseCalls.filter(c => c.table === 'acordos' && (c.op === 'update' || c.op === 'delete')))
+    .toEqual([]);
+}
+
+/** Clica no botão da janela quando a prévia já chegou (ele nasce desabilitado). */
+async function confirmarNaJanela(rotulo: RegExp) {
+  const botao = await screen.findByRole('button', { name: rotulo });
+  await waitFor(() => expect((botao as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(botao);
+}
+
+function abrirJanela() {
+  fireEvent.click(screen.getByRole('button', { name: /Tornar vínculo direto/i }));
+}
+
 beforeEach(() => {
-  transferirNrMock.mockReset().mockResolvedValue({ ok: true });
-  liberarNrPorAcordoIdMock.mockReset().mockResolvedValue({ ok: true });
-  criarNotificacaoMock.mockReset().mockResolvedValue(undefined);
+  previaMock.mockClear();
+  tornarDiretoMock.mockReset();
+  previaValue = PREVIA_MANUAL;
   toastError.mockReset();
   toastSuccess.mockReset();
+  toastInfo.mockReset();
   alertSpy.mockReset();
   supabaseCalls.length = 0;
-  routes.selectAcordoDiretoOriginal = { data: null, error: null };
-  routes.deleteAcordo                = { data: null, error: null };
-  routes.updateAcordo                = { data: null, error: null };
-  routes.selectGrupoParcelas         = { data: [], error: null };
-  perfilValue = { id: 'me-1', nome: 'Eu Operador', perfil: 'administrador' };
+  perfilValue = { id: 'me-1', nome: 'Eu Operador', perfil: 'operador' };
   empresaValue = { id: 'emp-1' };
 });
 
 // ── Testes ──────────────────────────────────────────────────────────────────
 
-describe('AcordoDetalheInline — exibição', () => {
+describe('AcordoDetalheInline — quem vê o botão', () => {
   it('renderiza badge "Extra" quando tipo_vinculo=extra', () => {
     renderDetalhe();
     expect(screen.getByText('Extra')).toBeInTheDocument();
   });
 
-  it('renderiza botão "Acordo direto" apenas se sou o dono do Extra', () => {
+  it('o dono do Extra vê «Tornar vínculo direto»', () => {
     renderDetalhe();
-    expect(screen.getByRole('button', { name: /Acordo direto/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Tornar vínculo direto/i })).toBeInTheDocument();
   });
 
-  it('NÃO renderiza botão "Acordo direto" quando não sou o dono', () => {
-    const acordo = makeAcordoExtra({ operador_id: 'outro-id' });
-    renderDetalhe({ acordo });
-    expect(screen.queryByRole('button', { name: /Acordo direto/i })).toBeNull();
+  it('operador que não é o dono NÃO vê o botão', () => {
+    renderDetalhe({ acordo: makeAcordoExtra({ operador_id: 'outro-id' }) });
+    expect(screen.queryByRole('button', { name: /Tornar vínculo direto/i })).toBeNull();
   });
 
-  it('NÃO renderiza botão "Acordo direto" se tipo_vinculo != extra', () => {
-    const acordo = makeAcordoExtra({ tipo_vinculo: 'direto' });
-    renderDetalhe({ acordo });
+  it('quem enxerga a operação vê o botão no acordo de outra pessoa', () => {
+    perfilValue = { id: 'me-1', nome: 'Admin', perfil: 'administrador' };
+    renderDetalhe({ acordo: makeAcordoExtra({ operador_id: 'outro-id' }) });
+    expect(screen.getByRole('button', { name: /Tornar vínculo direto/i })).toBeInTheDocument();
+  });
+
+  it('acordo DIRETO não tem o botão', () => {
+    renderDetalhe({ acordo: makeAcordoExtra({ tipo_vinculo: 'direto' }) });
     expect(screen.queryByText('Extra')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Acordo direto/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Tornar vínculo direto/i })).toBeNull();
   });
 });
 
-describe('AcordoDetalheInline — modal Extra → Direto (abertura/cancelamento)', () => {
-  it('abre modal ao clicar em "Acordo direto" mostrando mensagem e botão confirmar', async () => {
-    renderDetalhe();
-
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Tornar este acordo DIRETO/i)).toBeInTheDocument();
+describe('AcordoDetalheInline — Extra manual', () => {
+  it('pergunta se tem certeza e vira DIRETO sem tirar de ninguém', async () => {
+    tornarDiretoMock.mockResolvedValue({
+      ok: true, resultado: 'convertido', vinculado: false, donoAnterior: null, diretoRemovidoId: null,
     });
-    expect(screen.getByRole('button', { name: /Tornar Direto/i })).toBeInTheDocument();
-    // Como sou administrador, não deve pedir autorização.
-    expect(screen.queryByText(/E-mail do Líder/i)).toBeNull();
-  });
-
-  it('usuário comum vê campos de e-mail/senha do líder (precisaAutorizacao=true)', async () => {
-    perfilValue = { id: 'me-1', nome: 'Eu Operador', perfil: 'operador' };
-    renderDetalhe();
-
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/E-mail do Líder/i)).toBeInTheDocument();
-    });
-    // O botão fica desabilitado até preencher as credenciais.
-    const botao = screen.getByRole('button', { name: /Tornar Direto/i }) as HTMLButtonElement;
-    expect(botao.disabled).toBe(true);
-  });
-
-  it('cancela o modal sem disparar efeitos', async () => {
-    renderDetalhe();
-
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByRole('button', { name: /Cancelar/i }));
-
-    // Modal deve sumir.
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-
-    // Nenhuma chamada no banco ou services.
-    expect(transferirNrMock).not.toHaveBeenCalled();
-    expect(criarNotificacaoMock).not.toHaveBeenCalled();
-    const deleteCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'delete');
-    expect(deleteCall).toBeUndefined();
-  });
-});
-
-describe('AcordoDetalheInline — fluxo Extra → Direto (com par direto existente)', () => {
-  it('deleta acordo direto antigo, atualiza extra → direto, notifica, transfere e libera nr_registros', async () => {
-    // Acordo direto "pai" existe.
-    routes.selectAcordoDiretoOriginal = {
-      data: {
-        id: 'a-direto-antigo',
-        operador_id: 'op-direto',
-        nr_cliente: '777',
-        tipo_vinculo: 'direto',
-      },
-      error: null,
-    };
-    // Update do extra → direto retorna o acordo atualizado.
-    routes.updateAcordo = {
-      data: {
-        id: 'acordo-extra-1',
-        tipo_vinculo: 'direto',
-        vinculo_operador_id: null,
-        vinculo_operador_nome: null,
-      } as Acordo,
-      error: null,
-    };
-
     const onSaved = vi.fn();
     const onAcordoRemovido = vi.fn();
     renderDetalhe({ onSaved, onAcordoRemovido });
 
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-    await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
+    abrirJanela();
+    expect(await screen.findByText(/sem vínculo com outra/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tem certeza/i)).toBeInTheDocument();
 
-    // Aguarda o fluxo assíncrono terminar.
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-
-    // 1) SELECT no par direto foi feito com filtros corretos.
-    const selectPar = supabaseCalls.find(c =>
-      c.table === 'acordos' && c.op === 'select' &&
-      c.filters.some(f => f[0] === 'tipo_vinculo' && f[1] === 'direto'),
-    );
-    expect(selectPar).toBeTruthy();
-    // Filtros: empresa_id + nr_cliente (chave de vínculo no Bookplay).
-    expect(selectPar?.filters).toContainEqual(['empresa_id', 'emp-1']);
-    expect(selectPar?.filters).toContainEqual(['nr_cliente', '777']);
-
-    // 2) DELETE no acordo direto antigo.
-    const deleteCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'delete' && c.id === 'a-direto-antigo');
-    expect(deleteCall).toBeTruthy();
-
-    // 3) Notificação ao operador antigo.
-    expect(criarNotificacaoMock).toHaveBeenCalledWith(expect.objectContaining({
-      usuario_id: 'op-direto',
-      empresa_id: 'emp-1',
-    }));
-
-    // 4) UPDATE do extra → direto (limpando vínculo).
-    const updateCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'update' && c.id === 'acordo-extra-1');
-    expect(updateCall?.payload).toMatchObject({
-      tipo_vinculo:          'direto',
-      vinculo_operador_id:   null,
-      vinculo_operador_nome: null,
-    });
-
-    // 5) transferirNr chamado com os argumentos corretos.
-    expect(transferirNrMock).toHaveBeenCalledWith(expect.objectContaining({
-      empresaId:      'emp-1',
-      nrValue:        '777',
-      campo:          'nr_cliente',
-      novoOperadorId: 'me-1',
-      novoAcordoId:   'acordo-extra-1',
-    }));
-
-    // 6) liberarNrPorAcordoId limpa o registro órfão do acordo antigo.
-    expect(liberarNrPorAcordoIdMock).toHaveBeenCalledWith('a-direto-antigo');
-
-    // 7) Callbacks do pai.
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(onAcordoRemovido).toHaveBeenCalledWith('a-direto-antigo');
-  });
-
-  it('PaguePlay: usa campo "instituicao" como chave de vínculo', async () => {
-    const acordo = makeAcordoExtra({
-      instituicao: 'INS-999',
-      nr_cliente: '',
-    });
-    routes.selectAcordoDiretoOriginal = {
-      data: { id: 'a-direto-antigo', operador_id: 'op-direto' },
-      error: null,
-    };
-    routes.updateAcordo = {
-      data: { id: 'acordo-extra-1', tipo_vinculo: 'direto' } as Acordo,
-      error: null,
-    };
-
-    renderDetalhe({ acordo, isPaguePlay: true });
-
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-    await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
-
-    await waitFor(() => expect(transferirNrMock).toHaveBeenCalled());
-
-    // O select do par direto deve filtrar por `instituicao`, não nr_cliente.
-    const selectPar = supabaseCalls.find(c =>
-      c.table === 'acordos' && c.op === 'select' &&
-      c.filters.some(f => f[0] === 'tipo_vinculo' && f[1] === 'direto'),
-    );
-    expect(selectPar?.filters).toContainEqual(['instituicao', 'INS-999']);
-
-    // transferirNr deve ter recebido o campo 'instituicao'.
-    expect(transferirNrMock).toHaveBeenCalledWith(expect.objectContaining({
-      campo:   'instituicao',
-      nrValue: 'INS-999',
-    }));
-  });
-});
-
-describe('AcordoDetalheInline — fluxo Extra → Direto (sem par direto)', () => {
-  it('par direto não encontrado: promove extra→direto sem deletar nem notificar', async () => {
-    routes.selectAcordoDiretoOriginal = { data: null, error: null }; // não existe par
-    routes.updateAcordo = {
-      data: { id: 'acordo-extra-1', tipo_vinculo: 'direto' } as Acordo,
-      error: null,
-    };
-
-    const onSaved = vi.fn();
-    const onAcordoRemovido = vi.fn();
-    renderDetalhe({ onSaved, onAcordoRemovido });
-
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-    await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
+    await confirmarNaJanela(/^Tornar Direto$/i);
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-
-    // DELETE não ocorre.
-    const deleteCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'delete');
-    expect(deleteCall).toBeUndefined();
-
-    // Notificação não ocorre (nada a notificar).
-    expect(criarNotificacaoMock).not.toHaveBeenCalled();
-
-    // liberarNrPorAcordoId não é chamado (não havia registro antigo órfão).
-    expect(liberarNrPorAcordoIdMock).not.toHaveBeenCalled();
-
-    // Mas UPDATE + transferirNr ainda ocorrem.
-    const updateCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'update');
-    expect(updateCall?.payload).toMatchObject({ tipo_vinculo: 'direto' });
-    expect(transferirNrMock).toHaveBeenCalled();
-
-    // onAcordoRemovido NÃO é chamado (não houve direto a remover).
+    expect(tornarDiretoMock).toHaveBeenCalledWith('acordo-extra-1');
+    expect(onSaved.mock.calls[0][0]).toMatchObject({
+      tipo_vinculo: 'direto', vinculo_operador_id: null, vinculo_operador_nome: null,
+    });
     expect(onAcordoRemovido).not.toHaveBeenCalled();
+    semEscritaEmAcordos();
+  });
+
+  it('cancelar não chama o servidor', async () => {
+    renderDetalhe();
+    abrirJanela();
+    await screen.findByText(/sem vínculo com outra/i);
+    fireEvent.click(screen.getByRole('button', { name: /Cancelar/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(tornarDiretoMock).not.toHaveBeenCalled();
+    semEscritaEmAcordos();
   });
 });
 
-describe('AcordoDetalheInline — validações defensivas', () => {
-  it('chave de vínculo vazia: alerta e não prossegue', async () => {
-    const acordo = makeAcordoExtra({
-      nr_cliente: '   ', // whitespace
-      instituicao: null,
-    });
-    renderDetalhe({ acordo });
+describe('AcordoDetalheInline — Extra vinculado', () => {
+  const PREVIA_VINCULADO: Previa = {
+    vinculado: true, donoId: 'op-direto', donoNome: 'Operador Direto', nrLabel: 'NR', nrValor: '777',
+    souDono: true, souAutorizador: false, pedidoPendenteId: null,
+  };
 
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-    await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
-
-    await waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(toastError.mock.calls[0][0]).toMatch(/chave de vínculo vazia/i);
-    // Regressão anti-alert: o componente deve usar toast, não alert nativo.
-    expect(alertSpy).not.toHaveBeenCalled();
-
-    // Nenhuma ação no banco.
-    expect(supabaseCalls.length).toBe(0);
-    expect(transferirNrMock).not.toHaveBeenCalled();
-  });
-
-  it('erro no UPDATE: alerta e aborta', async () => {
-    routes.selectAcordoDiretoOriginal = { data: null, error: null };
-    routes.updateAcordo = { data: null, error: { message: 'RLS denied', code: '42501' } };
-
+  it('sem a chave de autorizar: vira pedido ao líder e o acordo continua EXTRA', async () => {
+    previaValue = PREVIA_VINCULADO;
+    tornarDiretoMock.mockResolvedValue({ ok: true, resultado: 'pedido', repetido: false });
     const onSaved = vi.fn();
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     renderDetalhe({ onSaved });
 
-    fireEvent.click(screen.getByRole('button', { name: /Acordo direto/i }));
-    await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
+    abrirJanela();
+    expect(await screen.findByText(/Precisa da autorização do líder/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Operador Direto/).length).toBeGreaterThan(0);
 
-    await waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(toastError.mock.calls.some(c => /Erro ao converter/i.test(String(c[0])))).toBe(true);
-    expect(alertSpy).not.toHaveBeenCalled();
+    await confirmarNaJanela(/Solicitar autorização/i);
 
-    // onSaved não deve ser chamado.
+    await waitFor(() => expect(toastInfo).toHaveBeenCalled());
+    expect(String(toastInfo.mock.calls[0][0])).toMatch(/Pedido enviado/i);
     expect(onSaved).not.toHaveBeenCalled();
-    consoleError.mockRestore();
+    semEscritaEmAcordos();
+  });
+
+  it('pedido já em análise: não oferece pedir de novo', async () => {
+    previaValue = { ...PREVIA_VINCULADO, pedidoPendenteId: 'ped-1' };
+    renderDetalhe();
+    abrirJanela();
+    expect(await screen.findByText(/Já existe um pedido seu em análise/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Solicitar autorização/i })).toBeNull();
+  });
+
+  it('quem já autoriza: executa na hora e a linha do DIRETO antigo sai da lista', async () => {
+    perfilValue = { id: 'me-1', nome: 'Líder', perfil: 'lider' };
+    previaValue = { ...PREVIA_VINCULADO, souAutorizador: true };
+    tornarDiretoMock.mockResolvedValue({
+      ok: true, resultado: 'convertido', vinculado: true,
+      donoAnterior: 'Operador Direto', diretoRemovidoId: 'a-direto-antigo',
+    });
+    const onSaved = vi.fn();
+    const onAcordoRemovido = vi.fn();
+    renderDetalhe({ onSaved, onAcordoRemovido });
+
+    abrirJanela();
+    expect(await screen.findByText(/Você pode autorizar esta mudança/i)).toBeInTheDocument();
+    await confirmarNaJanela(/^Tornar Direto$/i);
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(onAcordoRemovido).toHaveBeenCalledWith('a-direto-antigo');
+    expect(String(toastSuccess.mock.calls[0][0])).toMatch(/Operador Direto foi notificado/);
+    semEscritaEmAcordos();
+  });
+
+  it('erro do servidor: mostra a mensagem e não muda nada na tela', async () => {
+    tornarDiretoMock.mockResolvedValue({ ok: false, erro: 'Você não tem permissão para mudar o vínculo deste acordo.' });
+    const onSaved = vi.fn();
+    renderDetalhe({ onSaved });
+
+    abrirJanela();
+    await confirmarNaJanela(/^Tornar Direto$/i);
+
+    expect(await screen.findByText(/não tem permissão/i)).toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 });

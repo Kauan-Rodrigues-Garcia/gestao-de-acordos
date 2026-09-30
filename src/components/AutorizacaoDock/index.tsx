@@ -73,7 +73,10 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
 
 interface CartaoProps {
   pedido: PedidoAutorizacao;
-  /** Quem olha pode decidir, ou é o solicitante acompanhando? */
+  /**
+   * Quem olha pode decidir ESTE pedido? A chave depende do modo:
+   * `tornar_direto` tem a própria (`acordos_autorizar_tornar_direto`).
+   */
   souAutorizador: boolean;
   meuId: string | null;
   onDecidido: () => void;
@@ -87,6 +90,7 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
 
   const r = pedido.resumo ?? {};
   const ehTrocaExtra = pedido.modo === 'troca_extra';
+  const ehTornarDireto = pedido.modo === 'tornar_direto';
   const perde = ehTrocaExtra ? pedido.extra_atual_op_nome : pedido.dono_nome;
   const souSolicitante = meuId !== null && pedido.solicitante_id === meuId;
   const expira = restante(pedido.expira_em);
@@ -98,7 +102,9 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
     if ('erro' in res) { toast.error(res.erro); onDecidido(); return; }
     toast.success(
       res.status === 'aprovado'
-        ? `Autorizado. O acordo foi tabulado para ${pedido.solicitante_nome}.`
+        ? ehTornarDireto
+          ? `Autorizado. O acordo agora é DIRETO de ${pedido.solicitante_nome}.`
+          : `Autorizado. O acordo foi tabulado para ${pedido.solicitante_nome}.`
         : 'Pedido recusado. O operador foi avisado.',
     );
     setFase('normal'); setMotivo('');
@@ -138,7 +144,9 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         <div className="min-w-0">
           <p className="text-xs font-semibold truncate">
             {pedido.solicitante_nome}
-            <span className="font-normal text-muted-foreground"> quer registrar</span>
+            <span className="font-normal text-muted-foreground">
+              {ehTornarDireto ? ' quer tornar DIRETO' : ' quer registrar'}
+            </span>
           </p>
           <p className="text-sm font-mono font-bold truncate" title={pedido.nr_valor}>
             {pedido.nr_label} {pedido.nr_valor}
@@ -146,10 +154,11 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         </div>
         <span className={cn(
           'shrink-0 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
-          ehTrocaExtra ? 'bg-amber-500/15 text-amber-600' : 'bg-destructive/15 text-destructive',
+          ehTornarDireto ? 'bg-primary/15 text-primary'
+            : ehTrocaExtra ? 'bg-amber-500/15 text-amber-600' : 'bg-destructive/15 text-destructive',
         )}>
-          {ehTrocaExtra ? <ArrowRightLeft className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
-          {ehTrocaExtra ? 'troca extra' : 'transferência'}
+          {ehTrocaExtra || ehTornarDireto ? <ArrowRightLeft className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
+          {ehTornarDireto ? 'tornar direto' : ehTrocaExtra ? 'troca extra' : 'transferência'}
         </span>
       </div>
 
@@ -158,7 +167,7 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         <Campo rotulo="Valor" valor={r.valor != null ? formatBRL(Number(r.valor)) : '—'} />
         <Campo rotulo="Vencimento"
           valor={r.vencimento ? new Date(`${r.vencimento}T12:00:00`).toLocaleDateString('pt-BR') : '—'} />
-        <Campo rotulo={ehTrocaExtra ? 'EXTRA hoje de' : 'Hoje é de'} valor={perde || '—'} />
+        <Campo rotulo={ehTrocaExtra ? 'EXTRA hoje de' : ehTornarDireto ? 'DIRETO hoje de' : 'Hoje é de'} valor={perde || '—'} />
       </div>
 
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -224,7 +233,8 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
                   <strong className="text-destructive">Não tem como desfazer.</strong>{' '}
                   O acordo de <strong>{perde || 'outro operador'}</strong> vai para a
                   lixeira e o {pedido.nr_label} passa para{' '}
-                  <strong>{pedido.solicitante_nome}</strong>. Os dois são notificados.
+                  <strong>{pedido.solicitante_nome}</strong>
+                  {ehTornarDireto ? ', que deixa de ser EXTRA e vira DIRETO' : ''}. Os dois são notificados.
                 </span>
               </p>
               <div className="flex gap-2">
@@ -317,6 +327,9 @@ export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
   // MESMA chave com o token de quem digita a senha, e o servidor a confere de
   // novo em `fn_transferir_acordo_nr` — três checagens, uma fonte.
   const souAutorizador = temPermissao('acordos_autorizar_tabulacao');
+  // Tornar DIRETO tem chave própria (30/09/2026). A gaveta abre para quem tem
+  // qualquer uma das duas; cada cartão pergunta a sua.
+  const souAutorizadorTornarDireto = temPermissao('acordos_autorizar_tornar_direto');
   /**
    * A gaveta é só de quem decide.
    *
@@ -329,7 +342,7 @@ export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
    * uma janela que ele nunca abre.
    */
   const { pedidos, pendentes, recarregar } = useAutorizacaoPedidos(
-    souAutorizador && !!perfil?.id,
+    (souAutorizador || souAutorizadorTornarDireto) && !!perfil?.id,
   );
   /*
    * Fechada por padrão, e do jeito que a pessoa deixou.
@@ -429,7 +442,7 @@ export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
               {ordenados.map(p => (
                 <Cartao
                   key={p.id} pedido={p}
-                  souAutorizador={souAutorizador}
+                  souAutorizador={p.modo === 'tornar_direto' ? souAutorizadorTornarDireto : souAutorizador}
                   meuId={perfil?.id ?? null}
                   onDecidido={recarregar}
                 />

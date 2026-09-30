@@ -1112,6 +1112,44 @@ fallback para query direta caso a RPC não exista.
 O par é materializado em `acordos`: `tipo_vinculo` (`direto`/`extra`) mais
 `vinculo_operador_id` / `vinculo_operador_nome` apontando para o outro lado.
 
+### 8.4 Tornar DIRETO, e voltar a EXTRA (migration `20260930150000`)
+
+Botão **Tornar vínculo direto** no detalhe de um acordo EXTRA (para o dono e
+para quem tem visão ampla) e o seletor **Vínculo: Direto | Extra** na área de
+editar acordo. Os dois passam pelo servidor — `fn_tornar_direto_previa` diz à
+janela o que vai acontecer, `fn_tornar_direto` executa ou abre o pedido:
+
+| O EXTRA é… | Quem confirma | O que acontece |
+|---|---|---|
+| **manual** (ninguém segura o NR/Código) | o dono | vira DIRETO na hora, depois de «tem certeza?» |
+| **vinculado** (é o DIRETO de outra pessoa) | quem tem `acordos_autorizar_tornar_direto` | executa na hora, em nome de quem autorizou |
+| **vinculado** | o dono, sem a chave | pedido `tornar_direto` na gaveta de autorizações; os líderes do setor são notificados |
+
+Aprovado (ou executado por quem autoriza): o DIRETO do colega — o titular em
+`nr_registros` — vai para a lixeira como `troca_extra`, com quem autorizou e
+para quem foi; o que sobrou dele com a chave deixa de apontar para o par; o
+EXTRA vira DIRETO e ele é notificado. É o desenho da transferência (§ 7.5),
+com chave própria no painel, ligada de fábrica para a liderança.
+
+**Parcelas:** vira DIRETO a linha escolhida e as parcelas **ainda não pagas**
+do mesmo grupo. Parcela paga fica como estava — já contou no mês dela.
+
+**A gaveta não ganhou outro caminho.** `fn_autorizacao_decidir` virou
+despachante: `tornar_direto` vai para `fn_tornar_direto_decidir`, que exige a
+chave além do recorte de setor; os modos antigos vão para
+`fn_autorizacao_decidir_nr` — a função de sempre, **renomeada** (não
+reescrita), para não depender de o arquivo da migration ser o que roda.
+
+**O caminho de volta** (`fn_tornar_extra`): um DIRETO **sem** EXTRA de outra
+pessoa pode ser marcado EXTRA (acompanhamento). O NR/Código fica livre. Com
+EXTRA vinculado, o servidor recusa — inverter o par é o `tornar_direto`, feito
+a partir do EXTRA.
+
+> Até 30/09/2026 o botão «Acordo direto» fazia tudo no navegador: `DELETE` no
+> DIRETO do colega (a RLS devolvia zero linhas, sem erro), `.maybeSingle()`
+> sobre um NR que tem várias parcelas DIRETO, e o `update` para DIRETO batia
+> em `NR_JA_REGISTRADO` porque o titular continuava lá.
+
 ---
 
 ## 9. Exclusão, lixeira e parcelas
@@ -1151,6 +1189,19 @@ A parcela nova entra no **mesmo `acordo_grupo_id`** do acordo existente. O
 trigger `trg_sync_nr_registros` apenas re-aponta `nr_registros` para a linha
 nova — sem conflito. Duas portas de entrada: a tabulação bloqueada por NR
 próprio (`AcordoNovoInline`) e o botão "Adicionar parcela" no detalhe.
+
+### 9.4 Editar parcelas registradas `[PP]` (30/09/2026)
+
+A PaguePlay continua sem remontar parcelamento (a regra dos 40 % decide), mas
+a área de editar acordo ganhou **Editar parcelas (situação, valor, pagamento)**
+(`ModalEditarParcelasPP`, regra em `services/parcelasPP.ts`). Para cada parcela
+**que já existe**: situação (Pendente / Não Pago / Pago), valor e data.
+
+Na parcela **paga**, a data é o **dia do pagamento** e vai para
+`data_pagamento` **e** `vencimento` — o mesmo que o «marcar pago» grava, porque
+o recebimento é atribuído ao vencimento. Duas parcelas pagas no mesmo dia são
+aceitas. Voltar a pendente limpa `data_pagamento`. Os dois meses (o que perde e
+o que ganha) precisam estar abertos, como na edição.
 
 ---
 
