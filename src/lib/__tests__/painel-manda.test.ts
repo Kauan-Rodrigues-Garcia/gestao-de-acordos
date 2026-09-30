@@ -122,6 +122,10 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',
   },
+  'components/Halloween/tema.ts': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'pré-estreia do tema de Halloween: só o super_admin vê os enfeites enquanto eles são aprovados. Não libera tela nem dado — é decoração, e some quando o tema for aberto a todos.',
+  },
   'lib/mobile/preferencia.ts': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'super_admin abre a tela do celular só para TESTE e escolhe um operador antes (impersonação); não concede dado nenhum — a tela passa a ser a do operador escolhido.',

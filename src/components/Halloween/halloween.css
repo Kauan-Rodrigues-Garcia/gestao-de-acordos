@@ -1,0 +1,174 @@
+/*
+ * Tema de Halloween — só enfeite. Nada aqui mexe nas cores do tema escolhido:
+ * teias, fios, chuva, névoa e nuvens usam a cor do texto do próprio tema
+ * (`currentColor` / `--foreground`); abóbora, chapéu, morcego e olhos têm cor
+ * de objeto, que funciona em qualquer fundo.
+ *
+ * Não consulta `prefers-reduced-motion`, pelo mesmo motivo do chat
+ * (`Chat/comum.tsx`): nos computadores da operação ela vem ligada por política.
+ */
+
+/* ── Camadas ─────────────────────────────────────────────────────────────── */
+.hw-fundo, .hw-camada, .hw-revoada { position: absolute; pointer-events: none; }
+.hw-fundo { inset: 0; z-index: 0; overflow: hidden; }
+.hw-camada { inset: 0; z-index: 5; overflow: hidden; }
+.hw-revoada { inset: 0; z-index: 6; overflow: hidden; }
+
+/* ── Teias ───────────────────────────────────────────────────────────────── */
+.hw-teia { position: absolute; top: 0; width: 100px; height: 100px; opacity: .3; }
+.hw-teia.esq { left: 0; }
+.hw-teia.dir { right: 0; transform: scaleX(-1); }
+.hw-teia svg { width: 100%; height: 100%; overflow: visible; }
+.hw-teia path { fill: none; stroke: currentColor; stroke-width: .9; stroke-linecap: round; }
+
+/* ── Aranha pendurada na teia da direita ─────────────────────────────────── */
+.hw-aranha { position: absolute; top: 36px; right: 23px; width: 26px; display: flex; flex-direction: column; align-items: center; pointer-events: auto; }
+.hw-aranha .fio { width: 1px; background: color-mix(in oklch, currentColor 45%, transparent); height: var(--h, 110px); animation: hw-desce 6.5s ease-in-out infinite alternate; }
+.hw-aranha svg { width: 26px; height: 26px; margin-top: -3px; cursor: pointer; animation: hw-gira 3s ease-in-out infinite alternate; }
+.hw-aranha.escalando svg { animation: hw-escala .11s linear infinite alternate; }
+.hw-aranha.descendo svg { animation: hw-gira 1.4s ease-in-out infinite alternate; }
+@keyframes hw-desce { from { height: calc(var(--h) * .45); } to { height: var(--h); } }
+@keyframes hw-gira { from { transform: rotate(-8deg); } to { transform: rotate(8deg); } }
+@keyframes hw-escala { from { transform: rotate(-13deg) translateX(-.5px); } to { transform: rotate(13deg) translateX(.5px); } }
+.hw-aranha .corpo { fill: oklch(0.22 0.02 320); stroke: color-mix(in oklch, currentColor 50%, transparent); stroke-width: .8; }
+.hw-aranha .pernas { stroke: color-mix(in oklch, currentColor 35%, oklch(0.22 0.02 320)); stroke-width: 1.5; fill: none; stroke-linecap: round; }
+.hw-aranha .olho { fill: oklch(0.72 0.2 35); }
+
+/* ── Chuva, relâmpago e nuvens ───────────────────────────────────────────── */
+.hw-chuva { position: absolute; inset: 0; width: 100%; height: 100%; filter: blur(1.4px); opacity: .55; }
+.hw-claro .hw-chuva { opacity: .8; }
+.hw-relampago { position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(120% 90% at var(--rx, 70%) 0%, oklch(0.97 0.02 250 / .14), oklch(0.97 0.02 250 / .04) 55%, transparent 80%); }
+.hw-claro .hw-relampago { background: radial-gradient(120% 90% at var(--rx, 70%) 0%, oklch(0.55 0.05 260 / .06), oklch(0.55 0.05 260 / .02) 55%, transparent 80%); }
+.hw-relampago.on { animation: hw-clarao 1.1s ease-out 1; }
+@keyframes hw-clarao { 0% { opacity: 0; } 4% { opacity: 1; } 10% { opacity: .15; } 16% { opacity: .85; } 30% { opacity: .3; } 100% { opacity: 0; } }
+.hw-nuvens { position: absolute; left: -10%; right: -10%; top: -40px; height: 220px; filter: blur(26px); transition: opacity .15s; }
+.hw-nuvens i { position: absolute; border-radius: 50%; background: color-mix(in oklch, currentColor 15%, transparent); animation: hw-nuvem var(--t, 60s) ease-in-out infinite alternate; }
+.hw-claro .hw-nuvens i { background: color-mix(in oklch, currentColor 11%, transparent); }
+.hw-nuvens.clarao i { background: color-mix(in oklch, currentColor 24%, transparent); }
+@keyframes hw-nuvem { from { transform: translateX(-5%); } to { transform: translateX(6%); } }
+
+/* ── Névoa ───────────────────────────────────────────────────────────────── */
+.hw-nevoa { position: absolute; inset: 0; }
+.hw-nevoa i { position: absolute; border-radius: 50%; filter: blur(30px);
+  background: color-mix(in oklch, var(--muted-foreground) 20%, transparent); animation: hw-neblina var(--t, 40s) ease-in-out infinite alternate; }
+/* No claro a névoa cinza vira mancha; lá ela fica bem mais rala. */
+.hw-claro .hw-nevoa i { background: color-mix(in oklch, var(--muted-foreground) 8%, transparent); }
+@keyframes hw-neblina { from { transform: translateX(-6%) scale(1); } to { transform: translateX(7%) scale(1.08); } }
+
+/* ── Olhos na névoa ──────────────────────────────────────────────────────── */
+.hw-olhos { position: absolute; display: flex; gap: var(--gap, 18px); transition: opacity 2.5s ease; filter: blur(1.1px); }
+.hw-olhos::before { content: ''; position: absolute; inset: -40px -50px; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--foreground) 22%, transparent), transparent); z-index: -1; }
+.hw-olho { width: var(--w, 22px); height: calc(var(--w, 22px) * .52); border-radius: 50%; position: relative; transform-origin: 50% 50%;
+  background: radial-gradient(ellipse at 50% 50%, oklch(0.93 0.17 95), oklch(0.72 0.19 55) 55%, oklch(0.45 0.16 30) 100%);
+  box-shadow: 0 0 10px 2px oklch(0.75 0.18 60 / .55); animation: hw-espreita var(--t, 7s) ease-in-out infinite; }
+.hw-olho::after { content: ''; position: absolute; left: 50%; top: 8%; bottom: 8%; width: 16%; transform: translateX(-50%); border-radius: 50%; background: oklch(0.12 0.02 30); }
+.hw-olhos.pisca .hw-olho { animation: hw-pisca .22s ease-in-out 1; }
+@keyframes hw-pisca { 50% { transform: scaleY(.08); } }
+@keyframes hw-espreita { 0%, 100% { translate: 0 0; } 50% { translate: 1.5px 0; } }
+.hw-nevoa-olhos { position: absolute; inset: 0; backdrop-filter: blur(1.5px); }
+
+/* ── Fantasma que sobe de trás das tabelas ───────────────────────────────── */
+.hw-esconderijo { position: absolute; height: 64px; width: 48px; overflow: hidden; }
+.hw-fantasma { position: absolute; left: 4px; bottom: 0; width: 40px; height: 46px; transform: translateY(100%); pointer-events: auto; cursor: pointer;
+  animation: hw-sobe-fantasma 5.5s ease-in-out forwards; }
+.hw-fantasma.some { animation: none; transform: translateY(100%); transition: transform .25s ease-in; }
+.hw-fantasma svg { width: 100%; height: 100%; overflow: visible; }
+.hw-fantasma .lencol { fill: oklch(0.98 0.005 260); stroke: color-mix(in oklch, var(--foreground) 30%, transparent); stroke-width: 1.2; }
+.hw-fantasma .olhos { fill: oklch(0.2 0.02 260); }
+@keyframes hw-sobe-fantasma {
+  0% { transform: translateY(100%); }
+  18%, 80% { transform: translateY(12%); }
+  34% { transform: translateY(12%) rotate(-6deg); }
+  50% { transform: translateY(12%) rotate(5deg); }
+  64% { transform: translateY(12%) rotate(0); }
+  100% { transform: translateY(100%); }
+}
+
+/* ── Lanterna na mão ─────────────────────────────────────────────────────── */
+.hw-lanterna { position: absolute; top: 34px; width: 0; height: 0; --luz: oklch(0.97 0.05 92 / .26); --luz-fim: oklch(0.97 0.05 92 / .05); --luz-foco: oklch(0.98 0.06 92 / .32); }
+.hw-claro .hw-lanterna { --luz: oklch(0.86 0.14 85 / .34); --luz-fim: oklch(0.86 0.14 85 / .08); --luz-foco: oklch(0.88 0.15 85 / .4); }
+.hw-lanterna .giro { position: absolute; left: 0; top: 0; transform-origin: -31px -34px; animation: hw-procura 7s ease-in-out infinite; }
+.hw-lanterna.desligada .giro { animation-duration: 12s; }
+.hw-lanterna.susto .giro, .hw-lanterna.susto .feixe { animation-play-state: paused; }
+@keyframes hw-procura { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+.hw-lanterna .corpo { position: absolute; left: -44px; top: -11px; width: 46px; height: 22px; }
+.hw-lanterna .mao { position: absolute; left: -70px; top: -34px; width: 60px; height: 50px; overflow: visible; }
+.hw-lanterna .corpo, .hw-lanterna .mao { pointer-events: auto; cursor: pointer; transform-box: fill-box; transform-origin: 50% 50%; }
+.hw-lanterna .aperto { animation: hw-aperta .22s ease-out; }
+@keyframes hw-aperta { 40% { transform: translateY(1.5px) scale(.96); } }
+.hw-lanterna .feixe { position: absolute; left: 0; top: -60px; height: 120px; width: 330px; transition: opacity .3s; animation: hw-alcance 5.3s ease-in-out infinite alternate; }
+@keyframes hw-alcance { from { width: 300px; } to { width: 420px; } }
+.hw-lanterna.desligada .feixe, .hw-lanterna.apaga .feixe { opacity: 0; }
+.hw-lanterna.apaga .feixe { transition-duration: .08s; }
+.hw-lanterna .cone { position: absolute; inset: 0; clip-path: polygon(0 45%, 100% 0, 100% 100%, 0 55%); background: linear-gradient(to right, var(--luz), var(--luz-fim) 100%); filter: blur(3px);
+  -webkit-mask-image: linear-gradient(to right, #000 62%, transparent 100%); mask-image: linear-gradient(to right, #000 62%, transparent 100%); }
+.hw-lanterna .foco { position: absolute; right: -78px; top: 50%; width: 160px; height: 150px; transform: translateY(-50%); border-radius: 50%; filter: blur(4px);
+  background: radial-gradient(closest-side, var(--luz-foco) 0%, color-mix(in oklch, var(--luz-foco) 70%, transparent) 35%, color-mix(in oklch, var(--luz-foco) 30%, transparent) 65%, transparent 100%); }
+.hw-lanterna.pisca .cone, .hw-lanterna.pisca .foco { animation: hw-pisca-luz .7s steps(1) 1; }
+@keyframes hw-pisca-luz { 0% { opacity: 1; } 15% { opacity: .1; } 30% { opacity: .9; } 45% { opacity: 0; } 62% { opacity: .7; } 75% { opacity: .15; } 90% { opacity: 1; } }
+.hw-lanterna .lente { fill: oklch(0.98 0.07 95); transition: fill .3s; filter: drop-shadow(0 0 4px oklch(0.95 0.12 90)); }
+.hw-lanterna.desligada .lente { fill: oklch(0.55 0.01 250); filter: none; }
+.hw-lanterna .botao { fill: oklch(0.62 0.18 30); transition: transform .15s, fill .15s; }
+.hw-lanterna.desligada .botao { fill: oklch(0.45 0.01 250); transform: translateX(-2px); }
+.hw-lanterna .manga { fill: oklch(0.27 0.02 300); stroke: oklch(0.18 0.02 300); stroke-width: .8; stroke-linejoin: round; }
+.hw-lanterna .punho { fill: oklch(0.33 0.03 300); }
+.hw-lanterna .pele { fill: oklch(0.84 0.04 65); stroke: oklch(0.55 0.05 45); stroke-width: .7; stroke-linejoin: round; }
+.hw-lanterna .dobra { fill: none; stroke: oklch(0.6 0.05 45); stroke-width: .6; stroke-linecap: round; }
+.hw-assombracao { position: absolute; right: -34px; top: 50%; width: 74px; height: 104px; transform: translate(0, -42%) scale(.85); opacity: 0;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 42%, #000 55%, transparent 100%); mask-image: radial-gradient(ellipse 60% 55% at 50% 42%, #000 55%, transparent 100%);
+  filter: drop-shadow(0 0 5px oklch(0.2 0.02 260 / .55)); }
+.hw-assombracao svg { width: 100%; height: 100%; overflow: visible; }
+.hw-lanterna.aparece .hw-assombracao { animation: hw-aparece 1.9s ease-out forwards; }
+@keyframes hw-aparece {
+  0% { opacity: 0; transform: translate(0, -42%) scale(.8); }
+  8% { opacity: .95; transform: translate(0, -42%) scale(1.08); }
+  14% { transform: translate(-1px, -43%) scale(1.02); }
+  20% { transform: translate(1px, -41%) scale(1.05); }
+  26% { transform: translate(-1px, -42%) scale(1.03); }
+  70% { opacity: .9; transform: translate(0, -42%) scale(1.06); }
+  78% { opacity: .2; }
+  82% { opacity: .85; }
+  100% { opacity: 0; transform: translate(0, -42%) scale(1.14); }
+}
+
+/* ── Morcegos ────────────────────────────────────────────────────────────── */
+.hw-morcego { position: absolute; left: -60px; width: 50px; height: 25px; pointer-events: auto; cursor: crosshair; animation: hw-voa var(--d, 5s) linear forwards; }
+.hw-morcego svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 .7px color-mix(in oklch, var(--foreground) 50%, transparent)); }
+.hw-morcego .asa-e, .hw-morcego .asa-d { transform-box: view-box; animation: var(--bater, .34s) ease-in-out infinite alternate; }
+.hw-morcego .asa-e { transform-origin: 44px 21px; animation-name: hw-bate-e; }
+.hw-morcego .asa-d { transform-origin: 56px 21px; animation-name: hw-bate-d; }
+.hw-morcego .corpo-m { animation: hw-sobe-m var(--bater, .34s) ease-in-out infinite alternate; }
+.hw-morcego .olhos-x { display: none; }
+.hw-morcego.caindo { animation: none; cursor: default; pointer-events: none; }
+.hw-morcego.caindo .olhos-m { display: none; }
+.hw-morcego.caindo .olhos-x { display: inline; }
+.hw-morcego.caindo .asa-e, .hw-morcego.caindo .asa-d { animation-duration: .07s; }
+.hw-morcego.caindo .corpo-m { animation: none; }
+@keyframes hw-bate-e { from { transform: rotate(34deg) scaleY(.9); } to { transform: rotate(-26deg) scaleY(.75); } }
+@keyframes hw-bate-d { from { transform: rotate(-34deg) scaleY(.9); } to { transform: rotate(26deg) scaleY(.75); } }
+@keyframes hw-sobe-m { from { transform: translateY(1.5px); } to { transform: translateY(-2px); } }
+@keyframes hw-voa { 0% { transform: translate(0, 0); } 25% { transform: translate(calc(var(--w) * .25), -18px); } 50% { transform: translate(calc(var(--w) * .5), 12px); } 75% { transform: translate(calc(var(--w) * .75), -14px); } 100% { transform: translate(calc(var(--w) + 80px), 4px); } }
+.hw-pof { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; }
+.hw-pof i { position: absolute; left: 3px; top: 3px; width: 3px; height: 3px; border-radius: 50%; background: #F4A51C; animation: hw-pof .5s ease-out forwards; }
+@keyframes hw-pof { from { transform: rotate(var(--a)) translateX(0); opacity: 1; } to { transform: rotate(var(--a)) translateX(18px); opacity: 0; } }
+
+/* ── Chat: a bolha vira abóbora ──────────────────────────────────────────── */
+.hw-abobora { width: 62px; height: 62px; filter: drop-shadow(0 6px 10px oklch(0.2 0.05 40 / .35)); overflow: visible; }
+.hw-abobora .ab-corpo { transform-box: fill-box; transform-origin: 50% 100%; animation: hw-respira 3.6s ease-in-out infinite; }
+.hw-abobora .ab-cipo { transform-box: view-box; transform-origin: 99px 72px; animation: hw-cipo 3.6s ease-in-out infinite; }
+.hw-abobora .rosto { fill: #850000; transition: fill .3s; }
+.hw-abobora.acesa .rosto { fill: #FFC93C; animation: hw-vela 1.4s infinite steps(1); }
+.group:hover .hw-abobora { animation: hw-pula .7s ease-in-out; }
+@keyframes hw-respira { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.025, .975); } }
+@keyframes hw-cipo { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(1.2px) rotate(3deg); } }
+@keyframes hw-vela { 0%, 100% { opacity: 1; } 35% { opacity: .78; } 55% { opacity: .95; } 80% { opacity: .7; } }
+@keyframes hw-pula { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-6px) rotate(-4deg); } 65% { transform: translateY(0) rotate(3deg); } 80% { transform: translateY(-2px); } }
+
+/* ── Chapéu de bruxa nas fotos ───────────────────────────────────────────── */
+.hw-com-chapeu { position: relative; display: inline-flex; flex: none; }
+.hw-chapeu { position: absolute; left: 50%; height: auto; aspect-ratio: 100 / 76; pointer-events: none; overflow: visible; transform-origin: 50% 100%;
+  transform: translateX(-62%) rotate(-24deg); filter: drop-shadow(0 0 .6px color-mix(in oklch, var(--foreground) 55%, transparent)) drop-shadow(0 1px 1px oklch(0.15 0.03 300 / .3)); }
+.hw-com-chapeu:hover .hw-chapeu { animation: hw-tira-chapeu .9s ease-in-out; }
+@keyframes hw-tira-chapeu { 0%, 100% { transform: translateX(-62%) rotate(-24deg); } 40% { transform: translateX(-62%) translateY(-4px) rotate(-8deg); } }
