@@ -8,6 +8,7 @@ import { montarEquipe, type FontesEquipe } from './montarEquipe';
 import { AbaQuartis } from './AbaQuartis';
 import { AbaEquipe } from './AbaEquipe';
 import { AbaHoje } from './AbaHoje';
+import { AbaGrafico } from './AbaGrafico';
 import { marcasDosQuartis } from './regua';
 import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
 
@@ -77,6 +78,17 @@ describe('AbaQuartis', () => {
     expect(screen.getAllByRole('button', { name: /Ver detalhe/ })).toHaveLength(3);
   });
 
+  it('a folha abre fora da aba (no <body>), presa na tela, e fecha ao tocar fora', () => {
+    const { container } = render(<AbaQuartis equipe={equipe} mes="2026-09" />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Ver detalhe/ })[0]);
+    const folha = screen.getByRole('dialog');
+    expect(container.contains(folha)).toBe(false);
+    expect(document.body.style.position).toBe('fixed');
+    fireEvent.click(document.querySelector('.e-veu')!);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.body.style.position).toBe('');
+  });
+
   it('o toque abre a folha com faixas, ritmo e o botão do WhatsApp', () => {
     render(<AbaQuartis equipe={equipe} mes="2026-09" />);
     fireEvent.click(screen.getAllByRole('button', { name: /Ver detalhe/ })[1]);
@@ -127,5 +139,26 @@ describe('AbaHoje', () => {
     expect(screen.getByText('500,00')).toBeTruthy();
     expect(screen.getByText(/2 de 4 operadores receberam/)).toBeTruthy();
     expect(screen.getByText(/aparecem para quem vê o analítico da equipe/)).toBeTruthy();
+  });
+});
+
+describe('AbaGrafico', () => {
+  const equipe = montarEquipe(fontes(), 'eq1')!;
+  const linha = (op: string, valor: number, data: string) => ({
+    operador_id: op, setor_id: 's1', importado_por_id: null, valor_recebido: valor, data_pagamento: data,
+  });
+  const linhas = [linha('a', 1_000, '2026-09-01'), linha('b', 3_000, '2026-09-02'), linha('a', 500, '2026-09-24')];
+
+  it('mostra todos os dias do mês no eixo e lê o dia tocado no topo do cartão', () => {
+    render(<AbaGrafico equipe={equipe} mes="2026-09" hojeISO="2026-09-24" linhas={linhas}
+      carregando={false} erro={false} isPaguePlay={false} />);
+    const svg = screen.getByRole('img', { name: 'Recebido por dia do mês' });
+    const dias = [...svg.querySelectorAll('text')].map(t => t.textContent);
+    expect(dias).toEqual(Array.from({ length: 30 }, (_, i) => String(i + 1)));
+    // Abre em hoje, parcial.
+    expect(screen.getByText(/Qui, 24 de setembro · hoje/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Qua, 2 de setembro/ }));
+    expect(screen.getByText('Qua, 2 de setembro')).toBeTruthy();
+    expect(screen.getByText(/acima da média/, { selector: '.e-graf-pill' })).toBeTruthy();
   });
 });

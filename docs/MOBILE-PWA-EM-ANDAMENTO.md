@@ -432,7 +432,27 @@ a média, não a meta diária.
 - **GPU**: sem `backdrop-filter` nos cartões e sem `filter: blur` no fundo (manchas
   viraram gradientes radiais); brilho da barra por `transform`.
 - **Tempo real de acordos** desligado nas rotas `/m*` (nenhuma tela do celular usa;
-  era uma assinatura por aparelho). Volta ao sair para a versão completa. Depois:
+  era uma assinatura por aparelho). Volta ao sair para a versão completa.
+
+**Correções da tela da equipe (30/09/2026, pedido após teste no iPhone):**
+- **Folha de detalhe dos Quartis presa na tela** (`equipe/FolhaInferior.tsx`): abria
+  no fim da aba e não aparecia no iPhone. Causa: o conteúdo da aba entra com a
+  animação `v-entra` (fill `both` deixava o `transform` preso), e ancestral com
+  `transform` vira o bloco de referência do `position: fixed`. Agora a folha é um
+  portal no `<body>`, sobe deslizando, fecha arrastando para baixo pelo topo (> 90 px
+  ou gesto rápido), tocando fora ou com Esc; trava a rolagem do fundo do jeito que
+  funciona no Safari. `v-entra` passou a `backwards`.
+- **Distribuição por quartil**: rosca animada + legenda com a faixa de cada quartil,
+  quantidade e %; fatia e legenda filtram a lista (tocar de novo ou no miolo = todos).
+- **Barra de projeção de cada operador**: trilho tingido e degradê na cor do quartil,
+  ponta com brilho, cortes nas faixas; cresce na entrada por `transform`. O % também
+  na cor do quartil.
+- **Gráfico**: três números do mês no topo; o dia tocado é lido no cabeçalho do
+  cartão (com «▲ x% acima da média»); todos os dias do mês no eixo (hoje em negrito,
+  o tocado sublinhado, fim de semana/futuro claros); sem contorno azul de foco na
+  barra; barras acima da média um tom mais forte; legenda embaixo.
+
+Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 

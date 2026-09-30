@@ -97,13 +97,39 @@
 .tela-equipe .e-vazio b { display: block; color: var(--e-tinta); font-size: 16px; margin-bottom: 6px; }
 
 /* ── A RÉGUA ─────────────────────────────────────────────────────────── */
-.tela-equipe .e-regua { position: relative; height: 6px; border-radius: 6px; background: var(--e-trilho); }
-.tela-equipe .e-regua-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: rgba(14, 27, 38, 0.16); }
-.tela-equipe .e-regua-marca { position: absolute; top: -3px; width: 1.5px; height: 12px; background: #c9d1d6; border-radius: 1px; }
-.tela-equipe .e-regua-ponto {
-  position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%;
-  transform: translate(-50%, -50%); box-shadow: 0 0 0 2.5px var(--e-sup);
+/*
+ * Revisão de 30/09/2026 («sem ser cinza»): trilho tingido da cor do quartil,
+ * preenchimento em degradê da mesma cor e ponta com brilho. `--c` vem do
+ * componente (`Regua`). `color-mix` tem reserva para aparelho antigo.
+ */
+.tela-equipe .e-regua {
+  --c: var(--e-grafite);
+  position: relative; height: 8px; border-radius: 8px;
+  background: var(--e-trilho);
+  background: color-mix(in srgb, var(--c) 13%, #eef1f3);
 }
+.tela-equipe .e-regua-anda { position: absolute; left: 0; top: 0; bottom: 0; }
+.tela-equipe .e-regua-fill {
+  position: absolute; inset: 0; border-radius: 8px;
+  background: var(--c);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 45%, #fff), var(--c));
+  transform-origin: left center;
+  animation: e-regua-cresce 700ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.tela-equipe .e-regua-ponto {
+  position: absolute; right: 0; top: 50%; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--c); transform: translate(50%, -50%); z-index: 2;
+  box-shadow: 0 0 0 3px var(--e-sup), 0 2px 8px color-mix(in srgb, var(--c) 55%, transparent);
+  animation: e-regua-ponto 420ms 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+/* Marcas das faixas: um corte no trilho; dentro do preenchido, um corte claro. */
+.tela-equipe .e-regua-marca {
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: var(--e-sup); opacity: 0.9; z-index: 1;
+}
+.tela-equipe .e-regua-marca-in { opacity: 0.55; }
+@keyframes e-regua-cresce { from { transform: scaleX(0); } }
+@keyframes e-regua-ponto { from { transform: translate(50%, -50%) scale(0); } }
 .tela-equipe .e-escala { position: relative; height: 13px; margin-top: 7px; font-size: 11px; color: var(--e-grafite); }
 .tela-equipe .e-escala span { position: absolute; transform: translateX(-50%); }
 
@@ -128,17 +154,50 @@
 }
 
 /* ── Quartis ─────────────────────────────────────────────────────────── */
-.tela-equipe .e-dist { margin: 0 16px; background: rgba(255, 255, 255, 0.92); border-radius: 18px; padding: 14px 16px 12px; }
-.tela-equipe .e-dist-barra { display: flex; gap: 3px; height: 8px; }
-.tela-equipe .e-dist-barra i { display: block; border-radius: 3px; }
-.tela-equipe .e-filtros { display: flex; gap: 5px; margin-top: 12px; }
-.tela-equipe .e-filtros button {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-  font-size: 12px; font-weight: 600; padding: 6px 0; border-radius: 99px;
-  border: 1px solid var(--e-traco); white-space: nowrap;
+/* A rosca da distribuição + a legenda, que também é o filtro. */
+.tela-equipe .e-dist {
+  margin: 0 16px; background: rgba(255, 255, 255, 0.92); border-radius: 18px;
+  padding: 14px 14px 14px 12px;
+  display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: center;
 }
-.tela-equipe .e-filtros button i { width: 7px; height: 7px; border-radius: 50%; }
-.tela-equipe .e-filtros button[aria-pressed='true'] { background: var(--e-tinta); color: #fff; border-color: var(--e-tinta); }
+.tela-equipe .e-rosca { position: relative; width: 112px; height: 112px; }
+.tela-equipe .e-rosca svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.tela-equipe .e-rosca-g {
+  /* A rotação que põe o começo no topo fica no CSS: `transform-origin` também
+   * mexeria num `transform` de atributo e deslocaria a rosca. */
+  transform-box: view-box; transform-origin: 56px 56px; transform: rotate(-90deg);
+  animation: e-rosca-entra 650ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.tela-equipe .e-rosca-seg {
+  stroke-width: 12px; cursor: pointer;
+  transition: stroke-width 220ms ease, opacity 220ms ease;
+}
+.tela-equipe .e-rosca-on { stroke-width: 16px; }
+.tela-equipe .e-rosca-off { opacity: 0.22; }
+@keyframes e-rosca-entra { from { opacity: 0; transform: rotate(-160deg) scale(0.85); } }
+.tela-equipe .e-rosca-miolo {
+  position: absolute; inset: 24px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.tela-equipe .e-rosca-miolo b { font-size: 26px; font-weight: 700; line-height: 1; }
+.tela-equipe .e-rosca-miolo span { font-size: 11px; color: var(--e-grafite); margin-top: 3px; }
+.tela-equipe .e-legenda { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tela-equipe .e-legenda button {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 6px 8px; border-radius: 11px;
+  transition: background-color 180ms ease, opacity 180ms ease;
+}
+.tela-equipe .e-legenda button > i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.tela-equipe .e-legenda button[aria-pressed='true'] { background: var(--e-nevoa); }
+.tela-equipe .e-legenda .e-legenda-off { opacity: 0.45; }
+.tela-equipe .e-legenda-n { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.2; }
+.tela-equipe .e-legenda-n small {
+  display: block; font-size: 11px; font-weight: 500; color: var(--e-grafite);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tela-equipe .e-legenda-q { display: flex; align-items: baseline; gap: 5px; flex: none; }
+.tela-equipe .e-legenda-q b { font-size: 16px; font-weight: 700; }
+.tela-equipe .e-legenda-q small { font-size: 11px; color: var(--e-grafite); min-width: 28px; text-align: right; }
 .tela-equipe .e-ordem { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--e-grafite); }
 .tela-equipe .e-op { display: block; width: 100%; text-align: left; padding: 12px 0 13px; border-bottom: 1px solid var(--e-traco); }
 .tela-equipe .e-op:last-child { border-bottom: 0; }
@@ -146,20 +205,39 @@
 .tela-equipe .e-op-l1 > i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .tela-equipe .e-op-nm { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tela-equipe .e-op-pc { font-weight: 700; font-size: 15px; }
-.tela-equipe .e-op .e-regua { margin: 10px 0 8px; }
+.tela-equipe .e-op .e-regua { margin: 11px 7px 9px 0; }
 .tela-equipe .e-op-l3 { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--e-grafite); }
 
-/* Folha de detalhe (bottom sheet) */
+/* Folha de detalhe (bottom sheet) — `FolhaInferior`, num portal no <body>.
+ * O embrulho do portal leva `.tela-equipe` só pelas variáveis e pela fonte. */
+.tela-equipe.e-portal { min-height: 0; background: none; position: static; isolation: auto; }
 .tela-equipe .e-veu {
-  position: fixed; inset: 0; background: rgba(14, 27, 38, 0.38); z-index: 40;
-  display: flex; align-items: flex-end; justify-content: center;
+  position: fixed; inset: 0; z-index: 60; cursor: pointer;
+  background: rgba(14, 27, 38, 0.42);
+  opacity: 0; transition: opacity 300ms ease;
 }
+.tela-equipe .e-veu.e-veu-on { opacity: 1; }
 .tela-equipe .e-folha {
-  width: 100%; max-width: 480px; max-height: 92dvh; overflow-y: auto;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61;
+  width: 100%; max-width: 480px; margin: 0 auto;
+  max-height: 88vh; max-height: 88dvh;
+  display: flex; flex-direction: column;
   background: var(--e-nevoa); border-radius: 26px 26px 0 0;
-  padding: 10px 0 calc(24px + env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 40px rgba(14, 27, 38, 0.18);
+  transform: translate3d(0, 100%, 0);
+  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
 }
-.tela-equipe .e-alca { display: block; width: 38px; height: 5px; border-radius: 5px; background: #cfd6da; margin: 0 auto 14px; }
+.tela-equipe .e-folha.e-folha-on { transform: translate3d(0, 0, 0); }
+.tela-equipe .e-folha.e-folha-arrasto { transition: none; }
+.tela-equipe .e-folha:focus { outline: none; }
+/* O topo é a pega: `touch-action: none` deixa o arrasto para o JS. */
+.tela-equipe .e-folha-topo { flex: none; padding: 10px 0 12px; touch-action: none; cursor: grab; }
+.tela-equipe .e-folha-corpo {
+  flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+.tela-equipe .e-alca { display: block; width: 40px; height: 5px; border-radius: 5px; background: #cfd6da; margin: 0 auto 14px; }
 .tela-equipe .e-folha-cab { display: flex; align-items: center; gap: 10px; padding: 0 20px; }
 .tela-equipe .e-folha-cab h3 { font-size: 18px; font-weight: 700; flex: 1; min-width: 0; }
 .tela-equipe .e-selo {
@@ -183,9 +261,26 @@
 .tela-equipe .e-leitura-valor { font-size: 34px; font-weight: 700; line-height: 1; margin-top: 6px; }
 .tela-equipe .e-leitura-valor small { font-size: 0.5em; font-weight: 600; color: var(--e-grafite); margin-right: 3px; }
 .tela-equipe .e-leitura-de { font-size: 13.5px; color: var(--e-grafite); margin-top: 6px; }
-.tela-equipe .e-graf { margin: 14px 16px 0; background: rgba(255, 255, 255, 0.92); border-radius: 18px; padding: 16px 12px 10px; }
-.tela-equipe .e-graf svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.tela-equipe .e-graf { margin: 12px 16px 0; background: rgba(255, 255, 255, 0.92); border-radius: 18px; padding: 16px 10px 12px; }
+.tela-equipe .e-graf svg { display: block; width: 100%; height: auto; margin-top: 12px; touch-action: pan-y; }
+/* A barra tocada se destaca pela cor e pelo dia marcado no eixo — sem o
+ * contorno de foco do navegador, que parecia seleção de texto. */
+.tela-equipe .e-graf-dia { cursor: pointer; outline: none; }
+.tela-equipe .e-graf-dia:focus, .tela-equipe .e-graf-dia:focus-visible { outline: none; }
+.tela-equipe .e-graf-cab { padding: 0 8px; min-height: 76px; }
+.tela-equipe .e-graf-valor { font-size: 30px; font-weight: 700; line-height: 1; margin-top: 6px; }
+.tela-equipe .e-graf-comp { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12.5px; color: var(--e-grafite); min-height: 20px; align-items: center; }
+.tela-equipe .e-graf-pill { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+.tela-equipe .e-graf-pill-pos { color: var(--e-pos); background: rgba(31, 138, 91, 0.1); }
+.tela-equipe .e-graf-pill-neg { color: var(--e-neg); background: rgba(192, 69, 59, 0.1); }
+.tela-equipe .e-graf-leg { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 8px 0; font-size: 11.5px; color: var(--e-grafite); }
+.tela-equipe .e-graf-leg span { display: inline-flex; align-items: center; gap: 6px; }
+.tela-equipe .e-graf-leg i { display: inline-block; }
+.tela-equipe .e-graf-leg-media { width: 14px; height: 0; border-top: 1.5px dashed rgba(14, 27, 38, 0.55); }
+.tela-equipe .e-graf-leg-acima { width: 8px; height: 10px; border-radius: 2px; background: #b9cfd9; }
+.tela-equipe .e-graf-leg-hoje { width: 8px; height: 10px; border-radius: 2px; border: 1px dashed #9aa7b0; }
 .tela-equipe .e-tres { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 16px 0; background: rgba(255, 255, 255, 0.92); border-radius: 18px; }
+.tela-equipe .e-tres.e-tres-topo { margin-top: 0; }
 .tela-equipe .e-tres > div { padding: 14px; border-right: 1px solid var(--e-traco); min-width: 0; }
 .tela-equipe .e-tres > div:last-child { border-right: 0; }
 .tela-equipe .e-tres .e-olho { font-size: 10.5px; }
@@ -239,4 +334,7 @@
 /* ── Esqueleto ───────────────────────────────────────────────────────── */
 .tela-equipe .e-esq { background: linear-gradient(90deg, #e9edef, #f3f5f6, #e9edef); background-size: 200% 100%; animation: e-brilho 1.2s linear infinite; border-radius: 18px; }
 @keyframes e-brilho { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) { .tela-equipe .e-esq { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tela-equipe .e-esq, .tela-equipe .e-regua-fill, .tela-equipe .e-regua-ponto, .tela-equipe .e-rosca-g { animation: none; }
+  .tela-equipe .e-veu, .tela-equipe .e-folha { transition: none; }
+}

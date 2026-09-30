@@ -4,6 +4,11 @@
  * (a do site: total ÷ dias com recebimento) e uma leitura grande do dia tocado
  * no lugar dos rótulos sobre cada ponto, que não cabem no celular.
  *
+ * Revisão de 30/09/2026: os números do mês vêm primeiro (três quadros), o dia
+ * tocado é lido no cabeçalho do próprio cartão do gráfico, todos os dias do
+ * mês aparecem na linha de baixo, e a barra tocada não ganha contorno de foco
+ * — o destaque é a cor dela e o dia marcado no eixo.
+ *
  * Valor BRUTO, como o gráfico do site nos dois tenants.
  */
 import { useMemo, useState } from 'react';
@@ -19,8 +24,9 @@ const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julh
   'setembro', 'outubro', 'novembro', 'dezembro'];
 
 const L = 340;          // largura do desenho
-const BASE = 150;       // linha do chão
-const TOPO = 26;        // espaço para o rótulo da média
+const BASE = 142;       // linha do chão
+const TOPO = 8;
+const ALTURA = 164;
 const FONTE = 'Figtree, system-ui, sans-serif';
 
 export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isPaguePlay }: {
@@ -48,7 +54,7 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
   const sel = dia ? grafico.dias[dia - 1] : null;
 
   if (carregando) {
-    return <div className="e-esq" style={{ margin: '0 16px', height: 320 }} aria-busy="true" aria-label="Carregando" />;
+    return <div className="e-esq" style={{ margin: '0 16px', height: 340 }} aria-busy="true" aria-label="Carregando" />;
   }
   if (erro) return <p className="e-vazio"><b>Não foi possível carregar o gráfico</b>Tente de novo em instantes.</p>;
   if (grafico.total === 0) {
@@ -58,10 +64,14 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
   const [ano, mesN] = mes.split('-').map(Number);
   const n = grafico.dias.length;
   const passo = L / n;
-  const larg = Math.max(3, passo * 0.66);
-  const maximo = Math.max(grafico.melhor?.valor ?? 0, grafico.media) * 1.04 || 1;
+  const larg = Math.max(3, passo * 0.62);
+  const maximo = Math.max(grafico.melhor?.valor ?? 0, grafico.media) * 1.06 || 1;
   const altura = (v: number) => Math.max(2, (v / maximo) * (BASE - TOPO));
   const yMedia = BASE - altura(grafico.media);
+  const fimDeSemana = (d: number) => {
+    const s = new Date(ano, mesN - 1, d).getDay();
+    return s === 0 || s === 6;
+  };
 
   const rotuloDia = (d: DiaDoGrafico) => {
     const semana = DIAS_SEMANA[new Date(ano, mesN - 1, d.dia).getDay()];
@@ -73,69 +83,7 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
 
   return (
     <>
-      <section className="e-leitura" aria-live="polite">
-        <div className="e-olho">{sel ? rotuloDia(sel) : ''}{sel?.hoje ? ' · hoje' : ''}</div>
-        <div className="e-leitura-valor e-num">
-          {sel?.valor ? <DinheiroAnimado valor={sel.valor} /> : 'Sem recebimento'}
-        </div>
-        {sel?.hoje && sel.valor !== null && (
-          <div className="e-leitura-de">Parcial — o dia ainda está correndo.</div>
-        )}
-        {vsMedia !== null && (
-          <div className="e-leitura-de">
-            <span className={vsMedia >= 0 ? 'e-pos' : 'e-neg'}>
-              {vsMedia === 0 ? 'na média' : `${Math.abs(vsMedia)}% ${vsMedia > 0 ? 'acima' : 'abaixo'} da média`}
-            </span>
-          </div>
-        )}
-      </section>
-
-      <section className="e-graf">
-        <svg viewBox={`0 0 ${L} 176`} role="img" aria-label="Recebido por dia do mês">
-          <defs>
-            <linearGradient id="e-mare" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0" stopColor="#2ba8e0" /><stop offset="1" stopColor="#34c27a" />
-            </linearGradient>
-          </defs>
-          <line x1={0} x2={L} y1={yMedia} y2={yMedia} stroke="#0e1b26" strokeOpacity={0.5} strokeDasharray="3 4" />
-          <text x={L - 2} y={14} textAnchor="end" fontSize={10.5} fill="#6a7784" fontFamily={FONTE}>
-            - - média {valorCurto(grafico.media)}
-          </text>
-          <line x1={0} x2={L} y1={BASE + 0.5} y2={BASE + 0.5} stroke="#e7ebee" />
-          {grafico.dias.map(d => {
-            const x = (d.dia - 1) * passo + (passo - larg) / 2;
-            const escolhido = d.dia === dia;
-            const tocar = () => setTocado(d.dia);
-            return (
-              <g key={d.dia} role="button" tabIndex={d.valor !== null ? 0 : -1}
-                aria-label={`${rotuloDia(d)}: ${d.valor !== null ? formatBRL(d.valor) : 'sem recebimento'}`}
-                onClick={tocar}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tocar(); } }}>
-                <rect x={(d.dia - 1) * passo} y={0} width={passo} height={BASE} fill="transparent" />
-                {d.valor !== null ? (
-                  d.hoje && !escolhido ? (
-                    <rect x={x + 0.5} y={BASE - altura(d.valor) + 0.5} width={larg - 1} height={altura(d.valor) - 1}
-                      rx={3} fill="none" stroke="#9aa7b0" strokeDasharray="3 2" />
-                  ) : (
-                    <rect x={x} y={BASE - altura(d.valor)} width={larg} height={altura(d.valor)} rx={3}
-                      fill={escolhido ? 'url(#e-mare)' : '#cdd5da'} />
-                  )
-                ) : (
-                  <rect x={x} y={BASE - 3} width={larg} height={3} rx={1.5} fill={d.futuro ? '#eef1f3' : '#e3e8eb'} />
-                )}
-              </g>
-            );
-          })}
-          <text x={2} y={168} fontSize={10.5} fill="#6a7784" fontFamily={FONTE}>1/{mesN}</text>
-          {dia && dia !== 1 && dia !== n && (
-            <text x={(dia - 0.5) * passo} y={168} textAnchor="middle" fontSize={10.5} fill="#0e1b26"
-              fontWeight={600} fontFamily={FONTE}>{dia}/{mesN}</text>
-          )}
-          <text x={L - 2} y={168} textAnchor="end" fontSize={10.5} fill="#6a7784" fontFamily={FONTE}>{n}/{mesN}</text>
-        </svg>
-      </section>
-
-      <div className="e-tres">
+      <div className="e-tres e-tres-topo">
         <div>
           <div className="e-olho">No mês</div>
           <div className="e-tres-v e-num">{valorCurto(grafico.total)}</div>
@@ -152,6 +100,83 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
           <div className="e-tres-d">{grafico.melhor ? `${grafico.melhor.dia}/${mesN}` : ''}</div>
         </div>
       </div>
+
+      <section className="e-graf" aria-label="Recebido por dia">
+        <div className="e-graf-cab" aria-live="polite">
+          <div className="e-olho">{sel ? rotuloDia(sel) : ''}{sel?.hoje ? ' · hoje' : ''}</div>
+          <div className="e-graf-valor e-num">
+            {sel?.valor ? <DinheiroAnimado valor={sel.valor} semCor /> : 'Sem recebimento'}
+          </div>
+          <div className="e-graf-comp">
+            {sel?.hoje && sel.valor !== null && <span>Parcial — o dia ainda está correndo.</span>}
+            {vsMedia !== null && (
+              <span className={`e-graf-pill ${vsMedia >= 0 ? 'e-graf-pill-pos' : 'e-graf-pill-neg'}`}>
+                {vsMedia === 0 ? 'na média' : `${vsMedia > 0 ? '▲' : '▼'} ${Math.abs(vsMedia)}% ${vsMedia > 0 ? 'acima' : 'abaixo'} da média`}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <svg viewBox={`0 0 ${L} ${ALTURA}`} role="img" aria-label="Recebido por dia do mês">
+          <defs>
+            <linearGradient id="e-mare" x1="0" y1="1" x2="0" y2="0">
+              <stop offset="0" stopColor="#2ba8e0" /><stop offset="1" stopColor="#34c27a" />
+            </linearGradient>
+            <linearGradient id="e-mare-h" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#2ba8e0" /><stop offset="1" stopColor="#34c27a" />
+            </linearGradient>
+          </defs>
+          <line x1={0} x2={L} y1={BASE + 0.5} y2={BASE + 0.5} stroke="#e7ebee" />
+          {grafico.dias.map(d => {
+            const x = (d.dia - 1) * passo + (passo - larg) / 2;
+            const escolhido = d.dia === dia;
+            const tocar = () => setTocado(d.dia);
+            return (
+              <g key={d.dia} className="e-graf-dia" role="button" tabIndex={d.valor !== null ? 0 : -1}
+                aria-label={`${rotuloDia(d)}: ${d.valor !== null ? formatBRL(d.valor) : 'sem recebimento'}`}
+                aria-pressed={escolhido}
+                onClick={tocar}
+                onFocus={tocar}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tocar(); } }}>
+                <rect x={(d.dia - 1) * passo} y={0} width={passo} height={ALTURA} fill="transparent" />
+                {escolhido && (
+                  <rect x={(d.dia - 1) * passo + 0.5} y={TOPO - 4} width={passo - 1} height={BASE - TOPO + 4}
+                    rx={4} fill="#2ba8e0" fillOpacity={0.07} />
+                )}
+                {d.valor !== null ? (
+                  d.hoje && !escolhido ? (
+                    <rect x={x + 0.5} y={BASE - altura(d.valor) + 0.5} width={larg - 1} height={altura(d.valor) - 1}
+                      rx={2.5} fill="none" stroke="#9aa7b0" strokeDasharray="3 2" />
+                  ) : (
+                    <rect x={x} y={BASE - altura(d.valor)} width={larg} height={altura(d.valor)} rx={2.5}
+                      fill={escolhido ? 'url(#e-mare)' : d.valor >= grafico.media ? '#b9cfd9' : '#d5dde2'} />
+                  )
+                ) : (
+                  <rect x={x} y={BASE - 2} width={larg} height={2} rx={1} fill={d.futuro ? '#eef1f3' : '#e3e8eb'} />
+                )}
+                {escolhido && (
+                  <rect x={(d.dia - 1) * passo + 1.5} y={BASE + 17} width={passo - 3} height={2.5} rx={1.25} fill="url(#e-mare-h)" />
+                )}
+                <text x={(d.dia - 0.5) * passo} y={BASE + 13} textAnchor="middle" fontFamily={FONTE}
+                  fontSize={7.6} letterSpacing={-0.35} fontWeight={escolhido || d.hoje ? 700 : 500}
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                  fill={escolhido ? '#0e1b26' : d.hoje ? '#0e1b26' : fimDeSemana(d.dia) || d.futuro ? '#b3bdc4' : '#6a7784'}>
+                  {d.dia}
+                </text>
+              </g>
+            );
+          })}
+          <line x1={0} x2={L} y1={yMedia} y2={yMedia} stroke="#0e1b26" strokeOpacity={0.45}
+            strokeDasharray="3 4" pointerEvents="none" />
+        </svg>
+
+        <div className="e-graf-leg" aria-hidden="true">
+          <span><i className="e-graf-leg-media" />média {valorCurto(grafico.media)}/dia</span>
+          <span><i className="e-graf-leg-acima" />acima da média</span>
+          <span><i className="e-graf-leg-hoje" />hoje</span>
+        </div>
+      </section>
+
       <p className="e-nota">
         Toque numa barra para ver o dia. Hoje fica tracejado até fechar.
         {isPaguePlay && ' Valores brutos, como no gráfico do site.'}

@@ -13,8 +13,14 @@ import { useNumeroAnimado } from './numeroAnimado';
 import './comum.css';
 
 /** «R$ 38.420,50» com o «R$» menor, rolando do valor antigo para o novo. */
-export function DinheiroAnimado({ valor }: { valor: number }) {
-  const { valor: quadro, direcao } = useNumeroAnimado(valor);
+export function DinheiroAnimado({ valor, semCor = false }: {
+  valor: number;
+  /** Sem o verde/vermelho da mudança — para quando a troca não é subida nem
+   *  descida (ex.: tocar outro dia no gráfico). */
+  semCor?: boolean;
+}) {
+  const { valor: quadro, direcao: d } = useNumeroAnimado(valor);
+  const direcao = semCor ? null : d;
   const texto = formatBRL(quadro).replace(/^R\$\s?/, '');
   return (
     <span className={direcao ? `v-num v-${direcao}` : 'v-num'} aria-label={formatBRL(valor)}>

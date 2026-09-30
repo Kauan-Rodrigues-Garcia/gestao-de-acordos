@@ -5,19 +5,29 @@
 import { ESCALA_REGUA, corDoQuartil } from './regua';
 
 /**
- * A régua: um traço com as marcas das faixas e um ponto onde a pessoa está.
- * `pct` é a projeção (recebido ÷ esperado × 100). Só desenho — `aria-hidden`:
- * o número ao lado já diz o mesmo em texto.
+ * A régua: a barra de projeção de uma pessoa, com as marcas das faixas.
+ * `pct` é a projeção (recebido ÷ esperado × 100). O preenchimento é um degradê
+ * na cor do quartil sobre um trilho tingido da mesma cor, com a ponta
+ * brilhando — a cor já diz a faixa antes de ler o número. Só desenho
+ * (`aria-hidden`): o número ao lado já diz o mesmo em texto.
+ *
+ * O crescimento na entrada anima `transform` (barato no celular), nunca a
+ * largura.
  */
 export function Regua({ pct, marcas, cor }: { pct: number | null; marcas: number[]; cor: string }) {
   const pos = pct === null ? null : Math.max(0, Math.min(pct, ESCALA_REGUA)) / ESCALA_REGUA * 100;
   return (
-    <div className="e-regua" aria-hidden="true">
-      {pos !== null && <div className="e-regua-fill" style={{ width: `${pos}%` }} />}
+    <div className="e-regua" aria-hidden="true" style={{ '--c': cor } as React.CSSProperties}>
+      {pos !== null && pos > 0 && (
+        <div className="e-regua-anda" style={{ width: `${pos}%` }}>
+          <div className="e-regua-fill" />
+          <i className="e-regua-ponto" />
+        </div>
+      )}
       {marcas.map(m => (
-        <i key={m} className="e-regua-marca" style={{ left: `${(m / ESCALA_REGUA) * 100}%` }} />
+        <i key={m} className={`e-regua-marca${pos !== null && pos >= (m / ESCALA_REGUA) * 100 ? ' e-regua-marca-in' : ''}`}
+          style={{ left: `${(m / ESCALA_REGUA) * 100}%` }} />
       ))}
-      {pos !== null && <i className="e-regua-ponto" style={{ left: `${pos}%`, background: cor }} />}
     </div>
   );
 }
