@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Aviso de pagamento que SAIU do recebimento + NR e «hoje» nos avisos
--- 30/09/2026 — NÃO APLICADA. Só roda com o «pode» de quem manda (CLAUDE.md).
+-- 30/09/2026 — APLICADA com «pode» e registrada como 20260930175642.
 -- ============================================================================
 --
 -- ## O pedido (30/09/2026)
@@ -87,7 +87,7 @@ COMMENT ON TABLE public.push_saidas IS
   'Pagamentos que sairam do recebimento de alguem (apagados ou transferidos). '
   'Gravada so pelos gatilhos de analitico_recebimentos; lida so pela Edge '
   'Function enviar-push, depois da espera e se o pagamento nao voltou '
-  '(20260930170000).';
+  '(20260930175642).';
 
 -- ── Gatilho de DELETE: um por comando ───────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_push_saida_de_delete()

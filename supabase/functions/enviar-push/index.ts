@@ -10,7 +10,7 @@
  * `{ acao: 'rodada' }` — o pg_cron chama (fn_push_disparar, via pg_net) quando
  * há pendente em `push_fila` ou saída vencida em `push_saidas`. Exige o
  * cabeçalho `x-push-segredo` igual a `push_config.segredo`. Migrations
- * 20260930124757 (entradas) e 20260930170000 (saídas, NR e «hoje»).
+ * 20260930124757 (entradas) e 20260930175642 (saídas, NR e «hoje»).
  *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
@@ -150,7 +150,7 @@ async function rodadaEntradas(admin: ReturnType<typeof createClient>) {
 /**
  * Uma rodada das SAÍDAS (pagamento apagado ou transferido). A espera, o
  * «voltou» (limpar e reimportar) e o corte de limpeza em massa ficam no banco
- * (fn_push_pegar_saidas). Sem a migration 20260930170000, a RPC não existe e
+ * (fn_push_pegar_saidas). Sem a migration 20260930175642, a RPC não existe e
  * a rodada só registra — as entradas seguem normais.
  */
 async function rodadaSaidas(admin: ReturnType<typeof createClient>) {

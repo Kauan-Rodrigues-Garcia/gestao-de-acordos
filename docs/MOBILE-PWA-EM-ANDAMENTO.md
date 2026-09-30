@@ -407,13 +407,14 @@ a média, não a meta diária.
    - totais (mês, hoje, diário) já acompanhavam — somam as linhas que existem;
    - **com o app aberto**: aviso na tela quando um pagamento some da lista (chave
      natural NR + dia + forma, então limpar e reimportar não parece saída);
-   - **push**: migration `20260930170000_push_saidas_e_nr.sql` + `enviar-push`
+   - **push**: migration `20260930175642_push_saidas_e_nr.sql` + `enviar-push`
      (rodada de saídas; aviso com nome, NR, −valor e **o total de hoje**). Três
      travas: espera de 15 min com descarte do que voltou, corte de limpeza em massa
      (> 300 linhas num comando), uma vez por pagamento/pessoa. Validada num Postgres
-     16 local descartável. **NÃO aplicada**: precisa do «pode» para a migration e para
-     publicar a `enviar-push` v3. A Edge Function funciona sem a migration (a rodada
-     de saídas só registra erro; as entradas seguem). Depois:
+     16 local descartável. **APLICADA com «pode» em 30/09/2026**, registrada como
+     `20260930175642` (arquivo renomeado para bater), e **`enviar-push` v3 publicada**
+     (verify_jwt desligado, como a v2). Fumaça: `rodada` sem segredo 401, `teste` sem
+     sessão 401. Código na main (`5995bd0` e seguintes). Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 

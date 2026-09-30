@@ -1,10 +1,10 @@
 /**
- * Migration 20260930170000: aviso de pagamento que SAIU do recebimento, e o NR
+ * Migration 20260930175642: aviso de pagamento que SAIU do recebimento, e o NR
  * e o «hoje» nos avisos. Executada num Postgres 16 local descartável
  * (30/09/2026) com: limpar e reimportar (3 saídas → 3 «voltou», 0 avisos),
  * transferência e exclusão real (2 avisos), upsert com o mesmo operador (nada),
  * espera (nada antes; cron só dispara com saída vencida), limpeza em massa e
- * push desligado (nada). NÃO aplicada em produção — só com o «pode».
+ * push desligado (nada). Aplicada em produção com «pode» em 30/09/2026.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';

@@ -41,7 +41,7 @@ const ROTULO_CARTAO = 'Cartão';
 const ROTULO_BOLETO_PIX = 'Pix/Boleto';
 
 function familiaDaForma(rotulo: string): { chave: string; rotulo: string } | null {
-  const n = rotulo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const n = rotulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (n.includes('recorrente')) return { chave: 'cartao_recorrente', rotulo: 'Cartão recorrente' };
   if (n.includes('cart'))       return { chave: 'cartao',            rotulo: 'Cartão' };
   if (/^\s*(pix\s*\/\s*boleto|boleto\s*\/\s*pix)\s*$/.test(n)) {
@@ -77,7 +77,7 @@ export interface ItemFila {
   forma_pagamento: string;
   forma_detalhe: string | null;
   nome_cliente: string | null;
-  /** NR do pagamento (`codigo` do analítico). Ausente em fila de antes de 20260930170000. */
+  /** NR do pagamento (`codigo` do analítico). Ausente em fila de antes de 20260930175642. */
   codigo?: string | null;
 }
 
@@ -200,7 +200,7 @@ export function montarAvisos(
   return saida;
 }
 
-// ── Pagamento que saiu do recebimento (20260930170000) ─────────────────────
+// ── Pagamento que saiu do recebimento (20260930175642) ─────────────────────
 
 export interface ItemSaida extends ItemFila {
   /** 'removido' (apagado) | 'transferido' (foi para outra pessoa). */
