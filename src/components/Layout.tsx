@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
   Camera, Loader2, Trash2, Bell, MessageCircle, BarChart2, KeyRound, ArrowUpDown,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -39,6 +40,7 @@ import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import { abasDoMenu } from '@/lib/menuLateral';
 import { produtoDaEmpresa } from '@/lib/produto';
+import { ehCelular, ehPerfilDaTelaMinima, gravarVersao } from '@/lib/mobile/preferencia';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -282,6 +284,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * com ele vazio.
    */
   const produto = produtoDaEmpresa(empresa, tenant.slug);
+  // Quem escolheu «Versão completa» no celular volta para a tela mínima por
+  // aqui. Só aparece para quem a tela mínima atende, e só no celular.
+  const ofereceVersaoCelular =
+    produto === 'cobranca' && ehPerfilDaTelaMinima(perfil?.perfil) && ehCelular();
 
   const navItems = useMemo(() => abasDoMenu({
     cargo: userRole,
@@ -812,6 +818,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </PopoverContent>
             </Popover>
 
+            {ofereceVersaoCelular && (
+              <Button
+                variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground"
+                title="Versão para celular" aria-label="Versão para celular"
+                onClick={() => { gravarVersao('mobile'); navigate(ROUTE_PATHS.MOBILE); }}
+              >
+                <Smartphone className="w-4 h-4" />
+              </Button>
+            )}
             <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:text-destructive" onClick={handleSignOut}>
               <LogOut className="w-4 h-4" />
             </Button>

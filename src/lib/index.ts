@@ -107,6 +107,12 @@ export const ROUTE_PATHS = {
   MEUS_CHIPS: '/meus-chips',
   /** O painel do Núcleo, separado do Dashboard da cobrança (11/09/2026). */
   DASHBOARD_ADM: '/dashboard-adm',
+  /**
+   * A tela mínima do celular (PWA). No celular, quem recebe no próprio nome cai
+   * aqui depois do login — ver `lib/mobile/preferencia.ts` e a spec
+   * docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md.
+   */
+  MOBILE: '/m',
   COMEMORACOES: '/comemoracoes',
   /** A mesa do Modo TV: prévia, no ar e o corte. Atrás do painel. */
   MODO_TV: '/modo-tv',

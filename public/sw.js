@@ -8,6 +8,8 @@
  *
  * O servidor (Edge Function `enviar-push`) manda um JSON:
  *   { titulo, corpo, tag?, url? }
+ *
+ * O app usa HashRouter: a tela mínima é `/#/m`, não `/m`.
  */
 
 self.addEventListener('install', () => {
@@ -35,7 +37,7 @@ self.addEventListener('push', (event) => {
     // Com `tag`, um reenvio substitui o aviso anterior — e ainda assim vibra.
     renotify: Boolean(dados.tag),
     vibrate: [120, 60, 120],
-    data: { url: dados.url || '/m?novos=1' },
+    data: { url: dados.url || '/#/m?novos=1' },
   };
 
   event.waitUntil((async () => {
@@ -48,7 +50,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const destino = new URL(event.notification.data?.url || '/m?novos=1', self.location.origin).href;
+  const destino = new URL(event.notification.data?.url || '/#/m?novos=1', self.location.origin).href;
 
   event.waitUntil((async () => {
     const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

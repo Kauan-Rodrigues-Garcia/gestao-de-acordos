@@ -24,6 +24,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
+import { deveAbrirMobile } from '@/lib/mobile/preferencia';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -76,6 +77,7 @@ const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
+const Mobile            = lazy(() => import('@/pages/Mobile'));
 // A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
 // este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
 const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'));
@@ -168,7 +170,15 @@ function VersionWatcher(): null {
  */
 function PainelDeEntrada(): React.ReactElement {
   const { empresa, tenantSlug, loading } = useEmpresa();
+  const { perfil } = useAuth();
   const produto = produtoDaEmpresa(empresa, tenantSlug);
+
+  // No celular, quem recebe no próprio nome abre a tela mínima — a menos que
+  // tenha escolhido «Versão completa» neste aparelho. O login navega para `/`,
+  // então este é o único ponto de redirecionamento. Ver `lib/mobile/preferencia`.
+  if (!loading && produto === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
+    return <Navigate to={ROUTE_PATHS.MOBILE} replace />;
+  }
 
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
@@ -268,6 +278,14 @@ export default function App() {
                     <PainelDeEntrada />
                   </ProtectedRoute>
                 </LayoutWrapper>
+              } />
+              {/* Tela mínima do celular (PWA). Sem `LayoutWrapper`: ela toma a
+                  tela inteira, sem barra lateral nem cabeçalho. Mesma chave do
+                  Dashboard, que é de onde vêm os números dela. */}
+              <Route path={ROUTE_PATHS.MOBILE} element={
+                <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard">
+                  <Mobile />
+                </ProtectedRoute>
               } />
               {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.
                   Quem abre é a chave, que nasce só no Assistente ADM; o dado

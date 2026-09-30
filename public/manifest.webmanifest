@@ -4,7 +4,7 @@
   "description": "Seus recebimentos, sua meta e sua comissão no celular.",
   "lang": "pt-BR",
   "id": "/m",
-  "start_url": "/m",
+  "start_url": "/#/m",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
