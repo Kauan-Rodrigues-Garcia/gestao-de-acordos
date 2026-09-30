@@ -17,6 +17,8 @@ export interface RelatorioLido {
   linhas: Pagamento[];
   totais: Valores;
   duplicadas: number;
+  /** Pares «Estornado» + «Estorno» do mesmo Id.Baixa juntados numa linha líquida. */
+  estornos: number;
   rodapeConferido: boolean;
   camposConferidos: (keyof Valores)[];
   inicio: string;

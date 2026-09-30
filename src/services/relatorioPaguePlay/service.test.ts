@@ -5,7 +5,7 @@ import { importarRelatorio } from './service';
 import { zerarValores, type RelatorioLido } from './modelo';
 
 const linha={id_baixa:'1',data:'2026-09-11',data_pagamento:'2026-09-11',uf:'PE',acordo:'1',parcela:'1',forma:'Pix',ia:'',total:100,pp:20,coren:60,cofen:20};
-const relatorio:RelatorioLido={linhas:[linha],totais:{total:100,pp:20,coren:60,cofen:20},duplicadas:0,rodapeConferido:false,camposConferidos:[],inicio:'2026-09-11',fim:'2026-09-11',modalidade:'pagamento'};
+const relatorio:RelatorioLido={linhas:[linha],totais:{total:100,pp:20,coren:60,cofen:20},duplicadas:0,estornos:0,rodapeConferido:false,camposConferidos:[],inicio:'2026-09-11',fim:'2026-09-11',modalidade:'pagamento'};
 beforeEach(()=>{rpc.mockReset();});
 describe('envio atômico do relatório',()=>{
   it('só conclui depois de enviar todos os blocos',async()=>{
