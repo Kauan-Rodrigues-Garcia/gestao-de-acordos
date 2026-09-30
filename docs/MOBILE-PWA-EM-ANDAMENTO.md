@@ -69,23 +69,32 @@ Android funciona direto.
 ## 4. Onde paramos — pergunta em aberto
 
 Decididas em 30/09/2026: a versão mínima (§3.5) e o envio por fila (§3.6).
-Começou a apresentação do design por seções (§5.2). **Seção 1 (app
-instalável) apresentada, aguardando aprovação.** Pontos dela:
 
-- Arquivos de manifest estáticos, um por empresa (`manifest-bookplay` /
-  `manifest-pagueplay`), escolhidos pelo `index.html` antes de carregar,
-  com a mesma regra do hostname de `src/lib/tenant.ts`. `start_url` = `/m`.
-- Ícones 192/512 gerados a partir dos logos de 500×500 que já existem, mais
-  o `apple-touch-icon` por empresa.
+**Seção 1 do design (app instalável) — APROVADA em 30/09/2026**, com uma
+mudança pedida pelo usuário:
+
+- **Ícone único para o app** (não um por empresa): o mesmo aperto de mão dos
+  logos, com as cores num «degradê bagunçado» de verde (PaguePlay) e azul
+  (BookPlay). Rascunho em `docs/mobile/icone-rascunho.png` (duas variantes:
+  mão em degradê sobre branco / mão branca sobre degradê), gerado por
+  `docs/mobile/gerar-icone.py`. **Falta o usuário escolher a variante.**
+- Com ícone único, basta **um** `manifest.webmanifest` estático (nome do app
+  e `start_url` = `/m`).
 - Service worker escrito à mão, **sem cache offline**: só `push` e
-  `notificationclick`. Motivo: o aviso «Nova versão» (`useVersionCheck`) e o
-  deploy da Vercel continuam como estão, sem risco de o celular ficar preso
-  numa versão velha. Isso dispensa o `vite-plugin-pwa`.
+  `notificationclick`. O aviso «Nova versão» (`useVersionCheck`) e o deploy
+  da Vercel seguem como estão. Dispensa o `vite-plugin-pwa`.
 - Botão «Instalar app» na `/m` (Android: prompt do navegador; iPhone: passo a
-  passo «Compartilhar → Adicionar à Tela de Início», porque o iOS não tem
-  prompt).
-- Redirecionamento: no celular, após o login, operador cai em `/m`; o link
-  «Versão completa» grava a escolha no aparelho para não redirecionar de novo.
+  passo «Compartilhar → Adicionar à Tela de Início»).
+- No celular, após o login, operador cai em `/m`. «Versão completa» fica
+  lembrado no aparelho, com botão para voltar à versão mínima (sugestão
+  aceita — «do restante pode seguir como está»).
+
+**Seção 2 (tela mínima `/m`) apresentada em 30/09/2026, aguardando
+aprovação.** Conteúdo proposto: cabeçalho (nome, empresa, mês), recebido no
+mês + meta + % (mesma meta da aba Metas, via `usePainelMetas`), recebido hoje,
+posição no ranking só se a pessoa tiver a permissão (`podeVerRanking`),
+últimos pagamentos (valor, forma, cliente, data), botão de notificações,
+«Versão completa» e sair. Sem filtro de período na primeira versão.
 
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco
