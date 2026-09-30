@@ -165,7 +165,7 @@ export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking }: {
       {mostraRanking && ranking && (
         <section className="m-cartao">
           <div className="m-rot">Ranking</div>
-          <div className="m-v m-num">{ranking.posicao}º <span>de {ranking.de}</span></div>
+          <div className="m-v m-num">{ranking.posicao}º <span className="m-de">de {ranking.de}</span></div>
           <div className="m-d">
             {ranking.faltam === null ? 'Você está em 1º' : `${formatBRL(ranking.faltam)} do ${ranking.posicao - 1}º`}
           </div>

@@ -54,7 +54,8 @@ export function BarraMeta({ pct, marcos = [], esperado = null, rotuloEsperado }:
   }, [pct]);
 
   return (
-    <div className={marcos.length ? 'v-barra v-com-marcos' : 'v-barra'} aria-hidden="true">
+    <div className={['v-barra', marcos.length ? 'v-com-marcos' : '', esperado !== null && rotuloEsperado ? 'v-com-rotulo' : '']
+      .filter(Boolean).join(' ')} aria-hidden="true">
       <div className="v-trilho">
         <div className="v-cheio" style={{ width: `${largura}%` }}>
           <i className="v-brilho" />

@@ -18,7 +18,7 @@ elite), conta de comissão, importação do analítico
 
 | # | Pergunta | Decisão |
 |---|---|---|
-| 1 | Público | **Líder** e **elite**. O elite troca entre a visão individual e a da equipe. |
+| 1 | Público | **Líder** e **elite**. O elite troca entre a visão individual e a da equipe — e vê a equipe **de que faz parte**, sem precisar liderar (ajuste de 30/09/2026). |
 | 2 | Alcance | Só as equipes que a pessoa **lidera** (regra do `lideresDaEquipe`), não o alcance da permissão `painel_lider`. |
 | 3 | Aviso | Só **«equipe bateu a meta»**. Sem resumo por lote nem fechamento do dia. |
 | 4 | Conteúdo | O modelo do Painel do Líder: recebido + projeção, quartis, quem recebeu hoje, últimos pagamentos. |

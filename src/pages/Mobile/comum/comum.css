@@ -37,11 +37,13 @@
 
 /* ── Números que rolam ───────────────────────────────────────────────── */
 .v-num { font-variant-numeric: tabular-nums; transition: color 600ms ease; }
+.v-num small { font-size: 0.6em; font-weight: 600; opacity: 0.7; margin-right: 3px; }
 .v-num.v-subiu { color: #1f8a5b; }
 .v-num.v-desceu { color: #c0453b; }
 
 /* ── A barra ─────────────────────────────────────────────────────────── */
 .v-barra { position: relative; margin-top: 18px; }
+.v-barra.v-com-rotulo { margin-top: 32px; }
 .v-barra.v-com-marcos { padding-bottom: 18px; }
 .v-trilho { position: relative; height: 10px; border-radius: 10px; background: var(--v-trilho, rgba(14, 27, 38, 0.1)); }
 .v-cheio {

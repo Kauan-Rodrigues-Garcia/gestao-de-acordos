@@ -380,8 +380,40 @@ a média, não a meta diária.
   elite, comparando com o Painel do Líder.
 - Próximo: **L2** (aviso «equipe bateu a meta») — precisa de migration, com «pode».
 
-Em aberto: aplicar o acabamento v2 na `/m` do operador (perguntado, sem resposta
-ainda). Depois:
+**Rodada de ajustes de 30/09/2026 (pedido do usuário, antes da L2) — FEITA na branch:**
+1. **Elite vê a equipe por pertencer a ela** (não precisa estar em `equipe_lideres`):
+   `equipesDaVisao` = equipes que lidera + a de que faz parte (principal + clones).
+   A troca Eu / Equipe aparece para quem tem `ver_painel_lider` e uma equipe.
+2. **Acabamento v2 aplicado à `/m` do operador** (autorizado pelo usuário) e
+   **barra da meta corrigida**: a escala começava pouco abaixo da 1ª faixa e quem
+   estava abaixo dela via a barra vazia; agora começa em zero e enche conforme a %.
+3. Estética:
+   - **cartão principal pastel sólido** (sálvia névoa `#dde7e2`) nas duas telas, com
+     **barra simples e animada** (cresce ao abrir, brilho que passa) — `comum/`;
+   - **lista de pagamentos refeita**: nome do cliente (sem o código que algumas
+     origens gravam na frente — `limparNomeCliente`, na leitura), embaixo **NR** e
+     dia, à direita valor e forma. O **aviso** também: «Maria S.» / «NR 12345 · Pix de
+     R$ 350,00»;
+   - **quartil + quanto falta por faixa (hoje e amanhã)** na `/m` do operador;
+   - **foto de perfil** no cabeçalho (sem foto, a logo);
+   - **números que rolam** (valor antigo → novo; primeira carga sobe do zero) e
+     entrada suave do conteúdo; movimento reduzido respeitado;
+   - **fundo vivo**: três manchas de cor desfocadas, bem claras, derivando devagar.
+4. **Tempo real**: a `/m` já relia a cada sinal do analítico (canal único por
+   empresa, `assinarSinal`; entrega com até ~30–40 s de espera por regra do sinal).
+   A tela da equipe **não** ouvia — agora ouve o mesmo sinal (e o do diário na
+   PaguePlay), sem canal novo.
+5. **Pagamento que saiu do recebimento**:
+   - totais (mês, hoje, diário) já acompanhavam — somam as linhas que existem;
+   - **com o app aberto**: aviso na tela quando um pagamento some da lista (chave
+     natural NR + dia + forma, então limpar e reimportar não parece saída);
+   - **push**: migration `20260930170000_push_saidas_e_nr.sql` + `enviar-push`
+     (rodada de saídas; aviso com nome, NR, −valor e **o total de hoje**). Três
+     travas: espera de 15 min com descarte do que voltou, corte de limpeza em massa
+     (> 300 linhas num comando), uma vez por pagamento/pessoa. Validada num Postgres
+     16 local descartável. **NÃO aplicada**: precisa do «pode» para a migration e para
+     publicar a `enviar-push` v3. A Edge Function funciona sem a migration (a rodada
+     de saídas só registra erro; as entradas seguem). Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 
