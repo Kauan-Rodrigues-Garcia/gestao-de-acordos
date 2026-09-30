@@ -199,3 +199,69 @@ export function montarAvisos(
   }
   return saida;
 }
+
+// ── Pagamento que saiu do recebimento (20260930170000) ─────────────────────
+
+export interface ItemSaida extends ItemFila {
+  /** 'removido' (apagado) | 'transferido' (foi para outra pessoa). */
+  motivo: string;
+}
+
+export interface PessoaSaida {
+  em_ho: boolean;
+  /** Recebido hoje, já sem o que saiu — unidade do Dashboard. */
+  hoje: number | string;
+  /** Recebido no mês, já sem o que saiu — unidade do Dashboard. */
+  mes: number | string;
+}
+
+/**
+ * Os avisos de saída — pedido de 30/09/2026: dizer que o valor saiu do
+ * recebimento e mostrar sempre o total recebido no dia (já sem ele).
+ *
+ *   ↩️ Pagamento saiu do seu recebimento
+ *   Maria S.
+ *   NR 12345 · −R$ 350,00 · hoje: R$ 1.240,00
+ *
+ * Acima do corte, um resumo com o total que saiu, o de hoje e o do mês.
+ */
+export function montarAvisosDeSaida(
+  itens: ItemSaida[], pessoas: Record<string, PessoaSaida>, corte: number,
+): AvisosDaPessoa[] {
+  const porPessoa = new Map<string, ItemSaida[]>();
+  for (const i of itens) {
+    const lista = porPessoa.get(i.perfil_id) ?? [];
+    lista.push(i);
+    porPessoa.set(i.perfil_id, lista);
+  }
+
+  const saida: AvisosDaPessoa[] = [];
+  for (const [perfilId, lista] of porPessoa) {
+    const p = pessoas[perfilId];
+    const rotuloHoje = p?.em_ho ? 'hoje (H.O.)' : 'hoje';
+    const hoje = p ? ` · ${rotuloHoje}: ${brl(Number(p.hoje) || 0)}` : '';
+    const avisos: Aviso[] = [];
+    if (lista.length <= corte) {
+      for (const i of lista) {
+        const nr = String(i.codigo ?? '').trim();
+        avisos.push({
+          titulo: '↩️ Pagamento saiu do seu recebimento',
+          corpo: `${abreviarCliente(i.nome_cliente, nr)}\n${nr ? `NR ${nr} · ` : ''}−${brl(Number(i.valor) || 0)}${hoje}`,
+          tag: `saida:${i.id}`,
+          url: '/#/m',
+        });
+      }
+    } else {
+      const total = lista.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+      const noMes = p ? ` · no mês: ${brl(Number(p.mes) || 0)}` : '';
+      avisos.push({
+        titulo: `↩️ ${lista.length} pagamentos saíram do seu recebimento`,
+        corpo: `−${brl(total)}${hoje}${noMes}`,
+        tag: `saidas:${perfilId}:${lista[0].id}`,
+        url: '/#/m',
+      });
+    }
+    saida.push({ perfilId, ids: lista.map(i => i.id), avisos });
+  }
+  return saida;
+}

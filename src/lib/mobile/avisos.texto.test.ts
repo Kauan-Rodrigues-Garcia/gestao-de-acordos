@@ -1,6 +1,6 @@
 /** Os textos do aviso de pagamento — spec §4 (corte, resumo, meta batida). */
 import { describe, it, expect } from 'vitest';
-import { faixasBatidas, montarAvisos, type ItemFila } from '../../../supabase/functions/enviar-push/texto';
+import { faixasBatidas, montarAvisos, montarAvisosDeSaida, type ItemFila } from '../../../supabase/functions/enviar-push/texto';
 
 const it_ = (id: number, valor: number, detalhe: string | null, cliente = 'MARIA SILVA', forma = 'boleto_pix', perfil = 'ana', codigo: string | null = null): ItemFila =>
   ({ id, perfil_id: perfil, valor, forma_pagamento: forma, forma_detalhe: detalhe, nome_cliente: cliente, codigo });
@@ -64,5 +64,31 @@ describe('faixasBatidas', () => {
     expect(faixasBatidas(1550, [1000, 1500, 2000])).toBe(2);
     expect(faixasBatidas(999.99, [1000])).toBe(0);
     expect(faixasBatidas(1000, [1000])).toBe(1);
+  });
+});
+
+describe('montarAvisosDeSaida', () => {
+  const s_ = (id: number, valor: number, codigo = '222', perfil = 'ana') =>
+    ({ id, perfil_id: perfil, valor, forma_pagamento: 'boleto_pix', forma_detalhe: null,
+       nome_cliente: '222 - MARIA SILVA', codigo, motivo: 'transferido' });
+
+  it('um aviso por pagamento: nome, NR, valor negativo e o total de hoje', () => {
+    const [r] = montarAvisosDeSaida([s_(4, 200)], { ana: { em_ho: false, hoje: 100, mes: 3100 } }, 3);
+    expect(r.avisos[0].titulo).toBe('↩️ Pagamento saiu do seu recebimento');
+    expect(nbsp(r.avisos[0].corpo)).toBe('Maria S.\nNR 222 · −R$ 200,00 · hoje: R$ 100,00');
+    expect(r.ids).toEqual([4]);
+  });
+
+  it('PaguePlay: o «hoje» diz que é H.O.', () => {
+    const [r] = montarAvisosDeSaida([s_(4, 200)], { ana: { em_ho: true, hoje: 25, mes: 700 } }, 3);
+    expect(nbsp(r.avisos[0].corpo)).toContain('hoje (H.O.): R$ 25,00');
+  });
+
+  it('acima do corte: um resumo com o total que saiu, hoje e mês', () => {
+    const itens = [1, 2, 3, 4].map(i => s_(i, 100, String(i)));
+    const [r] = montarAvisosDeSaida(itens, { ana: { em_ho: false, hoje: 50, mes: 900 } }, 3);
+    expect(r.avisos).toHaveLength(1);
+    expect(r.avisos[0].titulo).toBe('↩️ 4 pagamentos saíram do seu recebimento');
+    expect(nbsp(r.avisos[0].corpo)).toBe('−R$ 400,00 · hoje: R$ 50,00 · no mês: R$ 900,00');
   });
 });

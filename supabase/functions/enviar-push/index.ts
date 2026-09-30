@@ -8,8 +8,9 @@
  * decide quem é, não o corpo da requisição.
  *
  * `{ acao: 'rodada' }` — o pg_cron chama (fn_push_disparar, via pg_net) quando
- * há pendente em `push_fila`. Exige o cabeçalho `x-push-segredo` igual a
- * `push_config.segredo`. Migration 20260930124757.
+ * há pendente em `push_fila` ou saída vencida em `push_saidas`. Exige o
+ * cabeçalho `x-push-segredo` igual a `push_config.segredo`. Migrations
+ * 20260930124757 (entradas) e 20260930170000 (saídas, NR e «hoje»).
  *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
@@ -22,7 +23,10 @@
  */
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
-import { montarAvisos, type Aviso, type ItemFila, type PessoaLote } from './texto.ts';
+import {
+  montarAvisos, montarAvisosDeSaida,
+  type Aviso, type AvisosDaPessoa, type ItemFila, type ItemSaida, type PessoaLote, type PessoaSaida,
+} from './texto.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -86,14 +90,13 @@ function mesAtual(): string {
  * a fila (até a 3ª tentativa — fn_push_concluir).
  */
 async function rodada(admin: ReturnType<typeof createClient>) {
-  const { data: lote, error } = await admin.rpc('fn_push_pegar_lote', { p_limite: 500 });
-  if (error) return { erro: error.message };
-  const itens = ((lote as { itens?: ItemFila[] })?.itens ?? []);
-  if (!itens.length) return { pessoas: 0, avisos: 0 };
-  const pessoas = (lote as { pessoas?: Record<string, PessoaLote> }).pessoas ?? {};
-  const corte = Number((lote as { corte?: number }).corte) || 3;
+  const entradas = await rodadaEntradas(admin);
+  const saidas = await rodadaSaidas(admin);
+  return { entradas, saidas };
+}
 
-  const porPessoa = montarAvisos(itens, pessoas, corte, mesAtual());
+/** Manda os avisos de cada pessoa para os aparelhos dela; devolve o que fechar. */
+async function entregar(admin: ReturnType<typeof createClient>, porPessoa: AvisosDaPessoa[]) {
   const { data: insc } = await admin
     .from('push_inscricoes').select('id, perfil_id, endpoint, p256dh, auth')
     .in('perfil_id', porPessoa.map(p => p.perfilId));
@@ -121,8 +124,46 @@ async function rodada(admin: ReturnType<typeof createClient>) {
     if (algumSaiu || !soFalhaDeRede) ok.push(...p.ids);
     else falha.push(...p.ids);
   }
+  return { ok, falha, avisos };
+}
 
+/**
+ * Uma rodada da fila de ENTRADA: pega o lote, monta os avisos por pessoa
+ * (texto.ts), manda para cada aparelho e fecha. A pessoa conta como «saiu» se
+ * ao menos um aparelho recebeu ou se todos morreram (404/410); só falha de
+ * rede/servidor volta para a fila (até a 3ª tentativa — fn_push_concluir).
+ */
+async function rodadaEntradas(admin: ReturnType<typeof createClient>) {
+  const { data: lote, error } = await admin.rpc('fn_push_pegar_lote', { p_limite: 500 });
+  if (error) return { erro: error.message };
+  const itens = ((lote as { itens?: ItemFila[] })?.itens ?? []);
+  if (!itens.length) return { pessoas: 0, avisos: 0 };
+  const pessoas = (lote as { pessoas?: Record<string, PessoaLote> }).pessoas ?? {};
+  const corte = Number((lote as { corte?: number }).corte) || 3;
+
+  const porPessoa = montarAvisos(itens, pessoas, corte, mesAtual());
+  const { ok, falha, avisos } = await entregar(admin, porPessoa);
   await admin.rpc('fn_push_concluir', { p_ok: ok, p_falha: falha });
+  return { pessoas: porPessoa.length, avisos, ok: ok.length, falha: falha.length };
+}
+
+/**
+ * Uma rodada das SAÍDAS (pagamento apagado ou transferido). A espera, o
+ * «voltou» (limpar e reimportar) e o corte de limpeza em massa ficam no banco
+ * (fn_push_pegar_saidas). Sem a migration 20260930170000, a RPC não existe e
+ * a rodada só registra — as entradas seguem normais.
+ */
+async function rodadaSaidas(admin: ReturnType<typeof createClient>) {
+  const { data: lote, error } = await admin.rpc('fn_push_pegar_saidas', { p_limite: 500 });
+  if (error) return { erro: error.message };
+  const itens = ((lote as { itens?: ItemSaida[] })?.itens ?? []);
+  if (!itens.length) return { pessoas: 0, avisos: 0 };
+  const pessoas = (lote as { pessoas?: Record<string, PessoaSaida> }).pessoas ?? {};
+  const corte = Number((lote as { corte?: number }).corte) || 3;
+
+  const porPessoa = montarAvisosDeSaida(itens, pessoas, corte);
+  const { ok, falha, avisos } = await entregar(admin, porPessoa);
+  await admin.rpc('fn_push_concluir_saidas', { p_ok: ok, p_falha: falha });
   return { pessoas: porPessoa.length, avisos, ok: ok.length, falha: falha.length };
 }
 
