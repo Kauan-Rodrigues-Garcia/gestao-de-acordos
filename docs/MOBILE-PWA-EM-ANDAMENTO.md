@@ -131,8 +131,34 @@ aprovação.** Proposta:
   pagamento de outra pessoa num celular compartilhado.
 - Chave VAPID pública em variável `VITE_`; a privada só em secret da Edge
   Function.
-- A detalhar na spec: quem recebe o push de linhas de clone (a regra de
-  comissão diz «tudo vem do usuário original»).
+- Clone: resolvido. Clone não é outro perfil — é o MESMO `operador_id` ligado
+  a outra equipe (`equipe_operadores_clones`). A linha já nasce com o id da
+  pessoa, então o push vai para ela sem regra especial.
+
+**Seção 3 — APROVADA em 30/09/2026.**
+
+**Seção 4 (como a notificação chega) apresentada em 30/09/2026, aguardando
+aprovação.** Achado que muda o texto: `forma_pagamento` no analítico é só
+`boleto_pix` | `cartao`. O detalhe (Pix, Boleto, Cartão recorrente, Pix
+automático…) vem de `forma_detalhe`, que **só a BookPlay preenche** — na
+PaguePlay o push diz «Boleto/Pix» ou «Cartão». Usar `rotuloDaForma` +
+`familiaDaForma` (`src/lib/formasPagamento.ts`); a Edge Function (Deno) não
+importa de `src/`, então a spec precisa decidir entre copiar com teste de
+paridade ou calcular a família no banco. Proposta:
+
+- 1 a 3 pagamentos no lote: um push cada — título «💰 Pagamento recebido!»,
+  corpo «Pix de R$ 350,00 · Maria S.» (primeiro nome + inicial: tela de
+  bloqueio é pública).
+- 4+: um push — «💰 Você recebeu 6 pagamentos!», corpo «R$ 2.140,00 · 4 Pix,
+  2 boletos · no mês: R$ 38.420,50».
+- Extra sugerido: push quando bate uma faixa de meta («🎯 Você bateu a 2ª
+  meta! Comissão agora: R$ 810,67»). Só com comissão/meta configurada.
+- Ícone do app + badge monocromático (mão branca) para a barra do Android;
+  vibração no Android. Som: o do sistema — Web Push não permite som próprio.
+- Toque abre `/m` com os pagamentos novos destacados.
+- `tag` por lote para não empilhar duplicado se reenviar.
+- Pergunta em aberto: horário de silêncio (ex.: 21h–8h acumula num resumo de
+  manhã) ou avisar a qualquer hora?
 
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco
