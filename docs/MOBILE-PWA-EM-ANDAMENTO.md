@@ -1,5 +1,8 @@
 # Versão mobile (PWA) + push de pagamento — brainstorm em andamento
 
+> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR; mobile PAUSADO — ver
+> «PAUSADO em 30/09/2026» abaixo.**
+>
 > **Para quem retoma isto** (o Cleber ou um agente numa sessão nova). Escrito em
 > **29/09/2026**, no meio do brainstorm. **Nada foi implementado.** Não existe
 > design aprovado nem spec: o processo está na etapa de perguntas. Leia a §4
@@ -279,6 +282,31 @@ tudo certo»).**
 
 **Falta:** o usuário ativar os avisos no celular e acompanhar a primeira
 importação (robô do 59 de hora em hora / importação da PaguePlay).
+
+---
+
+## PAUSADO em 30/09/2026 — fases seguintes pendentes
+
+O usuário pausou o mobile para uma manutenção. Etapas 1, 2 e 3 (operador) estão
+no ar e na main. **Ficou pendente, para retomar depois:**
+
+1. **Versão para LIDERANÇA** (líder e elite que lidera): tela mínima com a
+   equipe — recebido e projeção da equipe (mesma conta do Desempenho Equipes /
+   `CardEquipe`, H.O. na PaguePlay), quartil dos operadores, quem recebeu hoje.
+   Avisos: resumo da equipe (definir frequência — por lote ou fechamento do dia)
+   e «equipe bateu a meta». Hoje líder no celular cai no site completo
+   (`deveAbrirMobile` só atende `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`).
+2. **Versão para DIRETORIA / gerência**: visão por setor/empresa (Painel
+   Diretoria resumido). Decidir o que entra.
+3. Decisões adiadas da spec: horário de silêncio (hoje avisa a qualquer hora);
+   valor do aviso na PaguePlay em bruto «por enquanto».
+4. Acompanhar o primeiro aviso automático real (robô do 59 / importação PP) e
+   conferir `push_fila.situacao` se algo não chegar.
+5. Na próxima publicação da `enviar-push`, o comentário do topo passa a citar
+   `20260930124757` (hoje a v2 publicada cita `20260930140000` — só comentário).
+
+Retomar pelo brainstorm da fase 1 (liderança): perguntas de escopo antes de
+qualquer código, no mesmo processo das etapas do operador (§5).
 
 **Fora do mobile (30/09/2026): projeção do Desafio ≠ Painel do Líder — RESOLVIDO.**
 Código na main (`67b4632`); migration aplicada em produção com «pode» e
