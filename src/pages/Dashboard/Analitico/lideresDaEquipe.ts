@@ -66,22 +66,22 @@ export interface EntradaLideres {
 }
 
 /**
- * `equipe_id` → líderes a exibir.
+ * `equipe_id` → ids dos líderes, pela regra acima.
  *
- * Deduplica por **id**, não por nome: dois homônimos são duas pessoas, e a
- * versão anterior desta lógica escondia uma delas.
+ * A decisão de QUEM lidera mora aqui, em ids. `lideresDaEquipe` só troca o id
+ * por nome e foto para o card, e `equipesQueLidero` (celular) só inverte o
+ * mapa — as duas telas não podem discordar de quem lidera o quê.
  */
-export function lideresDaEquipe(entrada: EntradaLideres): Record<string, LiderInfo[]> {
+export function idsDosLideresPorEquipe(entrada: EntradaLideres): Record<string, string[]> {
   const { lideres, explicitos, clones } = entrada;
 
-  const porId = new Map<string, PerfilLider>();
-  for (const l of lideres) porId.set(l.id, l);
+  const conhecidos = new Set(lideres.map(l => l.id));
 
   /** equipe → ids, na ordem em que apareceram, sem repetir. */
   const acumular = (
     destino: Map<string, string[]>, equipeId: string | null, liderId: string,
   ) => {
-    if (!equipeId || !porId.has(liderId)) return;
+    if (!equipeId || !conhecidos.has(liderId)) return;
     const lista = destino.get(equipeId);
     if (!lista) { destino.set(equipeId, [liderId]); return; }
     if (!lista.includes(liderId)) lista.push(liderId);
@@ -110,19 +110,31 @@ export function lideresDaEquipe(entrada: EntradaLideres): Record<string, LiderIn
     if (jaLideraAlgo.has(l.id)) continue;
     acumular(daReserva, l.equipe_id, l.id);
   }
-  // Clone só entra se a pessoa for líder — `porId` já filtra isso.
+  // Clone só entra se a pessoa for líder — `conhecidos` já filtra isso.
   for (const c of clones) {
     if (jaLideraAlgo.has(c.operador_id)) continue;
     acumular(daReserva, c.equipe_id, c.operador_id);
   }
 
-  const saida: Record<string, LiderInfo[]> = {};
+  const saida: Record<string, string[]> = {};
   // A reserva primeiro, para o explícito sobrescrever a equipe inteira quando
   // existir. Sobrescrever, e não completar: é esse o ponto da correção.
-  for (const [equipeId, ids] of daReserva) {
-    saida[equipeId] = ids.map(id => porId.get(id)!).map(p => ({ nome: p.nome, foto_url: p.foto_url }));
-  }
-  for (const [equipeId, ids] of doExplicito) {
+  for (const [equipeId, ids] of daReserva) saida[equipeId] = ids;
+  for (const [equipeId, ids] of doExplicito) saida[equipeId] = ids;
+  return saida;
+}
+
+/**
+ * `equipe_id` → líderes a exibir.
+ *
+ * Deduplica por **id**, não por nome: dois homônimos são duas pessoas, e a
+ * versão anterior desta lógica escondia uma delas.
+ */
+export function lideresDaEquipe(entrada: EntradaLideres): Record<string, LiderInfo[]> {
+  const porId = new Map<string, PerfilLider>();
+  for (const l of entrada.lideres) porId.set(l.id, l);
+  const saida: Record<string, LiderInfo[]> = {};
+  for (const [equipeId, ids] of Object.entries(idsDosLideresPorEquipe(entrada))) {
     saida[equipeId] = ids.map(id => porId.get(id)!).map(p => ({ nome: p.nome, foto_url: p.foto_url }));
   }
   return saida;

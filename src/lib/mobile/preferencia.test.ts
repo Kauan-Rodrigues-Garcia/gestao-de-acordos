@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  CHAVE_VERSAO, deveAbrirMobile, ehCelular, gravarVersao, lerVersao, ofereceVersaoCelular,
+  CHAVE_VERSAO, deveAbrirMobile, destinoMobile, ehCelular, gravarVersao, lerVersao, ofereceVersaoCelular,
   type AmbienteTela,
 } from './preferencia';
 
@@ -39,8 +39,11 @@ describe('deveAbrirMobile', () => {
   it('elite também recebe no próprio nome → tela mínima', () => {
     expect(deveAbrirMobile('elite', celular)).toBe(true);
   });
-  it('líder no celular fica no site de sempre (1ª versão é só de quem recebe)', () => {
-    expect(deveAbrirMobile('lider', celular)).toBe(false);
+  it('líder no celular abre a tela mínima (a da equipe)', () => {
+    expect(deveAbrirMobile('lider', celular)).toBe(true);
+  });
+  it('gerência no celular fica no site de sempre (fase da diretoria)', () => {
+    expect(deveAbrirMobile('gerencia', celular)).toBe(false);
   });
   it('sem perfil carregado não redireciona', () => {
     expect(deveAbrirMobile(null, celular)).toBe(false);
@@ -91,9 +94,20 @@ describe('super admin (teste)', () => {
     expect(ofereceVersaoCelular('super_admin', desktop)).toBe(true);
     expect(ofereceVersaoCelular('super_admin', celular)).toBe(true);
   });
-  it('operador só vê o ícone no celular; líder nunca', () => {
+  it('operador e líder só veem o ícone no celular; gerência nunca', () => {
     expect(ofereceVersaoCelular('operador', celular)).toBe(true);
     expect(ofereceVersaoCelular('operador', desktop)).toBe(false);
-    expect(ofereceVersaoCelular('lider', celular)).toBe(false);
+    expect(ofereceVersaoCelular('lider', celular)).toBe(true);
+    expect(ofereceVersaoCelular('gerencia', celular)).toBe(false);
+  });
+});
+
+describe('destinoMobile', () => {
+  it('líder vai para a tela da equipe', () => {
+    expect(destinoMobile('lider')).toBe('/m/equipe');
+  });
+  it('operador e elite vão para a tela pessoal (o elite troca lá dentro)', () => {
+    expect(destinoMobile('operador')).toBe('/m');
+    expect(destinoMobile('elite')).toBe('/m');
   });
 });

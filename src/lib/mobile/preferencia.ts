@@ -6,10 +6,13 @@
  * instalado e no navegador. «Versão completa» fica lembrado NO APARELHO, e o
  * menu do site ganha «Versão para celular» para desfazer.
  *
- * A 1ª versão é só de quem recebe (`PERFIS_QUE_CONTAM_NO_RECEBIMENTO`): líder,
- * gerência e diretoria seguem no site de sempre.
+ * Quem recebe (`PERFIS_QUE_CONTAM_NO_RECEBIMENTO`) abre a tela pessoal `/m`; o
+ * `lider`, que só lidera, abre a da equipe `/m/equipe` (spec da liderança,
+ * docs/superpowers/specs/2026-09-30-mobile-lideranca-design.md §1). O elite
+ * abre a pessoal e troca para a da equipe lá dentro. Gerência e diretoria
+ * seguem no site de sempre.
  */
-import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, ROUTE_PATHS } from '@/lib/index';
 
 export const CHAVE_VERSAO = 'mobile:versao';
 
@@ -57,8 +60,23 @@ export function gravarVersao(v: VersaoEscolhida): void {
   }
 }
 
-export function ehPerfilDaTelaMinima(perfil: string | null | undefined): boolean {
+/** Cargo que conta no recebimento: a tela pessoal. */
+function recebeNoProprioNome(perfil: string | null | undefined): boolean {
   return (PERFIS_QUE_CONTAM_NO_RECEBIMENTO as readonly string[]).includes(perfil ?? '');
+}
+
+/** Só lidera — não recebe em nome próprio, então não tem a tela pessoal. */
+export function ehLider(perfil: string | null | undefined): boolean {
+  return perfil === 'lider';
+}
+
+export function ehPerfilDaTelaMinima(perfil: string | null | undefined): boolean {
+  return recebeNoProprioNome(perfil) || ehLider(perfil);
+}
+
+/** Para onde o celular leva: a tela da equipe para o líder, a pessoal para os demais. */
+export function destinoMobile(perfil: string | null | undefined): string {
+  return ehLider(perfil) ? ROUTE_PATHS.MOBILE_EQUIPE : ROUTE_PATHS.MOBILE;
 }
 
 /**

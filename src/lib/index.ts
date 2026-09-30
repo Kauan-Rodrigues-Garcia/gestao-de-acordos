@@ -113,6 +113,11 @@ export const ROUTE_PATHS = {
    * docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md.
    */
   MOBILE: '/m',
+  /**
+   * A visão da EQUIPE no celular: líder cai aqui; o elite chega pela troca
+   * Eu / Equipe da `/m`. Spec: docs/superpowers/specs/2026-09-30-mobile-lideranca-design.md.
+   */
+  MOBILE_EQUIPE: '/m/equipe',
   COMEMORACOES: '/comemoracoes',
   /** A mesa do Modo TV: prévia, no ar e o corte. Atrás do painel. */
   MODO_TV: '/modo-tv',

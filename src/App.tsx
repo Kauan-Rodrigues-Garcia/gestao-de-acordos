@@ -24,7 +24,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
-import { deveAbrirMobile } from '@/lib/mobile/preferencia';
+import { deveAbrirMobile, destinoMobile } from '@/lib/mobile/preferencia';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -177,7 +177,7 @@ function PainelDeEntrada(): React.ReactElement {
   // tenha escolhido «Versão completa» neste aparelho. O login navega para `/`,
   // então este é o único ponto de redirecionamento. Ver `lib/mobile/preferencia`.
   if (!loading && produto === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
-    return <Navigate to={ROUTE_PATHS.MOBILE} replace />;
+    return <Navigate to={destinoMobile(perfil?.perfil)} replace />;
   }
 
   // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
