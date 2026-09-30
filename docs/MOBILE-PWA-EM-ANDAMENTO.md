@@ -266,10 +266,9 @@ tudo certo»).**
   `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) → deploy da função →
   `VITE_VAPID_PUBLIC_KEY` na Vercel (os dois projetos) e redeploy.
 
-**Pendência urgente fora do mobile (30/09/2026):** projeção do Desafio ≠ Painel
-do Líder. Código na main (`67b4632`); **falta aplicar a migration
-`20260930120000_desafio_mede_equipe_como_o_painel.sql` (com «pode»)**. Sem ela a
-tela segue como antes.
+**Fora do mobile (30/09/2026): projeção do Desafio ≠ Painel do Líder — RESOLVIDO.**
+Código na main (`67b4632`); migration aplicada em produção com «pode» e
+registrada como `20260930115849` (arquivo renomeado para bater).
 
 **Antes era:** o usuário testar no preview da Vercel num Android e num
 iPhone (instalar, abrir, conferir os números contra o Dashboard). Depois,
