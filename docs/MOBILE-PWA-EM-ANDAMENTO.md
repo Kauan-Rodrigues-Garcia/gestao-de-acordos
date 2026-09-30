@@ -1,7 +1,7 @@
 # Versão mobile (PWA) + push de pagamento — brainstorm em andamento
 
-> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR. Fase da LIDERANÇA retomada:
-> spec em rascunho, aguardando aprovação — ver «Liderança — brainstorm RETOMADO».**
+> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR. Fase da LIDERANÇA: spec aprovada,
+> L1 (tela da equipe) em execução — ver «Liderança — brainstorm RETOMADO».**
 >
 > **Para quem retoma isto** (o Cleber ou um agente numa sessão nova). Escrito em
 > **29/09/2026**, no meio do brainstorm. **Nada foi implementado.** Não existe
@@ -362,7 +362,12 @@ equipe, operador e detalhe; Quartis vira barra de distribuição + faixas como f
 lista com régua + folha de detalhe (a linha expandida do site) com «Mandar resumo no
 WhatsApp»; Gráfico com a média diária do site e leitura do dia tocado. Corrigido do v1:
 faixas de quartil padrão são 100/80/50% (o v1 dizia 110%) e a linha do gráfico do site é
-a média, não a meta diária. **Aguardando aprovação do visual v2 e da spec.** Depois:
+a média, não a meta diária.
+
+**Spec e visual v2 APROVADOS em 30/09/2026.** Plano:
+`docs/superpowers/plans/2026-09-30-mobile-lideranca.md`. Em execução: **L1** (tela da
+equipe, sem banco). Em aberto: aplicar o acabamento v2 na `/m` do operador (perguntado,
+sem resposta ainda). Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 

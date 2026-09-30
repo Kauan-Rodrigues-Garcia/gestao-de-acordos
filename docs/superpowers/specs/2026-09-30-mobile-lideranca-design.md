@@ -1,7 +1,7 @@
 # Versão mobile para a liderança
 
 **Data:** 2026-09-30
-**Estado:** **RASCUNHO — aguardando aprovação do usuário.** Nada implementado.
+**Estado:** aprovada em 30/09/2026 (com o visual v2). Plano: `docs/superpowers/plans/2026-09-30-mobile-lideranca.md`
 **Continua:** `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md` (operador, no ar)
 **Histórico da conversa:** `docs/MOBILE-PWA-EM-ANDAMENTO.md` → «Liderança — brainstorm RETOMADO»
 **Protótipo:** `docs/mobile/prototipo-lider.html` (print `prototipo-lider.png`, dados fictícios) — v2
@@ -145,10 +145,11 @@ diária**.
 - **Leitura grande** no topo: o dia tocado (sem toque, hoje), valor, pagamentos e quanto
   ficou acima/abaixo da média. Substitui os rótulos sobre cada ponto, que não cabem no
   celular.
-- Barras por **dia útil**: cinza; o dia tocado no degradê do ícone; **hoje tracejado**
-  (parcial); dias que faltam como traço no chão. Linha tracejada da **média diária**,
-  como no site.
-- Três números: no mês, média por dia útil, melhor dia.
+- Barras por **dia do mês**, como o site (dia sem recebimento fica vazio, não é zero):
+  cinza; o dia tocado no degradê do ícone; **hoje tracejado** (parcial); dias que
+  faltam como traço no chão. Linha tracejada da **média diária** do site (total ÷ dias
+  com recebimento).
+- Três números: no mês, média por dia com recebimento, melhor dia.
 - SVG escrito à mão, sem recharts. Dados de `buscarRecebidoPorDia` (+ ajustes como linhas
   do dia, como o site), filtrados pelos operadores da equipe.
 
@@ -296,4 +297,4 @@ com o «pode». Registrar a versão aplicada.
 - Texto do aviso **sem valores** (como o de meta do operador).
 - Aba Hoje sem permissão de analítico da equipe: **só os agregados**.
 - Protótipo refeito (v2) a pedido: mais minimalista, cada aba baseada na do site.
-  **Aguardando aprovação do visual v2 e da spec.**
+  **Visual v2 e spec aprovados em 30/09/2026.**
