@@ -452,6 +452,12 @@ iPhone mostra sempre o ícone do app). Regras:
   mês/faixa) na mesma marca da importação. Migration aplicada com «pode» e registrada
   como `20260930195304` (176 faixas de 94 pessoas como semente); `enviar-push` v5
   publicada (sem segredo → 401).
+- **Correção no ar (20260930200115):** a rodada das metas quebrava em produção com
+  «DELETE requires a WHERE clause» — o Supabase liga o `safeupdate` nas chamadas pela
+  API, e o Postgres local não tem. `DELETE … WHERE TRUE`; teste novo acusa DELETE sem
+  WHERE nas migrations de push. As marcas guardadas foram processadas na rodada
+  seguinte. (A função da L2, `fn_push_metas_equipe_batidas`, tinha o mesmo defeito —
+  o aviso da meta da equipe não chegou a sair antes desta correção.)
 
 **«Instalar app» na visão Equipe (30/09/2026):** o líder cai direto na `/m/equipe` e o
 botão só existia no rodapé da `/m`. Agora o rodapé da equipe tem o mesmo botão (convite
