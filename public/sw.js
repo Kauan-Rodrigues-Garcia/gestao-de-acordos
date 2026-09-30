@@ -7,7 +7,10 @@
  * docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md §1.
  *
  * O servidor (Edge Function `enviar-push`) manda um JSON:
- *   { titulo, corpo, tag?, url? }
+ *   { titulo, corpo, tag?, url?, icone? }
+ *
+ * `icone` escolhe o ícone próprio do tipo de aviso (30/09/2026):
+ * /icons/avisos/<icone>.png. O Android mostra; o iPhone usa sempre o do app.
  *
  * O app usa HashRouter: a tela mínima é `/#/m`, não `/m`.
  */
@@ -29,9 +32,12 @@ self.addEventListener('push', (event) => {
   }
 
   const titulo = dados.titulo || 'Gestão de Acordos';
+  // Só nomes conhecidos: o ícone nunca vira um caminho arbitrário.
+  const ICONES = ['pagamento', 'saida', 'meta', 'operador', 'equipe', 'resumo'];
+  const icone = ICONES.includes(dados.icone) ? `/icons/avisos/${dados.icone}.png` : '/icons/app-192.png';
   const opcoes = {
     body: dados.corpo || '',
-    icon: '/icons/app-192.png',
+    icon: icone,
     badge: '/icons/badge-96.png',
     tag: dados.tag || undefined,
     // Com `tag`, um reenvio substitui o aviso anterior — e ainda assim vibra.

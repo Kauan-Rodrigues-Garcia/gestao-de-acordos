@@ -15,8 +15,9 @@
  * `{ acao: 'resumo_equipes' }` — o pg_cron chama de hora em hora
  * (fn_push_resumo_disparar): o recebido de cada equipe desde o último resumo,
  * para quem lidera e para quem ligou o resumo. Mesmo segredo da rodada.
- * A rodada também confere a META das equipes (marca do gatilho da importação).
- * Migration 20260930192744.
+ * A rodada também confere as METAS (marca do gatilho da importação): a equipe
+ * que alcançou a meta e cada operador que alcançou faixa nova — para a pessoa e
+ * para quem lidera. Migrations 20260930192744 e 20260930210000.
  *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
@@ -30,9 +31,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
 import {
-  montarAvisos, montarAvisosDeSaida, montarAvisosMetaEquipe, montarResumosEquipe,
+  montarAvisos, montarAvisosDeSaida, montarAvisosMetaEquipe, montarAvisosMetaOperador, montarResumosEquipe,
   type Aviso, type AvisosDaPessoa, type EquipeNaMeta, type ItemFila, type ItemSaida,
-  type PessoaLote, type PessoaSaida, type ResumoEquipe,
+  type OperadorNaMeta, type PessoaLote, type PessoaSaida, type ResumoEquipe,
 } from './texto.ts';
 
 const CORS = {
@@ -82,14 +83,6 @@ async function enviarPara(
   return { enviados, removidos, falhas };
 }
 
-/** Mês corrente em São Paulo, `yyyy-MM` — entra na `tag` do aviso de meta. */
-function mesAtual(): string {
-  const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit',
-  }).formatToParts(new Date());
-  return `${p.find(x => x.type === 'year')?.value}-${p.find(x => x.type === 'month')?.value}`;
-}
-
 /**
  * Uma rodada da fila: pega o lote, monta os avisos por pessoa (texto.ts), manda
  * para cada aparelho e fecha. A pessoa conta como «saiu» se ao menos um aparelho
@@ -99,23 +92,28 @@ function mesAtual(): string {
 async function rodada(admin: ReturnType<typeof createClient>) {
   const entradas = await rodadaEntradas(admin);
   const saidas = await rodadaSaidas(admin);
-  const metasEquipe = await rodadaMetasEquipe(admin);
-  return { entradas, saidas, metasEquipe };
+  const metas = await rodadaMetas(admin);
+  return { entradas, saidas, metas };
 }
 
 /**
- * A META das equipes: o banco confere as empresas marcadas pela importação,
- * grava o marco (uma vez por equipe por mês) e devolve só quem bateu agora,
- * com líderes e membros. Sem a migration 20260930192744 a RPC não existe e só
- * registra — o resto da rodada segue.
+ * As METAS: o banco consome as marcas da importação, grava os marcos (uma vez
+ * por equipe/mês e por pessoa/mês/faixa) e devolve só o que foi alcançado
+ * agora, já com quem recebe — fn_push_metas_da_rodada (20260930210000). Sem a
+ * migration a RPC não existe e só registra: o resto da rodada segue.
  */
-async function rodadaMetasEquipe(admin: ReturnType<typeof createClient>) {
-  const { data, error } = await admin.rpc('fn_push_metas_equipe_batidas');
+async function rodadaMetas(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc('fn_push_metas_da_rodada');
   if (error) return { erro: error.message };
-  const equipes = (data ?? []) as EquipeNaMeta[];
-  if (!equipes.length) return { equipes: 0, avisos: 0 };
-  const { avisos } = await entregar(admin, montarAvisosMetaEquipe(equipes));
-  return { equipes: equipes.length, avisos };
+  const r = (data ?? {}) as { equipes?: EquipeNaMeta[]; operadores?: OperadorNaMeta[] };
+  const equipes = r.equipes ?? [];
+  const operadores = r.operadores ?? [];
+  if (!equipes.length && !operadores.length) return { equipes: 0, operadores: 0, avisos: 0 };
+  const { avisos } = await entregar(admin, [
+    ...montarAvisosMetaOperador(operadores),
+    ...montarAvisosMetaEquipe(equipes),
+  ]);
+  return { equipes: equipes.length, operadores: operadores.length, avisos };
 }
 
 /** O resumo por hora do recebido de cada equipe. */
@@ -147,7 +145,7 @@ async function entregar(admin: ReturnType<typeof createClient>, porPessoa: Aviso
     const lista = aparelhos.get(p.perfilId) ?? [];
     if (!lista.length) { ok.push(...p.ids); continue; }
     let algumSaiu = false, soFalhaDeRede = true;
-    // Em ordem: os avisos de pagamento antes do de meta.
+    // Em ordem: a pessoa recebe os avisos na ordem em que foram montados.
     for (const aviso of p.avisos) {
       const r = await enviarPara(admin, lista, aviso);
       avisos += r.enviados;
@@ -174,7 +172,7 @@ async function rodadaEntradas(admin: ReturnType<typeof createClient>) {
   const pessoas = (lote as { pessoas?: Record<string, PessoaLote> }).pessoas ?? {};
   const corte = Number((lote as { corte?: number }).corte) || 3;
 
-  const porPessoa = montarAvisos(itens, pessoas, corte, mesAtual());
+  const porPessoa = montarAvisos(itens, pessoas, corte);
   const { ok, falha, avisos } = await entregar(admin, porPessoa);
   await admin.rpc('fn_push_concluir', { p_ok: ok, p_falha: falha });
   return { pessoas: porPessoa.length, avisos, ok: ok.length, falha: falha.length };
@@ -233,9 +231,9 @@ Deno.serve(async (req) => {
     // Ativado na tela da equipe (o líder não recebe aviso de pagamento próprio).
     const daEquipe = corpo.contexto === 'equipe';
     const r = await enviarPara(admin, (data ?? []) as Inscricao[], {
-      titulo: 'Pronto! 🔔',
+      titulo: 'Avisos ativados',
       corpo: daEquipe
-        ? 'Você vai receber o aviso quando a equipe bater a meta e, se ligado, o resumo de cada hora.'
+        ? 'Você vai receber os avisos da equipe neste aparelho.'
         : 'Você vai ser avisado a cada pagamento que cair.',
       tag: 'teste',
       url: daEquipe ? '/#/m/equipe' : '/#/m',

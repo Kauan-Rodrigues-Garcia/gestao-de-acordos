@@ -1,40 +1,58 @@
-/** A chave do resumo por hora na visão Equipe (migration 20260930192744). */
+/** As chaves dos avisos da equipe (migration 20260930210000). */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 const estado = { valor: 'ativo' as string };
 const definir = vi.fn();
-const resumo = { disponivel: true, ligado: false };
+const prefs = {
+  disponivel: true,
+  preferencias: { fixo: false, resumo_equipe: false, metas_operadores: false, meta_equipe: false } as
+    { fixo: boolean; resumo_equipe: boolean; metas_operadores: boolean; meta_equipe: boolean } | null,
+};
 
 vi.mock('../useAvisos', () => ({
   useAvisos: () => ({ estado: estado.valor, ocupado: false, ativar: vi.fn(), desativar: vi.fn() }),
 }));
-vi.mock('./useResumoEquipe', () => ({
-  useResumoEquipe: () => ({ ...resumo, salvando: false, definir }),
+vi.mock('./usePreferenciasEquipe', () => ({
+  usePreferenciasEquipe: () => ({ ...prefs, salvando: false, definir }),
 }));
 
 import { AvisosDaEquipe } from './AvisosDaEquipe';
 
-beforeEach(() => { definir.mockReset(); estado.valor = 'ativo'; resumo.disponivel = true; resumo.ligado = false; });
+beforeEach(() => {
+  definir.mockReset();
+  estado.valor = 'ativo';
+  prefs.disponivel = true;
+  prefs.preferencias = { fixo: false, resumo_equipe: false, metas_operadores: false, meta_equipe: false };
+});
 
 describe('AvisosDaEquipe', () => {
-  it('com avisos ativos: a chave do resumo, desligada por padrão para o elite, e liga no toque', () => {
+  it('elite: três chaves, desligadas, cada uma liga à parte', () => {
     render(<AvisosDaEquipe empresaId="e" />);
-    const chave = screen.getByRole('switch', { name: /Resumo da equipe a cada hora/ });
-    expect((chave as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(chave);
-    expect(definir).toHaveBeenCalledWith(true);
-    expect(screen.getByText('Equipe bateu a meta')).toBeTruthy();
+    const chaves = screen.getAllByRole('switch');
+    expect(chaves).toHaveLength(3);
+    for (const c of chaves) expect((c as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: /Metas alcançadas pelos operadores/ }));
+    expect(definir).toHaveBeenCalledWith('metas_operadores', true);
+    fireEvent.click(screen.getByRole('switch', { name: /Equipe alcançou a meta/ }));
+    expect(definir).toHaveBeenCalledWith('meta_equipe', true);
   });
 
-  it('líder (padrão ligado) desliga', () => {
-    resumo.ligado = true;
+  it('elite com o resumo ligado: desliga só ele', () => {
+    prefs.preferencias = { fixo: false, resumo_equipe: true, metas_operadores: false, meta_equipe: false };
     render(<AvisosDaEquipe empresaId="e" />);
-    fireEvent.click(screen.getByRole('switch'));
-    expect(definir).toHaveBeenCalledWith(false);
+    fireEvent.click(screen.getByRole('switch', { name: /Resumo da equipe a cada hora/ }));
+    expect(definir).toHaveBeenCalledWith('resumo_equipe', false);
   });
 
-  it('sem avisos no aparelho: oferece ativar, sem a chave', () => {
+  it('líder: sem chaves, os três «sempre avisa»', () => {
+    prefs.preferencias = { fixo: true, resumo_equipe: true, metas_operadores: true, meta_equipe: true };
+    render(<AvisosDaEquipe empresaId="e" />);
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.getAllByText('sempre avisa')).toHaveLength(3);
+  });
+
+  it('sem avisos no aparelho: oferece ativar, sem chaves', () => {
     estado.valor = 'inativo';
     render(<AvisosDaEquipe empresaId="e" />);
     expect(screen.getByRole('button', { name: 'Ativar avisos' })).toBeTruthy();
@@ -42,10 +60,11 @@ describe('AvisosDaEquipe', () => {
   });
 
   it('banco sem a migration: não promete aviso da equipe; desativar segue', () => {
-    resumo.disponivel = false;
+    prefs.disponivel = false;
+    prefs.preferencias = null;
     render(<AvisosDaEquipe empresaId="e" />);
     expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByText('Equipe bateu a meta')).toBeNull();
+    expect(screen.queryByText('sempre avisa')).toBeNull();
     expect(screen.getByRole('button', { name: 'Desativar' })).toBeTruthy();
   });
 

@@ -67,8 +67,16 @@ export function formaDoPagamento(
 }
 
 // ── Os avisos ───────────────────────────────────────────────────────────────
+//
+// Visual de 30/09/2026 (exemplo aprovado): textos sem emoji, diretos, e um
+// ÍCONE PRÓPRIO por tipo (`icone` → /icons/avisos/<icone>.png, desenhado no
+// estilo do ícone do app). O iPhone mostra sempre o ícone do app instalado; o
+// título já diz o que é.
 
-export interface Aviso { titulo: string; corpo: string; tag?: string; url?: string }
+/** Os ícones por tipo — os arquivos de `public/icons/avisos/`. */
+export type IconeAviso = 'pagamento' | 'saida' | 'meta' | 'operador' | 'equipe' | 'resumo';
+
+export interface Aviso { titulo: string; corpo: string; tag?: string; url?: string; icone?: IconeAviso }
 
 export interface ItemFila {
   id: number;
@@ -109,19 +117,22 @@ const NOMES: Record<string, [string, string]> = {
   ajuste: ['ajuste', 'ajustes'],
 };
 
+/** «Maria S. · NR 12345» — o cliente e, se houver, o NR. */
+function clienteENr(nome: string | null, codigo: string | null | undefined): string {
+  const nr = String(codigo ?? '').trim();
+  return `${abreviarCliente(nome, nr)}${nr ? ` · NR ${nr}` : ''}`;
+}
+
 /**
- * O corpo do aviso de UM pagamento — pedido de 30/09/2026: o nome, embaixo o
- * NR, depois o valor. Duas linhas (o Android e o iPhone mostram as duas na
- * notificação recolhida):
+ * O corpo do aviso de UM pagamento — o cliente com o NR, embaixo a forma e o
+ * valor (o Android e o iPhone mostram as duas linhas recolhidas):
  *
- *   Maria S.
- *   NR 12345 · Pix de R$ 350,00
+ *   Maria S. · NR 12345
+ *   Pix · R$ 350,00
  */
 export function linhasDoPagamento(i: Pick<ItemFila, 'valor' | 'forma_pagamento' | 'forma_detalhe' | 'nome_cliente' | 'codigo'>): string {
   const f = formaDoPagamento(i.forma_pagamento, i.forma_detalhe);
-  const nr = String(i.codigo ?? '').trim();
-  const valor = `${f.rotulo} de ${brl(Number(i.valor) || 0)}`;
-  return `${abreviarCliente(i.nome_cliente, nr)}\n${nr ? `NR ${nr} · ` : ''}${valor}`;
+  return `${clienteENr(i.nome_cliente, i.codigo)}\n${f.rotulo} · ${brl(Number(i.valor) || 0)}`;
 }
 
 /** Quantas faixas estão batidas com `valor`. Degraus em ordem (1ª, 2ª…). */
@@ -130,15 +141,17 @@ export function faixasBatidas(valor: number, degraus: number[]): number {
 }
 
 /**
- * Os avisos de um lote, por pessoa — spec §4:
+ * Os avisos de PAGAMENTO de um lote, por pessoa — spec §4:
  *   • até `corte` pagamentos: um aviso cada;
- *   • acima: um resumo com o total, as formas e o recebido do mês;
- *   • cruzou faixa da meta no lote: mais um aviso, só com a maior.
- * O valor do pagamento é BRUTO (o que o cliente pagou); o «no mês» e a meta
- * estão na unidade do Dashboard (H.O. na PaguePlay) — vêm prontos do banco.
+ *   • acima: um resumo com o total, as formas e o recebido do mês.
+ * O valor do pagamento é BRUTO (o que o cliente pagou); o «no mês» está na
+ * unidade do Dashboard (H.O. na PaguePlay) — vem pronto do banco.
+ *
+ * A meta alcançada saiu daqui (20260930210000): é conferida por estado no
+ * banco, para avisar também quem lidera — ver `montarAvisosMetaOperador`.
  */
 export function montarAvisos(
-  itens: ItemFila[], pessoas: Record<string, PessoaLote>, corte: number, mes: string,
+  itens: ItemFila[], pessoas: Record<string, PessoaLote>, corte: number,
 ): AvisosDaPessoa[] {
   const porPessoa = new Map<string, ItemFila[]>();
   for (const i of itens) {
@@ -153,10 +166,11 @@ export function montarAvisos(
     if (lista.length <= corte) {
       for (const i of lista) {
         avisos.push({
-          titulo: '💰 Pagamento recebido!',
+          titulo: 'Pagamento recebido',
           corpo: linhasDoPagamento(i),
           tag: `pgto:${i.id}`,
           url: '/#/m?novos=1',
+          icone: 'pagamento',
         });
       }
     } else {
@@ -171,30 +185,15 @@ export function montarAvisos(
         .map(([c, n]) => `${n} ${(NOMES[c] ?? [c, c])[n === 1 ? 0 : 1]}`)
         .join(', ');
       const p = pessoas[perfilId];
-      const noMes = p ? ` · no mês: ${brl(Number(p.depois) || 0)}` : '';
+      const noMes = p ? `\nNo mês: ${brl(Number(p.depois) || 0)}` : '';
       avisos.push({
-        titulo: `💰 Você recebeu ${lista.length} pagamentos!`,
+        titulo: `${lista.length} pagamentos recebidos`,
         corpo: `${brl(total)} · ${formas}${noMes}`,
         tag: `lote:${perfilId}:${lista[0].id}`,
         url: '/#/m?novos=1',
+        icone: 'pagamento',
       });
     }
-
-    const p = pessoas[perfilId];
-    if (p) {
-      const degraus = p.degraus.map(Number);
-      const antes = faixasBatidas(Number(p.antes) || 0, degraus);
-      const depois = faixasBatidas(Number(p.depois) || 0, degraus);
-      if (depois > antes) {
-        avisos.push({
-          titulo: `🎯 Você bateu a ${depois}ª meta!`,
-          corpo: 'Toque para ver sua comissão',
-          tag: `meta:${perfilId}:${mes}:${depois}`,
-          url: '/#/m',
-        });
-      }
-    }
-
     saida.push({ perfilId, ids: lista.map(i => i.id), avisos });
   }
   return saida;
@@ -216,12 +215,12 @@ export interface PessoaSaida {
 }
 
 /**
- * Os avisos de saída — pedido de 30/09/2026: dizer que o valor saiu do
- * recebimento e mostrar sempre o total recebido no dia (já sem ele).
+ * Os avisos de saída — dizer que o valor saiu do recebimento e mostrar sempre o
+ * total recebido no dia (já sem ele):
  *
- *   ↩️ Pagamento saiu do seu recebimento
- *   Maria S.
- *   NR 12345 · −R$ 350,00 · hoje: R$ 1.240,00
+ *   Pagamento retirado do recebimento
+ *   Maria S. · NR 12345 · R$ 350,00
+ *   Recebido hoje: R$ 1.240,00
  *
  * Acima do corte, um resumo com o total que saiu, o de hoje e o do mês.
  */
@@ -238,27 +237,28 @@ export function montarAvisosDeSaida(
   const saida: AvisosDaPessoa[] = [];
   for (const [perfilId, lista] of porPessoa) {
     const p = pessoas[perfilId];
-    const rotuloHoje = p?.em_ho ? 'hoje (H.O.)' : 'hoje';
-    const hoje = p ? ` · ${rotuloHoje}: ${brl(Number(p.hoje) || 0)}` : '';
+    const rotuloHoje = p?.em_ho ? 'Recebido hoje (H.O.)' : 'Recebido hoje';
+    const hoje = p ? `\n${rotuloHoje}: ${brl(Number(p.hoje) || 0)}` : '';
     const avisos: Aviso[] = [];
     if (lista.length <= corte) {
       for (const i of lista) {
-        const nr = String(i.codigo ?? '').trim();
         avisos.push({
-          titulo: '↩️ Pagamento saiu do seu recebimento',
-          corpo: `${abreviarCliente(i.nome_cliente, nr)}\n${nr ? `NR ${nr} · ` : ''}−${brl(Number(i.valor) || 0)}${hoje}`,
+          titulo: 'Pagamento retirado do recebimento',
+          corpo: `${clienteENr(i.nome_cliente, i.codigo)} · ${brl(Number(i.valor) || 0)}${hoje}`,
           tag: `saida:${i.id}`,
           url: '/#/m',
+          icone: 'saida',
         });
       }
     } else {
       const total = lista.reduce((s, i) => s + (Number(i.valor) || 0), 0);
       const noMes = p ? ` · no mês: ${brl(Number(p.mes) || 0)}` : '';
       avisos.push({
-        titulo: `↩️ ${lista.length} pagamentos saíram do seu recebimento`,
-        corpo: `−${brl(total)}${hoje}${noMes}`,
+        titulo: `${lista.length} pagamentos retirados do recebimento`,
+        corpo: `${brl(total)} no total${hoje}${noMes}`,
         tag: `saidas:${perfilId}:${lista[0].id}`,
         url: '/#/m',
+        icone: 'saida',
       });
     }
     saida.push({ perfilId, ids: lista.map(i => i.id), avisos });
@@ -266,62 +266,117 @@ export function montarAvisosDeSaida(
   return saida;
 }
 
-// ── Avisos da EQUIPE (20260930192744) ───────────────────────────────────────
+// ── Avisos de META e da EQUIPE (20260930192744, 20260930210000) ─────────────
 
-/** Uma equipe que acabou de bater a meta do mês — `fn_push_metas_equipe_batidas`. */
-export interface EquipeNaMeta {
-  equipe_id: string;
-  equipe_nome: string;
-  mes: string;
-  /** Quem lidera (a regra do Painel + o elite que lidera). */
-  lideres: string[];
-  /** Quem trabalha nela e conta no recebimento, sem quem já está em `lideres`. */
-  membros: string[];
-}
-
-/** Junta os avisos de várias equipes por pessoa (alguém pode estar em duas). */
+/** Junta os avisos por pessoa (alguém pode receber de várias equipes). */
 function porPessoa(): { add: (perfilId: string, aviso: Aviso) => void; lista: () => AvisosDaPessoa[] } {
   const mapa = new Map<string, Aviso[]>();
   return {
     add: (perfilId, aviso) => {
       const l = mapa.get(perfilId) ?? [];
-      l.push(aviso);
+      if (!l.some(a => a.tag && a.tag === aviso.tag)) l.push(aviso);
       mapa.set(perfilId, l);
     },
     lista: () => [...mapa.entries()].map(([perfilId, avisos]) => ({ perfilId, ids: [], avisos })),
   };
 }
 
+/** «Maria» — o primeiro nome, capitalizado. */
+export function primeiroNome(nome: string | null | undefined): string {
+  const p = String(nome ?? '').trim().split(/\s+/)[0] ?? '';
+  return p ? capitalizar(p) : '';
+}
+
+/** Uma equipe que acabou de alcançar a meta do mês — `fn_push_metas_da_rodada`. */
+export interface EquipeNaMeta {
+  equipe_id: string;
+  equipe_nome: string;
+  mes: string;
+  /** Quem lidera (sempre) e quem ligou a chave «meta da equipe». */
+  destinatarios: string[];
+}
+
 /**
- * «Equipe bateu a meta» — spec da liderança §3. SEM valores (a tela de
- * bloqueio é pública). Líder abre a equipe; operador abre a própria tela.
+ * «Equipe alcançou a meta» — só para quem lidera (e o elite que ligou a chave).
+ * SEM valores: a tela de bloqueio é pública.
  *
- *   líder:    🎯 Equipe Bryan bateu a meta!
- *             Meta do mês batida hoje · toque para ver a equipe
- *   operador: 🎯 Sua equipe bateu a meta!
- *             Equipe Bryan bateu a meta do mês. Parabéns!
+ *   Equipe Bryan alcançou a meta
+ *   Parabéns! Meta do mês concluída.
  */
 export function montarAvisosMetaEquipe(equipes: EquipeNaMeta[]): AvisosDaPessoa[] {
   const saida = porPessoa();
   for (const e of equipes) {
-    const tag = `meta-equipe:${e.equipe_id}:${e.mes}`;
-    for (const id of new Set(e.lideres)) {
+    for (const id of e.destinatarios ?? []) {
       saida.add(id, {
-        titulo: `🎯 ${e.equipe_nome} bateu a meta!`,
-        corpo: 'Meta do mês batida hoje · toque para ver a equipe',
-        tag,
+        titulo: `${e.equipe_nome} alcançou a meta`,
+        corpo: 'Parabéns! Meta do mês concluída.',
+        tag: `meta-equipe:${e.equipe_id}:${e.mes}`,
         url: `/#/m/equipe?equipe=${e.equipe_id}`,
+        icone: 'equipe',
       });
     }
-    const lideres = new Set(e.lideres);
-    for (const id of new Set(e.membros)) {
-      if (lideres.has(id)) continue;
-      saida.add(id, {
-        titulo: '🎯 Sua equipe bateu a meta!',
-        corpo: `${e.equipe_nome} bateu a meta do mês. Parabéns!`,
-        tag,
-        url: '/#/m',
-      });
+  }
+  return saida.lista();
+}
+
+/** Um operador que acabou de alcançar faixa nova — `fn_push_metas_da_rodada`. */
+export interface OperadorNaMeta {
+  perfil_id: string;
+  nome: string | null;
+  mes: string;
+  /** A MAIOR faixa alcançada agora (1 = 1ª meta). */
+  faixa: number;
+  /** A própria pessoa tem aparelho para receber. */
+  proprio: boolean;
+  /** As equipes dela, com quem recebe o aviso de meta de operador em cada uma. */
+  equipes: { equipe_id: string; equipe_nome: string; destinatarios: string[] }[];
+}
+
+/**
+ * Meta alcançada pelo operador — pedido de 30/09/2026:
+ *   • a própria pessoa: na 1ª faixa, parabéns; da 2ª em diante, só o fato;
+ *
+ *       Parabéns, Maria                    Você alcançou a 2ª meta!
+ *       Você alcançou a 1ª meta do mês.
+ *
+ *   • quem lidera a equipe (e o elite que ligou a chave):
+ *
+ *       Maria S. alcançou a 1ª meta
+ *       Equipe Bryan
+ *
+ * SEM valores. Quem lidera duas equipes da pessoa recebe um aviso só.
+ */
+export function montarAvisosMetaOperador(ops: OperadorNaMeta[]): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const o of ops) {
+    const k = Number(o.faixa) || 0;
+    if (k <= 0) continue;
+    if (o.proprio) {
+      const nome = primeiroNome(o.nome);
+      saida.add(o.perfil_id, k === 1
+        ? {
+            titulo: nome ? `Parabéns, ${nome}` : 'Parabéns!',
+            corpo: 'Você alcançou a 1ª meta do mês.',
+            tag: `meta:${o.perfil_id}:${o.mes}:${k}`, url: '/#/m', icone: 'meta',
+          }
+        : {
+            titulo: `Você alcançou a ${k}ª meta!`,
+            corpo: '',
+            tag: `meta:${o.perfil_id}:${o.mes}:${k}`, url: '/#/m', icone: 'meta',
+          });
+    }
+    const quem = abreviarCliente(o.nome);
+    for (const e of o.equipes ?? []) {
+      for (const id of e.destinatarios ?? []) {
+        if (id === o.perfil_id) continue;
+        saida.add(id, {
+          titulo: `${quem} alcançou a ${k}ª meta`,
+          corpo: e.equipe_nome,
+          tag: `meta-op:${o.perfil_id}:${o.mes}:${k}`,
+          url: `/#/m/equipe?equipe=${e.equipe_id}&aba=quartis`,
+          icone: 'operador',
+        });
+      }
     }
   }
   return saida.lista();
@@ -356,12 +411,12 @@ export function horaCheia(iso: string): string {
 }
 
 /**
- * O resumo por hora da equipe — pedido de 30/09/2026: «o líder recebe quanto a
- * equipe dele recebeu por horário». Só sai quando entrou pagamento.
+ * O resumo por hora da equipe — «o líder recebe quanto a equipe dele recebeu
+ * por horário». Só sai quando entrou pagamento.
  *
- *   💰 Equipe Bryan · +R$ 3.200,00
+ *   Equipe Bryan · R$ 3.200,00
  *   8 pagamentos das 14h às 15h
- *   Hoje: R$ 12.400,00
+ *   Recebido hoje: R$ 12.400,00
  */
 export function montarResumosEquipe(itens: ResumoEquipe[]): AvisosDaPessoa[] {
   const saida = porPessoa();
@@ -374,10 +429,11 @@ export function montarResumosEquipe(itens: ResumoEquipe[]): AvisosDaPessoa[] {
     const janela = de && de !== ate ? `das ${de} às ${ate}` : `até as ${ate}`;
     const quantos = qtd === 1 ? '1 pagamento' : qtd > 1 ? `${qtd} pagamentos` : 'Recebido';
     const aviso: Aviso = {
-      titulo: `💰 ${r.equipe_nome} · +${brl(novo)}`,
-      corpo: `${quantos} ${janela}\nHoje: ${brl(Number(r.hoje) || 0)}`,
+      titulo: `${r.equipe_nome} · ${brl(novo)}`,
+      corpo: `${quantos} ${janela}\nRecebido hoje: ${brl(Number(r.hoje) || 0)}`,
       tag: `resumo-equipe:${r.equipe_id}:${r.dia}:${ate}`,
       url: `/#/m/equipe?equipe=${r.equipe_id}&aba=hoje`,
+      icone: 'resumo',
     };
     for (const id of new Set(r.destinatarios)) saida.add(id, aviso);
   }

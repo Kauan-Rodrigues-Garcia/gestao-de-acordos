@@ -1,20 +1,32 @@
 /**
- * Os avisos na visão Equipe — L2 da liderança (migration 20260930192744).
+ * Os avisos na visão Equipe — migrations 20260930192744 e 20260930210000.
  *
- *   • «Equipe bateu a meta»: sempre, para quem lidera e para a equipe;
- *   • resumo por hora do recebido da equipe — pedido de 30/09/2026: o líder
- *     recebe; o elite, que tem as duas visões, escolhe. A chave mora aqui, e o
- *     padrão vem do banco (ligado para quem só lidera, desligado para os outros).
+ * Pedido de 30/09/2026:
+ *   • líder: recebe sempre (com o aparelho ativo) o resumo da equipe a cada
+ *     hora, cada operador que alcança uma meta e a equipe que alcança a meta;
+ *   • elite: escolhe cada um desses três à parte (começam desligados). Os
+ *     próprios pagamentos e metas ele recebe sempre, como a operação.
  *
- * O aparelho é o mesmo da `/m`: ativar aqui ou lá é a mesma inscrição.
+ * Quem escolhe e quem recebe sempre é o banco que diz (`fixo`). O aparelho é o
+ * mesmo da `/m`: ativar aqui ou lá é a mesma inscrição.
  */
 import { useAvisos } from '../useAvisos';
-import { useResumoEquipe } from './useResumoEquipe';
+import { usePreferenciasEquipe, type ChaveAviso } from './usePreferenciasEquipe';
+
+const CHAVES: { chave: ChaveAviso; titulo: string; detalhe: string }[] = [
+  { chave: 'resumo_equipe', titulo: 'Resumo da equipe a cada hora',
+    detalhe: 'Quanto a equipe recebeu e o total do dia. Só chega quando entra pagamento.' },
+  { chave: 'metas_operadores', titulo: 'Metas alcançadas pelos operadores',
+    detalhe: 'Um aviso quando alguém da equipe alcança uma meta.' },
+  { chave: 'meta_equipe', titulo: 'Equipe alcançou a meta',
+    detalhe: 'Um aviso quando a equipe fecha a meta do mês.' },
+];
 
 export function AvisosDaEquipe({ empresaId, onInstalar }: { empresaId: string | null; onInstalar?: () => void }) {
   const avisos = useAvisos(empresaId, 'equipe');
   const ativo = avisos.estado === 'ativo';
-  const resumo = useResumoEquipe(ativo);
+  const prefs = usePreferenciasEquipe(ativo);
+  const p = prefs.preferencias;
 
   if (avisos.estado === 'desligado' || avisos.estado === 'sem-suporte') return null;
 
@@ -45,8 +57,8 @@ export function AvisosDaEquipe({ empresaId, onInstalar }: { empresaId: string | 
             ) : (
               <>
                 <p>
-                  <b>Saiba quando a equipe bater a meta</b>
-                  E, se quiser, receba de hora em hora quanto a equipe recebeu.
+                  <b>Receba os avisos da equipe</b>
+                  O resumo de cada hora, as metas alcançadas pelos operadores e a meta da equipe.
                 </p>
                 <button type="button" className="e-btn" style={{ margin: '12px 0 4px', width: '100%' }}
                   disabled={avisos.ocupado} onClick={avisos.ativar}>
@@ -57,23 +69,26 @@ export function AvisosDaEquipe({ empresaId, onInstalar }: { empresaId: string | 
           </div>
         ) : (
           <>
-            {/* As duas linhas dependem da migration: sem ela, nenhuma das duas promete nada. */}
-            {resumo.disponivel && (
-              <label className="e-chave">
-                <span>
-                  <b>Resumo da equipe a cada hora</b>
-                  <small>Quanto entrou desde o último resumo e o total do dia. Só chega quando entra pagamento.</small>
-                </span>
-                <input type="checkbox" role="switch" checked={resumo.ligado}
-                  disabled={resumo.salvando} onChange={e => resumo.definir(e.target.checked)} />
-              </label>
-            )}
-            {resumo.disponivel && (
-              <div className="e-lin">
-                <span className="e-r">Equipe bateu a meta</span>
-                <span className="e-v">sempre avisa</span>
-              </div>
-            )}
+            {/* Sem a migration no banco, nenhuma linha promete aviso da equipe. */}
+            {prefs.disponivel && p && (p.fixo ? (
+              CHAVES.map(c => (
+                <div className="e-lin" key={c.chave}>
+                  <span className="e-r">{c.titulo}</span>
+                  <span className="e-v">sempre avisa</span>
+                </div>
+              ))
+            ) : (
+              CHAVES.map(c => (
+                <label className="e-chave" key={c.chave}>
+                  <span>
+                    <b>{c.titulo}</b>
+                    <small>{c.detalhe}</small>
+                  </span>
+                  <input type="checkbox" role="switch" checked={p[c.chave]}
+                    disabled={prefs.salvando} onChange={e => prefs.definir(c.chave, e.target.checked)} />
+                </label>
+              ))
+            ))}
             <div className="e-lin">
               <span className="e-r">Neste aparelho</span>
               <button type="button" className="e-desativar" disabled={avisos.ocupado} onClick={avisos.desativar}>
