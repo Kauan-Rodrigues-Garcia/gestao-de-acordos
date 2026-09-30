@@ -19,6 +19,7 @@ import { registrarLog } from '@/services/logs.service';
 import { paraHO } from '@/lib/hoPercentual';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { ROTA_DIARIO } from '@/lib/notificacoes-rota';
+import { idsDaEmpresa } from '@/services/notificacoes.service';
 import type {
   OperadorResolvidoMap,
   ResumoOperadorAnalitico,
@@ -538,7 +539,11 @@ export async function notificarImportacaoDiario(
   dia: string,               // 'yyyy-MM-dd'
   novosPorOperador: { operadorId: string; novosPagamentos: number; totalNovo: number }[],
 ): Promise<void> {
-  const comValor = novosPorOperador.filter(n => n.totalNovo > 0);
+  const positivos = novosPorOperador.filter(n => n.totalNovo > 0);
+  if (!positivos.length) return;
+  // Transferido para outra empresa: a linha continua dele, o aviso não vai.
+  const daEmpresa = await idsDaEmpresa(empresaId, positivos.map(n => n.operadorId));
+  const comValor = positivos.filter(n => daEmpresa.has(n.operadorId));
   if (!comValor.length) return;
 
   const diaLabel = new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR');

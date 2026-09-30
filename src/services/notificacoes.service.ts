@@ -83,6 +83,38 @@ export async function limparTodasNotificacoes(userId: string): Promise<boolean> 
   return true;
 }
 
+/**
+ * Dos ids pedidos, só os que ainda são perfis DESTA empresa.
+ *
+ * A importação casa o login do relatório também com quem foi transferido para
+ * outra empresa (`fn_operadores_transferidos`): o recebimento da origem
+ * continua com a pessoa o mês inteiro. Atribuir está certo; avisar não. Sem
+ * este filtro, cada relatório da PaguePlay virava «Analítico atualizado» no
+ * sino de quem hoje trabalha na BookPlay — e o clique abria o analítico da
+ * BookPlay, onde aquele recebimento não existe.
+ *
+ * O aviso nativo do celular já tinha a mesma trava (`fn_push_pode_receber`).
+ */
+export async function idsDaEmpresa(empresaId: string, ids: readonly string[]): Promise<Set<string>> {
+  const unicos = [...new Set(ids)];
+  const achados = new Set<string>();
+  // Em blocos: a lista vai na URL do PostgREST.
+  const BLOCO = 100;
+  for (let i = 0; i < unicos.length; i += BLOCO) {
+    const { data, error } = await supabase
+      .from('perfis')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .in('id', unicos.slice(i, i + BLOCO));
+    if (error) {
+      console.warn('[notificacoes.service] idsDaEmpresa error:', error.message);
+      continue;
+    }
+    for (const p of data ?? []) achados.add(p.id as string);
+  }
+  return achados;
+}
+
 /** Cria uma nova notificação */
 export async function criarNotificacao(params: {
   usuario_id: string;

@@ -33,6 +33,7 @@ import {
 } from './ajusteManual.service';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
+import { idsDaEmpresa } from '@/services/notificacoes.service';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaRelatorio } from './analiticoComum';
 import { lerComCache } from '@/lib/cacheCurto';
@@ -2850,7 +2851,11 @@ export async function notificarImportacaoAnalitico(
   const { data: perfis } = await q;
 
   const ids = new Set<string>((perfis ?? []).map(p => p.id as string));
-  if (escopo?.setorId) for (const id of escopo.operadorIds ?? []) ids.add(id);
+  // Operadores do lote: só os que ainda são desta empresa. O transferido
+  // continua dono da linha, mas o aviso iria para o sino da empresa nova.
+  if (escopo?.setorId && escopo.operadorIds?.length) {
+    for (const id of await idsDaEmpresa(empresaId, escopo.operadorIds)) ids.add(id);
+  }
   if (!ids.size) return;
 
   const notifs = [...ids].map(usuarioId => ({
