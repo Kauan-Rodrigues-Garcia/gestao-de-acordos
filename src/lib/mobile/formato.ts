@@ -84,3 +84,24 @@ export function formaDoPagamento(
     cor: corDaForma(familia.rotulo),
   };
 }
+
+/**
+ * Valor curto para listas do celular: «R$ 41,9 mil», «R$ 1,2 mi», «R$ 850».
+ *
+ * Nas listas a coluna de valor tem ~80 px; o valor completo fica nos
+ * destaques (cartão, leitura grande, folha de detalhe). Sinal opcional para
+ * sobra/falta: «+R$ 9,2 mil», «−R$ 1,6 mil» (menos tipográfico, não hífen).
+ */
+export function valorCurto(v: number, opcoes: { sinal?: boolean } = {}): string {
+  const n = Number.isFinite(v) ? v : 0;
+  const abs = Math.abs(n);
+  const umaCasa = (x: number) =>
+    x.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+  let corpo: string;
+  if (abs >= 1_000_000) corpo = `R$ ${umaCasa(abs / 1_000_000)} mi`;
+  else if (abs >= 1_000) corpo = `R$ ${umaCasa(abs / 1_000)} mil`;
+  else corpo = `R$ ${Math.round(abs).toLocaleString('pt-BR')}`;
+  if (opcoes.sinal) return `${n < 0 ? '−' : '+'}${corpo}`;
+  return n < 0 ? `−${corpo}` : corpo;
+}
+

@@ -5,7 +5,7 @@
  * inicial do último. A forma segue o vocabulário de `lib/formasPagamento`.
  */
 import { describe, it, expect } from 'vitest';
-import { abreviarCliente, formaDoPagamento } from './formato';
+import { abreviarCliente, formaDoPagamento, valorCurto } from './formato';
 
 describe('abreviarCliente', () => {
   it('primeiro nome + inicial do último, com maiúscula só na inicial', () => {
@@ -66,5 +66,18 @@ describe('formaDoPagamento', () => {
 
   it('toda forma tem cor', () => {
     expect(formaDoPagamento('boleto_pix', 'Pix').cor).toMatch(/^#/);
+  });
+});
+
+describe('valorCurto', () => {
+  it('abrevia mil e milhão com uma casa', () => {
+    expect(valorCurto(41_900)).toBe('R$ 41,9 mil');
+    expect(valorCurto(40_000)).toBe('R$ 40 mil');
+    expect(valorCurto(1_234_567)).toBe('R$ 1,2 mi');
+    expect(valorCurto(850.4)).toBe('R$ 850');
+  });
+  it('sinal para sobra e falta', () => {
+    expect(valorCurto(9_200, { sinal: true })).toBe('+R$ 9,2 mil');
+    expect(valorCurto(-1_564, { sinal: true })).toBe('−R$ 1,6 mil');
   });
 });
