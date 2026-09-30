@@ -40,3 +40,18 @@ describe('push: metas por cargo', () => {
     expect(LISO).toContain('GRANT EXECUTE ON FUNCTION public.fn_push_metas_da_rodada() TO service_role');
   });
 });
+
+describe('safeupdate do Supabase (DELETE/UPDATE sem WHERE é recusado pela API)', () => {
+  // As rodadas são chamadas pela API (PostgREST): lá o safeupdate recusa
+  // DELETE/UPDATE sem WHERE — em produção a rodada das metas quebrou assim.
+  // Da correção 20260930200500 em diante (a 195304 é a que quebrou, e foi
+  // substituída por ela).
+  it('nenhuma migration de push deixa DELETE sem WHERE numa função', () => {
+    const arquivos = fs.readdirSync(MIGRATIONS).filter(f => /_push_/.test(f) && f.slice(0, 14) > '20260930195304');
+    for (const f of arquivos) {
+      const sql = fs.readFileSync(path.join(MIGRATIONS, f), 'utf8').replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ');
+      const deletes = sql.match(/DELETE FROM [\w.]+ [A-Z]+/g) ?? [];
+      for (const d of deletes) expect(`${f}: ${d}`).toMatch(/ WHERE$/);
+    }
+  });
+});
