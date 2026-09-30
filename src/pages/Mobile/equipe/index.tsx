@@ -22,6 +22,7 @@ import { AbaQuartis } from './AbaQuartis';
 import { AbaGrafico } from './AbaGrafico';
 import { AbaHoje } from './AbaHoje';
 import { AvisosDaEquipe } from './AvisosDaEquipe';
+import { BotaoInstalar, PassoIPhone } from './InstalarApp';
 import { IconeAba, Seta } from './partes';
 import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
 import './equipe.css';
@@ -82,13 +83,18 @@ function TelaDaEquipe() {
     gravarVersao('completa');
     navigate(ROUTE_PATHS.DASHBOARD);
   };
+  // O líder cai direto aqui: o «Instalar app» mora neste rodapé também.
+  const [passoIPhone, setPassoIPhone] = useState(false);
   const rodape = (
-    <div className="e-links">
-      <button type="button" onClick={abrirVersaoCompleta}>Versão completa</button>
-      <button type="button" onClick={() => { void (impersonando ? sairImpersonacao() : signOut()); }}>
-        {impersonando ? 'Voltar à minha conta' : 'Sair'}
-      </button>
-    </div>
+    <>
+      <BotaoInstalar onPassoIPhone={() => setPassoIPhone(true)} />
+      <div className="e-links">
+        <button type="button" onClick={abrirVersaoCompleta}>Versão completa</button>
+        <button type="button" onClick={() => { void (impersonando ? sairImpersonacao() : signOut()); }}>
+          {impersonando ? 'Voltar à minha conta' : 'Sair'}
+        </button>
+      </div>
+    </>
   );
 
   const { equipe } = tela;
@@ -148,7 +154,14 @@ function TelaDaEquipe() {
         ) : (
           <main className="v-entra" key={aba}>
             {aba === 'equipe' && (
-              <AbaEquipe equipe={equipe} rodape={<><AvisosDaEquipe empresaId={tela.empresaId} />{rodape}</>} />
+              <AbaEquipe equipe={equipe} rodape={<>
+                {/* No teste do super admin o bloco some: ativar ali inscreveria
+                    o celular do admin nos avisos do líder. */}
+                {!impersonando && (
+                  <AvisosDaEquipe empresaId={tela.empresaId} onInstalar={() => setPassoIPhone(true)} />
+                )}
+                {rodape}
+              </>} />
             )}
             {aba === 'quartis' && <AbaQuartis equipe={equipe} mes={tela.mes} />}
             {aba === 'grafico' && (
@@ -165,6 +178,8 @@ function TelaDaEquipe() {
           </main>
         )}
       </div>
+
+      <PassoIPhone aberto={passoIPhone} onFechar={() => setPassoIPhone(false)} />
 
       {equipe && (
         <nav className="e-abas" aria-label="Abas">

@@ -439,6 +439,10 @@ um valor alto». Recebido no mês, comissão e recebido hoje sobem por ~2 a 3,2 
 longo quanto maior o salto), numa curva quase constante; % e barra acompanham
 (`numeroAnimado.ts`: `duracaoDaSubida`, `subirDevagar`, `useDuracaoDaSubida`).
 
+**«Instalar app» na visão Equipe (30/09/2026):** o líder cai direto na `/m/equipe` e o
+botão só existia no rodapé da `/m`. Agora o rodapé da equipe tem o mesmo botão (convite
+do Android, passo a passo do iPhone), e o bloco de avisos oferece «Como instalar».
+
 **L2 — avisos da equipe (30/09/2026): código pronto, migration ESPERANDO «pode».**
 - Meta da equipe batida (uma vez por equipe/mês, líderes + equipe, sem valores).
 - **Resumo por hora** do recebido da equipe (pedido do usuário): líder ligado por

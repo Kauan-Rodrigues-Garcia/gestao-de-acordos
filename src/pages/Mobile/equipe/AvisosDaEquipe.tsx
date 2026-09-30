@@ -11,7 +11,7 @@
 import { useAvisos } from '../useAvisos';
 import { useResumoEquipe } from './useResumoEquipe';
 
-export function AvisosDaEquipe({ empresaId }: { empresaId: string | null }) {
+export function AvisosDaEquipe({ empresaId, onInstalar }: { empresaId: string | null; onInstalar?: () => void }) {
   const avisos = useAvisos(empresaId, 'equipe');
   const ativo = avisos.estado === 'ativo';
   const resumo = useResumoEquipe(ativo);
@@ -30,10 +30,18 @@ export function AvisosDaEquipe({ empresaId }: { empresaId: string | null }) {
                 Para liberar, permita as notificações do app nas configurações do celular e volte aqui.
               </p>
             ) : avisos.estado === 'precisa-instalar' ? (
-              <p>
-                <b>Instale o app para receber avisos</b>
-                No iPhone, os avisos só chegam com o app na tela de início (Compartilhar › Adicionar à Tela de Início).
-              </p>
+              <>
+                <p>
+                  <b>Instale o app para receber avisos</b>
+                  No iPhone, os avisos só chegam com o app na tela de início.
+                </p>
+                {onInstalar && (
+                  <button type="button" className="e-btn" style={{ margin: '12px 0 4px', width: '100%' }}
+                    onClick={onInstalar}>
+                    Como instalar
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <p>

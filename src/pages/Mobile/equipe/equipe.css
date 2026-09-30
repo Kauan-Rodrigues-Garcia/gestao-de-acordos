@@ -363,3 +363,8 @@
 .tela-equipe .e-chave input:checked::after { transform: translateX(18px); }
 .tela-equipe .e-chave input:disabled { opacity: 0.6; }
 .tela-equipe .e-desativar { font-size: 13.5px; font-weight: 600; color: var(--e-neg); }
+
+/* ── Instalar app (InstalarApp) ──────────────────────────────────────── */
+.tela-equipe .e-instalar { margin-top: 24px; }
+.tela-equipe .e-instalar + .e-links { margin-top: 16px; }
+.tela-equipe .e-passos { margin: 6px 20px 16px; padding-left: 20px; display: grid; gap: 10px; font-size: 15px; line-height: 1.4; }
