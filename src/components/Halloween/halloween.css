@@ -11,7 +11,12 @@
 /* ── Camadas ─────────────────────────────────────────────────────────────── */
 .hw-fundo, .hw-camada, .hw-revoada { position: absolute; pointer-events: none; }
 .hw-fundo { inset: 0; z-index: 0; overflow: hidden; }
-.hw-camada { inset: 0; z-index: 5; overflow: hidden; }
+/* Dentro do <main>, no alto do conteúdo: rola junto com a página. Altura
+   zero e só o eixo x recortado, para o feixe não criar rolagem lateral. */
+.hw-camada { top: 0; left: 0; right: 0; height: 0; z-index: 5; overflow-x: clip; overflow-y: visible; }
+/* Fica parado na tela enquanto o conteúdo rola: clarão e doces. */
+.hw-sobre { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.hw-doces { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hw-revoada { inset: 0; z-index: 6; overflow: hidden; }
 
 /* ── Teias ───────────────────────────────────────────────────────────────── */
@@ -92,13 +97,14 @@
 .hw-lanterna .giro { position: absolute; left: 0; top: 0; transform-origin: -31px -34px; animation: hw-procura 7s ease-in-out infinite; }
 .hw-lanterna.desligada .giro { animation-duration: 12s; }
 .hw-lanterna.susto .giro, .hw-lanterna.susto .feixe { animation-play-state: paused; }
-@keyframes hw-procura { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+/* Só um pouco para cima do horizontal: mais que isso o feixe entra atrás da barra de cima. */
+@keyframes hw-procura { 0%, 100% { transform: rotate(2deg); } 50% { transform: rotate(8deg); } }
 .hw-lanterna .corpo { position: absolute; left: -44px; top: -11px; width: 46px; height: 22px; }
 .hw-lanterna .mao { position: absolute; left: -70px; top: -34px; width: 60px; height: 50px; overflow: visible; }
 .hw-lanterna .corpo, .hw-lanterna .mao { pointer-events: auto; cursor: pointer; transform-box: fill-box; transform-origin: 50% 50%; }
 .hw-lanterna .aperto { animation: hw-aperta .22s ease-out; }
 @keyframes hw-aperta { 40% { transform: translateY(1.5px) scale(.96); } }
-.hw-lanterna .feixe { position: absolute; left: 0; top: -60px; height: 120px; width: 330px; transition: opacity .3s; animation: hw-alcance 5.3s ease-in-out infinite alternate; }
+.hw-lanterna .feixe { position: absolute; left: 0; top: -50px; height: 100px; width: 330px; transition: opacity .3s; animation: hw-alcance 5.3s ease-in-out infinite alternate; }
 @keyframes hw-alcance { from { width: 300px; } to { width: 420px; } }
 .hw-lanterna.desligada .feixe, .hw-lanterna.apaga .feixe { opacity: 0; }
 .hw-lanterna.apaga .feixe { transition-duration: .08s; }

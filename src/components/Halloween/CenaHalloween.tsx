@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
-import type { CenaHalloween } from './tema';
+import { EVENTO_ACORDO_SALVO, type CenaHalloween } from './tema';
 import './halloween.css';
 
 /*
@@ -11,8 +11,10 @@ import './halloween.css';
  *
  *   FundoHalloween   — atrás do `<main>` (que fica transparente): chuva,
  *                      nuvens, névoa, olhos. Só aparece nos vãos entre cards.
- *   CamadaHalloween  — por cima do conteúdo, a partir da borda de baixo da
- *                      barra: teias, aranha, fantasmas, lanterna, clarão.
+ *   CamadaHalloween  — DENTRO do `<main>`, no alto do conteúdo: teias,
+ *                      aranha, fantasmas, lanterna. Rola junto com a página.
+ *   SobreposicaoHalloween — parada por cima do conteúdo: clarão do trovão e
+ *                      chuva de doces.
  *   RevoadaHalloween — a tela toda, barra incluída: os morcegos.
  *
  * Tudo com `pointer-events: none`, menos o que é para clicar (aranha, mão da
@@ -174,9 +176,67 @@ export function CamadaHalloween({ cena }: { cena: CenaHalloween }) {
       {cena.aranha && <Aranha />}
       {cena.fantasmas && <FantasmasDasTabelas />}
       {cena.lanterna !== null && <Lanterna posicao={cena.lanterna} />}
-      {cena.chuva && <Relampago />}
     </div>
   );
+}
+
+export function SobreposicaoHalloween({ cena }: { cena: CenaHalloween }) {
+  const claro = useClaro();
+  return (
+    <div className={cn('hw-sobre', claro && 'hw-claro')} aria-hidden="true">
+      {cena.chuva && <Relampago />}
+      <ChuvaDeDoces />
+    </div>
+  );
+}
+
+/**
+ * A cada 3 a 6 acordos salvos (sorteado de novo a cada vez), caem balas e
+ * abobrinhas por um segundo e meio. Aleatório de propósito: se fosse todo
+ * acordo, virava ruído no terceiro.
+ */
+function ChuvaDeDoces() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const cx = cv.getContext('2d'); if (!cx) return;
+    const CORES = ['#ff8a1f', '#8a4fff', '#43c46b', '#ff4f8b', '#ffd23f'];
+    type Doce = { x: number; y: number; vx: number; vy: number; r: number; vr: number; vida: number; a: number; abobora: boolean; cor: string };
+    let doces: Doce[] = [], rodando = false, faltam = Math.floor(acaso(3, 7));
+    const desenhar = (d: Doce) => {
+      cx.save(); cx.translate(d.x, d.y); cx.rotate(d.r); cx.globalAlpha = d.a;
+      if (d.abobora) {
+        cx.fillStyle = '#f07b17';
+        for (const dx of [-4, 4, 0]) { cx.beginPath(); cx.ellipse(dx, 0, 6, 8, 0, 0, Math.PI * 2); cx.fill(); }
+        cx.fillStyle = '#4d6b2a'; cx.fillRect(-1, -11, 2.5, 4);
+      } else {
+        cx.fillStyle = d.cor;
+        cx.beginPath(); cx.arc(0, 0, 6, 0, Math.PI * 2); cx.fill();
+        cx.beginPath(); cx.moveTo(-5, 0); cx.lineTo(-12, -5); cx.lineTo(-12, 5); cx.closePath(); cx.fill();
+        cx.beginPath(); cx.moveTo(5, 0); cx.lineTo(12, -5); cx.lineTo(12, 5); cx.closePath(); cx.fill();
+        cx.fillStyle = 'rgba(255,255,255,.45)'; cx.fillRect(-2, -5, 2, 10);
+      }
+      cx.restore();
+    };
+    const passo = () => {
+      cx.clearRect(0, 0, cv.width, cv.height);
+      for (const d of doces) { d.vy += 0.22; d.x += d.vx; d.y += d.vy; d.r += d.vr; d.vida--; if (d.vida < 30) d.a = Math.max(0, d.vida / 30); desenhar(d); }
+      doces = doces.filter(d => d.vida > 0 && d.y < cv.height + 30);
+      if (doces.length) requestAnimationFrame(passo); else { rodando = false; cx.clearRect(0, 0, cv.width, cv.height); }
+    };
+    const chover = () => {
+      cv.width = cv.clientWidth; cv.height = cv.clientHeight;
+      for (let i = 0; i < 80; i++) {
+        doces.push({ x: cv.width * acaso(0.15, 0.85), y: -20 - Math.random() * 90, vx: acaso(-2.5, 2.5), vy: Math.random() * 3, r: Math.random() * 6,
+          vr: acaso(-0.12, 0.12), vida: acaso(110, 150), a: 1, abobora: Math.random() < 0.25, cor: CORES[i % CORES.length] });
+      }
+      if (!rodando) { rodando = true; requestAnimationFrame(passo); }
+    };
+    const salvo = () => { if (--faltam > 0) return; faltam = Math.floor(acaso(3, 7)); chover(); };
+    window.addEventListener(EVENTO_ACORDO_SALVO, salvo);
+    return () => window.removeEventListener(EVENTO_ACORDO_SALVO, salvo);
+  }, []);
+  return <canvas ref={ref} className="hw-doces" />;
 }
 
 function desenharTeia(tam: number) {
@@ -277,11 +337,14 @@ function FantasmasDasTabelas() {
   useEffect(() => {
     let t: number, id = 0;
     const tentar = () => {
-      const base = camada.current?.parentElement?.getBoundingClientRect();
-      const main = document.querySelector('main');
+      // A camada rola com o conteúdo: a posição é gravada em relação a ela,
+      // então o fantasma fica preso à tabela quando a página rola.
+      const base = camada.current?.getBoundingClientRect();
+      const main = camada.current?.closest('main');
       if (base && main) {
+        const tela = main.getBoundingClientRect();
         const visiveis = [...main.querySelectorAll('table')].map(tb => tb.getBoundingClientRect())
-          .filter(r => r.width > 120 && r.top > base.top + 70 && r.top < base.bottom - 80);
+          .filter(r => r.width > 120 && r.top > tela.top + 70 && r.top < tela.bottom - 80);
         const r = visiveis[Math.floor(Math.random() * visiveis.length)];
         if (r) {
           setSome(false);
@@ -294,7 +357,7 @@ function FantasmasDasTabelas() {
     return () => window.clearTimeout(t);
   }, []);
   return (
-    <div ref={camada} className="absolute inset-0">
+    <div ref={camada} className="absolute left-0 top-0 h-0 w-full">
       {aparicao && (
         <div key={aparicao.id} className="hw-esconderijo" style={{ left: aparicao.left, top: aparicao.top }}>
           <div className={cn('hw-fantasma', some && 'some')} onMouseEnter={() => setSome(true)}
@@ -416,12 +479,13 @@ export function RevoadaHalloween() {
     let t: number, id = 0;
     const soltar = () => {
       const alt = ref.current?.clientHeight ?? 600;
-      setBandos(bs => [...bs.slice(-2), { id: id++, morcegos: Array.from({ length: Math.round(acaso(3, 5)) }, (_, i) => ({
+      setBandos(bs => [...bs.slice(-2), { id: id++, morcegos: Array.from({ length: Math.floor(acaso(3, 8)) }, (_, i) => ({
         top: acaso(40, Math.max(80, alt * 0.45)), d: acaso(4.6, 6.6), atraso: i * 0.22, s: acaso(0.7, 1.3), bater: acaso(0.28, 0.4),
       })) }]);
-      t = window.setTimeout(soltar, acaso(60000, 180000));
+      t = window.setTimeout(soltar, acaso(3 * 60000, 5 * 60000));
     };
-    t = window.setTimeout(soltar, acaso(15000, 30000));
+    // De 3 a 7 morcegos, a cada 3 a 5 minutos — o primeiro bando também.
+    t = window.setTimeout(soltar, acaso(3 * 60000, 5 * 60000));
     return () => window.clearTimeout(t);
   }, []);
 

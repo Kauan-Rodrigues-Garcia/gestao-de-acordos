@@ -93,6 +93,9 @@ const CHAVE_LARGURA = 'chat-expandido';
 export function BolhaChat() {
   const { perfil } = useAuth();
   const halloween = useTemaHalloween();
+  // Só o mouse acende a abóbora. O foco não: ao fechar a janela o foco volta
+  // para a bolha e a abóbora ficava acesa até trocar de aba.
+  const [mouseNaBolha, setMouseNaBolha] = useState(false);
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
   const [aberto, setAberto] = useState(false);
@@ -340,6 +343,8 @@ export function BolhaChat() {
   const abrirJanela = useCallback(() => {
     abertoRef.current = true;
     setAberto(true);
+    // A bolha some com o mouse em cima e o `mouseleave` nunca chega.
+    setMouseNaBolha(false);
     // Minimizar conserva a conversa selecionada. Ao voltar ela se torna
     // visível novamente, então relê e marca como lida o que chegou no intervalo.
     if (chat.conversaAberta) chat.abrir(chat.conversaAberta);
@@ -427,8 +432,8 @@ export function BolhaChat() {
       `}</style>
       <button
         onClick={abrirJanela}
-        onMouseEnter={() => { setSobre(true); precarregarJanela(); }}
-        onMouseLeave={() => setSobre(false)}
+        onMouseEnter={() => { setSobre(true); setMouseNaBolha(true); precarregarJanela(); }}
+        onMouseLeave={() => { setSobre(false); setMouseNaBolha(false); }}
         onFocus={() => { setSobre(true); precarregarJanela(); }}
         onBlur={() => setSobre(false)}
         className={cn(
@@ -462,7 +467,7 @@ export function BolhaChat() {
           />
         )}
         {halloween
-          ? <AboboraChat acesa={sobre || chat.naoLidasTotal > 0} />
+          ? <AboboraChat acesa={mouseNaBolha || chat.naoLidasTotal > 0} />
           : <IconeChat ativo={sobre || chat.naoLidasTotal > 0} />}
 
         {chat.naoLidasTotal > 0 && (

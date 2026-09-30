@@ -101,6 +101,7 @@ const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: 
 const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m.FundoHalloween })));
 const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
 const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
+const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -605,7 +606,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main className={cn('flex-1 overflow-y-auto', halloween && temFundo(cenaHalloween) ? 'relative z-[1] bg-transparent' : 'bg-background')}>
+    <main className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
+      {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
+          rolam com a página — ficar parado lá em cima era o defeito. */}
+      {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
       {children}
     </main>
   );
@@ -866,7 +870,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Suspense fallback={null}>{temFundo(cenaHalloween) && <FundoHalloween cena={cenaHalloween} />}</Suspense>
             {conteudo}
             <Suspense fallback={null}>
-              <CamadaHalloween cena={cenaHalloween} />
+              <SobreposicaoHalloween cena={cenaHalloween} />
               <RevoadaHalloween />
             </Suspense>
           </div>
