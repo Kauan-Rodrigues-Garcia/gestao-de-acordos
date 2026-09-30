@@ -10,6 +10,8 @@ O parser lê `Valor Recebido`, `Pague Play`, `Coren` e `Cofen` diretamente das r
 
 `Id.Baixa` identifica cada pagamento dentro de uma modalidade. Parcelas do mesmo acordo com identificadores diferentes são preservadas. Reimportações idênticas são ignoradas. Um identificador já salvo que volta com algum dado diferente é atualizado com o conteúdo do arquivo novo — o relatório é reexportado inteiro todo dia e a PaguePlay reajusta linhas antigas (até 28/09/2026 isso bloqueava a importação inteira e pedia para limpar o mês; ver migration `20260928170000`). O retorno informa novos, atualizados e ignorados. A importação não apaga pagamentos ausentes do novo arquivo: estorno que some do relatório ainda exige excluir e reimportar o período.
 
+Desde 30/09/2026 o ERP manda o estorno de cartão como duas linhas com o mesmo `Id.Baixa`: «Cartão Padrão - Estornado», com o valor original, e «Cartão Padrão - Estorno», com o mesmo valor negativo. O parser junta o par numa linha só, com a forma «Estornado» e o valor líquido (zero), porque a chave do banco é o `Id.Baixa`. Se a baixa já estava salva como paga, ela é atualizada para estornada e deixa de somar. O par só é aceito se os valores forem exatamente opostos e os demais dados iguais. Um «Estorno» sem o «Estornado» correspondente no mesmo arquivo é recusado, porque sobrescreveria a baixa salva com o valor negativo e descontaria duas vezes.
+
 CPF, nome de cliente, operador e demais informações pessoais do arquivo não são armazenados por esta aba. Não há sincronização com o recebimento diário existente.
 
 ## Datas e cobertura

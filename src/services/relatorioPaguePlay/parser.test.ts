@@ -48,6 +48,41 @@ describe('945 da diretoria', () => {
     const l=[...linha];l[7]=290.45;
     expect(()=>lerLinhas([cabecalho,linha,l])).toThrow('divergentes');
   });
+  describe('cartão estornado (formato de 30/09/2026)', () => {
+    // Recorte real do hj conci: o mesmo Id.Baixa vem pago («Estornado») e estornado («Estorno»).
+    const pago = ['Conciliação - 2026/09', 46294, '6637759', 'CE', '5590866', 5, 'Cartão Padrão - Estornado', 120.91, 60.38, 136.08, 45.36, 46141, ''];
+    const estorno = ['Conciliação - 2026/09', 46294, '6637759', 'CE', '5590866', 5, 'Cartão Padrão - Estorno', -120.91, -60.38, -136.08, -45.36, 46141, ''];
+    it('junta o par numa linha só, com valor líquido zero e forma Estornado', () => {
+      const r = lerLinhas([cabecalho, pago, estorno, [null,null,null,null,null,null,null,0,0,0,0]]);
+      expect(r.linhas).toHaveLength(1);
+      expect(r.estornos).toBe(1);
+      expect(r.linhas[0]).toMatchObject({ id_baixa: '6637759', forma: 'Cartão Padrão - Estornado', total: 0, pp: 0, coren: 0, cofen: 0 });
+      expect(r.totais).toEqual({ total: 0, pp: 0, coren: 0, cofen: 0 });
+      expect(r.rodapeConferido).toBe(true);
+    });
+    it('aceita o estorno antes da linha estornada', () => {
+      const r = lerLinhas([cabecalho, estorno, pago]);
+      expect(r.linhas[0].forma).toBe('Cartão Padrão - Estornado');
+      expect(r.totais.total).toBe(0);
+    });
+    it('não mistura o estorno com os outros pagamentos do arquivo', () => {
+      const outra = [...linha]; outra[0] = 'Conciliação - 2026/09';
+      const r = lerLinhas([cabecalho, outra, pago, estorno]);
+      expect(r.linhas).toHaveLength(2);
+      expect(r.totais.total).toBe(29044);
+    });
+    it('recusa estorno cujo valor não é o inverso do pagamento', () => {
+      const e = [...estorno]; e[7] = -120.90;
+      expect(() => lerLinhas([cabecalho, pago, e])).toThrow('divergentes');
+    });
+    it('recusa estorno sozinho, sem a linha estornada', () => {
+      expect(() => lerLinhas([cabecalho, estorno])).toThrow('sem a linha «Estornado»');
+    });
+    it('continua recusando repetição divergente que não é estorno', () => {
+      const e = [...estorno]; e[6] = 'Pix';
+      expect(() => lerLinhas([cabecalho, pago, e])).toThrow('divergentes');
+    });
+  });
   it('pagamentos diferentes do mesmo acordo não são descartados', () => {
     const l=[...linha];l[2]='2';l[5]=2;
     expect(lerLinhas([cabecalho,linha,l]).linhas).toHaveLength(2);

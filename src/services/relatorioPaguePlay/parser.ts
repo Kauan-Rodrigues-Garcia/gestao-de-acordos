@@ -28,6 +28,25 @@ export function dataISO(v: unknown): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/**
+ * Estorno de cartão (a partir de 30/09/2026): o ERP passou a mandar o mesmo
+ * Id.Baixa duas vezes — «Cartão Padrão - Estornado» com o valor original e
+ * «Cartão Padrão - Estorno» com o mesmo valor negativo. A chave do banco é o
+ * Id.Baixa, então o par vira uma linha só, com o valor líquido (zero) e a
+ * forma «Estornado»: o total do dia fica certo e a baixa que já estava salva
+ * como paga é atualizada para estornada.
+ */
+const tipoEstorno = (forma: string) => /\s*-\s*estornado$/i.test(forma) ? 'estornado' : /\s*-\s*estorno$/i.test(forma) ? 'estorno' : null;
+const formaBase = (forma: string) => forma.replace(/\s*-\s*estorn(?:ad)?o$/i, '');
+function ehParDeEstorno(a: Pagamento, b: Pagamento) {
+  const tipos = new Set([tipoEstorno(a.forma), tipoEstorno(b.forma)]);
+  if (!tipos.has('estornado') || !tipos.has('estorno')) return false;
+  const mesmo = (k: keyof Pagamento) => a[k] === b[k];
+  return formaBase(a.forma) === formaBase(b.forma)
+    && (['data', 'data_pagamento', 'uf', 'acordo', 'parcela', 'ia'] as const).every(mesmo)
+    && CAMPOS_VALOR.every(k => a[k] === -b[k]);
+}
+
 /** Parser exclusivo desta aba: não herda descartes por operador do diário. */
 export function lerLinhas(rows: unknown[][]): RelatorioLido {
   const headers = (rows[0] ?? []).map(normalizar);
@@ -46,7 +65,8 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
   };
   const linhas: Pagamento[] = [], porId = new Map<string, Pagamento>();
   const totais = zerarValores(), somaArquivo = zerarValores();
-  let rodape: Partial<Valores> | null = null, duplicadas = 0;
+  let rodape: Partial<Valores> | null = null, duplicadas = 0, estornos = 0;
+  const estornoSemPar = new Map<string, number>();
   const modalidades = new Set<Modalidade>();
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -82,15 +102,23 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
       somarValores(somaArquivo, valores);
       const anterior = porId.get(id);
       if (anterior) {
-        if (JSON.stringify(anterior) !== JSON.stringify(linha)) throw new Error(`Id.Baixa ${id} repetido com dados divergentes.`);
-        duplicadas++;
+        if (JSON.stringify(anterior) === JSON.stringify(linha)) { duplicadas++; continue; }
+        if (!ehParDeEstorno(anterior, linha)) throw new Error(`Id.Baixa ${id} repetido com dados divergentes.`);
+        const liquida: Pagamento = { ...anterior, forma: tipoEstorno(anterior.forma) === 'estornado' ? anterior.forma : linha.forma };
+        somarValores(liquida, valores);
+        linhas[linhas.indexOf(anterior)] = liquida; porId.set(id, liquida);
+        somarValores(totais, valores); estornoSemPar.delete(id); estornos++;
       } else {
         porId.set(id, linha); linhas.push(linha); somarValores(totais, valores);
+        if (tipoEstorno(linha.forma) === 'estorno') estornoSemPar.set(id, i + 1);
       }
     } catch (e) {
       throw new Error(`Linha ${i + 1}: ${e instanceof Error ? e.message : 'Dados inválidos.'}`);
     }
   }
+  // Estorno sozinho, sem a baixa estornada no mesmo arquivo, sobrescreveria a
+  // baixa já salva com o valor negativo e o total ficaria descontado duas vezes.
+  for (const [id, n] of estornoSemPar) throw new Error(`Linha ${n}: estorno do Id.Baixa ${id} sem a linha «Estornado» correspondente no arquivo. Exporte o relatório completo do período.`);
   if (!linhas.length) throw new Error('Relatório sem pagamentos.');
   if (modalidades.size > 1) throw new Error('O arquivo mistura pagamento e conciliação.');
   if (rodape) for (const k of CAMPOS_VALOR) {
@@ -98,7 +126,7 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
   }
   const datas = linhas.map(l => l.data).sort();
   const camposConferidos = CAMPOS_VALOR.filter(k => rodape?.[k] !== undefined);
-  return { linhas, totais, duplicadas, rodapeConferido: camposConferidos.length === 4, camposConferidos, inicio: datas[0], fim: datas[datas.length - 1], modalidade: [...modalidades][0] ?? null };
+  return { linhas, totais, duplicadas, estornos, rodapeConferido: camposConferidos.length === 4, camposConferidos, inicio: datas[0], fim: datas[datas.length - 1], modalidade: [...modalidades][0] ?? null };
 }
 
 export function lerArquivo(buffer: ArrayBuffer): RelatorioLido {
