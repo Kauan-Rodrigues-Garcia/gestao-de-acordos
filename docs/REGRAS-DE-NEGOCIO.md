@@ -36,7 +36,7 @@ Este arquivo é complementar ao [`ARQUITETURA.md`](../ARQUITETURA.md):
 10. [Analítico de recebimentos](#10-analítico-de-recebimentos)
 11. [Recebimento diário](#11-recebimento-diário)
 12. [Metas, dias úteis e quartis](#12-metas-dias-úteis-e-quartis)
-13. [Módulos auxiliares](#13-módulos-auxiliares)
+13. [Módulos auxiliares](#13-módulos-auxiliares) — inclui a versão para celular (13.10)
 14. [Mapa: onde cada regra vive](#14-mapa-onde-cada-regra-vive)
 
 ---
@@ -1948,6 +1948,32 @@ rótulo. Quem conserta o passado é a leitura: `normalizarDescricao`
 (`src/lib/logs-catalogo.ts`), aplicada na linha do tempo, na tabela, no detalhe e
 no CSV. Ela é deliberadamente conservadora — um cliente chamado "NR NR SERVICOS
 LTDA" passa intacto.
+
+### 13.10 Versão para celular (PWA)
+
+Spec: `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md`.
+
+- **O que é.** O mesmo site, instalável pelo navegador (manifest + service
+  worker em `public/`). Um ícone só para as duas empresas
+  (`docs/mobile/gerar-icone.py`). O service worker **não tem cache**: só recebe
+  aviso e abre a tela no toque — o deploy novo chega como sempre.
+- **Quem cai na tela mínima (`/#/m`).** No celular (toque + largura ≤ 768 px),
+  quem conta no recebimento (`PERFIS_QUE_CONTAM_NO_RECEBIMENTO`: operador e
+  elite), na cobrança. O redirecionamento mora no `PainelDeEntrada` (`App.tsx`),
+  por onde passam o login e quem abre `/`. «Versão completa» fica gravado no
+  aparelho (`localStorage['mobile:versao']`); o ícone de celular no cabeçalho
+  do site desfaz. Ver `src/lib/mobile/preferencia.ts`.
+- **Números.** Nenhuma conta própria. Recebido, meta e faixas vêm de
+  `usePainelMetas` (escopo «eu», H.O. na PaguePlay); a comissão de
+  `useMinhaComissao`, com a mesma regra de exibição do Dashboard
+  (`temCardComissao`); o ranking das mesmas buscas da aba Analítico
+  (`posicaoNoRanking`), só com `analitico_sub_ranking`.
+- **Pagamentos.** Valor **bruto** (o que o cliente pagou), cliente como
+  «primeiro nome + inicial do último» e forma por `formaDoPagamento`
+  (`src/lib/mobile/formato.ts`). Sem `forma_detalhe` (PaguePlay) fica o
+  consolidado «Pix/Boleto». O «novo» é do aparelho
+  (`localStorage['mobile:visto-ate']`), não a coluna `visto`: a tela do celular
+  não apaga a etiqueta «novo» da aba Analítico.
 
 ---
 

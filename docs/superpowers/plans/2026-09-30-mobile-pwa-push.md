@@ -37,6 +37,11 @@ RLS, `pg_cron`, `pg_net`, Edge Functions/Deno).
 
 ## Etapa 1 — App instalável + `/m` (sem banco)
 
+> **Feita em 30/09/2026.** Desvios: o redirecionamento ficou só no
+> `PainelDeEntrada` (o login já navega para `/`, então `Login.tsx` não mudou);
+> a rota real é `/#/m` (HashRouter); a conferência visual foi numa prévia com
+> dados fictícios — o teste no aparelho fica com o usuário.
+
 ### Mapa de arquivos
 
 | Arquivo | O quê |
@@ -58,82 +63,82 @@ RLS, `pg_cron`, `pg_net`, Edge Functions/Deno).
 
 ### Task 1.1: ícones e manifest
 
-- [ ] Estender `gerar-icone.py` para exportar os 5 PNGs a partir da variante C
+- [x] Estender `gerar-icone.py` para exportar os 5 PNGs a partir da variante C
   (maskable: mão a ~60% do quadro; badge: só a máscara da mão, branca, fundo
   transparente).
-- [ ] `public/manifest.webmanifest`: `name`, `short_name`, `start_url: "/m"`,
+- [x] `public/manifest.webmanifest`: `name`, `short_name`, `start_url: "/m"`,
   `scope: "/"`, `display: "standalone"`, `background_color`/`theme_color` `#0a2a4a`,
   ícones.
-- [ ] `index.html`: `<link rel="manifest" href="/manifest.webmanifest">`,
+- [x] `index.html`: `<link rel="manifest" href="/manifest.webmanifest">`,
   `apple-touch-icon` novo, `apple-mobile-web-app-capable`, `theme-color` do ícone.
-- [ ] Conferir que `_redirects`/`vercel.json` não reescrevem `/manifest.webmanifest`
+- [x] Conferir que `_redirects`/`vercel.json` não reescrevem `/manifest.webmanifest`
   nem `/sw.js` para o `index.html` (a regra atual exclui só `/api`; arquivo estático
   existente é servido antes do rewrite na Vercel — confirmar no preview).
-- [ ] Commit.
+- [x] Commit.
 
 ### Task 1.2: service worker
 
-- [ ] `public/sw.js`: `push` → `showNotification(titulo, { body, icon, badge, tag,
+- [x] `public/sw.js`: `push` → `showNotification(titulo, { body, icon, badge, tag,
   data: { url }, vibrate })`; `notificationclick` → foca janela do escopo e
   `navigate(url)`, senão `openWindow(url)`; `postMessage({ tipo: 'push' })` às
   janelas.
-- [ ] `install` → `skipWaiting()`; `activate` → `clients.claim()`. Nada de cache.
-- [ ] Registro em `src/lib/mobile/sw.ts`, chamado só pela `/m`.
-- [ ] Commit.
+- [x] `install` → `skipWaiting()`; `activate` → `clients.claim()`. Nada de cache.
+- [x] Registro em `src/lib/mobile/sw.ts`, chamado só pela `/m`.
+- [x] Commit.
 
 ### Task 1.3: preferência e redirecionamento
 
-- [ ] Teste primeiro (`preferencia.test.ts`): celular + operador + sem marca → `true`;
+- [x] Teste primeiro (`preferencia.test.ts`): celular + operador + sem marca → `true`;
   com marca «completa» → `false`; desktop → `false`; líder → `false`;
   `localStorage` lançando → trata como sem marca.
-- [ ] Implementar `ehCelular()` (`matchMedia('(pointer: coarse)')` + largura ≤ 768),
+- [x] Implementar `ehCelular()` (`matchMedia('(pointer: coarse)')` + largura ≤ 768),
   `lerVersao()`/`gravarVersao()`, `deveAbrirMobile(perfil)`.
-- [ ] `ROUTE_PATHS.MOBILE`; rota em `App.tsx`; `Login.tsx` navega para `/m` quando
+- [x] `ROUTE_PATHS.MOBILE`; rota em `App.tsx`; `Login.tsx` navega para `/m` quando
   `deveAbrirMobile`. Acesso direto ao `/` num celular de operador sem marca também
   redireciona (guarda no Dashboard, não no `ProtectedRoute`).
-- [ ] «Versão para celular» no menu do `Layout` (só `ehCelular()`), apaga a marca.
-- [ ] Commit.
+- [x] «Versão para celular» no menu do `Layout` (só `ehCelular()`), apaga a marca.
+- [x] Commit.
 
 ### Task 1.4: formato
 
-- [ ] Teste primeiro (`formato.test.ts`): «MARIA SILVA OLIVEIRA» → «Maria O.»; nome
+- [x] Teste primeiro (`formato.test.ts`): «MARIA SILVA OLIVEIRA» → «Maria O.»; nome
   único; vazio → «Cliente»; chip por `familiaDaForma(rotuloDaForma(...))`, PaguePlay
   sem detalhe → «Boleto/Pix»; «Ajuste manual» não vira chip de forma.
-- [ ] Implementar reaproveitando `src/lib/formasPagamento.ts`.
-- [ ] Commit.
+- [x] Implementar reaproveitando `src/lib/formasPagamento.ts`.
+- [x] Commit.
 
 ### Task 1.5: tela `/m`
 
-- [ ] Esqueleto com os dados reais: `usePainelMetas` (recebido, meta, faixas, unidade),
+- [x] Esqueleto com os dados reais: `usePainelMetas` (recebido, meta, faixas, unidade),
   `useMinhaComissao({ aberto: true, mes })`, linhas do mês de
   `useAnaliticoDashboard(true, mes)` (hoje e últimos pagamentos); ranking pela mesma
   fonte do `AnaliticoOperador` (`buscarResumoOperadoresAnalitico` +
   `idsOcultosRankingQuartil`), só com `temPermissao('analitico_sub_ranking')`.
-- [ ] Testes de componente: comissão some com `sem_config`/`sem_meta`/sem permissão,
+- [x] Testes de componente: comissão some com `sem_config`/`sem_meta`/sem permissão,
   mostra «Faltam R$ X para a 1ª» com `nenhuma_faixa`, mensagem de erro com `erro`
   (nunca R$ 0,00); ranking só com permissão; régua marca as faixas batidas.
-- [ ] Visual do protótipo (`docs/mobile/prototipo-m.html`): fontes Bricolage
+- [x] Visual do protótipo (`docs/mobile/prototipo-m.html`): fontes Bricolage
   Grotesque + Figtree carregadas só na `/m`; tokens escopados. Estados de
   carregando (esqueleto) e «sem relatório no mês».
-- [ ] «Novo»: guarda o `importado_em` mais recente visto (`localStorage`); linhas
+- [x] «Novo»: guarda o `importado_em` mais recente visto (`localStorage`); linhas
   depois dele ganham destaque. `?novos=1` rola até a lista.
-- [ ] Recarregar em `visibilitychange` e no `message` do service worker.
-- [ ] Commit.
+- [x] Recarregar em `visibilitychange` e no `message` do service worker.
+- [x] Commit.
 
 ### Task 1.6: instalar
 
-- [ ] `InstalarApp`: guarda `beforeinstallprompt`; iPhone (`/iPhone|iPad/` +
+- [x] `InstalarApp`: guarda `beforeinstallprompt`; iPhone (`/iPhone|iPad/` +
   não standalone) → folha com o passo a passo; standalone → some.
-- [ ] Commit.
+- [x] Commit.
 
 ### Task 1.7: verificação e push
 
-- [ ] `npm test`, `npm run typecheck`, eslint dos arquivos tocados.
-- [ ] Rodar local (`npm run dev`) e conferir no Chromium em viewport de celular:
+- [x] `npm test`, `npm run typecheck`, eslint dos arquivos tocados.
+- [x] Rodar local (`npm run dev`) e conferir no Chromium em viewport de celular:
   redirecionamento, `/m` com dados de teste do dev, manifest válido (DevTools →
   Application), service worker registrado.
-- [ ] Atualizar `docs/MOBILE-PWA-EM-ANDAMENTO.md` e `docs/REGRAS-DE-NEGOCIO.md`.
-- [ ] Push na branch. Pedir ao usuário: testar no preview da Vercel num Android e num
+- [x] Atualizar `docs/MOBILE-PWA-EM-ANDAMENTO.md` e `docs/REGRAS-DE-NEGOCIO.md`.
+- [x] Push na branch. Pedir ao usuário: testar no preview da Vercel num Android e num
   iPhone (instalar, abrir, conferir números contra o Dashboard).
 
 ---

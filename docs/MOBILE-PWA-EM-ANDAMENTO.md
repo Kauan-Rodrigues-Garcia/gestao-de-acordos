@@ -231,9 +231,24 @@ Desenho resultante (apresentado ao usuário):
 **Spec APROVADA em 30/09/2026:** `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md`
 (respostas da revisão no fim dela).
 
-**Plano escrito:** `docs/superpowers/plans/2026-09-30-mobile-pwa-push.md` — Etapa 1
-detalhada (sem banco), Etapas 2 e 3 em roteiro. **Próximo passo: o usuário aprovar
-o plano e começar a Task 1.1.**
+**Plano:** `docs/superpowers/plans/2026-09-30-mobile-pwa-push.md`.
+
+**Etapa 1 IMPLEMENTADA em 30/09/2026** (app instalável + tela `/#/m`, sem banco).
+Commits na branch `ccr-de15f4b2-ko9k07`. Testes, typecheck e build verdes; a tela
+foi conferida numa prévia com dados fictícios (o app local não tem `.env` e não
+pode ler o banco de produção sem «pode»).
+
+Descobertas da implementação:
+- O app usa **HashRouter**: a tela é `/#/m` (manifest e service worker já apontam
+  para ela).
+- `usePainelMetas` passou a expor `metasExtras` (régua das faixas).
+- `ROTULO_AJUSTE` mudou para `lib/formasPagamento` (reexportado pelo serviço).
+- Na PaguePlay, sem `forma_detalhe`, `familiaDaForma('Pix/Boleto')` daria
+  «Boleto/Pix Cofen»; a tela usa o consolidado direto.
+
+**Próximo passo:** o usuário testar no preview da Vercel num Android e num
+iPhone (instalar, abrir, conferir os números contra o Dashboard). Depois,
+Etapa 2 (avisos) — precisa de chaves VAPID e de migration, com «pode».
 
 ## 5. Próximos passos do processo (skill `brainstorming`)
 
