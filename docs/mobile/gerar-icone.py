@@ -36,3 +36,16 @@ prev=Image.new('RGBA',(S*2+120,S+80),(236,238,242,255))
 prev.paste(arred(a),(40,40),arred(a)); prev.paste(arred(b),(S+80,40),arred(b))
 prev.resize((prev.width//2,prev.height//2),Image.LANCZOS).save('icone-rascunho.png')
 a.save('icone-A-1024.png'); b.save('icone-B-1024.png')
+
+# ── Variante C (pedida em 30/09/2026): mão no degradê bagunçado, mais clara,
+#    sobre um degradê liso e escuro de azul (topo-esquerda) para verde.
+azul_esc=np.array([0x0a,0x2a,0x4a],float); verde_esc=np.array([0x0b,0x3a,0x1e],float)
+d=np.clip((xx+yy)/2,0,1)[...,None]
+fundo=(azul_esc*(1-d)+verde_esc*d).astype(np.uint8)
+azul_cl=np.array([0x38,0xbd,0xf8],float); verde_cl=np.array([0x4a,0xde,0x5a],float)
+mao=(azul_cl*(1-t[...,None])+verde_cl*t[...,None]).astype(np.uint8)
+c=Image.fromarray(fundo,'RGB')
+c.paste(Image.fromarray(mao,'RGB'),(0,0),mk)
+c.save('icone-C-1024.png')
+vc=Image.new('RGBA',(S+80,S+80),(236,238,242,255)); vc.paste(arred(c),(40,40),arred(c))
+vc.resize((vc.width//2,vc.height//2),Image.LANCZOS).save('icone-C-rascunho.png')

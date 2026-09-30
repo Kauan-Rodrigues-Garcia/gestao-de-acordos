@@ -77,7 +77,10 @@ mudança pedida pelo usuário:
   logos, com as cores num «degradê bagunçado» de verde (PaguePlay) e azul
   (BookPlay). Rascunho em `docs/mobile/icone-rascunho.png` (duas variantes:
   mão em degradê sobre branco / mão branca sobre degradê), gerado por
-  `docs/mobile/gerar-icone.py`. **Falta o usuário escolher a variante.**
+  `docs/mobile/gerar-icone.py`. O usuário pediu uma terceira: **variante C**
+  = só a mão colorida (degradê bagunçado, tons mais claros) sobre fundo em
+  degradê liso e escuro de azul para verde — `docs/mobile/icone-C-rascunho.png`
+  (1024 px em `icone-C-1024.png`). **Aguardando o ok do usuário na C.**
 - Com ícone único, basta **um** `manifest.webmanifest` estático (nome do app
   e `start_url` = `/m`).
 - Service worker escrito à mão, **sem cache offline**: só `push` e
