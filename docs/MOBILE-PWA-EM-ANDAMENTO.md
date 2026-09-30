@@ -109,10 +109,30 @@ mudança pedida pelo usuário:
   profissionalmente». **Protótipo estático** em `docs/mobile/prototipo-m.html`
   (print em `prototipo-m.png`, dados fictícios): cartão principal com as cores
   do ícone e a régua das faixas de meta (1ª–4ª) como elemento marcante;
-  fontes Bricolage Grotesque (números) e Figtree (texto). **Aguardando o ok
-  do usuário no visual.**
+  fontes Bricolage Grotesque (números) e Figtree (texto). **Visual aprovado
+  em 30/09/2026** («gostei, segue»).
 
-**Próxima seção a apresentar: 3 — inscrição de push** (§5.2).
+**Seção 3 (ativar notificações) apresentada em 30/09/2026, aguardando
+aprovação.** Proposta:
+
+- Tabela `push_inscricoes` (perfil_id → `perfis`, empresa_id, endpoint único,
+  chaves `p256dh`/`auth`, nome do aparelho, criada_em, ultimo_envio_em).
+  RLS «só a própria» no padrão de `acordos_mensagens_whatsapp`
+  (`perfil_id = (SELECT auth.uid())`), sem `anon`. Quem lê todas é só a
+  Edge Function de envio (service_role).
+- Um aparelho = uma linha; a pessoa pode ter vários (celular e PC).
+- Pedido de permissão só no toque em «Ativar notificações» (card na `/m`
+  enquanto não ativou; depois vira o sino do topo). Ao ativar, chega um push
+  de teste. iPhone sem app instalado: o botão explica que precisa instalar
+  primeiro.
+- Permissão negada: instrução de como liberar nas configurações do celular.
+- «Desativar notificações» no sino apaga a linha do aparelho.
+- Sair (logout) apaga a inscrição daquele aparelho, para ninguém receber o
+  pagamento de outra pessoa num celular compartilhado.
+- Chave VAPID pública em variável `VITE_`; a privada só em secret da Edge
+  Function.
+- A detalhar na spec: quem recebe o push de linhas de clone (a regra de
+  comissão diz «tudo vem do usuário original»).
 
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco
