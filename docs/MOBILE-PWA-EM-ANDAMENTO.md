@@ -92,12 +92,27 @@ mudança pedida pelo usuário:
   lembrado no aparelho, com botão para voltar à versão mínima (sugestão
   aceita — «do restante pode seguir como está»).
 
-**Seção 2 (tela mínima `/m`) apresentada em 30/09/2026, aguardando
-aprovação.** Conteúdo proposto: cabeçalho (nome, empresa, mês), recebido no
-mês + meta + % (mesma meta da aba Metas, via `usePainelMetas`), recebido hoje,
-posição no ranking só se a pessoa tiver a permissão (`podeVerRanking`),
-últimos pagamentos (valor, forma, cliente, data), botão de notificações,
-«Versão completa» e sair. Sem filtro de período na primeira versão.
+- **Ícone: variante C aprovada** (`docs/mobile/icone-C-1024.png`).
+
+**Seção 2 (tela mínima `/m`) — APROVADA em 30/09/2026**, com um acréscimo:
+
+- **Card de comissão**, só para quem tem comissão configurada: quanto a pessoa
+  recebe de comissão de metas se o mês fechar hoje, faixa atual e %, quanto
+  falta para a próxima faixa e quanto a comissão vira nela. Reusar
+  `useMinhaComissao` (mesma conta do card do Dashboard; exige a permissão
+  `dashboard_comissao`). Esconder o card quando `motivo` = `sem_config` ou
+  `sem_meta`; com `nenhuma_faixa`, mostrar quanto falta para a 1ª. PaguePlay:
+  valores em H.O., como no Dashboard.
+- Resto como proposto: cabeçalho, recebido do mês + meta + %, recebido hoje,
+  ranking só com `podeVerRanking`, últimos pagamentos com forma, rodapé.
+- Pedido de visual: «minimalista e bonito, fácil de entender, chamativo
+  profissionalmente». **Protótipo estático** em `docs/mobile/prototipo-m.html`
+  (print em `prototipo-m.png`, dados fictícios): cartão principal com as cores
+  do ícone e a régua das faixas de meta (1ª–4ª) como elemento marcante;
+  fontes Bricolage Grotesque (números) e Figtree (texto). **Aguardando o ok
+  do usuário no visual.**
+
+**Próxima seção a apresentar: 3 — inscrição de push** (§5.2).
 
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protótipo /m</title>
+<!-- Protótipo estático da tela mínima (§5.2, seção 2). Dados fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tinta:#0c1f2e;       /* texto principal: azul-petróleo quase preto */
+  --tinta-2:#5b6b78;     /* texto secundário */
+  --papel:#f3f6f5;       /* fundo da tela */
+  --cartao:#ffffff;
+  --linha:#e3e9e7;
+  --azul-esc:#0a2a4a;    /* fundo do ícone */
+  --verde-esc:#0b3a1e;
+  --azul:#38bdf8;        /* mão do ícone */
+  --verde:#4ade5a;
+  --verde-texto:#15803d;
+  --pix:#0e9f8e; --boleto:#8a6d1f; --cartao-cor:#5b5bd6;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#dfe5e3;font-family:Figtree,system-ui,sans-serif;color:var(--tinta);
+  display:flex;justify-content:center;padding:24px 0}
+.tel{width:390px;min-height:844px;background:var(--papel);border-radius:44px;overflow:hidden;
+  box-shadow:0 30px 60px -20px rgba(12,31,46,.35);position:relative}
+.num{font-family:"Bricolage Grotesque",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* topo */
+.topo{display:flex;align-items:center;gap:12px;padding:54px 22px 16px}
+.topo img{width:36px;height:36px;border-radius:10px}
+.topo .quem{flex:1;line-height:1.2}
+.topo .nome{font-weight:700;font-size:16px}
+.topo .sub{font-size:12.5px;color:var(--tinta-2)}
+.sino{width:38px;height:38px;border-radius:12px;background:var(--cartao);border:1px solid var(--linha);
+  display:grid;place-items:center;position:relative}
+.sino i{position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--verde);box-shadow:0 0 0 2px #fff}
+
+/* cartão principal: as cores do ícone */
+.hero{margin:0 16px;border-radius:28px;padding:22px 22px 20px;color:#fff;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,var(--azul-esc) 0%,#0b3237 55%,var(--verde-esc) 100%)}
+.hero::after{content:"";position:absolute;inset:auto -40px -70px auto;width:220px;height:220px;border-radius:50%;
+  background:radial-gradient(circle,rgba(74,222,90,.22),transparent 65%)}
+.rot{font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+.valor{font-size:44px;font-weight:800;margin-top:6px;line-height:1}
+.valor small{font-size:22px;font-weight:700;opacity:.75;margin-right:4px}
+.meta-linha{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;font-size:13.5px}
+.meta-linha b{font-family:"Bricolage Grotesque";font-size:18px;
+  background:linear-gradient(90deg,var(--azul),var(--verde));-webkit-background-clip:text;color:transparent}
+
+/* régua das faixas: a assinatura */
+.regua{margin-top:16px;position:relative;height:34px}
+.trilho{position:absolute;top:8px;left:0;right:0;height:8px;border-radius:8px;background:rgba(255,255,255,.12)}
+.cheio{position:absolute;top:8px;left:0;height:8px;border-radius:8px;
+  background:linear-gradient(90deg,var(--azul),var(--verde));box-shadow:0 0 14px rgba(74,222,90,.5)}
+.marco{position:absolute;top:4px;width:2px;height:16px;background:rgba(255,255,255,.35);border-radius:2px}
+.marco.ok{background:#fff}
+.marco span{position:absolute;top:20px;left:50%;transform:translateX(-50%);font-size:11px;white-space:nowrap;opacity:.65}
+.marco.ok span{opacity:1;font-weight:600}
+
+/* comissão */
+.cart{background:var(--cartao);border:1px solid var(--linha);border-radius:22px;margin:12px 16px 0;padding:18px 20px}
+.comissao .topo-c{display:flex;justify-content:space-between;align-items:center}
+.comissao .rot{color:var(--tinta-2);opacity:1}
+.selo{white-space:nowrap;font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px;background:#e8f7ec;color:var(--verde-texto)}
+.comissao .valor{font-size:34px;color:var(--tinta);margin-top:8px}
+.comissao .valor small{font-size:18px}
+.comissao p{font-size:13.5px;color:var(--tinta-2);margin-top:6px;line-height:1.45}
+.comissao p b{color:var(--tinta)}
+.prox{margin-top:12px;padding-top:12px;border-top:1px dashed var(--linha);display:flex;justify-content:space-between;font-size:13.5px}
+.prox .num{font-weight:700;color:var(--verde-texto)}
+
+/* dupla hoje / ranking */
+.dupla{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 16px 0}
+.dupla .cart{margin:0;padding:16px}
+.dupla .rot{color:var(--tinta-2);opacity:1;font-size:11.5px}
+.dupla .v{font-size:24px;font-weight:700;margin-top:6px}
+.dupla .d{font-size:12.5px;color:var(--tinta-2);margin-top:4px}
+
+/* pagamentos */
+.titulo{display:flex;justify-content:space-between;align-items:baseline;margin:22px 22px 8px}
+.titulo h2{font-size:16px;font-weight:700}
+.titulo a{font-size:13px;color:var(--tinta-2);text-decoration:none}
+.lista{margin:0 16px;background:var(--cartao);border:1px solid var(--linha);border-radius:22px;padding:4px 16px}
+.pg{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--linha)}
+.pg:last-child{border-bottom:0}
+.forma{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:11px;font-weight:700;flex:none}
+.forma.pix{background:#e2f5f2;color:var(--pix)} .forma.boleto{background:#f6f0de;color:var(--boleto)} .forma.cartao{background:#ebebfb;color:var(--cartao-cor)}
+.pg .q{flex:1;min-width:0}
+.pg .c{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg .h{font-size:12.5px;color:var(--tinta-2)}
+.pg .num{font-weight:700;font-size:16px}
+.pg.novo .num{color:var(--verde-texto)}
+
+.rodape{display:flex;flex-direction:column;gap:10px;margin:20px 16px 36px}
+.btn{height:50px;border-radius:16px;border:0;font:600 15px Figtree,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.pri{background:var(--tinta);color:#fff}
+.btn.sec{background:transparent;border:1px solid var(--linha);color:var(--tinta)}
+.links{display:flex;justify-content:center;gap:22px;font-size:13.5px;color:var(--tinta-2);margin-top:4px}
+</style>
+</head>
+<body>
+<main class="tel">
+  <header class="topo">
+    <img src="icone-C-1024.png" alt="">
+    <div class="quem"><div class="nome">Ana Paula</div><div class="sub">BookPlay · setembro de 2026</div></div>
+    <div class="sino" aria-label="Notificações ativadas">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0c1f2e" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="rot">Recebido no mês</div>
+    <div class="valor num"><small>R$</small>38.420,50</div>
+    <div class="meta-linha"><span>Meta R$ 34.000,00 · 2ª meta batida</span><b>113%</b></div>
+    <div class="regua" aria-hidden="true">
+      <div class="trilho"></div>
+      <!-- escala: 30 mil a 45 mil -->
+      <div class="cheio" style="width:56.1%"></div>
+      <div class="marco ok" style="left:26.7%"><span>1ª</span></div>
+      <div class="marco ok" style="left:46.7%"><span>2ª</span></div>
+      <div class="marco" style="left:66.7%"><span>3ª</span></div>
+      <div class="marco" style="left:86.7%"><span>4ª</span></div>
+    </div>
+  </section>
+
+  <section class="cart comissao">
+    <div class="topo-c"><span class="rot">Sua comissão</span><span class="selo">2ª meta · 2,11%</span></div>
+    <div class="valor num"><small>R$</small>810,67</div>
+    <p>É quanto você recebe <b>se o mês fechar hoje</b>. O valor sobe junto com o recebido.</p>
+    <div class="prox"><span>Faltam <b class="num" style="color:var(--tinta)">R$ 1.579,50</b> para a 3ª meta</span><span>vira <span class="num">R$ 1.320,00</span></span></div>
+  </section>
+
+  <div class="dupla">
+    <section class="cart"><div class="rot">Recebido hoje</div><div class="v num">R$ 1.240,00</div><div class="d">4 pagamentos</div></section>
+    <section class="cart"><div class="rot">Ranking</div><div class="v num">4º <span style="font-size:15px;color:var(--tinta-2);font-weight:500">de 18</span></div><div class="d">R$ 320,00 do 3º</div></section>
+  </div>
+
+  <div class="titulo"><h2>Últimos pagamentos</h2><a href="#">Ver todos</a></div>
+  <section class="lista">
+    <div class="pg novo"><span class="forma pix">PIX</span><div class="q"><div class="c">Maria S. Oliveira</div><div class="h">Hoje, 14:02 · novo</div></div><span class="num">R$ 350,00</span></div>
+    <div class="pg novo"><span class="forma boleto">BOL</span><div class="q"><div class="c">João Batista Ramos</div><div class="h">Hoje, 14:02 · novo</div></div><span class="num">R$ 520,00</span></div>
+    <div class="pg"><span class="forma cartao">CART</span><div class="q"><div class="c">Fernanda Lima</div><div class="h">Hoje, 11:00</div></div><span class="num">R$ 180,00</span></div>
+    <div class="pg"><span class="forma pix">PIX</span><div class="q"><div class="c">Carlos Eduardo Souza</div><div class="h">Hoje, 09:00</div></div><span class="num">R$ 190,00</span></div>
+    <div class="pg"><span class="forma pix">PIX</span><div class="q"><div class="c">Rosângela Martins</div><div class="h">Ontem, 17:00</div></div><span class="num">R$ 1.050,00</span></div>
+  </section>
+
+  <div class="rodape">
+    <button class="btn pri">Instalar app</button>
+    <div class="links"><span>Versão completa</span><span>Sair</span></div>
+  </div>
+</main>
+</body>
+</html>
