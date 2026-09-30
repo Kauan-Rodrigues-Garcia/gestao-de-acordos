@@ -1,7 +1,7 @@
 # Versão mobile (PWA) + push de pagamento — brainstorm em andamento
 
-> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR; mobile PAUSADO — ver
-> «PAUSADO em 30/09/2026» abaixo.**
+> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR. Fase da LIDERANÇA retomada:
+> spec em rascunho, aguardando aprovação — ver «Liderança — brainstorm RETOMADO».**
 >
 > **Para quem retoma isto** (o Cleber ou um agente numa sessão nova). Escrito em
 > **29/09/2026**, no meio do brainstorm. **Nada foi implementado.** Não existe
@@ -307,6 +307,56 @@ no ar e na main. **Ficou pendente, para retomar depois:**
 
 Retomar pelo brainstorm da fase 1 (liderança): perguntas de escopo antes de
 qualquer código, no mesmo processo das etapas do operador (§5).
+
+### Liderança — brainstorm RETOMADO em 30/09/2026
+
+Levantado no código antes das perguntas:
+
+- **Quem lidera qual equipe:** `lideresDaEquipe.ts` — `equipe_lideres` manda;
+  sem vínculo explícito, reserva em `perfis.equipe_id` + clones (22 dos 31
+  líderes da BookPlay só estão no legado).
+- **Elite** já cai na `/m` como operador (`PERFIS_QUE_CONTAM_NO_RECEBIMENTO`).
+- **Alcance do Painel do Líder** vem da permissão `painel_lider`
+  (`escopoEfetivo`: individual / equipe / setor / todos_setores), não do cargo.
+- **Contas da equipe** (acumulado, esperado até hoje, projeção, quartil, ritmo)
+  já isoladas e testadas em `desempenhoEquipe.ts`; o card é `CardEquipe.tsx`.
+- **Meta da equipe** existe em `metas` com `tipo = 'equipe'`.
+
+Decisões (30/09/2026):
+
+1. **Público:** líder **e** elite. O elite **troca** entre a visão individual
+   (a `/m` de hoje) e a da equipe.
+2. **Alcance:** só as equipes que a pessoa **lidera** (regra do
+   `lideresDaEquipe`), não o alcance da permissão `painel_lider`.
+3. **Aviso:** só **«equipe bateu a meta»**. Sem resumo por lote nem
+   fechamento do dia.
+4. **Conteúdo:** «o Painel do Líder como um todo é importante para a liderança
+   visualizar — manter o modelo»: recebido + projeção, quartil dos operadores,
+   quem recebeu hoje e últimos pagamentos da equipe.
+5. **Formato:** abas no rodapé, como app.
+6. **Abas do Painel que vêm:** Desempenho Equipes, Quartis e Gráfico de
+   recebimento. Ficam só no site: Ajuste de recebimento e Plantão Elite.
+7. **Várias equipes** (líder de mais de uma, ou clone): seletor no topo, uma
+   equipe por vez, lembrando a última escolhida.
+8. **Mês:** só o atual (mês passado fica na versão completa).
+
+Achado: a meta da equipe é **um valor só** (`metas.meta_valor` com
+`tipo = 'equipe'`, lida em `DesempenhoEquipes.tsx` por `metaDe('equipe', id)`),
+sem 2ª/3ª faixa como a do operador.
+
+9. **Gráfico:** próprio e leve (barras SVG do dia a dia + linha da meta
+   diária), sem recharts no celular.
+10. **Elite:** abre **sempre** na visão individual; a equipe é um toque.
+11. **Aviso «equipe bateu a meta»:** vai para os **líderes e para a equipe
+    toda** (operadores recebem «Sua equipe bateu a meta!»).
+12. **Marco do aviso:** só ao bater **100%** da meta da equipe — um aviso por
+    equipe por mês.
+
+**Rascunho da spec:** `docs/superpowers/specs/2026-09-30-mobile-lideranca-design.md`
++ protótipo `docs/mobile/prototipo-lider.html` (print `prototipo-lider.png`).
+**Aguardando aprovação do usuário** (e as duas confirmações no fim da spec). Depois:
+plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
+«pode»).
 
 **Fora do mobile (30/09/2026): projeção do Desafio ≠ Painel do Líder — RESOLVIDO.**
 Código na main (`67b4632`); migration aplicada em produção com «pode» e
