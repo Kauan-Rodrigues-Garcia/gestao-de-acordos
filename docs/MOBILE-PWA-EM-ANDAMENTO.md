@@ -226,7 +226,13 @@ Desenho resultante (apresentado ao usuário):
    novo — atualiza ao abrir, ao voltar para o app e quando chega um push
    (service worker avisa a página).
 
-**Próximo: Seção 6 (testes)**, depois escrever a spec.
+**Seção 6 (testes) — APROVADA em 30/09/2026.**
+
+**Spec escrita:** `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md`.
+**Aguardando revisão/aprovação do usuário.** Depois: plano de implementação.
+Pontos que a spec levanta e o usuário precisa ver: valor do aviso na PaguePlay
+em bruto (decisão nova, proposta); `ho_percentual` vem de
+`empresas.config` (não 24,96% fixo); janela de 3 dias serve para a PaguePlay?
 
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco
