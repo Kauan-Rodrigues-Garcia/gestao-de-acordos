@@ -32,7 +32,10 @@
   font-family: Figtree, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
+.tela-equipe { position: relative; isolation: isolate; }
+/* O conteúdo acima do fundo vivo (`FundoVivo`, fixo, z-index 0). */
 .tela-equipe .e-conteudo {
+  position: relative; z-index: 1;
   max-width: 480px; margin: 0 auto;
   padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
@@ -48,7 +51,7 @@
 
 /* ── Cabeçalho ───────────────────────────────────────────────────────── */
 .tela-equipe .e-topo {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
   padding: calc(16px + env(safe-area-inset-top)) 20px 14px;
 }
 .tela-equipe .e-quem { flex: 1; min-width: 0; position: relative; }
@@ -79,7 +82,10 @@
   margin: 22px 22px 8px;
 }
 .tela-equipe .e-sec-dir { font-size: 12.5px; color: var(--e-grafite); }
-.tela-equipe .e-grupo { background: var(--e-sup); border-radius: 18px; margin: 0 16px; padding: 0 16px; }
+.tela-equipe .e-grupo {
+  background: rgba(255, 255, 255, 0.86); border-radius: 18px; margin: 0 16px; padding: 0 16px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
 .tela-equipe .e-lin {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
   padding: 12px 0; border-bottom: 1px solid var(--e-traco); font-size: 14px;
@@ -102,29 +108,7 @@
 .tela-equipe .e-escala { position: relative; height: 13px; margin-top: 7px; font-size: 11px; color: var(--e-grafite); }
 .tela-equipe .e-escala span { position: absolute; transform: translateX(-50%); }
 
-/* ── Cartão escuro (só na aba Equipe) ────────────────────────────────── */
-.tela-equipe .e-hero {
-  margin: 0 16px; border-radius: 24px; padding: 20px 20px 16px; color: #fff;
-  background: var(--e-tinta); position: relative; overflow: hidden;
-}
-.tela-equipe .e-hero::before {
-  content: ''; position: absolute; right: -60px; top: -80px; width: 220px; height: 220px;
-  border-radius: 50%; pointer-events: none;
-  background: radial-gradient(circle, rgba(43, 168, 224, 0.2), transparent 65%);
-}
-.tela-equipe .e-hero .e-olho { color: rgba(255, 255, 255, 0.6); }
-.tela-equipe .e-hero-valor { font-size: 38px; font-weight: 700; margin-top: 8px; line-height: 1; }
-.tela-equipe .e-hero-valor small { font-size: 0.5em; font-weight: 600; opacity: 0.6; margin-right: 3px; }
-.tela-equipe .e-hero-de { font-size: 13.5px; color: rgba(255, 255, 255, 0.7); margin-top: 8px; }
-.tela-equipe .e-hero-de b { color: #fff; font-weight: 600; }
-.tela-equipe .e-hero .e-regua { height: 8px; background: rgba(255, 255, 255, 0.12); margin-top: 30px; }
-.tela-equipe .e-hero .e-regua-fill { background: linear-gradient(90deg, var(--e-mare-a), var(--e-mare-b)); }
-.tela-equipe .e-hero-esperado { position: absolute; top: -7px; width: 2px; height: 22px; background: #fff; border-radius: 2px; }
-.tela-equipe .e-hero-esperado b {
-  position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
-  font-size: 11px; font-weight: 600; white-space: nowrap; color: rgba(255, 255, 255, 0.85);
-}
-.tela-equipe .e-hero-escala { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255, 255, 255, 0.5); margin-top: 8px; }
+/* O cartão principal é o `v-cartao` pastel de `comum/comum.css`. */
 .tela-equipe .e-frase { margin: 14px 22px 0; font-size: 14px; line-height: 1.45; color: var(--e-grafite); }
 .tela-equipe .e-frase b { color: var(--e-tinta); font-weight: 600; }
 
@@ -145,7 +129,7 @@
 }
 
 /* ── Quartis ─────────────────────────────────────────────────────────── */
-.tela-equipe .e-dist { margin: 0 16px; background: var(--e-sup); border-radius: 18px; padding: 14px 16px 12px; }
+.tela-equipe .e-dist { margin: 0 16px; background: rgba(255, 255, 255, 0.86); border-radius: 18px; padding: 14px 16px 12px; }
 .tela-equipe .e-dist-barra { display: flex; gap: 3px; height: 8px; }
 .tela-equipe .e-dist-barra i { display: block; border-radius: 3px; }
 .tela-equipe .e-filtros { display: flex; gap: 5px; margin-top: 12px; }
@@ -200,9 +184,9 @@
 .tela-equipe .e-leitura-valor { font-size: 34px; font-weight: 700; line-height: 1; margin-top: 6px; }
 .tela-equipe .e-leitura-valor small { font-size: 0.5em; font-weight: 600; color: var(--e-grafite); margin-right: 3px; }
 .tela-equipe .e-leitura-de { font-size: 13.5px; color: var(--e-grafite); margin-top: 6px; }
-.tela-equipe .e-graf { margin: 14px 16px 0; background: var(--e-sup); border-radius: 18px; padding: 16px 12px 10px; }
+.tela-equipe .e-graf { margin: 14px 16px 0; background: rgba(255, 255, 255, 0.86); border-radius: 18px; padding: 16px 12px 10px; }
 .tela-equipe .e-graf svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
-.tela-equipe .e-tres { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 16px 0; background: var(--e-sup); border-radius: 18px; }
+.tela-equipe .e-tres { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 16px 0; background: rgba(255, 255, 255, 0.86); border-radius: 18px; }
 .tela-equipe .e-tres > div { padding: 14px; border-right: 1px solid var(--e-traco); min-width: 0; }
 .tela-equipe .e-tres > div:last-child { border-right: 0; }
 .tela-equipe .e-tres .e-olho { font-size: 10.5px; }
@@ -221,12 +205,15 @@
 }
 .tela-equipe .e-pg { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--e-traco); }
 .tela-equipe .e-pg:last-child { border-bottom: 0; }
-.tela-equipe .e-pg-fm { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--e-grafite); width: 56px; flex: none; text-transform: uppercase; }
 .tela-equipe .e-pg-q { flex: 1; min-width: 0; }
 .tela-equipe .e-pg-c { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tela-equipe .e-pg-h { font-size: 12px; color: var(--e-grafite); margin-top: 2px; }
+.tela-equipe .e-pg-h { font-size: 12px; color: var(--e-grafite); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tela-equipe .e-pg-h b { color: var(--e-tinta); font-weight: 600; font-variant-numeric: tabular-nums; }
 .tela-equipe .e-pg-h em { font-style: normal; color: var(--e-pos); font-weight: 600; }
-.tela-equipe .e-pg-v { font-weight: 600; font-size: 14.5px; white-space: nowrap; }
+.tela-equipe .e-pg-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.tela-equipe .e-pg-v { font-weight: 700; font-size: 14.5px; white-space: nowrap; }
+.tela-equipe .e-pg-f { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--e-grafite); white-space: nowrap; }
+.tela-equipe .e-pg-f i { width: 7px; height: 7px; border-radius: 50%; }
 
 /* ── Rodapé da aba Equipe ────────────────────────────────────────────── */
 .tela-equipe .e-links { display: flex; justify-content: center; gap: 22px; font-size: 13.5px; color: var(--e-grafite); margin: 26px 0 8px; }

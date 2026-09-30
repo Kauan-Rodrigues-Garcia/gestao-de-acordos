@@ -1,7 +1,7 @@
 /**
  * Tela da equipe: o que cada aba mostra e o que some.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { montarEquipe, type FontesEquipe } from './montarEquipe';
@@ -10,6 +10,15 @@ import { AbaEquipe } from './AbaEquipe';
 import { AbaHoje } from './AbaHoje';
 import { marcasDosQuartis } from './regua';
 import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
+
+// Movimento reduzido: os números animados mostram o valor final na hora.
+beforeAll(() => {
+  window.matchMedia = ((q: string) => ({
+    matches: q.includes('reduce'), media: q, onchange: null,
+    addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+});
 
 const resumo = (id: string, total: number): ResumoOperadorAnalitico => ({
   operador_id: id, operador_usuario: id, operador_nome: id,
