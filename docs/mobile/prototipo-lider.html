@@ -4,316 +4,450 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Protótipo /m liderança</title>
-<!-- Protótipo estático da versão de liderança (as quatro abas). Dados fictícios.
-     Mesmo visual aprovado da /m do operador (prototipo-m.html). -->
+<!--
+  Protótipo estático da versão de liderança — v2 (30/09/2026), mais minimalista.
+  Dados fictícios, mas coerentes entre si (meta R$ 480 mil, 22 dias úteis, 18 decorridos,
+  faixas de quartil padrão da aba Metas: 1º ≥100%, 2º ≥80%, 3º ≥50%, 4º abaixo).
+
+  Linguagem visual do celular (vale para a /m do operador e para a da equipe):
+  • um só elemento forte por tela — o cartão escuro, só na aba Equipe;
+  • o resto é superfície branca em grupos, com linhas finas, sem sombras;
+  • a assinatura é A RÉGUA: um traço com as marcas de 50/80/100% e um ponto onde a
+    pessoa/equipe está. A mesma régua aparece na equipe, em cada operador e no detalhe —
+    ler uma é saber ler todas;
+  • cor de quartil só em ponto e marca, nunca em fundo; o degradê azul→verde do ícone só
+    na régua da equipe, no dia tocado do gráfico e na aba ativa.
+-->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --tinta:#0c1f2e; --tinta-2:#5b6b78; --papel:#f3f6f5; --cartao:#ffffff; --linha:#e3e9e7;
-  --azul-esc:#0a2a4a; --verde-esc:#0b3a1e; --azul:#38bdf8; --verde:#4ade5a; --verde-texto:#15803d;
-  --pix:#0e9f8e; --boleto:#8a6d1f; --cartao-cor:#5b5bd6;
-  --q1:#15803d; --q2:#0e7490; --q3:#b45309; --q4:#b91c1c;
+  --nevoa:#f4f6f7; --sup:#ffffff; --tinta:#0e1b26; --grafite:#6a7784; --traco:#e7ebee; --trilho:#e3e8eb;
+  --mare-a:#2ba8e0; --mare-b:#34c27a;
+  --q1:#2e9e6a; --q2:#5566d6; --q3:#d08a1e; --q4:#d0493f;
+  --pos:#1f8a5b; --neg:#c0453b;
 }
-*{box-sizing:border-box;margin:0}
-body{background:#dfe5e3;font-family:Figtree,system-ui,sans-serif;color:var(--tinta);padding:24px}
-.grade{display:flex;gap:28px;justify-content:center;flex-wrap:wrap}
-.legenda{text-align:center;font-size:13px;color:var(--tinta-2);margin-top:10px;font-weight:600}
-.tel{width:390px;height:844px;background:var(--papel);border-radius:44px;overflow:hidden;
-  box-shadow:0 30px 60px -20px rgba(12,31,46,.35);position:relative;display:flex;flex-direction:column}
-.rolagem{flex:1;overflow:hidden;padding-bottom:12px}
-.num{font-family:"Bricolage Grotesque",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#dde3e6;font-family:Figtree,system-ui,sans-serif;color:var(--tinta);padding:28px 24px}
+.grade{display:flex;gap:26px;justify-content:center;flex-wrap:wrap}
+.legenda{text-align:center;font-size:13px;color:var(--grafite);margin-top:12px;font-weight:600}
+.tel{width:390px;height:844px;background:var(--nevoa);border-radius:44px;overflow:hidden;position:relative;
+  box-shadow:0 30px 60px -24px rgba(14,27,38,.35);display:flex;flex-direction:column}
+.corpo{flex:1;overflow:hidden}
+.num{font-family:"Bricolage Grotesque",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.015em}
+.tab{font-variant-numeric:tabular-nums}
 
-/* topo com seletor de equipe e troca Eu/Equipe (elite) */
-.topo{display:flex;align-items:center;gap:12px;padding:54px 22px 12px}
-.topo img{width:36px;height:36px;border-radius:10px}
-.topo .quem{flex:1;line-height:1.2;min-width:0}
-.topo .nome{font-weight:700;font-size:16px;display:flex;align-items:center;gap:4px}
-.topo .nome svg{flex:none}
-.topo .sub{font-size:12.5px;color:var(--tinta-2)}
-.sino{width:38px;height:38px;border-radius:12px;background:var(--cartao);border:1px solid var(--linha);display:grid;place-items:center;position:relative}
-.sino i{position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--verde);box-shadow:0 0 0 2px #fff}
-.troca{margin:0 16px 12px;background:#e4eae8;border-radius:14px;padding:4px;display:grid;grid-template-columns:1fr 1fr}
-.troca span{text-align:center;padding:8px 0;border-radius:11px;font-size:13.5px;font-weight:600;color:var(--tinta-2)}
-.troca span.ativo{background:var(--cartao);color:var(--tinta);box-shadow:0 1px 3px rgba(12,31,46,.12)}
+/* cabeçalho */
+.topo{display:flex;align-items:center;gap:10px;padding:56px 20px 14px}
+.topo .quem{flex:1;min-width:0}
+.topo .eq{font-size:17px;font-weight:700;display:flex;align-items:center;gap:5px;letter-spacing:-.01em}
+.topo .sub{font-size:12.5px;color:var(--grafite);margin-top:2px}
+.ico{width:36px;height:36px;display:grid;place-items:center;border-radius:12px;position:relative}
+.ico svg{width:20px;height:20px;stroke:var(--tinta);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ico i{position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--mare-b)}
+.seta{width:15px;height:15px;stroke:var(--grafite);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.troca{display:flex;background:#e8ecee;border-radius:10px;padding:3px}
+.troca span{font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:8px;color:var(--grafite)}
+.troca span.on{background:var(--sup);color:var(--tinta);box-shadow:0 1px 2px rgba(14,27,38,.12)}
 
-/* cartão principal */
-.hero{margin:0 16px;border-radius:28px;padding:20px 22px;color:#fff;position:relative;overflow:hidden;
-  background:linear-gradient(135deg,var(--azul-esc) 0%,#0b3237 55%,var(--verde-esc) 100%)}
-.hero::after{content:"";position:absolute;inset:auto -40px -70px auto;width:220px;height:220px;border-radius:50%;
-  background:radial-gradient(circle,rgba(74,222,90,.22),transparent 65%)}
-.rot{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
-.valor{font-size:40px;font-weight:800;margin-top:6px;line-height:1}
-.valor small{font-size:20px;font-weight:700;opacity:.75;margin-right:4px}
-.meta-linha{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;font-size:13.5px}
-.meta-linha b{white-space:nowrap;margin-left:10px;font-family:"Bricolage Grotesque";font-size:18px;background:linear-gradient(90deg,var(--azul),var(--verde));-webkit-background-clip:text;color:transparent}
-/* barra: acumulado, esperado até hoje e meta no mesmo eixo (como o CardEquipe) */
-.barra{margin-top:14px;position:relative;height:40px}
-.trilho{position:absolute;top:8px;left:0;right:0;height:10px;border-radius:10px;background:rgba(255,255,255,.12)}
-.cheio{position:absolute;top:8px;left:0;height:10px;border-radius:10px;background:linear-gradient(90deg,var(--azul),var(--verde));box-shadow:0 0 14px rgba(74,222,90,.5)}
-.esperado{position:absolute;top:2px;width:2px;height:22px;background:#fff;border-radius:2px}
-.esperado span,.fim span{position:absolute;transform:translateX(-50%);font-size:11px;white-space:nowrap;opacity:.8}
-.esperado span{top:24px}
-.fim{position:absolute;top:2px;right:0;width:2px;height:22px;background:rgba(255,255,255,.4)}
-.fim span{top:-14px;transform:translateX(-100%)}
-.barra{margin-top:22px!important}
-.proj{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:99px;background:rgba(74,222,90,.18);color:#bbf7c6}
+/* rótulos e grupos */
+.olho{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--grafite)}
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:22px 22px 8px}
+.sec > span:last-child:not(.olho){font-size:12.5px;color:var(--grafite)}
+.grupo{background:var(--sup);border-radius:18px;margin:0 16px;padding:0 16px}
+.lin{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 0;border-bottom:1px solid var(--traco);font-size:14px}
+.lin:last-child{border-bottom:0}
+.lin .r{color:var(--grafite)}
+.lin .v{font-weight:600}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
 
-.cart{background:var(--cartao);border:1px solid var(--linha);border-radius:22px;margin:12px 16px 0;padding:16px 18px}
-.cart .rot{color:var(--tinta-2);opacity:1}
-.quatro{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 16px 0}
-.quatro .cart{margin:0;padding:14px 16px}
-.quatro .rot{font-size:11px}
-.quatro .v{font-size:21px;font-weight:700;margin-top:6px}
-.quatro .d{font-size:12px;color:var(--tinta-2);margin-top:3px}
-.degrau{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--linha);font-size:13.5px}
-.degrau:last-child{border-bottom:0}
-.chip{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:99px;color:#fff}
-.q1{background:var(--q1)} .q2{background:var(--q2)} .q3{background:var(--q3)} .q4{background:var(--q4)}
-.degrau .num{font-weight:700}
-.degrau.ok{color:var(--tinta-2)} .degrau.ok .num{color:var(--verde-texto)}
+/* A RÉGUA */
+.regua{position:relative;height:6px;border-radius:6px;background:var(--trilho)}
+.regua .fill{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:rgba(14,27,38,.16)}
+.regua .marca{position:absolute;top:-3px;width:1.5px;height:12px;background:#c9d1d6;border-radius:1px}
+.regua .ponto{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 2.5px var(--sup)}
+.hero .regua{height:8px;background:rgba(255,255,255,.12);margin-top:30px}
+.hero .regua .fill{background:linear-gradient(90deg,var(--mare-a),var(--mare-b))}
+.hero .regua .esperado{position:absolute;top:-7px;width:2px;height:22px;background:#fff;border-radius:2px}
+.hero .regua .esperado b{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:600;white-space:nowrap;color:rgba(255,255,255,.85)}
+.hero .escala{display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.5);margin-top:8px}
 
-/* quartis */
-.dist{display:flex;height:14px;border-radius:8px;overflow:hidden;margin-top:12px}
-.dist i{display:block}
-.dist-leg{display:flex;justify-content:space-between;font-size:12px;color:var(--tinta-2);margin-top:8px}
-.titulo{display:flex;justify-content:space-between;align-items:baseline;margin:18px 22px 8px}
-.titulo h2{font-size:15px;font-weight:700}
-.titulo span{font-size:12.5px;color:var(--tinta-2)}
-.lista{margin:0 16px;background:var(--cartao);border:1px solid var(--linha);border-radius:22px;padding:2px 16px}
-.op{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--linha)}
+/* cartão escuro (só na aba Equipe) */
+.hero{margin:0 16px;border-radius:24px;padding:20px 20px 16px;color:#fff;background:var(--tinta);position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;right:-60px;top:-80px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(43,168,224,.20),transparent 65%)}
+.hero .olho{color:rgba(255,255,255,.6)}
+.hero .valor{font-size:38px;font-weight:700;margin-top:8px;line-height:1}
+.hero .valor small{font-size:19px;font-weight:600;opacity:.6;margin-right:3px}
+.hero .de{font-size:13.5px;color:rgba(255,255,255,.7);margin-top:8px}
+.hero .de b{color:#fff;font-weight:600}
+.frase{margin:14px 22px 0;font-size:14px;line-height:1.45;color:var(--grafite)}
+.frase b{color:var(--tinta);font-weight:600}
+
+/* faixas: hoje × amanhã */
+.faixa{display:grid;grid-template-columns:8px 1fr 82px 82px;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--traco);font-size:14px}
+.faixa:last-child{border-bottom:0}
+.faixa .d{width:8px;height:8px;border-radius:50%}
+.faixa .n{font-weight:600}
+.faixa .n small{font-weight:500;color:var(--grafite);font-size:12px;margin-left:5px}
+.faixa .h,.faixa .a{text-align:right}
+.faixa .a{color:var(--grafite)}
+.faixa.cab{padding:9px 0 7px;font-size:10.5px;color:var(--grafite);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+
+/* Quartis */
+.dist{margin:0 16px;background:var(--sup);border-radius:18px;padding:14px 16px 12px}
+.dist .barra{display:flex;gap:3px;height:8px}
+.dist .barra i{display:block;border-radius:3px}
+.filtros{display:flex;gap:5px;margin-top:12px}
+.filtros span{flex:1;justify-content:center;font-size:12px;font-weight:600;padding:6px 0;border-radius:99px;border:1px solid var(--traco);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.filtros span i{width:7px;height:7px;border-radius:50%}
+.filtros span.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+.ordem{display:flex;align-items:center;gap:4px}
+.ordem .seta{width:13px;height:13px}
+.op{padding:12px 0 13px;border-bottom:1px solid var(--traco)}
 .op:last-child{border-bottom:0}
-.av{width:34px;height:34px;border-radius:50%;background:#dbe4e1;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--tinta-2);flex:none}
-.op .q{flex:1;min-width:0}
-.op .c{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.op .h{font-size:12px;color:var(--tinta-2);margin-top:3px;display:flex;align-items:center;gap:6px}
-.op .h .chip{font-size:10.5px;padding:1px 7px;line-height:1.4}
-.op .num{font-weight:700;font-size:15px;text-align:right}
-.op .num small{display:block;font-family:Figtree;font-size:11.5px;font-weight:600;color:var(--tinta-2);letter-spacing:0}
-.forma{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none}
-.forma.pix{background:#e2f5f2;color:var(--pix)} .forma.boleto{background:#f6f0de;color:var(--boleto)} .forma.cartao{background:#ebebfb;color:var(--cartao-cor)}
-.op.novo .num{color:var(--verde-texto)}
+.op .l1{display:flex;align-items:center;gap:8px;font-size:14.5px}
+.op .l1 .d{width:8px;height:8px;border-radius:50%;flex:none}
+.op .l1 .nm{flex:1;font-weight:600}
+.op .l1 .pc{font-weight:700;font-size:15px}
+.op .regua{margin:10px 0 8px}
+.op .l3{display:flex;justify-content:space-between;font-size:12.5px;color:var(--grafite)}
+.nota{margin:12px 22px 0;font-size:12.5px;color:var(--grafite);line-height:1.45}
 
-/* gráfico */
-.graf{margin-top:12px}
+/* folha de detalhe */
+.veu{position:absolute;inset:0;background:rgba(14,27,38,.38)}
+.folha{position:absolute;left:0;right:0;bottom:0;background:var(--nevoa);border-radius:26px 26px 0 0;padding:10px 0 30px}
+.folha .alca{width:38px;height:5px;border-radius:5px;background:#cfd6da;margin:0 auto 14px}
+.folha .cab-f{display:flex;align-items:center;gap:10px;padding:0 20px}
+.folha .cab-f .nm{font-size:18px;font-weight:700;flex:1}
+.selo{font-size:12px;font-weight:600;padding:5px 10px;border-radius:99px;background:var(--sup);display:flex;align-items:center;gap:6px}
+.selo i{width:7px;height:7px;border-radius:50%}
+.folha .resumo{padding:14px 20px 0}
+.folha .resumo .valor{font-size:28px;font-weight:700}
+.folha .resumo .de{font-size:13px;color:var(--grafite);margin-top:4px}
+.folha .resumo .regua{margin:16px 0 7px}
+.folha .escala{position:relative;height:13px;font-size:11px;color:var(--grafite)}
+.folha .escala span{position:absolute;transform:translateX(-50%)}
+.btn{margin:16px 16px 0;height:50px;border-radius:15px;background:var(--tinta);color:#fff;font:600 15px Figtree,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* Gráfico e Hoje: leitura grande sem cartão */
+.leitura{margin:0 22px}
+.leitura .valor{font-size:34px;font-weight:700;line-height:1;margin-top:6px}
+.leitura .valor small{font-size:17px;font-weight:600;color:var(--grafite);margin-right:3px}
+.leitura .de{font-size:13.5px;color:var(--grafite);margin-top:6px}
+.graf{margin:14px 16px 0;background:var(--sup);border-radius:18px;padding:16px 12px 10px}
 .graf svg{display:block;width:100%;height:auto}
-.graf-leg{display:flex;flex-wrap:wrap;gap:6px 14px;white-space:nowrap;font-size:12px;color:var(--tinta-2);margin-top:8px}
-.graf-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.tres{display:grid;grid-template-columns:repeat(3,1fr);margin:12px 16px 0;background:var(--sup);border-radius:18px}
+.tres > div{padding:14px;border-right:1px solid var(--traco)}
+.tres > div:last-child{border-right:0}
+.tres .v{font-size:16px;font-weight:700;margin-top:6px;white-space:nowrap}
+.tres .olho{font-size:10.5px}
+.tres .d{font-size:12px;color:var(--grafite);margin-top:2px}
+.quem-rec{position:relative;padding:12px 0;border-bottom:1px solid var(--traco);display:flex;align-items:baseline;gap:10px;font-size:14px}
+.quem-rec:last-child{border-bottom:0}
+.quem-rec .nm{flex:1;font-weight:600}
+.quem-rec .q{color:var(--grafite);font-size:12.5px}
+.quem-rec .v{font-weight:600;min-width:78px;text-align:right}
+.quem-rec .bar{position:absolute;left:0;bottom:-1px;height:2px;background:var(--tinta);opacity:.22;border-radius:2px}
+.pg{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--traco)}
+.pg:last-child{border-bottom:0}
+.pg .fm{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--grafite);width:52px;flex:none}
+.pg .q{flex:1;min-width:0}
+.pg .c{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg .h{font-size:12px;color:var(--grafite);margin-top:2px}
+.pg .v{font-weight:600;font-size:14.5px}
+.pg.novo .h::after{content:" · novo";color:var(--pos);font-weight:600}
 
-/* abas do rodapé */
-.abas{display:grid;grid-template-columns:repeat(4,1fr);background:var(--cartao);border-top:1px solid var(--linha);padding:8px 8px 26px}
-.abas div{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--tinta-2)}
-.abas div.ativo{color:var(--tinta)}
-.abas div.ativo svg{stroke:var(--verde-texto)}
-.abas svg{width:22px;height:22px;stroke:var(--tinta-2);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* abas */
+.abas{display:grid;grid-template-columns:repeat(4,1fr);background:rgba(255,255,255,.94);border-top:1px solid var(--traco);padding:9px 6px 28px}
+.abas div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#93a0aa;position:relative}
+.abas svg{width:22px;height:22px;stroke:#93a0aa;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.abas div.on{color:var(--tinta)}
+.abas div.on svg{stroke:var(--tinta)}
+.abas div.on::before{content:"";position:absolute;top:-10px;width:22px;height:3px;border-radius:0 0 3px 3px;background:linear-gradient(90deg,var(--mare-a),var(--mare-b))}
 </style>
 </head>
 <body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-eq" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-qt" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-gf" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></symbol>
+  <symbol id="i-hj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-sino" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-seta" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+</svg>
+
 <div class="grade">
 
-<!-- ═══ 1. EQUIPE (Desempenho Equipes) — visto por um ELITE, com a troca Eu/Equipe ═══ -->
+<!-- ═════════ 1 · EQUIPE ═════════ -->
 <div>
 <main class="tel">
-  <div class="rolagem">
+ <div class="corpo">
   <header class="topo">
-    <img src="icone-C-1024.png" alt="">
     <div class="quem">
-      <div class="nome">Equipe Bryan <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b6b78" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="sub">Receptivo · setembro de 2026</div>
+      <div class="eq">Equipe Bryan <svg class="seta"><use href="#i-seta"/></svg></div>
+      <div class="sub">Receptivo · setembro</div>
     </div>
-    <div class="sino"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0c1f2e" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i></div>
+    <div class="troca"><span>Eu</span><span class="on">Equipe</span></div>
+    <div class="ico"><svg><use href="#i-sino"/></svg><i></i></div>
   </header>
-  <div class="troca"><span>Eu</span><span class="ativo">Equipe</span></div>
 
   <section class="hero">
-    <div class="rot">Recebido da equipe</div>
-    <div class="valor num"><small>R$</small>412.380,00</div>
-    <div class="meta-linha"><span>Meta R$ 480.000,00</span><b>86%</b></div>
-    <div class="barra" aria-hidden="true">
-      <div class="trilho"></div>
-      <div class="cheio" style="width:85.9%"></div>
-      <div class="esperado" style="left:81%"><span>esperado hoje</span></div>
-      <div class="fim"><span>meta</span></div>
+    <div class="olho">Recebido no mês</div>
+    <div class="valor num"><small>R$</small>372.450,00</div>
+    <div class="de">de <b>R$ 480.000,00</b> · 77,6% da meta</div>
+    <!-- escala 0 → meta; esperado hoje = 18 de 22 dias úteis = 81,8% -->
+    <div class="regua">
+      <div class="fill" style="width:77.6%"></div>
+      <div class="esperado" style="left:81.8%"><b>esperado hoje</b></div>
     </div>
-    <span class="proj">▲ Projeção 106% · fecha em R$ 509 mil</span>
+    <div class="escala"><span>0</span><span>meta</span></div>
   </section>
 
-  <div class="quatro">
-    <section class="cart"><div class="rot">Esperado até hoje</div><div class="v num">R$ 388.800</div><div class="d">+ R$ 23.580 à frente</div></section>
-    <section class="cart"><div class="rot">Falta p/ meta</div><div class="v num">R$ 67.620</div><div class="d">4 dias úteis</div></section>
-    <section class="cart"><div class="rot">Por dia, daqui pra frente</div><div class="v num">R$ 16.905</div><div class="d">meta diária R$ 22.857</div></section>
-    <section class="cart"><div class="rot">Hoje</div><div class="v num">R$ 18.420</div><div class="d">37 pagamentos</div></section>
+  <p class="frase">Projeção <b>95%</b> — <b>R$ 20,3 mil</b> atrás do esperado. No ritmo de hoje, o mês fecha em <b>R$ 455,2 mil</b>.</p>
+
+  <div class="sec"><span class="olho">Ritmo</span><span>4 dias úteis restantes</span></div>
+  <div class="grupo">
+    <div class="lin"><span class="r">Precisa por dia daqui pra frente</span><span class="v num">R$ 26.887</span></div>
+    <div class="lin"><span class="r">Média diária até agora</span><span class="v num">R$ 20.692</span></div>
+    <div class="lin"><span class="r">Falta para a meta</span><span class="v num">R$ 107.550</span></div>
   </div>
 
-  <section class="cart">
-    <div class="rot">Degraus de quartil</div>
-    <div class="degrau ok"><span><span class="chip q2">2º</span>&nbsp; faixa atual</span><span class="num">106%</span></div>
-    <div class="degrau"><span><span class="chip q1">1º</span>&nbsp; a partir de 110%</span><span>falta <b class="num">R$ 15.300</b></span></div>
-  </section>
+  <div class="sec"><span class="olho">Quanto falta por faixa</span></div>
+  <div class="grupo">
+    <div class="faixa cab"><span></span><span>Faixa</span><span class="h">Hoje</span><span class="a">Amanhã</span></div>
+    <div class="faixa"><i class="d" style="background:var(--q1)"></i><span class="n">1º quartil</span><span class="h num">R$ 20.277</span><span class="a num">R$ 42.095</span></div>
+    <div class="faixa"><i class="d" style="background:var(--q2)"></i><span class="n">2º quartil<small>atual</small></span><span class="h pos" style="font-weight:600">na faixa</span><span class="a num">R$ 1.186</span></div>
   </div>
-  <nav class="abas">
-    <div class="ativo"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Equipe</div>
-    <div><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Quartis</div>
-    <div><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg>Gráfico</div>
-    <div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoje</div>
-  </nav>
+ </div>
+ <nav class="abas">
+  <div class="on"><svg><use href="#i-eq"/></svg>Equipe</div>
+  <div><svg><use href="#i-qt"/></svg>Quartis</div>
+  <div><svg><use href="#i-gf"/></svg>Gráfico</div>
+  <div><svg><use href="#i-hj"/></svg>Hoje</div>
+ </nav>
 </main>
-<div class="legenda">1 · Equipe (elite vê a troca Eu / Equipe)</div>
+<div class="legenda">1 · Equipe — visto por um elite (troca Eu / Equipe)</div>
 </div>
 
-<!-- ═══ 2. QUARTIS ═══ -->
+<!-- ═════════ 2 · QUARTIS ═════════ -->
 <div>
 <main class="tel">
-  <div class="rolagem">
+ <div class="corpo">
   <header class="topo">
-    <img src="icone-C-1024.png" alt="">
     <div class="quem">
-      <div class="nome">Equipe Bryan <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b6b78" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="sub">Receptivo · setembro de 2026</div>
+      <div class="eq">Equipe Bryan <svg class="seta"><use href="#i-seta"/></svg></div>
+      <div class="sub">Receptivo · setembro</div>
     </div>
-    <div class="sino"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0c1f2e" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i></div>
+    <div class="ico"><svg><use href="#i-sino"/></svg><i></i></div>
   </header>
 
-  <section class="cart" style="margin-top:0">
-    <div class="rot">Operadores por quartil · 12 com meta</div>
-    <div class="dist">
-      <i class="q1" style="width:25%"></i><i class="q2" style="width:33.3%"></i><i class="q3" style="width:25%"></i><i class="q4" style="width:16.7%"></i>
+  <section class="dist">
+    <div class="barra"><i style="flex:3;background:var(--q1)"></i><i style="flex:4;background:var(--q2)"></i><i style="flex:3;background:var(--q3)"></i><i style="flex:2;background:var(--q4)"></i></div>
+    <div class="filtros">
+      <span class="on">Todos</span>
+      <span><i style="background:var(--q1)"></i>1º · 3</span>
+      <span><i style="background:var(--q2)"></i>2º · 4</span>
+      <span><i style="background:var(--q3)"></i>3º · 3</span>
+      <span><i style="background:var(--q4)"></i>4º · 2</span>
     </div>
-    <div class="dist-leg"><span>1º · 3</span><span>2º · 4</span><span>3º · 3</span><span>4º · 2</span></div>
   </section>
 
-  <div class="titulo"><h2>Quem puxa</h2><span>projeção</span></div>
-  <section class="lista">
-    <div class="op"><span class="av">AP</span><div class="q"><div class="c">Ana Paula R.</div><div class="h"><span class="chip q1">1º</span> R$ 48.200 de R$ 40.000</div></div><span class="num">128%</span></div>
-    <div class="op"><span class="av">LM</span><div class="q"><div class="c">Lucas M.</div><div class="h"><span class="chip q1">1º</span> R$ 41.050 de R$ 36.000</div></div><span class="num">121%</span></div>
-    <div class="op"><span class="av">JS</span><div class="q"><div class="c">Juliana S.</div><div class="h"><span class="chip q1">1º</span> R$ 39.900 de R$ 36.000</div></div><span class="num">116%</span></div>
-  </section>
-
-  <div class="titulo"><h2>Precisa de ajuda</h2><span>projeção</span></div>
-  <section class="lista">
-    <div class="op"><span class="av">RC</span><div class="q"><div class="c">Rafael C.</div><div class="h"><span class="chip q4">4º</span> falta R$ 4.100 para o 3º</div></div><span class="num" style="color:var(--q4)">71%</span></div>
-    <div class="op"><span class="av">TB</span><div class="q"><div class="c">Thaís B.</div><div class="h"><span class="chip q4">4º</span> falta R$ 2.350 para o 3º</div></div><span class="num" style="color:var(--q4)">78%</span></div>
-  </section>
-  <div class="titulo"><h2 style="font-size:13.5px;color:var(--tinta-2);font-weight:600">Ver todos os 12 →</h2></div>
+  <div class="sec"><span class="olho">Operadores</span><span class="ordem">maior projeção <svg class="seta"><use href="#i-seta"/></svg></span></div>
+  <!-- régua de cada um: 0 → 130% do esperado; marcas em 50, 80 e 100% -->
+  <div class="grupo">
+    <div class="op">
+      <div class="l1"><i class="d" style="background:var(--q1)"></i><span class="nm">Ana Paula R.</span><span class="pc num">128%</span></div>
+      <div class="regua"><div class="fill" style="width:98.5%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:98.5%;background:var(--q1)"></i></div>
+      <div class="l3"><span class="tab">R$ 41,9 mil de 40 mil</span><span class="pos tab">+R$ 9,2 mil</span></div>
+    </div>
+    <div class="op">
+      <div class="l1"><i class="d" style="background:var(--q1)"></i><span class="nm">Lucas M.</span><span class="pc num">121%</span></div>
+      <div class="regua"><div class="fill" style="width:93%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:93%;background:var(--q1)"></i></div>
+      <div class="l3"><span class="tab">R$ 35,6 mil de 36 mil</span><span class="pos tab">+R$ 6,2 mil</span></div>
+    </div>
+    <div class="op">
+      <div class="l1"><i class="d" style="background:var(--q2)"></i><span class="nm">Bruno A.</span><span class="pc num">95%</span></div>
+      <div class="regua"><div class="fill" style="width:73.4%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:73.4%;background:var(--q2)"></i></div>
+      <div class="l3"><span class="tab">R$ 32,8 mil de 42 mil</span><span class="neg tab">−R$ 1,6 mil</span></div>
+    </div>
+    <div class="op">
+      <div class="l1"><i class="d" style="background:var(--q2)"></i><span class="nm">Camila T.</span><span class="pc num">90%</span></div>
+      <div class="regua"><div class="fill" style="width:69.2%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:69.2%;background:var(--q2)"></i></div>
+      <div class="l3"><span class="tab">R$ 29,5 mil de 40 mil</span><span class="neg tab">−R$ 3,3 mil</span></div>
+    </div>
+    <div class="op">
+      <div class="l1"><i class="d" style="background:var(--q3)"></i><span class="nm">Felipe G.</span><span class="pc num">73%</span></div>
+      <div class="regua"><div class="fill" style="width:56.2%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:56.2%;background:var(--q3)"></i></div>
+      <div class="l3"><span class="tab">R$ 25,1 mil de 42 mil</span><span class="neg tab">−R$ 9,3 mil</span></div>
+    </div>
+    <div class="op">
+      <div class="l1"><i class="d" style="background:var(--q4)"></i><span class="nm">Rafael C.</span><span class="pc num">44%</span></div>
+      <div class="regua"><div class="fill" style="width:33.8%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:33.8%;background:var(--q4)"></i></div>
+      <div class="l3"><span class="tab">R$ 14,4 mil de 40 mil</span><span class="neg tab">−R$ 18,3 mil</span></div>
+    </div>
   </div>
-  <nav class="abas">
-    <div><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Equipe</div>
-    <div class="ativo"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Quartis</div>
-    <div><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg>Gráfico</div>
-    <div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoje</div>
-  </nav>
+  <p class="nota">2 sem meta ficam fora dos quartis. A meta se grava na versão completa.</p>
+ </div>
+ <nav class="abas">
+  <div><svg><use href="#i-eq"/></svg>Equipe</div>
+  <div class="on"><svg><use href="#i-qt"/></svg>Quartis</div>
+  <div><svg><use href="#i-gf"/></svg>Gráfico</div>
+  <div><svg><use href="#i-hj"/></svg>Hoje</div>
+ </nav>
 </main>
-<div class="legenda">2 · Quartis</div>
+<div class="legenda">2 · Quartis — as faixas viram filtro; cada linha tem a régua</div>
 </div>
 
-<!-- ═══ 3. GRÁFICO ═══ -->
+<!-- ═════════ 3 · QUARTIS: DETALHE ═════════ -->
 <div>
 <main class="tel">
-  <div class="rolagem">
+ <div class="corpo">
   <header class="topo">
-    <img src="icone-C-1024.png" alt="">
     <div class="quem">
-      <div class="nome">Equipe Bryan <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b6b78" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="sub">Receptivo · setembro de 2026</div>
+      <div class="eq">Equipe Bryan <svg class="seta"><use href="#i-seta"/></svg></div>
+      <div class="sub">Receptivo · setembro</div>
     </div>
-    <div class="sino"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0c1f2e" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i></div>
+    <div class="ico"><svg><use href="#i-sino"/></svg><i></i></div>
   </header>
-
-  <section class="cart" style="margin-top:0">
-    <div class="rot">Recebido por dia útil</div>
-    <div class="graf">
-      <!-- 22 dias úteis; 18 decorridos. Escala 0–30 mil; meta diária 22.857 -->
-      <svg viewBox="0 0 330 170" role="img" aria-label="Recebido por dia útil">
-        <g fill="#38bdf8">
-          <rect x="4"   y="62"  width="11" height="88" rx="2"/><rect x="19"  y="44"  width="11" height="106" rx="2"/>
-          <rect x="34"  y="70"  width="11" height="80" rx="2"/><rect x="49"  y="38"  width="11" height="112" rx="2"/>
-          <rect x="64"  y="56"  width="11" height="94" rx="2"/><rect x="79"  y="80"  width="11" height="70" rx="2"/>
-          <rect x="94"  y="30"  width="11" height="120" rx="2"/><rect x="109" y="50"  width="11" height="100" rx="2"/>
-          <rect x="124" y="66"  width="11" height="84" rx="2"/><rect x="139" y="42"  width="11" height="108" rx="2"/>
-          <rect x="154" y="58"  width="11" height="92" rx="2"/><rect x="169" y="34"  width="11" height="116" rx="2"/>
-          <rect x="184" y="48"  width="11" height="102" rx="2"/><rect x="199" y="74"  width="11" height="76" rx="2"/>
-          <rect x="214" y="40"  width="11" height="110" rx="2"/><rect x="229" y="52"  width="11" height="98" rx="2"/>
-          <rect x="244" y="46"  width="11" height="104" rx="2"/>
-        </g>
-        <rect x="259" y="80" width="11" height="70" rx="2" fill="#4ade5a"/>
-        <g fill="#e3e9e7"><rect x="274" y="148" width="11" height="2"/><rect x="289" y="148" width="11" height="2"/><rect x="304" y="148" width="11" height="2"/><rect x="319" y="148" width="11" height="2"/></g>
-        <line x1="0" x2="330" y1="59" y2="59" stroke="#0c1f2e" stroke-width="1.5" stroke-dasharray="4 4"/>
-        <line x1="0" x2="330" y1="150" y2="150" stroke="#cfd8d5"/>
-        <text x="4" y="165" font-size="10" fill="#5b6b78" font-family="Figtree, system-ui, sans-serif">01/09</text>
-        <text x="264" y="165" font-size="10" fill="#15803d" font-weight="700" font-family="Figtree, system-ui, sans-serif">hoje</text>
-        <text x="330" y="165" text-anchor="end" font-size="10" fill="#5b6b78" font-family="Figtree, system-ui, sans-serif">30/09</text>
-      </svg>
-    </div>
-    <div class="graf-leg"><span><i style="background:#38bdf8"></i>dia útil</span><span><i style="background:#4ade5a"></i>hoje (parcial)</span><span>- - - meta diária R$ 22.857</span></div>
-  </section>
-
-  <div class="quatro">
-    <section class="cart"><div class="rot">Média por dia</div><div class="v num">R$ 22.910</div><div class="d">18 dias úteis</div></section>
-    <section class="cart"><div class="rot">Melhor dia</div><div class="v num">R$ 24.100</div><div class="d">10/09</div></section>
+  <section class="dist"><div class="barra"><i style="flex:3;background:var(--q1)"></i><i style="flex:4;background:var(--q2)"></i><i style="flex:3;background:var(--q3)"></i><i style="flex:2;background:var(--q4)"></i></div></section>
+ </div>
+ <div class="veu"></div>
+ <section class="folha">
+  <div class="alca"></div>
+  <div class="cab-f"><span class="nm">Bruno A.</span><span class="selo"><i style="background:var(--q2)"></i>2º quartil · 95%</span></div>
+  <div class="resumo">
+    <div class="valor num">R$ 32.800,00</div>
+    <div class="de">de R$ 42.000 · esperado hoje R$ 34.364 · <span class="neg">−R$ 1.564</span></div>
+    <div class="regua"><div class="fill" style="width:73.4%"></div><i class="marca" style="left:38.5%"></i><i class="marca" style="left:61.5%"></i><i class="marca" style="left:76.9%"></i><i class="ponto" style="left:73.4%;background:var(--q2)"></i></div>
+    <div class="escala"><span style="left:38.5%">50%</span><span style="left:61.5%">80%</span><span style="left:76.9%">100%</span></div>
   </div>
 
-  <div class="titulo"><h2>Acumulado × meta</h2></div>
-  <section class="cart" style="margin-top:0">
-    <svg viewBox="0 0 330 110" role="img" aria-label="Acumulado contra a meta">
-      <line x1="0" y1="100" x2="330" y2="10" stroke="#cfd8d5" stroke-width="1.5" stroke-dasharray="4 4"/>
-      <polyline fill="none" stroke="url(#dg)" stroke-width="3" stroke-linecap="round" points="0,100 45,86 90,70 135,56 180,42 225,30 262,23"/>
-      <defs><linearGradient id="dg" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#4ade5a"/></linearGradient></defs>
-      <circle cx="262" cy="23" r="4.5" fill="#4ade5a"/>
-      <text x="330" y="8" text-anchor="end" font-size="10" fill="#5b6b78" font-family="Figtree, system-ui, sans-serif">meta</text>
+  <div class="sec" style="margin-top:16px"><span class="olho">Quanto falta por faixa</span></div>
+  <div class="grupo">
+    <div class="faixa cab"><span></span><span>Faixa</span><span class="h">Hoje</span><span class="a">Amanhã</span></div>
+    <div class="faixa"><i class="d" style="background:var(--q1)"></i><span class="n">1º quartil</span><span class="h num">R$ 1.564</span><span class="a num">R$ 3.473</span></div>
+  </div>
+
+  <div class="sec"><span class="olho">No ritmo de hoje</span></div>
+  <div class="grupo">
+    <div class="lin"><span class="r">Fecha o mês em</span><span class="v num">R$ 40.089</span></div>
+    <div class="lin"><span class="r">Falta projetada</span><span class="v num neg">R$ 1.911</span></div>
+    <div class="lin"><span class="r">Pagamentos · ticket médio</span><span class="v num">41 · R$ 800</span></div>
+    <div class="lin"><span class="r">Posição na equipe</span><span class="v num">3º de 12</span></div>
+  </div>
+
+  <div class="btn"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg>Mandar resumo no WhatsApp</div>
+ </section>
+</main>
+<div class="legenda">3 · Toque num operador — o detalhe da linha do site</div>
+</div>
+
+<!-- ═════════ 4 · GRÁFICO ═════════ -->
+<div>
+<main class="tel">
+ <div class="corpo">
+  <header class="topo">
+    <div class="quem">
+      <div class="eq">Equipe Bryan <svg class="seta"><use href="#i-seta"/></svg></div>
+      <div class="sub">Receptivo · setembro</div>
+    </div>
+    <div class="ico"><svg><use href="#i-sino"/></svg><i></i></div>
+  </header>
+
+  <!-- A leitura segue o dia tocado; sem toque, mostra hoje. -->
+  <section class="leitura">
+    <div class="olho">Qua, 17 de setembro</div>
+    <div class="valor num"><small>R$</small>24.180,00</div>
+    <div class="de">37 pagamentos · <span class="pos">17% acima da média</span></div>
+  </section>
+
+  <section class="graf">
+    <svg viewBox="0 0 340 176" role="img" aria-label="Recebido por dia útil">
+      <defs><linearGradient id="mare" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2ba8e0"/><stop offset="1" stop-color="#34c27a"/></linearGradient></defs>
+      <g fill="#cdd5da">
+        <rect x="2"   y="66"  width="11" height="84"  rx="3"/><rect x="17"  y="52"  width="11" height="98"  rx="3"/>
+        <rect x="32"  y="74"  width="11" height="76"  rx="3"/><rect x="47"  y="48"  width="11" height="102" rx="3"/>
+        <rect x="62"  y="60"  width="11" height="90"  rx="3"/><rect x="77"  y="84"  width="11" height="66"  rx="3"/>
+        <rect x="92"  y="44"  width="11" height="106" rx="3"/><rect x="107" y="58"  width="11" height="92"  rx="3"/>
+        <rect x="122" y="70"  width="11" height="80"  rx="3"/><rect x="137" y="50"  width="11" height="100" rx="3"/>
+        <rect x="152" y="64"  width="11" height="86"  rx="3"/>
+        <rect x="182" y="56"  width="11" height="94"  rx="3"/><rect x="197" y="78"  width="11" height="72"  rx="3"/>
+        <rect x="212" y="54"  width="11" height="96"  rx="3"/><rect x="227" y="62"  width="11" height="88"  rx="3"/>
+        <rect x="242" y="68"  width="11" height="82"  rx="3"/>
+      </g>
+      <rect x="167" y="36" width="11" height="114" rx="3" fill="url(#mare)"/>
+      <rect x="257.5" y="98.5" width="10" height="51" rx="3" fill="none" stroke="#9aa7b0" stroke-dasharray="3 2"/>
+      <g fill="#e3e8eb"><rect x="272" y="147" width="11" height="3" rx="1.5"/><rect x="287" y="147" width="11" height="3" rx="1.5"/><rect x="302" y="147" width="11" height="3" rx="1.5"/><rect x="317" y="147" width="11" height="3" rx="1.5"/></g>
+      <line x1="0" x2="340" y1="52" y2="52" stroke="#0e1b26" stroke-opacity=".5" stroke-width="1" stroke-dasharray="3 4"/>
+      <text x="338" y="18" text-anchor="end" font-size="10.5" fill="#6a7784" font-family="Figtree, system-ui, sans-serif">- - média R$ 20.692</text>
+      <line x1="0" x2="340" y1="150.5" y2="150.5" stroke="#e7ebee"/>
+      <text x="2" y="168" font-size="10.5" fill="#6a7784" font-family="Figtree, system-ui, sans-serif">1/9</text>
+      <text x="172" y="168" text-anchor="middle" font-size="10.5" fill="#0e1b26" font-weight="600" font-family="Figtree, system-ui, sans-serif">17/9</text>
+      <text x="262" y="168" text-anchor="middle" font-size="10.5" fill="#6a7784" font-family="Figtree, system-ui, sans-serif">hoje</text>
+      <text x="338" y="168" text-anchor="end" font-size="10.5" fill="#6a7784" font-family="Figtree, system-ui, sans-serif">30/9</text>
     </svg>
   </section>
+
+  <div class="tres">
+    <div><div class="olho">No mês</div><div class="v num">R$ 372,4 mil</div><div class="d">18 dias úteis</div></div>
+    <div><div class="olho">Média</div><div class="v num">R$ 20,7 mil</div><div class="d">por dia útil</div></div>
+    <div><div class="olho">Melhor dia</div><div class="v num">R$ 24,2 mil</div><div class="d">17/9</div></div>
   </div>
-  <nav class="abas">
-    <div><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Equipe</div>
-    <div><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Quartis</div>
-    <div class="ativo"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg>Gráfico</div>
-    <div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoje</div>
-  </nav>
+  <p class="nota">Toque numa barra para ver o dia. Hoje fica tracejado até fechar.</p>
+ </div>
+ <nav class="abas">
+  <div><svg><use href="#i-eq"/></svg>Equipe</div>
+  <div><svg><use href="#i-qt"/></svg>Quartis</div>
+  <div class="on"><svg><use href="#i-gf"/></svg>Gráfico</div>
+  <div><svg><use href="#i-hj"/></svg>Hoje</div>
+ </nav>
 </main>
-<div class="legenda">3 · Gráfico (SVG próprio, sem biblioteca)</div>
+<div class="legenda">4 · Gráfico — recebido por dia útil e a média, como no site</div>
 </div>
 
-<!-- ═══ 4. HOJE ═══ -->
+<!-- ═════════ 5 · HOJE ═════════ -->
 <div>
 <main class="tel">
-  <div class="rolagem">
+ <div class="corpo">
   <header class="topo">
-    <img src="icone-C-1024.png" alt="">
     <div class="quem">
-      <div class="nome">Equipe Bryan <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b6b78" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="sub">Receptivo · setembro de 2026</div>
+      <div class="eq">Equipe Bryan <svg class="seta"><use href="#i-seta"/></svg></div>
+      <div class="sub">Receptivo · setembro</div>
     </div>
-    <div class="sino"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0c1f2e" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i></div>
+    <div class="ico"><svg><use href="#i-sino"/></svg><i></i></div>
   </header>
 
-  <section class="hero" style="padding:18px 22px">
-    <div class="rot">Recebido hoje</div>
-    <div class="valor num" style="font-size:34px"><small>R$</small>18.420,00</div>
-    <div class="meta-linha" style="margin-top:8px"><span>37 pagamentos · 9 de 12 recebendo</span><b>81% da diária</b></div>
+  <section class="leitura">
+    <div class="olho">Recebido hoje · até 14h</div>
+    <div class="valor num"><small>R$</small>11.240,00</div>
+    <div class="de">22 pagamentos · 9 de 12 operadores</div>
   </section>
 
-  <div class="titulo"><h2>Quem recebeu hoje</h2><span>3 sem pagamento</span></div>
-  <section class="lista">
-    <div class="op"><span class="av">AP</span><div class="q"><div class="c">Ana Paula R.</div><div class="h">6 pagamentos</div></div><span class="num">R$ 3.240</span></div>
-    <div class="op"><span class="av">LM</span><div class="q"><div class="c">Lucas M.</div><div class="h">5 pagamentos</div></div><span class="num">R$ 2.880</span></div>
-    <div class="op"><span class="av">JS</span><div class="q"><div class="c">Juliana S.</div><div class="h">4 pagamentos</div></div><span class="num">R$ 2.410</span></div>
-  </section>
-
-  <div class="titulo"><h2>Últimos pagamentos</h2><span>Ver todos</span></div>
-  <section class="lista">
-    <div class="op novo"><span class="forma pix">PIX</span><div class="q"><div class="c">Maria S. · Ana Paula R.</div><div class="h">Hoje, 14:02 · novo</div></div><span class="num">R$ 350,00</span></div>
-    <div class="op novo"><span class="forma boleto">BOL</span><div class="q"><div class="c">João R. · Lucas M.</div><div class="h">Hoje, 14:02 · novo</div></div><span class="num">R$ 520,00</span></div>
-    <div class="op"><span class="forma cartao">CART</span><div class="q"><div class="c">Fernanda L. · Juliana S.</div><div class="h">Hoje, 11:00</div></div><span class="num">R$ 180,00</span></div>
-  </section>
+  <div class="sec"><span class="olho">Quem recebeu</span><span>3 sem pagamento</span></div>
+  <div class="grupo">
+    <div class="quem-rec"><span class="nm">Ana Paula R.</span><span class="q">5 pgtos</span><span class="v num">R$ 2.640</span><i class="bar" style="width:100%"></i></div>
+    <div class="quem-rec"><span class="nm">Lucas M.</span><span class="q">4 pgtos</span><span class="v num">R$ 1.980</span><i class="bar" style="width:75%"></i></div>
+    <div class="quem-rec"><span class="nm">Bruno A.</span><span class="q">3 pgtos</span><span class="v num">R$ 1.410</span><i class="bar" style="width:53%"></i></div>
+    <div class="quem-rec"><span class="nm">Camila T.</span><span class="q">3 pgtos</span><span class="v num">R$ 1.150</span><i class="bar" style="width:44%"></i></div>
   </div>
-  <nav class="abas">
-    <div><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Equipe</div>
-    <div><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Quartis</div>
-    <div><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg>Gráfico</div>
-    <div class="ativo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoje</div>
-  </nav>
+
+  <div class="sec"><span class="olho">Últimos pagamentos</span><span>Ver todos</span></div>
+  <div class="grupo">
+    <div class="pg novo"><span class="fm">PIX</span><div class="q"><div class="c">Maria S. · Ana Paula R.</div><div class="h">14:02</div></div><span class="v num">R$ 350,00</span></div>
+    <div class="pg novo"><span class="fm">BOLETO</span><div class="q"><div class="c">João R. · Lucas M.</div><div class="h">14:02</div></div><span class="v num">R$ 520,00</span></div>
+    <div class="pg"><span class="fm">CARTÃO</span><div class="q"><div class="c">Fernanda L. · Bruno A.</div><div class="h">11:00</div></div><span class="v num">R$ 180,00</span></div>
+  </div>
+ </div>
+ <nav class="abas">
+  <div><svg><use href="#i-eq"/></svg>Equipe</div>
+  <div><svg><use href="#i-qt"/></svg>Quartis</div>
+  <div><svg><use href="#i-gf"/></svg>Gráfico</div>
+  <div class="on"><svg><use href="#i-hj"/></svg>Hoje</div>
+ </nav>
 </main>
-<div class="legenda">4 · Hoje (quem recebeu + últimos pagamentos)</div>
+<div class="legenda">5 · Hoje — quem recebeu e os últimos pagamentos</div>
 </div>
 
 </div>

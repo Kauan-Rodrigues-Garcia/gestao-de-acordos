@@ -4,7 +4,7 @@
 **Estado:** **RASCUNHO — aguardando aprovação do usuário.** Nada implementado.
 **Continua:** `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md` (operador, no ar)
 **Histórico da conversa:** `docs/MOBILE-PWA-EM-ANDAMENTO.md` → «Liderança — brainstorm RETOMADO»
-**Protótipo:** `docs/mobile/prototipo-lider.html` (print `prototipo-lider.png`, dados fictícios)
+**Protótipo:** `docs/mobile/prototipo-lider.html` (print `prototipo-lider.png`, dados fictícios) — v2
 **Toca:** `src/pages/Mobile/*` (visão da equipe, abas), `src/lib/mobile/preferencia.ts`
 (quem abre o quê), extração de código puro de `DesempenhoEquipes.tsx` e
 `QuartisOperadores.tsx`, banco (migration nova: marco de meta de equipe, função do
@@ -71,53 +71,98 @@ escolhida lembrada no aparelho (`localStorage['mobile:equipe']`, com `try/catch`
 
 ## 2. A tela da equipe (`/m/equipe`)
 
-Protótipo: `docs/mobile/prototipo-lider.png`. Mesmo visual aprovado da `/m`
-(cartão escuro com as cores do ícone, Bricolage Grotesque nos números, Figtree no
-texto). Cabeçalho fixo: ícone, **equipe ▾**, setor · mês, sino. Para o elite, a troca
-**Eu | Equipe** logo abaixo. Abas no rodapé:
+Protótipo **v2** (30/09/2026, pedido «mais minimalista e mais profissional, baseado nas
+abas»): `docs/mobile/prototipo-lider.png`. Cada aba parte do que a aba do Painel do Líder
+mostra no site e reorganiza para o dedo e para uma coluna.
 
-### 2.1 Equipe (Desempenho Equipes)
+### Linguagem visual do celular
 
-- Cartão principal: **recebido da equipe**, meta, %, a **barra** com acumulado,
-  esperado até hoje e meta no mesmo eixo, e o selo de **projeção** («▲ Projeção 106%
-  · fecha em R$ 509 mil»), na cor de `corProjecao`.
-- Quatro números: esperado até hoje (e quanto à frente/atrás), falta para a meta
-  (e dias úteis restantes), **por dia daqui pra frente** (ritmo necessário) e
-  recebido hoje.
-- **Degraus de quartil**: a faixa atual e quanto falta para cada faixa acima.
-- Equipe sem meta: mostra o recebido e «Sem meta configurada», como o `CardEquipe`.
+Vale para a equipe e, para manter uma estética só, é a referência da `/m` do operador.
 
-### 2.2 Quartis
+- **Um elemento forte por tela**: o cartão escuro (cor do fundo do ícone), só na aba
+  Equipe. O resto é superfície branca em grupos, linhas finas, sem sombras nem cartões
+  coloridos.
+- **A régua é a assinatura**: um traço com as marcas das faixas de quartil da aba Metas
+  (padrão 50 / 80 / 100%) e um ponto onde a pessoa ou a equipe está. A mesma régua na
+  equipe, em cada operador e no detalhe: quem lê uma lê todas.
+- **Cor com parcimônia**: cor de quartil só em ponto e marca, nunca em fundo; o degradê
+  azul→verde do ícone só na régua da equipe, no dia tocado do gráfico e na aba ativa.
+  Verde/vermelho só em sobra/falta.
+- Tipos: Bricolage Grotesque nos números, Figtree no texto (os da `/m`). Valores longos
+  abreviados nas listas («R$ 41,9 mil»), completos nos destaques.
+- Cabeçalho: **equipe ▾** (seletor), setor · mês, sino. Para o elite, a troca
+  **Eu | Equipe** no próprio cabeçalho. Abas no rodapé: Equipe · Quartis · Gráfico · Hoje.
 
-- Barra de distribuição (1º a 4º) com a contagem de cada faixa.
-- **Quem puxa** e **Precisa de ajuda** (os mesmos critérios de `detalharEquipe`):
-  nome abreviado, recebido × meta, % de projeção, e para quem está embaixo, quanto
-  falta para a faixa de cima.
-- «Ver todos» abre a lista completa da equipe, ordenada por projeção.
-- Quem sai da tabela no site (férias, sem meta, os outros casos de 08/09/2026) sai
-  aqui também — mesma regra, extraída do `QuartisOperadores`.
+### 2.1 Equipe — do card do Desempenho Equipes
 
-### 2.3 Gráfico
+No site: acumulado, meta, falta para a meta, média diária, a barra acumulado × esperado ×
+meta e, aberto, «Quanto falta por faixa» (hoje e amanhã), «Ritmo e fechamento» e
+«Pessoas».
 
-- Barras do **recebido por dia útil** do mês, o dia de hoje em verde (parcial), dias
-  futuros vazios, linha tracejada da **meta diária**.
-- Média por dia e melhor dia.
-- **Acumulado × meta**: linha do acumulado contra a reta até a meta.
-- SVG escrito à mão, sem biblioteca. Dados de `buscarResumoMensalDiario` (a RPC
-  agregada que o Gráfico do Painel já usa), filtrados pelos operadores da equipe.
+- Cartão escuro: recebido no mês, «de R$ meta · X% da meta» e a **régua** até a meta com
+  a marca do **esperado hoje**.
+- Uma frase logo abaixo, no lugar de três números soltos: «Projeção 95% — R$ 20,3 mil
+  atrás do esperado. No ritmo de hoje, o mês fecha em R$ 455,2 mil.»
+- **Ritmo** (lista): precisa por dia daqui pra frente, média diária até agora, falta para
+  a meta; dias úteis restantes no título.
+- **Quanto falta por faixa**: tabela Faixa · Hoje · Amanhã, igual à do site («hoje entra,
+  amanhã mantém»), com a faixa atual marcada.
+- «Pessoas» do site vai para a aba Quartis, sem repetir aqui.
+- Equipe sem meta: recebido e «Sem meta configurada», sem régua nem faixas.
+
+### 2.2 Quartis — da tabela de 9 colunas para uma lista
+
+No site: tabela (operador, equipe, meta, recebimento, diário, hoje, falta/sobra, %,
+quartil) + pizza 3D que filtra a tabela + linha que abre o detalhe (fechamento, faixas
+hoje/amanhã, pagamentos, ticket, posição, participação) + «copiar resumo para o
+WhatsApp». Nove colunas não cabem em 390 px, e a pizza não tem alvo para o dedo. No
+celular:
+
+- **Distribuição** numa barra empilhada (1º a 4º, proporcional) e, embaixo, as faixas
+  como **filtros** — «Todos · 1º 3 · 2º 4 · 3º 3 · 4º 2». Tocar numa faixa faz o que o
+  clique na pizza faz no site: mostra só ela.
+- **Uma linha por operador**, em três andares: ponto do quartil + nome + **%**; a
+  **régua** (0 → 130% do esperado, marcas 50/80/100); «R$ recebido de R$ meta» à
+  esquerda e **sobra/falta** contra o esperado à direita. As colunas diário, hoje e equipe
+  saem da linha e vão para o detalhe.
+- Ordem: maior projeção (padrão) ou menor, que é o «quem precisa de ajuda».
+- **Toque abre a folha de detalhe** (bottom sheet), o mesmo conteúdo da linha expandida
+  do site: recebido × meta × esperado hoje, a régua com a escala, **quanto falta por
+  faixa (hoje / amanhã)**, fecha o mês em, falta/sobra projetada, pagamentos · ticket
+  médio, posição na equipe.
+- **«Mandar resumo no WhatsApp»**: no site é «copiar»; no celular abre o
+  compartilhamento do aparelho (`navigator.share`, com cópia como reserva) com o mesmo
+  texto de `montarMensagemOperador`.
+- Quem o site tira da tabela (férias, desligado, sem meta — 08/09/2026) sai aqui também.
+  «N sem meta ficam fora dos quartis» no rodapé; gravar meta é só na versão completa.
+- PaguePlay: em H.O., como o Dashboard. O alternador H.O./Bruto do site não vem.
+
+### 2.3 Gráfico — do gráfico de área do site
+
+No site: recebido de cada dia do mês, com o valor sobre cada ponto e a linha da **média
+diária**.
+
+- **Leitura grande** no topo: o dia tocado (sem toque, hoje), valor, pagamentos e quanto
+  ficou acima/abaixo da média. Substitui os rótulos sobre cada ponto, que não cabem no
+  celular.
+- Barras por **dia útil**: cinza; o dia tocado no degradê do ícone; **hoje tracejado**
+  (parcial); dias que faltam como traço no chão. Linha tracejada da **média diária**,
+  como no site.
+- Três números: no mês, média por dia útil, melhor dia.
+- SVG escrito à mão, sem recharts. Dados de `buscarRecebidoPorDia` (+ ajustes como linhas
+  do dia, como o site), filtrados pelos operadores da equipe.
 
 ### 2.4 Hoje
 
-- Cartão: recebido hoje, nº de pagamentos, quantos operadores receberam, % da meta
-  diária.
-- **Quem recebeu hoje**: operador, nº de pagamentos, valor, do maior para o menor;
-  «N sem pagamento» no título.
-- **Últimos pagamentos** da equipe: forma (chip), **cliente abreviado · operador**,
-  hora, valor; os chegados depois da última visita em verde com «novo» (marca do
-  aparelho, como na `/m`).
-- Os pagamentos um a um dependem de a pessoa ler o analítico dos outros
-  (`analitico_select` exige `fn_user_escopo('analitico') >= 2`). Sem isso, a aba
-  mostra só o cartão e «Quem recebeu hoje», que vêm dos agregados.
+- Leitura grande: recebido hoje, «até HHh» (hora da última importação), pagamentos,
+  «N de M operadores».
+- **Quem recebeu**: nome, nº de pagamentos, valor, com um traço fino proporcional ao
+  maior; «N sem pagamento» no título.
+- **Últimos pagamentos** da equipe: forma em texto (PIX / BOLETO / CARTÃO, sem chip
+  colorido), «cliente abreviado · operador», hora, valor; «novo» em verde para os
+  chegados depois da última visita (marca do aparelho, como na `/m`).
+- Sem permissão de ler o analítico dos outros (`fn_user_escopo('analitico') < 2`): só a
+  leitura e «Quem recebeu», que vêm dos agregados (**confirmado em 30/09/2026**).
 
 ### De onde vêm os números
 
@@ -130,7 +175,7 @@ mesmas contas:
 | meta da equipe | `metas` `tipo = 'equipe'` (`metaDe('equipe', id)`), em H.O. na PaguePlay (`metaNaUnidade`) |
 | dias úteis, quartis | `getMetasConfig`, `diasUteisDoMes` / `diasUteisDecorridos`, `QUARTIS_PADRAO` |
 | projeção, ritmo, degraus, quem puxa | `enriquecerOperadores` + `detalharEquipe` (`desempenhoEquipe.ts`, já testado) |
-| dia a dia | `buscarResumoMensalDiario` |
+| dia a dia | `buscarRecebidoPorDia` + ajustes como linhas do dia (o mesmo do Gráfico do site) |
 | pagamentos | `buscarAnalitico` com os operadores da equipe, 20 mais recentes |
 
 Hoje a montagem das fontes vive **dentro** do componente `DesempenhoEquipes.tsx`.
@@ -222,7 +267,8 @@ CONFLICT DO NOTHING`, só quando o lote tem linha do mês corrente.
 - `equipesQueLidero`: explícito manda, reserva, clone, `jaLideraAlgo`.
 - `montarEquipe`: **paridade** com o que o `DesempenhoEquipes` mostra para as mesmas
   fontes (BookPlay e PaguePlay em H.O.).
-- Quartis: quem sai da tabela (férias, sem meta), quem puxa / precisa de ajuda.
+- Quartis: quem sai da tabela (férias, sem meta), filtro por faixa, ordem, régua
+  (posição do ponto e marcas vindas da configuração de quartis), texto do resumo.
 - Gráfico: dias úteis, hoje parcial, dias futuros, meta diária (função pura que gera
   as barras; o SVG só desenha).
 - SQL (`*.sql.test.ts`): o desafio e o aviso usam a mesma
@@ -245,7 +291,9 @@ equipe, trocar Eu / Equipe, conferir os números contra o Painel do Líder.
 Banco é produção (`CLAUDE.md`): a migration da L2 é mostrada com o SQL exato e só roda
 com o «pode». Registrar a versão aplicada.
 
-## Para confirmar na aprovação
+## Confirmado em 30/09/2026
 
-- Texto do aviso sem valores (como o de meta do operador) — ok?
-- Aba Hoje sem permissão de analítico da equipe: mostrar só os agregados — ok?
+- Texto do aviso **sem valores** (como o de meta do operador).
+- Aba Hoje sem permissão de analítico da equipe: **só os agregados**.
+- Protótipo refeito (v2) a pedido: mais minimalista, cada aba baseada na do site.
+  **Aguardando aprovação do visual v2 e da spec.**

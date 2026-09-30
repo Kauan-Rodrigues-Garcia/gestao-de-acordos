@@ -354,7 +354,15 @@ sem 2ª/3ª faixa como a do operador.
 
 **Rascunho da spec:** `docs/superpowers/specs/2026-09-30-mobile-lideranca-design.md`
 + protótipo `docs/mobile/prototipo-lider.html` (print `prototipo-lider.png`).
-**Aguardando aprovação do usuário** (e as duas confirmações no fim da spec). Depois:
+Confirmado: aviso **sem valores**; aba Hoje sem permissão mostra **só agregados**.
+O usuário pediu, antes de seguir, um visual **mais minimalista e profissional, baseado
+nas abas do site** (ex.: Quartis). Feito o **protótipo v2**: cartão escuro só na aba
+Equipe, resto em grupos brancos; **a régua** (marcas 50/80/100%) como assinatura em
+equipe, operador e detalhe; Quartis vira barra de distribuição + faixas como filtro +
+lista com régua + folha de detalhe (a linha expandida do site) com «Mandar resumo no
+WhatsApp»; Gráfico com a média diária do site e leitura do dia tocado. Corrigido do v1:
+faixas de quartil padrão são 100/80/50% (o v1 dizia 110%) e a linha do gráfico do site é
+a média, não a meta diária. **Aguardando aprovação do visual v2 e da spec.** Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 
