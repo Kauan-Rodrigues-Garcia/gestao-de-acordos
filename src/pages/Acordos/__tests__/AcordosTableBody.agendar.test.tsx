@@ -43,7 +43,7 @@ function montar(over: {
         highlightedId={null} selecionados={[]} editandoInlineId={null} detalheInlineId={null}
         atualizandoStatus={null} excluindoId={null} operadoresMap={{ 'op-1': 'Usuário 1' }}
         empresaTags={[]} temFiltros={false}
-        selecionarTodos={vi.fn()} toggleSelecionado={vi.fn()} setNovoInlineAberto={vi.fn()}
+        selecionarTodos={vi.fn()} toggleSelecionado={vi.fn()} alternarDia={vi.fn()} setNovoInlineAberto={vi.fn()}
         addAcordo={vi.fn()} removeAcordo={vi.fn()} patchAcordo={vi.fn()}
         setEditandoInlineId={vi.fn()} setDetalheInlineId={vi.fn()}
         marcarComoPago={vi.fn()}

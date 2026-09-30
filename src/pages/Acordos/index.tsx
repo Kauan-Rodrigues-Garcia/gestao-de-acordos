@@ -29,6 +29,7 @@ import { formatDate, getTodayISO } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
+import { alternarSelecaoDoDia } from '@/lib/acordosPorDia';
 import { deslocarMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
@@ -466,6 +467,10 @@ export default function Acordos() {
   function selecionarTodos() {
     if (selecionados.length === acordos.length) setSelecionados([]);
     else setSelecionados(acordos.map(a => a.id));
+  }
+
+  function alternarDia(idsDoDia: string[]) {
+    setSelecionados(prev => alternarSelecaoDoDia(prev, idsDoDia));
   }
 
   function marcarComoPago(a: Acordo) {
@@ -955,6 +960,7 @@ export default function Acordos() {
                     temFiltros={temFiltros}
                     selecionarTodos={selecionarTodos}
                     toggleSelecionado={toggleSelecionado}
+                    alternarDia={alternarDia}
                     setNovoInlineAberto={setNovoInlineAberto}
                     addAcordo={addAcordo}
                     removeAcordo={removeAcordo}

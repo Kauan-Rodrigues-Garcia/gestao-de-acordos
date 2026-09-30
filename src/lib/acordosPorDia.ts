@@ -56,3 +56,48 @@ export function contarPorStatus(acordos: readonly { status: StatusAcordo | strin
   }
   return { total: acordos.length, pendentes: acordos.length - pagos - naoPagos, pagos, naoPagos };
 }
+
+/**
+ * Marcar o dia inteiro pela linha-título — pedido de 30/09/2026.
+ *
+ * Se o dia já está todo marcado, desmarca só ele; senão, junta os que faltam.
+ * Os marcados de OUTROS dias ficam como estavam: escolher o 30/09 não pode
+ * apagar o que a pessoa já tinha escolhido no 29/09.
+ */
+export function alternarSelecaoDoDia(selecionados: readonly string[], idsDoDia: readonly string[]): string[] {
+  if (idsDoDia.length === 0) return [...selecionados];
+  const marcados = new Set(selecionados);
+  const todoMarcado = idsDoDia.every(id => marcados.has(id));
+  if (todoMarcado) {
+    const doDia = new Set(idsDoDia);
+    return selecionados.filter(id => !doDia.has(id));
+  }
+  return [...selecionados, ...idsDoDia.filter(id => !marcados.has(id))];
+}
+
+export interface SelecaoDoDia {
+  /** Quantos acordos do dia estão marcados. */
+  marcados: number;
+  /** Soma do valor dos marcados — o dia inteiro, quando o dia todo está marcado. */
+  valor: number;
+}
+
+/**
+ * O que a linha-título do dia mostra da seleção. O valor só aparece quando há
+ * algo marcado: a linha continua só com quantidades para quem não escolheu nada.
+ */
+export function resumirSelecaoDoDia(
+  acordos: readonly { id: string; valor?: number | string | null }[],
+  selecionados: readonly string[],
+): SelecaoDoDia {
+  const marcadosSet = new Set(selecionados);
+  let marcados = 0;
+  let valor = 0;
+  for (const a of acordos) {
+    if (!marcadosSet.has(a.id)) continue;
+    marcados++;
+    valor += Number(a.valor) || 0;
+  }
+  // Centavos: somar floats de dinheiro acumula resto na 3ª casa.
+  return { marcados, valor: Math.round(valor * 100) / 100 };
+}

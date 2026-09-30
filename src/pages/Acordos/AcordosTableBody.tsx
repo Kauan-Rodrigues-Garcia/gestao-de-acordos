@@ -33,7 +33,7 @@ import {
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { acordoTemCpf } from '@/lib/cpf';
-import { agruparAcordosPorDia } from '@/lib/acordosPorDia';
+import { agruparAcordosPorDia, resumirSelecaoDoDia } from '@/lib/acordosPorDia';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
@@ -74,6 +74,8 @@ export interface AcordosTableBodyProps {
   temFiltros: boolean;
   selecionarTodos: () => void;
   toggleSelecionado: (id: string) => void;
+  /** Marca/desmarca o dia inteiro pela caixinha da linha-título. */
+  alternarDia: (idsDoDia: string[]) => void;
   setNovoInlineAberto: React.Dispatch<React.SetStateAction<boolean>>;
   addAcordo: (a: Acordo) => void;
   removeAcordo: (id: string) => void;
@@ -135,7 +137,7 @@ export function AcordosTableBody({
   acordosParaExibir, acordosCount, isPP, colSpanFull, mostrarColunaOperador, podeEditar, podeExcluir, novoInlineAberto,
   hoje, highlightedId, selecionados, editandoInlineId, detalheInlineId,
   atualizandoStatus, excluindoId, operadoresMap, empresaTags, temFiltros,
-  selecionarTodos, toggleSelecionado, setNovoInlineAberto,
+  selecionarTodos, toggleSelecionado, alternarDia, setNovoInlineAberto,
   addAcordo, removeAcordo, patchAcordo,
   setEditandoInlineId, setDetalheInlineId,
   marcarComoPago, podeAgendar, parcelasExistentes, setReagendarAcordo,
@@ -460,7 +462,13 @@ export function AcordosTableBody({
           </tr>
         ) : grupos.map(g => (
           <Fragment key={g.chave}>
-            <LinhaDoDiaAcordos dia={g.dia} acordos={g.acordos} colSpan={colSpanFull} hoje={hoje} />
+            <LinhaDoDiaAcordos
+              dia={g.dia} acordos={g.acordos} colSpan={colSpanFull} hoje={hoje}
+              selecao={{
+                ...resumirSelecaoDoDia(g.acordos, selecionados),
+                onAlternar: () => alternarDia(g.acordos.map(a => a.id)),
+              }}
+            />
             {g.acordos.map((a, noDia) => linha(a, posicao++, noDia))}
           </Fragment>
         ))}

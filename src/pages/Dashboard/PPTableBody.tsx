@@ -19,7 +19,7 @@ import {
   getEstadoFromAcordo, extractLinkAcordo, isAtrasado,
 } from '@/lib/index';
 import { acordoTemCpf } from '@/lib/cpf';
-import { agruparAcordosPorDia } from '@/lib/acordosPorDia';
+import { agruparAcordosPorDia, resumirSelecaoDoDia } from '@/lib/acordosPorDia';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { VinculoTag } from '@/components/VinculoTag';
@@ -78,6 +78,8 @@ interface PPTableBodyProps {
   hoje: string;
   selecionados: string[];
   toggleSelecionado: (id: string) => void;
+  /** Marca/desmarca o dia inteiro pela caixinha da linha-título. */
+  alternarDia: (idsDoDia: string[]) => void;
   atualizandoStatus: string | null;
   marcarComoPago: (a: AcordoComVinculo) => void;
   /** Chaves `grupo#numero` das parcelas que já existem (useParcelasExistentes). */
@@ -100,7 +102,7 @@ export function PPTableBody({
   editandoInlineIdTabela, setEditandoInlineIdTabela,
   detalheInlineIdTabela, setDetalheInlineIdTabela,
   highlightedId, hoje,
-  selecionados, toggleSelecionado,
+  selecionados, toggleSelecionado, alternarDia,
   atualizandoStatus, marcarComoPago,
   parcelasExistentes, setReagendarAcordo,
   excluindoId, setConfirmandoExclusao,
@@ -341,7 +343,13 @@ export function PPTableBody({
         </tr>
       ) : grupos.map(g => (
         <Fragment key={g.chave}>
-          <LinhaDoDiaAcordos dia={g.dia} acordos={g.acordos} colSpan={colSpan} hoje={hoje} />
+          <LinhaDoDiaAcordos
+            dia={g.dia} acordos={g.acordos} colSpan={colSpan} hoje={hoje}
+            selecao={{
+              ...resumirSelecaoDoDia(g.acordos, selecionados),
+              onAlternar: () => alternarDia(g.acordos.map(a => a.id)),
+            }}
+          />
           {g.acordos.map((a, noDia) => linha(a, posicao++, noDia))}
         </Fragment>
       ))}

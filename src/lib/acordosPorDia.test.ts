@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { agruparAcordosPorDia, contarPorStatus } from './acordosPorDia';
+import {
+  agruparAcordosPorDia, alternarSelecaoDoDia, contarPorStatus, resumirSelecaoDoDia,
+} from './acordosPorDia';
 import { rotuloDoDia } from './rotuloDoDia';
 
 type A = { id: string; vencimento: string; status: string; cpf?: boolean };
@@ -44,5 +46,35 @@ describe('rotuloDoDia', () => {
 
   it('vira o mês sem errar o «ontem»', () => {
     expect(rotuloDoDia('2026-09-30', '2026-10-01')).toBe('Ontem · 30/09/2026');
+  });
+});
+
+describe('alternarSelecaoDoDia', () => {
+  it('marca o dia inteiro sem mexer no que já estava marcado em outro dia', () => {
+    expect(alternarSelecaoDoDia(['x'], ['1', '2'])).toEqual(['x', '1', '2']);
+  });
+
+  it('dia com parte marcada: completa o dia, sem repetir id', () => {
+    expect(alternarSelecaoDoDia(['1', 'x'], ['1', '2'])).toEqual(['1', 'x', '2']);
+  });
+
+  it('dia todo marcado: desmarca só ele', () => {
+    expect(alternarSelecaoDoDia(['1', 'x', '2'], ['1', '2'])).toEqual(['x']);
+  });
+
+  it('dia vazio não muda nada', () => {
+    expect(alternarSelecaoDoDia(['x'], [])).toEqual(['x']);
+  });
+});
+
+describe('resumirSelecaoDoDia', () => {
+  const doDia = [{ id: '1', valor: 100.1 }, { id: '2', valor: '200.2' }, { id: '3', valor: null }];
+
+  it('soma só os marcados do dia, em centavos exatos', () => {
+    expect(resumirSelecaoDoDia(doDia, ['1', '2', 'fora'])).toEqual({ marcados: 2, valor: 300.3 });
+  });
+
+  it('nada marcado: zero', () => {
+    expect(resumirSelecaoDoDia(doDia, [])).toEqual({ marcados: 0, valor: 0 });
   });
 });

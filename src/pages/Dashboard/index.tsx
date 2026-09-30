@@ -15,6 +15,7 @@ import {
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
+import { alternarSelecaoDoDia } from '@/lib/acordosPorDia';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { cn } from '@/lib/utils';
@@ -543,6 +544,10 @@ export default function Dashboard() {
     else setSelecionados(acordos.map(a => a.id));
   }
 
+  function alternarDia(idsDoDia: string[]) {
+    setSelecionados(prev => alternarSelecaoDoDia(prev, idsDoDia));
+  }
+
   function marcarComoPago(acordo: AcordoComVinculo) {
     if (acordo.status === 'nao_pago') {
       setConfirmarPgtoAcordo(acordo);
@@ -884,6 +889,7 @@ export default function Dashboard() {
                         hoje={hoje}
                         selecionados={selecionados}
                         toggleSelecionado={toggleSelecionado}
+                        alternarDia={alternarDia}
                         atualizandoStatus={atualizandoStatus}
                         marcarComoPago={marcarComoPago}
                         parcelasExistentes={parcelasExistentes}
