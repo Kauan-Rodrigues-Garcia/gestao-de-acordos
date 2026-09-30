@@ -188,6 +188,46 @@ aparece na `/m`. Demais pontos:
 - Operador desligado/férias: não recebe.
 - Limpeza: fila processada apagada após 7 dias (pg_cron).
 
+**Seção 5 — APROVADA em 30/09/2026**, com o aviso de meta sem valor e duas
+exigências do usuário: (1) limpar e reimportar **não** pode notificar de novo;
+(2) tudo leve — processamento, banco, app.
+
+Levantado no código para essas duas exigências:
+
+- A importação grava com `upsert` na chave natural
+  `empresa_id,codigo,data_pagamento,forma_pagamento,operador_usuario`
+  (`analitico.service.ts` ~l.599): linha que já existe vira UPDATE.
+- Mas existem `limparDadosDoMes` / `limparDadosDoMesSetor` (DELETE do mês
+  inteiro, «para reimportar do zero») — depois deles tudo volta como INSERT.
+- Nenhum gatilho em `analitico_recebimentos` hoje (no repositório).
+
+Desenho resultante (apresentado ao usuário):
+
+1. **Janela de data**: só vira push linha com `data_pagamento` nos últimos
+   3 dias (configurável). Reimportar o mês não avisa nada antigo.
+2. **Memória da chave natural**: `push_fila` tem índice único na chave
+   natural; o gatilho faz `INSERT … ON CONFLICT DO NOTHING`. A linha da fila
+   **sobrevive ao DELETE do analítico**, então reimportar os últimos dias
+   também não avisa de novo. Retenção da fila (7 dias) > janela (3 dias), a
+   memória nunca some antes da hora.
+3. **Gatilho por comando, não por linha** (`FOR EACH STATEMENT` com
+   `REFERENCING NEW TABLE`): um INSERT…SELECT por bloco de importação, não
+   22 mil execuções. Filtra já no gatilho: `operador_id` não nulo, dentro da
+   janela, e **só quem tem aparelho inscrito** (`EXISTS push_inscricoes`) —
+   sem inscritos, a fila nem cresce. No `upsert`, linha já existente vai para
+   a transição de UPDATE, não de INSERT — não entra.
+4. **Cron barato**: o `pg_cron` roda a cada minuto uma função SQL que só chama
+   a Edge Function (`pg_net`) **se houver pendente** (índice parcial
+   `WHERE enviado_em IS NULL`). Parado = uma consulta de índice vazia por
+   minuto, zero chamada.
+5. **Edge Function**: uma leitura da fila, agrupa por pessoa, envia em
+   paralelo limitado, marca em lote. Meta batida só para quem está no lote.
+6. **App**: `/m` em chunk separado (lazy), sem recharts; sem canal Realtime
+   novo — atualiza ao abrir, ao voltar para o app e quando chega um push
+   (service worker avisa a página).
+
+**Próximo: Seção 6 (testes)**, depois escrever a spec.
+
 Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
 `pg_net`** — se a extensão está ativa só dá para saber consultando o banco
 (precisa de «pode»).
