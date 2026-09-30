@@ -22,7 +22,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
-  buscarLotes, buscarFranquias, buscarLinhasDoLote,
+  buscarLotes, buscarFranquias, buscarLinhasDoLote, EVENTO_LOTE_PROMOVIDO,
   type Lote, type Franquia, type LinhaGravada,
 } from '@/services/vendas/importacaoVendas.service';
 
@@ -55,6 +55,13 @@ export function useCargaVigente(empresaId: string | null, ativo: boolean): Carga
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [versao, setVersao] = useState(0);
+
+  // Importação nova: o lote vigente mudou, e o escolhido pode ter sido aposentado.
+  useEffect(() => {
+    const aoPromover = () => setVersao(v => v + 1);
+    window.addEventListener(EVENTO_LOTE_PROMOVIDO, aoPromover);
+    return () => window.removeEventListener(EVENTO_LOTE_PROMOVIDO, aoPromover);
+  }, []);
 
   useEffect(() => {
     if (!empresaId || !ativo) return;

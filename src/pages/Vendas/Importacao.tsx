@@ -52,6 +52,10 @@
  * pior que um erro faz é um retrato errado, que a próxima carga substitui.
  * Projetar escreve em `vendas`. `importar_vendas` e `projetar_vendas` são
  * chaves diferentes por isso.
+ *
+ * Desde 30/09/2026, importar o GERAL já projeta quando quem importa tem
+ * `projetar_vendas` — ver `lancarNasVendas`. O bloco «Lançar sobre as vendas»
+ * continua para relançar e para ler a prévia.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -76,7 +80,7 @@ import {
 } from '@/services/vendas/prospeccaoSetorParser';
 import {
   abrirLote, enviarLinhas, promoverLote, descartarLote,
-  buscarLotes, buscarFranquias, hashDoArquivo,
+  buscarLotes, buscarFranquias, hashDoArquivo, projetar, avisarLotePromovido,
   type Lote, type Franquia, type OrigemLote,
 } from '@/services/vendas/importacaoVendas.service';
 import { Projecao } from './Projecao';
@@ -243,9 +247,64 @@ export default function ImportacaoVendas() {
         + 'existe no relatório geral — importe o geral para cadastrá-la.',
       );
     }
+
+    if (origem === 'geral') await lancarNasVendas(loteId);
+
+    avisarLotePromovido();
     setArquivo(null); setPrevia(null);
     if (inputRef.current) inputRef.current.value = '';
     await recarregar();
+  }
+
+  /**
+   * O geral promovido já vira venda, sem segundo clique (pedido de 30/09/2026).
+   *
+   * «A partir do momento que eu confirme a importação do relatório, já atualize
+   * o sistema inteiro — dashboard, painel líder, painel de diretoria.» Esses
+   * painéis leem `vendas`, e promover só troca o retrato do relatório: até
+   * alguém lançar, nada mudava neles. Confirmar a importação é a confirmação.
+   *
+   * O banco avisa `vendas:<empresa>` quando a projeção escreve, e cada painel
+   * aberto relê sozinho — o mesmo caminho da BookPlay e da PaguePlay.
+   *
+   * Sem a chave `projetar_vendas` o lote fica no ar e a tela diz que o placar
+   * espera alguém que possa lançar: a trava do banco continua valendo.
+   */
+  async function lancarNasVendas(loteId: string) {
+    if (!podeProjetar) {
+      toast.warning(
+        'O relatório entrou, mas seu cargo não lança nas vendas — dashboard e painéis '
+        + 'só mudam quando alguém com essa permissão lançar (bloco «Lançar sobre as vendas»).',
+        { duration: 9000 },
+      );
+      return;
+    }
+
+    const r = await projetar(loteId);
+    if (!r.ok || !r.dado) {
+      toast.error(
+        `O relatório entrou, mas não foi lançado nas vendas: ${r.erro ?? 'erro desconhecido'}. `
+        + 'Tente pelo bloco «Lançar sobre as vendas».',
+        { duration: 9000 },
+      );
+      return;
+    }
+
+    const d = r.dado;
+    const fora = d.sem_franquia + d.franquia_ignorada + d.sem_dono;
+    const foraValor = d.sem_franquia_valor + d.ignorada_valor + d.sem_dono_valor;
+    toast.success(
+      [
+        `Painéis atualizados: ${d.criadas} vendas criadas, ${d.atualizadas} atualizadas.`,
+        d.revertidas > 0
+          ? `${d.revertidas} saíram do recebimento (${formatBRL(d.revertido_valor)}).`
+          : '',
+        fora > 0
+          ? `${fora} linhas ficaram de fora (${formatBRL(foraValor)}) — sem franquia vinculada ou sem perfil.`
+          : '',
+      ].filter(Boolean).join(' '),
+      { duration: fora > 0 || d.revertidas > 0 ? 9000 : 5000 },
+    );
   }
 
   const setorDaFranquia = useMemo(() => mapaDeSetorDaFranquia(franquias), [franquias]);
@@ -433,6 +492,8 @@ export default function ImportacaoVendas() {
                 </Button>
                 <p className="text-[11px] text-muted-foreground">
                   A carga anterior de {previa.r.mes ?? 'este mês'} ({origem}) será aposentada.
+                  {origem === 'geral' && podeProjetar
+                    && ' As linhas já são lançadas nas vendas, e dashboard e painéis se atualizam.'}
                 </p>
               </div>
             </div>
