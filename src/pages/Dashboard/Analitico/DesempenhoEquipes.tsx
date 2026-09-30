@@ -49,12 +49,13 @@ import {
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import {
-  acumuladoDoSetor, somarAnaliticoPorSetor, type SomaDoSetor,
+  acumuladoDoSetor, somarAnaliticoPorSetor,
 } from '@/services/analitico/acumuladoDoSetor';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { CardEquipe, type LiderInfo } from './CardEquipe';
 import type { CreditoDeOrigem } from '@/services/analitico/fantasmaTransferencia';
 import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
+import { somarPorEquipe, diasDaEquipe } from './acumuladoDaEquipe';
 import { lideresDaEquipe, type PerfilLider } from './lideresDaEquipe';
 import { ehMesAtual } from '@/lib/mesReferencia';
 
@@ -607,32 +608,13 @@ export function DesempenhoEquipes({
     // está DENTRO de `total_recebido` e a pergunta que responde é «quanto deste
     // número foi lançado à mão». Somá-lo por fora daria duas travessias da
     // mesma lista com a mesma regra de clone — e a segunda envelheceria.
-    const porEquipe: Record<string, SomaDoSetor> = {};
-    const somar = (id: string, r: ResumoOperadorAnalitico) => {
-      if (!porEquipe[id]) porEquipe[id] = { bruto: 0, ho: 0, ajuste: 0 };
-      porEquipe[id].bruto  += r.total_recebido;
-      porEquipe[id].ho     += Number(r.total_ho) || 0;
-      porEquipe[id].ajuste += Number(r.ajuste_manual) || 0;
-    };
+    // A conta do acumulado por equipe mora em `acumuladoDaEquipe.ts` desde
+    // 30/09/2026 — a tela da equipe no celular usa a MESMA função.
+    const porEquipe = somarPorEquipe({
+      resumos, operadorEquipeMap, equipesExtrasPorOperador, creditosDeOrigem,
+    });
     // Setor de cada equipe — o clone credita o setor DONO da equipe clonada
     const setorDaEquipe = mapaSetorDaEquipe(equipes);
-
-    for (const r of resumos) {
-      const info = operadorEquipeMap[r.operador_id];
-      if (info?.equipe_id) somar(info.equipe_id, r);
-      // Clones: o recebimento conta TAMBÉM nas equipes clonadas
-      for (const eqId of equipesExtrasPorOperador[r.operador_id] ?? []) {
-        if (eqId !== info?.equipe_id) somar(eqId, r);
-      }
-    }
-    // Quem saiu da equipe por transferência de setor deixa nela o que recebeu
-    // no setor de origem, e só isso — o resto já está no resumo, onde a pessoa
-    // está agora.
-    for (const c of creditosDeOrigem) {
-      if (!porEquipe[c.equipeId]) porEquipe[c.equipeId] = { bruto: 0, ho: 0, ajuste: 0 };
-      porEquipe[c.equipeId].bruto += c.bruto;
-      porEquipe[c.equipeId].ho    += c.ho;
-    }
 
     // Setores: o próprio + os das equipes clonadas, e os órfãos da importação.
     // A regra mora em `acumuladoDoSetor.ts` desde a comissão por meta — a aba
@@ -865,12 +847,11 @@ export function DesempenhoEquipes({
               // exatamente aqui que a aba Quartis divergia, projetando quem está
               // em treinamento contra o mês cheio.
               const inicioTreino = treinoMap[eq.id] ?? undefined;
-              const eqUteis = inicioTreino
-                ? diasUteisDoMes(anoNum, mesNum, feriados, inicioTreino)
-                : dados.totalUteis;
-              const eqDecorridos = inicioTreino
-                ? diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), inicioTreino, contarHoje)
-                : dados.decorridos;
+              const { totalUteis: eqUteis, decorridos: eqDecorridos } = inicioTreino
+                ? diasDaEquipe({
+                    ano: anoNum, mes: mesNum, feriados, hojeISO: getTodayISO(), contarHoje, inicioTreino,
+                  })
+                : { totalUteis: dados.totalUteis, decorridos: dados.decorridos };
               const metaEquipe = dados.metaDe('equipe', eq.id);
               return (
                 <CardEquipe
