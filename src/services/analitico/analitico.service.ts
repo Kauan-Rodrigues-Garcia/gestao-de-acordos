@@ -1918,6 +1918,59 @@ export async function buscarRecebidoPorDia(
 }
 
 /**
+ * O gráfico por dia de UM grupo de operadores (a equipe no celular).
+ *
+ * `buscarRecebidoPorDia` lê o mês INTEIRO da empresa — dezenas de milhares de
+ * linhas em páginas paralelas — porque o gráfico do site filtra depois, por
+ * setor. Para a equipe isso é desperdício: no escopo de equipe só contam as
+ * linhas COM operador da equipe (`linhaNoEscopo`), então pedir só elas ao banco
+ * dá o mesmo gráfico com uma fração do tráfego. Medido em 30/09/2026, quando a
+ * aba da equipe no celular demorava a abrir.
+ *
+ * Mesmas colunas, mesma paginação ordenada por `id` e o ajuste manual do mês
+ * no dia 1, como a leitura cheia faz.
+ */
+export async function buscarRecebidoPorDiaDosOperadores(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+  operadorIds: readonly string[],
+): Promise<{ data: LinhaRecebidaDia[]; error: string | null }> {
+  if (operadorIds.length === 0) return { data: [], error: null };
+  const [y, m] = mes.split('-').map(Number);
+  const inicio = `${mes}-01`;
+  const fim = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  const ids = [...operadorIds];
+
+  const { data, error } = await paginarParalelo<{
+    operador_id: string | null; setor_id: string | null; valor_recebido: number; data_pagamento: string;
+  }>(async (de, ate) => {
+    const r = await supabase
+      .from('analitico_recebimentos')
+      .select('operador_id, setor_id, valor_recebido, data_pagamento')
+      .eq('empresa_id', empresaId)
+      .in('operador_id', ids)
+      .gte('data_pagamento', inicio)
+      .lte('data_pagamento', fim)
+      .order('id', { ascending: true })
+      .range(de, ate);
+    return { data: (r.data as never) ?? [], error: r.error?.message ?? null };
+  });
+  if (error) return { data: [], error: 'Falha ao carregar os recebimentos do mês.' };
+
+  const linhas: LinhaRecebidaDia[] = data.map(l => ({
+    operador_id: l.operador_id,
+    setor_id: l.setor_id ?? null,
+    importado_por_id: null as string | null,
+    valor_recebido: Number(l.valor_recebido) || 0,
+    data_pagamento: l.data_pagamento,
+  }));
+  const doGrupo = new Set(ids);
+  const ajustes = (await buscarAjustesComoLinhasDia(empresaId, mes))
+    .filter(a => a.operador_id && doGrupo.has(a.operador_id));
+  return { data: [...linhas, ...ajustes], error: null };
+}
+
+/**
  * Os ajustes do mês no formato do gráfico por dia.
  *
  * Existe para o gráfico da **PaguePlay**, que não é alimentado pelo analítico:

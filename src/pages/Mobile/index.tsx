@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAuth } from '@/hooks/useAuth';
@@ -68,6 +68,38 @@ function useTemVisaoEquipe(): boolean {
   return podeVerEquipe && (temEquipePropria || data === true);
 }
 
+/**
+ * Deixa a visão da equipe pronta antes do toque em «Equipe» (30/09/2026 — a
+ * troca demorava). Depois que a tela pessoal carregou, com o aparelho ocioso,
+ * baixa o código da tela da equipe e as fontes dela para o cache. Import
+ * dinâmico: quem não tem a visão da equipe não baixa nada disso.
+ */
+function usePreparaVisaoEquipe(pronto: boolean, empresaId: string | null, mes: string) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!pronto || !empresaId) return;
+    let cancelado = false;
+    const preparar = () => {
+      if (cancelado) return;
+      void import('./equipe');
+      void import('./equipe/useTelaEquipe').then(m => {
+        if (cancelado) return;
+        void queryClient.prefetchQuery({
+          queryKey: m.chaveFontesEquipe(empresaId, mes),
+          queryFn: () => m.carregarFontes(empresaId, mes),
+          staleTime: 60_000,
+        });
+      });
+    };
+    const ocioso = (window as Window & { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
+    const id = ocioso ? ocioso(preparar) : window.setTimeout(preparar, 1200);
+    return () => {
+      cancelado = true;
+      if (!ocioso) window.clearTimeout(id);
+    };
+  }, [pronto, empresaId, mes, queryClient]);
+}
+
 function TelaDoOperador() {
   const tela = useTelaMobile();
   const { signOut } = useAuth();
@@ -79,6 +111,7 @@ function TelaDoOperador() {
   const avisos = useAvisos(empresa?.id ?? null);
   const [passoIPhone, setPassoIPhone] = useState(false);
   const lideraEquipe = useTemVisaoEquipe();
+  usePreparaVisaoEquipe(lideraEquipe && !tela.carregando, empresa?.id ?? null, tela.mes);
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 

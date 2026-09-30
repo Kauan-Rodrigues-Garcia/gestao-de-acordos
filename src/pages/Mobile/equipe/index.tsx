@@ -66,9 +66,11 @@ function TelaDaEquipe() {
   // Rola para o topo ao trocar de aba — cada aba é uma tela.
   useEffect(() => { window.scrollTo?.({ top: 0 }); }, [aba]);
 
+  // Gráfico e Hoje dividem a mesma leitura. Ela já começa com a tela aberta
+  // (e não no toque da aba): quando a pessoa troca de aba, está pronta.
   const grafico = useGraficoEquipe({
     empresaId: tela.empresaId, mes: tela.mes, isPaguePlay: tela.isPaguePlay,
-    ativo: aba === 'grafico' || aba === 'hoje',
+    operadorIds: tela.equipe?.operadorIds ?? [], ativo: !!tela.equipe,
   });
   const pagamentos = usePagamentosEquipe({
     empresaId: tela.empresaId, mes: tela.mes,

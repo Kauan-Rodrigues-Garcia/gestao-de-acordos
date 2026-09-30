@@ -41,6 +41,7 @@ import { supabase, type Acordo } from '@/lib/supabase';
 import { useAuth }    from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { logger } from '@/lib/logger';
+import { useNaRotaDoCelular } from '@/lib/mobile/rota';
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -97,6 +98,10 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
   const { perfil }    = useAuth();
   const { empresa }   = useEmpresa();
   const queryClient   = useQueryClient();
+  // As telas do celular (`/m`, `/m/equipe`) não mostram acordo nenhum: lá o
+  // canal só gastaria bateria, dados e uma assinatura no servidor por aparelho.
+  // Sair para a versão completa religa (30/09/2026).
+  const naRotaDoCelular = useNaRotaDoCelular();
 
   const [status, setStatus] = useState<RealtimeStatus>('off');
   // Incrementar força recriação do canal (reconexão automática ou por visibilidade)
@@ -149,6 +154,11 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const empresaId = empresa?.id ?? perfil?.empresa_id;
     if (!empresaId) return;
+    if (naRotaDoCelular) {
+      statusRef.current = 'off';
+      if (mountedRef.current) setStatus('off');
+      return;
+    }
 
     // Helper que sincroniza statusRef e state ao mesmo tempo
     const upd = (s: RealtimeStatus) => {
@@ -324,7 +334,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
     };
    
-  }, [empresa?.id, perfil?.empresa_id, reconnectTick, queryClient]);
+  }, [empresa?.id, perfil?.empresa_id, reconnectTick, queryClient, naRotaDoCelular]);
 
   return (
     <RealtimeContext.Provider value={{ status, subscribe, unsubscribe }}>

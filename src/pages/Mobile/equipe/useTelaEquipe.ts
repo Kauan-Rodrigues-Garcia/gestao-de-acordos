@@ -25,7 +25,7 @@ import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
   buscarCreditosDeOrigem, buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
-  buscarRecebidoPorDia, buscarAjustesComoLinhasDia, type LinhaRecebidaDia,
+  buscarRecebidoPorDiaDosOperadores, buscarAjustesComoLinhasDia, type LinhaRecebidaDia,
 } from '@/services/analitico/analitico.service';
 import { buscarResumoMensalDiario } from '@/services/diario/diario.service';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -60,7 +60,7 @@ type Bruto = Omit<FontesEquipe, 'hojeISO' | 'emHO' | 'ho' | 'indiretoMap'> & {
   };
 };
 
-async function carregarFontes(empresaId: string, mes: string): Promise<Bruto> {
+export async function carregarFontes(empresaId: string, mes: string): Promise<Bruto> {
   const [ano, mesNum] = mes.split('-').map(Number);
   const [
     composicao, resumo, creditos, metasRes, cfg, equipesRes, lideresRes,
@@ -132,6 +132,11 @@ async function carregarFontes(empresaId: string, mes: string): Promise<Bruto> {
   };
 }
 
+/** A chave do cache das fontes — a `/m` usa para deixar a equipe pronta antes do toque. */
+export function chaveFontesEquipe(empresaId: string | null, mes: string) {
+  return ['mobile-equipe-fontes', empresaId, mes] as const;
+}
+
 export interface OpcaoEquipe { id: string; nome: string; setorNome: string | null }
 
 export interface TelaEquipe {
@@ -163,7 +168,7 @@ export function useTelaEquipe(): TelaEquipe {
   const empresaId = empresa?.id ?? null;
   const emHO = tenant.isPaguePlay;
 
-  const chave = useMemo(() => ['mobile-equipe-fontes', empresaId, mes] as const, [empresaId, mes]);
+  const chave = useMemo(() => chaveFontesEquipe(empresaId, mes), [empresaId, mes]);
   const fontesQuery = useQuery({
     queryKey: chave,
     enabled: !!empresaId,
@@ -247,30 +252,44 @@ export function useTelaEquipe(): TelaEquipe {
 }
 
 /**
- * As linhas do mês por dia — a fonte do Gráfico do Painel: o analítico na
- * BookPlay; o recebimento diário + ajustes na PaguePlay. Só quando a aba abre.
+ * As linhas do mês por dia — a fonte do Gráfico do Painel, recortada na
+ * equipe: na BookPlay, só as linhas dos operadores da equipe (em vez do mês
+ * inteiro da empresa — ver `buscarRecebidoPorDiaDosOperadores`); na PaguePlay,
+ * o recebimento diário (já agregado por operador e dia) + ajustes.
  */
+export function carregarGraficoEquipe(
+  empresaId: string, mes: string, isPaguePlay: boolean, operadorIds: readonly string[],
+): Promise<LinhaRecebidaDia[]> {
+  return (async () => {
+    if (isPaguePlay) {
+      const [diario, ajustes] = await Promise.all([
+        buscarResumoMensalDiario(empresaId, mes),
+        buscarAjustesComoLinhasDia(empresaId, mes),
+      ]);
+      if (diario.error) throw new Error(diario.error);
+      return [...diario.linhasDia, ...ajustes];
+    }
+    const { data, error } = await buscarRecebidoPorDiaDosOperadores(empresaId, mes, operadorIds);
+    if (error) throw new Error(error);
+    return data;
+  })();
+}
+
+export function chaveGraficoEquipe(
+  empresaId: string | null, mes: string, isPaguePlay: boolean, operadorIds: readonly string[],
+) {
+  return ['mobile-equipe-grafico', empresaId, mes, isPaguePlay, [...operadorIds].sort().join(',')] as const;
+}
+
 export function useGraficoEquipe(params: {
-  empresaId: string | null; mes: string; isPaguePlay: boolean; ativo: boolean;
+  empresaId: string | null; mes: string; isPaguePlay: boolean; operadorIds: readonly string[]; ativo: boolean;
 }) {
-  const { empresaId, mes, isPaguePlay, ativo } = params;
+  const { empresaId, mes, isPaguePlay, operadorIds, ativo } = params;
   return useQuery({
-    queryKey: ['mobile-equipe-grafico', empresaId, mes, isPaguePlay],
-    enabled: ativo && !!empresaId,
+    queryKey: chaveGraficoEquipe(empresaId, mes, isPaguePlay, operadorIds),
+    enabled: ativo && !!empresaId && operadorIds.length > 0,
     staleTime: 60_000,
-    queryFn: async (): Promise<LinhaRecebidaDia[]> => {
-      if (isPaguePlay) {
-        const [diario, ajustes] = await Promise.all([
-          buscarResumoMensalDiario(empresaId as string, mes),
-          buscarAjustesComoLinhasDia(empresaId as string, mes),
-        ]);
-        if (diario.error) throw new Error(diario.error);
-        return [...diario.linhasDia, ...ajustes];
-      }
-      const { data, error } = await buscarRecebidoPorDia(empresaId as string, mes);
-      if (error) throw new Error(error);
-      return data;
-    },
+    queryFn: () => carregarGraficoEquipe(empresaId as string, mes, isPaguePlay, operadorIds),
   });
 }
 

@@ -10,8 +10,6 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import { TermoUsoGate } from '@/components/TermoUsoGate';
 import { TermoUsoProvider } from '@/hooks/useTermoUso';
-import Layout from '@/components/Layout';
-import { ChatNotificacoes } from '@/components/ChatNotificacoes';
 import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,7 +22,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
-import { deveAbrirMobile, destinoMobile } from '@/lib/mobile/preferencia';
+import { deveAbrirMobile, destinoMobile, ehCelular } from '@/lib/mobile/preferencia';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -78,6 +76,23 @@ const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
 const Mobile            = lazy(() => import('@/pages/Mobile'));
+
+/*
+ * O casco do site — barra lateral, cabeçalho, chat, tour, comemorações — sob
+ * demanda (30/09/2026). Era import estático, e toda abertura baixava e
+ * interpretava o casco inteiro (framer-motion, catálogos, chat…) antes de
+ * desenhar qualquer coisa — inclusive a tela do celular, que não usa nada dele.
+ * Fora do celular ele começa a baixar já na abertura, em paralelo com a página,
+ * então o desktop não espera mais do que esperava.
+ */
+const carregarLayout = () => import('@/components/Layout');
+const carregarChatNotificacoes = () => import('@/components/ChatNotificacoes');
+const Layout            = lazy(carregarLayout);
+const ChatNotificacoes  = lazy(() => carregarChatNotificacoes().then(m => ({ default: m.ChatNotificacoes })));
+if (typeof window !== 'undefined' && !ehCelular()) {
+  void carregarLayout();
+  void carregarChatNotificacoes();
+}
 const MobileEquipe      = lazy(() => import('@/pages/Mobile/equipe'));
 // A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
 // este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
@@ -123,13 +138,17 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
     <ProtectedRoute>
       <TermoUsoProvider>
         <TermoUsoGate>
-          <Layout>
-            {/* ErrorBoundary por página — evita que o erro de uma rota quebre o layout inteiro */}
-            <ErrorBoundary scope="Page" fallbackMessage="Ocorreu um erro ao carregar esta página. Tente novamente.">
-              {children}
-            </ErrorBoundary>
-          </Layout>
-          <ChatNotificacoes />
+          <Suspense fallback={<PageLoader />}>
+            <Layout>
+              {/* ErrorBoundary por página — evita que o erro de uma rota quebre o layout inteiro */}
+              <ErrorBoundary scope="Page" fallbackMessage="Ocorreu um erro ao carregar esta página. Tente novamente.">
+                {children}
+              </ErrorBoundary>
+            </Layout>
+          </Suspense>
+          <Suspense fallback={null}>
+            <ChatNotificacoes />
+          </Suspense>
         </TermoUsoGate>
       </TermoUsoProvider>
     </ProtectedRoute>
@@ -186,6 +205,37 @@ function PainelDeEntrada(): React.ReactElement {
   if (loading || produto === 'cobranca') return <Dashboard />;
   if (produto === 'comercial') return <DashboardComercial />;
   return <ProdutoEmMontagem produto={produto} />;
+}
+
+/**
+ * A rota `/` — o celular decide ANTES do casco do site.
+ *
+ * O redirecionamento para a tela do celular morava só em `PainelDeEntrada`,
+ * que fica DENTRO do `LayoutWrapper`: com o casco sob demanda, o celular
+ * baixaria o casco inteiro só para ser mandado embora. Aqui ele espera a
+ * sessão e a empresa (leve, sem casco) e vai direto para `/m`. O desktop, e o
+ * celular de quem escolheu «Versão completa», seguem pelo caminho de sempre —
+ * e `PainelDeEntrada` mantém a mesma checagem como segunda guarda.
+ */
+function RaizDoSite(): React.ReactElement {
+  const { loading: authLoading, perfil } = useAuth();
+  const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
+  if (ehCelular()) {
+    if (authLoading || (perfil && empresaLoading)) return <PageLoader />;
+    if (produtoDaEmpresa(empresa, tenantSlug) === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
+      return <Navigate to={destinoMobile(perfil?.perfil)} replace />;
+    }
+  }
+  return (
+    <LayoutWrapper>
+      <ProtectedRoute
+        requiredPermissao="ver_dashboard" mostrarSemAcesso
+        alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
+      >
+        <PainelDeEntrada />
+      </ProtectedRoute>
+    </LayoutWrapper>
+  );
 }
 
 function TenantThemeApplier(): null {
@@ -279,16 +329,7 @@ export default function App() {
                   `alternativa`: quem não tem o Dashboard da cobrança e tem o
                   Dashboard – ADM — o Assistente ADM — entra direto no painel dele,
                   em vez de ler «aba não liberada» na tela inicial. */}
-              <Route path={ROUTE_PATHS.DASHBOARD} element={
-                <LayoutWrapper>
-                  <ProtectedRoute
-                    requiredPermissao="ver_dashboard" mostrarSemAcesso
-                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
-                  >
-                    <PainelDeEntrada />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              <Route path={ROUTE_PATHS.DASHBOARD} element={<RaizDoSite />} />
               {/* Tela mínima do celular (PWA). Sem `LayoutWrapper`: ela toma a
                   tela inteira, sem barra lateral nem cabeçalho. Mesma chave do
                   Dashboard, que é de onde vêm os números dela. */}

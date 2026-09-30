@@ -414,7 +414,25 @@ a média, não a meta diária.
      16 local descartável. **APLICADA com «pode» em 30/09/2026**, registrada como
      `20260930175642` (arquivo renomeado para bater), e **`enviar-push` v3 publicada**
      (verify_jwt desligado, como a v2). Fumaça: `rodada` sem segredo 401, `teste` sem
-     sessão 401. Código na main (`5995bd0` e seguintes). Depois:
+     sessão 401. Código na main (`5995bd0` e seguintes).
+
+**Otimização (30/09/2026, relato: «pesado no celular» e «abas da equipe demoram», elite):**
+- **Recharts em toda página**: o `clsx` do `cn()` caía dentro de `vendor-charts` (é
+  dependência do recharts), e a entrada importava o pacote inteiro (~444 kB, 117 kB
+  gzip) em qualquer tela. Chunk próprio `vendor-utils` em `vite.config.ts`.
+- **Casco do site sob demanda**: `Layout` e `ChatNotificacoes` viraram `lazy` (framer-
+  motion, catálogos, chat, tour saem da entrada); fora do celular começam a baixar
+  na abertura. A rota `/` decide o celular ANTES do casco (`RaizDoSite`).
+- Resultado: entrada 482 → 254 kB gzip; `/m` inteira ~518 → ~300 kB gzip. O site no
+  computador também abre mais leve.
+- **Abas da equipe**: Gráfico/Hoje liam o mês inteiro da empresa; agora só as linhas
+  dos operadores da equipe (`buscarRecebidoPorDiaDosOperadores`), e a leitura
+  começa com a tela aberta. A `/m` do elite pré-carrega código e dados da equipe
+  quando o aparelho fica ocioso.
+- **GPU**: sem `backdrop-filter` nos cartões e sem `filter: blur` no fundo (manchas
+  viraram gradientes radiais); brilho da barra por `transform`.
+- **Tempo real de acordos** desligado nas rotas `/m*` (nenhuma tela do celular usa;
+  era uma assinatura por aparelho). Volta ao sair para a versão completa. Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 

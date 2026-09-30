@@ -162,6 +162,14 @@ export default defineConfig(({ mode }) => {
             ],
             // Supabase client (autenticação + realtime + queries)
             'vendor-supabase': ['@supabase/supabase-js'],
+            // `cn()` (lib/utils) — usado por quase todo componente. Tem chunk
+            // próprio por um motivo concreto: o `clsx` também é dependência do
+            // recharts, e sem esta linha ele caía DENTRO de `vendor-charts`. A
+            // entrada do app importava o `clsx` de lá e, com ele, o recharts
+            // inteiro (~444 kB, ~117 kB gzip) era baixado e interpretado em TODA
+            // página — inclusive na tela do celular, que não tem gráfico da
+            // biblioteca. Medido em 30/09/2026.
+            'vendor-utils': ['clsx', 'tailwind-merge'],
             // Recharts — só carrega quando Dashboard/PainelDiretoria/AnalyticsPanel renderizam
             'vendor-charts': ['recharts'],
             // XLSX — só carrega na página de importação
