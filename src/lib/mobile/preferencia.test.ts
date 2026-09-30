@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  CHAVE_VERSAO, deveAbrirMobile, ehCelular, gravarVersao, lerVersao,
+  CHAVE_VERSAO, deveAbrirMobile, ehCelular, gravarVersao, lerVersao, ofereceVersaoCelular,
   type AmbienteTela,
 } from './preferencia';
 
@@ -80,5 +80,20 @@ describe('localStorage indisponível', () => {
     } finally {
       Storage.prototype.setItem = original;
     }
+  });
+});
+
+describe('super admin (teste)', () => {
+  it('não é redirecionado no celular — usa o site completo', () => {
+    expect(deveAbrirMobile('super_admin', celular)).toBe(false);
+  });
+  it('vê o ícone da versão para celular em qualquer aparelho', () => {
+    expect(ofereceVersaoCelular('super_admin', desktop)).toBe(true);
+    expect(ofereceVersaoCelular('super_admin', celular)).toBe(true);
+  });
+  it('operador só vê o ícone no celular; líder nunca', () => {
+    expect(ofereceVersaoCelular('operador', celular)).toBe(true);
+    expect(ofereceVersaoCelular('operador', desktop)).toBe(false);
+    expect(ofereceVersaoCelular('lider', celular)).toBe(false);
   });
 });

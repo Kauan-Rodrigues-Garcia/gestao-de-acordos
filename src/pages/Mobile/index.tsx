@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
-import { gravarVersao } from '@/lib/mobile/preferencia';
+import { ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { useInstalacao } from '@/lib/mobile/instalar';
 import {
@@ -20,17 +20,27 @@ import {
 } from './partes';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
 import { useTelaMobile } from './useTelaMobile';
+import { EscolherOperador } from './EscolherOperador';
+import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import './mobile.css';
 
 /** Quantos pagamentos a tela mostra antes de «Ver todos». */
 const LIMITE_LISTA = 8;
 
 export default function Mobile() {
+  const { perfil } = useAuth();
+  // Super admin testa entrando como um operador — ver `EscolherOperador`.
+  if (ehSuperAdmin(perfil?.perfil)) return <EscolherOperador />;
+  return <TelaDoOperador />;
+}
+
+function TelaDoOperador() {
   const tela = useTelaMobile();
   const { signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [verTodos, setVerTodos] = useState(false);
+  const impersonando = !!getImpersonacaoAtiva();
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -87,7 +97,13 @@ export default function Mobile() {
           onVerTodos={() => setVerTodos(v => !v)}
         />
 
-        <Rodape onVersaoCompleta={abrirVersaoCompleta} onSair={() => { void signOut(); }} />
+        {/* Em teste (super admin impersonando), «Sair» deslogaria a sessão
+            emprestada e a volta para a conta do admin se perderia. */}
+        <Rodape
+          onVersaoCompleta={abrirVersaoCompleta}
+          rotuloSair={impersonando ? 'Voltar à minha conta' : 'Sair'}
+          onSair={() => { void (impersonando ? sairImpersonacao() : signOut()); }}
+        />
       </div>
     </div>
   );
@@ -103,7 +119,11 @@ function Esqueleto() {
   );
 }
 
-function Rodape({ onVersaoCompleta, onSair }: { onVersaoCompleta: () => void; onSair: () => void }) {
+function Rodape({ onVersaoCompleta, onSair, rotuloSair }: {
+  onVersaoCompleta: () => void;
+  onSair: () => void;
+  rotuloSair: string;
+}) {
   const { modo, instalar } = useInstalacao();
   const [passoIPhone, setPassoIPhone] = useState(false);
 
@@ -121,7 +141,7 @@ function Rodape({ onVersaoCompleta, onSair }: { onVersaoCompleta: () => void; on
       )}
       <div className="m-links">
         <button type="button" onClick={onVersaoCompleta}>Versão completa</button>
-        <button type="button" onClick={onSair}>Sair</button>
+        <button type="button" onClick={onSair}>{rotuloSair}</button>
       </div>
 
       {passoIPhone && (

@@ -1963,6 +1963,12 @@ Spec: `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md`.
   por onde passam o login e quem abre `/`. «Versão completa» fica gravado no
   aparelho (`localStorage['mobile:versao']`); o ícone de celular no cabeçalho
   do site desfaz. Ver `src/lib/mobile/preferencia.ts`.
+- **Super admin (teste).** Não é redirecionado; vê o ícone de celular no
+  cabeçalho em qualquer aparelho. Na `/#/m`, escolhe antes um operador e entra
+  como ele pela impersonação (`iniciarImpersonacao`, com auditoria) — a tela é
+  da própria pessoa logada, e mostrá-la com a sessão do admin daria comissão e
+  ranking errados. Durante a impersonação, «Sair» vira «Voltar à minha conta».
+  Ver `src/pages/Mobile/EscolherOperador.tsx`.
 - **Números.** Nenhuma conta própria. Recebido, meta e faixas vêm de
   `usePainelMetas` (escopo «eu», H.O. na PaguePlay); a comissão de
   `useMinhaComissao`, com a mesma regra de exibição do Dashboard

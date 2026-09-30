@@ -40,7 +40,7 @@ import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import { abasDoMenu } from '@/lib/menuLateral';
 import { produtoDaEmpresa } from '@/lib/produto';
-import { ehCelular, ehPerfilDaTelaMinima, gravarVersao } from '@/lib/mobile/preferencia';
+import { gravarVersao, ofereceVersaoCelular as ofereceIconeCelular } from '@/lib/mobile/preferencia';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -285,9 +285,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    */
   const produto = produtoDaEmpresa(empresa, tenant.slug);
   // Quem escolheu «Versão completa» no celular volta para a tela mínima por
-  // aqui. Só aparece para quem a tela mínima atende, e só no celular.
-  const ofereceVersaoCelular =
-    produto === 'cobranca' && ehPerfilDaTelaMinima(perfil?.perfil) && ehCelular();
+  // aqui: operador e elite no celular; super admin em qualquer aparelho, para
+  // testar (ele escolhe um operador lá dentro).
+  const ofereceVersaoCelular = produto === 'cobranca' && ofereceIconeCelular(perfil?.perfil);
 
   const navItems = useMemo(() => abasDoMenu({
     cargo: userRole,

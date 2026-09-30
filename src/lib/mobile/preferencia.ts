@@ -61,6 +61,24 @@ export function ehPerfilDaTelaMinima(perfil: string | null | undefined): boolean
   return (PERFIS_QUE_CONTAM_NO_RECEBIMENTO as readonly string[]).includes(perfil ?? '');
 }
 
+/**
+ * Super admin abre a tela mínima para TESTE (pedido de 30/09/2026): ela pede
+ * antes um operador e entra como ele pela impersonação. Não é redirecionado —
+ * usa o site completo no celular como sempre; chega pelo ícone do cabeçalho.
+ */
+export function ehSuperAdmin(perfil: string | null | undefined): boolean {
+  return perfil === 'super_admin';
+}
+
+/** Quem vê o ícone «Versão para celular» no cabeçalho do site. */
+export function ofereceVersaoCelular(
+  perfil: string | null | undefined,
+  amb: AmbienteTela = ambienteAtual(),
+): boolean {
+  if (ehSuperAdmin(perfil)) return true;
+  return ehPerfilDaTelaMinima(perfil) && ehCelular(amb);
+}
+
 export function deveAbrirMobile(
   perfil: string | null | undefined,
   amb: AmbienteTela = ambienteAtual(),

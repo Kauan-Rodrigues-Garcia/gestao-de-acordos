@@ -246,6 +246,11 @@ Descobertas da implementação:
 - Na PaguePlay, sem `forma_detalhe`, `familiaDaForma('Pix/Boleto')` daria
   «Boleto/Pix Cofen»; a tela usa o consolidado direto.
 
+**Super admin (pedido de 30/09/2026):** vê a tela para teste. Ícone de celular
+no cabeçalho do site (qualquer aparelho) → «Escolha um operador» → entra como
+ele pela impersonação existente → tela com os números do operador; faixa
+amarela ou «Voltar à minha conta» retornam. Super admin não é redirecionado.
+
 **Próximo passo:** o usuário testar no preview da Vercel num Android e num
 iPhone (instalar, abrir, conferir os números contra o Dashboard). Depois,
 Etapa 2 (avisos) — precisa de chaves VAPID e de migration, com «pode».

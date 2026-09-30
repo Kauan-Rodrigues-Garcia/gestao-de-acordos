@@ -195,3 +195,16 @@
   .tela-mobile .m-cheio { transition: none; }
   .tela-mobile .m-esq { animation: none; }
 }
+
+/* ── Escolha do operador (super admin, teste) ─────────────────────────── */
+.tela-mobile .m-busca {
+  width: 100%; margin-top: 14px; height: 44px; border-radius: 12px;
+  border: 1px solid var(--m-linha); padding: 0 14px; font: inherit; font-size: 15px;
+  background: var(--m-papel); color: var(--m-tinta);
+}
+.tela-mobile .m-pg-botao {
+  width: 100%; background: none; border: 0; border-bottom: 1px solid var(--m-linha);
+  text-align: left;
+}
+.tela-mobile .m-pg-botao:last-child { border-bottom: 0; }
+.tela-mobile .m-pg-botao:disabled { opacity: 0.6; }
