@@ -1,7 +1,7 @@
 # Versão mobile (PWA) e aviso de pagamento
 
 **Data:** 2026-09-30
-**Estado:** desenho aprovado em seis seções (29–30/09/2026), aguardando revisão desta spec
+**Estado:** aprovada em 30/09/2026. Plano: `docs/superpowers/plans/2026-09-30-mobile-pwa-push.md`
 **Histórico da conversa:** `docs/MOBILE-PWA-EM-ANDAMENTO.md`
 **Toca:** `public/` (manifest, ícones, service worker), `index.html`, rota nova `/m`
 (`src/pages/Mobile/*`), redirecionamento pós-login, `src/lib/formasPagamento.ts` (só
@@ -83,7 +83,8 @@ O registro (`navigator.serviceWorker.register('/sw.js')`) acontece só na `/m`.
 
 ### Redirecionamento
 
-- Celular (critério: `pointer: coarse` + largura ≤ 768 px) e perfil de **operador**:
+- Celular (critério: `pointer: coarse` + largura ≤ 768 px) e perfil que conta no
+  recebimento (`PERFIS_QUE_CONTAM_NO_RECEBIMENTO`: `operador`, `elite`):
   depois do login cai em `/m`.
 - «Versão completa» grava `localStorage['mobile:versao'] = 'completa'`; enquanto
   estiver assim, não redireciona. A versão completa ganha um botão «Versão para
@@ -331,7 +332,12 @@ tocar e cair na `/m`.
 Banco é produção (`CLAUDE.md`): cada migration é mostrada com o SQL exato e só roda com
 o «pode» de quem manda. Registrar a versão aplicada (o histórico está defasado).
 
+## Respondido na revisão (30/09/2026)
+
+- Valor do aviso de pagamento na PaguePlay em **bruto**: mantido «por enquanto».
+- Janela de **3 dias**: serve — a PaguePlay importa todos os dias.
+- H.O.: segue o percentual configurado na aba Metas (`ho_percentual`).
+
 ## Em aberto
 
-- `pg_net` ativo? (leitura no banco, pedir «pode»)
-- Janela de 3 dias serve para a PaguePlay, que importa pela tela e pode atrasar?
+- `pg_net` ativo? (leitura no banco, pedir «pode» — início da Etapa 3)
