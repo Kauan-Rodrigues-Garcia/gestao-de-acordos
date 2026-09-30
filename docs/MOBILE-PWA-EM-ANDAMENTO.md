@@ -58,26 +58,21 @@ Android funciona direto.
    push por pagamento («💰 Pix de R$ 350,00 — Maria S.»); de **4** em diante,
    um push só com o resumo («💰 Você recebeu 6 pagamentos — R$ 2.140,00 · 4 Pix,
    2 boletos»). O corte (3) fica **configurável**.
+5. **Celular sempre abre a versão mínima** (opção A, decidida em 30/09/2026):
+   no app instalado e no navegador do celular, dashboard + lista de pagamentos,
+   com link «Versão completa» para o site de sempre.
 
 ---
 
 ## 4. Onde paramos — pergunta em aberto
 
-**«O que acontece quando o operador abre o sistema no celular?»**
+A pergunta anterior («o que o celular abre») foi respondida: **A** (ver §3.5).
 
-- **A)** O celular **sempre** abre a versão mínima (dashboard + lista de
-  pagamentos), com um link «Versão completa» para o site de sempre (para
-  registrar acordo). Vale para o app instalado e para o navegador.
-- **B)** Só o **app instalado** abre a versão mínima; o navegador do celular
-  segue com o site completo de hoje.
-- **C)** Sem versão separada: tornar as telas atuais responsivas (todas).
-
-**Recomendação dada: A.** Resolve o «tá bagunçado» sem refazer ~280 telas; C
-seria meses; B deixa quem não instalou com a tela quebrada.
-
-**A resposta ainda não veio.** Retome perguntando isto.
-
----
+**Pergunta atual: como o push é enviado?** Opções apresentadas em 30/09/2026 —
+ver §5.1. Recomendação: fila no banco + `pg_cron`. Achado ao conferir o repo:
+`pg_cron` é usado em várias migrations, mas **nenhuma migration usa `pg_net`**
+— se a extensão está ativa no banco só dá para saber consultando (precisa de
+«pode»). `vercel.json` não tem `crons`.
 
 ## 5. Próximos passos do processo (skill `brainstorming`)
 
