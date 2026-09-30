@@ -251,7 +251,27 @@ no cabeçalho do site (qualquer aparelho) → «Escolha um operador» → entra 
 ele pela impersonação existente → tela com os números do operador; faixa
 amarela ou «Voltar à minha conta» retornam. Super admin não é redirecionado.
 
-**Próximo passo:** o usuário testar no preview da Vercel num Android e num
+**Etapa 1 publicada na main em 30/09/2026 e testada pelo usuário («por enquanto
+tudo certo»).**
+
+**Etapa 2 (avisos) — código escrito em 30/09/2026, NADA aplicado no banco:**
+- `supabase/migrations/20260930130000_push_inscricoes.sql` (tabela + RLS +
+  `fn_push_inscrever`) — testada num Postgres 16 local; **falta o «pode»**.
+- `supabase/functions/enviar-push/index.ts` (ação `teste`) — **falta deploy**
+  (com «pode») e os secrets VAPID.
+- Cliente: `src/lib/mobile/push.ts`, `src/pages/Mobile/Avisos.tsx`,
+  `useAvisos.ts`; logout apaga o aparelho. Desligado sem `VITE_VAPID_PUBLIC_KEY`.
+- Ordem para ligar: aplicar a migration → gerar par VAPID (`npx web-push
+  generate-vapid-keys`) → secrets na função (`VAPID_PUBLIC_KEY`,
+  `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) → deploy da função →
+  `VITE_VAPID_PUBLIC_KEY` na Vercel (os dois projetos) e redeploy.
+
+**Pendência urgente fora do mobile (30/09/2026):** projeção do Desafio ≠ Painel
+do Líder. Código na main (`67b4632`); **falta aplicar a migration
+`20260930120000_desafio_mede_equipe_como_o_painel.sql` (com «pode»)**. Sem ela a
+tela segue como antes.
+
+**Antes era:** o usuário testar no preview da Vercel num Android e num
 iPhone (instalar, abrir, conferir os números contra o Dashboard). Depois,
 Etapa 2 (avisos) — precisa de chaves VAPID e de migration, com «pode».
 

@@ -1969,6 +1969,12 @@ Spec: `docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md`.
   da própria pessoa logada, e mostrá-la com a sessão do admin daria comissão e
   ranking errados. Durante a impersonação, «Sair» vira «Voltar à minha conta».
   Ver `src/pages/Mobile/EscolherOperador.tsx`.
+- **Aviso de pagamento (Etapa 2).** «Ativar» pede a permissão só no toque e
+  grava o aparelho em `push_inscricoes` por `fn_push_inscrever` (um endpoint =
+  um aparelho; outra pessoa ativando no mesmo celular vira dona da linha). RLS:
+  cada um só vê e apaga os próprios. Sair da conta apaga o aparelho
+  (`esquecerAparelhoAoSair`, em `useAuth.signOut`). Durante a impersonação o
+  card não aparece. Sem `VITE_VAPID_PUBLIC_KEY` nada disso aparece.
 - **Números.** Nenhuma conta própria. Recebido, meta e faixas vêm de
   `usePainelMetas` (escopo «eu», H.O. na PaguePlay); a comissão de
   `useMinhaComissao`, com a mesma regra de exibição do Dashboard

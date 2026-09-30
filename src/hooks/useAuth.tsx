@@ -41,6 +41,7 @@ import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import { pareceEmailEntregavel } from '@/lib/identificadorLogin';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { esquecerAparelhoAoSair } from '@/lib/mobile/push';
 import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
 import { esquecerInstantaneos } from '@/lib/cacheInstantaneo';
 import { registrarLog, registrarLoginRecusado } from '@/services/logs.service';
@@ -500,6 +501,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       registroId: perfil?.id ?? null,
       alvoTipo: 'usuario',
     });
+    // Aparelho compartilhado não segue recebendo o aviso de quem saiu.
+    await esquecerAparelhoAoSair();
     await forceSignOut();
     // Os instantâneos de tela são o que faz o Gestão reabrir já pintado. Trocar
     // de usuário na mesma aba é caminho real (o suporte faz isso o dia inteiro),

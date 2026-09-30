@@ -21,6 +21,9 @@ import {
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
 import { useTelaMobile } from './useTelaMobile';
 import { EscolherOperador } from './EscolherOperador';
+import { CartaoAvisos, SinoAvisos } from './Avisos';
+import { useAvisos } from './useAvisos';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import './mobile.css';
 
@@ -41,6 +44,9 @@ function TelaDoOperador() {
   const location = useLocation();
   const [verTodos, setVerTodos] = useState(false);
   const impersonando = !!getImpersonacaoAtiva();
+  const { empresa } = useEmpresa();
+  const avisos = useAvisos(empresa?.id ?? null);
+  const [passoIPhone, setPassoIPhone] = useState(false);
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -67,6 +73,8 @@ function TelaDoOperador() {
               {[tela.empresaNome, mesPorExtenso(tela.mes)].filter(Boolean).join(' · ')}
             </div>
           </div>
+          <SinoAvisos ativo={avisos.estado === 'ativo'} ocupado={avisos.ocupado}
+            onDesativar={() => { void avisos.desativar(); }} />
         </header>
 
         {tela.carregando ? <Esqueleto /> : (
@@ -89,6 +97,16 @@ function TelaDoOperador() {
           </>
         )}
 
+        {/* No teste do super admin (impersonação) o card some: ativar ali
+            inscreveria o celular do admin nos pagamentos do operador. */}
+        {!impersonando && (
+          <CartaoAvisos
+            estado={avisos.estado} ocupado={avisos.ocupado}
+            onAtivar={() => { void avisos.ativar(); }}
+            onInstalar={() => setPassoIPhone(true)}
+          />
+        )}
+
         <ListaPagamentos
           pagamentos={tela.pagamentos}
           hoje={getTodayISO()}
@@ -100,6 +118,8 @@ function TelaDoOperador() {
         {/* Em teste (super admin impersonando), «Sair» deslogaria a sessão
             emprestada e a volta para a conta do admin se perderia. */}
         <Rodape
+          passoIPhone={passoIPhone}
+          setPassoIPhone={setPassoIPhone}
           onVersaoCompleta={abrirVersaoCompleta}
           rotuloSair={impersonando ? 'Voltar à minha conta' : 'Sair'}
           onSair={() => { void (impersonando ? sairImpersonacao() : signOut()); }}
@@ -119,13 +139,14 @@ function Esqueleto() {
   );
 }
 
-function Rodape({ onVersaoCompleta, onSair, rotuloSair }: {
+function Rodape({ onVersaoCompleta, onSair, rotuloSair, passoIPhone, setPassoIPhone }: {
+  passoIPhone: boolean;
+  setPassoIPhone: (v: boolean) => void;
   onVersaoCompleta: () => void;
   onSair: () => void;
   rotuloSair: string;
 }) {
   const { modo, instalar } = useInstalacao();
-  const [passoIPhone, setPassoIPhone] = useState(false);
 
   return (
     <div className="m-rodape">

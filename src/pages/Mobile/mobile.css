@@ -208,3 +208,11 @@
 }
 .tela-mobile .m-pg-botao:last-child { border-bottom: 0; }
 .tela-mobile .m-pg-botao:disabled { opacity: 0.6; }
+
+/* ── Avisos de pagamento ──────────────────────────────────────────────── */
+.tela-mobile .m-sino { color: var(--m-tinta); }
+.tela-mobile .m-avisos-icone {
+  width: 42px; height: 42px; border-radius: 14px; flex: none; display: grid; place-items: center;
+  color: #fff; background: linear-gradient(135deg, var(--m-azul-esc), var(--m-verde-esc));
+}
+.tela-mobile .m-btn:disabled { opacity: 0.6; }
