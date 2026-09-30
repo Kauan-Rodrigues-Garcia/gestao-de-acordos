@@ -61,18 +61,35 @@ Android funciona direto.
 5. **Celular sempre abre a versão mínima** (opção A, decidida em 30/09/2026):
    no app instalado e no navegador do celular, dashboard + lista de pagamentos,
    com link «Versão completa» para o site de sempre.
+6. **Envio do push: fila no banco + `pg_cron`** (opção 1 da §5.1, decidida em
+   30/09/2026).
 
 ---
 
 ## 4. Onde paramos — pergunta em aberto
 
-A pergunta anterior («o que o celular abre») foi respondida: **A** (ver §3.5).
+Decididas em 30/09/2026: a versão mínima (§3.5) e o envio por fila (§3.6).
+Começou a apresentação do design por seções (§5.2). **Seção 1 (app
+instalável) apresentada, aguardando aprovação.** Pontos dela:
 
-**Pergunta atual: como o push é enviado?** Opções apresentadas em 30/09/2026 —
-ver §5.1. Recomendação: fila no banco + `pg_cron`. Achado ao conferir o repo:
-`pg_cron` é usado em várias migrations, mas **nenhuma migration usa `pg_net`**
-— se a extensão está ativa no banco só dá para saber consultando (precisa de
-«pode»). `vercel.json` não tem `crons`.
+- Arquivos de manifest estáticos, um por empresa (`manifest-bookplay` /
+  `manifest-pagueplay`), escolhidos pelo `index.html` antes de carregar,
+  com a mesma regra do hostname de `src/lib/tenant.ts`. `start_url` = `/m`.
+- Ícones 192/512 gerados a partir dos logos de 500×500 que já existem, mais
+  o `apple-touch-icon` por empresa.
+- Service worker escrito à mão, **sem cache offline**: só `push` e
+  `notificationclick`. Motivo: o aviso «Nova versão» (`useVersionCheck`) e o
+  deploy da Vercel continuam como estão, sem risco de o celular ficar preso
+  numa versão velha. Isso dispensa o `vite-plugin-pwa`.
+- Botão «Instalar app» na `/m` (Android: prompt do navegador; iPhone: passo a
+  passo «Compartilhar → Adicionar à Tela de Início», porque o iOS não tem
+  prompt).
+- Redirecionamento: no celular, após o login, operador cai em `/m`; o link
+  «Versão completa» grava a escolha no aparelho para não redirecionar de novo.
+
+Achado: `pg_cron` é usado em várias migrations, mas **nenhuma migration usa
+`pg_net`** — se a extensão está ativa só dá para saber consultando o banco
+(precisa de «pode»).
 
 ## 5. Próximos passos do processo (skill `brainstorming`)
 
