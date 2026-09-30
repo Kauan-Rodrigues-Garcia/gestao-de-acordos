@@ -122,6 +122,10 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',
   },
+  'lib/mobile/preferencia.ts': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'super_admin abre a tela do celular só para TESTE e escolhe um operador antes (impersonação); não concede dado nenhum — a tela passa a ser a do operador escolhido.',
+  },
   'lib/menuLateral.ts': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'fallback do item sem chave de permissão: só o Dashboard cai nele, e super_admin sempre passa.',

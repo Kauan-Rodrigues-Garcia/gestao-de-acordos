@@ -27,6 +27,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { converterParaHO } from './contextoEmHO';
 import { getTodayISO } from '@/lib';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
 import { registrarLog } from '@/services/logs.service';
@@ -374,11 +375,13 @@ export async function buscarContextoEquipe(
     metas: Record<string, number | string>;
     equipe_empresa: Record<string, string>;
     config: Record<string, { feriados?: string[]; contar_dia_atual?: boolean }>;
-    recebido_mes_equipe?: Record<string, { total?: number | string; qtd?: number | string }>;
+    recebido_mes_equipe?: Record<string, { total?: number | string; total_ho?: number | string; qtd?: number | string }>;
     metas_setor?: Record<string, number | string>;
     setor_empresa?: Record<string, string>;
     setores_alternativos?: string[];
-    recebido_mes_setor?: Record<string, { total?: number | string; qtd?: number | string }>;
+    recebido_mes_setor?: Record<string, { total?: number | string; total_ho?: number | string; qtd?: number | string }>;
+    /** Empresa → percentual de H.O., só as que medem em H.O. (20260930120000). */
+    empresas_ho?: Record<string, number | string>;
   }>('fn_desafio_contexto_equipe', { p_desafio_id: desafioId });
 
   // NULL = não passou nos portões. Contexto vazio é a leitura certa: a tela
@@ -422,9 +425,9 @@ export async function buscarContextoEquipe(
    * objeto vazio aqui diria outra coisa — «nenhuma equipe recebeu nada no
    * mês» — e zeraria o ranking inteiro.
    */
-  const recebidoMesPorEquipe = data.recebido_mes_equipe
+  const recebidoMesPorEquipeBruto = data.recebido_mes_equipe
     ? Object.fromEntries(Object.entries(data.recebido_mes_equipe).map(([id, v]) => [
-        id, { total: Number(v?.total) || 0, qtd: Number(v?.qtd) || 0 },
+        id, { total: Number(v?.total) || 0, totalHO: Number(v?.total_ho) || 0, qtd: Number(v?.qtd) || 0 },
       ]))
     : undefined;
 
@@ -436,26 +439,37 @@ export async function buscarContextoEquipe(
    * que é o comportamento de antes dela. `{}` diria outra coisa — «nenhum setor
    * tem meta» — e zeraria a nota de quem lidera um setor alternativo.
    */
-  const metaPorSetor = data.metas_setor
+  const metaPorSetorBruta = data.metas_setor
     ? Object.fromEntries(
         Object.entries(data.metas_setor)
           .map(([id, valor]) => [id, Number(valor) || 0] as const)
           .filter(([, v]) => v > 0),
       )
     : undefined;
-  const recebidoMesPorSetor = data.recebido_mes_setor
+  const recebidoMesPorSetorBruto = data.recebido_mes_setor
     ? Object.fromEntries(Object.entries(data.recebido_mes_setor).map(([id, v]) => [
-        id, { total: Number(v?.total) || 0, qtd: Number(v?.qtd) || 0 },
+        id, { total: Number(v?.total) || 0, totalHO: Number(v?.total_ho) || 0, qtd: Number(v?.qtd) || 0 },
       ]))
     : undefined;
 
+  /*
+   * A unidade do Painel do Líder: equipe e setor da PaguePlay em H.O. — ver
+   * `contextoEmHO.ts`. Sem `empresas_ho` (migration 20260930120000 pendente),
+   * tudo segue em bruto, como antes.
+   */
+  const empresasHO = data.empresas_ho
+    ? Object.fromEntries(Object.entries(data.empresas_ho).map(([id, v]) => [id, Number(v)]))
+    : undefined;
+  const equipes = converterParaHO(metaPorEquipe, recebidoMesPorEquipeBruto, data.equipe_empresa, empresasHO);
+  const setores = converterParaHO(metaPorSetorBruta, recebidoMesPorSetorBruto, data.setor_empresa, empresasHO);
+
   return {
-    metaPorEquipe,
-    recebidoMesPorEquipe,
+    metaPorEquipe: equipes.metas ?? {},
+    recebidoMesPorEquipe: equipes.recebidos,
     empresaPorEquipe: data.equipe_empresa ?? {},
     uteisPorEmpresa,
-    metaPorSetor,
-    recebidoMesPorSetor,
+    metaPorSetor: setores.metas,
+    recebidoMesPorSetor: setores.recebidos,
     setoresAlternativos: data.setores_alternativos,
     empresaPorSetor: data.setor_empresa,
     totalUteis: diasUteisDoMes(ano, mes, semFeriado),
