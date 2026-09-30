@@ -50,6 +50,20 @@ feita uma vez por mês/empresa.
 
 ## L1 — Tela da equipe (sem banco)
 
+> **Feita em 30/09/2026.** Desvios do roteiro:
+> - `lideresDaEquipe` virou `idsDosLideresPorEquipe` (a regra, em ids) + a troca
+>   por nome/foto; `equipesQueLidero` inverte o mapa em `src/lib/mobile/`.
+> - A montagem da equipe ficou em `src/pages/Mobile/equipe/montarEquipe.ts` (pura,
+>   testada) e o hook só busca.
+> - Pagamentos da aba Hoje: consulta curta (20 linhas) em vez de `buscarAnalitico`,
+>   que pagina o mês inteiro da empresa.
+> - «Quem recebeu» mostra só valor: na PaguePlay as linhas do diário são
+>   agregadas por operador/dia e não dão a contagem de pagamentos.
+> - Gráfico e Hoje em valores brutos (a fonte do gráfico do site); a nota diz
+>   isso na PaguePlay.
+> - Sino/avisos ficam fora da tela da equipe até a L2 (o líder não recebe aviso
+>   de pagamento pessoal).
+
 ### Mapa de arquivos
 
 | Arquivo | O quê |
@@ -71,86 +85,91 @@ feita uma vez por mês/empresa.
 
 ### Task L1.1: quem abre o quê
 
-- [ ] Teste primeiro: `lider` celular sem marca → abre; `destinoMobile('lider')` →
+- [x] Teste primeiro: `lider` celular sem marca → abre; `destinoMobile('lider')` →
   `/m/equipe`; operador/elite → `/m`; gerência → não abre.
-- [ ] `ehPerfilDaTelaMinima` aceita `lider`; `destinoMobile(perfil)`.
-- [ ] `ROUTE_PATHS.MOBILE_EQUIPE = '/m/equipe'`; `PainelDeEntrada` navega para
+- [x] `ehPerfilDaTelaMinima` aceita `lider`; `destinoMobile(perfil)`.
+- [x] `ROUTE_PATHS.MOBILE_EQUIPE = '/m/equipe'`; `PainelDeEntrada` navega para
   `destinoMobile`.
-- [ ] Commit.
+- [x] Commit.
 
 ### Task L1.2: `equipesQueLidero`
 
-- [ ] Teste primeiro com os casos de `lideresDaEquipe.test` (Bryan × Kauan,
+- [x] Teste primeiro com os casos de `lideresDaEquipe.test` (Bryan × Kauan,
   `jaLideraAlgo`), + elite só pelo explícito, + clone de líder.
-- [ ] Implementar a partir das mesmas três fontes.
-- [ ] Commit.
+- [x] Implementar a partir das mesmas três fontes.
+- [x] Commit.
 
 ### Task L1.3: extrair o acumulado da equipe
 
-- [ ] `acumuladoDaEquipe.ts`: `somarPorEquipe({ resumos, operadorEquipeMap,
+- [x] `acumuladoDaEquipe.ts`: `somarPorEquipe({ resumos, operadorEquipeMap,
   equipesExtrasPorOperador, creditosDeOrigem })` → `Record<equipe, SomaDoSetor>`;
   `diasDaEquipe({ ano, mes, feriados, hoje, contarHoje, inicioTreino })`.
-- [ ] `DesempenhoEquipes` passa a chamar as duas (comportamento igual).
-- [ ] Testes: principal + clone (sem contar duas vezes na própria), crédito de
+- [x] `DesempenhoEquipes` passa a chamar as duas (comportamento igual).
+- [x] Testes: principal + clone (sem contar duas vezes na própria), crédito de
   origem, ajuste junto, treinamento.
-- [ ] `npx vitest run src/pages/Dashboard/Analitico` verde. Commit.
+- [x] `npx vitest run src/pages/Dashboard/Analitico` verde. Commit.
 
 ### Task L1.4: extrair as linhas dos quartis
 
-- [ ] `linhasQuartil.ts`: `montarLinhasQuartil(entrada)` → `{ porSetor, semMeta }`,
+- [x] `linhasQuartil.ts`: `montarLinhasQuartil(entrada)` → `{ porSetor, semMeta }`,
   com o corpo atual do `useMemo` (férias/desligado/arquivado, recorte, sem meta,
   treinamento, H.O., meta indireta, ordenação) e `distribuicaoQuartis(linhas,
   quartis)`.
-- [ ] `QuartisOperadores` passa a chamar (comportamento igual).
-- [ ] Testes: saídas de férias/desligado, arquivado em mês passado, sem meta,
+- [x] `QuartisOperadores` passa a chamar (comportamento igual).
+- [x] Testes: saídas de férias/desligado, arquivado em mês passado, sem meta,
   recorte por equipe com clone, H.O., ordem.
-- [ ] Commit.
+- [x] Commit.
 
 ### Task L1.5: gráfico por dia
 
-- [ ] Teste primeiro: soma por dia, dia sem valor = `null`, média = total ÷ dias com
+- [x] Teste primeiro: soma por dia, dia sem valor = `null`, média = total ÷ dias com
   valor, melhor dia, dia de hoje marcado, escopo de equipe (`linhaNoEscopo`).
-- [ ] Implementar com a mesma regra do `GraficoRecebimento`.
-- [ ] Commit.
+- [x] Implementar com a mesma regra do `GraficoRecebimento`.
+- [x] Commit.
 
 ### Task L1.6: dados da tela
 
-- [ ] `useTelaEquipe`: `buscarEquipesComOperadores`, `buscarResumoOperadoresAnalitico`,
+- [x] `useTelaEquipe`: `buscarEquipesComOperadores`, `buscarResumoOperadoresAnalitico`,
   `buscarCreditosDeOrigem`, metas (`setor/equipe/operador`), `getMetasConfig`,
   equipes de treinamento, perfis `lider` + `equipe_lideres` + clones (para
   `equipesQueLidero`), perfis que contam (nome/situação) — as consultas do Painel.
   Equipe escolhida lembrada em `localStorage['mobile:equipe']`.
-- [ ] Gráfico e Hoje só buscam quando a aba abre: `buscarRecebidoPorDia` (BookPlay) ou
+- [x] Gráfico e Hoje só buscam quando a aba abre: `buscarRecebidoPorDia` (BookPlay) ou
   `buscarResumoMensalDiario().linhasDia` + ajustes (PaguePlay); pagamentos com
   `buscarAnalitico` dos operadores da equipe (sem permissão → só agregados).
-- [ ] Recarrega em `visibilitychange` e no aviso do service worker (como a `/m`).
-- [ ] Commit.
+- [x] Recarrega em `visibilitychange` e no aviso do service worker (como a `/m`).
+- [x] Commit.
 
 ### Task L1.7: tela
 
-- [ ] `equipe.css` com os tokens do v2; `Regua`; cabeçalho (seletor de equipe, troca
+- [x] `equipe.css` com os tokens do v2; `Regua`; cabeçalho (seletor de equipe, troca
   Eu/Equipe do elite, sino), abas no rodapé.
-- [ ] Aba Equipe (card escuro + régua com «esperado hoje», frase da projeção, ritmo,
+- [x] Aba Equipe (card escuro + régua com «esperado hoje», frase da projeção, ritmo,
   quanto falta por faixa hoje/amanhã via `degrausComAmanha`).
-- [ ] Aba Quartis (barra + filtros por faixa, ordem, lista com régua, folha de
+- [x] Aba Quartis (barra + filtros por faixa, ordem, lista com régua, folha de
   detalhe com `detalharOperador`, «Mandar resumo no WhatsApp» com
   `montarMensagemOperador` → `navigator.share`, cópia como reserva).
-- [ ] Aba Gráfico (SVG próprio, leitura do dia tocado) e aba Hoje.
-- [ ] Estados: carregando, sem equipe liderada, equipe sem meta, sem relatório.
-- [ ] Testes de componente: filtros, folha, troca Eu/Equipe, estados vazios.
-- [ ] Commit.
+- [x] Aba Gráfico (SVG próprio, leitura do dia tocado) e aba Hoje.
+- [x] Estados: carregando, sem equipe liderada, equipe sem meta, sem relatório.
+- [x] Testes de componente: filtros, folha, troca Eu/Equipe, estados vazios.
+- [x] Commit.
 
 ### Task L1.8: verificação e push
 
-- [ ] `npm test`, `npm run typecheck`, eslint dos tocados, `npm run build` (conferir
+- [x] `npm test`, `npm run typecheck`, eslint dos tocados, `npm run build` (conferir
   que `/m/equipe` virou chunk próprio sem recharts).
-- [ ] Conferência visual numa prévia com dados fictícios em viewport de celular (o
+- [x] Conferência visual numa prévia com dados fictícios em viewport de celular (o
   app local não lê o banco de produção).
-- [ ] Atualizar `docs/MOBILE-PWA-EM-ANDAMENTO.md`.
-- [ ] Push na branch. Pedir ao usuário: conferir no preview da Vercel com um líder e
+- [x] Atualizar `docs/MOBILE-PWA-EM-ANDAMENTO.md`.
+- [x] Push na branch. Pedido ao usuário: conferir no preview da Vercel com um líder e
   um elite, comparando com o Painel do Líder.
 
 ---
+
+> Verificação de 30/09/2026: `npm test` (7.594 testes; a guarda `painel-manda`
+> reprovou a 1ª versão por decidir por cargo — convertido para a fonte/chave, sem
+> exceção nova; ver `PERFIS_QUE_SO_LIDERAM`), typecheck, lint e build verdes; chunk da
+> `/m/equipe` ~32 KB sem recharts. Prévia local com dados fictícios nas quatro abas.
 
 ## L2 — Aviso «equipe bateu a meta» (roteiro)
 

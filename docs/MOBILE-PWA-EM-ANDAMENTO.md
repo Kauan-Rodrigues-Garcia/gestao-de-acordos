@@ -1,7 +1,7 @@
 # Versão mobile (PWA) + push de pagamento — brainstorm em andamento
 
-> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR. Fase da LIDERANÇA: spec aprovada,
-> L1 (tela da equipe) em execução — ver «Liderança — brainstorm RETOMADO».**
+> **ESTADO EM 30/09/2026: etapas 1–3 (operador) NO AR. Fase da LIDERANÇA: L1 (tela da
+> equipe) implementada, aguardando conferência; L2 (aviso de meta) pendente — ver «Liderança — brainstorm RETOMADO».**
 >
 > **Para quem retoma isto** (o Cleber ou um agente numa sessão nova). Escrito em
 > **29/09/2026**, no meio do brainstorm. **Nada foi implementado.** Não existe
@@ -365,9 +365,23 @@ faixas de quartil padrão são 100/80/50% (o v1 dizia 110%) e a linha do gráfic
 a média, não a meta diária.
 
 **Spec e visual v2 APROVADOS em 30/09/2026.** Plano:
-`docs/superpowers/plans/2026-09-30-mobile-lideranca.md`. Em execução: **L1** (tela da
-equipe, sem banco). Em aberto: aplicar o acabamento v2 na `/m` do operador (perguntado,
-sem resposta ainda). Depois:
+`docs/superpowers/plans/2026-09-30-mobile-lideranca.md`.
+
+**L1 (tela da equipe `/#/m/equipe`) IMPLEMENTADA em 30/09/2026**, sem banco, na branch
+`claude/sleepy-ptolemy-vqekei`:
+- Líder cai na tela da equipe; elite ganha a troca Eu / Equipe na `/m` (só quem tem
+  vínculo em `equipe_lideres` e a permissão `ver_painel_lider`); super admin testa
+  entrando como um líder pelo «Escolha um operador ou líder».
+- Números sem conta nova: `DesempenhoEquipes` e `QuartisOperadores` passaram a
+  chamar funções puras extraídas deles (`acumuladoDaEquipe.ts`, `linhasQuartil.ts`),
+  as mesmas que a tela do celular usa. Quem lidera: `idsDosLideresPorEquipe`.
+- Conferida numa prévia local com dados fictícios (o app local não lê o banco de
+  produção). **Falta o usuário conferir no preview da Vercel** com um líder e um
+  elite, comparando com o Painel do Líder.
+- Próximo: **L2** (aviso «equipe bateu a meta») — precisa de migration, com «pode».
+
+Em aberto: aplicar o acabamento v2 na `/m` do operador (perguntado, sem resposta
+ainda). Depois:
 plano de implementação; L1 (tela, sem banco) antes de L2 (aviso, migration com
 «pode»).
 

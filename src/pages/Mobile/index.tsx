@@ -43,16 +43,18 @@ export default function Mobile() {
 }
 
 /**
- * O elite que lidera alguma equipe ganha a troca Eu / Equipe. Para o elite
- * vale só o vínculo explícito de `equipe_lideres` — ver `equipesQueLidero`.
+ * Quem recebe em nome próprio e lidera alguma equipe (o elite) ganha a troca
+ * Eu / Equipe. Quem abre a visão da equipe é a chave `ver_painel_lider` — a
+ * mesma da rota. Para quem recebe, vale só o vínculo explícito de
+ * `equipe_lideres` — ver `equipesQueLidero`.
  */
 function useEliteLidera(): boolean {
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
-  const elite = perfil?.perfil === 'elite' && temPermissao('ver_painel_lider');
+  const podeVerEquipe = temPermissao('ver_painel_lider');
   const { data } = useQuery({
     queryKey: ['mobile-elite-lidera', perfil?.id],
-    enabled: elite && !!perfil?.id,
+    enabled: podeVerEquipe && !!perfil?.id,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data: linhas, error } = await supabase
@@ -61,7 +63,7 @@ function useEliteLidera(): boolean {
       return (linhas ?? []).length > 0;
     },
   });
-  return elite && data === true;
+  return podeVerEquipe && data === true;
 }
 
 function TelaDoOperador() {

@@ -12,7 +12,7 @@
  * abre a pessoal e troca para a da equipe lá dentro. Gerência e diretoria
  * seguem no site de sempre.
  */
-import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, ROUTE_PATHS } from '@/lib/index';
+import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_QUE_SO_LIDERAM, ROUTE_PATHS } from '@/lib/index';
 
 export const CHAVE_VERSAO = 'mobile:versao';
 
@@ -67,7 +67,7 @@ function recebeNoProprioNome(perfil: string | null | undefined): boolean {
 
 /** Só lidera — não recebe em nome próprio, então não tem a tela pessoal. */
 export function ehLider(perfil: string | null | undefined): boolean {
-  return perfil === 'lider';
+  return (PERFIS_QUE_SO_LIDERAM as readonly string[]).includes(perfil ?? '');
 }
 
 export function ehPerfilDaTelaMinima(perfil: string | null | undefined): boolean {

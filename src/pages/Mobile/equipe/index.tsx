@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ROUTE_PATHS } from '@/lib/index';
+import { ROUTE_PATHS, contaNoRecebimento } from '@/lib/index';
 import { ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
@@ -50,7 +50,8 @@ function TelaDaEquipe() {
     return ABAS.some(a => a.id === pedida) ? (pedida as Aba) : 'equipe';
   });
   const impersonando = !!getImpersonacaoAtiva();
-  const ehElite = perfil?.perfil === 'elite';
+  // Quem recebe em nome próprio (o elite) tem também a tela pessoal: a troca Eu / Equipe.
+  const temTelaPessoal = contaNoRecebimento(perfil?.perfil);
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -110,7 +111,7 @@ function TelaDaEquipe() {
               </select>
             )}
           </div>
-          {ehElite && (
+          {temTelaPessoal && (
             <div className="e-troca" role="group" aria-label="Visão">
               <button type="button" aria-pressed={false} onClick={() => navigate(ROUTE_PATHS.MOBILE)}>Eu</button>
               <button type="button" aria-pressed={true}>Equipe</button>

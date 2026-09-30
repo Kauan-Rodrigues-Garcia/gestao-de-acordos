@@ -12,7 +12,7 @@ const maria: PerfilLider = { id: 'l-maria', nome: 'Maria Oliveira',  foto_url: n
 
 describe('líder', () => {
   it('pelo cadastro, quando a equipe não tem vínculo explícito', () => {
-    expect(equipesQueLidero({ id: 'l-kauan', perfil: 'lider' }, {
+    expect(equipesQueLidero({ id: 'l-kauan' }, {
       lideres: [kauan], explicitos: [], clones: [],
     })).toEqual(['eq-bryan']);
   });
@@ -24,13 +24,13 @@ describe('líder', () => {
       explicitos: [{ equipe_id: 'eq-bryan', lider_id: 'l-bryan' }],
       clones: [],
     };
-    expect(equipesQueLidero({ id: 'l-kauan', perfil: 'lider' }, entrada)).toEqual([]);
-    expect(equipesQueLidero({ id: 'l-bryan', perfil: 'lider' }, entrada)).toEqual(['eq-bryan']);
+    expect(equipesQueLidero({ id: 'l-kauan' }, entrada)).toEqual([]);
+    expect(equipesQueLidero({ id: 'l-bryan' }, entrada)).toEqual(['eq-bryan']);
   });
 
   /** Play 4, 02/09/2026: Maria lidera «Maria - Capitã» e o cadastro a prende em «Digital Bruno». */
   it('quem já lidera algo explicitamente não entra pela reserva', () => {
-    expect(equipesQueLidero({ id: 'l-maria', perfil: 'lider' }, {
+    expect(equipesQueLidero({ id: 'l-maria' }, {
       lideres: [maria],
       explicitos: [{ equipe_id: 'eq-capita', lider_id: 'l-maria' }],
       clones: [],
@@ -38,22 +38,22 @@ describe('líder', () => {
   });
 
   it('clone de líder lidera também a equipe clonada', () => {
-    expect(equipesQueLidero({ id: 'l-kauan', perfil: 'lider' }, {
+    expect(equipesQueLidero({ id: 'l-kauan' }, {
       lideres: [kauan], explicitos: [],
       clones: [{ equipe_id: 'eq-outra', operador_id: 'l-kauan' }],
     }).sort()).toEqual(['eq-bryan', 'eq-outra']);
   });
 
   it('sem equipe nenhuma devolve vazio', () => {
-    expect(equipesQueLidero({ id: 'l-bryan', perfil: 'lider' }, {
+    expect(equipesQueLidero({ id: 'l-bryan' }, {
       lideres: [bryan], explicitos: [], clones: [],
     })).toEqual([]);
   });
 });
 
-describe('elite', () => {
+describe('quem não está entre os líderes (elite)', () => {
   it('lidera só pelo vínculo explícito', () => {
-    expect(equipesQueLidero({ id: 'e-ana', perfil: 'elite' }, {
+    expect(equipesQueLidero({ id: 'e-ana' }, {
       lideres: [bryan],
       explicitos: [{ equipe_id: 'eq-plantao', lider_id: 'e-ana' }],
       clones: [],
@@ -63,7 +63,7 @@ describe('elite', () => {
   it('a equipe onde o elite trabalha não conta como liderada', () => {
     // O elite não está em `lideres` (o Painel só passa `lider`), então o
     // cadastro dele nunca vira reserva.
-    expect(equipesQueLidero({ id: 'e-ana', perfil: 'elite' }, {
+    expect(equipesQueLidero({ id: 'e-ana' }, {
       lideres: [bryan], explicitos: [], clones: [{ equipe_id: 'eq-x', operador_id: 'e-ana' }],
     })).toEqual([]);
   });

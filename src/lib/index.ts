@@ -338,6 +338,20 @@ export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO = ['operador', 'elite'] as const;
  */
 export const PERFIS_LIDERANCA_AJUSTE = ['lider', 'gerencia'] as const;
 
+/**
+ * Cargos que LIDERAM equipe sem receber em nome próprio.
+ *
+ * Responde uma pergunta de DADO, não de acesso: «esta pessoa tem recebimento
+ * pessoal para mostrar?». No celular (`lib/mobile/preferencia.ts`), quem está
+ * aqui abre a visão da equipe em vez da tela pessoal — porque a pessoal dele
+ * seria vazia. O ACESSO à visão da equipe continua sendo a chave
+ * `ver_painel_lider` na rota, como o Painel do Líder.
+ *
+ * É o complemento de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO` para quem lidera: o
+ * elite está lá (recebe e lidera), o líder está aqui (só lidera).
+ */
+export const PERFIS_QUE_SO_LIDERAM = ['lider'] as const;
+
 /** Este cargo conta como operador no recebimento? Ver a lista acima. */
 export function contaNoRecebimento(perfil: string | null | undefined): boolean {
   return (PERFIS_QUE_CONTAM_NO_RECEBIMENTO as readonly string[])

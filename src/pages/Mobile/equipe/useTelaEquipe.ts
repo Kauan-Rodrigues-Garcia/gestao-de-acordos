@@ -178,13 +178,13 @@ export function useTelaEquipe(): TelaEquipe {
 
   const opcoes = useMemo<OpcaoEquipe[]>(() => {
     if (!bruto || !perfil?.id) return [];
-    const ids = equipesQueLidero({ id: perfil.id, perfil: perfil.perfil }, bruto.lideranca);
+    const ids = equipesQueLidero({ id: perfil.id }, bruto.lideranca);
     return ids
       .map(id => bruto.equipes.find(e => e.id === id))
       .filter((e): e is NonNullable<typeof e> => !!e)
       .map(e => ({ id: e.id, nome: e.nome, setorNome: e.setor_id ? bruto.setores[e.setor_id] ?? null : null }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [bruto, perfil?.id, perfil?.perfil]);
+  }, [bruto, perfil?.id]);
 
   const [escolhida, setEscolhida] = useState<string | null>(() => lerEquipeLembrada());
   const equipeId = opcoes.some(o => o.id === escolhida) ? escolhida : opcoes[0]?.id ?? null;

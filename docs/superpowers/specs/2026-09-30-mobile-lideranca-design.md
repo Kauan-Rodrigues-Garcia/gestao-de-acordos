@@ -155,10 +155,11 @@ diária**.
 
 ### 2.4 Hoje
 
-- Leitura grande: recebido hoje, «até HHh» (hora da última importação), pagamentos,
-  «N de M operadores».
-- **Quem recebeu**: nome, nº de pagamentos, valor, com um traço fino proporcional ao
-  maior; «N sem pagamento» no título.
+- Leitura grande: recebido hoje e «N de M operadores receberam». Valor bruto (a
+  mesma fonte do gráfico); na PaguePlay a tela diz «valores brutos».
+- **Quem recebeu**: nome e valor, com um traço fino proporcional ao maior; «N sem
+  pagamento» no título. Sem a contagem de pagamentos: na PaguePlay as linhas do
+  diário vêm somadas por operador/dia e a contagem sairia errada.
 - **Últimos pagamentos** da equipe: forma em texto (PIX / BOLETO / CARTÃO, sem chip
   colorido), «cliente abreviado · operador», hora, valor; «novo» em verde para os
   chegados depois da última visita (marca do aparelho, como na `/m`).

@@ -29,6 +29,9 @@ interface Operador {
   perfil: string | null;
 }
 
+/** Rótulo do cargo na lista — só para quem escolhe saber quem é quem. */
+const ROTULO_CARGO: Record<string, string> = { lider: 'líder', elite: 'elite' };
+
 function semAcento(t: string): string {
   return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
@@ -117,10 +120,9 @@ export function EscolherOperador() {
             >
               <div className="m-pg-q">
                 <div className="m-pg-c">{o.nome ?? o.usuario ?? 'Sem nome'}</div>
-                {(o.usuario || o.perfil === 'lider') && (
+                {(o.usuario || ROTULO_CARGO[o.perfil ?? '']) && (
                   <div className="m-pg-h">
-                    {[o.usuario, o.perfil === 'lider' ? 'líder' : o.perfil === 'elite' ? 'elite' : null]
-                      .filter(Boolean).join(' · ')}
+                    {[o.usuario, ROTULO_CARGO[o.perfil ?? '']].filter(Boolean).join(' · ')}
                   </div>
                 )}
               </div>

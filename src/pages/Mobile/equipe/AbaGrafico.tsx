@@ -66,15 +66,20 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
     const semana = DIAS_SEMANA[new Date(ano, mesN - 1, d.dia).getDay()];
     return `${semana}, ${d.dia} de ${MESES[mesN - 1]}`;
   };
-  const vsMedia = sel?.valor && grafico.media > 0 ? Math.round((sel.valor / grafico.media - 1) * 100) : null;
+  // Hoje ainda está correndo: comparar o parcial com a média só assustaria.
+  const vsMedia = sel?.valor && !sel.hoje && grafico.media > 0
+    ? Math.round((sel.valor / grafico.media - 1) * 100) : null;
 
   return (
     <>
       <section className="e-leitura" aria-live="polite">
-        <div className="e-olho">{sel ? rotuloDia(sel) : ''}{sel?.hoje ? ' · parcial' : ''}</div>
+        <div className="e-olho">{sel ? rotuloDia(sel) : ''}{sel?.hoje ? ' · hoje' : ''}</div>
         <div className="e-leitura-valor e-num">
           {sel?.valor ? <><small>R$</small>{formatBRL(sel.valor).replace(/^R\$\s?/, '')}</> : 'Sem recebimento'}
         </div>
+        {sel?.hoje && sel.valor !== null && (
+          <div className="e-leitura-de">Parcial — o dia ainda está correndo.</div>
+        )}
         {vsMedia !== null && (
           <div className="e-leitura-de">
             <span className={vsMedia >= 0 ? 'e-pos' : 'e-neg'}>

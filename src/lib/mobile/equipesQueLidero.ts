@@ -10,20 +10,21 @@
  *
  * ## Elite
  *
- * O Painel entrega à regra só os perfis `lider`. O elite é operador que também
- * lidera, e o `perfis.equipe_id` dele é a equipe onde ele TRABALHA — usar a
- * reserva faria todo elite «liderar» a própria equipe de operador. Por isso,
- * para o elite, vale só o vínculo explícito de `equipe_lideres`.
+ * O Painel entrega à regra só os perfis `lider` (`entrada.lideres`). O elite é
+ * operador que também lidera, e o `perfis.equipe_id` dele é a equipe onde ele
+ * TRABALHA — usar a reserva faria todo elite «liderar» a própria equipe de
+ * operador. Por isso, para quem não está em `entrada.lideres`, vale só o
+ * vínculo explícito de `equipe_lideres`. Quem decide é a fonte, não o cargo.
  */
 import {
   idsDosLideresPorEquipe, type EntradaLideres,
 } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
 
 export function equipesQueLidero(
-  pessoa: { id: string; perfil: string | null | undefined },
+  pessoa: { id: string },
   entrada: EntradaLideres,
 ): string[] {
-  if (pessoa.perfil === 'lider') {
+  if (entrada.lideres.some(l => l.id === pessoa.id)) {
     return Object.entries(idsDosLideresPorEquipe(entrada))
       .filter(([, ids]) => ids.includes(pessoa.id))
       .map(([equipeId]) => equipeId);
