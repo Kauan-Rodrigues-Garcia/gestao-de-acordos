@@ -8,7 +8,7 @@
  * que o H.O. passou a vir do relatório (29/09/2026).
  *
  * Aqui a equipe e o setor de empresa que mede em H.O. (`empresas_ho`, de
- * `fn_desafio_contexto_equipe` — migration 20260930120000) trocam os dois
+ * `fn_desafio_contexto_equipe` — migration 20260930115849) trocam os dois
  * números para H.O. Daí em diante `calcularDesafio` não sabe de unidade
  * nenhuma: a mesma conta, com os números que o Painel usa.
  *

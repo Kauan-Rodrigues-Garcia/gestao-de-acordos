@@ -113,8 +113,8 @@ BEGIN
      AND m.ano        = v_ano
      AND m.meta_valor > 0;
 
-  -- De qual empresa é cada equipe — é o que liga a equipe à régua de dias
-  -- úteis dela. Só as equipes que têm meta interessam.
+  -- De qual empresa é cada equipe — liga a equipe à régua de dias úteis dela e
+  -- diz ao cliente se ela mede em H.O. Todas as equipes, não só as com meta.
   SELECT COALESCE(jsonb_object_agg(e.id, e.empresa_id), '{}'::JSONB)
     INTO v_equipe_emp
     FROM public.equipes e
@@ -145,7 +145,7 @@ BEGIN
 
   -- ── O recebido do mês POR EQUIPE ──────────────────────────────────────────
   -- Ver o cabeçalho da 20260909160000: as três regras de Desempenho Equipes.
-  -- E, desde 20260930120000, a regra do SETOR DA PESSOA (20260929211916) e o
+  -- E, desde 20260930115849, a regra do SETOR DA PESSOA (20260929211916) e o
   -- H.O. — ver o cabeçalho desta migration.
   WITH
   -- Vínculo de liderança, e só quando é ÚNICO. Quem lidera três equipes não
@@ -402,7 +402,7 @@ COMMENT ON FUNCTION public.fn_desafio_contexto_equipe(UUID) IS
   'conta_recebimento tambem a clonada, transferido a de origem - na BookPlay '
   '(set/2026+) a linha so conta no setor onde a pessoa esta e o fantasma de '
   'setor leva a origem so as linhas do setor de origem. empresas_ho diz quem '
-  'mede em H.O. Repete os tres portoes de fn_desafio_dados (20260930120000).';
+  'mede em H.O. Repete os tres portoes de fn_desafio_dados (20260930115849).';
 
 DO $guarda$
 BEGIN
