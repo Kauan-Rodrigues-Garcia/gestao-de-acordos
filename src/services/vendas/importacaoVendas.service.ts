@@ -216,6 +216,17 @@ export async function promoverLote(loteId: string): Promise<Resultado<ResultadoP
   };
 }
 
+/**
+ * «Um lote virou vigente nesta aba.» As abas do relatório do Painel Diretoria
+ * ficam montadas depois de visitadas e leem o lote uma vez: sem este aviso,
+ * mostrariam o retrato anterior até alguém recarregar a página.
+ */
+export const EVENTO_LOTE_PROMOVIDO = 'vendas:lote-promovido';
+
+export function avisarLotePromovido(): void {
+  window.dispatchEvent(new Event(EVENTO_LOTE_PROMOVIDO));
+}
+
 export async function descartarLote(loteId: string, motivo: string | null): Promise<Resultado> {
   const { error } = await rpcSemTipo('fn_vendas_lote_descartar', {
     p_lote_id: loteId, p_motivo: motivo,

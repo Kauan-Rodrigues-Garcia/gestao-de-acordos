@@ -34,7 +34,7 @@ import { formatBRL } from '@/lib/money';
 import { formatDate } from '@/lib/index';
 import { rotuloDoMes } from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
-import { buscarLotes, type EstadoLote, type Lote } from '@/services/vendas/importacaoVendas.service';
+import { buscarLotes, EVENTO_LOTE_PROMOVIDO, type EstadoLote, type Lote } from '@/services/vendas/importacaoVendas.service';
 
 const ESTADO: Record<EstadoLote, { rotulo: string; classe: string; dica: string }> = {
   vigente: {
@@ -67,6 +67,12 @@ export function HistoricoImportacoes({ ativo }: { ativo: boolean }) {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [versao, setVersao] = useState(0);
+
+  useEffect(() => {
+    const aoPromover = () => setVersao(v => v + 1);
+    window.addEventListener(EVENTO_LOTE_PROMOVIDO, aoPromover);
+    return () => window.removeEventListener(EVENTO_LOTE_PROMOVIDO, aoPromover);
+  }, []);
 
   useEffect(() => {
     if (!empresaId || !ativo) return;
