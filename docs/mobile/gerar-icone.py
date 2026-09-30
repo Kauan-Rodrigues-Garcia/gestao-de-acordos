@@ -1,51 +1,92 @@
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
-rng=np.random.default_rng(7)
-S=1024
-logo=Image.open('/home/user/gestao-de-acordos/public/logo-bookplay.png').convert('RGBA')
-blue=np.array([0x1e,0xa5,0xe6],float); green=np.array([0x1f,0x7f,0x2c],float)
-# degrade baguncado: campo de blobs + distorcao
-yy,xx=np.mgrid[0:S,0:S]/S
-field=np.zeros((S,S))
-for _ in range(14):
-    cx,cy=0.15+0.7*rng.random(2); r=0.07+rng.random()*0.12; w=rng.choice([-1,1])
-    field+=w*np.exp(-((xx-cx)**2+(yy-cy)**2)/(2*r*r))
-field+=0.6*(xx-yy)  # tendencia diagonal azul->verde
-field+=0.35*np.sin(xx*14+np.cos(yy*11)*2.5)
-c=field[int(S*.2):int(S*.8),int(S*.2):int(S*.8)]
-med=np.median(c); sd=c.std()
-t=np.clip((field-med)/(2.2*sd)+0.5,0,1)
-grad=(blue*(1-t[...,None])+green*t[...,None]).astype(np.uint8)
-gimg=Image.fromarray(grad,'RGB')
-def compor(fundo, cor_mao, escala=0.72, nome='x'):
-    base=Image.new('RGB',(S,S),fundo)
-    n=int(S*escala); m=logo.resize((n,n),Image.LANCZOS)
-    mask=Image.new('L',(S,S),0); mask.paste(m.split()[3],((S-n)//2,(S-n)//2))
-    fill=gimg if cor_mao is None else Image.new('RGB',(S,S),cor_mao)
-    base.paste(fill,(0,0),mask)
-    return base
-a=compor((255,255,255),None)                 # fundo branco, mao em degrade
-b=Image.new('RGB',(S,S)); b.paste(gimg)       # fundo em degrade, mao branca
-n=int(S*0.72); m=logo.resize((n,n),Image.LANCZOS)
-mk=Image.new('L',(S,S),0); mk.paste(m.split()[3],((S-n)//2,(S-n)//2))
-b.paste(Image.new('RGB',(S,S),(255,255,255)),(0,0),mk)
-def arred(im):
-    mk=Image.new('L',im.size,0); ImageDraw.Draw(mk).rounded_rectangle([0,0,S-1,S-1],radius=S*0.22,fill=255)
-    out=Image.new('RGBA',im.size,(0,0,0,0)); out.paste(im,(0,0),mk); return out
-prev=Image.new('RGBA',(S*2+120,S+80),(236,238,242,255))
-prev.paste(arred(a),(40,40),arred(a)); prev.paste(arred(b),(S+80,40),arred(b))
-prev.resize((prev.width//2,prev.height//2),Image.LANCZOS).save('icone-rascunho.png')
-a.save('icone-A-1024.png'); b.save('icone-B-1024.png')
+"""
+Gera o ícone do app (PWA) — variante C, aprovada em 30/09/2026.
 
-# ── Variante C (pedida em 30/09/2026): mão no degradê bagunçado, mais clara,
-#    sobre um degradê liso e escuro de azul (topo-esquerda) para verde.
-azul_esc=np.array([0x0a,0x2a,0x4a],float); verde_esc=np.array([0x0b,0x3a,0x1e],float)
-d=np.clip((xx+yy)/2,0,1)[...,None]
-fundo=(azul_esc*(1-d)+verde_esc*d).astype(np.uint8)
-azul_cl=np.array([0x38,0xbd,0xf8],float); verde_cl=np.array([0x4a,0xde,0x5a],float)
-mao=(azul_cl*(1-t[...,None])+verde_cl*t[...,None]).astype(np.uint8)
-c=Image.fromarray(fundo,'RGB')
-c.paste(Image.fromarray(mao,'RGB'),(0,0),mk)
-c.save('icone-C-1024.png')
-vc=Image.new('RGBA',(S+80,S+80),(236,238,242,255)); vc.paste(arred(c),(40,40),arred(c))
-vc.resize((vc.width//2,vc.height//2),Image.LANCZOS).save('icone-C-rascunho.png')
+A mão é a mesma dos logos (`public/logo-bookplay.png`), pintada num degradê
+«bagunçado» de azul (BookPlay) e verde (PaguePlay), sobre um fundo liso e
+escuro de azul para verde. Um ícone só para as duas empresas.
+
+Uso, da raiz do repositório:
+
+    pip install pillow numpy
+    python docs/mobile/gerar-icone.py
+
+Saída:
+    docs/mobile/icone-C-1024.png          referência em alta
+    public/icons/app-192.png              manifest, purpose "any"
+    public/icons/app-512.png              manifest, purpose "any"
+    public/icons/app-512-maskable.png     manifest, purpose "maskable"
+    public/icons/apple-touch-180.png      iPhone (tela de início)
+    public/icons/badge-96.png             barra de status do Android (só a mão, branca)
+
+A semente é fixa: rodar de novo produz os mesmos arquivos.
+"""
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+RAIZ = Path(__file__).resolve().parents[2]
+SAIDA = RAIZ / 'public' / 'icons'
+S = 1024
+
+rng = np.random.default_rng(7)
+logo = Image.open(RAIZ / 'public' / 'logo-bookplay.png').convert('RGBA')
+
+# ── Degradê bagunçado: manchas gaussianas + tendência diagonal + ondulação ──
+yy, xx = np.mgrid[0:S, 0:S] / S
+campo = np.zeros((S, S))
+for _ in range(14):
+    cx, cy = 0.15 + 0.7 * rng.random(2)
+    r = 0.07 + rng.random() * 0.12
+    w = rng.choice([-1, 1])
+    campo += w * np.exp(-((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * r * r))
+campo += 0.6 * (xx - yy)
+campo += 0.35 * np.sin(xx * 14 + np.cos(yy * 11) * 2.5)
+# Normaliza pelo miolo, onde a mão fica: metade azul, metade verde.
+miolo = campo[int(S * .2):int(S * .8), int(S * .2):int(S * .8)]
+t = np.clip((campo - np.median(miolo)) / (2.2 * miolo.std()) + 0.5, 0, 1)[..., None]
+
+AZUL_CLARO, VERDE_CLARO = np.array([0x38, 0xbd, 0xf8], float), np.array([0x4a, 0xde, 0x5a], float)
+AZUL_ESCURO, VERDE_ESCURO = np.array([0x0a, 0x2a, 0x4a], float), np.array([0x0b, 0x3a, 0x1e], float)
+
+mao = Image.fromarray((AZUL_CLARO * (1 - t) + VERDE_CLARO * t).astype(np.uint8), 'RGB')
+d = np.clip((xx + yy) / 2, 0, 1)[..., None]
+fundo = Image.fromarray((AZUL_ESCURO * (1 - d) + VERDE_ESCURO * d).astype(np.uint8), 'RGB')
+
+
+def mascara_da_mao(escala: float) -> Image.Image:
+    """Canal alfa do logo, centralizado, ocupando `escala` do quadro."""
+    n = int(S * escala)
+    alfa = logo.resize((n, n), Image.LANCZOS).split()[3]
+    m = Image.new('L', (S, S), 0)
+    m.paste(alfa, ((S - n) // 2, (S - n) // 2))
+    return m
+
+
+def icone(escala: float) -> Image.Image:
+    im = fundo.copy()
+    im.paste(mao, (0, 0), mascara_da_mao(escala))
+    return im
+
+
+def salvar(im: Image.Image, lado: int, nome: str) -> None:
+    im.resize((lado, lado), Image.LANCZOS).save(SAIDA / nome, optimize=True)
+
+
+SAIDA.mkdir(parents=True, exist_ok=True)
+
+normal = icone(0.72)
+normal.save(RAIZ / 'docs' / 'mobile' / 'icone-C-1024.png')
+salvar(normal, 192, 'app-192.png')
+salvar(normal, 512, 'app-512.png')
+salvar(normal, 180, 'apple-touch-180.png')
+
+# Maskable: o Android recorta até um círculo de 80% do lado. A mão encolhe
+# para caber inteira nessa zona segura.
+salvar(icone(0.58), 512, 'app-512-maskable.png')
+
+# Badge: o Android usa só o alfa (silhueta). Mão branca, fundo transparente,
+# grande no quadro para não sumir nos 24 dp da barra.
+badge = Image.new('RGBA', (S, S), (255, 255, 255, 0))
+badge.putalpha(mascara_da_mao(0.96))
+salvar(badge, 96, 'badge-96.png')
