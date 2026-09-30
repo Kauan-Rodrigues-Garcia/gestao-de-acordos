@@ -54,6 +54,7 @@ import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supaba
 // O ajuste manual não vem de relatório: H.O. no percentual configurado.
 import { paraHO } from '@/lib/hoPercentual';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import { ROTULO_AJUSTE } from '@/lib/formasPagamento';
 
 /**
  * A linha sintética tem o formato de um recebimento, sem os campos que só um
@@ -84,8 +85,8 @@ function db(tabela: string): Consulta {
   return (supabase.from as unknown as (t: string) => Consulta)(tabela);
 }
 
-/** O rótulo da forma, na tela e no relatório. Um lugar só. */
-export const ROTULO_AJUSTE = 'Ajuste manual';
+/** O rótulo da forma, na tela e no relatório. Mora em `lib/formasPagamento`. */
+export { ROTULO_AJUSTE };
 
 /**
  * O `lote_id` das linhas sintéticas na lista do Analítico.

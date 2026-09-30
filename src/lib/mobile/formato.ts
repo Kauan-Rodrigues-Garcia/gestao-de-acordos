@@ -15,9 +15,8 @@
  * consolidado do ERP BookPlay e viraria «Boleto/Pix Cofen», que é outra coisa.
  */
 import {
-  ROTULO_BOLETO_PIX, ROTULO_CARTAO, corDaForma, familiaDaForma,
+  ROTULO_AJUSTE, ROTULO_BOLETO_PIX, ROTULO_CARTAO, corDaForma, familiaDaForma,
 } from '@/lib/formasPagamento';
-import { ROTULO_AJUSTE } from '@/services/analitico/ajusteManual.service';
 
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
 

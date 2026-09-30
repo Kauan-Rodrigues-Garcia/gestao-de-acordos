@@ -22,6 +22,11 @@ export const ROTULO_CARTAO      = 'Cartão';
 export const ROTULO_BOLETO_PIX  = 'Pix/Boleto';
 /** A família do consolidado acima — ver a regra 3 de `familiaDaForma`. */
 export const ROTULO_BOLETO_PIX_COFEN = 'Boleto/Pix Cofen';
+/**
+ * A forma da linha sintética do ajuste manual (`ajusteManual.service`). Mora
+ * aqui, e não no serviço, para quem só formata não carregar o cliente do banco.
+ */
+export const ROTULO_AJUSTE = 'Ajuste manual';
 /** Linha sem operador cadastrado (órfã) nas quebras por operador/equipe. */
 export const ROTULO_SEM_OPERADOR = 'Sem operador';
 
