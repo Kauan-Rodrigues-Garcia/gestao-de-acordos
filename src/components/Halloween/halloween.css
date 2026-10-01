@@ -62,26 +62,24 @@
 @keyframes hw-neblina { from { transform: translateX(-6%) scale(1); } to { transform: translateX(7%) scale(1.08); } }
 
 /* ── Olhos na fumaça (Analítico) — ver OlhosNaFumaca.tsx ─────────────────── */
-/* Bem desfocados, como atrás de um vidro opaco; o brilho vermelho vaza em
-   volta. A fumaça passa por cima e às vezes quase os esconde. */
-.hw-olhos { position: absolute; display: flex; gap: var(--gap, 18px); transition: opacity 3s ease;
-  filter: blur(2.6px) drop-shadow(0 0 7px oklch(0.6 0.25 28 / .75)) drop-shadow(0 0 18px oklch(0.5 0.22 25 / .45)); }
-.hw-olhos::before { content: ''; position: absolute; inset: -46px -60px; border-radius: 50%; z-index: -1;
-  background: radial-gradient(closest-side, oklch(0.45 0.2 25 / .28), oklch(0.3 0.12 25 / .08) 60%, transparent); }
-.hw-claro .hw-olhos::before { background: radial-gradient(closest-side, oklch(0.2 0.05 25 / .3), oklch(0.2 0.05 25 / .08) 60%, transparent); }
-.hw-olho { width: var(--w, 34px); height: calc(var(--w, 34px) * .5); overflow: visible; transform-origin: 50% 50%;
+/* Contorno nítido e um brilho vermelho que vaza em volta; um borrão leve para
+   assentarem na névoa, que passa por cima deles. */
+.hw-olhos { position: absolute; display: flex; align-items: center; gap: var(--gap, 18px); transition: opacity 3s ease;
+  filter: blur(.6px) drop-shadow(0 0 5px rgb(255 30 40 / .55)) drop-shadow(0 0 16px rgb(220 10 20 / .35)); }
+.hw-olhos::before { content: ''; position: absolute; inset: -40px -50px; border-radius: 50%; z-index: -1;
+  background: radial-gradient(closest-side, rgb(20 0 2 / .55), rgb(20 0 2 / .15) 60%, transparent); }
+.hw-claro .hw-olhos::before { background: radial-gradient(closest-side, rgb(20 0 2 / .3), rgb(20 0 2 / .08) 60%, transparent); }
+.hw-olho { width: var(--w, 40px); height: calc(var(--w, 40px) * .6); overflow: visible; transform-origin: 50% 50%;
   animation: hw-espreita 7s ease-in-out infinite; }
 .hw-olho.espelho { transform: scaleX(-1); }
-/* A íris anda junto nos dois olhos: no espelhado, o sentido inverte. */
+/* A pupila anda junto nos dois olhos: no espelhado, o sentido inverte. */
 .hw-olho .hw-iris { transform: translateX(var(--olhar, 0px)); transition: transform .9s cubic-bezier(.4, 0, .2, 1); }
 .hw-olho.espelho .hw-iris { transform: translateX(calc(var(--olhar, 0px) * -1)); }
-.hw-olho .hw-pupila { transform-origin: 50px 25px; animation: hw-pupila 5s ease-in-out infinite; }
 .hw-olhos.pisca .hw-olho { animation: hw-pisca .3s ease-in-out 1; }
 .hw-olhos.pisca .hw-olho.espelho { animation: hw-pisca-esp .3s ease-in-out 1; }
 @keyframes hw-pisca { 50% { transform: scaleY(.06); } }
 @keyframes hw-pisca-esp { 0%, 100% { transform: scaleX(-1); } 50% { transform: scaleX(-1) scaleY(.06); } }
 @keyframes hw-espreita { 0%, 100% { translate: 0 0; } 50% { translate: 0 1px; } }
-@keyframes hw-pupila { 0%, 100% { transform: scaleX(1); } 45% { transform: scaleX(1.5); } }
 .hw-fumaca { position: absolute; inset: 0; width: 100%; height: 100%; filter: blur(1.5px); }
 
 /* ── Fantasma que sobe de trás das tabelas ───────────────────────────────── */

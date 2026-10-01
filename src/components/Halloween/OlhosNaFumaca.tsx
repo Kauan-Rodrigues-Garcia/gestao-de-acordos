@@ -2,9 +2,9 @@
  * OlhosNaFumaca — o fundo do Analítico: olhos vermelhos atrás de uma fumaça
  * densa, como quem espia por um vidro embaçado.
  *
- *   Olhos  — SVG: pálpebra amendoada, íris vermelha com estrias, pupila em
- *            fenda e um ponto de brilho. Olham para os lados, piscam e somem
- *            devagar para reaparecer em outro lugar. Bem desfocados.
+ *   Olhos  — SVG, olhos de bicho no escuro: vermelho vivo, pupila escura,
+ *            em quatro feitios (bravo, gato, meia-lua, redondo). Olham para os
+ *            lados, piscam e somem devagar para reaparecer em outro lugar.
  *   Fumaca — canvas: lufadas macias que sobem e derivam, crescem e se
  *            desfazem. Clara no tema escuro e escura no claro.
  *
@@ -18,14 +18,42 @@ import { cn } from '@/lib/utils';
 const acaso = (min: number, max: number) => min + Math.random() * (max - min);
 
 // ── Olhos ─────────────────────────────────────────────────────────────────────
+//
+// Olhos de bicho no escuro, no traço do desenho animado: vermelho vivo, sem
+// branco, pupila escura. Quatro feitios, todos desenhados como o olho ESQUERDO
+// (o canto do nariz à direita, num quadro de 100 × 60); o direito é o mesmo
+// espelhado.
+
+type Feitio = 'bravo' | 'gato' | 'meiaLua' | 'redondo';
+
+const FEITIOS: Record<Feitio, { contorno: string; pupila: string }> = {
+  // Pálpebra de cima reta e caída para o nariz: cara de bravo. Pupila em fenda.
+  bravo: {
+    contorno: 'M5 5 L96 38 C 82 57, 30 61, 10 43 C 1 34, 0 17, 5 5 Z',
+    pupila: 'M54 12 Q 64 36 54 60 Q 44 36 54 12 Z',
+  },
+  // Amêndoa puxada para cima no canto de fora. Pupila em fenda.
+  gato: {
+    contorno: 'M2 42 C 20 10, 70 0, 98 20 C 84 50, 34 62, 2 42 Z',
+    pupila: 'M52 4 Q 62 31 52 58 Q 42 31 52 4 Z',
+  },
+  // Meia-lua: pálpebra reta em cima, pupila redonda cortada por ela.
+  meiaLua: {
+    contorno: 'M4 6 L96 22 C 95 46, 72 60, 47 60 C 21 60, 3 42, 4 6 Z',
+    pupila: 'M33 11 A 17 17 0 0 0 67 17 Z',
+  },
+  // Amêndoa redonda, pupila redonda no meio: o que observa quieto.
+  redondo: {
+    contorno: 'M3 32 C 22 4, 78 4, 97 32 C 78 58, 22 58, 3 32 Z',
+    pupila: 'M50 17 A 15 15 0 1 1 49.99 17 Z',
+  },
+};
+const LISTA_FEITIOS = Object.keys(FEITIOS) as Feitio[];
 
 type Par = {
-  id: number; x: number; y: number; w: number; gap: number;
+  id: number; x: number; y: number; w: number; gap: number; feitio: Feitio; brilho: number;
   visivel: boolean; pisca: boolean; olhar: number; inclina: number;
 };
-
-/** O contorno do olho: pálpebra de cima mais arqueada que a de baixo. */
-const CONTORNO = 'M3 26 C 22 4, 78 2, 97 24 C 80 44, 24 46, 3 26 Z';
 
 export function Olhos() {
   const base = useId().replace(/:/g, '');
@@ -34,16 +62,19 @@ export function Olhos() {
   useEffect(() => {
     let id = 0; const timers: number[] = [];
     const novo = (): Par => {
-      const w = acaso(26, 44);
+      const w = acaso(42, 92);
+      const feitio = LISTA_FEITIOS[Math.floor(Math.random() * LISTA_FEITIOS.length)];
       return {
-        id: id++, x: acaso(4, 90), y: acaso(8, 86), w, gap: w * acaso(0.45, 0.7),
-        visivel: false, pisca: false, olhar: 0, inclina: acaso(-6, 6),
+        id: id++, x: acaso(4, 88), y: acaso(8, 86), w, gap: w * acaso(0.3, 0.6), feitio,
+        // Os pequenos parecem mais longe: um pouco mais apagados.
+        brilho: 0.7 + ((w - 42) / 50) * 0.3,
+        visivel: false, pisca: false, olhar: 0, inclina: acaso(-8, 8),
       };
     };
-    setPares(Array.from({ length: 4 }, novo));
+    setPares(Array.from({ length: 5 }, novo));
     const mostrar = () => setPares(ps => ps.map(p => ({ ...p, visivel: true })));
     timers.push(window.setTimeout(mostrar, 120));
-    // Um par some na fumaça e outro surge em outro canto, sem pressa.
+    // Um par some na névoa e outro surge em outro canto, sem pressa.
     timers.push(window.setInterval(() => {
       setPares(ps => { const i = Math.floor(Math.random() * ps.length); return ps.map((p, j) => (j === i ? { ...p, visivel: false } : p)); });
       timers.push(window.setTimeout(() => {
@@ -63,68 +94,54 @@ export function Olhos() {
     return () => timers.forEach(t => { window.clearTimeout(t); window.clearInterval(t); });
   }, []);
 
-  const iris = `${base}-iris`, brilho = `${base}-brilho`, estrias = `${base}-estrias`, sombra = `${base}-sombra`;
+  const cor = `${base}-cor`, luz = `${base}-luz`;
 
   return (
     <>
       {/* Um jogo de gradientes para todos os olhos da tela. */}
       <svg width="0" height="0" className="absolute" aria-hidden="true">
         <defs>
-          <radialGradient id={brilho} cx="50%" cy="52%" r="60%">
-            <stop offset="0%" stopColor="oklch(0.62 0.24 28)" />
-            <stop offset="55%" stopColor="oklch(0.4 0.19 25)" />
-            <stop offset="100%" stopColor="oklch(0.16 0.07 20)" />
+          {/* Vermelho vivo, mais escuro embaixo e no canto de fora. */}
+          <linearGradient id={cor} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#c4101a" />
+            <stop offset="55%" stopColor="#e3202a" />
+            <stop offset="100%" stopColor="#f2343c" />
+          </linearGradient>
+          {/* Um clarão no meio, como se brilhassem por dentro. */}
+          <radialGradient id={luz} cx="55%" cy="45%" r="55%">
+            <stop offset="0%" stopColor="#ff6a5a" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#ff6a5a" stopOpacity="0" />
           </radialGradient>
-          <radialGradient id={iris} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="oklch(0.9 0.16 60)" />
-            <stop offset="28%" stopColor="oklch(0.72 0.25 35)" />
-            <stop offset="70%" stopColor="oklch(0.55 0.24 27)" />
-            <stop offset="100%" stopColor="oklch(0.26 0.12 22)" />
-          </radialGradient>
-          <radialGradient id={sombra} cx="50%" cy="10%" r="75%">
-            <stop offset="0%" stopColor="oklch(0.08 0.03 20 / .85)" />
-            <stop offset="45%" stopColor="oklch(0.08 0.03 20 / .25)" />
-            <stop offset="100%" stopColor="oklch(0.08 0.03 20 / 0)" />
-          </radialGradient>
-          {/* Estrias da íris: raios finos saindo da pupila. */}
-          <g id={estrias}>
-            {Array.from({ length: 28 }, (_, i) => (
-              <line key={i} x1="0" y1="-5" x2="0" y2="-15.5" transform={`rotate(${i * (360 / 28)})`}
-                stroke={i % 2 ? 'oklch(0.95 0.12 70 / .35)' : 'oklch(0.2 0.1 20 / .45)'} strokeWidth=".9" />
-            ))}
-          </g>
         </defs>
       </svg>
-      {pares.map(p => (
-        <div
-          key={p.id}
-          className={cn('hw-olhos', p.pisca && 'pisca')}
-          style={{
-            left: `${p.x}%`, top: `${p.y}%`, opacity: p.visivel ? 1 : 0,
-            ['--w' as string]: `${p.w}px`, ['--gap' as string]: `${p.gap}px`,
-            ['--olhar' as string]: `${p.olhar * 9}px`, rotate: `${p.inclina}deg`,
-          }}
-        >
-          {[false, true].map(espelho => (
-            <svg key={String(espelho)} viewBox="0 0 100 50" className={cn('hw-olho', espelho && 'espelho')}>
-              <clipPath id={`${base}-c${p.id}${espelho ? 'b' : 'a'}`}><path d={CONTORNO} /></clipPath>
-              <g clipPath={`url(#${base}-c${p.id}${espelho ? 'b' : 'a'})`}>
-                <rect width="100" height="50" fill={`url(#${brilho})`} />
-                <g className="hw-iris">
-                  <circle cx="50" cy="25" r="16" fill={`url(#${iris})`} />
-                  <use href={`#${estrias}`} x="50" y="25" />
-                  <circle cx="50" cy="25" r="16" fill="none" stroke="oklch(0.15 0.06 20)" strokeWidth="1.6" />
-                  <ellipse className="hw-pupila" cx="50" cy="25" rx="3.2" ry="12" fill="oklch(0.07 0.02 20)" />
-                  <ellipse cx="44" cy="19" rx="2.6" ry="1.8" fill="oklch(1 0 0 / .8)" />
-                </g>
-                {/* Sombra da pálpebra de cima: dá fundo ao olho. */}
-                <rect width="100" height="50" fill={`url(#${sombra})`} />
-              </g>
-              <path d={CONTORNO} fill="none" stroke="oklch(0.1 0.04 20 / .9)" strokeWidth="2.4" />
-            </svg>
-          ))}
-        </div>
-      ))}
+      {pares.map(p => {
+        const f = FEITIOS[p.feitio];
+        return (
+          <div
+            key={p.id}
+            className={cn('hw-olhos', p.pisca && 'pisca')}
+            style={{
+              left: `${p.x}%`, top: `${p.y}%`, opacity: p.visivel ? p.brilho : 0,
+              ['--w' as string]: `${p.w}px`, ['--gap' as string]: `${p.gap}px`,
+              ['--olhar' as string]: `${p.olhar * p.w * 0.12}px`, rotate: `${p.inclina}deg`,
+            }}
+          >
+            {[false, true].map(espelho => {
+              const clip = `${base}-c${p.id}${espelho ? 'b' : 'a'}`;
+              return (
+                <svg key={String(espelho)} viewBox="0 0 100 60" className={cn('hw-olho', espelho && 'espelho')}>
+                  <clipPath id={clip}><path d={f.contorno} /></clipPath>
+                  <path d={f.contorno} fill={`url(#${cor})`} />
+                  <g clipPath={`url(#${clip})`}>
+                    <path d={f.contorno} fill={`url(#${luz})`} />
+                    <g className="hw-iris"><path d={f.pupila} fill="#160305" /></g>
+                  </g>
+                </svg>
+              );
+            })}
+          </div>
+        );
+      })}
     </>
   );
 }
