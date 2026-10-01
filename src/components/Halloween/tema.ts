@@ -23,13 +23,14 @@ export interface CenaHalloween {
   chuva: boolean;
   nuvens: boolean;
   nevoa: boolean;
-  olhos: boolean;
+  /** Analítico: alguém atrás de um vidro fosco, na névoa. */
+  vulto: boolean;
   fantasmas: boolean;
   /** Posição horizontal da mão com a lanterna, em % da largura; `null` sem lanterna. */
   lanterna: number | null;
 }
 
-const VAZIA: CenaHalloween = { teias: null, aranha: false, chuva: false, nuvens: false, nevoa: false, olhos: false, fantasmas: false, lanterna: null };
+const VAZIA: CenaHalloween = { teias: null, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null };
 
 /**
  * - Dashboard (BookPlay): as duas teias, a aranha, chuva com trovão e nuvens.
@@ -37,7 +38,7 @@ const VAZIA: CenaHalloween = { teias: null, aranha: false, chuva: false, nuvens:
  *   tabelas e a mão com a lanterna presa embaixo da barra de cima.
  * - Dashboard da PaguePlay (lá Acordos e Dashboard são a mesma tela): as duas
  *   teias com a aranha, chuva com trovão (sem nuvens) e a lanterna no meio.
- * - Analítico: olhos na névoa e uma teia só.
+ * - Analítico: um vulto atrás de vidro fosco, na névoa, e uma teia só.
  */
 export function cenaDaRota(caminho: string, isPaguePlay: boolean): CenaHalloween {
   if (caminho === ROUTE_PATHS.DASHBOARD) {
@@ -46,11 +47,11 @@ export function cenaDaRota(caminho: string, isPaguePlay: boolean): CenaHalloween
       : { ...VAZIA, teias: 'ambas', aranha: true, chuva: true, nuvens: true };
   }
   if (caminho === ROUTE_PATHS.ACORDOS) return { ...VAZIA, teias: 'esquerda', nevoa: true, fantasmas: true, lanterna: 32 };
-  if (caminho === ROUTE_PATHS.ANALITICO) return { ...VAZIA, teias: 'direita', olhos: true };
+  if (caminho === ROUTE_PATHS.ANALITICO) return { ...VAZIA, teias: 'direita', vulto: true };
   return VAZIA;
 }
 
-export const temFundo = (c: CenaHalloween) => c.chuva || c.nuvens || c.nevoa || c.olhos;
+export const temFundo = (c: CenaHalloween) => c.chuva || c.nuvens || c.nevoa || c.vulto;
 
 export const EVENTO_ACORDO_SALVO = 'hw-acordo-salvo';
 /**

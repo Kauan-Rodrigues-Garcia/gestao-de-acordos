@@ -4,6 +4,8 @@ import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { EVENTO_ACORDO_SALVO, type CenaHalloween } from './tema';
 import { FANTASMA, sortearEsconderijo, type Esconderijo } from './esconderijo';
+import { Fumaca } from './Fumaca';
+import { VultoNoVidro } from './VultoNoVidro';
 import './halloween.css';
 
 /*
@@ -11,7 +13,8 @@ import './halloween.css';
  * (barra de cima + conteúdo), que fica `relative` enquanto o tema está ligado:
  *
  *   FundoHalloween   — atrás do `<main>` (que fica transparente): chuva,
- *                      nuvens, névoa, olhos. Só aparece nos vãos entre cards.
+ *                      nuvens, névoa, o vulto atrás do vidro (`VultoNoVidro`). Só
+ *                      aparece nos vãos entre cards.
  *   CamadaHalloween  — DENTRO do `<main>`, no alto do conteúdo: teias,
  *                      aranha, fantasmas, lanterna. Rola junto com a página.
  *   SobreposicaoHalloween — parada por cima do conteúdo: clarão do trovão e
@@ -38,8 +41,9 @@ export function FundoHalloween({ cena }: { cena: CenaHalloween }) {
     <div className={cn('hw-fundo text-foreground', claro && 'hw-claro')} aria-hidden="true">
       {cena.nuvens && <Nuvens />}
       {cena.chuva && <Chuva />}
-      {cena.olhos && <Olhos />}
-      {(cena.nevoa || cena.olhos) && <Nevoa densa={cena.olhos} />}
+      {cena.vulto && <VultoNoVidro claro={claro} />}
+      {cena.vulto && <Fumaca claro={claro} />}
+      {cena.nevoa && !cena.vulto && <Nevoa densa={false} />}
     </div>
   );
 }
@@ -81,22 +85,26 @@ function Chuva() {
       const x0 = cv.width * acaso(0.3, 0.9), pts: [number, number][] = [[x0, 0]];
       let x = x0, y = 0;
       while (y < cv.height * acaso(0.6, 0.9)) { y += acaso(14, 36); x += acaso(-17, 17); pts.push([x, y]); }
-      raio = { pts, vida: 16 };
+      raio = { pts, vida: 8 }; // quadros, a 30 por segundo
       window.dispatchEvent(new CustomEvent(TROVAO, { detail: { x: x0 / cv.width } }));
     };
-    const quadroDaChuva = () => {
+    let ultimo = 0;
+    const quadroDaChuva = (agora: number) => {
       if (!rodando) return;
-      if (quadro++ % 30 === 0) cor = getComputedStyle(cv).color; // acompanha a troca de tema
+      // 30 quadros por segundo, com passo dobrado: a mesma chuva, metade do trabalho.
+      if (agora - ultimo < 32) { requestAnimationFrame(quadroDaChuva); return; }
+      ultimo = agora;
+      if (quadro++ % 15 === 0) cor = getComputedStyle(cv).color; // acompanha a troca de tema
       cx.clearRect(0, 0, cv.width, cv.height);
       cx.strokeStyle = cor; cx.lineCap = 'round';
       for (const g of gotas) {
-        g.y += g.v; g.x -= g.v * 0.18;
+        g.y += g.v * 2; g.x -= g.v * 0.36;
         if (g.y > cv.height + 20) Object.assign(g, nova(false));
         cx.globalAlpha = g.a; cx.lineWidth = g.w;
         cx.beginPath(); cx.moveTo(g.x, g.y); cx.lineTo(g.x + g.c * 0.18, g.y - g.c); cx.stroke();
       }
       if (raio && raio.vida-- > 0) {
-        cx.globalAlpha = raio.vida > 12 || (raio.vida > 5 && raio.vida < 9) ? 0.7 : 0.25;
+        cx.globalAlpha = raio.vida > 6 || (raio.vida > 2 && raio.vida < 5) ? 0.7 : 0.25;
         cx.lineWidth = 2; cx.beginPath();
         raio.pts.forEach(([px, py], i) => (i ? cx.lineTo(px, py) : cx.moveTo(px, py)));
         cx.stroke();
@@ -123,46 +131,6 @@ function Nevoa({ densa }: { densa: boolean }) {
     <div className="hw-nevoa">
       {manchas.map((m, i) => <i key={i} style={{ left: m.left, top: m.top, width: m.width, height: m.height, ['--t' as string]: m.t, animationDelay: m.d }} />)}
     </div>
-  );
-}
-
-/** Olhos que aparecem na névoa, olham, piscam de vez em quando e somem. */
-function Olhos() {
-  type Par = { id: number; x: number; y: number; w: number; gap: number; t: number; visivel: boolean; pisca: boolean };
-  const [pares, setPares] = useState<Par[]>([]);
-  useEffect(() => {
-    let id = 0; const timers: number[] = [];
-    const novo = (): Par => {
-      const w = acaso(14, 26);
-      return { id: id++, x: acaso(4, 92), y: acaso(8, 88), w, gap: w * acaso(0.7, 1.1), t: acaso(5, 9), visivel: false, pisca: false };
-    };
-    setPares(Array.from({ length: 5 }, novo));
-    const mostrar = () => setPares(ps => ps.map(p => ({ ...p, visivel: true })));
-    timers.push(window.setTimeout(mostrar, 80));
-    // Um par some e outro aparece em outro lugar, devagar
-    timers.push(window.setInterval(() => {
-      setPares(ps => { const i = Math.floor(Math.random() * ps.length); return ps.map((p, j) => (j === i ? { ...p, visivel: false } : p)); });
-      timers.push(window.setTimeout(() => {
-        setPares(ps => { const i = ps.findIndex(p => !p.visivel); if (i < 0) return ps; const c = [...ps]; c[i] = novo(); return c; });
-        timers.push(window.setTimeout(mostrar, 60));
-      }, 2800));
-    }, 9000));
-    // Piscadas
-    timers.push(window.setInterval(() => {
-      setPares(ps => { const i = Math.floor(Math.random() * ps.length); return ps.map((p, j) => (j === i ? { ...p, pisca: true } : p)); });
-      timers.push(window.setTimeout(() => setPares(ps => ps.map(p => ({ ...p, pisca: false }))), 260));
-    }, 2300));
-    return () => timers.forEach(t => { window.clearTimeout(t); window.clearInterval(t); });
-  }, []);
-  return (
-    <>
-      {pares.map(p => (
-        <div key={p.id} className={cn('hw-olhos', p.pisca && 'pisca')}
-          style={{ left: `${p.x}%`, top: `${p.y}%`, opacity: p.visivel ? 0.85 : 0, ['--w' as string]: `${p.w}px`, ['--gap' as string]: `${p.gap}px`, ['--t' as string]: `${p.t}s` }}>
-          <span className="hw-olho" /><span className="hw-olho" />
-        </div>
-      ))}
-    </>
   );
 }
 

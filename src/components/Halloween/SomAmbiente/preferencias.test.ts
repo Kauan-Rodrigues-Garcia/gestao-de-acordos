@@ -22,6 +22,18 @@ describe('preferências do Som ambiente', () => {
     expect(lerPreferencias('p2')).toEqual(PADRAO);
   });
 
+  it('o padrão é 15%; quem ficou no padrão antigo (20, gravado antes da versão 2) desce junto', () => {
+    expect(VOLUME_PADRAO).toBe(15);
+    localStorage.setItem('som-ambiente:p1', JSON.stringify({ faixa: 'halloween', volume: 20 }));
+    expect(lerPreferencias('p1').volume).toBe(15);
+    // Escolheu outro volume: fica.
+    localStorage.setItem('som-ambiente:p2', JSON.stringify({ faixa: 'halloween', volume: 35 }));
+    expect(lerPreferencias('p2').volume).toBe(35);
+    // Escolheu 20 já na versão nova: fica.
+    gravarPreferencias('p3', { ...PADRAO, volume: 20 });
+    expect(lerPreferencias('p3').volume).toBe(20);
+  });
+
   it('JSON quebrado volta ao padrão', () => {
     localStorage.setItem('som-ambiente:p1', '{quebrado');
     expect(lerPreferencias('p1')).toEqual(PADRAO);

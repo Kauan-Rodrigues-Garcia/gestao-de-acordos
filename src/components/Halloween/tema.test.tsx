@@ -15,7 +15,7 @@ describe('tema de Halloween', () => {
     expect(cenaDaRota(ROUTE_PATHS.DASHBOARD, false)).toMatchObject({ teias: 'ambas', aranha: true, chuva: true, nuvens: true, nevoa: false, lanterna: null });
     expect(cenaDaRota(ROUTE_PATHS.ACORDOS, false)).toMatchObject({ teias: 'esquerda', aranha: false, chuva: false, nevoa: true, fantasmas: true, lanterna: 32 });
     expect(cenaDaRota(ROUTE_PATHS.DASHBOARD, true)).toMatchObject({ teias: 'ambas', aranha: true, chuva: true, nuvens: false, nevoa: false, lanterna: 50 });
-    expect(cenaDaRota(ROUTE_PATHS.ANALITICO, true)).toMatchObject({ teias: 'direita', olhos: true, chuva: false, lanterna: null });
+    expect(cenaDaRota(ROUTE_PATHS.ANALITICO, true)).toMatchObject({ teias: 'direita', vulto: true, chuva: false, lanterna: null });
     const outra = cenaDaRota(ROUTE_PATHS.ADMIN_USUARIOS, false);
     expect(outra.teias).toBeNull();
     expect(temFundo(outra)).toBe(false);
