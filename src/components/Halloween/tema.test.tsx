@@ -7,8 +7,8 @@ import { podeVerHalloween } from './preferencia';
 
 describe('tema de Halloween', () => {
   it('por enquanto só o super_admin vê', () => {
-    expect(podeVerHalloween('super_admin')).toBe(true);
-    for (const p of ['administrador', 'diretoria', 'operador', null, undefined]) expect(podeVerHalloween(p)).toBe(false);
+    expect(podeVerHalloween('super_admin', false)).toBe(true);
+    for (const p of ['administrador', 'diretoria', 'operador', null, undefined]) expect(podeVerHalloween(p, false)).toBe(false);
   });
 
   it('cada tela ganha só o que foi pedido', () => {

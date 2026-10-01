@@ -24,6 +24,7 @@ import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
+import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 
@@ -277,6 +278,11 @@ export default function AdminConfiguracoes() {
               segura até o administrador, e o painel de Cargos só passa a
               mandar depois que ela abre. Só super_admin vira — a policy
               `chat_config_update` confere de novo no banco. */}
+          {/* ── Halloween: o botão temporário que libera o tema para todos.
+              Some sozinho depois de liberado. Só super_admin — a função
+              `fn_halloween_liberar` confere de novo no banco. */}
+          {ehSuperAdmin && <LiberacaoHalloween />}
+
           {ehSuperAdmin && <LiberacaoChat />}
 
           {/* ── Status do Banco de Dados ─────────────────────────────── */}

@@ -58,7 +58,7 @@ import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
-import { pediuBoasVindasNaUrl, useHalloween } from '@/components/Halloween/preferencia';
+import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
@@ -280,6 +280,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (pediuBoasVindasNaUrl()) { setBoasVindasAberta(true); return; }
     if (hw.boasVindasPendentes && tourJaVisto && !getImpersonacaoAtiva()) setBoasVindasAberta(true);
   }, [hw.ligado, hw.boasVindasPendentes, tourJaVisto, termoLoading, precisaAceitar]);
+  // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
+  useEffect(() => {
+    if (!hw.ligado) return;
+    const abrir = () => setBoasVindasAberta(true);
+    window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
+  }, [hw.ligado]);
   const fecharBoasVindas = () => {
     setBoasVindasAberta(false);
     if (pediuBoasVindasNaUrl()) {

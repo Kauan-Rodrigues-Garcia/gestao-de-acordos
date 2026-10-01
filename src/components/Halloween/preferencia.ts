@@ -3,8 +3,9 @@
  *
  * ## A regra (01/10/2026)
  *
- * O tema vale para todo mundo durante outubro (a temporada) — DEPOIS de
- * validado: até lá, só o super_admin (`HALLOWEEN_LIBERADO`). A pessoa pode
+ * O tema vale para todo mundo durante outubro (a temporada) — DEPOIS que o
+ * super_admin libera em Configurações (`liberacao.ts`): até lá, só ele vê. A
+ * pessoa pode
  * desligar pelo botão de tema, sem aviso — e a escolha é dela, não da máquina.
  * Na primeira vez que entra na temporada, recebe uma mensagem que fecha o mês
  * anterior e apresenta o tema; só uma vez.
@@ -25,18 +26,16 @@ import { supabase } from '@/lib/supabase';
 import { getTodayISO } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { useHalloweenLiberado } from './liberacao';
 
 /**
- * A chave da liberação. DESLIGADA até a validação (01/10/2026: «primeiro
- * preciso validar, não é para liberar ainda»).
+ * Quem vê o tema, se a pessoa não desligou.
  *
- * Desligada, só o `super_admin` vê — tema, mensagem e interruptor — e pode
- * testar tudo sem ninguém mais perceber. Ligar é trocar para `true`.
+ * Antes da liberação (`halloween_liberacao`, ver `liberacao.ts`), só o
+ * super_admin — para validar sem ninguém mais perceber. Depois, todo mundo.
  */
-export const HALLOWEEN_LIBERADO = false;
-
-/** Quem vê o tema, se a pessoa não desligou. */
-export function podeVerHalloween(cargo: string | null | undefined, liberado = HALLOWEEN_LIBERADO): boolean {
+export function podeVerHalloween(cargo: string | null | undefined, liberado: boolean): boolean {
   return liberado || cargo === 'super_admin';
 }
 
@@ -47,6 +46,10 @@ export function podeVerHalloween(cargo: string | null | undefined, liberado = HA
 export function pediuBoasVindasNaUrl(busca: string = window.location.search): boolean {
   return new URLSearchParams(busca).has('hw-boas-vindas');
 }
+
+/** Pede ao `Layout` para abrir a mensagem agora (o «Ver a mensagem» de Configurações). */
+export const EVENTO_ABRIR_BOAS_VINDAS = 'hw-abrir-boas-vindas';
+export const abrirBoasVindasHalloween = () => { window.dispatchEvent(new Event(EVENTO_ABRIR_BOAS_VINDAS)); };
 
 /** Outubro, no fuso de São Paulo. Pura, para os testes passarem a data. */
 export function temporadaHalloween(hojeISO: string = getTodayISO()): boolean {
@@ -115,6 +118,8 @@ interface PerfilHalloween {
 
 export function useHalloween() {
   const { user, perfil } = useAuth();
+  const { empresa } = useEmpresa();
+  const liberado = useHalloweenLiberado(empresa?.id);
   const id = user?.id ?? null;
 
   // Uma string só, para o React comparar por valor e não redesenhar à toa.
@@ -127,7 +132,7 @@ export function useHalloween() {
 
   const estado = resolverHalloween({
     temporada: temporadaHalloween(),
-    podeVer: podeVerHalloween(perfil?.perfil),
+    podeVer: podeVerHalloween(perfil?.perfil, liberado),
     localDesligado: d === '-' ? null : d,
     localBoasVindas: b === '-' ? null : b,
     perfilDesligado: doPerfil?.halloween_desligado,
@@ -156,5 +161,5 @@ export function useHalloween() {
     }
   }, [id, perfilId]);
 
-  return { ...estado, definirDesligado, marcarBoasVindasVistas };
+  return { ...estado, liberado, definirDesligado, marcarBoasVindasVistas };
 }

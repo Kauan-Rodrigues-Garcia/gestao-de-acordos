@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  HALLOWEEN_LIBERADO, pediuBoasVindasNaUrl, podeVerHalloween, resolverHalloween, temporadaHalloween,
+  pediuBoasVindasNaUrl, podeVerHalloween, resolverHalloween, temporadaHalloween,
 } from './preferencia';
 import { mesQuePassou, primeiroNome } from './textosBoasVindas';
 
@@ -11,10 +11,9 @@ const base = {
 };
 
 describe('quem vê o Halloween', () => {
-  it('a liberação nasce desligada: até validar, só o super_admin', () => {
-    expect(HALLOWEEN_LIBERADO).toBe(false);
-    expect(podeVerHalloween('super_admin')).toBe(true);
-    expect(podeVerHalloween('operador')).toBe(false);
+  it('antes da liberação, só o super_admin; depois, todo mundo', () => {
+    expect(podeVerHalloween('super_admin', false)).toBe(true);
+    expect(podeVerHalloween('operador', false)).toBe(false);
     expect(podeVerHalloween('operador', true)).toBe(true);
   });
 
