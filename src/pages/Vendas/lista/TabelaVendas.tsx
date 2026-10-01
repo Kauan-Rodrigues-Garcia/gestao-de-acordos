@@ -36,6 +36,7 @@ import { formatDate, getTodayISO } from '@/lib/index';
 import { rotuloDoDia } from '@/lib/rotuloDoDia';
 import { cn } from '@/lib/utils';
 import type { SituacaoVenda } from '@/lib/vendas';
+import { rotuloDoVendedor } from '@/lib/vendasIa';
 import {
   statusDaLinha, STATUS_DA_LINHA, ORIGEM_DA_LINHA, rotuloDoPrazo, saidaDaAbaFora,
   type StatusDaLinha, type PrazoDaVenda,
@@ -284,7 +285,17 @@ export function TabelaVendas({
                       </td>
                       {mostrarVendedor && (
                         <td className="px-2.5 py-2.5">
-                          <p className="truncate text-foreground" title={v.perfis?.nome ?? undefined}>{v.perfis?.nome ?? 'Sem nome'}</p>
+                          {(() => {
+                            const vendedor = rotuloDoVendedor(v);
+                            return (
+                              <>
+                                <p className="truncate text-foreground" title={vendedor.nome}>{vendedor.nome}</p>
+                                {vendedor.nota && (
+                                  <p className="mt-0.5 truncate text-[10px] font-medium text-primary" title={vendedor.nota}>{vendedor.nota}</p>
+                                )}
+                              </>
+                            );
+                          })()}
                           {equipe && <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{equipe}</p>}
                         </td>
                       )}
@@ -407,7 +418,11 @@ function DetalheDaVenda({
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 lg:grid-cols-6">
           <Campo rotulo="Status"><StatusPill status={status} /></Campo>
           <Campo rotulo="Origem"><span title={origem.dica}>{origem.rotulo}</span></Campo>
-          <Campo rotulo="Vendedor">{venda.perfis?.nome ?? '—'}{equipe ? <span className="text-muted-foreground"> · {equipe}</span> : null}</Campo>
+          <Campo rotulo="Vendedor">
+            {rotuloDoVendedor(venda).nome}
+            {rotuloDoVendedor(venda).nota ? <span className="text-primary"> · {rotuloDoVendedor(venda).nota}</span> : null}
+            {equipe ? <span className="text-muted-foreground"> · {equipe}</span> : null}
+          </Campo>
           <Campo rotulo="Data da venda">{formatDate(venda.data_venda)}</Campo>
           <Campo rotulo="Confirmação">{venda.data_confirmacao ? formatDate(venda.data_confirmacao) : '—'}</Campo>
           <Campo rotulo="Contrato">{venda.contrato_assinado ? 'Assinado' : 'Não assinado'}</Campo>

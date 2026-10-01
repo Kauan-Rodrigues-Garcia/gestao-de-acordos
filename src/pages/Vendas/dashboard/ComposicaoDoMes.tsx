@@ -36,6 +36,7 @@ import { formatDate } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import type { LinhaDoPlacar, LinhaDaEquipe, FatiaSimples, Destaque } from '@/lib/vendasPlacar';
 import type { ReguaMeta } from '@/lib/vendasMeta';
+import type { ResumoDeIa } from '@/lib/vendasIa';
 import { corTexto } from '@/lib/temas';
 
 /**
@@ -298,6 +299,56 @@ export function Estados({ ufs }: { ufs: readonly FatiaSimples[] }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/* ── Vendas via IA ────────────────────────────────────────────────────────── */
+
+/**
+ * Quanto do total veio de IA, por tipo (01/10/2026).
+ *
+ * Responde no recorte que a tela já tem: no Dashboard do operador, «quanto do
+ * MEU número veio das minhas IAs»; no do setor, «quanto do setor veio de IA».
+ * Conta toda venda de IA na régua — vinculada a alguém ou não — e diz à parte
+ * quanto disso foi creditado a operadores. Não soma nada ao total: é uma
+ * fatia dele, e a soma das fatias por tipo é o valor do card.
+ */
+export function CardVendasViaIa({ resumo, totalDoMes }: {
+  resumo: ResumoDeIa;
+  /** O faturamento na régua do recorte, para o percentual. */
+  totalDoMes: number;
+}) {
+  if (resumo.quantidade === 0) return null;
+  const fracao = totalDoMes > 0 ? resumo.valor / totalDoMes : null;
+  return (
+    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <Bot className="h-3.5 w-3.5" aria-hidden /> Vendas via IA
+        </span>
+        <span className="font-mono text-lg font-bold tabular-nums">{formatBRL(resumo.valor)}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {resumo.quantidade} {resumo.quantidade === 1 ? 'venda' : 'vendas'}
+          {fracao !== null ? ` · ${Math.round(fracao * 100)}% do total` : ''}
+        </span>
+        {resumo.valorVinculado > 0 && (
+          <span className="ml-auto text-[11px] text-muted-foreground">
+            {formatBRL(resumo.valorVinculado)} creditados a operadores
+          </span>
+        )}
+      </div>
+      <ul className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {resumo.porTipo.map(t => (
+          <li key={t.tipoId ?? 'sem-tipo'} className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">IA {t.rotulo.toLowerCase()}</p>
+            <p className="font-mono text-sm font-semibold tabular-nums">{formatBRL(t.valor)}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {t.quantidade} {t.quantidade === 1 ? 'venda' : 'vendas'}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound } from 'lucide-react';
+import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound, Bot } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos, mensagemHistoricoFechado,
   type ResumoExclusao,
@@ -63,6 +63,7 @@ const Comemoracoes = lazy(() => import('@/pages/Comemoracoes'));
 // cobrança não tem por que baixar a tela de metas de vendas nem a de feedback.
 const MetasVendas = lazy(() => import('@/pages/Vendas/Metas'));
 const AcompanhamentoVendas = lazy(() => import('@/pages/Vendas/Acompanhamento'));
+const IasDoComercial = lazy(() => import('@/pages/Vendas/IasDoComercial'));
 
 /** O que as abas lazy mostram enquanto baixam. */
 function CarregandoAba() {
@@ -240,8 +241,13 @@ export default function AdminUsuarios() {
   // Acompanhamento — feedback e ausências — é assunto de pessoa, e veio para cá
   // junto com a Metas de Vendas. Mesma chave do item de menu que existia.
   const podeVerAcompanhamento = ehComercial && temPermissao('ver_acompanhamento');
+  // IAs — os logins de automação, com tipo e vínculo (01/10/2026). Quem vê a
+  // lista de usuários vê as IAs; mexer exige `usuarios_editar_cargo`, a mesma
+  // chave da caixa «este login é automação».
+  const podeVerIas = ehComercial && podeVerUsuarios;
   const abasVisiveis = [
     podeVerUsuarios && 'usuarios',
+    podeVerIas && 'ias',
     podeVerSetores && 'setores',
     podeVerEquipes && 'equipes',
     (podeVerMetas || podeVerMetasVendas) && 'metas',
@@ -275,6 +281,7 @@ export default function AdminUsuarios() {
     equipes:      { label: 'Equipes',      Icon: Users2 },
     metas:        { label: 'Metas',        Icon: Target },
     acompanhamento: { label: 'Acompanhamento', Icon: UsersRound },
+    ias:          { label: 'IAs',          Icon: Bot },
     comemoracoes: { label: 'Comemorações', Icon: PartyPopper },
     desligados:   { label: 'Desligados',   Icon: UserX },
   };
@@ -1446,6 +1453,15 @@ export default function AdminUsuarios() {
           <TabsContent value="metas" className="flex-1 overflow-y-auto mt-0">
             <Suspense fallback={<CarregandoAba />}>
               <MetasVendas />
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {/* ─── Aba: IAs (Comercial) ──────────────────────────────────── */}
+        {podeVerIas && (
+          <TabsContent value="ias" className="flex-1 overflow-y-auto mt-0">
+            <Suspense fallback={<CarregandoAba />}>
+              <IasDoComercial />
             </Suspense>
           </TabsContent>
         )}

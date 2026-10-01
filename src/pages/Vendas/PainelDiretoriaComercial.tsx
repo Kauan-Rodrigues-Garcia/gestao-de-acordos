@@ -108,6 +108,7 @@ import {
   equipeDaVenda, placarPorOperador, separarAutomacao, totalDoRecorte,
   vendasPorFormaDePagamento, vendasPorUF, type IndicePessoas, type LinhaDoPlacar,
 } from '@/lib/vendasPlacar';
+import { donoDaVenda } from '@/lib/vendasIa';
 import {
   ajustarMetaPorPresenca, ehRegua, fatorDePresenca, REGUA_LABEL, type ReguaMeta,
 } from '@/lib/vendasMeta';
@@ -1686,8 +1687,8 @@ function DetalheDoRecorte({
           </span>
           <p className="mt-1.5 font-mono text-xl font-bold tabular-nums text-foreground">{r.pessoas}</p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {new Set(r.vendas.filter(x => x.conta_na_meta && !indice.get(x.operador_id)?.robo)
-              .map(x => x.operador_id)).size} com venda na régua
+            {new Set(r.vendas.filter(x => x.conta_na_meta && !indice.get(donoDaVenda(x))?.robo)
+              .map(donoDaVenda)).size} com venda na régua
           </p>
         </div>
 

@@ -333,6 +333,16 @@ function LinhaPessoa({
                 Você
               </span>
             )}
+            {/* `perfis.robo` só é marcado no Comercial — na cobrança a etiqueta
+                nunca aparece, sem precisar saber o produto aqui. */}
+            {(u as { robo?: boolean }).robo && (
+              <span
+                className="text-[9px] bg-primary/10 text-primary border border-primary/30 rounded px-1 py-0 font-bold shrink-0"
+                title="Login de inteligência artificial — não entra no sistema"
+              >
+                IA
+              </span>
+            )}
             {ehClone && (
               <span
                 className="text-[9px] bg-warning/15 text-warning border border-warning/30 rounded px-1 py-0 font-semibold whitespace-nowrap shrink-0"

@@ -81,6 +81,7 @@ import {
   equipeDaVenda, placarPorOperador, separarAutomacao, serieDiaria, totalDoRecorte,
   type LinhaDoPlacar,
 } from '@/lib/vendasPlacar';
+import { donoDaVenda } from '@/lib/vendasIa';
 import {
   ajustarMetaPorPresenca, ehRegua, fatorDePresenca, progressoDaMeta,
   rotuloDaPresenca, REGUA_LABEL, type ReguaMeta,
@@ -336,7 +337,7 @@ export default function PainelLiderComercial() {
     [vendas, setoresNoFoco, noRecorte, placar.indice],
   );
 
-  const quemVendeu = useMemo(() => new Set(vendasNaTela.map(v => v.operador_id)), [vendasNaTela]);
+  const quemVendeu = useMemo(() => new Set(vendasNaTela.map(donoDaVenda)), [vendasNaTela]);
 
   /**
    * Quem entra na lista: a equipe escolhida, ou todo o alcance.
@@ -411,7 +412,7 @@ export default function PainelLiderComercial() {
           const { presenca, fator } = presencaDe(e.id);
           const gente = placar.pessoas.filter(p =>
             !p.robo && p.equipe_id === e.id
-            && (p.situacao !== 'desligado' || vendasDoSetor.some(v => v.operador_id === p.id)));
+            && (p.situacao !== 'desligado' || vendasDoSetor.some(v => donoDaVenda(v) === p.id)));
           return {
             equipe: e,
             acumulado: medir(resumo, regua),
@@ -430,7 +431,7 @@ export default function PainelLiderComercial() {
 
       const genteDoSetor = placar.pessoas.filter(p =>
         !p.robo && p.setor_id === setor.id
-        && (p.situacao !== 'desligado' || vendasDoSetor.some(v => v.operador_id === p.id)));
+        && (p.situacao !== 'desligado' || vendasDoSetor.some(v => donoDaVenda(v) === p.id)));
 
       return {
         setor,

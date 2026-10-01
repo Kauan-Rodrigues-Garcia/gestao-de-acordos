@@ -90,6 +90,7 @@ import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useVendas } from '@/hooks/useVendas';
 import { useVendasPlacar } from '@/hooks/useVendasPlacar';
+import { donoDaVenda, rotuloDoVendedor } from '@/lib/vendasIa';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import {
@@ -312,7 +313,13 @@ export default function Vendas() {
   /** Todas as pessoas que aparecem nas vendas, para o filtro — inclusive desligado e robô. */
   const vendedoresDoFiltro = useMemo(() => {
     const mapa = new Map<string, string>();
-    for (const v of [...vendas, ...pendentes]) mapa.set(v.operador_id, v.perfis?.nome ?? 'Sem nome');
+    // Pelo CRÉDITO: filtrar por uma pessoa traz também as vendas das IAs
+    // vinculadas a ela — é o que conta no número dela.
+    for (const v of [...vendas, ...pendentes]) {
+      const dono = donoDaVenda(v);
+      if (dono !== v.operador_id) { if (!mapa.has(dono)) mapa.set(dono, v.credito_nome ?? 'Sem nome'); }
+      else mapa.set(dono, rotuloDoVendedor(v).nome);
+    }
     return [...mapa].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }, [vendas, pendentes]);
 
@@ -328,7 +335,7 @@ export default function Vendas() {
   /** O recorte sem a busca — é o que os cards usam, e a lista reaproveita. */
   const noRecorte = (v: Venda) =>
     (filtroSetor === TODOS || v.setor_id === filtroSetor)
-    && (filtroVendedor === TODOS || v.operador_id === filtroVendedor)
+    && (filtroVendedor === TODOS || donoDaVenda(v) === filtroVendedor)
     && (filtroEquipe === TODOS || equipeDaVenda(v, placar.indice) === filtroEquipe);
 
   const filtrar = (lista: readonly Venda[]) => lista.filter(v => casaComBusca(v, busca) && noRecorte(v));

@@ -17,10 +17,19 @@
  */
 import { rpcSemTipo, tabelaSemTipo } from '@/lib/supabaseSemTipo';
 import type { OrigemVenda, SituacaoVenda } from '@/lib/vendas';
+import { creditarVendas, type CamposDeCredito } from '@/lib/vendasIa';
 import { mensagemDoErro, pareceNaoInstalado } from './erroDoBanco';
+import { indiceDeIas } from './iaVendas.service';
 
-/** A linha como o banco a devolve. `conta_na_meta` e `valor_na_meta` são geradas. */
-export interface Venda {
+/**
+ * A linha como o banco a devolve, mais o crédito.
+ *
+ * `conta_na_meta` e `valor_na_meta` são geradas pelo banco. Os campos de
+ * `CamposDeCredito` são acrescentados aqui, na busca: a venda de uma IA
+ * vinculada leva `credito_id` = o operador do vínculo (`@/lib/vendasIa`).
+ * `operador_id` continua sendo quem vendeu — é ele que o formulário edita.
+ */
+export interface Venda extends CamposDeCredito {
   id: string;
   empresa_id: string;
   operador_id: string;
@@ -110,6 +119,18 @@ function normalizar(linha: Record<string, unknown>): Venda {
 }
 
 /**
+ * Normaliza e credita. Toda busca de vendas passa por aqui — é o lugar único
+ * onde a venda da IA vinculada ganha dono, e nenhuma tela precisa lembrar.
+ */
+async function normalizarECreditar(
+  empresaId: string, linhas: readonly Record<string, unknown>[],
+): Promise<Venda[]> {
+  const vendas = linhas.map(normalizar);
+  if (vendas.length === 0) return vendas;
+  return creditarVendas(vendas, await indiceDeIas(empresaId));
+}
+
+/**
  * As vendas de um intervalo, pelo eixo pedido.
  *
  * O intervalo é fechado nos dois lados (`>=` e `<=`) porque quem chama pensa em
@@ -146,7 +167,11 @@ export async function buscarVendas(params: {
   if (error) {
     return { vendas: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
-  return { vendas: (data ?? []).map(normalizar), disponivel: true, erro: null };
+  return {
+    vendas: await normalizarECreditar(params.empresaId, data ?? []),
+    disponivel: true,
+    erro: null,
+  };
 }
 
 /**
@@ -167,7 +192,7 @@ export async function buscarPendentes(empresaId: string): Promise<VendasDoPeriod
   if (error) {
     return { vendas: [], disponivel: !pareceNaoInstalado(error.message), erro: error.message };
   }
-  return { vendas: (data ?? []).map(normalizar), disponivel: true, erro: null };
+  return { vendas: await normalizarECreditar(empresaId, data ?? []), disponivel: true, erro: null };
 }
 
 /**
@@ -213,7 +238,7 @@ export async function buscarForaDoRelatorio(empresaId: string): Promise<Venda[]>
     .or('fora_do_relatorio_em.not.is.null')
     .order('fora_do_relatorio_em', { ascending: false });
   if (error || !data) return [];
-  return data.map(normalizar);
+  return normalizarECreditar(empresaId, data);
 }
 
 /**

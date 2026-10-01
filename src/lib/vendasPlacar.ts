@@ -34,11 +34,17 @@ import {
   classificarVenda, resumirVendas,
   type ResumoVendas, type VendaSomavel, type EixoDaVenda,
 } from '@/lib/vendas';
+import { donoDaVenda, type CamposDeCredito } from '@/lib/vendasIa';
 
 /* ── O que cada função precisa saber de uma venda ─────────────────────────── */
 
 /** O mínimo para agrupar: a régua, o valor e a chave do agrupamento. */
-export interface VendaAgrupavel extends VendaSomavel {
+export interface VendaAgrupavel extends VendaSomavel, CamposDeCredito {
+  /**
+   * Quem VENDEU — numa venda de IA, a IA. Todo agrupamento por pessoa usa
+   * `donoDaVenda` (o crédito), nunca este campo direto: a IA vinculada
+   * credita o operador do vínculo (`@/lib/vendasIa`).
+   */
   operador_id: string;
   equipe_id: string | null;
   setor_id: string | null;
@@ -109,8 +115,9 @@ export function placarPorOperador(
 ): LinhaDoPlacar[] {
   const porPessoa = new Map<string, VendaAgrupavel[]>();
   for (const v of vendas) {
-    const lista = porPessoa.get(v.operador_id);
-    if (lista) lista.push(v); else porPessoa.set(v.operador_id, [v]);
+    const dono = donoDaVenda(v);
+    const lista = porPessoa.get(dono);
+    if (lista) lista.push(v); else porPessoa.set(dono, [v]);
   }
 
   const linhas = [...porPessoa].map(([operadorId, lista]): LinhaDoPlacar => {
@@ -120,7 +127,11 @@ export function placarPorOperador(
       operadorId,
       // A ordem das fontes importa: o cadastro vence o join da venda, porque o
       // join congela o nome de quando a venda foi gravada e o cadastro é hoje.
-      nome: cadastro?.nome ?? primeira.perfis?.nome ?? 'Sem nome',
+      nome: cadastro?.nome
+        ?? (primeira.credito_id && primeira.credito_id !== primeira.operador_id
+          ? primeira.credito_nome
+          : primeira.perfis?.nome)
+        ?? 'Sem nome',
       robo: cadastro?.robo ?? false,
       equipeId:   cadastro?.equipe_id   ?? primeira.equipe_id ?? null,
       equipeNome: cadastro?.equipe_nome ?? null,
@@ -184,10 +195,14 @@ const SEM_EQUIPE = '__sem_equipe__';
  * do da linha da mesma equipe no placar.
  */
 export function equipeDaVenda(
-  venda: Pick<VendaAgrupavel, 'operador_id' | 'equipe_id'>,
+  venda: Pick<VendaAgrupavel, 'operador_id' | 'equipe_id' | 'credito_id'>,
   pessoas: IndicePessoas,
 ): string | null {
-  return pessoas.get(venda.operador_id)?.equipe_id ?? venda.equipe_id ?? null;
+  const dono = donoDaVenda(venda);
+  // A equipe gravada na venda é a de quem VENDEU. Numa venda de IA creditada
+  // a alguém, ela não diz nada sobre a equipe de quem leva o crédito.
+  const gravada = dono === venda.operador_id ? venda.equipe_id : null;
+  return pessoas.get(dono)?.equipe_id ?? gravada ?? null;
 }
 
 /**
@@ -204,7 +219,8 @@ export function placarPorEquipe(
   const grupos = new Map<string, { nome: string; vendas: VendaAgrupavel[]; gente: Set<string> }>();
 
   for (const v of vendas) {
-    const cadastro = pessoas.get(v.operador_id);
+    const dono = donoDaVenda(v);
+    const cadastro = pessoas.get(dono);
     const id = equipeDaVenda(v, pessoas) ?? SEM_EQUIPE;
     const nome = cadastro?.equipe_nome ?? (id === SEM_EQUIPE ? 'Sem equipe' : 'Equipe');
     let g = grupos.get(id);
@@ -213,7 +229,7 @@ export function placarPorEquipe(
     // venda cujo operador não está no índice.
     if (cadastro?.equipe_nome) g.nome = cadastro.equipe_nome;
     g.vendas.push(v);
-    if (!cadastro?.robo) g.gente.add(v.operador_id);
+    if (!cadastro?.robo) g.gente.add(dono);
   }
 
   return [...grupos]
@@ -424,11 +440,14 @@ export function totalDoRecorte(
 
   for (const v of vendas) {
     if (classificarVenda(v) !== 'na_meta') continue;
-    if (pessoas.get(v.operador_id)?.robo) {
+    // Pelo CRÉDITO: a IA vinculada a uma pessoa já não é automação solta —
+    // a venda dela é da pessoa, e aparece no card «Vendas via IA».
+    const dono = donoDaVenda(v);
+    if (pessoas.get(dono)?.robo) {
       valorAutomacao += Number(v.valor_total) || 0;
       quantidadeAutomacao += 1;
     } else {
-      gente.add(v.operador_id);
+      gente.add(dono);
     }
   }
 

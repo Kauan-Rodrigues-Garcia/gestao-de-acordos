@@ -91,7 +91,8 @@ import { Faixa } from './componentes';
 import { CardsDoMes } from './dashboard/CardsDoMes';
 import { CardDoMes } from './dashboard/CardDoMes';
 import { EvolucaoVendas } from './dashboard/EvolucaoVendas';
-import { Podio, Equipes, Estados, FaixaDaAutomacao } from './dashboard/ComposicaoDoMes';
+import { Podio, Equipes, Estados, FaixaDaAutomacao, CardVendasViaIa } from './dashboard/ComposicaoDoMes';
+import { resumoDeIa } from '@/lib/vendasIa';
 
 /** O `Select` do shadcn recusa `value=""`; o «todos» precisa de um valor. */
 const TODOS = '__todos__';
@@ -223,6 +224,7 @@ export default function DashboardComercial() {
   const regua: ReguaMeta = (metaDoSetor?.regua as ReguaMeta | undefined) ?? 'valor';
 
   const total = useMemo(() => totalDoRecorte(vendas, placar.indice), [vendas, placar.indice]);
+  const viaIa = useMemo(() => resumoDeIa(vendas), [vendas]);
   const resumo = total.resumo;
 
   const { pessoas: ranking, automacao } = useMemo(
@@ -500,6 +502,8 @@ export default function DashboardComercial() {
           eixo={eixo}
         />
       )}
+
+      <CardVendasViaIa resumo={viaIa} totalDoMes={total.resumo.valor} />
 
       <FaixaDaAutomacao
         robos={automacao.length}
