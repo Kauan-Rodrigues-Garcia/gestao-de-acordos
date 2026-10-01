@@ -22,7 +22,7 @@
  * ```
  */
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { lazy, Suspense, useState, useRef, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
@@ -282,7 +282,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [boasVindasVez, setBoasVindasVez] = useState(0);
   // A pessoa apertou «Ler agora» no envelope que está na tela.
   const [cartaAberta, setCartaAberta] = useState(false);
-  const tourJaVisto = !!perfil?.tour_visto_em;
+  /*
+   * O tutorial saiu do caminho? Vem do PRÓPRIO tutorial (`onFinished`), e não
+   * só de `perfil.tour_visto_em`: na conta nova o tutorial grava a data no
+   * banco, mas o perfil em memória não muda — e a mensagem só aparecia depois
+   * de recarregar a página (achado em 01/10/2026).
+   */
+  const [tourResolvido, setTourResolvido] = useState(false);
+  const aoResolverTour = useCallback(() => setTourResolvido(true), []);
+  const tourJaVisto = !!perfil?.tour_visto_em || tourResolvido;
   useEffect(() => {
     if (!hw.ligado || termoLoading || precisaAceitar) return;
     if (pediuBoasVindasNaUrl()) { setBoasVindasAberta(true); return; }
@@ -955,11 +963,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Suspense>
           </div>
         ) : conteudo}
-        {/* `onFinished` saiu junto com o mascote: o fim do tour só servia para
-            liberar o card de despedida dele, hoje em `arquivo-morto/pet/`. */}
+        {/* `onFinished` voltou em 01/10/2026: libera a mensagem de Halloween
+            assim que o tutorial sai do caminho, sem recarregar a página. */}
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
+          onFinished={aoResolverTour}
         />
         {boasVindasAberta && (
           <Suspense fallback={null}>

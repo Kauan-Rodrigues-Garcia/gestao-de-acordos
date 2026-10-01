@@ -236,7 +236,13 @@ interface OnboardingTourProps {
   precisaAceitar: boolean;
   /** true enquanto o hook de termos ainda está carregando */
   termoLoading: boolean;
-  /** Chamado quando o tour é concluído ou pulado */
+  /**
+   * Chamado quando o tutorial deixa de estar no caminho: concluído, pulado,
+   * ou já visto antes (aí ele nem abre). Quem espera o tutorial — a mensagem
+   * de Halloween — escuta isto, e não `perfil.tour_visto_em`: a data é gravada
+   * no banco, mas o perfil em memória só a vê depois de recarregar a página.
+   * Passe uma função estável (`useCallback`).
+   */
   onFinished?: () => void;
 }
 
@@ -279,9 +285,12 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
     // Quem entra como outra pessoa não gasta o tutorial dela.
     if (getImpersonacaoAtiva()) return;
     const chave = chaveDoTour(user.id);
-    if (localStorage.getItem(chave)) return;
+    // Tutorial já visto: avisa que não vai abrir, para quem espera por ele
+    // (a mensagem de Halloween) seguir sem precisar recarregar a página.
+    if (localStorage.getItem(chave)) { onFinished?.(); return; }
     if (tourVistoEm) {
       localStorage.setItem(chave, '1');
+      onFinished?.();
       return;
     }
     const t = setTimeout(() => {
@@ -290,7 +299,7 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
       void registrarTourVisto(perfilId);
     }, 1000);
     return () => clearTimeout(t);
-  }, [user?.id, perfilId, tourVistoEm, precisaAceitar, termoLoading, empresaLoading, permLoading, chaveDoTour]);
+  }, [user?.id, perfilId, tourVistoEm, precisaAceitar, termoLoading, empresaLoading, permLoading, chaveDoTour, onFinished]);
 
   // ── Finalizar tour ─────────────────────────────────────────────────────────
   const finish = useCallback(() => {
