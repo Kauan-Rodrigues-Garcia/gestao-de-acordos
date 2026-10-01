@@ -36,6 +36,15 @@ export interface ResumoExclusao {
    * `logs_sistema`.
    */
   logsAuditoria: number;
+  /**
+   * O que a pessoa tem em mês JÁ FECHADO, em texto («3 acordo(s), 12
+   * pagamento(s) no analítico»). `null` = nada, pode excluir.
+   *
+   * Com histórico fechado o banco recusa a exclusão (20261001120000): excluir
+   * apagaria ou desvincularia números de um mês já apresentado. A tela mostra
+   * o motivo e manda para «Desligar», que tira o login e guarda o histórico.
+   */
+  historicoFechado: string | null;
 }
 
 export type ResultadoExclusao =
@@ -84,13 +93,35 @@ export async function resumoExclusao(userId: string): Promise<ResumoExclusao | n
     console.warn('[exclusaoUsuario] resumo indisponível:', error?.message);
     return null;
   }
+  const historicoFechado = await historicoEmMesFechado(userId);
   return {
+    historicoFechado,
     nome:      data.nome,
     empresaId: data.empresa_id,
     acordos:   Number(data.acordos)   || 0,
     historico: Number(data.historico) || 0,
     logsAuditoria: Number(data.logs_auditoria) || 0,
   };
+}
+
+/**
+ * O que a pessoa tem em mês fechado. `null` = nada, ou a função ainda não
+ * existe no banco (migration 20261001120000 pendente) — aí quem decide é a
+ * exclusão, como antes.
+ */
+export async function historicoEmMesFechado(userId: string): Promise<string | null> {
+  const { data, error } = await rpc<string | null>(
+    'fn_usuario_historico_em_mes_fechado', { p_user_id: userId },
+  );
+  if (error) return null;
+  return data ? String(data) : null;
+}
+
+/** A frase para quem tenta excluir alguém com histórico em mês fechado. */
+export function mensagemHistoricoFechado(historico: string): string {
+  return `Esta pessoa tem histórico em mês já fechado (${historico}). `
+    + 'Excluir mudaria números de um mês fechado. Use «Desligar»: o login é '
+    + 'bloqueado e o histórico fica.';
 }
 
 /** Colunas do relatório, na ordem em que aparecem na planilha. */
@@ -196,6 +227,11 @@ export async function excluirUsuarioComAcordos(params: {
 }): Promise<ResultadoExclusao> {
   const { userId, nome } = params;
 
+  // Mês fechado não muda por exclusão — antes da planilha, para não baixar
+  // um relatório de uma exclusão que o banco vai recusar.
+  const historico = await historicoEmMesFechado(userId);
+  if (historico) return { status: 'falha', mensagem: mensagemHistoricoFechado(historico) };
+
   let relatorio: string | null = null;
   try {
     const acordos = await buscarAcordosDoUsuario(userId);
@@ -265,6 +301,10 @@ export function traduzirErro(mensagem: string): string {
   // — o que nunca resolveu nada, porque o problema nunca esteve no navegador.
   if (/lançamento\(s\) de RH|A exclusão parou numa tabela/i.test(mensagem)) {
     return mensagem;
+  }
+  // A recusa de mês fechado já vem dizendo o que fazer; só sai o código.
+  if (/MES_FECHADO_USUARIO:/.test(mensagem)) {
+    return mensagem.replace(/^.*MES_FECHADO_USUARIO:\s*/, '').replace(/^./, c => c.toUpperCase());
   }
   if (/violates foreign key constraint/i.test(mensagem)) {
     // Sobrou o texto cru do Postgres: pelo menos entrega o nome da tabela, que
