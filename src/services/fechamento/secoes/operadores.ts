@@ -11,6 +11,7 @@ import { esc, brl, num, comSinal } from '../formato';
 import { corDaProjecao, corDaVariacao } from '../graficos/paleta';
 import {
   htmlTabela, htmlPilulaQuartil, htmlPct, htmlCabecalhoSecao, painel, htmlVazio,
+  htmlMetaBatida, metaBatidaDe,
 } from './componentes';
 import type { LinhaOperadorFechamento } from '../tipos';
 
@@ -25,7 +26,8 @@ export function tabelaOperadores(
 
   const cabecalho = `<th>#</th><th>Operador</th>${mostrarSetor ? '<th>Setor</th>' : ''}`
     + '<th class="n">Recebido</th><th class="n">Pagtos</th><th class="n">Meta</th>'
-    + '<th class="n">% meta</th><th class="n">vs. esperado</th><th class="n">Quartil</th>';
+    + '<th class="n">% meta</th><th>Meta batida</th><th class="n">vs. esperado</th>'
+    + '<th class="n">Quartil</th>';
 
   const corpo = linhas.map((o, i) => `
     <tr>
@@ -41,6 +43,7 @@ export function tabelaOperadores(
       <td class="n">${o.meta !== null
         ? htmlPct(o.pctMeta, corDaProjecao(o.pctMeta))
         : '<span class="fraco">—</span>'}</td>
+      <td>${htmlMetaBatida(metaBatidaDe(o))}</td>
       <td class="n">${o.diferenca !== null
         ? `<span style="color:${corDaVariacao(o.diferenca)}">${esc(comSinal(o.diferenca))}</span>`
         : '<span class="fraco">—</span>'}</td>
@@ -54,19 +57,42 @@ export function secaoOperadores(
   linhas: readonly LinhaOperadorFechamento[],
   opcoes: { mostrarSetor?: boolean } = {},
 ): string {
-  const comMeta = linhas.filter(o => o.meta !== null && o.meta > 0);
-  const bateram = comMeta.filter(o => o.bruto >= (o.meta as number)).length;
+  const metas = linhas.map(metaBatidaDe).filter((m): m is NonNullable<typeof m> => m !== null);
+  const bateram = metas.filter(m => m.degrau > 0).length;
 
-  const resumoLateral = comMeta.length
-    ? `<span class="fraco">${bateram} de ${comMeta.length} bateram a meta</span>`
+  const resumoLateral = metas.length
+    ? `<span class="fraco">${bateram} de ${metas.length} bateram a meta</span>`
     : '';
 
   return painel(`${htmlCabecalhoSecao({
     titulo: 'Detalhamento por operador',
     rotuloSlide: 'Operadores',
     ajuda: 'Mesma leitura do Painel do Líder: recebido no mês, meta, quanto disso foi '
-      + 'alcançado e a posição contra o esperado até aqui. Quem não tem meta cadastrada '
-      + 'aparece sem percentual — é ausência de alvo, não desempenho ruim.',
+      + 'alcançado, a maior meta batida e a posição contra o esperado. Quem não tem meta '
+      + 'cadastrada aparece sem percentual — é ausência de alvo, não desempenho ruim.',
     aoLado: resumoLateral,
-  })}${tabelaOperadores(linhas, opcoes)}`);
+  })}${distribuicaoMetas(metas)}${tabelaOperadores(linhas, opcoes)}`);
+}
+
+/**
+ * Quantas pessoas pararam em cada meta — "4 na 1ª, 2 na 2ª, 3 em nenhuma".
+ *
+ * Só aparece quando o mês tem mais de um degrau: com meta única, a contagem já
+ * está no "X de Y bateram a meta" do cabeçalho, e repeti-la seria ruído.
+ */
+function distribuicaoMetas(metas: ReadonlyArray<{ degrau: number; total: number }>): string {
+  const maxDegraus = Math.max(0, ...metas.map(m => m.total));
+  if (maxDegraus < 2) return '';
+
+  const contagem = new Map<number, number>();
+  for (const m of metas) contagem.set(m.degrau, (contagem.get(m.degrau) ?? 0) + 1);
+
+  const itens = Array.from({ length: maxDegraus }, (_, i) => maxDegraus - i)
+    .map(d => ({ rotulo: `${d}ª meta`, qtd: contagem.get(d) ?? 0 }))
+    .concat({ rotulo: 'Nenhuma', qtd: contagem.get(0) ?? 0 });
+
+  return `<ul class="faixa-metas">${itens.map(i => `
+    <li${i.qtd ? '' : ' class="zerado"'}>
+      <strong>${esc(num(i.qtd))}</strong><span>${esc(i.rotulo)}</span>
+    </li>`).join('')}</ul>`;
 }

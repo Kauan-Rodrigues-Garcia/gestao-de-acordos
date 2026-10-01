@@ -11,12 +11,14 @@ import { COR_QUARTIL, corDaProjecao, corDaVariacao, COR_NEUTRA } from '../grafic
 import { svgBarrasDiarias, type DiaBarra } from '../graficos/barrasDiarias';
 import { svgDonut } from '../graficos/donut';
 import { barraProgressoMarcos } from '../graficos/progressoMarcos';
-import { htmlCartoes, htmlCabecalhoSecao, painel } from './componentes';
+import { htmlCartoes, htmlCabecalhoSecao, painel, rotuloMetaBatida } from './componentes';
+import { metaBatidaDoEscopo } from './capa';
 import type { DadosFechamento } from '../tipos';
 
 export function secaoVisaoDoMes(d: DadosFechamento): string {
   const { resumo, diasUteis } = d;
   const proj = resumo.projecao;
+  const batida = metaBatidaDoEscopo(d);
 
   // ── Progresso da meta, com os degraus em cascata ─────────────────────────
   const progresso = resumo.meta
@@ -50,8 +52,17 @@ export function secaoVisaoDoMes(d: DadosFechamento): string {
   const cartoes = htmlCartoes([
     {
       rotulo: 'Total recebido', valor: brl(resumo.totalBruto),
-      apoio: `${num(resumo.qtdPagamentos)} pagamento(s)`, cor: COR_QUARTIL[1],
+      apoio: `${num(resumo.qtdPagamentos)} pagamento(s)`,
     },
+    batida
+      ? {
+        rotulo: 'Meta batida', valor: rotuloMetaBatida(batida),
+        apoio: batida.degrau > 0
+          ? `${brl(batida.valor as number)}${batida.total > 1 ? ` · ${batida.degrau} de ${batida.total} metas` : ''}`
+          : 'nenhuma meta alcançada no mês',
+        cor: batida.degrau > 0 ? COR_QUARTIL[1] : undefined,
+      }
+      : null,
     resumo.totalHO > 0
       ? { rotulo: 'H.O. retido', valor: brl(resumo.totalHO), apoio: 'parcela que fica na operação' }
       : null,
@@ -102,11 +113,11 @@ export function secaoVisaoDoMes(d: DadosFechamento): string {
     })}${htmlCartoes([
       {
         rotulo: 'Recebimento direto', valor: brl(resumo.vinculo.direto),
-        apoio: `${num(resumo.vinculo.qtdDireto)} pagamento(s)`, cor: '#6366f1',
+        apoio: `${num(resumo.vinculo.qtdDireto)} pagamento(s)`,
       },
       {
         rotulo: 'Recebimento extra', valor: brl(resumo.vinculo.extra),
-        apoio: `${num(resumo.vinculo.qtdExtra)} pagamento(s)`, cor: '#f59e0b',
+        apoio: `${num(resumo.vinculo.qtdExtra)} pagamento(s)`,
       },
       {
         rotulo: 'Sem vínculo definido', valor: brl(resumo.vinculo.naoTabulado),

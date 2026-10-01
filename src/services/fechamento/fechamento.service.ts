@@ -66,6 +66,7 @@ import { coletarMesAnterior } from './coleta/mesAnterior';
 import { coletarSeriesPorOperador, type SerieOperador } from './coleta/seriesPorOperador';
 import { montarCuriosidades } from './curiosidades';
 import { TETO_PAGINAS_INDIVIDUAIS } from './secoes/individual';
+import { metaAtingida } from '@/services/fechamentoOperadores/calculoFechamento';
 import type {
   DadosFechamento, NivelFechamento, FatiaForma, PontoDia,
   LinhaOperadorFechamento, LinhaSetorFechamento, FaixaQuartilFechamento,
@@ -545,8 +546,6 @@ export async function montarFechamento(
     });
     const info = fontes.operadorEquipeMap[r.operador_id];
     const serie = series.get(r.operador_id);
-    // A meta principal conta como degrau: "2 de 3 batidas" inclui ela.
-    const degraus = meta ? [meta, ...metasExtras] : [];
 
     return {
       id: r.operador_id,
@@ -563,7 +562,10 @@ export async function montarFechamento(
       quartil: proj?.quartil?.quartil ?? null,
       diferenca: proj ? proj.diferenca : null,
       metasExtras,
-      metasBatidas: degraus.filter(v => bruto >= v).length,
+      // A meta principal conta como degrau: "2 de 3 batidas" inclui ela. Mesma
+      // régua (em centavos) da coluna META ATINGIDA da aba Fechamento — o
+      // relatório e a planilha da gerência não podem discordar da meta batida.
+      metasBatidas: metaAtingida(bruto, meta, metasExtras) ?? 0,
       porDia: serie?.porDia ?? [],
       porForma: serie?.porForma ?? [],
     };

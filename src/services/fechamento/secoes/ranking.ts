@@ -6,8 +6,14 @@
  */
 
 import { htmlPodio, htmlRankingBarras, type ItemRanking } from '../graficos/rankingBarras';
-import { htmlCabecalhoSecao, painel } from './componentes';
+import { htmlCabecalhoSecao, painel, metaBatidaDe, rotuloMetaBatida } from './componentes';
 import type { LinhaOperadorFechamento } from '../tipos';
+
+/** "2ª meta" para quem bateu alguma; nada para quem não bateu ou não tem meta. */
+function seloMeta(o: LinhaOperadorFechamento): string | null {
+  const m = metaBatidaDe(o);
+  return m && m.degrau > 0 ? rotuloMetaBatida(m) : null;
+}
 
 export function secaoRanking(
   linhas: readonly LinhaOperadorFechamento[],
@@ -21,6 +27,7 @@ export function secaoRanking(
     qtd: o.qtd,
     detalhe: o.equipeNome,
     destacado: !!opcoes.destacarId && o.id === opcoes.destacarId,
+    selo: seloMeta(o),
   }));
 
   return painel(`${htmlCabecalhoSecao({

@@ -109,4 +109,4 @@ export function svgBarrasDiarias(
 }
 
 /** Vermelho da linha de meta — fixo, é referência e não faixa de desempenho. */
-const COR_LINHA_META = '#ef4444';
+const COR_LINHA_META = '#b91c1c';

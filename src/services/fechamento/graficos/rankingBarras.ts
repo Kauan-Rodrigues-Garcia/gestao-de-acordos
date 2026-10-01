@@ -20,6 +20,8 @@ export interface ItemRanking {
   detalhe?: string | null;
   /** Marca a linha da própria pessoa no relatório individual. */
   destacado?: boolean;
+  /** Etiqueta curta ao lado do nome — hoje, a meta batida ("2ª meta"). */
+  selo?: string | null;
 }
 
 /** O pódio dos três primeiros. Vazio com menos de três. */
@@ -31,6 +33,7 @@ export function htmlPodio(itens: readonly ItemRanking[]): string {
       <strong>${esc(o.nome)}</strong>
       <span class="podio-valor">${esc(brl(o.valor))}</span>
       <span class="fraco">${esc(num(o.qtd))} pagamento(s)${o.detalhe ? ` · ${esc(o.detalhe)}` : ''}</span>
+      ${o.selo ? `<span class="podio-selo">${esc(o.selo)}</span>` : ''}
     </div>`).join('')}</div>`;
 }
 
@@ -46,10 +49,13 @@ export function htmlRankingBarras(itens: readonly ItemRanking[]): string {
 
   const linhas = itens.map((o, i) => {
     const largura = Math.max((o.valor / maior) * 100, o.valor > 0 ? 1 : 0);
-    const cor = i < 3 ? COR_PODIO[i] : 'var(--acento)';
+    // Uma cor só: a barra compara tamanho, e cor por posição repetiria o
+    // número que já está escrito ao lado. O primeiro leva o tom cheio.
+    const cor = i === 0 ? 'var(--acento)' : 'var(--barra)';
     return `<li${o.destacado ? ' class="eu"' : ''}>
       <span class="rank-pos">${i + 1}</span>
-      <span class="rank-nome" title="${esc(o.nome)}">${esc(o.nome)}</span>
+      <span class="rank-nome" title="${esc(o.nome)}">${esc(o.nome)}${o.selo
+        ? ` <em class="rank-selo">${esc(o.selo)}</em>` : ''}</span>
       <span class="rank-barra"><i style="width:${largura.toFixed(1)}%;background:${cor}"></i></span>
       <span class="rank-valor">${esc(brl(o.valor))}</span>
     </li>`;

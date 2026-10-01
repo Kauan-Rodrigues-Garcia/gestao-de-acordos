@@ -14,12 +14,12 @@
  */
 
 import { esc, brl, num, comSinal, pct } from '../formato';
-import { corDaProjecao, corDaVariacao, COR_PIX } from '../graficos/paleta';
+import { corDaProjecao, corDaVariacao, COR_PIX, COR_QUARTIL } from '../graficos/paleta';
 import { svgSparkline } from '../graficos/sparkline';
 import { svgDonut } from '../graficos/donut';
 import { barraProgressoMarcos } from '../graficos/progressoMarcos';
 import {
-  htmlCartoes, htmlCabecalhoSecao, htmlPilulaQuartil, painel,
+  htmlCartoes, htmlCabecalhoSecao, htmlPilulaQuartil, painel, metaBatidaDe, rotuloMetaBatida,
 } from './componentes';
 import type { LinhaOperadorFechamento, BlocoPixFechamento } from '../tipos';
 
@@ -58,6 +58,7 @@ function paginaDaPessoa(
 
   const semMeta = o.meta === null || o.meta <= 0;
   const semMovimento = o.bruto <= 0;
+  const batida = metaBatidaDe(o);
 
   const cartoes = htmlCartoes([
     {
@@ -68,6 +69,15 @@ function paginaDaPessoa(
     semMeta
       ? { rotulo: 'Meta', valor: '—', apoio: 'sem meta cadastrada para o mês' }
       : { rotulo: 'Meta do mês', valor: brl(o.meta as number), apoio: `${pct(o.pctMeta)} alcançado` },
+    batida
+      ? {
+        rotulo: 'Meta batida', valor: rotuloMetaBatida(batida),
+        apoio: batida.degrau > 0
+          ? `${brl(batida.valor as number)}${batida.total > 1 ? ` · ${batida.degrau} de ${batida.total} metas` : ''}`
+          : 'nenhuma meta alcançada no mês',
+        cor: batida.degrau > 0 ? COR_QUARTIL[1] : undefined,
+      }
+      : null,
     o.diferenca !== null
       ? {
         rotulo: 'Contra o esperado', valor: comSinal(o.diferenca),

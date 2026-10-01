@@ -7,8 +7,9 @@
  * uma apresentação parecer montada às pressas.
  */
 
-import { esc, pct } from '../formato';
+import { esc, pct, brl } from '../formato';
 import { COR_QUARTIL, COR_NEUTRA } from '../graficos/paleta';
+import type { LinhaOperadorFechamento } from '../tipos';
 
 export interface Cartao {
   rotulo: string;
@@ -41,7 +42,53 @@ export function htmlCartoes(
 export function htmlPilulaQuartil(quartil: number | null): string {
   if (quartil === null) return '<span class="fraco">—</span>';
   const cor = COR_QUARTIL[quartil] ?? COR_NEUTRA;
-  return `<span class="pilula" style="background:${cor}22;color:${cor}">${quartil}º</span>`;
+  return `<span class="pilula"><i style="background:${cor}"></i>${quartil}º</span>`;
+}
+
+/**
+ * A maior meta que a pessoa bateu no mês.
+ *
+ * `degrau` 1 = 1ª meta, 2 = 2ª meta…; `0` = tem meta e não bateu nenhuma.
+ * `null` = sem meta cadastrada — ausência de alvo, não "não bateu".
+ *
+ * A contagem é `metasBatidas`, que a coleta já calcula com a mesma régua da
+ * planilha da gerência (`metaAtingida`). Aqui só se acha o VALOR daquele
+ * degrau, para o relatório dizer "2ª meta · R$ 150 mil" e não só um número.
+ */
+export interface MetaBatida {
+  degrau: number;
+  /** Valor do degrau batido. `null` quando não bateu nenhum. */
+  valor: number | null;
+  /** Quantos degraus o mês tinha, a meta principal incluída. */
+  total: number;
+}
+
+export function metaBatidaDe(
+  o: Pick<LinhaOperadorFechamento, 'meta' | 'metasExtras' | 'metasBatidas'>,
+): MetaBatida | null {
+  if (o.meta === null || o.meta <= 0) return null;
+  const degraus = [o.meta, ...o.metasExtras].filter(v => v > 0).sort((a, b) => a - b);
+  const degrau = Math.min(Math.max(o.metasBatidas, 0), degraus.length);
+  return { degrau, valor: degrau > 0 ? degraus[degrau - 1] : null, total: degraus.length };
+}
+
+/** "2ª meta", ou "Nenhuma" — o rótulo curto, para tabela e legenda. */
+export function rotuloMetaBatida(m: MetaBatida | null): string {
+  if (m === null) return 'Sem meta';
+  return m.degrau > 0 ? `${m.degrau}ª meta` : 'Nenhuma';
+}
+
+/**
+ * Selo da meta batida: discreto, com o valor do degrau embaixo.
+ *
+ * Sem meta vira travessão, como as outras colunas que dependem dela.
+ */
+export function htmlMetaBatida(m: MetaBatida | null): string {
+  if (m === null) return '<span class="fraco">—</span>';
+  if (m.degrau === 0) return '<span class="meta-batida nenhuma">Nenhuma</span>';
+  const apoio = m.total > 1 ? `${brl(m.valor as number)} · de ${m.total}` : brl(m.valor as number);
+  return `<span class="meta-batida">${esc(rotuloMetaBatida(m))}</span>`
+    + `<span class="sub">${esc(apoio)}</span>`;
 }
 
 /** Percentual colorido, ou travessão quando não há meta. */

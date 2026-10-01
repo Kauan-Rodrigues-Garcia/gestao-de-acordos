@@ -49,10 +49,14 @@ export function corDaVariacao(v: number): string {
  *
  * Ordem estável: a forma na posição N recebe sempre a cor N, então Pix é da
  * mesma cor no donut do setor e no donut de cada operador do mesmo relatório.
+ *
+ * Tons sóbrios (01/10/2026): azul-marinho, azuis e um verde-petróleo, com um
+ * terroso no fim para a 8ª fatia ainda se distinguir. Nada de rosa e laranja
+ * vivos — o relatório é documento de diretoria, não painel de jogo.
  */
 export const CORES_FORMA = [
-  '#6366f1', '#22c55e', '#f59e0b', '#06b6d4',
-  '#ec4899', '#8b5cf6', '#14b8a6', '#f97316',
+  '#1e3a8a', '#3b82f6', '#93c5fd', '#0f766e',
+  '#5eead4', '#64748b', '#cbd5e1', '#a16207',
 ] as const;
 
 /** Cor das fatias agregadas em "outras" quando as formas excedem a paleta. */

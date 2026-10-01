@@ -27,7 +27,8 @@ export function secaoQuartis(faixas: readonly FaixaQuartilFechamento[]): string 
     .sort((a, b) => a.faixa.quartil - b.faixa.quartil)
     .map(q => `
       <div class="quartil-bloco">
-        <h4 style="color:${COR_QUARTIL[q.faixa.quartil] ?? 'var(--fraco)'}">
+        <h4 data-quartil="${q.faixa.quartil}">
+          <i class="ponto-quartil" style="background:${COR_QUARTIL[q.faixa.quartil] ?? 'var(--fraco)'}"></i>
           ${q.faixa.quartil}º quartil
           <span class="fraco">a partir de ${esc(pct(q.faixa.min_pct))} do esperado</span>
         </h4>

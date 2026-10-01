@@ -284,7 +284,8 @@ describe('montarHtmlFechamento — seções', () => {
     const html = montarHtmlFechamento(dados());
     expect(html).toContain('2º quartil');
     // O 1º aparece só na legenda da pizza, com zero — nunca como bloco de lista.
-    expect(html).not.toContain('<h4 style="color:#22c55e">');
+    expect(html).not.toContain('data-quartil="1"');
+    expect(html).toContain('data-quartil="2"');
   });
 
   it('o bloco de vínculo some quando o setor não usa Direto/Extra', () => {
@@ -459,6 +460,68 @@ describe('seção de fechamento individual', () => {
     }));
     expect(html).toContain('de 3 metas batidas');
     expect(html).toContain('com-marcos');
+  });
+});
+
+// ── Meta batida ──────────────────────────────────────────────────────────────
+
+describe('meta batida por operador', () => {
+  const cascata = (bruto: number, metasBatidas: number) => operador({
+    bruto, meta: 100_000, metasExtras: [200_000, 300_000], metasBatidas,
+  });
+
+  it('a tabela de operadores diz QUAL meta foi batida, com o valor do degrau', () => {
+    const html = montarHtmlFechamento(dados({ operadores: [cascata(250_000, 2)] }));
+    expect(html).toContain('<th>Meta batida</th>');
+    expect(html).toContain('<span class="meta-batida">2ª meta</span>');
+    // `brl` usa espaço não separável depois do R$.
+    expect(html).toMatch(/R\$\s200\.000,00 · de 3/);
+  });
+
+  it('quem tem meta e não bateu aparece como "Nenhuma", não como travessão', () => {
+    const html = montarHtmlFechamento(dados({ operadores: [cascata(50_000, 0)] }));
+    expect(html).toContain('<span class="meta-batida nenhuma">Nenhuma</span>');
+  });
+
+  it('sem meta cadastrada não inventa "Nenhuma"', () => {
+    const html = montarHtmlFechamento(dados({
+      operadores: [operador({ meta: null, pctMeta: 0, projecaoPct: null, quartil: null, diferenca: null })],
+    }));
+    expect(html).not.toContain('meta-batida nenhuma');
+  });
+
+  it('a página individual ganha o cartão de meta batida', () => {
+    const html = montarHtmlFechamento(dados({ operadores: [cascata(350_000, 3)] }));
+    expect(html).toContain('3ª meta');
+    expect(html).toContain('3 de 3 metas');
+  });
+
+  it('com degraus, mostra quantas pessoas pararam em cada meta', () => {
+    const html = montarHtmlFechamento(dados({
+      operadores: [
+        cascata(250_000, 2), operador({ ...cascata(120_000, 1), id: 'op-2', nome: 'Nayara Cruz' }),
+        operador({ ...cascata(10_000, 0), id: 'op-3', nome: 'Bryan Lima' }),
+      ],
+    }));
+    expect(html).toContain('class="faixa-metas"');
+    expect(html).toContain('2 de 3 bateram a meta');
+  });
+
+  it('o ranking marca a meta batida ao lado do nome', () => {
+    const html = montarHtmlFechamento(dados({
+      ranking: [cascata(250_000, 2), operador({ id: 'op-2', nome: 'Nayara Cruz' })],
+    }));
+    expect(html).toContain('<em class="rank-selo">2ª meta</em>');
+  });
+
+  it('a capa diz qual meta o escopo bateu', () => {
+    const d = dados();
+    const html = montarHtmlFechamento({
+      ...d,
+      resumo: { ...d.resumo, totalBruto: 1_500_000, meta: 1_000_000 },
+      metasExtrasEscopo: [1_400_000, 2_000_000],
+    });
+    expect(html).toMatch(/Meta batida<\/span>\s*<span class="medio">2ª meta/);
   });
 });
 

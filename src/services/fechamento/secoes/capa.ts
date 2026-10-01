@@ -11,7 +11,26 @@
 
 import { esc, brl, pct, num } from '../formato';
 import { corDaProjecao } from '../graficos/paleta';
+import { metaBatidaDe, rotuloMetaBatida, type MetaBatida } from './componentes';
 import type { DadosFechamento } from '../tipos';
+
+/**
+ * A maior meta que o ESCOPO do relatório bateu — o setor, ou a pessoa.
+ *
+ * Mesma régua de `metaBatidaDe`, aplicada à meta do escopo e aos degraus dele
+ * (`metasExtrasEscopo`). Comparação em centavos, como `metaAtingida`.
+ */
+export function metaBatidaDoEscopo(d: DadosFechamento): MetaBatida | null {
+  const { meta, totalBruto } = d.resumo;
+  if (meta === null || meta <= 0) return null;
+  const centavos = (v: number) => Math.round(v * 100);
+  const degraus = [meta, ...d.metasExtrasEscopo].filter(v => v > 0);
+  return metaBatidaDe({
+    meta,
+    metasExtras: d.metasExtrasEscopo,
+    metasBatidas: degraus.filter(v => centavos(totalBruto) >= centavos(v)).length,
+  });
+}
 
 /**
  * O veredito do mês em uma frase.
@@ -58,11 +77,14 @@ export function secaoCapa(d: DadosFechamento): string {
   ].filter(Boolean).join(' · ') || alvo.empresaNome;
 
   const cor = resumo.meta ? corDaProjecao(resumo.pctMeta) : undefined;
+  const batida = metaBatidaDoEscopo(d);
 
+  // O total fica na cor do texto: num documento sóbrio, a cor vai só onde há
+  // julgamento (o percentual), e não em todo número grande da página.
   const numeros = `<div class="capa-numeros">
     <div class="capa-numero">
       <span class="rotulo-forte">Total recebido</span>
-      <strong class="total-grande"${cor ? ` style="color:${cor}"` : ''}>${esc(brl(resumo.totalBruto))}</strong>
+      <strong class="total-grande">${esc(brl(resumo.totalBruto))}</strong>
     </div>
     ${resumo.meta !== null ? `<div class="capa-numero">
       <span class="rotulo-forte">Meta do mês</span>
@@ -71,6 +93,10 @@ export function secaoCapa(d: DadosFechamento): string {
     <div class="capa-numero">
       <span class="rotulo-forte">Alcançado</span>
       <span class="medio"${cor ? ` style="color:${cor}"` : ''}>${esc(pct(resumo.pctMeta))}</span>
+    </div>` : ''}
+    ${batida ? `<div class="capa-numero">
+      <span class="rotulo-forte">Meta batida</span>
+      <span class="medio">${esc(rotuloMetaBatida(batida))}</span>
     </div>` : ''}
     <div class="capa-numero">
       <span class="rotulo-forte">Pagamentos</span>
