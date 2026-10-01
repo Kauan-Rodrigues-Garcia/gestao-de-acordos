@@ -39,6 +39,8 @@ import {
   type ConversaChat, type MensagemChat, type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
+import { AboboraChat } from '@/components/Halloween/Desenhos';
+import { useTemaHalloween } from '@/components/Halloween/tema';
 import { PainelSobDemanda } from '@/components/PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
@@ -90,6 +92,10 @@ const CHAVE_LARGURA = 'chat-expandido';
 
 export function BolhaChat() {
   const { perfil } = useAuth();
+  const halloween = useTemaHalloween();
+  // Só o mouse acende a abóbora. O foco não: ao fechar a janela o foco volta
+  // para a bolha e a abóbora ficava acesa até trocar de aba.
+  const [mouseNaBolha, setMouseNaBolha] = useState(false);
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
   const [aberto, setAberto] = useState(false);
@@ -337,6 +343,8 @@ export function BolhaChat() {
   const abrirJanela = useCallback(() => {
     abertoRef.current = true;
     setAberto(true);
+    // A bolha some com o mouse em cima e o `mouseleave` nunca chega.
+    setMouseNaBolha(false);
     // Minimizar conserva a conversa selecionada. Ao voltar ela se torna
     // visível novamente, então relê e marca como lida o que chegou no intervalo.
     if (chat.conversaAberta) chat.abrir(chat.conversaAberta);
@@ -424,38 +432,43 @@ export function BolhaChat() {
       `}</style>
       <button
         onClick={abrirJanela}
-        onMouseEnter={() => { setSobre(true); precarregarJanela(); }}
-        onMouseLeave={() => setSobre(false)}
+        onMouseEnter={() => { setSobre(true); setMouseNaBolha(true); precarregarJanela(); }}
+        onMouseLeave={() => { setSobre(false); setMouseNaBolha(false); }}
         onFocus={() => { setSobre(true); precarregarJanela(); }}
         onBlur={() => setSobre(false)}
         className={cn(
           'fixed bottom-6 right-6 z-40 w-14 h-14 group',
           // Quadrado de cantos arredondados. `rounded-2xl` e não `rounded-full`:
           // pedido explícito, e combina com o resto do sistema, que é todo
-          // feito de cartões de canto arredondado.
-          'rounded-2xl bg-primary text-primary-foreground',
-          'shadow-lg transition-all duration-300',
+          // feito de cartões de canto arredondado. No Halloween o quadrado
+          // some e a bolha é a própria abóbora.
+          halloween ? 'rounded-2xl' : 'rounded-2xl bg-primary text-primary-foreground shadow-lg',
+          'transition-all duration-300',
           'hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95',
           'flex items-center justify-center',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         )}
         aria-label={chat.naoLidasTotal ? `Chat, ${chat.naoLidasTotal} não lidas` : 'Abrir o chat'}
       >
-        {chat.naoLidasTotal > 0 && (
+        {chat.naoLidasTotal > 0 && !halloween && (
           <span
             aria-hidden="true"
             className="chat-alerta-pendente pointer-events-none absolute -inset-1 rounded-[18px] border-2 border-primary/70"
           />
         )}
         {/* O brilho, atrás. Acende no hover e fica aceso com mensagem nova. */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
-            sobre || chat.naoLidasTotal > 0 ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-        <IconeChat ativo={sobre || chat.naoLidasTotal > 0} />
+        {!halloween && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
+              sobre || chat.naoLidasTotal > 0 ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+        )}
+        {halloween
+          ? <AboboraChat acesa={mouseNaBolha || chat.naoLidasTotal > 0} />
+          : <IconeChat ativo={sobre || chat.naoLidasTotal > 0} />}
 
         {chat.naoLidasTotal > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold flex items-center justify-center ring-2 ring-background">

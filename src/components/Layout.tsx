@@ -21,8 +21,8 @@
  * </Layout>
  * ```
  */
-import { NavLink, useNavigate } from 'react-router-dom';
-import { lazy, useState, useRef, useEffect, useMemo } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
@@ -57,6 +57,10 @@ import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
+import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
+import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, useHalloween } from '@/components/Halloween/preferencia';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -90,11 +94,19 @@ const carregarDesempenhoDia  = comNovaTentativa(() => import('./DesempenhoDia'))
 const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/PainelDesafio'));
 const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
 const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
+// Tema de Halloween: só quem está com ele ligado baixa as camadas.
+const carregarHalloween      = comNovaTentativa(() => import('@/components/Halloween/CenaHalloween'));
 
 const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ default: m.DesempenhoDia })));
 const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
 const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
 const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
+const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m.FundoHalloween })));
+const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
+const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
+const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
+const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
+const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -238,6 +250,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
+  // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
+  // `Halloween/preferencia.ts`. Até a validação, só o super_admin.
+  const { pathname } = useLocation();
+  const hw = useHalloween();
+  const halloween = hw.ligado;
+  const cenaHalloween = useMemo(() => cenaDaRota(pathname, isPP), [pathname, isPP]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -248,6 +266,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoes();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
+
+  /*
+   * A mensagem de outubro: uma vez por pessoa, com o tema carregando por trás.
+   * Espera o termo de uso e o tutorial de quem nunca entrou — as duas coisas
+   * na tela ao mesmo tempo seria demais —, e não gasta a mensagem de quem está
+   * sendo visto por impersonação. `?hw-boas-vindas` reabre, para validar.
+   */
+  const [boasVindasAberta, setBoasVindasAberta] = useState(false);
+  const tourJaVisto = !!perfil?.tour_visto_em;
+  useEffect(() => {
+    if (!hw.ligado || termoLoading || precisaAceitar) return;
+    if (pediuBoasVindasNaUrl()) { setBoasVindasAberta(true); return; }
+    if (hw.boasVindasPendentes && tourJaVisto && !getImpersonacaoAtiva()) setBoasVindasAberta(true);
+  }, [hw.ligado, hw.boasVindasPendentes, tourJaVisto, termoLoading, precisaAceitar]);
+  // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
+  useEffect(() => {
+    if (!hw.ligado) return;
+    const abrir = () => setBoasVindasAberta(true);
+    window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
+  }, [hw.ligado]);
+  const fecharBoasVindas = () => {
+    setBoasVindasAberta(false);
+    if (pediuBoasVindasNaUrl()) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('hw-boas-vindas');
+      window.history.replaceState(window.history.state, '', url);
+    }
+    if (!getImpersonacaoAtiva()) hw.marcarBoasVindasVistas();
+  };
 
   /*
    * A campanha que o menu anuncia.
@@ -424,7 +472,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
-              <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
+              {halloween
+                ? <MarcaHalloween nome={branding.appName} />
+                : <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>}
             </motion.div>
           )}
         </AnimatePresence>
@@ -594,7 +644,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 
+  const conteudo = (
+    <main className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
+      {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
+          rolam com a página — ficar parado lá em cima era o defeito. */}
+      {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
+      {children}
+    </main>
+  );
+
   return (
+    <TemaHalloweenContext.Provider value={halloween}>
     <div className="flex h-screen bg-background overflow-hidden">
       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
           fluxo e acima de tudo: aparecer e sumir não move um pixel do conteúdo,
@@ -720,7 +780,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </Button>
             <HelpDrawer />
-            <ThemeToggle />
+            <ThemeToggle
+              halloween={hw.disponivel
+                ? { ligado: !hw.desligado, alternar: ligar => hw.definirDesligado(!ligar) }
+                : undefined}
+            />
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
               <PopoverTrigger asChild>
@@ -842,15 +906,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <ChevronRight className={cn('w-3 h-3 transition-transform', sidebarOpen && 'rotate-180')} />
         </button>
 
-        <main className="flex-1 overflow-y-auto bg-background">
-          {children}
-        </main>
+        {halloween ? (
+          // Caixa própria para as camadas do tema: a coluna de fora não pode
+          // virar `relative`, senão o botão de recolher o menu muda de lugar.
+          <div className="relative flex-1 min-h-0 flex flex-col bg-background">
+            <Suspense fallback={null}>{temFundo(cenaHalloween) && <FundoHalloween cena={cenaHalloween} />}</Suspense>
+            {conteudo}
+            <Suspense fallback={null}>
+              <SobreposicaoHalloween cena={cenaHalloween} />
+              <RevoadaHalloween />
+            </Suspense>
+          </div>
+        ) : conteudo}
         {/* `onFinished` saiu junto com o mascote: o fim do tour só servia para
             liberar o card de despedida dele, hoje em `arquivo-morto/pet/`. */}
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
         />
+        {boasVindasAberta && (
+          <Suspense fallback={null}>
+            <BoasVindasHalloween nome={perfil?.nome} preparar={carregarHalloween} aoFechar={fecharBoasVindas} />
+          </Suspense>
+        )}
       </div>
 
       <PainelSobDemanda aberto={painelDiaAberto} nome="Desempenho do dia">
@@ -993,5 +1071,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
       </PainelSobDemanda>
     </div>
+    </TemaHalloweenContext.Provider>
   );
 }
