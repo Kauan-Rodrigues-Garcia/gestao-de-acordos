@@ -242,13 +242,16 @@ function CartaAberta({ nome, preparar, aoFechar }: PropsBoasVindas) {
 
         <div className="relative mt-3 space-y-3 text-[15px] leading-relaxed" style={{ color: 'oklch(0.9 0.02 80)' }}>
           <p>
-            {mes} terminou, e cada acordo fechado, cada ligação feita com paciência e cada
-            cliente que você ajudou a sair do aperto fizeram diferença. Obrigado pelo
-            carinho e pela dedicação de todos os dias — o mês foi bom porque você estava nele.
+            {mes} chegou ao fim, e queremos agradecer a cada um de vocês por toda a
+            dedicação, empenho e parceria ao longo do mês.
           </p>
           <p>
-            Que outubro chegue leve: com metas batidas, café quentinho e uma equipe que
-            segura a mão uma da outra. Estamos juntos em cada dia dele.
+            Que outubro chegue trazendo novas oportunidades, metas alcançadas, muitos
+            motivos para comemorar e, claro, aquela parceria de equipe que faz toda a
+            diferença nos desafios do dia a dia.
+          </p>
+          <p>
+            Que seja um mês de conquistas, evolução e excelentes resultados para todos nós!
           </p>
         </div>
 
