@@ -2,8 +2,8 @@
  * OlhosNaFumaca — o fundo do Analítico: olhos vermelhos atrás de uma fumaça
  * densa, como quem espia por um vidro embaçado.
  *
- *   Olhos  — SVG, olhos de bicho no escuro: vermelho vivo, pupila escura,
- *            em quatro feitios (bravo, gato, meia-lua, redondo). Olham para os
+ *   Olhos  — SVG, olhos de bicho no escuro: brancos no tema escuro, pretos no
+ *            claro, em quatro feitios (bravo, gato, meia-lua, redondo). Olham para os
  *            lados, piscam e somem devagar para reaparecer em outro lugar.
  *   Fumaca — canvas: lufadas macias que sobem e derivam, crescem e se
  *            desfazem. Clara no tema escuro e escura no claro.
@@ -19,8 +19,8 @@ const acaso = (min: number, max: number) => min + Math.random() * (max - min);
 
 // ── Olhos ─────────────────────────────────────────────────────────────────────
 //
-// Olhos de bicho no escuro, no traço do desenho animado: vermelho vivo, sem
-// branco, pupila escura. Quatro feitios, todos desenhados como o olho ESQUERDO
+// Olhos de bicho no escuro, no traço do desenho animado. No tema escuro são
+// brancos e brilham, com pupila preta; no claro são pretos, com pupila clara. Quatro feitios, todos desenhados como o olho ESQUERDO
 // (o canto do nariz à direita, num quadro de 100 × 60); o direito é o mesmo
 // espelhado.
 
@@ -55,7 +55,14 @@ type Par = {
   visivel: boolean; pisca: boolean; olhar: number; inclina: number;
 };
 
-export function Olhos() {
+/** As duas paletas: brancos que brilham no escuro, pretos no claro. */
+const PALETAS = {
+  escuro: { de: '#c9ced8', meio: '#eef1f6', ate: '#ffffff', luz: '#ffffff', luzForca: '.6', pupila: '#07070a' },
+  claro:  { de: '#000000', meio: '#0b0b0d', ate: '#26262b', luz: '#5a5a63', luzForca: '.35', pupila: '#e9e9ec' },
+} as const;
+
+export function Olhos({ claro = false }: { claro?: boolean }) {
+  const paleta = PALETAS[claro ? 'claro' : 'escuro'];
   const base = useId().replace(/:/g, '');
   const [pares, setPares] = useState<Par[]>([]);
 
@@ -101,16 +108,16 @@ export function Olhos() {
       {/* Um jogo de gradientes para todos os olhos da tela. */}
       <svg width="0" height="0" className="absolute" aria-hidden="true">
         <defs>
-          {/* Vermelho vivo, mais escuro embaixo e no canto de fora. */}
+          {/* Mais fechado no canto de fora, mais aceso perto do nariz. */}
           <linearGradient id={cor} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#c4101a" />
-            <stop offset="55%" stopColor="#e3202a" />
-            <stop offset="100%" stopColor="#f2343c" />
+            <stop offset="0%" stopColor={paleta.de} />
+            <stop offset="55%" stopColor={paleta.meio} />
+            <stop offset="100%" stopColor={paleta.ate} />
           </linearGradient>
           {/* Um clarão no meio, como se brilhassem por dentro. */}
           <radialGradient id={luz} cx="55%" cy="45%" r="55%">
-            <stop offset="0%" stopColor="#ff6a5a" stopOpacity=".55" />
-            <stop offset="100%" stopColor="#ff6a5a" stopOpacity="0" />
+            <stop offset="0%" stopColor={paleta.luz} stopOpacity={paleta.luzForca} />
+            <stop offset="100%" stopColor={paleta.luz} stopOpacity="0" />
           </radialGradient>
         </defs>
       </svg>
@@ -134,7 +141,7 @@ export function Olhos() {
                   <path d={f.contorno} fill={`url(#${cor})`} />
                   <g clipPath={`url(#${clip})`}>
                     <path d={f.contorno} fill={`url(#${luz})`} />
-                    <g className="hw-iris"><path d={f.pupila} fill="#160305" /></g>
+                    <g className="hw-iris"><path d={f.pupila} fill={paleta.pupila} /></g>
                   </g>
                 </svg>
               );

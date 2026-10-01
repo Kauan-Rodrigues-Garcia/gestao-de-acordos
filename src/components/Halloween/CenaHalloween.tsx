@@ -40,7 +40,7 @@ export function FundoHalloween({ cena }: { cena: CenaHalloween }) {
     <div className={cn('hw-fundo text-foreground', claro && 'hw-claro')} aria-hidden="true">
       {cena.nuvens && <Nuvens />}
       {cena.chuva && <Chuva />}
-      {cena.olhos && <Olhos />}
+      {cena.olhos && <Olhos claro={claro} />}
       {cena.olhos && <Fumaca claro={claro} />}
       {cena.nevoa && !cena.olhos && <Nevoa densa={false} />}
     </div>

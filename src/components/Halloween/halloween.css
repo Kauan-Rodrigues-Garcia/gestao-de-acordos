@@ -62,10 +62,11 @@
 @keyframes hw-neblina { from { transform: translateX(-6%) scale(1); } to { transform: translateX(7%) scale(1.08); } }
 
 /* ── Olhos na fumaça (Analítico) — ver OlhosNaFumaca.tsx ─────────────────── */
-/* Contorno nítido e um brilho vermelho que vaza em volta; um borrão leve para
-   assentarem na névoa, que passa por cima deles. */
+/* Contorno nítido e um brilho que vaza em volta — branco no escuro, sombra
+   preta no claro; um borrão leve para assentarem na névoa, que passa por cima. */
 .hw-olhos { position: absolute; display: flex; align-items: center; gap: var(--gap, 18px); transition: opacity 3s ease;
-  filter: blur(.6px) drop-shadow(0 0 5px rgb(255 30 40 / .55)) drop-shadow(0 0 16px rgb(220 10 20 / .35)); }
+  filter: blur(.6px) drop-shadow(0 0 5px rgb(255 255 255 / .5)) drop-shadow(0 0 16px rgb(210 220 255 / .3)); }
+.hw-claro .hw-olhos { filter: blur(.6px) drop-shadow(0 0 5px rgb(0 0 0 / .45)) drop-shadow(0 0 14px rgb(0 0 0 / .3)); }
 .hw-olhos::before { content: ''; position: absolute; inset: -40px -50px; border-radius: 50%; z-index: -1;
   background: radial-gradient(closest-side, rgb(20 0 2 / .55), rgb(20 0 2 / .15) 60%, transparent); }
 .hw-claro .hw-olhos::before { background: radial-gradient(closest-side, rgb(20 0 2 / .3), rgb(20 0 2 / .08) 60%, transparent); }
