@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { ROUTE_PATHS } from '@/lib';
 import { ComChapeu } from './Desenhos';
-import { TemaHalloweenContext, cenaDaRota, halloweenLigado, indiceDaPessoa, temFundo } from './tema';
+import { TemaHalloweenContext, cenaDaRota, indiceDaPessoa, temFundo } from './tema';
+import { podeVerHalloween } from './preferencia';
 
 describe('tema de Halloween', () => {
   it('por enquanto só o super_admin vê', () => {
-    expect(halloweenLigado('super_admin')).toBe(true);
-    for (const p of ['administrador', 'diretoria', 'operador', null, undefined]) expect(halloweenLigado(p)).toBe(false);
+    expect(podeVerHalloween('super_admin')).toBe(true);
+    for (const p of ['administrador', 'diretoria', 'operador', null, undefined]) expect(podeVerHalloween(p)).toBe(false);
   });
 
   it('cada tela ganha só o que foi pedido', () => {

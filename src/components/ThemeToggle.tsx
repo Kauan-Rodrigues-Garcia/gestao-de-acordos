@@ -85,7 +85,18 @@ function Amostra({ tema }: { tema: TemaInfo }) {
   );
 }
 
-export function ThemeToggle() {
+/**
+ * O interruptor do Halloween, quando a temporada está aberta para a pessoa.
+ *
+ * Vem do `Layout` por propriedade, e não de `useHalloween()` aqui dentro: o
+ * botão de tema não depende do login, e assim continua não dependendo.
+ */
+export interface InterruptorHalloween {
+  ligado: boolean;
+  alternar: (ligar: boolean) => void;
+}
+
+export function ThemeToggle({ halloween }: { halloween?: InterruptorHalloween } = {}) {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const atual = (theme ?? 'system') as EscolhaTema;
   const escuroEmVigor = ehTemaEscuro(resolvedTheme);
@@ -164,6 +175,25 @@ export function ThemeToggle() {
           Sistema
           {atual === 'system' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
+        {/*
+          Halloween (outubro): só os enfeites, sem trocar cor nenhuma. Sem
+          aviso, de propósito — quem não quer só desliga. O menu fica aberto,
+          como no menu lateral escuro, para a pessoa ver o efeito na hora.
+        */}
+        {halloween && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={halloween.ligado}
+              onCheckedChange={v => halloween.alternar(v === true)}
+              onSelect={e => e.preventDefault()}
+              className="gap-2"
+            >
+              <span aria-hidden className="text-[13px] leading-none">🎃</span>
+              Detalhes de Halloween
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

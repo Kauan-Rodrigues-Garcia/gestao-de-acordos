@@ -1,31 +1,10 @@
 import { useEffect, type CSSProperties } from 'react';
+import { carregarFonte } from './fonte';
 
 /**
  * O nome do sistema no menu, com «Halloween» em cima — na mesma fonte da
- * prévia do tema (Creepster), em cor de abóbora.
- *
- * A fonte mora no próprio site (`public/fonts/creepster.woff2`, licença OFL),
- * e não no Google: um domínio a menos para a rede da operação liberar. Ela só
- * é declarada quando o tema está ligado — quem não vê o Halloween não baixa
- * nada. A declaração entra uma vez e fica: tirar ao desligar faria a fonte
- * piscar em cada troca de tela.
+ * prévia do tema (Creepster, ver `fonte.ts`), em cor de abóbora.
  */
-const ID_FONTE = 'hw-fonte-creepster';
-const FONTE = `@font-face {
-  font-family: 'Creepster';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/creepster.woff2') format('woff2');
-}`;
-
-function carregarFonte() {
-  if (typeof document === 'undefined' || document.getElementById(ID_FONTE)) return;
-  const estilo = document.createElement('style');
-  estilo.id = ID_FONTE;
-  estilo.textContent = FONTE;
-  document.head.appendChild(estilo);
-}
 
 /*
  * Estilo aqui, e não em `halloween.css`: o `Layout` importa este componente

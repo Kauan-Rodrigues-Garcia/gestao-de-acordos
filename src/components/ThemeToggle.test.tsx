@@ -130,3 +130,32 @@ describe('ehTemaEscuro', () => {
       .toEqual([false, false, false, false, false]);
   });
 });
+
+describe('ThemeToggle — interruptor de Halloween', () => {
+  async function abrir(halloween?: { ligado: boolean; alternar: (v: boolean) => void }) {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const r = render(
+      <ThemeProvider attribute="class" defaultTheme="light" themes={NOMES_TEMAS} enableColorScheme={false}>
+        <ThemeToggle halloween={halloween} />
+      </ThemeProvider>,
+    );
+    await user.click(r.getByRole('button'));
+    return { ...r, user };
+  }
+
+  it('fora da temporada (sem a propriedade) o menu não tem o interruptor', async () => {
+    const r = await abrir();
+    expect(r.queryByText('Detalhes de Halloween')).toBeNull();
+  });
+
+  it('desligar é um clique, sem aviso', async () => {
+    const alternar = vi.fn();
+    const r = await abrir({ ligado: true, alternar });
+    const item = await r.findByRole('menuitemcheckbox', { name: /Detalhes de Halloween/ });
+    expect(item.getAttribute('aria-checked')).toBe('true');
+    await r.user.click(item);
+    expect(alternar).toHaveBeenCalledWith(false);
+    expect(r.queryByRole('alertdialog')).toBeNull();
+  });
+});

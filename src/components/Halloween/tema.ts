@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import { ROUTE_PATHS } from '@/lib';
 
 /**
- * Tema de Halloween — pré-estreia só para o super_admin (30/09/2026).
+ * Tema de Halloween — em pré-estreia até a validação (`preferencia.ts`).
  *
  * O `Layout` decide e publica aqui; quem desenha (bolha do chat, fotos) só lê.
  * Contexto e não `useAuth` direto: o padrão é `false`, então os componentes
@@ -11,7 +11,10 @@ import { ROUTE_PATHS } from '@/lib';
 export const TemaHalloweenContext = createContext(false);
 export const useTemaHalloween = () => useContext(TemaHalloweenContext);
 
-export const halloweenLigado = (perfil: string | null | undefined) => perfil === 'super_admin';
+/*
+ * Quem vê o tema saiu daqui para `preferencia.ts` (01/10/2026): temporada,
+ * liberação e a escolha de desligar de cada pessoa.
+ */
 
 /** O que cada tela ganha. Chat, chapéus e morcegos não dependem de tela. */
 export interface CenaHalloween {

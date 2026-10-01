@@ -57,7 +57,9 @@ import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
-import { TemaHalloweenContext, cenaDaRota, halloweenLigado, temFundo } from '@/components/Halloween/tema';
+import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
+import { pediuBoasVindasNaUrl, useHalloween } from '@/components/Halloween/preferencia';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
@@ -103,6 +105,8 @@ const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m
 const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
 const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
 const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
+const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
+const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -246,9 +250,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
-  // Tema de Halloween — pré-estreia só do super_admin. Ver `Halloween/tema.ts`.
+  // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
+  // `Halloween/preferencia.ts`. Até a validação, só o super_admin.
   const { pathname } = useLocation();
-  const halloween = halloweenLigado(perfil?.perfil);
+  const hw = useHalloween();
+  const halloween = hw.ligado;
   const cenaHalloween = useMemo(() => cenaDaRota(pathname, isPP), [pathname, isPP]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
@@ -260,6 +266,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoes();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
+
+  /*
+   * A mensagem de outubro: uma vez por pessoa, com o tema carregando por trás.
+   * Espera o termo de uso e o tutorial de quem nunca entrou — as duas coisas
+   * na tela ao mesmo tempo seria demais —, e não gasta a mensagem de quem está
+   * sendo visto por impersonação. `?hw-boas-vindas` reabre, para validar.
+   */
+  const [boasVindasAberta, setBoasVindasAberta] = useState(false);
+  const tourJaVisto = !!perfil?.tour_visto_em;
+  useEffect(() => {
+    if (!hw.ligado || termoLoading || precisaAceitar) return;
+    if (pediuBoasVindasNaUrl()) { setBoasVindasAberta(true); return; }
+    if (hw.boasVindasPendentes && tourJaVisto && !getImpersonacaoAtiva()) setBoasVindasAberta(true);
+  }, [hw.ligado, hw.boasVindasPendentes, tourJaVisto, termoLoading, precisaAceitar]);
+  const fecharBoasVindas = () => {
+    setBoasVindasAberta(false);
+    if (pediuBoasVindasNaUrl()) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('hw-boas-vindas');
+      window.history.replaceState(window.history.state, '', url);
+    }
+    if (!getImpersonacaoAtiva()) hw.marcarBoasVindasVistas();
+  };
 
   /*
    * A campanha que o menu anuncia.
@@ -744,7 +773,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </Button>
             <HelpDrawer />
-            <ThemeToggle />
+            <ThemeToggle
+              halloween={hw.disponivel
+                ? { ligado: !hw.desligado, alternar: ligar => hw.definirDesligado(!ligar) }
+                : undefined}
+            />
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
               <PopoverTrigger asChild>
@@ -884,6 +917,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
         />
+        {boasVindasAberta && (
+          <Suspense fallback={null}>
+            <BoasVindasHalloween nome={perfil?.nome} preparar={carregarHalloween} aoFechar={fecharBoasVindas} />
+          </Suspense>
+        )}
       </div>
 
       <PainelSobDemanda aberto={painelDiaAberto} nome="Desempenho do dia">
