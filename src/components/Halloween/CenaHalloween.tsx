@@ -4,6 +4,7 @@ import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { EVENTO_ACORDO_SALVO, type CenaHalloween } from './tema';
 import { FANTASMA, sortearEsconderijo, type Esconderijo } from './esconderijo';
+import { Fumaca, Olhos } from './OlhosNaFumaca';
 import './halloween.css';
 
 /*
@@ -11,7 +12,8 @@ import './halloween.css';
  * (barra de cima + conteúdo), que fica `relative` enquanto o tema está ligado:
  *
  *   FundoHalloween   — atrás do `<main>` (que fica transparente): chuva,
- *                      nuvens, névoa, olhos. Só aparece nos vãos entre cards.
+ *                      nuvens, névoa, olhos na fumaça (`OlhosNaFumaca`). Só
+ *                      aparece nos vãos entre cards.
  *   CamadaHalloween  — DENTRO do `<main>`, no alto do conteúdo: teias,
  *                      aranha, fantasmas, lanterna. Rola junto com a página.
  *   SobreposicaoHalloween — parada por cima do conteúdo: clarão do trovão e
@@ -39,7 +41,8 @@ export function FundoHalloween({ cena }: { cena: CenaHalloween }) {
       {cena.nuvens && <Nuvens />}
       {cena.chuva && <Chuva />}
       {cena.olhos && <Olhos />}
-      {(cena.nevoa || cena.olhos) && <Nevoa densa={cena.olhos} />}
+      {cena.olhos && <Fumaca claro={claro} />}
+      {cena.nevoa && !cena.olhos && <Nevoa densa={false} />}
     </div>
   );
 }
@@ -123,46 +126,6 @@ function Nevoa({ densa }: { densa: boolean }) {
     <div className="hw-nevoa">
       {manchas.map((m, i) => <i key={i} style={{ left: m.left, top: m.top, width: m.width, height: m.height, ['--t' as string]: m.t, animationDelay: m.d }} />)}
     </div>
-  );
-}
-
-/** Olhos que aparecem na névoa, olham, piscam de vez em quando e somem. */
-function Olhos() {
-  type Par = { id: number; x: number; y: number; w: number; gap: number; t: number; visivel: boolean; pisca: boolean };
-  const [pares, setPares] = useState<Par[]>([]);
-  useEffect(() => {
-    let id = 0; const timers: number[] = [];
-    const novo = (): Par => {
-      const w = acaso(14, 26);
-      return { id: id++, x: acaso(4, 92), y: acaso(8, 88), w, gap: w * acaso(0.7, 1.1), t: acaso(5, 9), visivel: false, pisca: false };
-    };
-    setPares(Array.from({ length: 5 }, novo));
-    const mostrar = () => setPares(ps => ps.map(p => ({ ...p, visivel: true })));
-    timers.push(window.setTimeout(mostrar, 80));
-    // Um par some e outro aparece em outro lugar, devagar
-    timers.push(window.setInterval(() => {
-      setPares(ps => { const i = Math.floor(Math.random() * ps.length); return ps.map((p, j) => (j === i ? { ...p, visivel: false } : p)); });
-      timers.push(window.setTimeout(() => {
-        setPares(ps => { const i = ps.findIndex(p => !p.visivel); if (i < 0) return ps; const c = [...ps]; c[i] = novo(); return c; });
-        timers.push(window.setTimeout(mostrar, 60));
-      }, 2800));
-    }, 9000));
-    // Piscadas
-    timers.push(window.setInterval(() => {
-      setPares(ps => { const i = Math.floor(Math.random() * ps.length); return ps.map((p, j) => (j === i ? { ...p, pisca: true } : p)); });
-      timers.push(window.setTimeout(() => setPares(ps => ps.map(p => ({ ...p, pisca: false }))), 260));
-    }, 2300));
-    return () => timers.forEach(t => { window.clearTimeout(t); window.clearInterval(t); });
-  }, []);
-  return (
-    <>
-      {pares.map(p => (
-        <div key={p.id} className={cn('hw-olhos', p.pisca && 'pisca')}
-          style={{ left: `${p.x}%`, top: `${p.y}%`, opacity: p.visivel ? 0.85 : 0, ['--w' as string]: `${p.w}px`, ['--gap' as string]: `${p.gap}px`, ['--t' as string]: `${p.t}s` }}>
-          <span className="hw-olho" /><span className="hw-olho" />
-        </div>
-      ))}
-    </>
   );
 }
 

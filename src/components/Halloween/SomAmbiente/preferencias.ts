@@ -46,7 +46,14 @@ export interface PreferenciasSom {
 }
 
 /** Baixo de propósito: é som de fundo para quem está trabalhando. */
-export const VOLUME_PADRAO = 20;
+export const VOLUME_PADRAO = 15;
+/**
+ * O padrão de antes (até 01/10/2026). Quem tem exatamente ele gravado e ainda
+ * não passou pela versão 2 ficou com o padrão, não escolheu: desce para o novo.
+ */
+const VOLUME_PADRAO_ANTIGO = 20;
+/** Versão do que vai gravado. A 2 é a do padrão em 15%. */
+const VERSAO = 2;
 export const LIMITE_PLAYLISTS = 12;
 
 export const PADRAO: PreferenciasSom = {
@@ -83,9 +90,10 @@ export function normalizar(bruto: unknown): PreferenciasSom {
     }
   }
 
-  const volume = typeof o.volume === 'number' && Number.isFinite(o.volume)
+  const lido = typeof o.volume === 'number' && Number.isFinite(o.volume)
     ? Math.round(Math.min(100, Math.max(0, o.volume)))
     : VOLUME_PADRAO;
+  const volume = o.v !== VERSAO && lido === VOLUME_PADRAO_ANTIGO ? VOLUME_PADRAO : lido;
 
   const faixa = typeof o.faixa === 'string' && (ehEmbutida(o.faixa) || playlists.some(p => p.id === o.faixa))
     ? o.faixa
@@ -104,7 +112,7 @@ export function lerPreferencias(perfilId: string): PreferenciasSom {
 }
 
 export function gravarPreferencias(perfilId: string, prefs: PreferenciasSom): void {
-  try { localStorage.setItem(chave(perfilId), JSON.stringify(prefs)); } catch { /* modo privado */ }
+  try { localStorage.setItem(chave(perfilId), JSON.stringify({ ...prefs, v: VERSAO })); } catch { /* modo privado */ }
 }
 
 /** Link salvo de volta em formato que o motor toca. */

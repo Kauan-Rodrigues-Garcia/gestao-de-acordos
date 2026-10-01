@@ -14,6 +14,10 @@
  * que o som é daqui, e não de outra aba. E quando a música muda com o painel
  * fechado (acabou e veio a próxima, ou começou sozinha ao entrar), um card
  * «Tocando agora» aparece logo abaixo do botão por alguns segundos.
+ *
+ * Só quando começa uma música NOVA. Cada tela do sistema monta o `Layout` de
+ * novo, e este botão junto — por isso a memória do que já foi anunciado mora
+ * em `anuncio.ts`, e não aqui.
  */
 import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -27,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { dentroDoPalco, iniciarSessao, soltarSessao, useSomAmbiente } from './motor';
 import { infoDaFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
+import { anunciarSeNova } from './anuncio';
 
 const carregarPainel = comNovaTentativa(() => import('./PainelSomAmbiente'));
 const PainelSomAmbiente = lazy(() => carregarPainel().then(m => ({ default: m.PainelSomAmbiente })));
@@ -56,11 +61,8 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
   // Anuncia cada música uma vez, quando ela de fato começa. Com o painel
   // aberto a troca já está à vista: só marca como anunciada.
   const [anuncio, setAnuncio] = useState<string | null>(null);
-  const anunciada = useRef<string | null>(null);
   useEffect(() => {
-    if (!tocando || !noAr || noAr === anunciada.current) return;
-    anunciada.current = noAr;
-    if (!aberto) setAnuncio(noAr);
+    if (anunciarSeNova(noAr, tocando) && !aberto) setAnuncio(noAr);
   }, [tocando, noAr, aberto]);
   useEffect(() => { if (aberto) setAnuncio(null); }, [aberto]);
   const sumir = useCallback(() => setAnuncio(null), []);
