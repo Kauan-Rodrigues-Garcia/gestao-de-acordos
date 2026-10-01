@@ -240,6 +240,66 @@ const SCRIPT_NAVEGACAO = `
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); mostrar(atual - 1); }
   });
 })();
+
+// ── Ordenar tabela pelo cabeçalho ─────────────────────────────────────────
+// Cada <th data-ordem> ordena pelo data-v das células daquela coluna. O
+// primeiro clique segue a direção natural da coluna (maior primeiro, A a Z,
+// 1º quartil primeiro); o seguinte inverte. Célula sem valor (sem meta) vai
+// SEMPRE para o fim, nas duas direções — não é zero, é ausência. Empate
+// mantém a ordem original, que é o ranking por recebido: em "Meta batida",
+// quem bateu a 3ª aparece primeiro, e entre eles quem mais recebeu.
+// Só seletores e children: tBodies/rows/cells/cellIndex faltam em leitor de
+// HTML mais simples, e a tabela tem de continuar funcionando lá.
+(function () {
+  var lista = function (x) { return Array.prototype.slice.call(x); };
+  lista(document.querySelectorAll('table.ordenavel')).forEach(function (tabela) {
+    var corpo = tabela.querySelector('tbody');
+    if (!corpo) return;
+    var linhasDe = function () { return lista(corpo.children); };
+    linhasDe().forEach(function (tr, i) { tr.setAttribute('data-i', String(i)); });
+    var todos = lista(tabela.querySelectorAll('thead th'));
+    var cabecalhos = todos.filter(function (h) { return h.hasAttribute('data-ordem'); });
+
+    function valor(tr, coluna) {
+      var td = tr.children[coluna];
+      return td ? td.getAttribute('data-v') || '' : '';
+    }
+
+    function ordenar(th) {
+      var coluna = todos.indexOf(th);
+      var tipo = th.getAttribute('data-ordem');
+      var atual = th.getAttribute('aria-sort');
+      var crescente = atual ? atual !== 'ascending' : tipo !== 'maior';
+
+      cabecalhos.forEach(function (h) { if (h !== th) h.removeAttribute('aria-sort'); });
+      th.setAttribute('aria-sort', crescente ? 'ascending' : 'descending');
+
+      var ordenadas = linhasDe().sort(function (a, b) {
+        var va = valor(a, coluna), vb = valor(b, coluna);
+        var ia = Number(a.getAttribute('data-i')), ib = Number(b.getAttribute('data-i'));
+        if (va === '' || vb === '') {
+          if (va === vb) return ia - ib;
+          return va === '' ? 1 : -1;
+        }
+        var r = tipo === 'texto'
+          ? va.localeCompare(vb, 'pt-BR', { sensitivity: 'base' })
+          : Number(va) - Number(vb);
+        if (r === 0) return ia - ib;
+        return crescente ? r : -r;
+      });
+      ordenadas.forEach(function (tr) { corpo.appendChild(tr); });
+    }
+
+    cabecalhos.forEach(function (th) {
+      th.tabIndex = 0;
+      th.title = 'Clique para ordenar';
+      th.addEventListener('click', function () { ordenar(th); });
+      th.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ordenar(th); }
+      });
+    });
+  });
+})();
 `;
 
 /**

@@ -120,8 +120,8 @@ export function painel(conteudo: string): string {
 }
 
 /** Tabela com rolagem horizontal própria, para não empurrar a página. */
-export function htmlTabela(cabecalho: string, corpo: string): string {
-  return `<div class="rolagem"><table class="grade">
+export function htmlTabela(cabecalho: string, corpo: string, classeExtra = ''): string {
+  return `<div class="rolagem"><table class="grade${classeExtra ? ` ${classeExtra}` : ''}">
     <thead><tr>${cabecalho}</tr></thead>
     <tbody>${corpo}</tbody>
   </table></div>`;

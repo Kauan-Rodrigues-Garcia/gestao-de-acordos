@@ -393,7 +393,7 @@ describe('montarHtmlFechamento — recorte do líder e da diretoria', () => {
   it('o relatório de líder não mostra a coluna de setor', () => {
     const html = montarHtmlFechamento(dados());
     expect(html).toContain('>Operadores</button>');
-    expect(html).not.toContain('<th>Setor</th>');
+    expect(html).not.toContain('<th data-ordem="texto">Setor</th>');
   });
 
   it('o da diretoria mostra a coluna de setor e agrupa as páginas individuais', () => {
@@ -404,7 +404,7 @@ describe('montarHtmlFechamento — recorte do líder e da diretoria', () => {
         meta: 200, pctMeta: 50, operadores: 2, pctDaEmpresa: 100,
       }],
     }));
-    expect(html).toContain('<th>Setor</th>');
+    expect(html).toContain('<th data-ordem="texto">Setor</th>');
     expect(html).toContain('<div class="divisor">Receptivo</div>');
   });
 });
@@ -472,7 +472,7 @@ describe('meta batida por operador', () => {
 
   it('a tabela de operadores diz QUAL meta foi batida, com o valor do degrau', () => {
     const html = montarHtmlFechamento(dados({ operadores: [cascata(250_000, 2)] }));
-    expect(html).toContain('<th>Meta batida</th>');
+    expect(html).toContain('<th data-ordem="maior">Meta batida</th>');
     expect(html).toContain('<span class="meta-batida">2ª meta</span>');
     // `brl` usa espaço não separável depois do R$.
     expect(html).toMatch(/R\$\s200\.000,00 · de 3/);
@@ -522,6 +522,71 @@ describe('meta batida por operador', () => {
       metasExtrasEscopo: [1_400_000, 2_000_000],
     });
     expect(html).toMatch(/Meta batida<\/span>\s*<span class="medio">2ª meta/);
+  });
+});
+
+// ── Ordenar a tabela de operadores pelo cabeçalho ────────────────────────────
+
+describe('tabela de operadores ordenável', () => {
+  /**
+   * Monta a página no `document` do teste e roda o script dela de verdade —
+   * o comportamento só existe no navegador, então é ali que ele é testado.
+   */
+  function abrir(d: DadosFechamento) {
+    const pagina = new DOMParser().parseFromString(montarHtmlFechamento(d), 'text/html');
+    document.body.innerHTML = pagina.body.innerHTML;
+    for (const s of [...document.querySelectorAll('script')]) {
+      new Function(s.textContent ?? '')();
+    }
+    const tabela = document.querySelector('#operadores table.ordenavel') as HTMLTableElement;
+    const clicar = (rotulo: string) => {
+      const th = [...tabela.querySelectorAll('th')].find(h => h.textContent === rotulo);
+      (th as HTMLElement).click();
+      return th as HTMLElement;
+    };
+    const nomes = () => [...tabela.querySelectorAll('tbody tr')].map(r => r.querySelector('strong')?.textContent);
+    return { clicar, nomes };
+  }
+
+  const op = (id: string, nome: string, bruto: number, metasBatidas: number, extra = {}) => operador({
+    id, nome, bruto, meta: 100_000, metasExtras: [200_000, 300_000], metasBatidas, ...extra,
+  });
+
+  // Já vem na ordem do ranking (por recebido), como a coleta entrega.
+  const linhas = [
+    op('a', 'Ana', 250_000, 2),
+    op('b', 'Bia', 150_000, 1),
+    op('c', 'Caio', 120_000, 1),
+    op('d', 'Dani', 90_000, 0),
+    op('e', 'Edu', 80_000, 0, { meta: null, metasExtras: [], quartil: null, diferenca: null }),
+    op('f', 'Fabi', 310_000, 3),
+  ];
+
+  it('clicar em "Meta batida" põe quem bateu a maior meta primeiro, e sem meta por último', () => {
+    const t = abrir(dados({ operadores: linhas }));
+    const th = t.clicar('Meta batida');
+    expect(t.nomes()).toEqual(['Fabi', 'Ana', 'Bia', 'Caio', 'Dani', 'Edu']);
+    expect(th.getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('o segundo clique inverte, mas quem não tem meta continua no fim', () => {
+    const t = abrir(dados({ operadores: linhas }));
+    t.clicar('Meta batida');
+    t.clicar('Meta batida');
+    expect(t.nomes()).toEqual(['Dani', 'Bia', 'Caio', 'Ana', 'Fabi', 'Edu']);
+  });
+
+  it('texto ordena de A a Z no primeiro clique', () => {
+    const t = abrir(dados({ operadores: [...linhas].reverse() }));
+    t.clicar('Operador');
+    expect(t.nomes()).toEqual(['Ana', 'Bia', 'Caio', 'Dani', 'Edu', 'Fabi']);
+  });
+
+  it('"#" devolve a ordem original do ranking', () => {
+    const t = abrir(dados({ operadores: linhas }));
+    t.clicar('Recebido');
+    t.clicar('#');
+    expect(t.nomes()).toEqual(['Ana', 'Bia', 'Caio', 'Dani', 'Edu', 'Fabi']);
   });
 });
 

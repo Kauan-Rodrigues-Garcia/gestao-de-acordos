@@ -171,6 +171,13 @@ table.grade th{
   color:var(--fraco);padding:0 12px 10px;border-bottom:1px solid var(--borda-forte);white-space:nowrap;
   font-weight:500;
 }
+table.ordenavel th[data-ordem]{cursor:pointer;user-select:none;transition:color .15s}
+table.ordenavel th[data-ordem]:hover,table.ordenavel th[aria-sort]{color:var(--texto)}
+table.ordenavel th[data-ordem]::after{content:"↕";margin-left:5px;opacity:0;font-size:10px}
+table.ordenavel th[data-ordem]:hover::after{opacity:.4}
+table.ordenavel th[aria-sort=ascending]::after{content:"↑";opacity:1}
+table.ordenavel th[aria-sort=descending]::after{content:"↓";opacity:1}
+table.ordenavel th[data-ordem]:focus-visible{outline:2px solid var(--acento);outline-offset:2px;border-radius:2px}
 table.grade th:first-child,table.grade td:first-child{padding-left:0}
 table.grade th:last-child,table.grade td:last-child{padding-right:0}
 table.grade td{padding:12px;border-bottom:1px solid var(--borda);vertical-align:middle}
