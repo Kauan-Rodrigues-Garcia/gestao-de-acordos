@@ -4,7 +4,8 @@ import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { EVENTO_ACORDO_SALVO, type CenaHalloween } from './tema';
 import { FANTASMA, sortearEsconderijo, type Esconderijo } from './esconderijo';
-import { Fumaca, Olhos } from './OlhosNaFumaca';
+import { Fumaca } from './Fumaca';
+import { VultoNoVidro } from './VultoNoVidro';
 import './halloween.css';
 
 /*
@@ -12,7 +13,7 @@ import './halloween.css';
  * (barra de cima + conteúdo), que fica `relative` enquanto o tema está ligado:
  *
  *   FundoHalloween   — atrás do `<main>` (que fica transparente): chuva,
- *                      nuvens, névoa, olhos na fumaça (`OlhosNaFumaca`). Só
+ *                      nuvens, névoa, o vulto atrás do vidro (`VultoNoVidro`). Só
  *                      aparece nos vãos entre cards.
  *   CamadaHalloween  — DENTRO do `<main>`, no alto do conteúdo: teias,
  *                      aranha, fantasmas, lanterna. Rola junto com a página.
@@ -40,9 +41,9 @@ export function FundoHalloween({ cena }: { cena: CenaHalloween }) {
     <div className={cn('hw-fundo text-foreground', claro && 'hw-claro')} aria-hidden="true">
       {cena.nuvens && <Nuvens />}
       {cena.chuva && <Chuva />}
-      {cena.olhos && <Olhos claro={claro} />}
-      {cena.olhos && <Fumaca claro={claro} />}
-      {cena.nevoa && !cena.olhos && <Nevoa densa={false} />}
+      {cena.vulto && <VultoNoVidro claro={claro} />}
+      {cena.vulto && <Fumaca claro={claro} />}
+      {cena.nevoa && !cena.vulto && <Nevoa densa={false} />}
     </div>
   );
 }
