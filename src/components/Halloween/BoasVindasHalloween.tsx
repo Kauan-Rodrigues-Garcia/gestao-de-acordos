@@ -4,20 +4,28 @@
  * Fecha o mês que passou com um agradecimento, deseja um bom mês e, no fim,
  * apresenta o tema de Halloween. Surge no meio da tela com o fundo borrado; o
  * tema carrega por trás enquanto a pessoa lê, e quando ela fecha já está tudo
- * no lugar. O botão espera o tema ficar pronto — com um teto, para uma rede
+ * no lugar. O botão fica parado por `ESPERA_MINIMA_MS`, com a contagem à
+ * mostra, e espera também o tema ficar pronto — com um teto, para uma rede
  * lenta não prender ninguém aqui.
+ *
+ * Enquanto ela está aberta, toca a trilha (ver `trilha.ts`): começa baixinho,
+ * sobe devagar e para quando a mensagem fecha. O alto-falante no canto desliga.
  *
  * Quem decide se aparece é o `Layout`, por `useHalloween().boasVindasPendentes`.
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
+import { Volume2, VolumeX } from 'lucide-react';
 import { AboboraChat } from './Desenhos';
 import { carregarFonte } from './fonte';
 import { mesQuePassou, primeiroNome } from './textosBoasVindas';
+import { tocarTrilhaHalloween, type EstadoTrilha, type Trilha } from './trilha';
 
 /** O máximo que o botão espera o tema antes de liberar mesmo assim. */
 const ESPERA_MAXIMA_MS = 4000;
+/** O mínimo que o botão fica parado: tempo de a mensagem ser vista. */
+export const ESPERA_MINIMA_MS = 3000;
 
 const FONTE_ASSUSTADORA = "'Creepster', Georgia, serif";
 
@@ -29,19 +37,41 @@ export default function BoasVindasHalloween({
   preparar: () => Promise<unknown>;
   aoFechar: () => void;
 }) {
-  const [pronto, setPronto] = useState(false);
+  const [temaPronto, setTemaPronto] = useState(false);
+  const [restante, setRestante] = useState(Math.ceil(ESPERA_MINIMA_MS / 1000));
+  const pronto = temaPronto && restante === 0;
   const botao = useRef<HTMLButtonElement>(null);
+  const trilha = useRef<Trilha | null>(null);
+  const [som, setSom] = useState<EstadoTrilha>('carregando');
   const mes = mesQuePassou();
   const quem = primeiroNome(nome);
 
   useEffect(() => {
     carregarFonte();
     let vivo = true;
-    const liberar = () => { if (vivo) setPronto(true); };
+    const liberar = () => { if (vivo) setTemaPronto(true); };
     const teto = setTimeout(liberar, ESPERA_MAXIMA_MS);
     preparar().then(liberar, liberar);
     return () => { vivo = false; clearTimeout(teto); };
   }, [preparar]);
+
+  // Conta pelo relógio, não por tique: aba em segundo plano atrasa timers.
+  useEffect(() => {
+    const fim = Date.now() + ESPERA_MINIMA_MS;
+    const tique = setInterval(() => {
+      const falta = Math.max(0, Math.ceil((fim - Date.now()) / 1000));
+      setRestante(falta);
+      if (falta === 0) clearInterval(tique);
+    }, 200);
+    return () => clearInterval(tique);
+  }, []);
+
+  // A trilha nasce e morre com a mensagem.
+  useEffect(() => {
+    const t = tocarTrilhaHalloween(setSom);
+    trilha.current = t;
+    return () => { t.parar(); trilha.current = null; };
+  }, []);
 
   useEffect(() => { if (pronto) botao.current?.focus(); }, [pronto]);
 
@@ -53,7 +83,7 @@ export default function BoasVindasHalloween({
 
   return createPortal(
     <motion.div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex overflow-y-auto p-4"
       style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', background: 'oklch(0.14 0.03 300 / .38)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -64,7 +94,8 @@ export default function BoasVindasHalloween({
         role="dialog"
         aria-modal="true"
         aria-labelledby="hw-bv-titulo"
-        className="relative w-full max-w-[460px] overflow-hidden rounded-3xl px-7 pb-7 pt-6 text-left shadow-2xl"
+        // `m-auto` centraliza sem cortar o topo quando a tela é mais baixa que a carta.
+        className="relative m-auto w-full max-w-[460px] overflow-hidden rounded-3xl px-7 pb-7 pt-6 text-left shadow-2xl"
         style={{
           // Cor de objeto, como a abóbora: a carta é a mesma em qualquer tema.
           background: 'radial-gradient(120% 80% at 50% 0%, oklch(0.32 0.08 300) 0%, oklch(0.2 0.05 295) 55%, oklch(0.15 0.035 290) 100%)',
@@ -78,6 +109,20 @@ export default function BoasVindasHalloween({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
       >
+        {som !== 'indisponivel' && som !== 'carregando' && (
+          <button
+            type="button"
+            data-hw-sem-destravar=""
+            onClick={() => trilha.current?.alternarSom()}
+            aria-label={som === 'tocando' ? 'Desligar a música' : 'Ligar a música'}
+            title={som === 'tocando' ? 'Desligar a música' : 'Ligar a música'}
+            className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-white/10"
+            style={{ color: 'oklch(0.9 0.03 80)' }}
+          >
+            {som === 'tocando' ? <Volume2 className="h-[18px] w-[18px]" /> : <VolumeX className="h-[18px] w-[18px]" />}
+          </button>
+        )}
+
         {/* Lua cheia ao fundo, só clima. */}
         <div
           aria-hidden="true"
@@ -88,7 +133,7 @@ export default function BoasVindasHalloween({
         <p className="relative text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'oklch(0.8 0.12 60)' }}>
           Outubro chegou
         </p>
-        <h2 id="hw-bv-titulo" className="relative mt-1.5 text-2xl font-bold leading-tight">
+        <h2 id="hw-bv-titulo" className="relative mt-1.5 pr-8 text-2xl font-bold leading-tight">
           {quem ? `Obrigado por ${mes.toLowerCase()}, ${quem}!` : `Obrigado por ${mes.toLowerCase()}!`}
         </h2>
 
@@ -137,12 +182,26 @@ export default function BoasVindasHalloween({
         <button
           ref={botao}
           type="button"
+          data-hw-sem-destravar=""
           onClick={aoFechar}
           disabled={!pronto}
-          className="relative mt-6 w-full rounded-xl px-4 py-3 text-[15px] font-semibold transition-[transform,opacity] enabled:hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"
+          className="relative mt-6 w-full overflow-hidden rounded-xl px-4 py-3 text-[15px] font-semibold transition-[transform,opacity] enabled:hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"
           style={{ background: 'oklch(0.72 0.18 52)', color: 'oklch(0.2 0.04 40)' }}
         >
-          {pronto ? 'Entrar no Halloween 🎃' : 'Preparando as teias…'}
+          {/* A contagem enche o botão da esquerda para a direita. */}
+          <motion.span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-full origin-left"
+            style={{ background: 'oklch(0.82 0.15 70 / .55)' }}
+            initial={{ scaleX: 0, opacity: 1 }}
+            animate={{ scaleX: 1, opacity: pronto ? 0 : 1 }}
+            transition={{ scaleX: { duration: ESPERA_MINIMA_MS / 1000, ease: 'linear' }, opacity: { duration: 0.3 } }}
+          />
+          <span className="relative">
+            {restante > 0
+              ? `Entrar no Halloween em ${restante}…`
+              : pronto ? 'Entrar no Halloween 🎃' : 'Preparando as teias…'}
+          </span>
         </button>
       </motion.div>
     </motion.div>,
