@@ -275,6 +275,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * sendo visto por impersonação. `?hw-boas-vindas` reabre, para validar.
    */
   const [boasVindasAberta, setBoasVindasAberta] = useState(false);
+  // Pela automática (e pelo `?hw-boas-vindas`) chega o envelope fechado; pelo
+  // «Ver a mensagem» de Configurações, que já é um clique, a carta aberta.
+  const [boasVindasDireto, setBoasVindasDireto] = useState(false);
   const tourJaVisto = !!perfil?.tour_visto_em;
   useEffect(() => {
     if (!hw.ligado || termoLoading || precisaAceitar) return;
@@ -284,12 +287,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
   useEffect(() => {
     if (!hw.ligado) return;
-    const abrir = () => setBoasVindasAberta(true);
+    const abrir = () => { setBoasVindasDireto(true); setBoasVindasAberta(true); };
     window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
     return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
   }, [hw.ligado]);
   const fecharBoasVindas = () => {
     setBoasVindasAberta(false);
+    setBoasVindasDireto(false);
     if (pediuBoasVindasNaUrl()) {
       const url = new URL(window.location.href);
       url.searchParams.delete('hw-boas-vindas');
@@ -753,10 +757,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             )}
             {/* Som ambiente — os temas de terror, a música do Veigh ou a
                 playlist da pessoa. Vem com o tema de Halloween: só aparece
-                quando ele está liberado (`hw.disponivel`). O motor vive fora
+                quando ele está liberado (`hw.disponivel`). Player inteiro só
+                para o super_admin; os demais têm a versão enxuta, sem
+                playlists e com volume até 50%. O motor vive fora
                 do React — trocar de página não para a música. Ver
                 `components/Halloween/SomAmbiente/motor.ts`. */}
-            {hw.disponivel && <BotaoSomAmbiente perfilId={perfil?.id} />}
+            {hw.disponivel && <BotaoSomAmbiente perfilId={perfil?.id} completo={userRole === 'super_admin'} />}
             {/* Sino — indica novas sem abrir o painel.
                 O sino BALANÇA e o número PULSA quando chega notificação: o
                 badge sozinho, num canto de 16 px, passava despercebido em quem
@@ -933,7 +939,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
         {boasVindasAberta && (
           <Suspense fallback={null}>
-            <BoasVindasHalloween nome={perfil?.nome} preparar={carregarHalloween} aoFechar={fecharBoasVindas} />
+            <BoasVindasHalloween
+              key={boasVindasDireto ? 'direto' : 'envelope'}
+              nome={perfil?.nome}
+              preparar={carregarHalloween}
+              aoFechar={fecharBoasVindas}
+              abrirDireto={boasVindasDireto}
+            />
           </Suspense>
         )}
       </div>

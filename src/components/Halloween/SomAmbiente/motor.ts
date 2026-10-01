@@ -24,6 +24,13 @@
  * tecla. O Spotify ainda pede o play no próprio player na primeira vez — o
  * clique no nosso botão não atravessa o iframe — e não aceita volume de fora.
  *
+ * ## Dois jeitos de usar
+ *
+ * O super_admin tem o player inteiro. Os demais cargos, a versão enxuta: só
+ * as quatro faixas de fábrica (sem «Minhas playlists») e volume de 0 a
+ * `VOLUME_MAX_ENXUTO`. A regra mora AQUI, não só no painel: a playlist que
+ * ficou salva no navegador, ou um volume gravado acima do teto, não tocam.
+ *
  * ## Quem mais fala
  *
  * A mensagem de outubro (Halloween) tem trilha própria: enquanto ela está
@@ -56,8 +63,15 @@ export interface InstantaneoSom {
   noAr: string | null;
   /** O player do Spotify/YouTube já está montado no palco. */
   playerAberto: boolean;
+  /** Player inteiro (super_admin) ou a versão enxuta. */
+  completo: boolean;
+  /** Teto do volume para esta pessoa: 100 no completo, `VOLUME_MAX_ENXUTO` no enxuto. */
+  volumeMax: number;
   erro: string | null;
 }
+
+/** Teto de volume de quem não é super_admin. */
+export const VOLUME_MAX_ENXUTO = 50;
 
 /** Curva de volume: o controle anda em passos que o ouvido percebe iguais. */
 export function ganhoDoVolume(volume: number): number {
@@ -65,14 +79,14 @@ export function ganhoDoVolume(volume: number): number {
   return v <= 0 ? 0 : Math.pow(v, 1.5);
 }
 
-/** A ordem da lista: as quatro de fábrica e depois as playlists. */
-export function ordemDasFaixas(prefs: PreferenciasSom): string[] {
-  return [...FAIXAS_EMBUTIDAS, ...prefs.playlists.map(p => p.id)];
+/** A ordem da lista: as quatro de fábrica e depois as playlists (só no completo). */
+export function ordemDasFaixas(prefs: PreferenciasSom, comPlaylists = true): string[] {
+  return [...FAIXAS_EMBUTIDAS, ...(comPlaylists ? prefs.playlists.map(p => p.id) : [])];
 }
 
 /** Próxima (ou anterior) na lista, dando a volta. */
-export function vizinha(prefs: PreferenciasSom, atual: string, passo: 1 | -1): string {
-  const ordem = ordemDasFaixas(prefs);
+export function vizinha(prefs: PreferenciasSom, atual: string, passo: 1 | -1, comPlaylists = true): string {
+  const ordem = ordemDasFaixas(prefs, comPlaylists);
   const i = ordem.indexOf(atual);
   if (i < 0) return ordem[0];
   return ordem[(i + passo + ordem.length) % ordem.length];
@@ -80,7 +94,10 @@ export function vizinha(prefs: PreferenciasSom, atual: string, passo: 1 | -1): s
 
 // ── Estado observável ────────────────────────────────────────────────────────
 
-let snap: InstantaneoSom = { estado: 'parado', prefs: PADRAO, silenciado: false, noAr: null, playerAberto: false, erro: null };
+let snap: InstantaneoSom = {
+  estado: 'parado', prefs: PADRAO, silenciado: false, noAr: null, playerAberto: false,
+  completo: false, volumeMax: VOLUME_MAX_ENXUTO, erro: null,
+};
 const ouvintes = new Set<() => void>();
 
 function publicar(parcial: Partial<InstantaneoSom>) {
@@ -116,14 +133,36 @@ function mudarPrefs(novas: PreferenciasSom) {
   publicar({ prefs: novas });
 }
 
-/** O `Layout` chama ao montar com a pessoa logada. */
-export function iniciarSessao(perfilId: string): void {
+/**
+ * As preferências cabendo no que esta pessoa pode: no enxuto, volume até o
+ * teto e faixa de fábrica. As playlists salvas ficam guardadas (não se perde o
+ * que um super_admin cadastrou ao entrar como outra pessoa), só não tocam.
+ */
+export function dentroDosLimites(prefs: PreferenciasSom, completo: boolean): PreferenciasSom {
+  if (completo) return prefs;
+  return {
+    ...prefs,
+    volume: Math.min(prefs.volume, VOLUME_MAX_ENXUTO),
+    faixa: ehEmbutida(prefs.faixa) ? prefs.faixa : PADRAO.faixa,
+  };
+}
+
+/** O `Layout` chama ao montar com a pessoa logada. `completo`: é super_admin. */
+export function iniciarSessao(perfilId: string, completo = false): void {
   if (encerramento) { clearTimeout(encerramento); encerramento = null; }
-  if (perfilAtual === perfilId) return;
+  const volumeMax = completo ? 100 : VOLUME_MAX_ENXUTO;
+  if (perfilAtual === perfilId) {
+    if (snap.completo !== completo) {
+      publicar({ completo, volumeMax, prefs: dentroDosLimites(snap.prefs, completo) });
+      if (!completo && externo) { soltarExterno(); pausar(); }
+      if (audio && !fade && !audio.paused) audio.volume = ganhoDoVolume(snap.prefs.volume);
+    }
+    return;
+  }
   if (perfilAtual) pararTudo();
   perfilAtual = perfilId;
-  const prefs = lerPreferencias(perfilId);
-  publicar({ prefs, estado: 'parado', noAr: null, erro: null });
+  const prefs = dentroDosLimites(lerPreferencias(perfilId), completo);
+  publicar({ prefs, completo, volumeMax, estado: 'parado', noAr: null, erro: null });
   if (prefs.tocarAoEntrar) tocar();
 }
 
@@ -589,6 +628,8 @@ function tocarExterna(faixaId: string, minha: number) {
 
 /** Toca a faixa escolhida (ou troca para `faixa` e toca). */
 export function tocar(faixa?: string): void {
+  // No enxuto, só as faixas de fábrica.
+  if (faixa && !snap.completo && !ehEmbutida(faixa)) return;
   if (faixa && faixa !== snap.prefs.faixa) mudarPrefs({ ...snap.prefs, faixa });
   querTocar = true;
   const minha = ++geracao;
@@ -623,11 +664,11 @@ export function escolher(faixa: string): void {
 }
 
 export function pular(passo: 1 | -1): void {
-  tocar(vizinha(snap.prefs, snap.prefs.faixa, passo));
+  tocar(vizinha(snap.prefs, snap.prefs.faixa, passo, snap.completo));
 }
 
 export function definirVolume(volume: number): void {
-  const v = Math.round(Math.min(100, Math.max(0, volume)));
+  const v = Math.round(Math.min(snap.volumeMax, Math.max(0, volume)));
   if (v === snap.prefs.volume) return;
   mudarPrefs({ ...snap.prefs, volume: v });
   // Durante um fade, quem leva ao volume novo é a própria rampa.
@@ -645,6 +686,7 @@ export function definirRepetir(ligado: boolean): void {
 }
 
 export function salvarPlaylists(playlists: PreferenciasSom['playlists'], faixa?: string): void {
+  if (!snap.completo) return;
   const novaFaixa = faixa ?? (ehEmbutida(snap.prefs.faixa) || playlists.some(p => p.id === snap.prefs.faixa)
     ? snap.prefs.faixa
     : PADRAO.faixa);

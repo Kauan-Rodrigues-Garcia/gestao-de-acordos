@@ -39,7 +39,7 @@ afterEach(() => {
 describe('BoasVindasHalloween', () => {
   it('o botão fica parado 3 segundos, com a contagem, mesmo com o tema pronto', async () => {
     const aoFechar = vi.fn();
-    render(<BoasVindasHalloween nome="Ana Souza" preparar={() => Promise.resolve()} aoFechar={aoFechar} />);
+    render(<BoasVindasHalloween abrirDireto nome="Ana Souza" preparar={() => Promise.resolve()} aoFechar={aoFechar} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
     expect(botaoEntrar()).toBeDisabled();
@@ -62,7 +62,7 @@ describe('BoasVindasHalloween', () => {
   });
 
   it('passados os 3 segundos, ainda espera o tema (até o teto)', async () => {
-    render(<BoasVindasHalloween nome={null} preparar={() => new Promise(() => {})} aoFechar={() => {}} />);
+    render(<BoasVindasHalloween abrirDireto nome={null} preparar={() => new Promise(() => {})} aoFechar={() => {}} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(ESPERA_MINIMA_MS); });
     expect(botaoEntrar()).toBeDisabled();
     expect(botaoEntrar()).toHaveTextContent('Preparando as teias…');
@@ -72,7 +72,7 @@ describe('BoasVindasHalloween', () => {
 
   it('a música começa com a mensagem e para quando ela sai', () => {
     const { unmount } = render(
-      <BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />,
+      <BoasVindasHalloween abrirDireto nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />,
     );
     expect(trilhaFalsa.tocar).toHaveBeenCalledTimes(1);
     expect(trilhaFalsa.parar).not.toHaveBeenCalled();
@@ -81,7 +81,7 @@ describe('BoasVindasHalloween', () => {
   });
 
   it('o alto-falante só aparece com música e alterna o som', () => {
-    render(<BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />);
+    render(<BoasVindasHalloween abrirDireto nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />);
     expect(screen.queryByRole('button', { name: /música/ })).toBeNull();
 
     act(() => trilhaFalsa.aoMudar?.('tocando'));
@@ -93,5 +93,23 @@ describe('BoasVindasHalloween', () => {
 
     act(() => trilhaFalsa.aoMudar?.('indisponivel'));
     expect(screen.queryByRole('button', { name: /música/ })).toBeNull();
+  });
+});
+
+describe('BoasVindasHalloween — chega fechada', () => {
+  it('mostra só o envelope, sem carta e sem música', () => {
+    render(<BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Ler agora' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(trilhaFalsa.tocar).not.toHaveBeenCalled();
+  });
+
+  it('«Ler agora» abre a carta e só então a música começa', async () => {
+    render(<BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Ler agora' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ler agora' })).toBeNull();
+    expect(trilhaFalsa.tocar).toHaveBeenCalledTimes(1);
   });
 });

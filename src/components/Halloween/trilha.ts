@@ -34,7 +34,7 @@ export const VOLUME_ALVO = 0.28;
 /** De onde ele parte. */
 export const VOLUME_INICIAL = 0.02;
 /** Quanto tempo a subida leva. */
-export const SUBIDA_S = 6;
+export const SUBIDA_S = 4;
 /** Quanto da música toca antes de voltar ao início. */
 export const TRECHO_S = 40;
 /** A respiração na emenda: o volume desce neste tempo antes e sobe depois. */

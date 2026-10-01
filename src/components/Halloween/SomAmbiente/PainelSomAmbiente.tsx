@@ -5,16 +5,21 @@
  * faixas de fábrica (três temas de terror e uma música), as playlists da
  * pessoa e o «Tocar ao entrar».
  *
+ * Duas versões, decididas pelo motor (`completo`):
+ *   - super_admin: tudo acima, volume de 0 a 100;
+ *   - os demais: enxuta — as quatro faixas numa lista só, sem «Minhas
+ *     playlists» (não dá para adicionar música) e volume de 0 a 50.
+ *
  * Mora com o tema de Halloween e só aparece quando o tema está liberado para
- * a pessoa (`useHalloween().disponivel`, no `Layout`). Tudo que muda aqui vai para o motor; o painel não guarda
- * estado de som — fechar e abrir de novo mostra o mesmo que está tocando.
+ * a pessoa (`useHalloween().disponivel`, no `Layout`). Tudo que muda aqui vai
+ * para o motor; o painel não guarda estado de som — fechar e abrir de novo
+ * mostra o mesmo que está tocando.
  *
  * Baixa sob demanda (ver `BotaoSomAmbiente`).
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  Ghost, Axe, Bug, Mic, ListMusic, Youtube, Play, Pause, SkipBack, SkipForward, Repeat, Repeat1,
-  Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2, type LucideIcon,
+  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,24 +32,11 @@ import {
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  LIMITE_PLAYLISTS, VOLUME_PADRAO, ehEmbutida, type FaixaEmbutida, type PlaylistSalva,
+  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, VOLUME_PADRAO, ehEmbutida, type FaixaEmbutida, type PlaylistSalva,
 } from './preferencias';
+import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
 
-interface InfoFaixa {
-  nome: string;
-  descricao: string;
-  Icone: LucideIcon;
-  /** Cor da faixa: o ícone, o fundo do bloco escolhido e o realce. */
-  tom: string;
-}
-
-const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
-  halloween: { nome: 'Halloween',      descricao: 'Tema de John Carpenter',         Icone: Ghost, tom: 'som-tom-halloween' },
-  sexta13:   { nome: 'Sexta-Feira 13', descricao: 'Tema de Harry Manfredini',       Icone: Axe,   tom: 'som-tom-sexta13' },
-  candyman:  { nome: 'Candyman',       descricao: 'Helen’s Theme, de Philip Glass', Icone: Bug,   tom: 'som-tom-candyman' },
-  veigh:     { nome: 'Talvez Você Precise de Mim', descricao: 'Veigh',              Icone: Mic,   tom: 'som-tom-veigh' },
-};
 const TEMAS: FaixaEmbutida[] = ['halloween', 'sexta13', 'candyman'];
 
 const mmss = (seg: number) => {
@@ -52,21 +44,10 @@ const mmss = (seg: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-function infoDaPlaylist(p: PlaylistSalva): InfoFaixa {
-  const youtube = p.id.startsWith('youtube:');
-  return {
-    nome: p.nome,
-    descricao: youtube ? 'YouTube' : 'Spotify',
-    Icone: youtube ? Youtube : ListMusic,
-    tom: youtube ? 'som-tom-youtube' : 'som-tom-spotify',
-  };
-}
-
 export function PainelSomAmbiente() {
-  const { estado, prefs, silenciado, noAr, playerAberto, erro } = useSomAmbiente();
+  const { estado, prefs, silenciado, noAr, playerAberto, completo, volumeMax, erro } = useSomAmbiente();
   const escolhida = prefs.faixa;
-  const playlist = prefs.playlists.find(p => p.id === escolhida) ?? null;
-  const info = ehEmbutida(escolhida) ? EMBUTIDAS[escolhida] : playlist ? infoDaPlaylist(playlist) : EMBUTIDAS.halloween;
+  const info = infoDaFaixa(escolhida, prefs.playlists) ?? EMBUTIDAS.halloween;
   const tocando = estado === 'tocando' && !silenciado;
   const carregando = estado === 'carregando';
   const externa = !ehEmbutida(escolhida);
@@ -91,7 +72,8 @@ export function PainelSomAmbiente() {
       definirVolume(antesDoMudo.current || VOLUME_PADRAO);
     }
   };
-  const IconeVolume = prefs.volume === 0 ? VolumeX : prefs.volume < 34 ? Volume : prefs.volume < 67 ? Volume1 : Volume2;
+  const fracao = prefs.volume / volumeMax;
+  const IconeVolume = prefs.volume === 0 ? VolumeX : fracao < 0.34 ? Volume : fracao < 0.67 ? Volume1 : Volume2;
 
   const legenda = silenciado
     ? 'Pausado enquanto a mensagem de outubro toca'
@@ -171,13 +153,18 @@ export function PainelSomAmbiente() {
           <Slider
             value={[prefs.volume]}
             min={0}
-            max={100}
+            max={volumeMax}
             step={1}
             onValueChange={([v]) => definirVolume(v)}
-            aria-label="Volume"
+            aria-label={volumeMax < 100 ? `Volume, até ${volumeMax}%` : 'Volume'}
             className="flex-1"
           />
-          <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">{prefs.volume}%</span>
+          <span
+            className="w-9 text-right text-xs tabular-nums text-muted-foreground"
+            title={volumeMax < 100 ? `Máximo de ${volumeMax}%` : undefined}
+          >
+            {prefs.volume}%
+          </span>
         </div>
         {spotify && (
           <p className="mt-1.5 text-[11px] text-muted-foreground">
@@ -197,6 +184,7 @@ export function PainelSomAmbiente() {
         </div>
       )}
 
+      {completo ? (
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
         {/* ── Fábrica ── */}
         <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Temas de terror</p>
@@ -225,6 +213,14 @@ export function PainelSomAmbiente() {
         </div>
         <NovaPlaylist playlists={prefs.playlists} />
       </div>
+      ) : (
+      // Enxuta: as quatro numa lista só, e nada de adicionar música.
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto border-t border-border px-4 py-3">
+        {FAIXAS_EMBUTIDAS.map(id => (
+          <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
+        ))}
+      </div>
+      )}
 
       <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-border px-4 py-3">
         <span className="min-w-0">

@@ -1,6 +1,16 @@
 /**
  * BoasVindasHalloween — a mensagem que abre outubro, uma vez por pessoa.
  *
+ * ## Chega fechada
+ *
+ * Abrir sozinha, no meio da tela e com música, assustava — a pessoa estava
+ * trabalhando (às vezes em ligação) e a tela «explodia». Agora ela chega como
+ * um envelope pequeno no rodapé, sem cobrir nada e sem som (`EnvelopeFechado`).
+ * Só o «Ler agora» abre a carta — e é aí que a música começa. «Ver a
+ * mensagem», em Configurações, já é um clique: abre direto (`abrirDireto`).
+ *
+ * ## A carta
+ *
  * Fecha o mês que passou com um agradecimento, deseja um bom mês e, no fim,
  * apresenta o tema de Halloween. Surge no meio da tela com o fundo borrado; o
  * tema carrega por trás enquanto a pessoa lê, e quando ela fecha já está tudo
@@ -30,14 +40,80 @@ export const ESPERA_MINIMA_MS = 3000;
 
 const FONTE_ASSUSTADORA = "'Creepster', Georgia, serif";
 
-export default function BoasVindasHalloween({
-  nome, preparar, aoFechar,
-}: {
+interface PropsBoasVindas {
   nome: string | null | undefined;
   /** Baixa as camadas do tema. Resolve quando estão prontas. */
   preparar: () => Promise<unknown>;
   aoFechar: () => void;
+}
+
+export default function BoasVindasHalloween({
+  abrirDireto = false, ...props
+}: PropsBoasVindas & {
+  /** Pula o envelope — quem pediu a mensagem já clicou para isso. */
+  abrirDireto?: boolean;
 }) {
+  const [lendo, setLendo] = useState(abrirDireto);
+  return lendo ? <CartaAberta {...props} /> : <EnvelopeFechado aoLer={() => setLendo(true)} />;
+}
+
+/**
+ * O envelope: pequeno, no rodapé, sem fundo borrado e sem som. Não prende a
+ * tela — dá para continuar trabalhando e abrir quando der.
+ */
+function EnvelopeFechado({ aoLer }: { aoLer: () => void }) {
+  return createPortal(
+    // Casca só para centralizar: o `transform` do framer-motion não briga com ela.
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[150] flex justify-center px-4">
+    <motion.section
+      aria-label="Mensagem de outubro"
+      className="pointer-events-auto relative w-full max-w-[420px] overflow-hidden rounded-2xl shadow-2xl"
+      style={{
+        background: 'radial-gradient(140% 120% at 0% 0%, oklch(0.32 0.08 300) 0%, oklch(0.2 0.05 295) 60%, oklch(0.16 0.04 290) 100%)',
+        color: 'oklch(0.95 0.015 80)',
+        border: '1px solid oklch(0.5 0.1 300 / .45)',
+        ['--ring' as string]: 'oklch(0.85 0.15 70)',
+        ['--background' as string]: 'oklch(0.17 0.04 292)',
+      }}
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 24 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {/* A aba do envelope, fechada. */}
+      <svg aria-hidden="true" viewBox="0 0 420 34" preserveAspectRatio="none" className="absolute inset-x-0 top-0 h-[34px] w-full">
+        <path d="M0 0 L210 30 L420 0" fill="none" stroke="oklch(0.6 0.1 300 / .45)" strokeWidth="1.2" />
+      </svg>
+      <div className="relative flex items-center gap-3 px-4 pb-4 pt-6">
+        <div className="shrink-0 [&_.hw-abobora]:h-[48px] [&_.hw-abobora]:w-[48px]">
+          <AboboraChat acesa={false} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'oklch(0.8 0.12 60)' }}>
+            Outubro chegou
+          </p>
+          <p className="text-[15px] font-semibold leading-tight">Você tem uma mensagem</p>
+          <p className="mt-0.5 text-xs" style={{ color: 'oklch(0.82 0.03 80)' }}>
+            Ela vem com música. Abra quando puder.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={aoLer}
+          className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+          style={{ background: 'oklch(0.72 0.18 52)', color: 'oklch(0.2 0.04 40)' }}
+        >
+          Ler agora
+        </button>
+      </div>
+    </motion.section>
+    </div>,
+    document.body,
+  );
+}
+
+/** A carta aberta, com a trilha tocando. */
+function CartaAberta({ nome, preparar, aoFechar }: PropsBoasVindas) {
   const [temaPronto, setTemaPronto] = useState(false);
   const [restante, setRestante] = useState(Math.ceil(ESPERA_MINIMA_MS / 1000));
   const pronto = temaPronto && restante === 0;
@@ -67,7 +143,8 @@ export default function BoasVindasHalloween({
     return () => clearInterval(tique);
   }, []);
 
-  // A trilha nasce e morre com a mensagem — e o Som ambiente espera ela acabar.
+  // A trilha nasce e morre com a carta aberta — e o Som ambiente espera ela
+  // acabar. Como a carta só abre no «Ler agora», o clique já liberou o som.
   useEffect(() => {
     silenciarSomAmbiente('halloween');
     const t = tocarTrilhaHalloween(setSom);
