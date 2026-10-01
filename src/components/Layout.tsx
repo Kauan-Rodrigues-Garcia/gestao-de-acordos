@@ -58,6 +58,7 @@ import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { TemaHalloweenContext, cenaDaRota, halloweenLigado, temFundo } from '@/components/Halloween/tema';
+import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -435,7 +436,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
-              <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
+              {halloween
+                ? <MarcaHalloween nome={branding.appName} />
+                : <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>}
             </motion.div>
           )}
         </AnimatePresence>
