@@ -1602,7 +1602,51 @@ Migration `20260911190000`, tabelas `comissao_config` e `comissao_faixas`. Desen
   `metas_comissao_confirmar_setor` e `dashboard_comissao`.
 - **Nada é congelado:** a comissão de um mês é sempre calculada com a configuração,
   as metas e o recebido daquele mês. Reabrir a validação e mudar a meta muda a
-  comissão daquele mês.
+  comissão daquele mês — **enquanto o mês está aberto**. Depois da virada, ver
+  §12.5.
+
+### 12.5 Fechamento do mês (01/10/2026)
+
+> «Fechou o mês, tudo fica para o mês passado. Alterar nome, excluir ou criar
+> usuário muda desse mês em diante, nada muda no mês passado. A única coisa que
+> muda o mês passado é subir relatório com pagamento daquele mês.» — Cleber
+
+À meia-noite do dia 1º (São Paulo) o mês anterior fecha. É conta de calendário
+(`fn_mes_fechado` no banco, `mesFechado` em `lib/fechamentoMes.ts`), não flag.
+
+**O que o mês fechado mostra** — sempre o retrato daquele mês (`composicao_mes*`,
+gravado todo dia às 23:50 pelo cron `composicao-mes-congelar`):
+
+| | Vem de |
+|---|---|
+| equipe, setor, liderança, nome de equipe e setor | retrato |
+| nome, cargo, situação (férias/desligado) de cada pessoa | retrato (`services/analitico/pessoasDoMes.ts`) |
+| chave «setor alternativo» | retrato (`buscarAlternativosDoRetrato`) |
+| quem entra no recorte do líder (equipe/setor) | retrato, nas RPCs do analítico (`fn_retrato_pessoas_do_alcance`) |
+| foto | a de hoje, se a pessoa existe — é a mesma pessoa |
+| alcance de quem olha (que equipes/setores enxerga) | hoje — é permissão |
+
+**O que é só leitura no mês fechado** — acordos (cadeado de sempre), metas,
+dias úteis/quartis, comissão (config, faixas, exceções, bônus), Pix (registrar,
+importar, mudar valor/NR/dono, excluir não desaprovado) e ajuste manual. Trava na
+tela (`useFechamentoMes`) **e** no banco (gatilhos `trg_trava_mes_fechado`,
+migration `20261001130000`).
+
+Passam: `super_admin` e quem tem `ignorar_fechamento_mes` (nasce desligada). E o
+próprio banco sem sessão (cron, service role).
+
+**Continua aberto, de propósito:** importar relatório (Analítico e Diário);
+confirmar a meta do setor na comissão; validar/reabrir meta; avaliar, pagar e
+corrigir saldo do Pix; excluir Pix desaprovado (expurgo). É o mês passado sendo
+fechado, não reescrito.
+
+**Importar relatório de mês fechado** completa o retrato só com quem tem
+pagamento naquele mês e não estava na foto (`20261001100000`) — nunca com quem
+foi criado depois sem pagamento.
+
+**Excluir usuário** com qualquer histórico em mês fechado (acordo, analítico,
+diário, Pix, ajuste, comissão) é recusado no banco (`20261001120000`): a
+exclusão apagaria ou desvincularia números já fechados. O caminho é **Desligar**.
 
 ---
 

@@ -23,6 +23,7 @@ import { supabase, type QuartilConfig } from '@/lib/supabase';
 import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { ehMesAtual } from '@/lib/mesReferencia';
+import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   buscarEquipesComOperadores, buscarLideresDoRetrato, buscarRecebidoPorDia,
@@ -80,7 +81,7 @@ export function useEquipesDiretoria(
       try {
         const [
           composicao, resumos, metasRes, config, identidadeRes, treinoRes,
-          lideresRes, explicitosRes, clonesRes,
+          lideresRes, explicitosRes, clonesRes, retratoPessoas,
         ] = await Promise.all([
           buscarEquipesComOperadores(empresaId, mes),
           buscarResumoOperadoresAnalitico(empresaId, mes),
@@ -99,11 +100,18 @@ export function useEquipesDiretoria(
             .eq('empresa_id', empresaId).eq('perfil', 'lider'),
           supabase.from('equipe_lideres').select('equipe_id, lider_id').eq('empresa_id', empresaId),
           supabase.from('equipe_operadores_clones').select('equipe_id, operador_id').eq('empresa_id', empresaId),
+          // Mês fechado: nome e situação DAQUELE mês (ver `pessoasDoMes.ts`).
+          buscarPessoasDoRetrato(empresaId, mes),
         ]);
         if (!vivo) return;
 
         const identidade: Base['identidade'] = {};
-        for (const p of (identidadeRes.data as { id: string; nome: string; foto_url: string | null }[] | null) ?? []) {
+        const identidadeDoMes = pessoasDoMes(
+          (identidadeRes.data as { id: string; nome: string; foto_url: string | null }[] | null) ?? [],
+          retratoPessoas,
+          { cargos: PERFIS_QUE_CONTAM_NO_RECEBIMENTO, situacao: 'ativos' },
+        );
+        for (const p of identidadeDoMes) {
           identidade[p.id] = { nome: p.nome, fotoUrl: p.foto_url };
         }
         const treino: Base['treino'] = {};

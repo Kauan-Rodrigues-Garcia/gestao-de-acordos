@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ehMesAtual, partesDoMes } from '@/lib/mesReferencia';
+import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { useTenant } from '@/lib/tenant-config';
 import { assinarTabela } from '@/lib/realtime';
 import { assinarSinal } from '@/lib/sinais';
@@ -128,7 +129,7 @@ export function usePremiacoesComissoes(params: {
     const encerrar = primeira ? null : comecouAtualizacao();
 
     try {
-      const [perfisResp, resumoResp, metasResp, composicao, manuais, dados] = await Promise.all([
+      const [perfisResp, resumoResp, metasResp, composicao, manuais, dados, retratoPessoas] = await Promise.all([
         supabase.from('perfis')
           .select('id, nome, setor_id, equipe_id, arquivado, desligado_em')
           .eq('empresa_id', empresaId)
@@ -144,11 +145,17 @@ export function usePremiacoesComissoes(params: {
         buscarEquipesComOperadores(empresaId, mes),
         buscarManuaisDoMes(empresaId, ano, mesNum),
         buscarDadosPremiacoes(empresaId, ano, mesNum),
+        // Mês fechado: a lista DAQUELE mês (ver `pessoasDoMes.ts`).
+        buscarPessoasDoRetrato(empresaId, mes),
       ]);
       if (meu !== serie.current) { encerrar?.(false); return; }
       if (perfisResp.error) throw new Error(perfisResp.error.message);
 
-      const perfis = ((perfisResp.data as unknown as PerfilPlanilha[]) ?? [])
+      const perfis = pessoasDoMes(
+        (perfisResp.data as unknown as PerfilPlanilha[]) ?? [],
+        retratoPessoas,
+        { cargos: PERFIS_DA_PLANILHA, situacao: 'ou_desligado' },
+      )
         .filter(p => p.arquivado !== true
           || (!!p.desligado_em && mes <= p.desligado_em.slice(0, 7)));
 

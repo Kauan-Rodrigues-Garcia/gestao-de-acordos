@@ -37,7 +37,7 @@ import {
   LIMITE_BUSCA_ANALITICO,
   buscarDestaquesDoMes,
   buscarDestaquesPorGrupo,
-  buscarEquipesComOperadores,
+  buscarEquipesComOperadores, buscarAlternativosDoRetrato,
   buscarTotalOrfaosPorSetor,
   buscarTotalPorSetor,
   buscarResumoMensal,
@@ -570,13 +570,16 @@ export function AnaliticoLider({
     // Setores alternativos (coluna pode não existir → todos normais). O nome vem
     // junto porque o aviso de "Limpar mês" precisa DIZER qual setor vai embora.
     void (async () => {
-      const comFlag = await supabase.from('setores')
-        .select('id, nome, alternativo').eq('empresa_id', empresaId);
+      const [comFlag, altDoMes] = await Promise.all([
+        supabase.from('setores').select('id, nome, alternativo').eq('empresa_id', empresaId),
+        // Mês fechado: a chave «alternativo» DAQUELE mês (01/10/2026).
+        buscarAlternativosDoRetrato(empresaId, mes),
+      ]);
       if (comFlag.error) return;
       const alt = new Set<string>();
       const nomes = new Map<string, string>();
       for (const s of (comFlag.data as { id: string; nome: string; alternativo: boolean | null }[]) ?? []) {
-        if (s.alternativo) alt.add(s.id);
+        if (altDoMes?.get(s.id) ?? s.alternativo) alt.add(s.id);
         nomes.set(s.id, s.nome);
       }
       setSetoresAlternativos(alt);

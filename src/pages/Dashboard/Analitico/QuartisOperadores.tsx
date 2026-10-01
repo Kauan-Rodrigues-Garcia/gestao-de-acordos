@@ -89,6 +89,7 @@ import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL, parseBRL } from '@/lib/money';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { upsertMetas } from '@/services/metas/metasValidacao.service';
 import {
   rotuloUnidade, UNIDADE_PADRAO, type UnidadeValor,
@@ -101,11 +102,12 @@ import {
 import { useHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import {
   QUARTIS_PADRAO, COR_QUARTIL,
 } from '@/lib/diasUteis';
 import {
-  mapaSetorDaEquipe,
+  mapaSetorDaEquipe, buscarSetoresDoRetrato,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { PizzaQuartis3D } from './PizzaQuartis3D';
@@ -575,7 +577,9 @@ export function QuartisOperadores({
    * é quando o valor passa a existir em `metasOp` e a pessoa muda de lista.
    */
   const { temPermissao } = useCargoPermissoes();
-  const podeEditarMetas = temPermissao('metas_editar');
+  // Mês fechado (01/10/2026): a meta de um mês já fechado é só leitura.
+  const fechamento = useFechamentoMes(mes);
+  const podeEditarMetas = temPermissao('metas_editar') && !fechamento.bloqueado;
   const [semMetaAberto, setSemMetaAberto] = useState(false);
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
   const [salvandoMeta, setSalvandoMeta] = useState<string | null>(null);
@@ -636,7 +640,7 @@ export function QuartisOperadores({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }, { data: equipesData }] = await Promise.all([
+        const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }, { data: equipesData }, retrato] = await Promise.all([
           // A lista de cargos sai de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`, e não
           // escrita à mão: era uma das quatro cópias da mesma pergunta, e o
           // Pix Automático tinha a sua discordando (elite sumia de lá).
@@ -676,9 +680,14 @@ export function QuartisOperadores({
           // que só faz a tabela voltar ao comportamento de mês cheio.
           supabase.from('equipes').select('id, treinamento, treinamento_inicio')
             .eq('empresa_id', empresaId),
+          // Mês fechado: a lista é a DAQUELE mês — nome, situação e equipe
+          // congelados no retrato. Ver `pessoasDoMes.ts`.
+          buscarPessoasDoRetrato(empresaId, mes),
         ]);
         if (cancelado) return;
-        setOperadores((ops as unknown as PerfilOp[]) ?? []);
+        setOperadores(pessoasDoMes((ops as unknown as PerfilOp[]) ?? [], retrato, {
+          cargos: PERFIS_QUE_CONTAM_NO_RECEBIMENTO, situacao: 'ou_desligado',
+        }));
         const mMap: Record<string, number> = {};
         const iMap: Record<string, number> = {};
         for (const m of (metasData as MetaOpRow[]) ?? []) {
@@ -694,7 +703,11 @@ export function QuartisOperadores({
         setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
         const sMap: Record<string, string> = {};
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
-        setSetores(sMap);
+        // Mês fechado: o nome do setor daquele mês por cima do de hoje (setor
+        // criado depois não está no retrato e fica com o nome de hoje).
+        const setoresDoMes = retrato ? await buscarSetoresDoRetrato(empresaId, mes) : null;
+        if (cancelado) return;
+        setSetores(setoresDoMes ? { ...sMap, ...setoresDoMes } : sMap);
         const tMap: Record<string, string | null> = {};
         for (const e of (equipesData as { id: string; treinamento: boolean | null; treinamento_inicio: string | null }[]) ?? []) {
           if (e.treinamento) tMap[e.id] = e.treinamento_inicio ?? null;
@@ -705,7 +718,7 @@ export function QuartisOperadores({
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [empresaId, mesNum, anoNum]);
+  }, [empresaId, mesNum, anoNum, mes]);
 
   /**
    * Recebimento indireto do mês — só a PaguePlay, e só quando alguém tem meta

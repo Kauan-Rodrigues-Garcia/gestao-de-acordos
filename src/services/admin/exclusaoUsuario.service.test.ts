@@ -9,6 +9,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const rpcMock  = vi.fn();
 const fromMock = vi.fn();
+/**
+ * A pergunta de mês fechado (20261001120000) responde à parte: os testes
+ * abaixo contam as chamadas de `rpcMock` como «a exclusão foi chamada?», e a
+ * pergunta não é exclusão. Padrão: nada em mês fechado.
+ */
+const historicoMock = vi.fn();
 
 /**
  * O mock imita a FORMA do SupabaseClient real, que faz
@@ -24,6 +30,7 @@ vi.mock('@/lib/supabase', () => ({
   supabase: {
     rest: { rpc: (...a: unknown[]) => rpcMock(...a) },
     rpc(this: { rest: { rpc: (...a: unknown[]) => unknown } }, nome: string, args: unknown) {
+      if (nome === 'fn_usuario_historico_em_mes_fechado') return historicoMock(args);
       return this.rest.rpc(nome, args);
     },
     from: (...a: unknown[]) => fromMock(...a),
@@ -60,6 +67,8 @@ function comAcordos(linhas: unknown[], error: { message: string } | null = null)
 beforeEach(() => {
   rpcMock.mockReset();
   fromMock.mockReset();
+  historicoMock.mockReset();
+  historicoMock.mockResolvedValue({ data: null, error: null });
   writeMock.mockReset();
   writeMock.mockReturnValue(new ArrayBuffer(8));
   // jsdom/happy-dom não têm createObjectURL.
@@ -78,7 +87,18 @@ describe('resumoExclusao', () => {
     });
     expect(await resumoExclusao('u-1')).toEqual({
       nome: 'Fulano', empresaId: 'emp-1', acordos: 47, historico: 3, logsAuditoria: 812,
+      historicoFechado: null,
     });
+  });
+
+  it('traz o histórico em mês fechado para a tela avisar antes', async () => {
+    rpcMock.mockResolvedValue({
+      data: { nome: 'Fulano', empresa_id: 'emp-1', acordos: 2, historico: 0, logs_auditoria: 0 },
+      error: null,
+    });
+    historicoMock.mockResolvedValue({ data: '2 acordo(s), 5 pagamento(s) no analítico', error: null });
+    expect((await resumoExclusao('u-1'))?.historicoFechado)
+      .toBe('2 acordo(s), 5 pagamento(s) no analítico');
   });
 
   /**
@@ -108,6 +128,27 @@ describe('resumoExclusao', () => {
 });
 
 describe('excluirUsuarioComAcordos', () => {
+  it('histórico em mês fechado: recusa ANTES da planilha e da exclusão', async () => {
+    comAcordos([{ id: 'a1' }]);
+    historicoMock.mockResolvedValue({ data: '1 acordo(s)', error: null });
+
+    const r = await excluirUsuarioComAcordos({ userId: 'u-1', nome: 'Fulano' });
+
+    expect(r.status).toBe('falha');
+    expect(r.status === 'falha' && r.mensagem).toContain('Desligar');
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it('migration pendente (pergunta sem resposta): segue como antes', async () => {
+    comAcordos([]);
+    historicoMock.mockResolvedValue({ data: null, error: { message: 'could not find the function' } });
+    rpcMock.mockResolvedValue({ data: { ok: true, acordos_apagados: 0 }, error: null });
+
+    const r = await excluirUsuarioComAcordos({ userId: 'u-1', nome: 'Fulano' });
+    expect(r.status).toBe('ok');
+  });
+
   it('baixa o relatório e só então chama a exclusão', async () => {
     comAcordos([{ id: 'a1', nr_cliente: '777', valor: 100 }]);
     rpcMock.mockResolvedValue({ data: { ok: true, acordos_apagados: 1 }, error: null });
@@ -197,6 +238,11 @@ describe('limparAcordosDaEmpresaAnterior', () => {
 });
 
 describe('traduzirErro', () => {
+  it('recusa de mês fechado chega sem o código e com o que fazer', () => {
+    const m = traduzirErro('MES_FECHADO_USUARIO: esta pessoa tem histórico em mês já fechado (1 acordo(s)). Use «Desligar».');
+    expect(m).toBe('Esta pessoa tem histórico em mês já fechado (1 acordo(s)). Use «Desligar».');
+  });
+
   it('FK vira instrução, não jargão, e entrega o nome da tabela', () => {
     const t = traduzirErro(
       'update or delete on table "perfis" violates foreign key constraint '

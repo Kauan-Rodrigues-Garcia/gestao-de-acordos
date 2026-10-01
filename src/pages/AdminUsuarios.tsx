@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound } from 'lucide-react';
 import {
-  resumoExclusao, excluirUsuarioComAcordos,
+  resumoExclusao, excluirUsuarioComAcordos, mensagemHistoricoFechado,
   type ResumoExclusao,
 } from '@/services/admin/exclusaoUsuario.service';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
@@ -1550,9 +1550,23 @@ export default function AdminUsuarios() {
             </DialogDescription>
           </DialogHeader>
 
+          {/* Histórico em mês fechado: o banco recusa, e a tela diz antes
+              (01/10/2026 — excluir mudava números de setembro). */}
+          {resumoDaExclusao?.historicoFechado && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2.5 space-y-1.5">
+              <p className="text-xs font-semibold text-destructive flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Não dá para excluir: há histórico em mês fechado
+              </p>
+              <p className="text-[11px] text-destructive/90 leading-relaxed">
+                {mensagemHistoricoFechado(resumoDaExclusao.historicoFechado)}
+              </p>
+            </div>
+          )}
+
           {/* O que exatamente vai embora. Sem isto, "não pode ser desfeita"
               não diz QUANTO se perde — e a exclusão apaga tabulação. */}
-          {resumoDaExclusao && resumoDaExclusao.acordos > 0 && (
+          {resumoDaExclusao && !resumoDaExclusao.historicoFechado && resumoDaExclusao.acordos > 0 && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 space-y-1.5">
               <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -1578,7 +1592,7 @@ export default function AdminUsuarios() {
               variant="destructive"
               size="sm"
               onClick={excluirUsuarioEditado}
-              disabled={excluindoUsuario}
+              disabled={excluindoUsuario || !!resumoDaExclusao?.historicoFechado}
               className="gap-2"
             >
               <Trash2 className="w-4 h-4" />

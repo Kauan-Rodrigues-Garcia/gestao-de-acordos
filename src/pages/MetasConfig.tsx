@@ -58,6 +58,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useEmpresa } from "@/hooks/useEmpresa";
 import { useCargoPermissoes } from "@/hooks/useCargoPermissoes";
+import { useFechamentoMes } from "@/hooks/useFechamentoMes";
+import { CadeadoMes } from "@/components/CadeadoMes";
 import { supabase } from "@/lib/supabase";
 import type { QuartilConfig } from "@/lib/supabase";
 import { useTenant } from "@/lib/tenant-config";
@@ -71,6 +73,10 @@ import {
   type MetaValidacaoStatus,
 } from "@/services/metas/metasValidacao.service";
 import { listarClonesEquipes } from "@/services/equipes/equipesClones.service";
+import { buscarPessoasDoRetrato } from "@/services/analitico/pessoasDoMes";
+import {
+  buscarEquipesComOperadores, buscarSetoresDoRetrato, mapaSetorDaEquipe,
+} from "@/services/analitico/analitico.service";
 import { limparAvisoDeFerias } from "@/services/situacaoUsuario.service";
 import { AvisoVoltouDeFerias } from "@/components/TagFerias";
 import {
@@ -152,6 +158,57 @@ interface Operador {
    */
   ferias_ate?: string | null;
 }
+/**
+ * Os operadores do setor NUM MÊS FECHADO, a partir do retrato.
+ *
+ * A lista desta tela é do cadastro de hoje, e é o certo para o mês corrente.
+ * Para um mês fechado ela reescrevia o passado: quem mudou de setor em outubro
+ * aparecia na comissão de setembro do setor novo, quem foi excluído sumia e quem
+ * foi criado depois aparecia. O retrato guarda setor, equipe, clones e nome de
+ * cada um no mês — a mesma fonte do Desempenho Equipes.
+ *
+ * `null` = mês corrente ou sem retrato; quem chama usa a lista de hoje.
+ */
+async function operadoresDoRetrato(
+  empresaId: string, mesISO: string, setorId: string,
+): Promise<Operador[] | null> {
+  const pessoas = await buscarPessoasDoRetrato(empresaId, mesISO);
+  if (!pessoas) return null;
+  const [composicao, setoresDoMes] = await Promise.all([
+    buscarEquipesComOperadores(empresaId, mesISO),
+    buscarSetoresDoRetrato(empresaId, mesISO),
+  ]);
+  if (!composicao.doRetrato) return null;
+  const setorDaEquipe = mapaSetorDaEquipe(composicao.equipes);
+
+  const proprios: Operador[] = [];
+  const clonados: Operador[] = [];
+  for (const p of pessoas.values()) {
+    if (p.perfil !== "operador" && p.perfil !== "elite") continue;
+    const onde = composicao.operadorEquipeMap[p.id];
+    const setorOrigem = onde?.setor_id ?? p.setor_id;
+    if (setorOrigem === setorId) {
+      proprios.push({
+        id: p.id, nome: p.nome, equipe_id: onde?.equipe_id ?? p.equipe_id,
+        setor_id: setorOrigem, situacao: p.situacao, ferias_ate: null,
+      });
+      continue;
+    }
+    const equipeAqui = (composicao.equipesExtrasPorOperador[p.id] ?? [])
+      .find(eq => setorDaEquipe.get(eq) === setorId);
+    if (!equipeAqui) continue;
+    clonados.push({
+      id: p.id, nome: p.nome, equipe_id: equipeAqui,
+      equipeOrigemId: onde?.equipe_id ?? p.equipe_id,
+      setor_id: setorOrigem,
+      clonadoDe: (setorOrigem && setoresDoMes?.[setorOrigem]) || "outro setor",
+      situacao: p.situacao, ferias_ate: null,
+    });
+  }
+  const porNome = (a: Operador, b: Operador) => a.nome.localeCompare(b.nome, "pt-BR");
+  return [...proprios.sort(porNome), ...clonados.sort(porNome)];
+}
+
 interface MetaInput {
   meta_valor: string; meta_ho: string; extras: string[]; proporcional: boolean;
   /**
@@ -781,6 +838,12 @@ export default function MetasConfig() {
     if (!setorSelecionado) return;
     setLoadingOperadores(true);
     try {
+      // Mês fechado: quem estava neste setor NAQUELE mês, com o nome de lá
+      // (01/10/2026). Sem retrato, cai na lista de hoje logo abaixo.
+      const doMes = empresa?.id
+        ? await operadoresDoRetrato(empresa.id, `${ano}-${String(mes).padStart(2, "0")}`, setorSelecionado)
+        : null;
+      if (doMes) { setOperadores(doMes); return; }
       const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id, setor_id, situacao, ferias_ate")
         .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
@@ -791,7 +854,7 @@ export default function MetasConfig() {
       toast.error("Erro ao carregar operadores", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingOperadores(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setorSelecionado, empresa?.id]);
+  }, [setorSelecionado, empresa?.id, mes, ano]);
 
   /** Operadores de OUTRO setor clonados em alguma equipe deste setor. Entram na
    *  lista de metas junto dos próprios: a meta é por operador (a chave do
@@ -916,7 +979,15 @@ export default function MetasConfig() {
     setValidacao(await getMetaValidacaoStatus(empresa.id, setorSelecionado, mes, ano));
   }, [empresa?.id, setorSelecionado, mes, ano]);
 
-  const metaTravada = validacao?.status === "validado";
+  const metaValidada = validacao?.status === "validado";
+  /*
+   * Mês fechado (01/10/2026): metas, dias úteis e comissão de um mês já
+   * fechado são só leitura — a mesma régua do cadeado de acordos, com a mesma
+   * saída (super admin ou `ignorar_fechamento_mes`). O banco recusa do mesmo
+   * jeito (20261001130000); aqui é para a tela não oferecer o que não grava.
+   */
+  const fechamento = useFechamentoMes(`${ano}-${String(mes).padStart(2, "0")}`);
+  const metaTravada = metaValidada || fechamento.bloqueado;
 
   async function handleValidarMeta() {
     if (!empresa?.id || !setorSelecionado) return;
@@ -1324,6 +1395,7 @@ export default function MetasConfig() {
    */
   const salvarConfigMes = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
+    if (fechamento.impedir("alterar dias úteis e quartis deste mês")) return;
     if (!(temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis)) return;
 
     setSalvandoTudo(true);
@@ -1341,7 +1413,7 @@ export default function MetasConfig() {
     setConfigOriginal({ feriados, quartis, contarDiaAtual });
   }, [
     empresa?.id, perfil?.id, temConfigMes, configDbAtiva, configAlterada,
-    podeEditarDiasUteis, mes, ano, feriados, quartis, contarDiaAtual,
+    podeEditarDiasUteis, mes, ano, feriados, quartis, contarDiaAtual, fechamento,
   ]);
 
   /*
@@ -1624,40 +1696,53 @@ export default function MetasConfig() {
             </SectionCard>
           )}
 
+          {/* Mês fechado: tudo aqui é só leitura (ou o aviso de quem passa por cima). */}
+          {fechamento.fechado && (
+            <div className={cn(
+              "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm",
+              fechamento.liberadoPorCargo
+                ? "border-amber-500/40 bg-amber-500/10"
+                : "border-border bg-muted/30",
+            )}>
+              <CadeadoMes mensagem={fechamento.mensagem} liberado={fechamento.liberadoPorCargo} variante="icone" />
+              <p className="text-xs text-foreground">{fechamento.mensagem}</p>
+            </div>
+          )}
+
           {/* Trava de meta do setor (Fase 1 de validação) */}
           <div className={cn(
             "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm",
-            metaTravada ? "border-emerald-600/30 bg-emerald-600/10" : "border-border bg-muted/20",
+            metaValidada ? "border-emerald-600/30 bg-emerald-600/10" : "border-border bg-muted/20",
           )}>
-            {metaTravada
+            {metaValidada
               ? <Lock className="h-4 w-4 text-emerald-600 shrink-0" />
               : <LockOpen className="h-4 w-4 text-muted-foreground shrink-0" />}
             <div className="flex-1 min-w-0">
               <p className="font-medium text-foreground">
-                {metaTravada
+                {metaValidada
                   ? `Meta validada${validacao?.validadoEm ? " em " + new Date(validacao.validadoEm).toLocaleDateString("pt-BR") : ""}`
                   : "Meta ainda não validada"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {metaTravada
+                {metaValidada
                   ? "Ninguém edita até um admin reabrir."
                   : "Só administrador/super_admin valida. Depois de validada, ninguém edita sem reabrir."}
               </p>
             </div>
-            {isAdmin && !metaTravada && (
+            {isAdmin && !metaValidada && (
               <Button size="sm" variant="outline" className="gap-1.5 shrink-0"
                 disabled={validandoAcao} onClick={handleValidarMeta}>
                 <ShieldCheck className="h-3.5 w-3.5" /> Validar meta do setor
               </Button>
             )}
-            {isAdmin && metaTravada && !mostrarReabrir && (
+            {isAdmin && metaValidada && !mostrarReabrir && (
               <Button size="sm" variant="outline" className="gap-1.5 shrink-0"
                 onClick={() => setMostrarReabrir(true)}>
                 <LockOpen className="h-3.5 w-3.5" /> Reabrir
               </Button>
             )}
           </div>
-          {isAdmin && metaTravada && mostrarReabrir && (
+          {isAdmin && metaValidada && mostrarReabrir && (
             <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 -mt-3">
               <Input
                 className="h-8 text-sm flex-1"
@@ -1949,6 +2034,7 @@ export default function MetasConfig() {
                 mes={mes}
                 isPaguePlay={isPP}
                 metaTravada={metaTravada}
+                motivoTrava={!metaValidada && fechamento.bloqueado ? fechamento.mensagem : undefined}
                 equipes={equipes.map(e => ({ id: e.id, nome: e.nome }))}
                 operadores={operadoresComissao}
                 metas={metasDoMes}

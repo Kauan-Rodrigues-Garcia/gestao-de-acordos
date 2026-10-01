@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { partesDoMes } from '@/lib/mesReferencia';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { assinarTabela } from '@/lib/realtime';
@@ -136,7 +137,7 @@ export function useFechamentoOperadores({
     const encerrar = primeira ? null : comecouAtualizacao();
 
     try {
-      const [perfisResp, resumoResp, metasResp, cfg, equipesResp, composicao, manuaisResp] =
+      const [perfisResp, resumoResp, metasResp, cfg, equipesResp, composicao, manuaisResp, retratoPessoas] =
         await Promise.all([
           /*
            * O mesmo corte da aba Quartis: quem produz recebimento, ativo OU
@@ -161,13 +162,19 @@ export function useFechamentoOperadores({
             .eq('empresa_id', empresaId),
           buscarEquipesComOperadores(empresaId, mes),
           buscarManuaisDoMes(empresaId, ano, mesNum),
+          // Mês fechado: a lista DAQUELE mês (ver `pessoasDoMes.ts`).
+          buscarPessoasDoRetrato(empresaId, mes),
         ]);
 
       if (meu !== serie.current) { encerrar?.(false); return; }
 
       if (perfisResp.error) throw new Error(perfisResp.error.message);
 
-      const perfis = ((perfisResp.data as unknown as PerfilFechamento[]) ?? [])
+      const perfis = pessoasDoMes(
+        (perfisResp.data as unknown as PerfilFechamento[]) ?? [],
+        retratoPessoas,
+        { cargos: PERFIS_QUE_CONTAM_NO_RECEBIMENTO, situacao: 'ou_desligado' },
+      )
         .filter(p => p.arquivado !== true
           || (!!p.desligado_em && mes <= p.desligado_em.slice(0, 7)));
 

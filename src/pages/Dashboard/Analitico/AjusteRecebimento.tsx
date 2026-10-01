@@ -38,6 +38,8 @@
  * Esconder botão é conforto; quem recusa é o banco. A RLS repete a mesma regra
  * de alcance (`fn_ajuste_no_meu_alcance`).
  */
+import { CadeadoMes } from '@/components/CadeadoMes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, Check, Loader2, Minus, Plus, Search, History,
@@ -84,8 +86,15 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
   const meuId = perfil?.id ?? null;
   const meuNome = perfil?.nome ?? perfil?.email ?? 'Sem nome';
 
-  const podeLancar      = temPermissao('ajuste_recebimento_lancar');
-  const podeAdministrar = temPermissao('ajuste_recebimento_administrar');
+  /*
+   * Mês fechado (01/10/2026): o ajuste é por competência, e o de um mês já
+   * fechado mudaria um número apresentado. Lançar, editar e apagar ficam
+   * fechados para quem não passa pelo cadeado; o banco recusa do mesmo jeito
+   * (20261001130000). A lista continua visível.
+   */
+  const fechamento = useFechamentoMes(mes);
+  const temAcesso       = temPermissao('ajuste_recebimento_lancar') || temPermissao('ajuste_recebimento_administrar');
+  const podeLancar      = temPermissao('ajuste_recebimento_lancar') && !fechamento.bloqueado;
 
   // ── Dados ─────────────────────────────────────────────────────────────────
 
@@ -188,7 +197,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
   const [alvoRemocao, setAlvoRemocao] = useState<AjusteManual | null>(null);
   const [verApagados, setVerApagados] = useState(false);
 
-  if (!podeLancar && !podeAdministrar) {
+  if (!temAcesso) {
     return (
       <p className="text-sm text-muted-foreground px-1 py-8 text-center">
         Você não tem permissão para ajustar recebimento.
@@ -212,6 +221,13 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
           </p>
         </div>
       </div>
+
+      {fechamento.fechado && (
+        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-muted/30">
+          <CadeadoMes mensagem={fechamento.mensagem} liberado={fechamento.liberadoPorCargo} variante="icone" />
+          <p className="text-xs text-foreground">{fechamento.mensagem}</p>
+        </div>
+      )}
 
       {/* ── Card novo — só para quem ainda não tem ────────────────────────── */}
       {podeLancar && (
@@ -367,6 +383,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
             <CardOperador
               key={a.id}
               ajuste={a}
+              somenteLeitura={fechamento.bloqueado}
               onEditar={() => setAlvoEdicao(a)}
               onApagar={() => setAlvoRemocao(a)}
             />
@@ -464,9 +481,11 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
  * por card em toda abertura da aba, para mostrar o que quase ninguém expande.
  */
 function CardOperador({
-  ajuste, onEditar, onApagar,
+  ajuste, onEditar, onApagar, somenteLeitura = false,
 }: {
   ajuste: AjusteManual;
+  /** Mês fechado: o card fica só de leitura (sem editar nem apagar). */
+  somenteLeitura?: boolean;
   onEditar: () => void;
   onApagar: () => void;
 }) {
@@ -510,12 +529,16 @@ function CardOperador({
       )}
 
       <div className="flex items-center gap-1.5 mt-1.5">
-        <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1" onClick={onEditar}>
-          <Pencil className="w-3 h-3" /> Atualizar total
-        </Button>
-        <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1 text-destructive" onClick={onApagar}>
-          <Trash2 className="w-3 h-3" /> Apagar
-        </Button>
+        {!somenteLeitura && (
+          <>
+            <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1" onClick={onEditar}>
+              <Pencil className="w-3 h-3" /> Atualizar total
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1 text-destructive" onClick={onApagar}>
+              <Trash2 className="w-3 h-3" /> Apagar
+            </Button>
+          </>
+        )}
         <Button
           size="sm" variant="ghost"
           className="h-6 text-[11px] gap-1 ml-auto text-muted-foreground"

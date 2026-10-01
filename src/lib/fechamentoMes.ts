@@ -7,6 +7,11 @@
  * edita, não se exclui, não se dispara WhatsApp, não se reagenda. A tela passa a
  * mostrar cadeado, e quem tenta agir recebe o motivo em vez de um erro genérico.
  *
+ * Desde 01/10/2026 o mesmo cadeado vale para metas, dias úteis, comissão, Pix e
+ * ajuste manual, com trava também no banco (`20261001130000`). O quadro inteiro
+ * do que fecha e do que continua aberto está em `docs/REGRAS-DE-NEGOCIO.md`
+ * §12.5.
+ *
  * O porquê é de negócio, não técnico: o fechamento do mês é apresentado para
  * diretoria e equipe (ver `services/fechamento`), e um número que ainda pode
  * mudar depois de apresentado não é fechamento — é foto de rascunho. Editar
