@@ -59,7 +59,7 @@ import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
-import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, useHalloween } from '@/components/Halloween/preferencia';
+import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
@@ -255,7 +255,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // `Halloween/preferencia.ts`. Até a validação, só o super_admin.
   const { pathname } = useLocation();
   const hw = useHalloween();
-  const halloween = hw.ligado;
   const cenaHalloween = useMemo(() => cenaDaRota(pathname, isPP), [pathname, isPP]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
@@ -281,6 +280,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // vez a mais: a `key` nova remonta e devolve o envelope mesmo com a carta
   // já aberta.
   const [boasVindasVez, setBoasVindasVez] = useState(0);
+  // A pessoa apertou «Ler agora» no envelope que está na tela.
+  const [cartaAberta, setCartaAberta] = useState(false);
   const tourJaVisto = !!perfil?.tour_visto_em;
   useEffect(() => {
     if (!hw.ligado || termoLoading || precisaAceitar) return;
@@ -290,7 +291,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
   useEffect(() => {
     if (!hw.ligado) return;
-    const abrir = () => { setBoasVindasVez(v => v + 1); setBoasVindasAberta(true); };
+    const abrir = () => { setBoasVindasVez(v => v + 1); setCartaAberta(false); setBoasVindasAberta(true); };
     window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
     return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
   }, [hw.ligado]);
@@ -303,6 +304,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
     if (!getImpersonacaoAtiva()) hw.marcarBoasVindasVistas();
   };
+
+  /*
+   * O tema chega COM a mensagem, não antes dela.
+   *
+   * Enquanto a mensagem está pendente (ou o envelope está na tela), o tema fica
+   * segurado: nada de teias, morcegos, fundo nem abóbora no chat, e as camadas
+   * nem são baixadas. No «Ler agora» ele solta — as camadas descem e se montam
+   * por trás da carta, que espera por elas (`preparar`) antes de liberar o
+   * «Entrar no Halloween». Quem fecha a carta encontra tudo no lugar.
+   *
+   * `cartaAberta` não volta a `false` ao fechar: entre fechar e a marca de
+   * «vista» chegar, o tema piscaria. Volta só quando um envelope novo abre.
+   * Impersonação não recebe a mensagem — então também não segura o tema.
+   */
+  const esperandoCarta = temaEsperaACarta({
+    cartaAberta,
+    envelopeNaTela: boasVindasAberta,
+    pendente: hw.boasVindasPendentes,
+    impersonando: !!getImpersonacaoAtiva(),
+  });
+  const halloween = hw.ligado && !esperandoCarta;
 
   /*
    * A campanha que o menu anuncia.
@@ -946,6 +968,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               nome={perfil?.nome}
               preparar={carregarHalloween}
               aoFechar={fecharBoasVindas}
+              aoAbrirCarta={() => setCartaAberta(true)}
             />
           </Suspense>
         )}

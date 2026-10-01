@@ -97,19 +97,38 @@ describe('BoasVindasHalloween', () => {
 });
 
 describe('BoasVindasHalloween — chega fechada', () => {
-  it('mostra só o envelope, sem carta e sem música', () => {
+  const envelope = () => screen.queryByRole('dialog', { name: 'Você tem uma mensagem' });
+  const carta = () => screen.queryByRole('dialog', { name: /Obrigado/ });
+
+  it('mostra só o envelope, no meio da tela, sem carta e sem música', () => {
     render(<BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Ler agora' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(envelope()).toBeInTheDocument();
+    expect(envelope()).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('button', { name: 'Ler agora' })).toHaveFocus();
+    expect(carta()).toBeNull();
     expect(trilhaFalsa.tocar).not.toHaveBeenCalled();
   });
 
-  it('«Ler agora» abre a carta e só então a música começa', async () => {
-    render(<BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={() => {}} />);
+  it('é obrigatória: Esc não fecha o envelope', () => {
+    const aoFechar = vi.fn();
+    render(<BoasVindasHalloween nome="Ana" preparar={() => Promise.resolve()} aoFechar={aoFechar} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(aoFechar).not.toHaveBeenCalled();
+    expect(envelope()).toBeInTheDocument();
+  });
+
+  it('«Ler agora» abre a carta, avisa o Layout (solta o tema) e só então a música começa', async () => {
+    const aoAbrirCarta = vi.fn();
+    const preparar = vi.fn(() => Promise.resolve());
+    render(<BoasVindasHalloween nome="Ana" preparar={preparar} aoFechar={() => {}} aoAbrirCarta={aoAbrirCarta} />);
+    expect(preparar).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Ler agora' }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(aoAbrirCarta).toHaveBeenCalledTimes(1);
+    expect(carta()).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Ler agora' })).toBeNull();
     expect(trilhaFalsa.tocar).toHaveBeenCalledTimes(1);
+    // O tema começa a carregar junto com a carta, não antes.
+    expect(preparar).toHaveBeenCalledTimes(1);
   });
 });

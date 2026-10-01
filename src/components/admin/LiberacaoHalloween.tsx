@@ -54,8 +54,8 @@ export default function LiberacaoHalloween() {
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground leading-relaxed">
           Hoje só super admins veem o tema. Ao liberar, quem está logado recebe na hora a
-          mensagem de outubro — fechada, no rodapé, com «Ler agora»; a música só toca quando
-          a pessoa abre — e ganha o tema; quem entrar depois recebe ao entrar. Cada um
+          mensagem de outubro — fechada, no meio da tela, com «Ler agora»; a música e o tema
+          só começam quando a pessoa abre; quem entrar depois recebe ao entrar. Cada um
           pode desligar os enfeites no botão de tema. Este cartão some depois de liberado.
         </p>
         <div className="flex flex-wrap gap-2">

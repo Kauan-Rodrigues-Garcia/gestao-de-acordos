@@ -47,6 +47,20 @@ export function pediuBoasVindasNaUrl(busca: string = window.location.search): bo
   return new URLSearchParams(busca).has('hw-boas-vindas');
 }
 
+/**
+ * O tema chega com a mensagem, não antes: fica segurado enquanto ela está
+ * pendente ou com o envelope na tela, e solta no «Ler agora». Quem está
+ * sendo visto por impersonação não recebe a mensagem — então não segura.
+ */
+export function temaEsperaACarta(p: {
+  cartaAberta: boolean;
+  envelopeNaTela: boolean;
+  pendente: boolean;
+  impersonando: boolean;
+}): boolean {
+  return !p.cartaAberta && (p.envelopeNaTela || (p.pendente && !p.impersonando));
+}
+
 /** Pede ao `Layout` para abrir a mensagem agora (o «Ver a mensagem» de Configurações). */
 export const EVENTO_ABRIR_BOAS_VINDAS = 'hw-abrir-boas-vindas';
 export const abrirBoasVindasHalloween = () => { window.dispatchEvent(new Event(EVENTO_ABRIR_BOAS_VINDAS)); };

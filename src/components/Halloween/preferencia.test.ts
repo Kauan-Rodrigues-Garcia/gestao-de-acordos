@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  pediuBoasVindasNaUrl, podeVerHalloween, resolverHalloween, temporadaHalloween,
+  pediuBoasVindasNaUrl, podeVerHalloween, resolverHalloween, temporadaHalloween, temaEsperaACarta,
 } from './preferencia';
 import { mesQuePassou, primeiroNome } from './textosBoasVindas';
 
@@ -70,5 +70,29 @@ describe('textos da mensagem', () => {
     expect(primeiroNome('  kauan rodrigues ')).toBe('Kauan');
     expect(primeiroNome('')).toBeNull();
     expect(primeiroNome(null)).toBeNull();
+  });
+});
+
+describe('temaEsperaACarta', () => {
+  const base = { cartaAberta: false, envelopeNaTela: false, pendente: false, impersonando: false };
+
+  it('mensagem pendente: o tema espera, mesmo antes de o envelope aparecer', () => {
+    expect(temaEsperaACarta({ ...base, pendente: true })).toBe(true);
+  });
+
+  it('envelope na tela (inclusive pelo «Ver a mensagem»): espera', () => {
+    expect(temaEsperaACarta({ ...base, envelopeNaTela: true })).toBe(true);
+  });
+
+  it('«Ler agora» solta o tema', () => {
+    expect(temaEsperaACarta({ ...base, pendente: true, envelopeNaTela: true, cartaAberta: true })).toBe(false);
+  });
+
+  it('já leu: tema livre', () => {
+    expect(temaEsperaACarta(base)).toBe(false);
+  });
+
+  it('impersonação não recebe a mensagem, então não segura o tema', () => {
+    expect(temaEsperaACarta({ ...base, pendente: true, impersonando: true })).toBe(false);
   });
 });

@@ -3,12 +3,14 @@
  *
  * ## Chega fechada
  *
- * Abrir sozinha, no meio da tela e com música, assustava — a pessoa estava
- * trabalhando (às vezes em ligação) e a tela «explodia». Agora ela chega como
- * um envelope pequeno no rodapé, sem cobrir nada e sem som (`EnvelopeFechado`).
- * Só o «Ler agora» abre a carta — e é aí que a música começa. Vale para
- * todos os caminhos, inclusive o «Ver a mensagem» de Configurações.
- * `abrirDireto` existe só para os testes da carta.
+ * Abrir sozinha já com música assustava — a pessoa estava trabalhando (às
+ * vezes em ligação) e a tela «explodia». Agora ela chega como um envelope
+ * fechado (`EnvelopeFechado`): no meio da tela, com o resto borrado, e sem
+ * som. É obrigatória — não fecha com Esc nem clicando fora. Só o «Ler agora»
+ * abre a carta, e é aí que a música começa e o tema começa a carregar (o
+ * `Layout` o segura até `aoAbrirCarta`). Vale para todos os caminhos,
+ * inclusive o «Ver a mensagem» de Configurações. `abrirDireto` existe só para
+ * os testes da carta.
  *
  * ## A carta
  *
@@ -26,7 +28,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Volume2, VolumeX } from 'lucide-react';
 import { AboboraChat } from './Desenhos';
 import { carregarFonte } from './fonte';
@@ -49,67 +51,96 @@ interface PropsBoasVindas {
 }
 
 export default function BoasVindasHalloween({
-  abrirDireto = false, ...props
+  abrirDireto = false, aoAbrirCarta, ...props
 }: PropsBoasVindas & {
   /** Pula o envelope. Só nos testes da carta; o app sempre entrega fechada. */
   abrirDireto?: boolean;
+  /** A pessoa apertou «Ler agora»: o `Layout` solta o tema neste instante. */
+  aoAbrirCarta?: () => void;
 }) {
   const [lendo, setLendo] = useState(abrirDireto);
-  return lendo ? <CartaAberta {...props} /> : <EnvelopeFechado aoLer={() => setLendo(true)} />;
+  const ler = () => { setLendo(true); aoAbrirCarta?.(); };
+
+  // Um véu só para o envelope e a carta: trocar um pelo outro não pisca o fundo.
+  return createPortal(
+    <motion.div
+      className="fixed inset-0 z-[200] flex overflow-y-auto p-4"
+      style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', background: 'oklch(0.14 0.03 300 / .38)' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {lendo
+          ? <CartaAberta key="carta" {...props} />
+          : <EnvelopeFechado key="envelope" aoLer={ler} />}
+      </AnimatePresence>
+    </motion.div>,
+    document.body,
+  );
 }
 
+/** As cores da noite, iguais no envelope e na carta, em qualquer tema. */
+const NOITE = {
+  color: 'oklch(0.95 0.015 80)',
+  border: '1px solid oklch(0.5 0.1 300 / .45)',
+  // O anel de foco global usa estas duas: aqui, âmbar sobre a noite.
+  ['--ring' as string]: 'oklch(0.85 0.15 70)',
+  ['--background' as string]: 'oklch(0.17 0.04 292)',
+};
+
 /**
- * O envelope: pequeno, no rodapé, sem fundo borrado e sem som. Não prende a
- * tela — dá para continuar trabalhando e abrir quando der.
+ * O envelope: no meio da tela, com o resto borrado, e sem som. Obrigatório —
+ * não fecha com Esc nem clicando fora; a única saída é «Ler agora».
  */
 function EnvelopeFechado({ aoLer }: { aoLer: () => void }) {
-  return createPortal(
-    // Casca só para centralizar: o `transform` do framer-motion não briga com ela.
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[150] flex justify-center px-4">
-    <motion.section
-      aria-label="Mensagem de outubro"
-      className="pointer-events-auto relative w-full max-w-[420px] overflow-hidden rounded-2xl shadow-2xl"
+  const botao = useRef<HTMLButtonElement>(null);
+  useEffect(() => { botao.current?.focus(); }, []);
+
+  return (
+    <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hw-env-titulo"
+      aria-describedby="hw-env-texto"
+      className="relative m-auto w-full max-w-[380px] overflow-hidden rounded-3xl px-7 pb-7 pt-12 text-center shadow-2xl"
       style={{
-        background: 'radial-gradient(140% 120% at 0% 0%, oklch(0.32 0.08 300) 0%, oklch(0.2 0.05 295) 60%, oklch(0.16 0.04 290) 100%)',
-        color: 'oklch(0.95 0.015 80)',
-        border: '1px solid oklch(0.5 0.1 300 / .45)',
-        ['--ring' as string]: 'oklch(0.85 0.15 70)',
-        ['--background' as string]: 'oklch(0.17 0.04 292)',
+        background: 'radial-gradient(120% 90% at 50% 0%, oklch(0.32 0.08 300) 0%, oklch(0.2 0.05 295) 55%, oklch(0.15 0.035 290) 100%)',
+        ...NOITE,
       }}
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 24 }}
-      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ opacity: 0, y: 18, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.2 } }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
     >
-      {/* A aba do envelope, fechada. */}
-      <svg aria-hidden="true" viewBox="0 0 420 34" preserveAspectRatio="none" className="absolute inset-x-0 top-0 h-[34px] w-full">
-        <path d="M0 0 L210 30 L420 0" fill="none" stroke="oklch(0.6 0.1 300 / .45)" strokeWidth="1.2" />
+      {/* A aba do envelope, fechada, com o selo de abóbora no vértice. */}
+      <svg aria-hidden="true" viewBox="0 0 380 92" preserveAspectRatio="none" className="absolute inset-x-0 top-0 h-[92px] w-full">
+        <path d="M0 0 L190 84 L380 0 Z" fill="oklch(0.27 0.07 298 / .7)" />
+        <path d="M0 0 L190 84 L380 0" fill="none" stroke="oklch(0.6 0.1 300 / .5)" strokeWidth="1.2" />
       </svg>
-      <div className="relative flex items-center gap-3 px-4 pb-4 pt-6">
-        <div className="shrink-0 [&_.hw-abobora]:h-[48px] [&_.hw-abobora]:w-[48px]">
-          <AboboraChat acesa={false} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'oklch(0.8 0.12 60)' }}>
-            Outubro chegou
-          </p>
-          <p className="text-[15px] font-semibold leading-tight">Você tem uma mensagem</p>
-          <p className="mt-0.5 text-xs" style={{ color: 'oklch(0.82 0.03 80)' }}>
-            Ela vem com música. Abra quando puder.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={aoLer}
-          className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-          style={{ background: 'oklch(0.72 0.18 52)', color: 'oklch(0.2 0.04 40)' }}
-        >
-          Ler agora
-        </button>
+      <div className="relative mx-auto mb-3 w-fit [&_.hw-abobora]:h-[72px] [&_.hw-abobora]:w-[72px]">
+        <AboboraChat acesa={false} />
       </div>
-    </motion.section>
-    </div>,
-    document.body,
+      <p className="relative text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'oklch(0.8 0.12 60)' }}>
+        Outubro chegou
+      </p>
+      <h2 id="hw-env-titulo" className="relative mt-1.5 text-2xl font-bold leading-tight">
+        Você tem uma mensagem
+      </h2>
+      <p id="hw-env-texto" className="relative mt-2 text-sm leading-relaxed" style={{ color: 'oklch(0.85 0.03 80)' }}>
+        Ela vem com música — se estiver em ligação, abaixe o som antes de abrir.
+      </p>
+      <button
+        ref={botao}
+        type="button"
+        onClick={aoLer}
+        className="relative mt-6 w-full rounded-xl px-4 py-3 text-[15px] font-semibold transition-transform hover:-translate-y-0.5"
+        style={{ background: 'oklch(0.72 0.18 52)', color: 'oklch(0.2 0.04 40)' }}
+      >
+        Ler agora
+      </button>
+    </motion.div>
   );
 }
 
@@ -161,15 +192,7 @@ function CartaAberta({ nome, preparar, aoFechar }: PropsBoasVindas) {
     return () => window.removeEventListener('keydown', aoTeclar);
   }, [pronto, aoFechar]);
 
-  return createPortal(
-    <motion.div
-      className="fixed inset-0 z-[200] flex overflow-y-auto p-4"
-      style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', background: 'oklch(0.14 0.03 300 / .38)' }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.35 }}
-    >
+  return (
       <motion.div
         role="dialog"
         aria-modal="true"
@@ -284,7 +307,5 @@ function CartaAberta({ nome, preparar, aoFechar }: PropsBoasVindas) {
           </span>
         </button>
       </motion.div>
-    </motion.div>,
-    document.body,
   );
 }
