@@ -87,6 +87,8 @@ vi.mock('@/services/analitico/analitico.service', () => ({
   })),
   buscarTotalOrfaosPorSetor: vi.fn(async () => ({})),
   buscarTotalPorSetor:       vi.fn(async () => ({})),
+  // Mês fechado lê a chave «alternativo» do retrato; null = sem retrato.
+  buscarAlternativosDoRetrato: vi.fn(async () => null),
   buscarResumoMensal:        vi.fn(async () => ({ data: null, error: null })),
   removerLinhaAnalitico:     vi.fn(async () => ({ error: null })),
   removerOrfaosDoMes:        vi.fn(async () => ({ error: null })),
