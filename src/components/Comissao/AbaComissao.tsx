@@ -76,6 +76,11 @@ export interface AbaComissaoProps {
   isPaguePlay: boolean;
   /** A meta do setor está validada neste mês. */
   metaTravada: boolean;
+  /**
+   * Por que está travada, quando NÃO é a validação do setor — hoje, o mês
+   * fechado (01/10/2026). Ausente = a frase da validação.
+   */
+  motivoTrava?: string;
   equipes: { id: string; nome: string }[];
   operadores: OperadorComissao[];
   /** As linhas de `metas` do mês (operadores e setor), cruas. */
@@ -95,7 +100,7 @@ function Secao({ titulo, descricao, children }: { titulo: string; descricao?: st
 }
 
 export function AbaComissao({
-  empresaId, setorId, setorNome, ano, mes, isPaguePlay, metaTravada, equipes, operadores, metas,
+  empresaId, setorId, setorNome, ano, mes, isPaguePlay, metaTravada, motivoTrava, equipes, operadores, metas,
 }: AbaComissaoProps) {
   const { temPermissao } = useCargoPermissoes();
   const podeEditar = temPermissao('metas_comissao_editar');
@@ -272,8 +277,10 @@ export function AbaComissao({
         <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-xs">
           <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
           <span>
-            Meta do setor validada neste mês: a configuração da comissão está bloqueada até a
-            validação ser reaberta. Confirmar a meta do setor continua possível.
+            {motivoTrava
+              ? `${motivoTrava} Confirmar a meta do setor continua possível.`
+              : 'Meta do setor validada neste mês: a configuração da comissão está bloqueada até a '
+                + 'validação ser reaberta. Confirmar a meta do setor continua possível.'}
           </span>
         </div>
       )}

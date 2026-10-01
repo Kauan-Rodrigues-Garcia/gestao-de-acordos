@@ -12,6 +12,7 @@
 --   diario_recebimentos      ON DELETE SET NULL
 --   comissao_config_usuarios ON DELETE CASCADE — a exceção de comissão do mês
 --   comissao_bonus_usuarios  ON DELETE CASCADE — o bônus do mês
+--   analitico_ajustes_manuais ON DELETE CASCADE — o ajuste de recebimento
 --
 -- Para o mês corrente é o que se quer. Para um mês FECHADO, cada um desses
 -- muda um número já apresentado: o dinheiro sai do card da equipe, do ranking
@@ -89,6 +90,13 @@ BEGIN
    WHERE operador_id = p_user_id
      AND (criado_em AT TIME ZONE 'America/Sao_Paulo')::DATE < v_inicio;
   IF n > 0 THEN v_partes := v_partes || format('%s registro(s) de Pix', n); END IF;
+
+  IF to_regclass('public.analitico_ajustes_manuais') IS NOT NULL THEN
+    EXECUTE 'SELECT count(*) FROM public.analitico_ajustes_manuais
+              WHERE operador_id = $1 AND mes_referencia < $2 AND NOT cancelado'
+       INTO n USING p_user_id, v_inicio;
+    IF n > 0 THEN v_partes := v_partes || format('%s ajuste(s) de recebimento', n); END IF;
+  END IF;
 
   IF to_regclass('public.comissao_config_usuarios') IS NOT NULL THEN
     EXECUTE 'SELECT count(*) FROM public.comissao_config_usuarios

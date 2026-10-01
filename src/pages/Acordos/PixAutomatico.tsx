@@ -72,7 +72,8 @@ import { copiarTexto } from '@/lib/clipboard';
 import {
   ehMesAtual, mesAtual, partesDoMes, primeiroDiaDoMes, rotuloDoMes, ultimoDiaDoMes,
 } from '@/lib/mesReferencia';
-import { noMesPix } from '@/lib/mesPix';
+import { noMesPix, dataLocalPix } from '@/lib/mesPix';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 // As contas desta tela vivem em `pixAutomaticoView`: são puras e têm teste
@@ -402,6 +403,13 @@ export function PixAutomatico() {
   const [loading, setLoading]       = useState(() => guardado == null);
 
   const noMesAtual = ehMesAtual(mes);
+  /*
+   * Mês fechado (01/10/2026): registrar, importar em lote e editar valor/NR de
+   * um mês já fechado ficam bloqueados — o banco recusa do mesmo jeito
+   * (20261001130000). Avaliar, pagar e corrigir saldo continuam: é a fila do
+   * mês passado sendo resolvida, não o mês sendo reescrito.
+   */
+  const fechamento = useFechamentoMes(mes);
   const inicioDoMes = primeiroDiaDoMes(mes);
   const fimDoMes    = ultimoDiaDoMes(mes);
 
@@ -1062,6 +1070,7 @@ export function PixAutomatico() {
    */
   async function registrarDaListaDeAcordos(a: AcordoSemRegistroPix) {
     if (!empresa?.id || !perfil?.id) return;
+    if (fechamento.impedir('registrar Pix neste mês')) return;
     const { ok, error, nrMesmoOperador } = await criarAcordoPix({
       empresaId:    empresa.id,
       operadorId:   perfil.id,
@@ -1423,6 +1432,7 @@ export function PixAutomatico() {
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
     if (!empresa?.id || !perfil?.id) return;
+    if (fechamento.impedir('registrar Pix neste mês')) return;
     const nr = nrNovo.trim();
     const valor = parseCurrencyInput(valorNovo);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
@@ -1595,6 +1605,7 @@ export function PixAutomatico() {
   }
 
   async function salvarEdicao(item: PixAutoAcordo) {
+    if (fechamento.impedirData(dataLocalPix(item.criado_em), 'editar este registro de Pix')) return;
     const nr = editNr.trim();
     const valor = parseCurrencyInput(editValor);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
@@ -2098,6 +2109,7 @@ export function PixAutomatico() {
 
   async function importarArquivo(file: File) {
     if (!empresa?.id || !perfil?.id) return;
+    if (fechamento.impedir('importar Pix neste mês')) return;
     setImportando(true);
     try {
       const buf = await file.arrayBuffer();

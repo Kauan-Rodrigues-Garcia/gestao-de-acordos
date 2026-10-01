@@ -89,6 +89,7 @@ import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL, parseBRL } from '@/lib/money';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { upsertMetas } from '@/services/metas/metasValidacao.service';
 import {
   rotuloUnidade, UNIDADE_PADRAO, type UnidadeValor,
@@ -576,7 +577,9 @@ export function QuartisOperadores({
    * é quando o valor passa a existir em `metasOp` e a pessoa muda de lista.
    */
   const { temPermissao } = useCargoPermissoes();
-  const podeEditarMetas = temPermissao('metas_editar');
+  // Mês fechado (01/10/2026): a meta de um mês já fechado é só leitura.
+  const fechamento = useFechamentoMes(mes);
+  const podeEditarMetas = temPermissao('metas_editar') && !fechamento.bloqueado;
   const [semMetaAberto, setSemMetaAberto] = useState(false);
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
   const [salvandoMeta, setSalvandoMeta] = useState<string | null>(null);
