@@ -50,6 +50,14 @@ describe('pacote de entrada', () => {
     }
   });
 
+  it('o Som ambiente só baixa o painel quando alguém abre', () => {
+    const daqui = arquivosDoApp(join(RAIZ, 'components', 'Halloween', 'SomAmbiente'))
+      .filter(f => !f.endsWith('PainelSomAmbiente.tsx'));
+    for (const f of daqui) {
+      expect(importsEstaticos(readFileSync(f, 'utf8')), relative(RAIZ, f)).not.toContain('./PainelSomAmbiente');
+    }
+  });
+
   it('a BolhaChat não importa estaticamente nenhuma peça da janela', () => {
     const imports = importsEstaticos(ler('components/Chat/BolhaChat.tsx'));
     for (const peca of [

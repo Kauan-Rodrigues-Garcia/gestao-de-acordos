@@ -54,6 +54,7 @@ import { OnboardingTour } from './OnboardingTour';
 import { DesafioMenu } from './DesafioMenu';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
+import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
@@ -750,6 +751,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500" />
               </Button>
             )}
+            {/* Som ambiente — os temas de terror, a música do Veigh ou a
+                playlist da pessoa. Vem com o tema de Halloween: só aparece
+                quando ele está liberado (`hw.disponivel`). O motor vive fora
+                do React — trocar de página não para a música. Ver
+                `components/Halloween/SomAmbiente/motor.ts`. */}
+            {hw.disponivel && <BotaoSomAmbiente perfilId={perfil?.id} />}
             {/* Sino — indica novas sem abrir o painel.
                 O sino BALANÇA e o número PULSA quando chega notificação: o
                 badge sozinho, num canto de 16 px, passava despercebido em quem

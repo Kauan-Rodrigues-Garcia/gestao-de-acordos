@@ -21,6 +21,7 @@ import { AboboraChat } from './Desenhos';
 import { carregarFonte } from './fonte';
 import { mesQuePassou, primeiroNome } from './textosBoasVindas';
 import { tocarTrilhaHalloween, type EstadoTrilha, type Trilha } from './trilha';
+import { liberarSilencio as liberarSomAmbiente, silenciar as silenciarSomAmbiente } from './SomAmbiente/motor';
 
 /** O máximo que o botão espera o tema antes de liberar mesmo assim. */
 const ESPERA_MAXIMA_MS = 4000;
@@ -66,11 +67,12 @@ export default function BoasVindasHalloween({
     return () => clearInterval(tique);
   }, []);
 
-  // A trilha nasce e morre com a mensagem.
+  // A trilha nasce e morre com a mensagem — e o Som ambiente espera ela acabar.
   useEffect(() => {
+    silenciarSomAmbiente('halloween');
     const t = tocarTrilhaHalloween(setSom);
     trilha.current = t;
-    return () => { t.parar(); trilha.current = null; };
+    return () => { t.parar(); trilha.current = null; liberarSomAmbiente('halloween'); };
   }, []);
 
   useEffect(() => { if (pronto) botao.current?.focus(); }, [pronto]);
