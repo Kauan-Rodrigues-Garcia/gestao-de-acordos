@@ -85,22 +85,26 @@ function Chuva() {
       const x0 = cv.width * acaso(0.3, 0.9), pts: [number, number][] = [[x0, 0]];
       let x = x0, y = 0;
       while (y < cv.height * acaso(0.6, 0.9)) { y += acaso(14, 36); x += acaso(-17, 17); pts.push([x, y]); }
-      raio = { pts, vida: 16 };
+      raio = { pts, vida: 8 }; // quadros, a 30 por segundo
       window.dispatchEvent(new CustomEvent(TROVAO, { detail: { x: x0 / cv.width } }));
     };
-    const quadroDaChuva = () => {
+    let ultimo = 0;
+    const quadroDaChuva = (agora: number) => {
       if (!rodando) return;
-      if (quadro++ % 30 === 0) cor = getComputedStyle(cv).color; // acompanha a troca de tema
+      // 30 quadros por segundo, com passo dobrado: a mesma chuva, metade do trabalho.
+      if (agora - ultimo < 32) { requestAnimationFrame(quadroDaChuva); return; }
+      ultimo = agora;
+      if (quadro++ % 15 === 0) cor = getComputedStyle(cv).color; // acompanha a troca de tema
       cx.clearRect(0, 0, cv.width, cv.height);
       cx.strokeStyle = cor; cx.lineCap = 'round';
       for (const g of gotas) {
-        g.y += g.v; g.x -= g.v * 0.18;
+        g.y += g.v * 2; g.x -= g.v * 0.36;
         if (g.y > cv.height + 20) Object.assign(g, nova(false));
         cx.globalAlpha = g.a; cx.lineWidth = g.w;
         cx.beginPath(); cx.moveTo(g.x, g.y); cx.lineTo(g.x + g.c * 0.18, g.y - g.c); cx.stroke();
       }
       if (raio && raio.vida-- > 0) {
-        cx.globalAlpha = raio.vida > 12 || (raio.vida > 5 && raio.vida < 9) ? 0.7 : 0.25;
+        cx.globalAlpha = raio.vida > 6 || (raio.vida > 2 && raio.vida < 5) ? 0.7 : 0.25;
         cx.lineWidth = 2; cx.beginPath();
         raio.pts.forEach(([px, py], i) => (i ? cx.lineTo(px, py) : cx.moveTo(px, py)));
         cx.stroke();

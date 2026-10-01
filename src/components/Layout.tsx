@@ -103,9 +103,6 @@ const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ defaul
 const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
 const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
 const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m.FundoHalloween })));
-// O sangue da aba selecionada desce à parte, com a própria folha: é pequeno e
-// aparece antes das outras camadas.
-const SangueDoMenu      = lazy(comNovaTentativa(() => import('@/components/Halloween/SangueDoMenu')));
 const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
 const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
 const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
@@ -524,26 +521,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
               isActive
                 ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
-              // O sangue escorre para fora da aba, por cima da de baixo.
-              halloween && isActive && 'relative z-[1]',
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
             )}
           >
-            {({ isActive }) => (
-              <>
-                <item.icon className="w-4 h-4 flex-shrink-0" />
-                <AnimatePresence>
-                  {(sidebarOpen || mobileOpen) && (
-                    <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
-                      {item.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                {halloween && isActive && (
-                  <Suspense fallback={null}><SangueDoMenu estreita={!(sidebarOpen || mobileOpen)} /></Suspense>
-                )}
-              </>
-            )}
+            <item.icon className="w-4 h-4 flex-shrink-0" />
+            <AnimatePresence>
+              {(sidebarOpen || mobileOpen) && (
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
+                  {item.label}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </NavLink>
         ))}
 

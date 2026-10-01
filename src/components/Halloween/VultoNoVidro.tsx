@@ -1,119 +1,240 @@
 /**
- * VultoNoVidro — o fundo do Analítico: alguém do outro lado de um vidro fosco.
+ * VultoNoVidro — o fundo do Analítico: vultos do outro lado de um vidro fosco.
  *
- * Camadas, de trás para a frente:
+ * Vários ao mesmo tempo, cada um na sua faixa da tela (sem se atropelarem), e
+ * cada aparição sorteia um tipo: comum, de chifres, de cartola, de chapéu de
+ * bruxa, de capuz, alto e magro, pequeno de cabeça grande, grandalhão,
+ * orelhudo. Surgem devagar da névoa, acendem os olhos, piscam quando bem
+ * entendem — às vezes duas vezes, às vezes fecham por um tempo — e somem.
  *
- *   luz     — uma lâmpada atrás do vidro, que nunca está bem: zumbe, engasga e
- *             às vezes apaga. É ela que recorta o vulto (no escuro, sem luz,
- *             ele some — e só os olhos ficam).
- *   vulto   — corpo bem desfocado, que respira; mãos que vêm de longe e batem
- *             no vidro, ficam nítidas onde encostam e escorregam devagar;
- *             olhos que acendem depois do impacto, piscam e são os últimos a
- *             apagar quando ele recua.
- *   marcas  — o que as mãos deixam no vidro embaçado, evaporando.
- *   vidro   — granulado fosco, reflexo diagonal e escorridos de condensação.
+ * Atrás deles, uma lâmpada que zumbe, engasga e às vezes apaga. No escuro é
+ * ela que recorta os vultos: sem luz, só os olhos ficam.
  *
- * A névoa (`Fumaca`) passa por cima de tudo isto.
+ * ## Leve de propósito
  *
- * Coreografia de cada aparição (em `useEffect`, com um cancelamento só):
- * surge (longe) → encosta (as mãos batem; a luz falha e o vidro treme) →
- * encostado (olhos, mãos escorregando) → recua (marcas ficam) → some, e a
- * próxima aparição vem de outro lugar.
- *
- * A luz é escrita direto numa variável CSS (`--luz`) — pisca dezenas de vezes
- * por minuto e não pode redesenhar o React a cada vez.
+ * - O desfoque de cada vulto é FIXO (sorteado na aparição). Só se anima
+ *   opacidade e posição, que a placa de vídeo compõe sem redesenhar: o vulto
+ *   desfocado é pintado uma vez por aparição.
+ * - A lâmpada é uma variável CSS (`--luz`) escrita direto no elemento — pisca
+ *   dezenas de vezes por minuto e não redesenha o React.
+ * - Cada vulto cuida dos próprios tempos; piscar redesenha só aquele vulto.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const acaso = (min: number, max: number) => min + Math.random() * (max - min);
-const esperar = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-/** Tamanho do vulto no desenho; a tela escala. */
-const LARGURA = 340;
-const ALTURA = 460;
+// ── Os tipos ──────────────────────────────────────────────────────────────────
+//
+// Desenhados num quadro de 200 × 400, com os pés embaixo. Os olhos vão em
+// coordenadas do mesmo quadro: altura, meia distância entre eles, tamanho e
+// inclinação (positiva = cara de bravo).
 
-type Fase = 'oculto' | 'surge' | 'encosta' | 'encostado' | 'recua';
-/** Onde o vulto aparece, e onde fica a lâmpada atrás dele. */
-type Lugar = { x: number; baixo: number; escala: number; luzX: number; luzY: number };
+type Olhos = { y: number; dx: number; w: number; h: number; giro: number };
+type Tipo = { desenho: ReactNode; olhos: Olhos; escala: number };
 
-// ── Desenhos ──────────────────────────────────────────────────────────────────
+const TRONCO = 'M30 240 C 32 205, 62 186, 84 182 L 116 182 C 138 186, 168 205, 170 240 L 182 400 L 18 400 Z';
+const CABECA = <><ellipse cx="100" cy="120" rx="28" ry="36" /><rect x="88" y="148" width="24" height="40" rx="10" /><path d={TRONCO} /></>;
+
+const TIPOS: Record<string, Tipo> = {
+  comum: { desenho: CABECA, olhos: { y: 118, dx: 12, w: 11, h: 4, giro: 8 }, escala: 1 },
+  chifres: {
+    desenho: <>{CABECA}
+      <path d="M82 98 C 66 84, 58 62, 68 38 C 72 58, 80 74, 94 88 Z" />
+      <path d="M118 98 C 134 84, 142 62, 132 38 C 128 58, 120 74, 106 88 Z" /></>,
+    olhos: { y: 119, dx: 12, w: 12, h: 4, giro: 16 }, escala: 1.02,
+  },
+  cartola: {
+    desenho: <>{CABECA}
+      <ellipse cx="100" cy="90" rx="44" ry="7" />
+      <path d="M76 92 L 78 30 Q 100 24 122 30 L 124 92 Z" /></>,
+    olhos: { y: 119, dx: 12, w: 11, h: 3.5, giro: 4 }, escala: 1,
+  },
+  bruxa: {
+    desenho: <>{CABECA}
+      <ellipse cx="100" cy="92" rx="52" ry="7" />
+      <path d="M70 94 Q 92 62 102 12 Q 110 2 118 12 Q 112 52 132 94 Z" /></>,
+    olhos: { y: 120, dx: 11, w: 10, h: 4, giro: 12 }, escala: 0.98,
+  },
+  capuz: {
+    desenho: <>
+      <path d="M100 36 C 62 62, 54 120, 58 176 L 142 176 C 146 120, 138 62, 100 36 Z" />
+      <path d="M22 250 C 26 204, 56 178, 84 172 L 116 172 C 144 178, 174 204, 178 250 L 190 400 L 10 400 Z" /></>,
+    olhos: { y: 128, dx: 10, w: 9, h: 3, giro: 10 }, escala: 1.04,
+  },
+  alto: {
+    desenho: <>
+      <ellipse cx="100" cy="70" rx="23" ry="40" />
+      <rect x="92" y="100" width="16" height="78" rx="7" />
+      <path d="M50 220 C 52 190, 74 176, 90 172 L 110 172 C 126 176, 148 190, 150 220 L 160 400 L 40 400 Z" /></>,
+    olhos: { y: 70, dx: 10, w: 10, h: 3.5, giro: 6 }, escala: 1.12,
+  },
+  pequeno: {
+    desenho: <>
+      <ellipse cx="100" cy="250" rx="36" ry="38" />
+      <rect x="90" y="280" width="20" height="24" rx="8" />
+      <path d="M50 342 C 52 312, 76 298, 90 296 L 110 296 C 124 298, 148 312, 150 342 L 158 400 L 42 400 Z" /></>,
+    olhos: { y: 248, dx: 14, w: 9, h: 9, giro: 0 }, escala: 0.82,
+  },
+  grandalhao: {
+    desenho: <>
+      <ellipse cx="100" cy="122" rx="24" ry="30" />
+      <rect x="84" y="140" width="32" height="40" rx="12" />
+      <path d="M4 250 C 8 196, 50 170, 84 166 L 116 166 C 150 170, 192 196, 196 250 L 200 400 L 0 400 Z" /></>,
+    olhos: { y: 120, dx: 9, w: 9, h: 3, giro: 12 }, escala: 1.1,
+  },
+  orelhudo: {
+    desenho: <>{CABECA}
+      <ellipse cx="82" cy="56" rx="9" ry="38" transform="rotate(-14 82 92)" />
+      <ellipse cx="118" cy="56" rx="9" ry="38" transform="rotate(14 118 92)" /></>,
+    olhos: { y: 118, dx: 12, w: 7, h: 7, giro: 0 }, escala: 0.96,
+  },
+};
+const NOMES = Object.keys(TIPOS);
+
+// ── Um vulto ─────────────────────────────────────────────────────────────────
+
+type Aparicao = {
+  tipo: string;
+  /** Centro, em px. */
+  x: number;
+  escala: number;
+  baixo: number;
+  /** 0 = lá no fundo (mais desfocado e apagado), 1 = perto do vidro. */
+  perto: number;
+  respira: number;
+};
 
 /**
- * Uma mão espalmada no vidro, vista de frente, com o polegar à DIREITA (é a
- * mão que aparece do lado esquerdo da tela). A outra é a mesma espelhada.
- *
- * Dedos longos que afinam na ponta, e o antebraço descendo até sumir no corpo.
- * Onde a pele encosta no vidro (pontas dos dedos e almofadas da palma) o tom é
- * mais fechado: é o que faz parecer encostado, e não pintado.
+ * Um lugar na tela que de tempos em tempos tem alguém. Cuida dos próprios
+ * tempos: chegar, acender os olhos, piscar, ir embora, esperar.
  */
-const DEDOS = [
-  // base x, base y, inclinação, comprimento, largura
-  { x: 38, y: 80, giro: -22, comp: 44, larg: 9 },
-  { x: 49, y: 70, giro: -8, comp: 58, larg: 10 },
-  { x: 60, y: 68, giro: 2, comp: 64, larg: 10.5 },
-  { x: 71, y: 72, giro: 12, comp: 57, larg: 10 },
-  { x: 82, y: 110, giro: 50, comp: 44, larg: 12 },
-];
+const Vulto = memo(function Vulto({ de, ate, atrasoInicial, alturaCena }: {
+  de: number;
+  ate: number;
+  atrasoInicial: number;
+  alturaCena: number;
+}) {
+  const [aparicao, setAparicao] = useState<Aparicao | null>(null);
+  const [visivel, setVisivel] = useState(false);
+  const [olhos, setOlhos] = useState(false);
+  const [pisca, setPisca] = useState(false);
 
-/** Dedo apontando para cima a partir da base (0,0): afina e arredonda na ponta. */
-function dedo(comp: number, larg: number): string {
-  const ponta = larg * 0.78;
-  return `M${-larg / 2} 6 L${-ponta / 2} ${-comp + ponta / 2} A${ponta / 2} ${ponta / 2} 0 0 1 ${ponta / 2} ${-comp + ponta / 2} L${larg / 2} 6 Z`;
-}
+  useEffect(() => {
+    let vivo = true;
+    let piscando = false;
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const depois = (ms: number) => new Promise<void>(r => {
+      const t = setTimeout(() => { timers.delete(t); r(); }, ms);
+      timers.add(t);
+    });
 
-function Mao({ espelho = false }: { espelho?: boolean }) {
+    // Pisca ao acaso enquanto os olhos estão abertos.
+    const piscar = async () => {
+      while (vivo && piscando) {
+        await depois(acaso(1200, 5200));
+        if (!vivo || !piscando) return;
+        const sorte = Math.random();
+        if (sorte < 0.12) {
+          // Fecha por um tempo — e o escuro fica mais escuro.
+          setPisca(true); await depois(acaso(700, 2000)); setPisca(false);
+        } else {
+          setPisca(true); await depois(130); setPisca(false);
+          if (sorte < 0.35) { await depois(180); setPisca(true); await depois(120); setPisca(false); }
+        }
+      }
+    };
+
+    void (async () => {
+      await depois(atrasoInicial);
+      while (vivo) {
+        const tipo = NOMES[Math.floor(Math.random() * NOMES.length)];
+        const perto = Math.random();
+        const base = Math.min(1.2, Math.max(0.7, alturaCena / 620));
+        const escala = base * TIPOS[tipo].escala * (0.75 + 0.3 * perto);
+        const meia = 100 * escala;
+        const min = de + meia, max = Math.max(min, ate - meia);
+        setAparicao({ tipo, x: acaso(min, max), escala, baixo: -acaso(30, 80) * escala, perto, respira: acaso(4.5, 7) });
+        await depois(60);
+        if (!vivo) return;
+        setVisivel(true);
+        await depois(acaso(1600, 3200));
+        if (!vivo) return;
+        setOlhos(true);
+        piscando = true;
+        void piscar();
+        await depois(acaso(6000, 14000));
+        if (!vivo) return;
+        piscando = false;
+        setPisca(false);
+        setOlhos(false);
+        await depois(acaso(300, 900));
+        setVisivel(false);
+        await depois(3200);
+        if (!vivo) return;
+        setAparicao(null);
+        await depois(acaso(800, 4000));
+      }
+    })();
+    return () => { vivo = false; piscando = false; timers.forEach(clearTimeout); };
+  }, [de, ate, atrasoInicial, alturaCena]);
+
+  if (!aparicao) return null;
+  const t = TIPOS[aparicao.tipo];
+  const o = t.olhos;
+  const estilo = {
+    left: aparicao.x - 100,
+    bottom: aparicao.baixo,
+    ['--escala' as string]: aparicao.escala,
+    ['--forca' as string]: 0.5 + 0.42 * aparicao.perto,
+    ['--desfoque' as string]: `${10 - 4.5 * aparicao.perto}px`,
+    ['--respira' as string]: `${aparicao.respira}s`,
+  } as CSSProperties;
+
   return (
-    <svg viewBox="0 0 120 240" style={espelho ? { transform: 'scaleX(-1)' } : undefined}>
-      <g opacity=".88">
-        <path d="M31 84 C 31 70, 38 66, 49 66 L 71 66 C 82 66, 86 72, 86 84 L 86 116 C 86 132, 75 142, 59 142 C 43 142, 31 132, 31 116 Z" />
-        {/* Punho e antebraço, que somem para baixo (máscara no CSS). */}
-        <path d="M42 130 L 74 130 L 80 240 L 36 240 Z" />
-        {DEDOS.map((d, i) => (
-          <path key={i} d={dedo(d.comp, d.larg)} transform={`translate(${d.x} ${d.y}) rotate(${d.giro})`} />
-        ))}
-      </g>
-      {/* Onde encosta: as pontas dos dedos e as almofadas da palma. */}
-      <g className="hw-vulto-contato">
-        {DEDOS.map((d, i) => (
-          <ellipse key={i} cx="0" cy={-d.comp + d.larg * 0.9} rx={d.larg * 0.36} ry={d.larg * 0.62}
-            transform={`translate(${d.x} ${d.y}) rotate(${d.giro})`} />
-        ))}
-        <ellipse cx="58" cy="90" rx="18" ry="7" />
-        <ellipse cx="47" cy="120" rx="8" ry="12" />
-        <ellipse cx="71" cy="123" rx="9" ry="11" />
-      </g>
-    </svg>
+    <div className="hw-vulto" data-visivel={visivel} style={estilo}>
+      <div className="hw-vulto-luz" />
+      <div className="hw-vulto-tronco">
+        <div className="hw-vulto-sombra">
+          {/* Quadro com folga: o desfoque precisa de espaço para vazar, senão corta reto na borda. */}
+          <svg viewBox="-60 -40 320 440" className="hw-vulto-corpo">{t.desenho}</svg>
+        </div>
+        <div className={cn('hw-vulto-olhos', olhos && 'acesos', pisca && 'pisca')}>
+          {[-1, 1].map(lado => (
+            <span
+              key={lado}
+              style={{
+                left: 100 + lado * o.dx - o.w / 2, top: o.y - o.h / 2, width: o.w, height: o.h,
+                rotate: `${-lado * o.giro}deg`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
   );
-}
-
-/** Cabeça, pescoço, ombros caídos e os braços erguidos até as mãos. */
-function Corpo() {
-  return (
-    <svg viewBox={`0 0 ${LARGURA} ${ALTURA}`}>
-      <ellipse cx="170" cy="150" rx="41" ry="54" />
-      <rect x="151" y="190" width="38" height="52" rx="14" />
-      <path d="M68 304 C 70 264, 108 242, 140 238 L 200 238 C 232 242, 270 264, 272 304 L 288 460 L 52 460 Z" />
-      <path d="M96 286 C 72 256, 60 222, 57 178" fill="none" stroke="currentColor" strokeWidth="34" strokeLinecap="round" />
-      <path d="M244 286 C 268 256, 280 222, 283 178" fill="none" stroke="currentColor" strokeWidth="34" strokeLinecap="round" />
-    </svg>
-  );
-}
+});
 
 // ── Cena ──────────────────────────────────────────────────────────────────────
 
-function estiloDoLugar(l: Lugar): CSSProperties {
-  return { left: l.x, bottom: l.baixo, ['--escala' as string]: l.escala };
-}
-
 export function VultoNoVidro({ claro }: { claro: boolean }) {
   const cena = useRef<HTMLDivElement>(null);
-  const [fase, setFase] = useState<Fase>('oculto');
-  const [lugar, setLugar] = useState<Lugar | null>(null);
-  const [marca, setMarca] = useState<(Lugar & { id: number }) | null>(null);
-  const [impacto, setImpacto] = useState(false);
-  /** Pede um engasgo da lâmpada fora de hora (o impacto das mãos). */
-  const engasgar = useRef<() => void>(() => {});
+  const [medida, setMedida] = useState<{ w: number; h: number } | null>(null);
+
+  // Mede (e mede de novo só se a tela mudar bastante): define quantas faixas.
+  useEffect(() => {
+    const el = cena.current;
+    if (!el) return;
+    const medir = () => setMedida(m => {
+      const w = el.clientWidth, h = el.clientHeight;
+      if (m && Math.abs(m.w - w) < 120 && Math.abs(m.h - h) < 120) return m;
+      return { w, h };
+    });
+    medir();
+    const obs = new ResizeObserver(medir);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   // ── A lâmpada ──
   useEffect(() => {
@@ -121,11 +242,8 @@ export function VultoNoVidro({ claro }: { claro: boolean }) {
     if (!el) return;
     let vivo = true;
     let t: ReturnType<typeof setTimeout> | undefined;
-    const luz = (v: number) => el.style.setProperty('--luz', v.toFixed(3));
-
-    /** Toca uma sequência [intensidade, ms] e volta ao zumbido. */
+    const luz = (v: number) => el.style.setProperty('--luz', v.toFixed(2));
     const tocar = (passos: [number, number][]) => {
-      clearTimeout(t);
       let i = 0;
       const passo = () => {
         if (!vivo) return;
@@ -136,116 +254,42 @@ export function VultoNoVidro({ claro }: { claro: boolean }) {
       };
       passo();
     };
-    const engasgo = (): [number, number][] => [
-      [acaso(0.15, 0.35), acaso(40, 70)], [acaso(0.8, 1), acaso(30, 60)], [acaso(0.02, 0.12), acaso(60, 110)],
-      [acaso(0.6, 0.9), acaso(30, 50)], [acaso(0.05, 0.2), acaso(80, 160)], [1, 0],
-    ];
-    const apagao = (): [number, number][] => [
-      [acaso(0.3, 0.5), 50], [0.02, acaso(500, 1500)], [0.55, 60], [0.08, 90], [0.9, 50], [0.2, 70], [1, 0],
-    ];
-    // Zumbido: quase estável, com um tremor miúdo; de vez em quando, engasga.
     const zumbir = () => {
       if (!vivo) return;
       const sorte = Math.random();
-      if (sorte < 0.022) { tocar(engasgo()); return; }
-      if (sorte < 0.03) { tocar(apagao()); return; }
-      luz(acaso(0.84, 1));
-      t = setTimeout(zumbir, acaso(90, 240));
+      if (sorte < 0.04) {
+        // Engasgo.
+        tocar([[acaso(0.15, 0.35), acaso(40, 70)], [acaso(0.8, 1), acaso(30, 60)], [acaso(0.02, 0.12), acaso(60, 110)],
+          [acaso(0.6, 0.9), acaso(30, 50)], [acaso(0.05, 0.2), acaso(80, 160)], [1, 0]]);
+        return;
+      }
+      if (sorte < 0.055) {
+        // Apagão.
+        tocar([[acaso(0.3, 0.5), 50], [0.02, acaso(600, 1600)], [0.55, 60], [0.08, 90], [0.9, 50], [0.2, 70], [1, 0]]);
+        return;
+      }
+      luz(acaso(0.86, 1));
+      t = setTimeout(zumbir, acaso(160, 340));
     };
-    engasgar.current = () => tocar(engasgo());
     luz(1);
     zumbir();
     return () => { vivo = false; clearTimeout(t); };
   }, []);
 
-  // ── As aparições ──
-  useEffect(() => {
-    let vivo = true;
-    let marcas = 0;
-    const sortearLugar = (): Lugar | null => {
-      const el = cena.current;
-      if (!el) return null;
-      const w = el.clientWidth, h = el.clientHeight;
-      const escala = Math.min(1.3, Math.max(0.75, h / 560)) * acaso(0.9, 1.05);
-      const largura = LARGURA * escala;
-      const x = acaso(w * 0.02, Math.max(w * 0.02, w - largura - w * 0.02));
-      const baixo = -acaso(40, 100) * escala;
-      // A lâmpada fica um pouco abaixo da cabeça, atrás do peito.
-      return { x, baixo, escala, luzX: x + (LARGURA / 2) * escala, luzY: h - baixo - (ALTURA - 190) * escala };
-    };
-    (async () => {
-      await esperar(acaso(900, 2200));
-      while (vivo) {
-        const l = sortearLugar();
-        if (!l) return;
-        setLugar(l);
-        setFase('oculto');
-        await esperar(80);
-        if (!vivo) return;
-        setFase('surge');
-        await esperar(acaso(2600, 3600));
-        if (!vivo) return;
-        setFase('encosta');
-        // As mãos chegam no fim da aceleração: aí é o baque.
-        await esperar(1000);
-        if (!vivo) return;
-        setImpacto(true);
-        engasgar.current();
-        setTimeout(() => { if (vivo) setImpacto(false); }, 260);
-        await esperar(250);
-        setFase('encostado');
-        await esperar(acaso(4500, 7000));
-        if (!vivo) return;
-        setMarca({ ...l, id: ++marcas });
-        setFase('recua');
-        await esperar(3200);
-        if (!vivo) return;
-        setFase('oculto');
-        await esperar(acaso(4500, 9000));
-      }
-    })();
-    return () => { vivo = false; };
-  }, []);
-
-  // Escorridos de condensação no vidro, sorteados uma vez.
-  const escorridos = useMemo(() => Array.from({ length: 9 }, () => ({
-    left: `${acaso(2, 98)}%`, top: `${acaso(-10, 60)}%`, height: `${acaso(12, 38)}%`, opacity: acaso(0.4, 1),
-  })), []);
+  const faixas = useMemo(() => {
+    if (!medida) return [];
+    const n = Math.min(5, Math.max(2, Math.floor(medida.w / 300)));
+    const larg = medida.w / n;
+    // Os atrasos de entrada também são sorteados aqui: os vultos não chegam juntos.
+    return Array.from({ length: n }, (_, i) => ({ de: i * larg, ate: (i + 1) * larg, atraso: i * 1400 + acaso(300, 2600) }));
+  }, [medida]);
 
   return (
-    <div ref={cena} className={cn('hw-vidro', claro && 'claro', impacto && 'impacto')} data-fase={fase}>
-      {lugar && (
-        <div className="hw-vidro-presenca">
-          <div className="hw-vidro-luz" style={{ left: lugar.luzX, top: lugar.luzY }} />
-        </div>
-      )}
-
-      {lugar && (
-        <div className="hw-vulto" style={estiloDoLugar(lugar)}>
-          <div className="hw-vulto-sombra">
-            <div className="hw-vulto-tronco">
-              <div className="hw-vulto-corpo"><Corpo /></div>
-            </div>
-            <div className="hw-vulto-mao esq"><Mao /></div>
-            <div className="hw-vulto-mao dir"><Mao espelho /></div>
-          </div>
-          {/* Fora da sombra: os olhos não dependem da luz. */}
-          <div className="hw-vulto-tronco">
-            <div className="hw-vulto-olhos"><span /><span /></div>
-          </div>
-        </div>
-      )}
-
-      {marca && (
-        <div key={marca.id} className="hw-vulto hw-vidro-marcas" style={estiloDoLugar(marca)}>
-          <div className="hw-vulto-mao esq"><Mao /></div>
-          <div className="hw-vulto-mao dir"><Mao espelho /></div>
-        </div>
-      )}
-
-      <div className="hw-vidro-fosco">
-        {escorridos.map((e, i) => <i key={i} style={e} />)}
-      </div>
+    <div ref={cena} className={cn('hw-vidro', claro && 'claro')}>
+      {medida && faixas.map((f, i) => (
+        <Vulto key={`${faixas.length}-${i}`} de={f.de} ate={f.ate} atrasoInicial={f.atraso} alturaCena={medida.h} />
+      ))}
+      <div className="hw-vidro-fosco" />
     </div>
   );
 }

@@ -3,9 +3,9 @@
  * que sobem, giram devagar, crescem e se desfazem. Clara no tema escuro e
  * escura no claro. Passa por cima do vulto atrás do vidro (`VultoNoVidro`).
  *
- * O canvas desenha em meia resolução e o CSS estica: fumaça é borrão de
- * qualquer jeito, e assim custa um quarto dos pixels. Aba escondida para
- * sozinha (`requestAnimationFrame`).
+ * Leve: o canvas desenha em meia resolução (o CSS estica — fumaça é borrão de
+ * qualquer jeito), a 30 quadros por segundo, e para sozinho com a aba
+ * escondida (`requestAnimationFrame`).
  */
 import { useEffect, useRef } from 'react';
 
@@ -96,11 +96,13 @@ export function Fumaca({ claro }: { claro: boolean }) {
       // Meia resolução: o CSS estica. Fumaça não precisa de nitidez.
       cv.width = Math.max(1, Math.round(cv.clientWidth / 2));
       cv.height = Math.max(1, Math.round(cv.clientHeight / 2));
-      const n = Math.round(Math.min(40, Math.max(14, (cv.width * cv.height) / 7000)));
+      const n = Math.round(Math.min(30, Math.max(12, (cv.width * cv.height) / 8000)));
       parts = Array.from({ length: n }, () => nova(true));
     };
     const quadro = (agora: number) => {
       if (!rodando) return;
+      // 30 quadros por segundo bastam para fumaça lenta: metade do trabalho.
+      if (agora - ultimo < 32) { requestAnimationFrame(quadro); return; }
       const dt = Math.min(0.1, (agora - ultimo) / 1000); ultimo = agora;
       const sprites = claroRef.current ? escura : clara;
       // Escura no claro precisa de menos para pesar o mesmo.
