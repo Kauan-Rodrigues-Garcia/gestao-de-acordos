@@ -62,6 +62,9 @@ beforeAll(async () => {
     create table public.equipe_lideres (equipe_id uuid, lider_id uuid);
 
     create function public.fn_can_access_empresa(e uuid) returns boolean language sql as $$ select true $$;
+    create function public.fn_empresas_acessiveis() returns uuid[] language sql
+      as $$ select coalesce(array_agg(id), '{}') from public.empresas $$;
+    create function public.fn_user_is_super_admin() returns boolean language sql as $$ select false $$;
     create function public.fn_user_tem(chave text) returns boolean language sql
       as $$ select coalesce(current_setting('test.perm', true), 'sim') = 'sim' $$;
     create function public.fn_user_escopo(aba text) returns integer language sql

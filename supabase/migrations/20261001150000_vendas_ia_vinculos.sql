@@ -40,9 +40,20 @@
 -- excluir), e o operador nao deve editar a venda da IA so porque leva o
 -- credito dela. Muda so a policy de LEITURA `vendas_select`: quem leva o
 -- credito — e o lider da equipe dele — passa a enxergar a linha.
+--
+-- ## A empresa e calculada UMA vez (20260930160000)
+--
+-- `vendas_select` foi reescrita em producao por 20260930160000: no lugar de
+-- `fn_can_access_empresa(empresa_id)` por linha, `empresa_id = ANY((SELECT
+-- fn_empresas_acessiveis())) OR (SELECT fn_user_is_super_admin())`, um InitPlan
+-- por consulta. A policy abaixo parte do texto LIDO do banco em 01/10/2026, e
+-- nao do arquivo da Fase 1 — recriar a partir dele desfaria a otimizacao. As
+-- policies novas ja nascem com o mesmo padrao.
 -- ============================================================================
 
 BEGIN;
+
+SET LOCAL lock_timeout = '3s';
 
 -- ── 1. Tipos de IA ──────────────────────────────────────────────────────────
 
@@ -139,7 +150,10 @@ GRANT SELECT ON TABLE public.vendas_ia_vinculos_historico TO authenticated;
 DROP POLICY IF EXISTS vendas_ia_tipos_select ON public.vendas_ia_tipos;
 CREATE POLICY vendas_ia_tipos_select ON public.vendas_ia_tipos
   FOR SELECT TO authenticated
-  USING (public.fn_can_access_empresa(empresa_id));
+  USING (
+    empresa_id = ANY ((SELECT public.fn_empresas_acessiveis())::uuid[])
+    OR (SELECT public.fn_user_is_super_admin())
+  );
 
 -- O vinculo e lido DENTRO da policy de `vendas` (o EXISTS abaixo roda com o
 -- direito de quem consulta). Sem esta leitura, o operador nunca enxergaria a
@@ -147,14 +161,20 @@ CREATE POLICY vendas_ia_tipos_select ON public.vendas_ia_tipos
 DROP POLICY IF EXISTS vendas_ia_vinculos_select ON public.vendas_ia_vinculos;
 CREATE POLICY vendas_ia_vinculos_select ON public.vendas_ia_vinculos
   FOR SELECT TO authenticated
-  USING (public.fn_can_access_empresa(empresa_id));
+  USING (
+    empresa_id = ANY ((SELECT public.fn_empresas_acessiveis())::uuid[])
+    OR (SELECT public.fn_user_is_super_admin())
+  );
 
 DROP POLICY IF EXISTS vendas_ia_vinculos_historico_select ON public.vendas_ia_vinculos_historico;
 CREATE POLICY vendas_ia_vinculos_historico_select ON public.vendas_ia_vinculos_historico
   FOR SELECT TO authenticated
   USING (
-    public.fn_can_access_empresa(empresa_id)
-    AND (SELECT public.fn_user_tem('usuarios_editar_cargo'))
+    (SELECT public.fn_user_tem('usuarios_editar_cargo'))
+    AND (
+      empresa_id = ANY ((SELECT public.fn_empresas_acessiveis())::uuid[])
+      OR (SELECT public.fn_user_is_super_admin())
+    )
   );
 
 -- ── 4. A regra do credito ───────────────────────────────────────────────────
@@ -405,15 +425,19 @@ GRANT EXECUTE ON FUNCTION public.fn_vendas_ia_cadastro(UUID) TO authenticated;
 
 -- ── 8. Leitura de `vendas`: quem leva o credito enxerga a linha ─────────────
 --
--- Tudo igual a 20260915100000, mais o ultimo OR. O EXISTS e por linha, mas so
--- ha vinculo para IA, e o indice (ia_id, desde) o resolve sem varrer.
+-- Tudo igual ao texto vigente em producao (20260930160000 sobre a Fase 1),
+-- mais o ultimo OR. O EXISTS e por linha, mas so ha vinculo para IA, e o
+-- indice (ia_id, desde) o resolve sem varrer.
 
 DROP POLICY IF EXISTS vendas_select ON public.vendas;
 CREATE POLICY vendas_select ON public.vendas
   FOR SELECT TO authenticated
   USING (
     (SELECT public.fn_user_tem('ver_vendas'))
-    AND public.fn_can_access_empresa(empresa_id)
+    AND (
+      empresa_id = ANY ((SELECT public.fn_empresas_acessiveis())::uuid[])
+      OR (SELECT public.fn_user_is_super_admin())
+    )
     AND (
       operador_id = (SELECT auth.uid())
       OR (SELECT public.fn_user_escopo('vendas')) >= 3
@@ -620,6 +644,15 @@ BEGIN
        AND qual ILIKE '%vendas_ia_vinculos%'
   ) THEN
     RAISE EXCEPTION 'vendas_select nao enxerga o vinculo de IA.';
+  END IF;
+  -- A otimizacao de 20260930160000 nao pode ter sido desfeita.
+  IF EXISTS (
+    SELECT 1 FROM pg_policies
+     WHERE schemaname = 'public'
+       AND tablename IN ('vendas', 'vendas_ia_tipos', 'vendas_ia_vinculos', 'vendas_ia_vinculos_historico')
+       AND qual ILIKE '%fn_can_access_empresa(empresa_id)%'
+  ) THEN
+    RAISE EXCEPTION 'Policy voltou a calcular a empresa por linha (ver 20260930160000).';
   END IF;
   IF (SELECT COUNT(*) FROM public.vendas_ia_tipos t
         JOIN public.empresas e ON e.id = t.empresa_id
