@@ -28,6 +28,7 @@ import type { QuartilConfig } from '@/lib/supabase';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { buscarPessoasDoRetrato } from '@/services/analitico/pessoasDoMes';
 import { getTodayISO } from '@/lib/index';
 import type {
   ResumoOperadorAnalitico, EquipeAnalitico,
@@ -131,11 +132,13 @@ export function useRankingAnalitico({
             .map((p): PerfilRanking => ({ ...p, subgrupo_id: null }))
         : (comSubgrupo.data as PerfilRanking[] ?? []);
 
-      const [sgs, cfgMetas, equipesTreino] = await Promise.all([
+      const [sgs, cfgMetas, equipesTreino, retrato] = await Promise.all([
         listarSubgrupos(empresaId),
         getMetasConfig(empresaId, mesNum, anoNum),
         supabase.from('equipes').select('id, treinamento, treinamento_inicio')
           .eq('empresa_id', empresaId),
+        // Mês fechado: a equipe de cada um é a DAQUELE mês (01/10/2026).
+        buscarPessoasDoRetrato(empresaId, mes),
       ]);
 
       // `select('*')` pelo mesmo motivo de QuartisOperadores: colunas da meta
@@ -146,7 +149,16 @@ export function useRankingAnalitico({
 
       if (cancelado) return;
 
-      setPerfis(perfisLidos);
+      // O subgrupo continua o de hoje (não é retratado), mas `grupoDe` só o usa
+      // quando ele é da mesma equipe — que agora é a do mês.
+      const subgrupoHoje = new Map(perfisLidos.map(p => [p.id, p.subgrupo_id]));
+      setPerfis(retrato
+        ? [...retrato.values()].map(r => ({
+            id: r.id,
+            equipe_id: r.equipe_id,
+            subgrupo_id: subgrupoHoje.get(r.id) ?? null,
+          }))
+        : perfisLidos);
       setSubgrupos(sgs ?? []);
 
       const mapaMetas: Record<string, number> = {};
@@ -171,7 +183,7 @@ export function useRankingAnalitico({
 
     void carregar();
     return () => { cancelado = true; };
-  }, [empresaId, mesNum, anoNum]);
+  }, [empresaId, mesNum, anoNum, mes]);
 
   /*
    * A tabela existe? — pergunta da EMPRESA, não do setor.

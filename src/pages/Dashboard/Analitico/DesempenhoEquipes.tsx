@@ -58,6 +58,7 @@ import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe'
 import { somarPorEquipe, diasDaEquipe } from './acumuladoDaEquipe';
 import { lideresDaEquipe, type PerfilLider } from './lideresDaEquipe';
 import { ehMesAtual } from '@/lib/mesReferencia';
+import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
@@ -484,7 +485,7 @@ export function DesempenhoEquipes({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: receptivoFotosData }, { data: clonesData }, { data: equipeLideresData }, { data: opsData }] = await Promise.all([
+        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: receptivoFotosData }, { data: clonesData }, { data: equipeLideresData }, { data: opsData }, retratoPessoas] = await Promise.all([
           // `operador` entrou na lista: a área expandida distribui as pessoas por
           // quartil, e sem a meta individual não há faixa a calcular.
           supabase.from('metas').select('tipo, referencia_id, meta_valor')
@@ -518,6 +519,10 @@ export function DesempenhoEquipes({
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
             .eq('ativo', true)
             .eq('situacao', 'ativo'),
+          // Mês fechado: nome e situação de cada pessoa NAQUELE mês. Ver
+          // `pessoasDoMes.ts` — sem isto, quem foi de férias ou desligado em
+          // outubro sumia da área expandida de setembro.
+          buscarPessoasDoRetrato(empresaId, mes),
         ]);
         if (cancelado) return;
         setMetas((metasData as MetaRow[]) ?? []);
@@ -525,7 +530,12 @@ export function DesempenhoEquipes({
         setContarHoje(cfg.data?.contar_dia_atual === true);
         setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
         const idMap: Record<string, IdentidadeOperador> = {};
-        for (const o of (opsData as { id: string; nome: string; foto_url: string | null }[]) ?? []) {
+        const opsDoMes = pessoasDoMes(
+          (opsData as { id: string; nome: string; foto_url: string | null }[]) ?? [],
+          retratoPessoas,
+          { cargos: PERFIS_QUE_CONTAM_NO_RECEBIMENTO, situacao: 'ativos' },
+        );
+        for (const o of opsDoMes) {
           idMap[o.id] = { nome: o.nome, fotoUrl: o.foto_url };
         }
         setIdentidade(idMap);

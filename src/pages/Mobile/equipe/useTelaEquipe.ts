@@ -29,6 +29,7 @@ import {
 } from '@/services/analitico/analitico.service';
 import { buscarResumoMensalDiario } from '@/services/diario/diario.service';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { lerMetaIndiretaDaLinha } from '@/services/metas/metaIndireta';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import type { PerfilLider } from '@/pages/Dashboard/Analitico/lideresDaEquipe';
@@ -64,7 +65,7 @@ export async function carregarFontes(empresaId: string, mes: string): Promise<Br
   const [ano, mesNum] = mes.split('-').map(Number);
   const [
     composicao, resumo, creditos, metasRes, cfg, equipesRes, lideresRes,
-    explicitosRes, clonesRes, opsRes, setoresRes,
+    explicitosRes, clonesRes, opsRes, setoresRes, retratoPessoas,
   ] = await Promise.all([
     buscarEquipesComOperadores(empresaId, mes),
     buscarResumoOperadoresAnalitico(empresaId, mes),
@@ -88,6 +89,8 @@ export async function carregarFontes(empresaId: string, mes: string): Promise<Br
       .or('ativo.eq.true,situacao.eq.desligado')
       .order('nome'),
     supabase.from('setores').select('id, nome').eq('empresa_id', empresaId),
+    // Mês fechado: a lista DAQUELE mês (ver `pessoasDoMes.ts`).
+    buscarPessoasDoRetrato(empresaId, mes),
   ]);
   if (resumo.error) throw new Error(resumo.error);
 
@@ -122,7 +125,9 @@ export async function carregarFontes(empresaId: string, mes: string): Promise<Br
     contarHoje: cfg.data?.contar_dia_atual === true,
     quartis: cfg.data?.quartis ?? QUARTIS_PADRAO,
     treinoMap,
-    operadores: (opsRes.data as unknown as PerfilOp[] | null) ?? [],
+    operadores: pessoasDoMes((opsRes.data as unknown as PerfilOp[] | null) ?? [], retratoPessoas, {
+      cargos: PERFIS_QUE_CONTAM_NO_RECEBIMENTO, situacao: 'ou_desligado',
+    }),
     setores,
     lideranca: {
       lideres: (lideresRes.data as PerfilLider[] | null) ?? [],

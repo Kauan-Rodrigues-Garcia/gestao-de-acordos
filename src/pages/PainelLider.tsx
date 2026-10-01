@@ -33,7 +33,7 @@ import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_LIDERANCA_AJUSTE } from '@/lib
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import {
-  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarSetoresDoRetrato,
+  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarSetoresDoRetrato, buscarAlternativosDoRetrato,
   buscarTotalOrfaosPorSetor, buscarTotalPorSetor, buscarCreditosDeOrigem,
   mapaSetorDaEquipe, operadoresDoSetor, operadoresDaEquipe,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
@@ -385,8 +385,10 @@ export default function PainelLider() {
         // `nome` entrou junto: o seletor de setor do cabeçalho precisa dele, e
         // uma segunda query para a mesma tabela no mesmo efeito seria desperdício.
         supabase.from('setores').select('id, nome, alternativo').eq('empresa_id', empresa.id),
+        // Mês fechado: a chave «alternativo» DAQUELE mês (01/10/2026).
+        buscarAlternativosDoRetrato(empresa.id, mesStr),
       ]);
-    }).then(([{ data }, orfaos, creditos, totSetor, setoresRes]) => {
+    }).then(([{ data }, orfaos, creditos, totSetor, setoresRes, altDoMes]) => {
       if (cancel) return;
       setAnaliticoResumos(data);
       setAnaliticoOrfaos(orfaos);
@@ -396,7 +398,7 @@ export default function PainelLider() {
       const lista: { id: string; nome: string }[] = [];
       if (!setoresRes.error) {
         for (const s of (setoresRes.data as { id: string; nome: string; alternativo: boolean | null }[]) ?? []) {
-          if (s.alternativo) alt.add(s.id);
+          if (altDoMes?.get(s.id) ?? s.alternativo) alt.add(s.id);
           lista.push({ id: s.id, nome: s.nome });
         }
       }

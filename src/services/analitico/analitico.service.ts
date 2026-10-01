@@ -38,6 +38,7 @@ import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaRelatorio } from './analiticoComum';
 import { lerComCache } from '@/lib/cacheCurto';
 import { chaveComposicao, invalidarComposicaoEquipes, VALIDADE_COMPOSICAO_MS } from './composicaoCache';
+import { buscarPessoasDoRetrato } from './pessoasDoMes';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
@@ -1000,8 +1001,19 @@ export async function buscarResumoOperadoresAnalitico(
     })
     .order('total_recebido', { ascending: false });
 
-  const linhas = (data ?? []) as ResumoOperadorAnalitico[];
-  if (error) return { data: linhas, error: error.message };
+  if (error) return { data: (data ?? []) as ResumoOperadorAnalitico[], error: error.message };
+
+  /*
+   * Mês fechado: o NOME de cada um é o daquele mês (01/10/2026). A RPC lê
+   * `perfis.nome`, o de hoje — renomear em outubro trocava o nome no ranking
+   * de setembro, e quem foi excluído vinha sem nome nenhum.
+   */
+  const retrato = await buscarPessoasDoRetrato(empresaId, mes);
+  const linhas = ((data ?? []) as ResumoOperadorAnalitico[]).map(l => (
+    retrato?.has(l.operador_id)
+      ? { ...l, operador_nome: retrato.get(l.operador_id)!.nome }
+      : l
+  ));
 
   /*
    * O ajuste manual é por COMPETÊNCIA — `mes_referencia`, sem dia. Somá-lo
@@ -1029,7 +1041,7 @@ export async function buscarResumoOperadoresAnalitico(
       porId.set(operadorId, {
         operador_id:      operadorId,
         operador_usuario: '',
-        operador_nome:    null,
+        operador_nome:    retrato?.get(operadorId)?.nome ?? null,
         total_recebido:   info.valor,
         total_ho:         pp ? paraHO(info.valor) : 0,
         total_pagamentos: 0,
@@ -2314,8 +2326,10 @@ export async function buscarLideresDoRetrato(
   // mudado de cargo depois, e cair fora do filtro apagaria a foto dele do mês
   // em que ele liderava de fato.
   const ids = [...new Set(data.map(l => l.lider_id))];
-  const { data: perfis } = await supabase
-    .from('perfis').select('id, nome, foto_url').in('id', ids);
+  const [{ data: perfis }, retrato] = await Promise.all([
+    supabase.from('perfis').select('id, nome, foto_url').in('id', ids),
+    buscarPessoasDoRetrato(empresaId, mes),
+  ]);
 
   const porId = new Map(
     ((perfis as { id: string; nome: string; foto_url: string | null }[] | null) ?? [])
@@ -2325,10 +2339,17 @@ export async function buscarLideresDoRetrato(
   const saida: Record<string, LiderDoRetrato[]> = {};
   for (const l of [...data].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))) {
     const p = porId.get(l.lider_id);
-    // Perfil ilegível (RLS de setor) ou excluído depois: o vínculo existiu, mas
+    const doMes = retrato?.get(l.lider_id);
+    // Perfil ilegível (RLS de setor) e fora do retrato: o vínculo existiu, mas
     // não há nome nem foto. Fica de fora em vez de virar um avatar anônimo.
-    if (!p) continue;
-    (saida[l.equipe_id] ??= []).push({ nome: p.nome, foto_url: p.foto_url });
+    if (!p && !doMes) continue;
+    // O NOME é o do mês (01/10/2026: renomear hoje não muda setembro); a foto
+    // é a de hoje quando a pessoa ainda existe. Excluído depois continua no
+    // card do mês em que liderava, com o que o retrato guardou.
+    (saida[l.equipe_id] ??= []).push({
+      nome:     doMes?.nome ?? p!.nome,
+      foto_url: p?.foto_url ?? doMes?.foto_url ?? null,
+    });
   }
   return saida;
 }
@@ -2628,15 +2649,20 @@ export interface FontesDeEscopo {
 export async function buscarFontesDeEscopo(
   empresaId: string, mes?: string | null,
 ): Promise<FontesDeEscopo> {
-  const [{ equipes, operadorEquipeMap, equipesExtrasPorOperador }, alt] = await Promise.all([
+  const [{ equipes, operadorEquipeMap, equipesExtrasPorOperador }, alt, altDoMes] = await Promise.all([
     buscarEquipesComOperadores(empresaId, mes),
     supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
+    buscarAlternativosDoRetrato(empresaId, mes),
   ]);
 
   const setoresAlternativos = new Set<string>();
   if (!alt.error) {
     for (const s of ((alt.data ?? []) as { id: string; alternativo: boolean | null }[])) {
-      if (s.alternativo) setoresAlternativos.add(s.id);
+      // Mês fechado: a chave DAQUELE mês manda (01/10/2026). Ligar ou desligar
+      // «alternativo» hoje mudava como setembro era somado. Setor que não está
+      // no retrato (criado depois) fica com a chave de hoje.
+      const doMes = altDoMes?.get(s.id);
+      if (doMes ?? s.alternativo) setoresAlternativos.add(s.id);
     }
   }
 
@@ -2646,6 +2672,24 @@ export async function buscarFontesDeEscopo(
     equipesExtrasPorOperador,
     setorDaEquipe: mapaSetorDaEquipe(equipes),
   };
+}
+
+/**
+ * A chave `alternativo` de cada setor NAQUELE mês (`composicao_mes_setor`).
+ * `null` no mês corrente, sem retrato, ou com a coluna ausente.
+ */
+export async function buscarAlternativosDoRetrato(
+  empresaId: string, mes?: string | null,
+): Promise<Map<string, boolean> | null> {
+  if (!mes || ehMesAtual(mes)) return null;
+  const { data, error } = await tabelaSemTipo<{ setor_id: string; alternativo: boolean | null }>('composicao_mes_setor')
+    .select('setor_id, alternativo')
+    .eq('empresa_id', empresaId).eq('mes', mes);
+  if (error || !data?.length) return null;
+  const saida = new Map<string, boolean>();
+  // Linha sem a chave gravada (anterior a 20260903410000) não decide nada.
+  for (const s of data) if (s.alternativo !== null) saida.set(s.setor_id, s.alternativo);
+  return saida.size ? saida : null;
 }
 
 /** Operadores cujo recebimento conta no setor (membros + clones que contam). */

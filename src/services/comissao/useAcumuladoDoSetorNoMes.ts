@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
+  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarAlternativosDoRetrato,
   buscarTotalOrfaosPorSetor, buscarTotalPorSetor, mapaSetorDaEquipe,
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
@@ -55,7 +55,7 @@ export function useAcumuladoDoSetorNoMes(params: {
       try {
         // As exclusões entram no total do relatório — mesma ordem do Painel Líder.
         const { porSetor: exclusoes } = await buscarExclusoesSetor(empresaId, mes);
-        const [resumos, orfaos, totalPorSetor, composicao, setores, receptivo] = await Promise.all([
+        const [resumos, orfaos, totalPorSetor, composicao, setores, receptivo, altDoMes] = await Promise.all([
           buscarResumoOperadoresAnalitico(empresaId, mes),
           buscarTotalOrfaosPorSetor(empresaId, mes),
           buscarTotalPorSetor(empresaId, mes, exclusoes),
@@ -65,6 +65,8 @@ export function useAcumuladoDoSetorNoMes(params: {
           isPaguePlay
             ? Promise.resolve({ porSetor: {} as Record<string, { acumulado: number }> })
             : buscarContribuicoesReceptivo(empresaId, mes),
+          // Mês fechado: a chave «alternativo» DAQUELE mês (01/10/2026).
+          buscarAlternativosDoRetrato(empresaId, mes),
         ]);
         if (!vivo) return;
 
@@ -77,7 +79,8 @@ export function useAcumuladoDoSetorNoMes(params: {
         });
         const linhasSetores = (setores.error ? [] : setores.data ?? []) as
           { id: string; alternativo: boolean | null }[];
-        const alternativo = linhasSetores.some(s => s.id === setorId && s.alternativo === true);
+        const alternativo = altDoMes?.get(setorId)
+          ?? linhasSetores.some(s => s.id === setorId && s.alternativo === true);
 
         setLido({
           chave,
