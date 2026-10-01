@@ -275,9 +275,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * sendo visto por impersonação. `?hw-boas-vindas` reabre, para validar.
    */
   const [boasVindasAberta, setBoasVindasAberta] = useState(false);
-  // Pela automática (e pelo `?hw-boas-vindas`) chega o envelope fechado; pelo
-  // «Ver a mensagem» de Configurações, que já é um clique, a carta aberta.
-  const [boasVindasDireto, setBoasVindasDireto] = useState(false);
+  // Chega SEMPRE como envelope fechado — pela automática, pelo
+  // `?hw-boas-vindas` e pelo «Ver a mensagem» de Configurações (que valida
+  // exatamente o que a equipe vai ver). Cada pedido de Configurações conta uma
+  // vez a mais: a `key` nova remonta e devolve o envelope mesmo com a carta
+  // já aberta.
+  const [boasVindasVez, setBoasVindasVez] = useState(0);
   const tourJaVisto = !!perfil?.tour_visto_em;
   useEffect(() => {
     if (!hw.ligado || termoLoading || precisaAceitar) return;
@@ -287,13 +290,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
   useEffect(() => {
     if (!hw.ligado) return;
-    const abrir = () => { setBoasVindasDireto(true); setBoasVindasAberta(true); };
+    const abrir = () => { setBoasVindasVez(v => v + 1); setBoasVindasAberta(true); };
     window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
     return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
   }, [hw.ligado]);
   const fecharBoasVindas = () => {
     setBoasVindasAberta(false);
-    setBoasVindasDireto(false);
     if (pediuBoasVindasNaUrl()) {
       const url = new URL(window.location.href);
       url.searchParams.delete('hw-boas-vindas');
@@ -940,11 +942,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {boasVindasAberta && (
           <Suspense fallback={null}>
             <BoasVindasHalloween
-              key={boasVindasDireto ? 'direto' : 'envelope'}
+              key={boasVindasVez}
               nome={perfil?.nome}
               preparar={carregarHalloween}
               aoFechar={fecharBoasVindas}
-              abrirDireto={boasVindasDireto}
             />
           </Suspense>
         )}

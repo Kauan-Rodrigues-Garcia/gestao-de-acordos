@@ -54,7 +54,8 @@ export default function LiberacaoHalloween() {
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground leading-relaxed">
           Hoje só super admins veem o tema. Ao liberar, quem está logado recebe na hora a
-          mensagem de outubro e ganha o tema; quem entrar depois recebe ao entrar. Cada um
+          mensagem de outubro — fechada, no rodapé, com «Ler agora»; a música só toca quando
+          a pessoa abre — e ganha o tema; quem entrar depois recebe ao entrar. Cada um
           pode desligar os enfeites no botão de tema. Este cartão some depois de liberado.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -73,8 +74,9 @@ export default function LiberacaoHalloween() {
           <AlertDialogHeader>
             <AlertDialogTitle>Liberar o Halloween para todos?</AlertDialogTitle>
             <AlertDialogDescription>
-              A mensagem de outubro aparece agora para todo mundo que está logado, nas duas
-              empresas, e o tema liga para todos. Não dá para recolher pela tela.
+              A mensagem de outubro aparece agora, fechada, para todo mundo que está logado,
+              nas duas empresas, e o tema liga para todos. A música só toca para quem clicar
+              em «Ler agora». Não dá para recolher pela tela.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

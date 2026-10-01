@@ -6,8 +6,9 @@
  * Abrir sozinha, no meio da tela e com música, assustava — a pessoa estava
  * trabalhando (às vezes em ligação) e a tela «explodia». Agora ela chega como
  * um envelope pequeno no rodapé, sem cobrir nada e sem som (`EnvelopeFechado`).
- * Só o «Ler agora» abre a carta — e é aí que a música começa. «Ver a
- * mensagem», em Configurações, já é um clique: abre direto (`abrirDireto`).
+ * Só o «Ler agora» abre a carta — e é aí que a música começa. Vale para
+ * todos os caminhos, inclusive o «Ver a mensagem» de Configurações.
+ * `abrirDireto` existe só para os testes da carta.
  *
  * ## A carta
  *
@@ -50,7 +51,7 @@ interface PropsBoasVindas {
 export default function BoasVindasHalloween({
   abrirDireto = false, ...props
 }: PropsBoasVindas & {
-  /** Pula o envelope — quem pediu a mensagem já clicou para isso. */
+  /** Pula o envelope. Só nos testes da carta; o app sempre entrega fechada. */
   abrirDireto?: boolean;
 }) {
   const [lendo, setLendo] = useState(abrirDireto);
