@@ -73,6 +73,8 @@
  */
 
 import { produtoDoSlug, type Produto } from '@/lib/produto';
+import { CARGOS_DERIVADOS } from '@/lib/cargos';
+import type { PerfilUsuario } from '@/lib/supabase';
 
 /**
  * Os cargos que o administrador configura na tela.
@@ -81,11 +83,9 @@ import { produtoDoSlug, type Produto } from '@/lib/produto';
  * exclusivo do setor. Como `rh`, não entra nos atalhos da operação: as chaves
  * dele são nominais, no grupo «Controle de Números», no Dashboard e no chat.
  */
-export const CARGOS_CONFIGURAVEIS = [
-  'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria', 'rh',
-  'assistente_adm',
-] as const;
-export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
+export type CargoConfiguravel = Exclude<PerfilUsuario, 'administrador' | 'super_admin'>;
+/** Os ativos sem acesso total, na `ordem` de `public.cargos`. */
+export const CARGOS_CONFIGURAVEIS = CARGOS_DERIVADOS.configuraveis as readonly CargoConfiguravel[];
 
 /**
  * Cargos com acesso total por construção (migration `20260812b`).
@@ -94,7 +94,7 @@ export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
  * cargo que desaparece sem explicação parece defeito, e a pergunta "por que
  * não posso configurar o administrador?" já foi feita.
  */
-export const CARGOS_ACESSO_TOTAL = ['administrador', 'super_admin'] as const;
+export const CARGOS_ACESSO_TOTAL: readonly PerfilUsuario[] = CARGOS_DERIVADOS.acessoTotal;
 
 /**
  * Chaves que o acesso total NÃO concede sozinho.

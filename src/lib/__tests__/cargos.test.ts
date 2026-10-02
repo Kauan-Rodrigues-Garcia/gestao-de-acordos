@@ -1,15 +1,14 @@
 /**
  * O cadastro de cargos e as listas que ele vai substituir.
  *
- * Fase 2 da reorganização empresa > setor > cargo: `public.cargos` existe, mas
- * o app ainda lê as listas antigas. Este teste é o que deixa a fase 3 trocar
- * uma pela outra sem ninguém ganhar nem perder nada:
+ * Desde a fase 3 da reorganização empresa > setor > cargo, as listas de cargo
+ * saem dos atributos de `lib/cargos.ts`. Este teste garante duas coisas:
  *
  *   1. as linhas de `lib/cargos.ts` são as mesmas da migration;
- *   2. cada lista antiga é reproduzida pelos atributos.
+ *   2. cada lista tem os mesmos cargos de antes da troca.
  *
- * Se um destes quebrar, o cadastro e a lista discordam — e a fase 3 mudaria
- * comportamento. Corrija o lado errado, nunca o teste.
+ * Se o 1 quebrar, código e banco discordam: corrija o lado errado. Se o 2
+ * quebrar, alguém ganhou ou perdeu acesso: só atualize o teste se foi decisão.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -72,42 +71,61 @@ describe('cadastro de cargos — a migration e o espelho', () => {
   });
 });
 
-describe('cada lista antiga sai dos atributos', () => {
+/*
+ * Desde a fase 3 as listas SÃO os derivados, então compará-las com `derivar()`
+ * não provaria nada. O que se prova aqui é o conteúdo: são os mesmos cargos de
+ * antes da troca. Quem mudar um atributo que dá ou tira acesso vê este teste
+ * cair e tem de decidir isso de propósito.
+ */
+describe('as listas continuam com os mesmos cargos de antes da fase 3', () => {
   it('PERFIS_ESCOPO_EMPRESA = não pertence a setor', () => {
-    expect(ordenado(d.escopoEmpresa)).toEqual(ordenado(PERFIS_ESCOPO_EMPRESA));
+    expect(PERFIS_ESCOPO_EMPRESA).toEqual(['diretoria', 'administrador', 'super_admin']);
+    expect(d.escopoEmpresa).toEqual(PERFIS_ESCOPO_EMPRESA);
   });
 
   it('CARGOS_ACESSO_TOTAL e PERFIS_ADMIN = acesso_total', () => {
-    expect(d.acessoTotal).toEqual([...CARGOS_ACESSO_TOTAL]);
-    expect(ordenado(d.acessoTotal)).toEqual(ordenado(PERFIS_ADMIN));
+    expect(CARGOS_ACESSO_TOTAL).toEqual(['administrador', 'super_admin']);
+    expect(PERFIS_ADMIN).toEqual(['administrador', 'super_admin']);
   });
 
   it('CARGOS_CONFIGURAVEIS = ativos sem acesso total, na ordem do painel', () => {
-    expect(d.configuraveis).toEqual([...CARGOS_CONFIGURAVEIS]);
+    expect(CARGOS_CONFIGURAVEIS).toEqual([
+      'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria', 'rh', 'assistente_adm',
+    ]);
   });
 
   it('PERFIS_QUE_CONTAM_NO_RECEBIMENTO = conta_no_recebimento', () => {
-    expect(ordenado(d.contamNoRecebimento)).toEqual(ordenado(PERFIS_QUE_CONTAM_NO_RECEBIMENTO));
+    expect(PERFIS_QUE_CONTAM_NO_RECEBIMENTO).toEqual(['operador', 'elite']);
   });
 
   it('PERFIS_QUE_SO_LIDERAM = lidera e não recebe', () => {
-    expect(ordenado(d.soLideram)).toEqual(ordenado(PERFIS_QUE_SO_LIDERAM));
+    expect(PERFIS_QUE_SO_LIDERAM).toEqual(['lider']);
   });
 
   it('CARGO_DO_NUCLEO e CARGOS_FORA_DO_NUCLEO = exige_tipo_setor', () => {
     expect(d.doNucleo).toEqual([CARGO_DO_NUCLEO]);
-    expect(ordenado(d.foraDoNucleo)).toEqual(ordenado(CARGOS_FORA_DO_NUCLEO));
+    expect(ordenado(CARGOS_FORA_DO_NUCLEO)).toEqual(
+      ordenado(['operador', 'lider', 'elite', 'gerencia', 'ouvidoria', 'rh']),
+    );
   });
 
   it('PERFIL_LABELS = nome', () => {
-    expect(d.rotulos).toEqual(PERFIL_LABELS);
+    expect(PERFIL_LABELS).toEqual({
+      operador: 'Operador', lider: 'Líder', administrador: 'Administrador',
+      super_admin: 'Super Admin', elite: 'Elite', gerencia: 'Gerência',
+      diretoria: 'Diretoria', ouvidoria: 'Ouvidoria', rh: 'RH',
+      assistente_adm: 'Assistente ADM',
+    });
   });
 
   it('PERFIL_NIVEL = nivel, onde há nível', () => {
-    expect(d.niveis).toEqual(PERFIL_NIVEL);
+    expect(PERFIL_NIVEL).toEqual({
+      operador: 1, ouvidoria: 2, lider: 2, elite: 3, gerencia: 4,
+      diretoria: 5, administrador: 6, super_admin: 7,
+    });
   });
 
   it('CARGOS_ALVO_CHAT = todos os cargos', () => {
-    expect(ordenado(CARGOS.map(c => c.slug))).toEqual(ordenado(CARGOS_ALVO_CHAT));
+    expect(ordenado(CARGOS_ALVO_CHAT)).toEqual(ordenado(CARGOS.map(c => c.slug)));
   });
 });

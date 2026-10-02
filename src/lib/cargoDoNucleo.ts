@@ -31,21 +31,20 @@
  * pode ser líder. O que cada cargo enxerga continua saindo do painel.
  */
 import type { PerfilUsuario } from '@/lib/supabase';
+import { CARGOS_DERIVADOS } from '@/lib/cargos';
 
 /** O cargo do Núcleo. Uma constante, e não o literal espalhado pelas telas. */
 export const CARGO_DO_NUCLEO = 'assistente_adm' as const satisfies PerfilUsuario;
 
 /** Acesso total atravessa a trava. Espelha o primeiro `IF` da trigger. */
-const ATRAVESSAM: readonly string[] = ['administrador', 'super_admin'];
+const ATRAVESSAM: readonly string[] = CARGOS_DERIVADOS.acessoTotal;
 
 /**
  * Os cargos oferecidos a quem SAI do Núcleo numa transferência: os que
  * pertencem a um setor. A cúpula fica de fora — ela não tem setor, e a
  * transferência é justamente mudar alguém de setor.
  */
-export const CARGOS_FORA_DO_NUCLEO: readonly PerfilUsuario[] = [
-  'operador', 'lider', 'elite', 'gerencia', 'ouvidoria', 'rh',
-];
+export const CARGOS_FORA_DO_NUCLEO: readonly PerfilUsuario[] = CARGOS_DERIVADOS.foraDoNucleo;
 
 /**
  * Por que este cargo não pode ser gravado neste setor — ou `null` quando pode.

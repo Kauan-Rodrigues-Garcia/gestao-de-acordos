@@ -1,26 +1,17 @@
 import { PERFIL_LABELS } from '@/lib/index';
+import { CARGOS } from '@/lib/cargos';
+import type { PerfilUsuario } from '@/lib/supabase';
 
 /**
  * Cargos que podem ser escolhidos como destino de uma nova conversa.
  *
- * Esta lista espelha o CHECK de `perfis.perfil`. O cargo de quem envia não
- * decide nada por si só: cada item abaixo aponta para uma permissão do painel,
+ * São todos os cargos de `public.cargos`, via o espelho `lib/cargos.ts`. O
+ * cargo de quem envia não decide nada por si só: cada item abaixo aponta para uma permissão do painel,
  * resolvida pelo cargo e, quando existir, pela exceção individual.
  */
-export const CARGOS_ALVO_CHAT = [
-  'operador',
-  'lider',
-  'elite',
-  'gerencia',
-  'diretoria',
-  'ouvidoria',
-  'rh',
-  'assistente_adm',
-  'administrador',
-  'super_admin',
-] as const;
+export const CARGOS_ALVO_CHAT: readonly PerfilUsuario[] = CARGOS.map(c => c.slug);
 
-export type CargoAlvoChat = typeof CARGOS_ALVO_CHAT[number];
+export type CargoAlvoChat = PerfilUsuario;
 
 export const CHAVE_CARGO_CHAT: Record<CargoAlvoChat, string> = {
   operador:       'chat_cargo_operador',

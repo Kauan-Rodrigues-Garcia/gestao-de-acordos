@@ -12,12 +12,13 @@
  *
  * Aqui cada cargo é UMA linha com atributos, e as listas saem deles.
  *
- * ## Fase 2 de 7: ninguém usa ainda
+ * ## Desde a fase 3, a fonte das listas
  *
- * As listas antigas continuam sendo as que o app lê. O teste
- * `__tests__/cargos.test.ts` prova duas coisas: que as linhas abaixo são as
- * mesmas da migration, e que cada lista antiga é reproduzida pelos atributos.
- * A troca das listas pelos derivados é a fase 3.
+ * `PERFIS_ESCOPO_EMPRESA`, `CARGOS_ACESSO_TOTAL`, `PERFIL_LABELS` e as demais
+ * saem de `CARGOS_DERIVADOS`, lá embaixo. O teste `__tests__/cargos.test.ts`
+ * prova que as linhas abaixo são as mesmas da migration e fixa o conteúdo de
+ * cada lista: mudar um atributo que dá ou tira acesso reprova o teste até
+ * alguém decidir isso de propósito.
  *
  * Cargos são GLOBAIS (decisão de 02/10/2026): valem para todas as empresas.
  * O que muda por empresa é a permissão, em `cargos_permissoes`.
@@ -84,3 +85,10 @@ export const derivar = (cargos: readonly Cargo[] = CARGOS) => ({
     cargos.filter(c => c.nivel !== null).map(c => [c.slug, c.nivel as number]),
   ) as Partial<Record<PerfilUsuario, number>>,
 });
+
+/**
+ * As listas derivadas do espelho estático. É daqui que `lib/index.ts`,
+ * `permissoes-catalogo.ts`, `cargoDoNucleo.ts` e `permissoes-chat.ts` tiram as
+ * listas de cargo desde a fase 3 — nenhuma delas é mais escrita à mão.
+ */
+export const CARGOS_DERIVADOS = derivar();

@@ -1,4 +1,6 @@
 import { getHoPercentual, repassePercentuais } from './hoPercentual';
+import { CARGOS_DERIVADOS } from './cargos';
+import type { PerfilUsuario } from './supabase';
 export const ROUTE_PATHS = {
   LOGIN: '/login',
   REGISTRO: '/registro',
@@ -167,34 +169,13 @@ export const TIPO_COLORS: Record<string, string> = {
   pix: 'bg-chart-2/15 text-chart-2 border-chart-2/30',
 };
 
-export const PERFIL_LABELS: Record<string, string> = {
-  operador: 'Operador',
-  lider: 'Líder',
-  administrador: 'Administrador',
-  super_admin: 'Super Admin',
-  elite: 'Elite',
-  gerencia: 'Gerência',
-  diretoria: 'Diretoria',
-  ouvidoria: 'Ouvidoria',
-  /*
-   * O cargo do RH (migration 20260823200000).
-   *
-   * Ele NÃO entra em `PERFIS_LIDER` nem em `PERFIS_ESCOPO_EMPRESA`: aquelas
-   * listas decidem quem enxerga acordo e recebimento alheio, e o RH não faz
-   * cobrança — ele confere folha. O alcance dele é o do módulo RH Gestão, e
-   * sai das chaves `rh_*` do painel, não de uma lista de cargo escrita aqui.
-   */
-  rh: 'RH',
-  /*
-   * O cargo do Núcleo de Inteligência e Gestão (migration 20260911120000).
-   *
-   * Exclusivo do setor, nos dois sentidos: só existe no Núcleo, e o Núcleo só
-   * aceita ele — administrador e super_admin à parte. Quem garante é o banco
-   * (`fn_perfis_cargo_do_nucleo`). Como o RH, não entra em lista de liderança
-   * nem de escopo: o alcance dele sai das chaves do painel.
-   */
-  assistente_adm: 'Assistente ADM',
-};
+/**
+ * Rótulo de cada cargo — a coluna `nome` de `public.cargos`, via o espelho
+ * `lib/cargos.ts`. `rh` (migration 20260823200000) e `assistente_adm`
+ * (20260911120000) não entram em lista de liderança nem de escopo: o alcance
+ * deles sai das chaves do painel.
+ */
+export const PERFIL_LABELS: Record<string, string> = CARGOS_DERIVADOS.rotulos;
 
 export const PERFIL_COLORS: Record<string, string> = {
   operador:      'bg-role-operador/10 text-role-operador border-role-operador/30',
@@ -223,21 +204,14 @@ export const PERFIL_COLORS: Record<string, string> = {
 // migration 20260717b) — manter os dois lados espelhados.
 export const PERFIS_LIDER = ['lider', 'elite', 'gerencia', 'ouvidoria'] as const;
 // Perfis com acesso de admin (visão global)
-export const PERFIS_ADMIN = ['administrador', 'super_admin'] as const;
+export const PERFIS_ADMIN: readonly PerfilUsuario[] = CARGOS_DERIVADOS.acessoTotal;
 // Perfis com acesso de diretoria (analíticos globais sem edição)
 export const PERFIS_DIRETORIA = ['diretoria'] as const;
 
 // Hierarquia numérica de cargos (quanto maior, mais alto)
-export const PERFIL_NIVEL: Record<string, number> = {
-  operador:      1,
-  ouvidoria:     2,
-  lider:         2,
-  elite:         3,
-  gerencia:      4,
-  diretoria:     5,
-  administrador: 6,
-  super_admin:   7,
-};
+// Sai de `cargos.nivel`. `rh` e `assistente_adm` não têm nível: a hierarquia
+// numérica nunca os incluiu, e definir um é decisão, não cópia.
+export const PERFIL_NIVEL: Record<string, number> = CARGOS_DERIVADOS.niveis as Record<string, number>;
 
 // Perfis que visualizam apenas usuários do próprio setor (abaixo de Gerência)
 export const PERFIS_VISAO_SETOR = ['operador', 'lider', 'elite', 'ouvidoria'] as const;
@@ -248,7 +222,7 @@ export function isPerfilLider(perfil: string): boolean {
   return PERFIS_LIDER.includes(perfil as typeof PERFIS_LIDER[number]);
 }
 export function isPerfilAdmin(perfil: string): boolean {
-  return PERFIS_ADMIN.includes(perfil as typeof PERFIS_ADMIN[number]);
+  return PERFIS_ADMIN.includes(perfil as PerfilUsuario);
 }
 export function isPerfilDiretoria(perfil: string): boolean {
   return PERFIS_DIRETORIA.includes(perfil as typeof PERFIS_DIRETORIA[number]);
@@ -320,7 +294,7 @@ export function podeAutorizarTabulacao(perfil: string | null | undefined): boole
  * lista própria com `lider`: lá a pergunta é "quem pode ser membro de equipe",
  * e não "quem conta no recebimento".
  */
-export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO = ['operador', 'elite'] as const;
+export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO: readonly PerfilUsuario[] = CARGOS_DERIVADOS.contamNoRecebimento;
 
 /**
  * Cargos de LIDERANÇA que podem receber um ajuste manual de recebimento.
@@ -350,7 +324,7 @@ export const PERFIS_LIDERANCA_AJUSTE = ['lider', 'gerencia'] as const;
  * É o complemento de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO` para quem lidera: o
  * elite está lá (recebe e lidera), o líder está aqui (só lidera).
  */
-export const PERFIS_QUE_SO_LIDERAM = ['lider'] as const;
+export const PERFIS_QUE_SO_LIDERAM: readonly PerfilUsuario[] = CARGOS_DERIVADOS.soLideram;
 
 /** Este cargo conta como operador no recebimento? Ver a lista acima. */
 export function contaNoRecebimento(perfil: string | null | undefined): boolean {
@@ -389,9 +363,7 @@ export function contaNoRecebimento(perfil: string | null | undefined): boolean {
  * `gerencia` responde SIM — tem `ver_todos_setores = false` e continua sendo de
  * um setor.
  */
-export const PERFIS_ESCOPO_EMPRESA = [
-  'diretoria', 'administrador', 'super_admin',
-] as const;
+export const PERFIS_ESCOPO_EMPRESA: readonly PerfilUsuario[] = CARGOS_DERIVADOS.escopoEmpresa;
 
 /** Este cargo pertence à empresa em vez de a um setor? Ver a lista acima. */
 export function ehEscopoEmpresa(perfil: string | null | undefined): boolean {
