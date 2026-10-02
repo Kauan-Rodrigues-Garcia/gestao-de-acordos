@@ -7,8 +7,9 @@
  * garante), e uma tela sem rótulo de cargo seria pior que uma tela com o
  * rótulo da última versão do código.
  *
- * Fase 2 da reorganização: ninguém chama ainda. A fase 3 troca as listas de
- * `lib/index.ts` pelo `derivados` daqui.
+ * As listas de `lib/index.ts` vêm do espelho estático (`CARGOS_DERIVADOS`),
+ * igual ao banco pelo teste de paridade. Este hook é para a tela que precisar
+ * do cadastro vivo — a de cargos, quando existir criação pelo painel.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';

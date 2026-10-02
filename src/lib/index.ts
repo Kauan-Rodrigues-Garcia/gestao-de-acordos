@@ -1,4 +1,7 @@
 import { getHoPercentual, repassePercentuais } from './hoPercentual';
+import { CARGOS_DERIVADOS } from './cargos';
+import type { PerfilUsuario } from './supabase';
+import { varianteDoSlug } from './variante';
 export const ROUTE_PATHS = {
   LOGIN: '/login',
   REGISTRO: '/registro',
@@ -167,34 +170,13 @@ export const TIPO_COLORS: Record<string, string> = {
   pix: 'bg-chart-2/15 text-chart-2 border-chart-2/30',
 };
 
-export const PERFIL_LABELS: Record<string, string> = {
-  operador: 'Operador',
-  lider: 'Líder',
-  administrador: 'Administrador',
-  super_admin: 'Super Admin',
-  elite: 'Elite',
-  gerencia: 'Gerência',
-  diretoria: 'Diretoria',
-  ouvidoria: 'Ouvidoria',
-  /*
-   * O cargo do RH (migration 20260823200000).
-   *
-   * Ele NÃO entra em `PERFIS_LIDER` nem em `PERFIS_ESCOPO_EMPRESA`: aquelas
-   * listas decidem quem enxerga acordo e recebimento alheio, e o RH não faz
-   * cobrança — ele confere folha. O alcance dele é o do módulo RH Gestão, e
-   * sai das chaves `rh_*` do painel, não de uma lista de cargo escrita aqui.
-   */
-  rh: 'RH',
-  /*
-   * O cargo do Núcleo de Inteligência e Gestão (migration 20260911120000).
-   *
-   * Exclusivo do setor, nos dois sentidos: só existe no Núcleo, e o Núcleo só
-   * aceita ele — administrador e super_admin à parte. Quem garante é o banco
-   * (`fn_perfis_cargo_do_nucleo`). Como o RH, não entra em lista de liderança
-   * nem de escopo: o alcance dele sai das chaves do painel.
-   */
-  assistente_adm: 'Assistente ADM',
-};
+/**
+ * Rótulo de cada cargo — a coluna `nome` de `public.cargos`, via o espelho
+ * `lib/cargos.ts`. `rh` (migration 20260823200000) e `assistente_adm`
+ * (20260911120000) não entram em lista de liderança nem de escopo: o alcance
+ * deles sai das chaves do painel.
+ */
+export const PERFIL_LABELS: Record<string, string> = CARGOS_DERIVADOS.rotulos;
 
 export const PERFIL_COLORS: Record<string, string> = {
   operador:      'bg-role-operador/10 text-role-operador border-role-operador/30',
@@ -223,32 +205,25 @@ export const PERFIL_COLORS: Record<string, string> = {
 // migration 20260717b) — manter os dois lados espelhados.
 export const PERFIS_LIDER = ['lider', 'elite', 'gerencia', 'ouvidoria'] as const;
 // Perfis com acesso de admin (visão global)
-export const PERFIS_ADMIN = ['administrador', 'super_admin'] as const;
+export const PERFIS_ADMIN: readonly PerfilUsuario[] = CARGOS_DERIVADOS.acessoTotal;
 // Perfis com acesso de diretoria (analíticos globais sem edição)
 export const PERFIS_DIRETORIA = ['diretoria'] as const;
 
 // Hierarquia numérica de cargos (quanto maior, mais alto)
-export const PERFIL_NIVEL: Record<string, number> = {
-  operador:      1,
-  ouvidoria:     2,
-  lider:         2,
-  elite:         3,
-  gerencia:      4,
-  diretoria:     5,
-  administrador: 6,
-  super_admin:   7,
-};
+// Sai de `cargos.nivel`. `rh` e `assistente_adm` não têm nível: a hierarquia
+// numérica nunca os incluiu, e definir um é decisão, não cópia.
+export const PERFIL_NIVEL: Record<string, number> = CARGOS_DERIVADOS.niveis as Record<string, number>;
 
-// Perfis que visualizam apenas usuários do próprio setor (abaixo de Gerência)
-export const PERFIS_VISAO_SETOR = ['operador', 'lider', 'elite', 'ouvidoria'] as const;
-// Perfis que podem ver todos os usuários dentro da empresa mas ficam restritos ao próprio cargo ou acima
-export const PERFIS_VISAO_EMPRESA_RESTRITA = ['gerencia', 'diretoria'] as const;
+// `PERFIS_VISAO_SETOR` e `PERFIS_VISAO_EMPRESA_RESTRITA` saíram na fase 3 da
+// reorganização de cargos (02/10/2026): a única tela que perguntava "este
+// cargo está preso ao setor?" (Campanha Fácil) passou a perguntar ao painel,
+// pela chave `campanha_escopo_todos_setores`.
 
 export function isPerfilLider(perfil: string): boolean {
   return PERFIS_LIDER.includes(perfil as typeof PERFIS_LIDER[number]);
 }
 export function isPerfilAdmin(perfil: string): boolean {
-  return PERFIS_ADMIN.includes(perfil as typeof PERFIS_ADMIN[number]);
+  return PERFIS_ADMIN.includes(perfil as PerfilUsuario);
 }
 export function isPerfilDiretoria(perfil: string): boolean {
   return PERFIS_DIRETORIA.includes(perfil as typeof PERFIS_DIRETORIA[number]);
@@ -257,36 +232,10 @@ export function isPerfilAdminOuLider(perfil: string): boolean {
   return isPerfilAdmin(perfil) || isPerfilLider(perfil);
 }
 
-/**
- * Quem pode AUTORIZAR uma tabulação (transferir NR, trocar vínculo EXTRA,
- * liberar duplicados na importação) digitando usuário e senha.
- *
- * ⚠️ Esta lista espelha, cargo a cargo, a checagem do servidor em
- * `fn_transferir_acordo_nr` (migration `20260728a`). Os dois lados precisam
- * mudar juntos: divergir aqui foi exatamente o defeito de 2026-08-09, quando
- * existiam QUATRO listas diferentes para a mesma pergunta —
- *
- *   • `AcordoForm`            → só lider/administrador/super_admin
- *   • `AcordoNovoInline`      → `isPerfilAdminOuLider` (com ouvidoria, sem diretoria)
- *   • `autorizacao_lider`     → idem
- *   • RPC no servidor         → com diretoria, sem ouvidoria
- *
- * O resultado é que gerência e elite eram recusadas numa tela e aceitas em
- * outra, e a diretoria não conseguia autorizar em lugar nenhum.
- *
- * NÃO use `isPerfilAdminOuLider` para isto: ele inclui `ouvidoria` — que é
- * outra trilha, e o servidor recusa — e deixa `diretoria` de fora.
- */
-export const PERFIS_AUTORIZADORES = [
-  'lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin',
-] as const;
-
-/** Este cargo pode autorizar uma tabulação? Ver `PERFIS_AUTORIZADORES`. */
-export function podeAutorizarTabulacao(perfil: string | null | undefined): boolean {
-  return PERFIS_AUTORIZADORES.includes(
-    String(perfil ?? '').toLowerCase().trim() as typeof PERFIS_AUTORIZADORES[number],
-  );
-}
+// Quem pode AUTORIZAR uma tabulação é a chave `acordos_autorizar_tabulacao`
+// do painel, conferida também por `fn_transferir_acordo_nr` (20260824200000).
+// A lista `PERFIS_AUTORIZADORES` e `podeAutorizarTabulacao`, que vieram antes
+// dela, saíram na fase 3 da reorganização de cargos (02/10/2026).
 
 /**
  * Cargos que CONTAM como operador no recebimento.
@@ -320,7 +269,7 @@ export function podeAutorizarTabulacao(perfil: string | null | undefined): boole
  * lista própria com `lider`: lá a pergunta é "quem pode ser membro de equipe",
  * e não "quem conta no recebimento".
  */
-export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO = ['operador', 'elite'] as const;
+export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO: readonly PerfilUsuario[] = CARGOS_DERIVADOS.contamNoRecebimento;
 
 /**
  * Cargos de LIDERANÇA que podem receber um ajuste manual de recebimento.
@@ -350,7 +299,7 @@ export const PERFIS_LIDERANCA_AJUSTE = ['lider', 'gerencia'] as const;
  * É o complemento de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO` para quem lidera: o
  * elite está lá (recebe e lidera), o líder está aqui (só lidera).
  */
-export const PERFIS_QUE_SO_LIDERAM = ['lider'] as const;
+export const PERFIS_QUE_SO_LIDERAM: readonly PerfilUsuario[] = CARGOS_DERIVADOS.soLideram;
 
 /** Este cargo conta como operador no recebimento? Ver a lista acima. */
 export function contaNoRecebimento(perfil: string | null | undefined): boolean {
@@ -389,9 +338,7 @@ export function contaNoRecebimento(perfil: string | null | undefined): boolean {
  * `gerencia` responde SIM — tem `ver_todos_setores = false` e continua sendo de
  * um setor.
  */
-export const PERFIS_ESCOPO_EMPRESA = [
-  'diretoria', 'administrador', 'super_admin',
-] as const;
+export const PERFIS_ESCOPO_EMPRESA: readonly PerfilUsuario[] = CARGOS_DERIVADOS.escopoEmpresa;
 
 /** Este cargo pertence à empresa em vez de a um setor? Ver a lista acima. */
 export function ehEscopoEmpresa(perfil: string | null | undefined): boolean {
@@ -506,8 +453,9 @@ export const TIPO_LABELS_PAGUEPLAY: Record<string, string> = {
   pix: 'Boleto / PIX',
 };
 
+/** A empresa é a PaguePlay? Lê `empresas.variante` (ver `lib/variante.ts`). */
 export function isPaguePlay(slug: string): boolean {
-  return slug === 'pagueplay';
+  return varianteDoSlug(slug) === 'pagueplay';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

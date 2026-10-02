@@ -88,6 +88,11 @@ export interface Empresa {
    * `produtoDaEmpresa`, que cai no slug.
    */
   produto?: string | null;
+  /**
+   * Variação da cobrança: `bookplay` | `pagueplay`; nulo fora da cobrança.
+   * Migration 20261002230000. Quem lê é `isPaguePlay`, via `lib/variante.ts`.
+   */
+  variante?: string | null;
   config: Record<string, unknown>;
   criado_em: string;
   atualizado_em: string;
@@ -101,6 +106,9 @@ export interface Setor {
   /** Setor alternativo (sem relatório próprio): acumulado = soma dos usuários
    *  que pertencem a ele (membros + clones), não o total do relatório. */
   alternativo?: boolean;
+  /** `operacao` | `nucleo` (20261002230000). Setor de tipo que algum cargo
+   *  exige (`cargos.exige_tipo_setor`) só aceita esses cargos. */
+  tipo?: string | null;
   empresa_id?: string;
   criado_em: string;
   atualizado_em: string;

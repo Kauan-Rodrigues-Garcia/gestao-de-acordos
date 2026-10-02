@@ -73,6 +73,8 @@
  */
 
 import { produtoDoSlug, type Produto } from '@/lib/produto';
+import { CARGOS_DERIVADOS } from '@/lib/cargos';
+import type { PerfilUsuario } from '@/lib/supabase';
 
 /**
  * Os cargos que o administrador configura na tela.
@@ -81,11 +83,9 @@ import { produtoDoSlug, type Produto } from '@/lib/produto';
  * exclusivo do setor. Como `rh`, não entra nos atalhos da operação: as chaves
  * dele são nominais, no grupo «Controle de Números», no Dashboard e no chat.
  */
-export const CARGOS_CONFIGURAVEIS = [
-  'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria', 'rh',
-  'assistente_adm',
-] as const;
-export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
+export type CargoConfiguravel = Exclude<PerfilUsuario, 'administrador' | 'super_admin'>;
+/** Os ativos sem acesso total, na `ordem` de `public.cargos`. */
+export const CARGOS_CONFIGURAVEIS = CARGOS_DERIVADOS.configuraveis as readonly CargoConfiguravel[];
 
 /**
  * Cargos com acesso total por construção (migration `20260812b`).
@@ -94,7 +94,7 @@ export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
  * cargo que desaparece sem explicação parece defeito, e a pergunta "por que
  * não posso configurar o administrador?" já foi feita.
  */
-export const CARGOS_ACESSO_TOTAL = ['administrador', 'super_admin'] as const;
+export const CARGOS_ACESSO_TOTAL: readonly PerfilUsuario[] = CARGOS_DERIVADOS.acessoTotal;
 
 /**
  * Chaves que o acesso total NÃO concede sozinho.
@@ -380,6 +380,18 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_campanha_facil', label: 'Aba Campanha Fácil',
     descricao: 'Abrir o módulo de campanhas de cobrança',
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: LIDERANCA,
+  },
+  {
+    /*
+     * Fase 3 da reorganização de cargos (02/10/2026). Antes a tela decidia
+     * pela lista `PERFIS_VISAO_SETOR` (operador, lider, elite, ouvidoria): quem
+     * estava nela ficava preso ao próprio setor. Nasce com o complemento exato
+     * daquela lista, para ninguém ganhar nem perder acesso.
+     */
+    key: 'campanha_escopo_todos_setores', label: 'Campanha Fácil: todos os setores',
+    descricao: 'Escolher de qual setor saem os operadores que encaminham a campanha. Sem ela, só o próprio setor',
+    grupo: 'Filtros e visão', tenants: ['bookplay'],
+    padrao: { gerencia: true, diretoria: true, rh: true, assistente_adm: true },
   },
   {
     key: 'ver_solicitacoes_whatsapp', label: 'Aba Solicitações de WhatsApp',

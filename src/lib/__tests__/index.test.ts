@@ -21,8 +21,6 @@ import {
   PERFIS_LIDER,
   PERFIS_ADMIN,
   PERFIS_DIRETORIA,
-  PERFIS_VISAO_SETOR,
-  PERFIS_VISAO_EMPRESA_RESTRITA,
   isPerfilLider,
   isPerfilAdmin,
   isPerfilDiretoria,
@@ -121,8 +119,6 @@ describe('lib/index constantes', () => {
     expect(PERFIS_ADMIN).toContain('administrador');
     expect(PERFIS_ADMIN).toContain('super_admin');
     expect(PERFIS_DIRETORIA).toEqual(['diretoria']);
-    expect(PERFIS_VISAO_SETOR).toContain('operador');
-    expect(PERFIS_VISAO_EMPRESA_RESTRITA).toContain('gerencia');
   });
 });
 

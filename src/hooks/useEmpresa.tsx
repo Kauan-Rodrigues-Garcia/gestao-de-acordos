@@ -5,6 +5,7 @@ import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { resolverEmpresaEscolhida } from '@/services/empresaAtiva.service';
 import { hoPercentualDaConfig, setHoPercentual } from '@/lib/hoPercentual';
+import { registrarVariantes } from '@/lib/variante';
 
 interface EmpresaContextType {
   empresa: Empresa | null;
@@ -105,6 +106,7 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   // do React (metas, comissão, serviços do analítico). Ver lib/hoPercentual.
   useEffect(() => {
     setHoPercentual(hoPercentualDaConfig(empresa?.config));
+    registrarVariantes([empresa]);
   }, [empresa]);
 
   useEffect(() => {

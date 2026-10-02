@@ -18,12 +18,28 @@
  * nasce a partir do banco.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { espelhoEquipeMembros } from '@/test/equipeMembros';
 
 type Resposta = { data: unknown; error: { message: string } | null };
 
-const { respostas } = vi.hoisted(() => ({
+const { respostas, servidas } = vi.hoisted(() => ({
   respostas: new Map<string, Resposta[]>(),
+  servidas: new Map<string, Resposta>(),
 }));
+
+/**
+ * `equipe_membros` sem resposta própria responde como o banco montaria a
+ * partir das tabelas antigas do cenário (gatilhos da fase 5).
+ */
+function espelho(): Resposta {
+  const ver = (t: string) => servidas.get(t)?.data ?? respostas.get(t)?.[0]?.data;
+  return {
+    data: espelhoEquipeMembros({
+      perfis: ver('perfis'), lideres: ver('equipe_lideres'), clones: ver('equipe_operadores_clones'),
+    }),
+    error: null,
+  };
+}
 
 function construtor(tabela: string) {
   const alvo: unknown = new Proxy({}, {
@@ -31,7 +47,9 @@ function construtor(tabela: string) {
       if (prop === 'then') {
         return (aceitar: (r: Resposta) => void) => {
           const fila = respostas.get(tabela) ?? [];
-          aceitar(fila.shift() ?? { data: [], error: null });
+          const r = fila.shift() ?? (tabela === 'equipe_membros' ? espelho() : { data: [], error: null });
+          servidas.set(tabela, r);
+          aceitar(r);
         };
       }
       return () => alvo;
@@ -53,7 +71,7 @@ function responder(tabela: string, ...rs: Resposta[]) {
   respostas.set(tabela, rs);
 }
 
-beforeEach(() => respostas.clear());
+beforeEach(() => { respostas.clear(); servidas.clear(); });
 
 // ── Peças puras ─────────────────────────────────────────────────────────────
 
@@ -148,27 +166,36 @@ describe('buscarEquipesComOperadores', () => {
     expect(r.equipesExtrasPorOperador['op-1']).toBeUndefined();
   });
 
-  it('coluna conta_recebimento ausente no banco: o clone conta (comportamento antigo)', async () => {
-    responder('perfis', { data: [], error: null });
-    responder('equipes', { data: [{ id: 'eq-2', nome: 'Play 5', setor_id: 'setor-B' }], error: null });
-    // 1ª tentativa (com a coluna) volta null; a 2ª, sem ela, traz as linhas.
-    responder('equipe_operadores_clones',
-      { data: null, error: { message: 'column conta_recebimento does not exist' } },
-      { data: [{ equipe_id: 'eq-2', operador_id: 'op-1' }], error: null });
+  it('equipe_membros ausente (fase 5 não aplicada): monta das tabelas antigas', async () => {
+    const perfis = { data: [
+      { id: 'op-1', equipe_id: 'eq-1', setor_id: null,
+        equipes: { id: 'eq-1', nome: 'Play 4', setor_id: 'setor-A' } },
+    ], error: null };
+    // A composição lê `perfis` uma vez; a reserva lê de novo para o membro.
+    responder('perfis', perfis, perfis);
+    responder('equipes', { data: [
+      { id: 'eq-1', nome: 'Play 4', setor_id: 'setor-A' },
+      { id: 'eq-2', nome: 'Play 5', setor_id: 'setor-B' },
+    ], error: null });
+    responder('equipe_membros', { data: null, error: { message: 'relation does not exist' } });
+    responder('equipe_operadores_clones', {
+      data: [{ equipe_id: 'eq-2', operador_id: 'op-1', conta_recebimento: true }], error: null,
+    });
 
     const r = await buscarEquipesComOperadores('emp-1');
+    expect(r.operadorEquipeMap['op-1'].equipe_id).toBe('eq-1');
     expect(r.equipesExtrasPorOperador['op-1']).toEqual(['eq-2']);
   });
 
-  it('tabela de clones inexistente não derruba a busca', async () => {
-    responder('perfis', { data: [
+  it('sem equipe_membros e sem a tabela de clones, a busca não cai', async () => {
+    const perfis = { data: [
       { id: 'op-1', equipe_id: 'eq-1', setor_id: null,
         equipes: { id: 'eq-1', nome: 'Play 4', setor_id: 'setor-A' } },
-    ], error: null });
+    ], error: null };
+    responder('perfis', perfis, perfis);
     responder('equipes', { data: [{ id: 'eq-1', nome: 'Play 4', setor_id: 'setor-A' }], error: null });
-    responder('equipe_operadores_clones',
-      { data: null, error: { message: 'relation does not exist' } },
-      { data: null, error: { message: 'relation does not exist' } });
+    responder('equipe_membros', { data: null, error: { message: 'relation does not exist' } });
+    responder('equipe_operadores_clones', { data: null, error: { message: 'relation does not exist' } });
 
     const r = await buscarEquipesComOperadores('emp-1');
     expect(r.equipesExtrasPorOperador).toEqual({});

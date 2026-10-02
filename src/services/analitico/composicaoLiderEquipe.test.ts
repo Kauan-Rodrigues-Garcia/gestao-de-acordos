@@ -15,6 +15,7 @@
  * equipe — o setor não fechava com a soma das equipes dele.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { espelhoEquipeMembros } from '@/test/equipeMembros';
 
 const BOOKPLAY  = 'emp-bookplay';
 const EQ_MATHEUS = 'eq-matheus';
@@ -29,15 +30,32 @@ const filtros: Array<{ tabela: string; coluna: string; valor: unknown }> = [];
 function construtor(tabela: string) {
   const alvo: Record<string, unknown> = {};
   for (const m of ['select', 'order', 'limit']) alvo[m] = () => alvo;
-  for (const m of ['eq', 'is', 'in', 'neq']) {
+  for (const m of ['eq', 'is', 'in', 'neq', 'not']) {
     alvo[m] = (coluna: string, valor: unknown) => {
       filtros.push({ tabela, coluna, valor });
       return alvo;
     };
   }
   alvo.then = (aceitar: (r: unknown) => unknown) =>
-    Promise.resolve(respostas.get(tabela) ?? { data: [], error: null }).then(aceitar);
+    Promise.resolve(responder(tabela)).then(aceitar);
   return alvo;
+}
+
+/**
+ * `equipe_membros` responde como o banco montaria a partir das três tabelas
+ * antigas do cenário (gatilhos da fase 5), salvo resposta explícita.
+ */
+function responder(tabela: string) {
+  const explicita = respostas.get(tabela);
+  if (explicita || tabela !== 'equipe_membros') return explicita ?? { data: [], error: null };
+  return {
+    data: espelhoEquipeMembros({
+      perfis:  respostas.get('perfis')?.data,
+      lideres: respostas.get('equipe_lideres')?.data,
+      clones:  respostas.get('equipe_operadores_clones')?.data,
+    }),
+    error: null,
+  };
 }
 
 vi.mock('@/lib/supabase', () => ({
@@ -99,11 +117,24 @@ describe('buscarEquipesComOperadores — líder conta na equipe que lidera', () 
     });
   });
 
-  it('consulta equipe_lideres filtrando pela empresa', async () => {
+  it('consulta equipe_membros filtrando pela empresa', async () => {
     montarBanco([{ equipe_id: EQ_MATHEUS, lider_id: MATHEUS }]);
 
     await buscarEquipesComOperadores(BOOKPLAY, null);
 
+    expect(filtros).toContainEqual({
+      tabela: 'equipe_membros', coluna: 'empresa_id', valor: BOOKPLAY,
+    });
+  });
+
+  it('equipe_membros ausente (fase 5 não aplicada): monta das três tabelas antigas', async () => {
+    montarBanco([{ equipe_id: EQ_OUTRA, lider_id: RENATA }]);
+    respostas.set('equipe_membros', { data: null, error: { message: 'relation does not exist' } });
+
+    const c = await buscarEquipesComOperadores(BOOKPLAY, null);
+
+    expect(c.operadorEquipeMap[RENATA].equipe_id).toBe(EQ_MATHEUS);
+    expect(c.equipesExtrasPorOperador[RENATA]).toEqual([EQ_OUTRA]);
     expect(filtros).toContainEqual({
       tabela: 'equipe_lideres', coluna: 'empresa_id', valor: BOOKPLAY,
     });
