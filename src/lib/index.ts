@@ -213,10 +213,10 @@ export const PERFIS_DIRETORIA = ['diretoria'] as const;
 // numérica nunca os incluiu, e definir um é decisão, não cópia.
 export const PERFIL_NIVEL: Record<string, number> = CARGOS_DERIVADOS.niveis as Record<string, number>;
 
-// Perfis que visualizam apenas usuários do próprio setor (abaixo de Gerência)
-export const PERFIS_VISAO_SETOR = ['operador', 'lider', 'elite', 'ouvidoria'] as const;
-// Perfis que podem ver todos os usuários dentro da empresa mas ficam restritos ao próprio cargo ou acima
-export const PERFIS_VISAO_EMPRESA_RESTRITA = ['gerencia', 'diretoria'] as const;
+// `PERFIS_VISAO_SETOR` e `PERFIS_VISAO_EMPRESA_RESTRITA` saíram na fase 3 da
+// reorganização de cargos (02/10/2026): a única tela que perguntava "este
+// cargo está preso ao setor?" (Campanha Fácil) passou a perguntar ao painel,
+// pela chave `campanha_escopo_todos_setores`.
 
 export function isPerfilLider(perfil: string): boolean {
   return PERFIS_LIDER.includes(perfil as typeof PERFIS_LIDER[number]);
@@ -231,36 +231,10 @@ export function isPerfilAdminOuLider(perfil: string): boolean {
   return isPerfilAdmin(perfil) || isPerfilLider(perfil);
 }
 
-/**
- * Quem pode AUTORIZAR uma tabulação (transferir NR, trocar vínculo EXTRA,
- * liberar duplicados na importação) digitando usuário e senha.
- *
- * ⚠️ Esta lista espelha, cargo a cargo, a checagem do servidor em
- * `fn_transferir_acordo_nr` (migration `20260728a`). Os dois lados precisam
- * mudar juntos: divergir aqui foi exatamente o defeito de 2026-08-09, quando
- * existiam QUATRO listas diferentes para a mesma pergunta —
- *
- *   • `AcordoForm`            → só lider/administrador/super_admin
- *   • `AcordoNovoInline`      → `isPerfilAdminOuLider` (com ouvidoria, sem diretoria)
- *   • `autorizacao_lider`     → idem
- *   • RPC no servidor         → com diretoria, sem ouvidoria
- *
- * O resultado é que gerência e elite eram recusadas numa tela e aceitas em
- * outra, e a diretoria não conseguia autorizar em lugar nenhum.
- *
- * NÃO use `isPerfilAdminOuLider` para isto: ele inclui `ouvidoria` — que é
- * outra trilha, e o servidor recusa — e deixa `diretoria` de fora.
- */
-export const PERFIS_AUTORIZADORES = [
-  'lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin',
-] as const;
-
-/** Este cargo pode autorizar uma tabulação? Ver `PERFIS_AUTORIZADORES`. */
-export function podeAutorizarTabulacao(perfil: string | null | undefined): boolean {
-  return PERFIS_AUTORIZADORES.includes(
-    String(perfil ?? '').toLowerCase().trim() as typeof PERFIS_AUTORIZADORES[number],
-  );
-}
+// Quem pode AUTORIZAR uma tabulação é a chave `acordos_autorizar_tabulacao`
+// do painel, conferida também por `fn_transferir_acordo_nr` (20260824200000).
+// A lista `PERFIS_AUTORIZADORES` e `podeAutorizarTabulacao`, que vieram antes
+// dela, saíram na fase 3 da reorganização de cargos (02/10/2026).
 
 /**
  * Cargos que CONTAM como operador no recebimento.

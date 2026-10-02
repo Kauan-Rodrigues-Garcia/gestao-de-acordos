@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { PERFIS_VISAO_SETOR } from '@/lib/index';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { Perfil } from '@/lib/supabase';
 import type { CampaignItem } from './lib/campaign-core';
 import { repartirPorOperador, type OperadorCampanha } from './envios';
@@ -18,13 +18,11 @@ import {
   type EnvioResumo, type Autor,
 } from './campanhaFacilEnvios.service';
 
-/** Cargo preso ao próprio setor — ver `PERFIS_VISAO_SETOR`. */
-function presoAoSetor(perfil: Perfil | null): boolean {
-  return !!perfil && (PERFIS_VISAO_SETOR as readonly string[]).includes(perfil.perfil);
-}
-
 export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | null) {
-  const setorFixo = presoAoSetor(perfil);
+  // Preso ao próprio setor quem não tem `campanha_escopo_todos_setores` no
+  // painel. Até a fase 3 de cargos era a lista `PERFIS_VISAO_SETOR`.
+  const { temPermissao } = useCargoPermissoes();
+  const setorFixo = !!perfil && !temPermissao('campanha_escopo_todos_setores');
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   const [setorEscolhido, setSetorEscolhido] = useState<string | null>(null);
   const setorId = setorFixo ? (perfil?.setor_id ?? null) : setorEscolhido;

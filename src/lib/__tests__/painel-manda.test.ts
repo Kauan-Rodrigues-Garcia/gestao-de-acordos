@@ -185,7 +185,7 @@ const EXCECOES: Record<string, Excecao> = {
   // «Quem é líder de equipe» é uma pergunta sobre o CADASTRO, não sobre acesso:
   // a resposta não muda o que a pessoa que olha consegue ver.
   'lib/index.ts': {
-    linhas: 6, familia: 'definicao-ou-dado',
+    linhas: 5, familia: 'definicao-ou-dado',
     motivo: 'é onde os helpers são definidos. Nenhuma tela os consome mais — some quando alguém apagar as funções.',
   },
   'pages/AdminEquipes.tsx': {

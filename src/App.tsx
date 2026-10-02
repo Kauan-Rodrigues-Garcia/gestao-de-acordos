@@ -380,14 +380,14 @@ export default function App() {
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="criar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="editar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -406,7 +406,7 @@ export default function App() {
               {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="importar_excel">
                     <ImportarExcel />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -414,21 +414,21 @@ export default function App() {
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_usuarios">
+                  <ProtectedRoute requiredPermissao="ver_usuarios">
                     <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -439,7 +439,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador']} requiredPermissao="ver_configuracoes">
+                  <ProtectedRoute requiredPermissao="ver_configuracoes">
                     <AdminConfiguracoes />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -448,14 +448,14 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_METAS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_metas">
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_lixeira">
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -464,7 +464,7 @@ export default function App() {
               {/* Painel Diretoria */}
               <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['diretoria','administrador']}
+                  <ProtectedRoute produtos={SO_COBRANCA}
                                   requiredPermissao="ver_painel_diretoria">
                     <PainelDiretoria />
                   </ProtectedRoute>
@@ -550,7 +550,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.VENDAS_PAINEL_LIDER} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL}
-                    allowedProfiles={['lider','administrador','elite','gerencia']}
+                   
                     requiredPermissao="ver_painel_lider">
                     <VendasPainelLider />
                   </ProtectedRoute>
@@ -559,7 +559,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COMERCIAL}
-                    allowedProfiles={['diretoria','administrador']}
+                   
                     requiredPermissao="ver_painel_diretoria">
                     <VendasPainelDiretoria />
                   </ProtectedRoute>

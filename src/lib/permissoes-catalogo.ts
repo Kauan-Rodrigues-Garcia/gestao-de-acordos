@@ -382,6 +382,18 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: LIDERANCA,
   },
   {
+    /*
+     * Fase 3 da reorganização de cargos (02/10/2026). Antes a tela decidia
+     * pela lista `PERFIS_VISAO_SETOR` (operador, lider, elite, ouvidoria): quem
+     * estava nela ficava preso ao próprio setor. Nasce com o complemento exato
+     * daquela lista, para ninguém ganhar nem perder acesso.
+     */
+    key: 'campanha_escopo_todos_setores', label: 'Campanha Fácil: todos os setores',
+    descricao: 'Escolher de qual setor saem os operadores que encaminham a campanha. Sem ela, só o próprio setor',
+    grupo: 'Filtros e visão', tenants: ['bookplay'],
+    padrao: { gerencia: true, diretoria: true, rh: true, assistente_adm: true },
+  },
+  {
     key: 'ver_solicitacoes_whatsapp', label: 'Aba Solicitações de WhatsApp',
     descricao: 'Abrir o chat interno de solicitação de mensagem',
     grupo: 'Abas e telas', padrao: TODOS,
