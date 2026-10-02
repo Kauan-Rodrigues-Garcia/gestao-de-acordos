@@ -96,6 +96,11 @@ export default function AdminSetoresAba() {
    */
   const podeEscolherNucleo  = temPermissao('numeros_configurar');
   const { perfil } = useAuth();
+  /*
+   * A cidade do setor e o cadastro de cidades são do super admin, não do RH
+   * nem de quem só edita setor. O banco cobra o mesmo (20261003140000).
+   */
+  const podeEscolherCidade  = perfil?.perfil === 'super_admin';
   /* O atalho só é atalho se houver para onde ir. */
   const podeIrParaUsuarios  = temPermissao('usuarios_sub_usuarios');
 
@@ -298,8 +303,8 @@ export default function AdminSetoresAba() {
        * coluna `cidade_id` só vai no payload quando muda, para a tela continuar
        * salvando num banco ainda sem a migration 20261003130000.
        */
-      let cidadeId = form.cidadeId;
-      if (novaCidade !== null && novaCidade.trim()) {
+      let cidadeId = podeEscolherCidade ? form.cidadeId : (editando?.cidade_id ?? null);
+      if (podeEscolherCidade && novaCidade !== null && novaCidade.trim()) {
         const { data: criada, error: erroCidade } = await supabase.from('rh_celulas').insert({
           empresa_id: empresaAtual.id, nome: novaCidade.trim(), ordem: cidades.length + 1,
         }).select('id').single();
@@ -715,7 +720,11 @@ export default function AdminSetoresAba() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Cidade</Label>
-              {novaCidade === null ? (
+              {!podeEscolherCidade ? (
+                <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/30 text-sm text-muted-foreground">
+                  {form.cidadeId ? (nomeDaCidade.get(form.cidadeId) ?? 'Cidade') : 'Sem cidade'}
+                </p>
+              ) : novaCidade === null ? (
                 <div className="flex gap-2">
                   <Select
                     value={form.cidadeId ?? '__nenhuma__'}
@@ -744,7 +753,9 @@ export default function AdminSetoresAba() {
                 </div>
               )}
               <p className="text-[11px] text-muted-foreground leading-snug">
-                É a mesma cidade que o RH usa para este setor: mudar aqui muda lá.
+                {podeEscolherCidade
+                  ? 'É a mesma cidade que o RH usa para este setor: mudar aqui muda lá.'
+                  : 'Só o super admin define a cidade do setor.'}
               </p>
             </div>
             <div className="flex items-center justify-between pt-1">

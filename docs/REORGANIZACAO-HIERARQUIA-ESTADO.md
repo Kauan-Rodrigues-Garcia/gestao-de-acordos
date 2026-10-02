@@ -94,6 +94,14 @@ ler a variante; os 439 usos ficam como estão, só a função muda.»
 - Front: `cargoDoNucleo.ts` (`CARGO_DO_NUCLEO`, `CARGOS_FORA_DO_NUCLEO`) passa a
   ler o atributo.
 
+## Cidade do setor é do super admin (20261003140000, a aplicar)
+
+Pedido do kauan em 02/10: a cidade do setor e o cadastro de cidades são
+configuração do super admin (Configurações > Setores), não do RH. A tela do RH
+só mostra a cidade e continua ligando setor e escolhendo premiação/comissão. O
+banco cobra o mesmo por policy (`rh_celulas`) e gatilhos (`setores`,
+`rh_config_setores`).
+
 ## Fase 7 — limpeza (não antes de novembro/2026)
 
 Só depois de um mês fechado (outubro/2026) sem divergência entre
