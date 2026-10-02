@@ -38,6 +38,22 @@
 .hw-aranha .corpo { fill: oklch(0.22 0.02 320); stroke: color-mix(in oklch, currentColor 50%, transparent); stroke-width: .8; }
 .hw-aranha .pernas { stroke: color-mix(in oklch, currentColor 35%, oklch(0.22 0.02 320)); stroke-width: 1.5; fill: none; stroke-linecap: round; }
 .hw-aranha .olho { fill: oklch(0.72 0.2 35); }
+/* Dá para pegar: clicar e puxar estica o fio (`Aranha.tsx`). Sem rolar a tela no toque. */
+.hw-aranha svg { cursor: grab; touch-action: none; user-select: none; }
+
+/* ── A aranha solta: palco fixo na tela inteira ──────────────────────────── */
+/* Fora do <main> (portal no body) para poder cair para fora da tela. Acima
+   do conteúdo e da barra, abaixo de diálogos e menus (z 50). */
+.hw-aranha-palco { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+.hw-aranha-fios { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.hw-aranha-fios .fio-livre { fill: none; stroke: color-mix(in oklch, currentColor 45%, transparent); stroke-width: 1; stroke-linecap: round; }
+.hw-aranha.solta { top: 0; left: 0; right: auto; width: 40px; height: 40px; display: none; justify-content: center; align-items: center; transform-origin: 20px 20px; cursor: grab; touch-action: none; will-change: transform; }
+.hw-aranha.solta.ativa { display: flex; }
+.hw-aranha.solta.agarrada { cursor: grabbing; }
+.hw-aranha.solta svg { margin: 0; animation: none; cursor: inherit; }
+/* Na mão, no ar ou subindo o fio: as pernas mexem sem parar. */
+.hw-aranha.solta.agitada svg { animation: hw-escala .09s linear infinite alternate; }
+.hw-pof.fio i { background: currentColor; opacity: .6; }
 
 /* ── Chuva, relâmpago e nuvens ───────────────────────────────────────────── */
 .hw-chuva { position: absolute; inset: 0; width: 100%; height: 100%; filter: blur(1.4px); opacity: .55; }

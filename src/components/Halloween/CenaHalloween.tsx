@@ -6,6 +6,7 @@ import { EVENTO_ACORDO_SALVO, type CenaHalloween } from './tema';
 import { FANTASMA, sortearEsconderijo, type Esconderijo } from './esconderijo';
 import { Fumaca } from './Fumaca';
 import { VultoNoVidro } from './VultoNoVidro';
+import { Aranha } from './Aranha';
 import './halloween.css';
 
 /*
@@ -17,6 +18,7 @@ import './halloween.css';
  *                      aparece nos vãos entre cards.
  *   CamadaHalloween  — DENTRO do `<main>`, no alto do conteúdo: teias,
  *                      aranha, fantasmas, lanterna. Rola junto com a página.
+ *                      A aranha solta sai dela para um palco fixo (`Aranha.tsx`).
  *   SobreposicaoHalloween — parada por cima do conteúdo: clarão do trovão e
  *                      chuva de doces.
  *   RevoadaHalloween — a tela toda, barra incluída: os morcegos.
@@ -142,7 +144,7 @@ export function CamadaHalloween({ cena }: { cena: CenaHalloween }) {
     <div className={cn('hw-camada text-foreground', claro && 'hw-claro')} aria-hidden="true">
       {(cena.teias === 'ambas' || cena.teias === 'esquerda') && <Teia lado="esq" />}
       {(cena.teias === 'ambas' || cena.teias === 'direita') && <Teia lado="dir" />}
-      {cena.aranha && <Aranha />}
+      {cena.aranha && <Aranha claro={claro} />}
       {cena.fantasmas && <FantasmasDasTabelas />}
       {cena.lanterna !== null && <Lanterna posicao={cena.lanterna} />}
     </div>
@@ -227,46 +229,6 @@ const TEIA = desenharTeia(100);
 
 function Teia({ lado }: { lado: 'esq' | 'dir' }) {
   return <div className={cn('hw-teia', lado)}><svg viewBox="0 0 100 100"><path d={TEIA} /></svg></div>;
-}
-
-/** Pendurada na teia da direita. Passou o mouse: sobe o fio e some por 0 a 3 minutos. */
-function Aranha() {
-  const caixa = useRef<HTMLDivElement>(null);
-  const fio = useRef<HTMLDivElement>(null);
-  const ocupada = useRef(false);
-  useEffect(() => () => { ocupada.current = false; }, []);
-  const foge = () => {
-    const el = caixa.current, f = fio.current;
-    if (!el || !f || ocupada.current) return;
-    ocupada.current = true;
-    const h = f.getBoundingClientRect().height;
-    f.style.animation = 'none'; f.style.height = `${h}px`;
-    el.classList.add('escalando');
-    const sobe = f.animate([{ height: `${h}px` }, { height: '4px' }], { duration: Math.max(1600, h * 20), easing: 'cubic-bezier(.4, .1, .6, .95)', fill: 'forwards' });
-    sobe.onfinish = () => {
-      f.style.height = '4px'; sobe.cancel(); el.classList.remove('escalando');
-      window.setTimeout(() => {
-        if (!fio.current) return;
-        el.classList.add('descendo');
-        const desce = f.animate([{ height: '4px' }, { height: `${110 * 0.45}px` }], { duration: 3200, easing: 'ease-in-out', fill: 'forwards' });
-        desce.onfinish = () => { desce.cancel(); f.style.height = ''; f.style.animation = ''; el.classList.remove('descendo'); ocupada.current = false; };
-      }, Math.random() * 180000);
-    };
-  };
-  return (
-    <div ref={caixa} className="hw-aranha">
-      <div ref={fio} className="fio" style={{ ['--h' as string]: '110px' }} />
-      <svg viewBox="-13 -13 26 26" onMouseEnter={foge}>
-        <g className="pernas">
-          <path d="M-3 -2 L-9 -8 L-12 -4" /><path d="M-3 0 L-10 -3 L-13 1" /><path d="M-3 2 L-10 3 L-12 8" /><path d="M-2 3 L-7 8 L-8 12" />
-          <path d="M3 -2 L9 -8 L12 -4" /><path d="M3 0 L10 -3 L13 1" /><path d="M3 2 L10 3 L12 8" /><path d="M2 3 L7 8 L8 12" />
-        </g>
-        <ellipse className="corpo" cx="0" cy="3" rx="5" ry="6" />
-        <circle className="corpo" cx="0" cy="-4" r="3.4" />
-        <circle className="olho" cx="-1.3" cy="-4.3" r=".9" /><circle className="olho" cx="1.3" cy="-4.3" r=".9" />
-      </svg>
-    </div>
-  );
 }
 
 function Relampago() {
