@@ -216,7 +216,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA, produtos: SO_COMERCIAL, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   // A lixeira do Comercial é outra TABELA (`lixeira_vendas`), não outro filtro.
   // `ver_lixeira` abre; `restaurar_vendas` é que deixa mexer.
-  { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira' },
+  { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira_vendas' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },

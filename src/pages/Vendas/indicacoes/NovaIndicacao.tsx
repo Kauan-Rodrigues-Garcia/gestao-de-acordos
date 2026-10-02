@@ -392,7 +392,9 @@ export function NovaIndicacao({ empresaId, perfilId, hoje, podeEditar, quemPodeI
               <SelectContent>
                 {quemPodeIndicar.map(p => (
                   <SelectItem key={p.id} value={p.id} className="text-xs">
-                    {p.id === perfilId ? `${p.nome} (eu)` : `Em nome de ${p.nome}`}
+                    {p.id === perfilId
+                      ? `${p.nome} (eu)`
+                      : `Em nome de ${p.nome}${p.robo ? ' · IA' : ''}`}
                   </SelectItem>
                 ))}
               </SelectContent>

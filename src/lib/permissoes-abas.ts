@@ -36,7 +36,11 @@ export type ModuloPermissaoId =
   | 'modo_tv'
   | 'controle_numeros'
   | 'meus_chips'
-  | 'fechamento';
+  | 'fechamento'
+  | 'vendas'
+  | 'indicacoes'
+  | 'acompanhamento'
+  | 'desafios';
 
 interface DefinicaoModulo {
   id: ModuloPermissaoId;
@@ -49,6 +53,14 @@ interface DefinicaoModulo {
   gruposPorTenant?: Partial<Record<TenantSlug, readonly GrupoPermissao[]>>;
   chaves?: readonly string[];
   tenants?: readonly TenantSlug[];
+  /**
+   * Só monta o card se o interruptor ainda não foi usado por um card anterior.
+   *
+   * Existe para os Desafios: na cobrança a chave `analitico_sub_desafios` mora
+   * no card Analítico; no Comercial, que não tem Analítico, ela vira um card
+   * próprio — sem isto ela apareceria duas vezes na cobrança.
+   */
+  soSeInterruptorLivre?: boolean;
 }
 
 /**
@@ -63,6 +75,36 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     // Dashboard. As chaves continuam estáveis; só aparecem no card da tela em
     // que a pessoa realmente executa essas ações.
     gruposPorTenant: { pagueplay: ['Acordos'] },
+  },
+  /*
+   * As abas do Comercial (02/10/2026). Até aqui nenhuma delas tinha card, e as
+   * ~40 chaves do grupo «Vendas» caíam em `avulsos` — que a tela não desenha.
+   * O administrador do Comercial não tinha como ligar «definir a meta»,
+   * «cadastrar por outro» ou o alcance de nenhuma aba. As chaves só existem no
+   * Comercial: nas empresas da cobrança estes cards não aparecem.
+   */
+  {
+    id: 'vendas', rotulo: 'Vendas', interruptor: 'ver_vendas', escopo: 'vendas',
+    descricao: 'Lançar, conferir e excluir vendas, e a lixeira delas.',
+    chaves: [
+      'criar_vendas', 'editar_vendas', 'confirmar_vendas',
+      'excluir_vendas', 'excluir_vendas_na_meta',
+      'ver_lixeira_vendas', 'restaurar_vendas',
+    ],
+  },
+  {
+    id: 'indicacoes', rotulo: 'Indicações', interruptor: 'ver_indicacoes', escopo: 'indicacoes',
+    descricao: 'Cadastrar, corrigir e lançar indicações em nome de outra pessoa ou de um agente de IA.',
+    chaves: ['criar_indicacoes', 'editar_indicacoes', 'excluir_indicacoes'],
+  },
+  {
+    id: 'acompanhamento', rotulo: 'Acompanhamento', interruptor: 'ver_acompanhamento',
+    escopo: 'acompanhamento',
+    descricao: 'Feedbacks e ausências de cada pessoa.',
+    chaves: [
+      'ver_feedbacks', 'registrar_feedbacks', 'excluir_feedbacks',
+      'registrar_ausencias', 'excluir_ausencias',
+    ],
   },
   {
     /*
@@ -121,12 +163,19 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
      * Diretoria não ganha a chave junto. Ela é explícita, e é ligada
      * nominalmente para a conta do robô. Ver `scripts/robo59/README.md`.
      */
-    chaves: ['mestre_importar_automatico'],
+    // No Comercial, a importação do relatório e o vínculo de franquia moram
+    // em abas do Painel Diretoria — o card fica onde a chave age.
+    chaves: [
+      'mestre_importar_automatico',
+      'importar_vendas', 'ver_importacoes_vendas', 'projetar_vendas', 'vendas_vincular_franquia',
+    ],
   },
   {
     id: 'usuarios', rotulo: 'Usuários', interruptor: 'ver_usuarios', escopo: 'usuarios',
     descricao: 'Usuários e as abas internas Setores, Equipes, Metas e Comemorações.',
-    grupos: ['Gestão de pessoas', 'Metas'], chaves: ['comemoracoes_gerenciar'],
+    grupos: ['Gestão de pessoas', 'Metas'],
+    // A meta do Comercial é a aba Metas de Usuários (`?tab=metas`).
+    chaves: ['comemoracoes_gerenciar', 'ver_metas_vendas', 'editar_metas_vendas'],
   },
   {
     id: 'configuracoes', rotulo: 'Configurações', interruptor: 'ver_configuracoes',
@@ -152,6 +201,21 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
       'desafios_configurar_setor', 'desafios_configurar',
       'desafios_excluir', 'desafios_multiempresa',
     ],
+  },
+  {
+    /*
+     * Desafios fora do Analítico: o caso do Comercial, onde eles são aba do
+     * Painel Líder e o Analítico não existe. Na cobrança o card Analítico já
+     * levou estas chaves, e este não é montado (`soSeInterruptorLivre`).
+     */
+    id: 'desafios', rotulo: 'Desafios', interruptor: 'analitico_sub_desafios',
+    descricao: 'As gincanas: quem enxerga, quem configura e quem exclui.',
+    chaves: [
+      'desafios_configurar_setor', 'desafios_configurar', 'desafios_excluir',
+      'desafios_escopo_individual', 'desafios_escopo_equipe',
+      'desafios_escopo_setor', 'desafios_escopo_todos_setores',
+    ],
+    soSeInterruptorLivre: true,
   },
   {
     id: 'campanha_facil', rotulo: 'Campanha Fácil', interruptor: 'ver_campanha_facil',
@@ -296,6 +360,21 @@ const SECOES_USUARIOS: Record<string, string> = {
   metas_excluir_dias_uteis: 'Aba interna Metas',
   ver_comemoracoes: 'Aba interna Comemorações',
   comemoracoes_gerenciar: 'Aba interna Comemorações',
+  // Comercial
+  ver_metas_vendas: 'Aba interna Metas',
+  editar_metas_vendas: 'Aba interna Metas',
+};
+
+const SECOES_VENDAS: Record<string, string> = {
+  ver_lixeira_vendas: 'Lixeira',
+  restaurar_vendas: 'Lixeira',
+};
+
+const SECOES_DESAFIOS: Record<string, string> = {
+  desafios_escopo_individual: 'Quem enxerga',
+  desafios_escopo_equipe: 'Quem enxerga',
+  desafios_escopo_setor: 'Quem enxerga',
+  desafios_escopo_todos_setores: 'Quem enxerga',
 };
 
 const SECOES_CONFIG: Record<string, string> = {
@@ -356,6 +435,11 @@ function secaoDaPermissao(modulo: ModuloPermissaoId, chave: string): string {
   if (modulo === 'configuracoes') return SECOES_CONFIG[chave] ?? 'Configurações';
   if (modulo === 'analitico') return SECOES_ANALITICO[chave] ?? 'Relatório';
   if (modulo === 'chat' && chave.startsWith('chat_cargo_')) return 'Cargos disponíveis';
+  if (modulo === 'vendas') return SECOES_VENDAS[chave] ?? 'O que pode fazer';
+  if (modulo === 'desafios') return SECOES_DESAFIOS[chave] ?? 'O que pode fazer';
+  if (modulo === 'acompanhamento' && chave.endsWith('_ausencias')) return 'Ausências';
+  if (modulo === 'acompanhamento') return 'Feedbacks';
+  if (modulo === 'painel_diretoria' && chave !== 'mestre_importar_automatico') return 'Relatório de vendas';
   return 'O que pode fazer';
 }
 
@@ -371,6 +455,7 @@ export function montarPorAba(
   for (const modulo of MODULOS_PERMISSAO) {
     const interruptor = porChave.get(modulo.interruptor);
     if (!interruptor) continue;
+    if (modulo.soSeInterruptorLivre && consumidas.has(interruptor.key)) continue;
     consumidas.add(interruptor.key);
 
     const metaEscopo = modulo.escopo ? ABAS_COM_ESCOPO[modulo.escopo] : null;

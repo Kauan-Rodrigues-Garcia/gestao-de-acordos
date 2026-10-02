@@ -279,6 +279,21 @@ const TODA_OPERACAO: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
  */
 const SO_COMERCIAL: readonly Produto[] = ['comercial'];
 
+/**
+ * Cobrança E Comercial. Para as abas que o Comercial reaproveita da cobrança
+ * com a MESMA chave: Painel Líder (Fase 9), Tickets (Fase 13), Desafios, Chat e
+ * o alcance do Dashboard.
+ *
+ * Até 02/10/2026 essas chaves eram só da cobrança. O menu e as rotas do
+ * Comercial perguntavam por elas, o banco as tinha semeadas (tenants nulos) —
+ * mas a tela de Permissões do Comercial não as mostrava. Resultado: ninguém
+ * conseguia ligá-las, e cada «Salvar» no cargo as APAGAVA do mapa (a tela
+ * gravava só as chaves visíveis). O líder perdia o Painel Líder sem que
+ * ninguém tivesse desligado nada. `permissoes-catalogo.test.ts` agora reprova
+ * chave que o Comercial consulta e o painel dele não mostra.
+ */
+const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+
 /** Atalhos para os padrões que se repetem. */
 const LIDERANCA: Partial<Record<CargoConfiguravel, boolean>> = {
   lider: true, elite: true, gerencia: true, diretoria: true,
@@ -354,12 +369,12 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_painel_lider', label: 'Painel do Líder',
     descricao: 'Abrir o painel da equipe, com acordos por operador e métricas',
-    grupo: 'Abas e telas', padrao: LIDERANCA,
+    grupo: 'Abas e telas', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
   },
   {
     key: 'ver_painel_diretoria', label: 'Painel da Diretoria',
     descricao: 'Abrir o painel estratégico, com KPIs e projeções',
-    grupo: 'Abas e telas', padrao: { diretoria: true },
+    grupo: 'Abas e telas', produtos: COBRANCA_E_COMERCIAL, padrao: { diretoria: true },
   },
   {
     key: 'ver_campanha_facil', label: 'Aba Campanha Fácil',
@@ -387,54 +402,54 @@ export const PERMISSOES: PermissaoMeta[] = [
      */
     key: 'ver_chat', label: 'Chat interno',
     descricao: 'Abrir o chat e conversar com outras pessoas da empresa',
-    grupo: 'Chat', padrao: {},
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: {},
   },
   {
     key: 'chat_escopo_equipe', label: 'Chat: pessoas da equipe',
     descricao: 'Iniciar conversa com quem está na mesma equipe',
-    grupo: 'Chat', padrao: {},
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: {},
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
   },
   {
     key: 'chat_escopo_setor', label: 'Chat: pessoas do setor',
     descricao: 'Iniciar conversa com quem está no mesmo setor',
-    grupo: 'Chat', padrao: {},
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: {},
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
   },
   {
     key: 'chat_escopo_todos_setores', label: 'Chat: a empresa inteira',
     descricao: 'Iniciar conversa com qualquer pessoa da empresa',
-    grupo: 'Chat', padrao: {},
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: {},
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
   },
   {
     key: 'chat_cargo_operador', label: 'Chat: cargo Operador',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Operador',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_lider', label: 'Chat: cargo Líder',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Líder',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_elite', label: 'Chat: cargo Elite',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Elite',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_gerencia', label: 'Chat: cargo Gerência',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Gerência',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_diretoria', label: 'Chat: cargo Diretoria',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Diretoria',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
@@ -458,13 +473,13 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'chat_cargo_administrador', label: 'Chat: cargo Administrador',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Administrador',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'chat_cargo_super_admin', label: 'Chat: cargo Super Admin',
     descricao: 'Permitir iniciar conversa com pessoas do cargo Super Admin',
-    grupo: 'Chat', padrao: CHAT_TODOS,
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: CHAT_TODOS,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   /*
@@ -481,25 +496,25 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'chat_grupo_criar', label: 'Chat: criar grupos',
     descricao: 'Montar um grupo com as pessoas que já estão no seu alcance',
-    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { ...LIDERANCA, ouvidoria: true },
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
   },
   {
     key: 'chat_grupo_editar', label: 'Chat: configurar grupos',
     descricao: 'Alterar nome, foto e a trava «só a liderança escreve» dos grupos que administra',
-    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { ...LIDERANCA, ouvidoria: true },
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
   },
   {
     key: 'chat_grupo_adicionar', label: 'Chat: adicionar ao grupo',
     descricao: 'Colocar pessoas nos grupos que administra',
-    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { ...LIDERANCA, ouvidoria: true },
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
   },
   {
     key: 'chat_grupo_remover', label: 'Chat: remover do grupo',
     descricao: 'Tirar pessoas dos grupos que administra',
-    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { ...LIDERANCA, ouvidoria: true },
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
   },
   /*
@@ -517,31 +532,31 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'chat_monitor', label: 'Chat: aba Monitor',
     descricao: 'Acompanhar em tempo real as conversas de outra pessoa (somente leitura)',
-    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { ...LIDERANCA, ouvidoria: true },
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para monitorar.' },
   },
   {
     key: 'chat_monitor_escopo_equipe', label: 'Monitor: pessoas da equipe',
     descricao: 'Acompanhar quem está na mesma equipe',
-    grupo: 'Chat', padrao: {},
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: {},
     depende: { chaves: ['chat_monitor'], motivo: 'A aba Monitor precisa estar ligada para o alcance valer.' },
   },
   {
     key: 'chat_monitor_escopo_setor', label: 'Monitor: pessoas do setor',
     descricao: 'Acompanhar quem está no mesmo setor',
-    grupo: 'Chat', padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
     depende: { chaves: ['chat_monitor'], motivo: 'A aba Monitor precisa estar ligada para o alcance valer.' },
   },
   {
     key: 'chat_monitor_escopo_todos_setores', label: 'Monitor: a empresa inteira',
     descricao: 'Acompanhar qualquer pessoa da empresa',
-    grupo: 'Chat', padrao: { diretoria: true },
+    grupo: 'Chat', produtos: COBRANCA_E_COMERCIAL, padrao: { diretoria: true },
     depende: { chaves: ['chat_monitor'], motivo: 'A aba Monitor precisa estar ligada para o alcance valer.' },
   },
   {
     key: 'ver_tickets', label: 'Aba Tickets',
     descricao: 'Abrir a fila de chamados internos',
-    grupo: 'Abas e telas',
+    grupo: 'Abas e telas', produtos: COBRANCA_E_COMERCIAL,
     padrao: { lider: true, elite: true, gerencia: true, diretoria: true, ouvidoria: true },
   },
   {
@@ -1196,12 +1211,12 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'painel_lider_escopo_setor', label: 'Painel Líder: o próprio setor',
     descricao: 'Ver no Painel Líder os dados do setor da própria pessoa',
-    grupo: 'Painel Líder', padrao: LIDERANCA,
+    grupo: 'Painel Líder', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
   },
   {
     key: 'painel_lider_escopo_todos_setores', label: 'Painel Líder: todos os setores',
     descricao: 'Ver no Painel Líder qualquer setor, com o filtro de setor disponível',
-    grupo: 'Painel Líder', padrao: { diretoria: true },
+    grupo: 'Painel Líder', produtos: COBRANCA_E_COMERCIAL, padrao: { diretoria: true },
   },
   // `painel_lider_sub_acompanhamento` saiu daqui em 31/08/2026, junto com a aba
   // que ela abria. A chave continua nos JSONBs de cargos_permissoes — apagá-la
@@ -1215,7 +1230,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'painel_lider_sub_quartis', label: 'Painel Líder: Quartis',
     descricao: 'Abrir a aba interna de quartis por operador',
-    grupo: 'Painel Líder', padrao: LIDERANCA,
+    grupo: 'Painel Líder', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
   },
   {
     key: 'painel_lider_sub_grafico_recebimento', label: 'Painel Líder: Gráfico recebimento',
@@ -1288,7 +1303,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_configurar_setor', label: 'Configurar desafios do próprio setor',
     descricao: 'Criar, editar e encerrar as gincanas do setor a que a pessoa pertence',
-    grupo: 'Ações específicas', padrao: LIDERANCA,
+    grupo: 'Ações específicas', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'A tela de configuracao vive dentro da aba Desafios, no Analitico.',
@@ -1297,7 +1312,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_configurar', label: 'Configurar desafios',
     descricao: 'Criar, editar, ativar e encerrar as gincanas da aba Desafios',
-    grupo: 'Ações específicas', padrao: {},
+    grupo: 'Ações específicas', produtos: COBRANCA_E_COMERCIAL, padrao: {},
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'A tela de configuracao vive dentro da aba Desafios, no Analitico.',
@@ -1314,7 +1329,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_excluir', label: 'Excluir desafios',
     descricao: 'Apagar de vez uma gincana e o histórico dela — encerrar é outra coisa',
-    grupo: 'Ações específicas', padrao: {},
+    grupo: 'Ações específicas', produtos: COBRANCA_E_COMERCIAL, padrao: {},
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'A acao vive dentro da aba Desafios, no Analitico.',
@@ -1345,12 +1360,12 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'dashboard_escopo_individual', label: 'Dashboard: os próprios dados',
     descricao: 'Ver no Dashboard os acordos da própria pessoa',
-    grupo: 'Dashboard', padrao: TODOS,
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: TODOS,
   },
   {
     key: 'dashboard_escopo_equipe', label: 'Dashboard: dados da equipe',
     descricao: 'Ver no Dashboard os acordos da equipe, com o filtro de equipe',
-    grupo: 'Dashboard', padrao: LIDERANCA,
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
   },
   /*
    * Qualificador do nível `equipe`, e não um quinto nível.
@@ -1370,7 +1385,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'dashboard_escopo_equipe_todas', label: 'Dashboard: todas as equipes',
     descricao: 'Com o alcance de equipe, ver qualquer equipe do setor — desligada, só as equipes de que a pessoa participa',
-    grupo: 'Dashboard', padrao: LIDERANCA,
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
     depende: {
       chaves: ['dashboard_escopo_equipe'],
       motivo: 'Ela qualifica o alcance de equipe; sem ele nao ha equipe nenhuma para ampliar',
@@ -1379,12 +1394,12 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'dashboard_escopo_setor', label: 'Dashboard: dados do setor',
     descricao: 'Ver no Dashboard os acordos do setor inteiro',
-    grupo: 'Dashboard', padrao: LIDERANCA,
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
   },
   {
     key: 'dashboard_escopo_todos_setores', label: 'Dashboard: todos os setores',
     descricao: 'Ver no Dashboard qualquer setor, com o filtro de setor disponível',
-    grupo: 'Dashboard', padrao: { gerencia: true, diretoria: true },
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'dashboard_comissao', label: 'Dashboard: ver a própria comissão',
@@ -1445,7 +1460,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'analitico_sub_desafios', label: 'Analítico: Desafios',
     descricao: 'Abrir a aba interna das gincanas, com ranking individual e por equipe',
-    grupo: 'Analítico', padrao: TODOS,
+    grupo: 'Analítico', produtos: COBRANCA_E_COMERCIAL, padrao: TODOS,
   },
   /*
    * O ALCANCE dentro da aba de Desafios.
@@ -1466,7 +1481,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_escopo_individual', label: 'Desafios: as campanhas em que disputo',
     descricao: 'Ver na aba Desafios as gincanas em que a própria pessoa está incluída',
-    grupo: 'Analítico', padrao: TODOS,
+    grupo: 'Analítico', produtos: COBRANCA_E_COMERCIAL, padrao: TODOS,
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
@@ -1475,7 +1490,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_escopo_equipe', label: 'Desafios: as campanhas da equipe',
     descricao: 'Ver as gincanas que alcançam alguma equipe da pessoa, mesmo sem ela disputar',
-    grupo: 'Analítico', padrao: LIDERANCA,
+    grupo: 'Analítico', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
@@ -1484,7 +1499,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_escopo_setor', label: 'Desafios: as campanhas do setor',
     descricao: 'Ver as gincanas que alcançam o setor da pessoa — da liderança à gerência',
-    grupo: 'Analítico', padrao: LIDERANCA,
+    grupo: 'Analítico', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
@@ -1493,7 +1508,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'desafios_escopo_todos_setores', label: 'Desafios: todos os setores',
     descricao: 'Ver todas as gincanas de todos os setores das empresas que a pessoa alcança',
-    grupo: 'Analítico', padrao: { diretoria: true },
+    grupo: 'Analítico', produtos: COBRANCA_E_COMERCIAL, padrao: { diretoria: true },
     depende: {
       chaves: ['analitico_sub_desafios'],
       motivo: 'e o alcance DENTRO da aba — sem a aba nao ha o que recortar.',
@@ -1682,7 +1697,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'tickets_administrar', label: 'Tickets: administrar a fila',
     descricao: 'Atender qualquer ticket e gerenciar o cadastro de atendentes',
-    grupo: 'Tickets', padrao: {},
+    grupo: 'Tickets', produtos: COBRANCA_E_COMERCIAL, padrao: {},
   },
   {
     key: 'tickets_abrir', label: 'Tickets: abrir chamado',
@@ -1695,7 +1710,7 @@ export const PERMISSOES: PermissaoMeta[] = [
      *
      * Agora tem consumidor, e o cargo saiu do caminho.
      */
-    grupo: 'Tickets',
+    grupo: 'Tickets', produtos: COBRANCA_E_COMERCIAL,
     padrao: { lider: true, elite: true, gerencia: true, diretoria: true, ouvidoria: true },
   },
   {
@@ -1707,7 +1722,7 @@ export const PERMISSOES: PermissaoMeta[] = [
      * super_admin recebem por acesso total. No banco quem cumpre é
      * `fn_ticket_excluir` (migration 20260914200000).
      */
-    grupo: 'Tickets', padrao: {},
+    grupo: 'Tickets', produtos: COBRANCA_E_COMERCIAL, padrao: {},
   },
   {
     key: 'criar_solicitacao_whatsapp', label: 'Abrir solicitação de WhatsApp',

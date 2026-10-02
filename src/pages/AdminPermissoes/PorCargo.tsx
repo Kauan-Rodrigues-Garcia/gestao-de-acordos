@@ -106,9 +106,17 @@ export function PorCargo() {
     try {
       // Grava o mapa INTEIRO, nunca só o que mudou: chave ausente era
       // exatamente o defeito que esta versão veio corrigir.
-      const completo = Object.fromEntries(
-        catalogo.map(p => [p.key, valorDe(p.key)]),
-      );
+      //
+      // E inteiro quer dizer o que JÁ estava gravado mais o que a tela mostra.
+      // Até 02/10/2026 ia só o recorte deste produto: no Comercial, cada
+      // «Salvar» apagava `ver_painel_lider`, `ver_tickets` e as outras chaves
+      // que a tela não mostrava — e o líder perdia a aba sem ninguém tê-la
+      // desligado. Chave fora do recorte não é decisão desta tela; fica como
+      // estava.
+      const completo = {
+        ...salvo,
+        ...Object.fromEntries(catalogo.map(p => [p.key, valorDe(p.key)])),
+      };
       const { error } = await supabase
         .from('cargos_permissoes')
         .upsert(

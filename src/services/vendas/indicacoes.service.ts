@@ -199,6 +199,8 @@ export async function corrigirIndicacao(params: {
 export interface PessoaQueIndica {
   id: string;
   nome: string;
+  /** Agente de IA (`perfis.robo`). */
+  robo?: boolean;
 }
 
 export async function buscarQuemPodeIndicar(empresaId: string): Promise<PessoaQueIndica[]> {
@@ -208,10 +210,17 @@ export async function buscarQuemPodeIndicar(empresaId: string): Promise<PessoaQu
     .order('nome', { ascending: true });
 
   if (error || !data) return [];
-  // Robô não visita escola, e desligado não volta com oito nomes.
+  // Desligado não volta com oito nomes. Robô entra desde 02/10/2026: os
+  // agentes de IA «(Indicação)» da Performance trazem indicação, e o líder
+  // precisa lançá-la no nome do agente. Vêm marcados, para não se confundirem
+  // com gente.
   return data
-    .filter(p => p.situacao !== 'desligado' && p.robo !== true)
-    .map(p => ({ id: String(p.id), nome: String(p.nome ?? '—') }));
+    .filter(p => p.situacao !== 'desligado')
+    .map(p => ({
+      id: String(p.id),
+      nome: String(p.nome ?? '—'),
+      robo: p.robo === true,
+    }));
 }
 
 export async function excluirIndicacao(id: string): Promise<Resultado<string>> {

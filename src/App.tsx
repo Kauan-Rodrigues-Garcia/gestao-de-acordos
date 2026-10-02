@@ -553,10 +553,12 @@ export default function App() {
               {/* A lixeira do Comercial é outra TABELA, não outro filtro:
                   `lixeira_vendas` e `fn_venda_restaurar`, criadas na Fase 1.
                   Restaurar exige `restaurar_vendas`, conferida na tela e na
-                  RPC — quem só tem `ver_lixeira` lê e não mexe. */}
+                  RPC — quem só tem `ver_lixeira_vendas` lê e não mexe. A
+                  porta é a chave do Comercial, e não `ver_lixeira` (a dos
+                  acordos), que o painel do Comercial não mostra. */}
               <Route path={ROUTE_PATHS.VENDAS_LIXEIRA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_lixeira">
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_lixeira_vendas">
                     <VendasLixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>

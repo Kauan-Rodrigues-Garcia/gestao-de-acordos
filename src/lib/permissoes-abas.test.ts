@@ -3,7 +3,9 @@ import { catalogoDoTenant, gruposDoTenant, PERMISSOES_POR_CHAVE } from './permis
 import { MODULOS_PERMISSAO, montarPorAba } from './permissoes-abas';
 
 describe('painel de permissões por módulo', () => {
-  for (const tenant of ['bookplay', 'pagueplay'] as const) {
+  // O Comercial entrou em 02/10/2026: as ~40 chaves da aba Vendas ficavam em
+  // `avulsos`, que a tela não desenha — ninguém conseguia ligá-las.
+  for (const tenant of ['bookplay', 'pagueplay', 'comercial'] as const) {
     it(`${tenant}: nenhuma permissão fica fora de um card real`, () => {
       const leitura = montarPorAba(catalogoDoTenant(tenant), gruposDoTenant(tenant), tenant);
       expect(leitura.avulsos).toEqual([]);

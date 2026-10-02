@@ -23,6 +23,7 @@ import {
   exigeConcessaoExplicita, produtosDaPermissao,
 } from './permissoes-catalogo';
 import { ABAS_COM_ESCOPO, chaveEscopo } from './permissoes-escopo';
+import { NAV_ITEMS } from './menuLateral';
 
 const RAIZ_SRC = path.resolve(__dirname, '..');
 
@@ -372,12 +373,18 @@ describe('padrões de semeadura', () => {
 describe('catálogo por produto', () => {
   it('o Comercial não recebe nenhuma chave de cobrança', () => {
     const chaves = new Set(catalogoDoTenant('comercial').map(p => p.key));
+    // `ver_painel_lider` e `ver_tickets` saíram desta lista em 02/10/2026: o
+    // Comercial tem Painel Líder (Fase 9) e Tickets (Fase 13) com a MESMA
+    // chave, e esconder a chave do painel dele fazia o «Salvar» apagá-la.
     for (const daCobranca of [
-      'ver_acordos', 'criar_acordos', 'ver_analitico', 'ver_painel_lider',
+      'ver_acordos', 'criar_acordos', 'ver_analitico',
       'ver_campanha_facil', 'ver_metas', 'importar_analitico',
-      // Lixeira é acordo excluído — voltou para a cobrança em 25/08.
+      // Lixeira é acordo excluído — voltou para a cobrança em 25/08. A do
+      // Comercial é `ver_lixeira_vendas`.
       'ver_lixeira', 'lixeira_restaurar', 'lixeira_escopo_setor',
-      'ajuste_recebimento_lancar', 'ver_pix_automatico', 'ver_tickets',
+      'ajuste_recebimento_lancar', 'ver_pix_automatico',
+      // As abas internas do Painel Líder que o Comercial NÃO tem.
+      'painel_lider_sub_elite', 'painel_lider_sub_ajuste_recebimento',
     ]) {
       expect(chaves.has(daCobranca), `${daCobranca} vazou para o Comercial`).toBe(false);
     }
@@ -410,12 +417,14 @@ describe('catálogo por produto', () => {
     for (const k of rh) {
       expect(comercial.has(k), `${k} está no RH e sumiu do Comercial`).toBe(true);
     }
-    // E o que o Comercial tem a mais é, chave por chave, declaradamente dele.
+    // E o que o Comercial tem a mais é, chave por chave, declaradamente dele —
+    // só dele, ou dividida com a cobrança (as abas que ele reaproveita). Nunca
+    // do RH por tabela.
     const soDoComercial = [...comercial].filter(k => !rh.has(k));
     for (const k of soDoComercial) {
-      const p = PERMISSOES_POR_CHAVE[k];
-      expect(produtosDaPermissao(p), `${k} sobra no Comercial sem ser do Comercial`)
-        .toEqual(['comercial']);
+      const produtos = produtosDaPermissao(PERMISSOES_POR_CHAVE[k]);
+      expect(produtos, `${k} sobra no Comercial sem ser do Comercial`).toContain('comercial');
+      expect(produtos, `${k} sobra no Comercial vindo do RH`).not.toContain('rh');
     }
   });
 
@@ -436,12 +445,70 @@ describe('catálogo por produto', () => {
     expect(juntas.size).toBe(esperadas.length);
   });
 
-  it('o recorte genérico é bem menor que o da cobrança', () => {
+  it('o Comercial herda bem menos da metade da cobrança', () => {
     // Não é um número mágico a defender: é a garantia de que o filtro FILTRA.
     // Se um dia isto falhar por igualdade, alguém marcou o catálogo inteiro
-    // como genérico.
-    expect(catalogoDoTenant('comercial').length)
+    // como genérico. Conta só o que o Comercial divide com a cobrança — as
+    // chaves próprias dele (aba Vendas) são crescimento, não vazamento.
+    const daCobrancaNoComercial = catalogoDoTenant('comercial')
+      .filter(p => produtosDaPermissao(p).includes('cobranca'));
+    expect(daCobrancaNoComercial.length)
       .toBeLessThan(catalogoDoTenant('bookplay').length / 2);
+  });
+
+  /*
+   * O defeito de 02/10/2026: o líder do Comercial perdeu Painel Líder, filtro
+   * de equipe, Desafios e Tickets. O menu e as telas perguntavam por chaves
+   * que a tela de Permissões do Comercial não mostrava — não dava para ligar,
+   * e cada «Salvar» no cargo apagava o que estava ligado.
+   *
+   * O contrato: toda chave que o Comercial CONSULTA aparece no painel dele.
+   */
+  it('toda chave que o menu do Comercial pede aparece no painel do Comercial', () => {
+    const chaves = new Set(catalogoDoTenant('comercial').map(p => p.key));
+    for (const item of NAV_ITEMS) {
+      if (!item.permissaoKey || !(item.produtos ?? []).includes('comercial')) continue;
+      expect(chaves.has(item.permissaoKey),
+        `menu «${item.label}» pede ${item.permissaoKey}, que o painel do Comercial esconde`).toBe(true);
+    }
+  });
+
+  it('toda chave consultada nas telas de Vendas aparece no painel do Comercial', () => {
+    const chaves = new Set(catalogoDoTenant('comercial').map(p => p.key));
+    const pastas = ['pages/Vendas', 'services/vendas'].map(d => path.join(RAIZ_SRC, d));
+    const arquivos: string[] = [];
+    const varrer = (d: string) => {
+      for (const f of fs.readdirSync(d)) {
+        const c = path.join(d, f);
+        if (fs.statSync(c).isDirectory()) { if (f !== '__tests__') varrer(c); }
+        else if (/\.tsx?$/.test(f) && !/\.test\./.test(f)) arquivos.push(c);
+      }
+    };
+    pastas.forEach(varrer);
+
+    const fora = new Set<string>();
+    for (const arq of arquivos) {
+      // Comentário cita chave para explicar, não para consultar.
+      const texto = fs.readFileSync(arq, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      for (const m of texto.matchAll(/['"`]([a-z][a-z0-9]*(?:_[a-z0-9]+)+)['"`]/g)) {
+        if (PERMISSOES_POR_CHAVE[m[1]] && !chaves.has(m[1])) {
+          fora.add(`${m[1]} (${path.relative(RAIZ_SRC, arq)})`);
+        }
+      }
+      // Escopo pedido pelo nome da aba: `niveisLiberados('dashboard', ...)`.
+      for (const m of texto.matchAll(/(?:niveisLiberados|escopoEfetivo|veAlemDeSi)\(\s*'([a-z_]+)'/g)) {
+        const aba = (ABAS_COM_ESCOPO as Record<string, { prefixo: string; chaveAba: string }>)[m[1]];
+        if (!aba) continue;
+        for (const p of PERMISSOES) {
+          if (p.key.startsWith(`${aba.prefixo}_escopo_`) && !chaves.has(p.key)) {
+            fora.add(`${p.key} (escopo de ${m[1]} em ${path.relative(RAIZ_SRC, arq)})`);
+          }
+        }
+      }
+    }
+    expect([...fora].sort()).toEqual([]);
   });
 
   it('slug de produto desconhecido não devolve nada', () => {
