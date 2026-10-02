@@ -3010,28 +3010,28 @@ export type Database = {
       equipes: {
         Row: {
           created_at: string | null
-          empresa_id: string | null
+          empresa_id: string
           id: string
           nome: string
-          setor_id: string | null
+          setor_id: string
           treinamento: boolean
           treinamento_inicio: string | null
         }
         Insert: {
           created_at?: string | null
-          empresa_id?: string | null
+          empresa_id: string
           id?: string
           nome: string
-          setor_id?: string | null
+          setor_id: string
           treinamento?: boolean
           treinamento_inicio?: string | null
         }
         Update: {
           created_at?: string | null
-          empresa_id?: string | null
+          empresa_id?: string
           id?: string
           nome?: string
-          setor_id?: string | null
+          setor_id?: string
           treinamento?: boolean
           treinamento_inicio?: string | null
         }
