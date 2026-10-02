@@ -109,6 +109,9 @@ export interface Setor {
   /** `operacao` | `nucleo` (20261002230000). Setor de tipo que algum cargo
    *  exige (`cargos.exige_tipo_setor`) só aceita esses cargos. */
   tipo?: string | null;
+  /** A cidade do setor (`rh_celulas`, 20261003130000). Espelho da cidade que
+   *  o RH usa em `rh_config_setores`. */
+  cidade_id?: string | null;
   empresa_id?: string;
   criado_em: string;
   atualizado_em: string;

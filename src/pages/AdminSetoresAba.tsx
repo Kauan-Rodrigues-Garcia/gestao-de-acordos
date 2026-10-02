@@ -46,7 +46,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Building2, Plus, GripVertical, Edit, Save, X, Power, Users, ArrowRight,
-  Trash2, Loader2, AlertTriangle,
+  Trash2, Loader2, AlertTriangle, MapPin,
 } from 'lucide-react';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,6 +54,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -93,9 +96,19 @@ export default function AdminSetoresAba() {
   // Dialog criar/editar
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando,   setEditando]   = useState<Setor | null>(null);
-  const [form, setForm] = useState<{ nome: string; descricao: string; ativo: boolean; alternativo: boolean }>({
-    nome: '', descricao: '', ativo: true, alternativo: false,
+  const [form, setForm] = useState<{
+    nome: string; descricao: string; ativo: boolean; alternativo: boolean; cidadeId: string | null;
+  }>({
+    nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null,
   });
+
+  /*
+   * As cidades (`rh_celulas`). O setor aponta para uma desde 20261003130000, e
+   * a cidade que o RH usa segue a do setor por gatilho. Antes a cidade só era
+   * escolhida dentro do RH, e só para os setores ligados a ele.
+   */
+  const [cidades, setCidades] = useState<{ id: string; nome: string }[]>([]);
+  const [novaCidade, setNovaCidade] = useState<string | null>(null);
 
   /*
    * Quantas pessoas há em cada setor.
@@ -167,9 +180,28 @@ export default function AdminSetoresAba() {
     setEquipesPorSetor(conta);
   }, [empresaAtual?.id]);
 
+  const fetchCidades = useCallback(async () => {
+    if (!empresaAtual?.id) { setCidades([]); return; }
+    const { data, error } = await supabase
+      .from('rh_celulas').select('id, nome')
+      .eq('empresa_id', empresaAtual.id).eq('ativo', true)
+      .order('ordem').order('nome');
+    if (error) {
+      console.warn('[AdminSetoresAba] fetchCidades error:', error.message);
+      setCidades([]);
+      return;
+    }
+    setCidades((data as { id: string; nome: string }[]) ?? []);
+  }, [empresaAtual?.id]);
+
+  const nomeDaCidade = useMemo(
+    () => new Map(cidades.map(c => [c.id, c.nome])),
+    [cidades],
+  );
+
   useEffect(() => {
-    void fetchSetores(); void fetchVinculos(); void fetchEquipes();
-  }, [fetchSetores, fetchVinculos, fetchEquipes]);
+    void fetchSetores(); void fetchVinculos(); void fetchEquipes(); void fetchCidades();
+  }, [fetchSetores, fetchVinculos, fetchEquipes, fetchCidades]);
 
   /**
    * Pessoas por setor — membros mais os clones de outro setor.
@@ -228,14 +260,19 @@ export default function AdminSetoresAba() {
   function abrirCriar() {
     if (!podeCriarEditar) return;
     setEditando(null);
-    setForm({ nome: '', descricao: '', ativo: true, alternativo: false });
+    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null });
+    setNovaCidade(null);
     setDialogOpen(true);
   }
 
   function abrirEditar(s: Setor) {
     if (!podeCriarEditar) return;
     setEditando(s);
-    setForm({ nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo, alternativo: s.alternativo === true });
+    setForm({
+      nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo,
+      alternativo: s.alternativo === true, cidadeId: s.cidade_id ?? null,
+    });
+    setNovaCidade(null);
     setDialogOpen(true);
   }
 
@@ -244,12 +281,30 @@ export default function AdminSetoresAba() {
     if (!empresaAtual?.id)  { toast.error('Empresa não identificada'); return; }
     setSaving(true);
     try {
+      /*
+       * Cidade nova digitada no próprio diálogo: cadastra antes do setor. A
+       * coluna `cidade_id` só vai no payload quando muda, para a tela continuar
+       * salvando num banco ainda sem a migration 20261003130000.
+       */
+      let cidadeId = form.cidadeId;
+      if (novaCidade !== null && novaCidade.trim()) {
+        const { data: criada, error: erroCidade } = await supabase.from('rh_celulas').insert({
+          empresa_id: empresaAtual.id, nome: novaCidade.trim(), ordem: cidades.length + 1,
+        }).select('id').single();
+        if (erroCidade) throw new Error(`Não foi possível cadastrar a cidade: ${erroCidade.message}`);
+        cidadeId = criada.id;
+        void fetchCidades();
+      }
+      const mudouCidade = cidadeId !== (editando?.cidade_id ?? null);
+      const cidade = mudouCidade ? { cidade_id: cidadeId } : {};
+
       if (editando) {
         const { error } = await supabase.from('setores').update({
           nome: form.nome.trim(),
           descricao: form.descricao.trim() || null,
           ativo: form.ativo,
           alternativo: form.alternativo,
+          ...cidade,
         }).eq('id', editando.id);
         if (error) throw error;
         toast.success('Setor atualizado!');
@@ -260,6 +315,7 @@ export default function AdminSetoresAba() {
           ativo: form.ativo,
           alternativo: form.alternativo,
           empresa_id: empresaAtual.id,
+          ...cidade,
         }).select('id').single();
         if (error) throw error;
         // Acrescenta ao fim da ordem persistida.
@@ -448,12 +504,26 @@ export default function AdminSetoresAba() {
                           Alternativo
                         </span>
                       )}
+                      {s.tipo === 'nucleo' && (
+                        <span
+                          className="text-[10px] uppercase tracking-wide font-semibold bg-red-500/10 text-red-600 border border-red-500/30 rounded-full px-2 py-0.5 shrink-0"
+                          title="Setor do Núcleo: só aceita o cargo Assistente ADM"
+                        >
+                          Núcleo
+                        </span>
+                      )}
                       {!s.ativo && (
                         <span className="text-[10px] uppercase tracking-wide font-semibold bg-muted text-muted-foreground border border-border rounded-full px-2 py-0.5 shrink-0">
                           Inativo
                         </span>
                       )}
                     </div>
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      {s.cidade_id
+                        ? (nomeDaCidade.get(s.cidade_id) ?? 'Cidade')
+                        : <span className="italic">Sem cidade</span>}
+                    </p>
                     {s.descricao && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{s.descricao}</p>
                     )}
@@ -626,6 +696,40 @@ export default function AdminSetoresAba() {
                 placeholder="Descrição do setor (opcional)"
                 className="h-9 text-sm"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Cidade</Label>
+              {novaCidade === null ? (
+                <div className="flex gap-2">
+                  <Select
+                    value={form.cidadeId ?? '__nenhuma__'}
+                    onValueChange={v => setForm(f => ({ ...f, cidadeId: v === '__nenhuma__' ? null : v }))}
+                  >
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__nenhuma__">Sem cidade</SelectItem>
+                      {cidades.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="outline" size="sm" className="h-9 shrink-0 gap-1" onClick={() => setNovaCidade('')}>
+                    <Plus className="w-3.5 h-3.5" /> Nova
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus value={novaCidade} placeholder="Nome da cidade"
+                    onChange={e => setNovaCidade(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <Button type="button" variant="ghost" size="sm" className="h-9 shrink-0" onClick={() => setNovaCidade(null)}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                É a mesma cidade que o RH usa para este setor: mudar aqui muda lá.
+              </p>
             </div>
             <div className="flex items-center justify-between pt-1">
               <Label className="text-xs font-medium">Setor ativo</Label>
