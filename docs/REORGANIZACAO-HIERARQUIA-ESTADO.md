@@ -1,6 +1,6 @@
 # Reorganização empresa > setor > equipe > cargo — estado e retomada
 
-Atualizado em 02/10/2026, fim da fase 5.
+Atualizado em 02/10/2026, fase 6 escrita (banco pendente).
 
 Plano completo (diagnóstico e as 7 fases):
 https://claude.ai/code/artifact/a95081b0-ebf0-4027-b599-67d617ee00bc
@@ -50,14 +50,26 @@ A sessão nova deve:
 | 3 | Listas de cargo viram atributos; `fn_user_tem` e `fn_perfis_escopo_empresa` leem `cargos`; chave `campanha_escopo_todos_setores` | #40 (base fase 2) | aplicada 02/10: as duas checagens true; chave no catálogo |
 | 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41 (base fase 3) | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
 | 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42 (base fase 4) | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
-| 6 | Tipo de setor (Núcleo) e variante de empresa | — | pendente |
+| 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | rascunho, base fase 5 | leitura 02/10: 1 setor vira nucleo (BookPlay), 4 Assistentes ADM; aplicação pendente (`/mnt/project-files/fase6/aplicar_fase6.sql`) |
 | 7 | Limpeza | — | pendente, só depois de um mês fechado sem divergência |
 
 Branches: `claude/project-thread-3vtyr1` (fase 2), `-fase3`, `-fase4`,
 `-fase5`. Todos os PRs estão em rascunho e o banco de cada um já está
 aplicado, então podem entrar em `main` na ordem #39 → #40 → #41 → #42.
 
-## Fase 6 — o que fazer
+## Fase 6 — feito no código (aplicar o banco)
+
+- Migration `20261002230000_setor_tipo_e_variante.sql`, testada em PGlite
+  (`src/lib/__tests__/setorTipoEVariante.sql.test.ts`) e em Postgres 16.
+- `numeros_config.setor_nucleo_id` continua sendo onde se escolhe o Núcleo;
+  gatilho espelha em `setores.tipo`; índice único: um Núcleo por empresa.
+- Front: `lib/variante.ts` (registro por slug, abastecido por `useEmpresa` e
+  `fetchEmpresas`); `isPaguePlay` e `getTenantCapabilities` leem dele.
+  `CARGO_DO_NUCLEO` sai de `cargos.exige_tipo_setor`.
+- Correção paralela: embeds de `perfis` nomeiam a chave de `setores`/`equipes`
+  (FK composta da fase 4 causou `PGRST201`, lista de Usuários vazia). PR #44.
+
+## Fase 6 — plano original
 
 Do plano: «setores.tipo, preenchido com nucleo a partir de
 numeros_config.setor_nucleo_id; o gatilho do Núcleo passa a ler

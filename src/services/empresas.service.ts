@@ -5,6 +5,7 @@
  */
 import { supabase, Empresa } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { registrarVariantes } from '@/lib/variante';
 
 /**
  * As empresas que a pessoa logada realmente ALCANÇA.
@@ -22,6 +23,12 @@ import { rpcSemTipo } from '@/lib/supabaseSemTipo';
  * Quem responde é o banco (`fn_user_empresas_liberadas`), e não uma cópia da
  * regra aqui: é a mesma função que a RLS usa.
  */
+/** Toda lista de empresas lida passa a variante adiante (ver `lib/variante.ts`). */
+function comVariantes(empresas: Empresa[]): Empresa[] {
+  registrarVariantes(empresas);
+  return empresas;
+}
+
 export async function fetchEmpresasLiberadas(): Promise<Empresa[]> {
   // `rpcSemTipo` porque `database.types.ts` é gerado do banco e ainda não
   // conhece a função. Mesmo padrão de `acessoMultiempresa.service`.
@@ -43,7 +50,7 @@ export async function fetchEmpresasLiberadas(): Promise<Empresa[]> {
     console.warn('[empresas.service] fetchEmpresasLiberadas error:', error.message);
     return [];
   }
-  return (data as Empresa[]) || [];
+  return comVariantes((data as Empresa[]) || []);
 }
 
 /** Lista todas as empresas ativas */
@@ -58,7 +65,7 @@ export async function fetchEmpresas(): Promise<Empresa[]> {
     console.warn('[empresas.service] fetchEmpresas error:', error.message);
     return [];
   }
-  return (data as Empresa[]) || [];
+  return comVariantes((data as Empresa[]) || []);
 }
 
 /**

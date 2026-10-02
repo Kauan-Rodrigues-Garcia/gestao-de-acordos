@@ -29,6 +29,7 @@ import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
 // Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
 import { paraHO } from '@/lib/hoPercentual';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
+import { isPaguePlay } from '@/lib/index';
 import {
   somasPorOperador, ajustesComoLinhas, ajustesComoRecebimentos,
 } from './ajusteManual.service';
@@ -963,7 +964,7 @@ export interface ResumoOperadorAnalitico {
  * `autorizacao_lider.service.ts` já usa por aqui.
  */
 function ehPaguePlay(): boolean {
-  return getConfiguredTenantSlug() === 'pagueplay';
+  return isPaguePlay(getConfiguredTenantSlug());
 }
 
 /**

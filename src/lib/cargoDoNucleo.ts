@@ -33,8 +33,12 @@
 import type { PerfilUsuario } from '@/lib/supabase';
 import { CARGOS_DERIVADOS } from '@/lib/cargos';
 
-/** O cargo do Núcleo. Uma constante, e não o literal espalhado pelas telas. */
-export const CARGO_DO_NUCLEO = 'assistente_adm' as const satisfies PerfilUsuario;
+/**
+ * O cargo do Núcleo: o que exige setor do tipo `nucleo`
+ * (`cargos.exige_tipo_setor`, fase 6). O tipo literal fica para as telas que
+ * comparam com ele; o teste confere que o cadastro diz o mesmo.
+ */
+export const CARGO_DO_NUCLEO = CARGOS_DERIVADOS.doNucleo[0] as 'assistente_adm';
 
 /** Acesso total atravessa a trava. Espelha o primeiro `IF` da trigger. */
 const ATRAVESSAM: readonly string[] = CARGOS_DERIVADOS.acessoTotal;

@@ -19,6 +19,7 @@ import {
   TIPO_OPTIONS_PAGUEPLAY,
   PARCELAS_MAX_DEFAULT,
   PARCELAS_MAX_PAGUEPLAY,
+  isPaguePlay,
 } from '@/lib/index';
 
 export interface TenantCapabilities {
@@ -69,7 +70,7 @@ const PAGUEPLAY_CAPABILITIES: Omit<TenantCapabilities, 'slug'> = {
 };
 
 export function getTenantCapabilities(slug: string): TenantCapabilities {
-  const base = slug === 'pagueplay' ? PAGUEPLAY_CAPABILITIES : BOOKPLAY_CAPABILITIES;
+  const base = isPaguePlay(slug) ? PAGUEPLAY_CAPABILITIES : BOOKPLAY_CAPABILITIES;
   return { ...base, slug };
 }
 

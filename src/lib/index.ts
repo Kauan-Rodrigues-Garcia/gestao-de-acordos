@@ -1,6 +1,7 @@
 import { getHoPercentual, repassePercentuais } from './hoPercentual';
 import { CARGOS_DERIVADOS } from './cargos';
 import type { PerfilUsuario } from './supabase';
+import { varianteDoSlug } from './variante';
 export const ROUTE_PATHS = {
   LOGIN: '/login',
   REGISTRO: '/registro',
@@ -452,8 +453,9 @@ export const TIPO_LABELS_PAGUEPLAY: Record<string, string> = {
   pix: 'Boleto / PIX',
 };
 
+/** A empresa é a PaguePlay? Lê `empresas.variante` (ver `lib/variante.ts`). */
 export function isPaguePlay(slug: string): boolean {
-  return slug === 'pagueplay';
+  return varianteDoSlug(slug) === 'pagueplay';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
