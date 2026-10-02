@@ -1251,6 +1251,51 @@ export type Database = {
           },
         ]
       }
+      cargos: {
+        Row: {
+          acesso_total: boolean
+          ativo: boolean
+          atualizado_em: string
+          conta_no_recebimento: boolean
+          criado_em: string
+          exige_tipo_setor: string | null
+          lidera_equipe: boolean
+          nivel: number | null
+          nome: string
+          ordem: number
+          pertence_a_setor: boolean
+          slug: string
+        }
+        Insert: {
+          acesso_total?: boolean
+          ativo?: boolean
+          atualizado_em?: string
+          conta_no_recebimento?: boolean
+          criado_em?: string
+          exige_tipo_setor?: string | null
+          lidera_equipe?: boolean
+          nivel?: number | null
+          nome: string
+          ordem: number
+          pertence_a_setor: boolean
+          slug: string
+        }
+        Update: {
+          acesso_total?: boolean
+          ativo?: boolean
+          atualizado_em?: string
+          conta_no_recebimento?: boolean
+          criado_em?: string
+          exige_tipo_setor?: string | null
+          lidera_equipe?: boolean
+          nivel?: number | null
+          nome?: string
+          ordem?: number
+          pertence_a_setor?: boolean
+          slug?: string
+        }
+        Relationships: []
+      }
       cargos_permissoes: {
         Row: {
           atualizado_em: string
