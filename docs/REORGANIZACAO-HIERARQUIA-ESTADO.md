@@ -99,6 +99,23 @@ ler a variante; os 439 usos ficam como estão, só a função muda.»
 Só depois de um mês fechado (outubro/2026) sem divergência entre
 `equipe_membros` e as tabelas antigas.
 
+**Script pronto e testado num Postgres local (02/10), não aplicado:**
+`supabase/migrations/20261101120000_fase7_equipes_viram_views.sql`. Na pasta
+do projeto: `fase7/conferir_fase7.sql` (só leitura, tem de dar tudo 0) e
+`fase7/aplicar_fase7.sql` (o mesmo script com registro e conferência).
+
+O que ele faz: `equipe_lideres` e `equipe_operadores_clones` viram views de
+`equipe_membros` com as mesmas colunas e os mesmos `id`; gravar nelas grava em
+`equipe_membros` (gatilho INSTEAD OF, com `RETURNING`); as tabelas viram
+`*_legado`, sem gatilho e sem acesso do app, até a fase 8. As ~50 funções e
+as telas continuam iguais. Vínculo duplicado devolve zero linhas em vez de
+erro, para o `ON CONFLICT DO NOTHING` de `fn_transferencia_desfazer`
+continuar valendo. O embed do Pix automático já aponta pela coluna
+(`equipes!equipe_id`), não pelo nome da FK antiga.
+
+Ficam para depois do script: `perfis.equipe_id` (fonte do papel `membro`),
+`fn_composicao_mes_snapshot` (lê pelas views, sem mudança).
+
 - Conferir a divergência (leitura, pedir autorização): comparar
   `equipe_membros` com `perfis.equipe_id` (sem cargo `lider`),
   `equipe_lideres` e `equipe_operadores_clones`.
