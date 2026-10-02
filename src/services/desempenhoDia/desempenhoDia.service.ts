@@ -244,8 +244,8 @@ export async function buscarPixDoDia(params: RecorteConsulta & {
  * Mesma precedência do Painel de Metas, para os dois não discordarem:
  *
  *   pessoa escolhida ....... a meta dela
- *   setor com meta própria . a meta do setor
- *   nem uma nem outra ...... a soma das metas individuais de quem está no escopo
+ *   setor .................. a meta do setor; sem ela, sem meta
+ *   equipe ................. a soma das metas individuais de quem está no escopo
  *
  * `null` quando não há meta nenhuma — e `null` é diferente de zero: sem alvo
  * definido o painel não desenha barra, em vez de cobrar por um número que
@@ -275,10 +275,9 @@ export async function buscarMetaDoEscopo(params: {
 
   if (operadorId) return umaMeta('operador', operadorId);
 
-  if (setorId) {
-    const doSetor = await umaMeta('setor', setorId);
-    if (doSetor !== null) return doSetor;
-  }
+  // Setor sem meta própria = sem meta; a soma das individuais não a substitui
+  // (02/10/2026 — ver `usePainelMetas`).
+  if (setorId) return umaMeta('setor', setorId);
 
   const ids = operadoresDoEscopo ?? [];
   if (!ids.length) return null;
