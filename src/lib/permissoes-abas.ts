@@ -175,7 +175,11 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     descricao: 'Usuários e as abas internas Setores, Equipes, Metas e Comemorações.',
     grupos: ['Gestão de pessoas', 'Metas'],
     // A meta do Comercial é a aba Metas de Usuários (`?tab=metas`).
-    chaves: ['comemoracoes_gerenciar', 'ver_metas_vendas', 'editar_metas_vendas'],
+    chaves: [
+      'comemoracoes_gerenciar', 'ver_metas_vendas', 'editar_metas_vendas',
+      // A aba IAs (Comercial): abrir, alcance por setor e vincular.
+      'ver_ias_vendas', 'ias_escopo_setor', 'ias_escopo_todos_setores', 'vincular_ias_vendas',
+    ],
   },
   {
     id: 'configuracoes', rotulo: 'Configurações', interruptor: 'ver_configuracoes',
@@ -363,6 +367,10 @@ const SECOES_USUARIOS: Record<string, string> = {
   // Comercial
   ver_metas_vendas: 'Aba interna Metas',
   editar_metas_vendas: 'Aba interna Metas',
+  ver_ias_vendas: 'Aba interna IAs',
+  ias_escopo_setor: 'Aba interna IAs',
+  ias_escopo_todos_setores: 'Aba interna IAs',
+  vincular_ias_vendas: 'Aba interna IAs',
 };
 
 const SECOES_VENDAS: Record<string, string> = {

@@ -2,8 +2,16 @@
  * IasDoComercial — a aba «IAs» de Usuários, só no Comercial (01/10/2026).
  *
  * Lista os logins de inteligência artificial (`perfis.robo`) com o tipo e o
- * vínculo de cada um, e deixa quem pode mexer no cargo (`usuarios_editar_cargo`)
- * definir o tipo, vincular, trocar e desvincular.
+ * vínculo de cada um, e deixa quem tem `vincular_ias_vendas` definir o tipo,
+ * vincular, trocar e desvincular.
+ *
+ * ## Cada setor vê as suas (02/10/2026)
+ *
+ * A lista vem recortada pelo alcance da aba (`ias_escopo_setor` ou
+ * `ias_escopo_todos_setores`, card Usuários em Permissões): a Performance não
+ * vê mais as IAs de Vendas BookPlay. O operador oferecido no vínculo é do
+ * setor da IA; quem alcança todos os setores pode abrir a lista inteira. O
+ * banco confere o mesmo (`fn_vendas_ias_alcanca_setor`).
  *
  * ## O que o vínculo faz
  *
@@ -34,11 +42,12 @@ import {
 } from '@/components/ui/select';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { formatDate, getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { inicioDoMes, vinculoVigente, type IaDoCadastro } from '@/lib/vendasIa';
 import {
-  buscarCadastroDeIas, buscarTiposDeIa, criarTipoDeIa, definirTipoDaIa,
+  buscarIasDaAba, buscarTiposDeIa, criarTipoDeIa, definirTipoDaIa,
   esquecerCadastroDeIas, vincularIa, type TipoDeIa,
 } from '@/services/vendas/iaVendas.service';
 import { buscarPessoasDoPlacar, type PessoaComAusencia } from '@/services/vendas/placar.service';
@@ -68,7 +77,11 @@ export default function IasDoComercial() {
   const { empresa } = useEmpresa();
   const empresaId = empresa?.id ?? null;
   const { temPermissao } = useCargoPermissoes();
-  const podeEditar = temPermissao('usuarios_editar_cargo');
+  const podeEditar = temPermissao('vincular_ias_vendas');
+  const veTodosSetores = useMemo(
+    () => niveisLiberados('ias', temPermissao).includes('todos_setores'),
+    [temPermissao],
+  );
 
   const [ias, setIas] = useState<IaDoCadastro[]>([]);
   const [tipos, setTipos] = useState<TipoDeIa[]>([]);
@@ -83,6 +96,8 @@ export default function IasDoComercial() {
   const [operador, setOperador] = useState<string>('');
   const [modo, setModo] = useState<Modo>('mes');
   const [data, setData] = useState<string>(getTodayISO());
+  // Quem alcança todos os setores pode vincular a IA a alguém de outro setor.
+  const [outrosSetores, setOutrosSetores] = useState(false);
 
   const hoje = getTodayISO();
 
@@ -91,7 +106,7 @@ export default function IasDoComercial() {
     setCarregando(true);
     esquecerCadastroDeIas(empresaId);
     const [cadastro, listaTipos, placar] = await Promise.all([
-      buscarCadastroDeIas(empresaId),
+      buscarIasDaAba(empresaId),
       buscarTiposDeIa(empresaId),
       buscarPessoasDoPlacar(empresaId),
     ]);
@@ -104,13 +119,20 @@ export default function IasDoComercial() {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
-  /** Quem pode receber uma IA: gente, e não desligada. */
-  const operadores = useMemo(
-    () => pessoas
+  /**
+   * Quem pode receber ESTA IA: gente, não desligada, e do setor dela.
+   *
+   * IA sem setor, ou «outros setores» marcado por quem alcança todos, abre a
+   * lista inteira — com o setor ao lado do nome para não confundir.
+   */
+  const operadores = useMemo(() => {
+    const setorDaIa = edicao?.ia.setorId ?? null;
+    const todos = !setorDaIa || (veTodosSetores && outrosSetores);
+    return pessoas
       .filter(p => !p.robo && p.situacao !== 'desligado')
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
-    [pessoas],
-  );
+      .filter(p => todos || p.setor_id === setorDaIa)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [pessoas, edicao, veTodosSetores, outrosSetores]);
 
   const visiveis = useMemo(() => {
     const termo = normalizar(busca);
@@ -133,6 +155,7 @@ export default function IasDoComercial() {
     setOperador(desvincular ? '' : (vinculoVigente(ia, hoje)?.operadorId ?? ''));
     setModo('mes');
     setData(hoje);
+    setOutrosSetores(false);
   };
 
   const desde = modo === 'mes' ? inicioDoMes(data) : data;
@@ -223,7 +246,9 @@ export default function IasDoComercial() {
       ) : visiveis.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
           {ias.length === 0
-            ? 'Nenhum login marcado como IA. Marque em Usuários → editar → «Este login é automação».'
+            ? (veTodosSetores
+              ? 'Nenhum login marcado como IA. Marque em Usuários → editar → «Este login é automação».'
+              : 'Nenhuma IA no seu setor. Marque em Usuários → editar → «Este login é automação».')
             : 'Nenhuma IA encontrada para essa busca.'}
         </p>
       ) : (
@@ -359,10 +384,25 @@ export default function IasDoComercial() {
                         {operadores.map(p => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.nome}{p.equipe_nome ? ` · ${p.equipe_nome}` : ''}
+                            {p.setor_id !== edicao.ia.setorId && p.setor_nome ? ` · ${p.setor_nome}` : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {operadores.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Ninguém ativo no setor {edicao.ia.setorNome ?? 'desta IA'}.
+                      </p>
+                    )}
+                    {veTodosSetores && edicao.ia.setorId && (
+                      <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <input
+                          type="checkbox" checked={outrosSetores}
+                          onChange={e => setOutrosSetores(e.target.checked)}
+                        />
+                        Mostrar operadores de outros setores
+                      </label>
+                    )}
                   </div>
                 )}
 

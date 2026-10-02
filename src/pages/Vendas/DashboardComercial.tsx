@@ -72,7 +72,7 @@ import { useVendasPlacar } from '@/hooks/useVendasPlacar';
 import { useVendasMesAnterior } from '@/hooks/useVendasMesAnterior';
 import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
 import { partesDoMes, rotuloDoMes, ehMesAtual } from '@/lib/mesReferencia';
-import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
+import { useCalendarioVendas } from '@/hooks/useCalendarioVendas';
 import { cn } from '@/lib/utils';
 import { resumirVendas, type EixoDaVenda } from '@/lib/vendas';
 import {
@@ -180,13 +180,10 @@ export default function DashboardComercial() {
     void buscarMetasDoMes(empresaId, ano, m).then(r => setMetas(r.dado ?? []));
   }, [empresaId, mes, temPermissao]);
 
-  const { uteis, trabalhados } = useMemo(() => {
-    const { ano, mes: m } = partesDoMes(mes);
-    return {
-      uteis: diasUteisDoMes(ano, m),
-      trabalhados: diasUteisDecorridos(ano, m, [], getTodayISO()),
-    };
-  }, [mes]);
+  // Dias úteis do calendário do mês (feriados e sábado configurados em Metas).
+  const calendario = useCalendarioVendas(empresaId, mes);
+  const uteis = calendario.uteis;
+  const trabalhados = useMemo(() => calendario.decorridos(getTodayISO()), [calendario]);
 
   /*
    * A régua que ordena o pódio é a que a configuração escolheu.

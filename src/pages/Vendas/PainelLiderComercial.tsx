@@ -72,7 +72,8 @@ import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
 import {
   deslocarMes, ehMesAtual, mesAtual, partesDoMes, rotuloDoMes,
 } from '@/lib/mesReferencia';
-import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
+import { QUARTIS_PADRAO } from '@/lib/diasUteis';
+import { useCalendarioVendas } from '@/hooks/useCalendarioVendas';
 import { cn } from '@/lib/utils';
 import {
   GAVETA_LABELS, GAVETAS_EM_ORDEM, resumirVendas, type ResumoVendas,
@@ -250,13 +251,10 @@ export default function PainelLiderComercial() {
   }, [abaVisivel]);
 
   // ── Calendário ──────────────────────────────────────────────────────────
-  const { uteis, trabalhados } = useMemo(() => {
-    const { ano, mes: m } = partesDoMes(mes);
-    return {
-      uteis: diasUteisDoMes(ano, m),
-      trabalhados: diasUteisDecorridos(ano, m, [], getTodayISO()),
-    };
-  }, [mes]);
+  // Feriados e sábado vêm do calendário do mês, configurado em Metas.
+  const calendario = useCalendarioVendas(empresaId, mes);
+  const uteis = calendario.uteis;
+  const trabalhados = useMemo(() => calendario.decorridos(getTodayISO()), [calendario]);
 
   // ── A régua ─────────────────────────────────────────────────────────────
   const regua: ReguaMeta = useMemo(() => {

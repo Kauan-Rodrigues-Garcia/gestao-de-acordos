@@ -80,6 +80,32 @@ export function buscarCadastroDeIas(empresaId: string): Promise<CadastroDeIas> {
   return promessa;
 }
 
+/**
+ * A lista da aba IAs, recortada pelo alcance de quem olha (`ias_escopo_*`).
+ *
+ * Migration 20261002160000. O cadastro de cima continua inteiro porque é dele
+ * que sai o crédito das vendas; esta é só a lista que a aba mostra. Sem a
+ * migration, cai no cadastro inteiro — o comportamento de antes — e avisa.
+ */
+export async function buscarIasDaAba(empresaId: string): Promise<CadastroDeIas> {
+  const { data, error } = await rpcSemTipo<LinhaCadastroIa[]>(
+    'fn_vendas_ias_da_aba', { p_empresa_id: empresaId },
+  );
+  if (error) {
+    if (pareceNaoInstalado(error.message)) {
+      const inteiro = await buscarCadastroDeIas(empresaId);
+      return {
+        ...inteiro,
+        erro: inteiro.erro ?? 'A separação das IAs por setor ainda não está no banco '
+          + '(migration 20261002160000_vendas_ias_por_setor.sql): a lista mostra todas as IAs da empresa.',
+      };
+    }
+    return { ...VAZIO, erro: mensagemDoErro(error.message, 'A lista de IAs', '20261002160000_vendas_ias_por_setor.sql') };
+  }
+  const ias = agruparCadastroIa(Array.isArray(data) ? data : []);
+  return { ias, indice: indexarIas(ias), disponivel: true, erro: null };
+}
+
 /** Só o índice, para creditar uma lista de vendas. Erro vira índice vazio. */
 export async function indiceDeIas(empresaId: string): Promise<IndiceIas> {
   return (await buscarCadastroDeIas(empresaId)).indice;

@@ -116,7 +116,8 @@ export async function buscarMetasIndividuaisDoMes(
  */
 export async function salvarMeta(params: {
   empresaId: string;
-  tipo: 'setor' | 'equipe';
+  /** `operador` = meta individual (02/10/2026); a RPC aceita desde a Fase 5. */
+  tipo: 'setor' | 'equipe' | 'operador';
   referenciaId: string;
   ano: number;
   mes: number;

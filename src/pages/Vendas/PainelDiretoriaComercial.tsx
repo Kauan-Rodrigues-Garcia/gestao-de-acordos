@@ -96,7 +96,11 @@ import {
   deslocarMes, diasDecorridos, diasNoMes, partesDoMes, primeiroDiaDoMes,
   rotuloDoMes, ultimoDiaDoMes,
 } from '@/lib/mesReferencia';
-import { diasUteisDoMes, diasUteisDecorridos, corProjecao, QUARTIS_PADRAO } from '@/lib/diasUteis';
+import { corProjecao, QUARTIS_PADRAO } from '@/lib/diasUteis';
+import {
+  diasUteisComercial, diasUteisDecorridosComercial, type CalendarioDoMes,
+} from '@/lib/vendasCalendario';
+import { useCalendarioVendas } from '@/hooks/useCalendarioVendas';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { agruparFormas, corDaForma } from '@/lib/formasPagamento';
 import type { PropsTooltipGrafico } from '@/lib/recharts-tooltip';
@@ -236,8 +240,9 @@ function projecaoDoRecorte(params: {
   resumo: ResumoVendas;
   mes: string;
   corte: number;
+  calendario: CalendarioDoMes;
 }): Recorte['projecao'] {
-  const { meta, fator, resumo, mes, corte } = params;
+  const { meta, fator, resumo, mes, corte, calendario } = params;
   if (!meta || !ehRegua(meta.regua)) return null;
   const ajustada = ajustarMetaPorPresenca(
     { regua: meta.regua, quantidade: meta.quantidade, valor: meta.valor }, fator,
@@ -249,8 +254,8 @@ function projecaoDoRecorte(params: {
   const r = calcularProjecao({
     meta: alvo,
     recebido: meta.regua === 'quantidade' ? resumo.quantidade : resumo.valor,
-    totalUteis: diasUteisDoMes(ano, m),
-    decorridos: diasUteisDecorridos(ano, m, [], corteIso),
+    totalUteis: diasUteisComercial(ano, m, calendario),
+    decorridos: diasUteisDecorridosComercial(ano, m, corteIso, calendario),
     quartis: QUARTIS_PADRAO,
   });
   return r ? {
@@ -268,6 +273,8 @@ export default function PainelDiretoriaComercial() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const empresaId = empresa?.id ?? null;
+  // Feriados e sábado vêm do calendário do mês, configurado em Metas.
+  const calendario = useCalendarioVendas(empresaId, mes);
   const ativo = Boolean(empresaId);
 
   // O «Atualizar» do cabeçalho relê as três fontes por contador.
@@ -395,7 +402,7 @@ export default function PainelDiretoriaComercial() {
         projecao: projecaoDoRecorte({
           meta: metas.find(m => m.tipo === tipo && m.referencia_id === id),
           fator: presenca ? fatorDePresenca(presenca) : null,
-          resumo, mes, corte,
+          resumo, mes, corte, calendario: calendario.calendario,
         }),
       };
     };
@@ -410,7 +417,7 @@ export default function PainelDiretoriaComercial() {
 
     return { setores, equipes: equipesMontadas };
   }, [placar.pessoas, placar.indice, placar.presencaPorRecorte, metas, vendasNoCorte,
-      anterioresNoCorte, mes, corte]);
+      anterioresNoCorte, mes, corte, calendario.calendario]);
 
   // ── Cabeçalho ───────────────────────────────────────────────────────────
   const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -582,6 +589,7 @@ export default function PainelDiretoriaComercial() {
               corte={corte}
               corteAnterior={corteAnterior}
               mesFechado={mesFechado}
+              calendario={calendario.calendario}
               vendas={vendasNoCorte}
               anteriores={anterioresNoCorte}
               temAnterior={temAnterior}
@@ -830,11 +838,12 @@ function GraficoRitmo({
 const GAVETAS_FORA: readonly GavetaVenda[] = ['pendente_assinatura', 'aberta', 'devolvida', 'cancelada'];
 
 function VisaoGeral({
-  mes, mesAnterior, corte, corteAnterior, mesFechado, vendas, anteriores, temAnterior,
+  mes, mesAnterior, corte, corteAnterior, mesFechado, calendario, vendas, anteriores, temAnterior,
   indice, pessoasNoCadastro, setores, equipes, metas, podeVerMetas,
   onAbrirSetores, onAbrirVinculo, onAbrirFechamento,
 }: {
   mes: string; mesAnterior: string; corte: number; corteAnterior: number; mesFechado: boolean;
+  calendario: CalendarioDoMes;
   vendas: Venda[]; anteriores: Venda[]; temAnterior: boolean;
   indice: IndicePessoas; pessoasNoCadastro: number;
   setores: Recorte[]; equipes: Recorte[];
@@ -879,10 +888,10 @@ function VisaoGeral({
     if (mesFechado || resumo.valor <= 0) return null;
     const { ano, mes: m } = partesDoMes(mes);
     const corteIso = `${mes}-${String(corte).padStart(2, '0')}`;
-    const feitos = diasUteisDecorridos(ano, m, [], corteIso);
-    const uteis = diasUteisDoMes(ano, m);
+    const feitos = diasUteisDecorridosComercial(ano, m, corteIso, calendario);
+    const uteis = diasUteisComercial(ano, m, calendario);
     return feitos > 0 ? (resumo.valor / feitos) * uteis : null;
-  }, [mesFechado, resumo.valor, mes, corte]);
+  }, [mesFechado, resumo.valor, mes, corte, calendario]);
 
   const equipeMaior = equipes.find(e => e.resumo.valor > 0);
 

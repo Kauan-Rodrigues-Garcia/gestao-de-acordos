@@ -241,10 +241,10 @@ export default function AdminUsuarios() {
   // Acompanhamento — feedback e ausências — é assunto de pessoa, e veio para cá
   // junto com a Metas de Vendas. Mesma chave do item de menu que existia.
   const podeVerAcompanhamento = ehComercial && temPermissao('ver_acompanhamento');
-  // IAs — os logins de automação, com tipo e vínculo (01/10/2026). Quem vê a
-  // lista de usuários vê as IAs; mexer exige `usuarios_editar_cargo`, a mesma
-  // chave da caixa «este login é automação».
-  const podeVerIas = ehComercial && podeVerUsuarios;
+  // IAs — os logins de automação, com tipo e vínculo (01/10/2026). Chave
+  // própria desde 02/10/2026 (`ver_ias_vendas`), com alcance por setor e
+  // `vincular_ias_vendas` para mexer — ver o card Usuários em Permissões.
+  const podeVerIas = ehComercial && temPermissao('ver_ias_vendas');
   const abasVisiveis = [
     podeVerUsuarios && 'usuarios',
     podeVerIas && 'ias',
@@ -298,7 +298,11 @@ export default function AdminUsuarios() {
   const [loading,     setLoading]     = useState(true);
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [editando,    setEditando]    = useState<Perfil | null>(null);
-  const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
+  // Nasce na empresa aberta, e não vazio: vazio é «Todas Empresas», e a
+  // primeira leitura do super_admin trazia a casa inteira (ver `fetchDados`).
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>(() => empresaAtual?.id ?? '');
+  /** Só a resposta da ÚLTIMA leitura entra na tela. Ver `fetchDados`. */
+  const leituraAtual = useRef(0);
   /*
    * Filtro e recolhimento por setor.
    *
@@ -441,6 +445,14 @@ export default function AdminUsuarios() {
   }, [empresaAtual?.id]);
 
   async function fetchDados() {
+    /*
+     * Leituras sobrepostas: a tela abre, o filtro de empresa se ajusta, e duas
+     * leituras correm juntas — a primeira sem filtro de empresa. Se ela
+     * chegasse por último, a lista (e a aba Desligados) ficava com gente de
+     * TODAS as empresas: os desligados da BookPlay aparecendo no Comercial.
+     * Só a leitura mais recente grava o resultado.
+     */
+    const minhaLeitura = ++leituraAtual.current;
     setLoading(true);
     // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
     const empAlvo = (!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
@@ -520,6 +532,7 @@ export default function AdminUsuarios() {
     } catch (err) {
       console.warn('[AdminUsuarios] fetchDados setores/empresas error:', err);
     }
+    if (minhaLeitura !== leituraAtual.current) return;
     // Arquivados somem da lista padrão (item 5).
     setUsuarios(usuariosData.filter(u => !u.arquivado));
     setDesligados(usuariosData.filter(u => u.arquivado === true));
@@ -999,6 +1012,17 @@ export default function AdminUsuarios() {
    *      transformá-la em nível de escopo misturaria as duas.
    */
   const PERFIS_ADMIN = ['administrador', 'super_admin'];
+
+  /*
+   * Desligados são do arquivo de UMA empresa. BookPlay e Comercial são
+   * empresas diferentes, e o arquivo morto de uma não tem nada a dizer na
+   * outra — nem para o super_admin com «Todas Empresas» no filtro, que vê a
+   * empresa aberta. Pedido de 02/10/2026.
+   */
+  const empresaDosDesligados = (isSuperAdmin && filtroEmpresa) || empresaAtual?.id || null;
+  const desligadosDaEmpresa = empresaDosDesligados
+    ? desligados.filter(u => u.empresa_id === empresaDosDesligados)
+    : desligados;
 
   const usuariosFiltrados = filtrarUsuariosVisiveis(
     isSuperAdmin && filtroEmpresa
@@ -1481,7 +1505,7 @@ export default function AdminUsuarios() {
         {podeAdministrarContas && (
           <TabsContent value="desligados" className="flex-1 overflow-y-auto mt-0">
             <AdminDesligadosAba
-              desligados={desligados}
+              desligados={desligadosDaEmpresa}
               loading={loading}
               onReativar={async (p) => {
                 // Reativar devolve `arquivado = false` e libera o login. Os

@@ -38,7 +38,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
-import { abasDoMenu } from '@/lib/menuLateral';
+import { abasDoMenu, itemAcesoDoMenu } from '@/lib/menuLateral';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { gravarVersao, ofereceVersaoCelular as ofereceIconeCelular } from '@/lib/mobile/preferencia';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
@@ -401,6 +401,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     [navItems, ordemMenu],
   );
   const [editorMenuAberto, setEditorMenuAberto] = useState(false);
+  const itemAceso = useMemo(
+    () => itemAcesoDoMenu(pathname, navItensOrdenados),
+    [pathname, navItensOrdenados],
+  );
 
   // As gavetas tapam a tela: enquanto abertas, o tempo é delas no monitoramento.
   useSobreposicaoUso('gaveta/desempenho-dia', painelDiaAberto);
@@ -525,9 +529,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             to={item.to}
             end={item.to === '/'}
             onClick={() => setMobileOpen(false)}
-            className={({ isActive }) => cn(
+            // Um item aceso por vez: o de caminho mais específico. Ver
+            // `itemAcesoDoMenu` — o prefixo do NavLink acendia «Vendas» em
+            // toda sub-rota de /vendas.
+            className={() => cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-              isActive
+              item.to === itemAceso
                 ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
             )}

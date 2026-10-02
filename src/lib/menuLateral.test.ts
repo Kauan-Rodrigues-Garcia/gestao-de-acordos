@@ -11,7 +11,7 @@
  * CARGO, com a operação e com os dois gates que não são permissão.
  */
 import { describe, it, expect } from 'vitest';
-import { abasDoMenu, ticketsVisivelParaCargo, NAV_ITEMS, type ContextoMenu } from './menuLateral';
+import { abasDoMenu, itemAcesoDoMenu, ticketsVisivelParaCargo, NAV_ITEMS, type ContextoMenu } from './menuLateral';
 import { ROUTE_PATHS } from './index';
 import { ordemDoCargo, CARGO_GERAL } from '@/services/menuLateral.service';
 
@@ -322,5 +322,39 @@ describe('abasDoMenu — o cargo do Núcleo', () => {
   it('a chave desligada continua mandando', () => {
     const semAba = rotulos(abasDoMenu(ctx({ temPermissao: chave => chave !== 'ver_controle_numeros' })));
     expect(semAba).not.toContain('Controle de Números');
+  });
+});
+
+/*
+ * 02/10/2026: «depois que seleciono Vendas e vou passando para outras abas, o
+ * Vendas fica azul também e não some». O NavLink acendia por prefixo, e
+ * `/vendas` é prefixo de toda aba do Comercial.
+ */
+describe('itemAcesoDoMenu — um item aceso por vez', () => {
+  const comercial = abasDoMenu(ctx({ produto: 'comercial', isBookplay: false }));
+
+  it('nas sub-rotas de /vendas, acende a aba aberta e não «Vendas»', () => {
+    expect(itemAcesoDoMenu(ROUTE_PATHS.VENDAS_PAINEL_LIDER, comercial)).toBe(ROUTE_PATHS.VENDAS_PAINEL_LIDER);
+    expect(itemAcesoDoMenu(ROUTE_PATHS.VENDAS_INDICACOES, comercial)).toBe(ROUTE_PATHS.VENDAS_INDICACOES);
+    expect(itemAcesoDoMenu(ROUTE_PATHS.VENDAS_LIXEIRA, comercial)).toBe(ROUTE_PATHS.VENDAS_LIXEIRA);
+  });
+
+  it('em /vendas, acende «Vendas»', () => {
+    expect(itemAcesoDoMenu(ROUTE_PATHS.VENDAS, comercial)).toBe(ROUTE_PATHS.VENDAS);
+  });
+
+  it('a raiz só acende nela mesma', () => {
+    expect(itemAcesoDoMenu('/', comercial)).toBe('/');
+    expect(itemAcesoDoMenu(ROUTE_PATHS.TICKETS, comercial)).toBe(ROUTE_PATHS.TICKETS);
+  });
+
+  it('sem item mais específico, o prefixo continua valendo (/acordos/123 acende Acordos)', () => {
+    const cobranca = abasDoMenu(ctx());
+    expect(itemAcesoDoMenu(`${ROUTE_PATHS.ACORDOS}/123`, cobranca)).toBe(ROUTE_PATHS.ACORDOS);
+    expect(itemAcesoDoMenu('/acordos/importar', cobranca)).toBe('/acordos/importar');
+  });
+
+  it('rota fora do menu não acende nada (nem prefixo parcial de palavra)', () => {
+    expect(itemAcesoDoMenu('/vendasx', comercial)).toBeNull();
   });
 });

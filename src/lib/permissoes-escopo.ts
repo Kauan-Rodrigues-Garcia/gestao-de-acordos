@@ -141,6 +141,18 @@ export const ABAS_COM_ESCOPO = {
     niveis: NIVEIS_ESCOPO,
   },
   /*
+   * A aba IAs de Usuários (Comercial, 02/10/2026). Dois níveis: IA é cadastro
+   * de SETOR — `individual` e `equipe` não recortariam nada.
+   *
+   * ⚠️ Espelha `fn_vendas_ias_alcanca_setor` (migration 20261002160000), que a
+   * lista da aba e as RPCs de vínculo chamam. Os dois lados mudam juntos.
+   */
+  ias: {
+    chaveAba: 'ver_ias_vendas',
+    prefixo: 'ias',
+    niveis: ['setor', 'todos_setores'],
+  },
+  /*
    * Acompanhamento (feedback e ausências) mede o alcance pela equipe de HOJE,
    * e não pela da gravação como Vendas e Indicações: o líder que recebe um
    * transferido precisa ler o histórico dele desde o primeiro dia.

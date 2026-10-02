@@ -2348,6 +2348,55 @@ export const PERMISSOES: PermissaoMeta[] = [
   },
 
   /*
+   * A aba IAs de Usuários — 02/10/2026, migration 20261002150000.
+   *
+   * Até aqui a aba não tinha chave: abria para quem via a lista de usuários,
+   * mostrava toda IA da empresa e vincular pedia `usuarios_editar_cargo`, que
+   * ninguém procuraria para isso. Pedido: «não estou a localizar a permissão em
+   * usuários sobre a IA para permitir ou não vincular», e «cada setor vê o
+   * próprio, só caso alterado nas permissões».
+   *
+   * O alcance tem só dois níveis: IA é cadastro de setor, não de pessoa nem de
+   * equipe. `vincular_ias_vendas` nasceu, nos cargos que já existiam, com o
+   * valor de `usuarios_editar_cargo` — quem vinculava continua vinculando.
+   */
+  {
+    key: 'ver_ias_vendas', label: 'Aba IAs',
+    descricao: 'Abrir a aba IAs de Usuários: os logins de IA, o tipo e com quem cada um está vinculado',
+    grupo: 'Vendas', produtos: SO_COMERCIAL,
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'ias_escopo_setor', label: 'IAs: as do próprio setor',
+    descricao: 'Ver e vincular na aba IAs só as IAs dos setores da própria pessoa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { lider: true, elite: true },
+    depende: {
+      chaves: ['ver_ias_vendas'],
+      motivo: 'O alcance vale dentro da aba IAs.',
+    },
+  },
+  {
+    key: 'ias_escopo_todos_setores', label: 'IAs: todos os setores',
+    descricao: 'Ver e vincular na aba IAs as IAs de qualquer setor da empresa',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+    depende: {
+      chaves: ['ver_ias_vendas'],
+      motivo: 'O alcance vale dentro da aba IAs.',
+    },
+  },
+  {
+    key: 'vincular_ias_vendas', label: 'IAs: vincular a operador',
+    descricao:
+      'Vincular, trocar e desvincular uma IA de um operador, e definir o tipo dela. '
+      + 'Só nas IAs que o alcance acima mostra',
+    grupo: 'Vendas', produtos: SO_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+    depende: {
+      chaves: ['ver_ias_vendas'],
+      motivo: 'Só se vincula a IA que aparece na aba.',
+    },
+  },
+
+  /*
    * Indicações — Fase 7, 15/09/2026.
    *
    * Escopo PRÓPRIO, e não o de Vendas. Alcance em Vendas responde «de quem eu

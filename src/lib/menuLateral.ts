@@ -337,3 +337,26 @@ export function ticketsVisivelParaCargo(
   if (temPermissao('tickets_administrar')) return true;
   return liberadoParaLideranca && temPermissao('tickets_abrir');
 }
+
+/**
+ * Qual item do menu está aceso nesta rota — um só.
+ *
+ * O `NavLink` acende por prefixo, e cada item decidia sozinho: `/vendas`
+ * casava `/vendas/painel-lider`, `/vendas/indicacoes` e `/vendas/lixeira`, e
+ * «Vendas» ficava azul junto com a aba aberta (02/10/2026). Agora decide a
+ * lista inteira: entre os itens cujo caminho é prefixo da rota, vence o mais
+ * longo. `/vendas/lixeira` acende «Lixeira»; `/acordos/123`, sem item mais
+ * específico, continua acendendo «Acordos». A raiz `/` só acende nela mesma.
+ */
+export function itemAcesoDoMenu(
+  pathname: string, itens: readonly Pick<NavItem, 'to'>[],
+): string | null {
+  let aceso: string | null = null;
+  for (const { to } of itens) {
+    const casa = to === '/'
+      ? pathname === '/'
+      : pathname === to || pathname.startsWith(`${to.replace(/\/+$/, '')}/`);
+    if (casa && (aceso === null || to.length > aceso.length)) aceso = to;
+  }
+  return aceso;
+}

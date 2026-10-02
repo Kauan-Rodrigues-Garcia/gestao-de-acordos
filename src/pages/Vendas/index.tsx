@@ -106,7 +106,7 @@ import {
 import { equipeDaVenda } from '@/lib/vendasPlacar';
 import { ticketMedio } from '@/lib/vendasDashboard';
 import { contarVendasLancadasPor, type Venda } from '@/services/vendas/vendas.service';
-import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
+import { useCalendarioVendas } from '@/hooks/useCalendarioVendas';
 import {
   buscarMetasDoMes, buscarMetasIndividuaisDoMes, type MetaDeRecorte, type MetaIndividual,
 } from '@/services/vendas/metasVendas.service';
@@ -445,10 +445,10 @@ export default function Vendas() {
       : []),
   ];
 
-  const { uteis, trabalhados } = useMemo(() => {
-    const { ano, mes: m } = partesDoMes(mes);
-    return { uteis: diasUteisDoMes(ano, m), trabalhados: diasUteisDecorridos(ano, m, [], hoje) };
-  }, [mes, hoje]);
+  // Dias úteis do calendário do mês (feriados e sábado configurados em Metas).
+  const calendario = useCalendarioVendas(empresaId, mes);
+  const uteis = calendario.uteis;
+  const trabalhados = useMemo(() => calendario.decorridos(hoje), [calendario, hoje]);
 
   /* ── Ações ────────────────────────────────────────────────────────────── */
 

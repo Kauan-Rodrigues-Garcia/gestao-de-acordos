@@ -133,7 +133,20 @@ function PageLoader() {
   );
 }
 
-function LayoutWrapper({ children }: { children: React.ReactNode }) {
+/**
+ * O casco do site: sessão, termo de uso, menu e cabeçalho em volta da página.
+ *
+ * TODA rota com casco passa por este MESMO componente, inclusive a `/` — e
+ * isso é o que mantém o menu e o cabeçalho montados de uma página para outra.
+ * Até 02/10/2026 a `/` embrulhava o casco em `RaizDoSite`: o React via outro
+ * componente naquela posição da árvore e desmontava o casco inteiro ao ir do
+ * Dashboard para Vendas (o menu sumia e voltava, as animações recomeçavam — o
+ * «bug visual» do pedido). `raiz` liga aqui dentro a checagem do celular que
+ * morava lá.
+ */
+function LayoutWrapper({ children, raiz = false }: { children: React.ReactNode; raiz?: boolean }) {
+  const desvio = useDesvioDoCelular(raiz);
+  if (desvio) return desvio;
   return (
     <ProtectedRoute>
       <TermoUsoProvider>
@@ -211,31 +224,24 @@ function PainelDeEntrada(): React.ReactElement {
  * A rota `/` — o celular decide ANTES do casco do site.
  *
  * O redirecionamento para a tela do celular morava só em `PainelDeEntrada`,
- * que fica DENTRO do `LayoutWrapper`: com o casco sob demanda, o celular
- * baixaria o casco inteiro só para ser mandado embora. Aqui ele espera a
- * sessão e a empresa (leve, sem casco) e vai direto para `/m`. O desktop, e o
- * celular de quem escolheu «Versão completa», seguem pelo caminho de sempre —
- * e `PainelDeEntrada` mantém a mesma checagem como segunda guarda.
+ * que fica DENTRO do casco: com o casco sob demanda, o celular baixaria o
+ * casco inteiro só para ser mandado embora. Aqui ele espera a sessão e a
+ * empresa (leve, sem casco) e vai direto para `/m`. O desktop, e o celular de
+ * quem escolheu «Versão completa», seguem pelo caminho de sempre — e
+ * `PainelDeEntrada` mantém a mesma checagem como segunda guarda.
+ *
+ * É um hook chamado pelo próprio `LayoutWrapper` (com `raiz`), e não um
+ * componente em volta dele: ver o comentário do `LayoutWrapper`.
  */
-function RaizDoSite(): React.ReactElement {
+function useDesvioDoCelular(ativo: boolean): React.ReactElement | null {
   const { loading: authLoading, perfil } = useAuth();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
-  if (ehCelular()) {
-    if (authLoading || (perfil && empresaLoading)) return <PageLoader />;
-    if (produtoDaEmpresa(empresa, tenantSlug) === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
-      return <Navigate to={destinoMobile(perfil?.perfil)} replace />;
-    }
+  if (!ativo || !ehCelular()) return null;
+  if (authLoading || (perfil && empresaLoading)) return <PageLoader />;
+  if (produtoDaEmpresa(empresa, tenantSlug) === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
+    return <Navigate to={destinoMobile(perfil?.perfil)} replace />;
   }
-  return (
-    <LayoutWrapper>
-      <ProtectedRoute
-        requiredPermissao="ver_dashboard" mostrarSemAcesso
-        alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
-      >
-        <PainelDeEntrada />
-      </ProtectedRoute>
-    </LayoutWrapper>
-  );
+  return null;
 }
 
 function TenantThemeApplier(): null {
@@ -329,7 +335,16 @@ export default function App() {
                   `alternativa`: quem não tem o Dashboard da cobrança e tem o
                   Dashboard – ADM — o Assistente ADM — entra direto no painel dele,
                   em vez de ler «aba não liberada» na tela inicial. */}
-              <Route path={ROUTE_PATHS.DASHBOARD} element={<RaizDoSite />} />
+              <Route path={ROUTE_PATHS.DASHBOARD} element={
+                <LayoutWrapper raiz>
+                  <ProtectedRoute
+                    requiredPermissao="ver_dashboard" mostrarSemAcesso
+                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
+                  >
+                    <PainelDeEntrada />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
               {/* Tela mínima do celular (PWA). Sem `LayoutWrapper`: ela toma a
                   tela inteira, sem barra lateral nem cabeçalho. Mesma chave do
                   Dashboard, que é de onde vêm os números dela. */}

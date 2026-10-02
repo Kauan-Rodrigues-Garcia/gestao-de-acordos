@@ -40,6 +40,8 @@ export interface IaDoCadastro {
   nome: string;
   usuario: string;
   situacao: string;
+  /** Setor da IA. Só a lista da aba IAs traz (`fn_vendas_ias_da_aba`). */
+  setorId?: string | null;
   setorNome: string | null;
   tipoId: string | null;
   tipoNome: string | null;
@@ -150,6 +152,7 @@ export interface LinhaCadastroIa {
   ia_nome: string | null;
   ia_usuario: string | null;
   ia_situacao: string | null;
+  setor_id?: string | null;
   setor_nome: string | null;
   tipo_id: string | null;
   tipo_nome: string | null;
@@ -170,6 +173,7 @@ export function agruparCadastroIa(linhas: readonly LinhaCadastroIa[]): IaDoCadas
         nome: l.ia_nome ?? l.ia_usuario ?? 'IA',
         usuario: l.ia_usuario ?? '',
         situacao: l.ia_situacao ?? 'ativo',
+        setorId: l.setor_id ?? null,
         setorNome: l.setor_nome,
         tipoId: l.tipo_id,
         tipoNome: l.tipo_nome,
