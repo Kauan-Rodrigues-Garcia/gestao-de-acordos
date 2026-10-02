@@ -14,14 +14,22 @@
 --
 -- Um setor de Birigui pode ser Cofen, e um de Marília pode ser Nosso produto.
 --
+-- A regra muda a visão inteira (abas, tipos de acordo), então é escolhida
+-- na criação do setor e não muda mais (kauan, 02/10/2026). Quem escolhe é o
+-- super admin; setor criado por outro cargo nasce com Nosso produto.
+--
 -- ## O que muda
 --
--- 1. `setores.regra`, preenchida com a regra que cada setor já segue hoje: a
---    da variante da empresa (`empresas.variante`, 20261002230000). Nada muda
---    de comportamento no dia em que isto roda.
--- 2. Setor novo de empresa de cobrança nasce com a regra da empresa.
--- 3. Só o super admin troca a regra (mesma porta de manutenção do SQL Editor:
---    sem `auth.uid()`, passa).
+-- 1. `setores.regra`, NOT NULL, padrão `nosso_produto`.
+-- 2. Os setores de hoje: só o Conecta Play da PaguePlay é Cofen; todo o resto
+--    é Nosso produto (kauan, 02/10/2026). A prova exige achar o Conecta Play
+--    como Cofen, para um nome diferente do esperado não passar calado.
+-- 3. Gatilho: na criação, só o super admin escolhe Cofen; depois de criado,
+--    ninguém troca pelo app. Pelo SQL Editor (sem `auth.uid()`) passa: é a
+--    porta de manutenção.
+--
+-- Esta migration só grava a regra. Telas e regras do app passam a ler dela
+-- nas próximas, área por área.
 --
 -- Reaplicável.
 -- ============================================================================
@@ -46,17 +54,25 @@ END
 $check$;
 
 COMMENT ON COLUMN public.setores.regra IS
-  'Regra de negócio do setor: nosso_produto (a da BookPlay) ou cofen (a da '
-  'PaguePlay). Independe da cidade. Só o super admin troca. Ver 20261003150000.';
+  'Regra de negócio do setor: nosso_produto ou cofen. Independe da cidade. '
+  'Escolhida na criação (só o super admin escolhe cofen) e não muda depois. '
+  'Ver 20261003150000.';
 
 -- ── 2. Cada setor com a regra que já segue ──────────────────────────────────
 
 UPDATE public.setores s
-   SET regra = CASE e.variante WHEN 'pagueplay' THEN 'cofen' ELSE 'nosso_produto' END
+   SET regra = CASE
+                 WHEN e.slug = 'pagueplay'
+                  AND regexp_replace(lower(s.nome), '[^a-z]', '', 'g') = 'conectaplay'
+                 THEN 'cofen'
+                 ELSE 'nosso_produto'
+               END
   FROM public.empresas e
  WHERE e.id = s.empresa_id
-   AND e.variante IN ('bookplay', 'pagueplay')
    AND s.regra IS NULL;
+
+ALTER TABLE public.setores ALTER COLUMN regra SET DEFAULT 'nosso_produto';
+ALTER TABLE public.setores ALTER COLUMN regra SET NOT NULL;
 
 -- ── 3. Setor novo nasce com a regra da empresa; só super admin troca ────────
 
@@ -66,18 +82,20 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  IF TG_OP = 'INSERT' AND NEW.regra IS NULL THEN
-    SELECT CASE e.variante WHEN 'pagueplay' THEN 'cofen' WHEN 'bookplay' THEN 'nosso_produto' END
-      INTO NEW.regra
-      FROM public.empresas e
-     WHERE e.id = NEW.empresa_id;
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;   -- SQL Editor / service_role: manutenção
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.regra IS DISTINCT FROM 'nosso_produto' AND NOT public.fn_user_is_super_admin() THEN
+      RAISE EXCEPTION 'Só o super admin escolhe a regra de negócio do setor.' USING ERRCODE = '42501';
+    END IF;
     RETURN NEW;
   END IF;
 
-  IF auth.uid() IS NOT NULL
-     AND NEW.regra IS DISTINCT FROM (CASE WHEN TG_OP = 'UPDATE' THEN OLD.regra END)
-     AND NOT public.fn_user_is_super_admin() THEN
-    RAISE EXCEPTION 'Só o super admin define a regra de negócio do setor.' USING ERRCODE = '42501';
+  IF NEW.regra IS DISTINCT FROM OLD.regra THEN
+    RAISE EXCEPTION 'A regra de negócio do setor é escolhida na criação e não muda depois.'
+      USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
 END
@@ -92,13 +110,14 @@ CREATE TRIGGER trg_setores_regra
 
 DO $prova$
 DECLARE
-  v_sem INTEGER;
+  v_cofen INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_sem
+  SELECT COUNT(*) INTO v_cofen
     FROM public.setores s JOIN public.empresas e ON e.id = s.empresa_id
-   WHERE e.variante IN ('bookplay', 'pagueplay') AND s.regra IS NULL;
-  IF v_sem > 0 THEN
-    RAISE EXCEPTION '% setor(es) de cobrança ficaram sem regra.', v_sem;
+   WHERE e.slug = 'pagueplay' AND s.regra = 'cofen'
+     AND regexp_replace(lower(s.nome), '[^a-z]', '', 'g') = 'conectaplay';
+  IF v_cofen <> 1 THEN
+    RAISE EXCEPTION 'Esperava o Conecta Play da PaguePlay como Cofen e achei % setor(es) assim. Confira o nome do setor.', v_cofen;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_setores_regra' AND NOT tgisinternal) THEN

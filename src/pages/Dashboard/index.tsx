@@ -1,3 +1,4 @@
+import { useMarca } from '@/hooks/useMarca';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FormaSaudacao } from '@/components/FormaSaudacao';
@@ -49,6 +50,7 @@ export default function Dashboard() {
   const { perfil } = useAuth();
   const { principal: equipePrincipal, todas: minhasEquipes } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
+  const marca = useMarca();
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
@@ -733,7 +735,7 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground capitalize mt-0.5">{diaSemana}, {dataFormatada}</p>
           {empresa && (
             <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
-              <Building2 className="w-3 h-3" /> {empresa.nome}
+              <Building2 className="w-3 h-3" /> {marca?.nome ?? empresa.nome}
             </p>
           )}
           {/*

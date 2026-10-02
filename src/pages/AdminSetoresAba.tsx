@@ -277,7 +277,7 @@ export default function AdminSetoresAba() {
   function abrirCriar() {
     if (!podeCriarEditar) return;
     setEditando(null);
-    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false, regra: null });
+    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false, regra: 'nosso_produto' });
     setNovaCidade(null);
     setDialogOpen(true);
   }
@@ -316,11 +316,9 @@ export default function AdminSetoresAba() {
       }
       const mudouCidade = cidadeId !== (editando?.cidade_id ?? null);
       const cidade = mudouCidade ? { cidade_id: cidadeId } : {};
-      /* Mesma cautela da cidade: `regra` só vai quando muda (20261003150000).
-         Setor novo sem escolha nasce com a regra da empresa, pelo gatilho. */
-      const mudouRegra = podeEscolherCidade && form.regra !== null
-        && form.regra !== (ehRegraDoSetor(editando?.regra) ? editando?.regra : null);
-      const regra = mudouRegra ? { regra: form.regra } : {};
+      /* A regra só é escolhida na criação, e só pelo super admin; depois não
+         muda (20261003150000). Sem escolha, o banco grava Nosso produto. */
+      const regra = !editando && podeEscolherCidade && form.regra ? { regra: form.regra } : {};
 
       if (editando) {
         const { error } = await supabase.from('setores').update({
@@ -329,7 +327,6 @@ export default function AdminSetoresAba() {
           ativo: form.ativo,
           alternativo: form.alternativo,
           ...cidade,
-          ...regra,
         }).eq('id', editando.id);
         if (error) throw error;
         if (form.nucleo && editando.tipo !== 'nucleo') {
@@ -774,25 +771,26 @@ export default function AdminSetoresAba() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Regra de negócio</Label>
-              {podeEscolherCidade ? (
+              {podeEscolherCidade && !editando ? (
                 <Select
-                  value={form.regra ?? '__empresa__'}
-                  onValueChange={v => setForm(f => ({ ...f, regra: ehRegraDoSetor(v) ? v : null }))}
+                  value={form.regra ?? 'nosso_produto'}
+                  onValueChange={v => setForm(f => ({ ...f, regra: ehRegraDoSetor(v) ? v : f.regra }))}
                 >
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {!form.regra && <SelectItem value="__empresa__">A da empresa</SelectItem>}
                     <SelectItem value="nosso_produto">{ROTULO_REGRA.nosso_produto}</SelectItem>
                     <SelectItem value="cofen">{ROTULO_REGRA.cofen}</SelectItem>
                   </SelectContent>
                 </Select>
               ) : (
                 <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/30 text-sm text-muted-foreground">
-                  {form.regra ? ROTULO_REGRA[form.regra] : 'A da empresa'}
+                  {ROTULO_REGRA[form.regra ?? 'nosso_produto']}
                 </p>
               )}
               <p className="text-[11px] text-muted-foreground leading-snug">
-                Relatório importado, tabela e jeito de salvar o acordo. Não depende da cidade.
+                {editando
+                  ? 'Escolhida na criação do setor. Não muda depois.'
+                  : 'Muda abas, relatórios e tipos de acordo. Não depende da cidade e não muda depois de criado.'}
               </p>
             </div>
             <div className="flex items-center justify-between pt-1">

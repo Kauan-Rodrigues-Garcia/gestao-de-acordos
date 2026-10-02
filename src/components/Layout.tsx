@@ -77,6 +77,8 @@ import { PainelSobDemanda } from './PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
+import { useMarca } from '@/hooks/useMarca';
+import { TemaDaMarca } from '@/components/TemaDaMarca';
 
 /*
  * Painéis que só aparecem com um clique — fora do pacote de entrada.
@@ -122,6 +124,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
   const tenant = useTenant();
+  /* Nome e cor pela cidade do setor da pessoa (Birigui BookPlay, Marília PaguePlay). */
+  const marca = useMarca();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -519,7 +523,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
               {halloween
                 ? <MarcaHalloween nome={branding.appName} />
-                : <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>}
+                : (
+                  <div>
+                    <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
+                    {marca && <p className="text-[11px] text-sidebar-foreground/70 leading-none mt-1">{marca.nome}</p>}
+                  </div>
+                )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -703,6 +712,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <TemaHalloweenContext.Provider value={halloween}>
+    <TemaDaMarca marca={marca} />
     <div className="flex h-screen bg-background overflow-hidden">
       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
           fluxo e acima de tudo: aparecer e sumir não move um pixel do conteúdo,
