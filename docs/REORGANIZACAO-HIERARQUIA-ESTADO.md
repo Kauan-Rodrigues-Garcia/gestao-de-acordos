@@ -1,6 +1,6 @@
 # Reorganização empresa > setor > equipe > cargo — estado e retomada
 
-Atualizado em 02/10/2026, fase 6 escrita (banco pendente).
+Atualizado em 02/10/2026, fim da fase 6.
 
 Plano completo (diagnóstico e as 7 fases):
 https://claude.ai/code/artifact/a95081b0-ebf0-4027-b599-67d617ee00bc
@@ -26,7 +26,7 @@ A sessão nova deve:
 - **Banco é produção.** Nenhuma leitura ou escrita sem autorização explícita
   daquela operação (`CLAUDE.md`). Ao propor: SQL exato, o que altera, quantas
   linhas.
-- O MCP do Supabase trava em DDL (ALTER/DROP/CREATE). Para migrations: gerar um
+- O MCP do Supabase trava em DDL (confirmado de novo na fase 6: timeout, nada gravado) (ALTER/DROP/CREATE). Para migrations: gerar um
   script único em `/mnt/project-files/faseN/aplicar_faseN.sql` com
   `BEGIN`/`COMMIT`, uma prova que desfaz tudo se algo divergir, o `INSERT` em
   `supabase_migrations.schema_migrations ... ON CONFLICT DO NOTHING` e um
@@ -50,14 +50,14 @@ A sessão nova deve:
 | 3 | Listas de cargo viram atributos; `fn_user_tem` e `fn_perfis_escopo_empresa` leem `cargos`; chave `campanha_escopo_todos_setores` | #40 (base fase 2) | aplicada 02/10: as duas checagens true; chave no catálogo |
 | 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41 (base fase 3) | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
 | 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42 (base fase 4) | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
-| 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | rascunho, base fase 5 | leitura 02/10: 1 setor vira nucleo (BookPlay), 4 Assistentes ADM; aplicação pendente (`/mnt/project-files/fase6/aplicar_fase6.sql`) |
+| 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | #45 (base fase 5) | aplicada 02/10 pelo SQL Editor: setores_nucleo=1, assistentes_no_nucleo=4, variantes bookplay/pagueplay, gatilhos=3 |
 | 7 | Limpeza | — | pendente, só depois de um mês fechado sem divergência |
 
 Branches: `claude/project-thread-3vtyr1` (fase 2), `-fase3`, `-fase4`,
 `-fase5`. Todos os PRs estão em rascunho e o banco de cada um já está
-aplicado, então podem entrar em `main` na ordem #39 → #40 → #41 → #42.
+aplicado, então podem entrar em `main` na ordem #39 → #40 → #41 → #42 → #45.
 
-## Fase 6 — feito no código (aplicar o banco)
+## Fase 6 — feita (código e banco)
 
 - Migration `20261002230000_setor_tipo_e_variante.sql`, testada em PGlite
   (`src/lib/__tests__/setorTipoEVariante.sql.test.ts`) e em Postgres 16.
