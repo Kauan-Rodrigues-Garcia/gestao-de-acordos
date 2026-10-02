@@ -2899,6 +2899,55 @@ export type Database = {
           },
         ]
       }
+      equipe_membros: {
+        Row: {
+          conta_recebimento: boolean
+          criado_em: string
+          empresa_id: string
+          equipe_id: string
+          papel: string
+          pessoa_id: string
+        }
+        Insert: {
+          conta_recebimento?: boolean
+          criado_em?: string
+          empresa_id: string
+          equipe_id: string
+          papel: string
+          pessoa_id: string
+        }
+        Update: {
+          conta_recebimento?: boolean
+          criado_em?: string
+          empresa_id?: string
+          equipe_id?: string
+          papel?: string
+          pessoa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipe_membros_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_membros_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_membros_pessoa_id_fkey"
+            columns: ["pessoa_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       equipe_operadores_clones: {
         Row: {
           conta_recebimento: boolean

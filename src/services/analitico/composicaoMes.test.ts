@@ -15,6 +15,7 @@
  * Vale para as duas empresas — é a mesma função para BookPlay e PaguePlay.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { espelhoEquipeMembros } from '@/test/equipeMembros';
 
 type Resposta = { data: unknown; error: { message: string } | null };
 
@@ -28,7 +29,14 @@ function construtor(tabela: string) {
     get(_, prop) {
       if (prop === 'then') {
         return (aceitar: (r: Resposta) => void) =>
-          aceitar(respostas.get(tabela) ?? { data: [], error: null });
+          aceitar(respostas.get(tabela) ?? (tabela === 'equipe_membros'
+            // Como o banco montaria a partir das tabelas antigas (fase 5).
+            ? { data: espelhoEquipeMembros({
+                perfis: respostas.get('perfis')?.data,
+                lideres: respostas.get('equipe_lideres')?.data,
+                clones: respostas.get('equipe_operadores_clones')?.data,
+              }), error: null }
+            : { data: [], error: null }));
       }
       return () => alvo;
     },

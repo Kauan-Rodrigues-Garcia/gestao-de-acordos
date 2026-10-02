@@ -25,6 +25,7 @@ import {
   type CreditoDeOrigem, type RecebidoForaDoSetor,
 } from './fantasmaTransferencia';
 import { equipesLideradasPorPessoa, equipesDaPessoa } from '@/services/equipes/equipeDoLider';
+import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
 // Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
 import { paraHO } from '@/lib/hoPercentual';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
@@ -2464,42 +2465,29 @@ async function buscarComposicaoAoVivo(
     .select('id, nome, setor_id')
     .eq('empresa_id', empresaId);
 
-  // Clones (tabela pode não existir — migration 20260712a pendente → vazio).
-  // conta_recebimento (migration 20260723e) pode faltar → tratamos ausente como
-  // true. Um segundo select sem a coluna é o fallback.
-  let clones = (await supabase
-    .from('equipe_operadores_clones')
-    .select('equipe_id, operador_id, conta_recebimento')
-    .eq('empresa_id', empresaId)).data as { equipe_id: string; operador_id: string; conta_recebimento?: boolean }[] | null;
-  if (!clones) {
-    clones = ((await supabase
-      .from('equipe_operadores_clones')
-      .select('equipe_id, operador_id')
-      .eq('empresa_id', empresaId)).data as { equipe_id: string; operador_id: string }[] | null)
-      ?.map(c => ({ ...c, conta_recebimento: true })) ?? null;
-  }
-  // Líder por equipe (migration 20260725b). É onde a tela de Equipes grava o
-  // líder — TODAS as equipes que ele lidera, e o recebimento dele conta em cada
-  // uma (regra de 29/09/2026, ver `equipeDoLider.ts`).
-  // Tabela ausente (migration pendente) → mapa vazio, comportamento de antes.
-  // `criado_em` ordena: a primeira liderança dá o rótulo da linha da pessoa.
-  const lideresExplicitos = (await supabase
-    .from('equipe_lideres')
-    .select('equipe_id, lider_id, criado_em')
-    .eq('empresa_id', empresaId)
-    .order('criado_em', { ascending: true })).data as { equipe_id: string; lider_id: string }[] | null;
-  const lideradasPorPessoa = equipesLideradasPorPessoa(lideresExplicitos ?? []);
+  // Quem está em que equipe: `equipe_membros` (fase 5, 20261002220000), uma
+  // linha por pessoa, equipe e papel, na ordem de criação. O líder entra em
+  // TODAS as equipes que lidera, e o recebimento dele conta em cada uma (regra
+  // de 29/09/2026, ver `equipeDoLider.ts`); a primeira liderança dá o rótulo da
+  // linha da pessoa. O clone traz `conta_recebimento`.
+  const vinculos = await buscarEquipeMembros({ empresaId });
+  const clones = vinculos.filter(v => v.papel === 'clone');
+  const membroDe = new Map<string, string>();
+  for (const v of vinculos) if (v.papel === 'membro') membroDe.set(v.pessoa_id, v.equipe_id);
+  const lideradasPorPessoa = equipesLideradasPorPessoa(
+    vinculos.filter(v => v.papel === 'lider').map(v => ({ equipe_id: v.equipe_id, lider_id: v.pessoa_id })),
+  );
 
   const equipesExtrasPorOperador: Record<string, string[]> = {};
   // Equipes que têm gente: membro de verdade OU clone. Sem isso, equipe vazia
   // de propósito passaria a aparecer zerada no painel.
   const comGente = new Set<string>();
-  for (const c of (clones ?? [])) {
+  for (const c of clones) {
     // A equipe aparece mesmo com a caixinha desligada (para mostrar foto/tag do
     // líder clonado); mas só entra no cálculo de recebimento se conta_recebimento.
     comGente.add(c.equipe_id);
     if (c.conta_recebimento === false) continue;
-    (equipesExtrasPorOperador[c.operador_id] ??= []).push(c.equipe_id);
+    (equipesExtrasPorOperador[c.pessoa_id] ??= []).push(c.equipe_id);
   }
 
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
@@ -2535,8 +2523,9 @@ async function buscarComposicaoAoVivo(
     // «Sem equipe» com o setor do perfil, e continua contando no setor de
     // origem sem sair dele — a regra do clone de sempre.
     const lideradas = lideradasPorPessoa[p.id] ?? [];
-    const propria = equipesDaPessoa(p.perfil, p.equipe_id, lideradas);
-    const todas = equipesDaPessoa(p.perfil, p.equipe_id, lideradas, equipesExtrasPorOperador[p.id]);
+    const membro = membroDe.get(p.id) ?? null;
+    const propria = equipesDaPessoa(p.perfil, membro, lideradas);
+    const todas = equipesDaPessoa(p.perfil, membro, lideradas, equipesExtrasPorOperador[p.id]);
     const equipeId = propria[0] ?? null;
     const extras = todas.filter(id => id !== equipeId);
     if (extras.length) equipesExtrasPorOperador[p.id] = extras;

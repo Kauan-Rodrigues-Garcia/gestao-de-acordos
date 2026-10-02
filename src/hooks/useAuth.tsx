@@ -47,6 +47,7 @@ import { esquecerInstantaneos } from '@/lib/cacheInstantaneo';
 import { registrarLog, registrarLoginRecusado } from '@/services/logs.service';
 import { iguaisProfundo } from '@/lib/dadosVivos';
 import { limparCacheCurto } from '@/lib/cacheCurto';
+import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
 
 /**
  * De quanto em quanto tempo a volta à aba pode reler o perfil da MESMA pessoa.
@@ -71,7 +72,7 @@ interface AuthContextType {
   session: Session | null;
   perfil: Perfil | null;
   /**
-   * As equipes que a pessoa lidera (`equipe_lideres`). O líder mora ali, e não
+   * As equipes que a pessoa lidera (`equipe_membros`, papel `lider`). O líder mora ali, e não
    * em `perfis.equipe_id` — leia a equipe de alguém por `useEquipesDoPerfil`,
    * nunca pelo cadastro sozinho. Ver `equipesDoPerfil`.
    */
@@ -541,14 +542,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const id = perfil?.id;
     if (!id) { setEquipesLideradas(SEM_EQUIPES); return; }
     let ativo = true;
-    void supabase.from('equipe_lideres').select('equipe_id').eq('lider_id', id)
-      .then(({ data, error }) => {
+    void buscarEquipeMembros({ pessoaId: id, papel: 'lider' })
+      .then((vinculos) => {
         if (!ativo) return;
-        if (error) { console.warn('[useAuth] equipes lideradas:', error.message); return; }
-        const ids = [...new Set(((data ?? []) as { equipe_id: string | null }[])
-          .map(l => l.equipe_id).filter((e): e is string => !!e))].sort();
+        const ids = [...new Set(vinculos.map(l => l.equipe_id).filter((e): e is string => !!e))].sort();
         setEquipesLideradas(atual => (atual.length === ids.length && atual.every((e, i) => e === ids[i]) ? atual : ids));
-      });
+      })
+      .catch((e: unknown) => console.warn('[useAuth] equipes lideradas:', e instanceof Error ? e.message : e));
     return () => { ativo = false; };
   }, [perfil]);
 
