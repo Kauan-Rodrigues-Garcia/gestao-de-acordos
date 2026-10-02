@@ -158,6 +158,18 @@ interface Operador {
    */
   ferias_ate?: string | null;
 }
+
+/**
+ * Desligado não aparece em meta nem em comissão (pedido de 02/10/2026).
+ *
+ * As duas abas leem a mesma lista, então o filtro fica na fonte — cadastro de
+ * hoje, clones e retrato do mês fechado. O recebimento do desligado NÃO depende
+ * desta tela: continua na equipe pela composição e pelo fantasma do analítico.
+ */
+function emOperacao(o: { situacao?: string | null }): boolean {
+  return o.situacao !== "desligado";
+}
+
 /**
  * Os operadores do setor NUM MÊS FECHADO, a partir do retrato.
  *
@@ -185,6 +197,7 @@ async function operadoresDoRetrato(
   const clonados: Operador[] = [];
   for (const p of pessoas.values()) {
     if (p.perfil !== "operador" && p.perfil !== "elite") continue;
+    if (!emOperacao(p)) continue;
     const onde = composicao.operadorEquipeMap[p.id];
     const setorOrigem = onde?.setor_id ?? p.setor_id;
     if (setorOrigem === setorId) {
@@ -848,7 +861,8 @@ export default function MetasConfig() {
         .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
       const proprios = ((data ?? []) as unknown as Operador[])
-        .filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0);
+        .filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0)
+        .filter(emOperacao);
       setOperadores([...proprios, ...(await buscarClonadosNoSetor(proprios))]);
     } catch (err: unknown) {
       toast.error("Erro ao carregar operadores", { description: err instanceof Error ? err.message : String(err) });
@@ -881,7 +895,8 @@ export default function MetasConfig() {
     const { data: perfisClonados } = await supabase.from("perfis")
       .select("id, nome, setor_id, equipe_id, situacao, ferias_ate").in("id", faltando)
       .in("perfil", ["operador", "elite"]).order("nome");
-    const linhas = (perfisClonados ?? []) as unknown as { id: string; nome: string; setor_id: string | null; equipe_id: string | null; situacao?: string | null; ferias_ate?: string | null }[];
+    const linhas = ((perfisClonados ?? []) as unknown as { id: string; nome: string; setor_id: string | null; equipe_id: string | null; situacao?: string | null; ferias_ate?: string | null }[])
+      .filter(emOperacao);
     if (!linhas.length) return [];
 
     // Nome do setor de origem para a etiqueta (o líder pode não ter esse setor carregado)
