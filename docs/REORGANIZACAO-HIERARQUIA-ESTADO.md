@@ -39,7 +39,8 @@ A sessão nova deve:
 - Cargos são globais (iguais para todas as empresas); permissão segue por
   empresa em `cargos_permissoes`.
 - Não mexer em velocidade da suíte de testes (pedido do Cleber).
-- Desejo futuro, fora do plano: setor com mais de uma cidade (multirregião).
+- Setor tem UMA cidade (`setores.cidade_id`, #48). Mais de uma (multirregião)
+  depende de o RH saber em qual cidade cada pessoa do setor entra.
 
 ## Situação por fase
 
@@ -51,6 +52,8 @@ A sessão nova deve:
 | 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41, em `main` | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
 | 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42, em `main` | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
 | 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | #45, em `main` | aplicada 02/10 pelo SQL Editor: setores_nucleo=1, assistentes_no_nucleo=4, variantes bookplay/pagueplay, gatilhos=3 |
+| — | Tela de Cargos (Configurações > Cargos) + `fn_cargos_guarda`, sai o CHECK antigo de `perfis.perfil` | #48 | aplicada 02/10: check_antigo=0, gatilhos=2, cargos=10 |
+| — | Setor com cidade: `setores.cidade_id` → `rh_celulas`, espelho com `rh_config_setores` | #48 | aplicada 02/10: setores_com_cidade=12, sem_cidade=6, cidades Birigui e Marília, gatilhos=2 |
 | 7 | Limpeza | — | pendente, só depois de um mês fechado sem divergência |
 
 Fases 2 a 6 estão em `main` desde 02/10 (#39, depois #40, #41, #42 e #45
