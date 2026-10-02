@@ -329,6 +329,50 @@ describe('usePainelMetas — escopo vem dos filtros do Dashboard', () => {
     expect(result.current.modoAgregado).toBe(false);
   });
 
+  /*
+   * Setor sem meta própria = sem meta (02/10/2026). O Play 1 de outubro não
+   * tinha meta de setor, mas 16 operadores tinham meta individual — e o card
+   * dizia «Meta do setor: R$ 784.000,00», com projeção de 700%.
+   */
+  function escopoComMembros(tipo: 'setor' | 'equipe') {
+    escopoRef.current = {
+      ...(escopoRef.current as object),
+      escopo: tipo === 'setor'
+        ? { tipo: 'setor', setorId: 'set-1', operadores: new Set(['op-a', 'op-b']) }
+        : { tipo: 'equipe', equipeId: EQUIPE, operadores: new Set(['op-a', 'op-b']) },
+    };
+  }
+
+  it('setor sem meta própria fica sem meta, mesmo com metas individuais', async () => {
+    comoLider();
+    escopoComMembros('setor');
+    enfileirar('metas', VAZIO); // a meta do setor: não existe
+    enfileirar('metas', { data: [{ meta_valor: 49_000 }, { meta_valor: 49_000 }], error: null });
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+    expect(result.current.escopoRotulo).toBe('do setor');
+    expect(result.current.meta).toBeNull();
+    expect(result.current.projecao).toBeNull();
+  });
+
+  it('setor com meta própria usa a dele', async () => {
+    comoLider();
+    escopoComMembros('setor');
+    enfileirar('metas', { data: { meta_valor: 1_040_000 }, error: null });
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1' })));
+    await waitFor(() => expect(result.current.meta).toBe(1_040_000));
+  });
+
+  it('equipe sem meta própria continua somando as individuais', async () => {
+    comoLider();
+    escopoComMembros('equipe');
+    enfileirar('metas', VAZIO); // a meta da equipe: não existe
+    enfileirar('metas', { data: [{ meta_valor: 49_000 }, { meta_valor: 51_000 }], error: null });
+    const { result } = renderHook(() => usePainelMetas(
+      paramsBase({ setorId: 'set-1', equipeId: EQUIPE })));
+    await waitFor(() => expect(result.current.meta).toBe(100_000));
+  });
+
   it('equipe em treinamento corta os dias anteriores ao início', async () => {
     perfilRef.current = { id: 'lid-1', perfil: 'lider', setor_id: 'set-1', equipe_id: null };
     enfileirar('equipes', {

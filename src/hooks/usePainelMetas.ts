@@ -385,7 +385,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // ── Meta do escopo ─────────────────────────────────────────────────────────
   // "Eu"     → meta do tipo `operador`.
   // "equipe" → meta do tipo `equipe` quando existir; senão a soma das metas
-  //            individuais dos membros. Mesma precedência de `useAnalytics`.
+  //            individuais dos membros.
+  // "setor"  → só a meta do tipo `setor`. Sem ela, sem meta — a soma das
+  //            individuais não vale como meta do setor. Igual a `useAnalytics`.
   const [meta, setMeta] = useState<number | null>(null);
   /** Meta INDIRETA `[PP]`, em BRUTO. `null` = a opção está desligada. */
   const [metaIndireta, setMetaIndireta] = useState<number | null>(null);
@@ -449,8 +451,25 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
           if (valorGrupo > 0) { if (!cancelado) setMeta(valorGrupo); return; }
         }
 
-        // Sem meta do grupo: soma as individuais. Membro sem meta soma zero —
-        // o recebimento dele continua contando, só a meta não.
+        /*
+         * Setor sem meta própria = sem meta (02/10/2026).
+         *
+         * Até aqui o setor também caía na soma das individuais, e o card dizia
+         * «Meta do setor: R$ 784.000,00» para o Play 1 de outubro, que não tinha
+         * meta de setor — eram as metas de 16 operadores somadas, e com elas
+         * vinham projeção de 700%, % da meta e quartil que ninguém definiu.
+         * Pedido: «quando não tem meta cadastrada fica como o Play 4, sem
+         * informações». A meta do setor é digitada (e validada) na aba Metas;
+         * a soma não a substitui. Igual a `useAnalytics` e ao Painel Diretoria,
+         * que já liam só a meta própria do setor.
+         *
+         * A equipe continua somando: equipe quase nunca tem meta própria, e a
+         * meta dela é, na prática, a dos seus membros.
+         */
+        if (modo === 'setor') { if (!cancelado) setMeta(null); return; }
+
+        // Equipe sem meta própria: soma as individuais. Membro sem meta soma
+        // zero — o recebimento dele continua contando, só a meta não.
         const ids = membrosChave ? membrosChave.split(',') : [];
         if (!ids.length) { if (!cancelado) setMeta(null); return; }
         const { data: individuais } = await supabase.from('metas')
