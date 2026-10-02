@@ -112,6 +112,9 @@ export interface Setor {
   /** A cidade do setor (`rh_celulas`, 20261003130000). Espelho da cidade que
    *  o RH usa em `rh_config_setores`. */
   cidade_id?: string | null;
+  /** A regra de negócio do setor: `nosso_produto` ou `cofen` (20261003150000).
+   *  Independe da cidade. Ver `lib/regraDoSetor.ts`. */
+  regra?: string | null;
   empresa_id?: string;
   criado_em: string;
   atualizado_em: string;

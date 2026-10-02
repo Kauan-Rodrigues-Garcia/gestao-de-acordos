@@ -40,6 +40,7 @@
  * é `fn_setor_excluir`, que refaz a conta com a linha travada: a tela avisa,
  * o banco decide. Mesma chave de criar e editar (`setores_criar_editar`).
  */
+import { ROTULO_REGRA, ehRegraDoSetor, type RegraDoSetor } from '@/lib/regraDoSetor';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -113,9 +114,9 @@ export default function AdminSetoresAba() {
   const [editando,   setEditando]   = useState<Setor | null>(null);
   const [form, setForm] = useState<{
     nome: string; descricao: string; ativo: boolean; alternativo: boolean; cidadeId: string | null;
-    nucleo: boolean;
+    nucleo: boolean; regra: RegraDoSetor | null;
   }>({
-    nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false,
+    nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false, regra: null,
   });
 
   /*
@@ -276,7 +277,7 @@ export default function AdminSetoresAba() {
   function abrirCriar() {
     if (!podeCriarEditar) return;
     setEditando(null);
-    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false });
+    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false, regra: null });
     setNovaCidade(null);
     setDialogOpen(true);
   }
@@ -288,6 +289,7 @@ export default function AdminSetoresAba() {
       nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo,
       alternativo: s.alternativo === true, cidadeId: s.cidade_id ?? null,
       nucleo: s.tipo === 'nucleo',
+      regra: ehRegraDoSetor(s.regra) ? s.regra : null,
     });
     setNovaCidade(null);
     setDialogOpen(true);
@@ -314,6 +316,11 @@ export default function AdminSetoresAba() {
       }
       const mudouCidade = cidadeId !== (editando?.cidade_id ?? null);
       const cidade = mudouCidade ? { cidade_id: cidadeId } : {};
+      /* Mesma cautela da cidade: `regra` só vai quando muda (20261003150000).
+         Setor novo sem escolha nasce com a regra da empresa, pelo gatilho. */
+      const mudouRegra = podeEscolherCidade && form.regra !== null
+        && form.regra !== (ehRegraDoSetor(editando?.regra) ? editando?.regra : null);
+      const regra = mudouRegra ? { regra: form.regra } : {};
 
       if (editando) {
         const { error } = await supabase.from('setores').update({
@@ -322,6 +329,7 @@ export default function AdminSetoresAba() {
           ativo: form.ativo,
           alternativo: form.alternativo,
           ...cidade,
+          ...regra,
         }).eq('id', editando.id);
         if (error) throw error;
         if (form.nucleo && editando.tipo !== 'nucleo') {
@@ -337,6 +345,7 @@ export default function AdminSetoresAba() {
           alternativo: form.alternativo,
           empresa_id: empresaAtual.id,
           ...cidade,
+          ...regra,
         }).select('id').single();
         if (error) throw error;
         // Acrescenta ao fim da ordem persistida.
@@ -544,6 +553,11 @@ export default function AdminSetoresAba() {
                       {s.cidade_id
                         ? (nomeDaCidade.get(s.cidade_id) ?? 'Cidade')
                         : <span className="italic">Sem cidade</span>}
+                      {ehRegraDoSetor(s.regra) && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wide font-semibold rounded-full border border-border px-2 py-0.5">
+                          {ROTULO_REGRA[s.regra]}
+                        </span>
+                      )}
                     </p>
                     {s.descricao && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{s.descricao}</p>
@@ -756,6 +770,29 @@ export default function AdminSetoresAba() {
                 {podeEscolherCidade
                   ? 'É a mesma cidade que o RH usa para este setor: mudar aqui muda lá.'
                   : 'Só o super admin define a cidade do setor.'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Regra de negócio</Label>
+              {podeEscolherCidade ? (
+                <Select
+                  value={form.regra ?? '__empresa__'}
+                  onValueChange={v => setForm(f => ({ ...f, regra: ehRegraDoSetor(v) ? v : null }))}
+                >
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {!form.regra && <SelectItem value="__empresa__">A da empresa</SelectItem>}
+                    <SelectItem value="nosso_produto">{ROTULO_REGRA.nosso_produto}</SelectItem>
+                    <SelectItem value="cofen">{ROTULO_REGRA.cofen}</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/30 text-sm text-muted-foreground">
+                  {form.regra ? ROTULO_REGRA[form.regra] : 'A da empresa'}
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Relatório importado, tabela e jeito de salvar o acordo. Não depende da cidade.
               </p>
             </div>
             <div className="flex items-center justify-between pt-1">
