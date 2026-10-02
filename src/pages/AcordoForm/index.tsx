@@ -51,7 +51,7 @@ export default function AcordoForm() {
   useEffect(() => {
     if (perfil) { setPerfilLocal(perfil); return; }
     if (!user) return;
-    supabase.from('perfis').select('*, setores(id, nome)').eq('id', user.id).maybeSingle()
+    supabase.from('perfis').select('*, setores!perfis_setor_id_fkey(id, nome)').eq('id', user.id).maybeSingle()
       .then(({ data, error }) => {
         if (error) {
           supabase.from('perfis').select('*').eq('id', user.id).maybeSingle()

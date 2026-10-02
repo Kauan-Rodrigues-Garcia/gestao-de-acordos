@@ -194,7 +194,7 @@ export async function coletarFatosConflitoNr(params: {
   let donoSetorNome: string | null = null;
   {
     const { data } = await supabase
-      .from('perfis').select('setores(nome)').eq('id', conflito.operadorId).maybeSingle();
+      .from('perfis').select('setores!perfis_setor_id_fkey(nome)').eq('id', conflito.operadorId).maybeSingle();
     const setores = (data as { setores?: { nome?: string } | null } | null)?.setores;
     donoSetorNome = setores?.nome ?? null;
   }

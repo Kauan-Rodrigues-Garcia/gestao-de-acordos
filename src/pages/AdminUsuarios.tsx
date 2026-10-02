@@ -479,7 +479,9 @@ export default function AdminUsuarios() {
         // `empresas!perfis_empresa_id_fkey`: há mais de um caminho entre
         // `perfis` e `empresas`, e sem o nome da chave o PostgREST recusa a
         // consulta (PGRST201). Ver `EMBED_EMPRESA` em `empresas.service.ts`.
-        .select('*, setores(id,nome), empresas!perfis_empresa_id_fkey(id,nome), foto_url')
+        // `setores!perfis_setor_id_fkey` pelo mesmo motivo, desde a FK composta
+        // da fase 4. Ver `lib/__tests__/embedsDePerfis.test.ts`.
+        .select('*, setores!perfis_setor_id_fkey(id,nome), empresas!perfis_empresa_id_fkey(id,nome), foto_url')
         .order('nome');
       if (!isSuperAdmin && empresaAtual?.id) {
         usersQuery = usersQuery.eq('empresa_id', empresaAtual.id);
@@ -491,7 +493,7 @@ export default function AdminUsuarios() {
         console.warn('[AdminUsuarios] fetchDados join error, tentando sem join de empresas:', eJoin.message);
         let fallbackQuery = supabase
           .from('perfis')
-          .select('*, setores(id,nome), foto_url')
+          .select('*, setores!perfis_setor_id_fkey(id,nome), foto_url')
           .order('nome');
         if (!isSuperAdmin && empresaAtual?.id) {
           fallbackQuery = fallbackQuery.eq('empresa_id', empresaAtual.id);

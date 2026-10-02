@@ -54,7 +54,7 @@ export default function ImportarAcordosCard() {
     (async () => {
       const { data } = await supabase
         .from('perfis')
-        .select('id, nome, usuario, arquivado, setores(nome)')
+        .select('id, nome, usuario, arquivado, setores!perfis_setor_id_fkey(nome)')
         .eq('empresa_id', empresaId)
         .order('nome');
       if (!vivo) return;
