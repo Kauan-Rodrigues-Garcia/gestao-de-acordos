@@ -22,7 +22,7 @@
  * ```
  */
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
@@ -78,6 +78,7 @@ import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
 import { useMarca } from '@/hooks/useMarca';
+import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
 import { TemaDaMarca } from '@/components/TemaDaMarca';
 
 /*
@@ -254,13 +255,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
+  // Regra de negócio: a do setor da pessoa quando há uma (ver `lib/regraDoSetor.ts`).
+  const regraDoSetor = useSyncExternalStore(ouvirRegraDaSessao, regraDaSessaoAtual);
+  const isPP = regraDoSetor ? regraDoSetor === 'cofen' : (tenant.isPaguePlay || empresa?.slug === 'pagueplay');
+  // Nome e logo: pela cidade do setor (`useMarca`); sem ela, como a regra.
+  const marcaPaguePlay = marca ? marca.nome === 'PaguePlay' : isPP;
   const userRole = perfil?.perfil ?? 'operador';
   // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
   // `Halloween/preferencia.ts`. Até a validação, só o super_admin.
   const { pathname } = useLocation();
   const hw = useHalloween();
-  const cenaHalloween = useMemo(() => cenaDaRota(pathname, isPP), [pathname, isPP]);
+  const cenaHalloween = useMemo(() => cenaDaRota(pathname, marcaPaguePlay), [pathname, marcaPaguePlay]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -513,7 +518,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             easterEgg.estagio === 4 && 'creators-logo-forte',
           )}
         >
-          {isPP
+          {marcaPaguePlay
             ? <img src="/logo-pagueplay.png" alt="Logo PaguePLAY" className="w-8 h-8 object-contain" />
             : <img src="/logo-bookplay.png" alt="Logo BookPlay" className="w-8 h-8 object-contain" />
           }

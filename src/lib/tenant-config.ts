@@ -9,7 +9,7 @@
  *   if (tenant.isPaguePlay) { ... }
  *   const label = tenant.statusLabels['pago'];
  */
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   STATUS_LABELS,
@@ -21,6 +21,7 @@ import {
   PARCELAS_MAX_PAGUEPLAY,
   isPaguePlay,
 } from '@/lib/index';
+import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
 
 export interface TenantCapabilities {
   /** true quando o tenant ativo é PaguePLAY */
@@ -77,5 +78,8 @@ export function getTenantCapabilities(slug: string): TenantCapabilities {
 /** Hook que retorna as capacidades do tenant ativo. */
 export function useTenant(): TenantCapabilities {
   const { tenantSlug } = useEmpresa();
-  return useMemo(() => getTenantCapabilities(tenantSlug), [tenantSlug]);
+  // A regra do setor da pessoa logada chega depois do perfil: redesenha quando chega.
+  const regra = useSyncExternalStore(ouvirRegraDaSessao, regraDaSessaoAtual);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `regra` muda a resposta de `isPaguePlay`.
+  return useMemo(() => getTenantCapabilities(tenantSlug), [tenantSlug, regra]);
 }
