@@ -32,6 +32,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useCargos } from '@/hooks/useCargos';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -259,6 +260,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
+  // O cadastro de cargos editado pelo painel: lido uma vez e aplicado nas
+  // listas de cargo (`lib/cargos.ts`, «O cadastro vivo»).
+  useCargos();
   const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um

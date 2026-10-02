@@ -3,7 +3,7 @@ import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { copiarTexto } from '@/lib/clipboard';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText, Briefcase } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
+import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
@@ -79,6 +80,7 @@ export default function AdminConfiguracoes() {
   const abasVisiveis = [
     podeVerGeral && 'geral',
     podeVerPermissoes && 'permissoes',
+    podeVerPermissoes && 'cargos',
     podeVerDiretoExtra && 'direto_extra',
     podeVerTags && 'tags',
     podeVerLogs && 'logs',
@@ -227,6 +229,14 @@ export default function AdminConfiguracoes() {
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <ShieldCheck className="w-4 h-4" /> Permissões
+            </TabsTrigger>}
+            {/* Cargos: quem vê as permissões vê o cadastro; editar é do Super
+                Admin, como no banco (policies de `cargos`). */}
+            {podeVerPermissoes && <TabsTrigger
+              value="cargos"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <Briefcase className="w-4 h-4" /> Cargos
             </TabsTrigger>}
             {podeVerDiretoExtra && (
             <TabsTrigger
@@ -417,6 +427,11 @@ export default function AdminConfiguracoes() {
         {/* ─── Aba: Permissões ─────────────────────────────────────────── */}
         {podeVerPermissoes && <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
           <AdminPermissoes />
+        </TabsContent>}
+
+        {/* ─── Aba: Cargos ─────────────────────────────────────────────── */}
+        {podeVerPermissoes && <TabsContent value="cargos" className="flex-1 overflow-y-auto p-6 mt-0">
+          <AdminCargos podeEditar={ehSuperAdmin} />
         </TabsContent>}
 
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}
