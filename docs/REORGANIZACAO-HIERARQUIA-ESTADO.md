@@ -94,6 +94,17 @@ Só depois de um mês fechado (outubro/2026) sem divergência entre
   `equipe_operadores_clones` (ou deixá-las como views), o CHECK antigo de
   cargo e as listas mortas do front; atualizar `ARQUITETURA.md`.
 
+## Lição das fases 4 e 5: embeds do PostgREST
+
+FK nova entre duas tabelas que já tinham uma (fase 4: `perfis`→`setores`
+composta) ou tabela de junção nova (fase 5: `equipe_membros` entre `perfis` e
+`equipes`) deixa ambíguo todo embed sem chave (`setores(...)`), e o PostgREST
+recusa a consulta inteira (PGRST201). A tela de Usuários ficou vazia em
+produção por isso. Correção: nomear a chave (`setores!perfis_setor_id_fkey`,
+`equipes!perfis_equipe_id_fkey`); o teste `src/lib/__tests__/embedsDePerfis.test.ts`
+trava isso a partir de `perfis`. Em `main` a correção vai pelo PR #43.
+Antes de criar FK ou junção nas fases 6 e 7, procurar os embeds afetados.
+
 ## Pendências soltas
 
 - `fn_permissoes_semear_empresa` ainda tem uma lista de cargos escrita à mão
