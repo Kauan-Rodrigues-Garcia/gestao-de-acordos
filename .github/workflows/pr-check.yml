@@ -36,7 +36,7 @@ jobs:
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' | tr '\n' ' ')
           if [ -n "$CHANGED" ]; then
             echo "Linting: $CHANGED"
-            npx eslint $CHANGED --max-warnings=0
+            npx eslint $CHANGED --max-warnings=0 --no-warn-ignored
           else
             echo "No TypeScript/TSX files changed."
           fi
