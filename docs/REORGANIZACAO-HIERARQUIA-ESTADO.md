@@ -46,16 +46,17 @@ A sessão nova deve:
 | Fase | O que é | PR | Banco |
 |---|---|---|---|
 | 1 | Medir (só leitura) | — | feito em 02/10, tudo zerado |
-| 2 | Tabela `cargos` + FKs | #39 (base `main`) | aplicada 02/10: cargos=10, fks_validadas=2 |
-| 3 | Listas de cargo viram atributos; `fn_user_tem` e `fn_perfis_escopo_empresa` leem `cargos`; chave `campanha_escopo_todos_setores` | #40 (base fase 2) | aplicada 02/10: as duas checagens true; chave no catálogo |
+| 2 | Tabela `cargos` + FKs | #39, em `main` desde 02/10 | aplicada 02/10: cargos=10, fks_validadas=2 |
+| 3 | Listas de cargo viram atributos; `fn_user_tem` e `fn_perfis_escopo_empresa` leem `cargos`; chave `campanha_escopo_todos_setores` | #40 (base `main`) | aplicada 02/10: as duas checagens true; chave no catálogo |
 | 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41 (base fase 3) | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
 | 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42 (base fase 4) | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
 | 6 | Tipo de setor (Núcleo) e variante de empresa | — | pendente |
 | 7 | Limpeza | — | pendente, só depois de um mês fechado sem divergência |
 
 Branches: `claude/project-thread-3vtyr1` (fase 2), `-fase3`, `-fase4`,
-`-fase5`. Todos os PRs estão em rascunho e o banco de cada um já está
-aplicado, então podem entrar em `main` na ordem #39 → #40 → #41 → #42.
+`-fase5`. O #39 entrou em `main` em 02/10 e o #40 passou a ter base `main`.
+Os demais seguem em rascunho com o banco já aplicado; ordem de merge
+#40 → #41 → #42.
 
 ## Fase 6 — o que fazer
 
@@ -102,7 +103,7 @@ composta) ou tabela de junção nova (fase 5: `equipe_membros` entre `perfis` e
 recusa a consulta inteira (PGRST201). A tela de Usuários ficou vazia em
 produção por isso. Correção: nomear a chave (`setores!perfis_setor_id_fkey`,
 `equipes!perfis_equipe_id_fkey`); o teste `src/lib/__tests__/embedsDePerfis.test.ts`
-trava isso a partir de `perfis`. Em `main` a correção vai pelo PR #43.
+trava isso a partir de `perfis`. Em `main` a correção entrou pelo PR #44 (o #43, igual, foi fechado).
 Antes de criar FK ou junção nas fases 6 e 7, procurar os embeds afetados.
 
 ## Pendências soltas
