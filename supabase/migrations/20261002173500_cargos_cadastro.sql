@@ -1,5 +1,8 @@
 -- ============================================================================
 -- O cargo ganha cadastro — fase 2 da reorganizacao empresa > setor > cargo
+-- Parte 1 de 2: a tabela, os dez cargos e o acesso. As FKs sao a parte 2
+-- (20261002173600_cargos_fks.sql), separada para que a espera pela trava de
+-- `perfis` nao segure a criacao da tabela.
 -- ============================================================================
 --
 -- ## Por que
@@ -45,24 +48,21 @@
 --
 -- ## As FKs
 --
--- `perfis.perfil` e `cargos_permissoes.cargo` passam a apontar para
--- `cargos(slug)`. Criadas `NOT VALID` e validadas em seguida: a validacao nao
--- bloqueia escrita em `perfis` enquanto varre a tabela. O passo 3 recusa
--- aplicar, e diz o valor, se existir cargo gravado fora do cadastro.
+-- Ficam na parte 2 (20261002173600_cargos_fks.sql).
 --
 -- `menu_lateral_ordem.cargo` fica de fora: a linha geral e `''` por decisao de
 -- 20260824130000, e `''` nao e cargo. Ganha validacao por gatilho na fase 3.
 --
 -- ## Reaplicavel
 --
--- CREATE IF NOT EXISTS, INSERT ... ON CONFLICT DO UPDATE e FKs criadas so
--- quando ausentes.
+-- CREATE IF NOT EXISTS, INSERT ... ON CONFLICT DO UPDATE e DROP POLICY IF
+-- EXISTS antes de cada CREATE POLICY.
 -- ============================================================================
 
 BEGIN;
 
-SET LOCAL lock_timeout = '15s';
-SET LOCAL statement_timeout = '120s';
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
 
 -- ── 1. A tabela ─────────────────────────────────────────────────────────────
 
@@ -121,64 +121,7 @@ ON CONFLICT (slug) DO UPDATE SET
   lidera_equipe        = EXCLUDED.lidera_equipe,
   atualizado_em        = NOW();
 
--- ── 3. Ninguem pode estar fora do cadastro antes das FKs ────────────────────
-
-DO $antes$
-DECLARE
-  v_perfis TEXT;
-  v_perm   TEXT;
-BEGIN
-  SELECT string_agg(DISTINCT p.perfil, ', ')
-    INTO v_perfis
-    FROM public.perfis p
-   WHERE NOT EXISTS (SELECT 1 FROM public.cargos c WHERE c.slug = p.perfil);
-
-  SELECT string_agg(DISTINCT cp.cargo, ', ')
-    INTO v_perm
-    FROM public.cargos_permissoes cp
-   WHERE NOT EXISTS (SELECT 1 FROM public.cargos c WHERE c.slug = cp.cargo);
-
-  IF v_perfis IS NOT NULL OR v_perm IS NOT NULL THEN
-    RAISE EXCEPTION 'Cargo fora do cadastro. perfis: [%]; cargos_permissoes: [%]',
-      COALESCE(v_perfis, ''), COALESCE(v_perm, '');
-  END IF;
-END
-$antes$;
-
--- ── 4. As FKs ───────────────────────────────────────────────────────────────
---
--- ON UPDATE CASCADE: renomear um slug leva junto quem o usa. ON DELETE
--- RESTRICT: cargo com gente ou com permissao nao se apaga — aposenta-se com
--- `ativo = FALSE`.
-
-DO $fks$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conrelid = 'public.perfis'::REGCLASS AND conname = 'perfis_perfil_fkey'
-  ) THEN
-    ALTER TABLE public.perfis
-      ADD CONSTRAINT perfis_perfil_fkey FOREIGN KEY (perfil)
-      REFERENCES public.cargos (slug) ON UPDATE CASCADE ON DELETE RESTRICT
-      NOT VALID;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conrelid = 'public.cargos_permissoes'::REGCLASS AND conname = 'cargos_permissoes_cargo_fkey'
-  ) THEN
-    ALTER TABLE public.cargos_permissoes
-      ADD CONSTRAINT cargos_permissoes_cargo_fkey FOREIGN KEY (cargo)
-      REFERENCES public.cargos (slug) ON UPDATE CASCADE ON DELETE RESTRICT
-      NOT VALID;
-  END IF;
-END
-$fks$;
-
-ALTER TABLE public.perfis            VALIDATE CONSTRAINT perfis_perfil_fkey;
-ALTER TABLE public.cargos_permissoes VALIDATE CONSTRAINT cargos_permissoes_cargo_fkey;
-
--- ── 5. Acesso ───────────────────────────────────────────────────────────────
+-- ── 3. Acesso ───────────────────────────────────────────────────────────────
 --
 -- Ler: qualquer pessoa autenticada — o menu, os rotulos e o painel precisam do
 -- cadastro no primeiro render, e ele nao tem dado pessoal. Escrever: so
@@ -205,7 +148,7 @@ WITH CHECK (public.fn_user_is_super_admin());
 
 -- Sem DELETE: aposentar e `ativo = FALSE`, e a FK recusaria de qualquer forma.
 
--- ── 6. Prova ────────────────────────────────────────────────────────────────
+-- ── 4. Prova ────────────────────────────────────────────────────────────────
 
 DO $prova$
 BEGIN
@@ -222,13 +165,6 @@ BEGIN
            )) NOT LIKE '%''' || c.slug || '''%'
   ) THEN
     RAISE EXCEPTION 'Ha cargo no cadastro que o CHECK de perfis nao aceita.';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conrelid = 'public.perfis'::REGCLASS AND conname = 'perfis_perfil_fkey' AND convalidated
-  ) THEN
-    RAISE EXCEPTION 'perfis_perfil_fkey ausente ou nao validada.';
   END IF;
 END
 $prova$;
