@@ -1,28 +1,28 @@
 # Reorganização empresa > setor > equipe > cargo — estado e retomada
 
-Atualizado em 02/10/2026, fim da fase 6.
+Atualizado em 02/10/2026: fases 2 a 6 em `main`.
 
 Plano completo (diagnóstico e as 7 fases):
 https://claude.ai/code/artifact/a95081b0-ebf0-4027-b599-67d617ee00bc
 
 ## Como retomar numa sessão nova
 
+As fases 2 a 6 estão em `main` e aplicadas no banco. Só falta a fase 7, que não
+começa antes de novembro/2026.
+
 Peça: «Continuar a reorganização da hierarquia a partir de
-`docs/REORGANIZACAO-HIERARQUIA-ESTADO.md`, na branch
-`claude/project-thread-3vtyr1-fase5`. Próximo passo: fase 6.»
+`docs/REORGANIZACAO-HIERARQUIA-ESTADO.md`, em `main`. Próximo passo: fase 7.»
 
 A sessão nova deve:
 
 1. Ler este arquivo, o `CLAUDE.md` (regra do banco) e o plano acima.
-2. Criar a branch `claude/project-thread-3vtyr1-fase6` a partir de
-   `claude/project-thread-3vtyr1-fase5` e abrir o PR em rascunho com base na
-   fase 5 (pilha de PRs, um por fase).
+2. Criar a branch da fase 7 a partir de `main` e abrir o PR em rascunho.
 3. Não rodar nada no banco sem um «pode» explícito para aquela operação.
 
 ## Regras combinadas (valem para todas as fases)
 
 - Responder em português; citar `arquivo:linha`.
-- Um PR em rascunho por fase, empilhado no anterior.
+- Um PR em rascunho por fase.
 - **Banco é produção.** Nenhuma leitura ou escrita sem autorização explícita
   daquela operação (`CLAUDE.md`). Ao propor: SQL exato, o que altera, quantas
   linhas.
@@ -46,16 +46,14 @@ A sessão nova deve:
 | Fase | O que é | PR | Banco |
 |---|---|---|---|
 | 1 | Medir (só leitura) | — | feito em 02/10, tudo zerado |
-| 2 | Tabela `cargos` + FKs | #39 (base `main`) | aplicada 02/10: cargos=10, fks_validadas=2 |
-| 3 | Listas de cargo viram atributos; `fn_user_tem` e `fn_perfis_escopo_empresa` leem `cargos`; chave `campanha_escopo_todos_setores` | #40 (base fase 2) | aplicada 02/10: as duas checagens true; chave no catálogo |
-| 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41 (base fase 3) | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
-| 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42 (base fase 4) | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
-| 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | #45 (base fase 5) | aplicada 02/10 pelo SQL Editor: setores_nucleo=1, assistentes_no_nucleo=4, variantes bookplay/pagueplay, gatilhos=3 |
+| 2 | Tabela `cargos` + FKs | #39, em `main` | aplicada 02/10: cargos=10, fks_validadas=2 |
+| 3 | Listas de cargo viram atributos; `fn_user_tem` e `fn_perfis_escopo_empresa` leem `cargos`; chave `campanha_escopo_todos_setores` | #40, em `main` | aplicada 02/10: as duas checagens true; chave no catálogo |
+| 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41, em `main` | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
+| 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42, em `main` | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
+| 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | #45, em `main` | aplicada 02/10 pelo SQL Editor: setores_nucleo=1, assistentes_no_nucleo=4, variantes bookplay/pagueplay, gatilhos=3 |
 | 7 | Limpeza | — | pendente, só depois de um mês fechado sem divergência |
 
-Branches: `claude/project-thread-3vtyr1` (fase 2), `-fase3`, `-fase4`,
-`-fase5`. Todos os PRs estão em rascunho e o banco de cada um já está
-aplicado, então podem entrar em `main` na ordem #39 → #40 → #41 → #42 → #45.
+Todos entraram em `main` em 02/10/2026 (merge 710699f0).
 
 ## Fase 6 — feita (código e banco)
 
@@ -106,6 +104,16 @@ Só depois de um mês fechado (outubro/2026) sem divergência entre
   `equipe_operadores_clones` (ou deixá-las como views), o CHECK antigo de
   cargo e as listas mortas do front; atualizar `ARQUITETURA.md`.
 
+## Lição das fases 4 e 5: embeds do PostgREST
+
+FK nova entre duas tabelas que já tinham uma (fase 4: `perfis`→`setores`
+composta) ou tabela de junção nova (fase 5: `equipe_membros` entre `perfis` e
+`equipes`) deixa ambíguo todo embed sem chave (`setores(...)`), e o PostgREST
+recusa a consulta inteira (PGRST201). Correção: nomear a chave
+(`setores!perfis_setor_id_fkey`, `equipes!perfis_equipe_id_fkey`); o teste
+`src/lib/__tests__/embedsDePerfis.test.ts` trava isso a partir de `perfis`.
+Antes de criar FK ou junção na fase 7, procurar os embeds afetados.
+
 ## Pendências soltas
 
 - `fn_permissoes_semear_empresa` ainda tem uma lista de cargos escrita à mão
@@ -116,7 +124,7 @@ Só depois de um mês fechado (outubro/2026) sem divergência entre
   (migration de julho) saiu; a porta única é
   `src/services/equipes/equipeMembros.ts`, que cai nas tabelas antigas se
   `equipe_membros` não responder.
-- Nesta fase as telas de cadastro de equipe ainda gravam nas tabelas antigas;
+- As telas de cadastro de equipe ainda gravam nas tabelas antigas;
   os gatilhos `trg_equipe_membros_espelho` (em `perfis`, `equipe_lideres`,
   `equipe_operadores_clones` e `equipes`) mantêm a nova em espelho. Não
   desligar esses gatilhos antes da fase 7.
