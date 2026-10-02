@@ -1712,7 +1712,7 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
     };
     let perfis = (await supabase
       .from('perfis')
-      .select('id, setor_id, equipes(setor_id)')
+      .select('id, setor_id, equipes!perfis_equipe_id_fkey(setor_id)')
       .eq('empresa_id', empresaId)).data as PerfilSetor[] | null;
 
     // Sem o vínculo com `equipes` (base antiga), cai no setor do cadastro.
@@ -2453,7 +2453,7 @@ async function buscarComposicaoAoVivo(
     .from('perfis')
     // `perfil` entrou por causa de `equipesDaPessoa`: no cargo `lider` o
     // `equipe_id` é resíduo que a tela de Equipes não mostra. Ver `equipeDoLider.ts`.
-    .select('id, perfil, equipe_id, setor_id, situacao, ativo, arquivado, desligado_em, equipes(id, nome, setor_id)')
+    .select('id, perfil, equipe_id, setor_id, situacao, ativo, arquivado, desligado_em, equipes!perfis_equipe_id_fkey(id, nome, setor_id)')
     .eq('empresa_id', empresaId);
 
   // Equipes vêm da tabela, não dos perfis: uma equipe formada SÓ por clones
