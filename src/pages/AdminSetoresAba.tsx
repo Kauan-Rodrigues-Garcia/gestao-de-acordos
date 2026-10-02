@@ -63,6 +63,8 @@ import {
 import { supabase, Setor } from '@/lib/supabase';
 import { useClonesCross } from '@/hooks/useClonesCross';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useAuth } from '@/hooks/useAuth';
+import { salvarConfigNucleo } from '@/services/numeros/numeros.service';
 import { cn } from '@/lib/utils';
 import {
   aplicarOrdemSetores, lerOrdemSetores, salvarOrdemSetores,
@@ -86,6 +88,14 @@ export default function AdminSetoresAba() {
   const podeCriarEditar     = temPermissao('setores_criar_editar');
   const podeAtivarDesativar = temPermissao('setores_ativar_desativar');
   const podeReordenar       = temPermissao('setores_reordenar');
+  /*
+   * Apontar o Núcleo é escalada de privilégio (o setor passa a mandar no
+   * Controle de Números), por isso a chave própria `numeros_configurar`, a
+   * mesma que a policy de `numeros_config` exige. A escolha grava lá, e o
+   * gatilho da fase 6 espelha em `setores.tipo`.
+   */
+  const podeEscolherNucleo  = temPermissao('numeros_configurar');
+  const { perfil } = useAuth();
   /* O atalho só é atalho se houver para onde ir. */
   const podeIrParaUsuarios  = temPermissao('usuarios_sub_usuarios');
 
@@ -98,8 +108,9 @@ export default function AdminSetoresAba() {
   const [editando,   setEditando]   = useState<Setor | null>(null);
   const [form, setForm] = useState<{
     nome: string; descricao: string; ativo: boolean; alternativo: boolean; cidadeId: string | null;
+    nucleo: boolean;
   }>({
-    nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null,
+    nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false,
   });
 
   /*
@@ -260,7 +271,7 @@ export default function AdminSetoresAba() {
   function abrirCriar() {
     if (!podeCriarEditar) return;
     setEditando(null);
-    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null });
+    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false });
     setNovaCidade(null);
     setDialogOpen(true);
   }
@@ -271,6 +282,7 @@ export default function AdminSetoresAba() {
     setForm({
       nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo,
       alternativo: s.alternativo === true, cidadeId: s.cidade_id ?? null,
+      nucleo: s.tipo === 'nucleo',
     });
     setNovaCidade(null);
     setDialogOpen(true);
@@ -307,6 +319,10 @@ export default function AdminSetoresAba() {
           ...cidade,
         }).eq('id', editando.id);
         if (error) throw error;
+        if (form.nucleo && editando.tipo !== 'nucleo') {
+          const r = await salvarConfigNucleo(empresaAtual.id, editando.id, perfil?.id, perfil?.nome);
+          if (!r.ok) throw new Error(`Setor salvo, mas não virou o Núcleo: ${r.erro}`);
+        }
         toast.success('Setor atualizado!');
       } else {
         const { data: inserido, error } = await supabase.from('setores').insert({
@@ -738,6 +754,23 @@ export default function AdminSetoresAba() {
                 onCheckedChange={v => setForm(f => ({ ...f, ativo: v }))}
               />
             </div>
+            {editando && podeEscolherNucleo && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
+                <div className="min-w-0">
+                  <Label className="text-xs font-medium">Núcleo de Inteligência e Gestão</Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    {editando.tipo === 'nucleo'
+                      ? 'Este setor é o Núcleo. Para trocar, marque outro setor.'
+                      : 'O Núcleo só aceita Assistente ADM e cuida do Controle de Números. Há um Núcleo por empresa: marcar este tira a marca do atual.'}
+                  </p>
+                </div>
+                <Switch
+                  checked={form.nucleo}
+                  disabled={editando.tipo === 'nucleo'}
+                  onCheckedChange={v => setForm(f => ({ ...f, nucleo: v }))}
+                />
+              </div>
+            )}
             <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
               <div className="min-w-0">
                 <Label className="text-xs font-medium">Setor alternativo</Label>
