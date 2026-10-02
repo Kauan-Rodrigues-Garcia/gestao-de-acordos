@@ -167,12 +167,15 @@ interface EquipeComSetor { id: string; nome: string; setor_id: string | null }
  * da tela vêm presas ao setor do líder e não dizem onde a pessoa dele foi
  * clonada. Falha aqui não derruba a aba: sem clones, vale só o carimbo, que é
  * o comportamento de antes.
+ *
+ * O vínculo é apontado pela coluna, não pelo nome da FK: na fase 7 a tabela
+ * vira view de `equipe_membros` e as FKs antigas deixam de valer para ela.
  */
 async function lerVinculosDeClone(empresaId: string): Promise<VinculoDeClone[]> {
   const { data, error } = await supabase
     .from('equipe_operadores_clones')
-    .select('operador_id, equipe_id, equipe:equipes!equipe_operadores_clones_equipe_id_fkey(setor_id), '
-      + 'operador:perfis!equipe_operadores_clones_operador_id_fkey(setor_id)')
+    .select('operador_id, equipe_id, equipe:equipes!equipe_id(setor_id), '
+      + 'operador:perfis!operador_id(setor_id)')
     .eq('empresa_id', empresaId);
   if (error) {
     console.warn('[PixAutomatico] clones:', error.message);

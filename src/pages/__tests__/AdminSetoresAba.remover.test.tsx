@@ -23,6 +23,8 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
   useCargoPermissoes: () => ({ temPermissao, permissoes: {}, loading: false }),
 }));
 
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ perfil: null }) }));
+vi.mock('@/services/numeros/numeros.service', () => ({ salvarConfigNucleo: vi.fn() }));
 vi.mock('@/hooks/useClonesCross', () => ({ useClonesCross: () => [] }));
 
 const TABELAS: Record<string, unknown[]> = {

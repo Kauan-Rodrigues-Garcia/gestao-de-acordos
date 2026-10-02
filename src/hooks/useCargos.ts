@@ -3,18 +3,21 @@
  *
  * Começa com o espelho estático de `lib/cargos.ts` e troca pelo do banco quando
  * ele chega. Se a leitura falhar, ou a tabela ainda não existir num ambiente,
- * fica o espelho: o cadastro é o mesmo nos dois lugares (o teste de paridade
- * garante), e uma tela sem rótulo de cargo seria pior que uma tela com o
+ * fica o espelho: uma tela sem rótulo de cargo seria pior que uma tela com o
  * rótulo da última versão do código.
  *
- * As listas de `lib/index.ts` vêm do espelho estático (`CARGOS_DERIVADOS`),
- * igual ao banco pelo teste de paridade. Este hook é para a tela que precisar
- * do cadastro vivo — a de cargos, quando existir criação pelo painel.
+ * O que vem do banco é aplicado nas listas de `lib/index.ts` e companhia
+ * (`aplicarCadastro`), porque desde a tela de Cargos o cadastro muda pelo
+ * painel. O `Layout` monta este hook uma vez; as telas que mostram a lista de
+ * cargos usam `useCadastroDeCargos` para re-renderizar quando ela muda.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
-import { lerComCache } from '@/lib/cacheCurto';
-import { CARGOS, derivar, type Cargo } from '@/lib/cargos';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import {
+  aplicarCadastro, assinarCadastro, cargosAtuais, derivar, versaoDoCadastro,
+  type Cargo,
+} from '@/lib/cargos';
 
 const CHAVE_CACHE = 'cargos:cadastro';
 /** O cadastro muda por decisão de super_admin, não ao longo do dia. */
@@ -29,17 +32,27 @@ async function buscarCargos(): Promise<Cargo[] | null> {
   return data as Cargo[];
 }
 
+/** Lê o cadastro (do cache curto, se houver) e aplica nas listas. */
+export async function carregarCadastroDeCargos(forcar = false): Promise<void> {
+  if (forcar) invalidarCache(CHAVE_CACHE);
+  const lidos = await lerComCache(CHAVE_CACHE, VALIDADE_MS, buscarCargos, { guardarSe: v => v !== null });
+  if (lidos) aplicarCadastro(lidos);
+}
+
+/** O cadastro em uso, re-renderizando quando ele muda. */
+export function useCadastroDeCargos(): readonly Cargo[] {
+  useSyncExternalStore(assinarCadastro, versaoDoCadastro, versaoDoCadastro);
+  return cargosAtuais();
+}
+
 export function useCargos() {
-  const [cargos, setCargos] = useState<readonly Cargo[]>(CARGOS);
+  const cargos = useCadastroDeCargos();
 
   useEffect(() => {
-    let vivo = true;
-    lerComCache(CHAVE_CACHE, VALIDADE_MS, buscarCargos, { guardarSe: v => v !== null })
-      .then(lidos => { if (vivo && lidos) setCargos(lidos); })
-      .catch(() => { /* fica o espelho estático */ });
-    return () => { vivo = false; };
+    carregarCadastroDeCargos().catch(() => { /* fica o espelho estático */ });
   }, []);
 
+  const recarregar = useCallback(() => carregarCadastroDeCargos(true), []);
   const derivados = useMemo(() => derivar(cargos), [cargos]);
-  return { cargos, derivados };
+  return { cargos, derivados, recarregar };
 }

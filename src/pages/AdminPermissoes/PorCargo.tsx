@@ -28,6 +28,7 @@ import { supabase } from '@/lib/supabase';
 import { PERFIL_LABELS } from '@/lib/index';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useCadastroDeCargos } from '@/hooks/useCargos';
 import {
   CARGOS_CONFIGURAVEIS, CARGOS_ACESSO_TOTAL,
   catalogoDoTenant, gruposDoTenant, permissoesPadraoDoCargo,
@@ -37,11 +38,17 @@ import { cn } from '@/lib/utils';
 import { BlocoAba } from './BlocoAba';
 import { useRascunho } from './useRascunho';
 
-const TODOS_OS_CARGOS = [...CARGOS_CONFIGURAVEIS, ...CARGOS_ACESSO_TOTAL] as const;
-
 export function PorCargo() {
   const { empresa, tenantSlug } = useEmpresa();
   const { todasPermissoes, refresh } = useCargoPermissoes();
+  // As listas mudam quando o cadastro de cargos chega do banco (cargo novo
+  // criado em Configurações > Cargos aparece aqui sem deploy).
+  const cadastro = useCadastroDeCargos();
+  const TODOS_OS_CARGOS = useMemo(
+    () => [...CARGOS_CONFIGURAVEIS, ...CARGOS_ACESSO_TOTAL],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as listas mudam com o cadastro
+    [cadastro],
+  );
 
   const [cargo, setCargo] = useState<string>('operador');
   const [salvando, setSalvando] = useState(false);

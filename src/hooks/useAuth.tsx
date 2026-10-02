@@ -48,6 +48,8 @@ import { registrarLog, registrarLoginRecusado } from '@/services/logs.service';
 import { iguaisProfundo } from '@/lib/dadosVivos';
 import { limparCacheCurto } from '@/lib/cacheCurto';
 import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
+import { definirRegraDaSessao, ehRegraDoSetor } from '@/lib/regraDoSetor';
+import { produtoDaEmpresa } from '@/lib/produto';
 
 /**
  * De quanto em quanto tempo a volta à aba pode reler o perfil da MESMA pessoa.
@@ -551,6 +553,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((e: unknown) => console.warn('[useAuth] equipes lideradas:', e instanceof Error ? e.message : e));
     return () => { ativo = false; };
   }, [perfil]);
+
+  /*
+   * A regra de negócio do setor da pessoa (Nosso produto ou Cofen) decide o
+   * que `isPaguePlay` responde para a empresa dela — ver `lib/regraDoSetor.ts`.
+   * Sem setor, ou leitura que falha (base sem a coluna), não registra nada e o
+   * app segue pela empresa, como antes. Só na cobrança: Comercial e RH não têm
+   * regra de setor (kauan, 02/10/2026).
+   */
+  const ehCobranca = produtoDaEmpresa(empresa) === 'cobranca';
+  useEffect(() => {
+    const setorId = ehCobranca ? perfil?.setor_id ?? null : null;
+    const slug = empresa?.slug ?? null;
+    if (!setorId || !slug) { definirRegraDaSessao(null); return; }
+    let ativo = true;
+    void supabase.from('setores').select('regra').eq('id', setorId).maybeSingle()
+      .then(({ data, error }) => {
+        if (!ativo) return;
+        const regra = (data as { regra?: unknown } | null)?.regra;
+        if (error || !ehRegraDoSetor(regra)) {
+          if (error) console.warn('[useAuth] regra do setor:', error.message);
+          definirRegraDaSessao(null);
+          return;
+        }
+        definirRegraDaSessao({ slug, regra });
+      });
+    return () => { ativo = false; };
+  }, [perfil?.setor_id, empresa?.slug, ehCobranca]);
 
   const value: AuthContextType = {
     user, session, perfil, equipesLideradas, empresa, loading, perfilLoading, authError,

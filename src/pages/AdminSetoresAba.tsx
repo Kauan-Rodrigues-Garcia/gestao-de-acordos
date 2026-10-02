@@ -40,13 +40,14 @@
  * é `fn_setor_excluir`, que refaz a conta com a linha travada: a tela avisa,
  * o banco decide. Mesma chave de criar e editar (`setores_criar_editar`).
  */
+import { ROTULO_REGRA, ehRegraDoSetor, type RegraDoSetor } from '@/lib/regraDoSetor';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Building2, Plus, GripVertical, Edit, Save, X, Power, Users, ArrowRight,
-  Trash2, Loader2, AlertTriangle,
+  Trash2, Loader2, AlertTriangle, MapPin,
 } from 'lucide-react';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
@@ -55,11 +56,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { supabase, Setor } from '@/lib/supabase';
 import { useClonesCross } from '@/hooks/useClonesCross';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa } from '@/lib/produto';
+import { useAuth } from '@/hooks/useAuth';
+import { salvarConfigNucleo } from '@/services/numeros/numeros.service';
 import { cn } from '@/lib/utils';
 import {
   aplicarOrdemSetores, lerOrdemSetores, salvarOrdemSetores,
@@ -75,7 +82,7 @@ let draggedSetorId: string | null = null;
 // ─── Componente ─────────────────────────────────────────────────────────────
 
 export default function AdminSetoresAba() {
-  const { empresa: empresaAtual } = useEmpresa();
+  const { empresa: empresaAtual, tenantSlug } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const [, setSearchParams] = useSearchParams();
 
@@ -83,6 +90,24 @@ export default function AdminSetoresAba() {
   const podeCriarEditar     = temPermissao('setores_criar_editar');
   const podeAtivarDesativar = temPermissao('setores_ativar_desativar');
   const podeReordenar       = temPermissao('setores_reordenar');
+  /*
+   * Apontar o Núcleo é escalada de privilégio (o setor passa a mandar no
+   * Controle de Números), por isso a chave própria `numeros_configurar`, a
+   * mesma que a policy de `numeros_config` exige. A escolha grava lá, e o
+   * gatilho da fase 6 espelha em `setores.tipo`.
+   */
+  const podeEscolherNucleo  = temPermissao('numeros_configurar');
+  const { perfil } = useAuth();
+  /*
+   * A cidade do setor e o cadastro de cidades são do super admin, não do RH
+   * nem de quem só edita setor. O banco cobra o mesmo (20261003140000).
+   */
+  const podeEscolherCidade  = perfil?.perfil === 'super_admin';
+  /*
+   * Cidade e regra de negócio do setor são só da cobrança (kauan, 02/10/2026):
+   * no Comercial e no RH a tela de setores fica como era.
+   */
+  const ehCobranca = produtoDaEmpresa(empresaAtual, tenantSlug) === 'cobranca';
   /* O atalho só é atalho se houver para onde ir. */
   const podeIrParaUsuarios  = temPermissao('usuarios_sub_usuarios');
 
@@ -93,9 +118,20 @@ export default function AdminSetoresAba() {
   // Dialog criar/editar
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando,   setEditando]   = useState<Setor | null>(null);
-  const [form, setForm] = useState<{ nome: string; descricao: string; ativo: boolean; alternativo: boolean }>({
-    nome: '', descricao: '', ativo: true, alternativo: false,
+  const [form, setForm] = useState<{
+    nome: string; descricao: string; ativo: boolean; alternativo: boolean; cidadeId: string | null;
+    nucleo: boolean; regra: RegraDoSetor | null;
+  }>({
+    nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false, regra: null,
   });
+
+  /*
+   * As cidades (`rh_celulas`). O setor aponta para uma desde 20261003130000, e
+   * a cidade que o RH usa segue a do setor por gatilho. Antes a cidade só era
+   * escolhida dentro do RH, e só para os setores ligados a ele.
+   */
+  const [cidades, setCidades] = useState<{ id: string; nome: string }[]>([]);
+  const [novaCidade, setNovaCidade] = useState<string | null>(null);
 
   /*
    * Quantas pessoas há em cada setor.
@@ -167,9 +203,28 @@ export default function AdminSetoresAba() {
     setEquipesPorSetor(conta);
   }, [empresaAtual?.id]);
 
+  const fetchCidades = useCallback(async () => {
+    if (!empresaAtual?.id) { setCidades([]); return; }
+    const { data, error } = await supabase
+      .from('rh_celulas').select('id, nome')
+      .eq('empresa_id', empresaAtual.id).eq('ativo', true)
+      .order('ordem').order('nome');
+    if (error) {
+      console.warn('[AdminSetoresAba] fetchCidades error:', error.message);
+      setCidades([]);
+      return;
+    }
+    setCidades((data as { id: string; nome: string }[]) ?? []);
+  }, [empresaAtual?.id]);
+
+  const nomeDaCidade = useMemo(
+    () => new Map(cidades.map(c => [c.id, c.nome])),
+    [cidades],
+  );
+
   useEffect(() => {
-    void fetchSetores(); void fetchVinculos(); void fetchEquipes();
-  }, [fetchSetores, fetchVinculos, fetchEquipes]);
+    void fetchSetores(); void fetchVinculos(); void fetchEquipes(); void fetchCidades();
+  }, [fetchSetores, fetchVinculos, fetchEquipes, fetchCidades]);
 
   /**
    * Pessoas por setor — membros mais os clones de outro setor.
@@ -228,14 +283,21 @@ export default function AdminSetoresAba() {
   function abrirCriar() {
     if (!podeCriarEditar) return;
     setEditando(null);
-    setForm({ nome: '', descricao: '', ativo: true, alternativo: false });
+    setForm({ nome: '', descricao: '', ativo: true, alternativo: false, cidadeId: null, nucleo: false, regra: 'nosso_produto' });
+    setNovaCidade(null);
     setDialogOpen(true);
   }
 
   function abrirEditar(s: Setor) {
     if (!podeCriarEditar) return;
     setEditando(s);
-    setForm({ nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo, alternativo: s.alternativo === true });
+    setForm({
+      nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo,
+      alternativo: s.alternativo === true, cidadeId: s.cidade_id ?? null,
+      nucleo: s.tipo === 'nucleo',
+      regra: ehRegraDoSetor(s.regra) ? s.regra : null,
+    });
+    setNovaCidade(null);
     setDialogOpen(true);
   }
 
@@ -244,14 +306,39 @@ export default function AdminSetoresAba() {
     if (!empresaAtual?.id)  { toast.error('Empresa não identificada'); return; }
     setSaving(true);
     try {
+      /*
+       * Cidade nova digitada no próprio diálogo: cadastra antes do setor. A
+       * coluna `cidade_id` só vai no payload quando muda, para a tela continuar
+       * salvando num banco ainda sem a migration 20261003130000.
+       */
+      let cidadeId = podeEscolherCidade ? form.cidadeId : (editando?.cidade_id ?? null);
+      if (ehCobranca && podeEscolherCidade && novaCidade !== null && novaCidade.trim()) {
+        const { data: criada, error: erroCidade } = await supabase.from('rh_celulas').insert({
+          empresa_id: empresaAtual.id, nome: novaCidade.trim(), ordem: cidades.length + 1,
+        }).select('id').single();
+        if (erroCidade) throw new Error(`Não foi possível cadastrar a cidade: ${erroCidade.message}`);
+        cidadeId = criada.id;
+        void fetchCidades();
+      }
+      const mudouCidade = ehCobranca && cidadeId !== (editando?.cidade_id ?? null);
+      const cidade = mudouCidade ? { cidade_id: cidadeId } : {};
+      /* A regra só é escolhida na criação, e só pelo super admin; depois não
+         muda (20261003150000). Sem escolha, o banco grava Nosso produto. */
+      const regra = ehCobranca && !editando && podeEscolherCidade && form.regra ? { regra: form.regra } : {};
+
       if (editando) {
         const { error } = await supabase.from('setores').update({
           nome: form.nome.trim(),
           descricao: form.descricao.trim() || null,
           ativo: form.ativo,
           alternativo: form.alternativo,
+          ...cidade,
         }).eq('id', editando.id);
         if (error) throw error;
+        if (form.nucleo && editando.tipo !== 'nucleo') {
+          const r = await salvarConfigNucleo(empresaAtual.id, editando.id, perfil?.id, perfil?.nome);
+          if (!r.ok) throw new Error(`Setor salvo, mas não virou o Núcleo: ${r.erro}`);
+        }
         toast.success('Setor atualizado!');
       } else {
         const { data: inserido, error } = await supabase.from('setores').insert({
@@ -260,6 +347,8 @@ export default function AdminSetoresAba() {
           ativo: form.ativo,
           alternativo: form.alternativo,
           empresa_id: empresaAtual.id,
+          ...cidade,
+          ...regra,
         }).select('id').single();
         if (error) throw error;
         // Acrescenta ao fim da ordem persistida.
@@ -448,12 +537,31 @@ export default function AdminSetoresAba() {
                           Alternativo
                         </span>
                       )}
+                      {s.tipo === 'nucleo' && (
+                        <span
+                          className="text-[10px] uppercase tracking-wide font-semibold bg-red-500/10 text-red-600 border border-red-500/30 rounded-full px-2 py-0.5 shrink-0"
+                          title="Setor do Núcleo: só aceita o cargo Assistente ADM"
+                        >
+                          Núcleo
+                        </span>
+                      )}
                       {!s.ativo && (
                         <span className="text-[10px] uppercase tracking-wide font-semibold bg-muted text-muted-foreground border border-border rounded-full px-2 py-0.5 shrink-0">
                           Inativo
                         </span>
                       )}
                     </div>
+                    {ehCobranca && <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      {s.cidade_id
+                        ? (nomeDaCidade.get(s.cidade_id) ?? 'Cidade')
+                        : <span className="italic">Sem cidade</span>}
+                      {ehRegraDoSetor(s.regra) && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wide font-semibold rounded-full border border-border px-2 py-0.5">
+                          {ROTULO_REGRA[s.regra]}
+                        </span>
+                      )}
+                    </p>}
                     {s.descricao && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{s.descricao}</p>
                     )}
@@ -627,6 +735,72 @@ export default function AdminSetoresAba() {
                 className="h-9 text-sm"
               />
             </div>
+            {ehCobranca && <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Cidade</Label>
+              {!podeEscolherCidade ? (
+                <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/30 text-sm text-muted-foreground">
+                  {form.cidadeId ? (nomeDaCidade.get(form.cidadeId) ?? 'Cidade') : 'Sem cidade'}
+                </p>
+              ) : novaCidade === null ? (
+                <div className="flex gap-2">
+                  <Select
+                    value={form.cidadeId ?? '__nenhuma__'}
+                    onValueChange={v => setForm(f => ({ ...f, cidadeId: v === '__nenhuma__' ? null : v }))}
+                  >
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__nenhuma__">Sem cidade</SelectItem>
+                      {cidades.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="outline" size="sm" className="h-9 shrink-0 gap-1" onClick={() => setNovaCidade('')}>
+                    <Plus className="w-3.5 h-3.5" /> Nova
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus value={novaCidade} placeholder="Nome da cidade"
+                    onChange={e => setNovaCidade(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <Button type="button" variant="ghost" size="sm" className="h-9 shrink-0" onClick={() => setNovaCidade(null)}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {podeEscolherCidade
+                  ? 'É a mesma cidade que o RH usa para este setor: mudar aqui muda lá.'
+                  : 'Só o super admin define a cidade do setor.'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Regra de negócio</Label>
+              {podeEscolherCidade && !editando ? (
+                <Select
+                  value={form.regra ?? 'nosso_produto'}
+                  onValueChange={v => setForm(f => ({ ...f, regra: ehRegraDoSetor(v) ? v : f.regra }))}
+                >
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nosso_produto">{ROTULO_REGRA.nosso_produto}</SelectItem>
+                    <SelectItem value="cofen">{ROTULO_REGRA.cofen}</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/30 text-sm text-muted-foreground">
+                  {ROTULO_REGRA[form.regra ?? 'nosso_produto']}
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {editando
+                  ? 'Escolhida na criação do setor. Não muda depois.'
+                  : 'Muda abas, relatórios e tipos de acordo. Não depende da cidade e não muda depois de criado.'}
+              </p>
+            </div>
+            </>}
             <div className="flex items-center justify-between pt-1">
               <Label className="text-xs font-medium">Setor ativo</Label>
               <Switch
@@ -634,6 +808,23 @@ export default function AdminSetoresAba() {
                 onCheckedChange={v => setForm(f => ({ ...f, ativo: v }))}
               />
             </div>
+            {editando && podeEscolherNucleo && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
+                <div className="min-w-0">
+                  <Label className="text-xs font-medium">Núcleo de Inteligência e Gestão</Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    {editando.tipo === 'nucleo'
+                      ? 'Este setor é o Núcleo. Para trocar, marque outro setor.'
+                      : 'O Núcleo só aceita Assistente ADM e cuida do Controle de Números. Há um Núcleo por empresa: marcar este tira a marca do atual.'}
+                  </p>
+                </div>
+                <Switch
+                  checked={form.nucleo}
+                  disabled={editando.tipo === 'nucleo'}
+                  onCheckedChange={v => setForm(f => ({ ...f, nucleo: v }))}
+                />
+              </div>
+            )}
             <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
               <div className="min-w-0">
                 <Label className="text-xs font-medium">Setor alternativo</Label>

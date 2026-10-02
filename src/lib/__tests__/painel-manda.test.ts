@@ -147,6 +147,10 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a aba Multiempresa só existe para super_admin — quem decide são as RPCs e o trigger em perfis.',
   },
+  'pages/AdminSetoresAba.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'a cidade do setor é do super_admin (decisão do kauan em 02/10/2026) — quem decide é o gatilho de 20261003140000.',
+  },
   /*
    * Era `pages/AdminSetoresAba.tsx`. A transferência saiu daquela aba em
    * 06/09/2026 — junto com a lista de pessoas que duplicava a aba Usuários — e

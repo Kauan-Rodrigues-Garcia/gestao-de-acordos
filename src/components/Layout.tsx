@@ -22,7 +22,7 @@
  * ```
  */
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
@@ -32,6 +32,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useCargos } from '@/hooks/useCargos';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -76,6 +77,9 @@ import { PainelSobDemanda } from './PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
+import { useMarca } from '@/hooks/useMarca';
+import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
+import { TemaDaMarca } from '@/components/TemaDaMarca';
 
 /*
  * Painéis que só aparecem com um clique — fora do pacote de entrada.
@@ -121,6 +125,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
   const tenant = useTenant();
+  /* Nome e cor pela cidade do setor da pessoa (Birigui BookPlay, Marília PaguePlay). */
+  const marca = useMarca();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -249,16 +255,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
+  // Regra de negócio: a do setor da pessoa quando há uma (ver `lib/regraDoSetor.ts`).
+  const regraDoSetor = useSyncExternalStore(ouvirRegraDaSessao, regraDaSessaoAtual);
+  const isPP = regraDoSetor ? regraDoSetor === 'cofen' : (tenant.isPaguePlay || empresa?.slug === 'pagueplay');
+  // Nome e logo: pela cidade do setor (`useMarca`); sem ela, como a regra.
+  const marcaPaguePlay = marca ? marca.nome === 'PaguePlay' : isPP;
   const userRole = perfil?.perfil ?? 'operador';
   // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
   // `Halloween/preferencia.ts`. Até a validação, só o super_admin.
   const { pathname } = useLocation();
   const hw = useHalloween();
-  const cenaHalloween = useMemo(() => cenaDaRota(pathname, isPP), [pathname, isPP]);
+  const cenaHalloween = useMemo(() => cenaDaRota(pathname, marcaPaguePlay), [pathname, marcaPaguePlay]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
+  // O cadastro de cargos editado pelo painel: lido uma vez e aplicado nas
+  // listas de cargo (`lib/cargos.ts`, «O cadastro vivo»).
+  useCargos();
   const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
@@ -505,7 +518,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             easterEgg.estagio === 4 && 'creators-logo-forte',
           )}
         >
-          {isPP
+          {marcaPaguePlay
             ? <img src="/logo-pagueplay.png" alt="Logo PaguePLAY" className="w-8 h-8 object-contain" />
             : <img src="/logo-bookplay.png" alt="Logo BookPlay" className="w-8 h-8 object-contain" />
           }
@@ -515,7 +528,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
               {halloween
                 ? <MarcaHalloween nome={branding.appName} />
-                : <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>}
+                : (
+                  <div>
+                    <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
+                    {marca && <p className="text-[11px] text-sidebar-foreground/70 leading-none mt-1">{marca.nome}</p>}
+                  </div>
+                )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -699,6 +717,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <TemaHalloweenContext.Provider value={halloween}>
+    <TemaDaMarca marca={marca} />
     <div className="flex h-screen bg-background overflow-hidden">
       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
           fluxo e acima de tudo: aparecer e sumir não move um pixel do conteúdo,

@@ -51,6 +51,8 @@ import {
 } from '@/components/ui/select';
 import { MIN_SENHA } from '@/services/senha.service';
 import { PERFIL_LABELS, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
+import type { Cargo } from '@/lib/cargos';
+import { useCadastroDeCargos } from '@/hooks/useCargos';
 import { pareceLoginDeIa } from '@/lib/vendas';
 import {
   CARGO_DO_NUCLEO, aoTrocarCargo, aoTrocarSetor, cargoCabeNoSetor, caminhoParaAssistenteAdm,
@@ -203,18 +205,18 @@ const SEM_PERMISSAO = 'Seu cargo não tem permissão para alterar este campo.';
  * RECORTADA: o Assistente ADM só cabe no Núcleo, e o Núcleo só aceita ele. Ver
  * `opcoesDeCargo` e `cargoDoNucleo.ts`.
  */
-const OPCOES_DE_CARGO: readonly { valor: PerfilUsuario; rotulo: string; soSuperAdmin?: boolean }[] = [
-  { valor: 'operador',       rotulo: 'Operador' },
-  { valor: 'lider',          rotulo: 'Líder' },
-  { valor: 'elite',          rotulo: 'Elite' },
-  { valor: 'gerencia',       rotulo: 'Gerência' },
-  { valor: 'diretoria',      rotulo: 'Diretoria' },
-  { valor: 'ouvidoria',      rotulo: 'Ouvidoria' },
-  { valor: 'rh',             rotulo: 'RH' },
-  { valor: 'assistente_adm', rotulo: 'Assistente ADM' },
-  { valor: 'administrador',  rotulo: 'Administrador' },
-  { valor: 'super_admin',    rotulo: 'Super Admin', soSuperAdmin: true },
-];
+/**
+ * Os cargos oferecidos saem do cadastro (Configurações > Cargos): os ativos, na
+ * ordem do cadastro. Super Admin só aparece para quem já é.
+ */
+function opcoesDoCadastro(
+  cargos: readonly Cargo[],
+): { valor: PerfilUsuario; rotulo: string; soSuperAdmin?: boolean; ativo: boolean }[] {
+  return cargos.map(c => ({
+    valor: c.slug, rotulo: c.nome, ativo: c.ativo,
+    ...(c.slug === 'super_admin' ? { soSuperAdmin: true } : {}),
+  }));
+}
 
 export function DialogUsuario({
   aberto, onFechar, editando, form, setForm,
@@ -255,17 +257,19 @@ export function DialogUsuario({
   const assistentePorTransferencia =
     !criando && !setorVazioParaPreencher && caminhoAoNucleo === 'transferir';
 
+  const cadastro = useCadastroDeCargos();
   const opcoesDeCargo = useMemo(() => {
     const setorEmAberto = criando || setorVazioParaPreencher;
     const setorAtual = editando?.setor_id ?? null;
-    return OPCOES_DE_CARGO.filter(o => {
+    return opcoesDoCadastro(cadastro).filter(o => {
       if (o.soSuperAdmin && !isSuperAdmin) return false;
       if (o.valor === form.perfil) return true;
+      if (!o.ativo) return false;
       if (setorEmAberto) return o.valor !== CARGO_DO_NUCLEO || setorNucleoId !== null;
       if (o.valor === CARGO_DO_NUCLEO) return caminhoAoNucleo !== 'nao';
       return cargoCabeNoSetor(o.valor, ehEscopoEmpresa(o.valor) ? null : setorAtual, setorNucleoId);
     });
-  }, [criando, setorVazioParaPreencher, editando?.setor_id, isSuperAdmin, form.perfil, setorNucleoId, caminhoAoNucleo]);
+  }, [cadastro, criando, setorVazioParaPreencher, editando?.setor_id, isSuperAdmin, form.perfil, setorNucleoId, caminhoAoNucleo]);
 
   /** Trocar cargo ou setor mantém os dois coerentes — ver `aoTrocarCargo`. */
   const trocarCargo = (cargo: PerfilUsuario) => {

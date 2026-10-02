@@ -645,7 +645,7 @@ export default function App() {
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
-              <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=permissoes'} replace />} />
+              <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=cargos'} replace />} />
 
               {/*
                 Creators Lab — a área escondida.

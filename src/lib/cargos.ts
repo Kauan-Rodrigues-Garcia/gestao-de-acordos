@@ -92,3 +92,64 @@ export const derivar = (cargos: readonly Cargo[] = CARGOS) => ({
  * listas de cargo desde a fase 3 — nenhuma delas é mais escrita à mão.
  */
 export const CARGOS_DERIVADOS = derivar();
+
+/*
+ * ── O cadastro vivo ─────────────────────────────────────────────────────────
+ *
+ * Desde a tela de Cargos (Configurações > Cargos) o cadastro muda pelo painel,
+ * sem deploy. As listas acima são exportadas como valores (`PERFIS_ADMIN`,
+ * `PERFIL_LABELS`...) e lidas fora do React, então em vez de trocá-las por
+ * funções o cadastro lido do banco é aplicado DENTRO dos mesmos objetos:
+ * quem guardou a referência passa a ver o conteúdo novo. O espelho estático
+ * continua valendo até a leitura chegar, e se ela falhar.
+ */
+
+let cadastroAtual: readonly Cargo[] = CARGOS;
+let versaoCadastro = 0;
+const ouvintes = new Set<() => void>();
+
+/** Troca o conteúdo das listas derivadas pelo cadastro lido do banco. */
+export function aplicarCadastro(lidos: readonly Cargo[]): void {
+  if (!lidos.length) return;
+  cadastroAtual = [...lidos].sort((a, b) => a.ordem - b.ordem);
+  const novo = derivar(cadastroAtual);
+  const alvo = CARGOS_DERIVADOS as Record<string, unknown>;
+  for (const [chave, valor] of Object.entries(novo)) {
+    const atual = alvo[chave];
+    if (Array.isArray(atual) && Array.isArray(valor)) {
+      atual.splice(0, atual.length, ...valor);
+    } else if (atual && typeof atual === 'object') {
+      const registro = atual as Record<string, unknown>;
+      for (const k of Object.keys(registro)) delete registro[k];
+      Object.assign(registro, valor);
+    }
+  }
+  versaoCadastro += 1;
+  ouvintes.forEach(fn => fn());
+}
+
+/** O cadastro em uso agora: o do banco, ou o espelho estático. */
+export function cargosAtuais(): readonly Cargo[] {
+  return cadastroAtual;
+}
+
+export function assinarCadastro(fn: () => void): () => void {
+  ouvintes.add(fn);
+  return () => { ouvintes.delete(fn); };
+}
+
+export function versaoDoCadastro(): number {
+  return versaoCadastro;
+}
+
+/**
+ * O slug de um cargo novo, a partir do nome: «Supervisor de Qualidade» vira
+ * `supervisor_de_qualidade`. O banco aceita só `^[a-z][a-z_]*$`.
+ */
+export function slugDoNome(nome: string): string {
+  return nome
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}

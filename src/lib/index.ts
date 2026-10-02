@@ -2,6 +2,7 @@ import { getHoPercentual, repassePercentuais } from './hoPercentual';
 import { CARGOS_DERIVADOS } from './cargos';
 import type { PerfilUsuario } from './supabase';
 import { varianteDoSlug } from './variante';
+import { regraDaSessao } from './regraDoSetor';
 export const ROUTE_PATHS = {
   LOGIN: '/login',
   REGISTRO: '/registro',
@@ -453,8 +454,14 @@ export const TIPO_LABELS_PAGUEPLAY: Record<string, string> = {
   pix: 'Boleto / PIX',
 };
 
-/** A empresa é a PaguePlay? Lê `empresas.variante` (ver `lib/variante.ts`). */
+/**
+ * Segue a regra Cofen (o jeito PaguePlay)? Para a empresa da pessoa logada,
+ * responde pela regra do setor dela (`lib/regraDoSetor.ts`); sem setor, ou
+ * para outra empresa, pela `empresas.variante` (`lib/variante.ts`).
+ */
 export function isPaguePlay(slug: string): boolean {
+  const regra = regraDaSessao(slug);
+  if (regra) return regra === 'cofen';
   return varianteDoSlug(slug) === 'pagueplay';
 }
 

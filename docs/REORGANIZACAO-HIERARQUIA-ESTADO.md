@@ -39,7 +39,8 @@ A sessão nova deve:
 - Cargos são globais (iguais para todas as empresas); permissão segue por
   empresa em `cargos_permissoes`.
 - Não mexer em velocidade da suíte de testes (pedido do Cleber).
-- Desejo futuro, fora do plano: setor com mais de uma cidade (multirregião).
+- Setor tem UMA cidade (`setores.cidade_id`, #48). Mais de uma (multirregião)
+  depende de o RH saber em qual cidade cada pessoa do setor entra.
 
 ## Situação por fase
 
@@ -51,6 +52,8 @@ A sessão nova deve:
 | 4 | `equipes.setor_id/empresa_id` NOT NULL, FKs compostas empresa>setor>equipe | #41, em `main` | aplicada 02/10: fks_validadas=2, equipes_aceitam_nulo=0 |
 | 5 | `equipe_membros` + espelho por gatilho; 5 funções de equipe leem dela | #42, em `main` | aplicada 02/10: membros=311, lideres=46, clones=51, funcoes=5, gatilhos=4 |
 | 6 | `setores.tipo` + regra única do Núcleo lida de `cargos`; `empresas.variante` e `isPaguePlay` lendo dela | #45, em `main` | aplicada 02/10 pelo SQL Editor: setores_nucleo=1, assistentes_no_nucleo=4, variantes bookplay/pagueplay, gatilhos=3 |
+| — | Tela de Cargos (Configurações > Cargos) + `fn_cargos_guarda`, sai o CHECK antigo de `perfis.perfil` | #48 | aplicada 02/10: check_antigo=0, gatilhos=2, cargos=10 |
+| — | Setor com cidade: `setores.cidade_id` → `rh_celulas`, espelho com `rh_config_setores` | #48 | aplicada 02/10: setores_com_cidade=12, sem_cidade=6, cidades Birigui e Marília, gatilhos=2 |
 | 7 | Limpeza | — | pendente, só depois de um mês fechado sem divergência |
 
 Fases 2 a 6 estão em `main` desde 02/10 (#39, depois #40, #41, #42 e #45
@@ -91,10 +94,35 @@ ler a variante; os 439 usos ficam como estão, só a função muda.»
 - Front: `cargoDoNucleo.ts` (`CARGO_DO_NUCLEO`, `CARGOS_FORA_DO_NUCLEO`) passa a
   ler o atributo.
 
+## Cidade do setor é do super admin (20261003140000, a aplicar)
+
+Pedido do kauan em 02/10: a cidade do setor e o cadastro de cidades são
+configuração do super admin (Configurações > Setores), não do RH. A tela do RH
+só mostra a cidade e continua ligando setor e escolhendo premiação/comissão. O
+banco cobra o mesmo por policy (`rh_celulas`) e gatilhos (`setores`,
+`rh_config_setores`).
+
 ## Fase 7 — limpeza (não antes de novembro/2026)
 
 Só depois de um mês fechado (outubro/2026) sem divergência entre
 `equipe_membros` e as tabelas antigas.
+
+**Script pronto e testado num Postgres local (02/10), não aplicado:**
+`supabase/migrations/20261101120000_fase7_equipes_viram_views.sql`. Na pasta
+do projeto: `fase7/conferir_fase7.sql` (só leitura, tem de dar tudo 0) e
+`fase7/aplicar_fase7.sql` (o mesmo script com registro e conferência).
+
+O que ele faz: `equipe_lideres` e `equipe_operadores_clones` viram views de
+`equipe_membros` com as mesmas colunas e os mesmos `id`; gravar nelas grava em
+`equipe_membros` (gatilho INSTEAD OF, com `RETURNING`); as tabelas viram
+`*_legado`, sem gatilho e sem acesso do app, até a fase 8. As ~50 funções e
+as telas continuam iguais. Vínculo duplicado devolve zero linhas em vez de
+erro, para o `ON CONFLICT DO NOTHING` de `fn_transferencia_desfazer`
+continuar valendo. O embed do Pix automático já aponta pela coluna
+(`equipes!equipe_id`), não pelo nome da FK antiga.
+
+Ficam para depois do script: `perfis.equipe_id` (fonte do papel `membro`),
+`fn_composicao_mes_snapshot` (lê pelas views, sem mudança).
 
 - Conferir a divergência (leitura, pedir autorização): comparar
   `equipe_membros` com `perfis.equipe_id` (sem cargo `lider`),
