@@ -8,6 +8,9 @@
  * aparece, e a linha do RH grava a mesma cidade do setor. Setor sem cidade não
  * entra no RH até o super admin definir.
  *
+ * Isso é só da cobrança (kauan, 02/10/2026). No Comercial e no RH a tela é
+ * como era: o RH cadastra cidade e escolhe a cidade de cada setor aqui.
+ *
  * ## É esta tela que substitui o `if (setor === 'Play 4')`
  *
  * O pedido proíbe espalhar condicional por nome de setor pelo código, e a saída
@@ -24,7 +27,11 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -36,7 +43,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { TIPO_REMUNERACAO_LABEL, type TipoRemuneracao } from '@/services/rh/rhEstados';
 import {
-  listarCelulas, listarConfigSetores, salvarConfigSetor,
+  listarCelulas, listarConfigSetores, salvarCelula, salvarConfigSetor,
   type RhCelulaRow, type RhConfigSetorRow,
 } from '@/services/rh/rhGestao.service';
 
@@ -59,6 +66,10 @@ export function PainelConfiguracao({
   const [setores, setSetores] = useState<SetorSimples[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
+  const [novaCelula, setNovaCelula] = useState('');
+  const { empresa, tenantSlug } = useEmpresa();
+  /* Fora da cobrança a cidade continua sendo escolhida aqui, pelo RH. */
+  const cidadeLivre = produtoDaEmpresa(empresa, tenantSlug) !== 'cobranca';
 
   const carregar = useCallback(async () => {
     if (!empresaId) return;
@@ -84,13 +95,19 @@ export function PainelConfiguracao({
 
   const nomeDaCidade = (id: string | null) => celulas.find(c => c.id === id)?.nome ?? null;
 
-  async function gravar(setor: SetorSimples, patch: { tipo?: TipoRemuneracao; ativo?: boolean }) {
+  async function gravar(setor: SetorSimples, patch: {
+    celulaId?: string; tipo?: TipoRemuneracao; ativo?: boolean;
+  }) {
     const setorId = setor.id;
     const atual = configDe(setorId);
     // Desligar um setor que perdeu a cidade ainda vale: grava a que a linha já tinha.
-    const celulaId = setor.cidade_id ?? (patch.ativo === false ? atual?.celula_id : null);
+    const celulaId = cidadeLivre
+      ? patch.celulaId ?? atual?.celula_id ?? celulas[0]?.id
+      : setor.cidade_id ?? (patch.ativo === false ? atual?.celula_id : null);
     if (!celulaId) {
-      toast.error('Este setor ainda não tem cidade. O super admin define em Configurações > Setores.');
+      toast.error(cidadeLivre
+        ? 'Cadastre uma cidade antes de configurar setores.'
+        : 'Este setor ainda não tem cidade. O super admin define em Configurações > Setores.');
       return;
     }
     setSalvandoId(setorId);
@@ -109,15 +126,25 @@ export function PainelConfiguracao({
     }
   }
 
+  async function criarCelula() {
+    const nome = novaCelula.trim();
+    if (!nome) return;
+    const r = await salvarCelula({ empresaId, nome, ordem: celulas.length + 1 });
+    if (!r.ok) { toast.error(r.erro ?? 'Não foi possível criar a cidade.'); return; }
+    setNovaCelula('');
+    await carregar();
+    toast.success(`Cidade ${nome} criada.`);
+  }
+
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Setores do RH</DialogTitle>
+          <DialogTitle>{cidadeLivre ? 'Cidades e setores do RH' : 'Setores do RH'}</DialogTitle>
           <DialogDescription>
             Só os setores ligados aqui entram nas próximas competências. As já abertas
-            não mudam — elas são fotografia do momento em que foram criadas. A cidade
-            de cada setor é definida pelo super admin em Configurações &gt; Setores.
+            não mudam — elas são fotografia do momento em que foram criadas.
+            {!cidadeLivre && ' A cidade de cada setor é definida pelo super admin em Configurações > Setores.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,6 +154,36 @@ export function PainelConfiguracao({
           </div>
         ) : (
           <div className="space-y-5">
+            {cidadeLivre && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Cidades / células
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {celulas.map(c => (
+                  <span key={c.id}
+                        className="text-xs px-2.5 py-1 rounded-lg border border-border bg-muted/30">
+                    {c.nome}
+                  </span>
+                ))}
+                {celulas.length === 0 && (
+                  <span className="text-xs text-muted-foreground">Nenhuma cidade cadastrada.</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={novaCelula} onChange={e => setNovaCelula(e.target.value)}
+                  placeholder="Nova cidade (ex.: Birigui)" className="h-8 text-xs max-w-xs"
+                  onKeyDown={e => { if (e.key === 'Enter') void criarCelula(); }}
+                />
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1"
+                        onClick={() => void criarCelula()} disabled={!novaCelula.trim()}>
+                  <Plus className="w-3 h-3" /> Adicionar
+                </Button>
+              </div>
+            </section>
+            )}
+
             {/* ── Setores ── */}
             <section className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -142,15 +199,32 @@ export function PainelConfiguracao({
                         {s.nome}
                       </span>
 
-                      <span className="flex items-center gap-1 w-36 text-xs text-muted-foreground">
-                        <MapPin className="w-3 h-3 shrink-0" />
-                        {nomeDaCidade(s.cidade_id) ?? <span className="italic">Sem cidade</span>}
-                      </span>
+                      {cidadeLivre ? (
+                        <Select
+                          value={cfg?.celula_id ?? ''}
+                          onValueChange={v => void gravar(s, { celulaId: v, ativo: true })}
+                          disabled={celulas.length === 0}
+                        >
+                          <SelectTrigger className="h-8 w-36 text-xs">
+                            <SelectValue placeholder="Cidade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {celulas.map(c => (
+                              <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="flex items-center gap-1 w-36 text-xs text-muted-foreground">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          {nomeDaCidade(s.cidade_id) ?? <span className="italic">Sem cidade</span>}
+                        </span>
+                      )}
 
                       <Select
                         value={cfg?.tipo_remuneracao ?? 'premiacao'}
                         onValueChange={v => void gravar(s, { tipo: v as TipoRemuneracao, ativo: true })}
-                        disabled={!s.cidade_id}
+                        disabled={!cidadeLivre && !s.cidade_id}
                       >
                         <SelectTrigger className="h-8 w-36 text-xs">
                           <SelectValue />
@@ -166,7 +240,7 @@ export function PainelConfiguracao({
                         <Switch
                           checked={ligado}
                           onCheckedChange={v => void gravar(s, { ativo: v })}
-                          disabled={!s.cidade_id && !ligado}
+                          disabled={!cidadeLivre && !s.cidade_id && !ligado}
                           aria-label={`Incluir ${s.nome} no RH`}
                         />
                         <span className="text-[11px] text-muted-foreground w-16">

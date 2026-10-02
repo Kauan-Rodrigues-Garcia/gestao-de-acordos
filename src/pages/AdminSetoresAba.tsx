@@ -64,6 +64,7 @@ import {
 import { supabase, Setor } from '@/lib/supabase';
 import { useClonesCross } from '@/hooks/useClonesCross';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { useAuth } from '@/hooks/useAuth';
 import { salvarConfigNucleo } from '@/services/numeros/numeros.service';
 import { cn } from '@/lib/utils';
@@ -81,7 +82,7 @@ let draggedSetorId: string | null = null;
 // ─── Componente ─────────────────────────────────────────────────────────────
 
 export default function AdminSetoresAba() {
-  const { empresa: empresaAtual } = useEmpresa();
+  const { empresa: empresaAtual, tenantSlug } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const [, setSearchParams] = useSearchParams();
 
@@ -102,6 +103,11 @@ export default function AdminSetoresAba() {
    * nem de quem só edita setor. O banco cobra o mesmo (20261003140000).
    */
   const podeEscolherCidade  = perfil?.perfil === 'super_admin';
+  /*
+   * Cidade e regra de negócio do setor são só da cobrança (kauan, 02/10/2026):
+   * no Comercial e no RH a tela de setores fica como era.
+   */
+  const ehCobranca = produtoDaEmpresa(empresaAtual, tenantSlug) === 'cobranca';
   /* O atalho só é atalho se houver para onde ir. */
   const podeIrParaUsuarios  = temPermissao('usuarios_sub_usuarios');
 
@@ -306,7 +312,7 @@ export default function AdminSetoresAba() {
        * salvando num banco ainda sem a migration 20261003130000.
        */
       let cidadeId = podeEscolherCidade ? form.cidadeId : (editando?.cidade_id ?? null);
-      if (podeEscolherCidade && novaCidade !== null && novaCidade.trim()) {
+      if (ehCobranca && podeEscolherCidade && novaCidade !== null && novaCidade.trim()) {
         const { data: criada, error: erroCidade } = await supabase.from('rh_celulas').insert({
           empresa_id: empresaAtual.id, nome: novaCidade.trim(), ordem: cidades.length + 1,
         }).select('id').single();
@@ -314,11 +320,11 @@ export default function AdminSetoresAba() {
         cidadeId = criada.id;
         void fetchCidades();
       }
-      const mudouCidade = cidadeId !== (editando?.cidade_id ?? null);
+      const mudouCidade = ehCobranca && cidadeId !== (editando?.cidade_id ?? null);
       const cidade = mudouCidade ? { cidade_id: cidadeId } : {};
       /* A regra só é escolhida na criação, e só pelo super admin; depois não
          muda (20261003150000). Sem escolha, o banco grava Nosso produto. */
-      const regra = !editando && podeEscolherCidade && form.regra ? { regra: form.regra } : {};
+      const regra = ehCobranca && !editando && podeEscolherCidade && form.regra ? { regra: form.regra } : {};
 
       if (editando) {
         const { error } = await supabase.from('setores').update({
@@ -545,7 +551,7 @@ export default function AdminSetoresAba() {
                         </span>
                       )}
                     </div>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                    {ehCobranca && <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                       <MapPin className="w-3 h-3 shrink-0" />
                       {s.cidade_id
                         ? (nomeDaCidade.get(s.cidade_id) ?? 'Cidade')
@@ -555,7 +561,7 @@ export default function AdminSetoresAba() {
                           {ROTULO_REGRA[s.regra]}
                         </span>
                       )}
-                    </p>
+                    </p>}
                     {s.descricao && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{s.descricao}</p>
                     )}
@@ -729,6 +735,7 @@ export default function AdminSetoresAba() {
                 className="h-9 text-sm"
               />
             </div>
+            {ehCobranca && <>
             <div className="space-y-1.5">
               <Label className="text-xs">Cidade</Label>
               {!podeEscolherCidade ? (
@@ -793,6 +800,7 @@ export default function AdminSetoresAba() {
                   : 'Muda abas, relatórios e tipos de acordo. Não depende da cidade e não muda depois de criado.'}
               </p>
             </div>
+            </>}
             <div className="flex items-center justify-between pt-1">
               <Label className="text-xs font-medium">Setor ativo</Label>
               <Switch
