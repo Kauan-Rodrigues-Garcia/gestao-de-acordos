@@ -107,7 +107,9 @@ import { equipeDaVenda } from '@/lib/vendasPlacar';
 import { ticketMedio } from '@/lib/vendasDashboard';
 import { contarVendasLancadasPor, type Venda } from '@/services/vendas/vendas.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
-import { buscarMetasDoMes, type MetaDeRecorte } from '@/services/vendas/metasVendas.service';
+import {
+  buscarMetasDoMes, buscarMetasIndividuaisDoMes, type MetaDeRecorte, type MetaIndividual,
+} from '@/services/vendas/metasVendas.service';
 import { AndamentoDasMetas } from './AndamentoDasMetas';
 import { NovaVendaInline, type OpcaoDeVendedor } from './lista/NovaVendaInline';
 import { ColarVendas } from './lista/ColarVendas';
@@ -139,6 +141,7 @@ export default function Vendas() {
   const [limite, setLimite] = useState(PASSO);
   const [festa, setFesta] = useState<string | null>(null);
   const [metas, setMetas] = useState<MetaDeRecorte[]>([]);
+  const [individuais, setIndividuais] = useState<MetaIndividual[]>([]);
 
   const empresaId = empresa?.id ?? null;
   const {
@@ -198,6 +201,13 @@ export default function Vendas() {
     const { ano, mes: m } = partesDoMes(mes);
     void buscarMetasDoMes(empresaId, ano, m).then(r => setMetas(r.dado ?? []));
   }, [empresaId, mes, podeVerMetas]);
+
+  // A meta individual: sem `ver_metas_vendas` a RPC devolve só a própria.
+  useEffect(() => {
+    if (!empresaId) { setIndividuais([]); return; }
+    const { ano, mes: m } = partesDoMes(mes);
+    void buscarMetasIndividuaisDoMes(empresaId, ano, m).then(r => setIndividuais(r.dado ?? []));
+  }, [empresaId, mes]);
 
   // Trocar de mês volta a lista ao começo; o filtro de texto fica, porque
   // procurar o mesmo NR em outro mês é justamente o motivo de trocar.
@@ -685,6 +695,7 @@ export default function Vendas() {
           ) : (
             <MinhaParteNaMeta
               metas={metas} eu={eu} resumo={resumirVendas(oficiais)}
+              individual={individuais.find(m => m.perfil_id === perfil?.id) ?? null}
               uteis={uteis} trabalhados={trabalhados}
             />
           )}

@@ -13,30 +13,41 @@
  * hoje.** A meta é a da equipe que credita a venda dele (a de
  * `fn_vendas_placar_pessoas`); sem ela, a do setor; sem nenhuma, o bloco
  * mostra só o ritmo.
+ *
+ * Desde 02/10/2026 a pessoa pode ter **meta individual** (12 vendas por
+ * operador em outubro). Quando tem, é ela que vale — antes da equipe e do
+ * setor —, com a régua que veio nela.
  */
 import { Target, TrendingUp } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { formatBRL } from '@/lib/money';
 import type { ResumoVendas } from '@/lib/vendas';
-import type { MetaDeRecorte } from '@/services/vendas/metasVendas.service';
+import type { MetaDeRecorte, MetaIndividual } from '@/services/vendas/metasVendas.service';
 import type { PessoaComAusencia } from '@/services/vendas/placar.service';
 
 interface Props {
   metas: readonly MetaDeRecorte[];
+  /** A meta individual de quem está logado, se houver. */
+  individual?: MetaIndividual | null;
   eu: PessoaComAusencia | null;
   resumo: Pick<ResumoVendas, 'quantidade' | 'valor'>;
   uteis: number;
   trabalhados: number;
 }
 
-export function MinhaParteNaMeta({ metas, eu, resumo, uteis, trabalhados }: Props) {
+export function MinhaParteNaMeta({ metas, individual, eu, resumo, uteis, trabalhados }: Props) {
+  const minha = individual?.regua
+    && (individual.regua === 'quantidade' ? individual.quantidade : individual.valor) > 0
+    ? individual
+    : null;
   const daEquipe = eu?.equipe_id
     ? metas.find(m => m.tipo === 'equipe' && m.referencia_id === eu.equipe_id && m.regua)
     : undefined;
   const doSetor = eu?.setor_id
     ? metas.find(m => m.tipo === 'setor' && m.referencia_id === eu.setor_id && m.regua)
     : undefined;
-  const meta = daEquipe ?? doSetor ?? null;
+  const meta: Pick<MetaDeRecorte, 'regua' | 'quantidade' | 'valor'> | null =
+    minha ?? daEquipe ?? doSetor ?? null;
 
   const porQuantidade = meta?.regua === 'quantidade';
   const feito = porQuantidade ? resumo.quantidade : resumo.valor;
@@ -62,9 +73,15 @@ export function MinhaParteNaMeta({ metas, eu, resumo, uteis, trabalhados }: Prop
             <>
               <p className="text-[12px] text-muted-foreground">
                 Você fez <strong className="font-mono text-foreground">{escrever(feito)}</strong>
-                {pct !== null && <> — <strong className="text-foreground">{pct}%</strong></>} da meta
-                {daEquipe ? ' da equipe ' : ' do setor '}
-                <strong className="text-foreground">{meta.nome}</strong> ({escrever(alvo)}).
+                {pct !== null && <> — <strong className="text-foreground">{pct}%</strong></>}
+                {minha ? (
+                  <> da sua meta individual ({escrever(alvo)}).</>
+                ) : (
+                  <>
+                    {' '}da meta{daEquipe ? ' da equipe ' : ' do setor '}
+                    <strong className="text-foreground">{(daEquipe ?? doSetor)?.nome}</strong> ({escrever(alvo)}).
+                  </>
+                )}
               </p>
               <Progress value={Math.min(pct ?? 0, 100)} className="h-1.5" />
             </>

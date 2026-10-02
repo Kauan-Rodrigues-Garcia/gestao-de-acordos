@@ -117,8 +117,10 @@ vi.mock('@/hooks/useVendasMesAnterior', async () => {
 });
 
 const metasDoMes = vi.fn(async () => ({ dado: [] as unknown[], erro: null }));
+const metasIndividuais = vi.fn(async () => ({ dado: [] as unknown[], erro: null, ok: true }));
 vi.mock('@/services/vendas/metasVendas.service', () => ({
   buscarMetasDoMes: (...a: unknown[]) => metasDoMes(...(a as [])),
+  buscarMetasIndividuaisDoMes: (...a: unknown[]) => metasIndividuais(...(a as [])),
 }));
 
 /*

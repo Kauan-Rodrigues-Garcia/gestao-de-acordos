@@ -140,8 +140,10 @@ vi.mock('@/hooks/useVendasPlacar', async () => {
 });
 
 const metasDoMes = vi.fn(async () => ({ dado: [] as unknown[], erro: null, ok: true }));
+const metasIndividuais = vi.fn(async () => ({ dado: [] as unknown[], erro: null, ok: true }));
 vi.mock('@/services/vendas/metasVendas.service', () => ({
   buscarMetasDoMes: (...a: unknown[]) => metasDoMes(...(a as [])),
+  buscarMetasIndividuaisDoMes: (...a: unknown[]) => metasIndividuais(...(a as [])),
 }));
 
 vi.mock('framer-motion', () => {
@@ -182,6 +184,7 @@ beforeEach(() => {
   salvar.mockClear();
   confirmar.mockClear();
   metasDoMes.mockResolvedValue({ dado: [], erro: null, ok: true });
+  metasIndividuais.mockResolvedValue({ dado: [], erro: null, ok: true });
 });
 
 describe('Vendas — a lista', () => {
@@ -263,6 +266,25 @@ describe('Vendas — o operador', () => {
     expect(await screen.findByText('Sua parte no mês')).toBeInTheDocument();
     expect(screen.getByText(/da equipe/)).toHaveTextContent('PEC 2');
     expect(screen.queryByText('Meta do mês')).not.toBeInTheDocument();
+  });
+
+  it('com meta individual, é ela que vale — antes da equipe', async () => {
+    metasDoMes.mockResolvedValue({
+      ok: true, erro: null,
+      dado: [
+        { tipo: 'equipe', referencia_id: 'pec2', nome: 'PEC 2', setor_id: 's1', setor_nome: null, regua: 'valor', quantidade: 0, valor: 80_000 },
+      ],
+    });
+    metasIndividuais.mockResolvedValue({
+      ok: true, erro: null,
+      dado: [
+        { perfil_id: 'outra', nome: 'Outra', equipe_id: 'pec2', setor_id: 's1', regua: 'quantidade', quantidade: 99, valor: 0 },
+        { perfil_id: 'ana', nome: 'Ana', equipe_id: 'pec2', setor_id: 's1', regua: 'quantidade', quantidade: 12, valor: 0 },
+      ],
+    });
+    montar();
+    expect(await screen.findByText(/da sua meta individual/)).toHaveTextContent('12 vendas');
+    expect(screen.queryByText(/da equipe/)).not.toBeInTheDocument();
   });
 });
 

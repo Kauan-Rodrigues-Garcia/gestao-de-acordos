@@ -16,11 +16,15 @@
  * Aba Pessoas continua onde estava. As duas respondem coisas diferentes:
  * Pessoas diz QUANTO cada um fez; Quartis diz se esse quanto está no RITMO.
  *
- * ## A meta individual não existe no Comercial, e é daí que vem a régua daqui
+ * ## Meta individual primeiro; sem ela, a parte na meta do time
  *
- * `metas` do Comercial tem dois tipos: `setor` e `equipe`. Não há meta por
- * pessoa, e não é esquecimento — a operação combina o alvo com o time, não com
- * cada vendedor.
+ * Desde 02/10/2026 o Comercial tem meta por pessoa (`metas.tipo = 'operador'`,
+ * 12 vendas por operador em outubro). Quem tem meta individual na régua do
+ * painel é medido por ela, com o desconto da ausência dela. O que segue abaixo
+ * vale para quem NÃO tem.
+ *
+ * Até então `metas` do Comercial tinha só `setor` e `equipe` — a operação
+ * combinava o alvo com o time, não com cada vendedor.
  *
  * Sem alvo individual não há projeção individual, e sem projeção não há
  * quartil. Só que a pergunta «quem está no ritmo?» continua valendo, e a
@@ -66,10 +70,10 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { COR_QUARTIL, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { calcularProjecao } from '@/lib/projecaoMetas';
-import { ajustarMetaPorPresenca, ehRegua, type ReguaMeta } from '@/lib/vendasMeta';
+import { ajustarMetaPorPresenca, alvoIndividual, ehRegua, type ReguaMeta } from '@/lib/vendasMeta';
 import type { ResumoVendas } from '@/lib/vendas';
 import { ticketMedio } from '@/lib/vendasDashboard';
-import type { MetaDeRecorte } from '@/services/vendas/metasVendas.service';
+import type { MetaDeRecorte, MetaIndividual } from '@/services/vendas/metasVendas.service';
 import type { PessoaComAusencia } from '@/services/vendas/placar.service';
 import type { PresencaDoRecorte } from '@/lib/vendasMeta';
 import { PizzaQuartis3D, type FatiaQuartil } from '@/pages/Dashboard/Analitico/PizzaQuartis3D';
@@ -94,6 +98,8 @@ interface Props {
   resumoPorPessoa: ReadonlyMap<string, ResumoVendas>;
   /** As metas do mês, como o banco as devolve. */
   metas: readonly MetaDeRecorte[];
+  /** As metas individuais do mês — quem tem uma é medido por ela. */
+  individuais?: readonly MetaIndividual[];
   /** A presença de cada setor e equipe, indexada pelo id do recorte. */
   presencaPorRecorte: ReadonlyMap<string, PresencaDoRecorte>;
   /** A régua do painel — quantidade ou valor. */
@@ -128,10 +134,12 @@ interface LinhaCalculada {
   uteisDela: number;
   projecao: ReturnType<typeof calcularProjecao>;
   recorte: string | null;
+  /** A parte veio da meta individual dela, e não da do time. */
+  individual: boolean;
 }
 
 export function QuartisComercial({
-  pessoas, resumoPorPessoa, metas, presencaPorRecorte, regua, uteis, trabalhados,
+  pessoas, resumoPorPessoa, metas, individuais, presencaPorRecorte, regua, uteis, trabalhados,
 }: Props) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [foco, setFoco] = useState<number | null>(null);
@@ -154,28 +162,34 @@ export function QuartisComercial({
     /** Quantas pessoas o recorte tem para cumprir a meta dele. */
     const cabecasDo = (id: string) => presencaPorRecorte.get(id)?.pessoas ?? 0;
 
+    const individualDe = new Map(
+      (individuais ?? []).map(m => [m.perfil_id, alvoIndividual(m, regua)] as const),
+    );
+
     return pessoas.map((p): LinhaCalculada => {
       const resumo = resumoPorPessoa.get(p.id);
       const feito = medir(resumo, regua);
 
       /*
-       * A equipe manda; o setor é a reserva.
+       * A meta individual manda; depois a equipe; o setor é a reserva.
        *
        * Uma pessoa com equipe é medida pela meta da equipe dela — é com esse
        * time que ela combinou o alvo. Sem equipe (ou sem meta de equipe), cai
        * na do setor. É a mesma ordem que `MinhaParteNaMeta` usa na aba Vendas.
        */
-      const recorte = metaBrutaDe(p.equipe_id) ?? metaBrutaDe(p.setor_id);
+      const propria = individualDe.get(p.id) ?? null;
+      const recorte = propria === null ? (metaBrutaDe(p.equipe_id) ?? metaBrutaDe(p.setor_id)) : null;
       const cabecas = recorte ? cabecasDo(recorte.id) : 0;
 
       // O mês que ESTA pessoa tinha, e não o do calendário.
       const uteisDela = Math.max(0, uteis - p.diasAbatidos);
 
       let parte: number | null = null;
-      if (recorte && cabecas > 0) {
-        // A parte bruta, e então o desconto da ausência dela — na mesma função
-        // que o card de equipe usa, para os dois lados nunca divergirem.
-        const bruta = recorte.alvo / cabecas;
+      const bruta = propria ?? (recorte && cabecas > 0 ? recorte.alvo / cabecas : null);
+      if (bruta !== null) {
+        // A parte bruta (a meta dela, ou a fatia do time), e então o desconto da
+        // ausência dela — na mesma função que o card de equipe usa, para os
+        // dois lados nunca divergirem.
         const fator = uteis > 0 ? uteisDela / uteis : null;
         const ajustada = ajustarMetaPorPresenca(
           regua === 'quantidade'
@@ -207,9 +221,10 @@ export function QuartisComercial({
         uteisDela,
         projecao,
         recorte: recorte?.id ?? null,
+        individual: propria !== null,
       };
     });
-  }, [pessoas, resumoPorPessoa, metas, presencaPorRecorte, regua, uteis, trabalhados]);
+  }, [pessoas, resumoPorPessoa, metas, individuais, presencaPorRecorte, regua, uteis, trabalhados]);
 
   const comMeta = useMemo(
     () => linhas.filter(l => l.projecao !== null)
@@ -244,10 +259,11 @@ export function QuartisComercial({
       <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
         <Target className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         <p>
-          O Comercial não tem meta por pessoa, então o quartil mede a{' '}
-          <strong className="text-foreground">parte de cada um na meta do time</strong>: a meta da
-          equipe (ou, sem ela, a do setor) dividida por quem a equipe tem para cumpri-la, já com a
-          ausência de cada um descontada. A régua é{' '}
+          Quem tem <strong className="text-foreground">meta individual</strong> é medido por ela;
+          quem não tem, pela{' '}
+          <strong className="text-foreground">parte na meta do time</strong>: a meta da
+          equipe (ou, sem ela, a do setor) dividida por quem a equipe tem para cumpri-la. Nos dois
+          casos a ausência de cada um é descontada. A régua é{' '}
           <strong className="text-foreground">{regua === 'quantidade' ? 'quantidade de vendas' : 'faturamento'}</strong>,
           e o que conta é venda confirmada e assinada.
         </p>
@@ -392,14 +408,20 @@ export function QuartisComercial({
                                   : <span className="text-success">já está na melhor faixa</span>}
                               </Campo>
                             </div>
-                            <p className="mt-2 text-[11px] text-muted-foreground">
-                              A parte na meta saiu {l.pessoa.equipe_nome ? 'da equipe' : 'do setor'}{' '}
-                              <strong className="text-foreground">
-                                {l.pessoa.equipe_nome ?? l.pessoa.setor_nome ?? '—'}
-                              </strong>
-                              , dividida por {presencaPorRecorte.get(l.recorte ?? '')?.pessoas ?? 0} pessoa
-                              {(presencaPorRecorte.get(l.recorte ?? '')?.pessoas ?? 0) === 1 ? '' : 's'}.
-                            </p>
+                            {l.individual ? (
+                              <p className="mt-2 text-[11px] text-muted-foreground">
+                                A parte na meta é a <strong className="text-foreground">meta individual</strong> dela.
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-[11px] text-muted-foreground">
+                                A parte na meta saiu {l.pessoa.equipe_nome ? 'da equipe' : 'do setor'}{' '}
+                                <strong className="text-foreground">
+                                  {l.pessoa.equipe_nome ?? l.pessoa.setor_nome ?? '—'}
+                                </strong>
+                                , dividida por {presencaPorRecorte.get(l.recorte ?? '')?.pessoas ?? 0} pessoa
+                                {(presencaPorRecorte.get(l.recorte ?? '')?.pessoas ?? 0) === 1 ? '' : 's'}.
+                              </p>
+                            )}
                           </td>
                         </tr>
                       )}

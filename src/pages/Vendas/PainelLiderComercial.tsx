@@ -87,7 +87,9 @@ import {
   rotuloDaPresenca, REGUA_LABEL, type ReguaMeta,
 } from '@/lib/vendasMeta';
 import { COR_DA_GAVETA, serieDoMes, ticketMedio } from '@/lib/vendasDashboard';
-import { buscarMetasDoMes, type MetaDeRecorte } from '@/services/vendas/metasVendas.service';
+import {
+  buscarMetasDoMes, buscarMetasIndividuaisDoMes, type MetaDeRecorte, type MetaIndividual,
+} from '@/services/vendas/metasVendas.service';
 import type { PessoaComAusencia } from '@/services/vendas/placar.service';
 import type { EquipeAnalitico } from '@/services/analitico/analitico.service';
 import { CardEquipe } from '@/pages/Dashboard/Analitico/CardEquipe';
@@ -197,10 +199,12 @@ export default function PainelLiderComercial() {
   const lideres = useLideresDasEquipes(empresaId);
 
   const [metas, setMetas] = useState<MetaDeRecorte[]>([]);
+  const [individuais, setIndividuais] = useState<MetaIndividual[]>([]);
   useEffect(() => {
-    if (!empresaId || !temPermissao('ver_metas_vendas')) { setMetas([]); return; }
+    if (!empresaId || !temPermissao('ver_metas_vendas')) { setMetas([]); setIndividuais([]); return; }
     const { ano, mes: m } = partesDoMes(mes);
     void buscarMetasDoMes(empresaId, ano, m).then(r => setMetas(r.dado ?? []));
+    void buscarMetasIndividuaisDoMes(empresaId, ano, m).then(r => setIndividuais(r.dado ?? []));
   }, [empresaId, mes, temPermissao]);
 
   // ── Abas ─────────────────────────────────────────────────────────────────
@@ -695,6 +699,7 @@ export default function PainelLiderComercial() {
             pessoas={pessoasNaTela}
             resumoPorPessoa={resumoPorPessoa}
             metas={metas}
+            individuais={individuais}
             presencaPorRecorte={placar.presencaPorRecorte}
             regua={regua}
             uteis={uteis}

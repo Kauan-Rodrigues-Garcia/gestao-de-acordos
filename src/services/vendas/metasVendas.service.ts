@@ -66,6 +66,48 @@ export async function buscarMetasDoMes(
 }
 
 /**
+ * A meta de UMA pessoa no mês (`metas.tipo = 'operador'`), desde 02/10/2026.
+ *
+ * Quem tem meta individual é medido por ela; quem não tem continua medido pela
+ * parte dele na meta da equipe (ou do setor). Ver `QuartisComercial`.
+ */
+export interface MetaIndividual {
+  perfil_id: string;
+  nome: string;
+  equipe_id: string | null;
+  setor_id: string | null;
+  regua: ReguaMeta | null;
+  quantidade: number;
+  valor: number;
+}
+
+/**
+ * As metas individuais do mês. Com `ver_metas_vendas`, de todos; sem, só a
+ * própria. Sem a migration 20261002120000 a RPC não existe e a lista volta
+ * vazia — a tela segue com a parte na meta do time, como antes.
+ */
+export async function buscarMetasIndividuaisDoMes(
+  empresaId: string, ano: number, mes: number,
+): Promise<Resultado<MetaIndividual[]>> {
+  const { data, error } = await rpcSemTipo<MetaIndividual[]>('fn_vendas_metas_individuais_do_mes', {
+    p_empresa_id: empresaId, p_ano: ano, p_mes: mes,
+  });
+  if (error) {
+    return {
+      ok: false, dado: null,
+      erro: mensagemDoErro(error.message, 'A meta individual', '20261002120000_vendas_meta_individual.sql'),
+    };
+  }
+
+  const linhas = (Array.isArray(data) ? data : []).map(l => ({
+    ...l,
+    quantidade: num(l.quantidade),
+    valor:      num(l.valor),
+  }));
+  return { ok: true, dado: linhas, erro: null };
+}
+
+/**
  * Grava a meta de um recorte.
  *
  * `regua: null` com as duas metas em zero **apaga** a linha — meta vazia não

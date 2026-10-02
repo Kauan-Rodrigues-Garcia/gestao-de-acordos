@@ -130,8 +130,10 @@ vi.mock('@/hooks/useVendasPlacar', async () => {
 });
 
 const metasDoMes = vi.fn(async () => ({ dado: [] as unknown[], erro: null, ok: true }));
+const metasIndividuais = vi.fn(async () => ({ dado: [] as unknown[], erro: null, ok: true }));
 vi.mock('@/services/vendas/metasVendas.service', () => ({
   buscarMetasDoMes: (...a: unknown[]) => metasDoMes(...(a as [])),
+  buscarMetasIndividuaisDoMes: (...a: unknown[]) => metasIndividuais(...(a as [])),
 }));
 
 vi.mock('@/services/vendas/vendas.service', () => ({
@@ -193,6 +195,7 @@ const aba = (nome: RegExp) => screen.getByRole('button', { name: nome });
 beforeEach(() => {
   temPermissao.mockImplementation(() => true);
   metasDoMes.mockResolvedValue({ dado: [], erro: null, ok: true });
+  metasIndividuais.mockResolvedValue({ dado: [], erro: null, ok: true });
 });
 
 /* ── Painel Líder ─────────────────────────────────────────────────────────── */
@@ -288,9 +291,34 @@ describe('PainelLiderComercial — a reforma de 21/09/2026', () => {
   it('a aba Quartis diz de onde saiu a parte de cada um na meta', () => {
     montar(PainelLiderComercial);
     fireEvent.click(aba(/Quartis/));
-    expect(screen.getByText(/parte de cada um na meta do time/)).toBeInTheDocument();
+    expect(screen.getByText(/parte na meta do time/)).toBeInTheDocument();
     // Sem meta configurada ninguém tem quartil, e a tela diz isso em vez de
     // medir contra zero.
+    expect(screen.getByText(/fora do quartil/)).toBeInTheDocument();
+  });
+
+  it('quem tem meta individual entra no quartil mesmo sem meta de equipe ou setor', async () => {
+    metasIndividuais.mockResolvedValue({
+      ok: true, erro: null,
+      dado: ['ana', 'bea', 'caio', 'duda'].map(id => ({
+        perfil_id: id, nome: id.toUpperCase(), equipe_id: null, setor_id: 's1',
+        regua: 'valor', quantidade: 0, valor: 100_000,
+      })),
+    });
+    montar(PainelLiderComercial);
+    fireEvent.click(aba(/Quartis/));
+    await waitFor(() => expect(screen.queryByText(/fora do quartil/)).not.toBeInTheDocument());
+    expect(screen.getByText(/4 pessoas com parte na meta/)).toBeInTheDocument();
+  });
+
+  it('meta individual em outra régua não vale: cai na parte do time', async () => {
+    metasIndividuais.mockResolvedValue({
+      ok: true, erro: null,
+      dado: [{ perfil_id: 'ana', nome: 'ANA', equipe_id: null, setor_id: 's1', regua: 'quantidade', quantidade: 12, valor: 0 }],
+    });
+    montar(PainelLiderComercial);
+    fireEvent.click(aba(/Quartis/));
+    await waitFor(() => expect(metasIndividuais).toHaveBeenCalled());
     expect(screen.getByText(/fora do quartil/)).toBeInTheDocument();
   });
 

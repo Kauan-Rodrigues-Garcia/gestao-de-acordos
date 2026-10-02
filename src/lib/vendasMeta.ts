@@ -54,6 +54,20 @@ export function ehRegua(v: unknown): v is ReguaMeta {
   return typeof v === 'string' && (REGUAS as readonly string[]).includes(v);
 }
 
+/**
+ * O alvo de uma meta individual (`metas.tipo = 'operador'`) na régua pedida —
+ * ou `null` se ela não mede nessa régua: meta só em quantidade num painel por
+ * valor cai na parte do time.
+ */
+export function alvoIndividual(
+  m: { regua: ReguaMeta | null; quantidade: number; valor: number } | null | undefined,
+  regua: ReguaMeta,
+): number | null {
+  if (!m?.regua) return null;
+  const alvo = regua === 'quantidade' ? m.quantidade : m.valor;
+  return alvo > 0 ? alvo : null;
+}
+
 /** O que a configuração de meta guarda para um setor, equipe ou operador. */
 export interface MetaDoRecorte {
   /** Qual régua vale. Sem ela, nada é «batido» — ver `progressoDaMeta`. */
