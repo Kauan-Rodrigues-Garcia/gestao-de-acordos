@@ -622,7 +622,7 @@ export function AcordoNovoInline({
 
           let opConflitoData: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null = null;
           {
-            const r = await supabase.from('perfis').select('id, nome, setor_id, equipe_id, setores(nome)').eq('id', conflitoFinal.operadorId).maybeSingle();
+            const r = await supabase.from('perfis').select('id, nome, setor_id, equipe_id, setores!perfis_setor_id_fkey(nome)').eq('id', conflitoFinal.operadorId).maybeSingle();
             opConflitoData = (r.data as typeof opConflitoData) ?? null;
             if (!opConflitoData) {
               const r2 = await supabase.from('perfis').select('id, nome, setor_id, equipe_id').eq('id', conflitoFinal.operadorId).maybeSingle();

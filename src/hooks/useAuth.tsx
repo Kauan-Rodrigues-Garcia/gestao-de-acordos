@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // `services/empresas.service.ts` para o porquê.
         const { data, error } = await supabase
           .from('perfis')
-          .select('*, setores(id, nome), empresas!perfis_empresa_id_fkey(id, nome, slug, ativo, config, criado_em, atualizado_em)')
+          .select('*, setores!perfis_setor_id_fkey(id, nome), empresas!perfis_empresa_id_fkey(id, nome, slug, ativo, config, criado_em, atualizado_em)')
           .eq('id', userId)
           .maybeSingle();
 

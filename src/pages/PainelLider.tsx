@@ -513,7 +513,7 @@ export default function PainelLider() {
 
     let q = supabase
       .from('perfis')
-      .select('*, setores(id, nome)')
+      .select('*, setores!perfis_setor_id_fkey(id, nome)')
       .eq('empresa_id', empresa.id)
       // Mesma lista do Pix, dos quartis e do ranking — ver
       // `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`.
@@ -540,7 +540,7 @@ export default function PainelLider() {
     if (!perfilId || !empresa?.id) return [];
     let q = supabase
       .from('perfis')
-      .select('*, setores(id, nome)')
+      .select('*, setores!perfis_setor_id_fkey(id, nome)')
       .eq('empresa_id', empresa.id)
       .in('perfil', [...PERFIS_LIDERANCA_AJUSTE])
       .eq('ativo', true);
