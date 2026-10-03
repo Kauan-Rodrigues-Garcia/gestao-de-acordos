@@ -85,7 +85,7 @@ export function CartazProcuraSe({ estado }: { estado: EstadoDoCartaz }) {
 
     // Desde fora da camada, pela esquerda, até a âncora — afundando a cada batida.
     const camada = r.parentElement;
-    const ate = (camada?.clientWidth ?? 1200) - 36;
+    const ate = (camada?.clientWidth ?? 1200) - 46;
     const dist = ate + 110;
     const quadros: Keyframe[] = [];
     const passos = 7;

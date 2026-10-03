@@ -1,14 +1,15 @@
 /*
  * O cartaz «Procura-se» da aranha (`CartazProcuraSe.tsx`).
  *
- * Pendurado no mesmo ponto da teia de onde a aranha desce (36 px da borda
- * direita do conteúdo). Os tamanhos de dentro do papel são em `cqw` (largura
- * do próprio cartaz), então a arte é a mesma pendurada ou aberta para ler.
+ * Pendurado num fio da teia ao lado do da aranha: 46 px da borda direita do
+ * conteúdo, e não os 36 dela — centrado ali, o papel de 76 px passava da
+ * borda. Os tamanhos de dentro do papel são em `cqw` (largura do cartaz),
+ * então a arte é a mesma pendurada ou aberta para ler.
  *
  * Cores de papel e tinta são cor de objeto: valem em qualquer tema.
  */
 
-.hw-cartaz { position: absolute; top: 36px; right: 36px; width: 0; height: 0; z-index: 1; }
+.hw-cartaz { position: absolute; top: 36px; right: 46px; width: 0; height: 0; z-index: 1; }
 
 /* O fio da teia até o prego. Aberto, estica em diagonal até onde o cartaz foi. */
 .hw-cartaz-fio {
@@ -28,7 +29,12 @@
 /* Mais perto para ler: 2,9 × (76 → 220 px), puxado para a esquerda para caber na tela. */
 .hw-cartaz.aberto .hw-cartaz-corpo { transform: translate(calc(-50% - 84px), calc(var(--fio) + 60px)) scale(2.9); }
 
+/* O balanço é a referência do `cqw` do papel, com largura fixa. Não pode ser
+   o próprio papel: `cqw` usado no padding/sombra do papel mede o contêiner de
+   FORA dele — sem um, a tela inteira, e o papel virava um lençol de 1.600 px. */
 .hw-cartaz-balanco {
+  width: 76px;
+  container-type: inline-size;
   transform-origin: 50% 0;
   animation: hw-cartaz-balanca 5.5s ease-in-out infinite alternate;
   filter: drop-shadow(0 3px 3px rgb(0 0 0 / .32));
@@ -41,8 +47,7 @@
 .hw-cartaz-papel {
   --papel: #e9cf9a; --papel-2: #d9b678; --tinta: #3b2413; --tinta-2: #6b4a2c; --lapis: #4d4a52;
   position: relative;
-  width: 76px;
-  container-type: inline-size;
+  width: 100%;
   padding: 9cqw 7cqw 8cqw;
   display: flex; flex-direction: column; align-items: center; gap: 2.4cqw;
   color: var(--tinta);
@@ -100,8 +105,9 @@
 .hw-cartaz-papel .aviso strong { text-decoration: underline; text-decoration-thickness: .4cqw; text-underline-offset: .6cqw; }
 .hw-cartaz-papel .lapis { position: absolute; font-family: 'Caveat', 'Segoe Print', 'Comic Sans MS', cursive; font-weight: 700; color: var(--lapis); line-height: 1; opacity: .88; }
 .hw-cartaz-papel .rabisco { top: 27cqw; right: 3cqw; width: 20cqw; font-size: 5.2cqw; transform: rotate(9deg); }
-.hw-cartaz-papel .volta { bottom: 18cqw; left: 4cqw; font-size: 5cqw; transform: rotate(-7deg); text-align: left; }
-.hw-cartaz-papel .volta b { font-size: 6.6cqw; font-variant-numeric: tabular-nums; }
+/* À esquerda do retrato, espelhando o rabisco da direita — embaixo a faixa da recompensa cobria. */
+.hw-cartaz-papel .volta { top: 30cqw; left: 2.5cqw; width: 17cqw; font-size: 4.6cqw; transform: rotate(-8deg); text-align: center; }
+.hw-cartaz-papel .volta b { display: inline-block; margin-top: .6cqw; font-size: 6.4cqw; font-variant-numeric: tabular-nums; }
 
 /* ── O carteiro ──────────────────────────────────────────────────────────── */
 /* O morcego da revoada, sem o voo dela: quem move é o cartaz. Bate rápido e
