@@ -32,6 +32,7 @@ import { dentroDoPalco, iniciarSessao, soltarSessao, useSomAmbiente } from './mo
 import { infoDaFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
 import { anunciarSeNova } from './anuncio';
+import './somAmbiente.css';
 
 const carregarPainel = comNovaTentativa(() => import('./PainelSomAmbiente'));
 const PainelSomAmbiente = lazy(() => carregarPainel().then(m => ({ default: m.PainelSomAmbiente })));

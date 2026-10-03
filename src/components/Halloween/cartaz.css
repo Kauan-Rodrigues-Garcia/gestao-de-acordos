@@ -1,0 +1,147 @@
+/*
+ * O cartaz «Procura-se» da aranha (`CartazProcuraSe.tsx`).
+ *
+ * Pendurado no mesmo ponto da teia de onde a aranha desce (36 px da borda
+ * direita do conteúdo). Os tamanhos de dentro do papel são em `cqw` (largura
+ * do próprio cartaz), então a arte é a mesma pendurada ou aberta para ler.
+ *
+ * Cores de papel e tinta são cor de objeto: valem em qualquer tema.
+ */
+
+.hw-cartaz { position: absolute; top: 36px; right: 36px; width: 0; height: 0; z-index: 1; }
+
+/* O fio da teia até o prego. Aberto, estica em diagonal até onde o cartaz foi. */
+.hw-cartaz-fio {
+  position: absolute; left: -.5px; top: 0; width: 1px; height: var(--fio);
+  background: color-mix(in oklch, currentColor 45%, transparent);
+  transform-origin: 50% 0;
+  transition: height .45s cubic-bezier(.3, .8, .3, 1), transform .45s cubic-bezier(.3, .8, .3, 1);
+}
+/* 84 px para a esquerda e 60 para baixo: comprimento e ângulo do fio até lá. */
+.hw-cartaz.aberto .hw-cartaz-fio { height: calc(var(--fio) + 94px); transform: rotate(44.3deg); }
+
+.hw-cartaz-corpo {
+  position: absolute; left: 0; top: 0;
+  transform: translate(-50%, var(--fio)); transform-origin: 50% 0;
+  transition: transform .45s cubic-bezier(.3, .8, .3, 1);
+}
+/* Mais perto para ler: 2,9 × (76 → 220 px), puxado para a esquerda para caber na tela. */
+.hw-cartaz.aberto .hw-cartaz-corpo { transform: translate(calc(-50% - 84px), calc(var(--fio) + 60px)) scale(2.9); }
+
+.hw-cartaz-balanco {
+  transform-origin: 50% 0;
+  animation: hw-cartaz-balanca 5.5s ease-in-out infinite alternate;
+  filter: drop-shadow(0 3px 3px rgb(0 0 0 / .32));
+}
+.hw-cartaz.aberto .hw-cartaz-balanco { animation: none; }
+@keyframes hw-cartaz-balanca { from { transform: rotate(-2deg); } to { transform: rotate(1.8deg); } }
+.hw-cartaz.cinzas .hw-cartaz-corpo { visibility: hidden; }
+
+/* ── O papel ─────────────────────────────────────────────────────────────── */
+.hw-cartaz-papel {
+  --papel: #e9cf9a; --papel-2: #d9b678; --tinta: #3b2413; --tinta-2: #6b4a2c; --lapis: #4d4a52;
+  position: relative;
+  width: 76px;
+  container-type: inline-size;
+  padding: 9cqw 7cqw 8cqw;
+  display: flex; flex-direction: column; align-items: center; gap: 2.4cqw;
+  color: var(--tinta);
+  text-align: center;
+  line-height: 1.2;
+  pointer-events: auto;
+  cursor: zoom-in;
+  user-select: none;
+  background:
+    linear-gradient(180deg, transparent 49.5%, rgba(95, 55, 20, .16) 50%, rgba(255, 244, 214, .35) 50.4%, transparent 51.2%),
+    linear-gradient(90deg, transparent 49.6%, rgba(95, 55, 20, .10) 50%, rgba(255, 244, 214, .25) 50.3%, transparent 51%),
+    radial-gradient(circle at 83% 79%, transparent 0 7.6cqw, rgba(120, 66, 22, .22) 7.9cqw 8.5cqw, transparent 9.1cqw),
+    radial-gradient(ellipse 30% 22% at 14% 36%, rgba(150, 95, 40, .2), transparent 70%),
+    radial-gradient(ellipse 26% 18% at 88% 18%, rgba(150, 95, 40, .16), transparent 70%),
+    radial-gradient(ellipse 40% 14% at 40% 96%, rgba(120, 70, 30, .22), transparent 70%),
+    radial-gradient(circle at 0% 0%, rgba(80, 40, 10, .55), transparent 18%),
+    radial-gradient(circle at 100% 100%, rgba(80, 40, 10, .5), transparent 16%),
+    linear-gradient(170deg, var(--papel), var(--papel-2));
+  box-shadow: inset 0 0 9cqw rgba(110, 58, 18, .55), inset 0 0 2cqw rgba(80, 40, 10, .5);
+}
+.hw-cartaz.aberto .hw-cartaz-papel { cursor: zoom-out; }
+/* Grão do papel. */
+.hw-cartaz-papel::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45  0 0 0 0 .28  0 0 0 0 .12  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+}
+.hw-cartaz-papel > * { position: relative; z-index: 1; margin: 0; }
+
+.hw-cartaz-papel .prego {
+  position: absolute; top: 2.6cqw; left: 50%; width: 4.4cqw; height: 4.4cqw; transform: translateX(-50%); border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #d8d2c8, #7b7368 45%, #3b342c 75%);
+  box-shadow: 0 0 0 1.4cqw rgba(120, 60, 20, .28), 0 .6cqw .8cqw rgba(0, 0, 0, .45);
+}
+.hw-cartaz-papel .titulo { font-family: 'Rye', Georgia, serif; font-size: 11.6cqw; line-height: .95; letter-spacing: .02em; white-space: nowrap; margin-top: 1cqw; }
+.hw-cartaz-papel .sub { font-family: 'Special Elite', 'Courier New', monospace; font-size: 3.8cqw; letter-spacing: .3em; display: flex; align-items: center; gap: 2cqw; }
+.hw-cartaz-papel .sub::before, .hw-cartaz-papel .sub::after { content: ''; width: 7cqw; height: .5cqw; background: currentColor; border-radius: 1cqw; }
+.hw-cartaz-papel .retrato { width: 66cqw; }
+.hw-cartaz-papel .retrato svg { display: block; width: 100%; height: auto; overflow: visible; }
+.hw-cartaz-papel .pupila { transition: transform .12s ease-out; }
+.hw-cartaz-papel .palpebra { transform-box: fill-box; transform-origin: 50% 0; transform: scaleY(0); transition: transform .09s ease-in; }
+.hw-cartaz-papel .retrato.pisca .palpebra { transform: scaleY(1); }
+.hw-cartaz-papel .nome { font-family: 'Rye', Georgia, serif; font-size: 8.8cqw; line-height: 1; }
+.hw-cartaz-papel .fugiu {
+  width: 100%; padding-block: 2.2cqw; font-family: 'Special Elite', 'Courier New', monospace; font-size: 5cqw;
+  border-top: .5cqw solid currentColor; border-bottom: .5cqw solid currentColor;
+}
+.hw-cartaz-papel .recompensa {
+  width: 100%; display: grid; gap: .6cqw; padding: 2.6cqw 6cqw 3cqw; color: #f6e3bb;
+  background: linear-gradient(180deg, #7d2a1c, #5e1d13);
+  clip-path: polygon(0 0, 100% 0, 96% 50%, 100% 100%, 0 100%, 4% 50%);
+}
+.hw-cartaz-papel .recompensa span { font-family: 'Special Elite', 'Courier New', monospace; font-size: 3.4cqw; letter-spacing: .4em; }
+.hw-cartaz-papel .recompensa b { font-family: 'Rye', Georgia, serif; font-weight: 400; font-size: 6.6cqw; line-height: 1.05; }
+.hw-cartaz-papel .aviso { font-family: 'Special Elite', 'Courier New', monospace; font-size: 4.8cqw; line-height: 1.3; max-width: 76cqw; }
+.hw-cartaz-papel .aviso strong { text-decoration: underline; text-decoration-thickness: .4cqw; text-underline-offset: .6cqw; }
+.hw-cartaz-papel .lapis { position: absolute; font-family: 'Caveat', 'Segoe Print', 'Comic Sans MS', cursive; font-weight: 700; color: var(--lapis); line-height: 1; opacity: .88; }
+.hw-cartaz-papel .rabisco { top: 27cqw; right: 3cqw; width: 20cqw; font-size: 5.2cqw; transform: rotate(9deg); }
+.hw-cartaz-papel .volta { bottom: 18cqw; left: 4cqw; font-size: 5cqw; transform: rotate(-7deg); text-align: left; }
+.hw-cartaz-papel .volta b { font-size: 6.6cqw; font-variant-numeric: tabular-nums; }
+
+/* ── O carteiro ──────────────────────────────────────────────────────────── */
+/* O morcego da revoada, sem o voo dela: quem move é o cartaz. Bate rápido e
+   sua enquanto carrega; aliviado, bate devagar. */
+.hw-morcego.hw-carteiro {
+  left: 50%; top: -21px; width: 46px; height: 23px; margin-left: -23px;
+  animation: none; pointer-events: none; cursor: default; --bater: .15s;
+}
+.hw-morcego.hw-carteiro.aliviado { --bater: .3s; }
+.hw-carteiro .gota {
+  position: absolute; left: 31px; top: 2px; width: 3px; height: 4px; border-radius: 50% 50% 50% 50% / 30% 30% 70% 70%;
+  background: #9fd3ff; animation: hw-cartaz-pinga .8s ease-in infinite;
+}
+.hw-carteiro.aliviado .gota { display: none; }
+@keyframes hw-cartaz-pinga { from { transform: translate(0, 0); opacity: 1; } to { transform: translate(3px, 9px); opacity: 0; } }
+
+/* ── O fogo ──────────────────────────────────────────────────────────────── */
+/* `--q` é a frente do fogo, de 0% a 112%, escrita pelo componente a cada quadro. */
+.hw-cartaz-papel.queimando {
+  -webkit-mask-image: radial-gradient(circle at 10% 104%, transparent var(--q, 0%), #000 calc(var(--q, 0%) + .8%));
+          mask-image: radial-gradient(circle at 10% 104%, transparent var(--q, 0%), #000 calc(var(--q, 0%) + .8%));
+  cursor: default;
+}
+.hw-cartaz-papel.queimando::before {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: radial-gradient(circle at 10% 104%,
+    transparent var(--q, 0%),
+    #ffd27a calc(var(--q, 0%) + .2%),
+    #ff8a2a calc(var(--q, 0%) + 1%),
+    #7a2a0c calc(var(--q, 0%) + 2.2%),
+    rgba(55, 22, 6, .8) calc(var(--q, 0%) + 3.4%),
+    rgba(70, 30, 8, .35) calc(var(--q, 0%) + 7%),
+    transparent calc(var(--q, 0%) + 12%));
+}
+.hw-cartaz-papel .faisca {
+  position: absolute; left: calc(10% - 3px); bottom: -1px; z-index: 4; width: 6px; height: 6px; border-radius: 50%;
+  background: #ffe08a; box-shadow: 0 0 6px 3px rgba(255, 150, 40, .85), 0 0 16px 6px rgba(255, 90, 20, .45);
+}
+.hw-cartaz-efeitos { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; }
+.hw-cartaz-efeitos i { position: absolute; display: block; }
+.hw-cartaz-efeitos .brasa { width: 2.5px; height: 2.5px; border-radius: 50%; background: #ffc061; box-shadow: 0 0 4px 2px rgba(255, 130, 30, .8); }
+.hw-cartaz-efeitos .fumaca { width: 20px; height: 20px; border-radius: 50%; background: color-mix(in oklch, currentColor 22%, transparent); filter: blur(5px); }
+.hw-cartaz-efeitos .cinza { width: 4px; height: 3px; border-radius: 1px; background: #3d3640; }

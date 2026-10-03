@@ -15,10 +15,36 @@ const FONTE = `@font-face {
   src: url('/fonts/creepster.woff2') format('woff2');
 }`;
 
-export function carregarFonte() {
-  if (typeof document === 'undefined' || document.getElementById(ID_FONTE)) return;
+function declarar(id: string, css: string) {
+  if (typeof document === 'undefined' || document.getElementById(id)) return;
   const estilo = document.createElement('style');
-  estilo.id = ID_FONTE;
-  estilo.textContent = FONTE;
+  estilo.id = id;
+  estilo.textContent = css;
   document.head.appendChild(estilo);
+}
+
+export function carregarFonte() {
+  declarar(ID_FONTE, FONTE);
+}
+
+/**
+ * As do cartaz «Procura-se» (`CartazProcuraSe.tsx`): Rye (letreiro de faroeste),
+ * Special Elite (máquina de escrever) e Caveat (lápis). Também no próprio site
+ * e OFL. Declarar não baixa: o navegador só busca o arquivo quando o cartaz
+ * aparece na tela.
+ */
+const FONTES_DO_CARTAZ = [
+  ['Rye', 'rye'],
+  ['Special Elite', 'special-elite'],
+  ['Caveat', 'caveat'],
+].map(([familia, arquivo]) => `@font-face {
+  font-family: '${familia}';
+  font-style: normal;
+  font-weight: ${arquivo === 'caveat' ? '400 700' : '400'};
+  font-display: swap;
+  src: url('/fonts/${arquivo}.woff2') format('woff2');
+}`).join('\n');
+
+export function carregarFontesDoCartaz() {
+  declarar('hw-fontes-cartaz', FONTES_DO_CARTAZ);
 }

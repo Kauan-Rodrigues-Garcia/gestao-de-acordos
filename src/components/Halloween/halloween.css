@@ -46,7 +46,9 @@
    do conteúdo e da barra, abaixo de diálogos e menus (z 50). */
 .hw-aranha-palco { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
 .hw-aranha-fios { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.hw-aranha-fios .fio-livre { fill: none; stroke: color-mix(in oklch, currentColor 45%, transparent); stroke-width: 1; stroke-linecap: round; }
+.hw-aranha-fios .fio-livre { fill: none; stroke: color-mix(in oklch, currentColor 45%, transparent); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+/* O toco que fica pendurado nela depois de o fio estourar. */
+.hw-aranha-fios .fio-livre.toco { stroke-width: .8; }
 .hw-aranha.solta { top: 0; left: 0; right: auto; width: 40px; height: 40px; display: none; justify-content: center; align-items: center; transform-origin: 20px 20px; cursor: grab; touch-action: none; will-change: transform; }
 .hw-aranha.solta.ativa { display: flex; }
 .hw-aranha.solta.agarrada { cursor: grabbing; }
@@ -172,9 +174,14 @@
    largura — largura refazia layout e pintura a cada quadro. */
 .hw-lanterna .cone { transform-origin: 0 50%; animation: hw-alcance 5.3s ease-in-out infinite alternate; will-change: transform; }
 .hw-lanterna .foco { animation: hw-alcance-foco 5.3s ease-in-out infinite alternate; will-change: transform; }
-.hw-lanterna.susto .cone, .hw-lanterna.susto .foco { animation-play-state: paused; }
+/* O rosto anda num trilho com o mesmo vai-e-vem do foco (mesma duração, mesmo
+   início, pausa junto no susto). Antes ele ficava parado no alcance máximo, e
+   o susto que caía com o feixe curto aparecia fora da luz. */
+.hw-lanterna .trilho { position: absolute; inset: 0; pointer-events: none; animation: hw-alcance-trilho 5.3s ease-in-out infinite alternate; will-change: transform; }
+.hw-lanterna.susto .cone, .hw-lanterna.susto .foco, .hw-lanterna.susto .trilho { animation-play-state: paused; }
 @keyframes hw-alcance { from { transform: scaleX(.714); } to { transform: scaleX(1); } }
 @keyframes hw-alcance-foco { from { transform: translate(-120px, -50%); } to { transform: translate(0, -50%); } }
+@keyframes hw-alcance-trilho { from { transform: translateX(-120px); } to { transform: translateX(0); } }
 .hw-lanterna.desligada .feixe, .hw-lanterna.apaga .feixe { opacity: 0; }
 .hw-lanterna.apaga .feixe { transition-duration: .08s; }
 .hw-lanterna .cone { position: absolute; inset: 0; clip-path: polygon(0 45%, 100% 0, 100% 100%, 0 55%); background: linear-gradient(to right, var(--luz), var(--luz-fim) 100%); filter: blur(3px);

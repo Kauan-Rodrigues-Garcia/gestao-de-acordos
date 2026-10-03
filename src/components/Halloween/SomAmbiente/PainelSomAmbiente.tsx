@@ -36,6 +36,7 @@ import {
 } from './preferencias';
 import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
+import './somAmbiente.css';
 
 const TEMAS: FaixaEmbutida[] = ['halloween', 'sexta13', 'candyman'];
 

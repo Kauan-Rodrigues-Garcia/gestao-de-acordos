@@ -7,6 +7,7 @@ import { FANTASMA, sortearEsconderijo, type Esconderijo } from './esconderijo';
 import { Fumaca } from './Fumaca';
 import { VultoNoVidro } from './VultoNoVidro';
 import { Aranha } from './Aranha';
+import { MorcegoSvg } from './Desenhos';
 import './halloween.css';
 
 /*
@@ -331,6 +332,8 @@ function Lanterna({ posicao }: { posicao: number }) {
       <div className="giro">
         <div className="feixe">
           <div className="cone" /><div className="foco" />
+          {/* O trilho anda junto com o foco: o rosto aparece onde a luz está, e não no alcance máximo. */}
+          <div className="trilho">
           <div className="hw-assombracao">
             <svg viewBox="0 0 80 110">
               <defs>
@@ -345,6 +348,7 @@ function Lanterna({ posicao }: { posicao: number }) {
               <path d="M27 50 Q26 58 28 66 M53 50 Q54 58 52 66" stroke="oklch(0.25 0.02 260 / .35)" strokeWidth="1.6" fill="none" strokeLinecap="round" />
               <path d="M34 58 C34 51 46 51 46 58 C47 73 43 85 40 88 C37 85 33 73 34 58 Z" fill="url(#hw-oco)" />
             </svg>
+          </div>
           </div>
         </div>
         <svg key={`c${aperta}`} className={cn('corpo', aperto > 0 && 'aperto')} viewBox="0 0 46 22" onClick={clicar}>
@@ -372,32 +376,7 @@ function Lanterna({ posicao }: { posicao: number }) {
 }
 
 // ── Morcegos, em qualquer tela ────────────────────────────────────────────────
-
-const ASA = (
-  <>
-    <path d="M45 17 C39 8 29 3.5 19.5 5.5 C15 8.5 12.5 13 13 18.5 C16.5 17 19.8 18.6 20.6 22.6 C24 20.6 27.8 22.6 28 26.8 C31.4 25 35.2 27 35.8 31 C39 29.4 42.6 30 45 32 Z" fill="#1B1A1F" />
-    <path d="M45 19.5 C39 12.5 31 9 22.5 9.5 C27.5 15.5 31.5 22 34.5 28.6 C38.4 27.8 42 28.6 45 30 Z" fill="#2B2930" />
-  </>
-);
-
-function MorcegoSvg() {
-  return (
-    <svg viewBox="0 0 100 50">
-      <g className="asa-e">{ASA}</g>
-      <g className="asa-d"><g transform="translate(100 0) scale(-1 1)">{ASA}</g></g>
-      <g className="corpo-m">
-        <path d="M44 20 L43 6 L48 13 Z M56 20 L57 6 L52 13 Z" fill="#1B1A1F" />
-        <ellipse cx="50" cy="31" rx="6.5" ry="10" fill="#1B1A1F" />
-        <circle cx="50" cy="20" r="8" fill="#1F1E24" />
-        <g className="olhos-m">
-          <path d="M44.5 18.5 L48.6 20.4 L45.4 21.8 Z M55.5 18.5 L51.4 20.4 L54.6 21.8 Z" fill="#F4A51C" />
-          <circle cx="46.6" cy="20.6" r=".7" fill="#1B1A1F" /><circle cx="53.4" cy="20.6" r=".7" fill="#1B1A1F" />
-        </g>
-        <path className="olhos-x" d="M44.6 18.4 L48.2 22 M48.2 18.4 L44.6 22 M51.8 18.4 L55.4 22 M55.4 18.4 L51.8 22" stroke="#F4A51C" strokeWidth="1.3" strokeLinecap="round" />
-      </g>
-    </svg>
-  );
-}
+// O desenho mora em `Desenhos.tsx`: o carteiro do cartaz é o mesmo morcego.
 
 /**
  * Um bando pequeno cruza a tela de vez em quando. Clicou num morcego, ele
