@@ -34,13 +34,24 @@ export const FISICA = {
   /** Freio só no eixo do fio: tira o «boing» sem matar o balanço. */
   freioDoFio: 0.12,
   /** Quanto o fio estica além do comprimento, puxando com a mão, antes de estourar. */
-  limite: 230,
+  limite: 150,
   /**
    * Quanto mais esticado, mais o fio segura: a aranha fica para trás da mão.
-   * Com 2,5 × o limite, a mão precisa ir uns 380 px além do comprimento para
-   * o fio esticar os 230 e estourar.
+   * Com 2,5 × o limite, a mão precisa ir uns 250 px além do comprimento para
+   * o fio esticar os 150 e estourar.
    */
-  resistencia: 575,
+  resistencia: 375,
+
+  // ── A aranha solta fio enquanto é puxada ──
+  /**
+   * Quanto do puxão vira fio novo, por quadro. Puxando devagar, ela acompanha
+   * soltando fio e ele quase não estica; puxando rápido, não dá tempo e estica.
+   */
+  soltaFio: 0.12,
+  /** O máximo de fio novo por quadro, px — um tranco forte estica e pode estourar. */
+  soltaMaxima: 14,
+  /** Todo o fio que ela tem. Acabou: daí em diante só estica, até estourar. */
+  comprimentoMaximo: 320,
   /** Quanto do puxão o fio devolve ao ser solto — o resto ele cede. */
   folga: 36,
   /** Resistência do ar, solta. */
@@ -101,6 +112,20 @@ export function comprimentoAoSoltar(p: Ponto, ancora: Ponto, comprimento: number
 /** Puxou além do limite: o fio estoura. */
 export function estourou(p: Ponto, ancora: Ponto, comprimento: number): boolean {
   return distancia(p, ancora) > comprimento + FISICA.limite;
+}
+
+/**
+ * O comprimento do fio depois de um passo sendo puxado pela mão. Só cresce:
+ * a aranha solta fio quando a mão passa do comprimento, e o fio solto não
+ * volta — trazer a aranha de volta para perto da teia deixa o fio frouxo,
+ * fazendo barriga. Solta uma parte do excesso por quadro, com teto por quadro
+ * e no total (`FISICA.soltaFio`, `soltaMaxima`, `comprimentoMaximo`).
+ */
+export function fioQueSolta(ancora: Ponto, mao: Ponto, comprimento: number, dt: number): number {
+  const excesso = distancia(ancora, mao) - comprimento;
+  if (excesso <= 0 || comprimento >= FISICA.comprimentoMaximo) return comprimento;
+  const solta = Math.min(excesso * FISICA.soltaFio * dt, FISICA.soltaMaxima * dt);
+  return Math.min(FISICA.comprimentoMaximo, comprimento + solta);
 }
 
 /**

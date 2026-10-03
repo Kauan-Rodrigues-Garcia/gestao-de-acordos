@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FISICA, alvoNoFio, anguloNoFio, arremesso, caminhoDoFio, comprimentoAoSoltar, criarFio, distancia, estourou,
-  normalizarAngulo, passoDoFio, passoLivre, passoNaMao, passoNoFio, saiuDaTela, tremerFio, velocidadeDaMao,
+  fioQueSolta, normalizarAngulo, passoDoFio, passoLivre, passoNaMao, passoNoFio, saiuDaTela, tremerFio, velocidadeDaMao,
   type CorpoLivre,
 } from './aranhaFisica';
 
@@ -140,6 +140,37 @@ describe('puxando o fio', () => {
     // Bem além: estoura.
     const longe = alvoNoFio(ANCORA, { x: ANCORA.x, y: ANCORA.y + 100 + FISICA.limite * 2 }, 100);
     expect(estourou(longe, ANCORA, 100)).toBe(true);
+  });
+});
+
+describe('ela solta fio enquanto é puxada', () => {
+  it('puxando devagar, o fio cresce junto e quase não estica', () => {
+    let L = 100;
+    let y = ANCORA.y + 100;
+    for (let i = 0; i < 60; i++) { y += 2; L = fioQueSolta(ANCORA, { x: ANCORA.x, y }, L, 1); }
+    const estica = y - ANCORA.y - L;
+    expect(L).toBeGreaterThan(200);
+    expect(estica).toBeLessThan(25);
+  });
+
+  it('o fio solto não volta: trazer a aranha para perto da teia deixa ele comprido', () => {
+    let L = 100;
+    for (let i = 0; i < 120; i++) L = fioQueSolta(ANCORA, { x: ANCORA.x, y: ANCORA.y + 260 }, L, 1);
+    const longe = L;
+    expect(longe).toBeGreaterThan(240);
+    L = fioQueSolta(ANCORA, { x: ANCORA.x, y: ANCORA.y + 30 }, L, 1);
+    expect(L).toBe(longe);
+  });
+
+  it('num tranco, solta no máximo um tanto por quadro — o resto estica', () => {
+    const L = fioQueSolta(ANCORA, { x: ANCORA.x, y: ANCORA.y + 100 + 600 }, 100, 1);
+    expect(L).toBe(100 + FISICA.soltaMaxima);
+  });
+
+  it('acabou o fio: daí em diante só estica', () => {
+    let L = 100;
+    for (let i = 0; i < 600; i++) L = fioQueSolta(ANCORA, { x: ANCORA.x, y: ANCORA.y + 900 }, L, 1);
+    expect(L).toBe(FISICA.comprimentoMaximo);
   });
 });
 

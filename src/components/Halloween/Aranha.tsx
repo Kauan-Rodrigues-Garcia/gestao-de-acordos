@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import {
   FISICA, alvoNoFio, anguloNoFio, arremesso, caminhoDoFio, comprimentoAoSoltar, criarFio, distancia, estourou,
-  normalizarAngulo, passoDoFio, passoLivre, passoNaMao, passoNoFio, saiuDaTela, tremerFio, velocidadeDaMao,
+  fioQueSolta, normalizarAngulo, passoDoFio, passoLivre, passoNaMao, passoNoFio, saiuDaTela, tremerFio, velocidadeDaMao,
   type Amostra, type Fio, type Ponto,
 } from './aranhaFisica';
 import { VOLTA_EM_MS, esquecerQueda, lembrarQueda, planoDaVolta, quedaGuardada } from './aranhaPerdida';
@@ -13,9 +13,12 @@ import { CartazProcuraSe, type EstadoDoCartaz } from './CartazProcuraSe';
  * A aranha pendurada na teia da direita — e, desde 02/10/2026, de brinquedo.
  *
  *   Passar o mouse   sobe o fio e some de 0 a 3 minutos (como sempre foi).
- *   Clicar e puxar   estica o fio, que segura cada vez mais. Soltar antes do
- *                    limite: ela balança no fio por uns segundos e depois sobe,
- *                    como no passar do mouse.
+ *   Clicar e puxar   ela solta fio enquanto é puxada, e o fio solto não volta:
+ *                    trazer de volta para perto da teia deixa o fio frouxo,
+ *                    fazendo barriga. Puxando mais rápido do que ela solta (ou
+ *                    depois de acabar o fio), ele estica e segura cada vez
+ *                    mais. Soltar antes do limite: ela balança no fio por uns
+ *                    segundos e depois sobe, como no passar do mouse.
  *   Puxar demais     o fio estoura: o pedaço de cima recolhe para a teia
  *                    chicoteando e um toco fica pendurado nela. Na mão ela tem
  *                    peso — vem atrasada atrás do cursor e pende. Soltar: cai
@@ -300,8 +303,11 @@ export function Aranha({ claro }: { claro: boolean }) {
 
       for (let i = 0; i < n; i++) {
         if (modo === 'esticando' && a) {
-          // A mão puxa, o fio segura: ela vai para onde o fio deixa, com peso.
-          passoNaMao(s, alvoNoFio(a, { x: s.mao.x - s.dedo.x, y: s.mao.y - s.dedo.y }, s.comprimento), dt);
+          // A mão puxa: ela solta fio (que não volta) e o resto estica; ela vai
+          // para onde o fio deixa, com peso.
+          const mao = { x: s.mao.x - s.dedo.x, y: s.mao.y - s.dedo.y };
+          s.comprimento = fioQueSolta(a, mao, s.comprimento, dt);
+          passoNaMao(s, alvoNoFio(a, mao, s.comprimento), dt);
         } else if (modo === 'balancando' && a) {
           passoNoFio(s, a, s.comprimento, dt);
         } else if (modo === 'segura') {
