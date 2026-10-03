@@ -10,8 +10,9 @@ import './cartaz.css';
  * Quem decide quando ele aparece e quando queima é a `Aranha` (linha do tempo
  * em `aranhaPerdida.ts`); aqui só a arte e as animações.
  *
- *   Chegada     um morcego traz o cartaz voando desde a esquerda, afundando
- *               com o peso e suando, prende na teia e vai embora aliviado. O
+ *   Chegada     um morcego traz o cartaz voando de cima, do centro da tela,
+ *               afundando com o peso e suando, prende na teia e vai embora
+ *               aliviado. O
  *               cartaz desce o fio e balança com o tranco. (Recarregou a
  *               página com ela ainda perdida: o cartaz já está lá.)
  *   Pendurado   balança devagar. Clique: chega mais perto, ali mesmo no fio,
@@ -83,20 +84,23 @@ export function CartazProcuraSe({ estado }: { estado: EstadoDoCartaz }) {
     // de layout: depois dela, a troca de altura viraria transição visível.
     f.style.height = '0px';
 
-    // Desde fora da camada, pela esquerda, até a âncora — afundando a cada batida.
-    const camada = r.parentElement;
-    const ate = (camada?.clientWidth ?? 1200) - 46;
-    const dist = ate + 110;
+    // De cima, no centro da tela (escondido atrás da barra), até a âncora:
+    // mergulha primeiro e chega quase na horizontal, afundando a cada batida.
+    const largura = r.parentElement?.clientWidth ?? 1200;
+    const x0 = largura / 2 - (largura - 46);
+    const y0 = -(36 + FIO + (papel.current?.offsetHeight ?? 120) + 60);
+    const dist = Math.hypot(x0, y0 + FIO);
     const quadros: Keyframe[] = [];
-    const passos = 7;
+    const passos = 8;
     for (let i = 0; i <= passos; i++) {
       const k = i / passos;
-      const x = -dist * (1 - k);
-      const afunda = i === passos ? 0 : (i % 2 ? 34 : 4) * (1 - k * 0.6);
+      const x = x0 * (1 - k);
+      const desce = 1 - (1 - k) * (1 - k);
+      const afunda = i === 0 || i === passos ? 0 : (i % 2 ? 16 : -2) * (1 - k * 0.5);
       const giro = i === passos ? 0 : (i % 2 ? 5 : -5) * (1 - k * 0.5);
-      quadros.push({ transform: `translate(${x}px, ${afunda - FIO}px) rotate(${giro}deg)`, offset: k });
+      quadros.push({ transform: `translate(${x}px, ${y0 + (-FIO - y0) * desce + afunda}px) rotate(${giro}deg)`, offset: k });
     }
-    const duracao = Math.min(5200, Math.max(2800, dist * 2.4));
+    const duracao = Math.min(3800, Math.max(2400, dist * 2.6));
     const chegou = animar(v, quadros, { duration: duracao, easing: 'cubic-bezier(.3,.1,.35,1)', fill: 'forwards' });
 
     chegou.finished.then(async () => {
