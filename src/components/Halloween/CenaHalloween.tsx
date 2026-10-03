@@ -69,27 +69,38 @@ function Nuvens() {
   );
 }
 
+/** Camadas de profundidade da chuva: cada uma é um traço só por quadro. */
+const PLANOS_DA_CHUVA = 4;
+
 function Chuva() {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const cx = cv.getContext('2d'); if (!cx) return;
-    type Gota = { x: number; y: number; v: number; c: number; a: number; w: number };
+    type Gota = { x: number; y: number; v: number; c: number; plano: number };
     let gotas: Gota[] = [], raio: { pts: [number, number][]; vida: number } | null = null, cor = '#888', quadro = 0, rodando = true;
+    // A conta é em px da tela; o canvas tem meia resolução e o CSS estica. A
+    // ampliação já amacia a gota — antes era um `filter: blur` de CSS sobre a
+    // tela inteira, refeito a cada quadro.
+    let w = 0, h = 0;
     const nova = (qualquerAltura: boolean): Gota => {
-      const z = Math.random(); // longe = menor, mais lenta e mais apagada
-      return { x: Math.random() * (cv.width + 120) - 60, y: qualquerAltura ? Math.random() * cv.height : -20 - Math.random() * 60, v: 7 + z * 9, c: 10 + z * 16, a: 0.12 + z * 0.3, w: 0.6 + z * 0.8 };
+      // Longe = menor, mais lenta e mais apagada. Sorteada em planos, para
+      // desenhar cada plano de uma vez (mesma espessura e transparência).
+      const plano = Math.floor(Math.random() * PLANOS_DA_CHUVA), z = (plano + Math.random()) / PLANOS_DA_CHUVA;
+      return { x: Math.random() * (w + 120) - 60, y: qualquerAltura ? Math.random() * h : -20 - Math.random() * 60, v: 7 + z * 9, c: 10 + z * 16, plano };
     };
     const ajustar = () => {
-      cv.width = cv.clientWidth; cv.height = cv.clientHeight;
-      gotas = Array.from({ length: Math.round(cv.width * cv.height / 9000) }, () => nova(true));
+      w = cv.clientWidth; h = cv.clientHeight;
+      cv.width = Math.max(1, Math.round(w / 2)); cv.height = Math.max(1, Math.round(h / 2));
+      cx.setTransform(cv.width / Math.max(1, w), 0, 0, cv.height / Math.max(1, h), 0, 0);
+      gotas = Array.from({ length: Math.round(w * h / 9000) }, () => nova(true));
     };
     const trovao = () => {
-      const x0 = cv.width * acaso(0.3, 0.9), pts: [number, number][] = [[x0, 0]];
+      const x0 = w * acaso(0.3, 0.9), pts: [number, number][] = [[x0, 0]];
       let x = x0, y = 0;
-      while (y < cv.height * acaso(0.6, 0.9)) { y += acaso(14, 36); x += acaso(-17, 17); pts.push([x, y]); }
+      while (y < h * acaso(0.6, 0.9)) { y += acaso(14, 36); x += acaso(-17, 17); pts.push([x, y]); }
       raio = { pts, vida: 8 }; // quadros, a 30 por segundo
-      window.dispatchEvent(new CustomEvent(TROVAO, { detail: { x: x0 / cv.width } }));
+      window.dispatchEvent(new CustomEvent(TROVAO, { detail: { x: x0 / Math.max(1, w) } }));
     };
     let ultimo = 0;
     const quadroDaChuva = (agora: number) => {
@@ -98,13 +109,18 @@ function Chuva() {
       if (agora - ultimo < 32) { requestAnimationFrame(quadroDaChuva); return; }
       ultimo = agora;
       if (quadro++ % 15 === 0) cor = getComputedStyle(cv).color; // acompanha a troca de tema
-      cx.clearRect(0, 0, cv.width, cv.height);
+      cx.clearRect(0, 0, w, h);
       cx.strokeStyle = cor; cx.lineCap = 'round';
       for (const g of gotas) {
         g.y += g.v * 2; g.x -= g.v * 0.36;
-        if (g.y > cv.height + 20) Object.assign(g, nova(false));
-        cx.globalAlpha = g.a; cx.lineWidth = g.w;
-        cx.beginPath(); cx.moveTo(g.x, g.y); cx.lineTo(g.x + g.c * 0.18, g.y - g.c); cx.stroke();
+        if (g.y > h + 20) Object.assign(g, nova(false));
+      }
+      for (let p = 0; p < PLANOS_DA_CHUVA; p++) {
+        const z = (p + 0.5) / PLANOS_DA_CHUVA;
+        cx.globalAlpha = 0.12 + z * 0.3; cx.lineWidth = 0.6 + z * 0.8;
+        cx.beginPath();
+        for (const g of gotas) if (g.plano === p) { cx.moveTo(g.x, g.y); cx.lineTo(g.x + g.c * 0.18, g.y - g.c); }
+        cx.stroke();
       }
       if (raio && raio.vida-- > 0) {
         cx.globalAlpha = raio.vida > 6 || (raio.vida > 2 && raio.vida < 5) ? 0.7 : 0.25;
@@ -331,7 +347,24 @@ function Lanterna({ posicao }: { posicao: number }) {
     <div className={cn('hw-lanterna', desligada && 'desligada', fase && 'susto', fase)} style={{ left: `${posicao}%` }}>
       <div className="giro">
         <div className="feixe">
-          <div className="cone" /><div className="foco" />
+          {/* O cone vem borrado de dentro do SVG (pintado uma vez): `filter` de CSS na camada que
+              estica era refeito pela placa de vídeo a cada quadro. */}
+          <div className="cone">
+            <svg viewBox="0 0 420 100" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="hw-cone-luz" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" style={{ stopColor: 'var(--luz)' }} />
+                  <stop offset=".62" style={{ stopColor: 'color-mix(in oklch, var(--luz) 38%, var(--luz-fim))' }} />
+                  <stop offset="1" style={{ stopColor: 'var(--luz-fim)', stopOpacity: 0 }} />
+                </linearGradient>
+                <filter id="hw-cone-borrao" filterUnits="userSpaceOnUse" x="-10" y="-10" width="440" height="120">
+                  <feGaussianBlur stdDeviation="3" />
+                </filter>
+              </defs>
+              <polygon points="0,45 420,0 420,100 0,55" fill="url(#hw-cone-luz)" filter="url(#hw-cone-borrao)" />
+            </svg>
+          </div>
+          <div className="foco" />
           {/* O trilho anda junto com o foco: o rosto aparece onde a luz está, e não no alcance máximo. */}
           <div className="trilho">
           <div className="hw-assombracao">

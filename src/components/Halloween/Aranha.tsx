@@ -136,7 +136,7 @@ export function Aranha({ claro }: { claro: boolean }) {
       const desce = animar(f, [{ height: '4px' }, { height: `${ALTURA_DO_FIO * 0.45}px` }], { duration: 3200, easing: 'ease-in-out', fill: 'forwards' });
       desce.onfinish = () => {
         desce.cancel(); f.style.height = ''; f.style.animation = '';
-        el.classList.remove('descendo'); ocupada = false; modo = 'teia';
+        el.classList.remove('descendo'); el.classList.add('ociosa'); ocupada = false; modo = 'teia';
       };
     };
     /** Lá em cima, espera de 0 a 3 minutos e desce. */
@@ -145,6 +145,7 @@ export function Aranha({ claro }: { claro: boolean }) {
     const recolhida = () => {
       const el = caixa.current, f = fio.current;
       if (!el || !f) return;
+      el.classList.remove('ociosa');
       f.style.animation = 'none'; f.style.height = '4px';
       el.style.visibility = '';
     };
@@ -154,6 +155,7 @@ export function Aranha({ claro }: { claro: boolean }) {
       if (!el || !f || modo !== 'teia' || ocupada) return;
       ocupada = true;
       const h = f.getBoundingClientRect().height;
+      el.classList.remove('ociosa');
       f.style.animation = 'none'; f.style.height = `${h}px`;
       el.classList.add('escalando');
       const sobe = animar(f, [{ height: `${h}px` }, { height: '4px' }], { duration: Math.max(1600, h * 20), easing: 'cubic-bezier(.4, .1, .6, .95)', fill: 'forwards' });
@@ -183,7 +185,7 @@ export function Aranha({ claro }: { claro: boolean }) {
      */
     const agendarVolta = (queda: number) => {
       modo = 'perdida';
-      if (caixa.current) caixa.current.style.visibility = 'hidden';
+      if (caixa.current) { caixa.current.style.visibility = 'hidden'; caixa.current.classList.remove('ociosa'); }
       const plano = planoDaVolta(queda, Date.now());
       const base = { queda, volta: queda + VOLTA_EM_MS, queimando: false };
       if (plano.queimaEm !== null) {
@@ -373,6 +375,7 @@ export function Aranha({ claro }: { claro: boolean }) {
       fioPreso = criarFio(a, s, s.comprimento);
       pararNaTeia();
       caixa.current.style.visibility = 'hidden';
+      caixa.current.classList.remove('ociosa');
       solta.current?.classList.remove('agitada');
       comecarArrasto(e, 'esticando');
       desenhar(a);
@@ -438,8 +441,9 @@ export function Aranha({ claro }: { claro: boolean }) {
 
   return (
     <>
-      <div ref={caixa} className="hw-aranha">
-        <div ref={fio} className="fio" style={{ ['--h' as string]: `${ALTURA_DO_FIO}px` }} />
+      {/* `ociosa`: o vai-e-vem do fio é do CSS; sem ela, quem mexe no fio é o código (subir, descer). */}
+      <div ref={caixa} className="hw-aranha ociosa" style={{ ['--h' as string]: `${ALTURA_DO_FIO}px` }}>
+        <div ref={fio} className="fio" />
         <AranhaSvg
           onMouseEnter={() => controle.current?.foge()}
           onPointerDown={e => controle.current?.pegarDaTeia(e)}

@@ -19,7 +19,7 @@
  *   dezenas de vezes por minuto e não redesenha o React.
  * - Cada vulto cuida dos próprios tempos; piscar redesenha só aquele vulto.
  */
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const acaso = (min: number, max: number) => min + Math.random() * (max - min);
@@ -119,6 +119,7 @@ const Vulto = memo(function Vulto({ de, ate, atrasoInicial, alturaCena }: {
   const [visivel, setVisivel] = useState(false);
   const [olhos, setOlhos] = useState(false);
   const [pisca, setPisca] = useState(false);
+  const id = useId().replace(/:/g, '');
 
   useEffect(() => {
     let vivo = true;
@@ -187,7 +188,6 @@ const Vulto = memo(function Vulto({ de, ate, atrasoInicial, alturaCena }: {
     bottom: aparicao.baixo,
     ['--escala' as string]: aparicao.escala,
     ['--forca' as string]: 0.5 + 0.42 * aparicao.perto,
-    ['--desfoque' as string]: `${10 - 4.5 * aparicao.perto}px`,
     ['--respira' as string]: `${aparicao.respira}s`,
   } as CSSProperties;
 
@@ -196,8 +196,26 @@ const Vulto = memo(function Vulto({ de, ate, atrasoInicial, alturaCena }: {
       <div className="hw-vulto-luz" />
       <div className="hw-vulto-tronco">
         <div className="hw-vulto-sombra">
-          {/* Quadro com folga: o desfoque precisa de espaço para vazar, senão corta reto na borda. */}
-          <svg viewBox="-60 -40 320 440" className="hw-vulto-corpo">{t.desenho}</svg>
+          {/*
+            Quadro com folga: o desfoque precisa de espaço para vazar, senão corta reto na borda.
+            Desfoque e esmaecido da base DENTRO do SVG, e não em `filter`/`mask` de CSS: assim
+            são pintados uma vez por aparição. Em CSS, numa camada que respira, a placa de
+            vídeo refazia o desfoque a cada quadro.
+          */}
+          <svg viewBox="-60 -40 320 440" className="hw-vulto-corpo">
+            <defs>
+              <filter id={`${id}-d`} filterUnits="userSpaceOnUse" x="-60" y="-40" width="320" height="440">
+                <feGaussianBlur stdDeviation={10 - 4.5 * aparicao.perto} />
+              </filter>
+              <linearGradient id={`${id}-g`} gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="268">
+                <stop offset="0" stopColor="#000" /><stop offset="1" stopColor="#fff" />
+              </linearGradient>
+              <mask id={`${id}-m`} maskUnits="userSpaceOnUse" x="-60" y="-40" width="320" height="440">
+                <rect x="-60" y="-40" width="320" height="440" fill={`url(#${id}-g)`} />
+              </mask>
+            </defs>
+            <g mask={`url(#${id}-m)`}><g filter={`url(#${id}-d)`}>{t.desenho}</g></g>
+          </svg>
         </div>
         <div className={cn('hw-vulto-olhos', olhos && 'acesos', pisca && 'pisca')}>
           {[-1, 1].map(lado => (
