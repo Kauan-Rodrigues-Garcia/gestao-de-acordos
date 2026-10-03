@@ -45,6 +45,7 @@ import { ReceitaDistribuicaoPP } from './ReceitaDistribuicaoPP';
 import { MetaSection } from './MetaSection';
 import { ExtrasSection } from './ExtrasSection';
 import { DiretoriaVisaoGeral } from './DiretoriaVisaoGeral';
+import { VisaoGeralPorCidade } from './visaoGeral/VisaoGeralPorCidade';
 import { DiretoriaSetores } from './DiretoriaSetores';
 import { esquecerLeiturasDo59 } from '@/services/mestre/cache59';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
@@ -600,11 +601,21 @@ export default function PainelDiretoria() {
           <CodigosDeSetor empresaId={empresa?.id ?? ''} mes={mesAnalise} versao={versaoVisao} />
         </Suspense>
       ) : abaVisivel === 'visao' ? (
-        <DiretoriaVisaoGeral
+        /* A Visão geral por cidade (20261003170000). Sem a migration no banco,
+           a anterior responde no lugar — ver `reserva`. */
+        <VisaoGeralPorCidade
           empresaId={empresa?.id ?? ''}
           mes={mesAnalise}
           versao={versaoVisao}
           onAbrirSetores={() => setAba('setores')}
+          reserva={
+            <DiretoriaVisaoGeral
+              empresaId={empresa?.id ?? ''}
+              mes={mesAnalise}
+              versao={versaoVisao}
+              onAbrirSetores={() => setAba('setores')}
+            />
+          }
         />
       ) : abaVisivel === 'setores' ? (
         <DiretoriaSetores
