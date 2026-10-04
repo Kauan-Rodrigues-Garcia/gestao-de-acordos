@@ -100,8 +100,27 @@
 .vg-mini > div { background: color-mix(in srgb, var(--card) 65%, transparent); border-radius: 14px; padding: 10px 12px; min-width: 0; }
 .vg-mini small { display: block; font-size: 11px; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vg-mini b { font-family: var(--vg-num); font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.vg-cofen-linha { margin-top: 10px; font-size: 12.5px; color: var(--muted-foreground); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.vg-cofen-linha b { color: var(--vg-cofen); font-family: var(--font-mono, monospace); font-size: 12px; }
+.vg-legenda b { font-weight: 700; }
+
+/* As duas carteiras no cartão da cidade: Nosso produto (cor da cidade) e Cofen. */
+.vg-carteiras-cid { margin-top: 12px; display: grid; gap: 5px; max-width: 360px; }
+.vg-barra2 { display: flex; height: 6px; border-radius: 6px; overflow: hidden; background: color-mix(in srgb, var(--cc) 12%, transparent); margin-bottom: 3px; }
+.vg-barra2 i { display: block; height: 100%; transition: width .7s var(--vg-ease); }
+.vg-carteira-l { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; color: var(--muted-foreground); white-space: nowrap; }
+.vg-carteira-l > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vg-carteira-l small { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.vg-carteira-l b { color: var(--foreground); font-family: var(--font-mono, monospace); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.vg-carteira-l.vg-c b, .vg-carteira-l.vg-c small { color: var(--vg-cofen); }
+
+/* O disjuntor H.O. ⇄ bruto do Cofen. */
+.vg-disjuntor { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-radius: 999px; font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--vg-cofen) 35%, var(--border)); background: color-mix(in srgb, var(--vg-cofen) 7%, var(--card)); }
+.vg-disjuntor-rot { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--vg-cofen); }
+.vg-disjuntor label { cursor: pointer; color: var(--muted-foreground); font-weight: 600; transition: color .2s; }
+.vg-disjuntor label.vg-on { color: var(--foreground); }
+.vg-disjuntor .vg-disjuntor-chave[data-state] { background: var(--vg-cofen); }
+.vg-disjuntor .vg-disjuntor-chave > span { background: #fff; }
+.vg-aviso-cofen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--foreground) !important; }
 
 /* ── Abre e fecha (linhas de grade de 0 a 1) ───────────────────────────── */
 .vg-desdobra { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--vg-dur) var(--vg-ease), opacity .3s ease; }
@@ -242,6 +261,8 @@
 
 /* ── Detalhe do setor, no lugar ────────────────────────────────────────── */
 .vg-detalhe { margin-top: 14px; border: 1px solid color-mix(in srgb, var(--vg-c) 35%, var(--border)); border-radius: 20px; padding: 18px 20px; background: var(--card); display: grid; gap: 14px; }
+/* Cofen é outra carteira: o detalhe dela tem a cor dela, não a da cidade. */
+.vg-detalhe-cofen { --vg-c: var(--vg-cofen); border-color: color-mix(in srgb, var(--vg-cofen) 40%, var(--border)); }
 .vg-detalhe-grade { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; }
 .vg-equipes { display: grid; gap: 8px; }
 .vg-equipe { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; font-size: 13px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--muted) 35%, transparent); }

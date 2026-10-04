@@ -1,20 +1,21 @@
 /**
  * diretoriaCidades.service.ts — a Visão geral do Painel Diretoria por cidade,
- * e o resumo de um dia.
+ * o resumo de um dia e a carteira Cofen.
  *
- * Duas leituras e uma escrita, todas na migration 20261003170000:
+ * Três leituras e uma escrita (migrations 20261003170000 e 20261004120000):
  *
- *   fn_mestre_diretoria_cidades   o mês: geral + cada cidade + as carteiras
- *   fn_mestre_diretoria_dia       um dia: total, formas, cada setor/carteira
- *   fn_mestre_carteira_classificar  cidade e regra de carteira sem setor
+ *   fn_mestre_diretoria_cidades   o mês do 59: geral + cada cidade + as carteiras
+ *   fn_mestre_diretoria_dia       um dia do 59: total, formas, cada setor/carteira
+ *   fn_diretoria_cofen            a carteira Cofen: conciliação + Analítico
+ *   fn_mestre_carteira_classificar  cidade e regra de carteira sem setor (super admin)
  *
- * ## A cidade é da carteira
+ * ## Só conta o que tem cidade
  *
  * Cada linha do 59 tem uma carteira, e a carteira tem uma cidade (a do setor
- * vinculado, ou a escolhida no painel). Por isso as cidades FECHAM o total —
- * coisa que somar setores nunca faria (o Integral conta em dois, o colchão em
- * nenhum). O teste `diretoriaPorCidade.sql.test.ts` amarra isso à Visão geral
- * de sempre.
+ * vinculado, ou a escolhida no painel). Carteira sem cidade não conta em lugar
+ * nenhum, nem no geral; carteira com regra Cofen também não — o dinheiro Cofen
+ * vem da conciliação, nunca do 59. As cidades FECHAM o geral. O teste
+ * `diretoriaPorCidade.sql.test.ts` amarra isso à Visão geral de sempre.
  */
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { espiarDo59, esquecerLeiturasDo59, lerDo59 } from './cache59';
@@ -43,10 +44,12 @@ export interface MesDoEscopo {
 }
 
 export interface CidadeDoMes extends MesDoEscopo {
-  /** `null` = «sem cidade»: carteiras sem setor que ninguém classificou. */
   cidadeId: string | null;
   nome: string | null;
 }
+
+/** Por que uma carteira do 59 não conta. */
+export type MotivoDeNaoContar = 'sem_cidade' | 'setor_sem_cidade' | 'cofen';
 
 export interface CarteiraDaCidade {
   cod: string;
@@ -60,6 +63,9 @@ export interface CarteiraDaCidade {
   setorNome: string | null;
   cidadeId: string | null;
   regra: RegraDaCarteira | null;
+  /** Conta no geral e na cidade: tem cidade e é Nosso produto. */
+  conta: boolean;
+  motivo: MotivoDeNaoContar | null;
 }
 
 export interface MesPorCidade {
@@ -72,6 +78,8 @@ export interface MesPorCidade {
   geral: MesDoEscopo;
   cidades: CidadeDoMes[];
   carteiras: CarteiraDaCidade[];
+  /** O dinheiro do 59 que ficou fora da conta, no mês até o corte. */
+  naoConta: { valor: number; linhas: number };
 }
 
 interface EscopoCru {
@@ -89,8 +97,13 @@ interface MesCru {
   carteiras: {
     cod: string; nome: string; valor: unknown; linhas: unknown; operadores: unknown; valor_anterior: unknown;
     estado: string; setor_id: string | null; setor_nome: string | null; cidade_id: string | null; regra: unknown;
+    conta?: boolean; motivo?: string | null;
   }[];
+  nao_conta?: { valor: unknown; linhas: unknown };
 }
+
+const motivoOuNulo = (v: unknown): MotivoDeNaoContar | null =>
+  (v === 'sem_cidade' || v === 'setor_sem_cidade' || v === 'cofen' ? v : null);
 
 function escopo(c: EscopoCru): MesDoEscopo {
   return {
@@ -123,12 +136,16 @@ async function buscarMesNoBanco(empresaId: string, mes: string, diaCorte?: numbe
     temLote: data.tem_lote === true,
     temLoteAnterior: data.tem_lote_anterior === true,
     geral: escopo(data.geral),
-    cidades: (data.cidades ?? []).map(c => ({ ...escopo(c), cidadeId: c.cidade_id, nome: c.nome })),
+    // Sem cidade não conta (20261004120000): não há cartão para ela.
+    cidades: (data.cidades ?? []).filter(c => c.cidade_id !== null)
+      .map(c => ({ ...escopo(c), cidadeId: c.cidade_id, nome: c.nome })),
     carteiras: (data.carteiras ?? []).map(c => ({
       cod: c.cod, nome: c.nome, valor: n(c.valor), linhas: n(c.linhas), operadores: n(c.operadores),
       valorAnterior: n(c.valor_anterior), estado: c.estado, setorId: c.setor_id, setorNome: c.setor_nome,
       cidadeId: c.cidade_id, regra: regraOuNula(c.regra),
+      conta: c.conta !== false, motivo: motivoOuNulo(c.motivo),
     })),
+    naoConta: { valor: n(data.nao_conta?.valor), linhas: n(data.nao_conta?.linhas) },
   };
 }
 
@@ -226,11 +243,125 @@ export function espiarResumoDoDia(
   return espiarDo59(['dia', empresaId, mes, dia, escopoDoDia, diaCorte]);
 }
 
+// ── A carteira Cofen ────────────────────────────────────────────────────────
+//
+// O dinheiro Cofen não vem do 59: o total é o do relatório de conciliação da
+// PaguePlay (o card do Conecta Play no Painel Líder) e os operadores são os do
+// Analítico. O banco devolve bruto e H.O. lado a lado; quem escolhe qual
+// mostrar é a tela (o disjuntor H.O. ⇄ bruto).
+
+/** Bruto e H.O. de um mesmo recorte. */
+export interface ValorCofen { bruto: number; ho: number }
+
+export interface DiaCofen extends ValorCofen {
+  dia: number;
+  dentroDoCorte: boolean;
+  coren: number;
+  cofen: number;
+  quantidade: number;
+  brutoAnterior: number;
+  hoAnterior: number;
+  /** Operadores do Analítico com recebimento no dia. */
+  operadores: number;
+  destaque: ({ nome: string } & ValorCofen) | null;
+}
+
+export interface FormaCofen extends ValorCofen { forma: string; qtd: number }
+
+export interface OperadorCofen extends ValorCofen { operadorId: string; nome: string; pagamentos: number }
+
+export interface CofenDoMes {
+  disponivel: boolean;
+  /** O que a tela precisa dizer: setor sem cidade, mais de um setor Cofen... */
+  aviso: string | null;
+  setorId: string | null;
+  nome: string;
+  /** A cidade do setor Cofen (da empresa dele) — a tela casa pelo nome. */
+  cidadeId: string | null;
+  cidadeNome: string | null;
+  /** Conta no geral e na cidade: o setor tem cidade. */
+  conta: boolean;
+  diaCorte: number;
+  diasNoMes: number;
+  mes: ValorCofen & { coren: number; cofen: number; quantidade: number };
+  anterior: { brutoAteCorte: number; hoAteCorte: number; brutoMes: number; hoMes: number; dias: number };
+  serie: DiaCofen[];
+  formas: FormaCofen[];
+  formasDia: (FormaCofen & { dia: number })[];
+  operadores: { quantidade: number; lista: OperadorCofen[] };
+}
+
+interface CofenCru {
+  disponivel: boolean; aviso: string | null;
+  setor_id?: string; nome?: string; cidade_id?: string | null; cidade_nome?: string | null; conta?: boolean;
+  dia_corte: unknown; dias_no_mes: unknown;
+  mes?: { bruto: unknown; ho: unknown; coren: unknown; cofen: unknown; quantidade: unknown };
+  anterior?: { bruto_ate_corte: unknown; ho_ate_corte: unknown; bruto_mes: unknown; ho_mes: unknown; dias: unknown };
+  serie?: {
+    dia: unknown; dentro_do_corte: boolean; bruto: unknown; ho: unknown; coren: unknown; cofen: unknown;
+    quantidade: unknown; bruto_anterior: unknown; ho_anterior: unknown; operadores: unknown;
+    destaque: { nome: string; bruto: unknown; ho: unknown } | null;
+  }[];
+  formas?: { forma: string; bruto: unknown; ho: unknown; qtd: unknown }[];
+  formas_dia?: { dia: unknown; forma: string; bruto: unknown; ho: unknown; qtd: unknown }[];
+  operadores?: { quantidade: unknown; lista: { operador_id: string; nome: string | null; bruto: unknown; ho: unknown; pagamentos: unknown }[] };
+}
+
+async function buscarCofenNoBanco(empresaId: string, mes: string, diaCorte?: number | null): Promise<CofenDoMes> {
+  const { data: c, error } = await rpcSemTipo<CofenCru>('fn_diretoria_cofen', {
+    p_empresa_id: empresaId, p_mes: mes, p_dia_corte: diaCorte ?? null,
+  });
+  if (error) throw new Error(error.message);
+  if (!c) throw new Error('A carteira Cofen não devolveu resultado.');
+  return {
+    disponivel: c.disponivel === true,
+    aviso: c.aviso ?? null,
+    setorId: c.setor_id ?? null,
+    nome: c.nome ?? 'Cofen',
+    cidadeId: c.cidade_id ?? null,
+    cidadeNome: c.cidade_nome ?? null,
+    conta: c.disponivel === true && c.conta === true,
+    diaCorte: n(c.dia_corte),
+    diasNoMes: n(c.dias_no_mes),
+    mes: {
+      bruto: n(c.mes?.bruto), ho: n(c.mes?.ho), coren: n(c.mes?.coren), cofen: n(c.mes?.cofen),
+      quantidade: n(c.mes?.quantidade),
+    },
+    anterior: {
+      brutoAteCorte: n(c.anterior?.bruto_ate_corte), hoAteCorte: n(c.anterior?.ho_ate_corte),
+      brutoMes: n(c.anterior?.bruto_mes), hoMes: n(c.anterior?.ho_mes), dias: n(c.anterior?.dias),
+    },
+    serie: (c.serie ?? []).map(d => ({
+      dia: n(d.dia), dentroDoCorte: d.dentro_do_corte === true,
+      bruto: n(d.bruto), ho: n(d.ho), coren: n(d.coren), cofen: n(d.cofen), quantidade: n(d.quantidade),
+      brutoAnterior: n(d.bruto_anterior), hoAnterior: n(d.ho_anterior), operadores: n(d.operadores),
+      destaque: d.destaque ? { nome: d.destaque.nome, bruto: n(d.destaque.bruto), ho: n(d.destaque.ho) } : null,
+    })),
+    formas: (c.formas ?? []).map(f => ({ forma: f.forma, bruto: n(f.bruto), ho: n(f.ho), qtd: n(f.qtd) })),
+    formasDia: (c.formas_dia ?? []).map(f => ({ dia: n(f.dia), forma: f.forma, bruto: n(f.bruto), ho: n(f.ho), qtd: n(f.qtd) })),
+    operadores: {
+      quantidade: n(c.operadores?.quantidade),
+      lista: (c.operadores?.lista ?? []).map(o => ({
+        operadorId: o.operador_id, nome: o.nome ?? 'Operador', bruto: n(o.bruto), ho: n(o.ho), pagamentos: n(o.pagamentos),
+      })),
+    },
+  };
+}
+
+/** A carteira Cofen do mês. Guardada junto com as leituras do 59. */
+export function buscarCofenDoMes(empresaId: string, mes: string, diaCorte?: number | null): Promise<CofenDoMes> {
+  return lerDo59(['cofen', empresaId, mes, diaCorte], () => buscarCofenNoBanco(empresaId, mes, diaCorte));
+}
+
+export function espiarCofenDoMes(empresaId: string, mes: string, diaCorte?: number | null): CofenDoMes | undefined {
+  return espiarDo59(['cofen', empresaId, mes, diaCorte]);
+}
+
 // ── Classificar carteira sem setor ──────────────────────────────────────────
 
 /**
- * Grava cidade e regra de uma carteira SEM setor. O banco confere a chave
- * `painel_diretoria_definir_carteira` e recusa carteira vinculada. Depois de
+ * Grava cidade e regra de uma carteira SEM setor. Só o super admin
+ * (20261004120000); o banco recusa os outros e a carteira vinculada. Depois de
  * gravar, as leituras guardadas do 59 caem: o dinheiro mudou de cartão.
  */
 export async function classificarCarteira(

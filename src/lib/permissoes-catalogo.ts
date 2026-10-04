@@ -1149,17 +1149,12 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Ver no Painel Diretoria a empresa inteira, com o filtro de setor disponível',
     grupo: 'Painel Diretoria', padrao: { diretoria: true },
   },
-  {
-    /*
-     * A carteira do 59 sem setor (ex.: MARILIA - COFEN) não tem cidade nem
-     * regra até alguém dizer. A escolha leva o dinheiro dela para o cartão da
-     * cidade — por isso é chave própria, e não leitura. Migration 20261003170000;
-     * o banco confere a mesma chave em `fn_mestre_carteira_classificar`.
-     */
-    key: 'painel_diretoria_definir_carteira', label: 'Painel Diretoria: cidade e regra de carteira',
-    descricao: 'Escolher a cidade e a regra (Nosso produto ou Cofen) das carteiras do 59 que não têm setor',
-    grupo: 'Painel Diretoria', tenants: ['bookplay'], padrao: { diretoria: true },
-  },
+  /*
+   * `painel_diretoria_definir_carteira` (20261003170000) saiu no dia seguinte
+   * (20261004120000): definir cidade e regra de carteira sem setor ficou só
+   * com o super admin, a pedido do Cleber. Ficar no catálogo seria um toggle
+   * que liga e não muda nada.
+   */
   /*
    * `ver_analiticos_global` foi APOSENTADA na fase 4.
    *

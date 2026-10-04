@@ -1,22 +1,26 @@
 /**
  * As peças da Visão geral: a fileira de cima (geral e cidades), o gráfico do
- * mês, as formas de pagamento, as carteiras sem cidade e o bloco Cofen.
- * Quem orquestra (cidade aberta, dia aberto) é `VisaoGeralPorCidade`.
+ * mês, as formas de pagamento, o que está fora da conta, o disjuntor do Cofen
+ * e a faixa H.O./Coren/Cofen. Quem orquestra (cidade aberta, dia aberto, modo
+ * do Cofen) é `VisaoGeralPorCidade`.
  */
-import { memo, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { memo, useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { ValorAnimado } from '@/components/ValorAnimado';
+import { Switch } from '@/components/ui/switch';
 import { agruparFormas, corDaForma } from '@/lib/formasPagamento';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { estimativaDeFechamento, type DiaDaSerie, type FormaDePagamento } from '@/services/mestre/diretoria.service';
 import {
-  classificarCarteira, type CarteiraDaCidade, type MesDoEscopo, type RegraDaCarteira,
+  classificarCarteira, type CarteiraDaCidade, type MotivoDeNaoContar, type RegraDaCarteira,
 } from '@/services/mestre/diretoriaCidades.service';
-import { divisaoCofen, ehFimDeSemana, nomeDoMes, variacaoPct, type CidadeDaVisao } from './modelo';
-import { corDaMarca, mil, milhoes, pct, sinal } from './formato';
+import {
+  ehFimDeSemana, nomeDoMes, variacaoPct, type CidadeDaVisao, type EscopoDaVisao, type ModoCofen, type ParteDoGeral,
+} from './modelo';
+import { corDaMarca, mil, milhoes, pct, rotuloModo, sinal } from './formato';
 
 
 /** O valor grande dos cartões: «R$» pequeno e o número rolando até o novo. */
@@ -29,19 +33,38 @@ function ValorGrande({ valor }: { valor: number }) {
   );
 }
 
+// ── O disjuntor do Cofen ────────────────────────────────────────────────────
+
+/**
+ * H.O. ⇄ bruto para tudo que é Cofen. Começa sempre em H.O. — o número que a
+ * operação acompanha — e troca cada valor da tela que tem Cofen dentro.
+ */
+export function DisjuntorCofen({ modo, onTrocar }: { modo: ModoCofen; onTrocar: (m: ModoCofen) => void }) {
+  const id = useId();
+  return (
+    <div className="vg-disjuntor" title="Os valores Cofen em H.O. (o que fica com a operação) ou em bruto (o que entrou)">
+      <span className="vg-disjuntor-rot">Cofen</span>
+      <label htmlFor={id} className={cn(modo === 'ho' && 'vg-on')}>H.O.</label>
+      <Switch id={id} checked={modo === 'bruto'} onCheckedChange={v => onTrocar(v ? 'bruto' : 'ho')}
+        aria-label="Mostrar os valores Cofen em bruto" className="vg-disjuntor-chave" />
+      <label htmlFor={id} className={cn(modo === 'bruto' && 'vg-on')}>Bruto</label>
+    </div>
+  );
+}
 
 // ── Geral ───────────────────────────────────────────────────────────────────
 
-export const CartaoGeral = memo(function CartaoGeral({ mes, mesAnterior, diaCorte, diasNoMes, cidades, semCidade, recolhido }: {
-  mes: MesDoEscopo; mesAnterior: string; diaCorte: number; diasNoMes: number;
-  cidades: CidadeDaVisao[]; semCidade: number; recolhido: boolean;
+const COR_DA_CARTEIRA_NO_ESCURO: Record<ParteDoGeral['chave'], string> = {
+  nosso_produto: 'rgb(255 255 255 / .82)',
+  cofen: 'var(--vg-cofen)',
+};
+
+export const CartaoGeral = memo(function CartaoGeral({ mes, carteiras, modo, mesAnterior, diaCorte, diasNoMes, recolhido }: {
+  mes: EscopoDaVisao; carteiras: ParteDoGeral[]; modo: ModoCofen; mesAnterior: string; diaCorte: number; diasNoMes: number;
+  recolhido: boolean;
 }) {
   const v = variacaoPct(mes.valor, mes.valorAnterior);
   const fecha = estimativaDeFechamento(mes.valor, diaCorte, diasNoMes);
-  const partes = [
-    ...cidades.map(c => ({ chave: c.chave, nome: c.nome, valor: c.mes.valor, cor: corDaMarca(c.marca) })),
-    ...(semCidade > 0 ? [{ chave: 'sem', nome: 'Sem cidade', valor: semCidade, cor: 'var(--warning)' }] : []),
-  ];
   return (
     <div className={cn('vg-geral', recolhido && 'vg-recolhe')} aria-hidden={recolhido}>
       <span className="vg-rot">Recebido no mês · geral</span>
@@ -54,12 +77,16 @@ export const CartaoGeral = memo(function CartaoGeral({ mes, mesAnterior, diaCort
       </div>
       {mes.valor > 0 && (
         <>
+          {/* De qual carteira vem o dinheiro. */}
           <div className="vg-divisao" aria-hidden="true">
-            {partes.map(p => <i key={p.chave} style={{ width: `${(p.valor / mes.valor) * 100}%`, background: p.cor }} />)}
+            {carteiras.map(p => <i key={p.chave} style={{ width: `${(p.valor / mes.valor) * 100}%`, background: COR_DA_CARTEIRA_NO_ESCURO[p.chave] }} />)}
           </div>
           <div className="vg-legenda">
-            {partes.map(p => (
-              <span key={p.chave}><span className="vg-ponto" style={{ background: p.cor }} />{p.nome} {pct((p.valor / mes.valor) * 100)}</span>
+            {carteiras.map(p => (
+              <span key={p.chave}>
+                <span className="vg-ponto" style={{ background: COR_DA_CARTEIRA_NO_ESCURO[p.chave] }} />
+                {p.nome}{p.chave === 'cofen' ? ` (${rotuloModo(modo)})` : ''} <b>{pct((p.valor / mes.valor) * 100)}</b>
+              </span>
             ))}
           </div>
         </>
@@ -70,13 +97,33 @@ export const CartaoGeral = memo(function CartaoGeral({ mes, mesAnterior, diaCort
 
 // ── Cidade ──────────────────────────────────────────────────────────────────
 
-export const CartaoCidade = memo(function CartaoCidade({ cidade, mesAnterior, diaCorte, diasNoMes, ho, aberta, recolhida, onAbrir, onFechar }: {
-  cidade: CidadeDaVisao; mesAnterior: string; diaCorte: number; diasNoMes: number; ho: number;
+/** As duas carteiras da cidade, quando ela tem Cofen: cada uma com o seu valor. */
+function CarteirasDaCidade({ cidade, modo }: { cidade: CidadeDaVisao; modo: ModoCofen }) {
+  const c = cidade.cofen;
+  if (!c) return null;
+  const total = Math.max(1e-9, cidade.mes.valor);
+  return (
+    <div className="vg-carteiras-cid">
+      <div className="vg-barra2" aria-hidden="true">
+        <i style={{ width: `${(cidade.mes.nossoProduto / total) * 100}%`, background: 'var(--cc)' }} />
+        <i style={{ width: `${(c.valor / total) * 100}%`, background: 'var(--vg-cofen)' }} />
+      </div>
+      <div className="vg-carteira-l"><span><span className="vg-ponto" style={{ background: 'var(--cc)' }} />Nosso produto</span>
+        <b><ValorAnimado valor={cidade.mes.nossoProduto} formatar={formatBRL} /></b></div>
+      <div className="vg-carteira-l vg-c"><span><span className="vg-ponto" style={{ background: 'var(--vg-cofen)' }} />{c.nome} · Cofen <small>{rotuloModo(modo)}</small></span>
+        <b><ValorAnimado valor={c.valor} formatar={formatBRL} /></b></div>
+    </div>
+  );
+}
+
+export const CartaoCidade = memo(function CartaoCidade({ cidade, modo, mesAnterior, diaCorte, diasNoMes, aberta, recolhida, onAbrir, onFechar }: {
+  cidade: CidadeDaVisao; modo: ModoCofen; mesAnterior: string; diaCorte: number; diasNoMes: number;
   aberta: boolean; recolhida: boolean; onAbrir: () => void; onFechar: () => void;
 }) {
   const m = cidade.mes;
   const v = variacaoPct(m.valor, m.valorAnterior);
   const fecha = estimativaDeFechamento(m.valor, diaCorte, diasNoMes);
+  const nSetores = cidade.setores.length + (cidade.cofen ? 1 : 0);
   const abrirPorTecla = (e: KeyboardEvent<HTMLDivElement>) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onAbrir(); }
   };
@@ -99,17 +146,12 @@ export const CartaoCidade = memo(function CartaoCidade({ cidade, mesAnterior, di
             {cidade.nome}{cidade.rotuloMarca ? ` · ${cidade.rotuloMarca}` : ''}</span>
           <div className="vg-valor"><ValorGrande valor={m.valor} /></div>
           {v !== null && <span className="vg-var">{sinal(v)} sobre {nomeDoMes(mesAnterior)}</span>}
+          <CarteirasDaCidade cidade={cidade} modo={modo} />
           <div className="vg-rodape">
-            <span><b>{cidade.setores.length}</b> setores</span>
+            <span><b>{nSetores}</b> setores</span>
             <span><b>{m.operadores}</b> operadores</span>
             {cidade.melhorSetor && <span>melhor: <b>{cidade.melhorSetor.nome}</b></span>}
           </div>
-          {cidade.cofenBruto !== null && (
-            <div className="vg-cofen-linha">
-              <span className="vg-selo cofen">Regra Cofen</span>
-              bruto <b>{mil(cidade.cofenBruto)}</b> · H.O. <b>{mil(cidade.cofenBruto * ho)}</b>
-            </div>
-          )}
         </div>
         <div className="vg-extra" aria-hidden={!aberta}>
           <div className="vg-participa"><span>Participação no geral</span><b>{pct(cidade.participacao * 100)}</b></div>
@@ -206,42 +248,50 @@ export function PilhaDeFormas({ formas }: { formas: FormaDePagamento[] }) {
 const COR_COREN = 'color-mix(in srgb, var(--muted-foreground) 55%, transparent)';
 const COR_COFEN_REPASSE = 'color-mix(in srgb, var(--muted-foreground) 28%, transparent)';
 
-/** A faixa H.O. / Coren / Cofen de um bruto. */
-export function PilhaCofen({ bruto, ho, legenda }: { bruto: number; ho: number; legenda?: boolean }) {
-  const d = divisaoCofen(bruto, ho);
-  const resto = 1 - ho;
+/**
+ * A faixa H.O. / Coren / Cofen — os valores das colunas do relatório de
+ * conciliação, sem percentual fixo.
+ */
+export function PilhaCofen({ v, legenda }: { v: { bruto: number; ho: number; coren: number; cofen: number }; legenda?: boolean }) {
+  const t = Math.max(1e-9, v.ho + v.coren + v.cofen);
   return (
     <>
       <div className="vg-pilha" aria-hidden="true">
-        <i style={{ width: `${ho * 100}%`, background: 'var(--vg-cofen)' }} />
-        <i style={{ width: `${resto * 75}%`, background: COR_COREN }} />
-        <i style={{ width: `${resto * 25}%`, background: COR_COFEN_REPASSE }} />
+        <i style={{ width: `${(v.ho / t) * 100}%`, background: 'var(--vg-cofen)' }} />
+        <i style={{ width: `${(v.coren / t) * 100}%`, background: COR_COREN }} />
+        <i style={{ width: `${(v.cofen / t) * 100}%`, background: COR_COFEN_REPASSE }} />
       </div>
       {legenda && (
         <div className="vg-pilha-leg">
-          <span><span className="vg-ponto" style={{ background: 'var(--vg-cofen)' }} />H.O. <b>{mil(d.ho)}</b></span>
-          <span><span className="vg-ponto" style={{ background: COR_COREN }} />Coren <b>{mil(d.coren)}</b></span>
-          <span><span className="vg-ponto" style={{ background: COR_COFEN_REPASSE }} />Cofen <b>{mil(d.cofen)}</b></span>
+          <span><span className="vg-ponto" style={{ background: 'var(--vg-cofen)' }} />H.O. <b>{mil(v.ho)}</b></span>
+          <span><span className="vg-ponto" style={{ background: COR_COREN }} />Coren <b>{mil(v.coren)}</b></span>
+          <span><span className="vg-ponto" style={{ background: COR_COFEN_REPASSE }} />Cofen <b>{mil(v.cofen)}</b></span>
         </div>
       )}
     </>
   );
 }
 
-// ── Carteiras sem cidade ────────────────────────────────────────────────────
+// ── Fora da conta ───────────────────────────────────────────────────────────
 
 const REGRAS: { valor: RegraDaCarteira; rotulo: string }[] = [
   { valor: 'nosso_produto', rotulo: 'Nosso produto' },
   { valor: 'cofen', rotulo: 'Cofen' },
 ];
 
+const MOTIVO: Record<MotivoDeNaoContar, string> = {
+  sem_cidade: 'sem cidade',
+  setor_sem_cidade: 'setor sem cidade',
+  cofen: 'regra Cofen',
+};
+
 /**
- * Cidade e regra de uma carteira sem setor, escolhidas ali mesmo. Grava ao
- * escolher; quem não tem a chave do painel vê o estado, sem os campos.
+ * Cidade e regra de uma carteira sem setor, escolhidas ali mesmo — só pelo
+ * super admin (20261004120000). Grava ao escolher.
  */
-export function EscolhaDaCarteira({ empresaId, carteira, cidades, podeDefinir, onGravou }: {
+export function EscolhaDaCarteira({ empresaId, carteira, cidades, superAdmin, onGravou }: {
   empresaId: string; carteira: CarteiraDaCidade; cidades: { id: string; nome: string }[];
-  podeDefinir: boolean; onGravou: () => void;
+  superAdmin: boolean; onGravou: () => void;
 }) {
   const [gravando, setGravando] = useState(false);
   const gravar = async (cidadeId: string | null, regra: RegraDaCarteira | null) => {
@@ -256,9 +306,7 @@ export function EscolhaDaCarteira({ empresaId, carteira, cidades, podeDefinir, o
       setGravando(false);
     }
   };
-  if (!podeDefinir) {
-    return <span className="vg-nota">Quem tem a permissão «cidade e regra de carteira» define.</span>;
-  }
+  if (!superAdmin) return null;
   return (
     <div className="vg-escolha">
       <Select value={carteira.cidadeId ?? ''} disabled={gravando}
@@ -275,22 +323,37 @@ export function EscolhaDaCarteira({ empresaId, carteira, cidades, podeDefinir, o
   );
 }
 
-export function CarteirasSemCidade({ empresaId, valor, carteiras, cidades, podeDefinir, onGravou }: {
-  empresaId: string; valor: number; carteiras: CarteiraDaCidade[]; cidades: { id: string; nome: string }[];
-  podeDefinir: boolean; onGravou: () => void;
+/**
+ * O que do 59 não está contando, nem no geral: carteira sem cidade, setor sem
+ * cidade, ou regra Cofen (o Cofen vem da conciliação). E o aviso do Cofen,
+ * quando ele não pode contar.
+ */
+export function ForaDaConta({ empresaId, valor, carteiras, avisoCofen, cidades, superAdmin, onGravou }: {
+  empresaId: string; valor: number; carteiras: CarteiraDaCidade[]; avisoCofen: string | null;
+  cidades: { id: string; nome: string }[]; superAdmin: boolean; onGravou: () => void;
 }) {
   return (
     <div className="vg-semcidade">
-      <h3>{formatBRL(valor)} sem cidade definida</h3>
+      <h3>{valor > 0 ? `${formatBRL(valor)} do 59 fora da conta` : 'Fora da conta'}</h3>
       <p>
-        Carteiras do 59 que não estão em nenhum setor do sistema. Já contam no geral; escolha a cidade
-        (e a regra, se for Cofen) uma vez e elas passam a contar no cartão da cidade, neste mês e nos próximos.
+        Só conta o que tem cidade definida. Estas carteiras do 59 não entram em lugar nenhum, nem no geral, até
+        terem cidade. A regra Cofen também não conta pelo 59: o dinheiro Cofen vem do relatório de conciliação.
+        {!superAdmin && ' Quem define a cidade e a regra de uma carteira é o super admin.'}
       </p>
+      {avisoCofen && <p className="vg-aviso-cofen"><span className="vg-selo cofen">Cofen</span> {avisoCofen}</p>}
       {carteiras.map(k => (
         <div key={k.cod} className="vg-carteira">
-          <span>{k.nome} <span className="vg-nota" style={{ display: 'inline' }}>· cód. {k.cod} · {k.linhas} pgtos</span></span>
+          <span>
+            {k.nome}{' '}
+            <span className={cn('vg-selo', k.motivo === 'cofen' ? 'cofen' : 'alerta')}>{MOTIVO[k.motivo ?? 'sem_cidade']}</span>
+            <span className="vg-nota" style={{ display: 'block', marginTop: 2 }}>
+              cód. {k.cod} · {k.linhas} pgtos{k.motivo === 'setor_sem_cidade' && k.setorNome ? ` · o setor ${k.setorNome} está sem cidade` : ''}
+            </span>
+          </span>
           <b>{formatBRL(k.valor)}</b>
-          <EscolhaDaCarteira empresaId={empresaId} carteira={k} cidades={cidades} podeDefinir={podeDefinir} onGravou={onGravou} />
+          {!k.setorId
+            ? <EscolhaDaCarteira empresaId={empresaId} carteira={k} cidades={cidades} superAdmin={superAdmin} onGravou={onGravou} />
+            : <span />}
         </div>
       ))}
     </div>

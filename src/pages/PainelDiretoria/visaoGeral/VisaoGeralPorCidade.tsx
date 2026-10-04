@@ -5,13 +5,14 @@
  *
  *   - clicar numa cidade abre o cartão dela para os lados, os outros recolhem,
  *     e o resto da tela passa a ser da cidade: indicadores, gráfico, formas e
- *     os setores dela (que se abrem no lugar, com o detalhe da aba Setores);
+ *     os setores dela (que se abrem no lugar);
  *   - clicar num dia do gráfico abre o resumo do dia ali mesmo — do geral, ou
  *     da cidade aberta.
  *
- * Os números saem de três fontes que não se misturam (ver `modelo.ts`): o mês
- * da cidade pela carteira, os setores pela grade da aba Setores e equipes, a
- * regra pelo setor (ou pela carteira sem setor).
+ * «Regra de negócio diferente é carteira diferente» (04/10/2026): o geral se
+ * divide por carteira — Nosso produto (o 59) e Cofen (conciliação +
+ * Analítico). Só conta o que tem cidade. O disjuntor troca o Cofen entre H.O.
+ * (padrão, sempre ao abrir) e bruto, em todo número que o tem dentro.
  *
  * Leve de propósito: um gráfico de barras em DOM (sem recharts), transições
  * curtas disparadas por clique, nada rodando parado. O movimento só desliga
@@ -25,16 +26,19 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { rotuloDoMes } from '@/lib/mesReferencia';
-import { useHoPercentual } from '@/lib/hoPercentual';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useAuth } from '@/hooks/useAuth';
 import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 import { buscarGradeDeSetores, espiarGradeDeSetores, type GradeDeSetores } from '@/services/mestre/diretoriaSetores.service';
-import { buscarMesPorCidade, espiarMesPorCidade, type MesPorCidade } from '@/services/mestre/diretoriaCidades.service';
+import {
+  buscarCofenDoMes, buscarMesPorCidade, espiarCofenDoMes, espiarMesPorCidade, type CofenDoMes, type MesPorCidade,
+} from '@/services/mestre/diretoriaCidades.service';
 import { esquecerLeiturasDo59 } from '@/services/mestre/cache59';
 import { FiltroDePeriodo } from '../FiltroDePeriodo';
 import { OndeOResultadoAcontece } from '../OndeOResultadoAcontece';
-import { montarCidades, semCidade, nomeDoMes, type InfoDoSetor, type CidadeDaVisao } from './modelo';
-import { CartaoCidade, CartaoGeral, CarteirasSemCidade, FormasDoEscopo, GraficoDoMes } from './partes';
+import {
+  cofenNoDia, foraDaConta, montarVisao, nomeDoMes, type InfoDoSetor, type ModoCofen,
+} from './modelo';
+import { CartaoCidade, CartaoGeral, DisjuntorCofen, ForaDaConta, FormasDoEscopo, GraficoDoMes } from './partes';
 import { mediaDoAnterior, pct } from './formato';
 import { ResumoDoDia } from './ResumoDoDia';
 import { SetoresDaCidade } from './SetoresDaCidade';
@@ -66,6 +70,9 @@ function lerSetores(empresaId: string): Promise<InfoDoSetor[]> {
  */
 const faltaAFuncao = (msg: string) => /fn_mestre_diretoria_cidades|could not find the function|PGRST202/i.test(msg);
 
+/** A Cofen que não carregou vira aviso, e o resto da tela segue com o 59. */
+type LeituraCofen = { ok: true; c: CofenDoMes } | { ok: false; erro: string };
+
 export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores, reserva }: {
   empresaId: string; mes: string; versao?: number; onAbrirSetores?: () => void;
   /** O que mostrar se o banco ainda não tem a função nova. */
@@ -73,16 +80,21 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
 }) {
   const [corte, setCorte] = useState<number | null>(null);
   const [dados, setDados] = useState<MesPorCidade | null>(() => espiarMesPorCidade(empresaId, mes, null) ?? null);
+  const [cofen, setCofen] = useState<LeituraCofen | null>(() => {
+    const c = espiarCofenDoMes(empresaId, mes, null);
+    return c ? { ok: true, c } : null;
+  });
   const [grade, setGrade] = useState<GradeDeSetores | null>(() => espiarGradeDeSetores(empresaId, mes, null) ?? null);
   const [setores, setSetores] = useState<InfoDoSetor[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<string | null>(null);
   const [dia, setDia] = useState<number | null>(null);
   const [recarga, setRecarga] = useState(0);
+  // Sempre começa em H.O.: é o número que a operação acompanha.
+  const [modo, setModo] = useState<ModoCofen>('ho');
 
-  const ho = useHoPercentual();
-  const { temPermissao } = useCargoPermissoes();
-  const podeDefinir = temPermissao('painel_diretoria_definir_carteira');
+  const { perfil } = useAuth();
+  const superAdmin = perfil?.perfil === 'super_admin';
   const { semMovimento } = useMovimentoPreferido();
 
   // Outro mês: o corte escolhido, a cidade e o dia abertos não valem mais.
@@ -96,20 +108,34 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
     setErro(null);
     Promise.all([
       buscarMesPorCidade(empresaId, mes, corte),
+      buscarCofenDoMes(empresaId, mes, corte).then(
+        (c): LeituraCofen => ({ ok: true, c }),
+        (e): LeituraCofen => ({ ok: false, erro: e instanceof Error ? e.message : 'Falha ao ler a carteira Cofen.' }),
+      ),
       buscarGradeDeSetores(empresaId, mes, corte).catch((): GradeDeSetores | null => null),
       lerSetores(empresaId).catch(() => [] as InfoDoSetor[]),
-    ]).then(([m, g, s]): void => {
+    ]).then(([m, c, g, s]): void => {
       if (!vivo) return;
-      setDados(m); setGrade(g); setSetores(s);
+      setDados(m); setCofen(c); setGrade(g); setSetores(s);
     }).catch(e => { if (vivo) setErro(e instanceof Error ? e.message : 'Falha ao carregar a visão geral.'); });
     return () => { vivo = false; };
     // `versao` e `recarga`: o «Atualizar» do cabeçalho e a classificação de carteira.
   }, [empresaId, mes, corte, versao, recarga]);
 
-  const cidades = useMemo<CidadeDaVisao[]>(() => (dados ? montarCidades(dados, grade, setores) : []), [dados, grade, setores]);
-  const pendentes = useMemo(() => (dados ? semCidade(dados) : { valor: 0, carteiras: [] }), [dados]);
-  const cidadeAberta = cidades.find(c => c.chave === aberta) ?? null;
-  const cidadesParaEscolha = useMemo(() => cidades.map(c => ({ id: c.cidadeId as string, nome: c.nome })), [cidades]);
+  const c = cofen?.ok ? cofen.c : null;
+  const visao = useMemo(() => (dados ? montarVisao(dados, c, grade, setores, modo) : null), [dados, c, grade, setores, modo]);
+  const cidades = useMemo(() => visao?.cidades ?? [], [visao]);
+  const fora = useMemo(() => (dados ? foraDaConta(dados) : { valor: 0, carteiras: [] }), [dados]);
+  const cidadeAberta = cidades.find(x => x.chave === aberta) ?? null;
+  const cidadeComCofen = cidades.find(x => x.cofen) ?? null;
+  // A escolha de cidade de carteira é do 59: só as cidades da empresa do painel.
+  const cidadesParaEscolha = useMemo(
+    () => (dados?.cidades ?? []).filter(x => x.cidadeId).map(x => ({ id: x.cidadeId as string, nome: x.nome ?? 'Cidade' })),
+    [dados],
+  );
+  const avisoCofen = cofen?.ok === false
+    ? `Não foi possível ler a carteira Cofen: ${cofen.erro}`
+    : c?.aviso ?? null;
 
   const fecharCidade = useCallback(() => { setAberta(null); }, []);
   const abrirCidade = useCallback((chave: string) => { setAberta(chave); }, []);
@@ -130,7 +156,7 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
   if (erro && !dados) {
     return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">{erro}</div>;
   }
-  if (!dados) {
+  if (!dados || !visao) {
     return (
       <div className="grid gap-3">
         <Skeleton className="h-12 rounded-xl" />
@@ -140,10 +166,14 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
     );
   }
 
-  const escopo = cidadeAberta ? cidadeAberta.mes : dados.geral;
-  const quarto = cidadeAberta
-    ? cidadeAberta.carteirasSemSetor.reduce((a, k) => a + k.valor, 0)
-    : dados.geral.colchao;
+  const escopo = cidadeAberta ? cidadeAberta.mes : visao.geral;
+  const nSetores = cidadeAberta
+    ? cidadeAberta.setores.length + (cidadeAberta.cofen ? 1 : 0)
+    : cidades.reduce((a, x) => a + x.setores.length + (x.cofen ? 1 : 0), 0);
+  const semSetorDaCidade = cidadeAberta ? cidadeAberta.carteirasSemSetor.reduce((a, k) => a + k.valor, 0) : 0;
+  // A Cofen do dia entra no geral e na cidade dela.
+  const cofenDoDia = dia !== null && (!cidadeAberta || cidadeAberta.cofen) ? cofenNoDia(c, dia, modo) : null;
+  const temCofen = !!visao.geral.cofen;
 
   return (
     <div className={cn('vg', cidadeAberta && `foco-${cidadeAberta.marca}`, semMovimento && 'vg-quieto')}>
@@ -153,7 +183,8 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
         <span className="text-muted-foreground text-xs">
           {dados.diaCorte >= dados.diasNoMes ? 'mês fechado' : `até o dia ${dados.diaCorte}`} · comparando com o mesmo dia de {nomeDoMes(dados.mesAnterior)}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-3 flex-wrap">
+          {temCofen && <DisjuntorCofen modo={modo} onTrocar={setModo} />}
           <FiltroDePeriodo mes={mes} corte={dados.diaCorte} diasNoMes={dados.diasNoMes} escolhido={corte} onEscolher={setCorte} />
         </span>
       </div>
@@ -165,12 +196,12 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
       ) : (
         <>
           <div className="vg-topo">
-            <CartaoGeral mes={dados.geral} mesAnterior={dados.mesAnterior} diaCorte={dados.diaCorte} diasNoMes={dados.diasNoMes}
-              cidades={cidades} semCidade={pendentes.valor} recolhido={!!cidadeAberta} />
-            {cidades.map(c => (
-              <CartaoCidade key={c.chave} cidade={c} mesAnterior={dados.mesAnterior} diaCorte={dados.diaCorte} diasNoMes={dados.diasNoMes}
-                ho={ho} aberta={aberta === c.chave} recolhida={!!aberta && aberta !== c.chave}
-                onAbrir={() => abrirCidade(c.chave)} onFechar={fecharCidade} />
+            <CartaoGeral mes={visao.geral} carteiras={visao.carteiras} modo={modo} mesAnterior={dados.mesAnterior}
+              diaCorte={dados.diaCorte} diasNoMes={dados.diasNoMes} recolhido={!!cidadeAberta} />
+            {cidades.map(x => (
+              <CartaoCidade key={x.chave} cidade={x} modo={modo} mesAnterior={dados.mesAnterior} diaCorte={dados.diaCorte} diasNoMes={dados.diasNoMes}
+                aberta={aberta === x.chave} recolhida={!!aberta && aberta !== x.chave}
+                onAbrir={() => abrirCidade(x.chave)} onFechar={fecharCidade} />
             ))}
           </div>
 
@@ -180,7 +211,8 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
               {cidadeAberta && (
                 <>
                   <SetoresDaCidade empresaId={empresaId} mes={mes} mesAnterior={dados.mesAnterior} diaCorte={dados.diaCorte}
-                    cidade={cidadeAberta} ho={ho} cidadesParaEscolha={cidadesParaEscolha} podeDefinir={podeDefinir} onGravou={gravou} />
+                    cidade={cidadeAberta} cofen={cidadeAberta.cofen ? c : null} modo={modo}
+                    cidadesParaEscolha={cidadesParaEscolha} superAdmin={superAdmin} onGravou={gravou} />
                   <p className="vg-nota" style={{ marginTop: 10, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                     A soma dos setores não é o valor da cidade: o colchão e o que conta só no total não são de setor nenhum, e o
                     Integral conta na carteira de origem e na de destino.
@@ -200,25 +232,24 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
             <KpiTile rotulo="Pagamentos no mês" valor="" valorNumerico={escopo.linhas} formatar={v => Math.round(v).toLocaleString('pt-BR')}
               sub={`até o dia ${dados.diaCorte}`} Icon={CreditCard} tom="sucesso" />
             <KpiTile rotulo="Ticket médio" valor="" valorNumerico={escopo.linhas ? escopo.valor / escopo.linhas : 0} formatar={formatBRL}
-              sub="por pagamento" Icon={Receipt} tom="primario" />
+              sub={escopo.cofen ? `por pagamento · Cofen em ${modo === 'ho' ? 'H.O.' : 'bruto'}` : 'por pagamento'} Icon={Receipt} tom="primario" />
             <KpiTile rotulo="Operadores com recebimento" valor="" valorNumerico={escopo.operadores} formatar={v => String(Math.round(v))}
-              sub={cidadeAberta ? `em ${cidadeAberta.setores.length} setores` : `${cidades.reduce((a, c) => a + c.setores.length, 0)} setores com recebimento`}
-              Icon={Users} tom="neutro" />
+              sub={`${nSetores} setores com recebimento`} Icon={Users} tom="neutro" />
             {cidadeAberta ? (
-              <KpiTile rotulo="Carteiras sem setor" valor={quarto ? formatBRL(quarto) : '—'}
+              <KpiTile rotulo="Carteiras sem setor" valor={semSetorDaCidade ? formatBRL(semSetorDaCidade) : '—'}
                 sub={cidadeAberta.carteirasSemSetor.length ? 'contam aqui por escolha de cidade' : 'nenhuma nesta cidade'} Icon={Layers} tom="alerta" />
             ) : (
-              <KpiTile rotulo="Colchão · só no total" valor="" valorNumerico={quarto} formatar={formatBRL}
+              <KpiTile rotulo="Colchão · só no total" valor="" valorNumerico={escopo.colchao} formatar={formatBRL}
                 sub="fora de setor, equipe e operador" Icon={Wallet} tom="alerta" />
             )}
           </div>
 
-          {/* O dinheiro sem cidade é assunto do geral: recolhe com uma cidade aberta. */}
-          {pendentes.carteiras.length > 0 && (
+          {/* O que não conta é assunto do geral: recolhe com uma cidade aberta. */}
+          {(fora.carteiras.length > 0 || avisoCofen) && (
             <div className={cn('vg-colapsa', cidadeAberta && 'vg-fechado')} aria-hidden={!!cidadeAberta}>
               <div>
-                <CarteirasSemCidade empresaId={empresaId} valor={pendentes.valor} carteiras={pendentes.carteiras}
-                  cidades={cidadesParaEscolha} podeDefinir={podeDefinir} onGravou={gravou} />
+                <ForaDaConta empresaId={empresaId} valor={fora.valor} carteiras={fora.carteiras} avisoCofen={avisoCofen}
+                  cidades={cidadesParaEscolha} superAdmin={superAdmin} onGravou={gravou} />
               </div>
             </div>
           )}
@@ -236,8 +267,10 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, onAbrirSetores
                   {dia !== null && (
                     <ResumoDoDia empresaId={empresaId} mes={mes} mesAnterior={dados.mesAnterior} dia={dia} diaCorte={dados.diaCorte}
                       escopo={cidadeAberta ? cidadeAberta.chave : 'geral'} rotuloEscopo={cidadeAberta ? cidadeAberta.nome : 'cobrança inteira'}
-                      cidadeDe={id => { const c = cidades.find(x => x.cidadeId === id); return c ? { nome: c.nome, marca: c.marca } : null; }}
-                      ho={ho} onDia={setDia} onFechar={() => setDia(null)} />
+                      cidadeDe={id => { const x = cidades.find(y => y.cidadeId === id); return x ? { nome: x.nome, marca: x.marca } : null; }}
+                      cofen={cofenDoDia}
+                      cidadeDoCofen={cidadeComCofen ? { nome: cidadeComCofen.nome, marca: cidadeComCofen.marca } : null}
+                      modo={modo} onDia={setDia} onFechar={() => setDia(null)} />
                   )}
                 </div>
               </div>

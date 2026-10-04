@@ -3,7 +3,10 @@
  * do Vite continuar funcionando nos arquivos de componente.
  */
 import type { MesDoEscopo } from '@/services/mestre/diretoriaCidades.service';
-import { mediaDiaria, type MarcaVisual } from './modelo';
+import { mediaDiaria, type MarcaVisual, type ModoCofen } from './modelo';
+
+/** «H.O.» / «bruto» — como o Cofen está aparecendo. */
+export const rotuloModo = (m: ModoCofen) => (m === 'ho' ? 'H.O.' : 'bruto');
 
 /** «R$ 54,5 mil». */
 export const mil = (v: number) =>
