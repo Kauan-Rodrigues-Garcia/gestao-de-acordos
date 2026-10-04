@@ -151,6 +151,11 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a cidade do setor é do super_admin (decisão do kauan em 02/10/2026) — quem decide é o gatilho de 20261003140000.',
   },
+  'pages/PainelDiretoria/visaoGeral/VisaoGeralPorCidade.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'definir cidade e regra de carteira do 59 sem setor é do super_admin (decisão do Cleber em 04/10/2026) — '
+      + 'quem decide é `fn_mestre_carteira_classificar` (20261004120000); a tela só não oferece o campo que o banco recusaria.',
+  },
   /*
    * Era `pages/AdminSetoresAba.tsx`. A transferência saiu daquela aba em
    * 06/09/2026 — junto com a lista de pessoas que duplicava a aba Usuários — e

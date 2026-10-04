@@ -79,6 +79,13 @@ import {
 // ─── Drag state (module-level, evita stale closures) ────────────────────────
 let draggedSetorId: string | null = null;
 
+/** Valor do Select para cidade que só existe noutra empresa da cobrança. */
+const DE_FORA = 'de-fora:';
+
+/** «Marília» e «marilia» são a mesma cidade. */
+const chaveDaCidade = (nome: string) =>
+  nome.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+
 // ─── Componente ─────────────────────────────────────────────────────────────
 
 export default function AdminSetoresAba() {
@@ -132,6 +139,16 @@ export default function AdminSetoresAba() {
    */
   const [cidades, setCidades] = useState<{ id: string; nome: string }[]>([]);
   const [novaCidade, setNovaCidade] = useState<string | null>(null);
+  /*
+   * Cidades das OUTRAS empresas da cobrança que esta ainda não tem (04/10/2026).
+   *
+   * O cadastro de cidades é por empresa (a FK de `setores.cidade_id` é composta
+   * com `empresa_id`), e Birigui e Marília nasceram na BookPlay: o Conecta Play,
+   * da PaguePlay, abria a lista vazia. A cidade é a mesma pelo NOME — é assim
+   * que a marca (`lib/marca.ts`) e o Painel Diretoria a reconhecem —, então
+   * escolher uma daqui cadastra (ou reaproveita) a de mesmo nome nesta empresa.
+   */
+  const [cidadesDeFora, setCidadesDeFora] = useState<string[]>([]);
 
   /*
    * Quantas pessoas há em cada setor.
@@ -214,7 +231,51 @@ export default function AdminSetoresAba() {
       setCidades([]);
       return;
     }
-    setCidades((data as { id: string; nome: string }[]) ?? []);
+    const daqui = (data as { id: string; nome: string }[]) ?? [];
+    setCidades(daqui);
+
+    // Só quem escolhe cidade precisa das de fora.
+    if (!ehCobranca || !podeEscolherCidade) { setCidadesDeFora([]); return; }
+    const { data: empresas } = await supabase.from('empresas').select('id, slug, produto');
+    const outras = ((empresas ?? []) as { id: string; slug: string; produto?: string | null }[])
+      .filter(e => e.id !== empresaAtual.id && produtoDaEmpresa(e) === 'cobranca')
+      .map(e => e.id);
+    if (!outras.length) { setCidadesDeFora([]); return; }
+    const { data: deFora } = await supabase
+      .from('rh_celulas').select('nome')
+      .in('empresa_id', outras).eq('ativo', true).order('nome');
+    const jaTem = new Set(daqui.map(c => chaveDaCidade(c.nome)));
+    const nomes = new Map<string, string>();
+    for (const c of (deFora ?? []) as { nome: string }[]) {
+      const k = chaveDaCidade(c.nome);
+      if (k && !jaTem.has(k) && !nomes.has(k)) nomes.set(k, c.nome.trim());
+    }
+    setCidadesDeFora([...nomes.values()]);
+  }, [empresaAtual?.id, ehCobranca, podeEscolherCidade]);
+
+  /**
+   * A cidade de nome `nome` NESTA empresa: a que já existe (mesmo nome, sem
+   * olhar acento nem maiúscula; reativada se estava desativada), ou uma nova.
+   */
+  const cidadeNestaEmpresa = useCallback(async (nome: string): Promise<string> => {
+    if (!empresaAtual?.id) throw new Error('Empresa não identificada');
+    const { data: todas, error } = await supabase
+      .from('rh_celulas').select('id, nome, ativo').eq('empresa_id', empresaAtual.id);
+    if (error) throw new Error(`Não foi possível ler as cidades: ${error.message}`);
+    const igual = ((todas ?? []) as { id: string; nome: string; ativo: boolean }[])
+      .find(c => chaveDaCidade(c.nome) === chaveDaCidade(nome));
+    if (igual) {
+      if (!igual.ativo) {
+        const { error: e } = await supabase.from('rh_celulas').update({ ativo: true }).eq('id', igual.id);
+        if (e) throw new Error(`Não foi possível reativar a cidade: ${e.message}`);
+      }
+      return igual.id;
+    }
+    const { data: criada, error: erroCidade } = await supabase.from('rh_celulas').insert({
+      empresa_id: empresaAtual.id, nome: nome.trim(), ordem: (todas?.length ?? 0) + 1,
+    }).select('id').single();
+    if (erroCidade) throw new Error(`Não foi possível cadastrar a cidade: ${erroCidade.message}`);
+    return criada.id;
   }, [empresaAtual?.id]);
 
   const nomeDaCidade = useMemo(
@@ -313,11 +374,11 @@ export default function AdminSetoresAba() {
        */
       let cidadeId = podeEscolherCidade ? form.cidadeId : (editando?.cidade_id ?? null);
       if (ehCobranca && podeEscolherCidade && novaCidade !== null && novaCidade.trim()) {
-        const { data: criada, error: erroCidade } = await supabase.from('rh_celulas').insert({
-          empresa_id: empresaAtual.id, nome: novaCidade.trim(), ordem: cidades.length + 1,
-        }).select('id').single();
-        if (erroCidade) throw new Error(`Não foi possível cadastrar a cidade: ${erroCidade.message}`);
-        cidadeId = criada.id;
+        cidadeId = await cidadeNestaEmpresa(novaCidade);
+        void fetchCidades();
+      } else if (ehCobranca && podeEscolherCidade && cidadeId?.startsWith(DE_FORA)) {
+        // Cidade de outra empresa da cobrança: a de mesmo nome, nesta.
+        cidadeId = await cidadeNestaEmpresa(cidadeId.slice(DE_FORA.length));
         void fetchCidades();
       }
       const mudouCidade = ehCobranca && cidadeId !== (editando?.cidade_id ?? null);
@@ -752,6 +813,9 @@ export default function AdminSetoresAba() {
                     <SelectContent>
                       <SelectItem value="__nenhuma__">Sem cidade</SelectItem>
                       {cidades.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                      {cidadesDeFora.map(nome => (
+                        <SelectItem key={`${DE_FORA}${nome}`} value={`${DE_FORA}${nome}`}>{nome}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Button type="button" variant="outline" size="sm" className="h-9 shrink-0 gap-1" onClick={() => setNovaCidade('')}>
