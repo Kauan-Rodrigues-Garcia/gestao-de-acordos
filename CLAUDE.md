@@ -43,6 +43,34 @@ O `.mcp.json` está com `read_only=false`. Isso significa que `execute_sql`
 executa `DROP`, `DELETE`, `UPDATE` e `ALTER` de verdade, direto em produção. A
 trava técnica foi retirada de propósito — a trava que sobrou é esta regra aqui.
 
+## Regra de negócio: Cofen não é PaguePlay
+
+Decisão do Cleber, 04/10/2026. Vale para todo código novo e para qualquer
+alteração no que já existe.
+
+**Tudo o que era «da PaguePlay» como regra de negócio agora é da regra de
+negócio Cofen.** O H.O., o repasse ao Coren e ao Cofen, o disjuntor H.O. ⇄ bruto,
+a meta indireta e o recebimento indireto, o relatório de conciliação e o
+percentual de H.O. da aba Metas pertencem à regra Cofen. Eles valem para o setor
+cuja regra (`setores.regra`) é `cofen`, como o Conecta Play.
+
+**PaguePlay agora é outra coisa: só a marca.** Quem diz a marca é a cidade do
+setor (`lib/marca.ts`): Birigui é BookPlay e Marília é PaguePlay. Um setor de
+Marília com regra Nosso produto é PaguePlay e não tem nada da regra Cofen.
+
+Na prática:
+
+- Não decida regra por `tenant.isPaguePlay`, `slug === 'pagueplay'` ou pela
+  empresa. Decida pela regra do setor (`lib/regraDoSetor.ts`). O código antigo
+  ainda faz isso em vários lugares; ao mexer em um deles, troque pela regra do
+  setor.
+- Regra de negócio diferente é carteira diferente. Os números Cofen aparecem
+  separados dos de Nosso produto, e o dinheiro Cofen vem da lógica Cofen (a
+  conciliação e o Analítico), nunca do relatório 59.
+- O cadastro ainda guarda os dados da regra Cofen na empresa PaguePlay
+  (conciliação, metas, Analítico). Isso é onde o dado mora, não qual regra se
+  aplica.
+
 ## Migrations
 
 O histórico em `supabase_migrations.schema_migrations` está **defasado** em

@@ -283,6 +283,8 @@ export interface CofenDoMes {
   conta: boolean;
   diaCorte: number;
   diasNoMes: number;
+  /** A meta do setor no mês, em BRUTO (aba Metas da PaguePlay). `null` sem meta. */
+  meta: number | null;
   mes: ValorCofen & { coren: number; cofen: number; quantidade: number };
   anterior: { brutoAteCorte: number; hoAteCorte: number; brutoMes: number; hoMes: number; dias: number };
   serie: DiaCofen[];
@@ -294,7 +296,7 @@ export interface CofenDoMes {
 interface CofenCru {
   disponivel: boolean; aviso: string | null;
   setor_id?: string; nome?: string; cidade_id?: string | null; cidade_nome?: string | null; conta?: boolean;
-  dia_corte: unknown; dias_no_mes: unknown;
+  dia_corte: unknown; dias_no_mes: unknown; meta?: unknown;
   mes?: { bruto: unknown; ho: unknown; coren: unknown; cofen: unknown; quantidade: unknown };
   anterior?: { bruto_ate_corte: unknown; ho_ate_corte: unknown; bruto_mes: unknown; ho_mes: unknown; dias: unknown };
   serie?: {
@@ -323,6 +325,7 @@ async function buscarCofenNoBanco(empresaId: string, mes: string, diaCorte?: num
     conta: c.disponivel === true && c.conta === true,
     diaCorte: n(c.dia_corte),
     diasNoMes: n(c.dias_no_mes),
+    meta: n(c.meta) > 0 ? n(c.meta) : null,
     mes: {
       bruto: n(c.mes?.bruto), ho: n(c.mes?.ho), coren: n(c.mes?.coren), cofen: n(c.mes?.cofen),
       quantidade: n(c.mes?.quantidade),

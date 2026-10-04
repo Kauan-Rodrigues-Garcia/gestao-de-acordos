@@ -31,6 +31,7 @@ const raiz = resolve(__dirname, '../../../../supabase/migrations');
 const DESEMPENHO = readFileSync(resolve(raiz, '20260917160000_painel_diretoria_59_desempenho.sql'), 'utf8');
 const CIDADES = readFileSync(resolve(raiz, '20261003170000_diretoria_por_cidade_e_dia.sql'), 'utf8');
 const CARTEIRAS = readFileSync(resolve(raiz, '20261004120000_diretoria_carteiras_e_cofen.sql'), 'utf8');
+const META_COFEN = readFileSync(resolve(raiz, '20261004180000_diretoria_cofen_meta.sql'), 'utf8');
 const PRODUCAO = readFileSync(resolve(__dirname, 'fixtures/diretoria59_producao_20260917.sql'), 'utf8');
 
 const E  = '00000000-0000-4000-8000-00000000e001';
@@ -125,6 +126,9 @@ beforeAll(async () => {
       removido_em timestamptz, restaurado_em timestamptz);
     create table public.logs_sistema (id bigint generated always as identity, empresa_id uuid,
       criado_em timestamptz default now(), alvo_tipo text);
+
+    create table public.metas (empresa_id uuid, tipo text, referencia_id uuid, mes integer, ano integer,
+      meta_valor numeric(14,2));
 
     -- O 945 de conciliação da PaguePlay (20260911222903), em centavos.
     create table public.pp_relatorio_conciliacoes (empresa_id uuid not null, id_baixa text not null,
@@ -278,6 +282,8 @@ beforeAll(async () => {
 
   await db.exec(CIDADES);
   await db.exec(CARTEIRAS);
+  await db.exec(META_COFEN);
+  await db.query("insert into public.metas values ($1, 'setor', $2, 9, 2026, 354000), ($1, 'setor', $2, 8, 2026, 0)", [PP, CONECTA]);
 }, 120_000);
 
 describe('o mês: só conta o que tem cidade e é Nosso produto', () => {
@@ -439,6 +445,13 @@ describe('a carteira Cofen vem da conciliação e do Analítico', () => {
     const dia5 = (c.serie as J[]).find(d => num(d.dia) === 5) as J;
     expect(num(dia5.operadores)).toBeGreaterThan(0);
     expect((dia5.destaque as J).nome).toBeTruthy();
+  });
+
+  it('a meta do setor Cofen vem cadastrada da PaguePlay; sem meta (ou zero), nula', async () => {
+    const set = await jsonb('select public.fn_diretoria_cofen($1, $2, null) as j', [E, '2026-09']);
+    expect(num(set.meta)).toBe(354000);
+    const ago = await jsonb('select public.fn_diretoria_cofen($1, $2, null) as j', [E, '2026-08']);
+    expect(ago.meta).toBeNull();
   });
 
   it('setor Cofen sem cidade: avisa e não conta', async () => {

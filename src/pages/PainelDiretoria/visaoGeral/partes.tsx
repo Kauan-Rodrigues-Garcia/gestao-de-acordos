@@ -1,37 +1,22 @@
 /**
- * As peças da Visão geral: a fileira de cima (geral e cidades), o gráfico do
- * mês, as formas de pagamento, o que está fora da conta, o disjuntor do Cofen
- * e a faixa H.O./Coren/Cofen. Quem orquestra (cidade aberta, dia aberto, modo
- * do Cofen) é `VisaoGeralPorCidade`.
+ * Peças da Visão geral: as formas de pagamento, a faixa H.O./Coren/Cofen, o
+ * disjuntor do Cofen e o bloco do que está fora da conta. O pulso está em
+ * `Pulso.tsx`; o placar, em `PlacarDeSetores.tsx`.
  */
-import { memo, useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { X } from 'lucide-react';
+import { memo, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
-import { ValorAnimado } from '@/components/ValorAnimado';
 import { Switch } from '@/components/ui/switch';
 import { agruparFormas, corDaForma } from '@/lib/formasPagamento';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { estimativaDeFechamento, type DiaDaSerie, type FormaDePagamento } from '@/services/mestre/diretoria.service';
+import type { FormaDePagamento } from '@/services/mestre/diretoria.service';
 import {
   classificarCarteira, type CarteiraDaCidade, type MotivoDeNaoContar, type RegraDaCarteira,
 } from '@/services/mestre/diretoriaCidades.service';
-import {
-  ehFimDeSemana, nomeDoMes, variacaoPct, type CidadeDaVisao, type EscopoDaVisao, type ModoCofen, type ParteDoGeral,
-} from './modelo';
-import { corDaMarca, mil, milhoes, pct, rotuloModo, sinal } from './formato';
+import type { ModoCofen } from './modelo';
+import { mil } from './formato';
 
-
-/** O valor grande dos cartões: «R$» pequeno e o número rolando até o novo. */
-function ValorGrande({ valor }: { valor: number }) {
-  return (
-    <>
-      <small>R$</small>
-      <ValorAnimado valor={valor} formatar={v => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
-    </>
-  );
-}
 
 // ── O disjuntor do Cofen ────────────────────────────────────────────────────
 
@@ -51,163 +36,6 @@ export function DisjuntorCofen({ modo, onTrocar }: { modo: ModoCofen; onTrocar: 
     </div>
   );
 }
-
-// ── Geral ───────────────────────────────────────────────────────────────────
-
-const COR_DA_CARTEIRA_NO_ESCURO: Record<ParteDoGeral['chave'], string> = {
-  nosso_produto: 'rgb(255 255 255 / .82)',
-  cofen: 'var(--vg-cofen)',
-};
-
-export const CartaoGeral = memo(function CartaoGeral({ mes, carteiras, modo, mesAnterior, diaCorte, diasNoMes, recolhido }: {
-  mes: EscopoDaVisao; carteiras: ParteDoGeral[]; modo: ModoCofen; mesAnterior: string; diaCorte: number; diasNoMes: number;
-  recolhido: boolean;
-}) {
-  const v = variacaoPct(mes.valor, mes.valorAnterior);
-  const fecha = estimativaDeFechamento(mes.valor, diaCorte, diasNoMes);
-  return (
-    <div className={cn('vg-geral', recolhido && 'vg-recolhe')} aria-hidden={recolhido}>
-      <span className="vg-rot">Recebido no mês · geral</span>
-      <div className="vg-valor"><ValorGrande valor={mes.valor} /></div>
-      <div className="vg-linhas">
-        <div><span>Mesmo dia de {nomeDoMes(mesAnterior)}</span>
-          <b>{formatBRL(mes.valorAnterior)} {v !== null && <span className={v >= 0 ? 'vg-sobe' : 'vg-desce'}>{sinal(v)}</span>}</b></div>
-        {fecha !== null && diaCorte < diasNoMes && <div><span>No ritmo de hoje, fecha o mês em</span><b>{milhoes(fecha)}</b></div>}
-        <div><span>Pagamentos · operadores</span><b>{mes.linhas.toLocaleString('pt-BR')} · {mes.operadores}</b></div>
-      </div>
-      {mes.valor > 0 && (
-        <>
-          {/* De qual carteira vem o dinheiro. */}
-          <div className="vg-divisao" aria-hidden="true">
-            {carteiras.map(p => <i key={p.chave} style={{ width: `${(p.valor / mes.valor) * 100}%`, background: COR_DA_CARTEIRA_NO_ESCURO[p.chave] }} />)}
-          </div>
-          <div className="vg-legenda">
-            {carteiras.map(p => (
-              <span key={p.chave}>
-                <span className="vg-ponto" style={{ background: COR_DA_CARTEIRA_NO_ESCURO[p.chave] }} />
-                {p.nome}{p.chave === 'cofen' ? ` (${rotuloModo(modo)})` : ''} <b>{pct((p.valor / mes.valor) * 100)}</b>
-              </span>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-});
-
-// ── Cidade ──────────────────────────────────────────────────────────────────
-
-/** As duas carteiras da cidade, quando ela tem Cofen: cada uma com o seu valor. */
-function CarteirasDaCidade({ cidade, modo }: { cidade: CidadeDaVisao; modo: ModoCofen }) {
-  const c = cidade.cofen;
-  if (!c) return null;
-  const total = Math.max(1e-9, cidade.mes.valor);
-  return (
-    <div className="vg-carteiras-cid">
-      <div className="vg-barra2" aria-hidden="true">
-        <i style={{ width: `${(cidade.mes.nossoProduto / total) * 100}%`, background: 'var(--cc)' }} />
-        <i style={{ width: `${(c.valor / total) * 100}%`, background: 'var(--vg-cofen)' }} />
-      </div>
-      <div className="vg-carteira-l"><span><span className="vg-ponto" style={{ background: 'var(--cc)' }} />Nosso produto</span>
-        <b><ValorAnimado valor={cidade.mes.nossoProduto} formatar={formatBRL} /></b></div>
-      <div className="vg-carteira-l vg-c"><span><span className="vg-ponto" style={{ background: 'var(--vg-cofen)' }} />{c.nome} · Cofen <small>{rotuloModo(modo)}</small></span>
-        <b><ValorAnimado valor={c.valor} formatar={formatBRL} /></b></div>
-    </div>
-  );
-}
-
-export const CartaoCidade = memo(function CartaoCidade({ cidade, modo, mesAnterior, diaCorte, diasNoMes, aberta, recolhida, onAbrir, onFechar }: {
-  cidade: CidadeDaVisao; modo: ModoCofen; mesAnterior: string; diaCorte: number; diasNoMes: number;
-  aberta: boolean; recolhida: boolean; onAbrir: () => void; onFechar: () => void;
-}) {
-  const m = cidade.mes;
-  const v = variacaoPct(m.valor, m.valorAnterior);
-  const fecha = estimativaDeFechamento(m.valor, diaCorte, diasNoMes);
-  const nSetores = cidade.setores.length + (cidade.cofen ? 1 : 0);
-  const abrirPorTecla = (e: KeyboardEvent<HTMLDivElement>) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onAbrir(); }
-  };
-  return (
-    <div
-      className={cn('vg-cidade', cidade.marca, aberta && 'vg-aberta', recolhida && 'vg-recolhe')}
-      role="button" tabIndex={recolhida ? -1 : 0} aria-expanded={aberta} aria-hidden={recolhida}
-      aria-label={aberta ? undefined : `Abrir ${cidade.nome}`}
-      onClick={() => { if (!aberta) onAbrir(); }} onKeyDown={abrirPorTecla}
-      style={{ ['--parte' as string]: cidade.participacao } as CSSProperties}
-    >
-      <span className="vg-abrir">Abrir →</span>
-      <button type="button" className="vg-fechar" aria-label="Voltar ao geral" tabIndex={aberta ? 0 : -1}
-        onClick={e => { e.stopPropagation(); onFechar(); }}>
-        <X className="w-4 h-4" />
-      </button>
-      <div className="vg-corpo">
-        <div>
-          <span className="vg-rot"><span className="vg-ponto" style={{ background: corDaMarca(cidade.marca) }} />
-            {cidade.nome}{cidade.rotuloMarca ? ` · ${cidade.rotuloMarca}` : ''}</span>
-          <div className="vg-valor"><ValorGrande valor={m.valor} /></div>
-          {v !== null && <span className="vg-var">{sinal(v)} sobre {nomeDoMes(mesAnterior)}</span>}
-          <CarteirasDaCidade cidade={cidade} modo={modo} />
-          <div className="vg-rodape">
-            <span><b>{nSetores}</b> setores</span>
-            <span><b>{m.operadores}</b> operadores</span>
-            {cidade.melhorSetor && <span>melhor: <b>{cidade.melhorSetor.nome}</b></span>}
-          </div>
-        </div>
-        <div className="vg-extra" aria-hidden={!aberta}>
-          <div className="vg-participa"><span>Participação no geral</span><b>{pct(cidade.participacao * 100)}</b></div>
-          <div className="vg-trilho"><i /></div>
-          <div className="vg-mini">
-            <div><small>Mesmo dia {nomeDoMes(mesAnterior).slice(0, 3)}.</small><b>{mil(m.valorAnterior)}</b></div>
-            <div><small>{diaCorte < diasNoMes ? 'Fecha em' : 'Fechou em'}</small><b>{fecha !== null ? milhoes(fecha) : '—'}</b></div>
-            <div><small>Pagamentos</small><b>{m.linhas.toLocaleString('pt-BR')}</b></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// ── O gráfico do mês ────────────────────────────────────────────────────────
-
-export const GraficoDoMes = memo(function GraficoDoMes({ mes, serie, diaCorte, diasNoMes, mediaAnterior, mesAnterior, diaAberto, onDia }: {
-  mes: string; serie: DiaDaSerie[]; diaCorte: number; diasNoMes: number;
-  mediaAnterior: number; mesAnterior: string; diaAberto: number | null; onDia?: (dia: number) => void;
-}) {
-  const maior = Math.max(1, mediaAnterior, ...serie.filter(d => d.dentroDoCorte).map(d => d.valor)) * 1.08;
-  return (
-    <>
-      <div className="vg-barras" role="group" aria-label="Recebido por dia">
-        {mediaAnterior > 0 && (
-          <div className="vg-media" style={{ bottom: `${(mediaAnterior / maior) * 100}%` }}>
-            <span>média {nomeDoMes(mesAnterior).slice(0, 3)}. {mil(mediaAnterior)}</span>
-          </div>
-        )}
-        {Array.from({ length: diasNoMes }, (_, i) => {
-          const dia = i + 1;
-          const d = serie[i];
-          const futuro = dia > diaCorte;
-          const valor = d?.valor ?? 0;
-          return (
-            <button
-              key={dia}
-              type="button"
-              disabled={futuro || !onDia}
-              tabIndex={futuro || !onDia ? -1 : 0}
-              className={cn('vg-col', futuro && 'vg-futuro', !futuro && ehFimDeSemana(mes, dia) && 'vg-fds',
-                dia === diaCorte && 'vg-hoje', dia === diaAberto && 'vg-sel')}
-              style={{ height: futuro ? '4%' : `${Math.max(2, (valor / maior) * 100)}%` }}
-              data-dica={futuro ? undefined : `${dia}/${mes.slice(5)} · ${mil(valor)}`}
-              aria-label={futuro ? undefined : `Dia ${dia}: ${formatBRL(valor)}${onDia ? '. Ver o resumo do dia' : ''}`}
-              aria-pressed={onDia ? dia === diaAberto : undefined}
-              onClick={() => onDia?.(dia)}
-            />
-          );
-        })}
-      </div>
-      <div className="vg-eixo"><span>1/{mes.slice(5)}</span><span>{diaCorte < diasNoMes ? `hoje · ${diaCorte}/${mes.slice(5)}` : 'mês fechado'}</span><span>{diasNoMes}/{mes.slice(5)}</span></div>
-    </>
-  );
-});
 
 // ── Formas de pagamento ─────────────────────────────────────────────────────
 
