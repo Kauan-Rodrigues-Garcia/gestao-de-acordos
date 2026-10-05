@@ -972,7 +972,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Caça à Abóbora: o nome de quem achou passa aqui por 4 min. Item do
+        {/* Caça à Abóbora: o nome de quem achou passa aqui por 20 min. Item do
             fluxo, logo abaixo da barra — não cobre nada. A abóbora em si é
             desenhada por cima do conteúdo, num canto sem botão por perto. */}
         <FaixaDaCaca empresaId={empresa?.id} />

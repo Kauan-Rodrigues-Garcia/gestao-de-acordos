@@ -11,7 +11,7 @@ import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { carregarFontesDoCartaz } from '@/components/Halloween/fonte';
 import { DesenhoAbobora } from './DesenhoAbobora';
-import { acharEsconderijo, areaVisivel, caixaLivre } from './esconderijo';
+import { acharEsconderijo, caixaLivre } from './esconderijo';
 import { formatarTempo, nomeCurto, pegarAbobora, type RodadaAbobora } from './caca';
 import './caca.css';
 
@@ -77,7 +77,15 @@ function estouro(x: number, y: number) {
 
 // ── A abóbora escondida ──────────────────────────────────────────────────────
 
-interface Lugar { x: number; y: number; visivel: boolean }
+interface Lugar { x: number; y: number }
+
+/**
+ * Depois de posta, quanto tempo ela ainda pode trocar de canto se a tela
+ * terminar de carregar algo clicável por cima. Passado isso, fica PARADA: é
+ * um adesivo na tela, e rolar a página não a move (Cleber, 05/10/2026 — antes
+ * ela acompanhava a rolagem quadro a quadro e parecia descolada).
+ */
+const ASSENTAR_MS = 6_000;
 
 function AboboraEscondida({ rodada, aoClicar }: { rodada: RodadaAbobora; aoClicar: (r: Recado) => void }) {
   const [lugar, setLugar] = useState<Lugar | null>(null);
@@ -85,34 +93,21 @@ function AboboraEscondida({ rodada, aoClicar }: { rodada: RodadaAbobora; aoClica
   // Muda a cada troca de lugar: remonta o botão e a chegada anima de novo.
   const [vez, setVez] = useState(0);
   const botaoRef = useRef<HTMLButtonElement>(null);
-  // Onde ela foi posta, e a rolagem do palco naquela hora: rolar a página leva
-  // a abóbora junto, como se estivesse desenhada no conteúdo.
-  const ancora = useRef<{ x: number; y: number; sx: number; sy: number } | null>(null);
   const tentativa = useRef(0);
+  /** Quando ela foi posta, e se a pessoa rolou desde então. */
+  const posta = useRef<{ em: number; rolou: boolean }>({ em: 0, rolou: false });
   const { pathname } = useLocation();
 
   const colocar = useCallback((avancar: boolean) => {
     const p = palco();
-    if (!p) { ancora.current = null; setLugar(null); return; }
+    if (!p) { setLugar(null); return; }
     if (avancar) tentativa.current += 1;
     const achado = acharEsconderijo(p, rodada.semente, LADO, tentativa.current, botaoRef.current);
-    if (!achado) { ancora.current = null; setLugar(null); return; }
-    ancora.current = { ...achado, sx: p.scrollLeft, sy: p.scrollTop };
-    setLugar({ ...achado, visivel: true });
+    if (!achado) { setLugar(null); return; }
+    posta.current = { em: Date.now(), rolou: false };
+    setLugar(achado);
     setVez(v => v + 1);
   }, [rodada.semente]);
-
-  // Onde ela está agora, pela rolagem.
-  const acompanhar = useCallback(() => {
-    const p = palco();
-    const a = ancora.current;
-    if (!p || !a) return;
-    const x = a.x - (p.scrollLeft - a.sx);
-    const y = a.y - (p.scrollTop - a.sy);
-    const area = areaVisivel(p, 0);
-    const visivel = !!area && x >= area.left && y >= area.top && x + LADO <= area.right && y + LADO <= area.bottom;
-    setLugar(l => (l && l.x === x && l.y === y && l.visivel === visivel ? l : { x, y, visivel }));
-  }, []);
 
   // Chega meio segundo depois do aviso: a tela termina de assentar.
   useEffect(() => {
@@ -128,33 +123,35 @@ function AboboraEscondida({ rodada, aoClicar }: { rodada: RodadaAbobora; aoClica
     return () => clearTimeout(t);
   }, [pathname, colocar]);
 
+  // Rolar não move a abóbora; só marca que a tela embaixo dela mudou por
+  // vontade da pessoa (e aí ela não foge do que passou por baixo). Janela de
+  // outro tamanho: o canto pode ter saído da área, então procura outro.
   useEffect(() => {
     const p = palco();
-    let quadro = 0;
-    const aoRolar = () => { cancelAnimationFrame(quadro); quadro = requestAnimationFrame(acompanhar); };
+    const aoRolar = () => { posta.current.rolou = true; };
     let espera: ReturnType<typeof setTimeout> | undefined;
     const aoRedimensionar = () => { clearTimeout(espera); espera = setTimeout(() => colocar(true), 300); };
     p?.addEventListener('scroll', aoRolar, { passive: true });
     window.addEventListener('resize', aoRedimensionar);
     return () => {
-      cancelAnimationFrame(quadro);
       clearTimeout(espera);
       p?.removeEventListener('scroll', aoRolar);
       window.removeEventListener('resize', aoRedimensionar);
     };
-  }, [acompanhar, colocar]);
+  }, [colocar]);
 
-  // A tela mudou por baixo dela (lista carregou, menu abriu): chegou algo
-  // clicável perto, ela muda de canto. Saiu da vista pela rolagem: volta
-  // para a parte visível.
+  // Sem lugar (tela cheia de botão, ou o palco ainda não existia): tenta de
+  // novo. Logo depois de posta, se a lista terminou de carregar por cima
+  // dela, muda de canto uma vez — depois disso, fica onde está.
   useEffect(() => {
     const t = setInterval(() => {
       if (document.visibilityState === 'hidden' || pegando) return;
       const p = palco();
-      const l = lugar;
       if (!p) return;
-      if (!l || !l.visivel) { colocar(!!l); return; }
-      if (!caixaLivre({ x: l.x, y: l.y, lado: LADO }, p, botaoRef.current)) colocar(true);
+      if (!lugar) { colocar(true); return; }
+      const { em, rolou } = posta.current;
+      if (rolou || Date.now() - em > ASSENTAR_MS) return;
+      if (!caixaLivre({ x: lugar.x, y: lugar.y, lado: LADO }, p, botaoRef.current)) colocar(true);
     }, CONFERE_MS);
     return () => clearInterval(t);
   }, [lugar, pegando, colocar]);
@@ -186,7 +183,7 @@ function AboboraEscondida({ rodada, aoClicar }: { rodada: RodadaAbobora; aoClica
       // Caça é de olho: a tecla Tab não entrega o esconderijo.
       tabIndex={-1}
       className={pegando ? 'cacab-abobora pega' : 'cacab-abobora'}
-      style={{ left: lugar.x, top: lugar.y, visibility: lugar.visivel ? 'visible' : 'hidden' }}
+      style={{ left: lugar.x, top: lugar.y }}
       aria-label="Uma abóbora escondida! Clique para pegar"
       title="Achou! Clique para pegar"
       onClick={pegar}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { caixaLivre, elementoDeAcao, sorteador } from './esconderijo';
 
 describe('sorteador', () => {
@@ -75,5 +75,23 @@ describe('caixaLivre', () => {
     document.body.appendChild(propria);
     const ambiente = { pilhaNoPonto: () => [propria, fundo], cursorDe: () => 'auto' };
     expect(caixaLivre({ x: 100, y: 100, lado: 40 }, palco, propria, 14, ambiente)).toBe(true);
+  });
+
+  it('texto em volta reprova na rodada rígida e não nas tolerantes (todo mundo recebe uma)', () => {
+    const { palco, fundo } = cena();
+    fundo.textContent = 'Nome do cliente, valor e vencimento';
+    const retangulos = vi.spyOn(Range.prototype, 'getClientRects').mockReturnValue(
+      [{ left: 0, top: 0, right: 2000, bottom: 2000 }] as unknown as DOMRectList,
+    );
+    const ambiente = { pilhaNoPonto: () => [fundo], cursorDe: () => 'auto' };
+    expect(caixaLivre({ x: 100, y: 100, lado: 40 }, palco, null, 14, ambiente)).toBe(false);
+    expect(caixaLivre({ x: 100, y: 100, lado: 40 }, palco, null, 4, ambiente, false)).toBe(true);
+    retangulos.mockRestore();
+  });
+
+  it('botão reprova mesmo nas rodadas tolerantes', () => {
+    const { palco, botao } = cena();
+    const ambiente = { pilhaNoPonto: () => [botao], cursorDe: () => 'pointer' };
+    expect(caixaLivre({ x: 100, y: 100, lado: 40 }, palco, null, 0, ambiente, false)).toBe(false);
   });
 });

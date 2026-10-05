@@ -16,8 +16,21 @@
  *      (menu aberto, diálogo, a bolha do chat).
  *   3. Falhou, próximo ponto da mesma sequência.
  *
- * Depois de posta, a abóbora é reconferida de tempos em tempos (a tela troca, a
- * lista carrega): se algo clicável chegou perto, ela muda de lugar.
+ * Depois de posta, a abóbora é reconferida nos primeiros segundos (a lista
+ * carrega): se algo clicável chegou perto, ela muda de lugar. Depois fica parada
+ * na tela, e rolar não a move.
+ *
+ * ## Todo mundo recebe uma (05/10/2026)
+ *
+ * Numa tela cheia de botão e texto (uma tabela grande), a regra 2 podia
+ * recusar os 140 pontos — e aquela pessoa ficava sem abóbora, o que não é
+ * justo. Então são três rodadas, cada uma mais tolerante:
+ *
+ *   rígida      folga de 14 px, sem botão e sem texto em volta;
+ *   apertada    folga de 4 px, texto pode, botão não;
+ *   qualquer    só não pode cair em botão nem fora do conteúdo (menu, diálogo).
+ *
+ * Sempre dentro da parte VISÍVEL do conteúdo.
  */
 
 /** mulberry32: sequência pseudoaleatória pequena e estável para uma semente. */
@@ -91,6 +104,8 @@ export function caixaLivre(
   propria: Element | null = null,
   folga = 14,
   ambiente: Ambiente = ambienteDoNavegador,
+  /** false: texto em volta não impede (rodadas tolerantes de `acharEsconderijo`). */
+  semTexto = true,
 ): boolean {
   const area = { left: c.x - folga, top: c.y - folga, right: c.x + c.lado + folga, bottom: c.y + c.lado + folga };
   const PASSOS = 5;
@@ -105,7 +120,7 @@ export function caixaLivre(
       if (vistos.has(topo)) continue;
       vistos.add(topo);
       if (elementoDeAcao(topo, ambiente.cursorDe(topo))) return false;
-      if (temTextoNaArea(topo, area)) return false;
+      if (semTexto && temTextoNaArea(topo, area)) return false;
     }
   }
   return true;
@@ -140,10 +155,17 @@ export function acharEsconderijo(
   const sortear = sorteador((semente ^ Math.imul(tentativa + 1, 0x9e3779b1)) >>> 0);
   const largura = area.right - area.left - lado;
   const altura  = area.bottom - area.top - lado;
-  for (let i = 0; i < 140; i++) {
-    const x = Math.round(area.left + sortear() * largura);
-    const y = Math.round(area.top + sortear() * altura);
-    if (caixaLivre({ x, y, lado }, palco, propria, 14, ambiente)) return { x, y };
+  const RODADAS: readonly { folga: number; semTexto: boolean }[] = [
+    { folga: 14, semTexto: true },    // rígida
+    { folga: 4,  semTexto: false },   // apertada
+    { folga: 0,  semTexto: false },   // qualquer canto que não seja botão
+  ];
+  for (const r of RODADAS) {
+    for (let i = 0; i < 140; i++) {
+      const x = Math.round(area.left + sortear() * largura);
+      const y = Math.round(area.top + sortear() * altura);
+      if (caixaLivre({ x, y, lado }, palco, propria, r.folga, ambiente, r.semTexto)) return { x, y };
+    }
   }
   return null;
 }

@@ -28,7 +28,8 @@
    quando), e o desenho CRESCE com o mouse em cima. */
 .cacab-abobora {
   position: fixed;
-  z-index: 30;
+  /* Acima de cabeçalho de tabela grudado (sticky) e abaixo de diálogo (50). */
+  z-index: 40;
   width: 40px;
   height: 40px;
   padding: 3px;
@@ -157,7 +158,7 @@
 /* ── A faixa ─────────────────────────────────────────────────────────────── */
 .cacab-faixa {
   position: relative;
-  height: 36px;
+  height: 32px;
   overflow: hidden;
   color: var(--cacab-vela);
   background:
@@ -196,17 +197,17 @@
 .cacab-faixa-recado {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding-right: 34px;
+  gap: 9px;
+  height: 32px;
+  padding-right: 30px;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 13px;
   letter-spacing: .01em;
 }
-.cacab-faixa-abobora { width: 22px; height: 22px; flex: none; }
+.cacab-faixa-abobora { width: 20px; height: 20px; flex: none; }
 .cacab-faixa-foto {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   object-fit: cover;
   flex: none;
@@ -214,13 +215,13 @@
 }
 .cacab-faixa-nome {
   font-family: var(--cacab-cartaz);
-  font-size: 16px;
+  font-size: 15px;
   color: var(--cacab-brilho);
   text-shadow: 0 0 10px rgb(255 140 40 / .55);
 }
 .cacab-faixa-tempo {
   font-family: var(--cacab-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: #fff;
   padding: 1px 8px;

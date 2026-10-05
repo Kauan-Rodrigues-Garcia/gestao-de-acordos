@@ -3,7 +3,8 @@
  *
  *   <FaixaDaCaca />    entre a barra do topo e o conteúdo: o nome de quem
  *                      achou passa por 20 min. É um item do fluxo, não um card
- *                      por cima: não cobre botão nenhum.
+ *                      por cima: não cobre botão nenhum. Presa no alto, fora da
+ *                      rolagem: está à vista o tempo todo, em qualquer tela.
  *   <AboboraDaCaca />  a abóbora escondida e o recado de quem clicou.
  *
  * Leves de propósito: o que desenha (`cena.tsx`, o CSS) só é baixado quando há
@@ -16,6 +17,9 @@ import { comNovaTentativa } from '@/lib/sobDemanda';
 import { aboboraNaTela, faixaNaTela, useCacaAbobora } from './caca';
 
 const carregarCena = comNovaTentativa(() => import('./cena'));
+
+/** Altura da faixa, em px — a mesma do `.cacab-faixa` no CSS. */
+const ALTURA_FAIXA = 32;
 const FaixaAbobora = lazy(() => carregarCena().then(m => ({ default: m.FaixaAbobora })));
 const CenaCaca     = lazy(() => carregarCena().then(m => ({ default: m.CenaCaca })));
 
@@ -28,9 +32,11 @@ export function FaixaDaCaca({ empresaId }: { empresaId: string | null | undefine
       {rodada && (
         <motion.div
           key={rodada.id}
-          className="flex-shrink-0 overflow-hidden"
+          // `sticky` e acima dos enfeites do Halloween: mesmo que alguma tela
+          // role a coluna inteira, a faixa fica no alto e à vista.
+          className="sticky top-0 z-[35] flex-shrink-0 overflow-hidden"
           initial={{ height: 0 }}
-          animate={{ height: 36 }}
+          animate={{ height: ALTURA_FAIXA }}
           exit={{ height: 0 }}
           transition={{ duration: 0.45, ease: [0.65, 0, 0.35, 1] }}
         >
