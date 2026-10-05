@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.presenca_online (
 );
 
 COMMENT ON TABLE public.presenca_online IS
-  'Quem está online: uma linha por pessoa, renovada a cada 60 s por fn_presenca_bater. '
+  'Quem está online: uma linha por pessoa, renovada a cada 15 s por fn_presenca_bater. '
   'Só as funções fn_presenca_* leem e escrevem. Ver 20261005150000.';
 
 ALTER TABLE public.presenca_online ENABLE ROW LEVEL SECURITY;
