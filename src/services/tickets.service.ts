@@ -17,6 +17,7 @@
  * `supabase.from('tickets')` é substituição direta.
  */
 import { supabase } from '@/lib/supabase';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 import { registrarLog } from '@/services/logs.service';
 import { recusadoPeloTamanho } from '@/lib/tetoDeUpload';
 import type { StatusTicket, PrioridadeTicket } from '@/pages/Tickets/categorias';
@@ -402,14 +403,18 @@ export async function revogarAtendente(
  * virar a chave.
  */
 export async function lerLiberacaoDaAba(empresaId: string): Promise<boolean> {
-  const { data, error } = await db('tickets_config')
-    .select('liberado_para_lideranca')
-    .eq('empresa_id', empresaId)
-    .maybeSingle() as unknown as {
-      data: { liberado_para_lideranca?: boolean } | null; error: { message: string } | null;
-    };
-  if (error || !data) return false;
-  return data.liberado_para_lideranca === true;
+  // Guardada por 5 min (05/10/2026: ~3 mil leituras por dia de uma chave que
+  // muda uma vez na vida). `definirLiberacaoDaAba` descarta na hora.
+  return lerComCache(`tickets:liberacao:${empresaId}`, 5 * 60_000, async () => {
+    const { data, error } = await db('tickets_config')
+      .select('liberado_para_lideranca')
+      .eq('empresa_id', empresaId)
+      .maybeSingle() as unknown as {
+        data: { liberado_para_lideranca?: boolean } | null; error: { message: string } | null;
+      };
+    if (error) throw new Error(error.message);
+    return data?.liberado_para_lideranca === true;
+  }).catch(() => false);
 }
 
 export async function definirLiberacaoDaAba(
@@ -424,6 +429,7 @@ export async function definirLiberacaoDaAba(
     },
     { onConflict: 'empresa_id' },
   );
+  invalidarCache('tickets:liberacao:');
   return { erro: error ? traduzir(error.message) : null };
 }
 

@@ -26,6 +26,7 @@
  *   em cache todas as configs + listas de setores/equipes/membros.
  */
 import { supabase } from '@/lib/supabase';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -43,17 +44,25 @@ export interface DiretoExtraConfig {
 
 // ─── Queries ────────────────────────────────────────────────────────────────
 
-export async function fetchDiretoExtraConfigs(empresaId: string): Promise<DiretoExtraConfig[]> {
-  const { data, error } = await supabase
-    .from('direto_extra_config')
-    .select('*')
-    .eq('empresa_id', empresaId);
+/**
+ * Guardadas por 1 min (05/10/2026: ~1 mil leituras por dia, uma por formulário
+ * de acordo aberto). Curto de propósito: a importação decide direto/extra com
+ * isto. `setDiretoExtraConfig` descarta na hora.
+ */
+const CONFIG_VALIDADE_MS = 60_000;
 
-  if (error) {
-    console.warn('[direto_extra.service] fetch error:', error.message);
+export async function fetchDiretoExtraConfigs(empresaId: string): Promise<DiretoExtraConfig[]> {
+  return lerComCache(`direto-extra:${empresaId}`, CONFIG_VALIDADE_MS, async () => {
+    const { data, error } = await supabase
+      .from('direto_extra_config')
+      .select('*')
+      .eq('empresa_id', empresaId);
+    if (error) throw new Error(error.message);
+    return (data as DiretoExtraConfig[]) ?? [];
+  }).catch((e: unknown): DiretoExtraConfig[] => {
+    console.warn('[direto_extra.service] fetch error:', e instanceof Error ? e.message : e);
     return [];
-  }
-  return (data as DiretoExtraConfig[]) ?? [];
+  });
 }
 
 /**
@@ -98,6 +107,7 @@ export async function setDiretoExtraConfig(params: {
     p_ativo:         ativo,
   });
 
+  invalidarCache('direto-extra:');
   if (error) {
     console.warn('[direto_extra.service] fn_direto_extra_definir:', error.message);
     return { ok: false, error: error.message };

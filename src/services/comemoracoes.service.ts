@@ -11,6 +11,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { lerComCache } from '@/lib/cacheCurto';
 import type { EfeitoId, SomId } from '@/pages/Comemoracoes/catalogo';
 import { validarAgendamento } from '@/pages/Comemoracoes/janela';
 import {
@@ -149,20 +150,30 @@ function colunaAusente(erro: { code?: string; message?: string } | null): boolea
 
 // ── Leitura ──────────────────────────────────────────────────────────────────
 
-/** Pessoas da empresa, para montar nomes e fotos sem depender de join. */
-async function buscarPessoas(empresaId: string): Promise<Map<string, PessoaComemoracao>> {
-  const { data, error } = await supabase
-    .from('perfis')
-    .select('id, nome, foto_url')
-    .eq('empresa_id', empresaId);
+/**
+ * Pessoas da empresa, para montar nomes e fotos sem depender de join.
+ *
+ * Guardadas por 5 min (05/10/2026): a sobreposição relia nomes e fotos da
+ * empresa INTEIRA a cada atualização das comemorações — eram ~8 mil leituras
+ * por dia de uma lista que muda quando entra gente nova ou alguém troca a foto.
+ */
+const PESSOAS_VALIDADE_MS = 5 * 60_000;
 
-  if (error) {
-    logger.warn('[comemoracoes] erro ao listar pessoas:', error.message);
-    return new Map();
-  }
-  const mapa = new Map<string, PessoaComemoracao>();
-  for (const p of (data ?? []) as PessoaComemoracao[]) mapa.set(p.id, p);
-  return mapa;
+async function buscarPessoas(empresaId: string): Promise<Map<string, PessoaComemoracao>> {
+  return lerComCache(`comemoracoes:pessoas:${empresaId}`, PESSOAS_VALIDADE_MS, async () => {
+    const { data, error } = await supabase
+      .from('perfis')
+      .select('id, nome, foto_url')
+      .eq('empresa_id', empresaId);
+
+    if (error) {
+      logger.warn('[comemoracoes] erro ao listar pessoas:', error.message);
+      return new Map<string, PessoaComemoracao>();
+    }
+    const mapa = new Map<string, PessoaComemoracao>();
+    for (const p of (data ?? []) as PessoaComemoracao[]) mapa.set(p.id, p);
+    return mapa;
+  }, { guardarSe: m => m.size > 0 });
 }
 
 export interface ListaComemoracoes {

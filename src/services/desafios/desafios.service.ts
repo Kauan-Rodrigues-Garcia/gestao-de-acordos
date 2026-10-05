@@ -27,6 +27,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { lerComCache } from '@/lib/cacheCurto';
 import { converterParaHO } from './contextoEmHO';
 import { getTodayISO } from '@/lib';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
@@ -602,11 +603,15 @@ export async function buscarSuperAdmins(): Promise<PessoaDesafio[]> {
  * está: a RLS de `desafios` é a régua, e ela já sabe de tudo isso.
  */
 export async function buscarDesafiosEmCartaz(): Promise<Desafio[]> {
-  const { data, error } = await rpcSemTipo<Record<string, unknown>[]>(
-    'fn_desafio_em_cartaz', {},
-  );
-  if (error || !Array.isArray(data)) return [];
-  return data.map(paraDesafio);
+  // Guardado por 1 min (05/10/2026: ~7 mil chamadas por dia, uma por montagem
+  // do menu). Campanha que entra ou sai de cartaz aparece em até um minuto.
+  return lerComCache('desafios:em-cartaz', 60_000, async () => {
+    const { data, error } = await rpcSemTipo<Record<string, unknown>[]>(
+      'fn_desafio_em_cartaz', {},
+    );
+    if (error || !Array.isArray(data)) throw new Error(error?.message ?? 'resposta inválida');
+    return data.map(paraDesafio);
+  }).catch((): Desafio[] => []);
 }
 
 // ── Setores que participam ───────────────────────────────────────────────────
