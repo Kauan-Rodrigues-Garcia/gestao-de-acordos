@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, Wifi, Palmtree, UserMinus, UsersRound, Bot } from 'lucide-react';
+import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, UsersRound, Bot, Download } from 'lucide-react';
 import {
   resumoExclusao, excluirUsuarioComAcordos, mensagemHistoricoFechado,
   type ResumoExclusao,
@@ -13,7 +12,6 @@ import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
-import { KpiTile } from '@/components/KpiTile';
 // A lista de gente e a transferência: as duas saíram da aba Setores, que as
 // duplicava. Ver o cabeçalho de `AdminSetoresAba` e o de `DialogTransferencia`.
 import { ListaPessoas, ListaPessoasVazia, type GrupoDeSetor } from '@/components/admin/ListaPessoas';
@@ -23,6 +21,14 @@ import { useSetorNucleo } from '@/hooks/useSetorNucleo';
 import { motivoCargoForaDoSetor } from '@/lib/cargoDoNucleo';
 import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
 import { useClonesCross } from '@/hooks/useClonesCross';
+import { PulsoDeUsuarios, type NumerosDoPulso } from '@/components/admin/usuarios/PulsoDeUsuarios';
+import { FichaPessoa } from '@/components/admin/usuarios/FichaPessoa';
+import {
+  FILTROS_VAZIOS, PENDENCIAS, infoDosSetores, listaEmCsv, passaNosFiltros, temPendencia,
+  type ChavePendencia, type ContextoPendencia, type Filtros, type InfoDeSetor, type MarcaDaPessoa,
+} from '@/components/admin/usuarios/modelo';
+import { empresasDaCobrancaQueVejo } from '@/services/admin/empresasDaCobranca.service';
+import '@/components/admin/usuarios/usuarios.css';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import MetasConfig from '@/pages/MetasConfig';
@@ -49,7 +55,7 @@ import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas }
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa } from '@/lib/index';
+import { TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa, PERFIL_LABELS, getTodayISO } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
@@ -117,9 +123,9 @@ export default function AdminUsuarios() {
   );
   const veUsuariosDeTodosSetores = niveisUsuarios.includes('todos_setores');
   const tenant = useTenant();
-  // Item 6: a aba Metas passa a viver dentro de Usuários (BookPlay e PaguePlay).
-  // `tenant` é usado em outras partes; mantém a referência p/ clareza.
-  const metasComoAba = tenant.slug === 'bookplay' || tenant.isPaguePlay;
+  // A aba Metas vive dentro de Usuários em toda a cobrança. O que muda entre
+  // setores é a regra de negócio, não a marca nem o site (04/10/2026).
+  const metasComoAba = true;
   /*
    * Comemorações também virou aba daqui (nos dois tenants). O gate é o mesmo da
    * criação — quem só assiste não precisa da aba, a comemoração chega pelo
@@ -189,6 +195,8 @@ export default function AdminUsuarios() {
   const ehComercial = produtoDaEmpresa(empresaAtual, tenant.slug) === 'comercial';
   const mostrarRobo = ehComercial;
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
+  /** A lista única da cobrança (BookPlay + PaguePlay) — quem vê todos os setores. */
+  const listaDaCobranca = ehCobranca && (isSuperAdmin || veUsuariosDeTodosSetores);
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
   const podeGerenciarSituacao = podeAdministrarContas
@@ -327,6 +335,23 @@ export default function AdminUsuarios() {
   const [busca, setBusca] = useState('');
 
   /*
+   * ── Usuários 2.0 (04/10/2026) ─────────────────────────────────────────────
+   *
+   * Na cobrança, quem vê todos os setores vê BookPlay e PaguePlay numa lista
+   * só: a marca é a cidade do setor de cada pessoa e vira só uma etiqueta. O
+   * que muda o que alguém vê é a regra de negócio do setor e as permissões —
+   * nunca a marca nem o endereço por onde se entrou.
+   */
+  const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIOS);
+  const [agrupar, setAgrupar] = useState<'setor' | 'az'>('setor');
+  const [abertaId, setAbertaId] = useState<string | null>(null);
+  /** As empresas da lista: as duas da cobrança, ou só a aberta. */
+  const [empresasDaLista, setEmpresasDaLista] = useState<string[]>([]);
+  const [cidades, setCidades] = useState<{ id: string; nome: string }[]>([]);
+  /** operador_id → meta individual do mês corrente. */
+  const [metasDoMes, setMetasDoMes] = useState<Map<string, number>>(() => new Map());
+
+  /*
    * ── Transferência ─────────────────────────────────────────────────────────
    *
    * Veio da aba Setores em 06/09/2026. Ver `DialogTransferencia` para o motivo:
@@ -454,15 +479,29 @@ export default function AdminUsuarios() {
      */
     const minhaLeitura = ++leituraAtual.current;
     setLoading(true);
+    /*
+     * A lista da cobrança junta as empresas da cobrança que a pessoa alcança
+     * (BookPlay e PaguePlay). Só para quem vê todos os setores: com alcance
+     * de setor a lista é o setor dela, numa empresa só.
+     */
+    let cobrancaDaLista: Empresa[] = [];
+    if (listaDaCobranca) {
+      try { cobrancaDaLista = await empresasDaCobrancaQueVejo(); } catch { cobrancaDaLista = []; }
+    }
+    const idsDaLista = cobrancaDaLista.length
+      ? cobrancaDaLista.map(e => e.id)
+      : [((!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id) || ''].filter(Boolean);
     // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
-    const empAlvo = (!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
-    if (empAlvo) { try { await arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: tenant.isPaguePlay }); } catch { /* best-effort */ } }
+    for (const empAlvo of idsDaLista) {
+      const pp = cobrancaDaLista.find(e => e.id === empAlvo)?.slug === 'pagueplay' || (!cobrancaDaLista.length && tenant.isPaguePlay);
+      try { await arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: pp }); } catch { /* best-effort */ }
+    }
     /*
      * Devolve ao ativo quem passou da data de retorno — o `pg_cron` já faz isso
      * às 00:15, e esta chamada cobre o dia em que ele não rodou. Barata e
      * idempotente: o WHERE da função só encontra quem ainda está pendente.
      */
-    if (empAlvo) {
+    for (const empAlvo of idsDaLista) {
       try {
         const voltaram = await encerrarFeriasVencidas(empAlvo);
         if (voltaram > 0) {
@@ -483,7 +522,9 @@ export default function AdminUsuarios() {
         // da fase 4. Ver `lib/__tests__/embedsDePerfis.test.ts`.
         .select('*, setores!perfis_setor_id_fkey(id,nome), empresas!perfis_empresa_id_fkey(id,nome), foto_url')
         .order('nome');
-      if (!isSuperAdmin && empresaAtual?.id) {
+      if (cobrancaDaLista.length) {
+        usersQuery = usersQuery.in('empresa_id', idsDaLista);
+      } else if (!isSuperAdmin && empresaAtual?.id) {
         usersQuery = usersQuery.eq('empresa_id', empresaAtual.id);
       } else if (filtroEmpresa) {
         usersQuery = usersQuery.eq('empresa_id', filtroEmpresa);
@@ -495,7 +536,9 @@ export default function AdminUsuarios() {
           .from('perfis')
           .select('*, setores!perfis_setor_id_fkey(id,nome), foto_url')
           .order('nome');
-        if (!isSuperAdmin && empresaAtual?.id) {
+        if (cobrancaDaLista.length) {
+          fallbackQuery = fallbackQuery.in('empresa_id', idsDaLista);
+        } else if (!isSuperAdmin && empresaAtual?.id) {
           fallbackQuery = fallbackQuery.eq('empresa_id', empresaAtual.id);
         } else if (filtroEmpresa) {
           fallbackQuery = fallbackQuery.eq('empresa_id', filtroEmpresa);
@@ -516,7 +559,9 @@ export default function AdminUsuarios() {
     try {
       const setoresPromise = (() => {
         let query = supabase.from('setores').select('*').eq('ativo', true).order('nome');
-        if (!isSuperAdmin && empresaAtual?.id) {
+        if (cobrancaDaLista.length) {
+          query = query.in('empresa_id', idsDaLista);
+        } else if (!isSuperAdmin && empresaAtual?.id) {
           query = query.eq('empresa_id', empresaAtual.id);
         } else if (filtroEmpresa) {
           query = query.eq('empresa_id', filtroEmpresa);
@@ -526,7 +571,7 @@ export default function AdminUsuarios() {
 
       const empresasPromise = isSuperAdmin
         ? fetchEmpresas()
-        : Promise.resolve(empresaAtual ? [empresaAtual] : []);
+        : Promise.resolve(cobrancaDaLista.length ? cobrancaDaLista : empresaAtual ? [empresaAtual] : []);
 
       const [{ data: s }, empresasList] = await Promise.all([setoresPromise, empresasPromise]);
       setoresData = (s as Setor[]) || [];
@@ -540,6 +585,7 @@ export default function AdminUsuarios() {
     setDesligados(usuariosData.filter(u => u.arquivado === true));
     setSetores(setoresData);
     setEmpresas(emps);
+    setEmpresasDaLista(idsDaLista);
     // Escolhe um setor de partida só para quem PERTENCE a um setor. Este
     // preenchimento automático é a origem do `setor_id` que a cúpula carregava
     // sem ninguém ter decidido — e que fazia a diretoria ver um setor só nas
@@ -560,7 +606,7 @@ export default function AdminUsuarios() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDados é recriada a cada render; incluí-la causaria refetch em loop.
-  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin]);
+  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin, listaDaCobranca]);
 
   function abrirCriar() {
     setEditando(null);
@@ -973,20 +1019,21 @@ export default function AdminUsuarios() {
    * Isto era trinta linhas escritas aqui e outras trinta iguais em
    * `AdminSetoresAba`. Agora é um hook só — ver `useClonesCross`.
    */
-  const clonesCross = useClonesCross(empresaAtual?.id);
+  const clonesCross = useClonesCross(empresasDaLista.length ? empresasDaLista : empresaAtual?.id);
 
   // As equipes da empresa, para a coluna «Equipe» da lista. Ver `equipes`.
+  const chaveDasEmpresas = (empresasDaLista.length ? empresasDaLista : [empresaAtual?.id ?? '']).filter(Boolean).sort().join(',');
   useEffect(() => {
-    const empresaId = empresaAtual?.id;
-    if (!empresaId) { setEquipes([]); return; }
+    const ids = chaveDasEmpresas ? chaveDasEmpresas.split(',') : [];
+    if (!ids.length) { setEquipes([]); return; }
     let cancel = false;
-    void supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId)
+    void supabase.from('equipes').select('id, nome').in('empresa_id', ids)
       .then(({ data, error }) => {
         if (cancel) return;
         if (error) { console.warn('[AdminUsuarios] equipes:', error.message); setEquipes([]); return; }
         setEquipes((data as { id: string; nome: string }[]) ?? []);
       });
-    void supabase.from('equipe_lideres').select('lider_id, equipe_id').eq('empresa_id', empresaId)
+    void supabase.from('equipe_lideres').select('lider_id, equipe_id').in('empresa_id', ids)
       .then(({ data, error }) => {
         if (cancel) return;
         if (error) { console.warn('[AdminUsuarios] equipe_lideres:', error.message); setLideradasPor(new Map()); return; }
@@ -997,8 +1044,24 @@ export default function AdminUsuarios() {
         }
         setLideradasPor(mapa);
       });
+    // A cidade de cada setor (a marca) e as metas individuais do mês (pendência «sem meta»).
+    void supabase.from('rh_celulas').select('id, nome').in('empresa_id', ids)
+      .then(({ data }) => { if (!cancel) setCidades((data as { id: string; nome: string }[]) ?? []); });
+    const hoje = getTodayISO();
+    void supabase.from('metas').select('referencia_id, meta_valor')
+      .in('empresa_id', ids).eq('tipo', 'operador')
+      .eq('mes', Number(hoje.slice(5, 7))).eq('ano', Number(hoje.slice(0, 4)))
+      .then(({ data }) => {
+        if (cancel) return;
+        const m = new Map<string, number>();
+        for (const r of (data as { referencia_id: string; meta_valor: number }[]) ?? []) {
+          const v = Number(r.meta_valor) || 0;
+          if (v > 0) m.set(r.referencia_id, v);
+        }
+        setMetasDoMes(m);
+      });
     return () => { cancel = true; };
-  }, [empresaAtual?.id]);
+  }, [chaveDasEmpresas]);
 
   /*
    * ── Filtro de acesso ──────────────────────────────────────────────────────
@@ -1022,12 +1085,14 @@ export default function AdminUsuarios() {
    * empresa aberta. Pedido de 02/10/2026.
    */
   const empresaDosDesligados = (isSuperAdmin && filtroEmpresa) || empresaAtual?.id || null;
-  const desligadosDaEmpresa = empresaDosDesligados
-    ? desligados.filter(u => u.empresa_id === empresaDosDesligados)
-    : desligados;
+  const desligadosDaEmpresa = empresasDaLista.length > 1
+    ? desligados.filter(u => !!u.empresa_id && empresasDaLista.includes(u.empresa_id))
+    : empresaDosDesligados
+      ? desligados.filter(u => u.empresa_id === empresaDosDesligados)
+      : desligados;
 
   const usuariosFiltrados = filtrarUsuariosVisiveis(
-    isSuperAdmin && filtroEmpresa
+    isSuperAdmin && filtroEmpresa && empresasDaLista.length <= 1
       ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
       : usuarios,
     {
@@ -1037,8 +1102,46 @@ export default function AdminUsuarios() {
     },
   );
 
+  // ── Marca, pendências e filtros (Usuários 2.0) ───────────────────────────────
+  const infoSetor = useMemo(
+    () => infoDosSetores(setores as unknown as { id: string; cidade_id?: string | null; regra?: string | null }[], cidades),
+    [setores, cidades],
+  );
+  const marcaDe = (u: Perfil): MarcaDaPessoa | null => (u.setor_id ? infoSetor.get(u.setor_id)?.marca ?? null : null);
+  const temMarca = [...infoSetor.values()].some(i => i.marca);
+  const ctxPendencia: ContextoPendencia = {
+    temEquipe: u => equipesDoPerfil(u.perfil, u.equipe_id ?? null, lideradasPor.get(u.id) ?? []).todas.length > 0,
+    comMeta: new Set(metasDoMes.keys()),
+  };
+  const ctxFiltro = { ...ctxPendencia, marcaDe, online: (id: string) => onlineIds.has(id) };
+  const filtrosAtivos = !!(filtros.marca || filtros.cargo || filtros.situacao || filtros.pendencia);
+
+  const numerosDoPulso: NumerosDoPulso = (() => {
+    const base = usuariosFiltrados.filter(u => !(u as { robo?: boolean }).robo);
+    const ativos = base.filter(u => (u.situacao ?? 'ativo') === 'ativo');
+    const porMarca = { bp: { online: 0, ativos: 0 }, pp: { online: 0, ativos: 0 } };
+    for (const u of ativos) {
+      const m = marcaDe(u);
+      if (!m) continue;
+      porMarca[m].ativos++;
+      if (onlineIds.has(u.id)) porMarca[m].online++;
+    }
+    const pendencias = Object.fromEntries(PENDENCIAS.map(p => [p.chave, base.filter(u => temPendencia(u, p.chave, ctxPendencia)).length])) as Record<ChavePendencia, number>;
+    return {
+      online: base.filter(u => onlineIds.has(u.id)).length,
+      ativos: ativos.length,
+      porMarca, temMarca,
+      situacao: {
+        ativo: ativos.length,
+        ferias: base.filter(u => u.situacao === 'ferias').length,
+        desligado: base.filter(u => u.situacao === 'desligado').length,
+      },
+      pendencias,
+    };
+  })();
+
   // ── Agrupamento por setor ────────────────────────────────────────────────────
-  const usuariosPorSetor = usuariosFiltrados.reduce<Record<string, { nomeSetor: string; lista: PerfilComClone[] }>>((acc, u) => {
+  const usuariosPorSetor = usuariosFiltrados.filter(u => passaNosFiltros(u, filtros, ctxFiltro)).reduce<Record<string, { nomeSetor: string; lista: PerfilComClone[] }>>((acc, u) => {
     const sid = u.setor_id ?? '__sem_setor__';
     const snome = nomeSetor(u);
     if (!acc[sid]) acc[sid] = { nomeSetor: snome, lista: [] };
@@ -1046,10 +1149,11 @@ export default function AdminUsuarios() {
     return acc;
   }, {});
 
-  // BookPlay: injeta os clones de OUTRO setor no grupo do setor destino, com tag.
+  // Os clones de OUTRO setor entram no grupo do setor destino, com tag — em
+  // qualquer empresa (até 04/10/2026 só a BookPlay; clone é de equipe, não de marca).
   // Respeita o alcance configurado para qualquer cargo: sem "todos os setores",
   // o grupo do setor da pessoa é o único destino possível, mesmo só com clones.
-  if (tenant.slug === 'bookplay' && clonesCross.length) {
+  if (clonesCross.length) {
     // O painel manda no alcance. Cargo nenhum ganha todos os setores por estar
     // ausente de uma lista fixa; se a chave ampla está desligada, até clones só
     // entram no grupo do setor da pessoa logada.
@@ -1061,6 +1165,7 @@ export default function AdminUsuarios() {
       const p = perfilPorId.get(c.operadorId);
       if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;   // só cross-setor
       if (PERFIS_ADMIN.includes(p.perfil) && !podeVerAdministradores) continue;
+      if (!passaNosFiltros(p, filtros, ctxFiltro)) continue;
       const grupo = (usuariosPorSetor[c.destinoSetorId] ??= { nomeSetor: nomeSetorPorId(c.destinoSetorId), lista: [] });
       if (grupo.lista.some(x => x.id === p.id)) continue;
       grupo.lista.push({ ...p, _cloneDe: nomeSetor(p) });
@@ -1076,23 +1181,6 @@ export default function AdminUsuarios() {
    */
   const setoresParaFiltro = Object.entries(usuariosPorSetor)
     .sort((a, b) => a[1].nomeSetor.localeCompare(b[1].nomeSetor, 'pt-BR'));
-
-  /*
-   * ── Os números do topo ────────────────────────────────────────────────────
-   *
-   * Saem de `usuariosFiltrados` — o que ESTA pessoa enxerga —, e não da lista
-   * já recortada por busca ou setor: um contador que muda quando se digita não
-   * conta nada, só ecoa o filtro.
-   *
-   * «Sem setor» é o que mais rende. Quem está sem setor num cargo que precisa
-   * de um fica invisível para o Analítico e para o Painel Líder, com cara de
-   * dado real — o caso do `setorVazioParaPreencher`. Antes só se descobria
-   * rolando até o fim da lista; agora o número aparece e o clique leva até lá.
-   */
-  const totalPessoas = usuariosFiltrados.length;
-  const totalOnline  = usuariosFiltrados.filter(u => onlineIds.has(u.id)).length;
-  const totalFerias  = usuariosFiltrados.filter(u => (u.situacao ?? 'ativo') === 'ferias').length;
-  const totalSemSetor = usuariosFiltrados.filter(u => !u.setor_id && !ehEscopoEmpresa(u.perfil)).length;
 
   const buscaNormalizada = normalizarBusca(busca);
 
@@ -1111,7 +1199,7 @@ export default function AdminUsuarios() {
     );
     const byId = new Map(entries);
     return ordenados
-      .map(({ id }) => {
+      .map(({ id }): GrupoDeSetor | null => {
         const g = byId.get(id);
         if (!g) return null;
         // A busca recorta PESSOAS; o setor que ficar sem nenhuma some da tela,
@@ -1120,14 +1208,31 @@ export default function AdminUsuarios() {
           ? g.lista.filter(u => casaComBusca(u, buscaNormalizada))
           : g.lista;
         if (lista.length === 0) return null;
+        const info: InfoDeSetor | undefined = infoSetor.get(id);
         return {
           id,
           nomeSetor: g.nomeSetor === '—' ? 'Sem setor' : g.nomeSetor,
           lista,
+          marca: info?.marca ?? null,
+          regra: info?.regra ?? null,
         } satisfies GrupoDeSetor;
       })
       .filter((g): g is GrupoDeSetor => g !== null);
   })();
+
+  /** No modo A–Z: todo mundo num grupo só, sem os clones (eles são a mesma pessoa). */
+  const gruposDaTela: GrupoDeSetor[] = agrupar === 'az'
+    ? (() => {
+        const vistos = new Set<string>();
+        const lista = setoresOrdenados.flatMap(g => g.lista).filter(u => {
+          if (u._cloneDe || vistos.has(u.id)) return false;
+          vistos.add(u.id);
+          return true;
+        }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        return lista.length ? [{ id: '__az__', nomeSetor: 'Todas as pessoas · A–Z', lista }] : [];
+      })()
+    : setoresOrdenados;
+  const totalNaTela = new Set(gruposDaTela.flatMap(g => g.lista.map(u => u.id))).size;
 
   /** Os perfis por trás dos ids marcados — o que vai para a transferência. */
   const perfisSelecionados = usuariosFiltrados.filter(u => selecionados.has(u.id));
@@ -1137,6 +1242,22 @@ export default function AdminUsuarios() {
    * sistema (`equipesDoPerfil`): para `lider`, o `perfis.equipe_id` é resíduo e
    * nunca aparece.
    */
+  const exportar = (pessoas: Perfil[]) => {
+    const csv = listaEmCsv(pessoas.map(u => ({
+      nome: u.nome, login: u.usuario ?? '', email: u.email ?? '',
+      cargo: PERFIL_LABELS[u.perfil] ?? u.perfil, setor: nomeSetor(u) === '—' ? '' : nomeSetor(u),
+      equipe: nomeEquipe(u) ?? '', marca: marcaDe(u) === 'bp' ? 'BookPlay' : marcaDe(u) === 'pp' ? 'PaguePlay' : '',
+      situacao: (u.situacao ?? 'ativo') === 'ferias' ? 'Férias' : (u.situacao ?? 'ativo') === 'desligado' ? 'Desligado' : 'Ativo',
+    })));
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `usuarios-${getTodayISO()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const pessoaAberta = abertaId ? usuarios.find(u => u.id === abertaId) ?? null : null;
+
   const nomeEquipe = (u: Perfil) => {
     const nome = (id: string) => equipes.find(e => e.id === id)?.nome ?? null;
     const { todas, lideradas } = equipesDoPerfil(u.perfil, u.equipe_id ?? null, lideradasPor.get(u.id) ?? []);
@@ -1158,7 +1279,11 @@ export default function AdminUsuarios() {
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" /> Usuários
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e equipes</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {empresasDaLista.length > 1
+                ? 'BookPlay e PaguePlay na mesma lista · a marca é a cidade do setor; o que muda o que cada um vê é a regra de negócio do setor'
+                : 'Gestão de usuários e equipes'}
+            </p>
           </div>
 
           {/*
@@ -1219,60 +1344,18 @@ export default function AdminUsuarios() {
 
         {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
         {podeVerUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
-        <div className="max-w-[1400px] mx-auto space-y-4">
+        <div className="us max-w-[1400px] mx-auto space-y-4 pb-20">
 
-          {/* ── Os quatro números ────────────────────────────────────────
-              Contam sobre TODA a gente que este cargo enxerga, não sobre o
-              recorte da tela: um número que muda quando se digita na busca
-              não informa nada que a própria lista já não mostre. */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiTile
-              rotulo="Pessoas"
-              valor={totalPessoas}
-              sub={setoresParaFiltro.length === 1
-                ? '1 setor'
-                : `${setoresParaFiltro.length} setores`}
-              Icon={Users}
-              tom="primario"
-            />
-            <KpiTile
-              rotulo="Online agora"
-              valor={totalOnline}
-              sub={totalPessoas > 0 ? `${Math.round((totalOnline / totalPessoas) * 100)}% da equipe` : undefined}
-              Icon={Wifi}
-              tom="sucesso"
-            />
-            <KpiTile
-              rotulo="De férias"
-              valor={totalFerias}
-              sub={totalFerias > 0 ? 'voltam sozinhos na data' : 'ninguém fora'}
-              Icon={Palmtree}
-              tom="neutro"
-            />
-            {/* Clicável porque é o único dos quatro que pede ação: quem está
-                sem setor num cargo que precisa de um some do Analítico e do
-                Painel Líder sem acusar erro. Ver `setorVazioParaPreencher`. */}
-            <button
-              type="button"
-              disabled={totalSemSetor === 0}
-              onClick={() => escolherFiltroSetor('__sem_setor__')}
-              title={totalSemSetor > 0 ? 'Ver quem está sem setor' : undefined}
-              className={cn(
-                'text-left rounded-xl transition-transform',
-                totalSemSetor > 0
-                  ? 'hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary cursor-pointer'
-                  : 'cursor-default',
-              )}
-            >
-              <KpiTile
-                rotulo="Sem setor"
-                valor={totalSemSetor}
-                sub={totalSemSetor > 0 ? 'zeram o analítico — clique' : 'todos vinculados'}
-                Icon={UserMinus}
-                tom={totalSemSetor > 0 ? 'alerta' : 'neutro'}
-              />
-            </button>
-          </div>
+          {/* ── O pulso: online por marca, situação e o que resolver ──────
+              Cada número é um filtro. Contam sobre toda a gente que este
+              cargo enxerga, não sobre o recorte da tela. */}
+          <PulsoDeUsuarios
+            n={numerosDoPulso}
+            marca={filtros.marca} situacao={filtros.situacao} pendencia={filtros.pendencia}
+            onMarca={m => setFiltros(f => ({ ...f, marca: m }))}
+            onSituacao={v => setFiltros(f => ({ ...f, situacao: v }))}
+            onPendencia={v => setFiltros(f => ({ ...f, pendencia: v }))}
+          />
 
           {/* ── Barra de ferramentas ─────────────────────────────────────
               A busca vem primeiro e ocupa o espaço que sobra: é a ação mais
@@ -1299,7 +1382,7 @@ export default function AdminUsuarios() {
               )}
             </div>
 
-            {isSuperAdmin && empresas.length > 1 && (
+            {isSuperAdmin && empresas.length > 1 && empresasDaLista.length <= 1 && (
               <Select
                 value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
                 onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
@@ -1311,10 +1394,10 @@ export default function AdminUsuarios() {
                 </SelectContent>
               </Select>
             )}
-            {!isSuperAdmin && empresaAtual && (
+            {!isSuperAdmin && empresaAtual && empresasDaLista.length <= 1 && (
               <Badge variant="outline" className="h-9 px-3 text-xs font-normal">{empresaAtual.nome}</Badge>
             )}
-            {isSuperAdmin && filtroEmpresa && (
+            {isSuperAdmin && filtroEmpresa && empresasDaLista.length <= 1 && (
               <Button variant="ghost" size="sm" className="h-9" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>
                 Limpar
               </Button>
@@ -1339,9 +1422,51 @@ export default function AdminUsuarios() {
               </Select>
             )}
 
+            {temMarca && (
+              <div className="inline-flex rounded-lg bg-muted/50 p-0.5 gap-0.5" role="group" aria-label="Marca">
+                {([[null, 'Todas'], ['bp', 'BookPlay'], ['pp', 'PaguePlay']] as const).map(([m, t]) => (
+                  <button key={t} type="button" aria-pressed={filtros.marca === m}
+                    onClick={() => setFiltros(f => ({ ...f, marca: m }))}
+                    className={cn('h-8 px-3 rounded-md text-xs font-semibold transition-colors',
+                      filtros.marca === m ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <Select value={filtros.cargo ?? '__todos__'} onValueChange={v => setFiltros(f => ({ ...f, cargo: v === '__todos__' ? null : v }))}>
+              <SelectTrigger className="w-40 h-9 text-sm" aria-label="Filtrar por cargo"><SelectValue placeholder="Cargo" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__todos__">Todos os cargos</SelectItem>
+                {[...new Set(usuariosFiltrados.map(u => u.perfil))].sort((a, b) => (PERFIL_LABELS[a] ?? a).localeCompare(PERFIL_LABELS[b] ?? b, 'pt-BR')).map(c => (
+                  <SelectItem key={c} value={c}>{PERFIL_LABELS[c] ?? c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {filtrosAtivos && (
+              <Button variant="ghost" size="sm" className="h-9 text-xs gap-1" onClick={() => setFiltros(FILTROS_VAZIOS)}>
+                <X className="w-3.5 h-3.5" /> Limpar filtros
+              </Button>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{totalNaTela} na lista</span>
+              <div className="inline-flex rounded-lg bg-muted/50 p-0.5 gap-0.5" role="group" aria-label="Agrupar">
+                {([['setor', 'Por setor'], ['az', 'A–Z']] as const).map(([k, t]) => (
+                  <button key={k} type="button" aria-pressed={agrupar === k} onClick={() => setAgrupar(k)}
+                    className={cn('h-8 px-3 rounded-md text-xs font-semibold transition-colors',
+                      agrupar === k ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Recolher some durante a busca: lá os grupos ficam abertos à
                 força, e um botão que não faz nada é pior que um botão a menos. */}
-            {setoresParaFiltro.length > 1 && !busca && (
+            {setoresParaFiltro.length > 1 && !busca && agrupar === 'setor' && (
               <Button
                 variant="ghost" size="sm" className="h-9 text-xs"
                 onClick={() => setSetoresRecolhidos(
@@ -1352,6 +1477,9 @@ export default function AdminUsuarios() {
               </Button>
             )}
 
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => exportar(gruposDaTela.flatMap(g => g.lista).filter(u => !u._cloneDe))}>
+              <Download className="w-4 h-4" /> Exportar
+            </Button>
             <Button variant="outline" size="icon" className="h-9 w-9" title="Recarregar" onClick={fetchDados}>
               <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
             </Button>
@@ -1366,27 +1494,15 @@ export default function AdminUsuarios() {
               Veio da aba Setores junto com a transferência. Lá os checkboxes
               ficavam dentro da lista de cada setor, que era a lista que esta
               reforma tirou. */}
-          {podeTransferir && selecionados.size > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2"
-            >
-              <p className="text-xs text-foreground flex-1">
-                <strong>{selecionados.size}</strong> pessoa{selecionados.size !== 1 && 's'} selecionada{selecionados.size !== 1 && 's'}
-              </p>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelecionados(new Set())}>
-                <X className="w-3 h-3 mr-1" /> Limpar
-              </Button>
-              <Button
-                size="sm" className="h-7 text-xs gap-1.5"
-                onClick={() => { if (perfisSelecionados.length) setTransferindo(perfisSelecionados); }}
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" /> Transferir selecionadas
-              </Button>
-            </motion.div>
-          )}
-
+          {/* A barra de seleção: presa embaixo, sobe quando alguém é marcado. */}
+          <div className={cn('us-lote', podeTransferir && selecionados.size > 0 && 'us-on')} role="region" aria-label="Seleção" aria-hidden={!(podeTransferir && selecionados.size > 0)}>
+            <span><b>{selecionados.size}</b> {selecionados.size === 1 ? 'pessoa selecionada' : 'pessoas selecionadas'}</span>
+            <button type="button" className="us-forte" onClick={() => { if (perfisSelecionados.length) setTransferindo(perfisSelecionados); }}>
+              <ArrowRightLeft className="w-3.5 h-3.5" /> Transferir
+            </button>
+            <button type="button" onClick={() => exportar(perfisSelecionados)}><Download className="w-3.5 h-3.5" /> Exportar</button>
+            <button type="button" aria-label="Limpar seleção" onClick={() => setSelecionados(new Set())}><X className="w-3.5 h-3.5" /></button>
+          </div>
           {/* ── A lista ── */}
           {loading ? (
             <div className="space-y-2">
@@ -1394,11 +1510,14 @@ export default function AdminUsuarios() {
                 <div key={i} className="h-14 rounded-xl border border-border bg-muted/30 animate-pulse" />
               ))}
             </div>
-          ) : setoresOrdenados.length === 0 ? (
-            <ListaPessoasVazia busca={busca} />
+          ) : gruposDaTela.length === 0 ? (
+            <ListaPessoasVazia busca={busca || (filtrosAtivos ? 'esses filtros' : '')} />
           ) : (
             <ListaPessoas
-              grupos={setoresOrdenados}
+              grupos={gruposDaTela}
+              marcaDe={temMarca ? marcaDe : undefined}
+              onAbrir={u => setAbertaId(u.id)}
+              abertaId={abertaId}
               recolhidos={setoresRecolhidos}
               onAlternarSetor={alternarSetor}
               buscaAtiva={!!buscaNormalizada}
@@ -1415,7 +1534,7 @@ export default function AdminUsuarios() {
                 temPermissao('usuarios_administrar')
                 || (temPermissao('usuarios_editar_do_setor') && u.id !== perfilAtual?.id)
               )}
-              mostrarEmpresa={isSuperAdmin && !filtroEmpresa}
+              mostrarEmpresa={isSuperAdmin && !filtroEmpresa && empresasDaLista.length <= 1}
               nomeEmpresa={nomeEmpresa}
               nomeEquipe={nomeEquipe}
               onEditar={abrirEditar}
@@ -1579,6 +1698,25 @@ export default function AdminUsuarios() {
         excluindo={excluindoUsuario}
       />
 
+
+      {/* A ficha da pessoa: abre ao clicar na linha. */}
+      <FichaPessoa
+        pessoa={pessoaAberta}
+        aberta={!!pessoaAberta}
+        onFechar={() => setAbertaId(null)}
+        online={!!pessoaAberta && onlineIds.has(pessoaAberta.id)}
+        setor={pessoaAberta?.setor_id ? { nome: nomeSetor(pessoaAberta), info: infoSetor.get(pessoaAberta.setor_id) ?? null } : null}
+        equipe={pessoaAberta ? nomeEquipe(pessoaAberta) : null}
+        empresa={pessoaAberta ? nomeEmpresa(pessoaAberta) : ''}
+        meta={pessoaAberta ? metasDoMes.get(pessoaAberta.id) ?? null : null}
+        podeEditar={!!pessoaAberta && podeAlgoNoUsuario && (temPermissao('usuarios_administrar') || (temPermissao('usuarios_editar_do_setor') && pessoaAberta.id !== perfilAtual?.id))}
+        podeTransferir={podeTransferir}
+        podeImpersonar={isSuperAdmin}
+        souEu={!!pessoaAberta && pessoaAberta.id === perfilAtual?.id}
+        onEditar={u => { setAbertaId(null); abrirEditar(u); }}
+        onTransferir={u => { setAbertaId(null); setTransferindo([u]); }}
+        onEntrarComo={u => void entrarComo(u)}
+      />
 
       {/* #6: diálogo de confirmação de exclusão de usuário */}
       <Dialog open={confirmExclusaoUser} onOpenChange={setConfirmExclusaoUser}>

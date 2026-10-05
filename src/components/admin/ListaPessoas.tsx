@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
+import { PERFIL_LABELS, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
 import type { Perfil, SituacaoUsuario } from '@/lib/supabase';
 import { separarPorCargo } from '@/lib/cargos-ordem';
 import { cn } from '@/lib/utils';
@@ -47,6 +47,10 @@ export interface GrupoDeSetor {
   id: string;
   nomeSetor: string;
   lista: PerfilComClone[];
+  /** A marca do setor (cidade): só etiqueta. */
+  marca?: 'bp' | 'pp' | null;
+  /** A regra de negócio do setor — esta sim muda o que a pessoa vê. */
+  regra?: 'nosso_produto' | 'cofen' | null;
 }
 
 /** Larguras das colunas — o cabeçalho e as linhas leem daqui. */
@@ -54,6 +58,7 @@ const COL = {
   cargo:    'w-[132px] shrink-0 hidden md:block',
   equipe:   'w-[150px] shrink-0 hidden xl:block',
   empresa:  'w-[132px] shrink-0 hidden lg:block',
+  marca:    'w-[96px] shrink-0 hidden lg:block',
   situacao: 'w-[128px] shrink-0 hidden sm:block',
   acoes:    'w-[104px] shrink-0',
 };
@@ -92,6 +97,11 @@ interface Props {
   mostrarEmpresa: boolean;
   nomeEmpresa: (u: Perfil) => string;
   nomeEquipe: (u: Perfil) => string | null;
+  /** A marca de cada pessoa (cidade do setor). Ausente: a coluna não aparece. */
+  marcaDe?: (u: Perfil) => 'bp' | 'pp' | null;
+  /** Clicar na linha abre a ficha. */
+  onAbrir?: (u: Perfil) => void;
+  abertaId?: string | null;
 
   onEditar: (u: Perfil) => void;
   onTransferir: (u: Perfil) => void;
@@ -105,7 +115,7 @@ export function ListaPessoas({
   selecionados, onAlternarSelecao, onSelecionarGrupo,
   onlineIds, perfilAtualId, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
-  mostrarEmpresa, nomeEmpresa, nomeEquipe,
+  mostrarEmpresa, nomeEmpresa, nomeEquipe, marcaDe, onAbrir, abertaId,
   onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto,
 }: Props) {
   return (
@@ -127,6 +137,7 @@ export function ListaPessoas({
         <span className={COL.cargo}>Cargo</span>
         <span className={COL.equipe}>Equipe</span>
         {mostrarEmpresa && <span className={COL.empresa}>Empresa</span>}
+        {marcaDe && <span className={COL.marca}>Marca</span>}
         <span className={COL.situacao}>Situação</span>
         <span className={cn(COL.acoes, 'text-right')}>Ações</span>
       </div>
@@ -166,6 +177,12 @@ export function ListaPessoas({
                 </span>
                 <span className="text-[10px] font-medium text-muted-foreground bg-background/80 border border-border rounded-full px-2 py-0.5 shrink-0">
                   {grupo.lista.length}
+                </span>
+                {grupo.marca && <span className={cn('us-tag shrink-0', grupo.marca)}>{grupo.marca === 'bp' ? 'BookPlay' : 'PaguePlay'}</span>}
+                {grupo.regra === 'cofen' && <span className="us-tag cofen shrink-0">Regra Cofen</span>}
+                {grupo.id === '__sem_setor__' && grupo.lista.some(u => !ehEscopoEmpresa(u.perfil)) && <span className="us-tag ruim shrink-0">resolver</span>}
+                <span className="ml-auto pr-1 text-[11px] text-muted-foreground shrink-0 hidden sm:inline">
+                  <b className="text-foreground">{grupo.lista.filter(u => onlineIds.has(u.id)).length}</b> online
                 </span>
               </button>
 
@@ -224,6 +241,9 @@ export function ListaPessoas({
                             mostrarEmpresa={mostrarEmpresa}
                             nomeEmpresa={nomeEmpresa(u)}
                             nomeEquipe={nomeEquipe(u)}
+                            marca={marcaDe ? marcaDe(u) : undefined}
+                            onAbrir={onAbrir}
+                            aberta={abertaId === u.id}
                             onAlternarSelecao={onAlternarSelecao}
                             onEditar={onEditar}
                             onTransferir={onTransferir}
@@ -260,6 +280,10 @@ interface LinhaProps {
   mostrarEmpresa: boolean;
   nomeEmpresa: string;
   nomeEquipe: string | null;
+  /** `undefined`: coluna escondida; `null`: setor sem cidade. */
+  marca?: 'bp' | 'pp' | null;
+  onAbrir?: (u: Perfil) => void;
+  aberta?: boolean;
   onAlternarSelecao: (id: string) => void;
   onEditar: (u: Perfil) => void;
   onTransferir: (u: Perfil) => void;
@@ -271,7 +295,7 @@ interface LinhaProps {
 function LinhaPessoa({
   u, online, souEu, selecionado, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
-  mostrarEmpresa, nomeEmpresa, nomeEquipe,
+  mostrarEmpresa, nomeEmpresa, nomeEquipe, marca, onAbrir, aberta,
   onAlternarSelecao, onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto,
 }: LinhaProps) {
   const ehClone = !!u._cloneDe;
@@ -279,10 +303,19 @@ function LinhaPessoa({
   const iniciais = u.nome.split(' ').map(n => n[0]).slice(0, 2).join('');
 
   return (
-    <div className={cn(
-      'group/linha flex items-center gap-3 px-3 py-2.5 transition-colors',
-      selecionado ? 'bg-primary/[0.07]' : 'hover:bg-accent/40',
-    )}>
+    <div
+      className={cn(
+        'group/linha flex items-center gap-3 px-3 py-2.5 transition-colors',
+        selecionado ? 'bg-primary/[0.07]' : 'hover:bg-accent/40',
+        onAbrir && 'cursor-pointer',
+        aberta && 'shadow-[inset_3px_0_0_var(--primary)] bg-primary/[0.05]',
+      )}
+      // Clicar na linha abre a ficha; os controles dentro dela fazem o deles.
+      onClick={e => {
+        if (!onAbrir || (e.target as HTMLElement).closest('button, input, a, [role="menuitem"]')) return;
+        onAbrir(u);
+      }}
+    >
       {/* Seleção — clone não entra: ele é gerido no setor de origem. */}
       {podeTransferir && (
         ehClone ? <span className="w-4 shrink-0" aria-hidden /> : (
@@ -390,6 +423,14 @@ function LinhaPessoa({
             <Building2 className="w-3 h-3 shrink-0 opacity-70" />
             <span className="truncate">{nomeEmpresa}</span>
           </span>
+        </div>
+      )}
+
+      {/* ── Marca: a cidade do setor. Etiqueta, não regra. ── */}
+      {marca !== undefined && (
+        <div className={COL.marca}>
+          {marca ? <span className={cn('us-tag', marca)}>{marca === 'bp' ? 'BookPlay' : 'PaguePlay'}</span>
+            : <span className="text-[11px] text-muted-foreground/50">—</span>}
         </div>
       )}
 

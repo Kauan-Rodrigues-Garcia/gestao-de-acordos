@@ -7,6 +7,7 @@ import { NOMES_TEMAS } from '@/lib/temas';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useMarca } from '@/hooks/useMarca';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import { TermoUsoGate } from '@/components/TermoUsoGate';
 import { TermoUsoProvider } from '@/hooks/useTermoUso';
@@ -244,8 +245,22 @@ function useDesvioDoCelular(ativo: boolean): React.ReactElement | null {
   return null;
 }
 
+/**
+ * A cor da sessão — azul BookPlay ou verde PaguePlay — e o ícone da aba.
+ *
+ * Desde 04/10/2026 (Cleber) a cor é da PESSOA, e não do link acessado: quem
+ * está num setor de Marília (PaguePlay) vê tudo verde, quem está em Birigui
+ * (BookPlay) vê tudo azul, entre pelo endereço que entrar. Quem decide é a
+ * cidade do setor (`useMarca` / `lib/marca.ts`). Sem setor com cidade (o
+ * super admin, quem ainda não tem setor) fica a empresa do link, como antes.
+ *
+ * `data-tenant` aqui é só COR (o CSS de `index.css` e os gráficos). Regra de
+ * negócio não sai daqui: ela é do setor (`lib/regraDoSetor.ts`).
+ */
 function TenantThemeApplier(): null {
-  const { empresa, tenantSlug } = useEmpresa();
+  const { empresa, tenantSlug: slugDoLink } = useEmpresa();
+  const marca = useMarca();
+  const tenantSlug = marca ? (marca.nome === 'PaguePlay' ? 'pagueplay' : 'bookplay') : slugDoLink;
   useEffect(() => {
     document.documentElement.setAttribute('data-tenant', tenantSlug);
 
@@ -260,7 +275,7 @@ function TenantThemeApplier(): null {
     // para um arquivo que ainda não existe daria 404 e ícone quebrado, que é
     // pior do que um ícone genérico. Quando Comercial e RH tiverem logo, entram
     // aqui como mais uma linha do mapa.
-    const produto = produtoDaEmpresa(empresa, tenantSlug);
+    const produto = produtoDaEmpresa(empresa, slugDoLink);
     const href = produto !== 'cobranca'
       ? null
       : (tenantSlug === 'bookplay' ? '/logo-bookplay.png' : '/logo-pagueplay.png');
@@ -278,7 +293,7 @@ function TenantThemeApplier(): null {
     return () => {
       document.documentElement.removeAttribute('data-tenant');
     };
-  }, [empresa, tenantSlug]);
+  }, [empresa, tenantSlug, slugDoLink]);
   return null;
 }
 
