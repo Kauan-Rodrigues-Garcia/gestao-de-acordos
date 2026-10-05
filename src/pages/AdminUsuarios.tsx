@@ -1108,7 +1108,6 @@ export default function AdminUsuarios() {
     [setores, cidades],
   );
   const marcaDe = (u: Perfil): MarcaDaPessoa | null => (u.setor_id ? infoSetor.get(u.setor_id)?.marca ?? null : null);
-  const temMarca = [...infoSetor.values()].some(i => i.marca);
   const ctxPendencia: ContextoPendencia = {
     temEquipe: u => equipesDoPerfil(u.perfil, u.equipe_id ?? null, lideradasPor.get(u.id) ?? []).todas.length > 0,
     comMeta: new Set(metasDoMes.keys()),
@@ -1116,8 +1115,51 @@ export default function AdminUsuarios() {
   const ctxFiltro = { ...ctxPendencia, marcaDe, online: (id: string) => onlineIds.has(id) };
   const filtrosAtivos = !!(filtros.marca || filtros.cargo || filtros.situacao || filtros.pendencia);
 
+  /*
+   * Os clones de OUTRO setor que esta tela mostra, antes dos filtros — em
+   * qualquer empresa (até 04/10/2026 só a BookPlay; clone é de equipe, não de
+   * marca). O painel manda no alcance: sem «todos os setores», só entram os
+   * clones que caem no setor da pessoa logada.
+   *
+   * Servem ao agrupamento E ao pulso. O pulso contava só `usuariosFiltrados`
+   * (o `setor_id` de cada um), e um setor feito só de clones, como o
+   * Treinamento Marília, mostrava «1 de 1 ativos» com 37 pessoas na lista.
+   */
+  const clonesDaTela: { perfil: Perfil; destinoSetorId: string }[] = [];
+  if (clonesCross.length) {
+    const escopadoAoSetor = !veUsuariosDeTodosSetores;
+    const perfilPorId = new Map(usuarios.map(p => [p.id, p]));
+    for (const c of clonesCross) {
+      if (escopadoAoSetor && c.destinoSetorId !== perfilAtual?.setor_id) continue;
+      const p = perfilPorId.get(c.operadorId);
+      if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;   // só cross-setor
+      if (PERFIS_ADMIN.includes(p.perfil) && !podeVerAdministradores) continue;
+      clonesDaTela.push({ perfil: p, destinoSetorId: c.destinoSetorId });
+    }
+  }
+
+  /*
+   * BookPlay × PaguePlay só para quem enxerga as duas (Cleber, 05/10/2026).
+   * Quem vê só o próprio setor vê uma marca só, e a etiqueta em cada linha, os
+   * cartões por marca e o filtro Todas/BookPlay/PaguePlay não diferenciam
+   * nada. Quem decide é a lista que a pessoa enxerga, e não uma lista de
+   * cargos: o alcance já vem do painel.
+   */
+  const temMarca = (() => {
+    const vistas = new Set<MarcaDaPessoa>();
+    for (const u of [...usuariosFiltrados, ...clonesDaTela.map(c => c.perfil)]) {
+      const m = marcaDe(u);
+      if (m) vistas.add(m);
+      if (vistas.size > 1) return true;
+    }
+    return false;
+  })();
+
   const numerosDoPulso: NumerosDoPulso = (() => {
-    const base = usuariosFiltrados.filter(u => !(u as { robo?: boolean }).robo);
+    // Cada pessoa conta uma vez, esteja no setor de origem ou só como clone aqui.
+    const porId = new Map(usuariosFiltrados.map(u => [u.id, u]));
+    for (const { perfil } of clonesDaTela) if (!porId.has(perfil.id)) porId.set(perfil.id, perfil);
+    const base = [...porId.values()].filter(u => !(u as { robo?: boolean }).robo);
     const ativos = base.filter(u => (u.situacao ?? 'ativo') === 'ativo');
     const porMarca = { bp: { online: 0, ativos: 0 }, pp: { online: 0, ativos: 0 } };
     for (const u of ativos) {
@@ -1149,27 +1191,13 @@ export default function AdminUsuarios() {
     return acc;
   }, {});
 
-  // Os clones de OUTRO setor entram no grupo do setor destino, com tag — em
-  // qualquer empresa (até 04/10/2026 só a BookPlay; clone é de equipe, não de marca).
-  // Respeita o alcance configurado para qualquer cargo: sem "todos os setores",
-  // o grupo do setor da pessoa é o único destino possível, mesmo só com clones.
-  if (clonesCross.length) {
-    // O painel manda no alcance. Cargo nenhum ganha todos os setores por estar
-    // ausente de uma lista fixa; se a chave ampla está desligada, até clones só
-    // entram no grupo do setor da pessoa logada.
-    const escopadoAoSetor = !veUsuariosDeTodosSetores;
-    const perfilPorId = new Map(usuarios.map(p => [p.id, p]));
-    const nomeSetorPorId = (id: string) => setores.find(s => s.id === id)?.nome ?? 'Setor';
-    for (const c of clonesCross) {
-      if (escopadoAoSetor && c.destinoSetorId !== perfilAtual?.setor_id) continue;
-      const p = perfilPorId.get(c.operadorId);
-      if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;   // só cross-setor
-      if (PERFIS_ADMIN.includes(p.perfil) && !podeVerAdministradores) continue;
-      if (!passaNosFiltros(p, filtros, ctxFiltro)) continue;
-      const grupo = (usuariosPorSetor[c.destinoSetorId] ??= { nomeSetor: nomeSetorPorId(c.destinoSetorId), lista: [] });
-      if (grupo.lista.some(x => x.id === p.id)) continue;
-      grupo.lista.push({ ...p, _cloneDe: nomeSetor(p) });
-    }
+  // Os clones de OUTRO setor entram no grupo do setor destino, com tag.
+  const nomeSetorPorId = (id: string) => setores.find(s => s.id === id)?.nome ?? 'Setor';
+  for (const { perfil: p, destinoSetorId } of clonesDaTela) {
+    if (!passaNosFiltros(p, filtros, ctxFiltro)) continue;
+    const grupo = (usuariosPorSetor[destinoSetorId] ??= { nomeSetor: nomeSetorPorId(destinoSetorId), lista: [] });
+    if (grupo.lista.some(x => x.id === p.id)) continue;
+    grupo.lista.push({ ...p, _cloneDe: nomeSetor(p) });
   }
 
   /*
@@ -1213,7 +1241,7 @@ export default function AdminUsuarios() {
           id,
           nomeSetor: g.nomeSetor === '—' ? 'Sem setor' : g.nomeSetor,
           lista,
-          marca: info?.marca ?? null,
+          marca: temMarca ? info?.marca ?? null : null,
           regra: info?.regra ?? null,
         } satisfies GrupoDeSetor;
       })
@@ -1394,7 +1422,9 @@ export default function AdminUsuarios() {
                 </SelectContent>
               </Select>
             )}
-            {!isSuperAdmin && empresaAtual && empresasDaLista.length <= 1 && (
+            {/* Na cobrança o nome da empresa não é a marca de quem olha: o líder
+                de Marília lia «BookPlay». A marca é a cidade do setor. */}
+            {!isSuperAdmin && empresaAtual && empresasDaLista.length <= 1 && !ehCobranca && (
               <Badge variant="outline" className="h-9 px-3 text-xs font-normal">{empresaAtual.nome}</Badge>
             )}
             {isSuperAdmin && filtroEmpresa && empresasDaLista.length <= 1 && (
