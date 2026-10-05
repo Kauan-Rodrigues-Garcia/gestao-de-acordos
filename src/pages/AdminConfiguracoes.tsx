@@ -25,6 +25,7 @@ import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
+import CacaAboboraConfig from '@/components/admin/CacaAboboraConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
@@ -292,6 +293,11 @@ export default function AdminConfiguracoes() {
               Some sozinho depois de liberado. Só super_admin — a função
               `fn_halloween_liberar` confere de novo no banco. */}
           {ehSuperAdmin && <LiberacaoHalloween />}
+
+          {/* ── Caça à Abóbora: liga só para o dia, com o painel do que
+              aconteceu. Só super_admin — as funções `fn_abobora_*` conferem
+              de novo no banco. */}
+          {ehSuperAdmin && <CacaAboboraConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 

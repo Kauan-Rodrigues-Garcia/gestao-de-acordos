@@ -63,6 +63,7 @@ import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Hallowe
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
+import { AboboraDaCaca, FaixaDaCaca } from '@/components/CacaAbobora';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -262,7 +263,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const marcaPaguePlay = marca ? marca.nome === 'PaguePlay' : isPP;
   const userRole = perfil?.perfil ?? 'operador';
   // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
-  // `Halloween/preferencia.ts`. Até a validação, só o super_admin.
+  // `Halloween/preferencia.ts`. Liberado para todos desde a primeira semana
+  // de outubro de 2026; cada um pode desligar os enfeites no botão de tema.
   const { pathname } = useLocation();
   const hw = useHalloween();
   const cenaHalloween = useMemo(() => cenaDaRota(pathname, marcaPaguePlay), [pathname, marcaPaguePlay]);
@@ -707,7 +709,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    // `data-palco-abobora`: é dentro daqui que a Caça à Abóbora procura um canto
+    // livre (`CacaAbobora/esconderijo.ts`) — nunca no menu nem na barra do topo.
+    <main data-palco-abobora className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
           rolam com a página — ficar parado lá em cima era o defeito. */}
       {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
@@ -967,6 +971,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
+
+        {/* Caça à Abóbora: o nome de quem achou passa aqui por 4 min. Item do
+            fluxo, logo abaixo da barra — não cobre nada. A abóbora em si é
+            desenhada por cima do conteúdo, num canto sem botão por perto. */}
+        <FaixaDaCaca empresaId={empresa?.id} />
+        <AboboraDaCaca empresaId={empresa?.id} />
 
         {/* Expand toggle */}
         <button

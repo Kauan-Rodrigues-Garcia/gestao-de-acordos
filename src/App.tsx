@@ -328,8 +328,9 @@ export default function App() {
               (ChatNotificacoes) precisam do MESMO estado de notificações. */}
           <NotificacoesProvider>
         <TenantThemeApplier />
-        <VersionWatcher />
         <Router>
+          {/* Dentro do Router: a versão nova entra na próxima troca de tela. */}
+          <VersionWatcher />
           {/* DENTRO do Router: o rastreio lê a rota atual com `useLocation`, e
               fora dele o hook estouraria. Não renderiza nada — só mede. */}
           <RastreioUsoProvider>

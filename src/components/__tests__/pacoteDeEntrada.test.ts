@@ -50,6 +50,16 @@ describe('pacote de entrada', () => {
     }
   });
 
+  it('a Caça à Abóbora só baixa a cena quando há abóbora ou faixa', () => {
+    const daqui = arquivosDoApp(join(RAIZ, 'components', 'CacaAbobora'))
+      .filter(f => !f.endsWith('cena.tsx'));
+    for (const f of [...daqui, join(RAIZ, 'components', 'Layout.tsx')]) {
+      const imports = importsEstaticos(readFileSync(f, 'utf8'));
+      expect(imports, relative(RAIZ, f)).not.toContain('./cena');
+      expect(imports, relative(RAIZ, f)).not.toContain('@/components/CacaAbobora/cena');
+    }
+  });
+
   it('o Som ambiente só baixa o painel quando alguém abre', () => {
     const daqui = arquivosDoApp(join(RAIZ, 'components', 'Halloween', 'SomAmbiente'))
       .filter(f => !f.endsWith('PainelSomAmbiente.tsx'));

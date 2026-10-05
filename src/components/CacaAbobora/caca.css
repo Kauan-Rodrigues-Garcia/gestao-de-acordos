@@ -1,0 +1,245 @@
+/*
+ * Caça à Abóbora — a abóbora, o recado do clique e a faixa.
+ *
+ * Tudo com prefixo `cacab-`: o arquivo só entra com a cena (ver `index.tsx`),
+ * mas as classes vivem no documento inteiro depois disso.
+ *
+ * A faixa é sempre noite (roxo fundo com luz de vela), no tema claro e no
+ * escuro: é um letreiro, não um pedaço da tela.
+ */
+
+:root {
+  --cacab-noite-a: #1a0c2a;
+  --cacab-noite-b: #3a1849;
+  --cacab-brilho: #ffb347;
+  --cacab-vela: #ffe7a3;
+  --cacab-ouro: #ffd65a;
+  --cacab-cartaz: 'Rye', 'Georgia', serif;
+  --cacab-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+/* ── A abóbora ──────────────────────────────────────────────────────────────
+   Três camadas, cada uma com o próprio movimento — senão uma animação apaga
+   o transform da outra: o botão CHEGA, o miolo ESPIA (balança de vez em
+   quando), e o desenho CRESCE com o mouse em cima. */
+.cacab-abobora {
+  position: fixed;
+  z-index: 30;
+  width: 40px;
+  height: 40px;
+  padding: 3px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: cacab-chega .7s cubic-bezier(.2, .9, .3, 1.35) both;
+}
+.cacab-abobora:focus-visible { outline: 2px solid var(--cacab-brilho); outline-offset: 2px; border-radius: 50%; }
+
+.cacab-espia {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 92%;
+  animation: cacab-espia 4.6s ease-in-out 1.2s infinite;
+}
+/* O halo de vela atrás dela: pulsa devagar, é o que chama o olho de canto. */
+.cacab-espia::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 170 60 / .45), rgb(255 140 40 / .12) 60%, transparent);
+  animation: cacab-halo 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.cacab-desenho {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 2px rgb(60 20 0 / .28));
+  transition: transform .18s ease, filter .18s ease;
+}
+.cacab-abobora:hover .cacab-desenho {
+  transform: scale(1.16) rotate(-5deg);
+  filter: drop-shadow(0 0 7px rgb(255 160 40 / .8)) drop-shadow(0 2px 2px rgb(60 20 0 / .3));
+}
+
+.cacab-abobora.pega { pointer-events: none; animation: cacab-pega .38s ease-in forwards; }
+
+.cacab-vela { animation: cacab-tremula 2.6s linear infinite; }
+
+@keyframes cacab-chega {
+  from { opacity: 0; transform: translateY(10px) scale(.3); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes cacab-espia {
+  0%, 72%, 100% { transform: rotate(0); }
+  78% { transform: rotate(-10deg) translateY(-1px); }
+  85% { transform: rotate(8deg); }
+  91% { transform: rotate(-4deg); }
+  96% { transform: rotate(2deg); }
+}
+@keyframes cacab-halo {
+  0%, 100% { opacity: .55; transform: scale(.92); }
+  50%      { opacity: 1;   transform: scale(1.08); }
+}
+@keyframes cacab-tremula {
+  0%, 100% { opacity: 1; }
+  12% { opacity: .86; }
+  16% { opacity: .97; }
+  38% { opacity: .9; }
+  44% { opacity: 1; }
+  71% { opacity: .84; }
+  76% { opacity: .96; }
+}
+@keyframes cacab-pega {
+  40%  { transform: scale(1.35) rotate(-8deg); opacity: 1; }
+  100% { transform: scale(.2) rotate(30deg); opacity: 0; }
+}
+
+/* ── O estouro do clique ──────────────────────────────────────────────────── */
+.cacab-estouro { position: fixed; z-index: 31; pointer-events: none; }
+.cacab-estouro i {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f7902a;
+  animation: cacab-voa .75s cubic-bezier(.2, .7, .3, 1) forwards;
+}
+.cacab-estouro i.brilho { background: var(--cacab-ouro); box-shadow: 0 0 6px var(--cacab-ouro); width: 6px; height: 6px; }
+@keyframes cacab-voa { to { transform: translate(var(--x), var(--y)) scale(.25); opacity: 0; } }
+
+/* ── O recado de quem clicou ──────────────────────────────────────────────── */
+.cacab-recado {
+  position: fixed;
+  left: 50%;
+  top: 72px;
+  z-index: 60;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px 12px 14px;
+  border-radius: 16px;
+  pointer-events: none;
+  color: var(--cacab-vela);
+  background: linear-gradient(135deg, var(--cacab-noite-a), var(--cacab-noite-b));
+  border: 1px solid rgb(255 179 71 / .5);
+  box-shadow: 0 16px 34px rgb(0 0 0 / .35), 0 0 24px rgb(242 140 40 / .18);
+  animation: cacab-recado 4.2s ease both;
+}
+.cacab-recado > div { display: grid; gap: 2px; font-size: 13px; line-height: 1.35; }
+.cacab-recado > div > b { font-family: var(--cacab-cartaz); font-weight: 400; font-size: 20px; color: var(--cacab-brilho); }
+.cacab-recado-abobora { width: 42px; height: 42px; flex: none; }
+.cacab-recado-nome { color: #fff; font-weight: 700; }
+.cacab-recado-rapida { color: var(--cacab-ouro); font-weight: 700; }
+.cacab-mono { font-family: var(--cacab-mono); color: #fff; }
+@keyframes cacab-recado {
+  0%   { opacity: 0; transform: translate(-50%, -14px) scale(.96); }
+  8%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  88%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
+}
+
+/* ── A faixa ─────────────────────────────────────────────────────────────── */
+.cacab-faixa {
+  position: relative;
+  height: 36px;
+  overflow: hidden;
+  color: var(--cacab-vela);
+  background:
+    radial-gradient(120px 60px at 18% 120%, rgb(255 150 40 / .18), transparent 70%),
+    radial-gradient(160px 60px at 82% -40%, rgb(150 80 220 / .25), transparent 70%),
+    linear-gradient(90deg, var(--cacab-noite-a), var(--cacab-noite-b) 50%, var(--cacab-noite-a));
+  border-bottom: 1px solid rgb(255 179 71 / .35);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .04);
+}
+/* As pontas se apagam na noite: o recado entra e sai sem corte seco. */
+.cacab-faixa::before,
+.cacab-faixa::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 64px;
+  z-index: 2;
+  pointer-events: none;
+}
+.cacab-faixa::before { left: 0;  background: linear-gradient(90deg, var(--cacab-noite-a), transparent); }
+.cacab-faixa::after  { right: 0; background: linear-gradient(-90deg, var(--cacab-noite-a), transparent); }
+
+.cacab-faixa-trilho {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: cacab-corre var(--cacab-dur, 30s) linear infinite;
+}
+.cacab-faixa:hover .cacab-faixa-trilho { animation-play-state: paused; }
+.cacab-faixa-grupo { display: flex; align-items: center; }
+@keyframes cacab-corre { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+.cacab-faixa-recado {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding-right: 34px;
+  white-space: nowrap;
+  font-size: 13.5px;
+  letter-spacing: .01em;
+}
+.cacab-faixa-abobora { width: 22px; height: 22px; flex: none; }
+.cacab-faixa-foto {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+  box-shadow: 0 0 0 2px var(--cacab-brilho), 0 0 10px rgb(255 160 40 / .55);
+}
+.cacab-faixa-nome {
+  font-family: var(--cacab-cartaz);
+  font-size: 16px;
+  color: var(--cacab-brilho);
+  text-shadow: 0 0 10px rgb(255 140 40 / .55);
+}
+.cacab-faixa-tempo {
+  font-family: var(--cacab-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 7px;
+  background: rgb(255 179 71 / .16);
+  border: 1px solid rgb(255 179 71 / .45);
+}
+.cacab-faixa-rapida {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #2a1400;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffe27a, #ffb347);
+  box-shadow: 0 0 12px rgb(255 200 80 / .45);
+}
+.cacab-faixa-estrela { color: rgb(255 214 90 / .55); font-size: 12px; }
+
+.cacab-faixa-parada { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cacab-abobora, .cacab-espia, .cacab-espia::before, .cacab-vela, .cacab-recado { animation: none; }
+  .cacab-recado { transform: translateX(-50%); }
+  .cacab-faixa-trilho { display: none; }
+  .cacab-faixa-parada { display: flex; justify-content: center; }
+}
