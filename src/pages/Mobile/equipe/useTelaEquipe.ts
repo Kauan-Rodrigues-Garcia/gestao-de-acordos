@@ -25,7 +25,8 @@ import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
   buscarCreditosDeOrigem, buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
-  buscarRecebidoPorDiaDosOperadores, buscarAjustesComoLinhasDia, type LinhaRecebidaDia,
+  buscarRecebidoPorDiaDosOperadores, buscarAjustesComoLinhasDia, buscarParesForaDoSetor,
+  type LinhaRecebidaDia,
 } from '@/services/analitico/analitico.service';
 import { buscarResumoMensalDiario } from '@/services/diario/diario.service';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -258,9 +259,14 @@ export function useTelaEquipe(): TelaEquipe {
 
 /**
  * As linhas do mês por dia — a fonte do Gráfico do Painel, recortada na
- * equipe: na BookPlay, só as linhas dos operadores da equipe (em vez do mês
- * inteiro da empresa — ver `buscarRecebidoPorDiaDosOperadores`); na PaguePlay,
+ * equipe: em Nosso produto, só as linhas dos operadores da equipe (em vez do
+ * mês inteiro da empresa — ver `buscarRecebidoPorDiaDosOperadores`); no Cofen,
  * o recebimento diário (já agregado por operador e dia) + ajustes.
+ *
+ * Nosso produto descarta a linha que caiu num setor onde a pessoa não está no
+ * mês (`buscarParesForaDoSetor`, 05/10/2026). Sem isso o «Recebido hoje» e o
+ * gráfico da equipe somavam mais que o card da equipe e que o aviso de equipe
+ * — R$ 3 mil a mais numa equipe do Play 1 no dia da conferência.
  */
 export function carregarGraficoEquipe(
   empresaId: string, mes: string, isPaguePlay: boolean, operadorIds: readonly string[],
@@ -274,9 +280,13 @@ export function carregarGraficoEquipe(
       if (diario.error) throw new Error(diario.error);
       return [...diario.linhasDia, ...ajustes];
     }
-    const { data, error } = await buscarRecebidoPorDiaDosOperadores(empresaId, mes, operadorIds);
+    const [{ data, error }, fora] = await Promise.all([
+      buscarRecebidoPorDiaDosOperadores(empresaId, mes, operadorIds),
+      buscarParesForaDoSetor(empresaId, mes),
+    ]);
     if (error) throw new Error(error);
-    return data;
+    if (!fora.size) return data;
+    return data.filter(l => !(l.operador_id && l.setor_id && fora.has(`${l.operador_id}|${l.setor_id}`)));
   })();
 }
 

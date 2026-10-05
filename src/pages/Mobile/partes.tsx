@@ -152,17 +152,23 @@ export function CartaoComissao({ comissao }: { comissao: MinhaComissao }) {
 
 // ── Hoje e ranking ──────────────────────────────────────────────────────────
 
-export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking }: {
+/**
+ * `unidadeHO` (regra Cofen): o «hoje» vem em H.O., como o cartão do mês, e o
+ * ranking continua em bruto, como na aba Analítico — cada número diz a sua
+ * unidade, senão os três parecem não bater (05/10/2026).
+ */
+export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking, unidadeHO = false }: {
   hoje: number;
   qtdHoje: number;
   podeVerRanking: boolean;
   ranking: PosicaoNoRanking | null;
+  unidadeHO?: boolean;
 }) {
   const mostraRanking = podeVerRanking && !!ranking;
   return (
     <div className={mostraRanking ? 'm-dupla' : 'm-dupla m-uma'}>
       <section className="m-cartao">
-        <div className="m-rot">Recebido hoje</div>
+        <div className="m-rot">Recebido hoje{unidadeHO ? ' · H.O.' : ''}</div>
         <div className="m-v m-num"><DinheiroAnimado valor={hoje} aposta /></div>
         <div className="m-d">{qtdHoje === 1 ? '1 pagamento' : `${qtdHoje} pagamentos`}</div>
       </section>
@@ -171,7 +177,9 @@ export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking }: {
           <div className="m-rot">Ranking</div>
           <div className="m-v m-num">{ranking.posicao}º <span className="m-de">de {ranking.de}</span></div>
           <div className="m-d">
-            {ranking.faltam === null ? 'Você está em 1º' : `${formatBRL(ranking.faltam)} do ${ranking.posicao - 1}º`}
+            {ranking.faltam === null
+              ? 'Você está em 1º'
+              : `${formatBRL(ranking.faltam)}${unidadeHO ? ' bruto' : ''} do ${ranking.posicao - 1}º`}
           </div>
         </section>
       )}
@@ -188,18 +196,23 @@ export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking }: {
  *   Maria da Silva                  R$ 350,00
  *   NR 12345 · Hoje                 ● Pix
  */
-export function ListaPagamentos({ pagamentos, hoje, carregando, limite, onVerTodos }: {
+export function ListaPagamentos({ pagamentos, hoje, carregando, limite, onVerTodos, valoresBrutos = false }: {
   pagamentos: Pagamento[];
   hoje: string;
   carregando: boolean;
   limite: number | null;
   onVerTodos: (() => void) | null;
+  /** Regra Cofen: o pagamento vem do relatório em bruto, e o cartão está em H.O. */
+  valoresBrutos?: boolean;
 }) {
   const visiveis = limite === null ? pagamentos : pagamentos.slice(0, limite);
   return (
     <>
       <div className="m-titulo" id="m-pagamentos">
-        <h2>{limite === null ? 'Pagamentos do mês' : 'Últimos pagamentos'}</h2>
+        <h2>
+          {limite === null ? 'Pagamentos do mês' : 'Últimos pagamentos'}
+          {valoresBrutos && <span className="m-de"> · valores brutos</span>}
+        </h2>
         {onVerTodos && pagamentos.length > (limite ?? 0) && (
           <button type="button" onClick={onVerTodos}>{limite === null ? 'Ver menos' : 'Ver todos'}</button>
         )}

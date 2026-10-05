@@ -166,6 +166,7 @@ function TelaDoOperador() {
               qtdHoje={tela.qtdHoje}
               podeVerRanking={tela.podeVerRanking}
               ranking={tela.ranking}
+              unidadeHO={tela.isPaguePlay}
             />
             {tela.quartil && <CartaoQuartil quartil={tela.quartil} />}
           </div>
@@ -189,6 +190,7 @@ function TelaDoOperador() {
           carregando={tela.carregandoPagamentos}
           limite={verTodos ? null : LIMITE_LISTA}
           onVerTodos={() => setVerTodos(v => !v)}
+          valoresBrutos={tela.isPaguePlay}
         />
 
         {/* Em teste (super admin impersonando), «Sair» deslogaria a sessão

@@ -2598,6 +2598,25 @@ export async function buscarCreditosDeOrigem(
   return creditosDeOrigem(fantasmas, data);
 }
 
+/**
+ * Os pares (pessoa, setor) cujo recebimento NÃO conta para a pessoa onde ela
+ * está — a regra de Nosso produto desde 29/09/2026: a linha conta só no setor
+ * em que a pessoa está no mês (`fn_analitico_recebido_fora_do_setor`, a mesma
+ * conta de `fn_analitico_resumo_por_operador` e do aviso de equipe).
+ *
+ * Quem soma linhas cruas do analítico por pessoa (o gráfico e o «Hoje» da
+ * equipe no celular) usa isto para chegar no mesmo número do card. Chave:
+ * `${operador_id}|${setor_id}`. Cofen não tem esta divisão: conjunto vazio.
+ */
+export async function buscarParesForaDoSetor(empresaId: string, mes: string): Promise<Set<string>> {
+  if (ehPaguePlay()) return new Set();
+  const { data, error } = await rpcSemTipo<RecebidoForaDoSetor[]>('fn_analitico_recebido_fora_do_setor', {
+    p_empresa_id: empresaId, p_mes: mes, p_inicio: null, p_fim: null,
+  });
+  if (error || !data) return new Set();
+  return new Set(data.map(r => `${r.operador_id}|${r.setor_id}`));
+}
+
 /** Congela o retrato do mês. Chamado depois de importar o analítico daquele
  *  mês — a única mudança de hoje que a diretoria autoriza a mexer no passado. */
 export async function congelarComposicaoDoMes(
