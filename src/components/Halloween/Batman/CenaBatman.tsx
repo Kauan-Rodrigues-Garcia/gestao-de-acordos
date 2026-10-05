@@ -1,8 +1,7 @@
 /**
  * CenaBatman — o fundo do modo Batman (ver `modoBatman.ts`).
  *
- * Mora atrás do `<main>` (que fica transparente nas telas com cena), junto do
- * `FundoHalloween`. O nível do modo, lido a cada quadro, leva tudo junto:
+ * O nível do modo, lido a cada quadro, leva tudo junto:
  *
  *   0 a 50%  — o fundo puxa para um vermelho-escuro (no tema claro também), e
  *              o Halloween de antes (chuva, nuvens, vultos, fantasmas) some na
@@ -14,17 +13,30 @@
  * Dois jeitos:
  *   - `mesa` (Dashboard e Acordos): ele SAI DE TRÁS da tabela, no vão do
  *     cabeçalho — `[data-hw-batman-topo]` diz onde fica o vão e
- *     `[data-hw-batman-chao]`, o primeiro bloco que o esconde do peito para
- *     baixo. Fica parado até a música sair. Onde há lanterna, ela mira nele
- *     (a cabeça vai para `definirAlvoBatman`).
+ *     `[data-hw-batman-chao]`, a linha atrás da qual o peito some. Ele, o
+ *     brilho vermelho e a névoa dele moram DENTRO do `<main>` (num palco atrás
+ *     do conteúdo): rolam junto com a tabela pelo próprio navegador. Antes
+ *     ficavam no fundo fixo, seguindo a tabela a 30 quadros por segundo — e
+ *     tremiam ao rolar a página. Onde há lanterna, ela mira nele.
  *   - `vultos` (Analítico): no lugar dos vultos, atrás do vidro fosco — surge
- *     de um lado, fica, some, volta do outro.
+ *     de um lado, fica, some, volta do outro. Fica no fundo fixo, como eles.
  *
  * A foto é recortada (fundo transparente): nenhum retângulo aparece, nem com a
- * luz apagada. Leve como a `Fumaca`: canvas em meia resolução, 30 quadros por
- * segundo, e só as variáveis CSS mudam a cada quadro.
+ * luz apagada.
+ *
+ * ## Leve
+ *
+ * - Canvas em meia resolução, 30 quadros por segundo (como a `Fumaca`); a
+ *   névoa dele, na mesa, num canvas pequeno só em volta dele.
+ * - Variável CSS só é escrita quando muda: com o tema inteiro no ar, o
+ *   `--hw-bat` (herdado pela página toda) fica parado e não refaz estilo de
+ *   nada. A luz que pisca escreve só no palco dele.
+ * - Vidro sem `backdrop-filter`: desfocar a tela inteira a cada piscada da luz
+ *   era o item mais caro. Na mesa ele só desfocava um degradê (que já é liso);
+ *   no Analítico o desfoque vai direto na foto. Fica o reflexo do vidro.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
@@ -47,9 +59,10 @@ function lufadasVermelhas() {
 }
 
 type Particula = { x: number; y: number; vx: number; vy: number; rot: number; vr: number; esc: number; cresce: number; vida: number; dur: number; sprite: number; a: number };
+type Lugar = { x: number; y: number; w: number; h: number };
 
-/** Onde ele fica na `mesa`, em px da caixa da cena; `null` se a tela não tem vão para ele. */
-function lugarNaMesa(caixa: DOMRect): { x: number; y: number; w: number; h: number } | null {
+/** Onde ele fica na `mesa`, em px do `palco` (que rola com a página); `null` se a tela não tem vão para ele. */
+function lugarNaMesa(palco: DOMRect): Lugar | null {
   const topo = document.querySelector<HTMLElement>('[data-hw-batman-topo]');
   const chao = document.querySelector<HTMLElement>('[data-hw-batman-chao]');
   if (!topo || !chao) return null;
@@ -60,13 +73,71 @@ function lugarNaMesa(caixa: DOMRect): { x: number; y: number; w: number; h: numb
   // O vão: do fim do texto da esquerda até os botões da direita (ou o fim do cabeçalho).
   const de = (primeiro ? primeiro.right : t.left) + 24;
   const ate = (ultimo && ultimo.width > 0 ? ultimo.left : t.right) - 16;
-  const w = Math.round(Math.min(196, Math.max(150, caixa.width * 0.14)));
-  const h = w * PROPORCAO;
+  const w = Math.round(Math.min(196, Math.max(150, palco.width * 0.14)));
+  const h = Math.round(w * PROPORCAO);
   if (ate - de < w) return null;
   const x = de + (ate - de - w) * 0.72;
-  // O peito (60% da altura) fica logo atrás do topo do bloco de baixo.
+  // O peito (60% da altura) fica logo atrás da linha de baixo.
   const y = chao.getBoundingClientRect().top + 6 - h * 0.6;
-  return { x: x - caixa.left, y: y - caixa.top, w, h };
+  return { x: Math.round(x - palco.left), y: Math.round(y - palco.top), w, h };
+}
+
+/** A luz que falha: zumbe, engasga, às vezes apaga ou dá um clarão — sem degrau seco. */
+function criarLuz() {
+  let luz = 1, luzVis = 1, ate = 0;
+  const seq: [number, number][] = [];
+  return (agora: number, dt: number) => {
+    if (agora >= ate) {
+      const passo = seq.shift();
+      if (passo) { luz = passo[0]; ate = agora + passo[1]; }
+      else {
+        const s = Math.random();
+        if (s < 0.04) seq.push([acaso(0.15, 0.35), acaso(40, 70)], [acaso(0.8, 1), acaso(30, 60)], [acaso(0.02, 0.12), acaso(60, 110)], [acaso(0.6, 0.9), acaso(30, 50)], [acaso(0.05, 0.2), acaso(80, 160)], [1, 0]);
+        else if (s < 0.058) seq.push([acaso(0.3, 0.5), 50], [0.02, acaso(900, 2000)], [0.55, 60], [0.08, 90], [0.9, 50], [0.2, 70], [1, 0]);
+        else if (s < 0.066) seq.push([1.7, 60], [0.25, 90], [1.5, 50], [0.4, 70], [1.2, 60], [1, 0]);
+        else { luz = acaso(0.84, 1); ate = agora + acaso(160, 340); }
+      }
+    }
+    // Apaga e acende com um rastro curto (filamento) e respira por baixo.
+    luzVis += (luz - luzVis) * (1 - Math.exp(-dt * (luz < luzVis ? 16 : 11)));
+    return luzVis * (1 + 0.06 * Math.sin((agora / 1000) * (2 * Math.PI / 4.2)));
+  };
+}
+
+/** Escreve a variável só se o valor mudou (escrever igual também refaz estilo). */
+function escritor(el: HTMLElement) {
+  const ultimo = new Map<string, string>();
+  return (nome: string, valor: string) => {
+    if (ultimo.get(nome) === valor) return;
+    ultimo.set(nome, valor);
+    el.style.setProperty(nome, valor);
+  };
+}
+
+/** Desenha um punhado de lufadas num canvas e devolve o quadro seguinte de cada uma. */
+function desenharLufadas(cx: CanvasRenderingContext2D, lista: Particula[], forca: number, dt: number, renova: () => Particula) {
+  const sprites = lufadasVermelhas();
+  for (const p of lista) {
+    p.vida += dt;
+    if (p.vida >= p.dur) { Object.assign(p, renova()); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.esc += p.cresce * dt;
+    if (forca < 0.005) continue;
+    const s = sprites[p.sprite], tam = s.width * p.esc;
+    cx.globalAlpha = Math.sin((p.vida / p.dur) * Math.PI) * p.a * forca;
+    cx.setTransform(Math.cos(p.rot), Math.sin(p.rot), -Math.sin(p.rot), Math.cos(p.rot), p.x, p.y);
+    cx.drawImage(s, -tam / 2, -tam / 2, tam, tam);
+  }
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  cx.globalAlpha = 1;
+}
+
+/** Lufadas em volta de um centro (px do canvas), nascendo embaixo e subindo devagar. */
+function lufadaPerto(cx: number, cy: number, r: number, qualquerLugar: boolean): Particula {
+  return {
+    x: cx + acaso(-0.75, 0.75) * r, y: cy + (qualquerLugar ? acaso(-0.6, 0.7) : acaso(0.3, 0.8)) * r,
+    vx: acaso(-3, 3), vy: -acaso(1.5, 5), rot: Math.random() * 6.28, vr: acaso(-0.1, 0.1), esc: acaso(0.6, 1.15), cresce: acaso(0.02, 0.05),
+    vida: qualquerLugar ? acaso(0, 14) : 0, dur: acaso(12, 22), sprite: Math.floor(Math.random() * 4), a: acaso(0.6, 1),
+  };
 }
 
 export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
@@ -76,6 +147,14 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
   const raiz = useRef<HTMLDivElement>(null);
   const figura = useRef<HTMLDivElement>(null);
   const tela = useRef<HTMLCanvasElement>(null);
+  const palco = useRef<HTMLDivElement>(null);
+  const brilho = useRef<HTMLDivElement>(null);
+  const telaPerto = useRef<HTMLCanvasElement>(null);
+  // Na mesa ele mora dentro do `<main>` (ver o cabeçalho).
+  const [main, setMain] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setMain(modo === 'mesa' ? raiz.current?.parentElement?.querySelector<HTMLElement>(':scope > main') ?? null : null);
+  }, [modo]);
 
   // No tema claro, o texto solto no fundo (saudação, título) clareia junto com o vermelho.
   useEffect(() => {
@@ -118,42 +197,51 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
 
   // ── O quadro: nível, luz, névoa e o lugar dele ──
   useEffect(() => {
-    const el = raiz.current, cv = tela.current, fig = figura.current;
+    const el = raiz.current, cv = tela.current;
     const pai = el?.parentElement;
     const cx = cv?.getContext('2d');
-    if (!el || !cv || !cx || !fig || !pai) return;
-    const sprites = lufadasVermelhas();
+    if (!el || !cv || !cx || !pai) return;
+    const naMesa = modo === 'mesa';
+    // Na mesa, espera o palco existir dentro do `<main>`.
+    const pal = palco.current, fig = figura.current, bri = brilho.current, cvPerto = telaPerto.current;
+    const cxPerto = cvPerto?.getContext('2d') ?? null;
+    if (naMesa && (!pal || !fig || !bri || !cvPerto || !cxPerto)) return;
+    if (!naMesa && !fig) return;
 
-    let parts: Particula[] = [], perto: Particula[] = [];
-    let centro = { x: 0, y: 0, r: 98 };
+    const varPai = escritor(pai), varFundo = escritor(el), varPalco = pal ? escritor(pal) : varFundo;
+    const luzQueFalha = criarLuz();
+
+    let parts: Particula[] = [];
     const nova = (qualquerLugar: boolean): Particula => ({
       x: acaso(-0.1, 1.1) * cv.width, y: qualquerLugar ? acaso(0, 1.1) * cv.height : cv.height + acaso(20, 120),
       vx: acaso(-6, 10), vy: -acaso(4, 13), rot: Math.random() * 6.28, vr: acaso(-0.12, 0.12), esc: acaso(1.2, 2.4), cresce: acaso(0.03, 0.08),
       vida: qualquerLugar ? acaso(0, 20) : 0, dur: acaso(22, 38), sprite: Math.floor(Math.random() * 4), a: acaso(0.55, 1),
     });
-    // A névoa dele: nasce atrás da tabela, sobe devagar e o envolve.
-    const novaPerto = (qualquerLugar: boolean): Particula => ({
-      x: centro.x + acaso(-0.75, 0.75) * centro.r, y: centro.y + (qualquerLugar ? acaso(-0.6, 0.7) : acaso(0.3, 0.8)) * centro.r,
-      vx: acaso(-3, 3), vy: -acaso(1.5, 5), rot: Math.random() * 6.28, vr: acaso(-0.1, 0.1), esc: acaso(0.6, 1.15), cresce: acaso(0.02, 0.05),
-      vida: qualquerLugar ? acaso(0, 14) : 0, dur: acaso(12, 22), sprite: Math.floor(Math.random() * 4), a: acaso(0.6, 1),
-    });
     const ajustar = () => {
       cv.width = Math.max(1, Math.round(cv.clientWidth / 2));
       cv.height = Math.max(1, Math.round(cv.clientHeight / 2));
       parts = Array.from({ length: Math.round(Math.min(32, Math.max(14, (cv.width * cv.height) / 7000))) }, () => nova(true));
-      perto = [];
     };
     ajustar();
     const obs = new ResizeObserver(ajustar);
     obs.observe(cv);
 
-    // A luz que falha: zumbe, engasga, às vezes apaga ou dá um clarão. Sem
-    // degrau seco: apaga e acende com um rastro curto e respira por baixo.
-    let luz = 1, luzVis = 1, ate = 0;
-    const seq: [number, number][] = [];
-    let ultimo = 0, rodando = true;
-    let lugar = '';
+    // A névoa dele: no Analítico, no canvas do fundo; na mesa, no canvas pequeno do palco.
+    let perto: Particula[] = [];
+    let centro = { x: 0, y: 0, r: 98 };
+    const novaPerto = () => lufadaPerto(centro.x, centro.y, centro.r, false);
 
+    // Na mesa: onde ele está (px do palco). A lanterna pergunta pela cabeça no próprio quadro.
+    let lugar: Lugar | null = null, chaveLugar = '';
+    if (naMesa && fig) {
+      definirAlvoBatman(() => {
+        if (!lugar) return null;
+        const r = fig.getBoundingClientRect();
+        return { x: r.left + r.width * 0.34, y: r.top + r.height * 0.3 };
+      });
+    }
+
+    let ultimo = 0, rodando = true;
     const quadro = (agora: number) => {
       if (!rodando) return;
       if (agora - ultimo < 32) { requestAnimationFrame(quadro); return; }
@@ -162,76 +250,53 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
 
       const nivel = nivelAgora();
       const verm = lim(nivel / 0.5), nevoa = lim((nivel - 0.25) / 0.5), pisca = lim((nivel - 0.5) / 0.5);
+      const luz = luzQueFalha(agora, dt);
+      const luzEf = 1 + (luz - 1) * pisca;
+      varPai('--hw-bat', verm.toFixed(3));
+      varFundo('--verm', verm.toFixed(3));
+      varPalco('--luz', luzEf.toFixed(3));
+      varPalco('--luzv', (pisca * Math.min(1.35, luz) * 0.9).toFixed(3));
 
-      if (agora >= ate) {
-        const passo = seq.shift();
-        if (passo) { luz = passo[0]; ate = agora + passo[1]; }
-        else {
-          const s = Math.random();
-          if (s < 0.04) seq.push([acaso(0.15, 0.35), acaso(40, 70)], [acaso(0.8, 1), acaso(30, 60)], [acaso(0.02, 0.12), acaso(60, 110)], [acaso(0.6, 0.9), acaso(30, 50)], [acaso(0.05, 0.2), acaso(80, 160)], [1, 0]);
-          else if (s < 0.058) seq.push([acaso(0.3, 0.5), 50], [0.02, acaso(900, 2000)], [0.55, 60], [0.08, 90], [0.9, 50], [0.2, 70], [1, 0]);
-          else if (s < 0.066) seq.push([1.7, 60], [0.25, 90], [1.5, 50], [0.4, 70], [1.2, 60], [1, 0]);
-          else { luz = acaso(0.84, 1); ate = agora + acaso(160, 340); }
+      if (naMesa && pal && fig && bri && cvPerto && cxPerto) {
+        // Relativo ao palco, que rola com a página: rolando, nada disto muda.
+        const l = lugarNaMesa(pal.getBoundingClientRect());
+        const chave = l ? `${l.x}:${l.y}:${l.w}` : 'sem';
+        if (chave !== chaveLugar) {
+          chaveLugar = chave;
+          lugar = l;
+          pal.classList.toggle('sem-lugar', !l);
+          if (l) {
+            Object.assign(fig.style, { left: `${l.x}px`, top: `${l.y}px`, width: `${l.w}px`, height: `${l.h}px` });
+            // O brilho vermelho atrás da cabeça.
+            const bw = l.w * 4, bh = l.h * 4.2;
+            Object.assign(bri.style, { left: `${l.x + l.w * 0.4 - bw / 2}px`, top: `${l.y + l.h * 0.36 - bh / 2}px`, width: `${bw}px`, height: `${bh}px` });
+            // O canvas da névoa dele, só em volta dele (meia resolução).
+            const cw = Math.round(l.w * 2.8), ch = Math.round(l.h * 1.7);
+            Object.assign(cvPerto.style, { left: `${l.x + l.w * 0.48 - cw / 2}px`, top: `${l.y + l.h * 0.45 - ch / 2}px`, width: `${cw}px`, height: `${ch}px` });
+            cvPerto.width = Math.round(cw / 2); cvPerto.height = Math.round(ch / 2);
+            centro = { x: cvPerto.width / 2, y: cvPerto.height / 2, r: l.w / 2 };
+            perto = Array.from({ length: 14 }, () => lufadaPerto(centro.x, centro.y, centro.r, true));
+          }
         }
+        cxPerto.clearRect(0, 0, cvPerto.width, cvPerto.height);
+        if (lugar) desenharLufadas(cxPerto, perto, 0.62 * nevoa * (0.5 + 0.5 * Math.min(1, luzEf)), dt, novaPerto);
+      } else if (fig) {
+        // Analítico: o brilho segue a cabeça dele no fundo.
+        const larg = Math.max(1, el.clientWidth), alt = Math.max(1, el.clientHeight);
+        const fx = fig.offsetLeft, fy = fig.offsetTop, fw = fig.offsetWidth, fh = fig.offsetHeight;
+        varFundo('--lx', `${(((fx + fw * 0.4) / larg) * 100).toFixed(1)}%`);
+        varFundo('--ly', `${(((fy + fh * 0.36) / alt) * 100).toFixed(1)}%`);
+        const novo = { x: (fx + fw * 0.48) / 2, y: (fy + fh * 0.45) / 2, r: fw / 2 };
+        if (!perto.length || Math.abs(novo.x - centro.x) > 40) { centro = novo; perto = Array.from({ length: 14 }, () => lufadaPerto(centro.x, centro.y, centro.r, true)); }
       }
-      luzVis += (luz - luzVis) * (1 - Math.exp(-dt * (luz < luzVis ? 16 : 11)));
-      const respira = 1 + 0.06 * Math.sin((agora / 1000) * (2 * Math.PI / 4.2));
-      const luzEf = 1 + (luzVis * respira - 1) * pisca;
-      el.style.setProperty('--verm', verm.toFixed(3));
-      el.style.setProperty('--luz', luzEf.toFixed(3));
-      el.style.setProperty('--luzv', (pisca * Math.min(1.35, luzVis * respira) * 0.9).toFixed(3));
-      pai.style.setProperty('--hw-bat', verm.toFixed(3));
 
-      // O lugar dele.
-      const caixa = el.getBoundingClientRect();
-      let fx: number, fy: number, fw: number, fh: number;
-      if (modo === 'mesa') {
-        const l = lugarNaMesa(caixa);
-        const chave = l ? `${Math.round(l.x)}:${Math.round(l.y)}:${l.w}` : 'sem';
-        if (chave !== lugar) {
-          lugar = chave;
-          el.classList.toggle('hw-bat-sem-lugar', !l);
-          if (l) Object.assign(fig.style, { left: `${l.x}px`, top: `${l.y}px`, width: `${l.w}px`, height: `${l.h}px` });
-        }
-        if (l) {
-          ({ x: fx, y: fy, w: fw, h: fh } = l);
-          definirAlvoBatman({ x: caixa.left + fx + fw * 0.34, y: caixa.top + fy + fh * 0.3 });
-        } else {
-          fx = caixa.width * 0.7; fy = 0; fw = 196; fh = 250;
-          definirAlvoBatman(null);
-        }
-      } else {
-        fx = fig.offsetLeft; fy = fig.offsetTop; fw = fig.offsetWidth; fh = fig.offsetHeight;
-      }
-      el.style.setProperty('--lx', `${(((fx + fw * 0.4) / Math.max(1, caixa.width)) * 100).toFixed(1)}%`);
-      el.style.setProperty('--ly', `${(((fy + fh * 0.36) / Math.max(1, caixa.height)) * 100).toFixed(1)}%`);
-      const novoCentro = { x: (fx + fw * 0.48) / 2, y: (fy + fh * 0.45) / 2, r: fw / 2 };
-      if (!perto.length || Math.abs(novoCentro.x - centro.x) > 40 || Math.abs(novoCentro.y - centro.y) > 40) {
-        centro = novoCentro;
-        perto = Array.from({ length: 14 }, () => novaPerto(true));
-      } else centro = novoCentro;
-
-      // A névoa: a geral da tela e a dele.
+      // A névoa geral da tela (e, no Analítico, a dele junto).
       cx.clearRect(0, 0, cv.width, cv.height);
-      const forca = 0.6 * nevoa * (0.4 + 0.6 * Math.min(1, luzEf));
-      const forcaPerto = 0.62 * nevoa * (0.5 + 0.5 * Math.min(1, luzEf));
-      const desenhar = (lista: Particula[], f: number, renova: (q: boolean) => Particula) => {
-        for (const p of lista) {
-          p.vida += dt;
-          if (p.vida >= p.dur) { Object.assign(p, renova(false)); continue; }
-          p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.esc += p.cresce * dt;
-          if (f < 0.005) continue;
-          const s = sprites[p.sprite], tam = s.width * p.esc;
-          cx.globalAlpha = Math.sin((p.vida / p.dur) * Math.PI) * p.a * f;
-          cx.setTransform(Math.cos(p.rot), Math.sin(p.rot), -Math.sin(p.rot), Math.cos(p.rot), p.x, p.y);
-          cx.drawImage(s, -tam / 2, -tam / 2, tam, tam);
-        }
-      };
-      desenhar(parts, forca, nova);
-      // No Analítico a névoa dele só faz sentido com ele na tela.
-      desenhar(perto, modo === 'vultos' && !fig.classList.contains('visivel') ? forcaPerto * 0.4 : forcaPerto, novaPerto);
-      cx.setTransform(1, 0, 0, 1, 0, 0);
-      cx.globalAlpha = 1;
+      desenharLufadas(cx, parts, 0.6 * nevoa * (0.4 + 0.6 * Math.min(1, luzEf)), dt, () => nova(false));
+      if (!naMesa && fig) {
+        const comEle = fig.classList.contains('visivel') ? 1 : 0.4;
+        desenharLufadas(cx, perto, 0.62 * nevoa * (0.5 + 0.5 * Math.min(1, luzEf)) * comEle, dt, novaPerto);
+      }
       requestAnimationFrame(quadro);
     };
     requestAnimationFrame(quadro);
@@ -242,21 +307,25 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
       // Saiu da tela no meio do modo: o Halloween de antes volta inteiro aqui.
       pai.style.removeProperty('--hw-bat');
     };
-  }, [modo]);
+  }, [modo, main]);
 
   const naMesa = modo === 'mesa';
+  const imagem = <div className="sobe"><img src={FOTO_BATMAN} alt="" draggable={false} /></div>;
   return (
     <div ref={raiz} className={cn('hw-batman', modo)} aria-hidden="true">
       <div className="hw-bat-verm" />
-      <div className="hw-bat-luz" />
-      {/* Na mesa ele fica NA FRENTE do vidro (nítido); no Analítico, atrás (como os vultos). */}
-      {naMesa && <div className="hw-bat-vidro" />}
-      <div ref={figura} className={cn('hw-bat-figura', naMesa && fase === 'dentro' && 'visivel')}>
-        <div className="sobe"><img src={FOTO_BATMAN} alt="" draggable={false} /></div>
-      </div>
+      {!naMesa && <div className="hw-bat-luz" />}
+      {!naMesa && <div ref={figura} className="hw-bat-figura">{imagem}</div>}
       <canvas ref={tela} className="hw-bat-fumaca" />
-      {!naMesa && <div className="hw-bat-vidro" />}
+      <div className="hw-bat-vidro" />
+      {naMesa && main && createPortal(
+        <div ref={palco} className="hw-bat-palco" aria-hidden="true">
+          <div ref={brilho} className="hw-bat-brilho" />
+          <div ref={figura} className={cn('hw-bat-figura', fase === 'dentro' && 'visivel')}>{imagem}</div>
+          <canvas ref={telaPerto} className="hw-bat-fumaca-perto" />
+        </div>,
+        main,
+      )}
     </div>
   );
 }
-

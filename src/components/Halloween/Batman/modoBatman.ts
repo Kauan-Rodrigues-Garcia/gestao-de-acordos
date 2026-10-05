@@ -160,9 +160,12 @@ export const nivelAgora = () => nivelEm(estado, relogio());
 
 // ── Para onde a lanterna aponta ──────────────────────────────────────────────
 //
-// A cena publica, a cada quadro, a cabeça dele em coordenadas da tela; a
-// lanterna (que mora em outra camada) lê e mira. `null`: ele não está na tela.
+// A cena publica COMO achar a cabeça dele (em coordenadas da tela); a lanterna,
+// que mora em outra camada, pergunta no próprio quadro. Pergunta e não valor
+// guardado: com a página rolando, um valor de um quadro atrás faria a mira
+// tremer. `null`: ele não está na tela.
 
-let alvo: { x: number; y: number } | null = null;
-export const definirAlvoBatman = (p: { x: number; y: number } | null) => { alvo = p; };
-export const alvoBatman = () => alvo;
+type Ponto = { x: number; y: number };
+let alvo: (() => Ponto | null) | null = null;
+export const definirAlvoBatman = (onde: (() => Ponto | null) | null) => { alvo = onde; };
+export const alvoBatman = (): Ponto | null => (alvo ? alvo() : null);
