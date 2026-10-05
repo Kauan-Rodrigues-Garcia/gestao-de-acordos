@@ -22,7 +22,7 @@
  *
  * O orçamento de eventos de presence do Realtime é do TENANT, não do canal:
  * os dois canais dividiam o mesmo teto, e o log acusava 903
- * `PresenceRateLimitReached` por dia. Agora o `track` é um só, no
+ * `PresenceRateLimitReached` por dia. Hoje nem Presence é: quem mede é a batida no banco do
  * `PresenceProvider`, e aqui se lê o resultado.
  *
  * O conjunto lido é o GLOBAL, não o da empresa: o chat cruza empresas — 319
@@ -123,8 +123,8 @@ export function useChatPresenca(ativo: boolean): UseChatPresenca {
       canal.current = null;
       if (anterior) void supabase.removeChannel(anterior);
       // Canal de BROADCAST, não de presence: aqui trafega só «digitando» e
-      // «gravando». Quem está online saiu daqui para o canal único da
-      // aplicação (`presence-global`, no PresenceProvider) — ver o cabeçalho.
+      // «gravando». Quem está online saiu daqui para a batida no banco
+      // do PresenceProvider — ver o cabeçalho.
       //
       // O tópico segue o mesmo, e privado: a RLS de `realtime.messages`
       // autoriza somente perfis com acesso ao chat.

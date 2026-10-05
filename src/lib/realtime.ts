@@ -71,7 +71,8 @@
  *   ), [empresaId]);
  *
  * ── Escopo ───────────────────────────────────────────────────────────────────
- * Presence tem `track` próprio e segue no `PresenceProvider`.
+ * Quem está online não passa por aqui nem pelo Realtime: é a batida no banco do
+ * `PresenceProvider` (05/10/2026).
  */
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';

@@ -1,118 +1,42 @@
 /**
  * src/providers/__tests__/PresenceProvider.test.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Testes unitários para PresenceProvider + useOnlineUsers().
+ * PresenceProvider + useOnlineUsers — a batida no banco (05/10/2026).
  *
- * Cenários cobertos:
- *   1. useOnlineUsers fora do provider → valores padrão (onlineIds vazio, loading=true)
- *   2. Sem userId → não cria canal, loading=true permanece
- *   3. Sem empresaId → não cria canal
- *   4. Canal criado com nome correto (presence-empresa-{empresaId})
- *   5. Após SUBSCRIBED → channel.track chamado com dados do perfil
- *   6. Evento sync → onlineIds atualizado, loading=false
- *   7. Evento join → onlineIds atualizado
- *   8. Evento leave → onlineIds atualizado (usuário removido)
- *   9. extractIds: usa key E user_id do payload como fallback
- *  10. Heartbeat: doTrack chamado periodicamente (fake timers)
- *  11. Cleanup: untrack + removeChannel chamados ao desmontar
- *  12. Cleanup: heartbeat cancelado ao desmontar
- *  13. CHANNEL_ERROR → não altera estado (não lança)
- *  14. Reconecta ao trocar de empresa
- *  15. Reconecta ao trocar de usuário
- *
- * Estratégia:
- *  - supabase.channel → canal fake com presenceState configurável
- *  - channel.track / channel.untrack → spies
- *  - useAuth / useEmpresa → vi.mock com refs mutáveis
- *  - Fake timers (vi.useFakeTimers) para cobrir heartbeat sem espera real
+ * O que se garante:
+ *   - nada de canal de Realtime: o online sai de `fn_presenca_bater`;
+ *   - a batida repete a cada 15 s e leva a empresa em que a pessoa está;
+ *   - a lista só vem quando muda: a aba manda a versão que já tem;
+ *   - os dois conjuntos (empresa de quem olha e global) saem da mesma resposta;
+ *   - voltar para a aba bate na hora, mas não duas vezes seguidas;
+ *   - fechar a aba chama `fn_presenca_sair` com `keepalive`;
+ *   - erro na batida não derruba a tela nem enche o console.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import React from 'react';
 
-// ── 1. vi.hoisted ─────────────────────────────────────────────────────────────
-
-const {
-  mockPerfilRef,
-  mockEmpresaRef,
-  mockChannelSpy,
-  mockRemoveChannelSpy,
-  mockTrackSpy,
-  mockUntrackSpy,
-  capturedPresenceHandlers,
-  capturedSubscribeCallback,
-  mockPresenceState,
-} = vi.hoisted(() => {
-  const mockPerfilRef  = { current: null as { id: string; nome?: string; perfil?: string } | null };
-  const mockEmpresaRef = { current: null as { id: string } | null };
-
-  const mockRemoveChannelSpy = vi.fn();
-  const mockTrackSpy   = vi.fn();
-  const mockUntrackSpy = vi.fn().mockResolvedValue(undefined);
-
-  // Estado de presença configurável por teste
-  const mockPresenceState: { current: Record<string, Array<{ user_id: string }>> } = {
-    current: {},
-  };
-
-  // Captura handlers de presence e o callback de subscribe
-  const capturedPresenceHandlers: {
-    current: Record<string, () => void>;
-  } = { current: {} };
-
-  const capturedSubscribeCallback: {
-    current: ((status: string, err?: unknown) => void) | null;
-  } = { current: null };
-
-  const mockChannelSpy = vi.fn();
-
-  return {
-    mockPerfilRef,
-    mockEmpresaRef,
-    mockChannelSpy,
-    mockRemoveChannelSpy,
-    mockTrackSpy,
-    mockUntrackSpy,
-    capturedPresenceHandlers,
-    capturedSubscribeCallback,
-    mockPresenceState,
-  };
-});
-
-// ── 2. vi.mock ANTES dos imports do SUT ───────────────────────────────────────
-
-vi.mock('@/lib/supabase', () => {
-  const fakeChannel = {
-    on: vi.fn(
-      (type: string, config: { event: string }, handler: () => void) => {
-        if (type === 'presence') {
-          capturedPresenceHandlers.current[config.event] = handler;
-        }
-        if (type === 'system') {
-          capturedPresenceHandlers.current.system = handler;
-        }
-        return fakeChannel;
-      },
-    ),
-    subscribe: vi.fn((cb: (status: string, err?: unknown) => void) => {
-      capturedSubscribeCallback.current = cb;
-      return fakeChannel;
-    }),
-    presenceState: vi.fn(() => mockPresenceState.current),
-    track:   mockTrackSpy,
-    untrack: mockUntrackSpy,
-  };
-
-  mockChannelSpy.mockReturnValue(fakeChannel);
-
-  return {
-    supabase: {
-      channel:       mockChannelSpy,
-      removeChannel: mockRemoveChannelSpy,
+const { mockPerfilRef, mockEmpresaRef, rpcSpy, channelSpy, respostaRef } = vi.hoisted(() => ({
+  mockPerfilRef:  { current: null as { id: string; nome?: string; perfil?: string } | null },
+  mockEmpresaRef: { current: null as { id: string } | null },
+  rpcSpy:         vi.fn(),
+  channelSpy:     vi.fn(),
+  respostaRef:    {
+    current: {
+      data: null as { versao: string; online?: [string, string | null][] } | null,
+      error: null as { message: string } | null,
     },
-  };
-});
+  },
+}));
+
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    rpc: rpcSpy,
+    channel: channelSpy,
+    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'tok-1' } } }) },
+  },
+}));
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ perfil: mockPerfilRef.current }),
@@ -122,685 +46,167 @@ vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: mockEmpresaRef.current }),
 }));
 
-// ── 3. Import do SUT ──────────────────────────────────────────────────────────
-
 import { PresenceProvider, useOnlineUsers } from '../PresenceProvider';
-import { __entradaInicialParaTestes } from '../presenceEntradaInicial';
 
-// ── 4. Helpers ────────────────────────────────────────────────────────────────
-
-const USER_ID    = 'user-presence-1';
-const EMPRESA_ID = 'empresa-presence-99';
+const USER_ID    = 'user-1';
+const EMPRESA_ID = 'empresa-1';
+const OUTRA      = 'empresa-2';
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(PresenceProvider, null, children);
 }
 
-/** Simula o Supabase chamar o subscribe callback com um status */
-function simulateSubscribeStatus(status: string, err?: unknown) {
-  capturedSubscribeCallback.current?.(status, err);
+/** Deixa a primeira batida (sorteada em até 3 s) acontecer e voltar. */
+async function primeiraBatida() {
+  await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
 }
-
-/** Simula um evento de presence (sync/join/leave) */
-function simulatePresenceEvent(
-  event: 'sync' | 'join' | 'leave',
-  state: Record<string, Array<{ user_id: string }>> = {},
-) {
-  mockPresenceState.current = state;
-  capturedPresenceHandlers.current[event]?.();
-}
-
-// ── 5. Testes ─────────────────────────────────────────────────────────────────
 
 describe('PresenceProvider + useOnlineUsers', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    // A primeira entrada da página é sorteada (até 12 s); os testes abaixo
-    // tratam da vida do canal, não da espera — ela tem o próprio teste.
-    __entradaInicialParaTestes(true);
-    capturedPresenceHandlers.current = {};
-    capturedSubscribeCallback.current = null;
-    mockPresenceState.current = {};
-
-    // Restaura o canal fake após clearAllMocks
-    const fakeChannel = {
-      on: vi.fn(
-        (type: string, config: { event: string }, handler: () => void) => {
-          if (type === 'presence') {
-            capturedPresenceHandlers.current[config.event] = handler;
-          }
-          if (type === 'system') {
-            capturedPresenceHandlers.current.system = handler;
-          }
-          return fakeChannel;
-        },
-      ),
-      subscribe: vi.fn((cb: (status: string, err?: unknown) => void) => {
-        capturedSubscribeCallback.current = cb;
-        return fakeChannel;
-      }),
-      presenceState: vi.fn(() => mockPresenceState.current),
-      track:   mockTrackSpy,
-      untrack: mockUntrackSpy,
+    vi.useFakeTimers();
+    mockPerfilRef.current  = { id: USER_ID, nome: 'Ana', perfil: 'operador' };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+    respostaRef.current = {
+      data: { versao: 'v1', online: [[USER_ID, EMPRESA_ID], ['user-2', EMPRESA_ID], ['user-3', OUTRA]] },
+      error: null,
     };
-
-    mockChannelSpy.mockReturnValue(fakeChannel);
-    // 'ok' é o que o track real devolve no caminho feliz; o código só repete
-    // quando vem 'timed out' ou 'error'.
-    mockTrackSpy.mockResolvedValue('ok');
-    mockUntrackSpy.mockResolvedValue(undefined);
+    rpcSpy.mockReset();
+    rpcSpy.mockImplementation(() => Promise.resolve(respostaRef.current));
+    channelSpy.mockReset();
+    // O desmontar de cada teste é um logout: sai pela rede, que aqui não existe.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
   });
 
   afterEach(() => {
-    mockPerfilRef.current  = null;
-    mockEmpresaRef.current = null;
-    // Desfaz os `spyOn` (Math.random) — os `vi.fn` do mock seguem de pé.
-    vi.restoreAllMocks();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
-  // ─── Defaults fora do provider ────────────────────────────────────────
-
-  it('useOnlineUsers fora do provider retorna valores padrão do context', () => {
+  it('fora do provider devolve os valores padrão', () => {
     const { result } = renderHook(() => useOnlineUsers());
-    // Context default: onlineIds = new Set(), loading = true
-    expect(result.current.onlineIds).toBeInstanceOf(Set);
     expect(result.current.onlineIds.size).toBe(0);
     expect(result.current.loading).toBe(true);
   });
 
-  // ─── Guarda: sem userId ───────────────────────────────────────────────
-
-  it('sem userId não cria canal', async () => {
-    mockPerfilRef.current  = null;
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
+  it('sem pessoa ou sem empresa não bate', async () => {
+    mockPerfilRef.current = null;
     renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    expect(rpcSpy).not.toHaveBeenCalled();
 
-    await new Promise(r => setTimeout(r, 10));
-
-    expect(mockChannelSpy).not.toHaveBeenCalled();
-  });
-
-  // ─── Guarda: sem empresaId ────────────────────────────────────────────
-
-  it('sem empresaId não cria canal', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
+    mockPerfilRef.current = { id: USER_ID };
     mockEmpresaRef.current = null;
-
     renderHook(() => useOnlineUsers(), { wrapper });
-
-    await new Promise(r => setTimeout(r, 10));
-
-    expect(mockChannelSpy).not.toHaveBeenCalled();
+    await primeiraBatida();
+    expect(rpcSpy).not.toHaveBeenCalled();
   });
 
-  // ─── Canal criado com nome correto ────────────────────────────────────
-
-  // O canal é UM para a aplicação inteira, não um por empresa: os dois canais
-  // de presence que existiam gastavam dois eventos por pessoa logada do mesmo
-  // orçamento do tenant. O recorte por empresa mudou de lugar — saiu do tópico
-  // e virou filtro sobre o payload, aqui no cliente.
-  it('a primeira entrada da página espera um sorteio (deploy não vira onda)', () => {
-    vi.useFakeTimers();
-    try {
-      __entradaInicialParaTestes(false);
-      mockPerfilRef.current  = { id: USER_ID };
-      mockEmpresaRef.current = { id: EMPRESA_ID };
-
-      renderHook(() => useOnlineUsers(), { wrapper });
-      expect(mockChannelSpy).not.toHaveBeenCalled();
-
-      act(() => { vi.advanceTimersByTime(12_000); });
-      expect(mockChannelSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('cria UM canal global e privado, não um por empresa', () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
+  it('não abre canal de Realtime — era o que estourava o limite de presence', async () => {
     renderHook(() => useOnlineUsers(), { wrapper });
-
-    expect(mockChannelSpy).toHaveBeenCalledWith(
-      'presence-global',
-      expect.objectContaining({
-        config: { private: true, presence: { key: USER_ID } },
-      }),
-    );
+    await primeiraBatida();
+    expect(channelSpy).not.toHaveBeenCalled();
+    expect(rpcSpy).toHaveBeenCalledWith('fn_presenca_bater', { p_empresa: EMPRESA_ID, p_versao: null });
   });
 
-  // ─── SUBSCRIBED → track ───────────────────────────────────────────────
-
-  it('após SUBSCRIBED chama channel.track com dados do perfil', async () => {
-    mockPerfilRef.current  = { id: USER_ID, nome: 'João', perfil: 'operador' };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await new Promise(r => setTimeout(r, 0));
-    });
-
-    expect(mockTrackSpy).toHaveBeenCalledWith({
-      user_id:     USER_ID,
-      nome:        'João',
-      perfil_tipo: 'operador',
-      // Sem isto o contador de UsuariosOnline não teria como recortar.
-      empresa_id:  EMPRESA_ID,
-    });
-  });
-
-  it('track usa string vazia quando nome/perfil não existem no perfil', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await new Promise(r => setTimeout(r, 0));
-    });
-
-    expect(mockTrackSpy).toHaveBeenCalledWith({
-      user_id:     USER_ID,
-      nome:        '',
-      perfil_tipo: '',
-      empresa_id:  EMPRESA_ID,
-    });
-  });
-
-  // ─── Evento sync ──────────────────────────────────────────────────────
-
-  it('evento sync atualiza onlineIds e seta loading=false', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
+  it('separa onlineIds (minha empresa) de onlineIdsGlobal (todas) e solta o loading', async () => {
     const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    act(() => {
-      simulatePresenceEvent('sync', {
-        [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }],
-        'user-2':  [{ user_id: 'user-2', empresa_id: EMPRESA_ID }],
-      });
-    });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.onlineIds.has(USER_ID)).toBe(true);
-    expect(result.current.onlineIds.has('user-2')).toBe(true);
-    expect(result.current.onlineIds.size).toBe(2);
+    await primeiraBatida();
+    expect([...result.current.onlineIds].sort()).toEqual([USER_ID, 'user-2']);
+    expect([...result.current.onlineIdsGlobal].sort()).toEqual([USER_ID, 'user-2', 'user-3']);
+    expect(result.current.loading).toBe(false);
   });
 
-  // ─── Evento join ──────────────────────────────────────────────────────
-
-  it('evento join adiciona novo usuário ao onlineIds', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    // Primeiro sync com 1 usuário
-    act(() => {
-      simulatePresenceEvent('sync', { [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }] });
-    });
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    // Join: novo usuário entra
-    act(() => {
-      simulatePresenceEvent('join', {
-        [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }],
-        'user-new': [{ user_id: 'user-new', empresa_id: EMPRESA_ID }],
-      });
-    });
-
-    expect(result.current.onlineIds.has('user-new')).toBe(true);
-    expect(result.current.onlineIds.size).toBe(2);
-  });
-
-  // ─── Evento leave ─────────────────────────────────────────────────────
-
-  it('evento leave remove usuário do onlineIds', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    // Dois usuários conectados
-    act(() => {
-      simulatePresenceEvent('sync', {
-        [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }],
-        'user-2':  [{ user_id: 'user-2', empresa_id: EMPRESA_ID }],
-      });
-    });
-
-    await waitFor(() => expect(result.current.onlineIds.size).toBe(2));
-
-    // user-2 sai
-    act(() => {
-      simulatePresenceEvent('leave', { [USER_ID]: [{ user_id: USER_ID, empresa_id: EMPRESA_ID }] });
-    });
-
-    expect(result.current.onlineIds.has(USER_ID)).toBe(true);
-    expect(result.current.onlineIds.has('user-2')).toBe(false);
-    expect(result.current.onlineIds.size).toBe(1);
-  });
-
-  // ─── extractIds: key + user_id ────────────────────────────────────────
-
-  it('extractIds usa tanto a key do slot quanto o user_id do payload', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    // key='slot-key', mas user_id='payload-uid' → ambos devem aparecer
-    act(() => {
-      simulatePresenceEvent('sync', {
-        'slot-key': [{ user_id: 'payload-uid', empresa_id: EMPRESA_ID }],
-      });
-    });
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.onlineIds.has('slot-key')).toBe(true);
-    expect(result.current.onlineIds.has('payload-uid')).toBe(true);
-  });
-
-  it('extractIds ignora presences sem user_id', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    act(() => {
-      // @ts-expect-error — testando payload sem user_id
-      simulatePresenceEvent('sync', { 'slot-key': [{ empresa_id: EMPRESA_ID }] });
-    });
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    // Apenas a key é adicionada, não um user_id vazio
-    expect(result.current.onlineIds.has('slot-key')).toBe(true);
-    expect(result.current.onlineIds.size).toBe(1);
-  });
-
-  // ─── Sem heartbeat de re-track ────────────────────────────────────────
-
-  it('NÃO faz re-track periódico — era o que estourava o rate limit', async () => {
-    // Havia um heartbeat de 20 s aqui. Cada track é difundido para todos os
-    // membros do canal, então com N pessoas online o custo crescia ao quadrado
-    // e o Realtime respondia `PresenceRateLimitReached`. A presença vive
-    // enquanto o socket viver; repetir o track não acrescentava nada.
-    vi.useFakeTimers();
-
-    mockPerfilRef.current  = { id: USER_ID, nome: 'Ana', perfil: 'lider' };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-
-    const aposSubscribed = (mockTrackSpy as Mock).mock.calls.length;
-    expect(aposSubscribed).toBe(1);
-
-    // Cinco minutos depois, continua sendo um só.
-    act(() => { vi.advanceTimersByTime(300_000); });
-    await act(async () => { await Promise.resolve(); });
-
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
-
-    vi.useRealTimers();
-  });
-
-  it('track que falha é repetido — senão a pessoa fica invisível até um F5', async () => {
-    vi.useFakeTimers();
-
-    mockPerfilRef.current  = { id: USER_ID, nome: 'Ana', perfil: 'lider' };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-    (mockTrackSpy as Mock).mockResolvedValue('timed out');
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
-
-    await act(async () => {
-      vi.advanceTimersByTime(5_000);
-      await Promise.resolve();
-    });
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(2);
-
-    // ...mas com teto: não vira o heartbeat de novo por outro caminho.
-    await act(async () => {
-      vi.advanceTimersByTime(300_000);
-      await Promise.resolve();
-    });
-    expect((mockTrackSpy as Mock).mock.calls.length).toBeLessThanOrEqual(4);
-
-    (mockTrackSpy as Mock).mockResolvedValue('ok');
-    vi.useRealTimers();
-  });
-
-  // ─── Cleanup: sai do canal sem gastar um evento de presence ──────────
-
-  it('cleanup ao desmontar: remove o canal e NÃO chama untrack', async () => {
-    // `untrack` é um evento de presence a mais no canal, e este cleanup roda em
-    // toda reconexão — ou seja, era enviado exatamente quando o canal estava
-    // saturado (PresenceRateLimitReached, 04/08/2026). Sair do canal já faz o
-    // servidor descartar a presença e difundir o `leave`.
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { unmount } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await new Promise(r => setTimeout(r, 0));
-    });
-
-    unmount();
-
-    await act(async () => {
-      await new Promise(r => setTimeout(r, 0));
-    });
-
-    expect(mockRemoveChannelSpy).toHaveBeenCalledTimes(1);
-    expect(mockUntrackSpy).not.toHaveBeenCalled();
-  });
-
-  // ─── Cleanup: retentativa cancelada ──────────────────────────────────
-
-  it('cleanup cancela a retentativa pendente ao desmontar', async () => {
-    vi.useFakeTimers();
-
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-    (mockTrackSpy as Mock).mockResolvedValue('error');
-
-    const { unmount } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-
-    const chamadasAoDesmontar = (mockTrackSpy as Mock).mock.calls.length;
-
-    unmount();
-
-    // Deslogou: nada mais deve bater no canal.
-    act(() => { vi.advanceTimersByTime(40_000); });
-
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(chamadasAoDesmontar);
-
-    (mockTrackSpy as Mock).mockResolvedValue('ok');
-    vi.useRealTimers();
-  });
-
-  // ─── CHANNEL_ERROR não lança ──────────────────────────────────────────
-
-  it('CHANNEL_ERROR não lança exceção e não altera onlineIds', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulatePresenceEvent('sync', { [USER_ID]: [{ user_id: USER_ID }] });
-    });
-
-    const sizeBeforeError = result.current.onlineIds.size;
-
-    expect(() => {
-      act(() => {
-        simulateSubscribeStatus('CHANNEL_ERROR', new Error('Socket error'));
-      });
-    }).not.toThrow();
-
-    expect(result.current.onlineIds.size).toBe(sizeBeforeError);
-  });
-
-  it('TIMED_OUT não lança exceção', () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    expect(() => {
-      act(() => {
-        simulateSubscribeStatus('TIMED_OUT');
-      });
-    }).not.toThrow();
-  });
-
-  // ─── Erro fica com a reentrada do supabase-js (17/09/2026) ────────────
-
-  it('reentrada depois de erro NÃO recria o canal, e o track dela é sorteado', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(1);
-
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
-
-    // O servidor caiu e a biblioteca reentrou no mesmo canal.
-    await act(async () => {
-      simulateSubscribeStatus('CHANNEL_ERROR');
-      vi.advanceTimersByTime(2_000);
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-    // Todo mundo reentra no mesmo segundo: o track não sai na hora.
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
-
-    await act(async () => {
-      vi.advanceTimersByTime(10_000);
-      await Promise.resolve();
-    });
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(2);
-
-    // E nada de derrubar e recriar o canal que acabou de voltar.
-    await act(async () => {
-      vi.advanceTimersByTime(120_000);
-      await Promise.resolve();
-    });
-    expect(mockChannelSpy).toHaveBeenCalledTimes(1);
-    expect(mockRemoveChannelSpy).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
-  });
-
-  it('CLOSED do servidor recria o canal', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(1);
-
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      simulateSubscribeStatus('CLOSED');
-      await vi.advanceTimersByTimeAsync(3_000);
-    });
-
-    expect(mockRemoveChannelSpy).toHaveBeenCalledTimes(1);
-    expect(mockChannelSpy).toHaveBeenCalledTimes(2);
-
-    vi.useRealTimers();
-  });
-
-  // O Realtime mede a média do último minuto e FECHA o canal de quem entra
-  // quando ela estoura. Voltar em 1,5 s era ser derrubado de novo — foi o que
-  // manteve os estouros em sequência nos minutos de deploy (28/09/2026).
-  it('CLOSED pelo limite de presence espera a janela do servidor antes de voltar', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      (capturedPresenceHandlers.current.system as unknown as (p: unknown) => void)({
-        status: 'error', extension: 'system',
-        message: 'Too many presence messages per second',
-      });
-      simulateSubscribeStatus('CLOSED');
-      await vi.advanceTimersByTimeAsync(20_000);
-    });
-    // Uma queda comum já teria recriado o canal a esta altura.
-    expect(mockChannelSpy).toHaveBeenCalledTimes(1);
-
-    // Voltar para a aba nesse meio-tempo também não fura a espera.
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'));
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
-    expect(mockChannelSpy).toHaveBeenCalledTimes(1);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
-    expect(mockChannelSpy).toHaveBeenCalledTimes(2);
-
-    vi.useRealTimers();
-  });
-
-  it('mensagem system que não é do limite não muda a volta do CLOSED', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(1);
-
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await Promise.resolve();
-    });
-    await act(async () => {
-      (capturedPresenceHandlers.current.system as unknown as (p: unknown) => void)({
-        status: 'ok', extension: 'postgres_changes', message: 'Subscribed to PostgreSQL',
-      });
-      simulateSubscribeStatus('CLOSED');
-      await vi.advanceTimersByTimeAsync(3_000);
-    });
-    expect(mockChannelSpy).toHaveBeenCalledTimes(2);
-
-    vi.useRealTimers();
-  });
-
-  // ─── Reconecta ao trocar de empresa ───────────────────────────────────
-
-  it('reconecta ao trocar empresaId', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { rerender } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    await act(async () => {
-      simulateSubscribeStatus('SUBSCRIBED');
-      await new Promise(r => setTimeout(r, 0));
-    });
-
-    const callsV1 = (mockChannelSpy as Mock).mock.calls.length;
-
-    // Troca de empresa → useEffect re-executa
-    act(() => {
-      mockEmpresaRef.current = { id: 'empresa-nova-123' };
-    });
-    rerender();
-
-    await act(async () => {
-      await new Promise(r => setTimeout(r, 0));
-    });
-
-    // O canal é recriado (o `track` precisa sair com a empresa nova), mas o
-    // TÓPICO é sempre o mesmo: quem separa as empresas agora é o payload.
-    expect((mockChannelSpy as Mock).mock.calls.length).toBeGreaterThan(callsV1);
-    expect(mockChannelSpy).toHaveBeenLastCalledWith(
-      'presence-global',
-      expect.any(Object),
-    );
-  });
-
-  // ─── Recorte por empresa sobre o canal único ──────────────────────────
-
-  it('separa onlineIds (minha empresa) de onlineIdsGlobal (todas)', async () => {
-    mockPerfilRef.current  = { id: USER_ID };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
-    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
-
-    act(() => {
-      simulatePresenceEvent('sync', {
-        [USER_ID]:  [{ user_id: USER_ID,  empresa_id: EMPRESA_ID }],
-        'de-fora':  [{ user_id: 'de-fora', empresa_id: 'outra-empresa' }],
-      });
-    });
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    // O contador da barra lateral mostra só a própria operação…
-    expect(result.current.onlineIds.has(USER_ID)).toBe(true);
-    expect(result.current.onlineIds.has('de-fora')).toBe(false);
-    expect(result.current.onlineIds.size).toBe(1);
-
-    // …e o chat, que cruza empresas, enxerga os dois.
-    expect(result.current.onlineIdsGlobal.has('de-fora')).toBe(true);
-    expect(result.current.onlineIdsGlobal.size).toBe(2);
-  });
-
-  // O super_admin atravessa as quatro operações — para ele os dois conjuntos
-  // são o mesmo, que é o comportamento que ele já tinha pelos canais extras.
   it('para super_admin os dois conjuntos são iguais', async () => {
-    mockPerfilRef.current  = { id: USER_ID, perfil: 'super_admin' };
-    mockEmpresaRef.current = { id: EMPRESA_ID };
-
+    mockPerfilRef.current = { id: USER_ID, perfil: 'super_admin' };
     const { result } = renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    expect(result.current.onlineIds.size).toBe(3);
+    expect(result.current.onlineIdsGlobal.size).toBe(3);
+  });
 
-    act(() => {
-      simulatePresenceEvent('sync', {
-        [USER_ID]:  [{ user_id: USER_ID,  empresa_id: EMPRESA_ID }],
-        'de-fora':  [{ user_id: 'de-fora', empresa_id: 'outra-empresa' }],
-      });
-    });
+  it('bate de novo a cada 15 s e acompanha quem saiu', async () => {
+    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    expect(rpcSpy).toHaveBeenCalledTimes(1);
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    respostaRef.current = { data: { versao: 'v2', online: [[USER_ID, EMPRESA_ID]] }, error: null };
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(rpcSpy).toHaveBeenCalledTimes(2);
+    expect([...result.current.onlineIds]).toEqual([USER_ID]);
+  });
 
-    expect(result.current.onlineIds.has('de-fora')).toBe(true);
-    expect(result.current.onlineIds.size).toBe(result.current.onlineIdsGlobal.size);
+  it('manda a versão que tem; resposta sem lista mantém a lista', async () => {
+    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    const antes = result.current.onlineIdsGlobal;
+
+    respostaRef.current = { data: { versao: 'v1' }, error: null };
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(rpcSpy).toHaveBeenLastCalledWith('fn_presenca_bater', { p_empresa: EMPRESA_ID, p_versao: 'v1' });
+    expect(result.current.onlineIdsGlobal).toBe(antes);
+    expect(result.current.onlineIdsGlobal.size).toBe(3);
+  });
+
+  it('erro na batida mantém a lista, avisa uma vez e tenta na próxima', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { result } = renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    const antes = result.current.onlineIds;
+
+    respostaRef.current = { data: null, error: { message: 'Could not find the function' } };
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(result.current.onlineIds).toBe(antes);
+    expect(aviso).toHaveBeenCalledTimes(1);
+    expect(rpcSpy).toHaveBeenCalledTimes(3);
+    aviso.mockRestore();
+  });
+
+  it('voltar para a aba bate na hora, mas não logo depois de outra batida', async () => {
+    renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    expect(rpcSpy).toHaveBeenCalledTimes(1);
+
+    // Recente demais: ignora.
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await vi.advanceTimersByTimeAsync(0); });
+    expect(rpcSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await vi.advanceTimersByTimeAsync(0); });
+    expect(rpcSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('trocar de empresa bate com a empresa nova', async () => {
+    const { rerender } = renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    mockEmpresaRef.current = { id: OUTRA };
+    rerender();
+    await primeiraBatida();
+    expect(rpcSpy).toHaveBeenLastCalledWith('fn_presenca_bater', { p_empresa: OUTRA, p_versao: null });
+  });
+
+  it('fechar a aba chama fn_presenca_sair com keepalive e o token da última batida', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchSpy);
+    renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+
+    window.dispatchEvent(new Event('pagehide'));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/rest\/v1\/rpc\/fn_presenca_sair$/);
+    expect(init.keepalive).toBe(true);
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok-1');
+  });
+
+  it('desmontar (logout) para de bater e sai da lista', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchSpy);
+    const { unmount } = renderHook(() => useOnlineUsers(), { wrapper });
+    await primeiraBatida();
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
+    expect(rpcSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(expect.stringMatching(/fn_presenca_sair$/), expect.objectContaining({ keepalive: true }));
   });
 });

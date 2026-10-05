@@ -1,119 +1,46 @@
 /**
  * src/providers/PresenceProvider.tsx
  *
- * Canal Supabase Presence SINGLETON para toda a aplicação.
+ * Quem está online, para a aplicação inteira — uma fonte só, lida por Context.
  *
- * ── Por que Provider e não hook direto? ──────────────────────────────────────
- * O Supabase JS Client trata cada `supabase.channel(nome)` como uma instância
- * independente, mesmo que o nome seja idêntico. Se dois componentes distintos
- * (ex: Layout + AdminUsuarios) chamam `usePresence` e cada um cria seu próprio
- * canal, o resultado é dois WebSockets separados para o mesmo canal — cada um
- * enxerga apenas os usuários que foram rastreados pela sua própria instância.
- * Isso explica o sintoma: o usuário A via apenas si mesmo no AdminUsuarios.
+ * ── Batida no banco, e não Presence do Realtime (05/10/2026) ─────────────────
+ * Até aqui era o canal `presence-global` do Supabase Realtime. Um mês de
+ * remendos (sem re-track, entrada sorteada, espera depois do limite, recarga
+ * do deploy só na troca de tela) baixou os erros, mas não os tirou: o log de
+ * 05/10 ainda tinha 25 `PresenceRateLimitReached` numa manhã. No Presence, cada
+ * entrada de uma pessoa é avisada a TODAS as outras do canal — o custo cresce
+ * com o quadrado de quem está logado, e o teto é do projeto inteiro.
  *
- * Solução: um único canal criado aqui no Provider. Todos os componentes lêem
- * `onlineIds` via Context — sem duplicar canais.
+ * Agora cada aba chama `fn_presenca_bater` a cada `BATIDA_MS` (15 s). A mesma
+ * chamada grava «estou aqui» e diz quem bateu nos últimos 150 s (migration
+ * 20261005150000). É uma requisição HTTP comum: não passa pelo Realtime e não
+ * tem limite de eventos para estourar.
  *
- * ── Um canal para a aplicação inteira, e não um por empresa ──────────────────
- * Foi `presence-empresa-{id}` até 10/09/2026, e o chat mantinha um segundo
- * canal de presence só para ele (`presenca-chat`). Como o orçamento de eventos
- * de presence do Realtime é do TENANT, e não do canal, os dois dividiam o mesmo
- * teto: cada pessoa logada gastava DOIS eventos para responder uma única
- * pergunta — quem está online. O log acusava 903 `PresenceRateLimitReached`
- * por dia, em ritmo constante durante toda a operação.
+ * A lista só viaja quando muda: a aba manda a `versao` que já tem e, se ela
+ * ainda vale, volta só a versão. 150 pessoas = 10 chamadas por segundo de uns
+ * 50 bytes; a lista inteira a cada 15 s seriam gigabytes por dia.
  *
- * Agora o `track` é um só, no tópico `presence-global`, e o recorte por empresa
- * saiu do NOME DO CANAL e virou um campo do payload:
+ * O que muda para quem olha: alguém que ENTRA aparece online em até 15 s
+ * (antes, na hora). Quem fecha a aba sai na batida seguinte de cada um —
+ * `fn_presenca_sair` no `pagehide` — e, se nem isso chegar (máquina desligada
+ * no botão), some sozinho em 150 s.
  *
- *   `onlineIds`       — a empresa de quem olha (as quatro, para super_admin).
- *                       É o que o contador de `UsuariosOnline` mostra e o que
- *                       as telas de admin consultam.
+ * ── Os dois conjuntos ────────────────────────────────────────────────────────
+ *   `onlineIds`       — a empresa de quem olha (todas, para super_admin). É o
+ *                       que o contador de `UsuariosOnline` mostra e o que as
+ *                       telas de admin consultam.
  *   `onlineIdsGlobal` — a aplicação inteira. É o que o chat lê, porque o chat
- *                       cruza empresas: 319 das 920 conversas têm participantes
- *                       de empresas diferentes, e o conjunto recortado deixaria
- *                       um terço dos contatos eternamente "offline".
+ *                       cruza empresas (319 das 920 conversas).
  *
- * Os dois saem do MESMO `presenceState`, numa passada sobre o objeto que já
- * está na memória: filtrar é de graça, abrir canal não é. Foi assim que o
- * super_admin deixou de precisar de três canais extras só para enxergar as
- * outras operações.
+ * Os dois saem da MESMA resposta, numa passada só.
  *
- * O tópico é adivinhável, ao contrário do antigo `presence-empresa-{uuid}`,
- * então o canal nasce `private`: a RLS de `realtime.messages` exige sessão para
- * publicar e para receber (migration 20260910143000). Na prática a postura
- * melhorou — o canal de presença saiu de aberto para fechado por RLS.
- *
- * ── Ciclo de vida ─────────────────────────────────────────────────────────────
- * 1. Provider monta → cria canal `presence-global` (privado)
- * 2. Após SUBSCRIBED → `track({ user_id, nome, perfil_tipo, empresa_id })`, UMA vez
- * 3. Eventos sync/join/leave → recalcula os dois conjuntos via setState
- * 4. Provider desmonta (logout) → `supabase.removeChannel(channel)`
- *
- * ── Por que NÃO existe heartbeat de re-track ─────────────────────────────────
- * Existiu um, de 20 em 20 segundos, e ele derrubava o Realtime:
- *
- *     PresenceRateLimitReached: Too many presence events per second
- *
- * Cada `track()` é difundido para TODOS os membros do canal. Com N pessoas
- * logadas, um re-track por pessoa a cada 20 s gera N/20 tracks por segundo, e
- * cada um deles notifica as outras N — o custo cresce ao quadrado. Numa
- * operação com dezenas de pessoas online o limite estourava sem parar, e aí o
- * ciclo se realimentava: o canal caía, o código reconectava, o SUBSCRIBED
- * fazia track de novo e reabria o intervalo.
- *
- * O re-track periódico também não servia para nada: o Presence do Supabase
- * mantém o estado enquanto o socket estiver vivo, e o socket já tem o próprio
- * heartbeat de transporte, que não é evento de presence. Quem cobre queda de
- * rede e máquina suspensa é a reconexão (CLOSED/CHANNEL_ERROR + visibilitychange),
- * logo abaixo. O track só é repetido quando FALHA — ver `doTrack`.
- *
- * ── Por que a reconexão é ESPALHADA no tempo ─────────────────────────────────
- * O mesmo erro voltou ao log em 04/08/2026, em ondas: vários estouros por minuto
- * na volta do intervalo, quando a operação inteira reabre o notebook junto.
- *
- * O orçamento de eventos de presence é do tenant, então todo mundo divide o
- * mesmo teto por segundo. Quando ele satura, os clientes caem
- * JUNTOS — e o backoff, sendo idêntico e determinístico para todos (3 s, 6 s,
- * 12 s…), fazia todos voltarem juntos e saturarem de novo. Uma manada
- * sincronizada, batendo na mesma porta em uníssono.
- *
- * Daí o jitter em `esperaComJitter`: mesma ordem de grandeza de espera, mas
- * cada aba sorteia a sua e a onda vira chuvisco. Pelo mesmo motivo o retorno à
- * aba não reconecta mais no mesmo milissegundo para todos.
- *
- * ── Quem reergue o canal depois de ERRO (17/09/2026) ─────────────────────────
- * O supabase-js reentra sozinho num canal com CHANNEL_ERROR/TIMED_OUT e dispara
- * SUBSCRIBED de novo. Este provider recriava o canal por cima, e o SUBSCRIBED
- * da reentrada não cancelava a recriação agendada: a pessoa entrava, fazia
- * `track`, e segundos depois o canal era derrubado e recriado — dois eventos de
- * presence por queda. E como o tópico é fixo e `supabase.channel(nome)` devolve
- * o canal que ainda estiver saindo, a recriação às vezes pegava o canal morto e
- * a presença sumia até a pessoa voltar para a aba.
- *
- * Agora: ERRO/TIMEOUT fica com a biblioteca (um vigia recria só se não voltar);
- * CLOSED recria; o canal novo só nasce depois que o antigo saiu; e o `track` da
- * reentrada é sorteado em `ESPALHAMENTO_RETRACK_MS`, porque quando o servidor
- * cai todo mundo reentra no mesmo segundo.
- *
- * ── Como o servidor conta, e por que a volta do limite espera (28/09/2026) ───
- * Lido no fonte do Realtime (`presence_handler.ex`, `tenants.ex`):
- *
- *   - conta DOIS eventos por entrada neste canal: o `presence_state` que o
- *     servidor empurra na entrada (sync) e o nosso `track`;
- *   - mede em baldes de 5 s e compara a MÉDIA DO ÚLTIMO MINUTO com o teto do
- *     projeto;
- *   - estourado, ele manda uma mensagem `system` de erro e FECHA o canal de
- *     quem estava entrando — do nosso lado, um CLOSED.
- *
- * Os estouros que sobraram (19 em 28/09/2026) vieram todos em minutos de
- * deploy: ~150 abas recarregando juntas. E o CLOSED do limite caía na mesma
- * recriação de 1,5–3 s de uma queda comum — a aba voltava enquanto a média do
- * minuto ainda estava no teto, era derrubada de novo, e a média não descia.
- *
- * Agora a mensagem `system` do limite é reconhecida, e a volta espera
- * `ESPERA_APOS_LIMITE_MS` com sorteio — tempo de a janela de um minuto
- * esvaziar, com as abas voltando espalhadas. Voltar para a aba nesse meio-tempo
- * também respeita a espera.
+ * ── Aba escondida ────────────────────────────────────────────────────────────
+ * Continua batendo: a pessoa está logada, só olhando outra janela — como era no
+ * Presence, que mantinha a presença enquanto o socket vivesse. O navegador
+ * espaça timers de aba escondida para até um por minuto; a janela de 150 s do
+ * banco cobre duas batidas atrasadas. Ao voltar para a aba, bate na hora. É só
+ * para isso e para a queda sem aviso que a janela é longa: ela não atrasa a
+ * entrada de ninguém, quem decide isso é a batida de 15 s.
  */
 import {
   createContext, useContext, useEffect, useRef,
@@ -122,33 +49,31 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { tomarEntradaInicial } from './presenceEntradaInicial';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-interface PresencePayload {
-  user_id: string;
-  nome?: string;
-  perfil_tipo?: string;
-  /** Recorta o contador por empresa sem precisar de um canal por empresa. */
-  empresa_id?: string;
+/**
+ * A resposta de `fn_presenca_bater`: a versão da lista e, só quando ela mudou
+ * desde a versão que a aba mandou, a lista — pares [pessoa, empresa].
+ */
+interface RespostaBatida {
+  versao: string;
+  online?: [string, string | null][];
 }
 
 interface PresenceContextValue {
   /**
    * Quem está online DENTRO do recorte de quem olha: a própria empresa, ou
-   * as quatro para o super_admin. É o que o contador de `UsuariosOnline`
-   * mostra e o que as telas de admin consultam.
+   * todas para o super_admin. É o que o contador de `UsuariosOnline` mostra e
+   * o que as telas de admin consultam.
    */
   onlineIds: Set<string>;
   /**
    * Quem está online na aplicação INTEIRA, sem recorte. Existe para o chat,
-   * que cruza empresas: 319 das 920 conversas têm gente de empresas
-   * diferentes, e ler o conjunto recortado deixaria um terço dos contatos
-   * eternamente "offline".
+   * que cruza empresas.
    */
   onlineIdsGlobal: Set<string>;
-  /** true enquanto não recebeu o primeiro sync do canal */
+  /** true enquanto a primeira batida não voltou. */
   loading: boolean;
 }
 
@@ -161,82 +86,53 @@ const PresenceContext = createContext<PresenceContextValue>({
 });
 
 /**
- * Espera antes de tentar o `track` de novo quando ele falha.
- *
- * Só vale para falha — não é heartbeat (ver o cabeçalho). Sem esta retentativa,
- * um `track` que voltasse 'timed out' deixaria a pessoa invisível para todos
- * até o próximo F5.
+ * De quanto em quanto tempo a aba avisa que está aqui e relê quem está. É o
+ * atraso máximo para alguém que entra aparecer para os outros.
  */
-const RETRY_TRACK_MS = 5_000;
-
-/** Teto de tentativas do track. Depois disso, a reconexão do canal reassume. */
-const MAX_TENTATIVAS_TRACK = 4;
-
-const BACKOFF_BASE_MS = 3_000;
-const BACKOFF_MAX_MS  = 30_000;
+const BATIDA_MS = 15_000;
 
 /**
- * Espalhamento máximo ao voltar para a aba ou quando a rede volta.
- *
- * Curto de propósito: é a hora em que a pessoa está olhando a tela e espera ver
- * quem está online. Meio segundo médio não se percebe, e já basta para as
- * dezenas de abas que voltam do intervalo no mesmo minuto não pedirem `track`
- * no mesmo instante.
+ * Sorteio da primeira batida da página. Não é por limite — o banco aguenta a
+ * onda de um deploy —, é para as 150 abas recarregando juntas não caírem no
+ * mesmo segundo.
  */
-const ESPALHAMENTO_RETOMADA_MS = 1_500;
+const ESPALHAMENTO_INICIAL_MS = 3_000;
 
-/**
- * Espalhamento do `track` quando o canal REENTRA depois de uma queda. A queda do
- * servidor derruba todo mundo junto; dez segundos sorteados dividem o turno
- * inteiro em poucos eventos por segundo.
- */
-const ESPALHAMENTO_RETRACK_MS = 10_000;
-
-/**
- * Espalhamento da PRIMEIRA entrada no canal, ao carregar a página (30/09/2026).
- *
- * As reentradas já eram sorteadas, mas a entrada inicial não: num deploy, o
- * «Nova versão — Recarregar» faz dezenas de abas recarregarem no mesmo minuto,
- * e cada uma entrava na hora — dois eventos de presence por aba, todos juntos.
- * Os `PresenceRateLimitReached` que sobraram vinham nessas ondas. Doze segundos
- * sorteados não se percebem (o contador de online só aparece um pouco depois) e
- * transformam a onda em chuvisco. Vale uma vez por carga de página.
- */
-const ESPALHAMENTO_INICIAL_MS = 12_000;
-
-/** Quanto esperar a reentrada da biblioteca antes de recriar o canal. */
-const VIGIA_MS = 45_000;
-
-/**
- * Espera mínima depois que o servidor fechou o canal por excesso de eventos de
- * presence; a espera real vai do mínimo ao dobro, sorteada. O servidor julga
- * pela média do último minuto — ver o cabeçalho.
- */
-const ESPERA_APOS_LIMITE_MS = 30_000;
-
-/** A mensagem `system` com que o Realtime avisa que fechou o canal pelo limite. */
-function ehAvisoDeLimite(payload: unknown): boolean {
-  const p = payload as { status?: unknown; message?: unknown } | null;
-  return p?.status === 'error' && /presence|rate ?limit|too many/i.test(String(p?.message ?? ''));
-}
-
-/**
- * Backoff exponencial com "equal jitter": metade fixa, metade sorteada.
- *
- * A metade fixa garante que a espera cresce de verdade a cada tentativa (com
- * jitter total, um sorteio baixo devolveria o cliente ao canal saturado na
- * hora); a metade sorteada é o que dessincroniza as abas.
- */
-function esperaComJitter(tentativa: number): number {
-  const teto = Math.min(BACKOFF_BASE_MS * 2 ** tentativa, BACKOFF_MAX_MS);
-  return teto / 2 + Math.random() * (teto / 2);
-}
+/** Voltar para a aba bate na hora, a não ser que a última batida seja recente. */
+const RETOMADA_MINIMA_MS = 5_000;
 
 /** Dois conjuntos com os mesmos ids? Evita re-render do app inteiro à toa. */
 function mesmosIds(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false;
   for (const id of a) if (!b.has(id)) return false;
   return true;
+}
+
+/** Cliente sem tipo: as funções ainda não estão em `database.types.ts`. */
+function rpc<T>(nome: string, args?: Record<string, unknown>) {
+  const cliente = supabase as unknown as {
+    rpc: (n: string, a?: Record<string, unknown>) => PromiseLike<{ data: T; error: { message: string } | null }>;
+  };
+  return cliente.rpc(nome, args);
+}
+
+/**
+ * Sai da lista de online ao fechar a aba. `fetch` com `keepalive` porque o
+ * navegador cancela requisição comum quando a página some; o token vem guardado
+ * da última batida, porque no `pagehide` não dá tempo de esperar promessa.
+ */
+function sairSemEsperar(token: string | null): void {
+  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const chave = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  if (!token || !url || !chave) return;
+  try {
+    void fetch(`${url}/rest/v1/rpc/fn_presenca_sair`, {
+      method: 'POST',
+      keepalive: true,
+      headers: { apikey: chave, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    }).catch((): void => undefined);
+  } catch { /* a linha expira sozinha em 150 s */ }
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -247,294 +143,119 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   const [onlineIds, setOnlineIds]             = useState<Set<string>>(new Set());
   const [onlineIdsGlobal, setOnlineIdsGlobal] = useState<Set<string>>(new Set());
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading]                 = useState(true);
 
-  const [reconnectKey, setReconnectKey] = useState(0);
+  /** O token da última batida — o `pagehide` não espera `getSession()`. */
+  const tokenRef = useRef<string | null>(null);
 
-  const channelRef          = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const retryTrackRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const mountedRef          = useRef(true);
-  /** Remoção do canal anterior ainda em curso — o próximo espera por ela. */
-  const saindoRef           = useRef<Promise<unknown> | null>(null);
-  /**
-   * Até quando não adianta tentar entrar: o servidor fechou o canal pelo teto
-   * de eventos de presence. Vale também para a volta à aba.
-   */
-  const bloqueadoAteRef     = useRef(0);
-
-  // ── Extrai os DOIS conjuntos do mesmo presenceState ───────────────────────
-  // `Object.keys(state)` devolve a `key` do canal — que definimos como o
-  // userId; o `user_id` do payload fica como reserva.
-  //
-  // O recorte por empresa saiu do TÓPICO e veio para cá. Antes existia um
-  // canal por empresa, e o super_admin precisava abrir mais três só para
-  // enxergar as outras. Agora o canal é um só, o `track` carrega o
-  // `empresa_id`, e o recorte é uma passada no objeto que já está na memória
-  // — de graça, e sem gastar evento de presence, que é o recurso escasso.
   const extrairConjuntos = useCallback(
-    (state: Record<string, PresencePayload[]>) => {
+    (linhas: readonly [string, string | null][]) => {
       const todos     = new Set<string>();
       const daEmpresa = new Set<string>();
       const souSuperAdmin = perfil?.perfil === 'super_admin';
       const minhaEmpresa  = empresa?.id;
-
-      Object.entries(state).forEach(([key, presences]) => {
-        const lista = presences ?? [];
-        // O super_admin atravessa as quatro operações, então para ele os dois
-        // conjuntos são o mesmo — que é o comportamento que ele já tinha.
-        const minha = souSuperAdmin || lista.some(p => p?.empresa_id === minhaEmpresa);
-        const registrar = (id: string) => {
-          todos.add(id);
-          if (minha) daEmpresa.add(id);
-        };
-        if (key) registrar(key);
-        lista.forEach(p => { if (p?.user_id) registrar(p.user_id); });
-      });
-
+      for (const [pessoa, daEmpresaDela] of linhas) {
+        if (!pessoa) continue;
+        todos.add(pessoa);
+        // O super_admin atravessa as empresas: para ele os dois são o mesmo.
+        if (souSuperAdmin || daEmpresaDela === minhaEmpresa) daEmpresa.add(pessoa);
+      }
       return { todos, daEmpresa };
     },
     [perfil?.perfil, empresa?.id],
   );
 
-  // ── Recuperação ao voltar para a aba / a rede voltar ──────────────────────
-  // O canal de presença não tinha nada disso: suspender a máquina ou perder o
-  // wi-fi deixava o usuário invisível para todos até um F5.
   useEffect(() => {
-    const reviver = () => {
-      if (!mountedRef.current) return;
-      if (channelRef.current?.state === 'joined') return;
-      reconnectAttemptsRef.current = 0;   // usuário está de volta: sem backoff
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      // Sem espera fixa e sem espera longa: só o bastante para que o turno
-      // inteiro voltando do intervalo não peça `track` no mesmo instante.
-      // Se o servidor acabou de fechar o canal pelo limite, espera ele liberar.
-      const bloqueio = Math.max(0, bloqueadoAteRef.current - Date.now());
-      reconnectTimerRef.current = setTimeout(() => {
-        if (mountedRef.current) setReconnectKey(k => k + 1);
-      }, bloqueio + Math.random() * ESPALHAMENTO_RETOMADA_MS);
-    };
-    const aoTrocarVisibilidade = () => {
-      if (document.visibilityState === 'visible') reviver();
-    };
-    document.addEventListener('visibilitychange', aoTrocarVisibilidade);
-    window.addEventListener('online', reviver);
-    return () => {
-      document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
-      window.removeEventListener('online', reviver);
-    };
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
     const userId    = perfil?.id;
     const empresaId = empresa?.id;
-
     if (!userId || !empresaId) return;
 
-    /** Este ciclo do efeito. Callback de um canal de ciclo anterior é ignorado. */
+    /** Este ciclo do efeito. Resposta de um ciclo anterior é ignorada. */
     let vivo = true;
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let vigia: ReturnType<typeof setTimeout> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let ultimaBatida = 0;
+    let batendo = false;
+    let avisouErro = false;
+    /** A versão da lista que esta aba já tem. Ciclo novo começa sem nenhuma. */
+    let versao: string | null = null;
 
-    // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta deve
-    // continuar tentando. O limite antigo de 5 tentativas fazia a presença
-    // morrer de vez depois de suspender a máquina.
-    const agendarRecriacao = (minimoMs = 0) => {
-      const delay = Math.max(esperaComJitter(reconnectAttemptsRef.current), minimoMs);
-      reconnectAttemptsRef.current += 1;
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = setTimeout(() => {
-        if (mountedRef.current) setReconnectKey(k => k + 1);
-      }, delay);
+    const agendar = (ms: number) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void bater(); }, ms);
     };
 
-    const iniciar = () => {
-      if (!vivo || !mountedRef.current) return;
-
-      // ── Canal único da APLICAÇÃO ─────────────────────────────────────────
-      // A key é o userId → cada usuário ocupa uma "slot" no presenceState.
-      //
-      // Um só, global, em vez de um por empresa: ver o cabeçalho. O tópico é
-      // adivinhável, ao contrário do antigo `presence-empresa-{uuid}`, então
-      // nasce `private` — a RLS de `realtime.messages` exige sessão para
-      // publicar e para receber (migration 20260910143000).
-      const ch = supabase.channel('presence-global', {
-        config: {
-          private: true,
-          presence: { key: userId },
-        },
-      });
-      channel = ch;
-      channelRef.current = ch;
-
-      /** SUBSCRIBED já veio uma vez neste canal: o próximo é reentrada. */
-      let jaInscrito = false;
-      /** O servidor avisou que vai fechar este canal pelo teto de presence. */
-      let limiteAtingido = false;
-
-      /**
-       * Anuncia esta pessoa no canal. Chamado UMA vez por SUBSCRIBED.
-       *
-       * Repete só quando falha, com teto — nunca em intervalo fixo, que foi o
-       * que estourou o limite de presence do Realtime (ver cabeçalho).
-       */
-      const doTrack = async (tentativa = 0) => {
-        const repetir = () => {
-          if (tentativa + 1 >= MAX_TENTATIVAS_TRACK) return;
-          if (retryTrackRef.current) clearTimeout(retryTrackRef.current);
-          retryTrackRef.current = setTimeout(() => {
-            if (vivo && mountedRef.current) void doTrack(tentativa + 1);
-          }, RETRY_TRACK_MS);
-        };
-
-        try {
-          const resposta = await ch.track({
-            user_id:     userId,
-            nome:        perfil?.nome        ?? '',
-            perfil_tipo: perfil?.perfil      ?? '',
-            // Sem isto o contador nao teria como recortar por empresa.
-            empresa_id:  empresaId,
-          });
-          // 'ok' | 'timed out' | 'error' — só o primeiro colocou a pessoa no ar.
-          if (resposta !== 'ok') repetir();
-        } catch (e) {
-          console.warn('[PresenceProvider] track error:', e);
-          repetir();
+    const bater = async () => {
+      if (!vivo || batendo) return;
+      batendo = true;
+      ultimaBatida = Date.now();
+      try {
+        const { data, error } = await rpc<RespostaBatida | null>('fn_presenca_bater', { p_empresa: empresaId, p_versao: versao });
+        if (!vivo) return;
+        if (error) {
+          // Um aviso por ciclo: a próxima batida tenta de novo, e a tela segue
+          // com o último conjunto que conhecia.
+          if (!avisouErro) { avisouErro = true; console.warn('[Presença] batida falhou:', error.message); }
+        } else {
+          avisouErro = false;
+          // Sem `online`: a lista é a mesma da versão que já se tem.
+          if (data?.online) {
+            const { todos, daEmpresa } = extrairConjuntos(data.online);
+            setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
+            setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
+          }
+          versao = data?.versao ?? null;
+          setLoading(false);
         }
-      };
-
-      // ── Handlers ────────────────────────────────────────────────────────
-      // Este Provider está no topo da árvore: trocar o Set faz o app inteiro
-      // re-renderizar. `mesmosIds` corta o render quando o evento não mudou
-      // nada — e sync/join/leave chegam bastante numa empresa com muita gente.
-      const aplicarEstado = () => {
-        if (!vivo || !mountedRef.current) return;
-        const { todos, daEmpresa } = extrairConjuntos(ch.presenceState<PresencePayload>());
-        setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
-        setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
-      };
-
-      ch
-        // O servidor avisa por aqui ANTES de fechar o canal pelo teto de eventos
-        // de presence. O CLOSED que vem em seguida precisa saber disso.
-        .on('system', {}, (payload: unknown) => {
-          if (!ehAvisoDeLimite(payload)) return;
-          limiteAtingido = true;
-          console.info('[Realtime] presence: limite de eventos do projeto atingido — voltando em até um minuto');
-        })
-        .on('presence', { event: 'sync' }, () => {
-          aplicarEstado();
-          if (vivo && mountedRef.current) setLoading(false);
-        })
-        .on('presence', { event: 'join' },  aplicarEstado)
-        .on('presence', { event: 'leave' }, aplicarEstado)
-        .subscribe(async (status, err) => {
-          if (!vivo || !mountedRef.current) return;
-
-          if (status === 'SUBSCRIBED') {
-            reconnectAttemptsRef.current = 0;
-            // A biblioteca reentrou por conta própria: a recriação agendada
-            // derrubaria um canal que acabou de voltar.
-            if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
-            if (vigia) { clearTimeout(vigia); vigia = null; }
-            if (retryTrackRef.current) { clearTimeout(retryTrackRef.current); retryTrackRef.current = null; }
-
-            if (!jaInscrito) {
-              // Uma vez só. A presença vive enquanto o socket viver.
-              jaInscrito = true;
-              await doTrack();
-              return;
-            }
-            // Reentrada depois de queda: o servidor perdeu a presença de todos
-            // ao mesmo tempo. Anunciar de novo, mas sorteado.
-            retryTrackRef.current = setTimeout(() => {
-              retryTrackRef.current = null;
-              if (vivo && mountedRef.current) void doTrack();
-            }, Math.random() * ESPALHAMENTO_RETRACK_MS);
-            return;
-          }
-
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            /*
-             * A PRIMEIRA falha de um ciclo não é defeito, é a reconexão fazendo
-             * o trabalho dela — o servidor encerra o socket ocioso e todo canal
-             * cai junto. Avisar em vermelho a cada queda enchia o console de
-             * linhas `CHANNEL_ERROR undefined` (o Supabase não manda `Error` num
-             * fechamento de socket) para algo que se resolve sozinho.
-             */
-            const registrar = reconnectAttemptsRef.current === 0 && !vigia ? console.info : console.warn;
-            if (err) registrar('[Realtime] presence:', status, err);
-            else registrar('[Realtime] presence:', status);
-            // O supabase-js reentra sozinho. O vigia só recria se não voltar.
-            if (!vigia) {
-              vigia = setTimeout(() => {
-                vigia = null;
-                if (vivo && mountedRef.current && ch.state !== 'joined') agendarRecriacao();
-              }, VIGIA_MS);
-            }
-            return;
-          }
-
-          // CLOSED que não fomos nós (o servidor encerrou o canal): a biblioteca
-          // não reentra canal fechado. Sem isso a presença ficava morta em
-          // silêncio e todo mundo aparecia offline.
-          if (status === 'CLOSED') {
-            if (!limiteAtingido) { agendarRecriacao(); return; }
-            // Fechado pelo limite: a média do servidor é do último minuto.
-            // Voltar em 1,5 s era ser derrubado de novo — ver o cabeçalho.
-            const espera = ESPERA_APOS_LIMITE_MS * (1 + Math.random());
-            bloqueadoAteRef.current = Date.now() + espera;
-            agendarRecriacao(espera);
-          }
-        });
+        const { data: sessao } = await supabase.auth.getSession();
+        tokenRef.current = sessao.session?.access_token ?? null;
+      } catch (e) {
+        if (vivo && !avisouErro) { avisouErro = true; console.warn('[Presença] batida falhou:', e); }
+      } finally {
+        batendo = false;
+        if (vivo) agendar(BATIDA_MS);
+      }
     };
 
-    // O tópico é fixo, e `supabase.channel(nome)` devolve o canal que ainda
-    // estiver saindo com o mesmo nome — um canal morto. O novo espera o antigo.
-    const saindo = saindoRef.current;
-    let atrasoInicial: ReturnType<typeof setTimeout> | null = null;
-    if (saindo) void saindo.then(iniciar, iniciar);
-    else if (tomarEntradaInicial()) {
-      // Primeira entrada desta carga de página: sorteada — ver
-      // `ESPALHAMENTO_INICIAL_MS`.
-      atrasoInicial = setTimeout(iniciar, Math.random() * ESPALHAMENTO_INICIAL_MS);
-    } else iniciar();
+    // Voltou para a aba, a rede voltou ou a página saiu do cache de navegação:
+    // bate já, para a pessoa reaparecer e ver a lista de agora.
+    const retomar = () => {
+      if (!vivo || document.visibilityState === 'hidden') return;
+      if (Date.now() - ultimaBatida < RETOMADA_MINIMA_MS) return;
+      agendar(0);
+    };
+    const aoMostrar = (e: PageTransitionEvent) => { if (e.persisted) retomar(); };
+    const aoEsconderPagina = () => sairSemEsperar(tokenRef.current);
 
-    // ── Cleanup ───────────────────────────────────────────────────────────
+    document.addEventListener('visibilitychange', retomar);
+    window.addEventListener('online', retomar);
+    window.addEventListener('pageshow', aoMostrar);
+    window.addEventListener('pagehide', aoEsconderPagina);
+
+    agendar(Math.random() * ESPALHAMENTO_INICIAL_MS);
+
     return () => {
       vivo = false;
-      mountedRef.current = false;
-      if (atrasoInicial) { clearTimeout(atrasoInicial); atrasoInicial = null; }
-      if (vigia) { clearTimeout(vigia); vigia = null; }
-      if (retryTrackRef.current) {
-        clearTimeout(retryTrackRef.current);
-        retryTrackRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      // Sem `untrack()` antes de sair.
-      //
-      // Este cleanup roda em toda RECONEXÃO, não só no logout, e `untrack` é um
-      // evento de presence a mais no canal — enviado justamente quando ele está
-      // saturado, que é o que derruba a conexão. Sair do canal já basta: o
-      // servidor descarta a presença da key e difunde o `leave` para os demais.
-      const antigo = channel;
-      if (antigo) {
-        let saida: Promise<unknown> | null = null;
-        saida = (async () => {
-          try { await supabase.removeChannel(antigo); } catch { /* sair já basta */ }
-        })().finally(() => { if (saindoRef.current === saida) saindoRef.current = null; });
-        saindoRef.current = saida;
-      }
-      channelRef.current = null;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', retomar);
+      window.removeEventListener('online', retomar);
+      window.removeEventListener('pageshow', aoMostrar);
+      window.removeEventListener('pagehide', aoEsconderPagina);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfil?.id, empresa?.id, reconnectKey]);
+  }, [perfil?.id, empresa?.id, extrairConjuntos]);
+
+  // Logout: sai da lista com o token que ainda se tem. Trocar de empresa não
+  // passa por aqui — a próxima batida já grava a empresa nova.
+  const userId = perfil?.id;
+  useEffect(() => {
+    if (!userId) return;
+    return () => {
+      sairSemEsperar(tokenRef.current);
+      tokenRef.current = null;
+      setOnlineIds(new Set());
+      setOnlineIdsGlobal(new Set());
+      setLoading(true);
+    };
+  }, [userId]);
 
   return (
     <PresenceContext.Provider value={{ onlineIds, onlineIdsGlobal, loading }}>
@@ -546,7 +267,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 // ── Hook consumidor ───────────────────────────────────────────────────────────
 
 /**
- * Retorna os IDs dos usuários online no canal da empresa.
+ * Retorna os IDs dos usuários online.
  * Deve ser usado dentro de <PresenceProvider>.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
