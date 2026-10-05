@@ -71,8 +71,8 @@
  *   ), [empresaId]);
  *
  * ── Escopo ───────────────────────────────────────────────────────────────────
- * Quem está online não passa por aqui nem pelo Realtime: é a batida no banco do
- * `PresenceProvider` (05/10/2026).
+ * Quem está online: a batida no banco do `PresenceProvider` (a verdade) e o
+ * sinal `presenca` daqui (o «entrou»/«saiu» na hora) — Presence não (05/10/2026).
  */
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';

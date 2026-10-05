@@ -3,27 +3,33 @@
  *
  * Quem está online, para a aplicação inteira — uma fonte só, lida por Context.
  *
- * ── Batida no banco, e não Presence do Realtime (05/10/2026) ─────────────────
- * Até aqui era o canal `presence-global` do Supabase Realtime. Um mês de
- * remendos (sem re-track, entrada sorteada, espera depois do limite, recarga
- * do deploy só na troca de tela) baixou os erros, mas não os tirou: o log de
- * 05/10 ainda tinha 25 `PresenceRateLimitReached` numa manhã. No Presence, cada
- * entrada de uma pessoa é avisada a TODAS as outras do canal — o custo cresce
- * com o quadrado de quem está logado, e o teto é do projeto inteiro.
+ * ── Na hora, sem o Presence do Realtime (05/10/2026) ─────────────────────────
+ * Até 05/10 era o canal `presence-global` do Supabase Presence, e o log seguia
+ * acusando `PresenceRateLimitReached` em todo deploy. O Presence tem o teto
+ * mais baixo do Realtime (Pro: 50 mensagens por segundo) e avisa cada entrada
+ * a todo o canal; recarregar 150 abas estourava.
  *
- * Agora cada aba chama `fn_presenca_bater` a cada `BATIDA_MS` (15 s). A mesma
- * chamada grava «estou aqui» e diz quem bateu nos últimos 150 s (migration
- * 20261005150000). É uma requisição HTTP comum: não passa pelo Realtime e não
- * tem limite de eventos para estourar.
+ * Agora são duas peças (migrations 20261005150000 e 20261005170000):
  *
- * A lista só viaja quando muda: a aba manda a `versao` que já tem e, se ela
- * ainda vale, volta só a versão. 150 pessoas = 10 chamadas por segundo de uns
- * 50 bytes; a lista inteira a cada 15 s seriam gigabytes por dia.
+ *   A batida   `fn_presenca_bater` a cada `BATIDA_MS`: grava «estou aqui» e
+ *              devolve quem está online — só quando a lista mudou desde a
+ *              versão que a aba já tem. É a VERDADE, e é o que corrige um
+ *              aviso perdido ou quem caiu sem avisar (some em até 150 s).
+ *   O aviso    o banco manda «entrou»/«saiu» no tópico `presenca:global`
+ *              (Broadcast, privado) no instante em que acontece. É o que faz o
+ *              online ser na hora. Mensagem comum, não Presence: outro teto
+ *              (Pro: 500/s), e renovação de batida não gera aviso nenhum.
  *
- * O que muda para quem olha: alguém que ENTRA aparece online em até 15 s
- * (antes, na hora). Quem fecha a aba sai na batida seguinte de cada um —
- * `fn_presenca_sair` no `pagehide` — e, se nem isso chegar (máquina desligada
- * no botão), some sozinho em 150 s.
+ * A regra que junta as duas está em `presencaAoVivo.ts`.
+ *
+ * ── Recarregar não pisca ──────────────────────────────────────────────────────
+ * Recarregar é um «saiu» (`fn_presenca_sair` no `pagehide`) e um «entrou» na
+ * primeira batida da página nova. Quem recebe espera `GRACA_SAIDA_MS` antes de
+ * tirar a pessoa, então o F5 de ninguém apaga a bolinha. Num deploy, cada aba
+ * custa duas mensagens — em vez das rajadas de Presence que estouravam.
+ *
+ * Duas abas da mesma pessoa: a que fecha avisa a irmã (`BroadcastChannel`),
+ * e a irmã bate logo em seguida — a pessoa sai e volta antes da espera acabar.
  *
  * ── Os dois conjuntos ────────────────────────────────────────────────────────
  *   `onlineIds`       — a empresa de quem olha (todas, para super_admin). É o
@@ -32,32 +38,31 @@
  *   `onlineIdsGlobal` — a aplicação inteira. É o que o chat lê, porque o chat
  *                       cruza empresas (319 das 920 conversas).
  *
- * Os dois saem da MESMA resposta, numa passada só.
- *
  * ── Aba escondida ────────────────────────────────────────────────────────────
- * Continua batendo: a pessoa está logada, só olhando outra janela — como era no
- * Presence, que mantinha a presença enquanto o socket vivesse. O navegador
- * espaça timers de aba escondida para até um por minuto; a janela de 150 s do
- * banco cobre duas batidas atrasadas. Ao voltar para a aba, bate na hora. É só
- * para isso e para a queda sem aviso que a janela é longa: ela não atrasa a
- * entrada de ninguém, quem decide isso é a batida de 15 s.
+ * Continua batendo: a pessoa está logada, só olhando outra janela. O navegador
+ * espaça timers de aba escondida para até um por minuto, e a janela de 150 s
+ * do banco cobre isso. Ao voltar para a aba, bate na hora.
  */
 import {
   createContext, useContext, useEffect, useRef,
   useState, useCallback, type ReactNode,
 } from 'react';
 import { supabase } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { criarMapaOnline, lerAviso, type MapaOnline } from './presencaAoVivo';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 /**
- * A resposta de `fn_presenca_bater`: a versão da lista e, só quando ela mudou
- * desde a versão que a aba mandou, a lista — pares [pessoa, empresa].
+ * A resposta de `fn_presenca_bater`: a versão da lista, a hora do banco e, só
+ * quando a lista mudou desde a versão que a aba mandou, a lista — pares
+ * [pessoa, empresa].
  */
 interface RespostaBatida {
   versao: string;
+  agora?: number;
   online?: [string, string | null][];
 }
 
@@ -86,20 +91,29 @@ const PresenceContext = createContext<PresenceContextValue>({
 });
 
 /**
- * De quanto em quanto tempo a aba avisa que está aqui e relê quem está. É o
- * atraso máximo para alguém que entra aparecer para os outros.
+ * De quanto em quanto tempo a aba confirma que está aqui e confere a lista.
+ * Não é o atraso de quem entra — esse é o do aviso, na hora.
  */
-const BATIDA_MS = 15_000;
+const BATIDA_MS = 60_000;
+
+/** Quanto um «saiu» espera antes de tirar a pessoa — o tempo de um F5. */
+const GRACA_SAIDA_MS = 15_000;
 
 /**
- * Sorteio da primeira batida da página. Não é por limite — o banco aguenta a
- * onda de um deploy —, é para as 150 abas recarregando juntas não caírem no
- * mesmo segundo.
+ * Sorteio da primeira batida da página: num deploy as abas recarregam juntas,
+ * e cada primeira batida é um «entrou» para todo mundo. Curto, porque é o
+ * tempo de a pessoa aparecer para os outros depois de um F5 — e precisa caber
+ * folgado na `GRACA_SAIDA_MS`.
  */
 const ESPALHAMENTO_INICIAL_MS = 3_000;
 
 /** Voltar para a aba bate na hora, a não ser que a última batida seja recente. */
-const RETOMADA_MINIMA_MS = 5_000;
+const RETOMADA_MINIMA_MS = 15_000;
+
+/** A aba irmã que avisou que fechou: bater depois que o `sair` dela chegou. */
+const ESPERA_APOS_IRMA_MS = 1_500;
+
+const CANAL_ENTRE_ABAS = 'gestao-presenca-abas';
 
 /** Dois conjuntos com os mesmos ids? Evita re-render do app inteiro à toa. */
 function mesmosIds(a: Set<string>, b: Set<string>): boolean {
@@ -135,6 +149,14 @@ function sairSemEsperar(token: string | null): void {
   } catch { /* a linha expira sozinha em 150 s */ }
 }
 
+function abrirCanalEntreAbas(): BroadcastChannel | null {
+  try {
+    return typeof BroadcastChannel === 'function' ? new BroadcastChannel(CANAL_ENTRE_ABAS) : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
@@ -147,6 +169,10 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   /** O token da última batida — o `pagehide` não espera `getSession()`. */
   const tokenRef = useRef<string | null>(null);
+  /** O mapa do ciclo atual (pessoa + empresa). Os avisos do Realtime caem nele. */
+  const mapaRef = useRef<MapaOnline | null>(null);
+  /** Pede uma batida ao ciclo atual — para a reconexão e a aba irmã. */
+  const pedirBatidaRef = useRef<((ms: number) => void) | null>(null);
 
   const extrairConjuntos = useCallback(
     (linhas: readonly [string, string | null][]) => {
@@ -165,6 +191,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     [perfil?.perfil, empresa?.id],
   );
 
+  // ── A batida e o mapa ──────────────────────────────────────────────────────
   useEffect(() => {
     const userId    = perfil?.id;
     const empresaId = empresa?.id;
@@ -179,10 +206,20 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     /** A versão da lista que esta aba já tem. Ciclo novo começa sem nenhuma. */
     let versao: string | null = null;
 
+    const publicar = () => {
+      if (!vivo) return;
+      const { todos, daEmpresa } = extrairConjuntos(mapa.linhas());
+      setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
+      setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
+    };
+    const mapa = criarMapaOnline({ graca: GRACA_SAIDA_MS, aoMudar: publicar });
+    mapaRef.current = mapa;
+
     const agendar = (ms: number) => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => { void bater(); }, ms);
     };
+    pedirBatidaRef.current = agendar;
 
     const bater = async () => {
       if (!vivo || batendo) return;
@@ -198,11 +235,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         } else {
           avisouErro = false;
           // Sem `online`: a lista é a mesma da versão que já se tem.
-          if (data?.online) {
-            const { todos, daEmpresa } = extrairConjuntos(data.online);
-            setOnlineIdsGlobal(prev => (mesmosIds(prev, todos)     ? prev : todos));
-            setOnlineIds     (prev => (mesmosIds(prev, daEmpresa) ? prev : daEmpresa));
-          }
+          if (data?.online) mapa.aplicarLista(data.online, Number(data.agora) || 0);
           versao = data?.versao ?? null;
           setLoading(false);
         }
@@ -224,31 +257,62 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       agendar(0);
     };
     const aoMostrar = (e: PageTransitionEvent) => { if (e.persisted) retomar(); };
-    const aoEsconderPagina = () => sairSemEsperar(tokenRef.current);
 
     document.addEventListener('visibilitychange', retomar);
     window.addEventListener('online', retomar);
     window.addEventListener('pageshow', aoMostrar);
-    window.addEventListener('pagehide', aoEsconderPagina);
 
     agendar(Math.random() * ESPALHAMENTO_INICIAL_MS);
 
     return () => {
       vivo = false;
       if (timer) clearTimeout(timer);
+      mapa.encerrar();
+      if (mapaRef.current === mapa) mapaRef.current = null;
+      if (pedirBatidaRef.current === agendar) pedirBatidaRef.current = null;
       document.removeEventListener('visibilitychange', retomar);
       window.removeEventListener('online', retomar);
       window.removeEventListener('pageshow', aoMostrar);
-      window.removeEventListener('pagehide', aoEsconderPagina);
     };
   }, [perfil?.id, empresa?.id, extrairConjuntos]);
 
-  // Logout: sai da lista com o token que ainda se tem. Trocar de empresa não
-  // passa por aqui — a próxima batida já grava a empresa nova.
+  // ── O aviso na hora, a aba irmã e a saída ──────────────────────────────────
+  // À parte da batida: trocar de empresa não derruba o canal do Realtime.
   const userId = perfil?.id;
   useEffect(() => {
     if (!userId) return;
+
+    const cancelarAviso = assinarTabela(
+      { topico: 'presenca:global', escutas: [{ sinal: 'presenca' }] },
+      {
+        onSinal: payload => {
+          const aviso = lerAviso(payload);
+          if (aviso) mapaRef.current?.aplicarAviso(aviso);
+        },
+        // Avisos do intervalo se perderam: a batida traz a lista de agora.
+        onReconectado: () => pedirBatidaRef.current?.(0),
+      },
+    );
+
+    const irmas = abrirCanalEntreAbas();
+    if (irmas) {
+      irmas.onmessage = (e: MessageEvent) => {
+        const m = e.data as { tipo?: string; pessoa?: string } | null;
+        if (m?.tipo === 'saindo' && m.pessoa === userId) pedirBatidaRef.current?.(ESPERA_APOS_IRMA_MS);
+      };
+    }
+
+    const aoEsconderPagina = () => {
+      try { irmas?.postMessage({ tipo: 'saindo', pessoa: userId }); } catch { /* sem irmãs */ }
+      sairSemEsperar(tokenRef.current);
+    };
+    window.addEventListener('pagehide', aoEsconderPagina);
+
     return () => {
+      window.removeEventListener('pagehide', aoEsconderPagina);
+      cancelarAviso();
+      irmas?.close();
+      // Logout (ou troca de pessoa): sai da lista com o token que ainda se tem.
       sairSemEsperar(tokenRef.current);
       tokenRef.current = null;
       setOnlineIds(new Set());
