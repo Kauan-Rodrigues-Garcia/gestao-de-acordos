@@ -40,7 +40,8 @@
 import { useSyncExternalStore } from 'react';
 import { enderecoYoutube, uriSpotify, type LinkExterno } from './links';
 import {
-  ARQUIVOS, FAIXAS_EMBUTIDAS, PADRAO, ehEmbutida, gravarPreferencias, lerPreferencias, linkDaPlaylist,
+  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, PADRAO, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
+  lerPosicao, lerPreferencias, linkDaPlaylist,
   type FaixaEmbutida, type PreferenciasSom,
 } from './preferencias';
 
@@ -68,6 +69,8 @@ export interface InstantaneoSom {
   /** Teto do volume para esta pessoa: 100 no completo, `VOLUME_MAX_ENXUTO` no enxuto. */
   volumeMax: number;
   erro: string | null;
+  /** De quem é a sessão do som (o modo Batman grava por pessoa). */
+  perfil: string | null;
 }
 
 /** Teto de volume de quem não é super_admin. */
@@ -79,16 +82,19 @@ export function ganhoDoVolume(volume: number): number {
   return v <= 0 ? 0 : Math.pow(v, 1.5);
 }
 
-/** A ordem da lista: as de fábrica e depois as playlists (só no completo). */
+/**
+ * A ordem do anterior/próxima: as de fábrica da sequência e depois as
+ * playlists (só no completo). O tema especial não entra — só toca escolhido.
+ */
 export function ordemDasFaixas(prefs: PreferenciasSom, comPlaylists = true): string[] {
-  return [...FAIXAS_EMBUTIDAS, ...(comPlaylists ? prefs.playlists.map(p => p.id) : [])];
+  return [...FAIXAS_DA_SEQUENCIA, ...(comPlaylists ? prefs.playlists.map(p => p.id) : [])];
 }
 
-/** Próxima (ou anterior) na lista, dando a volta. */
+/** Próxima (ou anterior) na lista, dando a volta. Fora dela (tema especial): a primeira ou a última. */
 export function vizinha(prefs: PreferenciasSom, atual: string, passo: 1 | -1, comPlaylists = true): string {
   const ordem = ordemDasFaixas(prefs, comPlaylists);
   const i = ordem.indexOf(atual);
-  if (i < 0) return ordem[0];
+  if (i < 0) return passo === 1 ? ordem[0] : ordem[ordem.length - 1];
   return ordem[(i + passo + ordem.length) % ordem.length];
 }
 
@@ -96,7 +102,7 @@ export function vizinha(prefs: PreferenciasSom, atual: string, passo: 1 | -1, co
 
 let snap: InstantaneoSom = {
   estado: 'parado', prefs: PADRAO, silenciado: false, noAr: null, playerAberto: false,
-  completo: false, volumeMax: VOLUME_MAX_ENXUTO, erro: null,
+  completo: false, volumeMax: VOLUME_MAX_ENXUTO, erro: null, perfil: null,
 };
 const ouvintes = new Set<() => void>();
 
@@ -117,6 +123,8 @@ export function useSomAmbiente(): InstantaneoSom {
 }
 
 export const lerEstadoSom = () => snap;
+/** Para quem precisa reagir ao som fora do React (o modo Batman). */
+export const assinarSom = assinar;
 
 // ── Sessão ───────────────────────────────────────────────────────────────────
 
@@ -155,14 +163,17 @@ export function iniciarSessao(perfilId: string, completo = false): void {
     if (snap.completo !== completo) {
       publicar({ completo, volumeMax, prefs: dentroDosLimites(snap.prefs, completo) });
       if (!completo && externo) { soltarExterno(); pausar(); }
-      if (audio && !fade && !audio.paused) audio.volume = ganhoDoVolume(snap.prefs.volume);
+      if (audio && !fade && !audio.paused) audio.volume = volumeAlvo();
     }
     return;
   }
   if (perfilAtual) pararTudo();
   perfilAtual = perfilId;
   const prefs = dentroDosLimites(lerPreferencias(perfilId), completo);
-  publicar({ prefs, completo, volumeMax, estado: 'parado', noAr: null, erro: null });
+  publicar({ prefs, completo, volumeMax, estado: 'parado', noAr: null, erro: null, perfil: perfilId });
+  // F5 no meio de uma música de fábrica: volta pausada no mesmo ponto.
+  const pos = lerPosicao(perfilId);
+  if (pos && pos.faixa === prefs.faixa) retomarPausada(pos.faixa, pos.t);
   if (prefs.tocarAoEntrar) tocar();
 }
 
@@ -177,7 +188,7 @@ export function soltarSessao(perfilId: string): void {
     encerramento = null;
     pararTudo();
     perfilAtual = null;
-    publicar({ prefs: PADRAO, estado: 'parado', noAr: null, playerAberto: false, erro: null });
+    publicar({ prefs: PADRAO, estado: 'parado', noAr: null, playerAberto: false, erro: null, perfil: null });
   }, 2500);
 }
 
@@ -220,11 +231,33 @@ let carregada: FaixaEmbutida | null = null;
 let fade: ReturnType<typeof setInterval> | null = null;
 /** Trocando de `src` agora: o `pause` que isso dispara não é da pessoa. */
 let trocando = false;
+/** Ponto (s) para onde pular assim que a faixa carregar — a volta do F5. */
+let pendente: number | null = null;
+let ultimaGravacao = 0;
 
-/** A faixa de fábrica seguinte — é por onde a sequência anda quando uma acaba. */
+/**
+ * A faixa de fábrica seguinte — é por onde a sequência anda quando uma acaba.
+ * O tema especial, quando acaba, vai para a primeira da sequência.
+ */
 export function proximaEmbutida(faixa: FaixaEmbutida): FaixaEmbutida {
-  const i = FAIXAS_EMBUTIDAS.indexOf(faixa);
-  return FAIXAS_EMBUTIDAS[(i + 1) % FAIXAS_EMBUTIDAS.length];
+  const i = FAIXAS_DA_SEQUENCIA.indexOf(faixa);
+  return FAIXAS_DA_SEQUENCIA[(i + 1) % FAIXAS_DA_SEQUENCIA.length];
+}
+
+/** O volume escolhido, já com o ganho da faixa que está carregada (`GANHO`). */
+export function volumeDaFaixa(volume: number, faixa: FaixaEmbutida | null): number {
+  return Math.min(1, ganhoDoVolume(volume) * (faixa ? GANHO[faixa] : 1));
+}
+const volumeAlvo = (volume = snap.prefs.volume) => volumeDaFaixa(volume, carregada);
+
+/** Guarda onde a música está (no máximo a cada 3 s, ou já, com `agora`). */
+function gravarOnde(agora = false) {
+  const a = audio;
+  if (!a || !carregada || !perfilAtual || trocando || pendente !== null) return;
+  const t = performance.now();
+  if (!agora && t - ultimaGravacao < 3000) return;
+  ultimaGravacao = t;
+  gravarPosicao(perfilAtual, { faixa: carregada, t: a.currentTime });
 }
 
 function elementoAudio(): HTMLAudioElement | null {
@@ -234,15 +267,25 @@ function elementoAudio(): HTMLAudioElement | null {
   a.preload = 'auto';
   a.addEventListener('ended', () => {
     // Com «Repetir» o `loop` cuida; sem ele, segue a sequência.
-    if (a !== audio || !querTocar || !carregada) return;
+    if (a !== audio || !carregada) return;
+    if (perfilAtual) esquecerPosicao(perfilAtual);
+    if (!querTocar) return;
     tocar(proximaEmbutida(carregada));
   });
+  a.addEventListener('loadedmetadata', () => {
+    if (a !== audio || pendente === null) return;
+    const d = Number.isFinite(a.duration) ? a.duration : 0;
+    a.currentTime = d ? Math.min(pendente, Math.max(0, d - 1)) : pendente;
+    pendente = null;
+  });
+  a.addEventListener('timeupdate', () => { if (a === audio) gravarOnde(); });
   a.addEventListener('playing', () => {
     if (a === audio && querTocar && ehEmbutida(snap.noAr ?? '')) publicar({ estado: 'tocando', erro: null });
   });
   a.addEventListener('pause', () => {
     // Pausa que não veio daqui (tecla de mídia do teclado, fone bluetooth).
     // Trocar de `src` também dispara `pause` — essa é ignorada.
+    if (a === audio && !a.ended) gravarOnde(true);
     if (a !== audio || trocando || a.ended || snap.estado !== 'tocando') return;
     querTocar = false;
     publicar({ estado: 'pausado' });
@@ -271,7 +314,7 @@ function rampa(paraZero: boolean, ms: number, depois?: () => void) {
   const t0 = performance.now();
   fade = setInterval(() => {
     const x = Math.min(1, (performance.now() - t0) / ms);
-    const alvo = paraZero ? 0 : ganhoDoVolume(snap.prefs.volume);
+    const alvo = paraZero ? 0 : volumeAlvo();
     a.volume = Math.min(1, Math.max(0, inicio + (alvo - inicio) * x));
     if (x >= 1) {
       if (fade) clearInterval(fade);
@@ -295,6 +338,7 @@ async function tocarEmbutida(faixa: FaixaEmbutida, minha: number) {
     if (fade) { clearInterval(fade); fade = null; }
     a.volume = 0;
     trocando = true;
+    pendente = null;
     a.src = ARQUIVOS[faixa];
     carregada = faixa;
     publicar({ estado: 'carregando', noAr: faixa, erro: null });
@@ -332,11 +376,34 @@ function pausarEmbutida() {
   });
 }
 
+/**
+ * A volta do F5: deixa a faixa carregada no ponto em que parou, pausada. O
+ * play seguinte (ou o «Tocar ao entrar») continua dali. Só baixa o cabeçalho
+ * do arquivo até alguém dar play.
+ */
+function retomarPausada(faixa: FaixaEmbutida, t: number) {
+  const a = elementoAudio();
+  if (!a) return;
+  a.preload = 'metadata';
+  a.volume = 0;
+  a.loop = snap.prefs.repetir;
+  pendente = t;
+  a.src = ARQUIVOS[faixa];
+  carregada = faixa;
+  publicar({ estado: 'pausado', noAr: faixa, erro: null });
+}
+
+if (typeof window !== 'undefined') {
+  // Fechar a aba ou dar F5: grava o ponto exato, não o de até 3 s atrás.
+  window.addEventListener('pagehide', () => gravarOnde(true));
+}
+
 /** Solta a música de fábrica de vez (ao trocar para uma playlist, ou no logout). */
 function soltarEmbutida() {
   const a = audio;
   if (!a) return;
   if (fade) { clearInterval(fade); fade = null; }
+  pendente = null;
   trocando = true;
   a.pause();
   carregada = null;
@@ -672,7 +739,7 @@ export function definirVolume(volume: number): void {
   if (v === snap.prefs.volume) return;
   mudarPrefs({ ...snap.prefs, volume: v });
   // Durante um fade, quem leva ao volume novo é a própria rampa.
-  if (audio && !fade && !audio.paused) audio.volume = ganhoDoVolume(v);
+  if (audio && !fade && !audio.paused) audio.volume = volumeAlvo(v);
   externo?.volume(v);
 }
 

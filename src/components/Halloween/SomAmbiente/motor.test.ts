@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  VOLUME_MAX_ENXUTO, dentroDosLimites, ganhoDoVolume, ordemDasFaixas, proximaEmbutida, vizinha,
+  VOLUME_MAX_ENXUTO, dentroDosLimites, ganhoDoVolume, ordemDasFaixas, proximaEmbutida, vizinha, volumeDaFaixa,
 } from './motor';
-import { PADRAO } from './preferencias';
+import { FAIXAS_EMBUTIDAS, GANHO, PADRAO } from './preferencias';
 
 describe('motor do Som ambiente', () => {
   it('volume: 0 cala, 100 é cheio, e o padrão fica baixo', () => {
@@ -48,5 +48,30 @@ describe('motor do Som ambiente', () => {
     expect(proximaEmbutida('halloween')).toBe('sexta13');
     expect(proximaEmbutida('pecadores')).toBe('puxalanca');
     expect(proximaEmbutida('reliquia')).toBe('halloween');
+  });
+
+  it('o tema especial (Batman) fica fora da sequência: só toca escolhido', () => {
+    expect(ordemDasFaixas(PADRAO)).not.toContain('batman');
+    // Ninguém cai nele pelo anterior/próxima, nem quando outra acaba.
+    for (const f of ordemDasFaixas(PADRAO)) {
+      expect(vizinha(PADRAO, f, 1)).not.toBe('batman');
+      expect(vizinha(PADRAO, f, -1)).not.toBe('batman');
+    }
+    // Saindo dele: a próxima é a primeira; a anterior, a última; acabou, vai para a primeira.
+    expect(vizinha(PADRAO, 'batman', 1)).toBe('halloween');
+    expect(vizinha(PADRAO, 'batman', -1)).toBe('reliquia');
+    expect(proximaEmbutida('batman')).toBe('halloween');
+  });
+
+  it('cada faixa tem o seu ganho, e o volume final nunca passa de 1', () => {
+    for (const f of FAIXAS_EMBUTIDAS) {
+      expect(GANHO[f]).toBeGreaterThan(0.5);
+      expect(GANHO[f]).toBeLessThan(1.6);
+    }
+    // A mais baixa sobe, a mais alta desce, no mesmo controle.
+    expect(volumeDaFaixa(40, 'candyman')).toBeGreaterThan(volumeDaFaixa(40, 'puxalanca'));
+    expect(volumeDaFaixa(100, 'candyman')).toBe(1);
+    expect(volumeDaFaixa(0, 'candyman')).toBe(0);
+    expect(volumeDaFaixa(40, null)).toBe(ganhoDoVolume(40));
   });
 });

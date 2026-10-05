@@ -11,6 +11,20 @@
 /* ── Camadas ─────────────────────────────────────────────────────────────── */
 .hw-fundo, .hw-camada, .hw-revoada { position: absolute; pointer-events: none; }
 .hw-fundo { inset: 0; z-index: 0; overflow: hidden; }
+
+/* ── Modo Batman: o Halloween de antes sai enquanto ele entra ─────────────────
+   `--hw-bat` (0 a 1) é escrita pela `CenaBatman` na caixa das camadas e herdada
+   por tudo aqui dentro. Saem chuva, nuvens, névoa, vultos, relâmpago e os
+   fantasmas das tabelas; ficam teias, aranha, lanterna e o botão do chat. */
+.hw-fundo { opacity: calc(1 - var(--hw-bat, 0)); }
+.hw-relampago-casca { position: absolute; inset: 0; opacity: calc(1 - var(--hw-bat, 0)); }
+.hw-esconderijo { opacity: calc(1 - var(--hw-bat, 0)); }
+/* No tema claro o fundo fica escuro: o texto que está solto nele (saudação,
+   título da página) clareia na mesma medida, para não sumir. */
+.hw-bat-claro [data-hw-batman-topo] :is(h1, .text-foreground) {
+  color: color-mix(in oklch, var(--foreground) calc(100% - var(--hw-bat, 0) * 100%), oklch(0.95 0.01 20)); }
+.hw-bat-claro [data-hw-batman-topo] .text-muted-foreground {
+  color: color-mix(in oklch, var(--muted-foreground) calc(100% - var(--hw-bat, 0) * 100%), oklch(0.82 0.03 20)); }
 /* Dentro do <main>, no alto do conteúdo: rola junto com a página. Altura
    zero e só o eixo x recortado, para o feixe não criar rolagem lateral. */
 .hw-camada { top: 0; left: 0; right: 0; height: 0; z-index: 5; overflow-x: clip; overflow-y: visible; }
@@ -216,6 +230,12 @@
 .hw-lanterna.pisca .cone { animation: hw-alcance 5.3s ease-in-out infinite alternate, hw-pisca-luz .7s steps(1) 1; }
 .hw-lanterna.pisca .foco { animation: hw-alcance-foco 5.3s ease-in-out infinite alternate, hw-pisca-luz .7s steps(1) 1; }
 @keyframes hw-pisca-luz { 0% { opacity: 1; } 15% { opacity: .1; } 30% { opacity: .9; } 45% { opacity: 0; } 62% { opacity: .7; } 75% { opacity: .15; } 90% { opacity: 1; } }
+/* Modo Batman (`Batman/miraDaLanterna.ts`): o código assume o feixe, o foco
+   perde força em cima dele e a luz pisca quando ele aparece. */
+.hw-lanterna.mirando .giro, .hw-lanterna.mirando .cone, .hw-lanterna.mirando .foco, .hw-lanterna.mirando .trilho { animation: none; }
+.hw-lanterna .cone { opacity: var(--cone, 1); }
+.hw-lanterna .foco { opacity: var(--foco, 1); }
+.hw-lanterna.mira-pisca .feixe { animation: hw-pisca-luz .7s steps(1) 1; }
 .hw-lanterna .lente { fill: oklch(0.98 0.07 95); transition: fill .3s; filter: drop-shadow(0 0 4px oklch(0.95 0.12 90)); }
 .hw-lanterna.desligada .lente { fill: oklch(0.55 0.01 250); filter: none; }
 .hw-lanterna .botao { fill: oklch(0.62 0.18 30); transition: transform .15s, fill .15s; }

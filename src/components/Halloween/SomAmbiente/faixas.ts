@@ -5,18 +5,23 @@
  * que aparece junto do botão, também precisa disso — e ele mora no pacote de
  * entrada.
  */
-import { Axe, Bed, Bug, Gem, Ghost, Guitar, Lightbulb, ListMusic, Mic, Youtube, type LucideIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
+import { Axe, Bed, Bug, Gem, Ghost, Guitar, Lightbulb, ListMusic, Mic, Youtube } from 'lucide-react';
 import { ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
+import { IconeBatman } from './IconeBatman';
 
 export interface InfoFaixa {
   nome: string;
   descricao: string;
-  Icone: LucideIcon;
-  /** Cor da faixa (classe `som-tom-*` em `index.css`). */
+  /** Um ícone do lucide ou um desenho próprio (o morcego do Batman). */
+  Icone: ComponentType<{ className?: string }>;
+  /** Cor da faixa (classe `som-tom-*` em `somAmbiente.css`). */
   tom: string;
 }
 
 export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
+  // Tema especial: tocando, o gestão entra no modo Batman (`Halloween/Batman`).
+  batman:    { nome: 'Batman',         descricao: 'The Batman, com KxllSwxtch e Nirvana', Icone: IconeBatman, tom: 'som-tom-batman' },
   halloween: { nome: 'Halloween',      descricao: 'Tema de John Carpenter',         Icone: Ghost, tom: 'som-tom-halloween' },
   sexta13:   { nome: 'Sexta-Feira 13', descricao: 'Tema de Harry Manfredini',       Icone: Axe,   tom: 'som-tom-sexta13' },
   candyman:  { nome: 'Candyman',       descricao: 'Helen’s Theme, de Philip Glass', Icone: Bug,   tom: 'som-tom-candyman' },

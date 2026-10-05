@@ -722,8 +722,9 @@ export default function Dashboard() {
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      {/* Header. `data-hw-batman-*`: no modo Batman (Halloween), ele surge no
+          vão à direita da saudação, saindo de trás do painel de métricas. */}
+      <div className="flex items-start justify-between mb-6" data-hw-batman-topo>
         <div>
           {/* O 👋 virou o sólido do CreatorsLab, com as cores do tema e da
               empresa. Ver `FormaSaudacao` para o porquê das cores saírem de
@@ -759,7 +760,7 @@ export default function Dashboard() {
       </div>
 
       {/* Analytics + setor filter */}
-      <div className="mb-6 space-y-2" data-tour="metricas">
+      <div className="mb-6 space-y-2" data-tour="metricas" data-hw-batman-chao>
         <FiltroEscopo
           niveis={niveis}
           setores={setoresList}

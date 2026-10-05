@@ -797,8 +797,10 @@ export default function Acordos() {
     <div className="p-6">
       <div className="max-w-[1400px] mx-auto">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        {/* Header. `data-hw-batman-*`: no modo Batman (Halloween), ele surge no
+            vão entre o título e os botões, saindo de trás da linha das abas
+            (o `data-hw-batman-chao` mora em `AcordosFilters`). */}
+        <div className="flex items-center justify-between mb-5" data-hw-batman-topo>
           <div>
             <h1 className="text-xl font-bold text-foreground">Acordos</h1>
             {!isPP && (

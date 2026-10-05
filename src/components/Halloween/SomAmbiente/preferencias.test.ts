@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, gravarPreferencias, lerPreferencias, normalizar,
+  LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, esquecerPosicao, gravarPosicao, gravarPreferencias, lerPosicao,
+  lerPreferencias, normalizar,
 } from './preferencias';
 
 const SPOTIFY = 'https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS';
@@ -49,6 +50,24 @@ describe('preferências do Som ambiente', () => {
     expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('halloween');
     expect(normalizar({ faixa: 'chuva' }).faixa).toBe('halloween');
     expect(normalizar({ faixa: 'pecadores' }).faixa).toBe('pecadores');
+  });
+
+  it('o tema especial do Batman é uma faixa de fábrica e fica escolhido', () => {
+    expect(normalizar({ faixa: 'batman' }).faixa).toBe('batman');
+  });
+
+  it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
+    gravarPosicao('p1', { faixa: 'candyman', t: 83.27 });
+    expect(lerPosicao('p1')).toEqual({ faixa: 'candyman', t: 83.3 });
+    expect(lerPosicao('p2')).toBeNull();
+    esquecerPosicao('p1');
+    expect(lerPosicao('p1')).toBeNull();
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'sumiu', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
+    localStorage.setItem('som-ambiente-posicao:p1', '{quebrado');
+    expect(lerPosicao('p1')).toBeNull();
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: -5 }));
+    expect(lerPosicao('p1')).toEqual({ faixa: 'batman', t: 0 });
   });
 
   it('quem tinha a música do Veigh que saiu fica com «Puxa o Lança»', () => {

@@ -10,15 +10,26 @@
  */
 import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
+/**
+ * O tema especial (05/10/2026): enquanto ele está escolhido, o gestão entra no
+ * modo Batman (`Halloween/Batman/modoBatman.ts`). Fica no alto do painel, mas
+ * FORA da sequência: o anterior/próxima e o fim de outra faixa nunca caem
+ * nele — só toca quando a pessoa escolhe.
+ */
+export const TEMAS_ESPECIAIS = ['batman'] as const;
 /** Os temas de terror que vêm de fábrica, na ordem do painel. */
 export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
 /** As músicas para escutar que vêm de fábrica. */
 export const MUSICAS = ['puxalanca', 'reliquia'] as const;
-export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
+/** Todas as de fábrica, na ordem do painel. */
+export const FAIXAS_EMBUTIDAS = [...TEMAS_ESPECIAIS, ...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
+/** A sequência que o player percorre sozinho: sem o tema especial. */
+export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = [...TEMAS_DE_TERROR, ...MUSICAS];
 
 /** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
 export const ARQUIVOS: Record<FaixaEmbutida, string> = {
+  batman: '/sounds/batman.mp3',
   halloween: '/sounds/halloween-john-carpenter.mp3',
   sexta13: '/sounds/halloween-sexta-feira-13.mp3',
   candyman: '/sounds/halloween-candyman.mp3',
@@ -27,6 +38,27 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   pecadores: '/sounds/halloween-pecadores-eu-menti-pra-voce.mp3',
   puxalanca: '/sounds/halloween-puxa-o-lanca.mp3',
   reliquia: '/sounds/halloween-na-reliquia-do-2t.mp3',
+};
+
+/**
+ * Ganho de cada faixa, para todas soarem no mesmo volume. Os arquivos vieram
+ * de lugares diferentes: medidos em 05/10/2026 (loudness integrada, BS.1770),
+ * iam de -16,0 LUFS (Candyman) a -9,6 LUFS (Puxa o Lança) — 6 dB de diferença,
+ * a mais alta soando quase o dobro da mais baixa. O alvo é -13 LUFS, o meio:
+ * nem estourado nem sumido. `ganho = 10^((-13 - medido) / 20)`.
+ *
+ * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
+ */
+export const GANHO: Record<FaixaEmbutida, number> = {
+  batman: 0.86,     // -11,7
+  halloween: 0.82,  // -11,3
+  sexta13: 0.89,    // -12,0
+  candyman: 1.41,   // -16,0
+  stranger: 1.04,   // -13,3
+  pesadelo: 1.22,   // -14,7
+  pecadores: 1.37,  // -15,7
+  puxalanca: 0.68,  // -9,6
+  reliquia: 0.78,   // -10,8
 };
 
 /**
@@ -128,6 +160,37 @@ export function lerPreferencias(perfilId: string): PreferenciasSom {
 
 export function gravarPreferencias(perfilId: string, prefs: PreferenciasSom): void {
   try { localStorage.setItem(chave(perfilId), JSON.stringify({ ...prefs, v: VERSAO })); } catch { /* modo privado */ }
+}
+
+/**
+ * Onde a música de fábrica parou — para o F5 voltar no mesmo ponto, pausada,
+ * em vez de recomeçar do zero. Também só no navegador e por pessoa.
+ */
+export interface PosicaoSalva {
+  faixa: FaixaEmbutida;
+  /** Segundos desde o começo da faixa. */
+  t: number;
+}
+
+const chavePosicao = (perfilId: string) => `som-ambiente-posicao:${perfilId}`;
+
+export function lerPosicao(perfilId: string): PosicaoSalva | null {
+  try {
+    const o = JSON.parse(localStorage.getItem(chavePosicao(perfilId)) ?? 'null') as Record<string, unknown> | null;
+    if (!o || typeof o.faixa !== 'string' || !ehEmbutida(o.faixa)) return null;
+    const t = typeof o.t === 'number' && Number.isFinite(o.t) && o.t > 0 ? o.t : 0;
+    return { faixa: o.faixa, t };
+  } catch {
+    return null;
+  }
+}
+
+export function gravarPosicao(perfilId: string, pos: PosicaoSalva): void {
+  try { localStorage.setItem(chavePosicao(perfilId), JSON.stringify({ faixa: pos.faixa, t: Math.round(pos.t * 10) / 10 })); } catch { /* modo privado */ }
+}
+
+export function esquecerPosicao(perfilId: string): void {
+  try { localStorage.removeItem(chavePosicao(perfilId)); } catch { /* modo privado */ }
 }
 
 /** Link salvo de volta em formato que o motor toca. */

@@ -2,8 +2,8 @@
  * PainelSomAmbiente — o que abre ao clicar no fone do header.
  *
  * De cima para baixo: o que está tocando e os controles, o volume, as faixas
- * de fábrica (seis temas de terror e duas músicas), as playlists da pessoa e o
- * «Tocar ao entrar».
+ * de fábrica (o tema especial do Batman, seis temas de terror e duas músicas),
+ * as playlists da pessoa e o «Tocar ao entrar».
  *
  * Duas versões, decididas pelo motor (`completo`):
  *   - super_admin: tudo acima, volume de 0 a 100;
@@ -32,7 +32,7 @@ import {
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
+  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, TEMAS_ESPECIAIS, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
@@ -186,6 +186,13 @@ export function PainelSomAmbiente() {
       {completo ? (
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
         {/* ── Fábrica ── */}
+        {/* O tema especial vem primeiro, sem aviso nenhum: quem escolhe descobre o modo Batman. */}
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Tema especial</p>
+        <div className="mb-4 space-y-1.5">
+          {TEMAS_ESPECIAIS.map(id => (
+            <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
+          ))}
+        </div>
         <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Temas de terror</p>
         <div className="grid grid-cols-3 gap-2">
           {TEMAS_DE_TERROR.map(id => (
