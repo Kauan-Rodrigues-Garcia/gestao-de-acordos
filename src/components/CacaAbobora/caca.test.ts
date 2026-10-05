@@ -27,7 +27,7 @@ describe('juntarRodada', () => {
     expect(faixaNaTela(e, AGORA)).toBe(false);
   });
 
-  it('achada ao vivo: a faixa passa 4 min contados deste computador', () => {
+  it('achada ao vivo: a faixa passa 20 min contados deste computador', () => {
     const e = juntarRodada(juntarRodada(VAZIO, rodada(), true, AGORA), achada(), true, AGORA);
     expect(aboboraNaTela(e, AGORA)).toBe(false);
     expect(e.faixaAte).toBe(AGORA + FAIXA_MS);

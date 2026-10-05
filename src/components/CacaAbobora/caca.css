@@ -6,6 +6,10 @@
  *
  * A faixa é sempre noite (roxo fundo com luz de vela), no tema claro e no
  * escuro: é um letreiro, não um pedaço da tela.
+ *
+ * Não consulta `prefers-reduced-motion`, como o resto do Halloween
+ * (`Halloween/halloween.css`): nos computadores da operação ela vem ligada por
+ * política, e a faixa ficava parada para todo mundo. O letreiro é a graça.
  */
 
 :root {
@@ -234,12 +238,3 @@
   box-shadow: 0 0 12px rgb(255 200 80 / .45);
 }
 .cacab-faixa-estrela { color: rgb(255 214 90 / .55); font-size: 12px; }
-
-.cacab-faixa-parada { display: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .cacab-abobora, .cacab-espia, .cacab-espia::before, .cacab-vela, .cacab-recado { animation: none; }
-  .cacab-recado { transform: translateX(-50%); }
-  .cacab-faixa-trilho { display: none; }
-  .cacab-faixa-parada { display: flex; justify-content: center; }
-}

@@ -39,8 +39,13 @@ export interface RodadaAbobora {
   mais_rapida_do_dia: boolean;
 }
 
-/** Quanto tempo o nome de quem achou fica passando na faixa. */
-export const FAIXA_MS = 4 * 60_000;
+/**
+ * Quanto tempo o nome de quem achou fica passando na faixa. 20 min (Cleber,
+ * 05/10/2026): a próxima abóbora demora, e dá tempo de todo mundo ver quem
+ * achou. Nunca encosta na próxima: ela sai pelo menos 30 min depois, e uma
+ * rodada nova derruba a faixa (`juntarRodada`).
+ */
+export const FAIXA_MS = 20 * 60_000;
 
 /**
  * Folga sobre o `expira_em` do banco antes de a abóbora sumir sozinha aqui. Quem

@@ -150,7 +150,7 @@ export default function CacaAboboraConfig() {
             <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
               Uma abóbora aparece escondida na tela de todo mundo, num canto longe de botões, a cada
               30 min a 1h10. Quem clica primeiro leva: o nome (e a foto, se tiver) passa na faixa do
-              topo por 4 minutos. Ninguém achou em 15 min, ela some.
+              topo por 20 minutos. Ninguém achou em 15 min, ela some.
             </p>
           </div>
           {painel?.disponivel && (

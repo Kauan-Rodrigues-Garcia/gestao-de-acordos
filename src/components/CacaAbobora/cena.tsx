@@ -241,7 +241,7 @@ function UmRecado({ rodada }: { rodada: RodadaAbobora }) {
 }
 
 /**
- * O letreiro: o recado passa sem parar enquanto a faixa estiver aberta (4 min,
+ * O letreiro: o recado passa sem parar enquanto a faixa estiver aberta (20 min,
  * ver `FAIXA_MS`). Dois grupos iguais, um atrás do outro, correndo meia volta:
  * quando o primeiro sai inteiro, o segundo está exatamente onde ele começou, e
  * o laço não tem emenda. Cada grupo tem cópias bastantes para cobrir a largura
@@ -286,8 +286,6 @@ export function FaixaAbobora({ rodada }: { rodada: RodadaAbobora }) {
         {grupo(grupoRef)}
         {grupo()}
       </div>
-      {/* Quem pede menos movimento lê parado. */}
-      <div className="cacab-faixa-parada" aria-hidden="true"><UmRecado rodada={rodada} /></div>
     </div>
   );
 }
