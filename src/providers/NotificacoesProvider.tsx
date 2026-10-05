@@ -43,10 +43,10 @@ export interface NotificacoesContextValue {
   /**
    * Não lidas dentro da lista carregada.
    *
-   * A lista é limitada às 200 mais recentes, então em teoria isto saturaria em
-   * 200. Na prática é indistinguível da contagem real: quem exibe o número
-   * mostra "99+" acima de 99, e a única forma de passar de 200 não lidas é nunca
-   * abrir o painel (que marca tudo como lido 2 s depois de abrir).
+   * A lista é limitada às 100 mais recentes, então em teoria isto saturaria em
+   * 100. Na prática é indistinguível da contagem real: quem exibe o número
+   * mostra "99+" acima de 99, e só ficam as notificações do dia (o pg_cron
+   * apaga as de antes à 00:05).
    */
   naoLidas: number;
   loading: boolean;
@@ -209,7 +209,7 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
       if (operacao === 'INSERT' && linha) {
         if (vistos.has(linha.id)) return;
         vistos.add(linha.id);
-        // A lista mostra 200; o conjunto não precisa crescer para sempre.
+        // A lista mostra 100; o conjunto não precisa crescer para sempre.
         if (vistos.size > 1000) vistos.clear();
 
         setNotificacoes(prev =>

@@ -8,10 +8,11 @@ import { supabase, Notificacao } from '@/lib/supabase';
 /**
  * Busca as notificações do usuário, mais recentes primeiro.
  *
- * O limite de 200 é o mesmo que o painel usava quando lia a tabela direto; a
- * contagem de não lidas do header é derivada desta lista.
+ * A contagem de não lidas do header é derivada desta lista. Teto de 100: o
+ * sino mostra «99+» acima de 99, e desde 05/10/2026 só existem as notificações
+ * do dia — o pg_cron apaga as de antes à 00:05 (migration 20261005190000).
  */
-export async function fetchNotificacoes(userId: string, limite = 200): Promise<Notificacao[]> {
+export async function fetchNotificacoes(userId: string, limite = 100): Promise<Notificacao[]> {
   const { data, error } = await supabase
     .from('notificacoes')
     .select('*')

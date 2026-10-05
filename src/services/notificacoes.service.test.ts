@@ -79,7 +79,7 @@ beforeEach(() => {
 // ── fetchNotificacoes ───────────────────────────────────────────────────────
 
 describe('fetchNotificacoes', () => {
-  it('retorna lista ordenada por criado_em desc com limit 200', async () => {
+  it('retorna lista ordenada por criado_em desc com limit 100', async () => {
     nextResult = {
       data: [
         { id: 'n1', titulo: 'A', lida: false },
@@ -95,9 +95,10 @@ describe('fetchNotificacoes', () => {
     expect(calls[0].operation).toBe('select');
     expect(calls[0].filters).toEqual([['eq', 'usuario_id', 'user-1']]);
     expect(calls[0].order).toEqual({ col: 'criado_em', opts: { ascending: false } });
-    // 200 (não 50): o NotificacoesProvider deriva a contagem de não lidas desta
-    // mesma lista, então ela precisa cobrir o que o painel exibe.
-    expect(calls[0].limit).toBe(200);
+    // 100: o NotificacoesProvider deriva a contagem de não lidas desta mesma
+    // lista e o sino mostra «99+» acima de 99; desde 05/10/2026 só existem as
+    // notificações do dia (faxina das 00:05).
+    expect(calls[0].limit).toBe(100);
   });
 
   it('aceita um limite explícito', async () => {
