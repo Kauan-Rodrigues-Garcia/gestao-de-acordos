@@ -8,7 +8,7 @@
  *     `presenca` no tópico `presenca:global`;
  *   - a batida repete a cada 60 s, leva a empresa e a versão da lista;
  *   - os dois conjuntos (empresa de quem olha e global) saem do mesmo mapa;
- *   - «entrou» aparece na hora; «saiu» espera 15 s;
+ *   - «entrou» aparece na hora; «saiu» espera 3 s (o banco já esperou 15);
  *   - voltar para a aba bate na hora, mas não duas vezes seguidas;
  *   - fechar a aba chama `fn_presenca_sair` com `keepalive`;
  *   - erro na batida não derruba a tela nem enche o console.
@@ -154,12 +154,14 @@ describe('PresenceProvider + useOnlineUsers', () => {
     expect(rpcSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('«saiu» some depois de 15 s', async () => {
+  it('«saiu» some depois de 3 s', async () => {
     const { result } = renderHook(() => useOnlineUsers(), { wrapper });
     await primeiraBatida();
     aviso({ tipo: 'saiu', pessoa: 'user-2', empresa: EMPRESA_ID, em: 2_000 });
     expect(result.current.onlineIds.has('user-2')).toBe(true);
-    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_900); });
+    expect(result.current.onlineIds.has('user-2')).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(result.current.onlineIds.has('user-2')).toBe(false);
   });
 

@@ -2824,6 +2824,99 @@ export async function verificarStatusTabulacao(
   };
 }
 
+// ── A conferência automática, em lote (05/10/2026) ──────────────────────────
+//
+// Cada linha não tabulada da tela chamava `fn_analitico_status_tabulacao`
+// sozinha ao montar (162 mil chamadas em 5 dias) e, se o status tinha mudado,
+// gravava a linha com um UPDATE próprio — um sinal «analítico mudou» para a
+// empresa inteira por linha. Agora as linhas que montam juntas viram UMA
+// chamada a `fn_analitico_status_tabulacao_lote`, que também grava no banco as
+// que mudaram, num UPDATE só (migration 20261005200000).
+//
+// O resultado fica guardado `CACHE_TABULACAO_MS`: voltar à tela ou reler a
+// lista não pergunta de novo. Quem tabula ou transfere apaga a linha do cache
+// (`esquecerStatusTabulacao`). O clique em «Tabular acordo» não usa nada disto
+// — `verificarStatusTabulacao`, acima, pergunta na hora.
+
+const CACHE_TABULACAO_MS = 60_000;
+/** Quanto esperar as outras linhas da mesma tela antes de perguntar. */
+const JANELA_LOTE_MS = 40;
+/** O servidor aceita até 500; 200 deixa a resposta pequena. */
+const LOTE_TABULACAO_MAX = 200;
+
+const cacheTabulacao = new Map<string, { resultado: StatusTabulacaoResultado; ate: number }>();
+let filaTabulacao = new Map<string, ((r: StatusTabulacaoResultado) => void)[]>();
+let timerLoteTabulacao: ReturnType<typeof setTimeout> | null = null;
+
+/** Tira uma linha (ou todas) do cache da conferência automática. */
+export function esquecerStatusTabulacao(linhaId?: string): void {
+  if (linhaId) cacheTabulacao.delete(linhaId);
+  else cacheTabulacao.clear();
+}
+
+type ItemLoteTabulacao = {
+  status?: StatusTabulacaoAnalitico;
+  acordo_id?: string | null;
+  outro_operador_id?: string | null;
+  outro_operador_nome?: string | null;
+};
+
+async function despacharLoteTabulacao(): Promise<void> {
+  timerLoteTabulacao = null;
+  const fila = filaTabulacao;
+  filaTabulacao = new Map();
+  const ids = [...fila.keys()];
+  const vazio: StatusTabulacaoResultado = {
+    status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
+  };
+
+  for (let i = 0; i < ids.length; i += LOTE_TABULACAO_MAX) {
+    const parte = ids.slice(i, i + LOTE_TABULACAO_MAX);
+    const { data, error } = await rpcSemTipo<{ linhas?: Record<string, ItemLoteTabulacao>; erro?: string }>(
+      'fn_analitico_status_tabulacao_lote', { p_linha_ids: parte },
+    );
+
+    if (error || !data || data.erro || !data.linhas) {
+      // Sem o lote (migration ainda não aplicada, ou erro): uma a uma, como antes.
+      if (error || data?.erro) console.warn('[statusTabulacaoEmLote]', error?.message ?? data?.erro);
+      await Promise.all(parte.map(async id => {
+        const r = await verificarStatusTabulacao(id);
+        for (const resolver of fila.get(id) ?? []) resolver(r);
+      }));
+      continue;
+    }
+
+    const ate = Date.now() + CACHE_TABULACAO_MS;
+    for (const id of parte) {
+      const item = data.linhas[id];
+      const r: StatusTabulacaoResultado = item?.status
+        ? {
+            status:            item.status,
+            acordoId:          item.acordo_id ?? null,
+            outroOperadorId:   item.outro_operador_id ?? null,
+            outroOperadorNome: item.outro_operador_nome ?? null,
+          }
+        : vazio;
+      if (item?.status) cacheTabulacao.set(id, { resultado: r, ate });
+      for (const resolver of fila.get(id) ?? []) resolver(r);
+    }
+  }
+}
+
+/**
+ * Status de tabulação para a conferência automática da linha: junta com as
+ * outras linhas da tela numa chamada só e reaproveita a resposta por um
+ * minuto. Quando o status mudou, o próprio servidor já gravou na linha.
+ */
+export function verificarStatusTabulacaoEmLote(linhaId: string): Promise<StatusTabulacaoResultado> {
+  const guardado = cacheTabulacao.get(linhaId);
+  if (guardado && guardado.ate > Date.now()) return Promise.resolve(guardado.resultado);
+  return new Promise(resolver => {
+    filaTabulacao.set(linhaId, [...(filaTabulacao.get(linhaId) ?? []), resolver]);
+    if (!timerLoteTabulacao) timerLoteTabulacao = setTimeout(() => { void despacharLoteTabulacao(); }, JANELA_LOTE_MS);
+  });
+}
+
 /** Atualiza status_tabulacao e acordo_id de uma linha */
 export async function atualizarTabulacao(
   id: string,

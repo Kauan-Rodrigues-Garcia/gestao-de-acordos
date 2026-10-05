@@ -22,14 +22,16 @@
  *
  * A regra que junta as duas está em `presencaAoVivo.ts`.
  *
- * ── Recarregar não pisca ──────────────────────────────────────────────────────
- * Recarregar é um «saiu» (`fn_presenca_sair` no `pagehide`) e um «entrou» na
- * primeira batida da página nova. Quem recebe espera `GRACA_SAIDA_MS` antes de
- * tirar a pessoa, então o F5 de ninguém apaga a bolinha. Num deploy, cada aba
- * custa duas mensagens — em vez das rajadas de Presence que estouravam.
+ * ── Recarregar não custa nada (05/10/2026, migration 20261005200000) ─────────
+ * `fn_presenca_sair` (no `pagehide`) só MARCA a saída. Se a pessoa volta em
+ * até 15 s — F5, deploy, ou a outra aba dela bate — a marca some e ninguém é
+ * avisado: zero mensagens. Se não volta, o agendador do banco apaga a linha e
+ * avisa «saiu». Quem caiu sem avisar (150 s sem batida) também sai por ele.
+ * Do lado de cá, `GRACA_SAIDA_MS` só cobre a corrida entre esse «saiu» e uma
+ * volta no mesmo instante.
  *
  * Duas abas da mesma pessoa: a que fecha avisa a irmã (`BroadcastChannel`),
- * e a irmã bate logo em seguida — a pessoa sai e volta antes da espera acabar.
+ * e a irmã bate logo em seguida, apagando a marca de saída.
  *
  * ── Os dois conjuntos ────────────────────────────────────────────────────────
  *   `onlineIds`       — a empresa de quem olha (todas, para super_admin). É o
@@ -96,14 +98,17 @@ const PresenceContext = createContext<PresenceContextValue>({
  */
 const BATIDA_MS = 60_000;
 
-/** Quanto um «saiu» espera antes de tirar a pessoa — o tempo de um F5. */
-const GRACA_SAIDA_MS = 15_000;
+/**
+ * Quanto um «saiu» espera antes de tirar a pessoa. Curto: o banco só avisa
+ * depois de 15 s sem a pessoa voltar — o F5 já ficou para trás.
+ */
+const GRACA_SAIDA_MS = 3_000;
 
 /**
  * Sorteio da primeira batida da página: num deploy as abas recarregam juntas,
  * e cada primeira batida é um «entrou» para todo mundo. Curto, porque é o
- * tempo de a pessoa aparecer para os outros depois de um F5 — e precisa caber
- * folgado na `GRACA_SAIDA_MS`.
+ * tempo de a pessoa voltar depois de um F5 — e precisa caber folgado nos 15 s
+ * em que a saída fica só marcada no banco.
  */
 const ESPALHAMENTO_INICIAL_MS = 3_000;
 

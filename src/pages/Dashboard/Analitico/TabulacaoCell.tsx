@@ -25,6 +25,8 @@ import { formatBRL } from '@/lib/money';
 import type { AnaliticoRecebimento, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import {
   verificarStatusTabulacao,
+  verificarStatusTabulacaoEmLote,
+  esquecerStatusTabulacao,
   atualizarTabulacao,
   tabularDivergente,
 } from '@/services/analitico/analitico.service';
@@ -64,8 +66,11 @@ export function TabulacaoCell({
   statusRef.current = statusLocal;
 
   // Auto-verifica tabulação ao montar, sem exigir clique manual.
-  // Stagger aleatório de até 600 ms para não sobrecarregar o banco com
-  // centenas de queries simultâneas quando muitas linhas renderizam juntas.
+  //
+  // As linhas que montam juntas viram UMA chamada (`verificarStatusTabulacaoEmLote`),
+  // e o servidor grava sozinho as que mudaram, num UPDATE só — antes cada linha
+  // perguntava e gravava por conta própria, e cada gravação avisava a empresa
+  // inteira (05/10/2026).
   //
   // Linha gravada como 'divergente' também é conferida: o nome do outro
   // operador não fica no banco, e sem ele o botão amarelo não aparece.
@@ -77,13 +82,8 @@ export function TabulacaoCell({
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (cancelled || statusRef.current === 'tabulado') return;
-      const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacao(linha.id);
+      const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacaoEmLote(linha.id);
       if (cancelled) return;
-
-      if (status !== linha.status_tabulacao || acordoId !== linha.acordo_id) {
-        await atualizarTabulacao(linha.id, status, acordoId);
-        if (cancelled) return;
-      }
       setStatusLocal(status);
       setAcordoIdLocal(acordoId);
       setDivergenteInfo(
@@ -91,7 +91,7 @@ export function TabulacaoCell({
           ? { outroNome: outroOperadorNome ?? 'outro operador', acordoId }
           : null,
       );
-    }, Math.random() * 600);
+    }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linha.id, operadorId, empresaId]);
@@ -108,6 +108,7 @@ export function TabulacaoCell({
 
   async function handleTabular() {
     setCarregando(true);
+    esquecerStatusTabulacao(linha.id);
     const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacao(linha.id);
 
     if (status === 'tabulado' && acordoId) {
@@ -143,6 +144,7 @@ export function TabulacaoCell({
     setCarregando(true);
 
     const r = await tabularDivergente(linha.id);
+    esquecerStatusTabulacao(linha.id);
     setCarregando(false);
 
     if ('error' in r) {
