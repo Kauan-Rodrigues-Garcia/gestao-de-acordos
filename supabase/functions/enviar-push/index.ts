@@ -19,6 +19,11 @@
  * que alcançou a meta e cada operador que alcançou faixa nova — para a pessoa e
  * para quem lidera. Migrations 20260930192744 e 20260930195304.
  *
+ * `{ acao: 'chat' }` — o gatilho de `chat_mensagens` chama na hora em que a
+ * mensagem chega (migration 20261005235000). Um aviso por pessoa e conversa,
+ * só para quem não está online no gestão; o aviso novo substitui o anterior da
+ * mesma conversa. Melhor esforço: aviso que falha não volta para a fila.
+ *
  * A função é publicada com verify_jwt DESLIGADO: o cron não tem sessão de
  * usuário, e as duas ações autenticam por conta própria (acima).
  *
@@ -31,8 +36,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
 import {
-  montarAvisos, montarAvisosDeSaida, montarAvisosMetaEquipe, montarAvisosMetaOperador, montarResumosEquipe,
-  type Aviso, type AvisosDaPessoa, type EquipeNaMeta, type ItemFila, type ItemSaida,
+  montarAvisos, montarAvisosChat, montarAvisosDeSaida, montarAvisosMetaEquipe, montarAvisosMetaOperador, montarResumosEquipe,
+  type Aviso, type AvisosDaPessoa, type EquipeNaMeta, type ItemChat, type ItemFila, type ItemSaida,
   type OperadorNaMeta, type PessoaLote, type PessoaSaida, type ResumoEquipe,
 } from './texto.ts';
 
@@ -198,6 +203,19 @@ async function rodadaSaidas(admin: ReturnType<typeof createClient>) {
   return { pessoas: porPessoa.length, avisos, ok: ok.length, falha: falha.length };
 }
 
+/**
+ * Uma rodada do chat: a RPC pega o que está pendente, marca quem está online
+ * (não recebe) e devolve uma linha por pessoa + conversa com a última mensagem.
+ */
+async function rodadaChat(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc('fn_push_chat_pegar', { p_limite: 500 });
+  if (error) return { erro: error.message };
+  const itens = (data ?? []) as ItemChat[];
+  if (!itens.length) return { conversas: 0, avisos: 0 };
+  const { avisos } = await entregar(admin, montarAvisosChat(itens));
+  return { conversas: itens.length, avisos };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return resposta(405, { error: 'Method not allowed' });
@@ -247,6 +265,14 @@ Deno.serve(async (req) => {
     });
     if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
     return resposta(200, await rodada(admin));
+  }
+
+  if (corpo.acao === 'chat') {
+    const { data: confere } = await admin.rpc('fn_push_segredo_confere', {
+      p_segredo: req.headers.get('x-push-segredo'),
+    });
+    if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
+    return resposta(200, await rodadaChat(admin));
   }
 
   if (corpo.acao === 'resumo_equipes') {

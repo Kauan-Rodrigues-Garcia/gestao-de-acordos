@@ -25,6 +25,7 @@ import { AvisosDaEquipe } from './AvisosDaEquipe';
 import { BotaoInstalar, PassoIPhone } from './InstalarApp';
 import { IconeAba, Seta } from './partes';
 import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
+import { ChatDoApp } from '../comum/ChatDoApp';
 import './equipe.css';
 
 type Aba = 'equipe' | 'quartis' | 'grafico' | 'hoje';
@@ -180,6 +181,9 @@ function TelaDaEquipe() {
       </div>
 
       <PassoIPhone aberto={passoIPhone} onFechar={() => setPassoIPhone(false)} />
+
+      {/* O chat do gestão, acima da barra de abas (05/10/2026). */}
+      <ChatDoApp acimaDoRodape={equipe ? 72 : 0} />
 
       {equipe && (
         <nav className="e-abas" aria-label="Abas">

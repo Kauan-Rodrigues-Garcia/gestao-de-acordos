@@ -1,5 +1,6 @@
 /*
- * Service worker do app instalável (PWA) — SÓ aviso de pagamento.
+ * Service worker do app instalável (PWA) — SÓ os avisos (pagamento, equipe, metas
+ * e, desde 05/10/2026, mensagem nova do chat).
  *
  * Não há `fetch` handler nem cache, de propósito: o site continua indo à rede
  * como sempre, o aviso «Nova versão disponível» (useVersionCheck) segue valendo
@@ -7,10 +8,14 @@
  * docs/superpowers/specs/2026-09-30-mobile-pwa-push-design.md §1.
  *
  * O servidor (Edge Function `enviar-push`) manda um JSON:
- *   { titulo, corpo, tag?, url?, icone? }
+ *   { titulo, corpo, tag?, url?, icone?, foto? }
  *
  * `icone` escolhe o ícone próprio do tipo de aviso (30/09/2026):
  * /icons/avisos/<icone>.png. O Android mostra; o iPhone usa sempre o do app.
+ *
+ * `foto` (aviso de chat): a foto de quem mandou, no lugar do ícone. Só endereço
+ * https — o Android mostra; o iPhone usa o ícone do app. A `tag` do chat é a
+ * da conversa: a mensagem nova substitui o aviso anterior, como no WhatsApp.
  *
  * O app usa HashRouter: a tela mínima é `/#/m`, não `/m`.
  */
@@ -35,9 +40,10 @@ self.addEventListener('push', (event) => {
   // Só nomes conhecidos: o ícone nunca vira um caminho arbitrário.
   const ICONES = ['pagamento', 'saida', 'meta', 'operador', 'equipe', 'resumo'];
   const icone = ICONES.includes(dados.icone) ? `/icons/avisos/${dados.icone}.png` : '/icons/app-192.png';
+  const foto = typeof dados.foto === 'string' && /^https:\/\//.test(dados.foto) ? dados.foto : null;
   const opcoes = {
     body: dados.corpo || '',
-    icon: icone,
+    icon: foto || icone,
     badge: '/icons/badge-96.png',
     tag: dados.tag || undefined,
     // Com `tag`, um reenvio substitui o aviso anterior — e ainda assim vibra.

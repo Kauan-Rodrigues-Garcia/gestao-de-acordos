@@ -27,7 +27,7 @@
  * qualquer jeito.
  */
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { MessageCircle, Minus, Maximize2, Minimize2, Loader2 } from 'lucide-react';
+import { MessageCircle, Minus, Maximize2, Minimize2, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -90,7 +90,47 @@ function CarregandoJanela() {
 
 const CHAVE_LARGURA = 'chat-expandido';
 
-export function BolhaChat() {
+/**
+ * A parte da tela que sobra acima do teclado, no celular.
+ *
+ * `100dvh` não encolhe com o teclado no iPhone: a caixa de texto ficava
+ * escondida embaixo dele. O `visualViewport` diz a altura que de fato se vê,
+ * e o topo dela (o Safari rola a página para mostrar o campo em foco).
+ */
+function useAreaVisivel(ativo: boolean): { altura: number; topo: number } | null {
+  const [area, setArea] = useState<{ altura: number; topo: number } | null>(null);
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!ativo || !vv) { setArea(null); return; }
+    const medir = () => setArea({ altura: vv.height, topo: vv.offsetTop });
+    medir();
+    vv.addEventListener('resize', medir);
+    vv.addEventListener('scroll', medir);
+    return () => {
+      vv.removeEventListener('resize', medir);
+      vv.removeEventListener('scroll', medir);
+    };
+  }, [ativo]);
+  return area;
+}
+
+export interface BolhaChatProps {
+  /**
+   * `janela` (padrão): o chat de canto do desktop. `celular`: o do app do
+   * celular — botão acima da área segura e, aberto, a tela inteira, sempre no
+   * tamanho compacto (lista OU conversa). Ver `pages/Mobile/comum/ChatDoApp`.
+   */
+  modo?: 'janela' | 'celular';
+  /** Abre direto nesta conversa (o aviso de mensagem nova no celular). */
+  conversaInicial?: string | null;
+  /** Chamado depois de abrir `conversaInicial` — quem passou limpa a URL. */
+  onConversaInicialAberta?: () => void;
+  /** Celular: quanto subir o botão, em px — acima de uma barra fixa embaixo. */
+  acimaDoRodape?: number;
+}
+
+export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaInicialAberta, acimaDoRodape = 0 }: BolhaChatProps = {}) {
+  const celular = modo === 'celular';
   const { perfil } = useAuth();
   const halloween = useTemaHalloween();
   // Só o mouse acende a abóbora. O foco não: ao fechar a janela o foco volta
@@ -330,6 +370,28 @@ export function BolhaChat() {
   }, [expandido]);
 
   const conversaAtual = chat.aberta;
+  /** As duas colunas lado a lado — nunca no celular, onde a tela é estreita. */
+  const largo = expandido && !celular;
+
+  // Veio de um aviso com a conversa: abre nela assim que o chat estiver liberado.
+  const avisarAberta = useRef(onConversaInicialAberta);
+  avisarAberta.current = onConversaInicialAberta;
+  useEffect(() => {
+    if (!podeVer || !conversaInicial) return;
+    chatRef.current?.abrir(conversaInicial);
+    abertoRef.current = true;
+    setAberto(true);
+    avisarAberta.current?.();
+  }, [podeVer, conversaInicial]);
+
+  // Celular, aberto: a tela de trás não rola por baixo do chat.
+  useEffect(() => {
+    if (!celular || !aberto) return;
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = antes; };
+  }, [celular, aberto]);
+  const areaVisivel = useAreaVisivel(celular && aberto);
 
   // No monitoramento de uso, o chat conta enquanto a pessoa mexe NA janela —
   // aberta num canto enquanto ela trabalha nos Acordos, o tempo é dos Acordos.
@@ -436,8 +498,10 @@ export function BolhaChat() {
         onMouseLeave={() => { setSobre(false); setMouseNaBolha(false); }}
         onFocus={() => { setSobre(true); precarregarJanela(); }}
         onBlur={() => setSobre(false)}
+        style={celular ? { bottom: `calc(env(safe-area-inset-bottom) + ${16 + acimaDoRodape}px)` } : undefined}
         className={cn(
-          'fixed bottom-6 right-6 z-40 w-14 h-14 group',
+          'fixed z-40 w-14 h-14 group',
+          celular ? 'right-4' : 'bottom-6 right-6',
           // Quadrado de cantos arredondados. `rounded-2xl` e não `rounded-full`:
           // pedido explícito, e combina com o resto do sistema, que é todo
           // feito de cartões de canto arredondado. No Halloween o quadrado
@@ -487,7 +551,7 @@ export function BolhaChat() {
    * resolvesse (conversa nova, ainda fora da lista), a janela ficava vazia:
    * lista escondida, conversa nula, nada desenhado.
    */
-  const mostraLista = expandido || !conversaAtual;
+  const mostraLista = largo || !conversaAtual;
   const mostraConversa = !!conversaAtual;
 
   /*
@@ -505,15 +569,29 @@ export function BolhaChat() {
     >
       <div
         ref={janelaRef}
+        style={celular ? {
+          top: areaVisivel?.topo ?? 0,
+          height: areaVisivel ? `${areaVisivel.altura}px` : '100dvh',
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        } : undefined}
         className={cn(
-          'fixed bottom-6 right-6 z-40 flex flex-col bg-background border border-border rounded-2xl shadow-2xl overflow-hidden transition-[width,height] duration-200',
-          expandido ? 'w-[720px] h-[560px]' : 'w-[360px] h-[520px]',
-          'max-w-[calc(100vw-2rem)] max-h-[calc(100vh-3rem)]',
+          'fixed flex flex-col bg-background overflow-hidden',
+          celular
+            ? 'left-0 right-0 z-50 w-full'
+            : cn(
+                'bottom-6 right-6 z-40 border border-border rounded-2xl shadow-2xl transition-[width,height] duration-200',
+                expandido ? 'w-[720px] h-[560px]' : 'w-[360px] h-[520px]',
+                'max-w-[calc(100vw-2rem)] max-h-[calc(100vh-3rem)]',
+              ),
         )}
       >
-        <header className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
-          <MessageCircle className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold flex-1">Chat</span>
+        <header className={cn(
+          'flex items-center gap-1 border-b border-border shrink-0',
+          celular ? 'px-4 py-3' : 'px-3 py-2',
+        )}>
+          <MessageCircle className={cn('text-primary', celular ? 'w-5 h-5' : 'w-4 h-4')} />
+          <span className={cn('font-semibold flex-1', celular ? 'text-base' : 'text-sm')}>Chat</span>
           {/*
             O Monitor mora AQUI, ao lado do controle de tamanho, e não mais na
             régua de abas.
@@ -540,14 +618,18 @@ export function BolhaChat() {
               🖥️
             </button>
           )}
-          <button onClick={() => setExpandido(e => !e)}
-                  className="p-1.5 rounded hover:bg-muted transition-colors"
-                  aria-label={expandido ? 'Diminuir a janela' : 'Aumentar a janela'}>
-            {expandido ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
+          {/* No celular a janela já é a tela inteira: não há o que aumentar. */}
+          {!celular && (
+            <button onClick={() => setExpandido(e => !e)}
+                    className="p-1.5 rounded hover:bg-muted transition-colors"
+                    aria-label={expandido ? 'Diminuir a janela' : 'Aumentar a janela'}>
+              {expandido ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
           <button onClick={() => { abertoRef.current = false; setAberto(false); }}
-                  className="p-1.5 rounded hover:bg-muted transition-colors" aria-label="Fechar o chat">
-            <Minus className="w-3.5 h-3.5" />
+                  className={cn('rounded hover:bg-muted transition-colors', celular ? 'p-2.5 -mr-1.5' : 'p-1.5')}
+                  aria-label="Fechar o chat">
+            {celular ? <X className="w-5 h-5" /> : <Minus className="w-3.5 h-3.5" />}
           </button>
         </header>
 
@@ -557,7 +639,7 @@ export function BolhaChat() {
               as próprias duas colunas e o próprio «voltar». */}
           {modoMonitor ? (
             <PainelMonitor
-              expandido={expandido}
+              expandido={largo}
               onSair={() => setModoMonitor(false)}
             />
           ) : (
@@ -567,7 +649,7 @@ export function BolhaChat() {
               // `min-w-0`: item de flex nao encolhe abaixo do conteudo sem isso,
               // e uma lista larga (disparo de texto longo) empurrava a janela.
               'min-h-0 min-w-0',
-              expandido ? 'w-[260px] border-r border-border shrink-0' : 'flex-1',
+              largo ? 'w-[260px] border-r border-border shrink-0' : 'flex-1',
             )}>
               <ListaConversas
                 conversas={chat.conversas}
@@ -606,7 +688,7 @@ export function BolhaChat() {
                 online={!!conversaAtual.outro_id && online.has(conversaAtual.outro_id)}
                 digitando={!!conversaAtual.outro_id && digitando.has(conversaAtual.outro_id)}
                 gravando={!!conversaAtual.outro_id && gravando.has(conversaAtual.outro_id)}
-                expandido={expandido}
+                expandido={largo}
                 onVoltar={() => chat.abrir(null)}
                 onEnviar={chat.enviar}
                 onDigitando={() => { if (conversaAtual.outro_id) avisarAtividade(conversaAtual.outro_id, 'digitando'); }}
@@ -622,7 +704,7 @@ export function BolhaChat() {
             </div>
           )}
 
-          {expandido && !conversaAtual && (
+          {largo && !conversaAtual && (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-xs text-muted-foreground">Escolha uma conversa</p>
             </div>

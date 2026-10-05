@@ -16,6 +16,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
+import { RegistroAppInstalado } from '@/components/RegistroAppInstalado';
 import { RastreioUsoProvider } from '@/providers/RastreioUsoProvider';
 import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
 import { MesProvider } from '@/providers/MesProvider';
@@ -331,6 +332,8 @@ export default function App() {
         <Router>
           {/* Dentro do Router: a versão nova entra na próxima troca de tela. */}
           <VersionWatcher />
+          {/* App aberto como instalado no celular: registra quem instalou. */}
+          <RegistroAppInstalado />
           {/* DENTRO do Router: o rastreio lê a rota atual com `useLocation`, e
               fora dele o hook estouraria. Não renderiza nada — só mede. */}
           <RastreioUsoProvider>

@@ -29,6 +29,7 @@ import { CartaoAvisos, SinoAvisos } from './Avisos';
 import { useAvisos } from './useAvisos';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
+import { ChatDoApp } from './comum/ChatDoApp';
 import './mobile.css';
 
 /** Quantos pagamentos a tela mostra antes de «Ver todos». */
@@ -36,10 +37,12 @@ const LIMITE_LISTA = 8;
 
 export default function Mobile() {
   const { perfil } = useAuth();
+  const { search } = useLocation();
   // Super admin testa entrando como um operador — ver `EscolherOperador`.
   if (ehSuperAdmin(perfil?.perfil)) return <EscolherOperador />;
   // Líder não recebe em nome próprio: a tela dele é a da equipe.
-  if (ehLider(perfil?.perfil)) return <Navigate to={ROUTE_PATHS.MOBILE_EQUIPE} replace />;
+  // A busca vai junto: o aviso de chat chega aqui com `?chat=<conversa>`.
+  if (ehLider(perfil?.perfil)) return <Navigate to={{ pathname: ROUTE_PATHS.MOBILE_EQUIPE, search }} replace />;
   return <TelaDoOperador />;
 }
 
@@ -203,6 +206,9 @@ function TelaDoOperador() {
           onSair={() => { void (impersonando ? sairImpersonacao() : signOut()); }}
         />
       </div>
+
+      {/* O chat do gestão, no canto (05/10/2026). */}
+      <ChatDoApp />
     </div>
   );
 }

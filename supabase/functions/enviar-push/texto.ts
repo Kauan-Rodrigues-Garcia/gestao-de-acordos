@@ -76,7 +76,18 @@ export function formaDoPagamento(
 /** Os ícones por tipo — os arquivos de `public/icons/avisos/`. */
 export type IconeAviso = 'pagamento' | 'saida' | 'meta' | 'operador' | 'equipe' | 'resumo';
 
-export interface Aviso { titulo: string; corpo: string; tag?: string; url?: string; icone?: IconeAviso }
+export interface Aviso {
+  titulo: string;
+  corpo: string;
+  tag?: string;
+  url?: string;
+  icone?: IconeAviso;
+  /**
+   * Foto de quem mandou (aviso de chat). O Android mostra no lugar do ícone; o
+   * iPhone usa sempre o ícone do app (limite do sistema).
+   */
+  foto?: string;
+}
 
 export interface ItemFila {
   id: number;
@@ -436,6 +447,69 @@ export function montarResumosEquipe(itens: ResumoEquipe[]): AvisosDaPessoa[] {
       icone: 'resumo',
     };
     for (const id of new Set(r.destinatarios)) saida.add(id, aviso);
+  }
+  return saida.lista();
+}
+
+// ── Chat ────────────────────────────────────────────────────────────────────
+
+/**
+ * Uma conversa com mensagem nova para uma pessoa — `fn_push_chat_pegar`
+ * (migration 20261005235000). A última mensagem e quantas a pessoa ainda não
+ * leu na conversa.
+ */
+export interface ItemChat {
+  perfil_id: string;
+  conversa_id: string;
+  conversa_tipo: string | null;
+  conversa_nome: string | null;
+  autor_nome: string | null;
+  autor_foto: string | null;
+  /** `null` quando a mensagem tem CPF (ou é só anexo). */
+  texto: string | null;
+  tem_cpf: boolean;
+  anexos: { tipo?: string | null; nome?: string | null }[] | null;
+  nao_lidas: number | string;
+}
+
+const LIMITE_PREVIA = 120;
+
+/** O que a mensagem diz, para o aviso: o texto cortado, ou o tipo do anexo. */
+export function previaDoChat(item: Pick<ItemChat, 'texto' | 'tem_cpf' | 'anexos'>): string {
+  // CPF é dado sensível no chat: não vai para a tela de bloqueio do celular.
+  if (item.tem_cpf) return 'Nova mensagem';
+  const texto = String(item.texto ?? '').replace(/\s+/g, ' ').trim();
+  if (texto) return texto.length > LIMITE_PREVIA ? `${texto.slice(0, LIMITE_PREVIA - 1).trimEnd()}…` : texto;
+  const anexos = item.anexos ?? [];
+  if (anexos.length > 1) return `${anexos.length} arquivos`;
+  const a = anexos[0];
+  if (!a) return 'Nova mensagem';
+  const tipo = String(a.tipo ?? '');
+  if (tipo.startsWith('image/')) return 'Foto';
+  if (tipo.startsWith('video/')) return 'Vídeo';
+  if (tipo.startsWith('audio/')) return 'Áudio';
+  return a.nome ? `Arquivo: ${a.nome}` : 'Arquivo';
+}
+
+/**
+ * Um aviso por pessoa e conversa, com a etiqueta da conversa: o aviso novo
+ * SUBSTITUI o anterior (o service worker usa `tag` + `renotify`), como no
+ * WhatsApp. Grupo: «Fulano · Nome do grupo».
+ */
+export function montarAvisosChat(itens: ItemChat[]): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const it of itens) {
+    const autor = String(it.autor_nome ?? '').trim() || 'Alguém';
+    const grupo = it.conversa_tipo === 'grupo' && it.conversa_nome?.trim();
+    const naoLidas = Number(it.nao_lidas) || 0;
+    const previa = previaDoChat(it);
+    saida.add(it.perfil_id, {
+      titulo: grupo ? `${primeiroNome(autor) || autor} · ${grupo}` : autor,
+      corpo: naoLidas > 1 ? `${previa}\n${naoLidas} mensagens não lidas` : previa,
+      tag: `chat:${it.conversa_id}`,
+      url: `/#/m?chat=${it.conversa_id}`,
+      ...(it.autor_foto && /^https:\/\//.test(it.autor_foto) ? { foto: it.autor_foto } : {}),
+    });
   }
   return saida.lista();
 }

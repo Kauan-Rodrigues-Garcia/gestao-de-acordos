@@ -48,7 +48,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, Users, Clock, MousePointerClick, CalendarDays, AlertTriangle,
   Loader2, EyeOff, Building2, UserX, TrendingUp, TrendingDown, Minus,
-  Search, X, Filter, LayoutGrid, MonitorSmartphone,
+  Search, X, Filter, LayoutGrid, MonitorSmartphone, Smartphone,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -71,6 +71,7 @@ import {
   type UsoSemAcesso,
 } from '@/services/uso.service';
 import ListaUsuariosUso from './ListaUsuariosUso';
+import AppNoCelular from './AppNoCelular';
 import { numeroBr, tempoRelativo, formatarDuracao } from './formatos';
 import { montarSerieDiaria, tendencia, type PontoDia } from './serieDiaria';
 import { agruparPorTela, telaTeveUso } from './agruparTelas';
@@ -138,7 +139,7 @@ const ABAS_POR_GRUPO = 4;
 const TODOS = '__todos__';
 const TODAS_EMPRESAS = '__todas__';
 
-type AbaUso = 'geral' | 'pessoas' | 'ausentes' | 'adocao';
+type AbaUso = 'geral' | 'pessoas' | 'ausentes' | 'adocao' | 'celular';
 type Metrica = 'segundos' | 'aberturas' | 'pessoas';
 
 const METRICAS: { key: Metrica; label: string; formatar: (n: number) => string }[] = [
@@ -450,6 +451,7 @@ export default function MonitoramentoUso({ empresas }: Props) {
     { key: 'pessoas',  label: 'Pessoas',        Icone: Users, contador: pessoas.length },
     { key: 'ausentes', label: 'Sem acesso',     Icone: UserX, contador: ausentes.length },
     { key: 'adocao',   label: 'Adoção de tela', Icone: MonitorSmartphone },
+    { key: 'celular',  label: 'App no celular', Icone: Smartphone },
   ];
 
   return (
@@ -820,6 +822,9 @@ export default function MonitoramentoUso({ empresas }: Props) {
           carregando={carregando}
         />
       )}
+
+      {/* ══ App no celular (05/10/2026) ══════════════════════════════════ */}
+      {aba === 'celular' && <AppNoCelular empresaId={empresaId} mostrarEmpresa={empresaId === null} />}
 
       {/* ══ Adoção de uma tela ═══════════════════════════════════════════ */}
       {aba === 'adocao' && (
