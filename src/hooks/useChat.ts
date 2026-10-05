@@ -99,6 +99,8 @@ export function useChat(
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const meuId = perfil?.id ?? null;
+  // Super admin sobe sem teto no navegador — ver `lib/tetoDeUpload.ts`.
+  const cargo = perfil?.perfil ?? null;
 
   const [conversas, setConversas] = useState<ConversaChat[]>([]);
   const [disparos,  setDisparos]  = useState<DisparoChat[]>([]);
@@ -475,7 +477,7 @@ export function useChat(
       // Os arquivos são preparados em paralelo; a prévia já está no balão.
       const uploads = await Promise.allSettled(item.arquivos.map(async (arquivo, i) => {
         if (item.enviados.has(i)) return;
-        const r = await subirAnexo(arquivo, conversaId);
+        const r = await subirAnexo(arquivo, conversaId, cargo);
         if (r.erro || !r.anexo) throw new Error(r.erro || 'Não foi possível enviar o anexo.');
         item.enviados.set(i, r.anexo);
       }));
@@ -504,7 +506,7 @@ export function useChat(
     } finally {
       item.emCurso = false;
     }
-  }, [publicarMensagens, agendarRefazer]);
+  }, [publicarMensagens, agendarRefazer, cargo]);
 
   const enviar = useCallback(async (
     texto: string, anexos: AnexoChat[] = [], respondendoId?: string | null, arquivos: File[] = [],

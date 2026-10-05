@@ -675,6 +675,7 @@ export function BolhaChat() {
 
       <DisparoDialog
         aberto={novoDisparo}
+        cargo={perfil?.perfil}
         onFechar={() => setNovoDisparo(false)}
         onPronto={enviados => {
           toast.success(`Enviado para ${enviados} ${enviados === 1 ? 'pessoa' : 'pessoas'}`, {

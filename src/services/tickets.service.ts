@@ -18,6 +18,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { registrarLog } from '@/services/logs.service';
+import { recusadoPeloTamanho } from '@/lib/tetoDeUpload';
 import type { StatusTicket, PrioridadeTicket } from '@/pages/Tickets/categorias';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
@@ -342,7 +343,11 @@ export async function subirAnexo(
     contentType: arquivo.type || 'application/octet-stream',
     upsert: false,
   });
-  if (error) throw new Error(`Não foi possível enviar "${arquivo.name}": ${error.message}`);
+  if (error) {
+    throw new Error(recusadoPeloTamanho(error)
+      ? `"${arquivo.name}" passa do limite de tamanho do armazenamento.`
+      : `Não foi possível enviar "${arquivo.name}": ${error.message}`);
+  }
 
   const { data } = supabase.storage.from('tickets').getPublicUrl(caminho);
   return {

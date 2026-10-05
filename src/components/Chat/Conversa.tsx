@@ -28,6 +28,7 @@ import {
   type MensagemChat, type ConversaChat, type AnexoChat,
   type CurtidasDaMensagem, type QuemCurtiu,
 } from '@/services/chat/chat.service';
+import { tetoDeUpload } from '@/lib/tetoDeUpload';
 import { listarMembros, nomesDeQuemParticipou, type MembroGrupo } from '@/services/chat/grupos.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
@@ -110,6 +111,8 @@ export function Conversa({
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   const meuId = perfil?.id ?? '';
+  // Super admin anexa sem teto no navegador — ver `lib/tetoDeUpload.ts`.
+  const tetoAnexo = tetoDeUpload(LIMITE_ANEXO, perfil?.perfil);
   /*
    * Quem ocupa o lado de dentro da conversa.
    *
@@ -330,15 +333,15 @@ export function Conversa({
 
   // ── Arquivos ───────────────────────────────────────────────────────────────
   const receberArquivos = useCallback((arquivos: File[]) => {
-    const grandes = arquivos.filter(a => a.size > LIMITE_ANEXO);
-    const bons    = arquivos.filter(a => a.size <= LIMITE_ANEXO);
+    const grandes = arquivos.filter(a => a.size > tetoAnexo);
+    const bons    = arquivos.filter(a => a.size <= tetoAnexo);
     if (grandes.length) {
       setErro(grandes.length === 1
         ? `«${grandes[0].name}» tem ${tamanhoLegivel(grandes[0].size)} e o limite é 10 MB.`
         : `${grandes.length} arquivos passam de 10 MB e ficaram de fora.`);
     }
     if (bons.length) setPendentes(atual => [...atual, ...bons]);
-  }, []);
+  }, [tetoAnexo]);
 
   const aoColar = useCallback((e: React.ClipboardEvent) => {
     const arquivos = [...e.clipboardData.files];
@@ -629,13 +632,13 @@ export function Conversa({
   const pararEAnexar = useCallback(async () => {
     const arquivo = await gravador.parar();
     if (!arquivo) return;
-    if (arquivo.size > LIMITE_ANEXO) {
+    if (arquivo.size > tetoAnexo) {
       setErro(`A gravação ficou com ${tamanhoLegivel(arquivo.size)} e o limite é 10 MB.`);
       return;
     }
     setPendentes(atual => [...atual, arquivo]);
     campo.current?.focus();
-  }, [gravador]);
+  }, [gravador, tetoAnexo]);
 
   const aoTeclar = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter manda, Shift+Enter quebra linha. É o que a mão já espera.

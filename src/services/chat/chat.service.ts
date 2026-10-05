@@ -23,6 +23,7 @@
 import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import { recusadoPeloTamanho, tetoDeUpload } from '@/lib/tetoDeUpload';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
 
@@ -963,7 +964,10 @@ export async function registrarBoasVindas(perfilId: string): Promise<{ erro: str
 
 // ── Anexos ───────────────────────────────────────────────────────────────────
 
-/** 10 MB. O balde recusa acima disso; aqui é só para avisar antes de subir. */
+/**
+ * 10 MB. O balde recusa acima disso; aqui é só para avisar antes de subir.
+ * O super admin não tem este teto no navegador — ver `lib/tetoDeUpload.ts`.
+ */
 export const LIMITE_ANEXO = 10 * 1024 * 1024;
 
 /**
@@ -976,8 +980,10 @@ export const LIMITE_ANEXO = 10 * 1024 * 1024;
  */
 export async function subirAnexo(
   arquivo: File, pasta: string,
+  /** Cargo de quem envia: o super admin não tem teto (`lib/tetoDeUpload.ts`). */
+  cargo?: string | null,
 ): Promise<{ anexo: AnexoChat | null; erro: string | null }> {
-  if (arquivo.size > LIMITE_ANEXO) {
+  if (arquivo.size > tetoDeUpload(LIMITE_ANEXO, cargo)) {
     return { anexo: null, erro: `«${arquivo.name}» passa de 10 MB.` };
   }
 
@@ -991,7 +997,14 @@ export async function subirAnexo(
     contentType: arquivo.type || 'application/octet-stream',
     upsert: false,
   });
-  if (error) return { anexo: null, erro: `Não foi possível enviar «${arquivo.name}».` };
+  if (error) {
+    return {
+      anexo: null,
+      erro: recusadoPeloTamanho(error)
+        ? `«${arquivo.name}» passa do limite de tamanho do armazenamento.`
+        : `Não foi possível enviar «${arquivo.name}».`,
+    };
+  }
 
   return {
     anexo: { url: caminho, nome: arquivo.name, tipo: arquivo.type || '', tamanho: arquivo.size },

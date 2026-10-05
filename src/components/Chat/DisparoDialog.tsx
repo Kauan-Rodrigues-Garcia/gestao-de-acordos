@@ -41,6 +41,7 @@ import {
   listarContatos, dispararMensagem, subirAnexo, LIMITE_ANEXO,
   type AnexoChat, type ContatoChat,
 } from '@/services/chat/chat.service';
+import { tetoDeUpload } from '@/lib/tetoDeUpload';
 import { AvatarChat } from './comum';
 import { tamanhoLegivel } from './formatos';
 import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
@@ -50,6 +51,8 @@ interface Props {
   aberto:    boolean;
   onFechar:  () => void;
   onPronto:  (enviados: number) => void;
+  /** Cargo de quem dispara: o super admin anexa sem teto (`lib/tetoDeUpload.ts`). */
+  cargo?:    string | null;
 }
 
 /** Um agrupamento da lista: um setor, ou uma equipe dentro dele. */
@@ -63,7 +66,8 @@ interface Grupo {
 /** Ordem e tag são apresentação do cadastro, não autorização de acesso. */
 const PRIORIDADE_NO_DISPARO: Record<string, number> = { lider: 0 };
 
-export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
+export function DisparoDialog({ aberto, onFechar, onPronto, cargo }: Props) {
+  const tetoAnexo = tetoDeUpload(LIMITE_ANEXO, cargo);
   const [passo, setPasso] = useState<1 | 2>(1);
   const [contatos, setContatos] = useState<ContatoChat[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -167,15 +171,15 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
   }, [contatos, chaves, buscaAdiada]);
 
   const receberArquivos = useCallback((arquivos: File[]) => {
-    const grandes = arquivos.filter(a => a.size > LIMITE_ANEXO);
-    const bons = arquivos.filter(a => a.size <= LIMITE_ANEXO);
+    const grandes = arquivos.filter(a => a.size > tetoAnexo);
+    const bons = arquivos.filter(a => a.size <= tetoAnexo);
     if (grandes.length) {
       setErro(grandes.length === 1
         ? `«${grandes[0].name}» tem ${tamanhoLegivel(grandes[0].size)} e o limite é 10 MB.`
         : `${grandes.length} arquivos passam de 10 MB e ficaram de fora.`);
     }
     if (bons.length) setPendentes(atuais => [...atuais, ...bons]);
-  }, []);
+  }, [tetoAnexo]);
 
   const aoColar = useCallback((e: React.ClipboardEvent) => {
     const arquivos = [...e.clipboardData.files];
@@ -208,7 +212,7 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
 
     const anexos: AnexoChat[] = [];
     for (const arquivo of pendentes) {
-      const { anexo, erro: falha } = await subirAnexo(arquivo, pastaDoDisparo.current);
+      const { anexo, erro: falha } = await subirAnexo(arquivo, pastaDoDisparo.current, cargo);
       if (falha) { setErro(falha); setEnviando(false); return; }
       if (anexo) anexos.push(anexo);
     }

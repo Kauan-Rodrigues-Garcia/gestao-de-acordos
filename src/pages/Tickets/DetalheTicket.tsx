@@ -49,6 +49,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { tetoDeUpload } from '@/lib/tetoDeUpload';
 import { useRelogioLento } from '@/hooks/useRelogioLento';
 import { assinarTabela } from '@/lib/realtime';
 import { criarAgrupador } from '@/lib/agrupador';
@@ -77,7 +78,10 @@ interface Props {
   onExcluido: () => void;
 }
 
-/** 10 MB — o mesmo teto do bucket (migration 20260819120000). */
+/**
+ * 10 MB — o mesmo teto do bucket (migration 20260819120000). O super admin não
+ * tem este teto no navegador — ver `lib/tetoDeUpload.ts`.
+ */
 const TAMANHO_MAXIMO = 10 * 1024 * 1024;
 
 /** Um item da linha do tempo: mensagem de gente ou movimento do sistema. */
@@ -195,7 +199,7 @@ export default function DetalheTicket({
     if (!lista) return;
     const bons: File[] = [];
     for (const f of Array.from(lista)) {
-      if (f.size > TAMANHO_MAXIMO) {
+      if (f.size > tetoDeUpload(TAMANHO_MAXIMO, perfil?.perfil)) {
         toast.error(`"${f.name}" passa de 10 MB e não pode ser enviado.`);
         continue;
       }
