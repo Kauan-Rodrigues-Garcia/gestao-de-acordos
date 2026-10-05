@@ -4,7 +4,9 @@
  * Morava no index.css; veio para a pasta do tema para sair junto com ele.
  *
  * Cada faixa tem a sua cor — Halloween abóbora, Sexta-Feira 13 sangue,
- * Candyman mel, Veigh roxo — e é ela que pinta o ícone, o bloco escolhido e o
+ * Candyman mel, Stranger Things azul do Mundo Invertido, A Hora do Pesadelo
+ * verde doente, Pecadores vinho, Puxa o Lança roxo, Na Relíquia do 2T
+ * turquesa — e é ela que pinta o ícone, o bloco escolhido e o
  * topo do painel. `--som-tom` é só matiz/saturação/luz (HSL sem `hsl()`),
  * para o mesmo tom servir em várias opacidades. Nos temas escuros a luz sobe.
  *
@@ -16,13 +18,21 @@
 .som-tom-halloween { --som-tom: 24 95% 46%; }
 .som-tom-sexta13   { --som-tom: 356 72% 42%; }
 .som-tom-candyman  { --som-tom: 40 90% 38%; }
-.som-tom-veigh     { --som-tom: 268 55% 52%; }
+.som-tom-stranger  { --som-tom: 200 80% 40%; }
+.som-tom-pesadelo  { --som-tom: 90 55% 33%; }
+.som-tom-pecadores { --som-tom: 330 60% 40%; }
+.som-tom-puxalanca { --som-tom: 268 55% 52%; }
+.som-tom-reliquia  { --som-tom: 176 70% 32%; }
 .som-tom-spotify  { --som-tom: 141 70% 36%; }
 .som-tom-youtube  { --som-tom: 0 72% 50%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-halloween { --som-tom: 26 95% 58%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-sexta13   { --som-tom: 356 80% 62%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-candyman  { --som-tom: 42 90% 58%; }
-:is(.dark, .dark-grey, .deep-blue) .som-tom-veigh     { --som-tom: 268 70% 72%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-stranger  { --som-tom: 200 85% 62%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-pesadelo  { --som-tom: 88 60% 55%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-pecadores { --som-tom: 330 70% 66%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-puxalanca { --som-tom: 268 70% 72%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-reliquia  { --som-tom: 176 65% 52%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-spotify  { --som-tom: 141 65% 52%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-youtube  { --som-tom: 0 80% 64%; }
 

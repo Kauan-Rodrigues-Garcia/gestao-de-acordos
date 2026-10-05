@@ -48,7 +48,11 @@ describe('preferências do Som ambiente', () => {
   it('faixa que não existe mais (playlist removida ou som antigo) volta para o padrão', () => {
     expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('halloween');
     expect(normalizar({ faixa: 'chuva' }).faixa).toBe('halloween');
-    expect(normalizar({ faixa: 'veigh' }).faixa).toBe('veigh');
+    expect(normalizar({ faixa: 'pecadores' }).faixa).toBe('pecadores');
+  });
+
+  it('quem tinha a música do Veigh que saiu fica com «Puxa o Lança»', () => {
+    expect(normalizar({ faixa: 'veigh' }).faixa).toBe('puxalanca');
   });
 
   it('playlists: descarta link ruim, repetido e o que passa do limite', () => {

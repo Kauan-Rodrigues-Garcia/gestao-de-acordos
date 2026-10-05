@@ -16,8 +16,11 @@ describe('motor do Som ambiente', () => {
 
   it('próxima e anterior dão a volta pela lista, com as playlists no fim', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
-    expect(ordemDasFaixas(prefs)).toEqual(['halloween', 'sexta13', 'candyman', 'veigh', 'youtube:playlist:X']);
-    expect(vizinha(prefs, 'veigh', 1)).toBe('youtube:playlist:X');
+    expect(ordemDasFaixas(prefs)).toEqual([
+      'halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores', 'puxalanca', 'reliquia',
+      'youtube:playlist:X',
+    ]);
+    expect(vizinha(prefs, 'reliquia', 1)).toBe('youtube:playlist:X');
     expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('halloween');
     expect(vizinha(prefs, 'halloween', -1)).toBe('youtube:playlist:X');
     expect(vizinha(prefs, 'sumiu', 1)).toBe('halloween');
@@ -25,8 +28,10 @@ describe('motor do Som ambiente', () => {
 
   it('enxuto: sem playlists na lista e no anterior/próxima', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
-    expect(ordemDasFaixas(prefs, false)).toEqual(['halloween', 'sexta13', 'candyman', 'veigh']);
-    expect(vizinha(prefs, 'veigh', 1, false)).toBe('halloween');
+    expect(ordemDasFaixas(prefs, false)).toEqual([
+      'halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores', 'puxalanca', 'reliquia',
+    ]);
+    expect(vizinha(prefs, 'reliquia', 1, false)).toBe('halloween');
   });
 
   it('enxuto: volume até 50 e faixa de fábrica; completo não muda nada', () => {
@@ -39,8 +44,9 @@ describe('motor do Som ambiente', () => {
     expect(dentroDosLimites({ ...PADRAO, volume: 30 }, false).volume).toBe(30);
   });
 
-  it('no fim de uma faixa de fábrica, a sequência segue só pelas quatro', () => {
+  it('no fim de uma faixa de fábrica, a sequência segue só pelas de fábrica', () => {
     expect(proximaEmbutida('halloween')).toBe('sexta13');
-    expect(proximaEmbutida('veigh')).toBe('halloween');
+    expect(proximaEmbutida('pecadores')).toBe('puxalanca');
+    expect(proximaEmbutida('reliquia')).toBe('halloween');
   });
 });

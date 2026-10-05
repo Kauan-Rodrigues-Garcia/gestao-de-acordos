@@ -1,13 +1,13 @@
 /**
  * PainelSomAmbiente — o que abre ao clicar no fone do header.
  *
- * De cima para baixo: o que está tocando e os controles, o volume, as quatro
- * faixas de fábrica (três temas de terror e uma música), as playlists da
- * pessoa e o «Tocar ao entrar».
+ * De cima para baixo: o que está tocando e os controles, o volume, as faixas
+ * de fábrica (seis temas de terror e duas músicas), as playlists da pessoa e o
+ * «Tocar ao entrar».
  *
  * Duas versões, decididas pelo motor (`completo`):
  *   - super_admin: tudo acima, volume de 0 a 100;
- *   - os demais: enxuta — as quatro faixas numa lista só, sem «Minhas
+ *   - os demais: enxuta — as faixas de fábrica numa lista só, sem «Minhas
  *     playlists» (não dá para adicionar música) e volume de 0 a 50.
  *
  * Mora com o tema de Halloween e só aparece quando o tema está liberado para
@@ -32,13 +32,11 @@ import {
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, VOLUME_PADRAO, ehEmbutida, type FaixaEmbutida, type PlaylistSalva,
+  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
 import './somAmbiente.css';
-
-const TEMAS: FaixaEmbutida[] = ['halloween', 'sexta13', 'candyman'];
 
 const mmss = (seg: number) => {
   const s = Math.max(0, Math.floor(seg));
@@ -190,13 +188,17 @@ export function PainelSomAmbiente() {
         {/* ── Fábrica ── */}
         <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Temas de terror</p>
         <div className="grid grid-cols-3 gap-2">
-          {TEMAS.map(id => (
+          {TEMAS_DE_TERROR.map(id => (
             <BlocoFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
           ))}
         </div>
 
-        <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Música</p>
-        <LinhaFaixa id="veigh" info={EMBUTIDAS.veigh} escolhida={escolhida === 'veigh'} tocando={tocando && noAr === 'veigh'} />
+        <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Músicas</p>
+        <div className="space-y-1.5">
+          {MUSICAS.map(id => (
+            <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
+          ))}
+        </div>
 
         {/* ── Da pessoa ── */}
         <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Minhas playlists</p>
@@ -215,7 +217,7 @@ export function PainelSomAmbiente() {
         <NovaPlaylist playlists={prefs.playlists} />
       </div>
       ) : (
-      // Enxuta: as quatro numa lista só, e nada de adicionar música.
+      // Enxuta: as de fábrica numa lista só, e nada de adicionar música.
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto border-t border-border px-4 py-3">
         {FAIXAS_EMBUTIDAS.map(id => (
           <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />

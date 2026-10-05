@@ -817,7 +817,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500" />
               </Button>
             )}
-            {/* Som ambiente — os temas de terror, a música do Veigh ou a
+            {/* Som ambiente — os temas de terror, as músicas de fábrica ou a
                 playlist da pessoa. Vem com o tema de Halloween: só aparece
                 quando ele está liberado (`hw.disponivel`). Player inteiro só
                 para o super_admin; os demais têm a versão enxuta, sem

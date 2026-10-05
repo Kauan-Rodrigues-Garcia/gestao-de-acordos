@@ -10,8 +10,11 @@
  */
 import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
-/** Os quatro que vêm de fábrica: três temas de terror e uma música. */
-export const FAIXAS_EMBUTIDAS = ['halloween', 'sexta13', 'candyman', 'veigh'] as const;
+/** Os temas de terror que vêm de fábrica, na ordem do painel. */
+export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
+/** As músicas para escutar que vêm de fábrica. */
+export const MUSICAS = ['puxalanca', 'reliquia'] as const;
+export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
 
 /** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
@@ -19,8 +22,19 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   halloween: '/sounds/halloween-john-carpenter.mp3',
   sexta13: '/sounds/halloween-sexta-feira-13.mp3',
   candyman: '/sounds/halloween-candyman.mp3',
-  veigh: '/sounds/halloween-veigh-talvez-voce-precise-de-mim.mp3',
+  stranger: '/sounds/halloween-stranger-things.mp3',
+  pesadelo: '/sounds/halloween-hora-do-pesadelo.mp3',
+  pecadores: '/sounds/halloween-pecadores-eu-menti-pra-voce.mp3',
+  puxalanca: '/sounds/halloween-puxa-o-lanca.mp3',
+  reliquia: '/sounds/halloween-na-reliquia-do-2t.mp3',
 };
+
+/**
+ * Faixas que saíram da fábrica e quem fica no lugar delas para quem as tinha
+ * escolhido. «Talvez Você Precise de Mim», do Veigh, saiu em 05/10/2026; vai
+ * para «Puxa o Lança», que também tem o Veigh.
+ */
+const SUBSTITUTAS: Record<string, FaixaEmbutida> = { veigh: 'puxalanca' };
 
 export interface PlaylistSalva {
   /** `chaveDoLink` — também evita a mesma playlist duas vezes. */
@@ -95,8 +109,9 @@ export function normalizar(bruto: unknown): PreferenciasSom {
     : VOLUME_PADRAO;
   const volume = o.v !== VERSAO && lido === VOLUME_PADRAO_ANTIGO ? VOLUME_PADRAO : lido;
 
-  const faixa = typeof o.faixa === 'string' && (ehEmbutida(o.faixa) || playlists.some(p => p.id === o.faixa))
-    ? o.faixa
+  const lida = typeof o.faixa === 'string' ? (SUBSTITUTAS[o.faixa] ?? o.faixa) : null;
+  const faixa = lida !== null && (ehEmbutida(lida) || playlists.some(p => p.id === lida))
+    ? lida
     : PADRAO.faixa;
 
   return { faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true, playlists };

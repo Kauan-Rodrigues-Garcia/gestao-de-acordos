@@ -7,8 +7,8 @@
  *
  * ## Duas fontes
  *
- *   - FÁBRICA: os temas de Halloween, Sexta-Feira 13 e Candyman e a música do
- *     Veigh, em `public/sounds/` junto da trilha da mensagem de outubro. Tocam
+ *   - FÁBRICA: os seis temas de terror e as duas músicas (`preferencias.ts`),
+ *     em `public/sounds/` junto da trilha da mensagem de outubro. Tocam
  *     em sequência, como playlist (ou repetem uma, com «Repetir»), num
  *     `<audio>`. O volume é nosso, de 0 a 100.
  *   - PLAYLIST da pessoa (Spotify ou YouTube): o player oficial da plataforma,
@@ -27,7 +27,7 @@
  * ## Dois jeitos de usar
  *
  * O super_admin tem o player inteiro. Os demais cargos, a versão enxuta: só
- * as quatro faixas de fábrica (sem «Minhas playlists») e volume de 0 a
+ * as faixas de fábrica (sem «Minhas playlists») e volume de 0 a
  * `VOLUME_MAX_ENXUTO`. A regra mora AQUI, não só no painel: a playlist que
  * ficou salva no navegador, ou um volume gravado acima do teto, não tocam.
  *
@@ -79,7 +79,7 @@ export function ganhoDoVolume(volume: number): number {
   return v <= 0 ? 0 : Math.pow(v, 1.5);
 }
 
-/** A ordem da lista: as quatro de fábrica e depois as playlists (só no completo). */
+/** A ordem da lista: as de fábrica e depois as playlists (só no completo). */
 export function ordemDasFaixas(prefs: PreferenciasSom, comPlaylists = true): string[] {
   return [...FAIXAS_EMBUTIDAS, ...(comPlaylists ? prefs.playlists.map(p => p.id) : [])];
 }
