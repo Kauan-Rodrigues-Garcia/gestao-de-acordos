@@ -41,7 +41,7 @@
       (function () {
         try {
           var d = document.documentElement;
-          var validos = ['light', 'rosa', 'verde', 'dark', 'dark-grey', 'deep-blue'];
+          var validos = ['light', 'rosa', 'verde', 'azul', 'dark', 'dark-grey', 'deep-blue'];
           var t = localStorage.getItem('theme') || 'system';
           if (t === 'system') {
             t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';

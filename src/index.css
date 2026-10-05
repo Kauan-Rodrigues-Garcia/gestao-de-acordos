@@ -307,6 +307,17 @@
   --sidebar-ring: oklch(0.72 0.14 160);
 }
 
+.menu-lateral-escuro:not(.dark):not(.dark-grey):not(.deep-blue).azul {
+  --sidebar: oklch(0.17 0.026 245);
+  --sidebar-foreground: oklch(0.88 0.018 240);
+  --sidebar-primary: oklch(0.72 0.13 240);
+  --sidebar-primary-foreground: oklch(0.16 0.025 245);
+  --sidebar-accent: oklch(0.25 0.037 245);
+  --sidebar-accent-foreground: oklch(0.92 0.015 240);
+  --sidebar-border: oklch(0.28 0.037 245);
+  --sidebar-ring: oklch(0.72 0.13 240);
+}
+
 .dark[data-tenant="pagueplay"] {
   --primary: oklch(0.62 0.18 155);
   --primary-foreground: oklch(0.12 0.015 155);
@@ -605,6 +616,74 @@
   --sidebar-primary-foreground: oklch(0.99 0.004 160);
   --sidebar-ring:               oklch(0.47 0.12 162);
   --chart-1:                    oklch(0.52 0.13 162);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   TEMA AZUL — Céu (claro, para todos)
+   Irmão do Verde, no azul da BookPlay: fundo quase branco com um fio de azul,
+   cards e menu em azul-névoa, destaque em azul fechado (H 245). Pedido do
+   Cleber em 04/10/2026: o Verde fica, e ganha o par azul, os dois para todos.
+   Ativado via <html class="azul">.
+
+   O primary fica em L 0.47, como o do Verde: texto branco em cima passa de
+   5:1. O `--chart-2` vai para o verde-água: com o `--chart-1` já azul,
+   boleto e pix virariam a mesma cor nos crachás de forma de pagamento.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.azul {
+  --success:             oklch(0.52 0.17 145);
+  --success-foreground:  oklch(0.98 0.005 145);
+  --warning:             oklch(0.62 0.18 75);
+  --warning-foreground:  oklch(0.15 0.02 75);
+  --info:                oklch(0.52 0.14 200);
+  --info-foreground:     oklch(0.98 0.005 200);
+
+  --background:          oklch(0.985 0.008 240);  /* branco com fio de azul */
+  --foreground:          oklch(0.18 0.028 250);   /* carvão azulado */
+  --card:                oklch(0.976 0.012 240);
+  --card-foreground:     oklch(0.18 0.028 250);
+  --popover:             oklch(0.992 0.005 240);
+  --popover-foreground:  oklch(0.18 0.028 250);
+  --primary:             oklch(0.47 0.14 245);    /* azul fechado */
+  --primary-foreground:  oklch(0.99 0.004 240);
+  --secondary:           oklch(0.925 0.022 240);
+  --secondary-foreground: oklch(0.22 0.032 250);
+  --muted:               oklch(0.948 0.016 240);
+  --muted-foreground:    oklch(0.47 0.032 250);
+  --accent:              oklch(0.935 0.020 240);
+  --accent-foreground:   oklch(0.22 0.032 250);
+  --destructive:         oklch(0.55 0.22 10);
+  --destructive-foreground: oklch(0.98 0.005 10);
+  --border:              oklch(0.870 0.024 240);
+  --input:               oklch(0.870 0.024 240);
+  --ring:                oklch(0.47 0.14 245);
+
+  --chart-1: oklch(0.52 0.15 245);   /* azul — cor principal */
+  --chart-2: oklch(0.58 0.12 175);   /* verde-água */
+  --chart-3: oklch(0.64 0.17 60);    /* âmbar */
+  --chart-4: oklch(0.55 0.16 300);   /* roxo */
+  --chart-5: oklch(0.60 0.18 15);    /* coral */
+
+  --sidebar:                      oklch(0.960 0.020 240);
+  --sidebar-foreground:           oklch(0.24 0.038 250);
+  --sidebar-primary:              oklch(0.47 0.14 245);
+  --sidebar-primary-foreground:   oklch(0.99 0.004 240);
+  --sidebar-accent:               oklch(0.912 0.028 240);
+  --sidebar-accent-foreground:    oklch(0.24 0.038 250);
+  --sidebar-border:               oklch(0.870 0.024 240);
+  --sidebar-ring:                 oklch(0.47 0.14 245);
+}
+
+/* Na PaguePlay o verde da empresa cede ao azul do tema — mesmo acordo do Verde e do Rosa. */
+.azul[data-tenant="pagueplay"],
+.azul [data-tenant="pagueplay"] {
+  --primary:                    oklch(0.47 0.14 245);
+  --primary-foreground:         oklch(0.99 0.004 240);
+  --ring:                       oklch(0.47 0.14 245);
+  --sidebar-primary:            oklch(0.47 0.14 245);
+  --sidebar-primary-foreground: oklch(0.99 0.004 240);
+  --sidebar-ring:               oklch(0.47 0.14 245);
+  --chart-1:                    oklch(0.52 0.15 245);
 }
 
 /* Suporte a PaguePay nos novos temas */

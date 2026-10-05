@@ -260,7 +260,7 @@ function useDesvioDoCelular(ativo: boolean): React.ReactElement | null {
 function TenantThemeApplier(): null {
   const { empresa, tenantSlug: slugDoLink } = useEmpresa();
   const marca = useMarca();
-  const tenantSlug = marca ? (marca.nome === 'PaguePlay' ? 'pagueplay' : 'bookplay') : slugDoLink;
+  const tenantSlug = marca ? marca.tom : slugDoLink;
   useEffect(() => {
     document.documentElement.setAttribute('data-tenant', tenantSlug);
 

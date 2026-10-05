@@ -79,7 +79,7 @@ import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
 import { useMarca } from '@/hooks/useMarca';
 import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
-import { TemaDaMarca } from '@/components/TemaDaMarca';
+import { DesfazTemaDaMarca } from '@/components/TemaDaMarca';
 
 /*
  * Painéis que só aparecem com um clique — fora do pacote de entrada.
@@ -717,7 +717,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <TemaHalloweenContext.Provider value={halloween}>
-    <TemaDaMarca marca={marca} />
+    <DesfazTemaDaMarca />
     <div className="flex h-screen bg-background overflow-hidden">
       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
           fluxo e acima de tudo: aparecer e sumir não move um pixel do conteúdo,

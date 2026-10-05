@@ -15,7 +15,7 @@
  * a lista de lá também.
  */
 
-export type NomeTema = 'light' | 'rosa' | 'verde' | 'dark' | 'dark-grey' | 'deep-blue';
+export type NomeTema = 'light' | 'rosa' | 'verde' | 'azul' | 'dark' | 'dark-grey' | 'deep-blue';
 export type EscolhaTema = NomeTema | 'system';
 
 export interface TemaInfo {
@@ -30,6 +30,7 @@ export const TEMAS: readonly TemaInfo[] = [
   { valor: 'light',     rotulo: 'Claro',           escuro: false, amostra: { fundo: 'oklch(0.99 0 0)',          destaque: 'oklch(0.45 0.15 220)' } },
   { valor: 'rosa',      rotulo: 'Rosa',            escuro: false, amostra: { fundo: 'oklch(0.962 0.021 347)',   destaque: 'oklch(0.50 0.125 3)' } },
   { valor: 'verde',     rotulo: 'Verde',           escuro: false, amostra: { fundo: 'oklch(0.960 0.020 158)',   destaque: 'oklch(0.47 0.12 162)' } },
+  { valor: 'azul',      rotulo: 'Azul',            escuro: false, amostra: { fundo: 'oklch(0.960 0.020 240)',   destaque: 'oklch(0.47 0.14 245)' } },
   { valor: 'dark',      rotulo: 'Escuro (Padrão)', escuro: true,  amostra: { fundo: 'oklch(0.12 0.015 220)',    destaque: 'oklch(0.62 0.18 220)' } },
   { valor: 'dark-grey', rotulo: 'Cinza Escuro',    escuro: true,  amostra: { fundo: 'oklch(0.21 0.007 220)',    destaque: 'oklch(0.62 0.18 220)' } },
   { valor: 'deep-blue', rotulo: 'Azul Profundo',   escuro: true,  amostra: { fundo: 'oklch(0.14 0.035 240)',    destaque: 'oklch(0.65 0.20 220)' } },

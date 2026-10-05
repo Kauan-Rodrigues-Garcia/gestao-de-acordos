@@ -1,4 +1,4 @@
-import { Moon, Sun, Monitor, Flower2, Leaf, PanelLeft } from 'lucide-react';
+import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -138,6 +138,8 @@ export function ThemeToggle({ halloween }: { halloween?: InterruptorHalloween } 
             <Flower2 className="h-4 w-4 text-primary" />
           ) : atual === 'verde' ? (
             <Leaf className="h-4 w-4 text-primary" />
+          ) : atual === 'azul' ? (
+            <Droplets className="h-4 w-4 text-primary" />
           ) : (
             <Sun className="h-4 w-4" />
           )}
