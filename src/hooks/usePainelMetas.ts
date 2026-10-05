@@ -154,6 +154,14 @@ export interface DadosPainelMetas {
   metaDupla: MetaDupla;
   quartis: QuartilConfig[];
   projecao: ResultadoProjecao | null;
+  /**
+   * A mesma projeção, refeita contra a 2ª, 3ª e 4ª metas (`metasExtras[0..2]`),
+   * para quem prefere se guiar por uma delas. Só as CADASTRADAS, em ordem: o
+   * índice 0 é a 2ª meta. Vazio = só existe a 1ª, e o seletor «Metas:» do card
+   * «Projeção» nem aparece. O quartil continua sendo o de `projecao`: a faixa
+   * oficial é medida pela 1ª meta, igual à aba Quartis.
+   */
+  projecoesMetasExtras: ResultadoProjecao[];
 
   porDia: Record<number, { bruto: number; ho: number; qtd: number }>;
   /** Agendado por dia, NO MESMO ESCOPO do recebimento — ver o serviço. */
@@ -661,6 +669,32 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     [metaDupla, diasUteisTotal, diasUteisPassados, quartis],
   );
 
+  /**
+   * A projeção pela 2ª, 3ª e 4ª metas (pedido de 05/10/2026). Mesma conta,
+   * mesma soma das duas frentes: só a meta direta troca de degrau. A meta
+   * indireta não tem degraus e entra igual em todas as leituras.
+   *
+   * `metasExtras` vira chave em texto porque é um array novo a cada render.
+   */
+  const chaveExtras = metasExtras.slice(0, 3).join('|');
+  const projecoesMetasExtras = useMemo(() => {
+    const extras = chaveExtras ? chaveExtras.split('|').map(Number) : [];
+    return extras
+      .map(valor => {
+        const dupla = combinarMetaDupla({
+          metaDireta: valor,
+          metaIndireta: metaDupla.metaIndireta,
+          recebidoDireto: metaDupla.recebidoDireto,
+          recebidoIndireto: metaDupla.recebidoIndireto,
+        });
+        return calcularProjecao({
+          meta: dupla.metaTotal, recebido: dupla.recebidoTotal,
+          totalUteis: diasUteisTotal, decorridos: diasUteisPassados, quartis,
+        });
+      })
+      .filter((p): p is ResultadoProjecao => p !== null);
+  }, [chaveExtras, metaDupla, diasUteisTotal, diasUteisPassados, quartis]);
+
   /** Formas na unidade ativa — o donut usa uma unidade só. */
   const porFormaNaUnidade = useMemo(() => {
     const saida: Record<string, { valor: number; qtd: number }> = {};
@@ -771,6 +805,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     metaDupla,
     quartis,
     projecao,
+    projecoesMetasExtras,
 
     porDia: agregado.porDia,
     agendadoPorDia,

@@ -4,9 +4,12 @@
  * A regra que mais custa caro se quebrar: card sem o que dizer some, em vez de
  * mostrar R$ 0,00. Um zero na tela parece dado real.
  */
+import { useState } from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { CardsMetas } from './CardsMetas';
+import type { NivelMeta } from '@/lib/alvoProjecao';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import type { DadosPainelMetas } from '@/hooks/usePainelMetas';
@@ -364,5 +367,85 @@ describe('CardsMetas — baixa anterior', () => {
   it('sem dia anterior com movimento, o card some', () => {
     render0(dados({ baixaAnterior: null }));
     expect(screen.queryByText('Recebido baixa anterior')).not.toBeInTheDocument();
+  });
+});
+
+describe('CardsMetas — projeção por 1ª, 2ª, 3ª ou 4ª meta', () => {
+  const pelaMeta = (meta: number) => calcularProjecao({
+    meta, recebido: 65_611.62,
+    totalUteis: 21, decorridos: 6, quartis: QUARTIS_PADRAO,
+  })!;
+  const TRES_EXTRAS = [pelaMeta(160_000), pelaMeta(200_000), pelaMeta(260_000)];
+
+  /** O estado mora no `PainelMetas`; aqui um invólucro faz o papel dele. */
+  function ComSeletor({ d }: { d: DadosPainelMetas }) {
+    const [nivel, setNivel] = useState<NivelMeta>(1);
+    return <CardsMetas dados={d} mes="2026-08" alvoProjecao={nivel} onEscolherAlvo={setNivel} />;
+  }
+
+  const opcao = (n: number) => screen.getByRole('radio', { name: `Projeção pela ${n}ª meta` });
+
+  it('só com a 1ª meta cadastrada o seletor não aparece', () => {
+    render(<ComSeletor d={dados({ projecoesMetasExtras: [] })} />);
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.queryByText('Metas:')).not.toBeInTheDocument();
+  });
+
+  it('oferece só as metas cadastradas', () => {
+    render(<ComSeletor d={dados({ projecoesMetasExtras: TRES_EXTRAS.slice(0, 1) })} />);
+    expect(screen.getByText('Metas:')).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.queryByRole('radio', { name: /3ª meta/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /4ª meta/ })).not.toBeInTheDocument();
+  });
+
+  it('com as quatro, cada opção troca a leitura de ritmo e a 1ª volta ao normal', async () => {
+    const user = userEvent.setup();
+    render(<ComSeletor d={dados({ projecoesMetasExtras: TRES_EXTRAS })} />);
+
+    expect(screen.getAllByRole('radio')).toHaveLength(4);
+    expect(opcao(1)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('177%')).toBeInTheDocument();
+
+    await user.click(opcao(2));
+    expect(opcao(2)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('144%')).toBeInTheDocument();
+    expect(screen.getByText('do esperado pela 2ª meta')).toBeInTheDocument();
+
+    await user.click(opcao(3));
+    expect(screen.getByText('115%')).toBeInTheDocument();
+    expect(screen.getByText('3ª meta · Com base em 6 de 21 dias úteis')).toBeInTheDocument();
+    expect(screen.getByText('Acima do ritmo da 3ª meta')).toBeInTheDocument();
+
+    await user.click(opcao(4));
+    expect(screen.getByText('88%')).toBeInTheDocument();
+    expect(screen.getByText(/−\s*R\$\s*8\.674,09/)).toBeInTheDocument();
+    expect(screen.getByText('Abaixo do ritmo da 4ª meta')).toBeInTheDocument();
+
+    await user.click(opcao(1));
+    expect(screen.getByText('177%')).toBeInTheDocument();
+    expect(screen.getByText('do esperado até hoje')).toBeInTheDocument();
+    expect(screen.getByText('Acima da meta projetada')).toBeInTheDocument();
+  });
+
+  it('o quartil continua sendo o oficial, pela 1ª meta', async () => {
+    const user = userEvent.setup();
+    render(<ComSeletor d={dados({ projecoesMetasExtras: TRES_EXTRAS })} />);
+    await user.click(opcao(4));
+    expect(screen.getByText('1º Quartil')).toBeInTheDocument();
+  });
+
+  it('meta escolhida que não existe no mês cai na 1ª, sem quebrar', () => {
+    render(
+      <CardsMetas
+        dados={dados({ projecoesMetasExtras: TRES_EXTRAS.slice(0, 1) })}
+        mes="2026-08"
+        alvoProjecao={4}
+        onEscolherAlvo={() => {}}
+      />,
+    );
+    expect(opcao(1)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('177%')).toBeInTheDocument();
+    expect(screen.getByText('do esperado até hoje')).toBeInTheDocument();
   });
 });

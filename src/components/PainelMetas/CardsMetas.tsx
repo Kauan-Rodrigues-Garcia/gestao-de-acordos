@@ -23,7 +23,8 @@
  * somem os cards de vínculo. Os grids são `auto-fit` para não abrir buraco.
  */
 
-import { motion } from 'framer-motion';
+import { useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   DollarSign, Wallet, Sparkles, Target, CalendarCheck, Gauge, Layers,
   TrendingUp, TrendingDown, History, FileWarning,
@@ -35,8 +36,37 @@ import { MetricCard } from '@/components/AnalyticsPanel/SubComponents';
 import { containerVariants } from '@/components/AnalyticsPanel/constants';
 import { CardMetaDonut } from './CardMetaDonut';
 import { AnelProjecao } from './AnelProjecao';
+import { AlternadorMeta } from './AlternadorMeta';
 import type { DadosPainelMetas } from '@/hooks/usePainelMetas';
+import { NIVEL_META_MAXIMO, type NivelMeta } from '@/lib/alvoProjecao';
 import { corTexto } from '@/lib/temas';
+
+/**
+ * O valor entra deslizando quando a meta de referência troca — e só aí.
+ *
+ * `chave` é a meta em uso: trocar a meta remonta o conteúdo e dispara a
+ * entrada. Uma atualização de dado (tempo real, troca de mês) não muda a chave
+ * e não anima, para o movimento continuar significando «troquei de meta».
+ * `animar` fica falso até o primeiro clique: o card não chega dançando.
+ */
+function TrocaSuave({ chave, animar, children }: {
+  chave: string;
+  animar: boolean;
+  children: React.ReactNode;
+}) {
+  const reduzir = useReducedMotion();
+  return (
+    <motion.span
+      key={chave}
+      className="inline-block"
+      initial={animar && !reduzir ? { opacity: 0, y: 8, filter: 'blur(3px)' } : false}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.span>
+  );
+}
 
 /** Grade que se reacomoda sozinha conforme cards entram e saem. */
 const DIAS_SEMANA = [
@@ -65,12 +95,21 @@ interface CardsMetasProps {
    * de 14/09/2026) — quem decide se ele existe é o `PainelMetas`.
    */
   slotComissao?: React.ReactNode;
+  /**
+   * Contra qual meta a projeção é lida. Quem guarda a escolha é o
+   * `PainelMetas`, porque o gráfico de evolução logo abaixo segue a mesma.
+   */
+  alvoProjecao?: NivelMeta;
+  /** Sem ela (ou sem meta além da 1ª) o seletor «Metas:» não aparece. */
+  onEscolherAlvo?: (nivel: NivelMeta) => void;
 }
 
-export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
+export function CardsMetas({
+  dados, mes, slotComissao, alvoProjecao = 1, onEscolherAlvo,
+}: CardsMetasProps) {
   const {
     totalRecebido, totalRecebidoOposto, diretoExtra, extraTabulado, meta, metaOposta,
-    projecao, escopoRotulo,
+    projecao, projecoesMetasExtras = [], escopoRotulo,
     diasUteisTotal, diasUteisPassados, baixaAnterior, porForma, unidade,
   } = dados;
 
@@ -114,7 +153,39 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
     naoTabulado: unidade === 'ho' ? diretoExtra.naoTabuladoHO : diretoExtra.naoTabulado,
   };
 
-  const corProj = projecao ? corProjecao(projecao.projecaoPct) : COR_QUARTIL[4];
+  /**
+   * A projeção em tela: pela 1ª meta (a de sempre) ou pela 2ª, 3ª ou 4ª, quando
+   * a pessoa escolheu e aquela meta está cadastrada no mês. Troca só a leitura
+   * de ritmo — projeção, valor esperado e diferença. O quartil fica em
+   * `projecao`: é a faixa oficial, a mesma da aba Quartis, e um quartil «pela
+   * 3ª meta» não existe em lugar nenhum do sistema.
+   *
+   * Meta escolhida que não existe neste mês cai na 1ª — sem apagar a escolha,
+   * que volta a valer no mês em que a meta existir.
+   */
+  const projecoes = projecao
+    ? [projecao, ...projecoesMetasExtras].slice(0, NIVEL_META_MAXIMO)
+    : [];
+  const niveis = projecoes.map((_, i) => (i + 1) as NivelMeta);
+  const nivel: NivelMeta = alvoProjecao <= projecoes.length ? alvoProjecao : 1;
+  const proj = projecoes[nivel - 1] ?? projecao;
+  const rotuloAlvo = nivel > 1 ? `${nivel}ª meta` : null;
+
+  // Só anima depois da primeira troca — ver `TrocaSuave`. O giro do anel
+  // acumula uma volta por troca, no sentido da troca: subir de meta gira para
+  // um lado, descer gira para o outro.
+  const nivelAnterior = useRef(nivel);
+  const jaTrocou = useRef(false);
+  const giro = useRef(0);
+  if (nivelAnterior.current !== nivel) {
+    giro.current += nivel > nivelAnterior.current ? 360 : -360;
+    nivelAnterior.current = nivel;
+    jaTrocou.current = true;
+  }
+  const chaveAlvo = String(nivel);
+  const reduzirMovimento = useReducedMotion();
+
+  const corProj = proj ? corProjecao(proj.projecaoPct) : COR_QUARTIL[4];
   const corQuartil = projecao?.quartil
     ? COR_QUARTIL[projecao.quartil.quartil] ?? COR_QUARTIL[2]
     : COR_QUARTIL[2];
@@ -229,24 +300,40 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
         {/* Os quatro números de projeção. Todos são o MESMO componente que os
             de cima, de propósito: mesma altura, mesmo respiro, mesma
             hierarquia de tipografia. */}
-        {projecao && (
+        {projecao && proj && (
           <>
             {/* O único card da grade cujo valor não é um número escrito: a
                 projeção é uma FRAÇÃO de um todo, e o anel é a forma dela. O
                 card, a célula que ocupa, o rótulo e a linha de apoio seguem os
-                mesmos — e a conta também. Ver `AnelProjecao`. */}
+                mesmos — e a conta também. Ver `AnelProjecao`.
+
+                Ao trocar de meta o anel NÃO é remontado: o arco varre do valor
+                velho ao novo (a transição em CSS do próprio anel) enquanto o
+                anel gira uma volta no eixo, como moeda virando. O giro esconde
+                o salto do número do centro e diz «a régua mudou». */}
             <MetricCard
               label="Projeção"
               icon={<Gauge className="w-4 h-4" />}
               accentColor={corProj}
               gradientFrom={corProj}
-              trend={projecao.projecaoPct >= 100 ? 'up' : 'down'}
+              trend={proj.projecaoPct >= 100 ? 'up' : 'down'}
+              acao={niveis.length > 1 && onEscolherAlvo ? (
+                <AlternadorMeta nivel={nivel} niveis={niveis} onEscolher={onEscolherAlvo} />
+              ) : undefined}
               value={(
-                <div className="flex justify-center py-1">
-                  <AnelProjecao pct={projecao.projecaoPct} cor={corProj} />
+                <div className="flex justify-center py-1" style={{ perspective: 600 }}>
+                  <motion.div
+                    initial={false}
+                    animate={{ rotateY: giro.current }}
+                    transition={reduzirMovimento
+                      ? { duration: 0 }
+                      : { duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <AnelProjecao pct={proj.projecaoPct} cor={corProj} />
+                  </motion.div>
                 </div>
               )}
-              sub="do esperado até hoje"
+              sub={rotuloAlvo ? `do esperado pela ${rotuloAlvo}` : 'do esperado até hoje'}
             />
 
             <MetricCard
@@ -254,25 +341,33 @@ export function CardsMetas({ dados, mes, slotComissao }: CardsMetasProps) {
               icon={<CalendarCheck className="w-4 h-4" />}
               accentColor="#6366f1"
               gradientFrom="#6366f1"
-              value={formatBRL(projecao.esperado)}
-              sub={`Com base em ${diasUteisPassados} de ${diasUteisTotal} dias úteis`}
+              value={(
+                <TrocaSuave chave={chaveAlvo} animar={jaTrocou.current}>
+                  {formatBRL(proj.esperado)}
+                </TrocaSuave>
+              )}
+              sub={`${rotuloAlvo ? `${rotuloAlvo} · ` : ''}Com base em ${diasUteisPassados} de ${diasUteisTotal} dias úteis`}
             />
 
             <MetricCard
               label="Diferença para projeção"
-              icon={projecao.diferenca >= 0
+              icon={proj.diferenca >= 0
                 ? <TrendingUp className="w-4 h-4" />
                 : <TrendingDown className="w-4 h-4" />}
-              accentColor={projecao.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
-              gradientFrom={projecao.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
-              trend={projecao.diferenca >= 0 ? 'up' : 'down'}
+              accentColor={proj.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
+              gradientFrom={proj.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
+              trend={proj.diferenca >= 0 ? 'up' : 'down'}
               value={(
-                <span style={{ color: corTexto(projecao.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]) }}>
-                  {projecao.diferenca >= 0 ? '+ ' : '− '}
-                  {formatBRL(Math.abs(projecao.diferenca))}
-                </span>
+                <TrocaSuave chave={chaveAlvo} animar={jaTrocou.current}>
+                  <span style={{ color: corTexto(proj.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]) }}>
+                    {proj.diferenca >= 0 ? '+ ' : '− '}
+                    {formatBRL(Math.abs(proj.diferenca))}
+                  </span>
+                </TrocaSuave>
               )}
-              sub={projecao.diferenca >= 0 ? 'Acima da meta projetada' : 'Abaixo da meta projetada'}
+              sub={rotuloAlvo
+                ? `${proj.diferenca >= 0 ? 'Acima' : 'Abaixo'} do ritmo da ${rotuloAlvo}`
+                : (proj.diferenca >= 0 ? 'Acima da meta projetada' : 'Abaixo da meta projetada')}
             />
 
             {projecao.quartil && (

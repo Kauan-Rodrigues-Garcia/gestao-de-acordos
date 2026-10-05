@@ -13,7 +13,7 @@
  *   `CardsMetas` e `EvolucaoDiaria`  desenham
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileSpreadsheet, ChevronDown, ChevronUp, CalendarClock } from 'lucide-react';
 import { getTodayISO } from '@/lib/index';
@@ -25,6 +25,9 @@ import { useMinhaComissao } from '@/services/comissao/useMinhaComissao';
 import { temCardComissao } from '@/services/comissao/temCardComissao';
 import { CardComissaoDashboard } from '@/components/Comissao/CardComissaoDashboard';
 import type { UnidadeValor } from '@/lib/unidadeValor';
+import {
+  lerAlvoProjecao, gravarAlvoProjecao, type NivelMeta,
+} from '@/lib/alvoProjecao';
 import { FaixaDiasUteis } from './FaixaDiasUteis';
 import { CardsMetas } from './CardsMetas';
 import { CardMetaDupla } from './CardMetaDupla';
@@ -91,6 +94,28 @@ export function PainelMetas({
   const resultadoComissao = comissao.podeVer && comissaoDaPessoa ? comissao.resultado : null;
   const mostraComissao = temCardComissao(resultadoComissao);
 
+  /*
+   * Projeção pela 1ª, 2ª, 3ª ou 4ª meta (pedido de 05/10/2026).
+   *
+   * A escolha mora AQUI, e não no card, porque duas peças a seguem: os cards
+   * de ritmo e a régua «Meta diária» do gráfico de evolução. Se cada um
+   * guardasse a sua, o gráfico cobraria a 1ª meta ao lado de um card falando
+   * da 3ª. Fica lembrada no aparelho, por pessoa (`lib/alvoProjecao.ts`).
+   *
+   * Mês sem a meta escolhida (ou escopo de equipe/setor, que não tem degraus)
+   * cai na 1ª sem apagar a escolha: no mês em que ela existir, volta a valer.
+   */
+  const [alvoProjecao, setAlvoProjecao] = useState<NivelMeta>(() => lerAlvoProjecao(perfil?.id));
+  useEffect(() => { setAlvoProjecao(lerAlvoProjecao(perfil?.id)); }, [perfil?.id]);
+  const escolherAlvo = (nivel: NivelMeta) => {
+    setAlvoProjecao(nivel);
+    gravarAlvoProjecao(perfil?.id, nivel);
+  };
+  // A mesma regra do `CardsMetas`: sem a 1ª meta não há projeção nenhuma.
+  const projecaoEmTela = dados.projecao && alvoProjecao > 1
+    ? (dados.projecoesMetasExtras[alvoProjecao - 2] ?? dados.projecao)
+    : dados.projecao;
+
   if (dados.carregando) {
     return (
       <div className="space-y-3">
@@ -142,6 +167,8 @@ export function PainelMetas({
           <CardsMetas
             dados={dados}
             mes={mes}
+            alvoProjecao={alvoProjecao}
+            onEscolherAlvo={escolherAlvo}
             slotComissao={mostraComissao && resultadoComissao ? (
               <CardComissaoDashboard
                 resultado={resultadoComissao}
@@ -165,7 +192,7 @@ export function PainelMetas({
             agendadoPorDia={dados.agendadoPorDia}
             mes={mes}
             unidade={dados.unidade}
-            metaDiaria={dados.projecao?.metaDiaria ?? null}
+            metaDiaria={projecaoEmTela?.metaDiaria ?? null}
             // Mês fechado não tem "hoje" para destacar. `getTodayISO` e não
             // `new Date()`: o dia tem que ser o de São Paulo, não o da máquina.
             diaDeHoje={dados.noMesAtual ? Number(getTodayISO().slice(8, 10)) : null}

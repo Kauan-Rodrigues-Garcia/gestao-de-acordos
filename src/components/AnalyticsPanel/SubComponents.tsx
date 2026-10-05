@@ -58,12 +58,18 @@ export interface MetricCardProps {
   accentColor?: string;
   trend?: TrendDirection;
   gradientFrom?: string;
+  /**
+   * Um controle pequeno no cabeçalho, antes dos ícones — hoje só o alternador
+   * 1ª/4ª meta do card «Projeção». Fica na linha do rótulo para não mudar a
+   * altura do card nem empurrar o valor.
+   */
+  acao?: React.ReactNode;
 }
 
 export function MetricCard({
   label, value, icon, sub,
   accentColor = '#6366f1',
-  trend, gradientFrom,
+  trend, gradientFrom, acao,
 }: MetricCardProps) {
   const TrendIcon =
     trend === 'up' ? ArrowUpRight : trend === 'down' ? ArrowDownRight : Minus;
@@ -97,6 +103,7 @@ export function MetricCard({
           {label}
         </span>
         <div className="flex items-center gap-1 shrink-0">
+          {acao && <div className="mr-1 flex">{acao}</div>}
           {trend && (
             <TrendIcon className={cn('w-3.5 h-3.5', trendColor)} />
           )}
