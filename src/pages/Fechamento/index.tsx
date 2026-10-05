@@ -62,6 +62,7 @@ import {
 import { TabelaFechamento } from './TabelaFechamento';
 import { GraficosFechamento } from './GraficosFechamento';
 import { PremiacoesComissoes } from './PremiacoesComissoes';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
@@ -103,7 +104,7 @@ export default function PaginaFechamento() {
   const podeEditar     = temPermissao('fechamento_editar');
   const setorProprio   = perfil?.setor_id ?? null;
 
-  const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
+  const [setores, setSetores] = useState<{ id: string; nome: string; ativo?: boolean | null; tipo?: string | null }[]>([]);
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
 
   // A aba fica na URL: recarregar a página ou mandar o link abre na mesma.
@@ -138,12 +139,15 @@ export default function PaginaFechamento() {
     let cancelado = false;
     void supabase
       .from('setores')
-      .select('id, nome')
+      .select(COLUNAS_SETOR_DO_FILTRO)
       .eq('empresa_id', empresa.id)
       .order('nome')
       .then(({ data }) => {
         if (cancelado) return;
-        setSetores(aplicarOrdemSetores((data as { id: string; nome: string }[]) ?? [], empresa.id));
+        setSetores(aplicarOrdemSetores(
+          (data as unknown as { id: string; nome: string; ativo: boolean; tipo: string | null }[] | null) ?? [],
+          empresa.id,
+        ));
       });
     return () => { cancelado = true; };
   }, [empresa?.id]);
@@ -260,7 +264,9 @@ export default function PaginaFechamento() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODOS_SETORES}>Todos os setores</SelectItem>
-                {setores.map(s => (
+                {/* Sem setor de sistema, e sem inativo do mês corrente em diante —
+                    `lib/setoresDosFiltros`. */}
+                {setoresDosFiltros(setores, { mes }).map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                 ))}
               </SelectContent>

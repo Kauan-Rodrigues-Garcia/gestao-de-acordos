@@ -40,6 +40,7 @@ import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
 import { useMensagensWhatsapp } from '@/hooks/useMensagensWhatsapp';
@@ -94,7 +95,11 @@ export default function Acordos() {
    * preso a ele pela própria consulta, e o seletor não teria o que oferecer.
    */
   const [filtroSetor, setFiltroSetor] = useState<string | null>(null);
-  const [setoresDisponiveis, setSetoresDisponiveis] = useState<{ id: string; nome: string }[]>([]);
+  // As linhas de `setores` como vieram; o seletor recorta pelo mês olhado
+  // (`setoresDoFiltro`, mais abaixo, depois de `mesFiltro`).
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState<
+    { id: string; nome: string; ativo: boolean; tipo: string | null }[]
+  >([]);
 
   /*
    * Alcance DESTA aba, e de nenhuma outra.
@@ -126,10 +131,12 @@ export default function Acordos() {
    */
   useEffect(() => {
     if (!verTodosSetores || !empresa?.id) { setSetoresDisponiveis([]); return; }
-    supabase.from('setores').select('id, nome')
+    supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO)
       .eq('empresa_id', empresa.id).order('nome')
       .then(({ data }) => {
-        setSetoresDisponiveis((data as { id: string; nome: string }[]) ?? []);
+        setSetoresDisponiveis(
+          (data as unknown as { id: string; nome: string; ativo: boolean; tipo: string | null }[] | null) ?? [],
+        );
       });
   }, [verTodosSetores, empresa?.id]);
 
@@ -225,6 +232,13 @@ export default function Acordos() {
    * Dashboard e clicar em Acordos tem que continuar em agosto.
    */
   const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
+
+  // Sem setor de sistema, e sem inativo do mês corrente em diante — mês
+  // passado mantém o setor que existia nele. Ver `lib/setoresDosFiltros`.
+  const setoresDoFiltro = useMemo(
+    () => listaDoFiltroDeSetores(setoresDisponiveis, null, { mes: mesFiltro }),
+    [setoresDisponiveis, mesFiltro],
+  );
 
   /**
    * Cadeado do mês. A lista é recortada por `vencimento` dentro de `mesFiltro`,
@@ -899,7 +913,7 @@ export default function Acordos() {
           activeTab={activeTab} setActiveTab={setActiveTab}
           niveis={niveis}
           equipesDoSetor={equipesDoSetor}
-          setoresDisponiveis={setoresDisponiveis}
+          setoresDisponiveis={setoresDoFiltro}
           filtroSetor={filtroSetor}
           setFiltroSetor={setFiltroSetor}
           visaoFiltroAcordos={visaoFiltroAcordos} setVisaoFiltroAcordos={setVisaoFiltroAcordos}

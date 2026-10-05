@@ -72,6 +72,7 @@ import { PainelResponsaveis } from './PainelResponsaveis';
 import { ChatSolicitacao } from './ChatSolicitacao';
 import { BlocoSolicitacoes } from './BlocoSolicitacoes';
 import { FaixaContadores } from './FaixaContadores';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 const TODOS = '__todos__';
 
@@ -125,7 +126,7 @@ export default function SolicitacoesWhatsapp() {
   const setorDoPerfil    = perfil?.setor_id ?? null;
   const veMaisDeUmSetor  = !setorDoPerfil && temVisaoGeralConfigurada;
 
-  const [setores, setSetores]   = useState<OpcaoSimples[]>([]);
+  const [setores, setSetores]   = useState<(OpcaoSimples & { ativo?: boolean | null; tipo?: string | null })[]>([]);
   const [equipes, setEquipes]   = useState<(OpcaoSimples & { setor_id: string | null })[]>([]);
   const [setorSel, setSetorSel] = useState<string | null>(setorDoPerfil);
   const [equipeSel, setEquipeSel] = useState<string>(TODOS);
@@ -162,11 +163,11 @@ export default function SolicitacoesWhatsapp() {
     let cancelado = false;
     void (async () => {
       const [{ data: s }, { data: e }] = await Promise.all([
-        supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
+        supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO).eq('empresa_id', empresaId).order('nome'),
         supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId).order('nome'),
       ]);
       if (cancelado) return;
-      setSetores((s ?? []) as OpcaoSimples[]);
+      setSetores((s ?? []) as unknown as (OpcaoSimples & { ativo: boolean; tipo: string | null })[]);
       setEquipes((e ?? []) as (OpcaoSimples & { setor_id: string | null })[]);
     })();
     return () => { cancelado = true; };
@@ -640,7 +641,8 @@ export default function SolicitacoesWhatsapp() {
               </SelectTrigger>
               <SelectContent>
                 {!veMaisDeUmSetor && <SelectItem value={TODOS}>Todos os setores</SelectItem>}
-                {setores.map(s => (
+                {/* Sem inativo e sem setor de sistema — `lib/setoresDosFiltros`. */}
+                {setoresDosFiltros(setores).map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                 ))}
               </SelectContent>

@@ -79,7 +79,7 @@ import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
 // As contas desta tela vivem em `pixAutomaticoView`: são puras e têm teste
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
-  mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
+  mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, operadoresDoRecorte, sugerirOperadores,
   filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
   calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe,
   textoPrazoExpurgo,
@@ -123,6 +123,7 @@ import { PixPedidosNr } from './PixPedidosNr';
 import { PixAcordosSemRegistro } from './PixAcordosSemRegistro';
 import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
 import { chaveDeCache, gravarInstantaneo, valorInstantaneo } from '@/lib/cacheInstantaneo';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { LinhaViva } from '@/components/LinhaViva';
@@ -217,12 +218,20 @@ const TODOS_SETORES = '__todos__';
  * Só o que a tela PINTA. Nada de estado de edição, seleção ou carregamento:
  * reabrir com um diálogo pela metade seria pior que reabrir vazio.
  */
+/**
+ * Setor como a aba guarda: o nome, e `ativo`/`tipo` para a barra saber quem
+ * fica fora do filtro (ver `lib/setoresDosFiltros`). A lista inteira continua
+ * servindo de mapa de nomes — a linha antiga de um setor inativo segue com
+ * nome na tabela.
+ */
+interface SetorDaAba { id: string; nome: string; ativo?: boolean | null; tipo?: string | null }
+
 interface InstantaneoPix {
   itens: PixAutoAcordo[];
   configs: Record<string, PixAutoConfig>;
   operadores: OperadorInfo[];
   equipes: EquipeComSetor[];
-  setores: { id: string; nome: string }[];
+  setores: SetorDaAba[];
   saldos: PixAutoSaldo[];
   pagamentos: PixPremiacaoPagamento[];
   /** Sem ele, a linha compartilhada sumiria da tabela até a releitura. */
@@ -376,7 +385,10 @@ export function PixAutomatico() {
    * vinha da empresa inteira e não havia como estreitá-la depois.
    */
   const [equipes, setEquipes]       = useState<EquipeComSetor[]>(() => guardado?.equipes ?? []);
-  const [setores, setSetores]       = useState<{ id: string; nome: string }[]>(() => guardado?.setores ?? []);
+  const [setores, setSetores]       = useState<SetorDaAba[]>(() => guardado?.setores ?? []);
+  /** Os setores que a barra oferece: sem setor de sistema, e sem inativo do
+   *  mês corrente em diante — mês passado mantém quem existia nele. */
+  const setoresDoFiltro = useMemo(() => setoresDosFiltros(setores, { mes }), [setores, mes]);
   /*
    * A composição desta tela veio da FOTO do mês, e não das tabelas de hoje?
    *
@@ -617,8 +629,8 @@ export function PixAutomatico() {
    * padrão da barra. Ver `setoresComAcordosPix`.
    */
   const setoresComMovimento = useMemo(
-    () => setoresComAcordosPix(itens, setores, mes, operadorSetor),
-    [itens, setores, mes, operadorSetor],
+    () => setoresComAcordosPix(itens, setoresDoFiltro, mes, operadorSetor),
+    [itens, setoresDoFiltro, mes, operadorSetor],
   );
 
   /**
@@ -631,8 +643,8 @@ export function PixAutomatico() {
    */
   const setorPadrao = useMemo(
     () => escolherSetorInicial(setoresComMovimento, meuSetor)
-       ?? escolherSetorInicial(setores, meuSetor),
-    [setoresComMovimento, setores, meuSetor],
+       ?? escolherSetorInicial(setoresDoFiltro, meuSetor),
+    [setoresComMovimento, setoresDoFiltro, meuSetor],
   );
 
   /**
@@ -694,6 +706,15 @@ export function PixAutomatico() {
     if (equipesDoFoco.some(e => e.id === filtroEquipe)) return;
     setFiltroEquipe('');
   }, [filtroEquipe, equipes, equipesDoFoco, setFiltroEquipe]);
+
+  // Setor lembrado que saiu do filtro (inativado, ou de sistema): volta ao
+  // padrão em vez de deixar a aba presa num setor que a barra não mostra.
+  useEffect(() => {
+    if (!podeVerTodosSetores || !filtroSetor || filtroSetor === TODOS_SETORES) return;
+    if (setores.length === 0) return;   // lista ainda não chegou
+    if (setoresDoFiltro.some(s => s.id === filtroSetor)) return;
+    setFiltroSetor('');
+  }, [podeVerTodosSetores, filtroSetor, setores, setoresDoFiltro, setFiltroSetor]);
 
   const pctPorSetor = useMemo(() => {
     const m: Record<string, number> = {};
@@ -832,7 +853,7 @@ export function PixAutomatico() {
 
       let listaOps: OperadorInfo[] = [];
       let listaEqs: EquipeComSetor[] = [];
-      let listaSets: { id: string; nome: string }[] = [];
+      let listaSets: SetorDaAba[] = [];
 
       if (podeVerDeOutros) {
         // Nomes/equipes/setores para filtros, vínculo e coluna Operador.
@@ -843,7 +864,7 @@ export function PixAutomatico() {
           .eq('empresa_id', empresa.id);
         let qEqs = supabase.from('equipes').select('id, nome, setor_id')
           .eq('empresa_id', empresa.id);
-        let qSets = supabase.from('setores').select('id, nome')
+        let qSets = supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO)
           .eq('empresa_id', empresa.id);
         if (setorEscopo) {
           qOps  = qOps.eq('setor_id', setorEscopo);
@@ -857,7 +878,8 @@ export function PixAutomatico() {
         ]);
         listaOps  = (ops  ?? []) as OperadorInfo[];
         listaEqs  = (eqs  ?? []) as EquipeComSetor[];
-        listaSets = (sets ?? []) as { id: string; nome: string }[];
+        // `tipo` (fase 6) ainda não está em `database.types.ts`.
+        listaSets = (sets ?? []) as unknown as SetorDaAba[];
 
         // Clone não muda o setor do cadastro — ver «Clones» em pixAutomaticoView.
         // O setor de cada equipe vem do próprio vínculo, e não de `listaEqs`:
@@ -913,9 +935,13 @@ export function PixAutomatico() {
           listaEqs = (setorEscopo
             ? corrigido.equipes.filter(e => e.setor_id === setorEscopo)
             : corrigido.equipes) as EquipeComSetor[];
-          listaSets = setorEscopo
+          // O retrato traz o nome do mês; `ativo`/`tipo` são de hoje, e é hoje
+          // que decide se o setor ainda entra no filtro.
+          const cadastro = new Map(listaSets.map(s => [s.id, s]));
+          listaSets = (setorEscopo
             ? corrigido.setores.filter(s => s.id === setorEscopo)
-            : corrigido.setores;
+            : corrigido.setores
+          ).map(s => ({ ...s, ativo: cadastro.get(s.id)?.ativo, tipo: cadastro.get(s.id)?.tipo }));
         }
 
         setOperadores(atual => reconciliarLista(atual, listaOps, { chave: o => o.id }));
@@ -1115,6 +1141,27 @@ export function PixAutomatico() {
   // ── Derivados ───────────────────────────────────────────────────────────
   // Filtro de operador só lista OPERADORES (sem líder/gerência/diretoria etc.)
   const operadoresFiltro = useMemo(() => apenasOperadores(operadores), [operadores]);
+  // O seletor da barra segue a equipe (e o setor) escolhidos. Ver
+  // `operadoresDoRecorte`.
+  const operadoresDoSeletor = useMemo(
+    () => operadoresDoRecorte(
+      operadoresFiltro,
+      { equipeId: filtroEquipe, setorId: setorEscopo ?? setorFoco },
+      { porEquipe: operadorEquipe, porSetor: operadorSetor, setoresDaPessoa },
+      itens,
+    ),
+    [operadoresFiltro, filtroEquipe, setorEscopo, setorFoco, operadorEquipe, operadorSetor,
+     setoresDaPessoa, itens],
+  );
+
+  // Trocar de equipe/setor solta o operador que ficou de fora — mesma razão
+  // da equipe solta ao trocar de setor, logo acima.
+  useEffect(() => {
+    if (!filtroOperador) return;
+    if (operadoresFiltro.length === 0) return;   // listas ainda não chegaram
+    if (operadoresDoSeletor.some(o => o.id === filtroOperador)) return;
+    setFiltroOperador('');
+  }, [filtroOperador, operadoresFiltro, operadoresDoSeletor, setFiltroOperador]);
 
   // Sugestões do vínculo (líder+ registra em nome de um operador)
   const sugestoesVinculo = useMemo(
@@ -2245,7 +2292,7 @@ export function PixAutomatico() {
           era invisível justamente para o que ele mais rege. */}
       {podeVerTodosSetores && (
         <PixBarraSetores
-          setores={setores}
+          setores={setoresDoFiltro}
           setorFoco={setorFoco}
           onEscolher={id => setFiltroSetor(id ?? TODOS_SETORES)}
           resumo={resumoPorSetor}
@@ -2698,7 +2745,7 @@ export function PixAutomatico() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__todos__">Todos os operadores</SelectItem>
-                {operadoresFiltro.map(o => <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>)}
+                {operadoresDoSeletor.map(o => <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </>

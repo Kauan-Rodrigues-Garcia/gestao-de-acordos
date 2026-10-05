@@ -74,6 +74,7 @@ import ListaUsuariosUso from './ListaUsuariosUso';
 import { numeroBr, tempoRelativo, formatarDuracao } from './formatos';
 import { montarSerieDiaria, tendencia, type PontoDia } from './serieDiaria';
 import { agruparPorTela, telaTeveUso } from './agruparTelas';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 /** Períodos oferecidos. 30 dias é o padrão: 7 é curto demais para tendência. */
 const PERIODOS = [
@@ -229,7 +230,7 @@ interface Props {
   empresas: { id: string; nome: string }[];
 }
 
-interface SetorOpcao { id: string; nome: string }
+interface SetorOpcao { id: string; nome: string; ativo?: boolean | null; tipo?: string | null }
 interface EquipeOpcao { id: string; nome: string; setor_id: string | null }
 
 export default function MonitoramentoUso({ empresas }: Props) {
@@ -262,14 +263,14 @@ export default function MonitoramentoUso({ empresas }: Props) {
     let cancelado = false;
     void Promise.all([
       empresaId
-        ? supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome')
-        : supabase.from('setores').select('id, nome').order('nome'),
+        ? supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO).eq('empresa_id', empresaId).order('nome')
+        : supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO).order('nome'),
       empresaId
         ? supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId).order('nome')
         : supabase.from('equipes').select('id, nome, setor_id').order('nome'),
     ]).then(([s, e]) => {
       if (cancelado) return;
-      setSetores((s.data as SetorOpcao[]) ?? []);
+      setSetores((s.data as unknown as SetorOpcao[] | null) ?? []);
       setEquipes((e.data as EquipeOpcao[]) ?? []);
     });
     return () => { cancelado = true; };
@@ -483,7 +484,8 @@ export default function MonitoramentoUso({ empresas }: Props) {
             <SelectTrigger className="h-8 w-40 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-72">
               <SelectItem value={TODOS}>Todos os setores</SelectItem>
-              {setores.map(s => (
+              {/* Sem inativo e sem setor de sistema — `lib/setoresDosFiltros`. */}
+              {setoresDosFiltros(setores).map(s => (
                 <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
               ))}
             </SelectContent>

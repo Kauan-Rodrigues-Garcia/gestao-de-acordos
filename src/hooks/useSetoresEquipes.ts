@@ -26,6 +26,7 @@ import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { niveisLiberados, type NivelEscopo } from '@/lib/permissoes-escopo';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
+import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 import {
   buscarEquipesComOperadores, buscarSetoresDoRetrato,
 } from '@/services/analitico/analitico.service';
@@ -158,17 +159,16 @@ export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
       // A lista de setores só serve a quem pode escolher entre eles.
       if (podeTodosSetores) {
         const { data } = await supabase
-          .from('setores').select('id, nome')
+          .from('setores').select(COLUNAS_SETOR_DO_FILTRO)
           .eq('empresa_id', empresaId).order('nome');
-        const vivos = (data as SetorResumo[]) ?? [];
         // Mês fechado: rótulo daquele mês, e o setor extinto depois volta.
-        const lista: SetorResumo[] = nomesSetorDoMes
-          ? (() => {
-              const porId = new Map(vivos.map(s => [s.id, s.nome]));
-              for (const [id, nome] of Object.entries(nomesSetorDoMes)) porId.set(id, nome);
-              return [...porId.entries()].map(([id, nome]) => ({ id, nome }));
-            })()
-          : vivos;
+        // Inativo sai só do mês corrente em diante; setor de sistema sai
+        // sempre — ver `lib/setoresDosFiltros`.
+        const lista: SetorResumo[] = listaDoFiltroDeSetores(
+          (data as unknown as (SetorResumo & { ativo: boolean; tipo: string | null })[] | null) ?? [],
+          nomesSetorDoMes,
+          { mes },
+        );
         // Ordem escolhida na aba Setores; o `order('nome')` acima vira só o
         // desempate de quem ainda não está na ordem salva.
         setSetores(aplicarOrdemSetores(lista, empresaId));

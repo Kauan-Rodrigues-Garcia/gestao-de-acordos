@@ -42,6 +42,7 @@ import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
 import { useTenant } from '@/lib/tenant-config';
+import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 /*
  * A composição sai da MESMA função que o Painel Líder usa.
  *
@@ -390,10 +391,9 @@ export function useAnalytics(
       if (podeTodosSetores) {
         const { data: setoresData } = await supabase
           .from('setores')
-          .select('id, nome')
+          .select(COLUNAS_SETOR_DO_FILTRO)
           .eq('empresa_id', empresa.id)
           .order('nome');
-        const vivos = (setoresData as { id: string; nome: string }[]) ?? [];
         /*
          * Mês fechado: o rótulo é o daquele mês, e o setor APAGADO depois volta
          * para a lista.
@@ -402,16 +402,15 @@ export function useAnalytics(
          * agosto aparece com um nome que não existiu no mês inteiro que está
          * sendo mostrado. E um setor extinto some do filtro levando junto os
          * acordos que ele produziu — que continuam na tabela, sem como chegar.
+         *
+         * Setor inativo sai do filtro só do mês corrente em diante; setor de
+         * sistema sai sempre — ver `lib/setoresDosFiltros`.
          */
-        if (nomesSetorDoMes) {
-          const porId = new Map(vivos.map(s => [s.id, s.nome]));
-          for (const [id, nome] of Object.entries(nomesSetorDoMes)) porId.set(id, nome);
-          pacote.setores = [...porId.entries()]
-            .map(([id, nome]) => ({ id, nome }))
-            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-        } else {
-          pacote.setores = vivos;
-        }
+        pacote.setores = listaDoFiltroDeSetores(
+          (setoresData as unknown as { id: string; nome: string; ativo: boolean; tipo: string | null }[] | null) ?? [],
+          nomesSetorDoMes,
+          { mes: mesAnalise },
+        ).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
         setSetores(pacote.setores);
       }
 
@@ -785,7 +784,7 @@ export function useAnalytics(
         setAtualizando(false);
       }
     }
-  }, [perfil, empresa, mes, ano, mesRef, setorFiltro, equipeFiltro, operadorFiltro,
+  }, [perfil, empresa, mes, ano, mesRef, mesAnalise, setorFiltro, equipeFiltro, operadorFiltro,
       podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache,
       equipesDaPessoa]);
 

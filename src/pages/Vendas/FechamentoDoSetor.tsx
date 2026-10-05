@@ -49,8 +49,11 @@ import {
   type Fechamento, type Igualdade, type LinhaFechamento,
 } from '@/lib/vendasFechamento';
 import { buscarFechamentoDoSetor } from '@/services/vendas/fechamentoSetor.service';
+import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 
 interface Setor { id: string; nome: string }
+/** `tipo` (fase 6) ainda não está em `database.types.ts`. */
+interface SetorDaTabela extends Setor { ativo: boolean; tipo: string | null }
 
 /** Uma parcela: rótulo, contagem e os dois valores. */
 function Parcela({ linha, destaque, explicacao }: {
@@ -138,7 +141,14 @@ export default function FechamentoDoSetor() {
   const escopo = escopoEfetivo('vendas', temPermissao);
   const alcanca = escopo === 'setor' || escopo === 'todos_setores';
 
-  const [setores, setSetores] = useState<Setor[]>([]);
+  // As linhas de `setores` como vieram; o seletor recorta pelo mês olhado.
+  const [linhasSetores, setLinhasSetores] = useState<SetorDaTabela[]>([]);
+  // Sem setor de sistema, e sem inativo do mês corrente em diante — mês
+  // passado mantém o setor que existia nele. Ver `lib/setoresDosFiltros`.
+  const setores: Setor[] = useMemo(
+    () => listaDoFiltroDeSetores(linhasSetores, null, { mes }),
+    [linhasSetores, mes],
+  );
   const [setorId, setSetorId] = useState<string | null>(null);
   const [dado, setDado] = useState<Fechamento | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -151,11 +161,12 @@ export default function FechamentoDoSetor() {
     let vivo = true;
     void (async () => {
       const { data } = await supabase
-        .from('setores').select('id, nome')
+        .from('setores').select(COLUNAS_SETOR_DO_FILTRO)
         .eq('empresa_id', empresaId).order('nome');
       if (!vivo) return;
-      const lista = (data ?? []) as Setor[];
-      setSetores(lista);
+      const linhas = (data ?? []) as unknown as SetorDaTabela[];
+      setLinhasSetores(linhas);
+      const lista = listaDoFiltroDeSetores(linhas);
       // Um setor só: escolher por quem olha seria cerimônia sem escolha.
       setSetorId(atual => atual ?? (lista.length === 1 ? lista[0].id : null));
     })();

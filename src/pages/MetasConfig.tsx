@@ -101,6 +101,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AbaComissao } from "@/components/Comissao/AbaComissao";
 import type { MetaLinhaBruta } from "@/services/comissao/entradaDoOperador";
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 const MESES = [
   "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
@@ -124,7 +125,7 @@ interface Meta {
   mes: number;
   ano: number;
 }
-interface Setor  { id: string; nome: string; }
+interface Setor  { id: string; nome: string; ativo?: boolean | null; tipo?: string | null; }
 interface Equipe {
   id: string; nome: string; setor_id: string;
   treinamento: boolean | null; treinamento_inicio: string | null;
@@ -821,12 +822,15 @@ export default function MetasConfig() {
     if (!empresa?.id) return;
     setLoadingSetores(true);
     try {
-      const { data, error } = await supabase.from("setores").select("id, nome")
+      const { data, error } = await supabase.from("setores").select(COLUNAS_SETOR_DO_FILTRO)
         .eq("empresa_id", empresa.id).order("nome");
       if (error) throw error;
-      const validos: Setor[] = (data ?? []).filter((s): s is Setor => typeof s?.id === "string" && s.id.length > 0);
+      const validos: Setor[] = ((data ?? []) as unknown as Setor[]).filter((s): s is Setor => typeof s?.id === "string" && s.id.length > 0);
       setSetores(validos);
-      if (isAdmin) { if (!setorSelecionado && validos.length > 0) setSetorSelecionado(validos[0].id); }
+      // O primeiro do SELETOR, e não da tabela: abrir num setor que o seletor
+      // não oferece deixaria a tela presa nele.
+      const primeiro = setoresDosFiltros(validos)[0];
+      if (isAdmin) { if (!setorSelecionado && primeiro) setSetorSelecionado(primeiro.id); }
       else { if (liderSetorId) setSetorSelecionado(liderSetorId); }
     } catch (err: unknown) {
       toast.error("Erro ao carregar setores", { description: err instanceof Error ? err.message : String(err) });
@@ -1515,7 +1519,10 @@ export default function MetasConfig() {
             <Select value={setorSelecionado} onValueChange={setSetorSelecionado}>
               <SelectTrigger className="w-56 h-9"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
               <SelectContent>
-                {setores.filter(s => typeof s?.id === "string" && s.id.length > 0).map(s => (
+                {/* Sem setor de sistema, e sem inativo do mês corrente em diante —
+                    `lib/setoresDosFiltros`. */}
+                {setoresDosFiltros(setores, { mes: `${ano}-${String(mes).padStart(2, "0")}` })
+                  .filter(s => typeof s?.id === "string" && s.id.length > 0).map(s => (
                   <SelectItem key={s.id} value={s.id}>{String(s.nome ?? "")}</SelectItem>
                 ))}
               </SelectContent>

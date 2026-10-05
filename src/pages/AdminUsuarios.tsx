@@ -60,6 +60,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
 import { equipesDoPerfil } from '@/services/equipes/equipeDoLider';
+import { setorEntraNosFiltros } from '@/lib/setoresDosFiltros';
 
 // Lazy: a aba Comemorações arrasta o editor de layout, o catálogo de sons e a
 // biblioteca de mídia. Enquanto era rota própria, só baixava para quem a abria;
@@ -1207,7 +1208,14 @@ export default function AdminUsuarios() {
    * deixaria o seletor com uma opcao so depois do primeiro clique, e nao
    * haveria como voltar sem recarregar.
    */
+  // O seletor não oferece setor inativo nem de sistema (`lib/setoresDosFiltros`).
+  // As pessoas desses setores continuam na lista, em «Todos os setores».
   const setoresParaFiltro = Object.entries(usuariosPorSetor)
+    .filter(([sid]) => {
+      if (sid === '__sem_setor__') return true;
+      const s = setores.find(x => x.id === sid);
+      return !!s && setorEntraNosFiltros(s);
+    })
     .sort((a, b) => a[1].nomeSetor.localeCompare(b[1].nomeSetor, 'pt-BR'));
 
   const buscaNormalizada = normalizarBusca(busca);

@@ -38,6 +38,7 @@ import type {
   Situacao, Posse, MotivoRetorno, Etiqueta, Tratamento,
 } from './numerosRegras';
 import { LIMITE_POR_CELULAR } from './numerosRegras';
+import { COLUNAS_SETOR_DO_FILTRO } from '@/lib/setoresDosFiltros';
 
 /**
  * O mesmo cliente, sem o schema gerado.
@@ -240,6 +241,10 @@ export async function buscarSetorNucleo(empresaId: string): Promise<string | nul
 export interface SetorNome {
   id: string;
   nome: string;
+  /** Para quem monta FILTRO saber quem fica de fora — `lib/setoresDosFiltros`.
+   *  Os seletores de cadastro (celular, Núcleo) usam a lista inteira. */
+  ativo?: boolean | null;
+  tipo?: string | null;
 }
 
 /**
@@ -268,11 +273,12 @@ export interface SetorNome {
 export async function listarSetores(empresaId: string): Promise<SetorNome[]> {
   const { data, error } = await supabase
     .from('setores')
-    .select('id, nome')
+    .select(COLUNAS_SETOR_DO_FILTRO)
     .eq('empresa_id', empresaId)
     .order('nome');
   if (error) throw error;
-  return (data as SetorNome[]) ?? [];
+  // `tipo` (fase 6) ainda não está em `database.types.ts`.
+  return (data as unknown as SetorNome[] | null) ?? [];
 }
 
 export async function listarCelulares(empresaId: string): Promise<CelularRow[]> {

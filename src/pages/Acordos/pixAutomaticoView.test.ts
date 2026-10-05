@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import type { MetasConfigMes } from '@/lib/supabase';
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 import {
-  mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
+  mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, operadoresDoRecorte, sugerirOperadores,
   filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
   calcularDobraComissao, rankingPixSetor, calcularMetaPix, calcularMetaPixPorEquipe,
   prazoExpurgoDesaprovado, textoPrazoExpurgo, dataLocalDaLinha,
@@ -91,6 +91,43 @@ describe('apenasOperadores', () => {
     expect(apenasOperadores([{ ...OPERADORES[0], perfil: 'OPERADOR' }])).toHaveLength(1);
     expect(apenasOperadores([{ ...OPERADORES[0], perfil: ' ELITE ' }])).toHaveLength(1);
     expect(apenasOperadores([{ ...OPERADORES[0], perfil: '' }])).toHaveLength(0);
+  });
+});
+
+describe('operadoresDoRecorte', () => {
+  const ops = apenasOperadores(OPERADORES);
+  const mapas = {
+    porEquipe: mapaOperadorEquipe(OPERADORES),
+    porSetor: mapaOperadorSetor(OPERADORES),
+  };
+
+  it('sem recorte, todos', () => {
+    expect(operadoresDoRecorte(ops, {}, mapas)).toEqual(ops);
+  });
+
+  it('com equipe escolhida, só quem é da equipe (queixa de 05/10/2026)', () => {
+    expect(operadoresDoRecorte(ops, { equipeId: 'eq-2' }, mapas).map(o => o.id)).toEqual(['joao']);
+    expect(operadoresDoRecorte(ops, { equipeId: 'eq-1', setorId: 'setor-A' }, mapas).map(o => o.id))
+      .toEqual(['maria', 'elite']);
+  });
+
+  it('escolher um operador do seletor nunca devolve tabela vazia pela equipe', () => {
+    const itens = [item({ operador_id: 'joao', setor_id: 'setor-B' })];
+    for (const o of operadoresDoRecorte(ops, { equipeId: 'eq-2' }, mapas)) {
+      expect(filtrarItensPix(itens, { equipeId: 'eq-2', operadorId: o.id }, mapas)).toHaveLength(1);
+    }
+  });
+
+  it('com setor e sem equipe, quem é do setor, clonado nele ou com linha nele', () => {
+    expect(operadoresDoRecorte(ops, { setorId: 'setor-B' }, mapas).map(o => o.id)).toEqual(['joao']);
+    // Clonada no setor B.
+    const comClone = { ...mapas, setoresDaPessoa: { maria: ['setor-A', 'setor-B'] } };
+    expect(operadoresDoRecorte(ops, { setorId: 'setor-B' }, comClone).map(o => o.id))
+      .toEqual(['maria', 'joao']);
+    // Mudou de setor: a linha carimbada no B ainda aparece na tabela do B.
+    const itens = [item({ operador_id: 'elite', setor_id: 'setor-B' })];
+    expect(operadoresDoRecorte(ops, { setorId: 'setor-B' }, mapas, itens).map(o => o.id))
+      .toEqual(['joao', 'elite']);
   });
 });
 

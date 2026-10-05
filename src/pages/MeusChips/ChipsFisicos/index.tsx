@@ -60,6 +60,7 @@ import { PONTO_STATUS_CHIP, PONTO_TEMPO_ENCERRADO } from './coresStatusChip';
 import { DialogoChipFisico } from './DialogoChipFisico';
 import { DialogoStatusChip } from './DialogoStatusChip';
 import { LinhaChip } from './LinhaChip';
+import { setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 const ROTULO_CONTADOR: Record<StatusChip, string> = {
   ativo: 'Ativos', restricao: 'Restrição', banido: 'Banidos', recuperar: 'Recuperar',
@@ -346,7 +347,8 @@ export function ChipsFisicos() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS_OS_SETORES}>Todos os setores</SelectItem>
-              {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+              {/* Sem inativo e sem setor de sistema — `lib/setoresDosFiltros`. */}
+              {setoresDosFiltros(setores).map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
               <SelectItem value={SEM_SETOR}>Sem setor</SelectItem>
             </SelectContent>
           </Select>

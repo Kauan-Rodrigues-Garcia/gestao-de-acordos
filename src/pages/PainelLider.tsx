@@ -62,6 +62,7 @@ import {
   rotuloDoMes, ultimoDiaDoMes, type MesRef,
 } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
+import { setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
@@ -222,7 +223,12 @@ export default function PainelLider() {
   // continua sendo o de sempre — é o conjunto de tamanho 1.
   const [filtroSetores, setFiltroSetores] = useState<string[]>([]);
   const [filtroEquipes, setFiltroEquipes] = useState<string[]>([]);
-  const [setoresLista, setSetoresLista]   = useState<{ id: string; nome: string }[]>([]);
+  const [setoresLista, setSetoresLista]   = useState<{ id: string; nome: string; ativo?: boolean | null; tipo?: string | null }[]>([]);
+  /** O seletor oferece só os setores que entram em filtro NO MÊS OLHADO
+   *  (`lib/setoresDosFiltros`); `setoresLista` inteira continua sendo o mapa
+   *  de nomes. */
+  const setoresDoFiltro = useMemo(
+    () => setoresDosFiltros(setoresLista, { mes: mesStr }), [setoresLista, mesStr]);
 
   // Mexer nos setores descarta as equipes marcadas antes: elas podem ser de um
   // setor que saiu do recorte, e o cruzamento devolveria lista vazia parecendo
@@ -384,7 +390,7 @@ export default function PainelLider() {
         buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
         // `nome` entrou junto: o seletor de setor do cabeçalho precisa dele, e
         // uma segunda query para a mesma tabela no mesmo efeito seria desperdício.
-        supabase.from('setores').select('id, nome, alternativo').eq('empresa_id', empresa.id),
+        supabase.from('setores').select('id, nome, alternativo, ativo, tipo').eq('empresa_id', empresa.id),
         // Mês fechado: a chave «alternativo» DAQUELE mês (01/10/2026).
         buscarAlternativosDoRetrato(empresa.id, mesStr),
       ]);
@@ -395,11 +401,11 @@ export default function PainelLider() {
       setCreditosDeOrigem(creditos);
       setAnaliticoTotalPorSetor(totSetor);
       const alt = new Set<string>();
-      const lista: { id: string; nome: string }[] = [];
+      const lista: { id: string; nome: string; ativo: boolean; tipo: string | null }[] = [];
       if (!setoresRes.error) {
-        for (const s of (setoresRes.data as { id: string; nome: string; alternativo: boolean | null }[]) ?? []) {
+        for (const s of (setoresRes.data as unknown as { id: string; nome: string; alternativo: boolean | null; ativo: boolean; tipo: string | null }[] | null) ?? []) {
           if (altDoMes?.get(s.id) ?? s.alternativo) alt.add(s.id);
-          lista.push({ id: s.id, nome: s.nome });
+          lista.push({ id: s.id, nome: s.nome, ativo: s.ativo, tipo: s.tipo });
         }
       }
       // Mesma ordem que o admin arrastou na aba Setores — o seletor e os grupos
@@ -652,7 +658,7 @@ export default function PainelLider() {
       {mostrarAbasAnaliticas && abaVisivel !== 'elite' && (
         <FiltrosEscopo
           escopo={escopoAbas}
-          setores={setoresLista}
+          setores={setoresDoFiltro}
           onSetores={mudarFiltroSetores}
           onEquipes={setFiltroEquipes}
           nomeSetorTravado={nomeSetorTravado}

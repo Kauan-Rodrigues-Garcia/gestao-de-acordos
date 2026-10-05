@@ -76,6 +76,41 @@ export function apenasOperadores(ops: OperadorInfo[]): OperadorInfo[] {
   return ops.filter(o => contaNoRecebimento(o.perfil));
 }
 
+/**
+ * Os operadores que o seletor de operador oferece, dado o recorte em cima dele.
+ *
+ * Queixa de 05/10/2026: escolhida a equipe da Luciana, o seletor de operador
+ * continuava listando a empresa inteira. Agora segue a cascata da barra:
+ * com equipe, só quem é DELA; sem equipe e com setor, só quem é do setor (o
+ * cadastro ou um clone lá); sem nenhum dos dois, todos.
+ *
+ * A equipe é a de `porEquipe` — o mesmo mapa que `filtrarItensPix` usa para
+ * recortar a tabela. Se o seletor e a tabela lessem a equipe de lugares
+ * diferentes, escolher um operador da lista poderia devolver tabela vazia.
+ *
+ * No setor entra também quem tem LINHA visível nele (`itens`): quem mudou de
+ * setor no meio do mês tem acordo carimbado no anterior, e a tabela mostra
+ * essa linha — o seletor não pode esconder o dono dela.
+ */
+export function operadoresDoRecorte(
+  ops: OperadorInfo[],
+  recorte: { equipeId?: string | null; setorId?: string | null },
+  mapas: MapasOperador,
+  itens: readonly Pick<PixAutoAcordo, 'setor_id' | 'operador_id'>[] = [],
+): OperadorInfo[] {
+  const { equipeId, setorId } = recorte;
+  if (equipeId) return ops.filter(o => mapas.porEquipe[o.id] === equipeId);
+  if (setorId) {
+    const comLinha = new Set(itens
+      .filter(i => linhaVisivelNoSetor(i, setorId, mapas.porSetor, mapas.setoresDaPessoa))
+      .map(i => i.operador_id));
+    return ops.filter(o => mapas.porSetor[o.id] === setorId
+      || (mapas.setoresDaPessoa?.[o.id]?.includes(setorId) ?? false)
+      || comLinha.has(o.id));
+  }
+  return ops;
+}
+
 export const MAX_SUGESTOES_VINCULO = 8;
 
 /** Sugestões do campo de vínculo. Busca vazia não sugere nada. */

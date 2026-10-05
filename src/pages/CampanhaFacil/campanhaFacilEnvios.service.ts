@@ -13,6 +13,7 @@ import {
   itemDaLinha, repartirRepasse,
   type LinhaEnvio, type OperadorCampanha,
 } from './envios';
+import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 
 /** A tabela nasceu depois dos tipos gerados — mesmo recurso do numeros.service. */
 const db = supabase as unknown as SupabaseClient;
@@ -66,10 +67,13 @@ export async function listarOperadoresParaCampanha(
 export async function listarSetoresParaCampanha(
   empresaId: string,
 ): Promise<{ id: string; nome: string }[]> {
-  const { data, error } = await supabase.from('setores').select('id, nome')
+  const { data, error } = await supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO)
     .eq('empresa_id', empresaId).order('nome');
   if (error) throw error;
-  return (data ?? []) as { id: string; nome: string }[];
+  // Sem inativo e sem setor de sistema — ver `lib/setoresDosFiltros`.
+  return listaDoFiltroDeSetores(
+    (data ?? []) as unknown as { id: string; nome: string; ativo: boolean; tipo: string | null }[],
+  );
 }
 
 // ── Liberar ──────────────────────────────────────────────────────────────────

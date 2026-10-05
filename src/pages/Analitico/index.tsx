@@ -32,6 +32,7 @@ import { useMesGlobal } from '@/providers/MesProvider';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 import { SeletorRecorte } from './SeletorRecorte';
 import { mesDoRecorte, recorteDaQuery, type Recorte } from './recorte';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
@@ -76,7 +77,7 @@ export default function PaginaAnalitico() {
   // o elite. Antes a condição era `perfil === 'elite'` escrita à mão.
   const [visao,         setVisao]         = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
-  const [setores,       setSetores]       = useState<{ id: string; nome: string }[]>([]);
+  const [setores,       setSetores]       = useState<{ id: string; nome: string; ativo?: boolean | null; tipo?: string | null }[]>([]);
   const [searchParams] = useSearchParams();
   const [abaPrincipal,  setAbaPrincipal]  = useState<AbaPrincipal>(
     () => {
@@ -242,12 +243,12 @@ export default function PaginaAnalitico() {
     if (!empresa?.id) return;
     supabase
       .from('setores')
-      .select('id, nome')
+      .select(COLUNAS_SETOR_DO_FILTRO)
       .eq('empresa_id', empresa.id)
       .order('nome')
       // Ordem escolhida na aba Setores (o `order('nome')` vira o desempate).
       .then(({ data }) => setSetores(
-        aplicarOrdemSetores((data as { id: string; nome: string }[]) ?? [], empresa.id),
+        aplicarOrdemSetores((data as unknown as { id: string; nome: string; ativo: boolean; tipo: string | null }[] | null) ?? [], empresa.id),
       ));
   }, [empresa?.id]);
 
@@ -486,7 +487,9 @@ export default function PaginaAnalitico() {
               <SelectContent>
                 {/* O `Select` do shadcn recusa `value=""` — daí o sentinela. */}
                 <SelectItem value={TODOS_SETORES}>Todos os setores</SelectItem>
-                {setores.map(s => (
+                {/* Sem setor de sistema, e sem inativo do mês corrente em diante —
+                    `lib/setoresDosFiltros`. */}
+                {setoresDosFiltros(setores, { mes: mesDaLente }).map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                 ))}
               </SelectContent>
