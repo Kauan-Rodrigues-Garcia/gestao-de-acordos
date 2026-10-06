@@ -1,0 +1,202 @@
+/*
+ * Aba Equipes — no desenho da casa: superfícies e cores do tema, cartão
+ * `rounded-xl` com cabeçalho em `muted`, o grupo segmentado das abas
+ * (`AbasSegmentadas`) para os setores. Cor fixa só a da marca da cidade.
+ *
+ * O MODO MOVER (gente selecionada) só acrescenta o botão «Mover para cá» nos
+ * cartões; o resto da tela não muda de cara.
+ */
+.eq {
+  --eq-bp: oklch(0.62 0.18 245);
+  --eq-pp: oklch(0.6 0.15 155);
+}
+.eq-ponto { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; background: var(--muted-foreground); }
+.eq-ponto.bp { background: var(--eq-bp); } .eq-ponto.pp { background: var(--eq-pp); }
+.eq :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.eq-qtd { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 999px; padding: 0 6px; line-height: 18px;
+  background: var(--secondary); color: var(--secondary-foreground); }
+
+/* ── Setores: o grupo segmentado das abas, por cidade, quebrando linha ──── */
+.eq-setores { display: grid; gap: 6px; }
+.eq-setores-grupo { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.eq-setores-rot { display: inline-flex; align-items: center; gap: 6px; width: 84px; flex: none; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+.eq-seg { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--muted) 40%, transparent); }
+.eq-setor { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border: 0; cursor: pointer; border-radius: 8px;
+  padding: 6px 12px; font-size: 12px; font-weight: 500; background: none; color: var(--muted-foreground); transition: background .15s, color .15s; }
+.eq-setor:hover { color: var(--foreground); background: color-mix(in srgb, var(--background) 60%, transparent); }
+.eq-setor[aria-pressed="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.eq-setor small { font-size: 11px; font-variant-numeric: tabular-nums; opacity: .7; }
+.eq-falta { border-radius: 999px; padding: 0 6px; font-size: 10px; font-weight: 700; line-height: 16px;
+  background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+
+/* ── Resumo do setor: uma linha ──────────────────────────────────────────── */
+.eq-resumo { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted-foreground); }
+.eq-resumo b { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
+.eq-resumo .eq-aviso b, .eq-resumo .eq-aviso { color: var(--warning); }
+.eq-barra { width: 120px; height: 6px; border-radius: 6px; background: var(--muted); overflow: hidden; }
+.eq-barra i { display: block; height: 100%; border-radius: 6px; background: var(--primary); transition: width .5s ease; }
+
+/* ── Ferramentas ─────────────────────────────────────────────────────────── */
+.eq-ferr { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.eq-busca { position: relative; flex: 1; min-width: 200px; max-width: 320px; }
+.eq-busca svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted-foreground); }
+.eq-busca input { padding-left: 30px; }
+
+/* ── O quadro ────────────────────────────────────────────────────────────── */
+.eq-quadro { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; align-items: start; }
+.eq-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+
+.eq-pool { position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 140px);
+  border: 1px dashed color-mix(in srgb, var(--muted-foreground) 30%, transparent); border-radius: 12px; padding: 10px;
+  background: color-mix(in srgb, var(--muted) 20%, transparent); transition: box-shadow .15s, background .15s; }
+.eq-pool-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+.eq-pool-lista { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 2px; align-content: start; margin: 0 -4px; padding: 0 4px; }
+.eq-pool-pe { font-size: 11px; color: var(--muted-foreground); text-align: center; opacity: .8; }
+.eq-link { border: 0; background: none; padding: 0; cursor: pointer; font-size: 11px; font-weight: 500; color: var(--primary); }
+.eq-link:hover { text-decoration: underline; }
+
+/* ── O cartão da equipe ──────────────────────────────────────────────────── */
+.eq-cartao { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-width: 0;
+  transition: border-color .15s, box-shadow .15s, opacity .2s; }
+.eq-cartao:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+.eq-cartao.eq-apagado { opacity: .45; }
+.eq-cab { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; min-height: 44px;
+  background: color-mix(in srgb, var(--muted) 30%, transparent); border-bottom: 1px solid var(--border); }
+.eq-cab h3 { margin: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.eq-cab-nome { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.eq-icone { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; border: 0; background: none; color: var(--muted-foreground); cursor: pointer; flex: none; }
+.eq-icone:hover { background: var(--muted); color: var(--foreground); }
+.eq-icone svg { width: 14px; height: 14px; }
+
+.eq-selo { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 500; border-radius: 999px; padding: 0 6px; line-height: 16px;
+  white-space: nowrap; border: 1px solid var(--border); color: var(--muted-foreground); flex: none; }
+.eq-selo svg { width: 10px; height: 10px; }
+.eq-selo.treino { border-color: color-mix(in srgb, var(--warning) 40%, transparent); background: color-mix(in srgb, var(--warning) 10%, transparent); color: var(--warning); }
+.eq-selo.clone { border-style: dashed; border-color: color-mix(in srgb, var(--primary) 40%, transparent); color: var(--primary); }
+.eq-selo.transf { border-style: dashed; border-color: color-mix(in srgb, var(--warning) 50%, transparent); color: var(--warning); }
+
+/* Liderança: um bloco à parte, com fundo e rótulo próprios — não pode se
+   confundir com a lista de quem opera logo abaixo. Um líder por linha, todos
+   com a mesma largura: com dois ou três, nada quebra torto. */
+.eq-lideres { display: grid; gap: 6px; padding: 8px 10px 10px 12px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warning) 7%, transparent); }
+.eq-lideres-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
+.eq-lideres-rot { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--warning); }
+.eq-lideres-rot svg { width: 13px; height: 13px; }
+.eq-lideres-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.eq-lider { display: flex; align-items: center; gap: 6px; min-width: 0; height: 30px; padding: 0 4px 0 10px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; color: var(--foreground); background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border)); }
+.eq-lider > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-lider.eq-sem-nome > span { color: var(--muted-foreground); font-style: italic; font-weight: 400; }
+.eq-lider em { flex: none; font-style: normal; font-weight: 400; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.eq-lider button { margin-left: auto; flex: none; border: 0; background: none; width: 22px; height: 22px; color: var(--muted-foreground); cursor: pointer;
+  display: inline-grid; place-items: center; border-radius: 6px; opacity: 0; transition: opacity .12s; }
+.eq-lider:hover button, .eq-lider button:focus-visible { opacity: 1; }
+.eq-lider button:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.eq-lider-nenhum { font-size: 12px; color: var(--muted-foreground); font-style: italic; }
+.eq-mais { display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; padding: 0; cursor: pointer; font-size: 11px; color: var(--primary); }
+.eq-mais:hover { text-decoration: underline; }
+.eq-mais svg { width: 12px; height: 12px; }
+
+.eq-corpo { padding: 8px; display: grid; gap: 4px; flex: 1; }
+.eq-vazio { font-size: 12px; color: var(--muted-foreground); text-align: center; padding: 14px 8px; font-style: italic; opacity: .8; }
+
+/* Painel aberto dentro do cartão (líder, clone, subgrupo). */
+.eq-painel { margin: 8px 8px 0; padding: 8px; border-radius: 8px; display: grid; gap: 6px; border: 1px solid var(--border); background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.eq-painel-cab { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; font-weight: 600; }
+.eq-painel p { margin: 0; font-size: 11px; color: var(--muted-foreground); }
+.eq-painel [cmdk-list] { max-height: 200px; }
+
+/* Subgrupo: seção tracejada com a própria zona de soltar. */
+.eq-sub { border: 1px dashed var(--border); border-radius: 8px; padding: 4px; transition: box-shadow .15s, background .15s; }
+.eq-sub-cab { display: flex; align-items: center; gap: 4px; padding: 0 2px 2px 6px; min-height: 24px; }
+.eq-sub-cab > span { flex: 1; min-width: 0; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-sub-cab .eq-icone { width: 22px; height: 22px; opacity: 0; }
+.eq-sub-cab .eq-icone svg { width: 12px; height: 12px; }
+.eq-sub:hover .eq-sub-cab .eq-icone, .eq-sub-cab .eq-icone:focus-visible { opacity: 1; }
+.eq-sub-vazio { font-size: 11px; color: var(--muted-foreground); padding: 4px 6px 6px; font-style: italic; opacity: .7; }
+.eq-solto-rot { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); padding: 4px 6px 0; }
+
+/* ── A pessoa ────────────────────────────────────────────────────────────── */
+.eq-pessoa { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 4px 3px 3px; border-radius: 8px; min-width: 0;
+  cursor: grab; user-select: none; transition: background .12s, opacity .2s; }
+.eq-pessoa:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); }
+.eq-pessoa:active { cursor: grabbing; }
+.eq-pessoa[data-sel="true"] { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.eq-pessoa[data-transf="true"] { cursor: default; opacity: .6; }
+.eq-pessoa[data-longe="true"] { opacity: .3; }
+.eq-pessoa[data-casa="true"] { background: color-mix(in srgb, var(--warning) 12%, transparent); }
+
+/* O círculo é também a caixa de seleção: vira um visto ao passar o mouse. */
+.eq-av { position: relative; width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden;
+  font-size: 10px; font-weight: 600; border: 0; padding: 0; cursor: pointer; background: var(--muted); color: var(--muted-foreground); }
+.eq-av img { width: 100%; height: 100%; object-fit: cover; }
+.eq-av > i { position: absolute; inset: 0; display: grid; place-items: center; background: var(--primary); color: var(--primary-foreground); opacity: 0; transition: opacity .12s; }
+.eq-av > i svg { width: 14px; height: 14px; }
+.eq-pessoa:hover .eq-av > i { opacity: .5; }
+.eq-pessoa[data-sel="true"] .eq-av > i, .eq-av:focus-visible > i { opacity: 1; }
+.eq-av:disabled { cursor: default; }
+.eq-pessoa:hover .eq-av:disabled > i { opacity: 0; }
+
+/* Nome e etiquetas numa linha só, centralizados: o nome encolhe (com «…»),
+   o cargo nunca desce para baixo dele. */
+.eq-pessoa-nome { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; overflow: hidden; }
+.eq-pessoa-nome > * { flex: none; }
+.eq-pessoa-nome > span:first-child { flex: 0 1 auto; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-cargo { font-size: 10px; font-weight: 500; border-radius: 999px; padding: 0 6px; line-height: 16px; border: 1px solid; white-space: nowrap; }
+.eq-acoes { display: flex; align-items: center; gap: 1px; flex: none; opacity: 0; transition: opacity .12s; }
+.eq-pessoa:hover .eq-acoes, .eq-pessoa:focus-within .eq-acoes, .eq-pessoa[data-transf="true"] .eq-acoes { opacity: 1; }
+.eq-acoes .eq-icone { width: 24px; height: 24px; }
+.eq-acoes .eq-icone svg { width: 13px; height: 13px; }
+.eq-acoes .eq-icone.perigo:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+@media (hover: none) { .eq-acoes, .eq-sub-cab .eq-icone, .eq-lider button { opacity: 1; } }
+
+/* Clone: nome em cima, de onde vem embaixo; o interruptor e o X à direita,
+   fora do texto — antes o selo comprido passava por cima deles. */
+.eq-clone { cursor: default; border: 1px dashed color-mix(in srgb, var(--primary) 35%, transparent); }
+.eq-clone .eq-av { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); cursor: default; }
+.eq-clone-txt { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
+.eq-clone-txt b { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-clone-txt small { font-size: 11px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-receb { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted-foreground); cursor: pointer; white-space: nowrap; flex: none; }
+
+/* ── Modo mover: alvos ───────────────────────────────────────────────────── */
+.eq-solta { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, transparent) !important;
+  background: color-mix(in srgb, var(--primary) 5%, var(--card)) !important; }
+.eq-alvo-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px dashed color-mix(in srgb, var(--primary) 40%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, transparent); color: var(--primary); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.eq-alvo-btn:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); border-style: solid; }
+.eq-alvo-btn svg { width: 13px; height: 13px; }
+.eq-alvo-btn.mini { width: auto; padding: 0 8px; line-height: 20px; font-size: 11px; }
+
+/* ── Barra de seleção (a mesma da aba Usuários) ──────────────────────────── */
+.eq-lote { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 40; transform: translate(-50%, 160%); transition: transform .3s ease;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: calc(100% - 32px); font-size: 13px;
+  background: var(--foreground); color: var(--background); border-radius: 12px; padding: 8px 8px 8px 16px; box-shadow: 0 12px 30px rgb(0 0 0 / .3); }
+.eq-lote:not(.eq-on) { visibility: hidden; transition: transform .3s ease, visibility 0s .3s; }
+.eq-lote.eq-on { transform: translate(-50%, 0); }
+.eq-lote button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
+  background: color-mix(in srgb, var(--background) 14%, transparent); color: var(--background); }
+.eq-lote button.eq-forte { background: var(--primary); color: var(--primary-foreground); }
+.eq-lote button svg { width: 14px; height: 14px; }
+
+/* Lista de destinos (Mover para…). */
+.eq-dest-sub { padding-left: 22px !important; }
+.eq-dest-qtd { margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+
+@media (max-width: 860px) {
+  .eq-setores-grupo { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .eq-setores-rot { width: auto; }
+  .eq-quadro { grid-template-columns: minmax(0, 1fr); }
+  .eq-pool { position: static; max-height: 320px; }
+}
+@media (max-width: 560px) {
+  .eq-grade { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eq *, .eq-lote { transition: none !important; }
+}
