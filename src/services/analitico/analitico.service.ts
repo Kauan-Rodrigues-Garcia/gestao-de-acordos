@@ -26,6 +26,7 @@ import {
 } from './fantasmaTransferencia';
 import { equipesLideradasPorPessoa, equipesDaPessoa } from '@/services/equipes/equipeDoLider';
 import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
+import { liderNaoContaEmEquipeDeAlternativo } from './liderEmAlternativo';
 // Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
 import { paraHO } from '@/lib/hoPercentual';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
@@ -2072,6 +2073,12 @@ export interface OperadorEquipeInfo {
   equipe_id:   string | null;
   equipe_nome: string;
   setor_id:    string | null;
+  /**
+   * Setores em que a pessoa conta SEM estar numa equipe deles: o líder de
+   * equipe de setor alternativo conta no total do setor e em nenhuma equipe
+   * de lá (`liderEmAlternativo.ts`, 06/10/2026).
+   */
+  setores_extra?: string[];
 }
 
 /** equipe_id → setor_id, para resolver o setor DONO de uma equipe clonada. */
@@ -2117,6 +2124,7 @@ export function setoresDoOperador(
   const out = new Set<string>();
   const proprio = operadorEquipeMap[operadorId]?.setor_id;
   if (proprio) out.add(proprio);
+  for (const sid of operadorEquipeMap[operadorId]?.setores_extra ?? []) out.add(sid);
   for (const eqId of equipesExtrasPorOperador[operadorId] ?? []) {
     const sid = setorDaEquipe.get(eqId);
     if (sid) out.add(sid);
@@ -2179,12 +2187,54 @@ export async function buscarEquipesComOperadores(
     async () => {
       if (mes && !ehMesAtual(mes)) {
         const retrato = await buscarComposicaoDoRetrato(empresaId, mes);
-        if (retrato) return retrato;
+        if (retrato) return semLiderNaEquipeDeAlternativo(empresaId, mes, retrato);
       }
-      return buscarComposicaoAoVivo(empresaId, mes ?? null);
+      return semLiderNaEquipeDeAlternativo(empresaId, mes ?? null, await buscarComposicaoAoVivo(empresaId, mes ?? null));
     },
     { guardarSe: c => c.equipes.length > 0 || Object.keys(c.operadorEquipeMap).length > 0 },
   );
+}
+
+/**
+ * A composição com o líder FORA das equipes de setor alternativo que ele
+ * lidera — contando, uma vez, só no total do setor (`liderEmAlternativo.ts`).
+ *
+ * Mês fechado lê a liderança e a chave `alternativo` do retrato; o corrente,
+ * de hoje. Falha de leitura devolve a composição como veio: é o comportamento
+ * de antes, e melhor que um painel vazio.
+ */
+async function semLiderNaEquipeDeAlternativo(
+  empresaId: string, mes: string | null, comp: ComposicaoEquipes,
+): Promise<ComposicaoEquipes> {
+  try {
+    const [setoresRes, altDoMes, lideresDoMes] = await Promise.all([
+      supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
+      buscarAlternativosDoRetrato(empresaId, mes),
+      comp.doRetrato && mes
+        ? tabelaSemTipo<LinhaComposicaoLider>('composicao_mes_lider')
+            .select('equipe_id, lider_id, ordem').eq('empresa_id', empresaId).eq('mes', mes)
+            .then(r => (r.error ? null : (r.data ?? []).map(l => ({ equipe_id: l.equipe_id, lider_id: l.lider_id }))))
+        : buscarEquipeMembros({ empresaId, papel: 'lider' })
+            .then(v => v.map(l => ({ equipe_id: l.equipe_id, lider_id: l.pessoa_id }))),
+    ]);
+    if (setoresRes.error || !lideresDoMes) return comp;
+    const alternativos = new Set<string>();
+    for (const s of (setoresRes.data as { id: string; alternativo: boolean | null }[] | null) ?? []) {
+      if (altDoMes?.get(s.id) ?? s.alternativo) alternativos.add(s.id);
+    }
+    if (!alternativos.size) return comp;
+    const ajustada = liderNaoContaEmEquipeDeAlternativo({
+      operadorEquipeMap:        comp.operadorEquipeMap,
+      equipesExtrasPorOperador: comp.equipesExtrasPorOperador,
+      lideradas:                equipesLideradasPorPessoa(lideresDoMes),
+      setorDaEquipe:            mapaSetorDaEquipe(comp.equipes),
+      nomeDaEquipe:             new Map(comp.equipes.map(e => [e.id, e.nome] as const)),
+      alternativos,
+    });
+    return { ...comp, ...ajustada };
+  } catch {
+    return comp;
+  }
 }
 
 /**
