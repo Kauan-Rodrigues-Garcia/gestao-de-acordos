@@ -62,5 +62,4 @@
  * continua no DOM: é ela que move o quadro da cena).
  */
 .hw-batman.vultos :is(.hw-bat-figura, .hw-bat-luz, .hw-bat-fumaca, .hw-bat-vidro) { display: none; }
-/* Na mesa, a névoa vermelha fica mais leve por cima da cidade. */
-.hw-batman.mesa .hw-bat-fumaca { opacity: .55; }
+/* Na mesa, a névoa vermelha vai inteira por cima da cidade (pedido de 06/10/2026). */

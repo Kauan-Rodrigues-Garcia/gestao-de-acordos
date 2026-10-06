@@ -12,7 +12,8 @@
  *              inteiro em ~3,5 s.
  *
  * Por baixo de tudo, Gotham (`gotham/CenaGotham.tsx`, 05/10/2026): na mesa, a
- * Gotham Square do filme na chuva; no Analítico, o bat-sinal pela janela. Ela
+ * Gotham Square do filme, sem chuva e no vermelho deste tema (06/10/2026); no
+ * Analítico, o bat-sinal pela janela. Ela
  * entra junto com o vermelho e segue a música. No Analítico ela substitui os
  * vultos atrás do vidro (que continuam no código, escondidos: a figura que os
  * desenhava é quem move o quadro). A carta do Charada e o Batmóvel moram na

@@ -3,9 +3,11 @@
  *
  * Conforme o tema toca:
  *
- *   - a CHUVA começa com a música e enche nos primeiros 25 s;
- *   - os RAIOS começam depois de 20 s e ficam mais frequentes até o fim;
- *   - a cidade vai se AVERMELHANDO do começo ao fim da faixa;
+ *   - a CHUVA começa com a música e enche nos primeiros 25 s (só no Analítico:
+ *     na praça ela saiu em 06/10/2026, poluía a tela);
+ *   - os RAIOS começam depois de 20 s e ficam mais frequentes até o fim (idem);
+ *   - a cidade já entra VERMELHA e avermelha mais até o fim da faixa — esperar
+ *     a música para o vermelho chegar deixava a praça com cara de outro tema;
  *   - os LETREIROS piscam cada vez mais.
  *
  * Tudo multiplicado pela entrada do modo (`nivelAgora`, de `modoBatman`): na
@@ -49,7 +51,7 @@ export function niveisNaMusica(ponto: { atual: number; duracao: number } | null,
   return {
     chuva: e * lim(atual / CHUVA_CHEIA_S),
     raios: atual < RAIOS_DESDE_S ? 0 : e * (0.35 + 1.4 * fracao),
-    tom: e * (0.08 + 0.55 * fracao),
+    tom: e * (0.5 + 0.25 * fracao),
     piscar: e * (0.15 + 0.85 * fracao),
   };
 }

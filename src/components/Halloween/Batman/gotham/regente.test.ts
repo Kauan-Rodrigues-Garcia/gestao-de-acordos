@@ -7,11 +7,11 @@ const { niveisNaMusica, CHUVA_CHEIA_S, RAIOS_DESDE_S } = await import('./regente
 const ponto = (atual: number, duracao = 200) => ({ atual, duracao });
 
 describe('a cena segue a música', () => {
-  it('no começo da música: sem chuva, sem raio, pouco vermelho', () => {
+  it('no começo da música: sem chuva, sem raio, mas já vermelho', () => {
     const n = niveisNaMusica(ponto(0), 1);
     expect(n.chuva).toBe(0);
     expect(n.raios).toBe(0);
-    expect(n.tom).toBeCloseTo(0.08);
+    expect(n.tom).toBeCloseTo(0.5);
   });
 
   it('a chuva enche nos primeiros segundos', () => {

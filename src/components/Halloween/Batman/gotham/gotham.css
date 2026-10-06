@@ -22,12 +22,21 @@
 @keyframes gt-some { to { opacity: 0; } }
 
 /* ── Dashboard: Gotham Square ────────────────────────────────────────────── */
+/* Translúcida: o vermelho-escuro do modo (`.hw-bat-verm`, logo atrás) passa pela
+   cidade — apaga o brilho dos telões e do neon e junta o tema de antes com este. */
+.gt-gotham.mesa { opacity: calc(var(--verm, 0) * .85); }
 .gt-cidade { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* Os telões vistos através da chuva e da névoa ficam um pouco moles e apagados — mas isso
    é pintado uma vez no canvas (`pintarTeloes`): `filter` de CSS nesta camada era refeito a
    cada quadro, porque a névoa desliza por cima (derrubava a Dashboard para ~44 quadros). */
 /* O tom do modo Batman por cima da cidade: puxa tudo para o vermelho sem apagar o neon. */
 .gt-tom { position: absolute; inset: 0; background: #7a0a10; mix-blend-mode: color; pointer-events: none; }
+/* O véu do tema de antes: escuro nas bordas e embaixo, e o vermelho dele perto do alto. */
+.gt-veu { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 90% 80% at 70% 20%, rgb(64 7 11 / .3) 0%, rgb(20 2 4 / .55) 55%, rgb(8 0 2 / .72) 100%); }
+/* No lugar da névoa da chuva: o mesmo véu deslizando, em vermelho e mais denso. */
+.gt-nevoa-vermelha { --nevoa: 150 14 24; }
+.gt-nevoa-vermelha i { background: radial-gradient(closest-side, rgb(var(--nevoa) / .3), rgb(var(--nevoa) / .12) 55%, transparent); }
 
 /* ── O Analítico: o bat-sinal pela janela ────────────────────────────────── */
 .gt-janela { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
@@ -47,6 +56,11 @@
 @keyframes gt-grao { 0% { transform: translate(0, 0); } 33% { transform: translate(-37px, 23px); } 66% { transform: translate(29px, -31px); } }
 /* Ele, de costas, olhando o sinal: só a forma, desfocada, em primeiro plano. */
 .gt-silhueta { position: absolute; right: 0; bottom: -14%; height: 82%; transform: scaleX(-1); filter: brightness(0) blur(4px); opacity: .95; }
+
+/* Mais escuro, sem apagar o sinal (pedido de 06/10/2026): a sala escurece por cima de
+   tudo, mais nas bordas e embaixo, menos em volta do disco. */
+.gt-janela::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 60% 70% at 68% 32%, rgb(4 2 1 / .18), rgb(4 2 1 / .5) 60%, rgb(2 1 0 / .7)); }
 
 /* O disco do sinal, no alto à direita da janela. */
 .gt-sinal { left: 68%; top: 6%; height: 58%; }

@@ -2,29 +2,29 @@
  * CenaGotham — Gotham no modo Batman (pedido de 05/10/2026, depois de validado
  * no playground). Montado pela `CenaBatman`:
  *
- *   FundoGotham       — atrás do conteúdo, no lugar do vermelho liso:
+ *   FundoGotham       — atrás do conteúdo:
  *                         `mesa` (Dashboard e Acordos): a Gotham Square do
- *                         filme na chuva (`cidade.tsx` + `chuva.tsx`);
+ *                         filme (`cidade.tsx`), SEM chuva, mergulhada no
+ *                         vermelho do modo — ver `PracaVermelha`;
  *                         `vultos` (Analítico): o bat-sinal pela janela
  *                         (`janela.tsx`), com o vidro molhado e embaçado.
  *                       Entra junto com o vermelho do modo (`--verm`) e segue a
- *                       música (`regente.ts`): a chuva começa com ela, os raios
- *                       vêm depois, a cidade avermelha e os letreiros piscam.
- *                       O som da chuva também mora aqui.
+ *                       música (`regente.ts`): a cidade avermelha mais e os
+ *                       letreiros piscam mais; no Analítico a chuva começa com
+ *                       ela e os raios vêm depois. O som da chuva mora aqui.
  *   AconteceEmGotham  — por cima do conteúdo: a carta do Charada e o Batmóvel,
  *                       em horários sorteados (`agenda.ts`).
  *
  * Para validar sem esperar, com o tema no ar: `?batman=charada`,
- * `?batman=batmovel`, `?batman=raio` ou, no Analítico, `?batman=policia`.
+ * `?batman=batmovel` ou, no Analítico, `?batman=raio` e `?batman=policia`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useModoBatman } from '../modoBatman';
 import { adiar, daVez, novaAgenda, reagendar, type Agenda, type EventoGotham } from './agenda';
 import { Batmovel } from './Batmovel';
 import { CartaDoCharada, FiltrosDoCharada } from './CartaDoCharada';
-import { ChuvaDeGotham, type Luz, type Ritmo } from './chuva';
+import type { Ritmo } from './chuva';
 import { CidadeGotham } from './cidade';
-import { useDepois } from './depois';
 import { JanelaDoSinal } from './janela';
 import { niveisAgora, pedirPolicia, pedirRaio, raiosPedidosAte, volumeDosEfeitos } from './regente';
 import { criarSomDeChuva } from './sons';
@@ -50,22 +50,40 @@ function useSomDaChuva(fator: number) {
 }
 
 export function FundoGotham({ modo }: { modo: 'mesa' | 'vultos' }) {
-  useSomDaChuva(modo === 'mesa' ? 0.55 : 0.45);
   return (
-    <div className="gt-gotham" aria-hidden="true">
-      {modo === 'mesa' ? <PracaNaChuva /> : <JanelaDoSinal ritmo={ritmoAgora} />}
+    <div className={`gt-gotham ${modo}`} aria-hidden="true">
+      {modo === 'mesa' ? <PracaVermelha /> : <SinalNaChuva />}
     </div>
   );
 }
 
-/** A Gotham Square na chuva, avermelhando conforme a música avança. */
-function PracaNaChuva() {
+/**
+ * O Analítico: o bat-sinal pela janela, com o som da chuva. Chuva pela metade e
+ * raios mais espaçados (pedido de 06/10/2026: a cheia poluía a tela); a água no
+ * vidro e o som acompanham.
+ */
+const ritmoDaJanela = (): Ritmo => {
+  const r = ritmoAgora();
+  return { ...r, densidade: r.densidade * 0.5, raios: r.raios * 0.6 };
+};
+function SinalNaChuva() {
+  useSomDaChuva(0.3);
+  return <JanelaDoSinal ritmo={ritmoDaJanela} />;
+}
+
+const semLuzes = () => {};
+
+/**
+ * A Gotham Square no vermelho do tema de antes (pedido de 06/10/2026: «junta o
+ * melhor dos dois»). Sem chuva — gotas, respingos e raios atrás da tabela
+ * poluíam a tela. A cidade é translúcida (`.gt-gotham.mesa`): o vermelho-escuro
+ * de `.hw-bat-verm` passa por ela, o que apaga o brilho e casa os dois temas. Por
+ * cima, o tom vermelho (já forte desde o começo, ver `regente.ts`), um véu de
+ * névoa vermelha que só desliza, e a névoa vermelha do modo (`CenaBatman`).
+ */
+function PracaVermelha() {
   const tom = useRef<HTMLDivElement>(null);
-  const luzes = useRef<Luz[]>([]);
-  const fontes = useCallback(() => luzes.current, []);
   const piscar = useCallback(() => niveisAgora().piscar, []);
-  // A chuva entra depois da cidade (que já se monta em etapas): ver `depois.ts`.
-  const comChuva = useDepois(600);
   useEffect(() => {
     let antes = '';
     const t = window.setInterval(() => {
@@ -76,12 +94,10 @@ function PracaNaChuva() {
   }, []);
   return (
     <>
-      <CidadeGotham aoMudarLuzes={l => { luzes.current = l; }} piscar={piscar} />
+      <CidadeGotham aoMudarLuzes={semLuzes} piscar={piscar} />
       <div ref={tom} className="gt-tom" style={{ opacity: 0 }} />
-      {comChuva && (
-        <ChuvaDeGotham densidade={1} ritmo={ritmoAgora} cidade={0} brilho={1} vento={0.08} neblina={1} respingos
-          raios={0} trovao={0} ceu fontes={fontes} tomNevoa={[80, 105, 100]} />
-      )}
+      <div className="gt-veu" />
+      <div className="gt-nevoa gt-nevoa-vermelha"><i /><i /><i /></div>
     </>
   );
 }
