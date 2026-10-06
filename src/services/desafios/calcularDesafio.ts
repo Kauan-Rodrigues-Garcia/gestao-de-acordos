@@ -266,6 +266,16 @@ export function participaDaCampanha(pessoa: PessoaDesafio, desafio: Desafio): bo
   // Recorte por cargo: é o que faz «a disputa dos líderes destes cinco
   // setores» caber em cinco cliques em vez de quarenta nomes.
   if (cargos.length    && !cargos.includes(pessoa.perfil)) return false;
+  /*
+   * Campanha de líderes: quem não lidera equipe nenhuma não disputa (Cleber,
+   * 06/10/2026 — «só aparecem se eu adicionar elas em uma equipe»). Antes ele
+   * entrava zerado no fim do placar, e a gerência tirava um a um pela lista de
+   * excluídos. Pôr a pessoa numa equipe pela tela de Equipes já a traz de volta.
+   */
+  if (desafio.regra.fonteResultado === 'equipe_liderada'
+      && !pessoa.equipeId && (pessoa.equipesLideradas ?? []).length === 0) {
+    return false;
+  }
   return true;
 }
 

@@ -23,6 +23,7 @@ import { diasRestantes, situacaoDoPeriodo } from '@/services/desafios/calcularDe
 import type { Desafio } from '@/services/desafios/types';
 import { dataBR, diaCurto, estiloDaCampanha, hojeISO } from './tema';
 import { ProgressoDesafio } from './ProgressoDesafio';
+import { EnfeiteHalloween, FONTE_TITULO_HALLOWEEN, useFonteHalloween } from './EnfeiteHalloween';
 
 interface Props {
   desafio: Desafio;
@@ -47,6 +48,8 @@ export function DesafioHero({
   const hoje  = hojeISO();
   const fase  = situacaoDoPeriodo(desafio, hoje);
   const faltam = diasRestantes(desafio.dataFim, hoje);
+  const halloween = desafio.visual.tema === 'halloween';
+  useFonteHalloween(halloween);
 
   const etiqueta =
     fase === 'antes'  ? 'Começa em breve'
@@ -59,7 +62,8 @@ export function DesafioHero({
       'relative overflow-hidden rounded-xl border bg-card bg-gradient-to-br p-5 sm:p-6',
       tema.borda, tema.gradiente,
     )}>
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      {halloween && <EnfeiteHalloween />}
+      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn(
@@ -77,7 +81,13 @@ export function DesafioHero({
             </span>
           </div>
 
-          <h2 className={cn('truncate text-2xl font-bold sm:text-3xl', tema.destaque)}>
+          <h2
+            className={cn(
+              'truncate text-2xl sm:text-3xl', tema.destaque,
+              halloween ? 'font-normal tracking-wide sm:text-4xl' : 'font-bold',
+            )}
+            style={halloween ? { fontFamily: FONTE_TITULO_HALLOWEEN } : undefined}
+          >
             {desafio.nome}
           </h2>
 

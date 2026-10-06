@@ -81,6 +81,7 @@ const TEMAS: { valor: TemaDesafio; rotulo: string }[] = [
   { valor: 'cafe',    rotulo: 'Café' },
   { valor: 'corrida', rotulo: 'Corrida' },
   { valor: 'equipes', rotulo: 'Equipes' },
+  { valor: 'halloween', rotulo: 'Halloween' },
 ];
 
 const STATUS: { valor: StatusDesafio; rotulo: string }[] = [

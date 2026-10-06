@@ -17,7 +17,7 @@
  * `muted-foreground`) mais a paleta do Tailwind que o resto do app já usa —
  * `amber` no pódio, `emerald` para subida. Nada de hexadecimal solto.
  */
-import { Coffee, Flag, Trophy, Users } from 'lucide-react';
+import { Coffee, Flag, Ghost, Trophy, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AcentoDesafio, TemaDesafio, VisualDesafio } from '@/services/desafios/types';
 
@@ -63,6 +63,16 @@ const TEMAS: Record<TemaDesafio, EstiloTema> = {
     borda:     'border-sky-500/30',
     selo:      'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30',
     barra:     'bg-sky-500',
+  },
+  // Outubro de 2026: abóbora no destaque e roxo de bruxa no fundo. O cartaz
+  // ganha morcegos, teia e abóbora por cima (`EnfeiteHalloween`).
+  halloween: {
+    Icone:     Ghost,
+    gradiente: 'from-orange-500/20 via-violet-600/10 to-card',
+    destaque:  'text-orange-600 dark:text-orange-400',
+    borda:     'border-orange-500/40',
+    selo:      'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/40',
+    barra:     'bg-gradient-to-r from-orange-500 to-violet-600',
   },
   equipes: {
     Icone:     Users,

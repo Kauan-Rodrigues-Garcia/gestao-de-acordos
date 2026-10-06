@@ -235,7 +235,7 @@ export type FonteMeta = 'individual' | 'meta_equipe' | 'projecao_equipe';
 export type AgregacaoLider = 'equipe_unica' | 'media_das_equipes';
 
 /** Tema da campanha. Governa a gincana, não o desenho da aplicação. */
-export type TemaDesafio = 'padrao' | 'cafe' | 'corrida' | 'equipes';
+export type TemaDesafio = 'padrao' | 'cafe' | 'corrida' | 'equipes' | 'halloween';
 
 /** Cor de acento da campanha, por cima do tema. `null` = a cor do tema. */
 export type AcentoDesafio =

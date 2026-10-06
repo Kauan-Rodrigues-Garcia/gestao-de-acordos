@@ -62,7 +62,7 @@ function db(tabela: string): Consulta {
 
 // ── Normalização ─────────────────────────────────────────────────────────────
 
-const TEMAS: readonly TemaDesafio[] = ['padrao', 'cafe', 'corrida', 'equipes'];
+const TEMAS: readonly TemaDesafio[] = ['padrao', 'cafe', 'corrida', 'equipes', 'halloween'];
 const ACENTOS: readonly AcentoDesafio[] = [
   'ambar', 'violeta', 'esmeralda', 'rosa', 'azul', 'laranja',
 ];

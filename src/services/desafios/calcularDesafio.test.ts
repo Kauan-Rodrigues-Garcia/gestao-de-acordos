@@ -145,6 +145,16 @@ describe('participaDaCampanha', () => {
     expect(participaDaCampanha(p, desafio())).toBe(true);
   });
 
+  it('campanha de líderes: quem não lidera equipe nenhuma fica fora (06/10/2026)', () => {
+    const lideres = desafio({ regra: { fonteResultado: 'equipe_liderada', agregacaoLider: 'media_das_equipes' } });
+    const semEquipe = pessoa({ id: 'l1', nome: 'Laysa', perfil: 'lider', equipeId: null, equipes: [], equipesLideradas: [] });
+    const comEquipe = pessoa({ id: 'l2', nome: 'Elis', perfil: 'lider', equipeId: null, equipes: [], equipesLideradas: ['eq9'] });
+    expect(participaDaCampanha(semEquipe, lideres)).toBe(false);
+    expect(participaDaCampanha(comEquipe, lideres)).toBe(true);
+    // Campanha de operação não muda: ninguém ali precisa liderar nada.
+    expect(participaDaCampanha(semEquipe, desafio())).toBe(true);
+  });
+
   it('respeita o recorte por setor, equipe e operador', () => {
     expect(participaDaCampanha(p, desafio({
       regra: { participantes: { setores: ['setorB'], equipes: [], operadores: [] } },
@@ -777,7 +787,9 @@ describe('resultado vindo da equipe liderada', () => {
     expect(r.individual.every(i => i.recebido === 0)).toBe(true);
   });
 
-  it('lider sem equipe resolvida entra zerado, e nao com o total de ninguem', () => {
+  it('lider sem equipe nenhuma fica fora do placar, e nao com o total de ninguem', () => {
+    // Era «entra zerado»; desde 06/10/2026 nem entra — só volta quando é posto
+    // numa equipe pela tela de Equipes.
     const solto = pessoa({
       id: 'l3', nome: 'Lider Sem Equipe', perfil: 'lider',
       equipeId: null, equipes: [],
@@ -786,7 +798,7 @@ describe('resultado vindo da equipe liderada', () => {
       desafio: campanhaDeLideres,
       dados: { participantes: [...participantes, solto], linhas },
     });
-    expect(r.individual.find(i => i.pessoa.id === 'l3')?.recebido).toBe(0);
+    expect(r.individual.find(i => i.pessoa.id === 'l3')).toBeUndefined();
   });
 });
 
