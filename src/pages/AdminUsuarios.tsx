@@ -10,6 +10,7 @@ import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { filtrarUsuariosVisiveis } from '@/lib/usuarios-visibilidade';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
+import { criarUsuario } from '@/services/criarUsuario.service';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 // A lista de gente e a transferência: as duas saíram da aba Setores, que as
@@ -50,10 +51,9 @@ import { CalendarRange } from 'lucide-react';
 import { UsuariosDoMesPainel } from '@/components/admin/UsuariosDoMesPainel';
 import { mesesComRetrato } from '@/services/admin/usuariosDoMes.service';
 import { ehMesAtual, rotuloDoMes } from '@/lib/mesReferencia';
-import { supabase, createIsolatedAuthClient, Perfil, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
+import { supabase, Perfil, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
 import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas } from '@/services/situacaoUsuario.service';
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
-import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa, PERFIL_LABELS, getTodayISO } from '@/lib/index';
 import { toast } from 'sonner';
@@ -737,43 +737,26 @@ export default function AdminUsuarios() {
         toast.success('Usuário atualizado!');
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
-        const authRedirectUrl = buildAuthRedirectUrl();
         // Use real email if provided, otherwise generate synthetic one from username
         const resolvedEmail = form.email.trim().toLowerCase().includes('@')
           ? form.email.trim().toLowerCase()
           : `${(form.usuario.trim() || form.email.trim()).toLowerCase()}@interno.sistema`;
-        // Usa um client isolado (sem persistência de sessão): mesmo que o
-        // Supabase crie sessão automática ao cadastrar, ela fica nesse client
-        // descartável e NÃO substitui/derruba a sessão do admin logado.
-        const signupClient = createIsolatedAuthClient();
-        const { data: signUpData, error } = await signupClient.auth.signUp({
+        // A conta nasce no SERVIDOR (/api/criar-usuario), que confere a
+        // permissão de quem pede e grava o cargo. O `signUp` no navegador
+        // exigia o cadastro público ligado — por onde qualquer pessoa criava a
+        // própria conta como super_admin (auditoria de segurança, 06/10/2026).
+        await criarUsuario({
+          nome: form.nome.trim(),
           email: resolvedEmail,
-          password: form.senha,
-          options: {
-            ...(authRedirectUrl ? { emailRedirectTo: authRedirectUrl } : {}),
-            data: {
-              nome: form.nome.trim(),
-              perfil: form.perfil,
-              usuario: form.usuario.trim() ? form.usuario.trim().toLowerCase() : null,
-              // Cúpula nasce sem setor. O gatilho no banco também zeraria, mas
-              // mandar o valor certo mantém a tela honesta sobre o que gravou.
-              setor_id: cargoEscopoEmpresa ? null : (form.setor_id || null),
-              empresa_id: empresaId,
-              empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,
-            }
-          }
+          senha: form.senha,
+          perfil: form.perfil,
+          usuario: form.usuario.trim() ? form.usuario.trim().toLowerCase() : null,
+          // Cúpula nasce sem setor. O gatilho no banco também zeraria, mas
+          // mandar o valor certo mantém a tela honesta sobre o que gravou.
+          setor_id: cargoEscopoEmpresa ? null : (form.setor_id || null),
+          empresa_id: empresaId,
         });
-        // Descarta a sessão em memória do client isolado (defensivo).
-        await signupClient.auth.signOut().catch(() => {});
-        if (error) {
-          if (error.message.toLowerCase().includes('database error')) {
-            throw new Error('Erro interno ao criar conta. Tente novamente em alguns instantes ou entre em contato com o suporte.');
-          }
-          throw error;
-        }
-        toast.success(signUpData?.session
-          ? 'Usuário criado com sucesso!'
-          : 'Usuário criado! Ele receberá um e-mail de confirmação.');
+        toast.success('Usuário criado com sucesso!');
       }
       setDialogOpen(false);
       fetchDados();

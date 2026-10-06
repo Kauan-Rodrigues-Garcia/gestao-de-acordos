@@ -72,7 +72,6 @@ const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
 const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
-const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
@@ -349,9 +348,9 @@ export default function App() {
               <Route path={ROUTE_PATHS.LOGIN} element={
                 <PublicRoute><Login /></PublicRoute>
               } />
-              <Route path={ROUTE_PATHS.REGISTRO} element={
-                <PublicRoute><Registro /></PublicRoute>
-              } />
+              {/* Cadastro público desligado (auditoria de segurança, 06/10/2026):
+                  conta só nasce pela administração, em /api/criar-usuario. */}
+              <Route path={ROUTE_PATHS.REGISTRO} element={<Navigate to={ROUTE_PATHS.LOGIN} replace />} />
 
               {/* `/` existe em todo produto — é a porta de entrada. O que ela
                   DESENHA é que muda: o Dashboard atual é da cobrança de ponta a
