@@ -69,6 +69,50 @@ verde.
 
 ## Parte 2 — Tela da gerência e a unidade Cofen
 
+### 2.0 As três visões (Cleber, 06/10/2026 — revisão)
+
+Cada cargo escolhe a visão no topo (Eu · Equipe · Setor). A primeira aba de
+Equipe e de Setor é o **Resumo** — um painel «de casa»: recebido do mês, recebido
+hoje, meta, quanto falta, quanto devia ter hoje, onde fecha e a faixa do ritmo.
+Só números do conjunto; nenhum nome, nenhuma lista de pessoas.
+
+| Cargo | Eu | Equipe | Setor |
+|---|---|---|---|
+| operador | completa (a de hoje) | **só o Resumo** (a equipe do cadastro) | **só o Resumo** (o setor do cadastro) |
+| elite | completa | completa (a equipe dele) | completa (o setor do cadastro) |
+| líder | — | completa (as que lidera) | completa (o setor do cadastro) |
+| gerência | — | completa (escolhe entre as equipes do setor) | completa |
+
+«Completa» = Resumo + as abas Quartis, Gráfico e Hoje e os cartões por equipe e
+pessoa. Operador NUNCA vê quartil, lista ou valor de outra pessoa.
+
+**Onde mora cada visão.** A troca Eu · Equipe · Setor fica no topo das três telas.
+- Operador: tudo dentro de `/m`. Equipe e Setor desenham só o Resumo, lido de
+  `fn_app_resumo_visoes` — ele nunca entra em `/m/equipe` nem `/m/setor`, que
+  continuam exigindo `ver_painel_lider`.
+- Elite: Eu em `/m`; Equipe leva a `/m/equipe`; Setor leva a `/m/setor`.
+- Líder: abre em `/m/equipe`; Setor leva a `/m/setor`.
+- Gerência: abre em `/m/setor`; Equipe leva a `/m/equipe`, com as equipes do setor
+  no seletor.
+
+**De onde vem cada visão**
+
+- **Elite, líder e gerência** já têm escopo de SETOR no Painel Líder e no
+  Analítico (`painel_lider_escopo_setor`, `analitico_escopo_setor` — conferido no
+  banco em 06/10, BookPlay e PaguePlay). As visões completas usam as mesmas
+  fontes do Painel Líder (`carregarFontes`), sem abrir nada novo.
+- **Operador** tem escopo individual: o Resumo de equipe e de setor vem de uma
+  função nova no banco, `fn_app_resumo_visoes(p_mes)`, SECURITY DEFINER, que
+  descobre a equipe e o setor de QUEM CHAMA e devolve só os totais deles — nunca
+  de outra equipe ou setor, nunca linha de pessoa:
+  - equipe: `fn_recebido_por_equipe` (a régua do card do Painel Líder, já usada
+    pelo desafio e pelos avisos);
+  - setor Nosso produto: `fn_recebido_por_setor` (nova, extraída do total de
+    setor que o desafio já valida contra o Painel — normal pelo carimbo,
+    alternativo pela gente dele);
+  - setor Cofen: o relatório de conciliação (ver 2.5);
+  - metas: a da equipe e a do setor na aba Metas.
+
 ### 2.1 Quem abre
 
 - Cargo `gerencia` abre em `/m/setor`, no **setor do cadastro** (`perfis.setor_id`;
@@ -121,7 +165,11 @@ desde 02/10):
 - o interruptor **H.O. | Bruto** aparece só para Cofen; abre em H.O.;
 - troca TUDO o que tem valor: recebido, meta, faixas, quartis, gráfico, Hoje e a
   lista de pagamentos (hoje gráfico, Hoje e lista estão em bruto);
-- meta em H.O. por `metaNaUnidade` (a régua do site).
+- meta em H.O. por `metaNaUnidade` (a régua do site);
+- **o total do SETOR Cofen é o do card do Painel Líder**: o relatório de
+  conciliação (`fn_pp_conciliacao_setor` — bruto `total`, H.O. `pp`, pela coluna
+  `data`), NUNCA a soma das pessoas. Equipe e pessoa Cofen seguem o analítico
+  (`total_ho`), como no Painel Líder.
 
 ### 2.6 Testes
 
@@ -145,7 +193,7 @@ avisos ligados. Nova `fn_push_destinatarios_setor`, irmã de
 | Setor bateu a meta | recebido do setor passa da meta do setor (uma vez no mês) | «Play 1 alcançou a meta do mês · R$ 420.312,00» |
 | Equipe bateu a meta | cada equipe do setor que passa da meta | «Equipe da Ana alcançou a meta · Play 1» |
 | Pessoa bateu a meta | cada pessoa do setor na 1ª, 2ª ou 3ª meta | «Maria S. alcançou a 2ª meta · Equipe da Ana» |
-| Resumo do setor | a cada hora, só se entrou dinheiro novo | «Play 1 · R$ 38.540,00 hoje · 12 pagamentos na última hora» |
+| Resumo do setor | todo hora cheia + 10 min (`10 * * * *`), logo depois de o 59 atualizar; só se entrou dinheiro na última hora | «Play 1 recebeu R$ 12.400,00 na última hora · R$ 38.540,00 hoje» |
 
 ### 3.3 Regras
 
@@ -153,7 +201,9 @@ avisos ligados. Nova `fn_push_destinatarios_setor`, irmã de
   setor e mês); equipe e pessoa reaproveitam os marcos existentes
   (`push_marcos_operador`, `push_marcos_equipe`). Reimportar não repete; ao
   ligar, grava o que já foi alcançado sem avisar. O resumo por hora guarda o
-  pico do dia por setor (como `push_resumo_equipe`).
+  total do dia por setor a cada rodada (`push_resumo_setor`); «na última hora» é
+  o total de agora menos o da rodada anterior. Cofen: total da conciliação, em
+  H.O.
 - **Sem enxurrada**: várias pessoas na mesma rodada viram UM aviso por gerente
   («3 pessoas do Play 1 alcançaram metas»), com os nomes no corpo.
 - **Cofen: só H.O.** em todo aviso, dito com clareza («R$ 226,00 em H.O.»), sem o
