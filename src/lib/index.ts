@@ -303,6 +303,12 @@ export const PERFIS_LIDERANCA_AJUSTE = ['lider', 'gerencia'] as const;
  */
 export const PERFIS_QUE_SO_LIDERAM: readonly PerfilUsuario[] = CARGOS_DERIVADOS.soLideram;
 
+/**
+ * Cuidam de um setor sem receber nem liderar equipe — a gerência. No app do
+ * celular abrem na tela do setor (06/10/2026). Derivado dos atributos do cargo.
+ */
+export const PERFIS_QUE_SUPERVISIONAM_SETOR: readonly PerfilUsuario[] = CARGOS_DERIVADOS.supervisionamSetor;
+
 /** Este cargo conta como operador no recebimento? Ver a lista acima. */
 export function contaNoRecebimento(perfil: string | null | undefined): boolean {
   return (PERFIS_QUE_CONTAM_NO_RECEBIMENTO as readonly string[])

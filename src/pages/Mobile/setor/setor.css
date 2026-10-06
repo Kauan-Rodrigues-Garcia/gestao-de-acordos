@@ -1,0 +1,54 @@
+/*
+ * Tela do setor no celular (06/10/2026). Usa o acabamento da tela da equipe
+ * (`equipe.css`, prefixo `e-`); aqui só o que é do setor (prefixo `s-`).
+ */
+
+/* ── Cartão de equipe na aba Setor ────────────────────────────────────── */
+.tela-equipe .s-eq {
+  display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left;
+  background: none; border: 0; padding: 12px 2px; border-bottom: 1px solid rgba(20, 38, 31, 0.08);
+  color: inherit;
+}
+.tela-equipe .s-eq:last-child { border-bottom: 0; }
+.tela-equipe .s-eq-l1 { display: flex; align-items: center; gap: 8px; }
+.tela-equipe .s-eq-nm { flex: 1; font-weight: 600; font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tela-equipe .s-eq-pct { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; }
+.tela-equipe .s-eq-barra { height: 6px; border-radius: 99px; background: rgba(20, 38, 31, 0.08); overflow: hidden; }
+.tela-equipe .s-eq-barra i { display: block; height: 100%; border-radius: 99px; transition: width .6s ease; }
+.tela-equipe .s-eq-l2 { font-size: 12.5px; color: rgba(20, 38, 31, 0.6); font-variant-numeric: tabular-nums; }
+
+/* ── Quartis do setor ─────────────────────────────────────────────────── */
+.tela-equipe .s-q-faixa { display: flex; height: 14px; border-radius: 99px; overflow: hidden; margin: 12px 0 10px; background: rgba(20, 38, 31, 0.08); }
+.tela-equipe .s-q-faixa i { display: block; height: 100%; transition: width .6s ease; }
+.tela-equipe .s-q-leg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tela-equipe .s-q-leg div { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.tela-equipe .s-q-leg small { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; display: flex; align-items: center; gap: 5px; }
+.tela-equipe .s-q-leg small i { width: 8px; height: 8px; border-radius: 99px; display: inline-block; }
+.tela-equipe .s-q-leg b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.tela-equipe .s-q-leg span { font-size: 12px; color: rgba(20, 38, 31, 0.6); }
+
+/* ── Equipes recolhíveis do gráfico ───────────────────────────────────── */
+.tela-equipe .s-rec { margin: 12px 16px 0; border-radius: 18px; background: rgba(255, 255, 255, 0.78); overflow: hidden; }
+.tela-equipe .s-rec > button {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 14px 16px; background: none; border: 0; font-weight: 600; font-size: 14.5px; color: inherit;
+}
+.tela-equipe .s-rec > button svg { transition: transform .2s ease; }
+.tela-equipe .s-rec[data-aberto='true'] > button svg { transform: rotate(180deg); }
+.tela-equipe .s-mini { padding: 10px 16px 14px; border-top: 1px solid rgba(20, 38, 31, 0.07); }
+.tela-equipe .s-mini-topo { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.tela-equipe .s-mini-topo b { font-variant-numeric: tabular-nums; }
+.tela-equipe .s-mini svg { display: block; width: 100%; height: 44px; }
+
+/* ── Seletor do Hoje ──────────────────────────────────────────────────── */
+.tela-equipe .s-chips {
+  display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 12px; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tela-equipe .s-chips::-webkit-scrollbar { display: none; }
+.tela-equipe .s-chips button {
+  flex: none; padding: 7px 13px; border-radius: 99px; border: 1px solid rgba(20, 38, 31, 0.12);
+  background: rgba(255, 255, 255, 0.7); font-size: 13px; font-weight: 600; color: rgba(20, 38, 31, 0.7);
+  min-height: 34px;
+}
+.tela-equipe .s-chips button[aria-pressed='true'] { background: #14261f; color: #fff; border-color: #14261f; }

@@ -43,8 +43,11 @@ describe('deveAbrirMobile', () => {
   it('líder no celular abre a tela mínima (a da equipe)', () => {
     expect(deveAbrirMobile('lider', celular)).toBe(true);
   });
-  it('gerência no celular fica no site de sempre (fase da diretoria)', () => {
-    expect(deveAbrirMobile('gerencia', celular)).toBe(false);
+  it('gerência no celular abre a tela mínima (a do setor — 06/10/2026)', () => {
+    expect(deveAbrirMobile('gerencia', celular)).toBe(true);
+  });
+  it('diretoria segue no site de sempre', () => {
+    expect(deveAbrirMobile('diretoria', celular)).toBe(false);
   });
   it('sem perfil carregado não redireciona', () => {
     expect(deveAbrirMobile(null, celular)).toBe(false);
@@ -126,17 +129,21 @@ describe('super admin (teste)', () => {
     expect(ofereceVersaoCelular('super_admin', desktop)).toBe(true);
     expect(ofereceVersaoCelular('super_admin', celular)).toBe(true);
   });
-  it('operador e líder só veem o ícone no celular; gerência nunca', () => {
+  it('operador, líder e gerência só veem o ícone no celular', () => {
     expect(ofereceVersaoCelular('operador', celular)).toBe(true);
     expect(ofereceVersaoCelular('operador', desktop)).toBe(false);
     expect(ofereceVersaoCelular('lider', celular)).toBe(true);
-    expect(ofereceVersaoCelular('gerencia', celular)).toBe(false);
+    expect(ofereceVersaoCelular('gerencia', celular)).toBe(true);
+    expect(ofereceVersaoCelular('gerencia', desktop)).toBe(false);
   });
 });
 
 describe('destinoMobile', () => {
   it('líder vai para a tela da equipe', () => {
     expect(destinoMobile('lider')).toBe('/m/equipe');
+  });
+  it('gerência vai para a tela do setor', () => {
+    expect(destinoMobile('gerencia')).toBe('/m/setor');
   });
   it('operador e elite vão para a tela pessoal (o elite troca lá dentro)', () => {
     expect(destinoMobile('operador')).toBe('/m');

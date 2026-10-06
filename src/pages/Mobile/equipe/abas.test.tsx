@@ -133,7 +133,10 @@ describe('AbaHoje', () => {
   });
 
   it('soma só hoje e só a equipe; sem permissão, explica a lista vazia', () => {
-    render(<AbaHoje equipe={equipe} hojeISO="2026-09-24"
+    render(<AbaHoje
+      conjunto={{ operadorIds: equipe.operadorIds, nomes: equipe.nomes,
+        totalPessoas: equipe.detalhe.totalOperadores, rotulo: 'da equipe' }}
+      hojeISO="2026-09-24"
       linhas={[linha('a', 300), linha('b', 200), linha('a', 999, '2026-09-23'), linha('x', 500)]}
       carregando={false} pagamentos={[]} carregandoPagamentos={false} isPaguePlay={false} />);
     expect(screen.getByText('500,00')).toBeTruthy();
@@ -150,7 +153,7 @@ describe('AbaGrafico', () => {
   const linhas = [linha('a', 1_000, '2026-09-01'), linha('b', 3_000, '2026-09-02'), linha('a', 500, '2026-09-24')];
 
   it('mostra todos os dias do mês no eixo e lê o dia tocado no topo do cartão', () => {
-    render(<AbaGrafico equipe={equipe} mes="2026-09" hojeISO="2026-09-24" linhas={linhas}
+    render(<AbaGrafico escopo={{ tipo: 'equipe', operadores: new Set(equipe.operadorIds) }} mes="2026-09" hojeISO="2026-09-24" linhas={linhas}
       carregando={false} erro={false} isPaguePlay={false} />);
     const svg = screen.getByRole('img', { name: 'Recebido por dia do mês' });
     const dias = [...svg.querySelectorAll('text')].map(t => t.textContent);

@@ -99,6 +99,7 @@ if (typeof window !== 'undefined' && !ehCelular()) {
   void carregarChatNotificacoes();
 }
 const MobileEquipe      = lazy(() => import('@/pages/Mobile/equipe'));
+const MobileSetor       = lazy(() => import('@/pages/Mobile/setor'));
 // A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
 // este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
 const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'));
@@ -414,6 +415,14 @@ export default function App() {
               <Route path={ROUTE_PATHS.MOBILE_EQUIPE} element={
                 <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
                   <MobileEquipe />
+                </ProtectedRoute>
+              } />
+              {/* A visão do setor no celular (gerência, e elite e líder pela troca
+                  de visão — 06/10/2026). Mesma chave do Painel do Líder, que é de
+                  onde vêm os números dela. */}
+              <Route path={ROUTE_PATHS.MOBILE_SETOR} element={
+                <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                  <MobileSetor />
                 </ProtectedRoute>
               } />
               {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.

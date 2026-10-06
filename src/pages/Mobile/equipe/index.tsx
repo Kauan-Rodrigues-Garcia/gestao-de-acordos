@@ -8,11 +8,16 @@
  * Gráfico, Hoje — só das equipes que a pessoa lidera, só no mês corrente.
  * Líder cai aqui depois do login; o elite chega pela troca Eu / Equipe.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ROUTE_PATHS, contaNoRecebimento } from '@/lib/index';
+import { ROUTE_PATHS } from '@/lib/index';
 import { ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
+import { acessoDasVisoes, rotaDaVisao } from '@/lib/mobile/visoes';
+import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
+import { paraHO, useHoPercentual } from '@/lib/hoPercentual';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { InterruptorUnidade, TrocaDeVisao } from '../comum/Topo';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
@@ -54,8 +59,12 @@ function TelaDaEquipe() {
     return ABAS.some(a => a.id === pedida) ? (pedida as Aba) : 'equipe';
   });
   const impersonando = !!getImpersonacaoAtiva();
-  // Quem recebe em nome próprio (o elite) tem também a tela pessoal: a troca Eu / Equipe.
-  const temTelaPessoal = contaNoRecebimento(perfil?.perfil);
+  // As visões do cargo (06/10/2026): elite Eu · Equipe · Setor; líder e
+  // gerência Equipe · Setor.
+  const { temPermissao } = useCargoPermissoes();
+  const acesso = acessoDasVisoes(perfil?.perfil, temPermissao('ver_painel_lider'));
+  const { unidade } = useUnidadeApp(tela.isPaguePlay);
+  useHoPercentual();
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -75,6 +84,14 @@ function TelaDaEquipe() {
     empresaId: tela.empresaId, mes: tela.mes, isPaguePlay: tela.isPaguePlay,
     operadorIds: tela.equipe?.operadorIds ?? [], ativo: !!tela.equipe,
   });
+  // Cofen em H.O.: o diário guarda só o bruto; o H.O. é o percentual da aba
+  // Metas sobre ele (`paraHO`), a régua do resto do sistema.
+  const linhasNaUnidade = useMemo(
+    () => (tela.emHO && grafico.data
+      ? grafico.data.map(l => ({ ...l, valor_recebido: paraHO(Number(l.valor_recebido) || 0) }))
+      : grafico.data),
+    [tela.emHO, grafico.data],
+  );
   const pagamentos = usePagamentosEquipe({
     empresaId: tela.empresaId, mes: tela.mes,
     operadorIds: tela.equipe?.operadorIds ?? [], ativo: aba === 'hoje',
@@ -124,13 +141,13 @@ function TelaDaEquipe() {
               </select>
             )}
           </div>
-          {temTelaPessoal && (
-            <div className="e-troca" role="group" aria-label="Visão">
-              <button type="button" aria-pressed={false} onClick={() => navigate(ROUTE_PATHS.MOBILE)}>Eu</button>
-              <button type="button" aria-pressed={true}>Equipe</button>
-            </div>
-          )}
         </header>
+
+        <div className="v-faixa-topo">
+          <TrocaDeVisao visoes={acesso.visoes} atual="equipe"
+            onEscolher={v => navigate(rotaDaVisao(v, acesso.completo))} />
+          <InterruptorUnidade unidade={unidade} visivel={tela.isPaguePlay} />
+        </div>
 
         {tela.carregando ? (
           <div aria-busy="true" aria-label="Carregando">
@@ -166,15 +183,19 @@ function TelaDaEquipe() {
             )}
             {aba === 'quartis' && <AbaQuartis equipe={equipe} mes={tela.mes} />}
             {aba === 'grafico' && (
-              <AbaGrafico equipe={equipe} mes={tela.mes} hojeISO={tela.hojeISO}
-                linhas={grafico.data} carregando={grafico.isLoading} erro={grafico.isError}
-                isPaguePlay={tela.isPaguePlay} />
+              <AbaGrafico escopo={{ tipo: 'equipe', operadores: new Set(equipe.operadorIds) }}
+                mes={tela.mes} hojeISO={tela.hojeISO}
+                linhas={linhasNaUnidade} carregando={grafico.isLoading} erro={grafico.isError}
+                isPaguePlay={tela.isPaguePlay} emHO={tela.emHO} />
             )}
             {aba === 'hoje' && (
-              <AbaHoje equipe={equipe} hojeISO={tela.hojeISO}
-                linhas={grafico.data} carregando={grafico.isLoading}
+              <AbaHoje
+                conjunto={{ operadorIds: equipe.operadorIds, nomes: equipe.nomes,
+                  totalPessoas: equipe.detalhe.totalOperadores, rotulo: 'da equipe' }}
+                hojeISO={tela.hojeISO}
+                linhas={linhasNaUnidade} carregando={grafico.isLoading}
                 pagamentos={pagamentos.data} carregandoPagamentos={pagamentos.isLoading}
-                isPaguePlay={tela.isPaguePlay} />
+                isPaguePlay={tela.isPaguePlay} emHO={tela.emHO} />
             )}
           </main>
         )}

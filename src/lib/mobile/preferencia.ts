@@ -12,7 +12,9 @@
  * abre a pessoal e troca para a da equipe lá dentro. Gerência e diretoria
  * seguem no site de sempre.
  */
-import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_QUE_SO_LIDERAM, ROUTE_PATHS } from '@/lib/index';
+import {
+  PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_QUE_SO_LIDERAM, PERFIS_QUE_SUPERVISIONAM_SETOR, ROUTE_PATHS,
+} from '@/lib/index';
 
 export const CHAVE_VERSAO = 'mobile:versao';
 
@@ -107,12 +109,21 @@ export function ehLider(perfil: string | null | undefined): boolean {
   return (PERFIS_QUE_SO_LIDERAM as readonly string[]).includes(perfil ?? '');
 }
 
-export function ehPerfilDaTelaMinima(perfil: string | null | undefined): boolean {
-  return recebeNoProprioNome(perfil) || ehLider(perfil);
+/** Quem cuida de um setor (a gerência): abre na tela do setor (06/10/2026). */
+function ehGerente(perfil: string | null | undefined): boolean {
+  return (PERFIS_QUE_SUPERVISIONAM_SETOR as readonly string[]).includes(perfil ?? '');
 }
 
-/** Para onde o celular leva: a tela da equipe para o líder, a pessoal para os demais. */
+export function ehPerfilDaTelaMinima(perfil: string | null | undefined): boolean {
+  return recebeNoProprioNome(perfil) || ehLider(perfil) || ehGerente(perfil);
+}
+
+/**
+ * Para onde o celular leva: o líder à tela da equipe, a gerência à do setor,
+ * quem recebe no próprio nome à pessoal.
+ */
 export function destinoMobile(perfil: string | null | undefined): string {
+  if (ehGerente(perfil)) return ROUTE_PATHS.MOBILE_SETOR;
   return ehLider(perfil) ? ROUTE_PATHS.MOBILE_EQUIPE : ROUTE_PATHS.MOBILE;
 }
 

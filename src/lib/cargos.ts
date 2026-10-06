@@ -74,6 +74,12 @@ export const derivar = (cargos: readonly Cargo[] = CARGOS) => ({
   contamNoRecebimento: slugs(cargos, c => c.conta_no_recebimento),
   /** `PERFIS_QUE_SO_LIDERAM` */
   soLideram:           slugs(cargos, c => c.lidera_equipe && !c.conta_no_recebimento),
+  /**
+   * `PERFIS_QUE_SUPERVISIONAM_SETOR` — cuidam de um setor sem receber nem
+   * liderar equipe (a gerência): a tela do setor no app (06/10/2026).
+   */
+  supervisionamSetor:  slugs(cargos, c => c.pertence_a_setor && !c.conta_no_recebimento && !c.lidera_equipe
+    && !c.acesso_total && c.exige_tipo_setor === null && (c.nivel ?? 0) >= 4),
   /** `CARGO_DO_NUCLEO` */
   doNucleo:            slugs(cargos, c => c.exige_tipo_setor === 'nucleo'),
   /** `CARGOS_FORA_DO_NUCLEO`: pertencem a setor e não são exclusivos de um tipo. */

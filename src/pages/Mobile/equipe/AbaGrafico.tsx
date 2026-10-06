@@ -16,7 +16,7 @@ import { formatBRL } from '@/lib/money';
 import { valorCurto } from '@/lib/mobile/formato';
 import { montarGraficoDoMes, type DiaDoGrafico } from '@/lib/mobile/graficoDia';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
-import type { EquipeNaTela } from './montarEquipe';
+import type { EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
 import { DinheiroAnimado } from '../comum/partesComuns';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -29,8 +29,13 @@ const TOPO = 8;
 const ALTURA = 164;
 const FONTE = 'Figtree, system-ui, sans-serif';
 
-export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isPaguePlay }: {
-  equipe: EquipeNaTela;
+export function AbaGrafico({ escopo, mes, hojeISO, linhas, carregando, erro, isPaguePlay, emHO = false, rodape = null }: {
+  /** De quem é o gráfico: a equipe (as pessoas dela) ou o setor. */
+  escopo: EscopoAnalitico;
+  /** H.O. no interruptor (Cofen): as linhas já chegam convertidas. */
+  emHO?: boolean;
+  /** O que vem depois do gráfico (o setor põe as equipes aqui). */
+  rodape?: React.ReactNode;
   mes: string;
   hojeISO: string;
   linhas: LinhaRecebidaDia[] | undefined;
@@ -40,8 +45,8 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
 }) {
   const grafico = useMemo(() => montarGraficoDoMes({
     linhas: linhas ?? [], mes, hojeISO,
-    escopo: { tipo: 'equipe', operadores: new Set(equipe.operadorIds) },
-  }), [linhas, mes, hojeISO, equipe.operadorIds]);
+    escopo,
+  }), [linhas, mes, hojeISO, escopo]);
 
   const padrao = useMemo(() => {
     const hoje = grafico.dias.find(d => d.hoje && d.valor !== null);
@@ -179,8 +184,9 @@ export function AbaGrafico({ equipe, mes, hojeISO, linhas, carregando, erro, isP
 
       <p className="e-nota">
         Toque numa barra para ver o dia. Hoje fica tracejado até fechar.
-        {isPaguePlay && ' Valores brutos, como no gráfico do site.'}
+        {emHO ? ' Valores em H.O.' : isPaguePlay && ' Valores brutos, como no gráfico do site.'}
       </p>
+      {rodape}
     </>
   );
 }

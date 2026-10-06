@@ -39,6 +39,8 @@ import { equipesDaVisao } from '@/lib/mobile/equipesQueLidero';
 import { ouvirAvisosDoServiceWorker } from '@/lib/mobile/sw';
 import { assinarSinal } from '@/lib/sinais';
 import { montarEquipe, type EquipeNaTela, type FontesEquipe } from './montarEquipe';
+import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
+import { ehGerencia } from '@/lib/mobile/visoes';
 
 const CHAVE_EQUIPE = 'mobile:equipe';
 
@@ -151,6 +153,8 @@ export interface TelaEquipe {
   mes: string;
   hojeISO: string;
   isPaguePlay: boolean;
+  /** A unidade do interruptor (Cofen). */
+  emHO: boolean;
   empresaId: string | null;
   /** Equipes que a pessoa lidera ou de que faz parte (o seletor do topo). */
   opcoes: OpcaoEquipe[];
@@ -172,7 +176,8 @@ export function useTelaEquipe(): TelaEquipe {
   const hojeISO = getTodayISO();
   const mes = hojeISO.slice(0, 7);
   const empresaId = empresa?.id ?? null;
-  const emHO = tenant.isPaguePlay;
+  // Cofen abre em H.O. e troca no interruptor (06/10/2026).
+  const { emHO } = useUnidadeApp(tenant.isPaguePlay);
 
   const chave = useMemo(() => chaveFontesEquipe(empresaId, mes), [empresaId, mes]);
   const fontesQuery = useQuery({
@@ -195,13 +200,17 @@ export function useTelaEquipe(): TelaEquipe {
 
   const opcoes = useMemo<OpcaoEquipe[]>(() => {
     if (!bruto || !perfil?.id) return [];
-    const ids = equipesDaVisao({ id: perfil.id }, bruto.lideranca, bruto);
+    // Gerência: as equipes do setor dela (06/10/2026). Os demais: as que lideram
+    // ou de que fazem parte.
+    const ids = ehGerencia(perfil.perfil)
+      ? bruto.equipes.filter(e => !!perfil.setor_id && e.setor_id === perfil.setor_id).map(e => e.id)
+      : equipesDaVisao({ id: perfil.id }, bruto.lideranca, bruto);
     return ids
       .map(id => bruto.equipes.find(e => e.id === id))
       .filter((e): e is NonNullable<typeof e> => !!e)
       .map(e => ({ id: e.id, nome: e.nome, setorNome: e.setor_id ? bruto.setores[e.setor_id] ?? null : null }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [bruto, perfil?.id]);
+  }, [bruto, perfil?.id, perfil?.perfil, perfil?.setor_id]);
 
   const [escolhida, setEscolhida] = useState<string | null>(() => lerEquipeLembrada());
   const equipeId = opcoes.some(o => o.id === escolhida) ? escolhida : opcoes[0]?.id ?? null;
@@ -247,6 +256,7 @@ export function useTelaEquipe(): TelaEquipe {
     erro: fontesQuery.error ? 'Não foi possível carregar os números da equipe.' : null,
     mes, hojeISO,
     isPaguePlay: tenant.isPaguePlay,
+    emHO,
     empresaId,
     opcoes,
     fotoUrl: perfil?.foto_url ?? null,
@@ -317,6 +327,8 @@ export interface PagamentoEquipe {
   forma: string;
   detalhe: string | null;
   valor: number;
+  /** H.O. da linha (`total_ho`) — regra Cofen. */
+  valorHO: number;
   data: string;
   importadoEm: string;
 }
@@ -339,7 +351,7 @@ export function usePagamentosEquipe(params: {
     queryFn: async (): Promise<PagamentoEquipe[]> => {
       const { data, error } = await supabase
         .from('analitico_recebimentos')
-        .select('id, operador_id, codigo, nome_cliente, forma_pagamento, forma_detalhe, valor_recebido, data_pagamento, importado_em')
+        .select('id, operador_id, codigo, nome_cliente, forma_pagamento, forma_detalhe, valor_recebido, total_ho, data_pagamento, importado_em')
         .eq('empresa_id', empresaId as string)
         .in('operador_id', [...operadorIds])
         .gte('data_pagamento', `${mes}-01`)
@@ -349,12 +361,13 @@ export function usePagamentosEquipe(params: {
       if (error) throw new Error(error.message);
       return ((data as {
         id: string; operador_id: string | null; codigo: string | null; nome_cliente: string | null;
-        forma_pagamento: string; forma_detalhe: string | null; valor_recebido: number;
+        forma_pagamento: string; forma_detalhe: string | null; valor_recebido: number; total_ho: number | null;
         data_pagamento: string; importado_em: string;
       }[] | null) ?? []).map(l => ({
         id: l.id, operadorId: l.operador_id, cliente: l.nome_cliente, codigo: l.codigo ?? null,
         forma: l.forma_pagamento, detalhe: l.forma_detalhe ?? null,
-        valor: Number(l.valor_recebido) || 0, data: l.data_pagamento, importadoEm: l.importado_em,
+        valor: Number(l.valor_recebido) || 0, valorHO: Number(l.total_ho) || 0,
+        data: l.data_pagamento, importadoEm: l.importado_em,
       }));
     },
   });

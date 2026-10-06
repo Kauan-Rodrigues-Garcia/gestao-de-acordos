@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
-import { ehLider, ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
+import { destinoMobile, ehLider, ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { useInstalacao } from '@/lib/mobile/instalar';
 import {
@@ -47,6 +47,10 @@ export default function Mobile() {
   // Líder não recebe em nome próprio: a tela dele é a da equipe.
   // A busca vai junto: o aviso de chat chega aqui com `?chat=<conversa>`.
   if (ehLider(perfil?.perfil)) return <Navigate to={{ pathname: ROUTE_PATHS.MOBILE_EQUIPE, search }} replace />;
+  // Gerência: a tela dela é a do setor (06/10/2026).
+  if (destinoMobile(perfil?.perfil) === ROUTE_PATHS.MOBILE_SETOR) {
+    return <Navigate to={{ pathname: ROUTE_PATHS.MOBILE_SETOR, search }} replace />;
+  }
   return <TelaDoOperador />;
 }
 

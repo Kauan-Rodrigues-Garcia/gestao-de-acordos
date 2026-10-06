@@ -13,7 +13,9 @@
  * `/m/setor`, que exigem `ver_painel_lider`. Operador nunca vê quartil, lista
  * ou valor de outra pessoa.
  */
-import { PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_QUE_SO_LIDERAM, ROUTE_PATHS } from '@/lib/index';
+import {
+  PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PERFIS_QUE_SO_LIDERAM, PERFIS_QUE_SUPERVISIONAM_SETOR, ROUTE_PATHS,
+} from '@/lib/index';
 
 export type Visao = 'eu' | 'equipe' | 'setor';
 
@@ -24,8 +26,9 @@ export interface AcessoDasVisoes {
   completo: boolean;
 }
 
+/** Quem cuida de um setor (a gerência) — pelos atributos do cargo, não pelo nome. */
 export function ehGerencia(perfil: string | null | undefined): boolean {
-  return perfil === 'gerencia';
+  return (PERFIS_QUE_SUPERVISIONAM_SETOR as readonly string[]).includes(perfil ?? '');
 }
 
 /**
