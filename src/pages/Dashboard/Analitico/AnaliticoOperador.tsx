@@ -46,7 +46,7 @@ import {
   buscarResumoOperadoresAnalitico,
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
-import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
+import { buscarForaDoRanking } from '@/services/situacaoUsuario.service';
 import { posicaoNoRanking } from '@/services/analitico/posicaoNoRanking';
 import {
   intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
@@ -129,19 +129,19 @@ export function AnaliticoOperador({
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);
   const [loadingRanking, setLoadingRanking] = useState(false);
 
-  // Item 5: férias/desligado somem do ranking (recebimento deles segue nos totais).
+  // Férias e líderes somem do ranking (recebimento deles segue nos totais).
   const [operadoresOcultos, setOperadoresOcultos] = useState<Set<string>>(new Set());
 
   const carregarRanking = useCallback(async () => {
     if (!empresaId || !mes) return;
     setLoadingRanking(true);
-    const [{ data, error }, situacaoMap] = await Promise.all([
+    const [{ data, error }, foraDoRanking] = await Promise.all([
       buscarResumoOperadoresAnalitico(empresaId, mes),
-      buscarSituacaoOperadores(empresaId, mes),
+      buscarForaDoRanking(empresaId, mes),
     ]);
     if (error) toast.error(`Erro ao carregar ranking: ${error}`);
     setRanking(data);
-    setOperadoresOcultos(idsOcultosRankingQuartil(situacaoMap));
+    setOperadoresOcultos(foraDoRanking);
     setLoadingRanking(false);
   }, [empresaId, mes]);
 

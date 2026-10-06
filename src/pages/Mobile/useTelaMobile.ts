@@ -29,7 +29,7 @@ import { getTodayISO } from '@/lib/index';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { buscarAnalitico, buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import { posicaoNoRanking, type PosicaoNoRanking } from '@/services/analitico/posicaoNoRanking';
-import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
+import { buscarForaDoRanking } from '@/services/situacaoUsuario.service';
 import { useMinhaComissao, type MinhaComissao } from '@/services/comissao/useMinhaComissao';
 import { temCardComissao } from '@/services/comissao/temCardComissao';
 import { ouvirAvisosDoServiceWorker } from '@/lib/mobile/sw';
@@ -218,12 +218,12 @@ export function useTelaMobile(): TelaMobile {
     queryKey: ['mobile-ranking', empresaId, mes],
     enabled: podeVerRanking && !!empresaId,
     queryFn: async () => {
-      const [{ data, error }, situacao] = await Promise.all([
+      const [{ data, error }, ocultos] = await Promise.all([
         buscarResumoOperadoresAnalitico(empresaId as string, mes),
-        buscarSituacaoOperadores(empresaId as string, mes),
+        buscarForaDoRanking(empresaId as string, mes),
       ]);
       if (error) throw new Error(error);
-      return { data, ocultos: idsOcultosRankingQuartil(situacao) };
+      return { data, ocultos };
     },
   });
   const ranking = rankingQuery.data && perfilId

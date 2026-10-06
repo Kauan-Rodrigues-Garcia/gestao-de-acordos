@@ -30,6 +30,7 @@ import { calcularProjecao } from '@/lib/projecaoMetas';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { buscarPessoasDoRetrato } from '@/services/analitico/pessoasDoMes';
 import { getTodayISO } from '@/lib/index';
+import { cargoForaDoRanking } from '@/services/situacaoUsuario.service';
 import type {
   ResumoOperadorAnalitico, EquipeAnalitico,
 } from '@/services/analitico/analitico.service';
@@ -51,6 +52,8 @@ interface PerfilRanking {
   id: string;
   equipe_id: string | null;
   subgrupo_id: string | null;
+  /** Cargo no mês — líder e gerência não entram no ranking (`cargoForaDoRanking`). */
+  perfil: string | null;
 }
 
 interface Params {
@@ -123,12 +126,12 @@ export function useRankingAnalitico({
        */
       const comSubgrupo = await supabase
         .from('perfis')
-        .select('id, equipe_id, subgrupo_id')
+        .select('id, equipe_id, subgrupo_id, perfil')
         .eq('empresa_id', empresaId);
 
       const perfisLidos: PerfilRanking[] = comSubgrupo.error
-        ? ((await supabase.from('perfis').select('id, equipe_id').eq('empresa_id', empresaId))
-            .data as { id: string; equipe_id: string | null }[] ?? [])
+        ? ((await supabase.from('perfis').select('id, equipe_id, perfil').eq('empresa_id', empresaId))
+            .data as { id: string; equipe_id: string | null; perfil: string | null }[] ?? [])
             .map((p): PerfilRanking => ({ ...p, subgrupo_id: null }))
         : (comSubgrupo.data as PerfilRanking[] ?? []);
 
@@ -157,6 +160,7 @@ export function useRankingAnalitico({
             id: r.id,
             equipe_id: r.equipe_id,
             subgrupo_id: subgrupoHoje.get(r.id) ?? null,
+            perfil: r.perfil,
           }))
         : perfisLidos);
       setSubgrupos(sgs ?? []);
@@ -282,7 +286,9 @@ export function useRankingAnalitico({
 
   /** Os resumos virados em linhas de ranking, com grupo e percentual. */
   const linhasBrutas = useMemo<LinhaRanking[]>(() => resumos
-    .filter(r => !operadoresOcultos.has(r.operador_id))
+    // Líder conta na equipe e no setor, mas não disputa o ranking (06/10/2026).
+    .filter(r => !operadoresOcultos.has(r.operador_id)
+      && !cargoForaDoRanking(perfilPorId.get(r.operador_id)?.perfil))
     .map(r => {
       const grupo = grupoDe(r.operador_id);
       const { totalUteis, decorridos } = diasDaPessoa(r.operador_id);
@@ -298,7 +304,7 @@ export function useRankingAnalitico({
         esperado:  proj?.esperado ?? null,
       };
     }),
-  [resumos, operadoresOcultos, grupoDe, diasDaPessoa, metas, quartis]);
+  [resumos, operadoresOcultos, perfilPorId, grupoDe, diasDaPessoa, metas, quartis]);
 
   const linhas = useMemo(
     () => ordenarLinhas(filtrarParticipantes(linhasBrutas, config), config.criterio),

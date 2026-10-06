@@ -13,6 +13,7 @@
 import { supabase } from '@/lib/supabase';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { ehMesAtual } from '@/lib/mesReferencia';
+import { contaNoRecebimento } from '@/lib/index';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 
@@ -231,4 +232,53 @@ export function idsOcultosRankingQuartil(mapa: Record<string, SituacaoUsuario>):
   const s = new Set<string>();
   for (const [id, sit] of Object.entries(mapa)) if (sit === 'ferias') s.add(id);
   return s;
+}
+
+/**
+ * Este cargo fica fora do ranking?
+ *
+ * Regra do Cleber (06/10/2026): «o recebimento do líder conta para a equipe e
+ * para o geral, só que o líder não participa do ranking». Fica no ranking só
+ * quem conta como operador (`contaNoRecebimento`: operador e elite — o elite
+ * atende como qualquer um). Líder, gerência e afins saem.
+ *
+ * Cargo desconhecido (`null`) fica: sem saber, não some ninguém.
+ */
+export function cargoForaDoRanking(cargo: string | null | undefined): boolean {
+  return !!cargo && !contaNoRecebimento(cargo);
+}
+
+/**
+ * IDs que somem do RANKING: quem está de férias (`idsOcultosRankingQuartil`) e
+ * quem tem cargo de liderança (`cargoForaDoRanking`). Só a exibição do ranking
+ * — os totais de equipe e setor não passam por aqui.
+ *
+ * Cargo e situação são os DO MÊS: mês fechado lê o retrato (`composicao_mes`),
+ * como `buscarSituacaoOperadores`; o corrente, o cadastro.
+ */
+export async function buscarForaDoRanking(empresaId: string, mes?: string | null): Promise<Set<string>> {
+  const fora = new Set<string>();
+  const marcar = (id: string, situacao: string | null, cargo: string | null) => {
+    if (situacao === 'ferias' || cargoForaDoRanking(cargo)) fora.add(id);
+  };
+
+  if (mes && !ehMesAtual(mes)) {
+    const retrato = await tabelaSemTipo<{ operador_id: string; situacao: string | null; cargo: string | null }>('composicao_mes')
+      .select('operador_id, situacao, cargo')
+      .eq('empresa_id', empresaId).eq('mes', mes);
+    if (!retrato.error && retrato.data?.length) {
+      for (const r of retrato.data) marcar(r.operador_id, r.situacao, r.cargo);
+      return fora;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('perfis')
+    .select('id, situacao, perfil')
+    .eq('empresa_id', empresaId);
+  if (error || !data) return fora;
+  for (const p of data as { id: string; situacao: string | null; perfil: string | null }[]) {
+    marcar(p.id, p.situacao, p.perfil);
+  }
+  return fora;
 }

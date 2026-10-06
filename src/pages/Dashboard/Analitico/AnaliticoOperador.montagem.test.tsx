@@ -32,8 +32,7 @@ vi.mock('@/services/analitico/analitico.service', () => ({
   buscarResumoOperadoresAnalitico: vi.fn(async () => ({ data: [], error: null })),
 }));
 vi.mock('@/services/situacaoUsuario.service', () => ({
-  buscarSituacaoOperadores: vi.fn(async () => ({})),
-  idsOcultosRankingQuartil: () => new Set<string>(),
+  buscarForaDoRanking: vi.fn(async () => new Set<string>()),
 }));
 
 /** Uma linha real o bastante para a tabela desenhar de verdade. */
