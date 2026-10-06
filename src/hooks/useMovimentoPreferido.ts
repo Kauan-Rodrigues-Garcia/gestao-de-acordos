@@ -31,6 +31,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useModoLeve } from '@/lib/modoLeve';
 
 export const CHAVE_MOVIMENTO = 'gestao:movimento';
 
@@ -69,6 +70,8 @@ export function useMovimentoPreferido(): MovimentoPreferido {
   // Lido UMA vez, na montagem: reler a cada render transformaria um acesso a
   // disco numa consulta de layout, e o valor não muda sem passar por aqui.
   const [escolha] = useState(movimentoEscolhido);
+  // Modo leve manda acima de tudo: quem o ligou pediu a máquina sem animação.
+  const leve = useModoLeve();
   const [sistemaPedeReduzir, setSistemaPedeReduzir] = useState(false);
 
   useEffect(() => {
@@ -82,7 +85,7 @@ export function useMovimentoPreferido(): MovimentoPreferido {
   }, []);
 
   return {
-    semMovimento: escolha ?? false,
+    semMovimento: leve || (escolha ?? false),
     sistemaPedeReduzir,
     semEscolha: escolha === null,
   };

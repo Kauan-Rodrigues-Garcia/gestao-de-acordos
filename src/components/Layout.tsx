@@ -61,6 +61,7 @@ import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { TemaHalloweenContext, cenaDaRota, modoBatmanDaRota, temFundo } from '@/components/Halloween/tema';
 import { useModoBatman } from '@/components/Halloween/Batman/modoBatman';
+import { useModoLeve } from '@/lib/modoLeve';
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
@@ -269,12 +270,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // de outubro de 2026; cada um pode desligar os enfeites no botão de tema.
   const { pathname } = useLocation();
   const hw = useHalloween();
-  const cenaHalloween = useMemo(() => cenaDaRota(pathname, marcaPaguePlay), [pathname, marcaPaguePlay]);
+  // Modo leve (`lib/modoLeve.ts`): do Halloween fica só o que é parado — as
+  // teias, os chapéus e a marca. Chuva, névoa, vultos, aranha, fantasmas,
+  // lanterna, morcegos e o Batman não montam.
+  const leve = useModoLeve();
+  const cenaHalloween = useMemo(() => {
+    const cena = cenaDaRota(pathname, marcaPaguePlay);
+    return leve
+      ? { teias: cena.teias, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null }
+      : cena;
+  }, [pathname, marcaPaguePlay, leve]);
   // Modo Batman: entra com a faixa «Batman» do Som ambiente (`Halloween/Batman`).
   const { fase: faseBatman } = useModoBatman();
   const modoBatman = modoBatmanDaRota(pathname);
   // Com o tema inteiro no ar, o Halloween de antes já está apagado: desmonta (chuva e vultos param de rodar).
   const fundoDeAntes = temFundo(cenaHalloween) && !(modoBatman && faseBatman === 'dentro');
+  const batmanNaTela = !leve && !!modoBatman && faseBatman !== 'fora';
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -999,12 +1010,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           // virar `relative`, senão o botão de recolher o menu muda de lugar.
           <div className="relative flex-1 min-h-0 flex flex-col bg-background">
             <Suspense fallback={null}>{fundoDeAntes && <FundoHalloween cena={cenaHalloween} />}</Suspense>
-            {modoBatman && faseBatman !== 'fora' && <Suspense fallback={null}><FundoBatman modo={modoBatman} /></Suspense>}
+            {batmanNaTela && modoBatman && <Suspense fallback={null}><FundoBatman modo={modoBatman} /></Suspense>}
             {conteudo}
-            <Suspense fallback={null}>
-              <SobreposicaoHalloween cena={cenaHalloween} />
-              <RevoadaHalloween />
-            </Suspense>
+            {!leve && (
+              <Suspense fallback={null}>
+                <SobreposicaoHalloween cena={cenaHalloween} />
+                <RevoadaHalloween />
+              </Suspense>
+            )}
           </div>
         ) : conteudo}
         {/* `onFinished` voltou em 01/10/2026: libera a mensagem de Halloween

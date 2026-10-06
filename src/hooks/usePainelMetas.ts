@@ -33,6 +33,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { criarAgrupador } from '@/lib/agrupador';
+import { esperaDaReleitura, useModoLeve } from '@/lib/modoLeve';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -332,15 +333,15 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   const idAssinatura = useRef(`painel-metas-${Math.random().toString(36).slice(2, 10)}`).current;
   const [versaoAcordos, setVersaoAcordos] = useState(0);
+  const leve = useModoLeve();
 
   useEffect(() => {
     if (!ativo) return;
-    const grupo = criarAgrupador(() => setVersaoAcordos(v => v + 1), {
-      esperaMs: 300, tetoMs: 1_200,
-    });
+    // Modo leve junta os avisos por mais tempo (`esperaDaReleitura`).
+    const grupo = criarAgrupador(() => setVersaoAcordos(v => v + 1), esperaDaReleitura());
     subscribe(idAssinatura, () => grupo.avisar());
     return () => { grupo.cancelar(); unsubscribe(idAssinatura); };
-  }, [ativo, subscribe, unsubscribe, idAssinatura]);
+  }, [ativo, subscribe, unsubscribe, idAssinatura, leve]);
 
   // ── Analítico + escopo — a MESMA base do AnalyticsPanel ────────────────────
   const analitico = useAnaliticoDashboard(ativo, mes);

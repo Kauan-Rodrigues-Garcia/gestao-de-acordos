@@ -7,7 +7,6 @@
  * e cada célula corta o excesso com reticências.
  */
 import { Fragment } from 'react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, X,
@@ -133,10 +132,9 @@ export function PPTableBody({
       : null;
     return (
       <Fragment key={a.id}>
-        <motion.tr
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: Math.min(i * 0.015, 0.3) }}
+        {/* Linha comum desde 06/10/2026: o fade de entrada por linha (framer-motion)
+            custava em máquina fraca e não dizia nada. */}
+        <tr
           className={cn(
             ALTURA_LINHA,
             'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
@@ -270,7 +268,7 @@ export function PPTableBody({
               <SetaDetalhe aberto={isDetailThis && !isEditingThis} disabled={isEditingThis} rotulo={rotulo} onClick={alternarDetalhe} />
             </div>
           </td>
-        </motion.tr>
+        </tr>
         {temCpf && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpan} />}
         {isEditingThis && (
           <AcordoEditInline

@@ -28,6 +28,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { reconciliarLista } from '@/lib/dadosVivos';
 import { chaveDeCache, gravarInstantaneo, lerInstantaneo } from '@/lib/cacheInstantaneo';
 import { criarAgrupador } from '@/lib/agrupador';
+import { esperaDaReleitura, useModoLeve } from '@/lib/modoLeve';
 import { lerComCache } from '@/lib/cacheCurto';
 import { PREFIXO_METAS, VALIDADE_METAS_MS } from '@/services/metas/metasCache';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
@@ -834,6 +835,7 @@ export function useAnalytics(
   // Quem passa `realtime: false` fica de fora do registry: nem assina, nem paga
   // o refetch. Ver `OpcoesAnalytics`.
   const realtimeLigado = opcoes?.realtime !== false;
+  const leve = useModoLeve();
   useEffect(() => {
     if (!realtimeLigado) return;
 
@@ -850,10 +852,11 @@ export function useAnalytics(
      * painel se atualiza cerca de uma vez por segundo, e uma última quando ela
      * termina.
      */
-    const grupo = criarAgrupador(releituraSilenciosa, { esperaMs: 300, tetoMs: 1_200 });
+    // Modo leve junta os avisos por mais tempo (`esperaDaReleitura`).
+    const grupo = criarAgrupador(releituraSilenciosa, esperaDaReleitura());
     subscribe(instanceId, () => grupo.avisar());
     return () => { grupo.cancelar(); unsubscribe(instanceId); };
-  }, [realtimeLigado, subscribe, unsubscribe, instanceId, releituraSilenciosa]);
+  }, [realtimeLigado, subscribe, unsubscribe, instanceId, releituraSilenciosa, leve]);
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {

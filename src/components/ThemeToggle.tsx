@@ -1,4 +1,5 @@
-import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft } from 'lucide-react';
+import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft, Feather } from 'lucide-react';
+import { definirModoLeve, useModoLeve } from '@/lib/modoLeve';
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -101,6 +102,7 @@ export function ThemeToggle({ halloween }: { halloween?: InterruptorHalloween } 
   const atual = (theme ?? 'system') as EscolhaTema;
   const escuroEmVigor = ehTemaEscuro(resolvedTheme);
   const [menuEscuro, setMenuEscuro] = useState(lerMenuEscuro);
+  const leve = useModoLeve();
 
   // Reaplica na montagem: o script do index.html ja pos a classe antes da
   // pintura, isto so garante o estado caso ele nao tenha rodado.
@@ -177,6 +179,21 @@ export function ThemeToggle({ halloween }: { halloween?: InterruptorHalloween } 
           Sistema
           {atual === 'system' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
+        {/*
+          Modo leve (`lib/modoLeve.ts`): para computador fraco. Vale para a
+          máquina, não para a pessoa, e o menu fica aberto para ver o efeito.
+        */}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={leve}
+          onCheckedChange={v => semTransicoes(() => definirModoLeve(v === true))}
+          onSelect={e => e.preventDefault()}
+          title="Desliga animações e enfeites para o sistema ficar mais rápido em computador mais fraco. Os números não mudam."
+          className="gap-2"
+        >
+          <Feather className="h-3.5 w-3.5" />
+          Modo leve
+        </DropdownMenuCheckboxItem>
         {/*
           Halloween (outubro): só os enfeites, sem trocar cor nenhuma. Sem
           aviso, de propósito — quem não quer só desliga. O menu fica aberto,

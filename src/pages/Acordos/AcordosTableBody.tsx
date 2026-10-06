@@ -16,14 +16,13 @@
  * tem no máximo duas linhas, cortadas com reticências (o texto inteiro fica no
  * `title`). `ALTURA_LINHA` fecha a conta.
  */
-import { Fragment } from 'react';
-import { motion } from 'framer-motion';
+import { Fragment, memo, useRef } from 'react';
 import {
   CheckCircle, MessageSquare, Edit, Trash2,
   MapPin, Link2, FileX, Plus, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { podeReagendar } from '@/services/reagendamento/reagendamento';
+import { podeReagendar, type DecisaoReagendar } from '@/services/reagendamento/reagendamento';
 import { BotaoReagendar } from '@/components/BotaoReagendar';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
@@ -133,6 +132,267 @@ function Colunas({ isPP, mostrarColunaOperador }: { isPP: boolean; mostrarColuna
   );
 }
 
+/**
+ * As ações de uma linha. Na página elas são recriadas a cada render; a linha as
+ * recebe por uma referência estável (`acoes.current`), e por isso o `memo` de
+ * `LinhaAcordo` não cai à toa.
+ */
+interface AcoesLinha {
+  toggleSelecionado: (id: string) => void;
+  marcarComoPago: (a: Acordo) => void;
+  setReagendarAcordo: (a: Acordo | null) => void;
+  enviarUmWhatsapp: (a: Acordo) => void;
+  setEditandoInlineId: (id: string | null) => void;
+  setDetalheInlineId: (id: string | null) => void;
+  setConfirmandoExclusao: (a: Acordo | null) => void;
+}
+
+interface LinhaAcordoProps {
+  a: AcordoComVinculo;
+  /** Posição dentro do dia — dá a listra. */
+  noDia: number;
+  sel: boolean;
+  isEditingThis: boolean;
+  isDetailThis: boolean;
+  destacado: boolean;
+  atualizando: boolean;
+  excluindo: boolean;
+  isPP: boolean;
+  hoje: string;
+  mostrarColunaOperador: boolean;
+  podeEditar: boolean;
+  podeExcluir: boolean;
+  operadoresMap: Record<string, string>;
+  empresaTags: AcordoTag[];
+  /** Já decidido no corpo: o conjunto de parcelas muda a cada evento e derrubaria o `memo`. */
+  agendar: DecisaoReagendar | null;
+  acoes: { readonly current: AcoesLinha };
+}
+
+/** `agendar` é objeto novo a cada render: compara pelo conteúdo. O resto, por identidade. */
+function mesmaLinha(x: LinhaAcordoProps, y: LinhaAcordoProps): boolean {
+  for (const k of Object.keys(x) as (keyof LinhaAcordoProps)[]) {
+    if (k === 'agendar') continue;
+    if (x[k] !== y[k]) return false;
+  }
+  const p = x.agendar, q = y.agendar;
+  if (p === q) return true;
+  if (!p || !q) return false;
+  return p.pode === q.pode && p.motivo === q.motivo
+    && p.proximaNumero === q.proximaNumero && p.totalParcelas === q.totalParcelas;
+}
+
+/**
+ * Uma linha da planilha. Com `memo` desde 06/10/2026 (auditoria de desempenho):
+ * cada acordo salvo na empresa chega em tempo real e troca a lista inteira, e
+ * antes as 60 linhas da página se redesenhavam a cada evento. Agora só a que
+ * mudou. Também deixou de ser animada (framer-motion) — o fade de entrada de
+ * cada linha custava em máquina fraca e não dizia nada.
+ */
+const LinhaAcordo = memo(function LinhaAcordo({
+  a, noDia, sel, isEditingThis, isDetailThis, destacado, atualizando, excluindo,
+  isPP, hoje, mostrarColunaOperador, podeEditar, podeExcluir, operadoresMap, empresaTags,
+  agendar, acoes,
+}: LinhaAcordoProps) {
+  const atrasado   = isAtrasado(a.vencimento, a.status);
+  const venceHoje  = a.vencimento === hoje;
+  /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
+  const temCpf     = acordoTemCpf(a);
+  const rotulo     = a.nome_cliente || a.nr_cliente || a.instituicao || 'acordo';
+  const secundaria = [a.instituicao, a.whatsapp].filter(Boolean).join(' · ');
+  const alternarDetalhe = () => acoes.current.setDetalheInlineId(isDetailThis ? null : a.id);
+  const donoNome = mostrarColunaOperador
+    ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
+    : null;
+  return (
+    <tr
+      className={cn(
+        ALTURA_LINHA,
+        'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
+        noDia % 2 === 0 && 'bg-muted/10',
+        atrasado  && 'bg-destructive/5',
+        venceHoje && a.status !== 'pago' && 'bg-warning/5',
+        sel && 'bg-primary/5 border-primary/20',
+        isEditingThis && 'bg-primary/5',
+        isDetailThis  && 'bg-accent/50',
+        destacado && 'bg-primary/20 border-l-4 border-l-primary',
+        // Por último: vence os demais estados. Um acordo com CPF em
+        // atraso continua vermelho de CPF, que é o que urge resolver.
+        temCpf && 'bg-destructive/15 border-l-4 border-l-destructive hover:bg-destructive/20',
+      )}
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.closest('a') || target.closest('input')) return;
+        if (!isEditingThis) alternarDetalhe();
+      }}
+    >
+      <td className={CELULA}>
+        <input
+          type="checkbox"
+          className="rounded border-border"
+          checked={sel}
+          onChange={() => acoes.current.toggleSelecionado(a.id)}
+        />
+      </td>
+      {isPP ? (
+        <>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+              <p className="min-w-0 truncate font-medium text-foreground" title={a.nome_cliente}>{a.nome_cliente}</p>
+              <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
+              <VinculoTag acordo={a} />
+            </div>
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" className="max-w-full" />
+          </td>
+          <td className={cn(CELULA, 'text-right font-mono font-semibold text-foreground whitespace-nowrap')}>
+            {formatCurrency(a.valor)}
+          </td>
+          <td className={CELULA}>
+            {getEstadoFromAcordo(a) ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                <MapPin className="w-2.5 h-2.5" />{getEstadoFromAcordo(a)}
+              </span>
+            ) : '—'}
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <span className={cn('inline-flex max-w-full truncate px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
+              {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
+            </span>
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            {extractLinkAcordo(a.observacoes) ? (
+              <a
+                href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-center gap-1 text-[11px] text-primary hover:underline"
+                title={extractLinkAcordo(a.observacoes)!}
+              >
+                <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate">ver link</span>
+              </a>
+            ) : '—'}
+          </td>
+          <td className={CELULA}>
+            <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+              {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
+            </span>
+          </td>
+        </>
+      ) : (
+        <>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <CodigoAcordoCopiavel codigo={a.nr_cliente} label="NR" className="max-w-full" />
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+              <p className="min-w-0 truncate font-medium text-foreground" title={a.nome_cliente}>{a.nome_cliente}</p>
+              <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
+              <VinculoTag acordo={a} />
+            </div>
+            {secundaria && (
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70" title={secundaria}>
+                {a.instituicao}
+                {a.instituicao && a.whatsapp && ' · '}
+                {a.whatsapp && <span className="font-mono">{a.whatsapp}</span>}
+              </p>
+            )}
+          </td>
+          <td className={cn(CELULA, 'whitespace-nowrap')}>
+            <span className={cn('font-mono', atrasado && 'text-destructive font-semibold', venceHoje && 'text-warning font-semibold')}>
+              {formatDate(a.vencimento)}
+            </span>
+          </td>
+          <td className={cn(CELULA, 'text-right font-mono font-semibold text-foreground whitespace-nowrap')}>
+            {formatCurrency(a.valor)}
+          </td>
+          <td className={cn(CELULA, 'overflow-hidden')}>
+            <span className={cn('inline-flex max-w-full truncate px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
+              {TIPO_LABELS[a.tipo]}
+            </span>
+          </td>
+          <td className={cn(CELULA, 'text-center font-mono text-muted-foreground')}>
+            {/* Era `['boleto','cartao_recorrente','pix_automatico'].includes(tipo)`:
+                Pix e Cartão parcelados apareciam como «—», e as duas formas
+                recorrentes — que não parcelam — mostravam número. */}
+            {(a.parcelas ?? 1) > 1 ? `${a.numero_parcela ?? 1}/${a.parcelas}` : '—'}
+          </td>
+          <td className={CELULA}>
+            <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+              {STATUS_LABELS[a.status]}
+            </span>
+          </td>
+        </>
+      )}
+      {/* Mesma célula da PaguePlay: nome COMPLETO e, quando há
+          vínculo, o segundo operador na linha de baixo. Até
+          16/08/2026 aqui só saía o primeiro nome, o que tornava
+          indistinguíveis dois operadores homônimos. */}
+      {mostrarColunaOperador && (
+        <td className={cn(CELULA, 'overflow-hidden truncate text-muted-foreground text-[11px]')}>
+          <OperadorCell acordo={a} operadoresMap={operadoresMap} />
+        </td>
+      )}
+      <td className={CELULA}>
+        <div className="flex items-center justify-end gap-0.5">
+          {a.status !== 'pago' && (
+            <Button
+              variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
+              title="Marcar como Pago"
+              disabled={atualizando}
+              onClick={() => acoes.current.marcarComoPago(a)}
+            >
+              <CheckCircle className="w-4 h-4" />
+            </Button>
+          )}
+          {agendar?.pode && (
+            <BotaoReagendar decisao={agendar} dono={donoNome} onClick={() => acoes.current.setReagendarAcordo(a)} />
+          )}
+          <Button
+            variant="ghost" size="icon"
+            className={cn(
+              'w-8 h-8',
+              a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
+              isPP && 'hidden',
+            )}
+            title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
+            onClick={() => acoes.current.enviarUmWhatsapp(a)}
+          >
+            <MessageSquare className="w-4 h-4" />
+          </Button>
+          {podeEditar && (
+          <Button
+            variant="ghost" size="icon"
+            className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
+            title={isEditingThis ? 'Fechar editor' : 'Editar'}
+            onClick={() => acoes.current.setEditandoInlineId(isEditingThis ? null : a.id)}
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
+          )}
+          {podeExcluir && (
+          <>
+          <span className="w-px h-5 bg-border mx-1 shrink-0" />
+          <Button
+            variant="ghost" size="icon"
+            className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+            title="Excluir acordo"
+            disabled={excluindo}
+            onClick={() => acoes.current.setConfirmandoExclusao(a)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+          </>
+          )}
+          <SetaDetalhe aberto={isDetailThis && !isEditingThis} disabled={isEditingThis} rotulo={rotulo} onClick={alternarDetalhe} />
+        </div>
+      </td>
+    </tr>
+  );
+}, mesmaLinha);
+
 export function AcordosTableBody({
   acordosParaExibir, acordosCount, isPP, colSpanFull, mostrarColunaOperador, podeEditar, podeExcluir, novoInlineAberto,
   hoje, highlightedId, selecionados, editandoInlineId, detalheInlineId,
@@ -145,247 +405,12 @@ export function AcordosTableBody({
   limparFiltros,
 }: AcordosTableBodyProps) {
   const grupos = agruparAcordosPorDia<AcordoComVinculo>(acordosParaExibir, acordoTemCpf);
-  /** Índice na lista inteira: a entrada escalonada continua uma fila só. */
-  let posicao = 0;
-
-  function linha(a: AcordoComVinculo, i: number, noDia: number) {
-    const atrasado      = isAtrasado(a.vencimento, a.status);
-    const venceHoje     = a.vencimento === hoje;
-    const sel           = selecionados.includes(a.id);
-    const isEditingThis = editandoInlineId === a.id;
-    const isDetailThis  = detalheInlineId === a.id;
-    /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
-    const temCpf        = acordoTemCpf(a);
-    const rotulo        = a.nome_cliente || a.nr_cliente || a.instituicao || 'acordo';
-    const secundaria    = [a.instituicao, a.whatsapp].filter(Boolean).join(' · ');
-    const alternarDetalhe = () => setDetalheInlineId(isDetailThis ? null : a.id);
-    // A regra mora em `services/reagendamento`: só aparece quando a próxima
-    // parcela ainda não foi agendada.
-    const agendar = podeAgendar ? podeReagendar(a, isPP, parcelasExistentes) : null;
-    const donoNome = mostrarColunaOperador
-      ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
-      : null;
-    return (
-      <Fragment key={a.id}>
-        <motion.tr
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: Math.min(i * 0.015, 0.3) }}
-          className={cn(
-            ALTURA_LINHA,
-            'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
-            noDia % 2 === 0 && 'bg-muted/10',
-            atrasado  && 'bg-destructive/5',
-            venceHoje && a.status !== 'pago' && 'bg-warning/5',
-            sel && 'bg-primary/5 border-primary/20',
-            isEditingThis && 'bg-primary/5',
-            isDetailThis  && 'bg-accent/50',
-            highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
-            // Por último: vence os demais estados. Um acordo com CPF em
-            // atraso continua vermelho de CPF, que é o que urge resolver.
-            temCpf && 'bg-destructive/15 border-l-4 border-l-destructive hover:bg-destructive/20',
-          )}
-          onClick={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.closest('button') || target.closest('a') || target.closest('input')) return;
-            if (!isEditingThis) alternarDetalhe();
-          }}
-        >
-          <td className={CELULA}>
-            <input
-              type="checkbox"
-              className="rounded border-border"
-              checked={sel}
-              onChange={() => toggleSelecionado(a.id)}
-            />
-          </td>
-          {isPP ? (
-            <>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                  <p className="min-w-0 truncate font-medium text-foreground" title={a.nome_cliente}>{a.nome_cliente}</p>
-                  <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
-                  <VinculoTag acordo={a} />
-                </div>
-              </td>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" className="max-w-full" />
-              </td>
-              <td className={cn(CELULA, 'text-right font-mono font-semibold text-foreground whitespace-nowrap')}>
-                {formatCurrency(a.valor)}
-              </td>
-              <td className={CELULA}>
-                {getEstadoFromAcordo(a) ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                    <MapPin className="w-2.5 h-2.5" />{getEstadoFromAcordo(a)}
-                  </span>
-                ) : '—'}
-              </td>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                <span className={cn('inline-flex max-w-full truncate px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
-                  {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
-                </span>
-              </td>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                {extractLinkAcordo(a.observacoes) ? (
-                  <a
-                    href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex max-w-full items-center gap-1 text-[11px] text-primary hover:underline"
-                    title={extractLinkAcordo(a.observacoes)!}
-                  >
-                    <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-                    <span className="truncate">ver link</span>
-                  </a>
-                ) : '—'}
-              </td>
-              <td className={CELULA}>
-                <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                  {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
-                </span>
-              </td>
-            </>
-          ) : (
-            <>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                <CodigoAcordoCopiavel codigo={a.nr_cliente} label="NR" className="max-w-full" />
-              </td>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                  <p className="min-w-0 truncate font-medium text-foreground" title={a.nome_cliente}>{a.nome_cliente}</p>
-                  <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
-                  <VinculoTag acordo={a} />
-                </div>
-                {secundaria && (
-                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70" title={secundaria}>
-                    {a.instituicao}
-                    {a.instituicao && a.whatsapp && ' · '}
-                    {a.whatsapp && <span className="font-mono">{a.whatsapp}</span>}
-                  </p>
-                )}
-              </td>
-              <td className={cn(CELULA, 'whitespace-nowrap')}>
-                <span className={cn('font-mono', atrasado && 'text-destructive font-semibold', venceHoje && 'text-warning font-semibold')}>
-                  {formatDate(a.vencimento)}
-                </span>
-              </td>
-              <td className={cn(CELULA, 'text-right font-mono font-semibold text-foreground whitespace-nowrap')}>
-                {formatCurrency(a.valor)}
-              </td>
-              <td className={cn(CELULA, 'overflow-hidden')}>
-                <span className={cn('inline-flex max-w-full truncate px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
-                  {TIPO_LABELS[a.tipo]}
-                </span>
-              </td>
-              <td className={cn(CELULA, 'text-center font-mono text-muted-foreground')}>
-                {/* Era `['boleto','cartao_recorrente','pix_automatico'].includes(tipo)`:
-                    Pix e Cartão parcelados apareciam como «—», e as duas formas
-                    recorrentes — que não parcelam — mostravam número. */}
-                {(a.parcelas ?? 1) > 1 ? `${a.numero_parcela ?? 1}/${a.parcelas}` : '—'}
-              </td>
-              <td className={CELULA}>
-                <span className={cn('inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                  {STATUS_LABELS[a.status]}
-                </span>
-              </td>
-            </>
-          )}
-          {/* Mesma célula da PaguePlay: nome COMPLETO e, quando há
-              vínculo, o segundo operador na linha de baixo. Até
-              16/08/2026 aqui só saía o primeiro nome, o que tornava
-              indistinguíveis dois operadores homônimos. */}
-          {mostrarColunaOperador && (
-            <td className={cn(CELULA, 'overflow-hidden truncate text-muted-foreground text-[11px]')}>
-              <OperadorCell acordo={a} operadoresMap={operadoresMap} />
-            </td>
-          )}
-          <td className={CELULA}>
-            <div className="flex items-center justify-end gap-0.5">
-              {a.status !== 'pago' && (
-                <Button
-                  variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
-                  title="Marcar como Pago"
-                  disabled={atualizandoStatus === a.id}
-                  onClick={() => marcarComoPago(a)}
-                >
-                  <CheckCircle className="w-4 h-4" />
-                </Button>
-              )}
-              {agendar?.pode && (
-                <BotaoReagendar decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
-              )}
-              <Button
-                variant="ghost" size="icon"
-                className={cn(
-                  'w-8 h-8',
-                  a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
-                  isPP && 'hidden',
-                )}
-                title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
-                onClick={() => enviarUmWhatsapp(a)}
-              >
-                <MessageSquare className="w-4 h-4" />
-              </Button>
-              {podeEditar && (
-              <Button
-                variant="ghost" size="icon"
-                className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
-                title={isEditingThis ? 'Fechar editor' : 'Editar'}
-                onClick={() => setEditandoInlineId(isEditingThis ? null : a.id)}
-              >
-                <Edit className="w-4 h-4" />
-              </Button>
-              )}
-              {podeExcluir && (
-              <>
-              <span className="w-px h-5 bg-border mx-1 shrink-0" />
-              <Button
-                variant="ghost" size="icon"
-                className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                title="Excluir acordo"
-                disabled={excluindoId === a.id}
-                onClick={() => setConfirmandoExclusao(a)}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-              </>
-              )}
-              <SetaDetalhe aberto={isDetailThis && !isEditingThis} disabled={isEditingThis} rotulo={rotulo} onClick={alternarDetalhe} />
-            </div>
-          </td>
-        </motion.tr>
-        {temCpf && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpanFull} />}
-        {isEditingThis && (
-          <AcordoEditInline
-            key={`inline-${a.id}`}
-            acordo={a}
-            isPaguePlay={isPP}
-            onSaved={(atualizado) => {
-              setEditandoInlineId(null);
-              patchAcordo(atualizado.id, atualizado);
-            }}
-            // Parcelas gravadas pelo modal: atualiza a lista sem fechar
-            // a edição, que continua aberta com o resto dos campos.
-            onParcelasAtualizadas={(linhas) => {
-              linhas.forEach(l => patchAcordo(l.id, l));
-            }}
-            onCancel={() => setEditandoInlineId(null)}
-          />
-        )}
-        {isDetailThis && !isEditingThis && (
-          <AcordoDetalheInline
-            key={`detalhe-${a.id}`}
-            acordo={a}
-            isPaguePlay={isPP}
-            colSpan={colSpanFull}
-            onClose={() => setDetalheInlineId(null)}
-            onSaved={(atualizado) => { patchAcordo(atualizado.id, atualizado); }}
-          />
-        )}
-      </Fragment>
-    );
-  }
+  /** Ações por referência: ver `AcoesLinha`. */
+  const acoes = useRef<AcoesLinha>(null as unknown as AcoesLinha);
+  acoes.current = {
+    toggleSelecionado, marcarComoPago, setReagendarAcordo, enviarUmWhatsapp,
+    setEditandoInlineId, setDetalheInlineId, setConfirmandoExclusao,
+  };
 
   return (
     <>
@@ -469,7 +494,57 @@ export function AcordosTableBody({
                 onAlternar: () => alternarDia(g.acordos.map(a => a.id)),
               }}
             />
-            {g.acordos.map((a, noDia) => linha(a, posicao++, noDia))}
+            {g.acordos.map((a, noDia) => {
+              const isEditingThis = editandoInlineId === a.id;
+              const isDetailThis  = detalheInlineId === a.id;
+              return (
+                <Fragment key={a.id}>
+                  <LinhaAcordo
+                    a={a} noDia={noDia}
+                    sel={selecionados.includes(a.id)}
+                    isEditingThis={isEditingThis} isDetailThis={isDetailThis}
+                    destacado={highlightedId === a.id}
+                    atualizando={atualizandoStatus === a.id}
+                    excluindo={excluindoId === a.id}
+                    isPP={isPP} hoje={hoje} mostrarColunaOperador={mostrarColunaOperador}
+                    podeEditar={podeEditar} podeExcluir={podeExcluir}
+                    operadoresMap={operadoresMap} empresaTags={empresaTags}
+                    // A regra mora em `services/reagendamento`: só aparece quando a
+                    // próxima parcela ainda não foi agendada.
+                    agendar={podeAgendar ? podeReagendar(a, isPP, parcelasExistentes) : null}
+                    acoes={acoes}
+                  />
+                  {acordoTemCpf(a) && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpanFull} />}
+                  {isEditingThis && (
+                    <AcordoEditInline
+                      key={`inline-${a.id}`}
+                      acordo={a}
+                      isPaguePlay={isPP}
+                      onSaved={(atualizado) => {
+                        setEditandoInlineId(null);
+                        patchAcordo(atualizado.id, atualizado);
+                      }}
+                      // Parcelas gravadas pelo modal: atualiza a lista sem fechar
+                      // a edição, que continua aberta com o resto dos campos.
+                      onParcelasAtualizadas={(linhas) => {
+                        linhas.forEach(l => patchAcordo(l.id, l));
+                      }}
+                      onCancel={() => setEditandoInlineId(null)}
+                    />
+                  )}
+                  {isDetailThis && !isEditingThis && (
+                    <AcordoDetalheInline
+                      key={`detalhe-${a.id}`}
+                      acordo={a}
+                      isPaguePlay={isPP}
+                      colSpan={colSpanFull}
+                      onClose={() => setDetalheInlineId(null)}
+                      onSaved={(atualizado) => { patchAcordo(atualizado.id, atualizado); }}
+                    />
+                  )}
+                </Fragment>
+              );
+            })}
           </Fragment>
         ))}
       </tbody>

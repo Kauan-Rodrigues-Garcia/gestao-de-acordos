@@ -1418,7 +1418,7 @@ export function AnaliticoLider({
 
         <table className="w-full text-xs">
           <thead>
-            <tr className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+            <tr className="sticky top-0 z-10 bg-muted">
               <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
                 {mostrarNR ? 'NR / NOME' : 'CÓDIGO / NOME'}
               </th>
@@ -1513,7 +1513,7 @@ export function AnaliticoLider({
         <div className="max-h-72 overflow-y-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+              <tr className="sticky top-0 z-10 bg-muted">
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground">{mostrarNR ? 'NR' : 'CÓDIGO'}</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground">OPERADOR</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground">FORMA</th>
@@ -1634,7 +1634,7 @@ export function AnaliticoLider({
     return (
       <table className="w-full text-xs">
         <thead>
-          <tr className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+          <tr className="sticky top-0 z-10 bg-muted">
             <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
             <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
             <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>

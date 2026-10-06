@@ -13,6 +13,9 @@ import { TermoUsoGate } from '@/components/TermoUsoGate';
 import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
+import { MotionConfig } from 'framer-motion';
+import { SugestaoModoLeve } from '@/components/SugestaoModoLeve';
+import { useModoLeve } from '@/lib/modoLeve';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
@@ -299,8 +302,12 @@ function TenantThemeApplier(): null {
 }
 
 export default function App() {
+  // Modo leve (`lib/modoLeve.ts`): o framer-motion do app inteiro para de animar.
+  // Fora dele fica o de sempre — `never` é o padrão da biblioteca.
+  const leve = useModoLeve();
   return (
     <ErrorBoundary scope="App" fallbackMessage="Erro crítico na aplicação. Recarregue a página.">
+    <MotionConfig reducedMotion={leve ? 'always' : 'never'}>
     <QueryClientProvider client={queryClient}>
     {/* Dono único do tema (o ThemeToggle só chama `setTheme`). `themes` lista
         todos os temas — é o que ele tira do <html> ao trocar. `color-scheme`
@@ -713,6 +720,7 @@ export default function App() {
           </Suspense>
           <ImpersonacaoBanner />
           <Toaster richColors position="top-right" />
+          <SugestaoModoLeve />
           </RastreioUsoProvider>
         </Router>
           </NotificacoesProvider>
@@ -724,6 +732,7 @@ export default function App() {
       </AuthProvider>
     </ThemeProvider>
     </QueryClientProvider>
+    </MotionConfig>
     </ErrorBoundary>
   );
 }
