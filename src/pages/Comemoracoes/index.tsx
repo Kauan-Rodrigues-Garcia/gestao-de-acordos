@@ -64,6 +64,9 @@ import {
   VOLUME_PADRAO, VOLUME_SETOR, volumeEfetivo, volumeTravado, volumeAtrapalha,
 } from './volume';
 import { Checkbox } from '@/components/ui/checkbox';
+import { mesAtual, rotuloDoMes } from '@/lib/mesReferencia';
+import { PainelMetaBatida } from './PainelMetaBatida';
+import { presetMetaBatida, type OperadorMeta } from './metaBatida';
 import { CardComemoracao } from '@/components/comemoracao/CardComemoracao';
 
 const DURACAO_PADRAO_S = 20;
@@ -277,6 +280,53 @@ export default function Comemoracoes() {
     }
   }
 
+  /**
+   * Carrega o modelo pronto de meta batida no formulário, com a pessoa já
+   * escolhida. É o mesmo estado que a montagem à mão usa: depois disso, editar
+   * ou mandar é o fluxo de sempre.
+   */
+  function aplicarMetaBatida(op: OperadorMeta) {
+    aplicarModelo([op]);
+    setEscolhidos([{ id: op.id, nome: op.nome, foto_url: op.foto_url }]);
+  }
+
+  /**
+   * O pre-save por cima do formulário, sem mexer em quem está escolhido — é o
+   * botão "Modelo meta batida", que vale mesmo quando ninguém bateu ainda.
+   */
+  function aplicarModelo(quem: { nome: string; pct?: number }[]) {
+    const p = presetMetaBatida(quem, rotuloDoMes(mesAtual()).split(' ')[0]);
+    setTitulo(p.titulo);
+    setMensagem(p.mensagem);
+    setEfeito(p.efeito);
+    setSom(p.som);
+    setAnimTexto(p.animTexto);
+    setLayout(layoutDoModelo(p.modelo));
+    setSelecionado(null);
+    setDuracao(p.duracaoS);
+    setVolume(p.volume);
+    setAlvoTipo('operadores');
+    setEquipeId('');
+    setSetorId('');
+    setAgendar(false);
+    setGifEscolhido(null);
+    setSomEscolhido(null);
+  }
+
+  /**
+   * "Enviar"/"Testar" do painel de meta batida: carrega o modelo e age no
+   * render seguinte, quando o estado já é o do modelo. Passa pelo MESMO
+   * `aoClicarComemorar` (inclusive a pergunta do clone) e pelo MESMO `testar`.
+   */
+  const [acaoModelo, setAcaoModelo] = useState<'enviar' | 'testar' | null>(null);
+  useEffect(() => {
+    if (!acaoModelo) return;
+    setAcaoModelo(null);
+    if (acaoModelo === 'enviar') aoClicarComemorar();
+    else testar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acaoModelo]);
+
   function testar() {
     dispararTeste({
       titulo: titulo || 'META BATIDA!',
@@ -440,11 +490,36 @@ export default function Comemoracoes() {
         </div>
       )}
 
+      <PainelMetaBatida
+        empresaId={empresaId as string}
+        pessoas={pessoas}
+        comemoracoes={comemoracoes}
+        ocupado={criando || acaoModelo !== null}
+        onEditar={(op) => {
+          aplicarMetaBatida(op);
+          toast.success(`Modelo de meta batida carregado para ${op.nome.split(' ')[0]}. Ajuste o que quiser e clique em Comemorar agora.`);
+        }}
+        onEnviar={(op) => { aplicarMetaBatida(op); setAcaoModelo('enviar'); }}
+        onTestar={(op) => { aplicarMetaBatida(op); setAcaoModelo('testar'); }}
+      />
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         {/* ── Montagem ── */}
         <div className="space-y-4 rounded-xl border border-border bg-card p-4">
           <div className="space-y-1.5">
-            <Label htmlFor="cm-titulo" className="text-xs">Título</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="cm-titulo" className="text-xs">Título</Label>
+              <Button type="button" size="sm" variant="outline"
+                className="h-6 gap-1 border-emerald-500/50 px-2 text-[11px] text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                title="Preenche título, mensagem, fundo, som e animação com o modelo pronto. Quem está escolhido continua."
+                onClick={() => {
+                  // Ninguém escolhido ainda: sai a mensagem coletiva, sem nome.
+                  aplicarModelo(escolhidos);
+                  toast.success('Modelo de meta batida aplicado. Edite o que quiser.');
+                }}>
+                <Trophy className="h-3 w-3" /> Modelo meta batida
+              </Button>
+            </div>
             <Input id="cm-titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)}
               maxLength={40} placeholder="META BATIDA!" />
           </div>
