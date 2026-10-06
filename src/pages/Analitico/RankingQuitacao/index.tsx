@@ -1,5 +1,9 @@
 /**
- * AbaRankingQuitacao — os 6 que mais quitaram no mês (pedido de 06/10/2026).
+ * AbaRankingQuitacao — o top 10 de quitação do mês (pedido de 06/10/2026).
+ *
+ * Prêmio só até o 6º. Do 7º ao 10º, no lugar do prêmio, quanto falta para
+ * passar quem está logo acima; quem está abaixo do 10º vê o mesmo, só para si,
+ * no rodapé. Do 1º ao 6º não há «falta»: já estão na premiação.
  *
  * Ao lado do Colchão, só nos setores habilitados em Configurações → Geral.
  * Ordem por VALOR quitado (soma do Valor Acordo dos acordos quitados no mês),
@@ -22,6 +26,7 @@ import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipant
 import { buscarRanking, type PosicaoRanking, type RankingQuitacao } from '@/services/rankingQuitacao/rankingQuitacao.service';
 import { ImportarRankingModal } from './ImportarRankingModal';
 import { nomeDoMes, primeiroDia } from './mes';
+import { POSICOES_COM_PREMIO, faltaParaPassar } from './regras';
 import './ranking.css';
 
 interface Props {
@@ -32,6 +37,8 @@ interface Props {
   setorId: string | null;
   setorNome: string;
   podeImportar: boolean;
+  /** Quem está olhando: a linha dele ganha destaque. */
+  operadorId: string;
   /** A importação foi de outro mês: a lente vai para ele. */
   onMudarMes: (mes: string) => void;
 }
@@ -45,7 +52,7 @@ const MEDALHA = ['#C9A227', '#A3ADB8', '#B4743F'] as const;
 
 const quitacoesTexto = (n: number) => `${n} ${n === 1 ? 'quitação' : 'quitações'}`;
 
-export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImportar, onMudarMes }: Props) {
+export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImportar, operadorId, onMudarMes }: Props) {
   const [ranking, setRanking] = useState<RankingQuitacao | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -74,6 +81,9 @@ export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImp
   const posicoes = ranking?.posicoes ?? [];
   const premios = ranking?.premios ?? [];
   const maior = posicoes[0]?.valor ?? 0;
+  // Pódio (1º–3º), o resto da premiação (4º–6º) e quem corre atrás (7º–10º).
+  const premiados = posicoes.slice(3, POSICOES_COM_PREMIO);
+  const perseguindo = posicoes.slice(POSICOES_COM_PREMIO, 10);
   const atualizado = ranking?.importado_em
     ? new Date(ranking.importado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null;
@@ -118,18 +128,38 @@ export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImp
       ) : (
         <>
           <Podio posicoes={posicoes.slice(0, 3)} premios={premios} maior={maior} />
-          {posicoes.length > 3 && (
+          {premiados.length > 0 && (
             <ol className="rq-lista overflow-hidden">
-              {posicoes.slice(3).map(p => (
-                <LinhaRanking key={p.operador_id} p={p} premio={premios[p.posicao - 1]} maior={maior} />
+              {premiados.map(p => (
+                <LinhaRanking key={p.operador_id} p={p} maior={maior} eu={p.operador_id === operadorId}
+                  premio={premios[p.posicao - 1]} />
               ))}
             </ol>
           )}
-          {ranking.eu && ranking.eu.posicao > 6 && (
-            <p className="rounded-xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          {perseguindo.length > 0 && (
+            <div className="space-y-2">
+              <p className="px-1 text-xs text-muted-foreground">
+                Prêmio até o {POSICOES_COM_PREMIO}º lugar. Daqui para baixo, quanto falta para passar quem está acima.
+              </p>
+              <ol className="rq-lista overflow-hidden">
+                {perseguindo.map(p => {
+                  const acima = posicoes[p.posicao - 2];
+                  return (
+                    <LinhaRanking key={p.operador_id} p={p} maior={maior} eu={p.operador_id === operadorId}
+                      falta={acima ? { valor: faltaParaPassar(acima.valor, p.valor), posicao: acima.posicao } : undefined} />
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+          {ranking.eu && ranking.eu.posicao > posicoes.length && (
+            <p className="rq-lista px-4 py-3 text-sm text-muted-foreground">
               Você está em <span className="font-semibold text-foreground">{ranking.eu.posicao}º</span> de {ranking.participantes},
               com {formatBRL(ranking.eu.valor)} em {quitacoesTexto(ranking.eu.quitacoes)}.
-              Faltam {formatBRL(Math.max(0, (posicoes[5]?.valor ?? 0) - ranking.eu.valor))} para o 6º lugar.
+              {ranking.eu.acima && (
+                <> Faltam <span className="font-semibold text-foreground">{formatBRL(faltaParaPassar(ranking.eu.acima.valor, ranking.eu.valor))}</span> para
+                  passar {ranking.eu.acima.nome ? `${ranking.eu.acima.nome} (${ranking.eu.acima.posicao}º)` : `o ${ranking.eu.acima.posicao}º`}.</>
+              )}
             </p>
           )}
         </>
@@ -211,15 +241,28 @@ function Podio({ posicoes, premios, maior }: { posicoes: PosicaoRanking[]; premi
   );
 }
 
-function LinhaRanking({ p, premio, maior }: { p: PosicaoRanking; premio: number | undefined; maior: number }) {
+/**
+ * Uma linha do 4º ao 10º. Na coluna da direita, sempre da mesma largura: o
+ * prêmio (até o 6º) ou quanto falta para passar quem está acima (7º ao 10º).
+ */
+function LinhaRanking({ p, maior, eu, premio, falta }: {
+  p: PosicaoRanking;
+  maior: number;
+  eu: boolean;
+  premio?: number;
+  falta?: { valor: number; posicao: number };
+}) {
   return (
     // Na lista o selo usa o destaque do tema: a cor de medalha é só do pódio.
-    <li className="flex items-center gap-3 px-4 py-3" style={{ '--medalha': 'var(--primary)' } as CSSProperties}>
+    <li className={cn('flex items-center gap-3 px-4 py-3', eu && 'rq-eu')} style={{ '--medalha': 'var(--primary)' } as CSSProperties}>
       <span className="w-6 shrink-0 text-center text-sm font-semibold tabular-nums text-muted-foreground">{p.posicao}º</span>
       <AvatarParticipante nome={p.nome} fotoUrl={p.foto_url} className="h-10 w-10 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="truncate text-sm font-medium text-foreground">{p.nome}</p>
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
+            <span className="truncate">{p.nome}</span>
+            {eu && <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-semibold text-primary">você</span>}
+          </p>
           <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatBRL(p.valor)}</p>
         </div>
         <div className="mt-1.5 flex items-center gap-3">
@@ -231,7 +274,18 @@ function LinhaRanking({ p, premio, maior }: { p: PosicaoRanking; premio: number 
         </div>
       </div>
       {premio != null && <Premio valor={premio} className="shrink-0" />}
+      {falta && <Falta valor={falta.valor} posicao={falta.posicao} />}
     </li>
+  );
+}
+
+/** Do 7º ao 10º, no lugar do prêmio: quanto falta para passar quem está acima. */
+function Falta({ valor, posicao }: { valor: number; posicao: number }) {
+  return (
+    <span className="rq-premio rq-falta shrink-0" aria-label={`Faltam ${formatBRL(valor)} para passar o ${posicao}º`}>
+      <span className="rq-premio-rotulo">Falta p/ {posicao}º</span>
+      <span className="rq-premio-valor text-sm">{formatBRL(valor)}</span>
+    </span>
   );
 }
 

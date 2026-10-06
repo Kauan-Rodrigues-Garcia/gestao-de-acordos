@@ -76,7 +76,8 @@ export default function RankingQuitacaoConfig() {
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground leading-relaxed">
           Os setores ligados ganham a aba Ranking de quitação no Analítico, ao lado do Colchão:
-          os 6 que mais quitaram no mês, pelo valor. Os prêmios aparecem em cada posição.
+          o top 10 de quitação do mês, pelo valor. Os prêmios valem do 1º ao 6º; do 7º ao 10º
+          aparece quanto falta para passar quem está acima.
         </p>
         {carregando ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

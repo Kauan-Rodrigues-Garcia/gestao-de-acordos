@@ -38,9 +38,20 @@ export interface RankingQuitacao {
   participantes: number;
   importado_em: string | null;
   posicoes: PosicaoRanking[];
-  /** Quem está olhando, quando quitou algo no mês. */
-  eu: { posicao: number; quitacoes: number; valor: number } | null;
+  /**
+   * Quem está olhando, quando quitou algo no mês, e quem está logo acima dele
+   * (`acima` nulo para o 1º; nome só quando o vizinho está no top 10).
+   */
+  eu: {
+    posicao: number; quitacoes: number; valor: number;
+    acima: { posicao: number; valor: number; nome: string | null } | null;
+  } | null;
 }
+
+type EuDoBanco = {
+  posicao: number | string; quitacoes: number | string; valor: number | string;
+  acima_posicao?: number | string | null; acima_valor?: number | string | null; acima_nome?: string | null;
+};
 
 export async function listarSetoresDoRanking(empresaId: string): Promise<SetorDoRanking[]> {
   const { data, error } = await tabelaSemTipo<{ setor_id: string; ativo: boolean; premios: (number | string)[] }>('ranking_quitacao_setores')
@@ -61,7 +72,10 @@ export async function definirSetorDoRanking(
 }
 
 export async function buscarRanking(empresaId: string, setorId: string, mes: string): Promise<RankingQuitacao> {
-  const { data, error } = await rpcSemTipo<Partial<RankingQuitacao> & { posicoes?: (PosicaoRanking & { valor: number | string })[] }>(
+  const { data, error } = await rpcSemTipo<Omit<Partial<RankingQuitacao>, 'eu'> & {
+    posicoes?: (PosicaoRanking & { valor: number | string })[];
+    eu?: EuDoBanco | null;
+  }>(
     'fn_ranking_quitacao', { p_empresa_id: empresaId, p_setor_id: setorId, p_mes: mes },
   );
   if (error) throw new Error(error.message);
@@ -71,7 +85,15 @@ export async function buscarRanking(empresaId: string, setorId: string, mes: str
     participantes: Number(data?.participantes ?? 0),
     importado_em: data?.importado_em ?? null,
     posicoes: (data?.posicoes ?? []).map(p => ({ ...p, quitacoes: Number(p.quitacoes), valor: Number(p.valor) })),
-    eu: data?.eu ? { posicao: Number(data.eu.posicao), quitacoes: Number(data.eu.quitacoes), valor: Number(data.eu.valor) } : null,
+    eu: data?.eu ? {
+      posicao: Number(data.eu.posicao),
+      quitacoes: Number(data.eu.quitacoes),
+      valor: Number(data.eu.valor),
+      // Antes da migration 20261006150000 o banco não manda o vizinho: fica nulo.
+      acima: data.eu.acima_posicao != null && data.eu.acima_valor != null
+        ? { posicao: Number(data.eu.acima_posicao), valor: Number(data.eu.acima_valor), nome: data.eu.acima_nome ?? null }
+        : null,
+    } : null,
   };
 }
 

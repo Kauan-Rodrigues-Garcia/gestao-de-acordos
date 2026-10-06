@@ -1473,7 +1473,7 @@ export const PERMISSOES: PermissaoMeta[] = [
    */
   {
     key: 'analitico_sub_ranking_quitacao', label: 'Analítico: Ranking de quitação',
-    descricao: 'Abrir a aba dos 6 que mais quitaram no mês, nos setores habilitados',
+    descricao: 'Abrir a aba do top 10 de quitação do mês (prêmio até o 6º), nos setores habilitados',
     grupo: 'Analítico', padrao: TODOS,
   },
   {

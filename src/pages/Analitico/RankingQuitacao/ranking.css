@@ -98,6 +98,18 @@
   /* A cor da medalha com a luminosidade presa na faixa legível do tema (ver `corTexto`). */
   color: oklch(from var(--medalha) clamp(var(--sinal-l-min), l, var(--sinal-l-max)) c h);
 }
+/* «Falta para passar»: o mesmo selo, sem cor — é meta, não prêmio. */
+.rq-falta {
+  border-style: dashed;
+  border-color: color-mix(in oklch, var(--foreground) 22%, var(--border));
+  background: color-mix(in oklch, var(--muted) 60%, var(--card));
+  box-shadow: none;
+}
+.rq-falta .rq-premio-rotulo { color: var(--muted-foreground); letter-spacing: 0.08em; }
+
+/* A linha de quem está olhando. */
+.rq-eu { background: color-mix(in oklch, var(--primary) 7%, transparent); }
+
 .rq-premio-valor {
   margin-top: 0.25rem;
   line-height: 1;
