@@ -56,7 +56,7 @@ import { criarAgrupador } from '@/lib/agrupador';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
   listarMensagens, listarEventos, enviarMensagem, mudarStatus, assumirTicket,
-  mudarPrioridade, subirAnexo, excluirTicket,
+  mudarPrioridade, subirAnexo, excluirTicket, urlDoAnexoTicket, urlDoAnexoTicketEmCache,
   type Ticket, type MensagemTicket, type EventoTicket, type AnexoTicket,
 } from '@/services/tickets.service';
 import {
@@ -637,22 +637,40 @@ function Balao({ mensagem: m, meu }: { mensagem: MensagemTicket; meu: boolean })
 
 /** Imagem aparece; o resto vira link. Print é o anexo mais comum de longe. */
 function Anexo({ anexo }: { anexo: AnexoTicket }) {
+  // O balde é privado: o endereço gravado vira link assinado (ver
+  // `urlDoAnexoTicket`). Enquanto assina, o anexo mostra só o nome.
+  const [assinada, setAssinada] = useState<string | null>(() => urlDoAnexoTicketEmCache(anexo.url));
+  const [falhou, setFalhou] = useState(false);
+  useEffect(() => {
+    if (assinada) return;
+    let vivo = true;
+    void urlDoAnexoTicket(anexo.url).then(u => { if (!vivo) return; if (u) setAssinada(u); else setFalhou(true); });
+    return () => { vivo = false; };
+  }, [anexo.url, assinada]);
+  if (!assinada) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <FileText className="w-3.5 h-3.5" /> {anexo.nome}{falhou ? ' — sem acesso ao anexo' : ''}
+      </span>
+    );
+  }
+  const url = assinada;
   if (anexo.tipo.startsWith('image/')) {
     return (
-      <a href={anexo.url} target="_blank" rel="noreferrer" className="block">
-        <img src={anexo.url} alt={anexo.nome} loading="lazy"
+      <a href={url} target="_blank" rel="noreferrer" className="block">
+        <img src={url} alt={anexo.nome} loading="lazy"
           className="max-h-56 rounded border border-border object-contain" />
       </a>
     );
   }
   if (anexo.tipo.startsWith('audio/')) {
-    return <audio controls preload="none" src={anexo.url} className="w-full max-w-xs" />;
+    return <audio controls preload="none" src={url} className="w-full max-w-xs" />;
   }
   if (anexo.tipo.startsWith('video/')) {
-    return <video controls preload="none" src={anexo.url} className="max-h-56 rounded border border-border" />;
+    return <video controls preload="none" src={url} className="max-h-56 rounded border border-border" />;
   }
   return (
-    <a href={anexo.url} target="_blank" rel="noreferrer"
+    <a href={url} target="_blank" rel="noreferrer"
       className="flex items-center gap-1.5 text-xs text-primary underline underline-offset-2">
       <FileText className="w-3.5 h-3.5" /> {anexo.nome}
     </a>

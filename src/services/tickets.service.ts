@@ -359,6 +359,42 @@ export async function subirAnexo(
   };
 }
 
+/**
+ * O balde `tickets` é privado desde a auditoria de segurança de 06/10/2026:
+ * print de chamado tem dado de cliente e não pode ficar num endereço público.
+ *
+ * Os anexos continuam gravados com o endereço público (os antigos e os novos),
+ * porque dele sai o CAMINHO no balde. Para mostrar, o caminho vira um link
+ * assinado de 1 h — guardado aqui por 50 min, para a conversa não reassinar
+ * a cada render.
+ */
+const ANEXO_ASSINADO_S = 3600;
+const assinados = new Map<string, { url: string; ate: number }>();
+
+export function caminhoDoAnexoTicket(url: string): string | null {
+  const m = url.match(/\/object\/(?:public|sign|authenticated)\/tickets\/([^?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return /^(https?:|blob:|data:)/i.test(url) ? null : url;
+}
+
+export function urlDoAnexoTicketEmCache(url: string): string | null {
+  const caminho = caminhoDoAnexoTicket(url);
+  if (!caminho) return url;
+  const c = assinados.get(caminho);
+  return c && c.ate > Date.now() ? c.url : null;
+}
+
+export async function urlDoAnexoTicket(url: string): Promise<string | null> {
+  const caminho = caminhoDoAnexoTicket(url);
+  if (!caminho) return url;
+  const pronto = urlDoAnexoTicketEmCache(url);
+  if (pronto) return pronto;
+  const { data, error } = await supabase.storage.from('tickets').createSignedUrl(caminho, ANEXO_ASSINADO_S);
+  if (error || !data?.signedUrl) return null;
+  assinados.set(caminho, { url: data.signedUrl, ate: Date.now() + 50 * 60 * 1000 });
+  return data.signedUrl;
+}
+
 // ── Atendentes e a chave da aba ──────────────────────────────────────────────
 
 export interface Atendente { perfilId: string; nome: string; perfil: string | null }
