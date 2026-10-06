@@ -81,8 +81,8 @@ export function AcordosFilters({
 
   return (
     <>
-      {/* Tabs. `data-hw-batman-chao`: no modo Batman (Halloween) ele sai de trás desta linha. */}
-      <div className="flex items-center gap-1 mb-4 border-b border-border" data-hw-batman-chao>
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-4 border-b border-border">
         {([
           { key: 'todos',     label: 'Todos' },
           { key: 'analitico', label: 'Verificar' },

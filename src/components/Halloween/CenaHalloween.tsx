@@ -8,12 +8,8 @@ import { Fumaca } from './Fumaca';
 import { VultoNoVidro } from './VultoNoVidro';
 import { Aranha } from './Aranha';
 import { MorcegoSvg } from './Desenhos';
-import { lerModoBatman } from './Batman/modoBatman';
-import { useMiraNoBatman } from './Batman/miraDaLanterna';
 import './halloween.css';
 
-// O modo Batman vai no mesmo pacote do tema (o `Layout` baixa este arquivo sob demanda).
-export { FundoBatman } from './Batman/CenaBatman';
 
 /*
  * As três camadas do tema, montadas pelo `Layout` dentro da coluna da direita
@@ -265,7 +261,7 @@ function Relampago() {
     window.addEventListener(TROVAO, ouvir);
     return () => window.removeEventListener(TROVAO, ouvir);
   }, []);
-  // A casca leva o apagar do modo Batman; o clarão em si anima a opacidade de dentro.
+  // A casca cobre a tela; o clarão em si anima a opacidade de dentro.
   return <div className="hw-relampago-casca"><div ref={ref} className="hw-relampago" /></div>;
 }
 
@@ -333,12 +329,10 @@ function Lanterna({ posicao }: { posicao: number }) {
   const [aperto, setAperto] = useState(0);
   const desligadaRef = useRef(desligada);
   desligadaRef.current = desligada;
-  const mira = useMiraNoBatman();
   useEffect(() => {
     const timers: number[] = [];
     const susto = () => {
-      // No modo Batman o feixe é dele: sem fantasma.
-      if (!desligadaRef.current && lerModoBatman().fase === 'fora') {
+      if (!desligadaRef.current) {
         setFase('pisca');
         timers.push(window.setTimeout(() => setFase('aparece'), 700));
         timers.push(window.setTimeout(() => setFase('apaga'), 2450));
@@ -352,12 +346,12 @@ function Lanterna({ posicao }: { posicao: number }) {
   const clicar = () => { if (fase) return; setDesligada(d => !d); setAperto(a => a + 1); };
   const aperta = aperto ? `aperto-${aperto % 2}` : '';
   return (
-    <div ref={mira.raiz} className={cn('hw-lanterna', desligada && 'desligada', fase && 'susto', fase)} style={{ left: `${posicao}%` }}>
-      <div ref={mira.giro} className="giro">
+    <div className={cn('hw-lanterna', desligada && 'desligada', fase && 'susto', fase)} style={{ left: `${posicao}%` }}>
+      <div className="giro">
         <div className="feixe">
           {/* O cone vem borrado de dentro do SVG (pintado uma vez): `filter` de CSS na camada que
               estica era refeito pela placa de vídeo a cada quadro. */}
-          <div ref={mira.cone} className="cone">
+          <div className="cone">
             <svg viewBox="0 0 420 100" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="hw-cone-luz" x1="0" y1="0" x2="1" y2="0">
@@ -372,9 +366,9 @@ function Lanterna({ posicao }: { posicao: number }) {
               <polygon points="0,45 420,0 420,100 0,55" fill="url(#hw-cone-luz)" filter="url(#hw-cone-borrao)" />
             </svg>
           </div>
-          <div ref={mira.foco} className="foco" />
+          <div className="foco" />
           {/* O trilho anda junto com o foco: o rosto aparece onde a luz está, e não no alcance máximo. */}
-          <div ref={mira.trilho} className="trilho">
+          <div className="trilho">
           <div className="hw-assombracao">
             <svg viewBox="0 0 80 110">
               <defs>

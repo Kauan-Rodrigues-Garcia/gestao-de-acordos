@@ -69,7 +69,7 @@ export interface InstantaneoSom {
   /** Teto do volume para esta pessoa: 100 no completo, `VOLUME_MAX_ENXUTO` no enxuto. */
   volumeMax: number;
   erro: string | null;
-  /** De quem é a sessão do som (o modo Batman grava por pessoa). */
+  /** De quem é a sessão do som (a posição da faixa é gravada por pessoa). */
   perfil: string | null;
 }
 
@@ -122,9 +122,6 @@ export function useSomAmbiente(): InstantaneoSom {
   return useSyncExternalStore(assinar, () => snap, () => snap);
 }
 
-export const lerEstadoSom = () => snap;
-/** Para quem precisa reagir ao som fora do React (o modo Batman). */
-export const assinarSom = assinar;
 
 // ── Sessão ───────────────────────────────────────────────────────────────────
 
@@ -750,11 +747,6 @@ export function definirTocarAoEntrar(ligado: boolean): void {
 export function definirRepetir(ligado: boolean): void {
   mudarPrefs({ ...snap.prefs, repetir: ligado });
   if (audio) audio.loop = ligado;
-}
-
-/** Liga ou desliga a chuva do modo Batman (lida em `Batman/gotham/regente.ts`). */
-export function definirChuva(ligada: boolean): void {
-  mudarPrefs({ ...snap.prefs, chuva: ligada });
 }
 
 export function salvarPlaylists(playlists: PreferenciasSom['playlists'], faixa?: string): void {

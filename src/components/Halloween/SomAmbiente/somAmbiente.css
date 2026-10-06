@@ -23,7 +23,6 @@
 .som-tom-pecadores { --som-tom: 330 60% 40%; }
 .som-tom-puxalanca { --som-tom: 268 55% 52%; }
 .som-tom-reliquia  { --som-tom: 176 70% 32%; }
-.som-tom-batman   { --som-tom: 356 74% 34%; }
 .som-tom-spotify  { --som-tom: 141 70% 36%; }
 .som-tom-youtube  { --som-tom: 0 72% 50%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-halloween { --som-tom: 26 95% 58%; }
@@ -34,20 +33,12 @@
 :is(.dark, .dark-grey, .deep-blue) .som-tom-pecadores { --som-tom: 330 70% 66%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-puxalanca { --som-tom: 268 70% 72%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-reliquia  { --som-tom: 176 65% 52%; }
-:is(.dark, .dark-grey, .deep-blue) .som-tom-batman   { --som-tom: 356 70% 46%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-spotify  { --som-tom: 141 65% 52%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-youtube  { --som-tom: 0 80% 64%; }
 
 .som-icone {
   color: hsl(var(--som-tom));
   background: hsl(var(--som-tom) / 0.13);
-}
-/* O ícone do Batman é o do print, mais fechado: chão quase preto e o morcego
-   num vermelho escuro, nos dois temas — combina com o modo Batman. */
-.som-tom-batman .som-icone {
-  color: hsl(356 78% 38%);
-  background: hsl(340 12% 9%);
-  box-shadow: inset 0 0 0 1px hsl(356 60% 22% / .6);
 }
 /* O do Candyman é o olho do pôster, em cores próprias: precisa do chão escuro
    para o vermelho da íris e o mel da abelha aparecerem, nos dois temas. */

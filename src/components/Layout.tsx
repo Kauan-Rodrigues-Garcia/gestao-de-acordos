@@ -59,8 +59,7 @@ import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
-import { TemaHalloweenContext, cenaDaRota, modoBatmanDaRota, temFundo } from '@/components/Halloween/tema';
-import { useModoBatman } from '@/components/Halloween/Batman/modoBatman';
+import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
 import { useModoLeve } from '@/lib/modoLeve';
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
@@ -113,7 +112,6 @@ const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m
 const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
 const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
 const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
-const FundoBatman       = lazy(() => carregarHalloween().then(m => ({ default: m.FundoBatman })));
 const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
 const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 
@@ -272,7 +270,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const hw = useHalloween();
   // Modo leve (`lib/modoLeve.ts`): do Halloween fica só o que é parado — as
   // teias, os chapéus e a marca. Chuva, névoa, vultos, aranha, fantasmas,
-  // lanterna, morcegos e o Batman não montam.
+  // lanterna e morcegos não montam.
   const leve = useModoLeve();
   const cenaHalloween = useMemo(() => {
     const cena = cenaDaRota(pathname, marcaPaguePlay);
@@ -280,12 +278,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       ? { teias: cena.teias, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null }
       : cena;
   }, [pathname, marcaPaguePlay, leve]);
-  // Modo Batman: entra com a faixa «Batman» do Som ambiente (`Halloween/Batman`).
-  const { fase: faseBatman } = useModoBatman();
-  const modoBatman = modoBatmanDaRota(pathname);
-  // Com o tema inteiro no ar, o Halloween de antes já está apagado: desmonta (chuva e vultos param de rodar).
-  const fundoDeAntes = temFundo(cenaHalloween) && !(modoBatman && faseBatman === 'dentro');
-  const batmanNaTela = !leve && !!modoBatman && faseBatman !== 'fora';
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -1009,8 +1001,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           // Caixa própria para as camadas do tema: a coluna de fora não pode
           // virar `relative`, senão o botão de recolher o menu muda de lugar.
           <div className="relative flex-1 min-h-0 flex flex-col bg-background">
-            <Suspense fallback={null}>{fundoDeAntes && <FundoHalloween cena={cenaHalloween} />}</Suspense>
-            {batmanNaTela && modoBatman && <Suspense fallback={null}><FundoBatman modo={modoBatman} /></Suspense>}
+            <Suspense fallback={null}>{temFundo(cenaHalloween) && <FundoHalloween cena={cenaHalloween} />}</Suspense>
             {conteudo}
             {!leve && (
               <Suspense fallback={null}>

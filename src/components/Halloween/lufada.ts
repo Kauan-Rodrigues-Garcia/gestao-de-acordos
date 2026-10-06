@@ -1,6 +1,6 @@
 /**
  * lufada.ts — as lufadas de fumaça (ruído fractal), feitas uma vez e reusadas
- * a cada quadro: a névoa do Analítico (`Fumaca`) e a vermelha do modo Batman.
+ * a cada quadro: a névoa do Analítico (`Fumaca`).
  */
 
 // ── Lufada ────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ export function ruidoFractal(tam: number, oitavas: number[]): Float32Array {
   return saida;
 }
 
-/** Uma lufada pronta, numa cor: ruído fractal apagado nas bordas. Também a névoa vermelha do modo Batman. */
+/** Uma lufada pronta, numa cor: ruído fractal apagado nas bordas. */
 export function desenharLufada(tam: number, r: number, g: number, b: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = c.height = tam;

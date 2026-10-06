@@ -50,19 +50,6 @@ describe('motor do Som ambiente', () => {
     expect(proximaEmbutida('reliquia')).toBe('halloween');
   });
 
-  it('o tema especial (Batman) fica fora da sequência: só toca escolhido', () => {
-    expect(ordemDasFaixas(PADRAO)).not.toContain('batman');
-    // Ninguém cai nele pelo anterior/próxima, nem quando outra acaba.
-    for (const f of ordemDasFaixas(PADRAO)) {
-      expect(vizinha(PADRAO, f, 1)).not.toBe('batman');
-      expect(vizinha(PADRAO, f, -1)).not.toBe('batman');
-    }
-    // Saindo dele: a próxima é a primeira; a anterior, a última; acabou, vai para a primeira.
-    expect(vizinha(PADRAO, 'batman', 1)).toBe('halloween');
-    expect(vizinha(PADRAO, 'batman', -1)).toBe('reliquia');
-    expect(proximaEmbutida('batman')).toBe('halloween');
-  });
-
   it('cada faixa tem o seu ganho, e o volume final nunca passa de 1', () => {
     for (const f of FAIXAS_EMBUTIDAS) {
       expect(GANHO[f]).toBeGreaterThan(0.5);

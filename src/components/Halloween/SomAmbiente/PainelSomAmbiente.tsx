@@ -2,7 +2,7 @@
  * PainelSomAmbiente — o que abre ao clicar no fone do header.
  *
  * De cima para baixo: o que está tocando e os controles, o volume, as faixas
- * de fábrica (o tema especial do Batman, seis temas de terror e duas músicas),
+ * de fábrica (seis temas de terror e duas músicas),
  * as playlists da pessoa e o «Tocar ao entrar».
  *
  * Duas versões, decididas pelo motor (`completo`):
@@ -19,7 +19,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2, Droplet,
+  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,11 +28,11 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { chaveDoLink, lerLink } from './links';
 import {
-  ALTURA_PALCO, alternar, ancorarPalco, buscar, definirChuva, definirRepetir, definirTocarAoEntrar, definirVolume,
+  ALTURA_PALCO, alternar, ancorarPalco, buscar, definirRepetir, definirTocarAoEntrar, definirVolume,
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, TEMAS_ESPECIAIS, VOLUME_PADRAO, ehEmbutida, faixaNoAr, type PlaylistSalva,
+  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
@@ -106,23 +106,8 @@ export function PainelSomAmbiente() {
         {!externa && <BarraProgresso ativa={noAr === escolhida && estado !== 'parado'} />}
 
         <div className="mt-2 flex items-center justify-center gap-2">
-          {/* Com o Batman: a gota liga e desliga a chuva dele (desligada de fábrica).
-              Sem ele, um vão da largura do «Repetir», para o play ficar no centro. */}
-          {escolhida === 'batman' ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn('h-9 w-9 rounded-full', prefs.chuva ? 'text-primary' : 'text-muted-foreground')}
-              onClick={() => definirChuva(!prefs.chuva)}
-              aria-pressed={prefs.chuva}
-              aria-label={prefs.chuva ? 'Chuva ligada' : 'Chuva desligada'}
-              title={prefs.chuva ? 'Chuva ligada — clique para parar a chuva' : 'Chuva desligada — clique para chover'}
-            >
-              <Droplet className="h-4 w-4" fill={prefs.chuva ? 'currentColor' : 'none'} />
-            </Button>
-          ) : (
-            <span className="h-9 w-9" aria-hidden />
-          )}
+          {/* Mesma largura do «Repetir», para o play ficar no centro. */}
+          <span className="h-9 w-9" aria-hidden />
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => pular(-1)} aria-label="Faixa anterior" title="Faixa anterior">
             <SkipBack className="h-4 w-4" />
           </Button>
@@ -201,15 +186,6 @@ export function PainelSomAmbiente() {
       {completo ? (
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
         {/* ── Fábrica ── */}
-        {/* O tema especial vem primeiro, sem aviso nenhum: quem escolhe descobre o modo Batman. */}
-        {TEMAS_ESPECIAIS.some(faixaNoAr) && (<>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Tema especial</p>
-          <div className="mb-4 space-y-1.5">
-            {TEMAS_ESPECIAIS.filter(faixaNoAr).map(id => (
-              <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
-            ))}
-          </div>
-        </>)}
         <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Temas de terror</p>
         <div className="grid grid-cols-3 gap-2">
           {TEMAS_DE_TERROR.map(id => (
@@ -243,7 +219,7 @@ export function PainelSomAmbiente() {
       ) : (
       // Enxuta: as de fábrica numa lista só, e nada de adicionar música.
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto border-t border-border px-4 py-3">
-        {FAIXAS_EMBUTIDAS.filter(faixaNoAr).map(id => (
+        {FAIXAS_EMBUTIDAS.map(id => (
           <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
         ))}
       </div>

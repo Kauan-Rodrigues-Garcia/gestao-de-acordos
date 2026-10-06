@@ -8,21 +8,18 @@
 import type { ComponentType } from 'react';
 import { Axe, Bed, Gem, Ghost, Guitar, Lightbulb, ListMusic, Mic, Youtube } from 'lucide-react';
 import { ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
-import { IconeBatman } from './IconeBatman';
 import { IconeCandyman } from './IconeCandyman';
 
 export interface InfoFaixa {
   nome: string;
   descricao: string;
-  /** Um ícone do lucide ou um desenho próprio, feito do pôster (Batman, Candyman). */
+  /** Um ícone do lucide ou um desenho próprio, feito do pôster (Candyman). */
   Icone: ComponentType<{ className?: string }>;
   /** Cor da faixa (classe `som-tom-*` em `somAmbiente.css`). */
   tom: string;
 }
 
 export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
-  // Tema especial: tocando, o gestão entra no modo Batman (`Halloween/Batman`).
-  batman:    { nome: 'Batman',         descricao: 'The Batman, com KxllSwxtch e Nirvana', Icone: IconeBatman, tom: 'som-tom-batman' },
   halloween: { nome: 'Halloween',      descricao: 'Tema de John Carpenter',         Icone: Ghost, tom: 'som-tom-halloween' },
   sexta13:   { nome: 'Sexta-Feira 13', descricao: 'Tema de Harry Manfredini',       Icone: Axe,   tom: 'som-tom-sexta13' },
   candyman:  { nome: 'Candyman',       descricao: 'Helen’s Theme, de Philip Glass', Icone: IconeCandyman, tom: 'som-tom-candyman' },

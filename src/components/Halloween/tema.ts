@@ -53,19 +53,6 @@ export function cenaDaRota(caminho: string, isPaguePlay: boolean): CenaHalloween
 
 export const temFundo = (c: CenaHalloween) => c.chuva || c.nuvens || c.nevoa || c.vulto;
 
-/**
- * Onde o modo Batman aparece (`Batman/modoBatman.ts`), pedido de 05/10/2026.
- * Nas outras telas, a música do Batman toca e nada muda.
- *   - Dashboard e Acordos: `mesa` — ele sai de trás da tabela; onde há
- *     lanterna (Acordos da BookPlay, Dashboard da PaguePlay), ela mira nele.
- *   - Analítico: `vultos` — no lugar dos vultos atrás do vidro.
- */
-export function modoBatmanDaRota(caminho: string): 'mesa' | 'vultos' | null {
-  if (caminho === ROUTE_PATHS.DASHBOARD || caminho === ROUTE_PATHS.ACORDOS) return 'mesa';
-  if (caminho === ROUTE_PATHS.ANALITICO) return 'vultos';
-  return null;
-}
-
 export const EVENTO_ACORDO_SALVO = 'hw-acordo-salvo';
 /**
  * Quem salva um acordo avisa; a chuva de doces (só com o tema ligado) decide

@@ -4,7 +4,7 @@
  * Operadores com máquina mais fraca reclamaram de a tela travar na planilha. O
  * modo leve tira o que custa processador sem mudar número nenhum:
  *
- *   - as camadas animadas do Halloween e do Batman (o que é parado fica);
+ *   - as camadas animadas do Halloween (o que é parado fica);
  *   - animações e transições do app (`html[data-leve]` em `index.css`, e o
  *     framer-motion via `MotionConfig` em `App.tsx`);
  *   - a contagem dos números (`useMovimentoPreferido`);

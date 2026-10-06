@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  BATMAN_LIGADO, LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, esquecerPosicao, gravarPosicao, gravarPreferencias, lerPosicao,
+  LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, esquecerPosicao, gravarPosicao, gravarPreferencias, lerPosicao,
   lerPreferencias, normalizar,
 } from './preferencias';
 
@@ -15,12 +15,11 @@ describe('preferências do Som ambiente', () => {
     expect(VOLUME_PADRAO).toBeLessThanOrEqual(25);
     expect(PADRAO.tocarAoEntrar).toBe(false);
     expect(PADRAO.repetir).toBe(false);
-    expect(PADRAO.chuva).toBe(false);
   });
 
   it('grava e lê por pessoa', () => {
-    gravarPreferencias('p1', { faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, chuva: true, playlists: [] });
-    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, chuva: true });
+    gravarPreferencias('p1', { faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, playlists: [] });
+    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true });
     expect(lerPreferencias('p2')).toEqual(PADRAO);
   });
 
@@ -53,8 +52,8 @@ describe('preferências do Som ambiente', () => {
     expect(normalizar({ faixa: 'pecadores' }).faixa).toBe('pecadores');
   });
 
-  it('o tema do Batman: escolhido, fica; desligado (BATMAN_LIGADO), volta ao padrão', () => {
-    expect(normalizar({ faixa: 'batman' }).faixa).toBe(BATMAN_LIGADO ? 'batman' : 'halloween');
+  it('quem tinha a faixa do Batman, que saiu do projeto, volta ao padrão', () => {
+    expect(normalizar({ faixa: 'batman' }).faixa).toBe('halloween');
   });
 
   it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
@@ -69,9 +68,9 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'sexta13', t: -5 }));
     expect(lerPosicao('p1')).toEqual({ faixa: 'sexta13', t: 0 });
-    // O Batman volta no F5 só enquanto está ligado.
+    // Faixa que saiu do projeto (o Batman) não volta no F5.
     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: 10 }));
-    expect(lerPosicao('p1')).toEqual(BATMAN_LIGADO ? { faixa: 'batman', t: 10 } : null);
+    expect(lerPosicao('p1')).toBeNull();
   });
 
   it('quem tinha a música do Veigh que saiu fica com «Puxa o Lança»', () => {

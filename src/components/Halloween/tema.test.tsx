@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { ROUTE_PATHS } from '@/lib';
 import { ComChapeu } from './Desenhos';
-import { TemaHalloweenContext, cenaDaRota, indiceDaPessoa, modoBatmanDaRota, temFundo } from './tema';
+import { TemaHalloweenContext, cenaDaRota, indiceDaPessoa, temFundo } from './tema';
 import { podeVerHalloween } from './preferencia';
 
 describe('tema de Halloween', () => {
@@ -19,13 +19,6 @@ describe('tema de Halloween', () => {
     const outra = cenaDaRota(ROUTE_PATHS.ADMIN_USUARIOS, false);
     expect(outra.teias).toBeNull();
     expect(temFundo(outra)).toBe(false);
-  });
-
-  it('modo Batman: Dashboard e Acordos saindo da tabela, Analítico no lugar dos vultos, resto nada', () => {
-    expect(modoBatmanDaRota(ROUTE_PATHS.DASHBOARD)).toBe('mesa');
-    expect(modoBatmanDaRota(ROUTE_PATHS.ACORDOS)).toBe('mesa');
-    expect(modoBatmanDaRota(ROUTE_PATHS.ANALITICO)).toBe('vultos');
-    expect(modoBatmanDaRota(ROUTE_PATHS.ADMIN_USUARIOS)).toBeNull();
   });
 
   it('a cor do chapéu é da pessoa, não do acaso', () => {

@@ -10,39 +10,18 @@
  */
 import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
-/**
- * O tema especial (05/10/2026): enquanto ele está escolhido, o gestão entra no
- * modo Batman (`Halloween/Batman/modoBatman.ts`). Fica no alto do painel, mas
- * FORA da sequência: o anterior/próxima e o fim de outra faixa nunca caem
- * nele — só toca quando a pessoa escolhe.
- */
-export const TEMAS_ESPECIAIS = ['batman'] as const;
-/**
- * Liga e desliga o tema do Batman. Desligado em 06/10/2026 (a faixa some do
- * painel e o modo não entra), religado no mesmo dia, com o vermelho seguindo
- * a música e a chuva na gota do player, desligado de novo a pedido do Cleber e
- * religado mais uma vez no mesmo dia, e desligado PARA TODOS de novo a pedido
- * do Cleber (06/10/2026), e religado de novo no mesmo dia. Antes de trocar a
- * chave, confirme com ele: ela já foi trocada de volta várias vezes no mesmo
- * dia. `false` desliga sem apagar nada.
- */
-export const BATMAN_LIGADO = true;
-/** As de fábrica fora do ar: não aparecem no painel nem voltam do armazenamento. */
-const FAIXAS_DESLIGADAS: readonly string[] = BATMAN_LIGADO ? [] : ['batman'];
-export const faixaNoAr = (faixa: string) => !FAIXAS_DESLIGADAS.includes(faixa);
 /** Os temas de terror que vêm de fábrica, na ordem do painel. */
 export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
 /** As músicas para escutar que vêm de fábrica. */
 export const MUSICAS = ['puxalanca', 'reliquia'] as const;
 /** Todas as de fábrica, na ordem do painel. */
-export const FAIXAS_EMBUTIDAS = [...TEMAS_ESPECIAIS, ...TEMAS_DE_TERROR, ...MUSICAS] as const;
+export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
-/** A sequência que o player percorre sozinho: sem o tema especial. */
-export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = [...TEMAS_DE_TERROR, ...MUSICAS];
+/** A sequência que o player percorre sozinho: todas as de fábrica, na ordem do painel. */
+export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = FAIXAS_EMBUTIDAS;
 
 /** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
 export const ARQUIVOS: Record<FaixaEmbutida, string> = {
-  batman: '/sounds/batman.mp3',
   halloween: '/sounds/halloween-john-carpenter.mp3',
   sexta13: '/sounds/halloween-sexta-feira-13.mp3',
   candyman: '/sounds/halloween-candyman.mp3',
@@ -63,7 +42,6 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
 export const GANHO: Record<FaixaEmbutida, number> = {
-  batman: 0.86,     // -11,7
   halloween: 0.82,  // -11,3
   sexta13: 0.89,    // -12,0
   candyman: 1.41,   // -16,0
@@ -101,11 +79,6 @@ export interface PreferenciasSom {
    * playlist, e voltam à primeira depois da última.
    */
   repetir: boolean;
-  /**
-   * A chuva do modo Batman (a gota ao lado do play, só com o Batman escolhido).
-   * Desligada de fábrica (pedido de 06/10/2026): quem quer chuva liga.
-   */
-  chuva: boolean;
   playlists: PlaylistSalva[];
 }
 
@@ -125,7 +98,6 @@ export const PADRAO: PreferenciasSom = {
   volume: VOLUME_PADRAO,
   tocarAoEntrar: false,
   repetir: false,
-  chuva: false,
   playlists: [],
 };
 
@@ -161,11 +133,11 @@ export function normalizar(bruto: unknown): PreferenciasSom {
   const volume = o.v !== VERSAO && lido === VOLUME_PADRAO_ANTIGO ? VOLUME_PADRAO : lido;
 
   const lida = typeof o.faixa === 'string' ? (SUBSTITUTAS[o.faixa] ?? o.faixa) : null;
-  const faixa = lida !== null && ((ehEmbutida(lida) && faixaNoAr(lida)) || playlists.some(p => p.id === lida))
+  const faixa = lida !== null && (ehEmbutida(lida) || playlists.some(p => p.id === lida))
     ? lida
     : PADRAO.faixa;
 
-  return { faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true, chuva: o.chuva === true, playlists };
+  return { faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true, playlists };
 }
 
 export function lerPreferencias(perfilId: string): PreferenciasSom {
@@ -196,7 +168,7 @@ const chavePosicao = (perfilId: string) => `som-ambiente-posicao:${perfilId}`;
 export function lerPosicao(perfilId: string): PosicaoSalva | null {
   try {
     const o = JSON.parse(localStorage.getItem(chavePosicao(perfilId)) ?? 'null') as Record<string, unknown> | null;
-    if (!o || typeof o.faixa !== 'string' || !ehEmbutida(o.faixa) || !faixaNoAr(o.faixa)) return null;
+    if (!o || typeof o.faixa !== 'string' || !ehEmbutida(o.faixa)) return null;
     const t = typeof o.t === 'number' && Number.isFinite(o.t) && o.t > 0 ? o.t : 0;
     return { faixa: o.faixa, t };
   } catch {
