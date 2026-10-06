@@ -20,10 +20,10 @@ export const TEMAS_ESPECIAIS = ['batman'] as const;
 /**
  * Liga e desliga o tema do Batman. Desligado em 06/10/2026 (a faixa some do
  * painel e o modo não entra), religado no mesmo dia, com o vermelho seguindo
- * a música e a chuva na gota do player, e desligado de novo a pedido do Cleber.
- * `true` religa sem apagar nada.
+ * a música e a chuva na gota do player, desligado de novo a pedido do Cleber e
+ * religado mais uma vez no mesmo dia. `false` desliga sem apagar nada.
  */
-export const BATMAN_LIGADO = false;
+export const BATMAN_LIGADO = true;
 /** As de fábrica fora do ar: não aparecem no painel nem voltam do armazenamento. */
 const FAIXAS_DESLIGADAS: readonly string[] = BATMAN_LIGADO ? [] : ['batman'];
 export const faixaNoAr = (faixa: string) => !FAIXAS_DESLIGADAS.includes(faixa);
