@@ -64,8 +64,8 @@ const TEMAS: Record<TemaDesafio, EstiloTema> = {
     selo:      'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30',
     barra:     'bg-sky-500',
   },
-  // Outubro de 2026: abóbora no destaque e roxo de bruxa no fundo. O cartaz
-  // ganha morcegos, teia e abóbora por cima (`EnfeiteHalloween`).
+  // Outubro de 2026: laranja no destaque e roxo de bruxa no fundo. O cartaz
+  // ganha teia e morcegos por cima (`EnfeiteHalloween`).
   halloween: {
     Icone:     Ghost,
     gradiente: 'from-orange-500/20 via-violet-600/10 to-card',

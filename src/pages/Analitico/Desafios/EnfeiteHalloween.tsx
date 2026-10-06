@@ -1,7 +1,8 @@
 /**
  * EnfeiteHalloween — o que o tema `halloween` põe por cima do cartaz.
  *
- * Teia no canto, morcegos voando devagar e uma abóbora acesa. Só enfeite: fica
+ * Teia no canto e morcegos voando devagar (a abóbora saiu a pedido do Cleber,
+ * 06/10/2026). Só enfeite: fica
  * atrás do texto, não recebe clique e some para o leitor de tela. Com
  * «reduzir movimento» ligado os morcegos param no lugar.
  *
@@ -45,19 +46,6 @@ function Teia({ className }: { className?: string }) {
   );
 }
 
-function Abobora({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 80 72" className={className} aria-hidden="true">
-      <path d="M38 14 C37 8 39 4 44 2 C45 6 43 10 42 14 Z" fill="#4D7C0F" />
-      <ellipse cx="22" cy="42" rx="16" ry="24" fill="#C2410C" />
-      <ellipse cx="58" cy="42" rx="16" ry="24" fill="#C2410C" />
-      <ellipse cx="40" cy="42" rx="18" ry="27" fill="#EA580C" />
-      <path d="M26 34 L33 30 L33 39 Z M54 34 L47 30 L47 39 Z" fill="#FDE047" />
-      <path d="M24 50 Q40 64 56 50 L51 52 L48 48 L44 53 L40 49 L36 53 L32 48 L29 52 Z" fill="#FDE047" />
-    </svg>
-  );
-}
-
 const MORCEGOS = [
   { top: '14%', left: '58%', tamanho: 30, atraso: '0s',   duracao: '7s'  },
   { top: '30%', left: '72%', tamanho: 20, atraso: '1.8s', duracao: '9s'  },
@@ -79,7 +67,6 @@ export function EnfeiteHalloween() {
           }}
         />
       ))}
-      <Abobora className="desafio-abobora absolute -bottom-2 right-3 h-16 w-16 opacity-80 sm:h-20 sm:w-20" />
       <style>{`
         @keyframes desafio-voo {
           0%, 100% { transform: translate(0, 0) scaleY(1); }
@@ -87,14 +74,9 @@ export function EnfeiteHalloween() {
           50%      { transform: translate(-6px, 6px) scaleY(1); }
           75%      { transform: translate(10px, -4px) scaleY(.7); }
         }
-        @keyframes desafio-brilho {
-          0%, 100% { filter: drop-shadow(0 0 6px rgba(251, 146, 60, .45)); }
-          50%      { filter: drop-shadow(0 0 14px rgba(251, 146, 60, .8)); }
-        }
         .desafio-morcego { animation: desafio-voo 8s ease-in-out infinite; }
-        .desafio-abobora { animation: desafio-brilho 3.2s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) {
-          .desafio-morcego, .desafio-abobora { animation: none; }
+          .desafio-morcego { animation: none; }
         }
       `}</style>
     </div>

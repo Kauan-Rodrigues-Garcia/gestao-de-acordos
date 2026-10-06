@@ -238,7 +238,7 @@ function UmRecado({ rodada }: { rodada: RodadaAbobora }) {
 }
 
 /**
- * O letreiro: o recado passa sem parar enquanto a faixa estiver aberta (20 min,
+ * O letreiro: o recado passa sem parar enquanto a faixa estiver aberta (10 min,
  * ver `FAIXA_MS`). Dois grupos iguais, um atrás do outro, correndo meia volta:
  * quando o primeiro sai inteiro, o segundo está exatamente onde ele começou, e
  * o laço não tem emenda. Cada grupo tem cópias bastantes para cobrir a largura

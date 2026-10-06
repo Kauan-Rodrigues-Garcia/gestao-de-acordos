@@ -2,7 +2,7 @@
  * CacaAbobora — as duas portas da caça no `Layout`.
  *
  *   <FaixaDaCaca />    entre a barra do topo e o conteúdo: o nome de quem
- *                      achou passa por 20 min. É um item do fluxo, não um card
+ *                      achou passa por 10 min. É um item do fluxo, não um card
  *                      por cima: não cobre botão nenhum. Presa no alto, fora da
  *                      rolagem: está à vista o tempo todo, em qualquer tela.
  *   <AboboraDaCaca />  a abóbora escondida e o recado de quem clicou.

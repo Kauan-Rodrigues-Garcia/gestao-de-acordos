@@ -13,6 +13,7 @@ import { formatBRL } from '@/lib/money';
 import { ClassificacaoDesafio } from '@/pages/Analitico/Desafios/ClassificacaoDesafio';
 import { RankingEquipes } from '@/pages/Analitico/Desafios/RankingEquipes';
 import { dataBR, estiloDaCampanha, hojeISO, percentualCheio } from '@/pages/Analitico/Desafios/tema';
+import { EnfeiteHalloween, FONTE_TITULO_HALLOWEEN, useFonteHalloween } from '@/pages/Analitico/Desafios/EnfeiteHalloween';
 import { diasRestantes, ehCorridaDeProjecao, type ResultadoDesafio } from '@/services/desafios/calcularDesafio';
 import { rotuloCriterio } from '@/services/desafios/tiposDesafio';
 import type { Desafio } from '@/services/desafios/types';
@@ -58,6 +59,9 @@ export function PainelDesafioVisual({ desafio, aberto, onClose, resultado, carre
   const periodo = encerrado ? 'Encerrado' : restam > 0 ? `${restam} ${restam === 1 ? 'dia restante' : 'dias restantes'}` : 'Último dia';
   const carregandoInicial = carregando && (!resultado || !resultado.totalParticipantes);
   const semParticipantes = !resultado || resultado.totalParticipantes === 0;
+  // Tema Halloween: o cabeçalho ganha o mesmo acabamento do cartaz da aba.
+  const halloween = desafio.visual.tema === 'halloween';
+  useFonteHalloween(halloween);
 
   return (
     <Dialog.Root open={aberto} onOpenChange={v => { if (!v) onClose(); }}>
@@ -69,7 +73,12 @@ export function PainelDesafioVisual({ desafio, aberto, onClose, resultado, carre
           onCloseAutoFocus={e => { e.preventDefault(); focoAnterior.current?.focus(); }}
           className="fixed inset-y-0 right-0 z-50 flex w-[680px] max-w-[calc(100vw-2rem)] flex-col border-l border-border bg-background shadow-2xl outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right data-[state=open]:duration-300 data-[state=closed]:duration-200 motion-reduce:animate-none"
         >
-          <header className="shrink-0 border-b border-border bg-card px-6 py-5">
+          <header className={cn(
+            'relative shrink-0 overflow-hidden border-b bg-card px-6 py-5',
+            halloween ? cn('bg-gradient-to-br', tema.gradiente, tema.borda) : 'border-border',
+          )}>
+            {halloween && <EnfeiteHalloween />}
+            <div className="relative">
             <div className="mb-3 flex items-center justify-between gap-3">
               <span className={cn('inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em]', tema.destaque)}>
                 <Icone className="h-4 w-4" aria-hidden="true" /> Desafios
@@ -78,13 +87,19 @@ export function PainelDesafioVisual({ desafio, aberto, onClose, resultado, carre
                 <X className="h-4 w-4" aria-hidden="true" />
               </Dialog.Close>
             </div>
-            <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">{desafio.nome}</Dialog.Title>
+            <Dialog.Title
+              className={cn('text-xl tracking-tight', halloween ? cn('text-3xl font-normal tracking-wide', tema.destaque) : 'font-semibold text-foreground')}
+              style={halloween ? { fontFamily: FONTE_TITULO_HALLOWEEN } : undefined}
+            >
+              {desafio.nome}
+            </Dialog.Title>
             <Dialog.Description className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
               {projecao ? 'Classificação pelo percentual da projeção' : rotuloCriterio(desafio.regra.criterioRanking)}
             </Dialog.Description>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />{dataBR(desafio.dataInicio)} — {dataBR(desafio.dataFim)}</span>
               <span className={cn('rounded-full border px-2.5 py-1 font-medium', encerrado ? 'border-border' : tema.selo)}>{periodo}</span>
+            </div>
             </div>
           </header>
 
