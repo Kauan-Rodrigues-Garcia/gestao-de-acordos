@@ -29,6 +29,9 @@
 --                        anexo por link assinado desde o commit desta migration.
 --
 -- Reaplicável.
+--
+-- APLICADA em 06/10/2026 pelo SQL Editor (Cleber), conferida pelo MCP e
+-- registrada em schema_migrations à mão.
 -- ============================================================================
 
 BEGIN;

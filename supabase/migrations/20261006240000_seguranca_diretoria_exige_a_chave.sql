@@ -26,6 +26,9 @@
 -- chama. Sai o EXECUTE de PUBLIC, anon e authenticated.
 --
 -- Reaplicável: função que já exige a chave é pulada.
+--
+-- APLICADA em 06/10/2026 pelo SQL Editor (Cleber), conferida pelo MCP e
+-- registrada em schema_migrations à mão.
 -- ============================================================================
 
 BEGIN;
