@@ -29,13 +29,15 @@
 /* Os telões vistos através da chuva e da névoa ficam um pouco moles e apagados — mas isso
    é pintado uma vez no canvas (`pintarTeloes`): `filter` de CSS nesta camada era refeito a
    cada quadro, porque a névoa desliza por cima (derrubava a Dashboard para ~44 quadros). */
-/* O tom do modo Batman por cima da cidade: puxa tudo para o vermelho sem apagar o neon. */
-.gt-tom { position: absolute; inset: 0; background: #7a0a10; mix-blend-mode: color; pointer-events: none; }
-/* O véu do tema de antes: escuro nas bordas e embaixo, e o vermelho dele perto do alto. */
+/* O tom do modo Batman por cima da cidade: puxa tudo para o vermelho sem apagar o neon.
+   Segue a música (`--vermelho`, escrita pela `CenaBatman`): nada no começo, 75% no fim. */
+.gt-tom { position: absolute; inset: 0; background: #7a0a10; mix-blend-mode: color; pointer-events: none; opacity: calc(var(--vermelho, 0) * .75); }
+/* O véu do tema de antes: escuro nas bordas e embaixo, mais claro perto do alto. O vermelho
+   vem por baixo (`.hw-bat-verm`), com a música. */
 .gt-veu { position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse 90% 80% at 70% 20%, rgb(64 7 11 / .3) 0%, rgb(20 2 4 / .55) 55%, rgb(8 0 2 / .72) 100%); }
-/* No lugar da névoa da chuva: o mesmo véu deslizando, em vermelho e mais denso. */
-.gt-nevoa-vermelha { --nevoa: 150 14 24; }
+  background: radial-gradient(ellipse 90% 80% at 70% 20%, rgb(14 16 22 / .3) 0%, rgb(8 9 13 / .55) 55%, rgb(3 3 5 / .72) 100%); }
+/* No lugar da névoa da chuva: o mesmo véu deslizando, em vermelho e mais denso — com a música. */
+.gt-nevoa-vermelha { --nevoa: 150 14 24; opacity: var(--vermelho, 0); }
 .gt-nevoa-vermelha i { background: radial-gradient(closest-side, rgb(var(--nevoa) / .3), rgb(var(--nevoa) / .12) 55%, transparent); }
 
 /* ── O Analítico: o bat-sinal pela janela ────────────────────────────────── */

@@ -3,11 +3,15 @@
  *
  * O nível do modo, lido a cada quadro, leva tudo junto:
  *
- *   0 a 50%  — o fundo puxa para um vermelho-escuro (no tema claro também), e
+ *   0 a 50%  — o fundo escurece na noite de Gotham (no tema claro também), e
  *              o Halloween de antes (chuva, nuvens, vultos, fantasmas) some na
  *              mesma medida (`--hw-bat`, lido em `halloween.css`);
  *   25 a 75% — sobe a névoa vermelha;
  *   50 a 100% — uma luz vermelha começa a falhar;
+ *
+ * O VERMELHO (o do fundo, da névoa e da luz) não vem do nível, vem da música
+ * (`--vermelho`, de `regente.ts`; pedido de 06/10/2026): nada no começo da
+ * faixa, inteiro perto do fim. Antes o tema já entrava todo vermelho.
  *   50% em diante — ele sobe (na mesa); com a entrada de 3,5 s, o tema está
  *              inteiro em ~3,5 s.
  *
@@ -52,6 +56,7 @@ import { cn } from '@/lib/utils';
 import { desenharLufada } from '../lufada';
 import { SUBIDA_MS, definirAlvoBatman, nivelAgora, useModoBatman, type EstadoBatman } from './modoBatman';
 import { AconteceEmGotham, FundoGotham } from './gotham/CenaGotham';
+import { niveisAgora } from './gotham/regente';
 import './batman.css';
 
 const FOTO_BATMAN = '/images/halloween/batman.png';
@@ -273,7 +278,7 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
       });
     }
 
-    let ultimo = 0, rodando = true;
+    let ultimo = 0, rodando = true, vermelho = -1;
     const quadro = (agora: number) => {
       if (!rodando) return;
       if (agora - ultimo < 32) { requestAnimationFrame(quadro); return; }
@@ -281,13 +286,19 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
       ultimo = agora;
 
       const nivel = nivelAgora();
-      const verm = lim(nivel / 0.5), nevoa = lim((nivel - 0.25) / 0.5), pisca = lim((nivel - 0.5) / 0.5);
+      const verm = lim(nivel / 0.5), pisca = lim((nivel - 0.5) / 0.5);
+      // O vermelho segue a música (`regente.ts`), suavizado: a faixa recomeçando
+      // (repetir) ou um salto na barra não trocam a cor de um quadro para o outro.
+      const alvoVermelho = niveisAgora().tom;
+      vermelho = vermelho < 0 ? alvoVermelho : vermelho + (alvoVermelho - vermelho) * (1 - Math.exp(-dt * 1.2));
+      const nevoa = lim((nivel - 0.25) / 0.5) * vermelho;
       const luz = luzQueFalha(agora, dt);
       const luzEf = 1 + (luz - 1) * pisca;
       varPai('--hw-bat', verm.toFixed(3));
       varFundo('--verm', verm.toFixed(3));
+      varFundo('--vermelho', vermelho.toFixed(3));
       varPalco('--luz', luzEf.toFixed(3));
-      varPalco('--luzv', (pisca * Math.min(1.35, luz) * 0.9).toFixed(3));
+      varPalco('--luzv', (pisca * vermelho * Math.min(1.35, luz) * 0.9).toFixed(3));
 
       if (naMesa && pal && fig && bri && cvPerto && cxPerto) {
         // Relativo ao palco, que rola com a página: rolando, nada disto muda.

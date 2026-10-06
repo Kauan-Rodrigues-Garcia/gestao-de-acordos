@@ -15,11 +15,12 @@ describe('preferências do Som ambiente', () => {
     expect(VOLUME_PADRAO).toBeLessThanOrEqual(25);
     expect(PADRAO.tocarAoEntrar).toBe(false);
     expect(PADRAO.repetir).toBe(false);
+    expect(PADRAO.chuva).toBe(false);
   });
 
   it('grava e lê por pessoa', () => {
-    gravarPreferencias('p1', { faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, playlists: [] });
-    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true });
+    gravarPreferencias('p1', { faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, chuva: true, playlists: [] });
+    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, chuva: true });
     expect(lerPreferencias('p2')).toEqual(PADRAO);
   });
 

@@ -752,6 +752,11 @@ export function definirRepetir(ligado: boolean): void {
   if (audio) audio.loop = ligado;
 }
 
+/** Liga ou desliga a chuva do modo Batman (lida em `Batman/gotham/regente.ts`). */
+export function definirChuva(ligada: boolean): void {
+  mudarPrefs({ ...snap.prefs, chuva: ligada });
+}
+
 export function salvarPlaylists(playlists: PreferenciasSom['playlists'], faixa?: string): void {
   if (!snap.completo) return;
   const novaFaixa = faixa ?? (ehEmbutida(snap.prefs.faixa) || playlists.some(p => p.id === snap.prefs.faixa)

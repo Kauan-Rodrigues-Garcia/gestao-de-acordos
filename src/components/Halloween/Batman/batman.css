@@ -7,9 +7,16 @@
  */
 
 /* ── O fundo fixo, atrás do <main> ───────────────────────────────────────── */
-.hw-batman { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; --verm: 0; --luz: 1; --luzv: 0; }
+.hw-batman { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; --verm: 0; --vermelho: 0; --luz: 1; --luzv: 0; }
 
+/*
+ * O fundo: entra com o modo (`--verm`) como a noite de Gotham, escura e sem cor,
+ * e avermelha com a música (`--vermelho`, pedido de 06/10/2026 — antes já entrava
+ * todo vermelho).
+ */
 .hw-bat-verm { position: absolute; inset: 0; opacity: var(--verm);
+  background: radial-gradient(ellipse 90% 80% at var(--lx, 70%) 20%, #1a1d24 0%, #0b0d11 55%, #040506 100%); }
+.hw-bat-verm::after { content: ''; position: absolute; inset: 0; opacity: var(--vermelho);
   background: radial-gradient(ellipse 90% 80% at var(--lx, 70%) 20%, #40070b 0%, #1b0305 55%, #0b0102 100%); }
 /* Analítico: o brilho segue a cabeça dele no fundo. (Na mesa ele mora no palco, abaixo.) */
 .hw-bat-luz { position: absolute; inset: 0; opacity: var(--luzv);

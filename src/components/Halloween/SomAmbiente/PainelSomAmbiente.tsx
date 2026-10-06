@@ -19,7 +19,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2,
+  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2, Droplet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { chaveDoLink, lerLink } from './links';
 import {
-  ALTURA_PALCO, alternar, ancorarPalco, buscar, definirRepetir, definirTocarAoEntrar, definirVolume,
+  ALTURA_PALCO, alternar, ancorarPalco, buscar, definirChuva, definirRepetir, definirTocarAoEntrar, definirVolume,
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
@@ -106,8 +106,23 @@ export function PainelSomAmbiente() {
         {!externa && <BarraProgresso ativa={noAr === escolhida && estado !== 'parado'} />}
 
         <div className="mt-2 flex items-center justify-center gap-2">
-          {/* Mesma largura do «Repetir», para o play ficar no centro. */}
-          <span className="h-9 w-9" aria-hidden />
+          {/* Com o Batman: a gota liga e desliga a chuva dele (desligada de fábrica).
+              Sem ele, um vão da largura do «Repetir», para o play ficar no centro. */}
+          {escolhida === 'batman' ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn('h-9 w-9 rounded-full', prefs.chuva ? 'text-primary' : 'text-muted-foreground')}
+              onClick={() => definirChuva(!prefs.chuva)}
+              aria-pressed={prefs.chuva}
+              aria-label={prefs.chuva ? 'Chuva ligada' : 'Chuva desligada'}
+              title={prefs.chuva ? 'Chuva ligada — clique para parar a chuva' : 'Chuva desligada — clique para chover'}
+            >
+              <Droplet className="h-4 w-4" fill={prefs.chuva ? 'currentColor' : 'none'} />
+            </Button>
+          ) : (
+            <span className="h-9 w-9" aria-hidden />
+          )}
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => pular(-1)} aria-label="Faixa anterior" title="Faixa anterior">
             <SkipBack className="h-4 w-4" />
           </Button>

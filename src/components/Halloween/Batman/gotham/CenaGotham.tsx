@@ -4,14 +4,13 @@
  *
  *   FundoGotham       — atrás do conteúdo:
  *                         `mesa` (Dashboard e Acordos): a Gotham Square do
- *                         filme (`cidade.tsx`), SEM chuva, mergulhada no
- *                         vermelho do modo — ver `PracaVermelha`;
+ *                         filme (`cidade.tsx`), avermelhando — ver `PracaVermelha`;
  *                         `vultos` (Analítico): o bat-sinal pela janela
  *                         (`janela.tsx`), com o vidro molhado e embaçado.
- *                       Entra junto com o vermelho do modo (`--verm`) e segue a
- *                       música (`regente.ts`): a cidade avermelha mais e os
- *                       letreiros piscam mais; no Analítico a chuva começa com
- *                       ela e os raios vêm depois. O som da chuva mora aqui.
+ *                       Entra com o modo (`--verm`) e segue a música
+ *                       (`regente.ts`): o vermelho chega aos poucos e os
+ *                       letreiros piscam mais. Chuva e raios só com a gota do
+ *                       player ligada (desligada de fábrica). O som da chuva mora aqui.
  *   AconteceEmGotham  — por cima do conteúdo: a carta do Charada e o Batmóvel,
  *                       em horários sorteados (`agenda.ts`).
  *
@@ -23,8 +22,10 @@ import { useModoBatman } from '../modoBatman';
 import { adiar, daVez, novaAgenda, reagendar, type Agenda, type EventoGotham } from './agenda';
 import { Batmovel } from './Batmovel';
 import { CartaDoCharada, FiltrosDoCharada } from './CartaDoCharada';
-import type { Ritmo } from './chuva';
+import { useSomAmbiente } from '../../SomAmbiente/motor';
+import { ChuvaDeGotham, type Luz, type Ritmo } from './chuva';
 import { CidadeGotham } from './cidade';
+import { useDepois } from './depois';
 import { JanelaDoSinal } from './janela';
 import { niveisAgora, pedirPolicia, pedirRaio, raiosPedidosAte, volumeDosEfeitos } from './regente';
 import { criarSomDeChuva } from './sons';
@@ -71,33 +72,58 @@ function SinalNaChuva() {
   return <JanelaDoSinal ritmo={ritmoDaJanela} />;
 }
 
-const semLuzes = () => {};
+/** Na praça a chuva é mais leve que a cheia: atrás da tabela, a cheia poluía a tela. */
+const ritmoDaPraca = (): Ritmo => {
+  const r = ritmoAgora();
+  return { ...r, densidade: r.densidade * 0.7 };
+};
+
+/**
+ * A chuva montada? Com a gota ligada; desligou, fica mais um pouco para baixar
+ * (o `regente` leva a densidade a zero em ~2 s) e então sai — desligada, a
+ * chuva não custa nada.
+ */
+function useChuvaMontada(): boolean {
+  const ligada = useSomAmbiente().prefs.chuva;
+  const [montada, setMontada] = useState(ligada);
+  useEffect(() => {
+    if (ligada) { setMontada(true); return; }
+    const t = window.setTimeout(() => setMontada(false), 3_000);
+    return () => window.clearTimeout(t);
+  }, [ligada]);
+  return montada;
+}
 
 /**
  * A Gotham Square no vermelho do tema de antes (pedido de 06/10/2026: «junta o
- * melhor dos dois»). Sem chuva — gotas, respingos e raios atrás da tabela
- * poluíam a tela. A cidade é translúcida (`.gt-gotham.mesa`): o vermelho-escuro
+ * melhor dos dois»). A cidade é translúcida (`.gt-gotham.mesa`): o fundo escuro
  * de `.hw-bat-verm` passa por ela, o que apaga o brilho e casa os dois temas. Por
- * cima, o tom vermelho (já forte desde o começo, ver `regente.ts`), um véu de
- * névoa vermelha que só desliza, e a névoa vermelha do modo (`CenaBatman`).
+ * cima, o tom vermelho, um véu de névoa vermelha que só desliza, e a névoa
+ * vermelha do modo (`CenaBatman`) — todos em `--vermelho`, que segue a música.
+ *
+ * A chuva só com a gota do player ligada (desligada de fábrica): gotas,
+ * respingos e raios atrás da tabela poluíam a tela de quem não pediu.
  */
 function PracaVermelha() {
-  const tom = useRef<HTMLDivElement>(null);
+  const luzes = useRef<Luz[]>([]);
+  const fontes = useCallback(() => luzes.current, []);
+  const aoMudarLuzes = useCallback((l: Luz[]) => { luzes.current = l; }, []);
   const piscar = useCallback(() => niveisAgora().piscar, []);
-  useEffect(() => {
-    let antes = '';
-    const t = window.setInterval(() => {
-      const v = niveisAgora().tom.toFixed(2);
-      if (v !== antes && tom.current) { antes = v; tom.current.style.opacity = v; }
-    }, 250);
-    return () => window.clearInterval(t);
-  }, []);
+  // A chuva entra depois da cidade (que já se monta em etapas): ver `depois.ts`.
+  const depoisDaCidade = useDepois(600);
+  const chuvaMontada = useChuvaMontada();
+  const comChuva = depoisDaCidade && chuvaMontada;
+  useSomDaChuva(0.4);
   return (
     <>
-      <CidadeGotham aoMudarLuzes={semLuzes} piscar={piscar} />
-      <div ref={tom} className="gt-tom" style={{ opacity: 0 }} />
+      <CidadeGotham aoMudarLuzes={aoMudarLuzes} piscar={piscar} />
+      <div className="gt-tom" />
       <div className="gt-veu" />
       <div className="gt-nevoa gt-nevoa-vermelha"><i /><i /><i /></div>
+      {comChuva && (
+        <ChuvaDeGotham densidade={1} ritmo={ritmoDaPraca} cidade={0} brilho={1} vento={0.08} neblina={1} respingos
+          raios={0} trovao={0} ceu fontes={fontes} tomNevoa={[80, 105, 100]} />
+      )}
     </>
   );
 }

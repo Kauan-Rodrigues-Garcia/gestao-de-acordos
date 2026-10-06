@@ -96,6 +96,11 @@ export interface PreferenciasSom {
    * playlist, e voltam à primeira depois da última.
    */
   repetir: boolean;
+  /**
+   * A chuva do modo Batman (a gota ao lado do play, só com o Batman escolhido).
+   * Desligada de fábrica (pedido de 06/10/2026): quem quer chuva liga.
+   */
+  chuva: boolean;
   playlists: PlaylistSalva[];
 }
 
@@ -115,6 +120,7 @@ export const PADRAO: PreferenciasSom = {
   volume: VOLUME_PADRAO,
   tocarAoEntrar: false,
   repetir: false,
+  chuva: false,
   playlists: [],
 };
 
@@ -154,7 +160,7 @@ export function normalizar(bruto: unknown): PreferenciasSom {
     ? lida
     : PADRAO.faixa;
 
-  return { faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true, playlists };
+  return { faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true, chuva: o.chuva === true, playlists };
 }
 
 export function lerPreferencias(perfilId: string): PreferenciasSom {
