@@ -9,7 +9,7 @@ import {
 import { mirar } from './miraDaLanterna';
 
 describe('nível e decisão (puros)', () => {
-  it('o nível sobe em 12 s, segura na saída enquanto ele some e desce em 8 s', () => {
+  it('o nível sobe em 3,5 s, segura na saída enquanto ele some e desce em 8 s', () => {
     const entrando: EstadoBatman = { fase: 'entrando', desde: 1000, n0: 0 };
     expect(nivelEm(entrando, 1000)).toBe(0);
     expect(nivelEm(entrando, 1000 + SUBIDA_MS / 2)).toBeCloseTo(0.5);

@@ -8,7 +8,15 @@
  *              mesma medida (`--hw-bat`, lido em `halloween.css`);
  *   25 a 75% — sobe a névoa vermelha;
  *   50 a 100% — uma luz vermelha começa a falhar;
- *   fase `dentro` — ele aparece.
+ *   50% em diante — ele sobe (na mesa); com a entrada de 3,5 s, o tema está
+ *              inteiro em ~3,5 s.
+ *
+ * Por baixo de tudo, Gotham (`gotham/CenaGotham.tsx`, 05/10/2026): na mesa, a
+ * Gotham Square do filme na chuva; no Analítico, o bat-sinal pela janela. Ela
+ * entra junto com o vermelho e segue a música. No Analítico ela substitui os
+ * vultos atrás do vidro (que continuam no código, escondidos: a figura que os
+ * desenhava é quem move o quadro). A carta do Charada e o Batmóvel moram na
+ * caixa das camadas, por cima do conteúdo.
  *
  * Dois jeitos:
  *   - `mesa` (Dashboard e Acordos): ele SAI DE TRÁS da tabela, no vão do
@@ -41,7 +49,8 @@ import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { desenharLufada } from '../lufada';
-import { definirAlvoBatman, nivelAgora, useModoBatman } from './modoBatman';
+import { SUBIDA_MS, definirAlvoBatman, nivelAgora, useModoBatman, type EstadoBatman } from './modoBatman';
+import { AconteceEmGotham, FundoGotham } from './gotham/CenaGotham';
 import './batman.css';
 
 const FOTO_BATMAN = '/images/halloween/batman.png';
@@ -140,10 +149,29 @@ function lufadaPerto(cx: number, cy: number, r: number, qualquerLugar: boolean):
   };
 }
 
+/**
+ * Ele já pode subir? Da metade da entrada em diante (e com o tema inteiro): esperar a
+ * entrada acabar para só então começar a subir deixava o tema pela metade por segundos.
+ */
+function useEleSobe(e: EstadoBatman): boolean {
+  const [sobe, setSobe] = useState(e.fase === 'dentro');
+  useEffect(() => {
+    if (e.fase !== 'entrando') { setSobe(e.fase === 'dentro'); return; }
+    const falta = (0.5 - e.n0) * SUBIDA_MS;
+    setSobe(falta <= 0);
+    if (falta <= 0) return;
+    const t = setTimeout(() => setSobe(true), falta);
+    return () => clearTimeout(t);
+  }, [e]);
+  return sobe;
+}
+
 export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
   const { resolvedTheme } = useTheme();
   const claro = !ehTemaEscuro(resolvedTheme);
-  const { fase } = useModoBatman();
+  const modoBatman = useModoBatman();
+  const { fase } = modoBatman;
+  const eleSobe = useEleSobe(modoBatman);
   const raiz = useRef<HTMLDivElement>(null);
   const figura = useRef<HTMLDivElement>(null);
   const tela = useRef<HTMLCanvasElement>(null);
@@ -152,8 +180,11 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
   const telaPerto = useRef<HTMLCanvasElement>(null);
   // Na mesa ele mora dentro do `<main>` (ver o cabeçalho).
   const [main, setMain] = useState<HTMLElement | null>(null);
+  // A caixa das camadas: a carta do Charada e o Batmóvel passam por cima do conteúdo.
+  const [caixa, setCaixa] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setMain(modo === 'mesa' ? raiz.current?.parentElement?.querySelector<HTMLElement>(':scope > main') ?? null : null);
+    setCaixa(raiz.current?.parentElement ?? null);
   }, [modo]);
 
   // No tema claro, o texto solto no fundo (saudação, título) clareia junto com o vermelho.
@@ -280,22 +311,15 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
         }
         cxPerto.clearRect(0, 0, cvPerto.width, cvPerto.height);
         if (lugar) desenharLufadas(cxPerto, perto, 0.62 * nevoa * (0.5 + 0.5 * Math.min(1, luzEf)), dt, novaPerto);
-      } else if (fig) {
-        // Analítico: o brilho segue a cabeça dele no fundo.
-        const larg = Math.max(1, el.clientWidth), alt = Math.max(1, el.clientHeight);
-        const fx = fig.offsetLeft, fy = fig.offsetTop, fw = fig.offsetWidth, fh = fig.offsetHeight;
-        varFundo('--lx', `${(((fx + fw * 0.4) / larg) * 100).toFixed(1)}%`);
-        varFundo('--ly', `${(((fy + fh * 0.36) / alt) * 100).toFixed(1)}%`);
-        const novo = { x: (fx + fw * 0.48) / 2, y: (fy + fh * 0.45) / 2, r: fw / 2 };
-        if (!perto.length || Math.abs(novo.x - centro.x) > 40) { centro = novo; perto = Array.from({ length: 14 }, () => lufadaPerto(centro.x, centro.y, centro.r, true)); }
       }
 
-      // A névoa geral da tela (e, no Analítico, a dele junto).
-      cx.clearRect(0, 0, cv.width, cv.height);
-      desenharLufadas(cx, parts, 0.6 * nevoa * (0.4 + 0.6 * Math.min(1, luzEf)), dt, () => nova(false));
-      if (!naMesa && fig) {
-        const comEle = fig.classList.contains('visivel') ? 1 : 0.4;
-        desenharLufadas(cx, perto, 0.62 * nevoa * (0.5 + 0.5 * Math.min(1, luzEf)) * comEle, dt, novaPerto);
+      // A névoa geral da tela — só na mesa. No Analítico a janela do bat-sinal
+      // (`gotham/janela.tsx`) tomou o lugar dos vultos: a névoa, a figura e o
+      // brilho estão escondidos, e desenhá-los (ou medir a figura, que força
+      // layout) seria trabalho jogado fora a cada quadro.
+      if (naMesa) {
+        cx.clearRect(0, 0, cv.width, cv.height);
+        desenharLufadas(cx, parts, 0.6 * nevoa * (0.4 + 0.6 * Math.min(1, luzEf)), dt, () => nova(false));
       }
       requestAnimationFrame(quadro);
     };
@@ -314,6 +338,7 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
   return (
     <div ref={raiz} className={cn('hw-batman', modo)} aria-hidden="true">
       <div className="hw-bat-verm" />
+      <FundoGotham modo={modo} />
       {!naMesa && <div className="hw-bat-luz" />}
       {!naMesa && <div ref={figura} className="hw-bat-figura">{imagem}</div>}
       <canvas ref={tela} className="hw-bat-fumaca" />
@@ -321,11 +346,12 @@ export function FundoBatman({ modo }: { modo: 'mesa' | 'vultos' }) {
       {naMesa && main && createPortal(
         <div ref={palco} className="hw-bat-palco" aria-hidden="true">
           <div ref={brilho} className="hw-bat-brilho" />
-          <div ref={figura} className={cn('hw-bat-figura', fase === 'dentro' && 'visivel')}>{imagem}</div>
+          <div ref={figura} className={cn('hw-bat-figura', eleSobe && 'visivel')}>{imagem}</div>
           <canvas ref={telaPerto} className="hw-bat-fumaca-perto" />
         </div>,
         main,
       )}
+      {caixa && createPortal(<AconteceEmGotham />, caixa)}
     </div>
   );
 }

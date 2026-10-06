@@ -27,8 +27,9 @@
 
 /* ── Ele ─────────────────────────────────────────────────────────────────── */
 .hw-bat-figura { position: absolute; }
+/* Sobe da metade da entrada (1,75 s) em diante e fecha junto com ela (~3,5 s). */
 .hw-bat-figura .sobe { position: absolute; inset: 0; opacity: 0; transform: translateY(74px);
-  transition: opacity 3.2s ease, transform 4.2s cubic-bezier(.2, .7, .3, 1); }
+  transition: opacity 1.5s ease, transform 1.9s cubic-bezier(.2, .7, .3, 1); }
 .hw-bat-figura.visivel .sobe { opacity: 1; transform: none; }
 .hw-bat-figura img { width: 100%; height: 100%; display: block; user-select: none; transform: scaleX(var(--lado, 1)); }
 
@@ -54,3 +55,12 @@
 .hw-batman.vultos .hw-bat-figura img {
   filter: brightness(calc(.12 + var(--luz) * .55)) contrast(1.25) saturate(1.2) blur(3px);
   -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent 98%); mask-image: linear-gradient(to bottom, #000 75%, transparent 98%); }
+
+/*
+ * Analítico: a janela do bat-sinal (`gotham/janela.tsx`) toma o lugar dos
+ * vultos — a figura, o brilho e a névoa vermelha ficam escondidos (a figura
+ * continua no DOM: é ela que move o quadro da cena).
+ */
+.hw-batman.vultos :is(.hw-bat-figura, .hw-bat-luz, .hw-bat-fumaca, .hw-bat-vidro) { display: none; }
+/* Na mesa, a névoa vermelha fica mais leve por cima da cidade. */
+.hw-batman.mesa .hw-bat-fumaca { opacity: .55; }

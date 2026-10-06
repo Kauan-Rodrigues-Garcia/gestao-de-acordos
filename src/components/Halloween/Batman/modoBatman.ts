@@ -35,8 +35,13 @@ export interface EstadoBatman {
 }
 
 export const FAIXA_BATMAN = 'batman';
-/** Do Halloween normal ao tema inteiro. */
-export const SUBIDA_MS = 12_000;
+/**
+ * Do Halloween normal ao tema inteiro: aos poucos, mas sem fazer esperar (pedido de
+ * 06/10/2026 — eram 12 s). 3,5 s dá folga ao computador fraco, que leva meio segundo
+ * a mais para montar a cena, sem parecer demora em quem tem um bom. O vermelho e Gotham entram na primeira metade, a névoa no
+ * meio, a luz falhando na segunda metade; ele sobe da metade em diante (`CenaBatman`).
+ */
+export const SUBIDA_MS = 3_500;
 /** Na saída, o tempo de ele sumir antes de o vermelho começar a baixar. */
 export const SEGURA_MS = 2_600;
 /** Do tema inteiro de volta ao normal, depois que ele sumiu. */

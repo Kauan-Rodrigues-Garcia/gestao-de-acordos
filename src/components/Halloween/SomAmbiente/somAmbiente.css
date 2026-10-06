@@ -49,6 +49,12 @@
   background: hsl(340 12% 9%);
   box-shadow: inset 0 0 0 1px hsl(356 60% 22% / .6);
 }
+/* O do Candyman é o olho do pôster, em cores próprias: precisa do chão escuro
+   para o vermelho da íris e o mel da abelha aparecerem, nos dois temas. */
+.som-tom-candyman .som-icone {
+  background: hsl(15 22% 9%);
+  box-shadow: inset 0 0 0 1px hsl(30 60% 30% / .5);
+}
 .som-bloco-escolhido {
   border-color: hsl(var(--som-tom) / 0.6);
   background: hsl(var(--som-tom) / 0.08);

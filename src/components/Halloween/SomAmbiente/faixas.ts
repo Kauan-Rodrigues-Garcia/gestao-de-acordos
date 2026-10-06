@@ -6,14 +6,15 @@
  * entrada.
  */
 import type { ComponentType } from 'react';
-import { Axe, Bed, Bug, Gem, Ghost, Guitar, Lightbulb, ListMusic, Mic, Youtube } from 'lucide-react';
+import { Axe, Bed, Gem, Ghost, Guitar, Lightbulb, ListMusic, Mic, Youtube } from 'lucide-react';
 import { ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
 import { IconeBatman } from './IconeBatman';
+import { IconeCandyman } from './IconeCandyman';
 
 export interface InfoFaixa {
   nome: string;
   descricao: string;
-  /** Um ícone do lucide ou um desenho próprio (o morcego do Batman). */
+  /** Um ícone do lucide ou um desenho próprio, feito do pôster (Batman, Candyman). */
   Icone: ComponentType<{ className?: string }>;
   /** Cor da faixa (classe `som-tom-*` em `somAmbiente.css`). */
   tom: string;
@@ -24,7 +25,7 @@ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
   batman:    { nome: 'Batman',         descricao: 'The Batman, com KxllSwxtch e Nirvana', Icone: IconeBatman, tom: 'som-tom-batman' },
   halloween: { nome: 'Halloween',      descricao: 'Tema de John Carpenter',         Icone: Ghost, tom: 'som-tom-halloween' },
   sexta13:   { nome: 'Sexta-Feira 13', descricao: 'Tema de Harry Manfredini',       Icone: Axe,   tom: 'som-tom-sexta13' },
-  candyman:  { nome: 'Candyman',       descricao: 'Helen’s Theme, de Philip Glass', Icone: Bug,   tom: 'som-tom-candyman' },
+  candyman:  { nome: 'Candyman',       descricao: 'Helen’s Theme, de Philip Glass', Icone: IconeCandyman, tom: 'som-tom-candyman' },
   stranger:  { nome: 'Stranger Things', descricao: 'Tema de Kyle Dixon e Michael Stein', Icone: Lightbulb, tom: 'som-tom-stranger' },
   pesadelo:  { nome: 'A Hora do Pesadelo', descricao: 'Tema de Charles Bernstein', Icone: Bed, tom: 'som-tom-pesadelo' },
   // «I Lied To You», do filme Sinners (2025). O arquivo começa no violão: a

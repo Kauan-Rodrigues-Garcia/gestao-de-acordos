@@ -29,14 +29,16 @@ export function carregarFonte() {
 
 /**
  * As do cartaz «Procura-se» (`CartazProcuraSe.tsx`): Rye (letreiro de faroeste),
- * Special Elite (máquina de escrever) e Caveat (lápis). Também no próprio site
+ * Special Elite (máquina de escrever) e Caveat (lápis); e a da carta do
+ * Charada no modo Batman: Permanent Marker (marcador). Também no próprio site
  * e OFL. Declarar não baixa: o navegador só busca o arquivo quando o cartaz
- * aparece na tela.
+ * (ou a carta) aparece na tela.
  */
 const FONTES_DO_CARTAZ = [
   ['Rye', 'rye'],
   ['Special Elite', 'special-elite'],
   ['Caveat', 'caveat'],
+  ['Permanent Marker', 'permanent-marker'],
 ].map(([familia, arquivo]) => `@font-face {
   font-family: '${familia}';
   font-style: normal;
