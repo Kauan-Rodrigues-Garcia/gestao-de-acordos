@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { ROUTE_PATHS } from '@/lib/index';
+import { ehEnderecoDoApp } from '@/lib/mobile/preferencia';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,7 +113,8 @@ export default function Login() {
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground">{branding.loginTitle}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {empresa?.nome ?? branding.loginSubtitle}
+              {/* No endereço do app entram as duas empresas da cobrança: sem nome de empresa. */}
+              {ehEnderecoDoApp() ? 'Entre com o seu usuário' : (empresa?.nome ?? branding.loginSubtitle)}
             </p>
           </div>
 

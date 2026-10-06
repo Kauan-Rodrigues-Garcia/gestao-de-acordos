@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
-import { destinoMobile, ehLider, ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
+import { destinoMobile, ehLider, ehSuperAdmin, gravarVersao, ofereceVersaoCompleta } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { useInstalacao } from '@/lib/mobile/instalar';
 import {
@@ -265,7 +265,7 @@ function Rodape({ onVersaoCompleta, onSair, rotuloSair, passoIPhone, setPassoIPh
         </button>
       )}
       <div className="m-links">
-        <button type="button" onClick={onVersaoCompleta}>Versão completa</button>
+        {ofereceVersaoCompleta() && <button type="button" onClick={onVersaoCompleta}>Versão completa</button>}
         <button type="button" onClick={onSair}>{rotuloSair}</button>
       </div>
 

@@ -6,7 +6,8 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  CHAVE_VERSAO, decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, gravarVersao, lerVersao, ofereceVersaoCelular,
+  CHAVE_VERSAO, decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, ehEnderecoDoApp, gravarVersao, lerVersao,
+  ofereceVersaoCelular,
   type AmbienteTela,
 } from './preferencia';
 
@@ -189,5 +190,24 @@ describe('decidirDesvio — o celular nunca cai no site sem querer (06/10/2026)'
     expect(decidirDesvio({ ...base, produtoCobranca: false })).toEqual({ tipo: 'nada' });
     expect(decidirDesvio({ ...base, perfil: 'diretoria' })).toEqual({ tipo: 'nada' });
     expect(decidirDesvio({ ...base, perfil: 'super_admin' })).toEqual({ tipo: 'nada' });
+  });
+});
+
+describe('endereço do app (app.gestaodeacordos.com.br, 06/10/2026)', () => {
+  it('reconhece o app. e só ele', () => {
+    expect(ehEnderecoDoApp('app.gestaodeacordos.com.br')).toBe(true);
+    expect(ehEnderecoDoApp('APP.gestaodeacordos.com.br')).toBe(true);
+    expect(ehEnderecoDoApp('www.gestaodeacordos.com.br')).toBe(false);
+    expect(ehEnderecoDoApp('pagueplay.gestaodeacordos.com.br')).toBe(false);
+    expect(ehEnderecoDoApp('localhost')).toBe(false);
+  });
+
+  it('pelo app. é sempre o app, até no computador', () => {
+    expect(ehCelular({ ...desktop, enderecoDoApp: true })).toBe(true);
+    expect(deveAbrirMobile('operador', { ...desktop, enderecoDoApp: true })).toBe(true);
+  });
+
+  it('cargo sem tela do celular segue no site mesmo pelo app.', () => {
+    expect(deveAbrirMobile('admin', { ...desktop, enderecoDoApp: true })).toBe(false);
   });
 });

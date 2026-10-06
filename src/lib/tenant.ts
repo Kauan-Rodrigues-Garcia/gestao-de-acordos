@@ -87,6 +87,25 @@ export function getConfiguredTenantSlug(): string {
   return envSlug || detectSlugFromHostname();
 }
 
+/**
+ * Quem é desta empresa pode entrar por este site?
+ *
+ * BookPlay e PaguePlay deixaram de ser divisão de empresa: são um produto só
+ * (a cobrança), e o que muda a visão de cada pessoa é a regra do setor dela —
+ * Nosso produto ou Cofen (Cleber, 06/10/2026). Então quem é de uma entra pelo
+ * site da outra, e pelo `app.`, e continua na própria empresa. A trava só
+ * separa produtos diferentes: Comercial e RH não entram pela cobrança.
+ */
+export function siteAceitaEmpresa(
+  siteSlug: string | null | undefined,
+  empresa: (Pick<Empresa, 'slug'> & { produto?: string | null }) | null | undefined,
+): boolean {
+  const site = normalizeSlug(siteSlug);
+  const daEmpresa = normalizeSlug(empresa?.slug);
+  if (!site || !daEmpresa || site === daEmpresa) return true;
+  return produtoDaEmpresa(empresa) === 'cobranca' && produtoDaEmpresa(null, site) === 'cobranca';
+}
+
 export function getConfiguredSiteUrl(): string | null {
   const siteUrl = (import.meta.env.VITE_SITE_URL as string | undefined)?.trim();
 
@@ -149,10 +168,15 @@ export function getTenantRuntimeConfig(empresa?: Empresa | null): TenantRuntimeC
   // forma. Conferir cargo nesta função exigiria torná-la assíncrona.
   //
   // Prioridade normal: env var → hostname → slug da empresa no banco
-  const cruzaTenant = !!getImpersonacaoAtiva() || !!getEmpresaEscolhida();
-  const slug = cruzaTenant
-    ? (normalizeSlug(empresa?.slug) || getConfiguredTenantSlug())
-    : (getConfiguredTenantSlug() || normalizeSlug(empresa?.slug));
+  //
+  // E um terceiro, desde 06/10/2026: quem é da BookPlay entrando pelo site da
+  // PaguePlay (ou o contrário, ou pelo `app.`) — `useEmpresa` entrega a empresa
+  // DELE, e o slug tem de ser o dela para `isPaguePlay` ler a regra do setor.
+  const doSite = getConfiguredTenantSlug();
+  const daEmpresa = normalizeSlug(empresa?.slug);
+  const outraDaCobranca = !!daEmpresa && !!doSite && daEmpresa !== doSite && siteAceitaEmpresa(doSite, empresa);
+  const cruzaTenant = !!getImpersonacaoAtiva() || !!getEmpresaEscolhida() || outraDaCobranca;
+  const slug = cruzaTenant ? (daEmpresa || doSite) : (doSite || daEmpresa);
 
   return {
     slug,

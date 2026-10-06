@@ -34,6 +34,25 @@ export interface AmbienteTela {
   /** Menor e maior lado da TELA (não da janela): girar o celular não muda. */
   menorLado?: number;
   maiorLado?: number;
+  /** Aberto pelo endereço do app (`app.`): lá é sempre o app, em qualquer aparelho. */
+  enderecoDoApp?: boolean;
+}
+
+/**
+ * O endereço próprio do app, `app.gestaodeacordos.com.br` (Cleber, 06/10/2026).
+ * Por ele, quem tem a tela do celular abre SEMPRE o app — no celular e no
+ * computador — e «Versão completa» some: o site completo é o endereço de
+ * sempre.
+ */
+export function ehEnderecoDoApp(
+  host: string = typeof window === 'undefined' ? '' : window.location.hostname,
+): boolean {
+  return host.toLowerCase().startsWith('app.');
+}
+
+/** «Versão completa» só existe fora do endereço do app. */
+export function ofereceVersaoCompleta(): boolean {
+  return !ehEnderecoDoApp();
 }
 
 /**
@@ -57,11 +76,12 @@ export function ambienteAtual(): AmbienteTela {
       || (navigator as Navigator & { standalone?: boolean }).standalone === true,
     menorLado: larguraTela && alturaTela ? Math.min(larguraTela, alturaTela) : undefined,
     maiorLado: larguraTela && alturaTela ? Math.max(larguraTela, alturaTela) : undefined,
+    enderecoDoApp: ehEnderecoDoApp(),
   };
 }
 
 export function ehCelular(amb: AmbienteTela = ambienteAtual()): boolean {
-  if (amb.instalado) return true;
+  if (amb.instalado || amb.enderecoDoApp) return true;
   if (!amb.toqueGrosso) return false;
   if (amb.menorLado !== undefined && amb.maiorLado !== undefined) {
     return amb.menorLado <= MENOR_LADO_CELULAR && amb.maiorLado <= MAIOR_LADO_CELULAR;
@@ -82,6 +102,7 @@ function apagarEscolhaAntiga(): void {
 /** Sem escolha nesta sessão (ou sem armazenamento) vale a tela mínima. */
 export function lerVersao(): VersaoEscolhida {
   apagarEscolhaAntiga();
+  if (ehEnderecoDoApp()) return 'mobile';
   try {
     return sessionStorage.getItem(CHAVE_VERSAO) === 'completa' ? 'completa' : 'mobile';
   } catch {

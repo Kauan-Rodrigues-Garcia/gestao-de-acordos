@@ -38,7 +38,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
-import { getConfiguredTenantSlug } from '@/lib/tenant';
+import { getConfiguredTenantSlug, siteAceitaEmpresa } from '@/lib/tenant';
 import { pareceEmailEntregavel } from '@/lib/identificadorLogin';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { esquecerAparelhoAoSair } from '@/lib/mobile/push';
@@ -215,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .select('id, nome, slug, ativo, config, criado_em, atualizado_em')
                 .eq('id', (data2 as Perfil).empresa_id)
                 .maybeSingle();
-              if (empData && (empData as Empresa).slug !== tenantSlug) {
+              if (empData && !siteAceitaEmpresa(tenantSlug, empData as Empresa)) {
                 return rejectTenantMismatch(empData as Empresa);
               }
               aplicarEmpresa((empData as Empresa) ?? null);
@@ -238,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           // Impersonação atravessa tenant — super_admin pode entrar como usuário de outra empresa.
-          if (!isSuperAdmin && !getImpersonacaoAtiva() && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {
+          if (!isSuperAdmin && !getImpersonacaoAtiva() && tenantSlug && emp && !siteAceitaEmpresa(tenantSlug, emp)) {
             return rejectTenantMismatch(emp);
           }
 
@@ -598,4 +598,10 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth deve ser usado dentro de AuthProvider');
   return ctx;
+}
+
+/** `useAuth` para quem também vive fora do `AuthProvider` (o `EmpresaProvider` nos testes). */
+// eslint-disable-next-line react-refresh/only-export-components -- hook irmão de useAuth, mesmo arquivo do Provider.
+export function useAuthOpcional(): AuthContextType | undefined {
+  return useContext(AuthContext);
 }

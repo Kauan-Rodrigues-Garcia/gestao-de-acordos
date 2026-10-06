@@ -72,7 +72,8 @@ vi.mock('@/lib/supabase', () => ({
   // Re-exporta tipos (não precisam ser mocks reais, só o shape)
 }));
 
-vi.mock('@/lib/tenant', () => ({
+vi.mock('@/lib/tenant', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/tenant')>()),
   getConfiguredTenantSlug: mockGetConfiguredTenantSlug,
 }));
 
@@ -591,6 +592,26 @@ describe('useAuth – validação multi-tenant', () => {
 
     expect(result.current.perfil).not.toBeNull();
     expect(result.current.authError).toBeNull();
+  });
+
+  it('BookPlay entra pelo site da PaguePlay: a cobrança é um produto só (06/10/2026)', async () => {
+    mockGetConfiguredTenantSlug.mockReturnValue('pagueplay');
+
+    const perfilBookplay = makePerfil({
+      empresas: makeEmpresa({ slug: 'bookplay', nome: 'BookPlay' }),
+    });
+
+    const session = makeSession();
+    mockGetSession.mockResolvedValue({ data: { session } });
+    queueResultFor('perfis', { data: perfilBookplay, error: null });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.perfil).not.toBeNull();
+    expect(result.current.empresa?.slug).toBe('bookplay');
+    expect(result.current.authError).toBeNull();
+    expect(mockAuthSignOut).not.toHaveBeenCalled();
   });
 
   it('bloqueia no signIn quando tenant não confere', async () => {

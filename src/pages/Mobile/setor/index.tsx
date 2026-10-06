@@ -12,7 +12,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { ROUTE_PATHS } from '@/lib/index';
-import { ehSuperAdmin, gravarVersao } from '@/lib/mobile/preferencia';
+import { ehSuperAdmin, gravarVersao, ofereceVersaoCompleta } from '@/lib/mobile/preferencia';
 import { acessoDasVisoes, rotaDaVisao } from '@/lib/mobile/visoes';
 import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
@@ -98,7 +98,7 @@ function TelaDoSetor() {
     <>
       <BotaoInstalar onPassoIPhone={() => setPassoIPhone(true)} />
       <div className="e-links">
-        <button type="button" onClick={abrirVersaoCompleta}>Versão completa</button>
+        {ofereceVersaoCompleta() && <button type="button" onClick={abrirVersaoCompleta}>Versão completa</button>}
         <button type="button" onClick={() => { void (impersonando ? sairImpersonacao() : signOut()); }}>
           {impersonando ? 'Voltar à minha conta' : 'Sair'}
         </button>
