@@ -701,18 +701,16 @@ export default function App() {
               } />
 
               {/*
-                O palco — a ÚNICA rota com dado que roda sem sessão.
+                O palco da TV toma a tela inteira: sem `LayoutWrapper` e sem
+                `PublicRoute` (que mandaria a TV para o Dashboard).
 
-                Sem `LayoutWrapper`, sem `ProtectedRoute` e sem `PublicRoute`:
-                ele toma a tela inteira e não pode redirecionar ninguém. Um
-                `PublicRoute` aqui mandaria a TV para o Dashboard toda vez que
-                alguém abrisse o palco de um navegador já logado.
-
-                O que protege esta rota não é sessão, é superfície: ela fala com
-                uma RPC só, somente leitura, que devolve apenas o que está na
-                tela. Ver a migration 20260902110000.
+                Exige login desde a auditoria de segurança de 06/10/2026 — a
+                RPC devolvia nome, foto e recebido do setor para quem soubesse
+                o endereço. A TV entra uma vez com uma conta da empresa e a
+                sessão fica salva; `fn_tv_palco` só mostra tela da empresa de
+                quem está logado (migration 20261006260000).
               */}
-              <Route path={ROUTE_PATHS.TV_PALCO} element={<TvPalco />} />
+              <Route path={ROUTE_PATHS.TV_PALCO} element={<ProtectedRoute><TvPalco /></ProtectedRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
