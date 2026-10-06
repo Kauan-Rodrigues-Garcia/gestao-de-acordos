@@ -31,6 +31,7 @@ const CartaoDoSetor = memo(function CartaoDoSetor({ s, quartis, modo, mesAnterio
       <span className="vg-st-l1">
         <span className="vg-st-nome"><span className="vg-ponto" style={{ background: corDaMarca(s.marca) }} /><span>{s.nome}</span></span>
         {s.cofen && <span className="vg-selo cofen">Cofen</span>}
+        {s.alternativo && <span className="vg-selo neutra" title="Soma pela gente do setor e não entra no total da cidade">Alternativo</span>}
       </span>
       <span className="vg-st-v">{formatBRL(s.valor)}{s.cofen && <small>{rotuloModo(modo)}</small>}</span>
       <BarraDeMeta ritmo={r} />

@@ -35,6 +35,7 @@ export interface InfoDoSetor {
   nome: string;
   cidadeId: string | null;
   regra: RegraDaCarteira | null;
+  alternativo?: boolean;
 }
 
 export interface SetorDaCidade {
@@ -45,6 +46,12 @@ export interface SetorDaCidade {
   temAnterior: boolean;
   operadores: number;
   linhas: number;
+  /**
+   * Setor alternativo (Marília Digital, Treinamento...): soma pela GENTE dele,
+   * espelhando dinheiro que outro setor da cidade já cobrou. Aparece no placar
+   * e NUNCA entra em soma de cidade ou do geral (`fn_mestre_diretoria_alternativos`).
+   */
+  alternativo: boolean;
 }
 
 /** A carteira Cofen de um escopo, já no modo escolhido. */
@@ -177,10 +184,10 @@ export function comporEscopo(m: MesDoEscopo, c: CofenDoMes | null, modo: ModoCof
 
 // ── A visão ─────────────────────────────────────────────────────────────────
 
-function setorDaGrade(s: SetorDoPainel): SetorDaCidade {
+function setorDaGrade(s: SetorDoPainel, alternativo = false): SetorDaCidade {
   return {
     setorId: s.setorId, nome: s.setorNome, valor: s.valor, valorAnterior: s.valorAnterior,
-    temAnterior: s.temAnterior, operadores: s.operadores, linhas: s.linhas,
+    temAnterior: s.temAnterior, operadores: s.operadores, linhas: s.linhas, alternativo,
   };
 }
 
@@ -226,13 +233,16 @@ export function montarVisao(
     const { marca, rotulo } = marcaVisual(b.nome);
     const comCofen = c && cidadeDoCofen === b.cidadeId ? c : null;
     const escopo = comporEscopo(b.mes, comCofen, modo);
-    const setoresDaCidade = (grade?.setores ?? [])
-      .filter(s => {
-        const i = info.get(s.setorId);
-        return i?.cidadeId === b.cidadeId && i.regra !== 'cofen';
-      })
-      .map(setorDaGrade)
-      .sort((x, y) => y.valor - x.valor);
+    const daCidade = (s: SetorDoPainel) => {
+      const i = info.get(s.setorId);
+      return i?.cidadeId === b.cidadeId && i.regra !== 'cofen';
+    };
+    // Os alternativos vêm numa lista à parte da grade (não somam no total);
+    // sem eles o Marília Digital aparecia zerado no placar (06/10/2026).
+    const setoresDaCidade = [
+      ...(grade?.setores ?? []).filter(daCidade).map(s => setorDaGrade(s)),
+      ...(grade?.alternativos ?? []).filter(daCidade).map(s => setorDaGrade(s, true)),
+    ].sort((x, y) => y.valor - x.valor);
     const soltas = mes.carteiras
       .filter(k => !k.setorId && k.conta && k.cidadeId === b.cidadeId)
       .sort((x, y) => y.valor - x.valor);
@@ -245,7 +255,7 @@ export function montarVisao(
       participacao: geral.valor > 0 ? escopo.valor / geral.valor : 0,
       setores: setoresDaCidade,
       carteirasSemSetor: soltas,
-      melhorSetor: setoresDaCidade[0] ?? null,
+      melhorSetor: setoresDaCidade.find(s => !s.alternativo) ?? null,
       cofen: escopo.cofen,
     };
   });

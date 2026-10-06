@@ -91,7 +91,8 @@ export const DetalheDoSetor = memo(function DetalheDoSetor({
         <div>
           <h2>{setor.nome}
             {setor.cofen && <span className="vg-selo cofen">Carteira Cofen</span>}
-            {r && <span className="vg-pill" style={{ ['--s' as string]: `var(--vg-${tomDoRitmo(r.pct)})` }}>{pct(r.pct)} · {rotuloDoRitmo(r.pct)}</span>}
+            {setor.alternativo && <span className="vg-selo neutra" title="Soma pela gente do setor e não entra no total da cidade">Alternativo</span>}
+            {r &&<span className="vg-pill" style={{ ['--s' as string]: `var(--vg-${tomDoRitmo(r.pct)})` }}>{pct(r.pct)} · {rotuloDoRitmo(r.pct)}</span>}
           </h2>
           <p>{setor.cidadeNome} · meta do setor na aba Metas{setor.cofen ? ` · em ${rotuloModo(modo)}` : ''} · dia útil {cal.decorridos} de {cal.totalUteis}</p>
         </div>
@@ -348,13 +349,24 @@ function AbaDia({ setor, empresaId, mes, mesAnterior, diaCorte, diasNoMes, cal, 
   const [d, setD] = useState<Detalhe59 | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   useEffect(() => {
-    if (setor.cofen || !setor.setorId) return;
+    if (setor.cofen || setor.alternativo || !setor.setorId) return;
     let vivo = true;
     buscarDetalheDoSetor(empresaId, mes, { setorId: setor.setorId }, diaCorte)
       .then(x => { if (vivo) setD(x); })
       .catch(e => { if (vivo) setErro(e instanceof Error ? e.message : 'Falha ao carregar.'); });
     return () => { vivo = false; };
-  }, [setor.cofen, setor.setorId, empresaId, mes, diaCorte]);
+  }, [setor.cofen, setor.alternativo, setor.setorId, empresaId, mes, diaCorte]);
+
+  // O detalhe do 59 é por carteira, e o alternativo não tem carteira: a
+  // consulta voltaria zerada e o gráfico diria que o setor não recebeu nada.
+  if (setor.alternativo) {
+    return (
+      <p className="vg-nota">
+        {setor.nome} é um setor alternativo: soma o que a gente dele recebeu, e não tem carteira própria no 59. O dia a dia
+        desse dinheiro está nos setores de origem de cada pessoa.
+      </p>
+    );
+  }
 
   const meta = ritmo?.meta ?? null;
   if (setor.cofen && cofen) {

@@ -15,7 +15,7 @@ import { diasUteisDecorridos, diasUteisDoMes } from '@/lib/diasUteis';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import type { QuartilConfig } from '@/lib/supabase';
-import { mapaSetorDaEquipe } from '@/services/analitico/analitico.service';
+import { mapaSetorDaEquipe, setoresDoOperador } from '@/services/analitico/analitico.service';
 import type { CofenDoMes } from '@/services/mestre/diretoriaCidades.service';
 import type { FontesDoPainel } from '@/services/mestre/diretoriaPlacar.service';
 import type { MapaRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
@@ -174,6 +174,27 @@ export function pessoasDaEmpresa(
   }).porSetor;
 }
 
+/**
+ * As pessoas de um setor alternativo: as do cadastro E os clones das equipes
+ * dele — quem o Painel Líder mostra com o setor filtrado (`setoresDoOperador`).
+ * `pessoasDaEmpresa` agrupa só pelo setor do cadastro, e o alternativo ficaria
+ * sem os clones.
+ */
+export function pessoasDoAlternativo(
+  porSetor: ReadonlyMap<string, readonly LinhaQuartil[]>, fontes: FontesDoPainel, setorId: string,
+): LinhaQuartil[] {
+  const setorDaEquipe = mapaSetorDaEquipe(fontes.equipes);
+  const out: LinhaQuartil[] = [];
+  for (const lista of porSetor.values()) {
+    for (const l of lista) {
+      if (setoresDoOperador(l.op.id, fontes.operadorEquipeMap, fontes.equipesExtrasPorOperador, setorDaEquipe).has(setorId)) {
+        out.push(l);
+      }
+    }
+  }
+  return out;
+}
+
 /** As equipes do gestão de um setor, com a conta do card do Painel Líder. */
 export function equipesDoSetor(
   fontes: FontesDoPainel, setorId: string, cal: Calendario, emHO: boolean, ho: number,
@@ -198,6 +219,8 @@ export interface SetorDoPlacar {
   cidadeNome: string;
   marca: MarcaVisual;
   cofen: boolean;
+  /** Setor alternativo: espelha gente de outros setores — fora de toda soma de conjunto. */
+  alternativo: boolean;
   /** Recebido no modo (Cofen em H.O. ou bruto). */
   valor: number;
   valorAnterior: number;
@@ -221,7 +244,7 @@ export function setoresDoPlacar(params: {
     for (const s of c.setores) {
       out.push({
         chave: s.setorId, setorId: s.setorId, nome: s.nome, cidadeId: c.cidadeId, cidadeNome: c.nome, marca: c.marca,
-        cofen: false, valor: s.valor, valorAnterior: s.valorAnterior, temAnterior: s.temAnterior,
+        cofen: false, alternativo: s.alternativo, valor: s.valor, valorAnterior: s.valorAnterior, temAnterior: s.temAnterior,
         operadores: s.operadores, ritmo: ritmoDe(s.valor, metas[s.setorId], cal),
       });
     }
@@ -231,14 +254,15 @@ export function setoresDoPlacar(params: {
       if (s.cidadeId !== c.cidadeId || s.regra === 'cofen' || presentes.has(s.id) || !(metas[s.id] > 0)) continue;
       out.push({
         chave: s.id, setorId: s.id, nome: s.nome, cidadeId: c.cidadeId, cidadeNome: c.nome, marca: c.marca,
-        cofen: false, valor: 0, valorAnterior: 0, temAnterior: false, operadores: 0, ritmo: ritmoDe(0, metas[s.id], cal),
+        cofen: false, alternativo: s.alternativo === true,
+        valor: 0, valorAnterior: 0, temAnterior: false, operadores: 0, ritmo: ritmoDe(0, metas[s.id], cal),
       });
     }
     if (c.cofen && cofen) {
       const meta = modo === 'ho' ? metaNaUnidade(cofen.meta, 'ho') : cofen.meta;
       out.push({
         chave: 'cofen', setorId: c.cofen.setorId, nome: c.cofen.nome, cidadeId: c.cidadeId, cidadeNome: c.nome, marca: c.marca,
-        cofen: true, valor: c.cofen.valor, valorAnterior: c.cofen.valorAnterior, temAnterior: c.cofen.valorAnterior > 0,
+        cofen: true, alternativo: false, valor: c.cofen.valor, valorAnterior: c.cofen.valorAnterior, temAnterior: c.cofen.valorAnterior > 0,
         operadores: c.cofen.operadores, ritmo: ritmoDe(c.cofen.valor, meta, cal),
       });
     }
@@ -246,10 +270,18 @@ export function setoresDoPlacar(params: {
   return out;
 }
 
-/** A meta de um conjunto de setores: a soma das metas dos setores (os sem meta não entram). */
+/**
+ * A meta de um conjunto de setores: a soma das metas dos setores (os sem meta
+ * não entram). O alternativo também não: o recebido dele já está no setor de
+ * origem de cada pessoa, e a meta dele contra o recebido da cidade contaria a
+ * mesma gente duas vezes.
+ */
 export function metaDoConjunto(lista: readonly SetorDoPlacar[]): { meta: number; semMeta: number } {
   let meta = 0, semMeta = 0;
-  for (const s of lista) { if (s.ritmo) meta += s.ritmo.meta; else semMeta++; }
+  for (const s of lista) {
+    if (s.alternativo) continue;
+    if (s.ritmo) meta += s.ritmo.meta; else semMeta++;
+  }
   return { meta, semMeta };
 }
 

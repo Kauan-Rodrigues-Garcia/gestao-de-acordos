@@ -146,9 +146,46 @@ describe('os setores do placar', () => {
   });
 });
 
+describe('o setor alternativo (Marília Digital, 06/10/2026)', () => {
+  const GRADE_ALT = {
+    setores: [setor('s5', 'Play 5', 120)],
+    alternativos: [{ ...setor('dig', 'Marília Digital', 89_289.98), pessoas: 15 }],
+  } as unknown as GradeDeSetores;
+  const INFO_ALT = [
+    { id: 's5', nome: 'Play 5', cidadeId: MAR, regra: 'nosso_produto' as const },
+    { id: 'dig', nome: 'Marília Digital', cidadeId: MAR, regra: 'nosso_produto' as const, alternativo: true },
+  ];
+  const metas = { s5: 60_000, dig: 210_000 };
+  const visao = montarVisao(MES, null, GRADE_ALT, INFO_ALT, 'ho');
+  const lista = setoresDoPlacar({ visao, setores: INFO_ALT, metas, cofen: null, modo: 'ho', cal: OUT });
+  const dig = lista.find(s => s.chave === 'dig')!;
+
+  it('chega com o valor da grade dos alternativos, não zerado', () => {
+    expect(lista.filter(s => s.chave === 'dig')).toHaveLength(1);
+    expect(dig.alternativo).toBe(true);
+    expect(dig.valor).toBe(89_289.98);
+    expect(dig.ritmo?.meta).toBe(210_000);
+  });
+
+  it('não entra no valor da cidade nem na meta do conjunto', () => {
+    const mar = visao.cidades.find(c => c.cidadeId === MAR)!;
+    expect(mar.mes.valor).toBe(300);
+    expect(mar.melhorSetor?.setorId).toBe('s5');
+    expect(metaDoConjunto(lista)).toEqual({ meta: 60_000, semMeta: 0 });
+  });
+
+  it('sem a grade dos alternativos (falhou), o setor com meta ainda aparece — zerado, mas marcado', () => {
+    const sem = setoresDoPlacar({
+      visao: montarVisao(MES, null, { setores: GRADE_ALT.setores } as unknown as GradeDeSetores, INFO_ALT, 'ho'),
+      setores: INFO_ALT, metas, cofen: null, modo: 'ho', cal: OUT,
+    });
+    expect(sem.find(s => s.chave === 'dig')?.alternativo).toBe(true);
+  });
+});
+
 describe('o que pede atenção', () => {
   const s = (chave: string, pct: number, diferenca: number): SetorDoPlacar => ({
-    chave, setorId: chave, nome: chave, cidadeId: BIR, cidadeNome: 'Birigui', marca: 'bp', cofen: false,
+    chave, setorId: chave, nome: chave, cidadeId: BIR, cidadeNome: 'Birigui', marca: 'bp', cofen: false, alternativo: false,
     valor: 0, valorAnterior: 0, temAnterior: false, operadores: 0,
     ritmo: { meta: 1, esperado: 1, diferenca, pct, pctMeta: 0, fecha: 100, falta: 0, porDiaUtil: 0 },
   });

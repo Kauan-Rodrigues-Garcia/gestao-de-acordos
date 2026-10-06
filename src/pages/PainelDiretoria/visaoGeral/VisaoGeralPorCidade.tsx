@@ -46,7 +46,8 @@ import type { MapaRecebimentoIndireto } from '@/services/metas/recebimentoIndire
 import { FiltroDePeriodo } from '../FiltroDePeriodo';
 import { cofenNoDia, foraDaConta, montarVisao, nomeDoMes, type InfoDoSetor, type ModoCofen } from './modelo';
 import {
-  calendarioDoMes, diaDeHoje, metaDoConjunto, ordenarPlacar, pessoasDaEmpresa, resumirQuartis, ritmoDe, setoresDoPlacar, sinaisDoPlacar,
+  calendarioDoMes, diaDeHoje, metaDoConjunto, ordenarPlacar, pessoasDaEmpresa, pessoasDoAlternativo, resumirQuartis, ritmoDe,
+  setoresDoPlacar, sinaisDoPlacar,
   type OrdemDoPlacar, type ResumoQuartis, type SetorDoPlacar,
 } from './placar';
 import { DisjuntorCofen, ForaDaConta } from './partes';
@@ -64,14 +65,17 @@ function lerSetores(empresaId: string): Promise<InfoDoSetor[]> {
   let p = setoresDaEmpresa.get(empresaId);
   if (!p) {
     p = Promise.resolve(
-      supabase.from('setores').select('id, nome, cidade_id, regra, ativo').eq('empresa_id', empresaId),
+      supabase.from('setores').select('id, nome, cidade_id, regra, ativo, alternativo').eq('empresa_id', empresaId),
     ).then(({ data, error }) => {
       if (error) { setoresDaEmpresa.delete(empresaId); throw new Error(error.message); }
       // `cidade_id` e `regra` são de 02-03/10 e ainda não estão em `database.types.ts`.
-      return ((data ?? []) as unknown as { id: string; nome: string; cidade_id: string | null; regra: string | null; ativo: boolean | null }[])
+      return ((data ?? []) as unknown as {
+        id: string; nome: string; cidade_id: string | null; regra: string | null; ativo: boolean | null; alternativo: boolean | null;
+      }[])
         .filter(s => s.ativo !== false)
         .map((s): InfoDoSetor => ({
           id: s.id, nome: s.nome, cidadeId: s.cidade_id, regra: s.regra === 'cofen' ? 'cofen' : s.regra === 'nosso_produto' ? 'nosso_produto' : null,
+          alternativo: s.alternativo === true,
         }));
     });
     setoresDaEmpresa.set(empresaId, p);
@@ -217,8 +221,10 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
     const fonte = s.cofen ? pessoasPP : pessoasBP;
     if (fonte === undefined) return undefined;
     if (fonte === null || !(fonte instanceof Map)) return null;
-    return s.setorId ? fonte.get(s.setorId) ?? [] : [];
-  }, [pessoasBP, pessoasPP]);
+    if (!s.setorId) return [];
+    if (s.alternativo && fontesBP) return pessoasDoAlternativo(fonte, fontesBP, s.setorId);
+    return fonte.get(s.setorId) ?? [];
+  }, [pessoasBP, pessoasPP, fontesBP]);
 
   const quartisPorSetor = useMemo(() => {
     const m = new Map<string, ResumoQuartis | null>();
@@ -230,9 +236,12 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
     return m;
   }, [placar, linhasDe, quartisCfg]);
 
+  // O conjunto (cidade, geral) deixa o alternativo de fora: as pessoas dele já
+  // estão no setor de origem, e os clones contariam duas vezes.
   const resumoDe = useCallback((lista: SetorDoPlacar[]): ResumoQuartis | null => {
-    if (lista.some(s => linhasDe(s) === undefined)) return null;
-    return resumirQuartis(lista.flatMap(s => linhasDe(s) ?? []), quartisCfg);
+    const somam = lista.filter(s => !s.alternativo);
+    if (somam.some(s => linhasDe(s) === undefined)) return null;
+    return resumirQuartis(somam.flatMap(s => linhasDe(s) ?? []), quartisCfg);
   }, [linhasDe, quartisCfg]);
 
   const cidades = useMemo(() => visao?.cidades ?? [], [visao]);
@@ -246,7 +255,8 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
   const resumoEmpresa = useMemo(() => resumoDe(placar), [resumoDe, placar]);
 
   const sinais = useMemo(() => {
-    const q4 = doFiltro.map(s => ({ s, n: (linhasDe(s) ?? []).filter(l => l.quartil?.quartil === 4).length }));
+    const q4 = doFiltro.filter(s => !s.alternativo)
+      .map(s => ({ s, n: (linhasDe(s) ?? []).filter(l => l.quartil?.quartil === 4).length }));
     const total = q4.reduce((a, x) => a + x.n, 0);
     const mais = [...q4].sort((a, b) => b.n - a.n)[0];
     return sinaisDoPlacar(doFiltro, total ? { qtd: total, maisEm: mais?.s ?? null } : null, mil);
