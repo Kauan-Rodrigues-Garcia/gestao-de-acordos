@@ -30,6 +30,10 @@ import { useAvisos } from './useAvisos';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { ChatDoApp } from './comum/ChatDoApp';
+import { InterruptorUnidade, TrocaDeVisao } from './comum/Topo';
+import { ResumoDaVisao } from './ResumoDaVisao';
+import { acessoDasVisoes, rotaDaVisao, visaoDaBusca } from '@/lib/mobile/visoes';
+import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 import './mobile.css';
 
 /** Quantos pagamentos a tela mostra antes de «Ver todos». */
@@ -115,6 +119,13 @@ function TelaDoOperador() {
   const [passoIPhone, setPassoIPhone] = useState(false);
   const lideraEquipe = useTemVisaoEquipe();
   usePreparaVisaoEquipe(lideraEquipe && !tela.carregando, empresa?.id ?? null, tela.mes);
+  // As visões do cargo (06/10/2026): operador vê Equipe e Setor só no Resumo,
+  // aqui dentro; quem tem o Painel do Líder vai às telas completas.
+  const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
+  const acesso = acessoDasVisoes(perfil?.perfil, temPermissao('ver_painel_lider'));
+  const visao = acesso.completo ? 'eu' : visaoDaBusca(location.search);
+  const { unidade } = useUnidadeApp(tela.isPaguePlay);
 
   useEffect(() => { void registrarServiceWorker(); }, []);
 
@@ -142,17 +153,20 @@ function TelaDoOperador() {
               {[tela.empresaNome, mesPorExtenso(tela.mes)].filter(Boolean).join(' · ')}
             </div>
           </div>
-          {lideraEquipe && (
-            <div className="m-troca" role="group" aria-label="Visão">
-              <button type="button" aria-pressed={true}>Eu</button>
-              <button type="button" aria-pressed={false}
-                onClick={() => navigate(ROUTE_PATHS.MOBILE_EQUIPE)}>Equipe</button>
-            </div>
-          )}
+
           <SinoAvisos ativo={avisos.estado === 'ativo'} ocupado={avisos.ocupado}
             onDesativar={() => { void avisos.desativar(); }} />
         </header>
 
+        <div className="v-faixa-topo">
+          <TrocaDeVisao visoes={acesso.visoes} atual={visao}
+            onEscolher={v => navigate(rotaDaVisao(v, acesso.completo))} />
+          <InterruptorUnidade unidade={unidade} visivel={tela.isPaguePlay} />
+        </div>
+
+        {visao !== 'eu' ? (
+          <ResumoDaVisao visao={visao} mes={tela.mes} emHO={tela.emHO} />
+        ) : <>
         {tela.carregando ? <Esqueleto /> : (
           <div className="v-entra">
             <CartaoRecebido
@@ -160,7 +174,7 @@ function TelaDoOperador() {
               meta={tela.meta}
               faixas={tela.faixas}
               pctMeta={tela.pctMeta}
-              unidadeHO={tela.isPaguePlay}
+              unidadeHO={tela.emHO}
               semRelatorio={tela.semRelatorio}
             />
             {tela.comissao && <CartaoComissao comissao={tela.comissao} />}
@@ -169,7 +183,7 @@ function TelaDoOperador() {
               qtdHoje={tela.qtdHoje}
               podeVerRanking={tela.podeVerRanking}
               ranking={tela.ranking}
-              unidadeHO={tela.isPaguePlay}
+              unidadeHO={tela.emHO}
             />
             {tela.quartil && <CartaoQuartil quartil={tela.quartil} />}
           </div>
@@ -188,13 +202,15 @@ function TelaDoOperador() {
         )}
 
         <ListaPagamentos
-          pagamentos={tela.pagamentos}
+          pagamentos={tela.emHO ? tela.pagamentos.map(p => ({ ...p, valor: p.valorHO })) : tela.pagamentos}
           hoje={getTodayISO()}
           carregando={tela.carregandoPagamentos}
           limite={verTodos ? null : LIMITE_LISTA}
           onVerTodos={() => setVerTodos(v => !v)}
           valoresBrutos={tela.isPaguePlay}
+          emHO={tela.emHO}
         />
+        </>}
 
         {/* Em teste (super admin impersonando), «Sair» deslogaria a sessão
             emprestada e a volta para a conta do admin se perderia. */}

@@ -34,6 +34,7 @@ import { useMinhaComissao, type MinhaComissao } from '@/services/comissao/useMin
 import { temCardComissao } from '@/services/comissao/temCardComissao';
 import { ouvirAvisosDoServiceWorker } from '@/lib/mobile/sw';
 import { degrausComAmanha, type DegrauComAmanha } from '@/lib/projecaoMetas';
+import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 
 const CHAVE_VISTO_ATE = 'mobile:visto-ate';
 
@@ -53,6 +54,8 @@ export interface Pagamento {
   detalhe: string | null;
   /** Bruto — o que o cliente pagou (decisão da revisão da spec, 30/09/2026). */
   valor: number;
+  /** H.O. da linha (`total_ho`, coluna do relatório) — regra Cofen. */
+  valorHO: number;
   data: string;
   novo: boolean;
 }
@@ -69,6 +72,8 @@ export interface TelaMobile {
   nome: string;
   empresaNome: string;
   isPaguePlay: boolean;
+  /** A unidade do interruptor (Cofen): H.O. ou bruto. Fora do Cofen, sempre bruto. */
+  emHO: boolean;
   mes: string;
 
   recebidoMes: number;
@@ -131,12 +136,14 @@ export function useTelaMobile(): TelaMobile {
   const empresaId = empresa?.id ?? null;
   const perfilId = perfil?.id ?? null;
 
-  // H.O. é o que a PaguePlay acompanha; a BookPlay ignora a unidade.
+  // Cofen abre em H.O. e troca para bruto no interruptor (06/10/2026); fora
+  // do Cofen a unidade não existe.
+  const { emHO } = useUnidadeApp(tenant.isPaguePlay);
   const painel = usePainelMetas({
     mes,
     operadorId: perfilId,
     setorId: perfil?.setor_id ?? null,
-    unidade: tenant.isPaguePlay ? 'ho' : 'bruto',
+    unidade: emHO ? 'ho' : 'bruto',
   });
 
   const comissaoHook = useMinhaComissao({ aberto: !painel.carregando, mes });
@@ -184,6 +191,7 @@ export function useTelaMobile(): TelaMobile {
         forma: l.forma_pagamento,
         detalhe: l.forma_detalhe ?? null,
         valor: Number(l.valor_recebido) || 0,
+        valorHO: Number(l.total_ho) || 0,
         data: l.data_pagamento,
         // 1ª visita neste aparelho: nada é «novo», senão o mês inteiro acenderia.
         novo: !!vistoAte && l.importado_em > vistoAte,
@@ -282,6 +290,7 @@ export function useTelaMobile(): TelaMobile {
     nome: perfil?.nome ?? '',
     empresaNome: empresa?.nome ?? '',
     isPaguePlay: tenant.isPaguePlay,
+    emHO,
     mes,
     recebidoMes,
     meta: painel.meta,

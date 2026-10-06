@@ -122,6 +122,7 @@ export const ROUTE_PATHS = {
    * Eu / Equipe da `/m`. Spec: docs/superpowers/specs/2026-09-30-mobile-lideranca-design.md.
    */
   MOBILE_EQUIPE: '/m/equipe',
+  MOBILE_SETOR: '/m/setor',
   COMEMORACOES: '/comemoracoes',
   /** A mesa do Modo TV: prévia, no ar e o corte. Atrás do painel. */
   MODO_TV: '/modo-tv',

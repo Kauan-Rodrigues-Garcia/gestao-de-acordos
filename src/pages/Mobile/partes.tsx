@@ -196,7 +196,7 @@ export function ParHojeRanking({ hoje, qtdHoje, podeVerRanking, ranking, unidade
  *   Maria da Silva                  R$ 350,00
  *   NR 12345 · Hoje                 ● Pix
  */
-export function ListaPagamentos({ pagamentos, hoje, carregando, limite, onVerTodos, valoresBrutos = false }: {
+export function ListaPagamentos({ pagamentos, hoje, carregando, limite, onVerTodos, valoresBrutos = false, emHO = false }: {
   pagamentos: Pagamento[];
   hoje: string;
   carregando: boolean;
@@ -204,6 +204,8 @@ export function ListaPagamentos({ pagamentos, hoje, carregando, limite, onVerTod
   onVerTodos: (() => void) | null;
   /** Regra Cofen: o pagamento vem do relatório em bruto, e o cartão está em H.O. */
   valoresBrutos?: boolean;
+  /** Cofen no interruptor em H.O.: os valores da lista já vêm em H.O. */
+  emHO?: boolean;
 }) {
   const visiveis = limite === null ? pagamentos : pagamentos.slice(0, limite);
   return (
@@ -211,7 +213,7 @@ export function ListaPagamentos({ pagamentos, hoje, carregando, limite, onVerTod
       <div className="m-titulo" id="m-pagamentos">
         <h2>
           {limite === null ? 'Pagamentos do mês' : 'Últimos pagamentos'}
-          {valoresBrutos && <span className="m-de"> · valores brutos</span>}
+          {emHO ? <span className="m-de"> · H.O.</span> : valoresBrutos && <span className="m-de"> · valores brutos</span>}
         </h2>
         {onVerTodos && pagamentos.length > (limite ?? 0) && (
           <button type="button" onClick={onVerTodos}>{limite === null ? 'Ver menos' : 'Ver todos'}</button>

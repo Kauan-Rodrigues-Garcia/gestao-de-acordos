@@ -111,3 +111,35 @@
   .v-cheio { transition: none; }
   .v-brilho, .v-mancha, .v-entra { animation: none; }
 }
+
+/* ── Controles do topo: visão e unidade (06/10/2026) ──────────────────── */
+.v-seg {
+  display: inline-flex; flex: none; padding: 3px; border-radius: 11px;
+  background: rgba(20, 38, 31, 0.08);
+}
+.v-seg button {
+  font-size: 12.5px; font-weight: 600; padding: 6px 11px; border-radius: 8px; border: 0;
+  background: none; color: rgba(20, 38, 31, 0.62); min-height: 30px;
+  transition: background-color .15s ease, color .15s ease;
+}
+.v-seg button[aria-pressed='true'] {
+  background: #fff; color: #14261f; box-shadow: 0 1px 2px rgba(12, 31, 46, 0.14);
+}
+.v-seg-unidade button { padding: 5px 9px; font-size: 11.5px; }
+.v-faixa-topo {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 2px 16px 12px; flex-wrap: wrap;
+}
+
+/* ── Cartão de resumo (equipe / setor) ────────────────────────────────── */
+.v-resumo { margin-bottom: 12px; }
+.v-resumo-grade {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 16px;
+}
+.v-resumo-grade > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.v-resumo-grade small {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--v-tinta-2);
+}
+.v-resumo-grade b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.v-resumo-grade i { font-style: normal; font-size: 12px; color: var(--v-tinta-2); }
