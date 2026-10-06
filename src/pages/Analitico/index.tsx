@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BarChart2, User, Users, Building2, Layers3, Trophy } from 'lucide-react';
+import { BarChart2, User, Users, Building2, Layers3, Trophy, Medal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -27,6 +27,8 @@ import {
 } from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
 import { AbaColchao } from './Colchao';
 import { AbaDesafios } from './Desafios';
+import { AbaRankingQuitacao } from './RankingQuitacao';
+import { useSetoresDoRanking } from './RankingQuitacao/useSetoresDoRanking';
 import { useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
@@ -37,7 +39,7 @@ import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFilt
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
 
-type AbaPrincipal = 'analitico' | 'colchao' | 'desafios';
+type AbaPrincipal = 'analitico' | 'colchao' | 'ranking_quitacao' | 'desafios';
 
 export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
@@ -82,7 +84,7 @@ export default function PaginaAnalitico() {
   const [abaPrincipal,  setAbaPrincipal]  = useState<AbaPrincipal>(
     () => {
       const aba = searchParams.get('aba');
-      if (aba === 'colchao' || aba === 'desafios') return aba;
+      if (aba === 'colchao' || aba === 'ranking_quitacao' || aba === 'desafios') return aba;
       return 'analitico';
     },
   );
@@ -101,6 +103,18 @@ export default function PaginaAnalitico() {
     && setoresDoDesafio.participa(perfil?.setor_id ?? null);
 
   /*
+   * Ranking de quitação (06/10/2026): as mesmas duas travas dos Desafios — a
+   * chave `analitico_sub_ranking_quitacao` por CARGO e
+   * `ranking_quitacao_setores` (Configurações → Geral) por SETOR. Quem vê
+   * todos os setores escolhe no filtro; sem filtro, o primeiro habilitado.
+   */
+  const setoresDoRanking = useSetoresDoRanking(empresa?.id, temPermissao('analitico_sub_ranking_quitacao'));
+  const setorDoRanking = veTodosSetores
+    ? (filtroSetorId ?? setoresDoRanking.habilitados[0] ?? null)
+    : (setorProprio && setoresDoRanking.habilitados.includes(setorProprio) ? setorProprio : null);
+  const rankingNoMeuSetor = veTodosSetores ? setoresDoRanking.habilitados.length > 0 : !!setorDoRanking;
+
+  /*
    * As abas internas, cada uma com a própria chave. Desligar uma não pode
    * mexer nas outras — é o §2 do pedido, aplicado dentro da aba.
    *
@@ -116,9 +130,10 @@ export default function PaginaAnalitico() {
     // chave `analitico_sub_recebimento_diario` continua existindo e continua
     // querendo dizer a mesma coisa — ela agora libera o recorte, não uma aba.
     { key: 'colchao',   label: 'Colchão',   Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: !tenant.isPaguePlay },
+    { key: 'ranking_quitacao', label: 'Ranking de quitação', Icon: Medal, permissao: 'analitico_sub_ranking_quitacao', extra: rankingNoMeuSetor },
     { key: 'desafios',  label: 'Desafios',  Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
   ] as const).filter(a => a.extra && temPermissao(a.permissao)),
-  [temPermissao, desafiosNoMeuSetor, tenant.isPaguePlay]);
+  [temPermissao, desafiosNoMeuSetor, rankingNoMeuSetor, tenant.isPaguePlay]);
 
   /*
    * A aba que a tela realmente mostra.
@@ -190,7 +205,8 @@ export default function PaginaAnalitico() {
    * daquele recorte, senão a régua diria «Mês» e os números seriam de um dia.
    */
   const [abaDaVisao, setAbaDaVisao] = useState<string | null>(null);
-  const lenteSoMes = abaVisivel === 'analitico' && abaDaVisao === 'ranking';
+  // O Ranking de quitação também é do mês: o relatório que o alimenta é mensal.
+  const lenteSoMes = (abaVisivel === 'analitico' && abaDaVisao === 'ranking') || abaVisivel === 'ranking_quitacao';
   useEffect(() => {
     if (lenteSoMes && recorte.modo !== 'mes') setRecorte({ modo: 'mes', mes: mesDoRecorte(recorte) });
   }, [lenteSoMes, recorte, setRecorte]);
@@ -209,6 +225,7 @@ export default function PaginaAnalitico() {
     }
     if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
     if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
+    if (abaDaUrl === 'ranking_quitacao') setAbaPrincipal('ranking_quitacao');
     if (abaDaUrl === 'desafios')  setAbaPrincipal('desafios');
   }, [abaDaUrl, searchParams, setRecorte]);
 
@@ -442,7 +459,7 @@ export default function PaginaAnalitico() {
         )}
       </div>
 
-      {/* Abas internas: Analítico × Colchão × Desafios */}
+      {/* Abas internas: Analítico × Colchão × Ranking de quitação × Desafios */}
       <AbasSegmentadas
         abas={abasDaRegua}
         ativa={abaVisivel}
@@ -568,6 +585,17 @@ export default function PaginaAnalitico() {
           mes={mesDaLente}
           setorId={mostrarVisaoGeral ? (veTodosSetores ? filtroSetorId : setorProprio) : null}
           operadorId={mostrarVisaoIndividual ? perfil.id : null}
+        />
+      )}
+
+      {abaVisivel === 'ranking_quitacao' && (
+        <AbaRankingQuitacao
+          empresaId={empresa.id}
+          mes={mesDaLente}
+          setorId={setorDoRanking}
+          setorNome={setores.find(s => s.id === setorDoRanking)?.nome ?? ''}
+          podeImportar={temPermissao('ranking_quitacao_importar')}
+          onMudarMes={m => setRecorte({ modo: 'mes', mes: m })}
         />
       )}
 

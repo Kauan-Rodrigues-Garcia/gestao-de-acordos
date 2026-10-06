@@ -104,7 +104,7 @@ export const TELA_LABEL: Record<string, string> = {
  */
 export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'analitico': {
-    analitico: 'Analítico', colchao: 'Colchão', desafios: 'Desafios',
+    analitico: 'Analítico', colchao: 'Colchão', ranking_quitacao: 'Ranking de quitação', desafios: 'Desafios',
   },
   'analitico:analitico': {
     mes: 'Mês', periodo: 'Período', dia: 'Dia',

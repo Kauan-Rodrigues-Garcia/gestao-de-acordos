@@ -29,6 +29,7 @@ import CacaAboboraConfig from '@/components/admin/CacaAboboraConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
+import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -78,6 +79,8 @@ export default function AdminConfiguracoes() {
   const podeVerLogs = temPermissao('ver_logs');
   const podeVerDocumentacoes = temPermissao('config_sub_documentacoes');
   const podeVerMultiempresa = temPermissao('config_sub_multiempresa');
+  // Setores com o Ranking de quitação, e os prêmios. A função do banco confere a chave de novo.
+  const podeConfigurarRankingQuitacao = ehCobranca && temPermissao('ranking_quitacao_configurar');
   const abasVisiveis = [
     podeVerGeral && 'geral',
     podeVerPermissoes && 'permissoes',
@@ -300,6 +303,8 @@ export default function AdminConfiguracoes() {
           {ehSuperAdmin && <CacaAboboraConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
+
+          {podeConfigurarRankingQuitacao && <RankingQuitacaoConfig />}
 
           {/* ── Status do Banco de Dados ─────────────────────────────── */}
           {/* Gate: visível apenas para Admin e Super Admin (item #8) */}

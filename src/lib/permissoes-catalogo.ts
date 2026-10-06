@@ -1465,6 +1465,32 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Analítico', padrao: TODOS,
   },
   /*
+   * Ranking de quitação (06/10/2026) — os 6 que mais quitaram no mês.
+   *
+   * Duas travas, como os Desafios: esta chave decide por CARGO, e
+   * `ranking_quitacao_setores` (Configurações → Geral) decide em que SETOR a
+   * aba existe. Nasce para todos os cargos: o ranking é para quem disputa.
+   */
+  {
+    key: 'analitico_sub_ranking_quitacao', label: 'Analítico: Ranking de quitação',
+    descricao: 'Abrir a aba dos 6 que mais quitaram no mês, nos setores habilitados',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'ranking_quitacao_importar', label: 'Ranking de quitação: importar',
+    descricao: 'Subir o relatório mensal de parcelas pagas que alimenta o Ranking de quitação',
+    grupo: 'Analítico', padrao: LIDERANCA,
+    depende: {
+      chaves: ['analitico_sub_ranking_quitacao'],
+      motivo: 'o botão de importar mora dentro da aba.',
+    },
+  },
+  {
+    key: 'ranking_quitacao_configurar', label: 'Ranking de quitação: configurar',
+    descricao: 'Escolher os setores que têm o Ranking de quitação e os prêmios de cada posição',
+    grupo: 'Analítico', padrao: {},
+  },
+  /*
    * Desafios — a aba das gincanas internas.
    *
    * Nasce ligada para todo mundo porque uma gincana existe para ser vista por
