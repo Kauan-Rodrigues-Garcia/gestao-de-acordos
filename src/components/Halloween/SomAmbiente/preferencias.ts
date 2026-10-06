@@ -22,10 +22,11 @@ export const TEMAS_ESPECIAIS = ['batman'] as const;
  * painel e o modo não entra), religado no mesmo dia, com o vermelho seguindo
  * a música e a chuva na gota do player, desligado de novo a pedido do Cleber e
  * religado mais uma vez no mesmo dia, e desligado PARA TODOS de novo a pedido
- * do Cleber (06/10/2026). Antes de religar, confirme com ele: a chave já foi
- * trocada de volta três vezes no mesmo dia. `true` religa sem apagar nada.
+ * do Cleber (06/10/2026), e religado de novo no mesmo dia. Antes de trocar a
+ * chave, confirme com ele: ela já foi trocada de volta várias vezes no mesmo
+ * dia. `false` desliga sem apagar nada.
  */
-export const BATMAN_LIGADO = false;
+export const BATMAN_LIGADO = true;
 /** As de fábrica fora do ar: não aparecem no painel nem voltam do armazenamento. */
 const FAIXAS_DESLIGADAS: readonly string[] = BATMAN_LIGADO ? [] : ['batman'];
 export const faixaNoAr = (faixa: string) => !FAIXAS_DESLIGADAS.includes(faixa);
