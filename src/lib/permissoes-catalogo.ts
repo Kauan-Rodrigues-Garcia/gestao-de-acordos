@@ -211,6 +211,8 @@ export const GRUPOS_PERMISSAO = [
   // grupo do painel que não fala de cobrança. As chaves dele não aparecem na
   // BookPlay nem na PaguePlay: `produtos: SO_COMERCIAL` as esconde de lá.
   'Vendas',
+  // Calendário do setor, 06/10/2026. Neutro de produto: cobrança e Comercial.
+  'Calendário',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -2603,6 +2605,35 @@ export const PERMISSOES: PermissaoMeta[] = [
     depende: {
       chaves: ['ver_acompanhamento'],
       motivo: 'Só se exclui o que aparece na tela.',
+    },
+  },
+
+  // ── Calendário do setor (06/10/2026, migration 20261006170000) ────────────
+  //
+  // O mês do setor: dias úteis, banco de horas, feriados, aniversariantes e
+  // avisos. A liderança monta, o operador consulta. O dia útil NÃO é decidido
+  // aqui — vem das Metas (cobrança) ou do calendário de Vendas (Comercial).
+  {
+    key: 'ver_calendario', label: 'Aba Calendário',
+    descricao: 'Abrir o calendário do mês do próprio setor: dias úteis, banco de horas, feriados e avisos',
+    grupo: 'Calendário', produtos: COBRANCA_E_COMERCIAL, padrao: TODOS,
+  },
+  {
+    key: 'calendario_editar', label: 'Calendário: montar o mês',
+    descricao: 'Lançar banco de horas, feriados, aniversários e avisos, e escolher o tema do mês',
+    grupo: 'Calendário', produtos: COBRANCA_E_COMERCIAL, padrao: { lider: true, gerencia: true },
+    depende: {
+      chaves: ['ver_calendario'],
+      motivo: 'Monta-se o calendário dentro da própria aba.',
+    },
+  },
+  {
+    key: 'calendario_todos_setores', label: 'Calendário: todos os setores',
+    descricao: 'Ver (e montar, com a chave acima) o calendário de qualquer setor da empresa, e não só dos próprios',
+    grupo: 'Calendário', produtos: COBRANCA_E_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+    depende: {
+      chaves: ['ver_calendario'],
+      motivo: 'O alcance vale dentro da aba.',
     },
   },
 ];

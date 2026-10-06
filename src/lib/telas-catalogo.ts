@@ -91,6 +91,7 @@ export const TELA_LABEL: Record<string, string> = {
   'chat':                      'Chat',
   'gaveta/desempenho-dia':     'Desempenho do Dia (painel do topo)',
   'gaveta/desafio':            'Desafio (painel do topo)',
+  'gaveta/calendario':         'Calendário do setor (painel do topo)',
   'gaveta/editor-menu':        'Editor do menu (painel do topo)',
 };
 

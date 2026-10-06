@@ -21,6 +21,7 @@ export type ModuloPermissaoId =
   | 'dashboard_adm'
   | 'solicitacoes_whatsapp'
   | 'tickets'
+  | 'calendario'
   | 'rh'
   | 'acordos'
   | 'pix'
@@ -130,6 +131,16 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'tickets', rotulo: 'Tickets', interruptor: 'ver_tickets',
     descricao: 'Abertura de chamados e administração da fila.', grupos: ['Tickets'],
+  },
+  {
+    /*
+     * Calendário do setor (06/10/2026). Sem `escopo`: o alcance não é uma escala
+     * de níveis, é «os meus setores» ou «todos» — a chave
+     * `calendario_todos_setores`, conferida por `fn_calendario_alcanca`.
+     */
+    id: 'calendario', rotulo: 'Calendário', interruptor: 'ver_calendario',
+    descricao: 'O mês do setor: dias úteis, banco de horas, feriados, aniversariantes e avisos.',
+    grupos: ['Calendário'],
   },
   {
     id: 'rh', rotulo: 'RH Gestão', interruptor: 'ver_rh_gestao', escopo: 'rh',

@@ -1,0 +1,26 @@
+/*
+ * O botão do Calendário piscando: há algo marcado para hoje e a pessoa ainda
+ * não viu. Um anel do destaque do tema que se abre e some, e o fundo que
+ * respira junto — chama o olho sem tremer o texto. Quem pediu menos movimento
+ * ao sistema vê o botão aceso, parado.
+ */
+@keyframes cal-botao-anel {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 9px color-mix(in oklch, var(--primary) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
+}
+@keyframes cal-botao-fundo {
+  0%, 100% { background-color: color-mix(in oklch, var(--primary) 10%, var(--background)); }
+  50%      { background-color: color-mix(in oklch, var(--primary) 24%, var(--background)); }
+}
+
+.cal-botao-aceso {
+  border-color: color-mix(in oklch, var(--primary) 60%, var(--border));
+  background-color: color-mix(in oklch, var(--primary) 12%, var(--background));
+}
+.cal-botao-piscando {
+  animation: cal-botao-anel 1.8s ease-out infinite, cal-botao-fundo 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-botao-piscando { animation: none; }
+}

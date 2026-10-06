@@ -1,0 +1,128 @@
+/*
+ * O Calendário do setor.
+ *
+ * Uma cor só manda: `--cal-acento`, a cor do tema do mês (o rosa do Outubro
+ * Rosa, o azul do Novembro Azul), posta no contêiner. No tema Padrão ela é o
+ * próprio `--primary`. Tudo o mais sai dos tokens do app por `color-mix`, então
+ * os 7 temas do app (claro, escuro…) ficam certos sem regra por tema.
+ *
+ * `--cal-sobre-acento` é a cor do texto em cima do acento cheio: branco ou
+ * quase preto, escolhido pela luminância (o amarelo pede texto escuro).
+ */
+
+.cal-raiz {
+  --cal-acento: var(--primary);
+  --cal-forte: var(--primary);
+  --cal-sobre-acento: var(--primary-foreground);
+}
+
+/* A capa: uma faixa com a luz do acento vindo do canto. */
+.cal-capa {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(80% 140% at 0% 0%, color-mix(in oklch, var(--cal-acento) 22%, transparent), transparent 65%),
+    radial-gradient(60% 120% at 100% 100%, color-mix(in oklch, var(--cal-acento) 12%, transparent), transparent 70%),
+    var(--card);
+}
+.cal-capa-titulo { color: color-mix(in oklch, var(--cal-acento) 78%, var(--foreground)); }
+.cal-emoji {
+  display: grid;
+  place-items: center;
+  border-radius: 1rem;
+  background: color-mix(in oklch, var(--cal-acento) 16%, var(--card));
+  border: 1px solid color-mix(in oklch, var(--cal-acento) 30%, var(--border));
+}
+
+/* O cabeçalho dos dias da semana. */
+.cal-semana {
+  background: color-mix(in oklch, var(--cal-acento) 10%, var(--muted));
+  color: color-mix(in oklch, var(--cal-acento) 55%, var(--foreground));
+}
+
+/* ── As casas ─────────────────────────────────────────────────────────────── */
+
+.cal-dia {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  text-align: left;
+  background: var(--card);
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.cal-dia:hover { background: color-mix(in oklch, var(--cal-acento) 6%, var(--card)); }
+.cal-dia:focus-visible { outline: 2px solid var(--cal-acento); outline-offset: -2px; z-index: 1; }
+
+/* Fora do mês: só o fundo, sem número. */
+.cal-fora { background: color-mix(in oklch, var(--muted) 45%, var(--card)); }
+
+/* Não é dia útil (fim de semana ou feriado das Metas). */
+.cal-nao-util { background: color-mix(in oklch, var(--muted) 70%, var(--card)); }
+.cal-nao-util .cal-numero { color: var(--muted-foreground); }
+
+/* Banco de horas: o tom suave do acento, como as casas rosa do modelo. */
+.cal-tinta { background: color-mix(in oklch, var(--cal-acento) 16%, var(--card)); }
+.cal-tinta:hover { background: color-mix(in oklch, var(--cal-acento) 22%, var(--card)); }
+
+/* Feriado: vermelho suave. */
+.cal-feriado { background: color-mix(in oklch, #DC2626 12%, var(--card)); }
+.cal-feriado:hover { background: color-mix(in oklch, #DC2626 17%, var(--card)); }
+.cal-feriado .cal-numero { color: color-mix(in oklch, #DC2626 75%, var(--foreground)); }
+
+/* Destaque: o dia inteiro na cor forte. */
+.cal-forte { background: var(--cal-forte); color: var(--cal-sobre-acento); }
+.cal-forte:hover { background: color-mix(in oklch, var(--cal-forte) 90%, var(--foreground)); }
+.cal-forte .cal-numero,
+.cal-forte .cal-chip-detalhe { color: inherit; }
+.cal-forte .cal-chip-detalhe { opacity: 0.85; }
+
+/* Hoje: um anel do acento por dentro. */
+.cal-hoje { box-shadow: inset 0 0 0 2px var(--cal-acento); }
+.cal-selo-hoje {
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1rem;
+  background: var(--cal-forte);
+  color: var(--cal-sobre-acento);
+}
+.cal-forte .cal-selo-hoje { background: var(--cal-sobre-acento); color: var(--cal-forte); }
+
+.cal-numero { font-variant-numeric: tabular-nums; }
+
+/* Um evento dentro da casa. A cor do tipo vem por `--tipo`. */
+.cal-chip-titulo { color: inherit; }
+.cal-ponto {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--tipo, var(--cal-acento));
+}
+.cal-forte .cal-ponto { background: currentColor; }
+
+/* ── Painel lateral e diálogos ─────────────────────────────────────────────── */
+
+.cal-icone-tipo {
+  display: grid;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: color-mix(in oklch, var(--tipo, var(--cal-acento)) 14%, var(--card));
+  color: var(--tipo-texto, var(--cal-acento));
+}
+
+/* Botão de escolha (modelo, tema, dia da semana) ligado. */
+.cal-opcao[data-ligado='true'] {
+  border-color: var(--cal-acento);
+  background: color-mix(in oklch, var(--cal-acento) 12%, var(--card));
+}
+
+/* A amostra de cor de um tema. */
+.cal-amostra {
+  background: linear-gradient(135deg, var(--amostra) 0 50%, color-mix(in oklch, var(--amostra) 25%, var(--card)) 50% 100%);
+}

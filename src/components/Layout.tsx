@@ -76,6 +76,7 @@ import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
+import { BotaoCalendario } from './Calendario/BotaoCalendario';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
@@ -101,6 +102,7 @@ const carregarDesempenhoDia  = comNovaTentativa(() => import('./DesempenhoDia'))
 const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/PainelDesafio'));
 const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
 const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
+const carregarCalendario     = comNovaTentativa(() => import('./Calendario/PainelCalendario'));
 // Tema de Halloween: só quem está com ele ligado baixa as camadas.
 const carregarHalloween      = comNovaTentativa(() => import('@/components/Halloween/CenaHalloween'));
 
@@ -108,6 +110,7 @@ const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ defaul
 const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
 const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
 const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
+const PainelCalendario  = lazy(() => carregarCalendario().then(m => ({ default: m.PainelCalendario })));
 const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m.FundoHalloween })));
 const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
 const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
@@ -135,6 +138,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [painelDiaAberto, setPainelDiaAberto] = useState(false);
   const [painelDesafioAberto, setPainelDesafioAberto] = useState(false);
+  const [calendarioAberto, setCalendarioAberto] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
@@ -435,6 +439,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useSobreposicaoUso('gaveta/desempenho-dia', painelDiaAberto);
   useSobreposicaoUso('gaveta/desafio', painelDesafioAberto);
   useSobreposicaoUso('gaveta/editor-menu', editorMenuAberto);
+  useSobreposicaoUso('gaveta/calendario', calendarioAberto);
+
+  /*
+   * O Calendário do setor não é aba: é um botão no topo que abre o painel por
+   * cima da tela (pedido de 06/10/2026). Quem vê é `ver_calendario`, nas duas
+   * operações que têm setor — cobrança e Comercial.
+   */
+  const veCalendario = !permLoading && temPermissao('ver_calendario')
+    && (produto === 'cobranca' || produto === 'comercial');
   const podeEditarMenu = perfil?.perfil === 'super_admin';
 
   /*
@@ -779,6 +792,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </Button>
 
+          {/* O Calendário do setor: o mês e o que há hoje, a um clique. */}
+          <BotaoCalendario
+            empresaId={empresa?.id}
+            perfilId={perfil?.id}
+            meuSetorId={perfil?.setor_id ?? null}
+            ativo={veCalendario}
+            onAbrir={() => setCalendarioAberto(true)}
+          />
+
           {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
               entre o menu e o bloco de ações — e é ele mesmo que faz o papel do
               antigo `flex-1`. Assim o aviso não pode cobrir botão nenhum: ele é
@@ -1036,6 +1058,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           aberto={painelDiaAberto}
           onClose={() => setPainelDiaAberto(false)}
         />
+      </PainelSobDemanda>
+
+      <PainelSobDemanda aberto={calendarioAberto} nome="Calendário" onFalha={() => setCalendarioAberto(false)}>
+        <PainelCalendario aberto={calendarioAberto} onClose={() => setCalendarioAberto(false)} />
       </PainelSobDemanda>
 
       {/* O andamento da campanha, na gaveta que o campo do menu abre. */}
