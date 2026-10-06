@@ -15,6 +15,7 @@ import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
 import { MotionConfig } from 'framer-motion';
 import { SugestaoModoLeve } from '@/components/SugestaoModoLeve';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useModoLeve } from '@/lib/modoLeve';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
@@ -27,7 +28,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
-import { deveAbrirMobile, destinoMobile, ehCelular } from '@/lib/mobile/preferencia';
+import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao } from '@/lib/mobile/preferencia';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -145,11 +146,11 @@ function PageLoader() {
  * Até 02/10/2026 a `/` embrulhava o casco em `RaizDoSite`: o React via outro
  * componente naquela posição da árvore e desmontava o casco inteiro ao ir do
  * Dashboard para Vendas (o menu sumia e voltava, as animações recomeçavam — o
- * «bug visual» do pedido). `raiz` liga aqui dentro a checagem do celular que
+ * «bug visual» do pedido). Aqui dentro mora também o desvio do celular, que
  * morava lá.
  */
-function LayoutWrapper({ children, raiz = false }: { children: React.ReactNode; raiz?: boolean }) {
-  const desvio = useDesvioDoCelular(raiz);
+function LayoutWrapper({ children }: { children: React.ReactNode }) {
+  const desvio = useDesvioDoCelular();
   if (desvio) return desvio;
   return (
     <ProtectedRoute>
@@ -225,27 +226,57 @@ function PainelDeEntrada(): React.ReactElement {
 }
 
 /**
- * A rota `/` — o celular decide ANTES do casco do site.
+ * O celular decide ANTES do casco do site — em QUALQUER rota do casco.
  *
- * O redirecionamento para a tela do celular morava só em `PainelDeEntrada`,
- * que fica DENTRO do casco: com o casco sob demanda, o celular baixaria o
- * casco inteiro só para ser mandado embora. Aqui ele espera a sessão e a
- * empresa (leve, sem casco) e vai direto para `/m`. O desktop, e o celular de
- * quem escolheu «Versão completa», seguem pelo caminho de sempre — e
- * `PainelDeEntrada` mantém a mesma checagem como segunda guarda.
+ * Até 06/10/2026 só a `/` desviava, sem esperar o perfil: com internet ruim o
+ * site desenhava primeiro e, se o perfil não carregasse, ficava nele; e um link
+ * para outra rota nunca chegava ao app (relato do Cleber: «às vezes vai para o
+ * site normal»). Agora:
  *
- * É um hook chamado pelo próprio `LayoutWrapper` (com `raiz`), e não um
- * componente em volta dele: ver o comentário do `LayoutWrapper`.
+ *   • celular é o app instalado, ou toque + tela de celular (`ehCelular`);
+ *   • «Versão completa» nesta sessão do app deixa o site em paz;
+ *   • com sessão e perfil carregando, o esqueleto — nunca o site;
+ *   • perfil que não veio, «Sem conexão · Tentar de novo» — nunca o site;
+ *   • só manda se a pessoa tem a chave da tela de destino (sem ela, a tela
+ *     devolveria para `/` e o desvio mandaria de volta, sem fim).
+ *
+ * As rotas do app (`/m…`), o login e a TV não têm casco: não passam por aqui.
+ * `PainelDeEntrada` mantém a checagem antiga como segunda guarda.
  */
-function useDesvioDoCelular(ativo: boolean): React.ReactElement | null {
-  const { loading: authLoading, perfil } = useAuth();
+function useDesvioDoCelular(): React.ReactElement | null {
+  const { user, perfil, loading: authLoading, perfilLoading, refreshPerfil } = useAuth();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
-  if (!ativo || !ehCelular()) return null;
-  if (authLoading || (perfil && empresaLoading)) return <PageLoader />;
-  if (produtoDaEmpresa(empresa, tenantSlug) === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
-    return <Navigate to={destinoMobile(perfil?.perfil)} replace />;
-  }
+  const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const decisao = decidirDesvio({
+    temSessao: !!user,
+    celular: ehCelular(),
+    versaoCompleta: lerVersao() === 'completa',
+    carregando: authLoading || perfilLoading || empresaLoading,
+    perfil: perfil?.perfil,
+    produtoCobranca: produtoDaEmpresa(empresa, tenantSlug) === 'cobranca',
+    permissoesCarregando: permLoading,
+    temPermissao,
+  });
+  if (decisao.tipo === 'esperar') return <PageLoader />;
+  if (decisao.tipo === 'sem_conexao') return <SemConexaoNoCelular onTentar={() => { void refreshPerfil(); }} />;
+  if (decisao.tipo === 'ir') return <Navigate to={decisao.destino} replace />;
   return null;
+}
+
+/** O perfil não veio (internet ruim): a tela do app, e não o site. */
+function SemConexaoNoCelular({ onTentar }: { onTentar: () => void }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-8 text-center">
+      <div className="max-w-xs space-y-3">
+        <p className="text-base font-semibold text-foreground">Sem conexão</p>
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os seus dados. Confira a internet e tente de novo.</p>
+        <button type="button" onClick={onTentar}
+          className="mt-2 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">
+          Tentar de novo
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -361,7 +392,7 @@ export default function App() {
                   Dashboard – ADM — o Assistente ADM — entra direto no painel dele,
                   em vez de ler «aba não liberada» na tela inicial. */}
               <Route path={ROUTE_PATHS.DASHBOARD} element={
-                <LayoutWrapper raiz>
+                <LayoutWrapper>
                   <ProtectedRoute
                     requiredPermissao="ver_dashboard" mostrarSemAcesso
                     alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}

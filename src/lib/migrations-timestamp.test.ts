@@ -77,6 +77,12 @@ const DIVIDA_ANTERIOR = new Set([
   '20260904500000_mestre_59_destino_da_equipe.sql',
   '20260904600000_composicao_mes_completar_clones.sql',
   '20260904700000_desafio_lider_multi_equipe.sql',
+  // Auditoria de segurança de 06/10/2026: aplicadas pelo SQL Editor e
+  // registradas em schema_migrations com estas versões (hora 24, 25, 26)
+  // antes de o teste rodar. Renomear desalinharia o registro.
+  '20261006240000_seguranca_diretoria_exige_a_chave.sql',
+  '20261006250000_seguranca_funcoes_internas_fechadas.sql',
+  '20261006260000_seguranca_tv_exige_login.sql',
 ]);
 
 const arquivos = fs.readdirSync(PASTA).filter(f => f.endsWith('.sql')).sort();
@@ -126,6 +132,6 @@ describe('timestamp das migrations', () => {
     // que acompanhar, senão vira lixo que esconde arquivo que não existe mais.
     const presentes = [...DIVIDA_ANTERIOR].filter(f => arquivos.includes(f));
     expect(presentes).toHaveLength(DIVIDA_ANTERIOR.size);
-    expect(DIVIDA_ANTERIOR.size).toBe(36);
+    expect(DIVIDA_ANTERIOR.size).toBe(39) // +3 em 06/10/2026: as migrations 24, 25 e 26 da auditoria de segurança;
   });
 });

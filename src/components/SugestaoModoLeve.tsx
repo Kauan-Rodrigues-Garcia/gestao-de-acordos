@@ -14,6 +14,8 @@
  * à parte. Oferece uma vez por carga de página; «Agora não» cala por 7 dias.
  */
 import { useEffect } from 'react';
+import { ehCelular } from '@/lib/mobile/preferencia';
+import { useNaRotaDoCelular } from '@/lib/mobile/rota';
 import { toast } from 'sonner';
 import {
   definirModoLeve, deveSugerir, JANELA_MS, podeSugerir, recusarSugestao, useModoLeve,
@@ -33,8 +35,12 @@ function dicasDaMaquina(): DicasDaMaquina {
 
 export function SugestaoModoLeve(): null {
   const leve = useModoLeve();
+  // Nunca no celular (Cleber, 06/10/2026): nem no app, nem no site aberto no
+  // celular. O aviso fala de «computador», e o app já é a versão leve.
+  const naRotaDoApp = useNaRotaDoCelular();
 
   useEffect(() => {
+    if (naRotaDoApp || ehCelular()) return;
     if (leve || !podeSugerir()) return;
     if (typeof PerformanceObserver === 'undefined') return;
     // `long-animation-frame` (Chrome 123+) mede o quadro INTEIRO — script,
@@ -75,7 +81,7 @@ export function SugestaoModoLeve(): null {
       return;
     }
     return () => observador.disconnect();
-  }, [leve]);
+  }, [leve, naRotaDoApp]);
 
   return null;
 }

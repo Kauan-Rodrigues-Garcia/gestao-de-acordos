@@ -27,6 +27,7 @@ import {
   useCallback, useRef, useMemo, type ReactNode,
 } from 'react';
 import type { Notificacao } from '@/lib/supabase';
+import { useNaRotaDoCelular } from '@/lib/mobile/rota';
 import { useAuth } from '@/hooks/useAuth';
 import { assinarTabela } from '@/lib/realtime';
 import { reconciliarLista } from '@/lib/dadosVivos';
@@ -95,7 +96,11 @@ const PULSO_MS = 900;
 
 export function NotificacoesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const userId   = user?.id ?? null;
+  // Nas telas do app do celular o sino não existe: sem lista, sem canal e sem
+  // vibrar o aparelho a cada notificação que ninguém vê (06/10/2026). Voltar
+  // para o site recarrega.
+  const naRotaDoCelular = useNaRotaDoCelular();
+  const userId   = naRotaDoCelular ? null : (user?.id ?? null);
 
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>(VAZIO);
   const [loading, setLoading]           = useState(false);
