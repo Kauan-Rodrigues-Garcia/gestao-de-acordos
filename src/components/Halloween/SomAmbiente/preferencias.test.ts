@@ -53,9 +53,8 @@ describe('preferências do Som ambiente', () => {
     expect(normalizar({ faixa: 'pecadores' }).faixa).toBe('pecadores');
   });
 
-  it('o tema do Batman está desligado: quem o tinha escolhido volta ao padrão', () => {
-    expect(BATMAN_LIGADO).toBe(false);
-    expect(normalizar({ faixa: 'batman' }).faixa).toBe('halloween');
+  it('o tema do Batman: escolhido, fica; desligado (BATMAN_LIGADO), volta ao padrão', () => {
+    expect(normalizar({ faixa: 'batman' }).faixa).toBe(BATMAN_LIGADO ? 'batman' : 'halloween');
   });
 
   it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
@@ -70,9 +69,9 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'sexta13', t: -5 }));
     expect(lerPosicao('p1')).toEqual({ faixa: 'sexta13', t: 0 });
-    // Faixa desligada (o Batman) não volta no F5.
+    // O Batman volta no F5 só enquanto está ligado.
     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: 10 }));
-    expect(lerPosicao('p1')).toBeNull();
+    expect(lerPosicao('p1')).toEqual(BATMAN_LIGADO ? { faixa: 'batman', t: 10 } : null);
   });
 
   it('quem tinha a música do Veigh que saiu fica com «Puxa o Lança»', () => {
