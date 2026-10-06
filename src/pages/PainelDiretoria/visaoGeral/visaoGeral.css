@@ -61,7 +61,7 @@
 .vg-disjuntor .vg-disjuntor-chave > span { background: #fff; }
 
 /* ── O pulso ───────────────────────────────────────────────────────────── */
-.vg-pulso { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.vg-pulso { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
 
 .vg-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 20px; padding: 22px 24px; border-radius: 24px; color: #fff;
   background: linear-gradient(145deg, var(--vg-escuro), var(--vg-escuro-2)); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06); }
@@ -128,9 +128,16 @@
 .vg-cid-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .vg-cid-mini small { display: block; font-size: 10.5px; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
 .vg-cid-mini b { font-family: var(--vg-num); font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.vg-cid-pe { display: flex; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted-foreground); margin-top: auto; }
+/* Os dois cartões têm a altura do escuro: as linhas ficam na mesma altura nos
+   dois, e só o rodapé de carteiras desce para o pé do cartão. */
+.vg-cid-pe { display: flex; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted-foreground); }
 .vg-cid-pe b { color: var(--foreground); }
-.vg-cid-cart { margin-top: 0; padding-top: 8px; border-top: 1px dashed color-mix(in srgb, var(--cc) 30%, transparent); }
+.vg-cid-q { display: block; }
+.vg-cid-q .vg-qfaixa { height: 22px; }
+.vg-cid-q .vg-qleg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; margin-top: 8px; }
+.vg-cid-q .vg-qleg span { white-space: normal; align-items: baseline; flex-wrap: wrap; column-gap: 5px; color: var(--foreground); }
+.vg-cid-q .vg-qleg small { color: var(--muted-foreground); font-weight: 500; flex-basis: 100%; padding-left: 13px; }
+.vg-cid-cart { margin-top: auto; padding-top: 8px; border-top: 1px dashed color-mix(in srgb, var(--cc) 30%, transparent); }
 .vg-cid-cart b { font-family: var(--font-mono, monospace); font-size: 12px; }
 .vg-cid-cart b.vg-c { color: var(--vg-cofen); }
 

@@ -173,17 +173,20 @@ export const CartaoDaCidade = memo(function CartaoDaCidade({ cidade, setores, ri
         <span><small>Ritmo</small><b style={ritmo ? { color: `var(--vg-${tomDoRitmo(ritmo.pct)})` } : undefined}>{ritmo ? pct(ritmo.pct) : '—'}</b></span>
         <span><small>Fecha em</small><b>{ritmo ? mil(ritmo.fecha) : '—'}</b></span>
       </span>
-      <FaixaQuartis resumo={quartis} />
+      <span className="vg-cid-q">
+        <FaixaQuartis resumo={quartis} rotulos />
+        <LegendaQuartis resumo={quartis} />
+      </span>
       <span className="vg-cid-pe">
         {melhor?.ritmo && <span>melhor <b className="vg-sobe">{melhor.nome} {pct(melhor.ritmo.pct)}</b></span>}
         {atencao?.ritmo && <span>atenção <b style={{ color: `var(--vg-${tomDoRitmo(atencao.ritmo.pct)})` }}>{atencao.nome} {pct(atencao.ritmo.pct)}</b></span>}
       </span>
-      {cidade.cofen && (
-        <span className="vg-cid-pe vg-cid-cart">
-          <span>Nosso produto <b>{formatBRL(cidade.mes.nossoProduto)}</b></span>
-          <span>{cidade.cofen.nome} · Cofen {rotuloModo(modo)} <b className="vg-c">{formatBRL(cidade.cofen.valor)}</b></span>
-        </span>
-      )}
+      <span className="vg-cid-pe vg-cid-cart">
+        <span>Nosso produto <b>{formatBRL(cidade.mes.nossoProduto)}</b></span>
+        {cidade.cofen
+          ? <span>{cidade.cofen.nome} · Cofen {rotuloModo(modo)} <b className="vg-c">{formatBRL(cidade.cofen.valor)}</b></span>
+          : <span>sem carteira Cofen</span>}
+      </span>
     </button>
   );
 });
