@@ -27,6 +27,9 @@
 -- policy roda como quem consulta, e fechar quebraria a tabela.
 --
 -- Só privilégios. Reaplicável.
+--
+-- APLICADA em 06/10/2026 pelo SQL Editor (Cleber; a primeira tentativa não
+-- gravou), conferida pelo MCP e registrada em schema_migrations à mão.
 -- ============================================================================
 
 BEGIN;

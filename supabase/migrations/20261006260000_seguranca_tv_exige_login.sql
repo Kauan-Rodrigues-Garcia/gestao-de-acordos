@@ -19,6 +19,9 @@
 -- que o administrador sobe para passar na tela.
 --
 -- Reaplicável: função que já tem a trava é pulada.
+--
+-- APLICADA em 06/10/2026 pelo SQL Editor (Cleber), conferida pelo MCP e
+-- registrada em schema_migrations à mão.
 -- ============================================================================
 
 BEGIN;
