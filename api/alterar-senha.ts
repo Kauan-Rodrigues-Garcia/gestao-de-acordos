@@ -51,6 +51,7 @@ function enderecoCliente(req: ReqLike): string | null {
 }
 
 const MIN_SENHA = 6;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * A chave que libera redefinir a senha de outra pessoa.
@@ -189,6 +190,11 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       res.status(400).json({ error: 'alvoUserId e novaSenha são obrigatórios.' });
       return;
     }
+    // Vai direto na URL do PostgREST e da Admin API: só UUID passa.
+    if (typeof alvoId !== 'string' || !UUID.test(alvoId) || typeof novaSenha !== 'string') {
+      res.status(400).json({ error: 'alvoUserId inválido.' });
+      return;
+    }
     if (novaSenha.length < MIN_SENHA) {
       res.status(400).json({ error: `A senha deve ter pelo menos ${MIN_SENHA} caracteres.` });
       return;
@@ -217,10 +223,40 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       res.status(403).json({ error: 'Apenas um super_admin pode redefinir a senha de outro super_admin.' });
       return;
     }
-    // Isolamento entre empresas — super_admin é global, administrador não.
-    if (callerRole === 'administrador' && alvo.empresa_id !== callerPerfil.empresa_id) {
-      res.status(403).json({ error: 'Você só pode redefinir a senha de usuários da sua empresa.' });
+    // Conta de administração só por quem é administração: um líder com a chave
+    // de redefinir senha trocaria a senha do administrador e entraria como ele
+    // (auditoria de segurança, 06/10/2026).
+    if (alvo.perfil === 'administrador' && !acessoTotal) {
+      res.status(403).json({ error: 'Apenas a administração pode redefinir a senha de um administrador.' });
       return;
+    }
+    // Isolamento entre empresas — só super_admin é global. Antes a trava valia
+    // só para `administrador`, e qualquer outro cargo com a chave alcançava a
+    // senha de gente de outra empresa. A régua é a do banco
+    // (`fn_can_access_empresa`, com o JWT de quem chamou): a mesma das policies,
+    // inclusive para quem tem acesso às duas empresas.
+    if (callerRole !== 'super_admin') {
+      let alcanca = false;
+      if (alvo.empresa_id) {
+        try {
+          const r = await fetch(`${url}/rest/v1/rpc/fn_can_access_empresa`, {
+            method: 'POST',
+            headers: {
+              apikey: process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || serviceKey,
+              Authorization: `Bearer ${callerJwt}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ target_empresa_id: alvo.empresa_id }),
+          });
+          alcanca = r.ok && (await r.json()) === true;
+        } catch {
+          alcanca = false;
+        }
+      }
+      if (!alcanca) {
+        res.status(403).json({ error: 'Você só pode redefinir a senha de usuários da sua empresa.' });
+        return;
+      }
     }
 
     // 4) Redefine no GoTrue (Admin API)

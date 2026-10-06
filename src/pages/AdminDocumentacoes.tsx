@@ -70,15 +70,19 @@ function exportarPDF(doc: DocumentoLgpd) {
     toast.error('Permita pop-ups para exportar PDF');
     return;
   }
-  const conteudoEscapado = doc.conteudo
+  // Tudo que vem do banco é escapado: a janela é da mesma origem do app, e um
+  // `<script>` no título rodaria com a sessão de quem exportou.
+  const esc = (s: unknown) => String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  const conteudoEscapado = esc(doc.conteudo);
   win.document.write(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>${doc.titulo}</title>
+  <title>${esc(doc.titulo)}</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.7;
@@ -96,8 +100,8 @@ function exportarPDF(doc: DocumentoLgpd) {
   </style>
 </head>
 <body>
-  <h1>${doc.titulo}</h1>
-  <div class="meta">Versão ${doc.versao} | Atualizado em ${formatarData(doc.atualizado_em)}</div>
+  <h1>${esc(doc.titulo)}</h1>
+  <div class="meta">Versão ${esc(doc.versao)} | Atualizado em ${formatarData(doc.atualizado_em)}</div>
   <hr/>
   <pre>${conteudoEscapado}</pre>
   <div class="aviso">

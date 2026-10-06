@@ -62,7 +62,9 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const destino = new URL(event.notification.data?.url || '/#/m?novos=1', self.location.origin).href;
+  // Só abre o próprio app: um `url` de fora (aviso adulterado) cai na tela mínima.
+  const pedido = new URL(event.notification.data?.url || '/#/m?novos=1', self.location.origin);
+  const destino = pedido.origin === self.location.origin ? pedido.href : new URL('/#/m?novos=1', self.location.origin).href;
 
   event.waitUntil((async () => {
     const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

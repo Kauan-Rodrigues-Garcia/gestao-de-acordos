@@ -106,6 +106,11 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       res.status(400).json({ error: 'alvoUserId é obrigatório.' });
       return;
     }
+    // Vai direto na URL do PostgREST: só UUID passa.
+    if (typeof alvoId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alvoId)) {
+      res.status(400).json({ error: 'alvoUserId inválido.' });
+      return;
+    }
     if (alvoId === caller.id) {
       res.status(400).json({ error: 'Você já está logado como você mesmo.' });
       return;
