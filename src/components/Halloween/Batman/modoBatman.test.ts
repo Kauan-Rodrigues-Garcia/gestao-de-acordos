@@ -58,6 +58,12 @@ type Som = { perfil: string | null; estado: string; noAr: string | null; silenci
 const ctl = vi.hoisted(() => ({
   snap: { perfil: null, estado: 'parado', noAr: null, silenciado: false, prefs: { faixa: 'halloween' } } as Som,
   ouvintes: new Set<() => void>(),
+  ligado: true,
+}));
+// O tema está desligado no site (06/10/2026); os testes do comportamento o ligam.
+vi.mock('../SomAmbiente/preferencias', async importOriginal => ({
+  ...(await importOriginal<typeof import('../SomAmbiente/preferencias')>()),
+  get BATMAN_LIGADO() { return ctl.ligado; },
 }));
 vi.mock('../SomAmbiente/motor', () => ({
   lerEstadoSom: () => ctl.snap,
@@ -76,6 +82,7 @@ async function carregar() {
 describe('modo Batman no navegador', () => {
   beforeEach(() => {
     localStorage.clear();
+    ctl.ligado = true;
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] });
     ctl.snap = { perfil: 'p1', estado: 'parado', noAr: null, silenciado: false, prefs: { faixa: 'halloween' } };
   });
@@ -122,6 +129,18 @@ describe('modo Batman no navegador', () => {
     m = await carregar();
     expect(m.lerModoBatman().fase).toBe('fora');
     expect(localStorage.getItem('modo-batman:p1')).toBeNull();
+  });
+
+  it('desligado: a faixa toca e o tema não entra, nem no F5 com a marca de antes', async () => {
+    ctl.ligado = false;
+    localStorage.setItem('modo-batman:p1', '1');
+    ctl.snap = { perfil: 'p1', estado: 'pausado', noAr: 'batman', silenciado: false, prefs: { faixa: 'batman' } };
+    const m = await carregar();
+    expect(m.lerModoBatman().fase).toBe('fora');
+    expect(localStorage.getItem('modo-batman:p1')).toBeNull();
+    som({ estado: 'tocando' });
+    vi.advanceTimersByTime(SUBIDA_MS);
+    expect(m.lerModoBatman().fase).toBe('fora');
   });
 
   it('logout volta ao normal sem animação', async () => {

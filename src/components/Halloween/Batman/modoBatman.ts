@@ -23,6 +23,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { assinarSom, lerEstadoSom } from '../SomAmbiente/motor';
+import { BATMAN_LIGADO } from '../SomAmbiente/preferencias';
 
 export type FaseBatman = 'fora' | 'entrando' | 'dentro' | 'saindo';
 
@@ -135,11 +136,12 @@ function avaliar() {
     // Outra sessão (login, logout, troca de pessoa): começa do zero — ou do F5.
     perfil = s.perfil;
     if (timer) { clearTimeout(timer); timer = null; }
-    const volta = !!perfil && marcado(perfil) && s.prefs.faixa === FAIXA_BATMAN;
+    const volta = BATMAN_LIGADO && !!perfil && marcado(perfil) && s.prefs.faixa === FAIXA_BATMAN;
     publicar(volta ? { fase: 'dentro', desde: relogio(), n0: 1 } : FORA);
     if (perfil && !volta) marcar(perfil, false);
   }
-  if (!perfil) return;
+  // Desligado (06/10/2026, `BATMAN_LIGADO`): o tema nunca entra.
+  if (!perfil || !BATMAN_LIGADO) return;
   const acao = decidir(estado.fase, {
     faixa: s.prefs.faixa,
     tocando: s.estado === 'tocando' && s.noAr === FAIXA_BATMAN && !s.silenciado,

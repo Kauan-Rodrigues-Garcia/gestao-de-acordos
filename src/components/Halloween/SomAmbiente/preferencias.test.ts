@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, esquecerPosicao, gravarPosicao, gravarPreferencias, lerPosicao,
+  BATMAN_LIGADO, LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, esquecerPosicao, gravarPosicao, gravarPreferencias, lerPosicao,
   lerPreferencias, normalizar,
 } from './preferencias';
 
@@ -52,8 +52,9 @@ describe('preferências do Som ambiente', () => {
     expect(normalizar({ faixa: 'pecadores' }).faixa).toBe('pecadores');
   });
 
-  it('o tema especial do Batman é uma faixa de fábrica e fica escolhido', () => {
-    expect(normalizar({ faixa: 'batman' }).faixa).toBe('batman');
+  it('o tema do Batman está desligado: quem o tinha escolhido volta ao padrão', () => {
+    expect(BATMAN_LIGADO).toBe(false);
+    expect(normalizar({ faixa: 'batman' }).faixa).toBe('halloween');
   });
 
   it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
@@ -66,8 +67,11 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
     localStorage.setItem('som-ambiente-posicao:p1', '{quebrado');
     expect(lerPosicao('p1')).toBeNull();
-    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: -5 }));
-    expect(lerPosicao('p1')).toEqual({ faixa: 'batman', t: 0 });
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'sexta13', t: -5 }));
+    expect(lerPosicao('p1')).toEqual({ faixa: 'sexta13', t: 0 });
+    // Faixa desligada (o Batman) não volta no F5.
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
   });
 
   it('quem tinha a música do Veigh que saiu fica com «Puxa o Lança»', () => {

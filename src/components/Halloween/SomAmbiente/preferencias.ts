@@ -17,6 +17,14 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
  * nele — só toca quando a pessoa escolhe.
  */
 export const TEMAS_ESPECIAIS = ['batman'] as const;
+/**
+ * Desligado em 06/10/2026, a pedido do Cleber: a faixa «Batman» some do painel e
+ * o modo Batman não entra mais. Nada foi apagado — trocar para `true` volta tudo.
+ */
+export const BATMAN_LIGADO = false;
+/** As de fábrica fora do ar: não aparecem no painel nem voltam do armazenamento. */
+const FAIXAS_DESLIGADAS: readonly string[] = BATMAN_LIGADO ? [] : ['batman'];
+export const faixaNoAr = (faixa: string) => !FAIXAS_DESLIGADAS.includes(faixa);
 /** Os temas de terror que vêm de fábrica, na ordem do painel. */
 export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
 /** As músicas para escutar que vêm de fábrica. */
@@ -142,7 +150,7 @@ export function normalizar(bruto: unknown): PreferenciasSom {
   const volume = o.v !== VERSAO && lido === VOLUME_PADRAO_ANTIGO ? VOLUME_PADRAO : lido;
 
   const lida = typeof o.faixa === 'string' ? (SUBSTITUTAS[o.faixa] ?? o.faixa) : null;
-  const faixa = lida !== null && (ehEmbutida(lida) || playlists.some(p => p.id === lida))
+  const faixa = lida !== null && ((ehEmbutida(lida) && faixaNoAr(lida)) || playlists.some(p => p.id === lida))
     ? lida
     : PADRAO.faixa;
 
@@ -177,7 +185,7 @@ const chavePosicao = (perfilId: string) => `som-ambiente-posicao:${perfilId}`;
 export function lerPosicao(perfilId: string): PosicaoSalva | null {
   try {
     const o = JSON.parse(localStorage.getItem(chavePosicao(perfilId)) ?? 'null') as Record<string, unknown> | null;
-    if (!o || typeof o.faixa !== 'string' || !ehEmbutida(o.faixa)) return null;
+    if (!o || typeof o.faixa !== 'string' || !ehEmbutida(o.faixa) || !faixaNoAr(o.faixa)) return null;
     const t = typeof o.t === 'number' && Number.isFinite(o.t) && o.t > 0 ? o.t : 0;
     return { faixa: o.faixa, t };
   } catch {

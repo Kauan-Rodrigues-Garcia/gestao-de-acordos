@@ -32,7 +32,7 @@ import {
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, TEMAS_ESPECIAIS, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
+  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, TEMAS_ESPECIAIS, VOLUME_PADRAO, ehEmbutida, faixaNoAr, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
@@ -187,12 +187,14 @@ export function PainelSomAmbiente() {
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
         {/* ── Fábrica ── */}
         {/* O tema especial vem primeiro, sem aviso nenhum: quem escolhe descobre o modo Batman. */}
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Tema especial</p>
-        <div className="mb-4 space-y-1.5">
-          {TEMAS_ESPECIAIS.map(id => (
-            <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
-          ))}
-        </div>
+        {TEMAS_ESPECIAIS.some(faixaNoAr) && (<>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Tema especial</p>
+          <div className="mb-4 space-y-1.5">
+            {TEMAS_ESPECIAIS.filter(faixaNoAr).map(id => (
+              <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
+            ))}
+          </div>
+        </>)}
         <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Temas de terror</p>
         <div className="grid grid-cols-3 gap-2">
           {TEMAS_DE_TERROR.map(id => (
@@ -226,7 +228,7 @@ export function PainelSomAmbiente() {
       ) : (
       // Enxuta: as de fábrica numa lista só, e nada de adicionar música.
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto border-t border-border px-4 py-3">
-        {FAIXAS_EMBUTIDAS.map(id => (
+        {FAIXAS_EMBUTIDAS.filter(faixaNoAr).map(id => (
           <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
         ))}
       </div>
