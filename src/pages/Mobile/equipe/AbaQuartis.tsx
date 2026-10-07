@@ -50,7 +50,7 @@ export function AbaQuartis({ equipe, mes }: { equipe: EquipeNaTela; mes: string 
     return (
       <p className="e-vazio">
         <b>Ninguém com meta nesta equipe</b>
-        Os quartis comparam o recebido com a meta de cada pessoa. A meta se grava na versão completa.
+        Os quartis comparam o recebido com a meta de cada pessoa. A meta se grava no site, no computador.
       </p>
     );
   }
@@ -92,7 +92,7 @@ export function AbaQuartis({ equipe, mes }: { equipe: EquipeNaTela; mes: string 
       {equipe.semMeta.length > 0 && (
         <p className="e-nota">
           {equipe.semMeta.length} {equipe.semMeta.length === 1 ? 'pessoa sem meta fica' : 'pessoas sem meta ficam'} fora
-          dos quartis. A meta se grava na versão completa.
+          dos quartis. A meta se grava no site, no computador.
         </p>
       )}
 

@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_TENANT_SLUG?: string;
   readonly VITE_SITE_URL?: string;
   readonly VITE_AUTH_REDIRECT_URL?: string;
+  /** Endereço do app do celular. Padrão: https://app.gestaodeacordos.com.br */
+  readonly VITE_APP_URL?: string;
   readonly VITE_SENTRY_DSN?: string;
 }
 

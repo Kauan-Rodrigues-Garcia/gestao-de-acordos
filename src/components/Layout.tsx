@@ -41,7 +41,9 @@ import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import { abasDoMenu, itemAcesoDoMenu } from '@/lib/menuLateral';
 import { produtoDaEmpresa } from '@/lib/produto';
-import { gravarVersao, ofereceVersaoCelular as ofereceIconeCelular } from '@/lib/mobile/preferencia';
+import {
+  gravarVersao, mobileNesteEndereco, ofereceVersaoCelular as ofereceIconeCelular, urlNoApp,
+} from '@/lib/mobile/preferencia';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -398,9 +400,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * com ele vazio.
    */
   const produto = produtoDaEmpresa(empresa, tenant.slug);
-  // Quem escolheu «Versão completa» no celular volta para a tela mínima por
-  // aqui: operador e elite no celular; super admin em qualquer aparelho, para
-  // testar (ele escolhe um operador lá dentro).
+  // O ícone do celular abre o app: operador e elite no celular; super admin em
+  // qualquer aparelho, para testar (ele escolhe um operador lá dentro). Desde
+  // 07/10/2026 o app mora em `app.gestaodeacordos.com.br`: fora dele o ícone
+  // abre o app numa aba nova (lá a pessoa entra com a própria senha).
   const ofereceVersaoCelular = produto === 'cobranca' && ofereceIconeCelular(perfil?.perfil);
 
   const navItems = useMemo(() => abasDoMenu({
@@ -993,7 +996,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Button
                 variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground"
                 title="Versão para celular" aria-label="Versão para celular"
-                onClick={() => { gravarVersao('mobile'); navigate(ROUTE_PATHS.MOBILE); }}
+                onClick={() => {
+                  if (mobileNesteEndereco()) { gravarVersao('mobile'); navigate(ROUTE_PATHS.MOBILE); }
+                  else window.open(urlNoApp(ROUTE_PATHS.MOBILE), '_blank', 'noopener');
+                }}
               >
                 <Smartphone className="w-4 h-4" />
               </Button>

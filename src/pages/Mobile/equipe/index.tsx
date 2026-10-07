@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS } from '@/lib/index';
-import { ehSuperAdmin, gravarVersao, ofereceVersaoCompleta } from '@/lib/mobile/preferencia';
+import { ehSuperAdmin } from '@/lib/mobile/preferencia';
 import { acessoDasVisoes, rotaDaVisao } from '@/lib/mobile/visoes';
 import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 import { paraHO, useHoPercentual } from '@/lib/hoPercentual';
@@ -97,17 +97,12 @@ function TelaDaEquipe() {
     operadorIds: tela.equipe?.operadorIds ?? [], ativo: aba === 'hoje',
   });
 
-  const abrirVersaoCompleta = () => {
-    gravarVersao('completa');
-    navigate(ROUTE_PATHS.DASHBOARD);
-  };
   // O líder cai direto aqui: o «Instalar app» mora neste rodapé também.
   const [passoIPhone, setPassoIPhone] = useState(false);
   const rodape = (
     <>
       <BotaoInstalar onPassoIPhone={() => setPassoIPhone(true)} />
       <div className="e-links">
-        {ofereceVersaoCompleta() && <button type="button" onClick={abrirVersaoCompleta}>Versão completa</button>}
         <button type="button" onClick={() => { void (impersonando ? sairImpersonacao() : signOut()); }}>
           {impersonando ? 'Voltar à minha conta' : 'Sair'}
         </button>
@@ -165,7 +160,7 @@ function TelaDaEquipe() {
           <>
             <p className="e-vazio">
               <b>Você ainda não lidera nenhuma equipe</b>
-              A liderança é definida na tela de Equipes. Enquanto isso, o Painel do Líder segue na versão completa.
+              A liderança é definida na tela de Equipes. Enquanto isso, o Painel do Líder segue no site, no computador.
             </p>
             {rodape}
           </>

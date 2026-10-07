@@ -5,8 +5,8 @@
  * Visual aprovado: docs/mobile/prototipo-m.html.
  *
  * Uma coluna, mês corrente: recebido e régua das faixas, comissão (quando a
- * pessoa tem), hoje e ranking, últimos pagamentos, e o rodapé com instalar,
- * versão completa e sair. O card «Ativar notificações» entra na Etapa 2.
+ * pessoa tem), hoje e ranking, últimos pagamentos, e o rodapé com instalar
+ * e sair (o site completo fica no endereço do computador desde 07/10/2026). O card «Ativar notificações» entra na Etapa 2.
  */
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
-import { destinoMobile, ehLider, ehSuperAdmin, gravarVersao, ofereceVersaoCompleta } from '@/lib/mobile/preferencia';
+import { destinoMobile, ehLider, ehSuperAdmin } from '@/lib/mobile/preferencia';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { useInstalacao } from '@/lib/mobile/instalar';
 import {
@@ -140,10 +140,6 @@ function TelaDoOperador() {
     document.getElementById('m-pagamentos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [veioDeAviso, tela.carregandoPagamentos]);
 
-  const abrirVersaoCompleta = () => {
-    gravarVersao('completa');
-    navigate(ROUTE_PATHS.DASHBOARD);
-  };
 
   return (
     <div className="tela-mobile">
@@ -221,7 +217,6 @@ function TelaDoOperador() {
         <Rodape
           passoIPhone={passoIPhone}
           setPassoIPhone={setPassoIPhone}
-          onVersaoCompleta={abrirVersaoCompleta}
           rotuloSair={impersonando ? 'Voltar à minha conta' : 'Sair'}
           onSair={() => { void (impersonando ? sairImpersonacao() : signOut()); }}
         />
@@ -243,10 +238,9 @@ function Esqueleto() {
   );
 }
 
-function Rodape({ onVersaoCompleta, onSair, rotuloSair, passoIPhone, setPassoIPhone }: {
+function Rodape({ onSair, rotuloSair, passoIPhone, setPassoIPhone }: {
   passoIPhone: boolean;
   setPassoIPhone: (v: boolean) => void;
-  onVersaoCompleta: () => void;
   onSair: () => void;
   rotuloSair: string;
 }) {
@@ -265,7 +259,6 @@ function Rodape({ onVersaoCompleta, onSair, rotuloSair, passoIPhone, setPassoIPh
         </button>
       )}
       <div className="m-links">
-        {ofereceVersaoCompleta() && <button type="button" onClick={onVersaoCompleta}>Versão completa</button>}
         <button type="button" onClick={onSair}>{rotuloSair}</button>
       </div>
 

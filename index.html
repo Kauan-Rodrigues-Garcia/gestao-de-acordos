@@ -20,6 +20,18 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Acordos" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script>
+      // O app instalável mora em app.gestaodeacordos.com.br (07/10/2026). No
+      // endereço do site o navegador não oferece «instalar»: sem manifest e sem
+      // as marcas de app do iPhone. localhost fica como app, para desenvolver.
+      (function () {
+        var h = location.hostname.toLowerCase();
+        if (/^app\./.test(h) || h === 'localhost' || h === '127.0.0.1') return;
+        document.querySelectorAll(
+          'link[rel="manifest"], meta[name="apple-mobile-web-app-capable"], meta[name="mobile-web-app-capable"]'
+        ).forEach(function (el) { el.remove(); });
+      })();
+    </script>
 
     <!-- Open Graph -->
     <meta property="og:title" content="Gestão de Acordos" />

@@ -12,7 +12,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { ROUTE_PATHS } from '@/lib/index';
-import { ehSuperAdmin, gravarVersao, ofereceVersaoCompleta } from '@/lib/mobile/preferencia';
+import { ehSuperAdmin } from '@/lib/mobile/preferencia';
 import { acessoDasVisoes, rotaDaVisao } from '@/lib/mobile/visoes';
 import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
@@ -90,15 +90,10 @@ function TelaDoSetor() {
     empresaId: tela.empresaId, mes: tela.mes, operadorIds: conjuntoHoje.operadorIds, ativo: aba === 'hoje',
   });
 
-  const abrirVersaoCompleta = () => {
-    gravarVersao('completa');
-    navigate(ROUTE_PATHS.DASHBOARD);
-  };
   const rodape = (
     <>
       <BotaoInstalar onPassoIPhone={() => setPassoIPhone(true)} />
       <div className="e-links">
-        {ofereceVersaoCompleta() && <button type="button" onClick={abrirVersaoCompleta}>Versão completa</button>}
         <button type="button" onClick={() => { void (impersonando ? sairImpersonacao() : signOut()); }}>
           {impersonando ? 'Voltar à minha conta' : 'Sair'}
         </button>
@@ -128,7 +123,7 @@ function TelaDoSetor() {
 
         {tela.semSetor ? (
           <>
-            <p className="e-vazio"><b>Seu cadastro está sem setor</b>Peça para a administração definir o seu setor. Enquanto isso, use a versão completa.</p>
+            <p className="e-vazio"><b>Seu cadastro está sem setor</b>Peça para a administração definir o seu setor.</p>
             {rodape}
           </>
         ) : tela.carregando ? (

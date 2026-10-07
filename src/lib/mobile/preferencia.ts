@@ -50,9 +50,24 @@ export function ehEnderecoDoApp(
   return host.toLowerCase().startsWith('app.');
 }
 
-/** «Versão completa» só existe fora do endereço do app. */
-export function ofereceVersaoCompleta(): boolean {
-  return !ehEnderecoDoApp();
+/**
+ * A tela do celular (`/m…`) só abre no endereço do app (Cleber, 07/10/2026).
+ * No endereço do site (`www.`, `pagueplay.`) ela manda para o `app.` — ver
+ * `SoNoEnderecoDoApp`. `localhost` fica liberado para o desenvolvimento.
+ */
+export function mobileNesteEndereco(
+  host: string = typeof window === 'undefined' ? '' : window.location.hostname,
+): boolean {
+  const h = host.toLowerCase();
+  return ehEnderecoDoApp(h) || h === 'localhost' || h === '127.0.0.1';
+}
+
+const URL_DO_APP = ((import.meta.env.VITE_APP_URL as string | undefined)?.trim()
+  || 'https://app.gestaodeacordos.com.br').replace(/\/+$/, '');
+
+/** O endereço completo de uma tela do app: `urlNoApp('/m/equipe')`. */
+export function urlNoApp(caminho: string): string {
+  return `${URL_DO_APP}/#${caminho.startsWith('/') ? caminho : `/${caminho}`}`;
 }
 
 /**

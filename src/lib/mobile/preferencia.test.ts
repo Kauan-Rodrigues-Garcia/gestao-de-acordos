@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   CHAVE_VERSAO, decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, ehEnderecoDoApp, gravarVersao, lerVersao,
+  mobileNesteEndereco, urlNoApp,
   ofereceVersaoCelular,
   type AmbienteTela,
 } from './preferencia';
@@ -209,5 +210,21 @@ describe('endereço do app (app.gestaodeacordos.com.br, 06/10/2026)', () => {
 
   it('cargo sem tela do celular segue no site mesmo pelo app.', () => {
     expect(deveAbrirMobile('admin', { ...desktop, enderecoDoApp: true })).toBe(false);
+  });
+});
+
+describe('a tela do celular só no endereço do app (07/10/2026)', () => {
+  it('abre no app. e no localhost; nunca no endereço do site', () => {
+    expect(mobileNesteEndereco('app.gestaodeacordos.com.br')).toBe(true);
+    expect(mobileNesteEndereco('localhost')).toBe(true);
+    expect(mobileNesteEndereco('127.0.0.1')).toBe(true);
+    expect(mobileNesteEndereco('www.gestaodeacordos.com.br')).toBe(false);
+    expect(mobileNesteEndereco('pagueplay.gestaodeacordos.com.br')).toBe(false);
+    expect(mobileNesteEndereco('gestaodeacordos.com.br')).toBe(false);
+  });
+
+  it('monta o endereço da mesma tela no app', () => {
+    expect(urlNoApp('/m/equipe?aba=hoje')).toBe('https://app.gestaodeacordos.com.br/#/m/equipe?aba=hoje');
+    expect(urlNoApp('m')).toBe('https://app.gestaodeacordos.com.br/#/m');
   });
 });

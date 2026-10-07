@@ -131,6 +131,19 @@ export async function ativarPush(empresaId: string, contexto?: 'equipe'): Promis
   await supabase.functions.invoke('enviar-push', { body: { acao: 'teste', contexto } }).catch(() => {});
 }
 
+/**
+ * O app mudou para `app.gestaodeacordos.com.br` (07/10/2026). Quem ativou os
+ * avisos pelo endereço do site tem uma inscrição de lá, que continuaria
+ * chegando junto com a do app novo — aviso em dobro. Ao abrir o endereço
+ * antigo, a inscrição dele é cancelada e o worker sai. Melhor esforço.
+ */
+export async function aposentarAvisosDesteEndereco(): Promise<void> {
+  if (!suportaServiceWorker()) return;
+  await desativarPush().catch(() => {});
+  const registros = await navigator.serviceWorker.getRegistrations().catch((): readonly ServiceWorkerRegistration[] => []);
+  await Promise.all(registros.map(r => r.unregister().catch(() => false)));
+}
+
 /** Desliga NESTE aparelho: apaga a linha (RLS: só a própria) e cancela no navegador. */
 export async function desativarPush(): Promise<void> {
   const insc = await inscricaoAtual().catch((): null => null);

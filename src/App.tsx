@@ -28,6 +28,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
+import { SoNoEnderecoDoApp } from '@/pages/Mobile/comum/SoNoEnderecoDoApp';
 import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao } from '@/lib/mobile/preferencia';
 
 /**
@@ -406,24 +407,30 @@ export default function App() {
                   tela inteira, sem barra lateral nem cabeçalho. Mesma chave do
                   Dashboard, que é de onde vêm os números dela. */}
               <Route path={ROUTE_PATHS.MOBILE} element={
-                <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard">
-                  <Mobile />
-                </ProtectedRoute>
+                <SoNoEnderecoDoApp>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard">
+                    <Mobile />
+                  </ProtectedRoute>
+                </SoNoEnderecoDoApp>
               } />
               {/* A visão da equipe no celular (liderança). Mesma chave do Painel
                   do Líder, que é de onde vêm os números dela. */}
               <Route path={ROUTE_PATHS.MOBILE_EQUIPE} element={
-                <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
-                  <MobileEquipe />
-                </ProtectedRoute>
+                <SoNoEnderecoDoApp>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                    <MobileEquipe />
+                  </ProtectedRoute>
+                </SoNoEnderecoDoApp>
               } />
               {/* A visão do setor no celular (gerência, e elite e líder pela troca
                   de visão — 06/10/2026). Mesma chave do Painel do Líder, que é de
                   onde vêm os números dela. */}
               <Route path={ROUTE_PATHS.MOBILE_SETOR} element={
-                <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
-                  <MobileSetor />
-                </ProtectedRoute>
+                <SoNoEnderecoDoApp>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                    <MobileSetor />
+                  </ProtectedRoute>
+                </SoNoEnderecoDoApp>
               } />
               {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.
                   Quem abre é a chave, que nasce só no Assistente ADM; o dado
