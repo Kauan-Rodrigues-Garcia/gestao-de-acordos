@@ -14,7 +14,15 @@ const db = supabase as unknown as SupabaseClient;
 
 const PAGINA = 1000;
 const COLUNAS =
-  'id, envio_id, ordem, nome, contrato, empresa_cliente, telefone, whatsapp, mensagem, mensagem_editada, pendencias, status, enviado_em';
+  'id, envio_id, ordem, nome, contrato, empresa_cliente, telefone, whatsapp, telefone2, whatsapp2, mensagem, mensagem_editada, pendencias, status, enviado_em';
+
+/**
+ * A campanha foi desativada ou excluída pelo líder: o banco não deixa mais
+ * mexer nela (20261007190000). A tela tira a campanha da lista.
+ */
+export class CampanhaIndisponivel extends Error {
+  constructor() { super('Esta campanha foi desativada pelo líder.'); }
+}
 
 /** Todas as mensagens de uma campanha, na ordem (o PostgREST pagina em 1000). */
 export async function listarContatos(envioId: string): Promise<Contato[]> {
@@ -30,13 +38,17 @@ export async function listarContatos(envioId: string): Promise<Contato[]> {
   return todos;
 }
 
+// Campanha desativada: a policy esconde a linha e o UPDATE passa sem mudar
+// nada — sem erro. O `select('id')` é o que mostra que nada mudou.
 export async function definirStatus(id: string, status: StatusContato): Promise<void> {
-  const { error } = await db.from('campanha_facil_contatos').update({ status }).eq('id', id);
+  const { data, error } = await db.from('campanha_facil_contatos').update({ status }).eq('id', id).select('id');
   if (error) throw error;
+  if ((data ?? []).length === 0) throw new CampanhaIndisponivel();
 }
 
 /** `null` volta para a mensagem original. */
 export async function editarMensagem(id: string, texto: string | null): Promise<void> {
-  const { error } = await db.from('campanha_facil_contatos').update({ mensagem_editada: texto }).eq('id', id);
+  const { data, error } = await db.from('campanha_facil_contatos').update({ mensagem_editada: texto }).eq('id', id).select('id');
   if (error) throw error;
+  if ((data ?? []).length === 0) throw new CampanhaIndisponivel();
 }

@@ -558,8 +558,16 @@ export function useCampanhaFacil() {
   const { liberar } = envios;
   const liberarCampanha = useCallback(async (): Promise<boolean> => {
     if (!campanhaPorId.length) return false;
-    return liberar(campanhaPorId, selectedTemplate.name, defaultExportFileName());
-  }, [campanhaPorId, liberar, selectedTemplate, defaultExportFileName]);
+    return liberar(campanhaPorId, {
+      titulo: selectedTemplate.name,
+      arquivoNome: defaultExportFileName(),
+      // O modelo e os descontos vão junto: é o que deixa o líder trocar a
+      // mensagem depois de lançada (o banco refaz o texto dos pendentes).
+      modelo: selectedTemplateBody,
+      semValores: relatorioSemValores,
+      discounts: discountsApplied,
+    });
+  }, [campanhaPorId, liberar, selectedTemplate, selectedTemplateBody, relatorioSemValores, discountsApplied, defaultExportFileName]);
 
   const copyMessage = useCallback(async (item: CampaignItem | null) => {
     if (!item) return;

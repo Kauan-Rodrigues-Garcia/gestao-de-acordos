@@ -11,7 +11,7 @@
  * do próprio painel. Persistência de mensagens/descontos é compartilhada por
  * empresa via Supabase (useCampanhaFacil).
  */
-import { useRef, useState, type RefObject } from 'react';
+import { useRef, useState } from 'react';
 import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
   ChevronLeft, ChevronRight, MessageSquare, Percent,
@@ -42,54 +42,13 @@ import { cn } from '@/lib/utils';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
 import { useCampanhaFacil, type WorkspaceState } from './useCampanhaFacil';
 import { SeletorOperadores } from './SeletorOperadores';
-import { CampanhasLiberadas } from './CampanhasLiberadas';
-
-const VARIABLE_LABELS: [string, string][] = [
-  ['primeiro_nome', 'Primeiro nome'], ['nome', 'Nome completo'], ['cpf', 'CPF'],
-  ['empresa', 'Empresa'], ['contrato', 'Contrato'], ['parcela_desconto', 'Parcela'],
-  ['quitacao', 'Quitação'], ['valor_com_juros', 'Valor atualizado'], ['juncao', 'Junção'],
-  ['anual', 'Plano anual'], ['cartao_quitacao', '12x quitação'], ['cartao_anual', '12x anual'],
-  ['pct_atraso', '% parcela'], ['pct_quitacao', '% quitação'], ['pct_juncao', '% junção'],
-  ['pct_anual', '% anual'], ['protocolo', 'Protocolo'], ['link', 'Link'],
-];
+import { HistoricoCampanhas } from './HistoricoCampanhas';
+import { VariableChips, insertVariable } from './VariaveisMensagem';
 
 const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string][] = [
   ['overdue', 'Parcela em atraso'], ['settlement', 'Quitação'], ['interest', 'Valor com juros'],
   ['bundle', 'Junção'], ['annual', 'Anual'],
 ];
-
-function insertVariable(ref: RefObject<HTMLTextAreaElement>, value: string, setValue: (v: string) => void, variable: string) {
-  const el = ref.current;
-  const token = `{{${variable}}}`;
-  if (!el) { setValue(''); return; }
-  const start = el.selectionStart ?? el.value.length;
-  const end = el.selectionEnd ?? el.value.length;
-  const next = el.value.slice(0, start) + token + el.value.slice(end);
-  setValue(next);
-  requestAnimationFrame(() => {
-    el.focus();
-    const caret = start + token.length;
-    el.setSelectionRange(caret, caret);
-  });
-}
-
-function VariableChips({ onInsert }: { onInsert: (variable: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {VARIABLE_LABELS.map(([variable, label]) => (
-        <button
-          key={variable}
-          type="button"
-          title={`Inserir {{${variable}}}`}
-          onClick={() => onInsert(variable)}
-          className="rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
@@ -358,7 +317,7 @@ export default function CampanhaFacil() {
             </CardContent>
           </Card>
 
-          <CampanhasLiberadas envios={cf.envios} />
+          <HistoricoCampanhas envios={cf.envios} />
 
           {/* Descontos (ocultos no relatório 245) */}
           {!cf.relatorioSemValores && (

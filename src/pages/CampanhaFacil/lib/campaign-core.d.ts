@@ -95,6 +95,8 @@ export interface CampaignItem {
   phone: string;
   phoneDigits: string;
   whatsAppPhone: string;
+  /** O segundo número do relatório («Fone 2»), diferente do principal. Vazio se não houver. */
+  phone2: string;
   protocol: string;
   birthday: string;
   shortLink: string;
@@ -137,6 +139,9 @@ export interface CampaignCoreApi {
   normalizeSenders(senders: string[] | string): string[];
   buildCampaign(records: RawRecord[], options?: BuildCampaignOptions): CampaignItem[];
   campaignToCsv(items: CampaignItem[]): string;
+  /** As colunas da campanha exportada (CSV e Excel). */
+  readonly CAMPAIGN_COLUMNS: readonly string[];
+  campaignRow(item: CampaignItem): string[];
   excludedRecordsToCsv(parsed: ParsedResult): string;
   templateById(id: string): Template;
   isValidPhone(value: unknown): boolean;

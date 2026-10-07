@@ -256,16 +256,36 @@ describe('exportação do preventivo', () => {
     return CampaignCore.buildCampaign(parsed.records, { senders: ['Bianca'], template: preventivo.body });
   }
 
-  it('CSV sem campos financeiros, com WhatsApp, mensagem e responsável', () => {
+  it('CSV só com as colunas de envio (07/10/2026), sem campos financeiros', () => {
     const csv = CampaignCore.campaignToCsv(itens());
     const cabecalho = csv.split('\r\n')[0];
 
-    for (const coluna of ['NOME', 'NR. DOCUMENTO', 'EMPRESA', 'WHATSAPP', 'MENSAGEM', 'ENCAMINHADA POR']) {
-      expect(cabecalho).toContain(coluna);
-    }
+    expect(cabecalho.replace(/^\uFEFF/, '').split(';')).toEqual([
+      'NOME', 'CONTRATO (NR)', 'EMPRESA', 'WHATSAPP', 'FONE 2', 'MENSAGEM', 'ENCAMINHADA POR',
+    ]);
     for (const financeiro of ['QUITACAO', 'PARCELA', 'JUNCAO', 'ANUAL', 'CARTAO', 'VALOR']) {
       expect(cabecalho).not.toContain(financeiro);
     }
     expect(csv).toContain('37999176351');
+  });
+
+  it('Fone 2 é o segundo número do relatório, diferente do primeiro', () => {
+    const parsed = CampaignCore.parseReport245(planilha245([
+      linha245({ 'DDD 2': '18', 'Telefone 2': '997001122' }),
+      // Repetido do primeiro: não conta como segundo número.
+      linha245({ 'Nr.Documento': '2', 'DDD 2': '37', 'Telefone 2': '999176351' }),
+    ]));
+    const [a, b] = CampaignCore.buildCampaign(parsed.records, { senders: ['Bianca'], template: 'Oi' });
+    expect(a.phone).toBe('37999176351');
+    expect(a.phone2).toBe('18997001122');
+    expect(b.phone2).toBe('');
+  });
+
+  it('247: Fone 2 vem da coluna 1 quando o Whats Titular é outro número', () => {
+    const linha = [...LINHA_247];
+    linha[CAB_247.indexOf('1')] = '(99)98222-0000';
+    const parsed = CampaignCore.parseMailing(csv247([linha]));
+    const [item] = CampaignCore.buildCampaign(parsed.records, { senders: ['Bianca'], template: 'Oi' });
+    expect(item.phone2.replace(/\D/g, '')).toBe('99982220000');
   });
 });

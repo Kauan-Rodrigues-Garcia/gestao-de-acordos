@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
-import { casaNome, numeroWhatsApp, repartirPorOperador, repartirRepasse } from './envios';
+import {
+  casaNome, numeroWhatsApp, redistribuir, repartirPorOperador, repartirRepasse, type MensagemDaCampanha,
+} from './envios';
 import { rotaDaCampanhaWhatsapp, rotaDaNotificacao } from '@/lib/notificacoes-rota';
 
 const ANA = { id: 'id-ana', nome: 'Ana' };
@@ -42,6 +44,12 @@ describe('repartirPorOperador', () => {
     expect(c).not.toHaveProperty('cpf');
     expect(c.pendencias.some(p => /encaminhar/i.test(p))).toBe(false);
   });
+
+  it('leva as variáveis do modelo, sem o CPF', () => {
+    const [{ contatos: [c] }] = repartirPorOperador(campanha(1, [ANA.id]), [ANA]);
+    expect(c.variaveis).toMatchObject({ primeiro_nome: 'Cliente', contrato: 'C0' });
+    expect(c.variaveis).not.toHaveProperty('cpf');
+  });
 });
 
 describe('numeroWhatsApp', () => {
@@ -69,6 +77,45 @@ describe('repartirRepasse', () => {
 
   it('sem recebedor não repassa', () => {
     expect(repartirRepasse(contatos, [])).toEqual([]);
+  });
+});
+
+describe('redistribuir (editar a campanha)', () => {
+  const CAIO = { id: 'id-caio', nome: 'Caio' };
+  function msg(id: number, operador: string, status: MensagemDaCampanha['status'] = 'pendente'): MensagemDaCampanha {
+    return { id: `m${id}`, operador_id: operador, ordem: id, status };
+  }
+
+  it('enviadas e «não deu» ficam com o dono; os pendentes nivelam', () => {
+    // Ana já enviou 4, Bia 1 (e 1 não deu); 6 pendentes para Ana, Bia e Caio (novo).
+    const mensagens = [
+      msg(1, ANA.id, 'enviado'), msg(2, ANA.id, 'enviado'), msg(3, ANA.id, 'enviado'), msg(4, ANA.id, 'enviado'),
+      msg(5, BIA.id, 'enviado'), msg(6, BIA.id, 'nao_enviado'),
+      msg(7, ANA.id), msg(8, ANA.id), msg(9, BIA.id), msg(10, BIA.id), msg(11, BIA.id), msg(12, ANA.id),
+    ];
+    const partes = redistribuir(mensagens, [ANA, BIA, CAIO]);
+    const total = (id: string) => {
+      const p = partes.find(x => x.operador.id === id)!;
+      return p.presas + p.contatos.length;
+    };
+    expect(partes.map(p => p.presas)).toEqual([4, 2, 0]);
+    // 12 no total para 3: 4 cada. Ana já tem 4 e não recebe nada.
+    expect([total(ANA.id), total(BIA.id), total(CAIO.id)]).toEqual([4, 4, 4]);
+    expect(partes.find(p => p.operador.id === ANA.id)!.contatos).toEqual([]);
+    // Todo pendente vai para alguém, uma vez só.
+    expect(partes.flatMap(p => p.contatos).sort()).toEqual(['m10', 'm11', 'm12', 'm7', 'm8', 'm9']);
+  });
+
+  it('quem sai da lista mantém o que já enviou e perde os pendentes', () => {
+    const mensagens = [msg(1, ANA.id, 'enviado'), msg(2, ANA.id), msg(3, ANA.id)];
+    const partes = redistribuir(mensagens, [BIA]);
+    expect(partes).toHaveLength(1);
+    expect(partes[0]).toMatchObject({ presas: 0, contatos: ['m2', 'm3'] });
+  });
+
+  it('sem ninguém para receber os pendentes é erro', () => {
+    expect(() => redistribuir([msg(1, ANA.id)], [])).toThrow();
+    expect(redistribuir([msg(1, ANA.id, 'enviado')], [])).toEqual([]);
   });
 });
 

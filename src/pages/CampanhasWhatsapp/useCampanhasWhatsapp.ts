@@ -2,15 +2,21 @@
  * Campanhas de WhatsApp — o estado da aba do operador.
  *
  * As campanhas que chegaram para ele, a escolhida (pela URL: a notificação
- * traz `?envio=`), as mensagens dela e as três ações: enviar (marca enviada no
- * clique), marcar que não deu, e editar a mensagem de um contato só.
+ * traz `?envio=`), as mensagens dela e as ações: enviar (marca enviada no
+ * clique), copiar (também conta como enviada), marcar que não deu, e editar a
+ * mensagem de um contato só.
+ *
+ * O líder pode desativar ou excluir a campanha (20261007190000): o banco manda
+ * o sinal `campanhas:<operador>` e a aba aberta relê na hora — a campanha some.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { assinarTabela } from '@/lib/realtime';
+import { copiarTextoSilencioso } from '@/lib/clipboard';
 import { listarMinhasCampanhas, type EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
-import { definirStatus, editarMensagem, listarContatos } from './campanhasWhatsapp.service';
+import { CampanhaIndisponivel, definirStatus, editarMensagem, listarContatos } from './campanhasWhatsapp.service';
 import {
   contar, linkWhatsApp, textoDoContato,
   type Contato, type ModoAbrir, type StatusContato,
@@ -21,6 +27,9 @@ const CHAVE_MODO = 'campanhas-whatsapp:modo';
 function lerModo(): ModoAbrir {
   try { return localStorage.getItem(CHAVE_MODO) === 'app' ? 'app' : 'web'; } catch { return 'web'; }
 }
+
+/** Qual número abrir: o principal ou o «Fone 2». */
+export type QualNumero = 1 | 2;
 
 export function useCampanhasWhatsapp() {
   const { perfil } = useAuth();
@@ -53,6 +62,21 @@ export function useCampanhasWhatsapp() {
   }, [perfilId]);
 
   useEffect(() => { void recarregar(); }, [recarregar]);
+
+  // O líder desativou, relançou ou excluiu: relê na hora.
+  useEffect(() => {
+    if (!perfilId) return;
+    return assinarTabela(
+      { topico: `campanhas:${perfilId}`, escutas: [{ sinal: 'mudou' }] },
+      {
+        onSinal: (payload) => {
+          if (payload.operacao === 'desativada') toast.info('O líder desativou uma campanha para ajustes. Ela volta quando for liberada de novo.');
+          void recarregar();
+        },
+        onReconectado: () => { void recarregar(); },
+      },
+    );
+  }, [perfilId, recarregar]);
 
   // A escolhida: a da URL, se ainda existir; senão a mais recente.
   const pedida = params.get('envio');
@@ -99,16 +123,27 @@ export function useCampanhasWhatsapp() {
     try {
       await gravar();
     } catch (err) {
+      if (antes) setContatos((cs) => cs.map(c => (c.id === id ? antes : c)));
+      if (err instanceof CampanhaIndisponivel) {
+        toast.warning(err.message);
+        void recarregar();
+        return;
+      }
       console.error('[CampanhasWhatsapp]', err);
       toast.error(erro);
-      if (antes) setContatos((cs) => cs.map(c => (c.id === id ? antes : c)));
     }
-  }, []);
+  }, [recarregar]);
 
   const marcar = useCallback((c: Contato, status: StatusContato) => alterar(
     c.id, { status, enviado_em: status === 'enviado' ? new Date().toISOString() : null },
     () => definirStatus(c.id, status), 'Não foi possível salvar. Tente de novo.',
   ), [alterar]);
+
+  /** Copiou ou abriu o WhatsApp: está com ele, conta como enviada. */
+  const marcarEnviada = useCallback((c: Contato) => {
+    const atual = contatosRef.current.find(x => x.id === c.id) ?? c;
+    if (atual.status !== 'enviado') void marcar(atual, 'enviado');
+  }, [marcar]);
 
   /**
    * Abre a conversa com a mensagem pronta e marca como enviada — «enviado é a
@@ -117,17 +152,30 @@ export function useCampanhasWhatsapp() {
    * O WhatsApp Web abre sempre na MESMA aba (janela com nome): enviar a
    * campanha inteira não enche o navegador de abas.
    */
-  const enviar = useCallback((c: Contato) => {
-    if (!c.whatsapp) return;
-    const url = linkWhatsApp(c.whatsapp, textoDoContato(c), modo);
+  const enviar = useCallback((c: Contato, qual: QualNumero = 1) => {
+    const numero = qual === 2 ? c.whatsapp2 : c.whatsapp;
+    if (!numero) return;
+    const url = linkWhatsApp(numero, textoDoContato(c), modo);
     if (modo === 'app') {
       window.location.href = url;
     } else {
       const janela = window.open(url, 'gestao-whatsapp-web');
       janela?.focus();
     }
-    if (c.status !== 'enviado') void marcar(c, 'enviado');
-  }, [modo, marcar]);
+    marcarEnviada(c);
+  }, [modo, marcarEnviada]);
+
+  /**
+   * Para enviar à mão: a única forma de copiar a mensagem (a tela não deixa
+   * selecionar o texto), e conta como enviada — «qualquer mensagem copiada
+   * fica presa com a pessoa» (Cleber, 07/10/2026).
+   */
+  const copiar = useCallback(async (c: Contato) => {
+    const ok = await copiarTextoSilencioso(textoDoContato(c));
+    if (!ok) { toast.error('Não foi possível copiar a mensagem.'); return; }
+    toast.success('Mensagem copiada. Ela conta como enviada.');
+    marcarEnviada(c);
+  }, [marcarEnviada]);
 
   const salvarMensagem = useCallback((c: Contato, texto: string | null) => {
     const limpo = texto === null || texto.trim() === '' || texto === c.mensagem ? null : texto;
@@ -138,6 +186,6 @@ export function useCampanhasWhatsapp() {
   return {
     perfilId, carregando, campanhas, selecionada, selecionar, recarregar,
     contatos, carregandoContatos, contagem,
-    modo, setModo, enviar, marcar, salvarMensagem,
+    modo, setModo, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
   };
 }

@@ -8,8 +8,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCircle2, Clock, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
-  Globe, AlertTriangle,
+  Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
+  Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -65,7 +65,8 @@ export default function CampanhasWhatsapp() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Campanhas de WhatsApp</h1>
           <p className="text-sm text-muted-foreground">
-            As campanhas que o líder liberou para você. Cada clique em Enviar abre a conversa com a mensagem pronta.
+            As campanhas que o líder liberou para você. Enviar abre a conversa com a mensagem pronta; Copiar serve para
+            enviar à mão. As duas contam como enviada.
           </p>
         </div>
         <SeletorModo modo={w.modo} onChange={w.setModo} />
@@ -174,6 +175,8 @@ export default function CampanhasWhatsapp() {
                     <LinhaContato
                       key={c.id} c={c} proximo={c.id === proximo?.id}
                       onEnviar={() => w.enviar(c)}
+                      onEnviar2={() => w.enviar(c, 2)}
+                      onCopiar={() => void w.copiar(c)}
                       onEditar={() => setEditando(c)}
                       onNaoDeu={() => void w.marcar(c, 'nao_enviado')}
                       onVoltar={() => void w.marcar(c, 'pendente')}
@@ -198,6 +201,7 @@ export default function CampanhasWhatsapp() {
           c={editando}
           onFechar={() => setEditando(null)}
           onSalvar={async (texto) => { await w.salvarMensagem(editando, texto); setEditando(null); }}
+          onCopiou={() => w.marcarEnviada(editando)}
         />
       )}
     </div>
@@ -271,13 +275,15 @@ function Aba({ ativo, onClick, rotulo, n, icone }: {
   );
 }
 
-function LinhaContato({ c, proximo, onEnviar, onEditar, onNaoDeu, onVoltar }: {
+function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onNaoDeu, onVoltar }: {
   c: Contato; proximo: boolean;
-  onEnviar: () => void; onEditar: () => void; onNaoDeu: () => void; onVoltar: () => void;
+  onEnviar: () => void; onEnviar2: () => void; onCopiar: () => void;
+  onEditar: () => void; onNaoDeu: () => void; onVoltar: () => void;
 }) {
   const [aberta, setAberta] = useState(false);
   const texto = textoDoContato(c);
   const fone = telefoneLegivel(c.whatsapp, c.telefone);
+  const fone2 = telefoneLegivel(c.whatsapp2, c.telefone2);
   const enviado = c.status === 'enviado';
   const naoDeu = c.status === 'nao_enviado';
 
@@ -290,7 +296,7 @@ function LinhaContato({ c, proximo, onEnviar, onEditar, onNaoDeu, onVoltar }: {
       )}
     >
       <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate font-medium">{nomeBonito(c.nome) || 'Sem nome'}</p>
             {enviado && (
@@ -307,17 +313,20 @@ function LinhaContato({ c, proximo, onEnviar, onEditar, onNaoDeu, onVoltar }: {
               <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">Mensagem editada</span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {[fone || 'Sem telefone', c.contrato && `Contrato ${c.contrato}`, c.empresa_cliente].filter(Boolean).join(' · ')}
-          </p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+            <Campo rotulo="Contrato (NR)" valor={c.contrato} />
+            <Campo rotulo="Empresa" valor={c.empresa_cliente} />
+            <Campo rotulo="WhatsApp" valor={fone} />
+            <Campo rotulo="Fone 2" valor={fone2} />
+          </dl>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          {naoDeu || enviado ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          {naoDeu ? (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={onVoltar} title="Voltar para pendente">
               <Undo2 className="h-3.5 w-3.5" /> Desfazer
             </Button>
-          ) : (
+          ) : !enviado && (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={onNaoDeu}>
               <X className="h-3.5 w-3.5" /> Não deu
             </Button>
@@ -325,6 +334,20 @@ function LinhaContato({ c, proximo, onEnviar, onEditar, onNaoDeu, onVoltar }: {
           <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={onEditar}>
             <Pencil className="h-3.5 w-3.5" /> Editar
           </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onCopiar}
+            title="Copiar a mensagem para enviar à mão. Conta como enviada."
+          >
+            <Copy className="h-3.5 w-3.5" /> Copiar
+          </Button>
+          {c.whatsapp2 && (
+            <Button
+              variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onEnviar2}
+              title={`Abrir a conversa no Fone 2 (${fone2})`}
+            >
+              <Send className="h-3.5 w-3.5" /> Fone 2
+            </Button>
+          )}
           <Button
             size="sm"
             className={cn('h-8 gap-1.5 text-xs', !enviado && 'bg-emerald-600 text-white hover:bg-emerald-700')}
@@ -338,25 +361,32 @@ function LinhaContato({ c, proximo, onEnviar, onEditar, onNaoDeu, onVoltar }: {
         </div>
       </div>
 
+      {/* Só dá para copiar pelo botão Copiar: copiar conta como enviada. */}
       <button
         type="button" onClick={() => setAberta((a) => !a)}
-        className="mt-3 block w-full rounded-lg bg-muted/40 px-3 py-2.5 text-left text-sm leading-relaxed text-foreground/90 hover:bg-muted/60"
+        onCopy={(e) => e.preventDefault()}
+        className="mt-3 block w-full select-none rounded-lg bg-muted/40 px-3 py-2.5 text-left text-sm leading-relaxed text-foreground/90 hover:bg-muted/60"
         aria-expanded={aberta}
       >
         <span className={cn('whitespace-pre-wrap', !aberta && 'line-clamp-2')}>{texto || 'Mensagem vazia'}</span>
       </button>
-
-      {c.pendencias.length > 0 && (
-        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="mt-px h-3 w-3 shrink-0" /> {c.pendencias.join(' · ')}
-        </p>
-      )}
     </li>
   );
 }
 
-function DialogoEditar({ c, onFechar, onSalvar }: {
+function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{rotulo}</dt>
+      <dd className="truncate tabular-nums">{valor?.trim() || '—'}</dd>
+    </div>
+  );
+}
+
+function DialogoEditar({ c, onFechar, onSalvar, onCopiou }: {
   c: Contato; onFechar: () => void; onSalvar: (texto: string | null) => Promise<void>;
+  /** Copiou o texto da caixa: conta como enviada, igual ao botão Copiar. */
+  onCopiou: () => void;
 }) {
   const [texto, setTexto] = useState(textoDoContato(c));
   const [salvando, setSalvando] = useState(false);
@@ -374,10 +404,12 @@ function DialogoEditar({ c, onFechar, onSalvar }: {
           <DialogTitle>Editar mensagem</DialogTitle>
           <DialogDescription>
             Só para {nomeBonito(c.nome) || 'este contato'}. As outras mensagens da campanha não mudam.
+            Copiar o texto daqui conta como enviada.
           </DialogDescription>
         </DialogHeader>
         <Textarea
           value={texto} onChange={(e) => setTexto(e.target.value)}
+          onCopy={onCopiou} onCut={onCopiou}
           rows={9} className="resize-y text-sm leading-relaxed" autoFocus
         />
         <DialogFooter className="gap-2 sm:justify-between">

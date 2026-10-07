@@ -757,7 +757,7 @@ Contrato: *{{contrato}}*
 
     const headers = [
       "Código", "Nome", "CPF", "Contratos", "Parcelas em atraso", "Protesto",
-      "Valor", "Valor Aberto", "Valor Atualizado", "Tp. Venda", "1",
+      "Valor", "Valor Aberto", "Valor Atualizado", "Tp. Venda", "1", "2",
       "Whats Titular", "Aniversariante", "Operador",
     ];
     const stats = estatisticasVazias();
@@ -796,6 +796,11 @@ Contrato: *{{contrato}}*
       const clientName = reportValue(row, "Cliente");
       const contract = reportValue(row, "Nr.Documento");
       const phone = combineReportPhone(reportValue(row, "DDD 1"), reportValue(row, "Telefone 1"));
+      // O «Fone 2» da campanha: o primeiro dos outros números (DDD 2..5 +
+      // Telefone 2..5) que seja telefone de verdade e diferente do primeiro.
+      const phone2 = [2, 3, 4, 5]
+        .map((n) => combineReportPhone(reportValue(row, `DDD ${n}`), reportValue(row, `Telefone ${n}`)))
+        .find((p) => isValidPhone(p) && phoneForWhatsApp(p) !== phoneForWhatsApp(phone)) || "";
       // Só o que o preventivo usa: nome, contrato, empresa e WhatsApp. Os
       // valores do arquivo ficam de fora — a campanha não fala de dinheiro.
       const values = {
@@ -810,6 +815,7 @@ Contrato: *{{contrato}}*
         "Valor Atualizado": "",
         "Tp. Venda": reportValue(row, "Empresa"),
         "1": phone,
+        "2": phone2,
         "Whats Titular": phone,
         "Aniversariante": "",
         "Operador": "",
@@ -1053,6 +1059,9 @@ Contrato: *{{contrato}}*
     const phone1 = getField(record, "1");
     const phone2 = getField(record, "2");
     const contact = [whats, phone1, phone2].find(isValidPhone) || whats || phone1 || phone2;
+    // O segundo número: o próximo válido que não seja o mesmo do principal.
+    const secondPhone = [whats, phone1, phone2]
+      .find((p) => isValidPhone(p) && phoneForWhatsApp(p) !== phoneForWhatsApp(contact)) || "";
 
     const discountFields = {
       overdue: { label: "Desconto da parcela", value: discounts.overdue },
@@ -1145,6 +1154,7 @@ Contrato: *{{contrato}}*
       phone: contact,
       phoneDigits: phoneDigits(contact),
       whatsAppPhone: phoneForWhatsApp(contact),
+      phone2: secondPhone,
       protocol: getField(record, "Código") || contract,
       birthday: getField(record, "Aniversariante"),
       shortLink: getField(record, "Link curto"),
@@ -1256,58 +1266,22 @@ Contrato: *{{contrato}}*
     return `\uFEFF${[headers, ...rows].map((row) => row.map(safeCsvCell).join(";")).join("\r\n")}`;
   }
 
-  function campaignToCsv(items) {
-    const hasReview = items.some((item) => item.status !== "Pronto" || item.issues.length > 0);
-    const relatorioSemValoresCampaign = items.length > 0
-      && items.every((item) => item.sourceType === "report-245");
-    if (relatorioSemValoresCampaign) {
-      // Nenhum campo financeiro, mas COM o WhatsApp — sem o número a campanha
-      // preventiva não tem como ser enviada.
-      const headers = [
-        "NOME",
-        "NR. DOCUMENTO",
-        "EMPRESA",
-        ...(hasReview ? ["STATUS", "PENDÊNCIAS"] : []),
-        "WHATSAPP",
-        "MENSAGEM",
-        "ENCAMINHADA POR",
-      ];
-      const rows = items.map((item) => {
-        const row = [item.name, item.contract, item.company];
-        if (hasReview) row.push(item.status === "Pronto" ? "" : "Revisar", item.issues.join(", "));
-        row.push(item.phone, item.message, item.sender);
-        return row;
-      });
-      return `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
-    }
+  /**
+   * As colunas da campanha exportada (Cleber, 07/10/2026): só o que o operador
+   * usa para enviar. CPF, valores, STATUS e PENDÊNCIAS saíram — a mensagem já
+   * leva os valores. Mesma lista do Excel (`xlsx-export.js`).
+   */
+  const CAMPAIGN_COLUMNS = Object.freeze([
+    "NOME", "CONTRATO (NR)", "EMPRESA", "WHATSAPP", "FONE 2", "MENSAGEM", "ENCAMINHADA POR",
+  ]);
 
-    const headers = [
-      "NOME", "CPF", "CONTRATO", "EMPRESA", "QTD_ATRASO",
-      "PARCELA_COM_DESCONTO", "QUITACAO", "VALOR_COM_JUROS", "JUNCAO", "ANUAL",
-      "CARTAO_12X_QUITACAO", "CARTAO_12X_ANUAL",
-      ...(hasReview ? ["STATUS", "PENDENCIAS"] : []),
-      "WHATSAPP", "MENSAGEM", "ENCAMINHADA_POR",
-    ];
-    const rows = items.map((item) => {
-      const row = [
-        item.name,
-        item.cpf,
-        item.contract,
-        item.company,
-        item.overdueCount,
-        formatCurrency(item.overdueDiscounted),
-        formatCurrency(item.settlement),
-        formatCurrency(item.valueWithInterest),
-        formatCurrency(item.bundle),
-        formatCurrency(item.annual),
-        formatCurrency(item.cardSettlement),
-        formatCurrency(item.cardAnnual),
-      ];
-      if (hasReview) row.push(item.status === "Pronto" ? "" : "Revisar", item.issues.join(", "));
-      row.push(item.phone, item.message, item.sender);
-      return row;
-    });
-    return `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
+  function campaignRow(item) {
+    return [item.name, item.contract, item.company, item.phone, item.phone2 || "", item.message, item.sender];
+  }
+
+  function campaignToCsv(items) {
+    const rows = items.map(campaignRow);
+    return `﻿${[CAMPAIGN_COLUMNS, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
   }
 
   function templateById(id) {
@@ -1339,6 +1313,8 @@ Contrato: *{{contrato}}*
     normalizeSenders,
     buildCampaign,
     campaignToCsv,
+    CAMPAIGN_COLUMNS,
+    campaignRow,
     excludedRecordsToCsv,
     templateById,
     isValidPhone,

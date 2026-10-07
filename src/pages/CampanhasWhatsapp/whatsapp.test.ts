@@ -3,7 +3,7 @@ import { contar, filtrar, linkWhatsApp, proximoPendente, telefoneLegivel, textoD
 
 const base: Contato = {
   id: '1', envio_id: 'e', ordem: 1, nome: 'MARIA SILVA', contrato: '123', empresa_cliente: 'Coren',
-  telefone: '18 99999-9999', whatsapp: '5518999999999', mensagem: 'Olá Maria', mensagem_editada: null,
+  telefone: '18 99999-9999', whatsapp: '5518999999999', telefone2: null, whatsapp2: null, mensagem: 'Olá Maria', mensagem_editada: null,
   pendencias: [], status: 'pendente', enviado_em: null,
 };
 

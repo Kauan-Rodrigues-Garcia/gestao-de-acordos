@@ -41,48 +41,13 @@
   }
 
   function buildCampaignSheet(items) {
-    const hasReview = items.some((item) => item.status !== "Pronto" || item.issues.length > 0);
-    const compactReport = items.length > 0 && items.every(
-      (item) => item.financialDataAvailable === false || item.sourceType === "report-245",
-    );
-    const headers = compactReport
-      // Sem nenhum campo financeiro — mas COM o WhatsApp, montado por DDD 1 +
-      // Telefone 1. Ele faltava aqui, e sem o número a planilha do preventivo
-      // não servia para enviar nada.
-      ? [
-        "NOME",
-        "NR. DOCUMENTO",
-        "EMPRESA",
-        ...(hasReview ? ["STATUS", "PENDÊNCIAS"] : []),
-        "WHATSAPP",
-        "MENSAGEM",
-        "ENCAMINHADA POR",
-      ]
-      : [
-        "NOME",
-        "CPF",
-        "CONTRATO",
-        "EMPRESA",
-        "QTD. ATRASO",
-        "PARCELA COM DESCONTO",
-        "QUITAÇÃO",
-        "VALOR COM JUROS",
-        "JUNÇÃO",
-        "ANUAL",
-        "CARTÃO 12X QUITAÇÃO",
-        "CARTÃO 12X ANUAL",
-        ...(hasReview ? ["STATUS", "PENDÊNCIAS"] : []),
-        "WHATSAPP",
-        "MENSAGEM",
-        "ENCAMINHADA POR",
-      ];
-    const widths = compactReport
-      ? [31, 18, 23, ...(hasReview ? [13, 29] : []), 19, 86, 25]
-      : [
-        31, 16, 15, 23, 13, 22, 16, 19, 15, 15, 23, 20,
-        ...(hasReview ? [13, 29] : []),
-        19, 86, 25,
-      ];
+    // As colunas que a operação usa para enviar (Cleber, 07/10/2026): nome,
+    // contrato, empresa, os dois números, a mensagem e quem encaminha. CPF,
+    // valores, STATUS e PENDÊNCIAS saíram — a mensagem já leva os valores.
+    // Mesma lista do CSV (`CAMPAIGN_COLUMNS` em campaign-core.js).
+    const headers = ["NOME", "CONTRATO (NR)", "EMPRESA", "WHATSAPP", "FONE 2", "MENSAGEM", "ENCAMINHADA POR"];
+    const widths = [31, 18, 23, 19, 19, 86, 25];
+    const styles = [2, 2, 2, 2, 2, 7, 8];
     const columns = widths
       .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
       .join("");
@@ -92,49 +57,8 @@
 
     items.forEach((item, itemIndex) => {
       const rowNumber = itemIndex + 2;
-      if (compactReport) {
-        const cells = [item.name, item.contract, item.company]
-          .map((value, index) => inlineCell(`${columnLetter(index)}${rowNumber}`, value, 2));
-        let columnIndex = 3;
-        if (hasReview) {
-          const visibleStatus = item.status === "Pronto" ? "" : "Revisar";
-          cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, visibleStatus, item.status === "Pronto" ? 2 : 6));
-          columnIndex += 1;
-          cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.issues.join(", "), 2));
-          columnIndex += 1;
-        }
-        cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.phone, 2));
-        columnIndex += 1;
-        cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.message, 7));
-        columnIndex += 1;
-        cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.sender, 8));
-        rows.push(buildRow(rowNumber, cells, 30));
-        return;
-      }
-
-      const textValues = [
-        item.name,
-        item.cpf,
-        item.contract,
-        item.company,
-      ];
-      const cells = textValues.map((value, index) => inlineCell(`${columnLetter(index)}${rowNumber}`, value, 2));
-      cells.push(numericCell(`E${rowNumber}`, item.overdueCount, 4));
-      [item.overdueDiscounted, item.settlement, item.valueWithInterest, item.bundle, item.annual, item.cardSettlement, item.cardAnnual]
-        .forEach((value, index) => cells.push(numericCell(`${columnLetter(index + 5)}${rowNumber}`, value, 3)));
-      let columnIndex = 12;
-      if (hasReview) {
-        const visibleStatus = item.status === "Pronto" ? "" : "Revisar";
-        cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, visibleStatus, item.status === "Pronto" ? 2 : 6));
-        columnIndex += 1;
-        cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.issues.join(", "), 2));
-        columnIndex += 1;
-      }
-      cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.phone, 2));
-      columnIndex += 1;
-      cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.message, 7));
-      columnIndex += 1;
-      cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.sender, 8));
+      const values = [item.name, item.contract, item.company, item.phone, item.phone2 || "", item.message, item.sender];
+      const cells = values.map((value, index) => inlineCell(`${columnLetter(index)}${rowNumber}`, value, styles[index]));
       rows.push(buildRow(rowNumber, cells, 30));
     });
 

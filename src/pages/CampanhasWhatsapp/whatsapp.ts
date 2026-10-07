@@ -14,6 +14,9 @@ export interface Contato {
   empresa_cliente: string | null;
   telefone: string | null;
   whatsapp: string | null;
+  /** O segundo número do relatório («Fone 2»). Migration 20261007190000. */
+  telefone2: string | null;
+  whatsapp2: string | null;
   mensagem: string;
   mensagem_editada: string | null;
   pendencias: string[];
@@ -80,6 +83,7 @@ export function filtrar<T extends Contato>(contatos: readonly T[], filtro: Filtr
     if (!b) return true;
     return SEM_ACENTO(c.nome).includes(b)
       || SEM_ACENTO(c.contrato ?? '').includes(b)
-      || (digitos.length >= 4 && String(c.whatsapp ?? c.telefone ?? '').replace(/\D/g, '').includes(digitos));
+      || (digitos.length >= 4 && [c.whatsapp ?? c.telefone, c.whatsapp2 ?? c.telefone2]
+        .some((num) => String(num ?? '').replace(/\D/g, '').includes(digitos)));
   });
 }
