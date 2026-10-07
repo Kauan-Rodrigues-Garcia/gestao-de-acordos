@@ -1,5 +1,5 @@
 /**
- * As chaves dos avisos da equipe — `fn_push_minhas_preferencias` e
+ * As chaves dos avisos da equipe e do setor — `fn_push_minhas_preferencias` e
  * `fn_push_definir_preferencia` (migration 20260930195304). Por pessoa, não
  * por aparelho.
  *
@@ -11,13 +11,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 
-export type ChaveAviso = 'resumo_equipe' | 'metas_operadores' | 'meta_equipe';
+export type ChaveAviso =
+  | 'resumo_equipe' | 'metas_operadores' | 'meta_equipe'
+  // Gerência (20261007120000): começam ligadas.
+  | 'setor_meta' | 'setor_metas_equipes' | 'setor_metas_operadores' | 'setor_resumo';
 
 export interface PreferenciasEquipe {
   fixo: boolean;
   resumo_equipe: boolean;
   metas_operadores: boolean;
   meta_equipe: boolean;
+  /** Cuida de um setor: recebe os avisos do setor. */
+  gerencia: boolean;
+  setor_meta: boolean;
+  setor_metas_equipes: boolean;
+  setor_metas_operadores: boolean;
+  setor_resumo: boolean;
 }
 
 const CHAVE = ['push-preferencias-equipe'] as const;
@@ -37,6 +46,12 @@ export function usePreferenciasEquipe(ativo: boolean) {
         resumo_equipe: data?.resumo_equipe === true,
         metas_operadores: data?.metas_operadores === true,
         meta_equipe: data?.meta_equipe === true,
+        gerencia: data?.gerencia === true,
+        // Sem resposta (banco sem a migration da gerência): ligadas, o padrão.
+        setor_meta: data?.setor_meta !== false,
+        setor_metas_equipes: data?.setor_metas_equipes !== false,
+        setor_metas_operadores: data?.setor_metas_operadores !== false,
+        setor_resumo: data?.setor_resumo !== false,
       };
     },
   });

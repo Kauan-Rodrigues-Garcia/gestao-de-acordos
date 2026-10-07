@@ -19,6 +19,13 @@
  * que alcançou a meta e cada operador que alcançou faixa nova — para a pessoa e
  * para quem lidera. Migrations 20260930192744 e 20260930195304.
  *
+ * `{ acao: 'resumo_setores' }` — o pg_cron chama no minuto 10 de cada hora
+ * (fn_push_setores_disparar): para a GERÊNCIA, o setor que alcançou a meta e o
+ * resumo do setor. Na rodada das metas, o gerente também recebe a equipe e as
+ * pessoas do setor que alcançaram meta. Migration 20261007120000.
+ *
+ * Regra Cofen: todo valor sai só em H.O. (06/10/2026).
+ *
  * `{ acao: 'chat' }` — o gatilho de `chat_mensagens` chama na hora em que a
  * mensagem chega (migration 20261005235000). Um aviso por pessoa e conversa,
  * só para quem não está online no gestão; o aviso novo substitui o anterior da
@@ -36,9 +43,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
 import {
-  montarAvisos, montarAvisosChat, montarAvisosDeSaida, montarAvisosMetaEquipe, montarAvisosMetaOperador, montarResumosEquipe,
-  type Aviso, type AvisosDaPessoa, type EquipeNaMeta, type ItemChat, type ItemFila, type ItemSaida,
-  type OperadorNaMeta, type PessoaLote, type PessoaSaida, type ResumoEquipe,
+  montarAvisos, montarAvisosChat, montarAvisosDeSaida, montarAvisosMetaEquipe, montarAvisosMetaEquipeGerencia,
+  montarAvisosMetaOperador, montarAvisosMetaOperadorGerencia, montarAvisosMetaSetor, montarResumosEquipe,
+  montarResumosSetor,
+  type Aviso, type AvisosDaPessoa, type EquipeNaMeta, type GerenteDaEquipe, type ItemChat, type ItemFila,
+  type ItemSaida, type OperadorNaMeta, type PessoaLote, type PessoaSaida, type ResumoEquipe, type ResumoSetor,
+  type SetorNaMeta,
 } from './texto.ts';
 
 const CORS = {
@@ -114,11 +124,49 @@ async function rodadaMetas(admin: ReturnType<typeof createClient>) {
   const equipes = r.equipes ?? [];
   const operadores = r.operadores ?? [];
   if (!equipes.length && !operadores.length) return { equipes: 0, operadores: 0, avisos: 0 };
+  const gerencia = await gerentesDasMetas(admin, equipes, operadores);
   const { avisos } = await entregar(admin, [
     ...montarAvisosMetaOperador(operadores),
     ...montarAvisosMetaEquipe(equipes),
+    ...montarAvisosMetaEquipeGerencia(equipes, gerencia.equipes),
+    ...montarAvisosMetaOperadorGerencia(operadores, gerencia.operadores),
   ]);
   return { equipes: equipes.length, operadores: operadores.length, avisos };
+}
+
+/**
+ * O gerente do setor de cada equipe da rodada, por chave — 20261007120000.
+ * Sem a migration a RPC não existe: o líder e a pessoa recebem como antes.
+ */
+async function gerentesDasMetas(
+  admin: ReturnType<typeof createClient>, equipes: EquipeNaMeta[], operadores: OperadorNaMeta[],
+): Promise<{ equipes: GerenteDaEquipe[]; operadores: GerenteDaEquipe[] }> {
+  const ler = async (ids: string[], chave: string): Promise<GerenteDaEquipe[]> => {
+    if (!ids.length) return [];
+    const { data, error } = await admin.rpc('fn_push_gerentes_das_equipes', { p_equipes: ids, p_chave: chave });
+    if (error) { console.error('[enviar-push] gerentes', error.message); return []; }
+    return (data ?? []) as GerenteDaEquipe[];
+  };
+  const idsOperadores = [...new Set(operadores.flatMap(o => (o.equipes ?? []).map(e => e.equipe_id)))];
+  return {
+    equipes: await ler(equipes.map(e => e.equipe_id), 'setor_metas_equipes'),
+    operadores: await ler(idsOperadores, 'setor_metas_operadores'),
+  };
+}
+
+/**
+ * A rodada da gerência (minuto 10 de cada hora): o setor que alcançou a meta e
+ * o resumo de cada setor — fn_push_rodada_setores (20261007120000).
+ */
+async function rodadaSetores(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc('fn_push_rodada_setores');
+  if (error) return { erro: error.message };
+  const r = (data ?? {}) as { metas?: SetorNaMeta[]; resumos?: ResumoSetor[] };
+  const metas = r.metas ?? [];
+  const resumos = r.resumos ?? [];
+  if (!metas.length && !resumos.length) return { metas: 0, resumos: 0, avisos: 0 };
+  const { avisos } = await entregar(admin, [...montarAvisosMetaSetor(metas), ...montarResumosSetor(resumos)]);
+  return { metas: metas.length, resumos: resumos.length, avisos };
 }
 
 /** O resumo por hora do recebido de cada equipe. */
@@ -246,15 +294,18 @@ Deno.serve(async (req) => {
       .from('push_inscricoes').select('id, endpoint, p256dh, auth').eq('perfil_id', user.id);
     if (erroLeitura) return resposta(500, { error: erroLeitura.message });
 
-    // Ativado na tela da equipe (o líder não recebe aviso de pagamento próprio).
-    const daEquipe = corpo.contexto === 'equipe';
+    // Ativado na tela da equipe ou do setor (quem lidera ou cuida do setor não
+    // recebe aviso de pagamento próprio).
+    const contexto = corpo.contexto === 'equipe' || corpo.contexto === 'setor' ? corpo.contexto : null;
     const r = await enviarPara(admin, (data ?? []) as Inscricao[], {
       titulo: 'Avisos ativados',
-      corpo: daEquipe
-        ? 'Você vai receber os avisos da equipe neste aparelho.'
-        : 'Você vai ser avisado a cada pagamento que cair.',
+      corpo: contexto === 'setor'
+        ? 'Você vai receber os avisos do setor neste aparelho.'
+        : contexto === 'equipe'
+          ? 'Você vai receber os avisos da equipe neste aparelho.'
+          : 'Você vai ser avisado a cada pagamento que cair.',
       tag: 'teste',
-      url: daEquipe ? '/#/m/equipe' : '/#/m',
+      url: contexto === 'setor' ? '/#/m/setor' : contexto === 'equipe' ? '/#/m/equipe' : '/#/m',
     });
     return resposta(200, r);
   }
@@ -281,6 +332,14 @@ Deno.serve(async (req) => {
     });
     if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
     return resposta(200, await rodadaResumoEquipes(admin));
+  }
+
+  if (corpo.acao === 'resumo_setores') {
+    const { data: confere } = await admin.rpc('fn_push_segredo_confere', {
+      p_segredo: req.headers.get('x-push-segredo'),
+    });
+    if (confere !== true) return resposta(401, { error: 'Não autorizado.' });
+    return resposta(200, await rodadaSetores(admin));
   }
 
   return resposta(400, { error: 'Ação desconhecida.' });

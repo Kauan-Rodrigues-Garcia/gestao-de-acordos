@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { ROUTE_PATHS } from '@/lib/index';
 import { ehSuperAdmin } from '@/lib/mobile/preferencia';
-import { acessoDasVisoes, rotaDaVisao } from '@/lib/mobile/visoes';
+import { acessoDasVisoes, ehGerencia, rotaDaVisao } from '@/lib/mobile/visoes';
 import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
@@ -31,6 +31,7 @@ import { useTelaSetor } from './useTelaSetor';
 import { AbaSetor } from './AbaSetor';
 import { AbaQuartisSetor } from './AbaQuartisSetor';
 import { EquipesRecolhiveis } from './EquipesRecolhiveis';
+import { AvisosDoSetor } from './AvisosDoSetor';
 import { hojeDoConjunto } from './contas';
 import '../equipe/equipe.css';
 import './setor.css';
@@ -142,7 +143,14 @@ function TelaDoSetor() {
             {aba === 'setor' && (
               <AbaSetor nome={tela.setor!.nome} recebido={tela.recebido} ritmo={tela.ritmo} emHO={tela.emHO}
                 cofen={cofen} equipes={tela.equipes} linhasSetor={tela.linhasSetor}
-                escopoSetor={cofen ? null : tela.escopoSetor} hojeISO={tela.hojeISO} rodape={rodape} />
+                escopoSetor={cofen ? null : tela.escopoSetor} hojeISO={tela.hojeISO}
+                rodape={<>
+                  {/* Os avisos do setor são da gerência (06/10/2026). */}
+                  {ehGerencia(perfil?.perfil) && (
+                    <AvisosDoSetor empresaId={tela.empresaId} onInstalar={() => setPassoIPhone(true)} />
+                  )}
+                  {rodape}
+                </>} />
             )}
             {aba === 'quartis' && <AbaQuartisSetor nome={tela.setor!.nome} equipes={tela.equipes} emHO={tela.emHO} />}
             {aba === 'grafico' && tela.escopoSetor && (

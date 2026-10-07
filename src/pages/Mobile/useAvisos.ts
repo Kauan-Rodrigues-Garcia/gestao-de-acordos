@@ -5,7 +5,7 @@ import {
   ativarPush, desativarPush, estadoPush, lerAmbientePush, type EstadoPush,
 } from '@/lib/mobile/push';
 
-export function useAvisos(empresaId: string | null, contexto?: 'equipe') {
+export function useAvisos(empresaId: string | null, contexto?: 'equipe' | 'setor') {
   const [estado, setEstado] = useState<EstadoPush>('desligado');
   const [ocupado, setOcupado] = useState(false);
 

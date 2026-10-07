@@ -93,6 +93,8 @@ export interface ItemFila {
   id: number;
   perfil_id: string;
   valor: number | string;
+  /** H.O. do pagamento (a parte da regra Cofen). Ausente em fila antiga. */
+  valor_ho?: number | string | null;
   forma_pagamento: string;
   forma_detalhe: string | null;
   nome_cliente: string | null;
@@ -115,6 +117,18 @@ export interface AvisosDaPessoa {
 
 const brl = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+/**
+ * Regra Cofen: todo aviso sai SÓ em H.O., dito com clareza («R$ 226,00 em
+ * H.O.»), sem o bruto (Cleber, 06/10/2026). `emHO` vem do banco, pela regra
+ * do setor da pessoa.
+ */
+export const naUnidade = (v: number, emHO: boolean) => `${brl(v)}${emHO ? ' em H.O.' : ''}`;
+
+/** O valor do pagamento na unidade da pessoa: o H.O. no Cofen. */
+function valorDoItem(i: Pick<ItemFila, 'valor' | 'valor_ho'>, emHO: boolean): number {
+  return Number(emHO ? i.valor_ho : i.valor) || 0;
+}
 
 /** Singular e plural de cada forma, para o resumo. */
 const NOMES: Record<string, [string, string]> = {
@@ -141,9 +155,12 @@ function clienteENr(nome: string | null, codigo: string | null | undefined): str
  *   Maria S. · NR 12345
  *   Pix · R$ 350,00
  */
-export function linhasDoPagamento(i: Pick<ItemFila, 'valor' | 'forma_pagamento' | 'forma_detalhe' | 'nome_cliente' | 'codigo'>): string {
+export function linhasDoPagamento(
+  i: Pick<ItemFila, 'valor' | 'valor_ho' | 'forma_pagamento' | 'forma_detalhe' | 'nome_cliente' | 'codigo'>,
+  emHO = false,
+): string {
   const f = formaDoPagamento(i.forma_pagamento, i.forma_detalhe);
-  return `${clienteENr(i.nome_cliente, i.codigo)}\n${f.rotulo} · ${brl(Number(i.valor) || 0)}`;
+  return `${clienteENr(i.nome_cliente, i.codigo)}\n${f.rotulo} · ${naUnidade(valorDoItem(i, emHO), emHO)}`;
 }
 
 /** Quantas faixas estão batidas com `valor`. Degraus em ordem (1ª, 2ª…). */
@@ -155,8 +172,8 @@ export function faixasBatidas(valor: number, degraus: number[]): number {
  * Os avisos de PAGAMENTO de um lote, por pessoa — spec §4:
  *   • até `corte` pagamentos: um aviso cada;
  *   • acima: um resumo com o total, as formas e o recebido do mês.
- * O valor do pagamento é BRUTO (o que o cliente pagou); o «no mês» está na
- * unidade do Dashboard (H.O. na PaguePlay) — vem pronto do banco.
+ * O valor do pagamento é o BRUTO (o que o cliente pagou) — na regra Cofen, só
+ * o H.O. (06/10/2026). O «no mês» está na mesma unidade e vem pronto do banco.
  *
  * A meta alcançada saiu daqui (20260930195304): é conferida por estado no
  * banco, para avisar também quem lidera — ver `montarAvisosMetaOperador`.
@@ -174,18 +191,19 @@ export function montarAvisos(
   const saida: AvisosDaPessoa[] = [];
   for (const [perfilId, lista] of porPessoa) {
     const avisos: Aviso[] = [];
+    const emHO = pessoas[perfilId]?.em_ho === true;
     if (lista.length <= corte) {
       for (const i of lista) {
         avisos.push({
           titulo: 'Pagamento recebido',
-          corpo: linhasDoPagamento(i),
+          corpo: linhasDoPagamento(i, emHO),
           tag: `pgto:${i.id}`,
           url: '/#/m?novos=1',
           icone: 'pagamento',
         });
       }
     } else {
-      const total = lista.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+      const total = lista.reduce((s, i) => s + valorDoItem(i, emHO), 0);
       const contagem = new Map<string, number>();
       for (const i of lista) {
         const c = formaDoPagamento(i.forma_pagamento, i.forma_detalhe).chave;
@@ -196,10 +214,10 @@ export function montarAvisos(
         .map(([c, n]) => `${n} ${(NOMES[c] ?? [c, c])[n === 1 ? 0 : 1]}`)
         .join(', ');
       const p = pessoas[perfilId];
-      const noMes = p ? `\nNo mês: ${brl(Number(p.depois) || 0)}` : '';
+      const noMes = p ? `\nNo mês: ${naUnidade(Number(p.depois) || 0, emHO)}` : '';
       avisos.push({
         titulo: `${lista.length} pagamentos recebidos`,
-        corpo: `${brl(total)} · ${formas}${noMes}`,
+        corpo: `${naUnidade(total, emHO)} · ${formas}${noMes}`,
         tag: `lote:${perfilId}:${lista[0].id}`,
         url: '/#/m?novos=1',
         icone: 'pagamento',
@@ -248,25 +266,25 @@ export function montarAvisosDeSaida(
   const saida: AvisosDaPessoa[] = [];
   for (const [perfilId, lista] of porPessoa) {
     const p = pessoas[perfilId];
-    const rotuloHoje = p?.em_ho ? 'Recebido hoje (H.O.)' : 'Recebido hoje';
-    const hoje = p ? `\n${rotuloHoje}: ${brl(Number(p.hoje) || 0)}` : '';
+    const emHO = p?.em_ho === true;
+    const hoje = p ? `\nRecebido hoje: ${naUnidade(Number(p.hoje) || 0, emHO)}` : '';
     const avisos: Aviso[] = [];
     if (lista.length <= corte) {
       for (const i of lista) {
         avisos.push({
           titulo: 'Pagamento retirado do recebimento',
-          corpo: `${clienteENr(i.nome_cliente, i.codigo)} · ${brl(Number(i.valor) || 0)}${hoje}`,
+          corpo: `${clienteENr(i.nome_cliente, i.codigo)} · ${naUnidade(valorDoItem(i, emHO), emHO)}${hoje}`,
           tag: `saida:${i.id}`,
           url: '/#/m',
           icone: 'saida',
         });
       }
     } else {
-      const total = lista.reduce((s, i) => s + (Number(i.valor) || 0), 0);
-      const noMes = p ? ` · no mês: ${brl(Number(p.mes) || 0)}` : '';
+      const total = lista.reduce((s, i) => s + valorDoItem(i, emHO), 0);
+      const noMes = p ? ` · no mês: ${naUnidade(Number(p.mes) || 0, emHO)}` : '';
       avisos.push({
         titulo: `${lista.length} pagamentos retirados do recebimento`,
-        corpo: `${brl(total)} no total${hoje}${noMes}`,
+        corpo: `${naUnidade(total, emHO)} no total${hoje}${noMes}`,
         tag: `saidas:${perfilId}:${lista[0].id}`,
         url: '/#/m',
         icone: 'saida',
@@ -403,8 +421,10 @@ export interface ResumoEquipe {
   novo: number | string;
   /** Quantos pagamentos entraram (pode ser 0 quando só o valor mudou). */
   qtd_novos: number | string;
-  /** Recebido da equipe hoje (bruto, como a aba Hoje). */
+  /** Recebido da equipe hoje (bruto, como a aba Hoje; H.O. na regra Cofen). */
   hoje: number | string;
+  /** Equipe de setor Cofen: `novo` e `hoje` já vêm em H.O. */
+  em_ho?: boolean;
   /** Hora do resumo anterior de hoje; `null` = o primeiro do dia. */
   desde: string | null;
   ate: string;
@@ -439,14 +459,201 @@ export function montarResumosEquipe(itens: ResumoEquipe[]): AvisosDaPessoa[] {
     const de = r.desde ? horaCheia(r.desde) : null;
     const janela = de && de !== ate ? `das ${de} às ${ate}` : `até as ${ate}`;
     const quantos = qtd === 1 ? '1 pagamento' : qtd > 1 ? `${qtd} pagamentos` : 'Recebido';
+    const emHO = r.em_ho === true;
     const aviso: Aviso = {
-      titulo: `${r.equipe_nome} · ${brl(novo)}`,
-      corpo: `${quantos} ${janela}\nRecebido hoje: ${brl(Number(r.hoje) || 0)}`,
+      titulo: `${r.equipe_nome} · ${naUnidade(novo, emHO)}`,
+      corpo: `${quantos} ${janela}\nRecebido hoje: ${naUnidade(Number(r.hoje) || 0, emHO)}`,
       tag: `resumo-equipe:${r.equipe_id}:${r.dia}:${ate}`,
       url: `/#/m/equipe?equipe=${r.equipe_id}&aba=hoje`,
       icone: 'resumo',
     };
     for (const id of new Set(r.destinatarios)) saida.add(id, aviso);
+  }
+  return saida.lista();
+}
+
+// ── Avisos da GERÊNCIA (20261007120000) ─────────────────────────────────────
+//
+// O gerente acompanha o setor que cuida. Quatro avisos, cada um com interruptor
+// (começam ligados); tocar abre a tela do setor (`/m/setor`). Na regra Cofen,
+// valores só em H.O.
+
+/** O gerente do setor de uma equipe — `fn_push_gerentes_das_equipes`. */
+export interface GerenteDaEquipe {
+  equipe_id: string;
+  setor_id: string;
+  setor_nome: string;
+  perfil_id: string;
+}
+
+/** Um setor que acabou de alcançar a meta do mês — `fn_push_rodada_setores`. */
+export interface SetorNaMeta {
+  setor_id: string;
+  setor_nome: string;
+  mes: string;
+  /** Regra Cofen: `total` em H.O. */
+  em_ho: boolean;
+  total: number | string;
+  destinatarios: string[];
+}
+
+/** O recebido de um setor desde o último resumo — `fn_push_rodada_setores`. */
+export interface ResumoSetor {
+  setor_id: string;
+  setor_nome: string;
+  dia: string;
+  /** Regra Cofen: `novo` e `hoje` em H.O. (relatório de conciliação). */
+  em_ho: boolean;
+  novo: number | string;
+  qtd_novos: number | string;
+  hoje: number | string;
+  /** Hora do resumo anterior de hoje; `null` = o primeiro do dia. */
+  desde: string | null;
+  ate: string;
+  destinatarios: string[];
+}
+
+/** Uma etiqueta curta e estável para um conjunto (a etiqueta do aviso). */
+function etiquetaCurta(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ *   Play 1 alcançou a meta do mês
+ *   Parabéns! R$ 420.312,00 no mês.
+ */
+export function montarAvisosMetaSetor(setores: SetorNaMeta[]): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const s of setores) {
+    const aviso: Aviso = {
+      titulo: `${s.setor_nome} alcançou a meta do mês`,
+      corpo: `Parabéns! ${naUnidade(Number(s.total) || 0, s.em_ho === true)} no mês.`,
+      tag: `meta-setor:${s.setor_id}:${s.mes}`,
+      url: '/#/m/setor',
+      icone: 'meta',
+    };
+    for (const id of new Set(s.destinatarios ?? [])) saida.add(id, aviso);
+  }
+  return saida.lista();
+}
+
+/**
+ * A equipe do setor que alcançou a meta, para o gerente:
+ *
+ *   Equipe Bryan alcançou a meta
+ *   Play 1 · meta do mês concluída
+ */
+export function montarAvisosMetaEquipeGerencia(
+  equipes: EquipeNaMeta[], gerentes: GerenteDaEquipe[],
+): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const e of equipes) {
+    for (const g of gerentes) {
+      if (g.equipe_id !== e.equipe_id) continue;
+      saida.add(g.perfil_id, {
+        titulo: `${e.equipe_nome} alcançou a meta`,
+        corpo: `${g.setor_nome} · meta do mês concluída`,
+        tag: `meta-equipe-g:${e.equipe_id}:${e.mes}`,
+        url: '/#/m/setor',
+        icone: 'equipe',
+      });
+    }
+  }
+  return saida.lista();
+}
+
+const MAX_NOMES = 6;
+
+/**
+ * Quem do setor alcançou meta, para o gerente — várias pessoas na mesma rodada
+ * viram UM aviso (sem enxurrada):
+ *
+ *   Maria S. alcançou a 2ª meta          3 pessoas do Play 1 alcançaram metas
+ *   Equipe Bryan · Play 1                Maria S. (2ª), João P. (1ª), Ana L. (1ª)
+ *
+ * SEM valores, como o aviso do líder. Quem está em duas equipes do mesmo setor
+ * entra uma vez só.
+ */
+export function montarAvisosMetaOperadorGerencia(
+  ops: OperadorNaMeta[], gerentes: GerenteDaEquipe[],
+): AvisosDaPessoa[] {
+  type Alcance = { perfilId: string; nome: string; faixa: number; equipe: string };
+  const grupos = new Map<string, { gerente: string; setorId: string; setor: string; mes: string; quem: Map<string, Alcance> }>();
+  for (const o of ops) {
+    const k = Number(o.faixa) || 0;
+    if (k <= 0) continue;
+    for (const e of o.equipes ?? []) {
+      for (const g of gerentes) {
+        if (g.equipe_id !== e.equipe_id || g.perfil_id === o.perfil_id) continue;
+        const chave = `${g.perfil_id}|${g.setor_id}`;
+        const grupo = grupos.get(chave)
+          ?? { gerente: g.perfil_id, setorId: g.setor_id, setor: g.setor_nome, mes: o.mes, quem: new Map() };
+        const atual = grupo.quem.get(o.perfil_id);
+        if (!atual || k > atual.faixa) {
+          grupo.quem.set(o.perfil_id, { perfilId: o.perfil_id, nome: abreviarCliente(o.nome), faixa: k, equipe: e.equipe_nome });
+        }
+        grupos.set(chave, grupo);
+      }
+    }
+  }
+
+  const saida = porPessoa();
+  for (const g of grupos.values()) {
+    const lista = [...g.quem.values()].sort((a, b) => b.faixa - a.faixa || a.nome.localeCompare(b.nome, 'pt-BR'));
+    if (!lista.length) continue;
+    const marca = etiquetaCurta(lista.map(a => `${a.perfilId}:${a.faixa}`).sort().join(','));
+    const base = { tag: `metas-op-g:${g.setorId}:${g.mes}:${marca}`, url: '/#/m/setor?aba=quartis', icone: 'operador' as const };
+    if (lista.length === 1) {
+      const a = lista[0];
+      saida.add(g.gerente, { ...base, titulo: `${a.nome} alcançou a ${a.faixa}ª meta`, corpo: `${a.equipe} · ${g.setor}` });
+    } else {
+      const nomes = lista.slice(0, MAX_NOMES).map(a => `${a.nome} (${a.faixa}ª)`).join(', ');
+      const resto = lista.length > MAX_NOMES ? ` e mais ${lista.length - MAX_NOMES}` : '';
+      saida.add(g.gerente, { ...base, titulo: `${lista.length} pessoas do ${g.setor} alcançaram metas`, corpo: `${nomes}${resto}` });
+    }
+  }
+  return saida.lista();
+}
+
+/** Minutos entre dois instantes ISO. */
+function minutosEntre(de: string, ate: string): number {
+  return (new Date(ate).getTime() - new Date(de).getTime()) / 60_000;
+}
+
+/**
+ * O resumo do setor no minuto 10 de cada hora — «o setor recebeu tanto em uma
+ * hora» (Cleber, 06/10/2026). Só sai quando entrou dinheiro.
+ *
+ *   Play 1 recebeu R$ 12.400,00
+ *   8 pagamentos na última hora
+ *   Hoje: R$ 38.540,00
+ *
+ * Se a hora anterior não teve nada, a janela diz desde quando («desde as 11h»).
+ */
+export function montarResumosSetor(itens: ResumoSetor[]): AvisosDaPessoa[] {
+  const saida = porPessoa();
+  for (const r of itens) {
+    const novo = Number(r.novo) || 0;
+    if (novo <= 0) continue;
+    const emHO = r.em_ho === true;
+    const qtd = Number(r.qtd_novos) || 0;
+    const ate = horaCheia(r.ate);
+    const janela = !r.desde
+      ? `até as ${ate}`
+      : minutosEntre(r.desde, r.ate) <= 75 ? 'na última hora' : `desde as ${horaCheia(r.desde)}`;
+    const linha = qtd === 1 ? `1 pagamento ${janela}`
+      : qtd > 1 ? `${qtd} pagamentos ${janela}`
+      : janela.charAt(0).toLocaleUpperCase('pt-BR') + janela.slice(1);
+    const aviso: Aviso = {
+      titulo: `${r.setor_nome} recebeu ${naUnidade(novo, emHO)}`,
+      corpo: `${linha}\nHoje: ${naUnidade(Number(r.hoje) || 0, emHO)}`,
+      tag: `resumo-setor:${r.setor_id}:${r.dia}:${ate}`,
+      url: '/#/m/setor?aba=hoje',
+      icone: 'resumo',
+    };
+    for (const id of new Set(r.destinatarios ?? [])) saida.add(id, aviso);
   }
   return saida.lista();
 }

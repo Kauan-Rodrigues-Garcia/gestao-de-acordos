@@ -73,9 +73,9 @@ describe('montarAvisosDeSaida', () => {
     expect(r.ids).toEqual([4]);
   });
 
-  it('PaguePlay: o «hoje» diz que é H.O.', () => {
+  it('regra Cofen: o «hoje» diz que é H.O. (06/10/2026: «… em H.O.»)', () => {
     const [r] = montarAvisosDeSaida([s_(4, 200)], { ana: { em_ho: true, hoje: 25, mes: 700 } }, 3);
-    expect(nbsp(r.avisos[0].corpo)).toContain('Recebido hoje (H.O.): R$ 25,00');
+    expect(nbsp(r.avisos[0].corpo)).toContain('Recebido hoje: R$ 25,00 em H.O.');
   });
 
   it('acima do corte: um resumo com o total que saiu, hoje e mês', () => {

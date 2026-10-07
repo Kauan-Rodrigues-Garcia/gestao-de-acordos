@@ -95,7 +95,7 @@ function rotuloDoAparelho(ua: string = navigator.userAgent): string {
  * Ativa o aviso NESTE aparelho. Chamar só dentro do toque do botão: é lá que o
  * navegador aceita pedir a permissão.
  */
-export async function ativarPush(empresaId: string, contexto?: 'equipe'): Promise<void> {
+export async function ativarPush(empresaId: string, contexto?: 'equipe' | 'setor'): Promise<void> {
   const chave = chavePublicaVapid();
   if (!chave) throw new Error('Aviso ainda não configurado.');
   if (!suportaPush()) throw new Error('Este navegador não recebe avisos.');
@@ -127,7 +127,7 @@ export async function ativarPush(empresaId: string, contexto?: 'equipe'): Promis
   if (error) throw new Error(error.message);
 
   // O aviso de teste confirma na hora que chegou. Falha aqui não desfaz nada.
-  // Na tela da equipe o texto do teste fala dos avisos da equipe.
+  // Na tela da equipe (ou do setor) o texto do teste fala dos avisos dela.
   await supabase.functions.invoke('enviar-push', { body: { acao: 'teste', contexto } }).catch(() => {});
 }
 
