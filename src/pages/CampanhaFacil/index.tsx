@@ -4,7 +4,7 @@
  * Transforma arquivos exportados do sistema (mailing CSV/TXT, relatório 245 ou
  * 247 em Excel) em campanhas de cobrança: aplica descontos, substitui variáveis
  * da mensagem, distribui os operadores marcados em rodízio e exporta um Excel
- * pronto — ou libera a parte de cada um, que chega pela notificação.
+ * pronto — ou libera a parte de cada um, que chega na aba Campanhas de WhatsApp.
  *
  * A lógica de negócio é a mesma do app original (campaign-core / xlsx-export,
  * portados verbatim); esta página é a interface reescrita com o design system
@@ -422,7 +422,7 @@ export default function CampanhaFacil() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-primary">Comece por aqui</p>
                 <h2 className="mt-1 text-lg font-bold">Importe o mailing para criar a campanha</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Os dados e mensagens são organizados automaticamente e divididos entre os operadores marcados. Cada um recebe a parte dele pela notificação.
+                  Os dados e mensagens são organizados automaticamente e divididos entre os operadores marcados. Cada um recebe a parte dele na aba Campanhas de WhatsApp.
                 </p>
                 <Button className="mt-4 gap-2" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="h-4 w-4" /> Selecionar mailing
@@ -728,12 +728,12 @@ export default function CampanhaFacil() {
             <AlertDialogDescription>
               {cf.stats.total.toLocaleString('pt-BR')} contatos com a mensagem “{cf.selectedTemplate.name}”, divididos
               entre {cf.sendersList.length} {cf.sendersList.length === 1 ? 'operador' : 'operadores'}. Cada um recebe
-              uma notificação e baixa a planilha com a parte dele. Fica disponível por 2 dias.
+              uma notificação e envia a parte dele pela aba Campanhas de WhatsApp. Fica disponível por 2 dias.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {reviewCount > 0 && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              {reviewCount.toLocaleString('pt-BR')} registros precisam de atenção e saem marcados na planilha de quem recebê-los.
+              {reviewCount.toLocaleString('pt-BR')} registros precisam de atenção e aparecem marcados para quem recebê-los.
             </p>
           )}
           <AlertDialogFooter>

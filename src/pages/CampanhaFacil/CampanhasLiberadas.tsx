@@ -1,5 +1,6 @@
 /**
- * Campanhas que o líder liberou nos últimos 2 dias, com o repasse.
+ * Campanhas que o líder liberou nos últimos 2 dias, com o andamento de cada
+ * operador (enviadas / total, 20261007150000) e o repasse.
  *
  * «Líder fez campanha com todos, três não foram: ele pode escolher um para
  * receber os três, ou separar.» (29/09/2026) — o diálogo tem uma lista só de
@@ -18,6 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { cn } from '@/lib/utils';
 import type { EnvioResumo } from './campanhaFacilEnvios.service';
 import type { OperadorCampanha } from './envios';
 import type { useEnviosCampanha } from './useEnviosCampanha';
@@ -31,7 +33,7 @@ interface Lote {
   expiraEm: string;
   envios: EnvioResumo[];
   /** Um por operador, somando original e repasses. */
-  porOperador: { id: string; nome: string; qtd: number; repasse: boolean }[];
+  porOperador: { id: string; nome: string; qtd: number; enviados: number; naoEnviados: number; repasse: boolean }[];
 }
 
 function agrupar(envios: readonly EnvioResumo[]): Lote[] {
@@ -46,8 +48,17 @@ function agrupar(envios: readonly EnvioResumo[]): Lote[] {
     if (e.criado_em < lote.criadoEm) lote.criadoEm = e.criado_em;
     if (e.expira_em < lote.expiraEm) lote.expiraEm = e.expira_em;
     const op = lote.porOperador.find((o) => o.id === e.operador_id);
-    if (op) { op.qtd += e.qtd; op.repasse ||= e.repasse; }
-    else lote.porOperador.push({ id: e.operador_id, nome: e.operador_nome, qtd: e.qtd, repasse: e.repasse });
+    // O que está na aba agora (o repasse tira o pendente de quem faltou).
+    const qtd = e.progresso.total || e.qtd;
+    if (op) {
+      op.qtd += qtd; op.enviados += e.progresso.enviados; op.naoEnviados += e.progresso.nao_enviados;
+      op.repasse ||= e.repasse;
+    } else {
+      lote.porOperador.push({
+        id: e.operador_id, nome: e.operador_nome, qtd,
+        enviados: e.progresso.enviados, naoEnviados: e.progresso.nao_enviados, repasse: e.repasse,
+      });
+    }
   }
   for (const l of mapa.values()) l.porOperador.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   return [...mapa.values()].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
@@ -71,7 +82,7 @@ export function CampanhasLiberadas({ envios }: { envios: Envios }) {
           <Send className="h-4 w-4 text-primary" /> Campanhas liberadas
         </div>
         <p className="text-xs text-muted-foreground">
-          Cada operador baixa a parte dele pela notificação. Ficam disponíveis por 2 dias.
+          Cada operador envia a parte dele em Campanhas de WhatsApp. Ficam disponíveis por 2 dias.
         </p>
         {lotes.map((l) => (
           <div key={l.loteId} className="space-y-2 rounded-lg border border-border p-3">
@@ -89,7 +100,14 @@ export function CampanhasLiberadas({ envios }: { envios: Envios }) {
                   <span className="truncate">{o.nome}</span>
                   <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
                     {o.repasse && <Badge variant="secondary" className="h-4 px-1 text-[10px]">repasse</Badge>}
-                    {o.qtd.toLocaleString('pt-BR')}
+                    {o.naoEnviados > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400" title="Não deu para enviar">
+                        {o.naoEnviados.toLocaleString('pt-BR')} não
+                      </span>
+                    )}
+                    <span className={cn('tabular-nums', o.qtd > 0 && o.enviados >= o.qtd && 'text-emerald-600 dark:text-emerald-400')}>
+                      {o.enviados.toLocaleString('pt-BR')}/{o.qtd.toLocaleString('pt-BR')}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -128,7 +146,7 @@ export function CampanhasLiberadas({ envios }: { envios: Envios }) {
             <AlertDialogTitle>Cancelar esta campanha?</AlertDialogTitle>
             <AlertDialogDescription>
               “{cancelarDe?.titulo}” deixa de estar disponível para os {cancelarDe?.porOperador.length} operadores.
-              A notificação continua com eles, mas o download para de funcionar.
+              A notificação continua com eles, mas a campanha some da aba Campanhas de WhatsApp.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -168,7 +186,8 @@ function DialogoRepasse({
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }, [lote, operadoresDoSetor, faltaram]);
 
-  const qtdRepasse = lote.porOperador.filter((o) => faltaram.has(o.id)).reduce((s, o) => s + o.qtd, 0);
+  // Só o que ainda não saiu: o enviado fica com quem enviou.
+  const qtdRepasse = lote.porOperador.filter((o) => faltaram.has(o.id)).reduce((s, o) => s + o.qtd - o.enviados, 0);
   const recebedores = candidatos.filter((o) => recebem.has(o.id));
 
   function alternar(set: Set<string>, id: string): Set<string> {
@@ -192,7 +211,7 @@ function DialogoRepasse({
         <DialogHeader>
           <DialogTitle>Repassar contatos de quem faltou</DialogTitle>
           <DialogDescription>
-            Marque quem faltou e quem vai receber. Um recebedor leva tudo; vários dividem em rodízio.
+            Marque quem faltou e quem vai receber. Vai só o que ainda não foi enviado. Um recebedor leva tudo; vários dividem em rodízio.
           </DialogDescription>
         </DialogHeader>
 
@@ -205,7 +224,7 @@ function DialogoRepasse({
                   <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent">
                     <Checkbox checked={faltaram.has(o.id)} onCheckedChange={() => setFaltaram((s) => alternar(s, o.id))} />
                     <span className="flex-1 truncate">{o.nome}</span>
-                    <span className="text-xs text-muted-foreground">{o.qtd.toLocaleString('pt-BR')}</span>
+                    <span className="text-xs text-muted-foreground">{(o.qtd - o.enviados).toLocaleString('pt-BR')}</span>
                   </label>
                 </li>
               ))}
@@ -232,9 +251,9 @@ function DialogoRepasse({
             : recebedores.length === 0
               ? 'Marque ao menos uma pessoa para receber.'
               : recebedores.length === 1
-                ? <><strong>{qtdRepasse.toLocaleString('pt-BR')}</strong> contatos vão para <strong>{recebedores[0].nome}</strong>.</>
-                : <><strong>{qtdRepasse.toLocaleString('pt-BR')}</strong> contatos divididos entre <strong>{recebedores.length}</strong> operadores.</>}
-          {' '}Quem recebe ganha uma notificação nova com a planilha do repasse.
+                ? <><strong>{qtdRepasse.toLocaleString('pt-BR')}</strong> mensagens vão para <strong>{recebedores[0].nome}</strong>.</>
+                : <><strong>{qtdRepasse.toLocaleString('pt-BR')}</strong> mensagens divididas entre <strong>{recebedores.length}</strong> operadores.</>}
+          {' '}Quem recebe ganha uma notificação e acha as mensagens em Campanhas de WhatsApp.
         </p>
 
         <DialogFooter>

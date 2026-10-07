@@ -25,6 +25,7 @@ export const ROUTE_PATHS = {
   ADMIN_CARGOS: '/admin/cargos',
   ANALITICO: '/analitico',
   CAMPANHA_FACIL: '/campanha-facil',
+  CAMPANHAS_WHATSAPP: '/campanhas-whatsapp',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',

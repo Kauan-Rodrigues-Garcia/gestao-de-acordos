@@ -78,6 +78,7 @@ const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
+const CampanhasWhatsapp = lazy(() => import('@/pages/CampanhasWhatsapp'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
@@ -558,6 +559,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanha_facil">
                     <CampanhaFacil />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Campanhas de WhatsApp [BP] — a parte do operador (20261007150000). */}
+              <Route path={ROUTE_PATHS.CAMPANHAS_WHATSAPP} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanhas_whatsapp">
+                    <CampanhasWhatsapp />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

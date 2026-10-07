@@ -1,21 +1,22 @@
 /**
- * Quem encaminha a campanha, e o que já foi liberado (20260929100000).
+ * Quem encaminha a campanha, e o que já foi liberado (20260929100000,
+ * 20261007150000).
  *
- * Antes o líder digitava os nomes. Agora a lista vem do setor: o líder só vê
- * operadores do próprio setor (com os clones), marca quem vai mandar, libera,
- * e cada um recebe a parte dele na notificação. Se alguém faltou depois da
- * liberação, o líder repassa a parte dessa pessoa para um ou mais colegas.
+ * A lista vem do setor: o líder só vê operadores do próprio setor (com os
+ * clones), filtra pelo nome, marca quem vai mandar e libera. Cada um recebe
+ * uma notificação e acha a parte dele na aba Campanhas de WhatsApp. Se alguém
+ * faltou, o líder repassa o que essa pessoa ainda não enviou.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { Perfil } from '@/lib/supabase';
 import type { CampaignItem } from './lib/campaign-core';
-import { repartirPorOperador, type OperadorCampanha } from './envios';
+import { casaNome, repartirPorOperador, type OperadorCampanha } from './envios';
 import {
   listarOperadoresParaCampanha, listarSetoresParaCampanha,
   liberarCampanha, listarEnviosLiberados, repassarEnvios, cancelarLote,
-  type EnvioResumo, type Autor,
+  AvisoNaoEnviado, type EnvioResumo, type Autor,
 } from './campanhaFacilEnvios.service';
 
 export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | null) {
@@ -30,6 +31,12 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
   const [operadores, setOperadores] = useState<OperadorCampanha[]>([]);
   const [carregandoOperadores, setCarregandoOperadores] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [busca, setBusca] = useState('');
+  /** A lista do passo 3, filtrada pelo nome. A seleção vale para todos, filtrados ou não. */
+  const operadoresVisiveis = useMemo(
+    () => operadores.filter((o) => casaNome(o.nome, busca)),
+    [operadores, busca],
+  );
 
   const [enviados, setEnviados] = useState<EnvioResumo[]>([]);
   const [liberando, setLiberando] = useState(false);
@@ -120,10 +127,15 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
       const n = await liberarCampanha({
         empresaId, setorId, titulo, arquivoNome: arquivoBase, autor, partes,
       });
-      toast.success(`Campanha liberada para ${n} ${n === 1 ? 'operador' : 'operadores'}. Cada um recebeu a notificação para baixar a planilha.`);
+      toast.success(`Campanha liberada para ${n} ${n === 1 ? 'operador' : 'operadores'}. Cada um já vê a parte dele em Campanhas de WhatsApp.`);
       await recarregarEnviados();
       return true;
     } catch (err) {
+      if (err instanceof AvisoNaoEnviado) {
+        toast.warning(`Campanha liberada para ${err.gravados} ${err.gravados === 1 ? 'operador' : 'operadores'}, mas a notificação não saiu. Avise que está em Campanhas de WhatsApp.`);
+        await recarregarEnviados();
+        return true;
+      }
       console.error('[CampanhaFacil] liberar:', err);
       toast.error('Não foi possível liberar a campanha. Nada foi enviado — tente de novo.');
       return false;
@@ -164,7 +176,8 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
 
   return {
     setorFixo, setores, setorId, setSetorId: setSetorEscolhido,
-    operadores, carregandoOperadores, selecionados, operadoresSelecionados,
+    operadores, operadoresVisiveis, busca, setBusca,
+    carregandoOperadores, selecionados, operadoresSelecionados,
     alternar, marcarTodos, desmarcarTodos,
     enviados, liberando, liberar, repassar, cancelar, recarregarEnviados,
   };

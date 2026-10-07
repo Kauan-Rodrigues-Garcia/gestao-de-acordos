@@ -384,6 +384,13 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: LIDERANCA,
   },
   {
+    // 07/10/2026, migration 20261007150000: a parte do operador na campanha
+    // liberada pelo líder, para enviar direto pelo WhatsApp.
+    key: 'ver_campanhas_whatsapp', label: 'Aba Campanhas de WhatsApp',
+    descricao: 'Receber as campanhas liberadas pelo líder e enviar cada mensagem pelo WhatsApp',
+    grupo: 'Abas e telas', tenants: ['bookplay'], padrao: { operador: true },
+  },
+  {
     /*
      * Fase 3 da reorganização de cargos (02/10/2026). Antes a tela decidia
      * pela lista `PERFIS_VISAO_SETOR` (operador, lider, elite, ouvidoria): quem

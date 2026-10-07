@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Tv, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake,
+  ShoppingBag, Handshake, Send,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -234,6 +234,7 @@ export const NAV_ITEMS: NavItem[] = [
   // no menu. Dentro da lista, todo item passa pelo mesmo filtro.
   { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           produtos: SO_COBRANCA, permissaoKey: 'ver_analitico' },
   { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
+  { label: 'Campanhas de WhatsApp', icon: Send, to: ROUTE_PATHS.CAMPANHAS_WHATSAPP, produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanhas_whatsapp' },
   { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             produtos: SO_COBRANCA, permissaoKey: 'importar_excel' },
 ];
 

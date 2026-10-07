@@ -67,6 +67,7 @@ const INVENTARIO: Caso[] = [
   // «acordo» aqui provam que a rota vence o título.
   ['Campanha pronta — Pix do acordo', '/campanha-facil/envio/0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
   ['Campanha repassada — Preventivo', '/campanha-facil/envio/0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
+  ['Campanha de WhatsApp pronta', '/campanhas-whatsapp?envio=0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
 ];
 
 describe('inventário de produtores', () => {

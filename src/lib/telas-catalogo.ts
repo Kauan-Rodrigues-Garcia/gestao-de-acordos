@@ -72,6 +72,7 @@ export const TELA_LABEL: Record<string, string> = {
   // histórico vira uma chave crua no Monitoramento de uso.
   'ouvidoria':                 'Ouvidoria',
   'campanha-facil':            'Campanha Fácil',
+  'campanhas-whatsapp':        'Campanhas de WhatsApp',
   'solicitacoes-whatsapp':     'Solicitações WhatsApp',
   'comemoracoes':              'Comemorações',
   'creators':                  'Creators Lab',

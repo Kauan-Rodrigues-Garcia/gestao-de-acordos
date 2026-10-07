@@ -32,6 +32,7 @@ export type ModuloPermissaoId =
   | 'lixeira'
   | 'analitico'
   | 'campanha_facil'
+  | 'campanhas_whatsapp'
   | 'importar_excel'
   | 'chat'
   | 'modo_tv'
@@ -235,6 +236,10 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'campanha_facil', rotulo: 'Campanha Fácil', interruptor: 'ver_campanha_facil',
     descricao: 'Campanhas de cobrança da BookPlay.', tenants: ['bookplay'],
+  },
+  {
+    id: 'campanhas_whatsapp', rotulo: 'Campanhas de WhatsApp', interruptor: 'ver_campanhas_whatsapp',
+    descricao: 'A parte de cada operador na campanha, enviada pelo WhatsApp.', tenants: ['bookplay'],
   },
   {
     id: 'importar_excel', rotulo: 'Importar Excel', interruptor: 'importar_excel',
