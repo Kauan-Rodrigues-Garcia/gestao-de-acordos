@@ -22,7 +22,7 @@
  * `mes` lê o analítico, `dia` lê o diário e desenha a faixa de pulso, `periodo`
  * filtra client-side.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { permissoesDoCargo } from '@/test/permissoesDoCargo';
 import type { Recorte } from '@/pages/Analitico/recorte';
@@ -150,6 +150,14 @@ vi.mock('@/lib/supabase', async (importarOriginal) => {
 });
 
 describe('AnaliticoLider monta', () => {
+  /*
+   * A primeira carga de `AnaliticoLider` (transformar 1.926 linhas e a árvore
+   * de imports) é cara, e caía inteira no primeiro caso: sob a suíte cheia ele
+   * passava dos 20s e o arquivo ficava vermelho de forma intermitente (verde
+   * sozinho em ~4s). Aquecer aqui tira esse custo dos casos — o teto de cada um
+   * volta a medir só a montagem.
+   */
+  beforeAll(async () => { await import('./AnaliticoLider'); }, 120_000);
   beforeEach(() => { vi.clearAllMocks(); });
 
   const props = {

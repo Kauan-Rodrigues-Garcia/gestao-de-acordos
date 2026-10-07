@@ -195,8 +195,10 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       res.status(400).json({ error: 'alvoUserId inválido.' });
       return;
     }
-    if (novaSenha.length < MIN_SENHA) {
-      res.status(400).json({ error: `A senha deve ter pelo menos ${MIN_SENHA} caracteres.` });
+    // Teto de 72: o bcrypt do GoTrue ignora o que passa disso, e a senha
+    // "longa" valeria só pelo começo. Mesma régua de api/criar-usuario.ts.
+    if (novaSenha.length < MIN_SENHA || novaSenha.length > 72) {
+      res.status(400).json({ error: `A senha deve ter entre ${MIN_SENHA} e 72 caracteres.` });
       return;
     }
     if (alvoId === caller.id) {

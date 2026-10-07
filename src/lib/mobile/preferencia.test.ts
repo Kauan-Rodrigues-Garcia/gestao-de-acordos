@@ -223,6 +223,11 @@ describe('a tela do celular só no endereço do app (07/10/2026)', () => {
     expect(mobileNesteEndereco('gestaodeacordos.com.br')).toBe(false);
   });
 
+  it('abre no preview da Vercel, para testar antes de publicar', () => {
+    expect(mobileNesteEndereco('gestao-de-acordos-m8bobqihw-kauans-projects-6df284c2.vercel.app')).toBe(true);
+    expect(mobileNesteEndereco('vercel.app.gestaodeacordos.com.br')).toBe(false);
+  });
+
   it('monta o endereço da mesma tela no app', () => {
     expect(urlNoApp('/m/equipe?aba=hoje')).toBe('https://app.gestaodeacordos.com.br/#/m/equipe?aba=hoje');
     expect(urlNoApp('m')).toBe('https://app.gestaodeacordos.com.br/#/m');

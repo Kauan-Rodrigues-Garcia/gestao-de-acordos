@@ -53,13 +53,15 @@ export function ehEnderecoDoApp(
 /**
  * A tela do celular (`/m…`) só abre no endereço do app (Cleber, 07/10/2026).
  * No endereço do site (`www.`, `pagueplay.`) ela manda para o `app.` — ver
- * `SoNoEnderecoDoApp`. `localhost` fica liberado para o desenvolvimento.
+ * `SoNoEnderecoDoApp`. `localhost` fica liberado para o desenvolvimento, e o
+ * preview da Vercel (`*.vercel.app`) para testar a tela antes de publicar —
+ * sem isso o preview mandava para o `app.` de produção (auditoria, 07/10/2026).
  */
 export function mobileNesteEndereco(
   host: string = typeof window === 'undefined' ? '' : window.location.hostname,
 ): boolean {
   const h = host.toLowerCase();
-  return ehEnderecoDoApp(h) || h === 'localhost' || h === '127.0.0.1';
+  return ehEnderecoDoApp(h) || h === 'localhost' || h === '127.0.0.1' || h.endsWith('.vercel.app');
 }
 
 const URL_DO_APP = ((import.meta.env.VITE_APP_URL as string | undefined)?.trim()
