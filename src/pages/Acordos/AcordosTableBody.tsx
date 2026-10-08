@@ -19,8 +19,9 @@
 import { Fragment, memo, useRef } from 'react';
 import {
   CheckCircle, MessageSquare, Edit, Trash2,
-  MapPin, Link2, FileX, Plus, X,
+  MapPin, Link2, FileX, Plus, X, Undo2,
 } from 'lucide-react';
+import { horaLimite, usePagoDesfazivel } from '@/lib/desfazerPago';
 import { Button } from '@/components/ui/button';
 import { podeReagendar, type DecisaoReagendar } from '@/services/reagendamento/reagendamento';
 import { BotaoReagendar } from '@/components/BotaoReagendar';
@@ -82,6 +83,8 @@ export interface AcordosTableBodyProps {
   setEditandoInlineId: (id: string | null) => void;
   setDetalheInlineId: (id: string | null) => void;
   marcarComoPago: (a: Acordo) => void;
+  /** Volta o acordo marcado como pago há menos de 5 min (`lib/desfazerPago`). */
+  desfazerPago: (a: Acordo) => void;
   /**
    * Agendar a próxima parcela. Separado de `podeEditar` de propósito: editar
    * é travado pelo mês fechado, e agendar não — a parcela NOVA nasce no mês
@@ -140,6 +143,7 @@ function Colunas({ isPP, mostrarColunaOperador }: { isPP: boolean; mostrarColuna
 interface AcoesLinha {
   toggleSelecionado: (id: string) => void;
   marcarComoPago: (a: Acordo) => void;
+  desfazerPago: (a: Acordo) => void;
   setReagendarAcordo: (a: Acordo | null) => void;
   enviarUmWhatsapp: (a: Acordo) => void;
   setEditandoInlineId: (id: string | null) => void;
@@ -201,6 +205,8 @@ const LinhaAcordo = memo(function LinhaAcordo({
   const rotulo     = a.nome_cliente || a.nr_cliente || a.instituicao || 'acordo';
   const secundaria = [a.instituicao, a.whatsapp].filter(Boolean).join(' · ');
   const alternarDetalhe = () => acoes.current.setDetalheInlineId(isDetailThis ? null : a.id);
+  // Marcado como pago há pouco: o botão de pago vira «Desfazer» por 5 min.
+  const desfazivel = usePagoDesfazivel(a.id);
   const donoNome = mostrarColunaOperador
     ? ((a.perfis as { nome?: string } | undefined)?.nome ?? operadoresMap[a.operador_id] ?? null)
     : null;
@@ -347,6 +353,17 @@ const LinhaAcordo = memo(function LinhaAcordo({
               <CheckCircle className="w-4 h-4" />
             </Button>
           )}
+          {a.status === 'pago' && desfazivel && (
+            <Button
+              variant="ghost" size="icon" className="w-8 h-8 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+              title={`Desfazer o pagamento (até ${horaLimite(desfazivel)})`}
+              aria-label="Desfazer o pagamento"
+              disabled={atualizando}
+              onClick={(e) => { e.stopPropagation(); acoes.current.desfazerPago(a); }}
+            >
+              <Undo2 className="w-4 h-4" />
+            </Button>
+          )}
           {agendar?.pode && (
             <BotaoReagendar decisao={agendar} dono={donoNome} onClick={() => acoes.current.setReagendarAcordo(a)} />
           )}
@@ -400,7 +417,7 @@ export function AcordosTableBody({
   selecionarTodos, toggleSelecionado, alternarDia, setNovoInlineAberto,
   addAcordo, removeAcordo, patchAcordo,
   setEditandoInlineId, setDetalheInlineId,
-  marcarComoPago, podeAgendar, parcelasExistentes, setReagendarAcordo,
+  marcarComoPago, desfazerPago, podeAgendar, parcelasExistentes, setReagendarAcordo,
   enviarUmWhatsapp, setConfirmandoExclusao,
   limparFiltros,
 }: AcordosTableBodyProps) {
@@ -408,7 +425,7 @@ export function AcordosTableBody({
   /** Ações por referência: ver `AcoesLinha`. */
   const acoes = useRef<AcoesLinha>(null as unknown as AcoesLinha);
   acoes.current = {
-    toggleSelecionado, marcarComoPago, setReagendarAcordo, enviarUmWhatsapp,
+    toggleSelecionado, marcarComoPago, desfazerPago, setReagendarAcordo, enviarUmWhatsapp,
     setEditandoInlineId, setDetalheInlineId, setConfirmandoExclusao,
   };
 

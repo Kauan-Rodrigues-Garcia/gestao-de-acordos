@@ -14,6 +14,9 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   ROUTE_PATHS, formatDate, getTodayISO,
 } from '@/lib/index';
+import {
+  desfazerPagoNoBanco, esquecerPagoDesfazivel, guardarPagoDesfazivel, pagoDesfazivel,
+} from '@/lib/desfazerPago';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
 import { alternarSelecaoDoDia } from '@/lib/acordosPorDia';
@@ -577,6 +580,10 @@ export default function Dashboard() {
       patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
+      // Por 5 min o botão de pago da linha vira «Desfazer» (08/10/2026).
+      guardarPagoDesfazivel(id, {
+        statusAnterior, vencimentoAnterior, dataPagamentoAnterior: acordo.data_pagamento ?? null,
+      });
       if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
         supabase.rpc('fn_sync_par_vinculo', {
           p_acordo_id: id, p_valor: acordo.valor, p_vencimento: dataPagamento,
@@ -594,20 +601,40 @@ export default function Dashboard() {
         setReagendarAcordo(acordo);
       } else {
         toast.success('Acordo marcado como Pago!', {
+          description: 'Errou? O botão «Desfazer» fica na linha por 5 minutos.',
           duration: 5000,
-          action: {
-            label: 'Desfazer',
-            onClick: async () => {
-              patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
-              await supabase.from('acordos')
-                .update({ status: statusAnterior, vencimento: vencimentoAnterior })
-                .eq('id', id);
-            },
-          },
+          action: { label: 'Desfazer', onClick: () => { void desfazerPago(acordo); } },
         });
       }
     }
     setAtualizandoStatus(null);
+  }
+
+  /** «Desfazer» da linha (ou do aviso): o acordo volta ao status de antes do pago. */
+  async function desfazerPago(acordo: AcordoComVinculo) {
+    const antes = pagoDesfazivel(acordo.id);
+    if (!antes) { toast.info('Passou o tempo de desfazer. Edite o acordo para mudar o status.'); return; }
+    setAtualizandoStatus(acordo.id);
+    const erro = await desfazerPagoNoBanco(acordo.id, antes);
+    setAtualizandoStatus(null);
+    if (erro) { toast.error(`Não foi possível desfazer: ${erro}`); return; }
+    esquecerPagoDesfazivel(acordo.id);
+    patchAcordo(acordo.id, {
+      status: antes.statusAnterior as Acordo['status'],
+      vencimento: antes.vencimentoAnterior,
+      data_pagamento: antes.dataPagamentoAnterior,
+    });
+    // O par Direto↔Extra volta junto, como foi junto no «pago».
+    if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
+      supabase.rpc('fn_sync_par_vinculo', {
+        p_acordo_id: acordo.id, p_valor: acordo.valor, p_vencimento: antes.vencimentoAnterior,
+        p_nome_cliente: acordo.nome_cliente, p_tipo: acordo.tipo,
+        p_whatsapp: acordo.whatsapp ?? null, p_parcelas: acordo.parcelas, p_status: antes.statusAnterior,
+      }).then(({ error: rpcErr }) => {
+        if (rpcErr) console.warn('[desfazerPago] sync par falhou:', rpcErr.message);
+      });
+    }
+    toast.success('Pagamento desfeito: o acordo voltou ao status de antes.');
   }
 
   async function handleReagendarDashboard(params: ReagendarParams) {
@@ -894,6 +921,7 @@ export default function Dashboard() {
                         alternarDia={alternarDia}
                         atualizandoStatus={atualizandoStatus}
                         marcarComoPago={marcarComoPago}
+                        desfazerPago={desfazerPago}
                         parcelasExistentes={parcelasExistentes}
                         setReagendarAcordo={setReagendarAcordo}
                         excluindoId={excluindoId}

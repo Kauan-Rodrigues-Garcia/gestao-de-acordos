@@ -9,8 +9,9 @@
 import { Fragment } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, X,
+  CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, Undo2, X,
 } from 'lucide-react';
+import { horaLimite, pagoDesfazivel, useRelogioDesfazerPago } from '@/lib/desfazerPago';
 import { cn } from '@/lib/utils';
 import {
   formatCurrency, formatDate, STATUS_COLORS, STATUS_LABELS,
@@ -81,6 +82,8 @@ interface PPTableBodyProps {
   alternarDia: (idsDoDia: string[]) => void;
   atualizandoStatus: string | null;
   marcarComoPago: (a: AcordoComVinculo) => void;
+  /** Volta o acordo marcado como pago há menos de 5 min (`lib/desfazerPago`). */
+  desfazerPago: (a: AcordoComVinculo) => void;
   /** Chaves `grupo#numero` das parcelas que já existem (useParcelasExistentes). */
   parcelasExistentes: ReadonlySet<string>;
   setReagendarAcordo: (a: AcordoComVinculo | null) => void;
@@ -102,7 +105,7 @@ export function PPTableBody({
   detalheInlineIdTabela, setDetalheInlineIdTabela,
   highlightedId, hoje,
   selecionados, toggleSelecionado, alternarDia,
-  atualizandoStatus, marcarComoPago,
+  atualizandoStatus, marcarComoPago, desfazerPago,
   parcelasExistentes, setReagendarAcordo,
   excluindoId, setConfirmandoExclusao,
   empresaTags, operadoresMap,
@@ -110,6 +113,8 @@ export function PPTableBody({
 }: PPTableBodyProps) {
   // checkbox, código, estado, vencimento, valor, tipo, link, status, [operador], ações
   const colSpan = visaoAmpla ? 10 : 9;
+  // O «Desfazer» do pago some sozinho depois de 5 min: redesenha quando fecha.
+  useRelogioDesfazerPago();
   const grupos = agruparAcordosPorDia<AcordoComVinculo>(acordosOrdenados, acordoTemCpf);
   /** Índice na lista inteira: a entrada escalonada continua uma fila só. */
   let posicao = 0;
@@ -236,6 +241,20 @@ export function PPTableBody({
                   <CheckCircle className="w-4 h-4" />
                 </Button>
               )}
+              {a.status === 'pago' && (() => {
+                const desfazivel = pagoDesfazivel(a.id);
+                return desfazivel && (
+                  <Button
+                    variant="ghost" size="icon" className="w-8 h-8 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                    title={`Desfazer o pagamento (até ${horaLimite(desfazivel)})`}
+                    aria-label="Desfazer o pagamento"
+                    disabled={atualizandoStatus === a.id}
+                    onClick={(e) => { e.stopPropagation(); desfazerPago(a); }}
+                  >
+                    <Undo2 className="w-4 h-4" />
+                  </Button>
+                );
+              })()}
               {agendar?.pode && (
                 <BotaoReagendar decisao={agendar} dono={donoNome} onClick={() => setReagendarAcordo(a)} />
               )}

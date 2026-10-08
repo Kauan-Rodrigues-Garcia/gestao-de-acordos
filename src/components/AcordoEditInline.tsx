@@ -223,7 +223,8 @@ export function AcordoEditInline({
   async function handleSave(
     { confirmouRemocao = false, vinculoOk = false }: { confirmouRemocao?: boolean; vinculoOk?: boolean } = {},
   ) {
-    if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
+    // Nome do cliente é opcional nas duas regras (Cleber, 08/10/2026): a
+    // tabulação nova já aceitava sem nome, e a edição barrava o acordo inteiro.
     if (!vencimento)         { toast.error('Vencimento é obrigatório'); return; }
     // Os DOIS meses precisam estar abertos: o de origem (o mês que perderia o
     // valor) e o de destino (o que ganharia). Checar só um deles deixaria mover
@@ -798,7 +799,7 @@ export function AcordoEditInline({
 
                 {/* Nome */}
                 <div className="space-y-1 sm:col-span-2 lg:col-span-2">
-                  <Label className="text-xs font-medium">{isPaguePlay ? 'Nome do Profissional' : 'Nome do Cliente'}{!isPaguePlay && ' *'}</Label>
+                  <Label className="text-xs font-medium">{isPaguePlay ? 'Nome do Profissional' : 'Nome do Cliente'}</Label>
                   <Input
                     value={nomeCliente}
                     onChange={e => setNomeCliente(e.target.value)}

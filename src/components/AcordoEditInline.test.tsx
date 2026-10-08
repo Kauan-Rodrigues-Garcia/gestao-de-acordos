@@ -479,15 +479,19 @@ describe('AcordoEditInline — campo Instituição/Código', () => {
 });
 
 describe('AcordoEditInline — validações básicas', () => {
-  it('bloqueia quando nome vazio', async () => {
+  // Nome do cliente deixou de ser obrigatório na edição (08/10/2026).
+  it('salva com o nome vazio, gravando o nome em branco', async () => {
     const acordo = makeAcordo({ nome_cliente: '   ' });
+    nextSingleResult = { data: acordo, error: null };
     const onSaved = vi.fn();
     renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
 
     clickSalvar();
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Nome é obrigatório'));
-    expect(onSaved).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(toastError).not.toHaveBeenCalledWith('Nome é obrigatório');
+    const payload = updateCalls.at(-1)?.payload as Record<string, unknown>;
+    expect(payload.nome_cliente).toBe('');
   });
 
   it('bloqueia quando valor inválido', async () => {
