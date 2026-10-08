@@ -597,7 +597,12 @@ describe('AcordoNovoInline — PIX Automático entra sozinho no Pix', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     clickSalvarAcordo();
 
-    await waitFor(() => expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument());
+    // Folga de tempo: com a suíte inteira em paralelo a cadeia salvar → conferir
+    // NR → abrir o modal passa de 1 s.
+    await waitFor(
+      () => expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
     expect(screen.getByText(/Confirmo que o valor é o TOTAL/)).toBeInTheDocument();
     // Nada gravado nem registrado no Pix antes de confirmar no modal.
     expect(registrarNoPixMock).not.toHaveBeenCalled();
