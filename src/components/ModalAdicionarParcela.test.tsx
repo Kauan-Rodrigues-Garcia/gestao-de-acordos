@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ModalAdicionarParcela, type ModalAdicionarParcelaProps } from './ModalAdicionarParcela';
 import type { Acordo } from '@/lib/supabase';
+import { getTodayISO } from '@/lib/index';
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -128,18 +129,50 @@ describe('ModalAdicionarParcela — parcelas personalizadas', () => {
   });
 });
 
-describe('ModalAdicionarParcela — recorrente não entra como parcela', () => {
+/*
+ * PIX Automático / Cartão Recorrente como PRÓXIMA parcela — liberado em
+ * 08/10/2026 (entrada no Pix hoje, o resto no Pix Automático). Entra com as
+ * travas do acordo novo: uma parcela só, valor TOTAL confirmado e data do mês
+ * corrente. Lote com recorrente continua recusado.
+ */
+describe('ModalAdicionarParcela — recorrente como próxima parcela', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('acordo de PIX Automático abre a nova parcela em Boleto', async () => {
-    const { onConfirm } = abrir({ inicial: { vencimento: '2026-09-10', valor: 400, tipo: 'pix_automatico' } });
-    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+  it('PIX Automático entra como UMA parcela, só depois de confirmar o valor total', async () => {
+    const { toast } = await import('sonner');
+    const hoje = getTodayISO();
+    const { onConfirm } = abrir({ inicial: { vencimento: hoje, valor: 2806.38, tipo: 'pix_automatico' } });
 
+    expect(screen.getByText(/Valor TOTAL \*/)).toBeTruthy();
+    expect(screen.queryByText(/Quantidade de parcelas/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/VALOR TOTAL/), expect.anything(),
+    ));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText(/Confirmo que o valor é o TOTAL/));
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
     await waitFor(() => expect(onConfirm).toHaveBeenCalled());
-    expect(onConfirm.mock.calls[0][0][0].tipo).toBe('boleto');
+    const enviadas = onConfirm.mock.calls[0][0];
+    expect(enviadas).toHaveLength(1);
+    expect(enviadas[0]).toMatchObject({ tipo: 'pix_automatico', valor: 2806.38, vencimento: hoje });
   });
 
-  it('escolher PIX Automático numa parcela recusa, sem gravar', async () => {
+  it('PIX Automático com data passada é recusado, mesmo confirmado', async () => {
+    const { toast } = await import('sonner');
+    const { onConfirm } = abrir({ inicial: { vencimento: '2020-01-10', valor: 400, tipo: 'pix_automatico' } });
+    fireEvent.click(screen.getByLabelText(/Confirmo que o valor é o TOTAL/));
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/data passada/), expect.anything(),
+    ));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('PIX Automático dentro de um lote de parcelas é recusado, sem gravar', async () => {
     const { toast } = await import('sonner');
     const { onConfirm } = abrir();
     await ligarPersonalizacao('2');
@@ -150,7 +183,7 @@ describe('ModalAdicionarParcela — recorrente não entra como parcela', () => {
     fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
-      expect.stringMatching(/não pode ser adicionado como parcela/),
+      expect.stringMatching(/UMA parcela só/),
       expect.anything(),
     ));
     expect(onConfirm).not.toHaveBeenCalled();

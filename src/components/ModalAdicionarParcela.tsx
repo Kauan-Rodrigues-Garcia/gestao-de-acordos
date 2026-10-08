@@ -11,7 +11,7 @@
  * vencimento, valor, forma e status antes de confirmar.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Layers, Plus } from 'lucide-react';
+import { AlertTriangle, Layers, Plus } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -28,12 +28,12 @@ import {
   planejarParcelas, validarPlano, MAX_PARCELAS_LOTE, type AjustePersonalizado,
 } from '@/services/parcelasLote';
 import {
-  formatCurrency, formatDate, parseCurrencyInput,
+  formatCurrency, formatDate, parseCurrencyInput, getTodayISO,
   STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, STATUS_COLORS,
   TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
 } from '@/lib/index';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY, STATUS_OPTIONS } from '@/components/AcordoNovoInline/constants';
-import { ehFormaRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
+import { ehFormaRecorrente, erroVencimentoRecorrente, nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -105,6 +105,21 @@ export function ModalAdicionarParcela({
     tipo?:       string | null;
   };
   const [personalizar, setPersonalizar] = useState(false);
+  /*
+   * PIX Automático / Cartão Recorrente como a PRÓXIMA parcela (08/10/2026):
+   * a entrada foi paga num Pix comum e o restante vai para a recorrência. Entra
+   * como UMA parcela, com o VALOR TOTAL do Pix Automático — a comissão sai da
+   * aba Pix Automático, sobre o total —, e a pessoa confirma isso, como no
+   * formulário de acordo novo.
+   */
+  const [confirmouValorTotal, setConfirmouValorTotal] = useState(false);
+  const recorrenteSel = !isPaguePlay && ehFormaRecorrente(tipoSel);
+  const escolherTipo = (t: string) => {
+    if (t !== tipoSel) setConfirmouValorTotal(false);
+    setTipoSel(t);
+    // Recorrente é sempre uma parcela só: quem parcela é a recorrência.
+    if (!isPaguePlay && ehFormaRecorrente(t)) { setQtdStr('1'); setPersonalizar(false); }
+  };
   const [ajustes, setAjustes] = useState<Record<number, AjusteDigitado>>({});
   const setAjuste = (i: number, patch: AjusteDigitado) =>
     setAjustes(prev => ({ ...prev, [i]: { ...prev[i], ...patch } }));
@@ -118,9 +133,11 @@ export function ModalAdicionarParcela({
         ? inicial.valor.toFixed(2).replace('.', ',')
         : '',
     );
-    // Recorrente não é forma de parcela (ver `confirmar`): abre em Boleto.
-    const tipoInicial = tipoParaOpcao(inicial?.tipo ?? acordo.tipo, isPaguePlay);
-    setTipoSel(!isPaguePlay && ehFormaRecorrente(tipoInicial) ? 'boleto' : tipoInicial);
+    // O acordo base recorrente não chega aqui (não tem reparcelamento); a
+    // forma que vem do formulário, recorrente inclusive, abre como veio.
+    const tipoBase = inicial?.tipo ?? (ehFormaRecorrente(acordo.tipo) ? 'boleto' : acordo.tipo);
+    setTipoSel(tipoParaOpcao(tipoBase, isPaguePlay));
+    setConfirmouValorTotal(false);
     setStatusSel(inicial?.status ?? 'verificar_pendente');
     setQtdStr('1');
     setPersonalizar(false);
@@ -193,21 +210,36 @@ export function ModalAdicionarParcela({
       return;
     }
     /*
-     * PIX Automático e Cartão Recorrente não entram como PARCELA.
+     * PIX Automático e Cartão Recorrente como parcela (liberado em 08/10/2026).
      *
-     * Como parcela, o valor é só um pedaço do acordo, e o Pix Automático paga
-     * comissão sobre o total — a liderança pediu que esse caso não entre
-     * (14/09/2026). A forma recorrente se lança como acordo próprio, com o
-     * valor total, e vai sozinha para o Pix (ver `AcordoNovoInline`).
+     * Até aqui era recusado: como parcela, o valor seria só um pedaço do
+     * acordo, e o Pix Automático paga comissão sobre o total (14/09/2026). Mas
+     * o caso real é «entrada hoje no Pix, o resto no Pix Automático dia 24», e
+     * a pessoa acabava salvando como Pix comum — fora da comissão. Agora entra,
+     * com as mesmas travas do acordo novo: UMA parcela, data de hoje até o fim
+     * do mês, e a confirmação de que o valor é o TOTAL. Depois de gravar, quem
+     * chamou registra o NR na aba Pix Automático (ver `useRegistrarPixAoPagar`).
      */
     const recorrente = !isPaguePlay && plano.parcelas.find(p => ehFormaRecorrente(p.tipo));
     if (recorrente) {
-      toast.error(
-        `${nomeDaFormaRecorrente(recorrente.tipo)} não pode ser adicionado como parcela: ele entra com o `
-        + 'valor total, como acordo próprio. Escolha outra forma de pagamento para a parcela.',
-        { duration: 8000 },
-      );
-      return;
+      const nome = nomeDaFormaRecorrente(recorrente.tipo);
+      if (plano.parcelas.length > 1) {
+        toast.error(
+          `${nome} entra como UMA parcela só, com o valor total — quem parcela é a recorrência. `
+          + 'Adicione as outras formas separadamente.',
+          { duration: 8000 },
+        );
+        return;
+      }
+      const erroData = erroVencimentoRecorrente(recorrente.tipo, recorrente.vencimento, getTodayISO());
+      if (erroData) { toast.error(erroData, { duration: 8000 }); return; }
+      if (!confirmouValorTotal) {
+        toast.error(
+          `${nome} é lançado com o VALOR TOTAL, não o da parcela — confira o valor e marque a confirmação.`,
+          { duration: 8000 },
+        );
+        return;
+      }
     }
     void onConfirm(plano.parcelas.map(p => ({
       vencimento: p.vencimento,
@@ -296,7 +328,7 @@ export function ModalAdicionarParcela({
             <div className="grid grid-cols-2 gap-3">
               <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
               <div className="space-y-1">
-                <Label className="text-xs">Valor *</Label>
+                <Label className="text-xs">{recorrenteSel ? 'Valor TOTAL *' : 'Valor *'}</Label>
                 <Input
                   value={valorStr}
                   onChange={(e) => setValorStr(e.target.value)}
@@ -306,7 +338,7 @@ export function ModalAdicionarParcela({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Forma de Pagamento</Label>
-                <Select value={tipoSel} onValueChange={setTipoSel}>
+                <Select value={tipoSel} onValueChange={escolherTipo}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {tipos.map((t) => (
@@ -326,6 +358,7 @@ export function ModalAdicionarParcela({
                   </SelectContent>
                 </Select>
               </div>
+              {!recorrenteSel && (
               <div className="space-y-1">
                 <Label className="text-xs">Quantidade de parcelas</Label>
                 <Input
@@ -335,7 +368,35 @@ export function ModalAdicionarParcela({
                   className="h-8 text-xs font-mono"
                 />
               </div>
+              )}
             </div>
+
+            {/* PIX Automático / Cartão Recorrente como próxima parcela. */}
+            {recorrenteSel && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+                <p className="flex items-start gap-2 font-semibold text-amber-900 dark:text-amber-300">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
+                  {nomeDaFormaRecorrente(tipoSel)}: sem parcelamento
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-amber-900/90 dark:text-amber-200/90">
+                  <li>Coloque o <strong>VALOR TOTAL</strong> do {nomeDaFormaRecorrente(tipoSel)}, não o valor de uma parcela.</li>
+                  <li>Entra como <strong>uma parcela só</strong>, com data de hoje até o fim do mês.</li>
+                  <li>
+                    A comissão sai da aba <strong>Pix Automático</strong>: ao salvar, o {nrLabel} {nrValor} é
+                    registrado lá com este valor. Se não der, o aviso diz como registrar.
+                  </li>
+                </ul>
+                <label className="flex items-start gap-2 cursor-pointer select-none pt-1 font-medium text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={confirmouValorTotal}
+                    onChange={(e) => setConfirmouValorTotal(e.target.checked)}
+                    className="h-3.5 w-3.5 mt-0.5 accent-primary cursor-pointer"
+                  />
+                  Confirmo que o valor é o TOTAL do {nomeDaFormaRecorrente(tipoSel)}
+                </label>
+              </div>
+            )}
 
             {/* Parcelas personalizadas — só faz sentido com mais de uma. */}
             {quantidade > 1 && (

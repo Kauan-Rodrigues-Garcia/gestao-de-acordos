@@ -46,8 +46,14 @@ vi.mock('@/services/direto_extra.service', () => ({
 
 // 2c) PIX Automático / Cartão Recorrente entram sozinhos no Pix (14/09/2026).
 const registrarNoPixMock = vi.fn().mockResolvedValue({ tipo: 'registrado' });
-vi.mock('@/services/pixAutomaticoDoAcordo.service', () => ({
+const registrarPixAoPagarMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('@/services/pixAutomaticoDoAcordo.service', async importOriginal => ({
+  // `parcelaRecorrenteParaPix` é puro: fica o de verdade.
+  ...(await importOriginal<typeof import('@/services/pixAutomaticoDoAcordo.service')>()),
   registrarAcordoNoPixAutomatico: (...a: unknown[]) => registrarNoPixMock(...a),
+}));
+vi.mock('@/hooks/useRegistrarPixAoPagar', () => ({
+  useRegistrarPixAoPagar: () => registrarPixAoPagarMock,
 }));
 
 // 3) hooks
@@ -571,20 +577,29 @@ describe('AcordoNovoInline — PIX Automático entra sozinho no Pix', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
-  it('NR já seu: recorrente não vira parcela do acordo existente', async () => {
+  // Liberado em 08/10/2026: entrada no Pix hoje, o resto no Pix Automático.
+  it('NR já seu: recorrente abre o modal para virar a próxima parcela', async () => {
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
     });
+    routes.acordosMaybeSingle = {
+      data: {
+        id: 'a-meu', nome_cliente: 'Cliente Pix', nr_cliente: '900',
+        vencimento: '2026-05-20', valor: 60, tipo: 'pix', status: 'pago',
+        parcelas: 1, numero_parcela: 1, acordo_grupo_id: 'grp-1',
+        operador_id: 'me-1', empresa_id: 'emp-1',
+        perfis: { id: 'me-1', nome: 'Eu Operador' },
+      } as Acordo,
+      error: null,
+    };
     semearRecorrente();
     renderInline();
     fireEvent.click(screen.getByRole('checkbox'));
     clickSalvarAcordo();
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith(
-      expect.stringMatching(/não pode ser adicionado como parcela/),
-      expect.anything(),
-    ));
-    expect(screen.queryByText(/Adicionar parcela ao acordo/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument());
+    expect(screen.getByText(/Confirmo que o valor é o TOTAL/)).toBeInTheDocument();
+    // Nada gravado nem registrado no Pix antes de confirmar no modal.
     expect(registrarNoPixMock).not.toHaveBeenCalled();
   });
 });

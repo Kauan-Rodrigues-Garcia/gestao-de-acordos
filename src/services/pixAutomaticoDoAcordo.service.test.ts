@@ -26,8 +26,9 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
-  registrarAcordoNoPixAutomatico, registrarAcordoPagoNoPix, avisoPixDoAcordoPago,
+  registrarAcordoNoPixAutomatico, registrarAcordoPagoNoPix, avisoPixDoAcordoPago, parcelaRecorrenteParaPix,
 } from './pixAutomaticoDoAcordo.service';
+import type { Acordo } from '@/lib/supabase';
 
 const BASE = {
   empresaId: 'emp-1',
@@ -182,5 +183,33 @@ describe('avisoPixDoAcordoPago', () => {
   it('registrado e pedido enviado são sucesso', () => {
     expect(avisoPixDoAcordoPago({ tipo: 'registrado' }, '9')?.tipo).toBe('sucesso');
     expect(avisoPixDoAcordoPago({ tipo: 'pedido_enviado' }, '9')?.tipo).toBe('sucesso');
+  });
+});
+
+// Entrada no Pix hoje, o resto no Pix Automático (08/10/2026).
+describe('parcelaRecorrenteParaPix', () => {
+  const base = {
+    id: 'a1', nr_cliente: '12792564', operador_id: 'op-1', empresa_id: 'emp-1',
+    setor_id: 'set-1', tipo_vinculo: 'direto', tipo: 'pix', status: 'pago', valor: 60,
+  } as unknown as Acordo;
+  const pedida = { vencimento: '2026-10-24', valor: 2806.38, tipo: 'pix_automatico', status: 'verificar_pendente' };
+
+  it('usa a linha gravada quando ela existe', () => {
+    const gravada = { ...base, id: 'a2', tipo: 'pix_automatico', status: 'verificar_pendente', valor: 2806.38, vencimento: '2026-10-24' } as unknown as Acordo;
+    expect(parcelaRecorrenteParaPix(base, [pedida], [gravada])).toMatchObject({
+      tipo: 'pix_automatico', nr_cliente: '12792564', valor: 2806.38, operador_id: 'op-1', vencimento: '2026-10-24',
+    });
+  });
+
+  it('sem linha gravada (parcela em aberto no grupo), usa a parcela pedida e o dono do acordo', () => {
+    expect(parcelaRecorrenteParaPix(base, [pedida], [])).toMatchObject({
+      tipo: 'pix_automatico', status: 'verificar_pendente', nr_cliente: '12792564', valor: 2806.38,
+      operador_id: 'op-1', empresa_id: 'emp-1', setor_id: 'set-1',
+    });
+  });
+
+  it('nada a fazer quando a parcela não é recorrente ou veio em lote', () => {
+    expect(parcelaRecorrenteParaPix(base, [{ ...pedida, tipo: 'boleto' }], [])).toBeNull();
+    expect(parcelaRecorrenteParaPix(base, [pedida, pedida], [])).toBeNull();
   });
 });

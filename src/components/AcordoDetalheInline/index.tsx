@@ -17,6 +17,8 @@ import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagenda
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import { parcelaRecorrenteParaPix } from '@/services/pixAutomaticoDoAcordo.service';
+import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import {
   formatCurrency, formatDate,
@@ -85,6 +87,7 @@ export function AcordoDetalheInline({
   const statusLabels  = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels    = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
   const { perfil } = useAuth();
+  const registrarPixAoPagar = useRegistrarPixAoPagar();
   const { empresa } = useEmpresa();
 
   const [registrosReais,        setRegistrosReais]        = useState<Acordo[]>([]);
@@ -270,6 +273,9 @@ export function AcordoDetalheInline({
       });
       setModalAddParcela(false);
       onSaved?.(baseAtualizado);
+      // Parcela de PIX Automático / Cartão Recorrente: o NR vai para a aba Pix.
+      const pix = parcelaRecorrenteParaPix(acordoLocal, inputs, novas);
+      if (pix) void registrarPixAoPagar(pix);
       // O acordo passa a DECLARAR as parcelas pedidas, mas materializa no
       // máximo a próxima. Sem dizer isso, o operador que pediu 10 e viu uma
       // linha (ou nenhuma) acha que o botão falhou.

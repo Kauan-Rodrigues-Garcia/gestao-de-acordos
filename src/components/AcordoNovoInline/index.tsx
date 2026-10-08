@@ -44,7 +44,8 @@ import {
 } from '@/lib/formasRecorrentes';
 import { useCargoPermissoes }       from '@/hooks/useCargoPermissoes';
 import { niveisLiberados }          from '@/lib/permissoes-escopo';
-import { registrarAcordoNoPixAutomatico } from '@/services/pixAutomaticoDoAcordo.service';
+import { parcelaRecorrenteParaPix, registrarAcordoNoPixAutomatico } from '@/services/pixAutomaticoDoAcordo.service';
+import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -75,6 +76,7 @@ export function AcordoNovoInline({
   isPaguePlay, colSpan, onSaved, onCancel, onAcordoRemovido,
 }: AcordoNovoInlineProps) {
   const { perfil }  = useAuth();
+  const registrarPixAoPagar = useRegistrarPixAoPagar();
   const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const navigate    = useNavigate();
@@ -526,20 +528,12 @@ export function AcordoNovoInline({
             // PaguePlay mantém o bloqueio original.
             if (!isPaguePlay) {
               /*
-               * Recorrente não vira PARCELA de acordo existente.
-               *
-               * Como parcela, o valor seria só um pedaço do acordo — e o Pix
-               * Automático paga sobre o total. A liderança pediu que esse caso
-               * não entre (14/09/2026). `ModalAdicionarParcela` recusa o mesmo.
+               * Recorrente como PRÓXIMA parcela do acordo existente — liberado
+               * em 08/10/2026 (entrada no Pix hoje, o resto no Pix Automático).
+               * O modal abre com a forma recorrente e cobra as travas: uma
+               * parcela, valor TOTAL confirmado, data do mês corrente. Ao
+               * gravar, o NR vai para a aba Pix Automático.
                */
-              if (formaRecorrente) {
-                toast.error(
-                  `${label} "${nrParaVerificar}" já é seu. ${nomeDaFormaRecorrente(tipo)} entra com o valor total, `
-                  + 'como acordo próprio — não pode ser adicionado como parcela de um acordo existente.',
-                  { duration: 8000 },
-                );
-                return;
-              }
               const { data: acordoMeu } = await supabase
                 .from('acordos')
                 .select('*, perfis(id, nome, email, perfil, setor_id)')
@@ -865,6 +859,9 @@ export function AcordoNovoInline({
           ? `Parcela ${novas[0]?.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`
           : `${novas.length} parcelas adicionadas ao acordo existente (total ${r.novoTotal}).`,
       );
+      // Parcela de PIX Automático / Cartão Recorrente: o NR vai para a aba Pix.
+      const pix = parcelaRecorrenteParaPix(acordoParaParcela, inputs, novas);
+      if (pix) await registrarPixAoPagar(pix);
     } finally {
       setSalvandoParcela(false);
     }

@@ -49,6 +49,8 @@ vi.mock('@/hooks/useAuth', () => ({
 }));
 
 let empresaValue: { id: string } | null = { id: 'emp-1' };
+// O registro no Pix depois de adicionar parcela recorrente tem teste próprio.
+vi.mock('@/hooks/useRegistrarPixAoPagar', () => ({ useRegistrarPixAoPagar: () => vi.fn() }));
 vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: empresaValue }),
 }));

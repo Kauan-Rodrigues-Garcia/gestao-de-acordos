@@ -32,7 +32,8 @@
  * registro, disparado pela mudança de status.
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, type Acordo } from '@/lib/supabase';
+import type { NovaParcelaInput } from '@/services/parcelas.service';
 import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 import {
   criarAcordoPix, fetchConfigsPix, pedirAutorizacaoNr,
@@ -181,6 +182,42 @@ export async function registrarAcordoPagoNoPix(p: {
 }
 
 /**
+ * A parcela de PIX Automático / Cartão Recorrente que acabou de ser adicionada
+ * a um acordo existente, no formato de `registrarAcordoPagoNoPix` (08/10/2026).
+ *
+ * Caso real: entrada paga hoje num Pix comum, o resto no Pix Automático dia
+ * 24. O modal só deixa a forma recorrente entrar como UMA parcela, com o valor
+ * TOTAL confirmado — é esse valor que vai para a aba Pix.
+ *
+ * Usa a linha gravada quando ela existe. Quando o grupo ainda tem parcela em
+ * aberto, a nova não vira linha agora (`adicionarParcelasAoGrupo`), mas a
+ * autorização do Pix Automático é do cliente, não da linha: o registro na aba
+ * acontece do mesmo jeito, com os dados da parcela pedida.
+ *
+ * `null` quando não há parcela recorrente no pedido.
+ */
+export function parcelaRecorrenteParaPix(
+  base: Acordo,
+  pedidas: readonly NovaParcelaInput[],
+  gravadas: readonly Acordo[],
+): AcordoParaPix | null {
+  if (pedidas.length !== 1 || !ehFormaRecorrente(pedidas[0].tipo)) return null;
+  const pedida = pedidas[0];
+  const linha = gravadas.find(a => ehFormaRecorrente(a.tipo));
+  return {
+    tipo:         linha?.tipo ?? pedida.tipo,
+    status:       linha?.status ?? pedida.status,
+    nr_cliente:   linha?.nr_cliente ?? base.nr_cliente ?? null,
+    valor:        Number(linha?.valor ?? pedida.valor),
+    vencimento:   linha?.vencimento ?? pedida.vencimento,
+    operador_id:  linha?.operador_id ?? base.operador_id,
+    empresa_id:   linha?.empresa_id ?? base.empresa_id ?? null,
+    setor_id:     linha?.setor_id ?? base.setor_id ?? null,
+    tipo_vinculo: linha?.tipo_vinculo ?? base.tipo_vinculo ?? null,
+  };
+}
+
+/**
  * A frase para a tela depois de `registrarAcordoPagoNoPix`.
  *
  * `null` quando não há o que dizer: nada a fazer, ou o NR já estava no Pix —
@@ -201,7 +238,7 @@ export function avisoPixDoAcordoPago(
   }
   return {
     tipo: 'aviso',
-    texto: `O acordo está pago, mas o NR ${nr} NÃO entrou no Pix Automático: ${r.motivo} `
+    texto: `O NR ${nr} NÃO entrou no Pix Automático: ${r.motivo} `
       + 'Registre pela aba Pix Automático para não perder a comissão.',
   };
 }
