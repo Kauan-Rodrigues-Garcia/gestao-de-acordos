@@ -48,3 +48,27 @@ const FONTES_DO_CARTAZ = [
 export function carregarFontesDoCartaz() {
   declarar('hw-fontes-cartaz', FONTES_DO_CARTAZ);
 }
+
+/**
+ * As da Caça aos Zumbis, em pixel: Pixelify Sans (o texto, variável de 400 a
+ * 700) e Press Start 2P (as etiquetas, como HEADSHOT). Também no próprio site
+ * e OFL.
+ */
+const FONTES_PIXEL = `@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/pixelify-sans.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/press-start-2p.woff2') format('woff2');
+}`;
+
+export function carregarFontesPixel() {
+  declarar('hw-fontes-pixel', FONTES_PIXEL);
+}

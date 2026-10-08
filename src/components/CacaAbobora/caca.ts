@@ -1,10 +1,15 @@
 /**
- * caca.ts — a Caça à Abóbora: o que está na tela agora, e o clique.
+ * caca.ts — a Caça aos Zumbis: o que está na tela agora, e o tiro.
  *
- * A regra mora no banco (migration 20261005120000): o super_admin liga só para
- * o dia, o pg_cron solta uma abóbora a cada 30 min–1h10 e `fn_abobora_pegar`
- * decide quem achou primeiro, com o tempo medido no próprio banco. Aqui só se
- * acompanha a ÚLTIMA rodada:
+ * Até 07/10/2026 era a Caça à Abóbora; virou zumbi em pixel art (Cleber). Por
+ * dentro o nome ficou: as tabelas, as funções e o tópico continuam `abobora_*`
+ * — renomear o banco em produção não compraria nada.
+ *
+ * A regra mora no banco (migrations 20261005120000 e 20261007200000): o
+ * super_admin liga só para o dia, o pg_cron solta um zumbi a cada 30 min–1h10
+ * — um diferente a cada vez no mesmo dia — e `fn_abobora_pegar` decide quem
+ * matou primeiro, com o tempo medido no próprio banco e o headshot gravado.
+ * Aqui só se acompanha a ÚLTIMA rodada:
  *
  *   - ao entrar, uma leitura de `abobora_rodadas`;
  *   - depois, o Broadcast `abobora:<empresa>` traz a linha inteira a cada
@@ -36,7 +41,14 @@ export interface RodadaAbobora {
   /** Só com foto: a faixa mostra a foto. Sem ela, só o nome. */
   achada_por_foto:    string | null;
   ms:                 number | null;
+  /** O mais rápido do dia, de qualquer tiro. */
   mais_rapida_do_dia: boolean;
+  /** Qual dos `ZUMBIS` saiu. Antes da migration 20261007200000, `null` (a semente escolhe). */
+  zumbi:              number | null;
+  /** Matou com tiro na cabeça. */
+  headshot:           boolean;
+  /** O headshot mais rápido do dia (precisa de outro headshot no dia para bater). */
+  headshot_mais_rapido_do_dia: boolean;
 }
 
 /**
@@ -83,6 +95,9 @@ export function normalizarRodada(bruto: unknown): RodadaAbobora | null {
     achada_por_foto:    texto(r.achada_por_foto),
     ms:                 r.ms == null ? null : Number(r.ms),
     mais_rapida_do_dia: r.mais_rapida_do_dia === true,
+    zumbi:              r.zumbi == null || !Number.isFinite(Number(r.zumbi)) ? null : Number(r.zumbi),
+    headshot:           r.headshot === true,
+    headshot_mais_rapido_do_dia: r.headshot_mais_rapido_do_dia === true,
   };
 }
 
@@ -113,7 +128,8 @@ export function juntarRodada(
   }
   if (nova.situacao !== 'achada') faixaAte = 0;
   const igual = antes && antes.id === nova.id && antes.situacao === nova.situacao
-    && antes.achada_em === nova.achada_em && antes.mais_rapida_do_dia === nova.mais_rapida_do_dia;
+    && antes.achada_em === nova.achada_em && antes.mais_rapida_do_dia === nova.mais_rapida_do_dia
+    && antes.headshot === nova.headshot && antes.headshot_mais_rapido_do_dia === nova.headshot_mais_rapido_do_dia;
   if (igual && faixaAte === atual.faixaAte) return atual;
   return { rodada: nova, faixaAte };
 }
@@ -252,15 +268,95 @@ export interface ResultadoPegar {
   erro:   string | null;
 }
 
-/** Quem chega primeiro ao banco leva. A resposta já atualiza a faixa. */
-export async function pegarAbobora(rodadaId: number): Promise<ResultadoPegar> {
-  const { data, error } = await rpc<{ ganhou?: boolean; rodada?: unknown } | null>(
-    'fn_abobora_pegar', { p_rodada: rodadaId },
+/**
+ * Quem chega primeiro ao banco leva. A resposta já atualiza a faixa.
+ *
+ * `headshot` vai junto. Banco ainda sem a migration 20261007200000 não conhece
+ * o parâmetro (PostgREST responde PGRST202): manda de novo sem ele, e o tiro
+ * vale como um tiro qualquer.
+ */
+export async function pegarAbobora(rodadaId: number, headshot = false): Promise<ResultadoPegar> {
+  if (rodadaId < 0) return pegarNoEnsaio(rodadaId, headshot);
+  let { data, error } = await rpc<{ ganhou?: boolean; rodada?: unknown } | null>(
+    'fn_abobora_pegar', { p_rodada: rodadaId, p_headshot: headshot },
   );
+  if (error && /PGRST202|p_headshot/.test(`${(error as { code?: string }).code ?? ''} ${error.message}`)) {
+    ({ data, error } = await rpc<{ ganhou?: boolean; rodada?: unknown } | null>('fn_abobora_pegar', { p_rodada: rodadaId }));
+  }
   if (error) return { ganhou: false, rodada: null, erro: error.message };
   const rodada = normalizarRodada(data?.rodada);
   if (rodada) aceitarRodada(rodada, true);
   return { ganhou: data?.ganhou === true, rodada, erro: null };
+}
+
+// ── Ensaio (só no localhost) ─────────────────────────────────────────────────
+//
+// O laboratório (`laboratorio.tsx`, que só existe com `import.meta.env.DEV`)
+// solta zumbis de mentira, de id negativo: o tiro neles se resolve aqui e nunca
+// chega ao banco. Uma rodada de verdade que sair depois passa por cima (id maior).
+
+let ultimoEnsaio = 0;
+
+function rodadaDeEnsaio(p: Partial<RodadaAbobora>): RodadaAbobora {
+  const agora = Date.now();
+  return {
+    id: ultimoEnsaio, dia: '', solta_em: new Date(agora).toISOString(),
+    expira_em: new Date(agora + 15 * 60_000).toISOString(),
+    semente: Math.floor(Math.random() * 2 ** 31), origem: 'teste', situacao: 'solta',
+    achada_em: null, achada_por: null, achada_por_nome: null, achada_por_foto: null, ms: null,
+    mais_rapida_do_dia: false, zumbi: 0, headshot: false, headshot_mais_rapido_do_dia: false,
+    ...p,
+  };
+}
+
+function matarNoEnsaio(r: RodadaAbobora, nome: string, headshot: boolean, extra: Partial<RodadaAbobora> = {}): RodadaAbobora {
+  const agora = Date.now();
+  return {
+    ...r, situacao: 'achada', achada_em: new Date(agora).toISOString(), achada_por: 'ensaio',
+    achada_por_nome: nome, ms: Math.max(0, agora - Date.parse(r.solta_em)), headshot, ...extra,
+  };
+}
+
+/** Solta um zumbi de mentira — só na tela de quem está no laboratório. */
+export function ensaioSoltar(zumbi: number): void {
+  ultimoEnsaio -= 1;
+  publicar({ rodada: rodadaDeEnsaio({ zumbi }), faixaAte: 0 });
+}
+
+/** Outra pessoa «matou» o zumbi de mentira: ele morre na tela e a faixa abre. */
+export function ensaioOutroMatou(headshot: boolean): void {
+  const r = estado.rodada;
+  if (!r || r.id >= 0 || r.situacao !== 'solta') return;
+  aceitarRodada(matarNoEnsaio(r, 'Ana Paula Moura Silva', headshot), true);
+}
+
+/** Ninguém matou: o zumbi volta para a terra. */
+export function ensaioSumir(): void {
+  const r = estado.rodada;
+  if (!r || r.id >= 0 || r.situacao !== 'solta') return;
+  aceitarRodada({ ...r, situacao: 'sumiu' }, true);
+}
+
+/** Só a faixa, sem zumbi: para ver as etiquetas. */
+export function ensaioFaixa(p: { zumbi: number; headshot: boolean; rapida: boolean; headshotRapido: boolean; foto?: string | null }): void {
+  ultimoEnsaio -= 1;
+  const r = matarNoEnsaio(rodadaDeEnsaio({ zumbi: p.zumbi, solta_em: new Date(Date.now() - 4213).toISOString() }), 'Kauan Rodrigues Garcia', p.headshot, {
+    mais_rapida_do_dia: p.rapida, headshot_mais_rapido_do_dia: p.headshotRapido, achada_por_foto: p.foto ?? null,
+  });
+  publicar({ rodada: r, faixaAte: Date.now() + FAIXA_MS });
+}
+
+/** Tira o ensaio da tela. */
+export function ensaioLimpar(): void {
+  if (estado.rodada && estado.rodada.id < 0) publicar({ rodada: null, faixaAte: 0 });
+}
+
+function pegarNoEnsaio(rodadaId: number, headshot: boolean): ResultadoPegar {
+  const r = estado.rodada;
+  if (!r || r.id !== rodadaId || r.situacao !== 'solta') return { ganhou: false, rodada: r, erro: null };
+  const morta = matarNoEnsaio(r, 'Você (ensaio)', headshot);
+  aceitarRodada(morta, true);
+  return { ganhou: true, rodada: morta, erro: null };
 }
 
 // ── O painel do super_admin (Configurações → Geral) ──────────────────────────

@@ -11,7 +11,7 @@ function rodada(p: Partial<RodadaAbobora> = {}): RodadaAbobora {
     id: 1, dia: '2026-10-05', solta_em: '2026-10-05T14:59:00Z', expira_em: '2026-10-05T15:14:00Z',
     semente: 42, origem: 'sorteio', situacao: 'solta',
     achada_em: null, achada_por: null, achada_por_nome: null, achada_por_foto: null, ms: null,
-    mais_rapida_do_dia: false, ...p,
+    mais_rapida_do_dia: false, zumbi: 3, headshot: false, headshot_mais_rapido_do_dia: false, ...p,
   };
 }
 const achada = (p: Partial<RodadaAbobora> = {}) => rodada({
@@ -80,6 +80,24 @@ describe('normalizarRodada', () => {
     expect(r).toMatchObject({ id: 7, origem: 'teste', situacao: 'achada', ms: 1500, mais_rapida_do_dia: true });
     // Foto vazia = sem foto: a faixa mostra só o nome.
     expect(r?.achada_por_foto).toBeNull();
+  });
+
+  it('lê o zumbi e o headshot; linha de antes da migration nova vem sem eles', () => {
+    const nova = normalizarRodada({
+      id: 8, solta_em: 'a', expira_em: 'b', semente: 9, situacao: 'achada', zumbi: 5,
+      headshot: true, headshot_mais_rapido_do_dia: true,
+    });
+    expect(nova).toMatchObject({ zumbi: 5, headshot: true, headshot_mais_rapido_do_dia: true });
+    const antiga = normalizarRodada({ id: 7, solta_em: 'a', expira_em: 'b', semente: 9 });
+    expect(antiga).toMatchObject({ zumbi: null, headshot: false, headshot_mais_rapido_do_dia: false });
+  });
+
+  it('o headshot que chega depois atualiza a mesma rodada', () => {
+    const e1 = juntarRodada(VAZIO, achada(), true, AGORA);
+    const e2 = juntarRodada(e1, achada({ headshot: true }), true, AGORA + 1000);
+    expect(e2).not.toBe(e1);
+    expect(e2.rodada?.headshot).toBe(true);
+    expect(e2.faixaAte).toBe(e1.faixaAte);
   });
 
   it('lixo não vira rodada', () => {

@@ -297,7 +297,7 @@ export default function AdminConfiguracoes() {
               `fn_halloween_liberar` confere de novo no banco. */}
           {ehSuperAdmin && <LiberacaoHalloween />}
 
-          {/* ── Caça à Abóbora: liga só para o dia, com o painel do que
+          {/* ── Caça aos Zumbis (era a Caça à Abóbora): liga só para o dia, com o painel do que
               aconteceu. Só super_admin — as funções `fn_abobora_*` conferem
               de novo no banco. */}
           {ehSuperAdmin && <CacaAboboraConfig />}

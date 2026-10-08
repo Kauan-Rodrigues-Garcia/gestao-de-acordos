@@ -50,7 +50,7 @@ describe('pacote de entrada', () => {
     }
   });
 
-  it('a Caça à Abóbora só baixa a cena quando há abóbora ou faixa', () => {
+  it('a Caça aos Zumbis só baixa a cena (e a física) quando há zumbi ou faixa', () => {
     const daqui = arquivosDoApp(join(RAIZ, 'components', 'CacaAbobora'))
       .filter(f => !f.endsWith('cena.tsx'));
     for (const f of [...daqui, join(RAIZ, 'components', 'Layout.tsx')]) {

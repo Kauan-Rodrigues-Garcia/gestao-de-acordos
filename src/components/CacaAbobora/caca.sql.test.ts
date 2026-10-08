@@ -56,3 +56,47 @@ describe('migration da Caça à Abóbora', () => {
     expect(SQL).toContain("split_part((select realtime.topic()), ':', 1) = 'abobora'");
   });
 });
+
+const SQL_ZUMBIS = fs.readFileSync(
+  path.resolve(__dirname, '../../../supabase/migrations/20261007200000_caca_zumbis.sql'),
+  'utf8',
+).toLowerCase().replace(/\s+/g, ' ');
+
+function corpoZumbis(funcao: string): string {
+  const inicio = SQL_ZUMBIS.indexOf(`create or replace function public.${funcao}(`);
+  expect(inicio, funcao).toBeGreaterThan(-1);
+  return SQL_ZUMBIS.slice(inicio, SQL_ZUMBIS.indexOf('$function$;', inicio));
+}
+
+describe('migration da Caça aos Zumbis', () => {
+  it('o tiro continua travando a linha e medindo o tempo no banco', () => {
+    const pegar = corpoZumbis('fn_abobora_pegar');
+    expect(pegar).toContain('for update');
+    expect(pegar).toContain("situacao <> 'solta'");
+    expect(pegar).toContain('v_agora timestamptz := clock_timestamp()');
+  });
+
+  it('a assinatura antiga sai antes da nova entrar (o PostgREST não pode ter duas)', () => {
+    const drop = SQL_ZUMBIS.indexOf('drop function if exists public.fn_abobora_pegar(bigint);');
+    const cria = SQL_ZUMBIS.indexOf('create or replace function public.fn_abobora_pegar(p_rodada bigint, p_headshot boolean default false)');
+    expect(drop).toBeGreaterThan(-1);
+    expect(cria).toBeGreaterThan(drop);
+  });
+
+  it('o headshot mais rápido só compara com outros headshots do dia', () => {
+    const pegar = corpoZumbis('fn_abobora_pegar');
+    expect(pegar).toContain("r.situacao = 'achada' and r.headshot and r.id <> v_rodada.id and r.ms <= v_ms");
+    expect(pegar).toMatch(/v_hs := v_headshot and exists/);
+  });
+
+  it('o zumbi é sorteado entre os que ainda não saíram no dia', () => {
+    const soltar = corpoZumbis('fn_abobora_soltar');
+    expect(soltar).toContain('r.dia = v_hoje and r.zumbi is not null');
+  });
+
+  it('o tiro é de quem está logado; soltar continua fechado ao app', () => {
+    expect(SQL_ZUMBIS).toContain('revoke all on function public.fn_abobora_pegar(bigint, boolean) from public, anon');
+    expect(SQL_ZUMBIS).toContain('grant execute on function public.fn_abobora_pegar(bigint, boolean) to authenticated');
+    expect(SQL_ZUMBIS).toContain('revoke all on function public.fn_abobora_soltar(text) from public, anon, authenticated');
+  });
+});

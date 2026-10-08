@@ -1,15 +1,20 @@
 /**
- * CacaAbobora — as duas portas da caça no `Layout`.
+ * CacaAbobora — as duas portas da Caça aos Zumbis no `Layout` (até 07/10/2026,
+ * Caça à Abóbora; o nome da pasta e do banco ficou).
  *
  *   <FaixaDaCaca />    entre a barra do topo e o conteúdo: o nome de quem
- *                      achou passa por 10 min. É um item do fluxo, não um card
+ *                      matou passa por 10 min. É um item do fluxo, não um card
  *                      por cima: não cobre botão nenhum. Presa no alto, fora da
  *                      rolagem: está à vista o tempo todo, em qualquer tela.
- *   <AboboraDaCaca />  a abóbora escondida e o recado de quem clicou.
+ *   <AboboraDaCaca />  o zumbi escondido, a morte dele e o recado de quem atirou.
  *
- * Leves de propósito: o que desenha (`cena.tsx`, o CSS) só é baixado quando há
- * abóbora ou faixa. A regra inteira está em `caca.ts` e na migration
- * 20261005120000.
+ * Leves de propósito: o que desenha (`cena.tsx`, a física, o CSS) só é baixado
+ * quando há zumbi ou faixa. A regra inteira está em `caca.ts` e nas migrations
+ * 20261005120000 e 20261007200000.
+ *
+ * No localhost há ainda o laboratório (`?zumbis` no endereço): solta zumbis de
+ * mentira, sem banco, para ver tudo funcionando. Fora do `npm run dev` ele nem
+ * existe no pacote.
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -18,10 +23,13 @@ import { aboboraNaTela, faixaNaTela, useCacaAbobora } from './caca';
 
 const carregarCena = comNovaTentativa(() => import('./cena'));
 
-/** Altura da faixa, em px — a mesma do `.cacab-faixa` no CSS. */
+/** Altura da faixa, em px — a mesma do `.zb-faixa` no CSS. */
 const ALTURA_FAIXA = 32;
 const FaixaAbobora = lazy(() => carregarCena().then(m => ({ default: m.FaixaAbobora })));
 const CenaCaca     = lazy(() => carregarCena().then(m => ({ default: m.CenaCaca })));
+
+const Laboratorio = import.meta.env.DEV ? lazy(() => import('./laboratorio')) : null;
+const comLaboratorio = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('zumbis');
 
 export function FaixaDaCaca({ empresaId }: { empresaId: string | null | undefined }) {
   const caca = useCacaAbobora(empresaId);
@@ -50,14 +58,20 @@ export function FaixaDaCaca({ empresaId }: { empresaId: string | null | undefine
 export function AboboraDaCaca({ empresaId }: { empresaId: string | null | undefined }) {
   const caca = useCacaAbobora(empresaId);
   const naTela = aboboraNaTela(caca, Date.now());
-  // Depois da primeira abóbora a cena fica montada: o recado de quem clicou
-  // precisa sobreviver à abóbora, que some no clique.
+  // Depois do primeiro zumbi a cena fica montada: a morte e o recado precisam
+  // sobreviver à rodada, que vira «achada» no tiro.
   const [montada, setMontada] = useState(false);
   useEffect(() => { if (naTela) setMontada(true); }, [naTela]);
-  if (!montada && !naTela) return null;
+  // O laboratório fica sempre no mesmo lugar da árvore: se mudasse de lugar
+  // quando o primeiro zumbi sai, remontaria e perderia o zumbi escolhido.
   return (
-    <Suspense fallback={null}>
-      <CenaCaca rodada={naTela ? caca.rodada : null} />
-    </Suspense>
+    <>
+      {(montada || naTela) && (
+        <Suspense fallback={null}>
+          <CenaCaca rodada={caca.rodada} naTela={naTela} />
+        </Suspense>
+      )}
+      {Laboratorio && comLaboratorio() && <Suspense fallback={null}><Laboratorio /></Suspense>}
+    </>
   );
 }

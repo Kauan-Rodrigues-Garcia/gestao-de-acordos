@@ -1,131 +1,179 @@
 /*
- * Caça à Abóbora — a abóbora, o recado do clique e a faixa.
+ * Caça aos Zumbis — o zumbi, a morte, o recado, a faixa e o laboratório.
  *
- * Tudo com prefixo `cacab-`: o arquivo só entra com a cena (ver `index.tsx`),
+ * Tudo com prefixo `zb-`: o arquivo só entra com a cena (ver `index.tsx`),
  * mas as classes vivem no documento inteiro depois disso.
  *
- * A faixa é sempre noite (roxo fundo com luz de vela), no tema claro e no
+ * É arte em pixel do começo ao fim: borda em degrau (sombra sem desfoque, sem
+ * canto arredondado), animação em passos (`steps()`), ampliação inteira com
+ * `image-rendering: pixelated`. A faixa é sempre noite, no tema claro e no
  * escuro: é um letreiro, não um pedaço da tela.
  *
  * Não consulta `prefers-reduced-motion`, como o resto do Halloween
  * (`Halloween/halloween.css`): nos computadores da operação ela vem ligada por
- * política, e a faixa ficava parada para todo mundo. O letreiro é a graça.
+ * política, e a faixa ficava parada para todo mundo.
  */
 
 :root {
-  --cacab-noite-a: #1a0c2a;
-  --cacab-noite-b: #3a1849;
-  --cacab-brilho: #ffb347;
-  --cacab-vela: #ffe7a3;
-  --cacab-ouro: #ffd65a;
-  --cacab-cartaz: 'Rye', 'Georgia', serif;
-  --cacab-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  --zb-noite: #0d100f;
+  --zb-noite-2: #161b18;
+  --zb-toxico: #9dff5c;
+  --zb-toxico-escuro: #2f6a17;
+  --zb-sangue: #c8202a;
+  --zb-sangue-escuro: #6e0a12;
+  --zb-osso: #ece5d0;
+  --zb-ouro: #ffd34d;
+  --zb-texto: 'Pixelify Sans', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --zb-arcade: 'Press Start 2P', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /* A mira: cruz branca de contorno escuro, com o ponto vermelho no meio. */
+  --zb-mira: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' shape-rendering='crispEdges'%3E%3Cg fill='%23140c14'%3E%3Crect x='9' y='0' width='4' height='8'/%3E%3Crect x='9' y='14' width='4' height='8'/%3E%3Crect x='0' y='9' width='8' height='4'/%3E%3Crect x='14' y='9' width='8' height='4'/%3E%3Crect x='9' y='9' width='4' height='4'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Crect x='10' y='1' width='2' height='6'/%3E%3Crect x='10' y='15' width='2' height='6'/%3E%3Crect x='1' y='10' width='6' height='2'/%3E%3Crect x='15' y='10' width='6' height='2'/%3E%3C/g%3E%3Crect x='10' y='10' width='2' height='2' fill='%23ff3b3b'/%3E%3C/svg%3E") 11 11, crosshair;
 }
 
-/* ── A abóbora ──────────────────────────────────────────────────────────────
-   Três camadas, cada uma com o próprio movimento — senão uma animação apaga
-   o transform da outra: o botão CHEGA, o miolo ESPIA (balança de vez em
-   quando), e o desenho CRESCE com o mouse em cima. */
-.cacab-abobora {
+/* Borda em degrau: quatro sombras retas, sem canto — o canto fica vazado. */
+.zb-recado, .zb-tag, .zb-faixa-tempo, .zb-lab, .zb-lab-btn, .zb-lab-zumbi, .zb-faixa-foto {
+  --zb-borda: var(--zb-toxico-escuro);
+  --zb-b: 2px;
+  box-shadow:
+    0 calc(-1 * var(--zb-b)) 0 0 var(--zb-borda),
+    0 var(--zb-b) 0 0 var(--zb-borda),
+    calc(-1 * var(--zb-b)) 0 0 0 var(--zb-borda),
+    var(--zb-b) 0 0 0 var(--zb-borda);
+}
+
+/* ── A camada ────────────────────────────────────────────────────────────────
+   A lâmina em cima do conteúdo (`camada.ts`): corta o que sai dela e não pega
+   clique; a folha dentro anda ao contrário da rolagem, e o que mora nela rola
+   com a página. Acima de cabeçalho de tabela grudado, abaixo de diálogo (50). */
+.zb-camada {
   position: fixed;
-  /* Acima de cabeçalho de tabela grudado (sticky) e abaixo de diálogo (50). */
   z-index: 40;
-  width: 40px;
-  height: 40px;
-  padding: 3px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  animation: cacab-chega .7s cubic-bezier(.2, .9, .3, 1.35) both;
-}
-.cacab-abobora:focus-visible { outline: 2px solid var(--cacab-brilho); outline-offset: 2px; border-radius: 50%; }
-
-.cacab-espia {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  transform-origin: 50% 92%;
-  animation: cacab-espia 4.6s ease-in-out 1.2s infinite;
-}
-/* O halo de vela atrás dela: pulsa devagar, é o que chama o olho de canto. */
-.cacab-espia::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(255 170 60 / .45), rgb(255 140 40 / .12) 60%, transparent);
-  animation: cacab-halo 3.2s ease-in-out infinite;
+  overflow: hidden;
   pointer-events: none;
 }
-
-.cacab-desenho {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 2px 2px rgb(60 20 0 / .28));
-  transition: transform .18s ease, filter .18s ease;
-}
-.cacab-abobora:hover .cacab-desenho {
-  transform: scale(1.16) rotate(-5deg);
-  filter: drop-shadow(0 0 7px rgb(255 160 40 / .8)) drop-shadow(0 2px 2px rgb(60 20 0 / .3));
-}
-
-.cacab-abobora.pega { pointer-events: none; animation: cacab-pega .38s ease-in forwards; }
-
-.cacab-vela { animation: cacab-tremula 2.6s linear infinite; }
-
-@keyframes cacab-chega {
-  from { opacity: 0; transform: translateY(10px) scale(.3); }
-  to   { opacity: 1; transform: none; }
-}
-@keyframes cacab-espia {
-  0%, 72%, 100% { transform: rotate(0); }
-  78% { transform: rotate(-10deg) translateY(-1px); }
-  85% { transform: rotate(8deg); }
-  91% { transform: rotate(-4deg); }
-  96% { transform: rotate(2deg); }
-}
-@keyframes cacab-halo {
-  0%, 100% { opacity: .55; transform: scale(.92); }
-  50%      { opacity: 1;   transform: scale(1.08); }
-}
-@keyframes cacab-tremula {
-  0%, 100% { opacity: 1; }
-  12% { opacity: .86; }
-  16% { opacity: .97; }
-  38% { opacity: .9; }
-  44% { opacity: 1; }
-  71% { opacity: .84; }
-  76% { opacity: .96; }
-}
-@keyframes cacab-pega {
-  40%  { transform: scale(1.35) rotate(-8deg); opacity: 1; }
-  100% { transform: scale(.2) rotate(30deg); opacity: 0; }
-}
-
-/* ── O estouro do clique ──────────────────────────────────────────────────── */
-.cacab-estouro { position: fixed; z-index: 31; pointer-events: none; }
-.cacab-estouro i {
+.zb-camada-folha {
   position: absolute;
-  left: -4px;
-  top: -4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f7902a;
-  animation: cacab-voa .75s cubic-bezier(.2, .7, .3, 1) forwards;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
 }
-.cacab-estouro i.brilho { background: var(--cacab-ouro); box-shadow: 0 0 6px var(--cacab-ouro); width: 6px; height: 6px; }
-@keyframes cacab-voa { to { transform: translate(var(--x), var(--y)) scale(.25); opacity: 0; } }
 
-/* ── O recado de quem clicou ──────────────────────────────────────────────── */
-.cacab-recado {
+/* ── O zumbi ─────────────────────────────────────────────────────────────────
+   A caixa fica parada; o desenho sobe de dentro da terra (a caixa corta o que
+   está abaixo da linha dos pés) e afunda de volta se ninguém atirar. */
+.zb-zumbi {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: var(--zb-mira);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Para onde ele olha: camada só sua (a subida anima o transform do canvas). */
+.zb-zumbi-vira { display: block; width: 100%; height: 100%; }
+.zb-zumbi-sprite {
+  display: block;
+  image-rendering: pixelated;
+  animation: zb-sobe 0.85s steps(17, end) both;
+}
+/* O monte de terra que se abre embaixo dele enquanto sobe. */
+.zb-zumbi::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  background: #4a3424;
+  box-shadow:
+    -12px 0 0 #3a281b, -8px 0 0 #5c4330, -4px 0 0 #4a3424, 4px 0 0 #5c4330, 8px 0 0 #3a281b, 12px 0 0 #4a3424,
+    -8px -4px 0 #6b5038, -4px -4px 0 #5c4330, 0 -4px 0 #6b5038, 4px -4px 0 #4a3424, 8px -4px 0 #5c4330,
+    -16px 0 0 #2e2016, 16px 0 0 #2e2016;
+  animation: zb-terra 1.6s steps(6, end) both;
+  pointer-events: none;
+}
+.zb-zumbi.afunda .zb-zumbi-sprite { animation: zb-afunda 1.1s steps(17, end) forwards; }
+.zb-zumbi.afunda::after { animation: zb-terra-volta 1.1s steps(6, end) both; }
+
+@keyframes zb-sobe {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes zb-afunda {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+@keyframes zb-terra {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes zb-terra-volta {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── A morte ─────────────────────────────────────────────────────────────── */
+.zb-palco {
+  position: absolute;
+  pointer-events: none;
+  image-rendering: pixelated;
+  transition: opacity 0.85s steps(5, end);
+}
+.zb-palco.apagando { opacity: 0; }
+/* O que fica no chão depois: o sangue, mais claro, por uns minutos. */
+.zb-palco-chao.resquicio { opacity: .5; transition: opacity 1.6s steps(8, end); }
+.zb-palco-chao.some { opacity: 0; transition: opacity 1.2s steps(6, end); }
+
+.zb-letreiro {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--zb-arcade);
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow:
+    2px 0 0 var(--zb-sangue-escuro), -2px 0 0 var(--zb-sangue-escuro),
+    0 2px 0 var(--zb-sangue-escuro), 0 -2px 0 var(--zb-sangue-escuro),
+    2px 2px 0 var(--zb-sangue-escuro), 4px 4px 0 rgb(0 0 0 / .45);
+  animation: zb-letreiro 1.4s steps(14, end) forwards;
+}
+@keyframes zb-letreiro {
+  0%   { transform: translate(-50%, -60%) scale(.5); color: #fff; opacity: 1; }
+  12%  { transform: translate(-50%, -110%) scale(1.25); color: var(--zb-ouro); }
+  22%  { transform: translate(-50%, -110%) scale(1); color: #fff; }
+  75%  { transform: translate(-50%, -190%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -230%) scale(1); opacity: 0; }
+}
+
+/* O tiro que pegou na parede. */
+.zb-furo {
+  position: fixed;
+  z-index: 41;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  pointer-events: none;
+  background: #140c14;
+  box-shadow: -4px -4px 0 #b9b2a3, 4px -4px 0 #d6d0c2, -4px 4px 0 #d6d0c2, 4px 4px 0 #b9b2a3, 0 -6px 0 #e8e2d4, 6px 0 0 #e8e2d4;
+  animation: zb-furo .7s steps(7, end) forwards;
+}
+@keyframes zb-furo {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+/* ── O recado de quem atirou ─────────────────────────────────────────────── */
+/* Embaixo, no meio: em cima ficam a barra e a faixa (que abre com o nome de
+   quem matou), e o zumbi pode estar em qualquer canto do conteúdo. */
+.zb-recado {
   position: fixed;
   left: 50%;
-  top: 72px;
+  bottom: 28px;
   z-index: 60;
   transform: translateX(-50%);
   width: max-content;
@@ -133,109 +181,218 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 20px 12px 14px;
-  border-radius: 16px;
+  padding: 12px 18px 12px 14px;
   pointer-events: none;
-  color: var(--cacab-vela);
-  background: linear-gradient(135deg, var(--cacab-noite-a), var(--cacab-noite-b));
-  border: 1px solid rgb(255 179 71 / .5);
-  box-shadow: 0 16px 34px rgb(0 0 0 / .35), 0 0 24px rgb(242 140 40 / .18);
-  animation: cacab-recado 4.2s ease both;
+  color: var(--zb-osso);
+  background: var(--zb-noite);
+  --zb-b: 4px;
+  /* A borda em degrau e uma sombra dura, deslocada: o painel «descola» da tela. */
+  box-shadow:
+    0 -4px 0 0 var(--zb-borda), 0 4px 0 0 var(--zb-borda),
+    -4px 0 0 0 var(--zb-borda), 4px 0 0 0 var(--zb-borda),
+    8px 8px 0 0 rgb(0 0 0 / .35);
+  animation: zb-recado 5.2s linear both;
 }
-.cacab-recado > div { display: grid; gap: 2px; font-size: 13px; line-height: 1.35; }
-.cacab-recado > div > b { font-family: var(--cacab-cartaz); font-weight: 400; font-size: 20px; color: var(--cacab-brilho); }
-.cacab-recado-abobora { width: 42px; height: 42px; flex: none; }
-.cacab-recado-nome { color: #fff; font-weight: 700; }
-.cacab-recado-rapida { color: var(--cacab-ouro); font-weight: 700; }
-.cacab-mono { font-family: var(--cacab-mono); color: #fff; }
-@keyframes cacab-recado {
-  0%   { opacity: 0; transform: translate(-50%, -14px) scale(.96); }
-  8%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  88%  { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -8px); }
+.zb-recado-hs { --zb-borda: var(--zb-sangue); }
+.zb-recado > div { display: grid; gap: 4px; font-family: var(--zb-texto); font-size: 14px; line-height: 1.35; max-width: 420px; }
+.zb-recado > div > b {
+  font-family: var(--zb-arcade);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--zb-toxico);
+  text-shadow: 2px 2px 0 var(--zb-toxico-escuro);
+}
+.zb-recado-hs > div > b { color: #fff; text-shadow: 2px 2px 0 var(--zb-sangue), 4px 4px 0 var(--zb-sangue-escuro); }
+.zb-recado-cabeca { flex: none; image-rendering: pixelated; }
+.zb-recado-nome { color: var(--zb-toxico); font-weight: 700; }
+.zb-recado-recordes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.zb-mono { font-family: var(--zb-arcade); font-size: 10px; color: var(--zb-ouro); }
+@keyframes zb-recado {
+  0%   { opacity: 0; transform: translate(-50%, 8px); }
+  2%   { opacity: 1; transform: translate(-50%, 4px); }
+  4%   { transform: translate(-50%, 0); }
+  94%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── As etiquetas ────────────────────────────────────────────────────────── */
+/* A Press Start 2P não tem maiúscula com acento («RÁPIDO» saía «RAPIDO»):
+   etiqueta com palavra acentuada vai na Pixelify; HEADSHOT fica na de fliperama. */
+.zb-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 2px;
+  font-family: var(--zb-texto);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.zb-tag svg { flex: none; }
+.zb-tag-hs {
+  --zb-borda: var(--zb-sangue-escuro);
+  padding: 4px 6px 3px;
+  font-family: var(--zb-arcade);
+  font-weight: 400;
+  font-size: 8px;
+  letter-spacing: .02em;
+  color: #fff;
+  background: var(--zb-sangue);
+  text-shadow: 1px 1px 0 var(--zb-sangue-escuro);
+  animation: zb-pisca-hs 1.2s steps(2, jump-none) infinite;
+}
+.zb-tag-rapido {
+  --zb-borda: #8a6a10;
+  color: #2a1a00;
+  background: var(--zb-ouro);
+}
+.zb-tag-hs-rapido {
+  --zb-borda: var(--zb-sangue);
+  color: var(--zb-ouro);
+  background: #2a0a0e;
+}
+@keyframes zb-pisca-hs {
+  from { background: var(--zb-sangue); }
+  to   { background: #e0262b; }
 }
 
 /* ── A faixa ─────────────────────────────────────────────────────────────── */
-.cacab-faixa {
+.zb-faixa {
   position: relative;
   height: 32px;
   overflow: hidden;
-  color: var(--cacab-vela);
+  color: var(--zb-osso);
+  font-family: var(--zb-texto);
   background:
-    radial-gradient(120px 60px at 18% 120%, rgb(255 150 40 / .18), transparent 70%),
-    radial-gradient(160px 60px at 82% -40%, rgb(150 80 220 / .25), transparent 70%),
-    linear-gradient(90deg, var(--cacab-noite-a), var(--cacab-noite-b) 50%, var(--cacab-noite-a));
-  border-bottom: 1px solid rgb(255 179 71 / .35);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .04);
+    /* O sangue escorrendo da borda de cima, em pixel. */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='8' shape-rendering='crispEdges'%3E%3Crect width='36' height='2' fill='%236e0a12'/%3E%3Crect x='4' y='2' width='2' height='4' fill='%236e0a12'/%3E%3Crect x='4' y='6' width='2' height='2' fill='%23c8202a'/%3E%3Crect x='15' y='2' width='2' height='2' fill='%236e0a12'/%3E%3Crect x='26' y='2' width='2' height='6' fill='%236e0a12'/%3E%3Crect x='28' y='2' width='2' height='2' fill='%236e0a12'/%3E%3C/svg%3E") 0 0 / 36px 8px repeat-x,
+    /* O musgo na borda de baixo. */
+    linear-gradient(0deg, var(--zb-toxico-escuro) 0 2px, transparent 2px),
+    repeating-linear-gradient(90deg, var(--zb-noite) 0 4px, var(--zb-noite-2) 4px 8px);
+  image-rendering: pixelated;
 }
-/* As pontas se apagam na noite: o recado entra e sai sem corte seco. */
-.cacab-faixa::before,
-.cacab-faixa::after {
+/* As pontas apagam na noite, em degraus — o recado entra e sai sem corte seco. */
+.zb-faixa::before,
+.zb-faixa::after {
   content: '';
   position: absolute;
   top: 0;
-  bottom: 0;
-  width: 64px;
+  bottom: 2px;
+  width: 48px;
   z-index: 2;
   pointer-events: none;
 }
-.cacab-faixa::before { left: 0;  background: linear-gradient(90deg, var(--cacab-noite-a), transparent); }
-.cacab-faixa::after  { right: 0; background: linear-gradient(-90deg, var(--cacab-noite-a), transparent); }
+.zb-faixa::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--zb-noite) 0 16px, rgb(13 16 15 / .66) 16px 32px, rgb(13 16 15 / .33) 32px 48px);
+}
+.zb-faixa::after {
+  right: 0;
+  background: linear-gradient(-90deg, var(--zb-noite) 0 16px, rgb(13 16 15 / .66) 16px 32px, rgb(13 16 15 / .33) 32px 48px);
+}
 
-.cacab-faixa-trilho {
+.zb-faixa-trilho {
   position: absolute;
   inset: 0 auto 0 0;
   display: flex;
   width: max-content;
   will-change: transform;
-  animation: cacab-corre var(--cacab-dur, 30s) linear infinite;
+  animation: zb-corre var(--zb-dur, 30s) linear infinite;
 }
-.cacab-faixa:hover .cacab-faixa-trilho { animation-play-state: paused; }
-.cacab-faixa-grupo { display: flex; align-items: center; }
-@keyframes cacab-corre { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.zb-faixa:hover .zb-faixa-trilho { animation-play-state: paused; }
+.zb-faixa-grupo { display: flex; align-items: center; }
+@keyframes zb-corre { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-.cacab-faixa-recado {
+.zb-faixa-recado {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   height: 32px;
-  padding-right: 30px;
+  padding: 2px 34px 0 0;
   white-space: nowrap;
-  font-size: 13px;
-  letter-spacing: .01em;
+  font-size: 14px;
+  letter-spacing: .02em;
 }
-.cacab-faixa-abobora { width: 20px; height: 20px; flex: none; }
-.cacab-faixa-foto {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+.zb-faixa-cabeca { flex: none; image-rendering: pixelated; margin-top: -2px; }
+.zb-faixa-foto {
+  width: 20px;
+  height: 20px;
   object-fit: cover;
   flex: none;
-  box-shadow: 0 0 0 2px var(--cacab-brilho), 0 0 10px rgb(255 160 40 / .55);
+  --zb-borda: var(--zb-toxico);
 }
-.cacab-faixa-nome {
-  font-family: var(--cacab-cartaz);
-  font-size: 15px;
-  color: var(--cacab-brilho);
-  text-shadow: 0 0 10px rgb(255 140 40 / .55);
-}
-.cacab-faixa-tempo {
-  font-family: var(--cacab-mono);
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  padding: 1px 8px;
-  border-radius: 7px;
-  background: rgb(255 179 71 / .16);
-  border: 1px solid rgb(255 179 71 / .45);
-}
-.cacab-faixa-rapida {
+.zb-faixa-nome {
   font-weight: 700;
-  font-size: 12.5px;
-  color: #2a1400;
-  padding: 1px 9px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #ffe27a, #ffb347);
-  box-shadow: 0 0 12px rgb(255 200 80 / .45);
+  font-size: 16px;
+  color: var(--zb-toxico);
+  text-shadow: 2px 2px 0 #0b2a07;
 }
-.cacab-faixa-estrela { color: rgb(255 214 90 / .55); font-size: 12px; }
+.zb-faixa-tempo {
+  font-family: var(--zb-arcade);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--zb-ouro);
+  padding: 4px 6px 3px;
+  background: #1d1a10;
+  --zb-borda: #5c4a12;
+}
+.zb-faixa-caveira { flex: none; color: var(--zb-osso); opacity: .55; }
+
+/* ── O laboratório (só no localhost) ─────────────────────────────────────── */
+.zb-lab {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 70;
+  width: 268px;
+  color: var(--zb-osso);
+  background: var(--zb-noite);
+  font-family: var(--zb-texto);
+  font-size: 13px;
+  --zb-borda: var(--zb-toxico);
+}
+.zb-lab.fechado { width: auto; }
+.zb-lab-titulo {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font-family: var(--zb-arcade);
+  font-size: 9px;
+  color: var(--zb-toxico);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.zb-lab-corpo { padding: 0 10px 12px; display: grid; gap: 8px; }
+.zb-lab-nota { margin: 0; font-size: 11px; opacity: .7; }
+.zb-lab-rotulo { margin: 2px 0 0; font-size: 12px; color: var(--zb-toxico); }
+.zb-lab-zumbis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.zb-lab-zumbi {
+  display: grid;
+  place-items: center;
+  padding: 4px 0;
+  background: var(--zb-noite-2);
+  border: 0;
+  cursor: pointer;
+  --zb-borda: #2a322c;
+}
+.zb-lab-zumbi.ativo { --zb-borda: var(--zb-toxico); background: #1e2a1a; }
+.zb-lab-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.zb-lab-btn {
+  padding: 5px 8px;
+  font-family: var(--zb-texto);
+  font-size: 12px;
+  color: var(--zb-osso);
+  background: var(--zb-noite-2);
+  border: 0;
+  cursor: pointer;
+  --zb-borda: #3a463c;
+}
+.zb-lab-btn:hover { --zb-borda: var(--zb-toxico); }
+.zb-lab-btn:active { transform: translateY(2px); }
+.zb-lab-btn.principal { color: #0b1a06; background: var(--zb-toxico); --zb-borda: var(--zb-toxico-escuro); font-weight: 700; }

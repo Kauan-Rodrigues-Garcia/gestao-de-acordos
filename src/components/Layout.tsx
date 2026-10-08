@@ -735,7 +735,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    // `data-palco-abobora`: é dentro daqui que a Caça à Abóbora procura um canto
+    // `data-palco-abobora`: é dentro daqui que a Caça aos Zumbis procura um canto
     // livre (`CacaAbobora/esconderijo.ts`) — nunca no menu nem na barra do topo.
     <main data-palco-abobora className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
@@ -1010,8 +1010,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Caça à Abóbora: o nome de quem achou passa aqui por 20 min. Item do
-            fluxo, logo abaixo da barra — não cobre nada. A abóbora em si é
+        {/* Caça aos Zumbis: o nome de quem matou passa aqui por 10 min. Item do
+            fluxo, logo abaixo da barra — não cobre nada. O zumbi em si é
             desenhada por cima do conteúdo, num canto sem botão por perto. */}
         <FaixaDaCaca empresaId={empresa?.id} />
         <AboboraDaCaca empresaId={empresa?.id} />
