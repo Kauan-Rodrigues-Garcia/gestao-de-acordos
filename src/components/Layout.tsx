@@ -67,6 +67,7 @@ import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHa
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { AboboraDaCaca, FaixaDaCaca } from '@/components/CacaAbobora';
+import { PesquisaExperiencia } from '@/components/PesquisaExperiencia';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -1045,6 +1046,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
           onFinished={aoResolverTour}
+        />
+        {/* Pesquisa de experiência (temporária, 08/10/2026): canto de baixo à
+            esquerda, depois do menu. Espera o termo, o tutorial e a carta de
+            Halloween saírem da frente. */}
+        <PesquisaExperiencia
+          liberado={!termoLoading && !precisaAceitar && tourJaVisto && !boasVindasAberta}
+          esquerda={sidebarOpen ? 240 : 64}
         />
         {boasVindasAberta && (
           <Suspense fallback={null}>

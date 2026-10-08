@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import PesquisaExperienciaConfig from '@/components/admin/PesquisaExperienciaConfig';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -292,6 +293,11 @@ export default function AdminConfiguracoes() {
               segura até o administrador, e o painel de Cargos só passa a
               mandar depois que ela abre. Só super_admin vira — a policy
               `chat_config_update` confere de novo no banco. */}
+          {/* ── Pesquisa de experiência (TEMPORÁRIO, 08/10/2026): liga a
+              pergunta para todos e mostra as respostas. Ligar é do super_admin;
+              ler é de quem abre esta aba (a policy cobra `config_sub_geral`). */}
+          <PesquisaExperienciaConfig />
+
           {/* ── Halloween: o botão temporário que libera o tema para todos.
               Some sozinho depois de liberado. Só super_admin — a função
               `fn_halloween_liberar` confere de novo no banco. */}

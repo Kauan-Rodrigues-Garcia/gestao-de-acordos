@@ -1,0 +1,90 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Caveat:wght@700&display=swap");
+
+/*
+ * O cartão «Cafezinho» da pesquisa de experiência (08/10/2026). Cores próprias
+ * e sempre claras — é um bilhete, não um pedaço do tema: fica igual no Claro,
+ * no Escuro e nos temas de cor. Canto de baixo à esquerda, ao lado do menu
+ * (`--pq-esquerda`, posta pelo Layout), longe da bolha do chat.
+ */
+.pq-caf {
+  position: fixed; z-index: 45;
+  left: calc(var(--pq-esquerda, 0px) + 16px); bottom: 16px;
+  width: min(300px, calc(100vw - 32px));
+  border-radius: 22px; padding: 15px 15px 13px;
+  color: #4a2e22; font-family: 'Nunito', 'Inter', system-ui, sans-serif;
+  background: radial-gradient(120% 90% at 100% 0%, #ffe3c2 0%, #fff4e6 46%, #fffaf3 100%);
+  box-shadow: 0 24px 50px -12px rgb(110 60 20 / 0.38), 0 0 0 1px rgb(200 140 90 / 0.22);
+  display: grid; gap: 9px; overflow: hidden;
+  animation: pq-sobe 0.55s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+  color-scheme: light;
+}
+@media (max-width: 767px) { .pq-caf { left: 12px; bottom: 12px; } }
+.pq-caf.pq-sai { transition: opacity 0.35s, transform 0.35s; opacity: 0; transform: translateY(14px); }
+@keyframes pq-sobe { from { opacity: 0; transform: translateY(22px) scale(0.97); } }
+
+.pq-caf .pq-cab { display: flex; gap: 10px; align-items: center; }
+.pq-caf .pq-caneca { width: 44px; height: 44px; flex: none; }
+.pq-caf .pq-vapor path { fill: none; stroke: #d9a679; stroke-width: 2.4; stroke-linecap: round; animation: pq-vapor 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: bottom; }
+.pq-caf .pq-vapor path:nth-child(2) { animation-delay: 0.5s; }
+.pq-caf .pq-vapor path:nth-child(3) { animation-delay: 1s; }
+@keyframes pq-vapor { 0% { opacity: 0; transform: translateY(4px) scaleY(0.7); } 40% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-6px) scaleY(1.1); } }
+.pq-caf .pq-oi { font-weight: 900; font-size: 17px; line-height: 1.15; letter-spacing: -0.01em; }
+.pq-caf .pq-sub { font-size: 12.5px; color: #8a5f48; font-weight: 600; margin-top: 1px; line-height: 1.35; }
+.pq-caf .pq-perg { font-size: 14px; font-weight: 800; margin: 0; }
+.pq-caf .pq-previa { position: absolute; top: 9px; right: 12px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #a0745a; }
+
+.pq-caf .pq-ops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.pq-caf .pq-op {
+  border: 0; border-radius: 15px; padding: 8px 4px 7px; display: grid; justify-items: center; gap: 4px;
+  font: inherit; font-weight: 800; font-size: 12px; color: #4a2e22; cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1), box-shadow 0.2s, opacity 0.2s;
+  box-shadow: 0 2px 0 rgb(120 70 30 / 0.12);
+}
+.pq-caf .pq-op svg { width: 32px; height: 32px; transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.pq-caf .pq-op:hover { transform: translateY(-3px); box-shadow: 0 8px 16px -6px rgb(120 70 30 / 0.35); }
+.pq-caf .pq-op:hover svg { transform: rotate(-8deg) scale(1.08); }
+.pq-caf .pq-op:focus-visible { outline: 3px solid #d9783e; outline-offset: 2px; }
+.pq-caf .pq-op.ruim { background: #ffd9cf; }
+.pq-caf .pq-op.media { background: #ffeab8; }
+.pq-caf .pq-op.boa { background: #d5f0d9; }
+.pq-caf .pq-op[aria-pressed='true'] { outline: 3px solid #4a2e22; outline-offset: 1px; }
+.pq-caf .pq-ops:has([aria-pressed='true']) .pq-op:not([aria-pressed='true']) { opacity: 0.62; }
+
+.pq-caf .pq-abaixo { display: grid; gap: 9px; }
+.pq-caf .pq-abaixo.pq-obrigado { justify-items: center; text-align: center; padding-top: 2px; }
+.pq-caf textarea {
+  width: 100%; border: 2px dashed #e3b994; background: rgb(255 255 255 / 0.7); border-radius: 14px;
+  padding: 9px 11px; min-height: 64px; resize: none; color: #4a2e22; font: inherit; font-weight: 600; font-size: 15px;
+}
+.pq-caf textarea::placeholder { color: #b08a72; }
+.pq-caf textarea:focus { outline: none; border-style: solid; border-color: #d98a4e; }
+.pq-caf .pq-linha { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pq-caf .pq-linha.pq-so-enviar { justify-content: flex-end; }
+.pq-caf .pq-env { border: 0; background: #4a2e22; color: #fff4e6; border-radius: 999px; padding: 8px 17px; font: inherit; font-weight: 800; font-size: 13.5px; cursor: pointer; }
+.pq-caf .pq-env:hover { background: #5f3c2c; }
+.pq-caf .pq-env:disabled { opacity: 0.6; cursor: default; }
+.pq-caf .pq-pular { border: 0; background: none; color: #a0745a; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.pq-caf .pq-pular:hover { color: #4a2e22; }
+.pq-caf .pq-add {
+  border: 2px solid #4a2e22; background: rgb(255 255 255 / 0.6); color: #4a2e22; border-radius: 999px;
+  padding: 7px 14px; font: inherit; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.pq-caf .pq-add:hover { background: #fff; transform: translateY(-1px); }
+.pq-caf .pq-add svg { width: 15px; height: 15px; }
+.pq-caf .pq-fecha-em { font-size: 12px; font-weight: 700; color: #b08a72; font-variant-numeric: tabular-nums; }
+/* O relógio de 5 s: a barra cor de mel, no topo do cartão, esvazia. */
+.pq-caf .pq-relogio { position: absolute; left: 0; right: 0; top: 0; height: 5px; background: rgb(217 138 78 / 0.18); }
+.pq-caf .pq-relogio i { display: block; height: 100%; background: linear-gradient(90deg, #f2a66b, #d9783e); transform-origin: left; animation: pq-esvazia var(--pq-segundos, 5s) linear forwards; }
+@keyframes pq-esvazia { to { transform: scaleX(0); } }
+
+.pq-caf.pq-fim { justify-items: center; text-align: center; }
+.pq-caf .pq-assin { font-family: 'Caveat', cursive; font-size: 19px; color: #b5643a; line-height: 1; }
+.pq-caf .pq-coracao { animation: pq-flutua 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes pq-flutua { 50% { transform: translateY(-3px) scale(1.08); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pq-caf, .pq-caf * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  /* Sem animação a barra sumiria de cara: some só o desenho, o relógio continua. */
+  .pq-caf .pq-relogio { display: none; }
+}
