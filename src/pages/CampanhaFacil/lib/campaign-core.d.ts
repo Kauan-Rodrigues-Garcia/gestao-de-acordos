@@ -129,6 +129,10 @@ export interface CampaignCoreApi {
   parseNumber(value: unknown): number;
   percentToRate(value: unknown): number;
   mapCompany(saleType: unknown): string;
+  /** O 0800 de atendimento da empresa (nome de `mapCompany`). */
+  supportPhoneFor(company: string): string;
+  /** Troca os 0800 conhecidos escritos no texto por {{atendimento}}. */
+  withCompanySupportPhone(template: string): string;
   formatOperator(value: unknown): string;
   formatCurrency(value: number | string | null | undefined): string;
   formatPercent(value: unknown): string;

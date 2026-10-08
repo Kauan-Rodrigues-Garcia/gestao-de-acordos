@@ -11,7 +11,7 @@ export const VARIABLE_LABELS: [string, string][] = [
   ['quitacao', 'Quitação'], ['valor_com_juros', 'Valor atualizado'], ['juncao', 'Junção'],
   ['anual', 'Plano anual'], ['cartao_quitacao', '12x quitação'], ['cartao_anual', '12x anual'],
   ['pct_atraso', '% parcela'], ['pct_quitacao', '% quitação'], ['pct_juncao', '% junção'],
-  ['pct_anual', '% anual'], ['protocolo', 'Protocolo'], ['link', 'Link'],
+  ['pct_anual', '% anual'], ['protocolo', 'Protocolo'], ['atendimento', '0800 da empresa'], ['link', 'Link'],
 ];
 
 export function insertVariable(ref: RefObject<HTMLTextAreaElement>, value: string, setValue: (v: string) => void, variable: string) {

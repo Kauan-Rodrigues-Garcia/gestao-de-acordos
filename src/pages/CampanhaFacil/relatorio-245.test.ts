@@ -289,3 +289,33 @@ describe('exportação do preventivo', () => {
     expect(item.phone2.replace(/\D/g, '')).toBe('99982220000');
   });
 });
+
+describe('0800 de atendimento por empresa', () => {
+  // Antes o número vinha escrito no modelo: o preventivo saía sempre com o
+  // 0800 777 2020, fosse o cliente da Mundial, da Bookplay ou da Faculdade.
+  function mensagemDa(empresa: string, template?: string) {
+    const parsed = CampaignCore.parseReport245(planilha245([linha245({ 'Empresa': empresa })]));
+    const preventivo = CampaignCore.TEMPLATES.find((t) => t.id === 'preventivo')!;
+    return CampaignCore.buildCampaign(parsed.records, { senders: ['Bianca'], template: template ?? preventivo.body })[0].message;
+  }
+
+  it.each([
+    ['COLECAO', '0800 779 4000'],
+    ['MUNDIALEDITORA', '0800 779 4000'],
+    ['PEC', '0800 777 2020'],
+    ['FACULDADEBOOKPLAY', '0800 777 2020'],
+    ['PRO', '0800 779 6000'],
+    ['BOOKPLAY', '0800 779 6000'],
+  ])('empresa %s → %s', (empresa, fone) => {
+    expect(mensagemDa(empresa)).toContain(`📞 Atendimento: ${fone}`);
+  });
+
+  it('nenhum modelo padrão traz o 0800 escrito à mão', () => {
+    for (const t of CampaignCore.TEMPLATES) expect(t.body).not.toMatch(/0800/);
+  });
+
+  it('mensagem salva com o 0800 digitado também segue a empresa', () => {
+    expect(mensagemDa('COLECAO', 'Ligue 0800 777 2020')).toBe('Ligue 0800 779 4000');
+    expect(CampaignCore.withCompanySupportPhone('Ligue 0800 779 6000')).toBe('Ligue {{atendimento}}');
+  });
+});

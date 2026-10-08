@@ -1810,6 +1810,7 @@ export default function AdminUsuarios() {
         alvos={transferindo}
         setores={setores}
         empresaId={empresaAtual?.id}
+        empresasDosSetores={empresas}
         destinoSetorInicial={destinoTransferencia}
         onFechar={() => { setTransferindo(null); setDestinoTransferencia(null); }}
         onConcluida={() => {
