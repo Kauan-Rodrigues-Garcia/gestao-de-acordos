@@ -195,7 +195,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const perfilId = perfil.id;
 
     const sincronizar = () => {
-      void supabase.from('perfis').select('foto_url').eq('id', perfilId).single()
+      void supabase.from('perfis').select('foto_url').eq('id', perfilId).maybeSingle()
         .then(({ data }) => {
           if (data?.foto_url) setFotoUrl(data.foto_url as string);
         });

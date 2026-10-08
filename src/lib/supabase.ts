@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 import { obterDispositivoId } from './dispositivo';
+import { criarFetchAuth } from './fetchAuth';
 
 export type { Database };
 
@@ -17,7 +18,9 @@ let _instance: SupabaseClient<Database> | null = null;
 function getSupabase(): SupabaseClient<Database> {
   if (_instance) return _instance;
   _instance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    global: { headers: cabecalhosDoDispositivo() },
+    // `fetch` próprio: relógio adiantado e 429 na renovação do token não
+    // desconectam mais ninguém. Ver `lib/fetchAuth.ts`.
+    global: { headers: cabecalhosDoDispositivo(), fetch: criarFetchAuth() },
     auth: {
       persistSession: true,
       autoRefreshToken: true,
