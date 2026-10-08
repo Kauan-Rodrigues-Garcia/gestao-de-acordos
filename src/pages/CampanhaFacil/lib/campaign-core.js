@@ -35,7 +35,7 @@ A *{{empresa}}* liberou DESCONTOS especiais nas suas parcelas.
 6️⃣ *PIX AUTOMÁTICO no valor de R$ 00,00 por parcela*
 
 💬 *Estamos à disposição! Qual opção de pagamento você escolhe?*
-📞 Atendimento: 0800 777 2020`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "em-dia",
@@ -65,7 +65,7 @@ ou
 3️⃣ *Falar com atendimento*
 
 👉 Responda com o número da opção 😉
-📞 Atendimento: 0800 777 2020`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "preventivo",
@@ -89,7 +89,7 @@ Para facilitar, caso ainda não tenha realizado o pagamento posso encaminhar o l
 
 Aguardamos sua escolha para seguirmos com o melhor atendimento!
 _Agradecemos pela parceria e confiança._
-📞 Atendimento: 0800 777 2020`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "negociacao-recebida",
@@ -112,7 +112,7 @@ Por favor, me informe qual opção você deseja:
 
 Fico no aguardo da sua resposta para seguirmos com a melhor solução para você 😊
 Agradecemos seu interesse e estamos à disposição!
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "regularizacao-um-minuto",
@@ -155,7 +155,7 @@ O seu contrato (*{{contrato}}*) foi selecionado para pagamento com um *DESCONTO 
 4️⃣ Parcela em atraso com *JUROS OFF* no PIX por *{{parcela_desconto}}*
 
 *Qual opção de desconto você deseja?*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "pagamento-nao-identificado",
@@ -176,7 +176,7 @@ O seu contrato (*{{contrato}}*) foi selecionado para pagamento com um *DESCONTO 
 
 💬 *Estamos aqui para te ajudar!*
 ⚡ *Qual opção funciona melhor pra você hoje?*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "ultimo-aviso",
@@ -196,7 +196,7 @@ Aproveite o desconto via PIX Automático HOJE:
 4️⃣ *Parcela em atraso: {{parcela_desconto}}*
 
 ⚠️ *Confirma hoje? Após isso, perde o desconto!*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "negociacao-nao-concluida",
@@ -227,7 +227,7 @@ Medidas de cobrança e possível ação judicial
 Sem resposta, o acordo poderá ser cancelado e as medidas iniciadas imediatamente.
 
 💬*Estamos aqui para lhe ajudar,*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "pix-automatico",
@@ -253,7 +253,7 @@ Com o PIX automático da *{{empresa}}*, você não precisa mais se preocupar com
 
 *Escolha a opção que faz mais sentido pra você e me chama aqui! Vamos ativar sua condição especial ainda hoje!*
 💬*Estamos aqui para lhe ajudar,*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "quitacao-cartao",
@@ -274,7 +274,7 @@ Com o PIX automático da *{{empresa}}*, você não precisa mais se preocupar com
 
 💬 *Estamos aqui para te ajudar!*
 ⚡ *Qual opção funciona melhor pra você hoje?*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "negativacao",
@@ -293,7 +293,7 @@ Aproveite o desconto e evite maiores transtornos em seu CPF:
 3️⃣ Junção (atrasada + a vencer): *{{juncao}} (10% OFF)*
 
 ⚠️ *Confirma hoje? Após isso, perde o desconto e o processo de negativação segue automaticamente.*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "cpf-negativado",
@@ -316,7 +316,7 @@ Sabemos que imprevistos acontecem. Queremos te ajudar a resolver o quanto antes:
 _Assim que o pagamento for confirmado, damos início à baixa da restrição junto aos órgãos de proteção ao crédito._
 
 ⚡*Qual melhor opção de pagamento para hoje?*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "protesto",
@@ -338,7 +338,7 @@ Como última oportunidade de negociação, conforme a Lei 13.140/15, temos as se
 
 💬 Estamos aqui para ajudar.
 ⚡ Qual dessas opções é mais viável para você hoje?
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "saude",
@@ -360,7 +360,7 @@ Como última oportunidade de negociação, conforme a Lei 13.140/15, temos as se
 4️⃣ *Parcelamento total em até 12x no cartão (inclusive de terceiros) 💳 12x de {{cartao_quitacao}}*
 
 *Qualquer dúvida ou para aproveitar, estou à disposição por aqui!* 😊
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "educador",
@@ -381,7 +381,7 @@ Identificamos uma pendência no contrato Nº *{{contrato}}*. Para evitar que iss
 
 *Temos condições facilitadas. Como prefere seguir com o acerto?*
 💬*Estamos aqui para lhe ajudar,*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "aniversario",
@@ -424,7 +424,7 @@ Não fique de fora dessa, tempo limitado!
 
 💬*Estamos aqui para lhe ajudar,*
 ⚡*Qual melhor opção de pagamento para hoje?*
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "esquenta-black",
@@ -445,7 +445,7 @@ A *{{empresa}}* liberou DESCONTOS EXCLUSIVOS nas suas parcelas para você aprove
 6️⃣ *Já efetuei o pagamento, vou enviar o comprovante*
 
 💬 Aproveite enquanto a condição está ativa! Qual opção você prefere?
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
     {
       id: "sexta-oportunidade",
@@ -465,7 +465,7 @@ Contrato: *{{contrato}}*
 3️⃣ *Pagar somente as parcelas em atraso com 5% OFF: {{parcela_desconto}}*
 
 📲 Responda com a melhor opção ou fale conosco. Só hoje!
-📞 Atendimento: 0800 779 6000`,
+📞 Atendimento: {{atendimento}}`,
     },
   ]);
 
@@ -977,6 +977,24 @@ Contrato: *{{contrato}}*
     return cleanValue(saleType) || "Bookplay";
   }
 
+  // O 0800 de atendimento é o da empresa do cliente. Empresa fora desta lista
+  // cai no da Bookplay, que também é a empresa padrão de `mapCompany`.
+  const SUPPORT_PHONES = Object.freeze({
+    "Mundial Editora": "0800 779 4000",
+    "Faculdade Bookplay": "0800 777 2020",
+    "Bookplay": "0800 779 6000",
+  });
+
+  function supportPhoneFor(company) {
+    return SUPPORT_PHONES[company] || SUPPORT_PHONES.Bookplay;
+  }
+
+  // Mensagem salva com um destes 0800 escrito à mão (modelo padrão editado ou
+  // mensagem adicionada) passa a usar o da empresa de cada cliente.
+  function withCompanySupportPhone(template) {
+    return String(template ?? "").replace(/0800[\s.-]?77[79][\s.-]?(?:2020|4000|6000)/g, "{{atendimento}}");
+  }
+
   function titleCase(value) {
     return String(value ?? "")
       .toLocaleLowerCase("pt-BR")
@@ -1174,6 +1192,7 @@ Contrato: *{{contrato}}*
       contrato: item.contract,
       protocolo: item.protocol,
       empresa: item.company,
+      atendimento: supportPhoneFor(item.company),
       telefone: item.phone,
       parcela_desconto: formatCurrency(item.overdueDiscounted),
       quitacao: formatCurrency(item.settlement),
@@ -1201,7 +1220,7 @@ Contrato: *{{contrato}}*
   }
 
   function templateWithoutForwarder(template) {
-    return String(template ?? "");
+    return withCompanySupportPhone(template);
   }
 
   function finishMessage(message) {
@@ -1303,6 +1322,8 @@ Contrato: *{{contrato}}*
     parseNumberStrict,
     percentToRate,
     mapCompany,
+    supportPhoneFor,
+    withCompanySupportPhone,
     formatOperator,
     formatCurrency,
     formatPercent,

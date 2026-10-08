@@ -563,7 +563,8 @@ export function useCampanhaFacil() {
       arquivoNome: defaultExportFileName(),
       // O modelo e os descontos vão junto: é o que deixa o líder trocar a
       // mensagem depois de lançada (o banco refaz o texto dos pendentes).
-      modelo: selectedTemplateBody,
+      // Com o 0800 já como {{atendimento}}, para o banco refazer igual.
+      modelo: CampaignCore.withCompanySupportPhone(selectedTemplateBody),
       semValores: relatorioSemValores,
       discounts: discountsApplied,
     });
