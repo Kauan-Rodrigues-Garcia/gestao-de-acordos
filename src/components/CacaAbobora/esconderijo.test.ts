@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { caixaLivre, elementoDeAcao, sorteador } from './esconderijo';
+import { caixaLivre, elementoDeAcao, lugarAindaServe, sorteador } from './esconderijo';
 
 describe('sorteador', () => {
   it('a mesma semente dá a mesma sequência, entre 0 e 1', () => {
@@ -93,5 +93,49 @@ describe('caixaLivre', () => {
     const { palco, botao } = cena();
     const ambiente = { pilhaNoPonto: () => [botao], cursorDe: () => 'pointer' };
     expect(caixaLivre({ x: 100, y: 100, lado: 40 }, palco, null, 0, ambiente, false)).toBe(false);
+  });
+});
+
+describe('lugarAindaServe', () => {
+  function cena() {
+    document.body.innerHTML = `
+      <main id="palco"><div id="fundo"></div><button id="botao">ok</button></main>
+      <div id="dialogo"></div>`;
+    return {
+      palco:   document.getElementById('palco')!,
+      fundo:   document.getElementById('fundo')!,
+      botao:   document.getElementById('botao')!,
+      dialogo: document.getElementById('dialogo')!,
+    };
+  }
+
+  it('botão só na folga em volta: continua servindo (antes ele pulava de canto)', () => {
+    const { palco, fundo, botao } = cena();
+    // Caixa 100–140; o botão começa em 150, fora dela, dentro da folga rígida de 14.
+    const ambiente = {
+      pilhaNoPonto: (x: number, y: number) => (x >= 150 && y >= 150 ? [botao] : [fundo]),
+      cursorDe: () => 'auto',
+    };
+    expect(caixaLivre({ x: 100, y: 100, lado: 40 }, palco, null, 14, ambiente)).toBe(false);
+    expect(lugarAindaServe({ x: 100, y: 100, lado: 40 }, palco, null, ambiente)).toBe(true);
+  });
+
+  it('texto encostado: continua servindo', () => {
+    const { palco, fundo } = cena();
+    fundo.textContent = 'Total recebido';
+    const ambiente = { pilhaNoPonto: () => [fundo], cursorDe: () => 'auto' };
+    expect(lugarAindaServe({ x: 100, y: 100, lado: 40 }, palco, null, ambiente)).toBe(true);
+  });
+
+  it('botão por cima do zumbi: deixa de servir', () => {
+    const { palco, botao } = cena();
+    const ambiente = { pilhaNoPonto: () => [botao], cursorDe: () => 'auto' };
+    expect(lugarAindaServe({ x: 100, y: 100, lado: 40 }, palco, null, ambiente)).toBe(false);
+  });
+
+  it('diálogo aberto por cima: deixa de servir', () => {
+    const { palco, dialogo } = cena();
+    const ambiente = { pilhaNoPonto: () => [dialogo], cursorDe: () => 'auto' };
+    expect(lugarAindaServe({ x: 100, y: 100, lado: 40 }, palco, null, ambiente)).toBe(false);
   });
 });

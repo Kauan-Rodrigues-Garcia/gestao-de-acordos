@@ -29,6 +29,7 @@ As decisões dele, na ordem em que vieram (não relitigar):
 | 07/10 | Depois da morte fica **uma mancha de sangue** mais clara no lugar, por um tempo (3 min, a 50%). |
 | 08/10 | Escolheu 3 de 10 ideias extras: **cada zumbi morre do seu jeito** (os enfeites caem: o machado crava, a bag solta uma pizza, a gravata plana…), a **câmera lenta no headshot** (que depois mandou tirar) e os **sons em 8 bits**. |
 | 08/10 | **Tirar a câmera lenta.** Os sons tocam **para todos, sempre**, sem depender do Som ambiente do Halloween estar ligado. No headshot, som de **cérebro estourando, gosmento**. O som da saída da cova é **o primeiro gemido, bem baixinho** («só para ter alguma coisa ali»). |
+| 08/10 (tarde) | Sons do tiro **a um terço** («só um somzinho ambiente»), gemido igual. A caça **ignora o Modo leve**: é gincana da empresa inteira. A mancha de sangue fica **1 min a 30%** e **desbota devagar em 30 s** (revoga os 3 min a 50%). Corrigido o zumbi que **pulava de canto** logo depois de nascer (`lugarAindaServe`). |
 
 Escolhas feitas pelo agente, que ele não contestou (confirmar se estranhar):
 - Clicar no vão do sprite (entre o braço e a perna) é **tiro na parede**: não mata, só faz um furo e toca o ricochete.

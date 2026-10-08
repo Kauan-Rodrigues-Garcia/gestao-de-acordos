@@ -124,9 +124,11 @@
   transition: opacity 0.85s steps(5, end);
 }
 .zb-palco.apagando { opacity: 0; }
-/* O que fica no chão depois: o sangue, mais claro, por uns minutos. */
-.zb-palco-chao.resquicio { opacity: .5; transition: opacity 1.6s steps(8, end); }
-.zb-palco-chao.some { opacity: 0; transition: opacity 1.2s steps(6, end); }
+/* O que fica no chão depois: o sangue, bem mais claro, por 1 min; depois
+   desbota devagar e sem degrau em 30 s. Os tempos são os de `RESQUICIO_MS` e
+   `SOME_MS` em cena.tsx — mudar um é mudar o outro. */
+.zb-palco-chao.resquicio { opacity: .3; transition: opacity 1.6s steps(8, end); }
+.zb-palco-chao.some { opacity: 0; transition: opacity 30s linear; }
 
 .zb-letreiro {
   position: absolute;

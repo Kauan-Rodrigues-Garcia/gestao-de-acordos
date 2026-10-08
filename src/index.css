@@ -1160,10 +1160,16 @@
 
    O desfoque de fundo sai: o navegador reamostra tudo o que está atrás dele a
    cada quadro, e é justamente o que máquina sem placa de vídeo não aguenta.
+
+   A Caça aos Zumbis (classes `zb-*`) fica de fora: é gincana da empresa
+   inteira e tem que funcionar igual para todo mundo (Cleber, 08/10/2026). Sem
+   a exceção, o recado «você matou» e o HEADSHOT! sumiam em 1 ms (as animações
+   terminam invisíveis) e a faixa do topo parava no meio do nome. Custa pouco:
+   um zumbi por vez, que já pausa com a aba escondida.
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-leve] *,
-html[data-leve] *::before,
-html[data-leve] *::after {
+html[data-leve] *:not([class^="zb-"], [class*=" zb-"]),
+html[data-leve] *:not([class^="zb-"], [class*=" zb-"])::before,
+html[data-leve] *:not([class^="zb-"], [class*=" zb-"])::after {
   animation-duration: 1ms !important;
   animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;

@@ -126,6 +126,25 @@ export function caixaLivre(
   return true;
 }
 
+/**
+ * O lugar onde ele JÁ ESTÁ ainda serve? Só deixa de servir quando algo
+ * clicável (ou fora do conteúdo, como um diálogo) passou a ficar por cima.
+ *
+ * Régua frouxa de propósito (folga 0, texto em volta não conta), a mesma da
+ * última rodada de `acharEsconderijo`. Com a régua rígida de `caixaLivre`, o
+ * zumbi posto por uma rodada tolerante — ou andando na ronda, que é medida
+ * com folga 4 e sem texto — era reprovado na primeira conferência e pulava
+ * para outro canto menos de 2 s depois de nascer (Cleber, 08/10/2026).
+ */
+export function lugarAindaServe(
+  c: Caixa,
+  palco: Element,
+  propria: Element | null = null,
+  ambiente: Ambiente = ambienteDoNavegador,
+): boolean {
+  return caixaLivre(c, palco, propria, 0, ambiente, false);
+}
+
 /** A parte do palco que está na janela agora, já sem as margens. */
 export function areaVisivel(palco: Element, margem = 24): { left: number; top: number; right: number; bottom: number } | null {
   const r = palco.getBoundingClientRect();

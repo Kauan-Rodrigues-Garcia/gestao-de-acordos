@@ -18,11 +18,19 @@
  * caça segue sem som.
  */
 
-/** O volume de tudo, de 0 a 1. Baixo: é enfeite, não alarme. */
-export const VOLUME = 0.45;
+/**
+ * O volume de tudo, de 0 a 1. Baixo: é enfeite, não alarme. Era 0,45; o
+ * Cleber achou o tiro alto demais (acertando ou errando) e pediu «só um
+ * somzinho ambiente, de fundo» — 08/10/2026, caiu para um terço.
+ */
+export const VOLUME = 0.15;
 
-/** O gemido da saída da cova, ainda mais baixo que o resto: um fundo, quase nada. */
-const GEMIDO = 0.07;
+/**
+ * O gemido da saída da cova, ainda mais baixo que o resto: um fundo, quase
+ * nada. Multiplica o `VOLUME`; subiu de 0,07 para 0,21 quando o `VOLUME` caiu
+ * para um terço, para o gemido continuar exatamente onde estava.
+ */
+const GEMIDO = 0.21;
 
 let ctx: AudioContext | null = null;
 let ruidoCache: AudioBuffer | null = null;

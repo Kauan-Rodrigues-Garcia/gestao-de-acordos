@@ -33,7 +33,7 @@ import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { carregarFontesPixel } from '@/components/Halloween/fonte';
-import { acharEsconderijo, caixaLivre } from './esconderijo';
+import { acharEsconderijo, caixaLivre, lugarAindaServe } from './esconderijo';
 import { formatarTempo, nomeCurto, pegarAbobora, type RodadaAbobora } from './caca';
 import {
   ALTURA, LARGURA, MS_POR_PASSO, MS_POR_QUADRO, NUMERO_DA_PARTE, PRIMEIRO_PASSO, TODOS_OS_QUADROS,
@@ -150,11 +150,16 @@ interface Morte {
 
 /**
  * Quanto tempo a mancha fica no chão depois da morte, apagada, como resquício
- * de que morreu um zumbi ali (Cleber, 07/10/2026 — «um tempinho»).
+ * de que morreu um zumbi ali (Cleber, 07/10/2026 — «um tempinho»). Era 3 min
+ * a 50%; em 08/10 ele pediu mais clara, mais curta e sumindo devagar: 1 min
+ * a 30% (`.zb-palco-chao.resquicio`) e depois `SOME_MS` desbotando.
  */
-const RESQUICIO_MS = 3 * 60_000;
-/** O apagar da mancha no fim — o mesmo do CSS `.zb-palco-chao.some`. */
-const SOME_MS = 1_200;
+const RESQUICIO_MS = 60_000;
+/**
+ * O desbotar da mancha no fim, contínuo — o mesmo do CSS `.zb-palco-chao.some`.
+ * Era 1,2 s em 6 degraus, e parecia sumir do nada.
+ */
+const SOME_MS = 30_000;
 
 /**
  * O palco da morte: dois canvas transparentes em volta do zumbi, com o chão na
@@ -404,7 +409,8 @@ function ZumbiEscondido({ camada, rodada, aoAtirar, aoAcabar }: {
       if (!lugar) { colocar(true); return; }
       if (Date.now() - postoEm.current > ASSENTAR_MS || !andar.current) return;
       const v = camada.paraTela(andar.current.x, lugar.y);
-      if (!caixaLivre({ x: v.x, y: v.y, lado: LADO }, camada.palco, caixaRef.current)) colocar(true);
+      // Régua frouxa: só sai se algo clicável caiu por cima. Ver `lugarAindaServe`.
+      if (!lugarAindaServe({ x: v.x, y: v.y, lado: LADO }, camada.palco, caixaRef.current)) colocar(true);
     }, CONFERE_MS);
     return () => clearInterval(t);
   }, [lugar, fase, colocar, camada]);
