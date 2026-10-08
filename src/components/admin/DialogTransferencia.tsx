@@ -57,14 +57,24 @@ import {
   CARGO_DO_NUCLEO, CARGOS_FORA_DO_NUCLEO, ajusteDeCargoNaTransferencia,
 } from '@/lib/cargoDoNucleo';
 import { PERFIL_LABELS } from '@/lib/index';
+import {
+  empresaDeOrigem, empresaDoDestino, setoresDeVariasEmpresas,
+} from '@/lib/empresasDaTransferencia';
 import { cn } from '@/lib/utils';
 
 interface Props {
   /** Quem vai ser transferido. `null` mantém o diálogo fechado. */
   alvos: Perfil[] | null;
-  /** Setores da empresa ATUAL — o destino padrão. */
+  /**
+   * Setores de destino padrão. Na lista única da cobrança vêm das DUAS
+   * empresas — por isso a empresa de destino sai do setor escolhido, e não de
+   * `empresaId`. Ver `lib/empresasDaTransferencia.ts`.
+   */
   setores: Setor[];
+  /** A empresa aberta na tela. Só vale quando o perfil ou o setor não dizem a sua. */
   empresaId: string | null | undefined;
+  /** Nomes das empresas da tela, para marcar o setor quando a lista mistura as duas. */
+  empresasDosSetores?: { id: string; nome: string }[];
   /**
    * O setor que já vem escolhido ao abrir. Existe para a janela de usuário:
    * escolher Assistente ADM para alguém de outro setor abre a transferência já
@@ -77,7 +87,7 @@ interface Props {
 }
 
 export function DialogTransferencia({
-  alvos, setores, empresaId, destinoSetorInicial = null, onFechar, onConcluida,
+  alvos, setores, empresaId, empresasDosSetores = [], destinoSetorInicial = null, onFechar, onConcluida,
 }: Props) {
   const { perfil: perfilAtual } = useAuth();
   const { temPermissao } = useCargoPermissoes();
@@ -99,8 +109,32 @@ export function DialogTransferencia({
    */
   const podeTrocarEmpresa = perfilAtual?.perfil === 'super_admin';
 
+  /*
+   * A empresa de destino é a do SETOR escolhido, e a de origem é a de cada
+   * pessoa. A da tela só vale de reserva: na lista única da cobrança ela não
+   * diz de onde ninguém é. Ver `lib/empresasDaTransferencia.ts`.
+   */
+  const setorEscolhido = setoresDestino.find(s => s.id === destinoSetor) ?? null;
+  const empresaDestinoEfetiva = empresaId
+    ? empresaDoDestino(setorEscolhido, destinoEmpresa, empresaId)
+    : '';
+
   /** O destino é outra empresa? Muda o título, some a escolha e o aviso troca. */
-  const trocaDeEmpresa = !!destinoEmpresa && destinoEmpresa !== empresaId;
+  const trocaDeEmpresa = !!empresaId && !!empresaDestinoEfetiva
+    && !!alvos?.some(p => empresaDeOrigem(p, empresaId) !== empresaDestinoEfetiva);
+
+  /**
+   * `fn_transferencia_mover_empresa` recusa quem não é super_admin. Quem vê as
+   * duas empresas por concessão da Multiempresa enxerga setor da outra na
+   * lista; melhor dizer aqui do que deixar o banco recusar no meio.
+   */
+  const bloqueioDeEmpresa = trocaDeEmpresa && !podeTrocarEmpresa
+    ? 'Este setor é de outra empresa, e mudar alguém de empresa é só com o super admin.'
+    : null;
+
+  const mostrarEmpresaNoSetor = setoresDeVariasEmpresas(setoresDestino);
+  const nomeDaEmpresa = (id: string | undefined) =>
+    (id && (empresasDosSetores.find(e => e.id === id) ?? empresas.find(e => e.id === id))?.nome) || '';
 
   // Reabrir SEMPRE recomeça em "chegar limpo": herdar a escolha da
   // transferência anterior é como se apaga um histórico sem querer. O único
@@ -152,7 +186,7 @@ export function DialogTransferencia({
    * O Núcleo que vale é o da empresa de DESTINO: é nela que o cargo vai ser
    * gravado.
    */
-  const nucleoDestino = useSetorNucleo(destinoEmpresa || empresaId);
+  const nucleoDestino = useSetorNucleo(empresaDestinoEfetiva || empresaId);
 
   const ajustes = useMemo(
     () => (alvos ?? []).map(p => (destinoSetor
@@ -187,10 +221,10 @@ export function DialogTransferencia({
    */
   const transferir = useCallback(async () => {
     if (!alvos?.length || !destinoSetor || !empresaId) return;
-    if (bloqueioDeCargo || faltaNovoCargo) return;
+    if (bloqueioDeEmpresa || bloqueioDeCargo || faltaNovoCargo) return;
     setSalvando(true);
 
-    const empresaDestino = destinoEmpresa || empresaId;
+    const empresaDestino = empresaDestinoEfetiva || empresaId;
     let ok = 0, apagados = 0, movidos = 0, cargosTrocados = 0;
     const falhas: string[] = [];
 
@@ -206,13 +240,15 @@ export function DialogTransferencia({
           perfilId:         p.id,
           nome:             p.nome,
           usuario:          p.usuario ?? null,
-          origemEmpresaId:  empresaId,
+          origemEmpresaId:  empresaDeOrigem(p, empresaId),
           origemSetorId:    p.setor_id ?? null,
           origemEquipeId:   p.equipe_id ?? null,
           destinoEmpresaId: empresaDestino,
           destinoSetorId:   destinoSetor,
         },
-        levarAcordos,
+        // A tela esconde a escolha quando alguém troca de empresa; num lote
+        // misto, o aviso «sempre limpa» vale para todos.
+        levarAcordos: levarAcordos && !trocaDeEmpresa,
         executadoPorId: perfilAtual?.id ?? null,
         novoCargo: cargoNovo,
       });
@@ -242,8 +278,8 @@ export function DialogTransferencia({
     setSalvando(false);
     if (ok > 0) onConcluida();
   }, [
-    alvos, destinoSetor, destinoEmpresa, empresaId, levarAcordos, perfilAtual?.id, onConcluida,
-    nucleoDestino, novoCargo, bloqueioDeCargo, faltaNovoCargo,
+    alvos, destinoSetor, empresaDestinoEfetiva, empresaId, levarAcordos, perfilAtual?.id, onConcluida,
+    nucleoDestino, novoCargo, bloqueioDeEmpresa, bloqueioDeCargo, faltaNovoCargo, trocaDeEmpresa,
   ]);
 
   return (
@@ -311,11 +347,19 @@ export function DialogTransferencia({
                     // já estão nele — e só faz sentido na mesma empresa.
                     .filter(s => trocaDeEmpresa || !(alvos && alvos.every(t => t.setor_id === s.id)))
                     .map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.nome}{!s.ativo && ' (inativo)'}</SelectItem>
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.nome}{!s.ativo && ' (inativo)'}
+                        {mostrarEmpresaNoSetor && nomeDaEmpresa(s.empresa_id) && (
+                          <span className="text-muted-foreground"> · {nomeDaEmpresa(s.empresa_id)}</span>
+                        )}
+                      </SelectItem>
                     ))
                 )}
               </SelectContent>
             </Select>
+            {bloqueioDeEmpresa && (
+              <p className="text-[11px] text-destructive leading-snug">{bloqueioDeEmpresa}</p>
+            )}
             {/* Setor é obrigatório: sem ele a pessoa some de todo painel escopado
                 por setor, e é um estado que ninguém escolhe de propósito. */}
             {!destinoSetor && (
@@ -419,7 +463,7 @@ export function DialogTransferencia({
           <Button
             size="sm"
             onClick={() => void transferir()}
-            disabled={salvando || !destinoSetor || !!bloqueioDeCargo || faltaNovoCargo}
+            disabled={salvando || !destinoSetor || !!bloqueioDeEmpresa || !!bloqueioDeCargo || faltaNovoCargo}
             className="gap-2"
           >
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
