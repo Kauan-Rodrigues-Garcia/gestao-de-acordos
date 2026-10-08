@@ -126,3 +126,57 @@
 .cal-amostra {
   background: linear-gradient(135deg, var(--amostra) 0 50%, color-mix(in oklch, var(--amostra) 25%, var(--card)) 50% 100%);
 }
+
+/* O horário do banco de horas, no formulário: o tom suave do acento. */
+.cal-bloco-banco {
+  border-color: color-mix(in oklch, var(--cal-acento) 35%, var(--border));
+  background: color-mix(in oklch, var(--cal-acento) 6%, var(--card));
+}
+
+/* ── O painel: abrir e fechar ─────────────────────────────────────────────────
+ *
+ * Preso no alto da tela, e não no meio: centrado, ele subia e descia quando o
+ * conteúdo mudava de altura (o esqueleto virando o mês, a faixa de rascunho
+ * aparecendo). Preso no alto, só a borda de baixo anda.
+ *
+ * A animação mexe só em `opacity` e `transform` (compositor, sem refazer
+ * layout). O Radix espera o `animationend` da saída para desmontar — por isso
+ * o conteúdo não some antes de a animação terminar.
+ *
+ * `scrollbar-gutter: stable` reserva o lugar da barra de rolagem: quando o mês
+ * chega e passa da altura da tela, a barra aparece sem estreitar a grade.
+ */
+.cal-painel-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgb(0 0 0 / 0.6);
+}
+.cal-painel-fundo[data-state='open']   { animation: cal-fundo-entra 200ms ease-out; }
+.cal-painel-fundo[data-state='closed'] { animation: cal-fundo-sai 160ms ease-in forwards; }
+
+.cal-painel {
+  position: fixed;
+  z-index: 50;
+  left: 50%;
+  top: max(0.5rem, 3vh);
+  max-height: calc(100dvh - 2 * max(0.5rem, 3vh));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  transform: translateX(-50%);
+  transform-origin: 50% 0;
+}
+.cal-painel[data-state='open']   { animation: cal-painel-entra 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+.cal-painel[data-state='closed'] { animation: cal-painel-sai 160ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+
+@keyframes cal-fundo-entra { from { opacity: 0; } }
+@keyframes cal-fundo-sai   { to   { opacity: 0; } }
+@keyframes cal-painel-entra {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.985); }
+  to   { opacity: 1; transform: translateX(-50%); }
+}
+@keyframes cal-painel-sai {
+  from { opacity: 1; transform: translateX(-50%); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.99); }
+}

@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  TIPOS_EVENTO, corForte, diasDaRegra, diasDoMes, eventosPorDia, proximosEventos,
-  resumoDoMes, rotuloDoDia, semanasDoMes, temaEfetivo, textoSobreCor,
-  type EventoCalendario,
+  MODELOS, TIPOS_EVENTO, TIPOS_LANCAVEIS, corForte, diasDaRegra, diasDoMes, eventosPorDia,
+  faltaNoHorarioBanco, feriadosDoMes, lerHorarioBanco, proximosEventos, resumoDoMes, rotuloDoDia,
+  semanasDoMes, temaEfetivo, textoDoBanco, textoSobreCor, type EventoCalendario,
 } from './calendarioSetor';
 
 /** Segunda a sexta, menos o 12/10 — o calendário das Metas de outubro/2026. */
@@ -63,7 +63,7 @@ describe('o resumo do mês', () => {
     ev('2026-10-05', 'banco_horas'),
     ev('2026-10-05', 'banco_horas'),            // o mesmo dia não conta duas vezes
     ev('2026-10-12', 'feriado'),                // também está nas Metas: um feriado só
-    ev('2026-10-20', 'feriado'),                // só aqui: conta como feriado lançado
+    ev('2026-10-20', 'feriado'),                // só aqui, à mão: não é feriado (quem diz é a Meta)
     ev('2026-10-28', 'aniversario', { pessoa_id: 'ana' }), // a mesma pessoa: uma vez
   ];
 
@@ -73,7 +73,7 @@ describe('o resumo do mês', () => {
       diasNoMes: 31,
       diasUteis: 21,
       diasUteisRestantes: 18,  // de 06 a 30, menos o 12
-      feriados: 2,
+      feriados: 1,
       diasComBancoDeHoras: 2,
       aniversariantes: 1,
     });
@@ -93,6 +93,59 @@ describe('o resumo do mês', () => {
     const porDia = eventosPorDia(eventos);
     expect(porDia.get('2026-10-03')?.map(e => e.tipo)).toEqual(['banco_horas', 'aniversario']);
     expect(porDia.get('2026-10-04')).toBeUndefined();
+  });
+});
+
+describe('o feriado vem das Metas', () => {
+  it('o dia das Metas é folga, com o nome do feriado nacional quando é um', () => {
+    const f = feriadosDoMes('2026-10', ['2026-10-12', '2026-10-16']);
+    expect(f.get('2026-10-12')).toEqual({ nome: 'Nossa Senhora Aparecida', folga: true });
+    expect(f.get('2026-10-16')).toEqual({ nome: 'Feriado', folga: true });
+  });
+
+  it('feriado nacional que as Metas contam é dia de trabalho', () => {
+    const f = feriadosDoMes('2026-11', []);
+    expect(f.get('2026-11-02')).toEqual({ nome: 'Finados', folga: false });
+    expect(f.get('2026-11-20')).toEqual({ nome: 'Consciência Negra', folga: false });
+    expect(f.get('2026-11-03')).toBeUndefined();
+  });
+
+  it('o formulário não lança feriado nem tem modelo dele', () => {
+    expect(TIPOS_LANCAVEIS).not.toContain('feriado');
+    expect(MODELOS.some(m => m.tipo === 'feriado')).toBe(false);
+  });
+});
+
+describe('o horário do banco de horas', () => {
+  it('um modelo só de banco de horas, sem ponto facultativo nem expediente especial', () => {
+    expect(MODELOS.filter(m => m.tipo === 'banco_horas')).toHaveLength(1);
+    expect(MODELOS.map(m => m.rotulo)).not.toContain('Ponto facultativo');
+    expect(MODELOS.map(m => m.rotulo)).not.toContain('Expediente especial');
+  });
+
+  it('escreve como a liderança já escrevia', () => {
+    expect(textoDoBanco({ modo: 'duracao', minutos: 60 })).toBe('01 hora');
+    expect(textoDoBanco({ modo: 'duracao', minutos: 120 })).toBe('02 horas');
+    expect(textoDoBanco({ modo: 'duracao', minutos: 90 })).toBe('01h30');
+    expect(textoDoBanco({ modo: 'duracao', minutos: 30 })).toBe('30 minutos');
+    expect(textoDoBanco({ modo: 'intervalo', de: '08:30', ate: '12:00' })).toBe('08:30 às 12:00');
+    expect(textoDoBanco({ modo: 'ate', ate: '19:00' })).toBe('até às 19:00');
+  });
+
+  it('lê de volta o que gravou, e o resto vira texto livre', () => {
+    for (const t of ['01 hora', '02 horas', '01h30', '30 minutos', '08:30 às 12:00', 'até às 19:00']) {
+      expect(textoDoBanco(lerHorarioBanco(t))).toBe(t);
+    }
+    expect(lerHorarioBanco('depois do almoço')).toEqual({ modo: 'livre', texto: 'depois do almoço' });
+    expect(lerHorarioBanco('')).toEqual({ modo: 'duracao', minutos: 60 });
+  });
+
+  it('recusa horário incompleto ou ao contrário', () => {
+    expect(faltaNoHorarioBanco({ modo: 'intervalo', de: '12:00', ate: '08:30' })).toMatch(/depois do início/);
+    expect(faltaNoHorarioBanco({ modo: 'intervalo', de: '', ate: '12:00' })).toMatch(/Preencha/);
+    expect(faltaNoHorarioBanco({ modo: 'ate', ate: '' })).toMatch(/Preencha/);
+    expect(faltaNoHorarioBanco({ modo: 'livre', texto: '  ' })).toMatch(/Escreva/);
+    expect(faltaNoHorarioBanco({ modo: 'intervalo', de: '08:30', ate: '12:00' })).toBeNull();
   });
 });
 

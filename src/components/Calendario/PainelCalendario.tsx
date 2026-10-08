@@ -22,21 +22,32 @@
  * de um feriado lançado aqui. Lançar um feriado que as Metas não têm mostra o
  * aviso para quem edita — a meta diária continua contando aquele dia.
  *
+ * ## Feriado é o das Metas
+ *
+ * O dia de feriado é o que as Metas descontam (`feriadosDoMes`): tem feriado
+ * em que a operação trabalha, e quem decide é a aba Metas. O feriado nacional
+ * que as Metas contam aparece só com o nome e «expediente normal».
+ *
+ * ## Abrir e fechar sem pulo
+ *
+ * O painel tem animação própria (`.cal-painel`, em calendario.css) e fica
+ * preso no alto da tela, não no meio: centrado, ele subia e descia quando o
+ * conteúdo trocava de tamanho. O conteúdo continua montado durante a saída, e
+ * o hook guarda o que já leu, para a reabertura nascer pronta.
+ *
  * ## Copiar imagem
  *
  * O cartão do calendário vira PNG na área de transferência, para colar no
  * grupo do setor — o mesmo caminho do «copiar imagem» do Plantão Elite.
  */
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {
-  CalendarDays, ChevronLeft, ChevronRight, EyeOff, ImageDown, Loader2, Palette, Send, Wand2,
+  CalendarDays, ChevronLeft, ChevronRight, EyeOff, ImageDown, Loader2, Palette, Send, Wand2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog, DialogContent, DialogDescription, DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -48,8 +59,8 @@ import { deslocarMes } from '@/lib/mesReferencia';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { copiarImagemDoElemento } from '@/lib/copiarImagem';
 import {
-  corForte, eventosPorDia, proximosEventos, resumoDoMes, rotuloDoMesLongo,
-  temaEfetivo, textoSobreCor, INFO_TIPO, TIPOS_EVENTO, type TipoEvento,
+  corForte, eventosPorDia, feriadosDoMes, proximosEventos, resumoDoMes, rotuloDoMesLongo,
+  temaEfetivo, textoSobreCor, INFO_TIPO, TIPOS_EVENTO, type EventoCalendario, type TipoEvento,
 } from '@/lib/calendarioSetor';
 import {
   listarPessoasDoSetor, publicarMes, type PessoaDoSetor,
@@ -67,17 +78,35 @@ interface Props {
   onClose: () => void;
 }
 
+/** Dia sem nada: sempre o mesmo array, para o diálogo do dia não se refazer à toa. */
+const SEM_EVENTOS: EventoCalendario[] = [];
+
 export function PainelCalendario({ aberto, onClose }: Props) {
+  const painel = useRef<HTMLDivElement>(null);
   return (
-    <Dialog open={aberto} onOpenChange={a => { if (!a) onClose(); }}>
-      <DialogContent className="block max-h-[94vh] w-[calc(100vw-1rem)] max-w-[1400px] overflow-y-auto p-0 sm:rounded-2xl">
-        <DialogTitle className="sr-only">Calendário do setor</DialogTitle>
-        <DialogDescription className="sr-only">
-          O mês do setor: dias úteis, banco de horas, feriados, aniversariantes e avisos.
-        </DialogDescription>
-        {aberto && <ConteudoCalendario />}
-      </DialogContent>
-    </Dialog>
+    <DialogPrimitive.Root open={aberto} onOpenChange={a => { if (!a) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="cal-painel-fundo" />
+        <DialogPrimitive.Content
+          ref={painel}
+          className="cal-painel w-[calc(100vw-1rem)] max-w-[1400px] rounded-2xl border border-border bg-background shadow-2xl focus:outline-none"
+          // O foco vai para o painel, não para a seta do mês (o anel nela, ao abrir, parecia um clique).
+          onOpenAutoFocus={e => { e.preventDefault(); painel.current?.focus(); }}
+        >
+          <DialogPrimitive.Title className="sr-only">Calendário do setor</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="sr-only">
+            O mês do setor: dias úteis, banco de horas, feriados, aniversariantes e avisos.
+          </DialogPrimitive.Description>
+          <ConteudoCalendario />
+          <DialogPrimitive.Close
+            className="absolute right-3 top-3 rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:right-4 sm:top-4"
+            aria-label="Fechar o calendário"
+          >
+            <X className="h-4 w-4" />
+          </DialogPrimitive.Close>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
@@ -127,7 +156,7 @@ function ConteudoCalendario() {
 
   // ── O mês montado ─────────────────────────────────────────────────────────
   const porDia = useMemo(() => eventosPorDia(dados.eventos), [dados.eventos]);
-  const feriadosSet = useMemo(() => new Set(feriadosOficiais), [feriadosOficiais]);
+  const feriados = useMemo(() => feriadosDoMes(mes, feriadosOficiais), [mes, feriadosOficiais]);
   const resumo = useMemo(
     () => resumoDoMes(mes, dados.eventos, ehDiaUtil, feriadosOficiais, hojeISO),
     [mes, dados.eventos, ehDiaUtil, feriadosOficiais, hojeISO],
@@ -135,18 +164,21 @@ function ConteudoCalendario() {
   const ehMesCorrente = hojeISO.slice(0, 7) === mes;
   const agenda = useMemo(() => proximosEventos(mes, dados.eventos, hojeISO), [mes, dados.eventos, hojeISO]);
   const aniversarios = useMemo(() => dados.eventos.filter(e => e.tipo === 'aniversario'), [dados.eventos]);
+  // O feriado da legenda é o das Metas, que tem linha própria logo abaixo.
   const tiposNoMes = useMemo(
-    () => TIPOS_EVENTO.filter(t => dados.eventos.some(e => e.tipo === t)) as TipoEvento[],
+    () => TIPOS_EVENTO.filter(t => t !== 'feriado' && dados.eventos.some(e => e.tipo === t)) as TipoEvento[],
     [dados.eventos],
   );
+  const temFolga = useMemo(() => [...feriados.values()].some(f => f.folga), [feriados]);
+  const temTrabalhado = useMemo(() => [...feriados.values()].some(f => !f.folga), [feriados]);
 
   const rascunho = dados.temPublicacao && !dados.publicado;
   // O operador num mês ainda não lançado: vê os dias úteis, sem os eventos.
-  const aguardandoLideranca = rascunho && !podeEditar && !cal.carregandoMes;
+  const aguardandoLideranca = rascunho && !podeEditar && cal.mesPronto;
 
-  const avisoFeriado = produto === 'comercial'
-    ? 'As Metas de Vendas ainda contam este dia como útil. Para a meta diária descontá-lo, marque o feriado nos dias úteis de Usuários → Metas.'
-    : 'As Metas ainda contam este dia como útil. Para a meta diária descontá-lo, inclua o feriado nos dias úteis de Usuários → Metas.';
+  const notaFeriado = produto === 'comercial'
+    ? 'Feriado vem das Metas de Vendas.'
+    : 'Feriado vem de Usuários → Metas.';
 
   async function copiarImagem() {
     if (!cartaoRef.current) return;
@@ -181,10 +213,21 @@ function ConteudoCalendario() {
 
   // ── Estados de espera e vazio ─────────────────────────────────────────────
   if (cal.carregandoSetores) {
+    // Com o desenho da tela pronta, para a troca não mudar o tamanho do painel.
     return (
-      <div className="space-y-4 p-4 sm:p-6">
-        <Skeleton className="h-8 w-56" />
-        <Skeleton className="h-[480px] w-full rounded-2xl" />
+      <div className="space-y-4 p-3 sm:p-5" aria-busy>
+        <div className="flex items-center gap-2 pr-10">
+          <Skeleton className="h-9 w-9 rounded-md" />
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-9 w-9 rounded-md" />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <Skeleton className="h-[min(70vh,760px)] rounded-2xl" />
+          <div className="hidden space-y-4 lg:block">
+            <Skeleton className="h-44 rounded-2xl" />
+            <Skeleton className="h-64 rounded-2xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -200,7 +243,7 @@ function ConteudoCalendario() {
     );
   }
 
-  const diaEventos = diaAberto ? (porDia.get(diaAberto) ?? []) : [];
+  const diaEventos = diaAberto ? (porDia.get(diaAberto) ?? SEM_EVENTOS) : SEM_EVENTOS;
   const publicadoEm = dados.publicadoEm
     ? new Date(dados.publicadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null;
@@ -208,7 +251,7 @@ function ConteudoCalendario() {
   return (
     <div className="cal-raiz space-y-4 p-3 sm:p-5" style={estiloTema}>
       {/* ── Barra de controle (o X do diálogo fica no canto direito) ───────── */}
-      <header className="flex flex-wrap items-center justify-between gap-2 pr-8">
+      <header className="flex flex-wrap items-center justify-between gap-2 pr-10">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => setMes(m => deslocarMes(m, -1))}>
             <ChevronLeft className="h-4 w-4" />
@@ -255,7 +298,7 @@ function ConteudoCalendario() {
       </header>
 
       {/* ── Situação do mês, para quem monta ─────────────────────────────────── */}
-      {podeEditar && dados.temPublicacao && !cal.carregandoMes && (
+      {podeEditar && dados.temPublicacao && cal.mesPronto && (
         rascunho ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
             <div className="min-w-0">
@@ -325,7 +368,7 @@ function ConteudoCalendario() {
             mes={mes}
             porDia={porDia}
             ehDiaUtil={ehDiaUtil}
-            feriadosOficiais={feriadosSet}
+            feriados={feriados}
             hojeISO={hojeISO}
             onAbrirDia={setDiaAberto}
           />
@@ -338,6 +381,16 @@ function ConteudoCalendario() {
                 {INFO_TIPO[t].rotulo}
               </span>
             ))}
+            {temFolga && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="cal-feriado h-3.5 w-3.5 rounded border border-border" /> Feriado (não trabalha)
+              </span>
+            )}
+            {temTrabalhado && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="cal-ponto" style={{ '--tipo': '#0284C7' } as CSSProperties} /> Feriado com expediente
+              </span>
+            )}
             <span className="inline-flex items-center gap-1.5">
               <span className="cal-nao-util h-3.5 w-3.5 rounded border border-border" /> Não é dia útil
             </span>
@@ -360,13 +413,13 @@ function ConteudoCalendario() {
         iso={diaAberto}
         eventos={diaEventos}
         util={diaAberto ? ehDiaUtil(diaAberto) : false}
-        feriadoOficial={diaAberto ? feriadosSet.has(diaAberto) : false}
+        feriado={diaAberto ? (feriados.get(diaAberto) ?? null) : null}
         podeEditar={podeEditar}
         empresaId={empresaId}
         setorId={setorId}
         pessoas={pessoasDoSetor}
         onPrecisaPessoas={precisaPessoas}
-        avisoFeriadoForaDasMetas={avisoFeriado}
+        notaFeriado={notaFeriado}
         onMudou={cal.recarregar}
         onFechar={() => setDiaAberto(null)}
         tema={estiloTema}
@@ -380,7 +433,7 @@ function ConteudoCalendario() {
             empresaId={empresaId}
             setorId={setorId}
             pessoas={pessoasDoSetor}
-            avisoFeriadoForaDasMetas={avisoFeriado}
+            notaFeriado={notaFeriado}
             onMudou={cal.recarregar}
             onFechar={() => setLoteAberto(false)}
             tema={estiloTema}

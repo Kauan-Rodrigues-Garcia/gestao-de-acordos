@@ -7,19 +7,25 @@
  * fraco: destaque (a cor cheia do tema) › feriado › banco de horas (o tom
  * suave do tema) › dia não útil › dia comum.
  *
+ * Feriado é o das Metas e só ele (`feriadosDoMes`): o dia em que a operação não
+ * trabalha fica vermelho. O feriado nacional em que as Metas contam o dia
+ * aparece escrito, com «expediente normal», sem pintar a casa.
+ *
  * No celular a casa mostra só pontos coloridos — o texto não cabe em 1/7 da
  * tela —, e o toque abre o dia. A leitura por extenso fica na agenda, ao lado.
  */
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
-import { SEMANA_CURTA, semanasDoMes, type EventoCalendario } from '@/lib/calendarioSetor';
+import {
+  SEMANA_CURTA, semanasDoMes, type EventoCalendario, type FeriadoDoDia,
+} from '@/lib/calendarioSetor';
 import { estiloDoTipo } from './estiloTipo';
 
 interface Props {
   mes: string;
   porDia: Map<string, EventoCalendario[]>;
   ehDiaUtil: (iso: string) => boolean;
-  feriadosOficiais: ReadonlySet<string>;
+  feriados: ReadonlyMap<string, FeriadoDoDia>;
   hojeISO: string;
   onAbrirDia: (iso: string) => void;
 }
@@ -27,7 +33,11 @@ interface Props {
 /** Quantos eventos cabem por extenso numa casa (do `sm` para cima). */
 const VISIVEIS = 3;
 
-export function GradeDoMes({ mes, porDia, ehDiaUtil, feriadosOficiais, hojeISO, onAbrirDia }: Props) {
+const COR_FERIADO = '#DC2626';
+/** O feriado em que se trabalha: azul, de informação, e não o vermelho de folga. */
+const COR_FERIADO_TRABALHADO = '#0284C7';
+
+export function GradeDoMes({ mes, porDia, ehDiaUtil, feriados, hojeISO, onAbrirDia }: Props) {
   const semanas = semanasDoMes(mes);
   return (
     <div role="grid" aria-label="Dias do mês" className="overflow-hidden">
@@ -46,7 +56,7 @@ export function GradeDoMes({ mes, porDia, ehDiaUtil, feriadosOficiais, hojeISO, 
               iso={iso}
               eventos={porDia.get(iso) ?? []}
               util={ehDiaUtil(iso)}
-              feriadoOficial={feriadosOficiais.has(iso)}
+              feriado={feriados.get(iso) ?? null}
               hoje={iso === hojeISO}
               onAbrir={() => onAbrirDia(iso)}
             />
@@ -58,26 +68,25 @@ export function GradeDoMes({ mes, porDia, ehDiaUtil, feriadosOficiais, hojeISO, 
   );
 }
 
-function Casa({ iso, eventos, util, feriadoOficial, hoje, onAbrir }: {
+function Casa({ iso, eventos, util, feriado, hoje, onAbrir }: {
   iso: string;
   eventos: EventoCalendario[];
   util: boolean;
-  feriadoOficial: boolean;
+  feriado: FeriadoDoDia | null;
   hoje: boolean;
   onAbrir: () => void;
 }) {
   const dia = Number(iso.slice(8, 10));
   const forte = eventos.some(e => e.destaque);
-  const feriado = feriadoOficial || eventos.some(e => e.tipo === 'feriado');
+  const folga = feriado?.folga === true;
   const banco = eventos.some(e => e.tipo === 'banco_horas');
-  // O feriado das Metas sem evento lançado ainda aparece escrito na casa.
-  const semRotulo = feriadoOficial && !eventos.some(e => e.tipo === 'feriado');
+  const corFeriado = folga ? COR_FERIADO : COR_FERIADO_TRABALHADO;
 
   const descricao = [
     `Dia ${dia}`,
     hoje ? 'hoje' : null,
     util ? 'dia útil' : 'não é dia útil',
-    semRotulo ? 'feriado' : null,
+    feriado ? (folga ? `feriado: ${feriado.nome}` : `${feriado.nome}, expediente normal`) : null,
     ...eventos.map(e => [e.titulo, e.detalhe, e.pessoa_nome].filter(Boolean).join(' ')),
   ].filter(Boolean).join(', ');
 
@@ -89,7 +98,7 @@ function Casa({ iso, eventos, util, feriadoOficial, hoje, onAbrir }: {
       aria-label={descricao}
       className={cn(
         'cal-dia min-h-[58px] p-1.5 sm:min-h-[112px] sm:p-2',
-        forte ? 'cal-forte' : feriado ? 'cal-feriado' : banco ? 'cal-tinta' : !util && 'cal-nao-util',
+        forte ? 'cal-forte' : folga ? 'cal-feriado' : banco ? 'cal-tinta' : !util && 'cal-nao-util',
         hoje && 'cal-hoje',
       )}
     >
@@ -101,16 +110,16 @@ function Casa({ iso, eventos, util, feriadoOficial, hoje, onAbrir }: {
       </div>
 
       {/* Celular: um ponto por evento. */}
-      {(eventos.length > 0 || semRotulo) && (
+      {(eventos.length > 0 || feriado) && (
         <div className="mt-auto flex flex-wrap gap-0.5 sm:hidden" aria-hidden>
-          {semRotulo && <span className="cal-ponto" style={{ '--tipo': '#DC2626' } as CSSProperties} />}
+          {feriado && <span className="cal-ponto" style={{ '--tipo': corFeriado } as CSSProperties} />}
           {eventos.slice(0, 5).map(e => <span key={e.id} className="cal-ponto" style={estiloDoTipo(e.tipo)} />)}
         </div>
       )}
 
       {/* Do `sm` para cima: o evento por extenso. */}
       <div className="hidden min-w-0 flex-1 flex-col justify-center gap-1 sm:flex" aria-hidden>
-        {semRotulo && <Linha titulo="Feriado" detalhe={null} tipoCor="#DC2626" />}
+        {feriado && <Linha titulo={feriado.nome} detalhe={folga ? null : 'expediente normal'} tipoCor={corFeriado} />}
         {eventos.slice(0, VISIVEIS).map(e => (
           <Linha
             key={e.id}

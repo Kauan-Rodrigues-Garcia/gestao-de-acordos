@@ -3,10 +3,10 @@
  * sábados», «expediente até bater a meta no último dia». Grava um evento por
  * dia escolhido; depois, cada um se corrige ou exclui sozinho no dia.
  *
- * O modelo com regra (o do sábado) já marca os dias dela; os atalhos e a
- * mini-grade acertam o resto.
+ * Os atalhos (dias úteis, um dia da semana inteiro) e a mini-grade marcam os
+ * dias.
  */
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ import {
 } from '@/lib/calendarioSetor';
 import { salvarEvento, type PessoaDoSetor } from '@/services/calendario/calendario.service';
 import { FormEvento } from './FormEvento';
-import { RASCUNHO_VAZIO, faltaNoRascunho, type RascunhoEvento } from './rascunho';
+import { RASCUNHO_VAZIO, detalheDoRascunho, faltaNoRascunho, type RascunhoEvento } from './rascunho';
 
 interface Props {
   aberto: boolean;
@@ -28,7 +28,8 @@ interface Props {
   empresaId: string;
   setorId: string;
   pessoas: PessoaDoSetor[] | null;
-  avisoFeriadoForaDasMetas: string;
+  /** De onde vem o feriado — o formulário lembra quem procurar o modelo. */
+  notaFeriado: string;
   onMudou: () => void;
   onFechar: () => void;
   /** As cores do tema: o diálogo abre num portal, fora do contêiner que as define. */
@@ -42,15 +43,20 @@ const ATALHOS: { rotulo: string; regra: RegraDias }[] = [
 ];
 
 export function DialogoLote({
-  aberto, mes, ehDiaUtil, empresaId, setorId, pessoas, avisoFeriadoForaDasMetas, onMudou, onFechar, tema,
+  aberto, mes, ehDiaUtil, empresaId, setorId, pessoas, notaFeriado, onMudou, onFechar, tema,
 }: Props) {
   const [rascunho, setRascunho] = useState<RascunhoEvento>(RASCUNHO_VAZIO);
   const [dias, setDias] = useState<Set<string>>(new Set());
   const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
-    if (aberto) { setRascunho(RASCUNHO_VAZIO); setDias(new Set()); }
-  }, [aberto, mes]);
+  // Abriu (ou mudou o mês): começa do zero já no primeiro quadro, e não um
+  // quadro depois, num efeito — o que mostrava o lançamento anterior piscando.
+  const [aberturaAnterior, setAberturaAnterior] = useState<string | null>(null);
+  const abertura = aberto ? mes : null;
+  if (abertura !== aberturaAnterior) {
+    setAberturaAnterior(abertura);
+    if (abertura) { setRascunho(RASCUNHO_VAZIO); setDias(new Set()); }
+  }
 
   const semanas = useMemo(() => semanasDoMes(mes), [mes]);
   const marcar = (regra: RegraDias) => setDias(new Set(diasDaRegra(mes, regra, ehDiaUtil)));
@@ -85,7 +91,7 @@ export function DialogoLote({
         dias: [...dias].sort(),
         tipo: rascunho.tipo,
         titulo: rascunho.titulo.trim(),
-        detalhe: rascunho.detalhe.trim() || null,
+        detalhe: detalheDoRascunho(rascunho),
         pessoa_id: rascunho.tipo === 'aniversario' ? rascunho.pessoa_id : null,
         destaque: rascunho.destaque,
       });
@@ -99,8 +105,6 @@ export function DialogoLote({
     }
   }
 
-  const algumUtilMarcado = [...dias].some(ehDiaUtil);
-
   return (
     <Dialog open={aberto} onOpenChange={a => { if (!a) onFechar(); }}>
       <DialogContent className="cal-raiz max-h-[92vh] overflow-y-auto sm:max-w-2xl" style={tema}>
@@ -111,13 +115,7 @@ export function DialogoLote({
           </DialogDescription>
         </DialogHeader>
 
-        <FormEvento
-          valor={rascunho}
-          onChange={setRascunho}
-          pessoas={pessoas}
-          avisoFeriado={rascunho.tipo === 'feriado' && algumUtilMarcado ? avisoFeriadoForaDasMetas : null}
-          onModelo={m => { if (m.regra) marcar(m.regra); }}
-        />
+        <FormEvento valor={rascunho} onChange={setRascunho} pessoas={pessoas} notaFeriado={notaFeriado} />
 
         <div className="space-y-3 rounded-2xl border border-border p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">

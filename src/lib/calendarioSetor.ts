@@ -10,9 +10,11 @@
  * `ehDiaUtil` chega pronto de quem chama: na cobrança é segunda a sexta menos
  * os feriados das Metas (`metas_config_mes`); no Comercial, a regra de
  * `vendasCalendario`. O calendário MOSTRA o dia útil que a meta conta — nunca
- * um terceiro.
+ * um terceiro. O feriado também: o dia só fica de feriado se está nas Metas
+ * (`feriadosDoMes`).
  */
 import { diasNoMes } from '@/lib/mesReferencia';
+import { feriadosNacionais } from '@/lib/feriadosNacionais';
 
 // ── Os tipos de evento ───────────────────────────────────────────────────────
 
@@ -61,29 +63,95 @@ export interface ModeloEvento {
   titulo: string;
   detalhe?: string;
   destaque?: boolean;
-  /** Sugestão de dias para o «aplicar em vários dias». */
-  regra?: RegraDias;
 }
 
 /**
  * Os modelos do dia a dia, tirados dos calendários que a liderança já monta à
  * mão (o do Outubro Rosa e o de horário por dia). O modelo só PREENCHE o
  * formulário — título e detalhe continuam editáveis.
+ *
+ * Um modelo só de banco de horas (08/10/2026): o horário — uma hora, das 08:30
+ * às 12:00, até às 19:00 — se configura depois de escolher, em vez de um
+ * modelo para cada. Feriado não tem modelo: vem das Metas (`feriadosDoMes`).
  */
 export const MODELOS: readonly ModeloEvento[] = [
-  { id: 'bh_1h',       rotulo: 'Banco de horas · 1 hora',  tipo: 'banco_horas', titulo: 'Banco de horas', detalhe: '01 hora' },
-  { id: 'bh_sabado',   rotulo: 'Banco de horas · sábado',  tipo: 'banco_horas', titulo: 'Banco de horas', detalhe: '08:30 às 12:00', regra: { tipo: 'semana', dia: 6 } },
-  { id: 'bh_19h',      rotulo: 'Banco de horas até 19h',   tipo: 'banco_horas', titulo: 'Banco de horas', detalhe: 'até às 19:00', destaque: true },
-  { id: 'feriado',     rotulo: 'Feriado',                  tipo: 'feriado',     titulo: 'Feriado' },
-  { id: 'facultativo', rotulo: 'Ponto facultativo',        tipo: 'folga',       titulo: 'Ponto facultativo' },
-  { id: 'aniversario', rotulo: 'Aniversário',              tipo: 'aniversario', titulo: 'Aniversário' },
-  { id: 'ate_bater',   rotulo: 'Até bater a meta',         tipo: 'horario',     titulo: 'Até bater a meta', destaque: true },
-  { id: 'expediente',  rotulo: 'Expediente especial',      tipo: 'horario',     titulo: 'Expediente', detalhe: '08:00 às 17:00' },
-  { id: 'reuniao',     rotulo: 'Reunião do setor',         tipo: 'evento',      titulo: 'Reunião do setor' },
-  { id: 'treinamento', rotulo: 'Treinamento',              tipo: 'evento',      titulo: 'Treinamento' },
-  { id: 'campanha',    rotulo: 'Campanha / ação',          tipo: 'evento',      titulo: 'Campanha' },
-  { id: 'aviso',       rotulo: 'Aviso',                    tipo: 'aviso',       titulo: 'Aviso' },
+  { id: 'banco_horas', rotulo: 'Banco de horas',   tipo: 'banco_horas', titulo: 'Banco de horas' },
+  { id: 'ate_bater',   rotulo: 'Até bater a meta', tipo: 'horario',     titulo: 'Até bater a meta', destaque: true },
+  { id: 'aniversario', rotulo: 'Aniversário',      tipo: 'aniversario', titulo: 'Aniversário' },
+  { id: 'reuniao',     rotulo: 'Reunião do setor', tipo: 'evento',      titulo: 'Reunião do setor' },
+  { id: 'treinamento', rotulo: 'Treinamento',      tipo: 'evento',      titulo: 'Treinamento' },
+  { id: 'campanha',    rotulo: 'Campanha / ação',  tipo: 'evento',      titulo: 'Campanha' },
+  { id: 'aviso',       rotulo: 'Aviso',            tipo: 'aviso',       titulo: 'Aviso' },
 ];
+
+/**
+ * Os tipos que se lançam à mão. O feriado fica de fora: quem diz se a
+ * operação para é a aba Metas. Os feriados lançados antes disso continuam no
+ * banco e aparecem como evento, mas não pintam mais o dia.
+ */
+export const TIPOS_LANCAVEIS: readonly TipoEvento[] = TIPOS_EVENTO.filter(t => t !== 'feriado');
+
+// ── O horário do banco de horas ──────────────────────────────────────────────
+
+/**
+ * Como a liderança escreve o banco de horas: quanto tempo («01 hora»), de que
+ * horas a que horas («08:30 às 12:00») ou até quando («até às 19:00»). Vira o
+ * `detalhe` do evento — o mesmo texto que já se lia na casa do dia.
+ * `livre` é o texto que não segue nenhum dos três, escrito à mão.
+ */
+export type HorarioBanco =
+  | { modo: 'duracao'; minutos: number }
+  | { modo: 'intervalo'; de: string; ate: string }
+  | { modo: 'ate'; ate: string }
+  | { modo: 'livre'; texto: string };
+
+export const HORARIO_BANCO_PADRAO: HorarioBanco = { modo: 'duracao', minutos: 60 };
+
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function textoDoBanco(h: HorarioBanco): string {
+  switch (h.modo) {
+    case 'duracao': {
+      const horas = Math.floor(h.minutos / 60);
+      const min = h.minutos % 60;
+      if (horas === 0) return `${min} minutos`;
+      const hh = String(horas).padStart(2, '0');
+      return min === 0 ? `${hh} ${horas === 1 ? 'hora' : 'horas'}` : `${hh}h${String(min).padStart(2, '0')}`;
+    }
+    case 'intervalo': return `${h.de} às ${h.ate}`;
+    case 'ate':       return `até às ${h.ate}`;
+    case 'livre':     return h.texto.trim();
+  }
+}
+
+/** O texto gravado de volta no formulário. O que não se reconhece fica `livre`. */
+export function lerHorarioBanco(detalhe: string | null | undefined): HorarioBanco {
+  const t = (detalhe ?? '').trim();
+  if (!t) return HORARIO_BANCO_PADRAO;
+  let m = /^(\d{1,2}) horas?$/i.exec(t);
+  if (m) return { modo: 'duracao', minutos: Number(m[1]) * 60 };
+  m = /^(\d{1,2})h(\d{2})$/i.exec(t);
+  if (m) return { modo: 'duracao', minutos: Number(m[1]) * 60 + Number(m[2]) };
+  m = /^(\d{1,3}) minutos$/i.exec(t);
+  if (m) return { modo: 'duracao', minutos: Number(m[1]) };
+  m = /^(\d{2}:\d{2}) às (\d{2}:\d{2})$/i.exec(t);
+  if (m) return { modo: 'intervalo', de: m[1], ate: m[2] };
+  m = /^até às (\d{2}:\d{2})$/i.exec(t);
+  if (m) return { modo: 'ate', ate: m[1] };
+  return { modo: 'livre', texto: t };
+}
+
+/** O que falta no horário (`null` = pronto). */
+export function faltaNoHorarioBanco(h: HorarioBanco): string | null {
+  switch (h.modo) {
+    case 'duracao':   return h.minutos > 0 ? null : 'Escolha quanto tempo de banco de horas.';
+    case 'intervalo':
+      if (!HORA.test(h.de) || !HORA.test(h.ate)) return 'Preencha o horário de início e de fim do banco de horas.';
+      return h.de < h.ate ? null : 'O fim do banco de horas precisa ser depois do início.';
+    case 'ate':       return HORA.test(h.ate) ? null : 'Preencha até que horas vai o banco de horas.';
+    case 'livre':     return h.texto.trim() ? null : 'Escreva o horário do banco de horas.';
+  }
+}
 
 // ── Os temas do mês ──────────────────────────────────────────────────────────
 
@@ -230,12 +298,38 @@ export function eventosPorDia(eventos: readonly EventoCalendario[]): Map<string,
   return mapa;
 }
 
+/**
+ * O feriado de um dia, como o calendário mostra.
+ *
+ * `folga` vem das Metas: o dia está nos feriados que a meta desconta, e a
+ * operação não trabalha. Feriado nacional que as Metas NÃO têm é dia de
+ * trabalho — tem feriado em que a operação trabalha, e é lá que se decide —:
+ * aparece só com o nome e «expediente normal».
+ */
+export interface FeriadoDoDia {
+  nome: string;
+  folga: boolean;
+}
+
+export function feriadosDoMes(mes: string, feriadosOficiais: readonly string[]): Map<string, FeriadoDoDia> {
+  const ano = Number(mes.slice(0, 4));
+  const nacionais = new Map(feriadosNacionais(ano).map(f => [f.dia, f.nome]));
+  const oficiais = new Set(feriadosOficiais);
+  const mapa = new Map<string, FeriadoDoDia>();
+  for (const iso of diasDoMes(mes)) {
+    const nome = nacionais.get(iso);
+    if (oficiais.has(iso)) mapa.set(iso, { nome: nome ?? 'Feriado', folga: true });
+    else if (nome) mapa.set(iso, { nome, folga: false });
+  }
+  return mapa;
+}
+
 export interface ResumoDoMes {
   diasNoMes: number;
   diasUteis: number;
   /** Dias úteis de hoje (inclusive) em diante. `null` fora do mês corrente. */
   diasUteisRestantes: number | null;
-  /** Feriados: os das Metas mais os lançados aqui, sem contar o mesmo dia duas vezes. */
+  /** Feriados em que a operação não trabalha: os das Metas, e só eles. */
   feriados: number;
   diasComBancoDeHoras: number;
   aniversariantes: number;
@@ -255,7 +349,6 @@ export function resumoDoMes(
   const comBanco = new Set<string>();
   const aniversariantes = new Set<string>();
   for (const e of eventos) {
-    if (e.tipo === 'feriado') feriados.add(e.dia);
     if (e.tipo === 'banco_horas') comBanco.add(e.dia);
     if (e.tipo === 'aniversario') aniversariantes.add(e.pessoa_id ?? `${e.titulo}|${e.dia}`);
   }

@@ -12,6 +12,13 @@
  *
  * Uma leitura que falha não derruba as outras: sem os feriados oficiais, vale
  * segunda a sexta, e a tela continua mostrando o que a liderança lançou.
+ *
+ * ## Abrir de novo é instantâneo
+ *
+ * O que já foi lido fica guardado na memória da aba (`CACHE`), e o painel
+ * reaberto nasce com ele — sem esqueleto e sem a tela trocando de tamanho no
+ * meio da animação. A leitura de novo acontece por baixo e só troca o que
+ * mudou. Recarregar depois de salvar também não apaga nada da tela no meio.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { partesDoMes } from '@/lib/mesReferencia';
@@ -29,12 +36,29 @@ const MES_VAZIO: MesDoCalendario = {
   capa: null, eventos: [], publicado: false, publicadoEm: null, temPublicacao: true,
 };
 
+/** Sempre o mesmo array: quem compara por referência (os `useMemo`) não refaz à toa. */
+const SEM_FERIADOS: string[] = [];
+
+/** O que já se leu nesta aba do navegador. Some no F5 — e é o que se quer. */
+const CACHE = {
+  setores: new Map<string, SetorDoCalendario[]>(),
+  meses: new Map<string, MesDoCalendario>(),
+  metas: new Map<string, string[]>(),
+  vendas: new Map<string, CalendarioDoMes>(),
+};
+
 export interface CalendarioSetor {
   setores: SetorDoCalendario[];
   setorId: string | null;
   setSetorId: (id: string) => void;
   setor: SetorDoCalendario | null;
   dados: MesDoCalendario;
+  /**
+   * Já há um mês lido deste setor na tela (o atual ou, trocando de mês, o
+   * anterior, até o novo chegar). As faixas de rascunho/lançado só somem
+   * quando isso é falso — e não a cada recarga.
+   */
+  mesPronto: boolean;
   /** Feriados que a META conta (Metas ou Vendas), em ISO. */
   feriadosOficiais: string[];
   ehDiaUtil: (iso: string) => boolean;
@@ -50,24 +74,28 @@ export function useCalendarioSetor(
   meuSetorId: string | null,
   mes: string,
 ): CalendarioSetor {
-  const [setores, setSetores] = useState<SetorDoCalendario[]>([]);
+  const [setores, setSetores] = useState<SetorDoCalendario[]>(() => (empresaId && CACHE.setores.get(empresaId)) || []);
   const [escolhido, setEscolhido] = useState<string | null>(null);
-  const [carregandoSetores, setCarregandoSetores] = useState(true);
-  const [dados, setDados] = useState<MesDoCalendario>(MES_VAZIO);
+  const [carregandoSetores, setCarregandoSetores] = useState(() => !(empresaId && CACHE.setores.has(empresaId)));
+  const [lido, setLido] = useState<{ chave: string; dados: MesDoCalendario } | null>(null);
   const [carregandoMes, setCarregandoMes] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [versao, setVersao] = useState(0);
-  const [feriadosMetas, setFeriadosMetas] = useState<string[]>([]);
-  const [calVendas, setCalVendas] = useState<CalendarioDoMes>(CALENDARIO_PADRAO);
+  const [, setFeriadosLidos] = useState(0);
 
   // 1. Os setores.
   useEffect(() => {
     if (!empresaId) { setSetores([]); setCarregandoSetores(false); return; }
     let vivo = true;
-    setCarregandoSetores(true);
+    if (!CACHE.setores.has(empresaId)) setCarregandoSetores(true);
     listarSetoresDoCalendario(empresaId)
-      .then(l => { if (vivo) setSetores(l); })
-      .catch(e => { if (vivo) { setSetores([]); setErro(e instanceof Error ? e.message : 'Não foi possível carregar os setores.'); } })
+      .then(l => { if (vivo) { CACHE.setores.set(empresaId, l); setSetores(l); } })
+      .catch(e => {
+        if (vivo && !CACHE.setores.has(empresaId)) {
+          setSetores([]);
+          setErro(e instanceof Error ? e.message : 'Não foi possível carregar os setores.');
+        }
+      })
       .finally(() => { if (vivo) setCarregandoSetores(false); });
     return () => { vivo = false; };
   }, [empresaId]);
@@ -80,39 +108,52 @@ export function useCalendarioSetor(
   }, [escolhido, setores, meuSetorId]);
 
   // 2. O mês do setor.
+  const chaveMes = empresaId && setorId ? `${empresaId}|${setorId}|${mes}` : null;
   useEffect(() => {
-    if (!empresaId || !setorId) { setDados(MES_VAZIO); return; }
+    if (!empresaId || !setorId || !chaveMes) return;
     let vivo = true;
     setCarregandoMes(true);
     setErro(null);
     buscarMes(empresaId, setorId, mes)
-      .then(d => { if (vivo) setDados(d); })
-      .catch(e => { if (vivo) { setDados(MES_VAZIO); setErro(e instanceof Error ? e.message : 'Não foi possível carregar o calendário.'); } })
+      .then(d => { if (vivo) { CACHE.meses.set(chaveMes, d); setLido({ chave: chaveMes, dados: d }); } })
+      .catch(e => { if (vivo) setErro(e instanceof Error ? e.message : 'Não foi possível carregar o calendário.'); })
       .finally(() => { if (vivo) setCarregandoMes(false); });
     return () => { vivo = false; };
-  }, [empresaId, setorId, mes, versao]);
+  }, [empresaId, setorId, mes, chaveMes, versao]);
+
+  // O mês na tela: o lido agora, senão o guardado, senão o último deste setor.
+  const doCache = chaveMes ? CACHE.meses.get(chaveMes) : undefined;
+  const mesmoSetor = !!lido && !!setorId && lido.chave.startsWith(`${empresaId}|${setorId}|`);
+  const dados = lido?.chave === chaveMes ? lido.dados : doCache ?? (mesmoSetor ? lido!.dados : MES_VAZIO);
+  const mesPronto = lido?.chave === chaveMes || !!doCache || mesmoSetor;
 
   // 3. O dia útil oficial.
   const { ano, mes: m } = partesDoMes(mes);
+  const chaveFeriados = `${empresaId}|${ano}-${m}`;
   useEffect(() => {
     if (!empresaId) return;
     let vivo = true;
+    const lidos = () => { if (vivo) setFeriadosLidos(v => v + 1); };
     if (produto === 'comercial') {
       void buscarCalendario(empresaId, ano, m)
-        .then(c => { if (vivo) setCalVendas(c); })
-        .catch(() => { if (vivo) setCalVendas(CALENDARIO_PADRAO); });
+        .then(c => CACHE.vendas.set(chaveFeriados, c))
+        .catch(() => { if (!CACHE.vendas.has(chaveFeriados)) CACHE.vendas.set(chaveFeriados, CALENDARIO_PADRAO); })
+        .finally(lidos);
     } else {
       void getMetasConfig(empresaId, m, ano)
-        .then(r => { if (vivo) setFeriadosMetas(r.data?.feriados ?? []); })
-        .catch(() => { if (vivo) setFeriadosMetas([]); });
+        .then(r => CACHE.metas.set(chaveFeriados, r.data?.feriados ?? []))
+        .catch(() => { if (!CACHE.metas.has(chaveFeriados)) CACHE.metas.set(chaveFeriados, []); })
+        .finally(lidos);
     }
     return () => { vivo = false; };
-  }, [empresaId, produto, ano, m]);
+  }, [empresaId, produto, ano, m, chaveFeriados, versao]);
 
-  const feriadosOficiais = produto === 'comercial' ? calVendas.feriados : feriadosMetas;
+  const calVendas = CACHE.vendas.get(chaveFeriados) ?? CALENDARIO_PADRAO;
+  const feriadosMetas = CACHE.metas.get(chaveFeriados);
+  const feriadosOficiais = produto === 'comercial' ? calVendas.feriados : (feriadosMetas ?? SEM_FERIADOS);
   const ehDiaUtil = useCallback((iso: string) => {
     if (produto === 'comercial') return ehDiaUtilComercial(iso, calVendas);
-    return ehSegundaASexta(iso) && !feriadosMetas.includes(iso);
+    return ehSegundaASexta(iso) && !(feriadosMetas ?? SEM_FERIADOS).includes(iso);
   }, [produto, calVendas, feriadosMetas]);
 
   const recarregar = useCallback(() => {
@@ -126,6 +167,7 @@ export function useCalendarioSetor(
     setSetorId: setEscolhido,
     setor: setores.find(s => s.id === setorId) ?? null,
     dados,
+    mesPronto,
     feriadosOficiais,
     ehDiaUtil,
     carregandoSetores,
