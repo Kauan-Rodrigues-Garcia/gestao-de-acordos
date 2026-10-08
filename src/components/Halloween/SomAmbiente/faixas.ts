@@ -6,7 +6,7 @@
  * entrada.
  */
 import type { ComponentType } from 'react';
-import { Axe, Bed, Gem, Ghost, Guitar, Lightbulb, ListMusic, Mic, Youtube } from 'lucide-react';
+import { Axe, Bed, Crown, Disc3, Flame, Ghost, Guitar, Lightbulb, ListMusic, Music, Music2, Speaker, Youtube } from 'lucide-react';
 import { ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
 import { IconeCandyman } from './IconeCandyman';
 
@@ -28,8 +28,12 @@ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
   // «I Lied To You», do filme Sinners (2025). O arquivo começa no violão: a
   // fala da cena, antes da música, foi cortada.
   pecadores: { nome: 'Eu Menti pra Você', descricao: 'Pecadores (Sinners), com Miles Caton', Icone: Guitar, tom: 'som-tom-pecadores' },
-  puxalanca: { nome: 'Puxa o Lança',   descricao: 'MC JVila, Veigh e Kayblack',     Icone: Mic,   tom: 'som-tom-puxalanca' },
-  reliquia:  { nome: 'Na Relíquia do 2T', descricao: 'MC Tuto',                     Icone: Gem,   tom: 'som-tom-reliquia' },
+  rainha:    { nome: 'Rainha da Finesse', descricao: 'WIU',                        Icone: Crown,   tom: 'som-tom-rainha' },
+  boladao:   { nome: 'Eu Tô Boladão',  descricao: 'Funk de Canalha',                Icone: Speaker, tom: 'som-tom-boladao' },
+  numb:      { nome: 'Numb',           descricao: 'Linkin Park',                    Icone: Disc3,   tom: 'som-tom-numb' },
+  byob:      { nome: 'B.Y.O.B.',       descricao: 'System Of A Down',               Icone: Flame,   tom: 'som-tom-byob' },
+  bicho:     { nome: 'Coisas que Aprendi com o Bicho', descricao: '2zdinizz', Icone: Music, tom: 'som-tom-bicho' },
+  gemebaixo: { nome: 'Geme Baixo',     descricao: 'MC JVila, Menor MC e G.A',   Icone: Music2,  tom: 'som-tom-gemebaixo' },
 };
 
 export function infoDaPlaylist(p: PlaylistSalva): InfoFaixa {

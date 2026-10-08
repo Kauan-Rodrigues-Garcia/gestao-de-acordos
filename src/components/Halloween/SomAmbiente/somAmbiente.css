@@ -5,9 +5,9 @@
  *
  * Cada faixa tem a sua cor — Halloween abóbora, Sexta-Feira 13 sangue,
  * Candyman mel, Stranger Things azul do Mundo Invertido, A Hora do Pesadelo
- * verde doente, Pecadores vinho, Puxa o Lança roxo, Na Relíquia do 2T
- * turquesa — e é ela que pinta o ícone, o bloco escolhido e o
- * topo do painel. `--som-tom` é só matiz/saturação/luz (HSL sem `hsl()`),
+ * verde doente, Pecadores vinho; nas músicas, Rainha da Finesse magenta, Eu Tô
+ * Boladão roxo, Numb aço, B.Y.O.B. brasa, Coisas que Aprendi com o Bicho turquesa e Geme Baixo anil —
+ * e é ela que pinta o ícone, o bloco escolhido e o topo do painel. `--som-tom` é só matiz/saturação/luz (HSL sem `hsl()`),
  * para o mesmo tom servir em várias opacidades. Nos temas escuros a luz sobe.
  *
  * O equalizador anima só `transform` (compositor, sem refazer layout). Não
@@ -21,8 +21,12 @@
 .som-tom-stranger  { --som-tom: 200 80% 40%; }
 .som-tom-pesadelo  { --som-tom: 90 55% 33%; }
 .som-tom-pecadores { --som-tom: 330 60% 40%; }
-.som-tom-puxalanca { --som-tom: 268 55% 52%; }
-.som-tom-reliquia  { --som-tom: 176 70% 32%; }
+.som-tom-rainha    { --som-tom: 300 55% 45%; }
+.som-tom-boladao   { --som-tom: 268 55% 52%; }
+.som-tom-numb      { --som-tom: 215 30% 44%; }
+.som-tom-byob      { --som-tom: 14 85% 48%; }
+.som-tom-bicho     { --som-tom: 176 70% 32%; }
+.som-tom-gemebaixo { --som-tom: 235 55% 55%; }
 .som-tom-spotify  { --som-tom: 141 70% 36%; }
 .som-tom-youtube  { --som-tom: 0 72% 50%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-halloween { --som-tom: 26 95% 58%; }
@@ -31,8 +35,12 @@
 :is(.dark, .dark-grey, .deep-blue) .som-tom-stranger  { --som-tom: 200 85% 62%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-pesadelo  { --som-tom: 88 60% 55%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-pecadores { --som-tom: 330 70% 66%; }
-:is(.dark, .dark-grey, .deep-blue) .som-tom-puxalanca { --som-tom: 268 70% 72%; }
-:is(.dark, .dark-grey, .deep-blue) .som-tom-reliquia  { --som-tom: 176 65% 52%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-rainha    { --som-tom: 300 65% 70%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-boladao   { --som-tom: 268 70% 72%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-numb      { --som-tom: 215 40% 68%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-byob      { --som-tom: 14 90% 62%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-bicho     { --som-tom: 176 65% 52%; }
+:is(.dark, .dark-grey, .deep-blue) .som-tom-gemebaixo { --som-tom: 235 70% 74%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-spotify  { --som-tom: 141 65% 52%; }
 :is(.dark, .dark-grey, .deep-blue) .som-tom-youtube  { --som-tom: 0 80% 64%; }
 

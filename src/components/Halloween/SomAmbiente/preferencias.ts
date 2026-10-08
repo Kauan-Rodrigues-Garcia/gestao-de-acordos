@@ -12,8 +12,8 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
 /** Os temas de terror que vêm de fábrica, na ordem do painel. */
 export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
-/** As músicas para escutar que vêm de fábrica. */
-export const MUSICAS = ['puxalanca', 'reliquia'] as const;
+/** As músicas para escutar que vêm de fábrica. Trocadas em 08/10/2026. */
+export const MUSICAS = ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo'] as const;
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
@@ -28,8 +28,12 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   stranger: '/sounds/halloween-stranger-things.mp3',
   pesadelo: '/sounds/halloween-hora-do-pesadelo.mp3',
   pecadores: '/sounds/halloween-pecadores-eu-menti-pra-voce.mp3',
-  puxalanca: '/sounds/halloween-puxa-o-lanca.mp3',
-  reliquia: '/sounds/halloween-na-reliquia-do-2t.mp3',
+  rainha: '/sounds/halloween-rainha-da-finesse.mp3',
+  boladao: '/sounds/halloween-eu-to-boladao.mp3',
+  numb: '/sounds/halloween-numb.mp3',
+  byob: '/sounds/halloween-byob.mp3',
+  bicho: '/sounds/halloween-coisas-que-aprendi-com-o-bicho.mp3',
+  gemebaixo: '/sounds/halloween-geme-baixo.mp3',
 };
 
 /**
@@ -37,7 +41,8 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * de lugares diferentes: medidos em 05/10/2026 (loudness integrada, BS.1770),
  * iam de -16,0 LUFS (Candyman) a -9,6 LUFS (Puxa o Lança) — 6 dB de diferença,
  * a mais alta soando quase o dobro da mais baixa. O alvo é -13 LUFS, o meio:
- * nem estourado nem sumido. `ganho = 10^((-13 - medido) / 20)`.
+ * nem estourado nem sumido. `ganho = 10^((-13 - medido) / 20)`. As músicas de
+ * 08/10/2026 vieram do YouTube bem mais altas (-8,3 a -7,6) e descem.
  *
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
@@ -48,16 +53,21 @@ export const GANHO: Record<FaixaEmbutida, number> = {
   stranger: 1.04,   // -13,3
   pesadelo: 1.22,   // -14,7
   pecadores: 1.37,  // -15,7
-  puxalanca: 0.68,  // -9,6
-  reliquia: 0.78,   // -10,8
+  rainha: 0.58,     // -8,3
+  boladao: 0.58,    // -8,3
+  numb: 0.54,       // -7,6
+  byob: 0.56,       // -8,0
+  bicho: 0.56,      // -8,0
+  gemebaixo: 0.58,  // -8,2
 };
 
 /**
  * Faixas que saíram da fábrica e quem fica no lugar delas para quem as tinha
- * escolhido. «Talvez Você Precise de Mim», do Veigh, saiu em 05/10/2026; vai
- * para «Puxa o Lança», que também tem o Veigh.
+ * escolhido. «Talvez Você Precise de Mim», do Veigh, saiu em 05/10/2026;
+ * «Puxa o Lança» e «Na Relíquia do 2T», em 08/10/2026. Vão todas para a
+ * primeira das músicas.
  */
-const SUBSTITUTAS: Record<string, FaixaEmbutida> = { veigh: 'puxalanca' };
+const SUBSTITUTAS: Record<string, FaixaEmbutida> = { veigh: 'rainha', puxalanca: 'rainha', reliquia: 'rainha' };
 
 export interface PlaylistSalva {
   /** `chaveDoLink` — também evita a mesma playlist duas vezes. */

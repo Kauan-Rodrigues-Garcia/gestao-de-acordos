@@ -73,8 +73,10 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
   });
 
-  it('quem tinha a música do Veigh que saiu fica com «Puxa o Lança»', () => {
-    expect(normalizar({ faixa: 'veigh' }).faixa).toBe('puxalanca');
+  it('quem tinha uma música que saiu fica com «Rainha da Finesse»', () => {
+    expect(normalizar({ faixa: 'veigh' }).faixa).toBe('rainha');
+    expect(normalizar({ faixa: 'puxalanca' }).faixa).toBe('rainha');
+    expect(normalizar({ faixa: 'reliquia' }).faixa).toBe('rainha');
   });
 
   it('playlists: descarta link ruim, repetido e o que passa do limite', () => {

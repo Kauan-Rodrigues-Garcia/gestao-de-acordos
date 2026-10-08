@@ -1,14 +1,15 @@
 /**
  * PainelSomAmbiente — o que abre ao clicar no fone do header.
  *
- * De cima para baixo: o que está tocando e os controles, o volume, as faixas
- * de fábrica (seis temas de terror e duas músicas),
- * as playlists da pessoa e o «Tocar ao entrar».
+ * De cima para baixo: o que está tocando e os controles, o volume, o seletor
+ * de faixas (`SeletorFaixas`: abas «Temas» e «Músicas», em páginas) e o
+ * «Tocar ao entrar».
  *
  * Duas versões, decididas pelo motor (`completo`):
- *   - super_admin: tudo acima, volume de 0 a 100;
- *   - os demais: enxuta — as faixas de fábrica numa lista só, sem «Minhas
- *     playlists» (não dá para adicionar música) e volume de 0 a 50.
+ *   - super_admin: tudo acima, mais a aba «Playlists» (as da pessoa), volume
+ *     de 0 a 100;
+ *   - os demais: enxuta — só as de fábrica, sem a aba «Playlists» (não dá
+ *     para adicionar música) e volume de 0 a 50.
  *
  * Mora com o tema de Halloween e só aparece quando o tema está liberado para
  * a pessoa (`useHalloween().disponivel`, no `Layout`). Tudo que muda aqui vai
@@ -20,6 +21,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2,
+  ChevronLeft, ChevronRight, Ghost, ListMusic, Music, Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +34,7 @@ import {
   escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  FAIXAS_EMBUTIDAS, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
+  LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { Equalizador } from './Equalizador';
@@ -183,47 +185,13 @@ export function PainelSomAmbiente() {
         </div>
       )}
 
-      {completo ? (
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
-        {/* ── Fábrica ── */}
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Temas de terror</p>
-        <div className="grid grid-cols-3 gap-2">
-          {TEMAS_DE_TERROR.map(id => (
-            <BlocoFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
-          ))}
-        </div>
-
-        <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Músicas</p>
-        <div className="space-y-1.5">
-          {MUSICAS.map(id => (
-            <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
-          ))}
-        </div>
-
-        {/* ── Da pessoa ── */}
-        <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Minhas playlists</p>
-        <div className="space-y-1.5">
-          {prefs.playlists.map(p => (
-            <LinhaFaixa
-              key={p.id}
-              id={p.id}
-              info={infoDaPlaylist(p)}
-              escolhida={escolhida === p.id}
-              tocando={tocando && noAr === p.id}
-              onRemover={() => salvarPlaylists(prefs.playlists.filter(x => x.id !== p.id))}
-            />
-          ))}
-        </div>
-        <NovaPlaylist playlists={prefs.playlists} />
+        <SeletorFaixas
+          escolhida={escolhida}
+          noAr={tocando ? noAr : null}
+          playlists={completo ? prefs.playlists : null}
+        />
       </div>
-      ) : (
-      // Enxuta: as de fábrica numa lista só, e nada de adicionar música.
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto border-t border-border px-4 py-3">
-        {FAIXAS_EMBUTIDAS.map(id => (
-          <LinhaFaixa key={id} id={id} info={EMBUTIDAS[id]} escolhida={escolhida === id} tocando={tocando && noAr === id} />
-        ))}
-      </div>
-      )}
 
       <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-border px-4 py-3">
         <span className="min-w-0">
@@ -270,6 +238,219 @@ function BarraProgresso({ ativa }: { ativa: boolean }) {
   );
 }
 
+type Aba = 'temas' | 'musicas' | 'playlists';
+
+/** Faixas por página. Lista que cresce vira mais páginas, nunca uma rolagem sem fim. */
+export const POR_PAGINA = 5;
+
+/** Altura de uma `LinhaFaixa` (ícone de 32px + respiro + borda): as vagas vazias da última página. */
+const ALTURA_LINHA = 'h-[50px]';
+
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+function abaDaFaixa(id: string): Aba {
+  if ((TEMAS_DE_TERROR as readonly string[]).includes(id)) return 'temas';
+  if ((MUSICAS as readonly string[]).includes(id)) return 'musicas';
+  return 'playlists';
+}
+
+interface ItemDaLista {
+  id: string;
+  info: InfoFaixa;
+  onRemover?: () => void;
+}
+
+/**
+ * Temas de terror e músicas em abas separadas (e «Playlists», no completo),
+ * cada uma em páginas de `POR_PAGINA`. Com mais de uma página aparece a busca,
+ * por nome ou artista, sem acento. Abre — e volta, a cada troca pelo
+ * anterior/próxima — na aba e na página da faixa escolhida.
+ *
+ * `playlists`: as da pessoa; `null` na versão enxuta, que não tem a aba.
+ */
+function SeletorFaixas({ escolhida, noAr, playlists }: {
+  escolhida: string;
+  /** O que está tocando de fato (`null` se nada). */
+  noAr: string | null;
+  playlists: PlaylistSalva[] | null;
+}) {
+  const listas: Record<Aba, ItemDaLista[]> = {
+    temas: TEMAS_DE_TERROR.map(id => ({ id, info: EMBUTIDAS[id] })),
+    musicas: MUSICAS.map(id => ({ id, info: EMBUTIDAS[id] })),
+    playlists: (playlists ?? []).map(p => ({
+      id: p.id,
+      info: infoDaPlaylist(p),
+      onRemover: () => salvarPlaylists(playlists!.filter(x => x.id !== p.id)),
+    })),
+  };
+  const abas: { id: Aba; rotulo: string; Icone: typeof Ghost }[] = [
+    { id: 'temas', rotulo: 'Temas', Icone: Ghost },
+    { id: 'musicas', rotulo: 'Músicas', Icone: Music },
+    ...(playlists ? [{ id: 'playlists' as const, rotulo: 'Playlists', Icone: ListMusic }] : []),
+  ];
+
+  const paginaDe = (aba: Aba, id: string) =>
+    Math.max(0, Math.floor(listas[aba].findIndex(x => x.id === id) / POR_PAGINA));
+
+  const abaInicial = () => {
+    const a = abaDaFaixa(escolhida);
+    return a === 'playlists' && !playlists ? 'temas' : a;
+  };
+  const [aba, setAba] = useState<Aba>(abaInicial);
+  const [pagina, setPagina] = useState(() => paginaDe(abaInicial(), escolhida));
+  const [busca, setBusca] = useState('');
+
+  // Trocou a faixa (anterior/próxima, ou a sequência andou): vai até ela.
+  const ultima = useRef(escolhida);
+  useEffect(() => {
+    if (ultima.current === escolhida) return;
+    ultima.current = escolhida;
+    const a = abaInicial();
+    setAba(a);
+    setBusca('');
+    setPagina(paginaDe(a, escolhida));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escolhida]);
+
+  const trocarAba = (a: Aba) => {
+    setAba(a);
+    setBusca('');
+    setPagina(paginaDe(a, escolhida));
+  };
+
+  const todos = listas[aba];
+  const termo = semAcento(busca);
+  const filtrados = termo
+    ? todos.filter(x => semAcento(`${x.info.nome} ${x.info.descricao}`).includes(termo))
+    : todos;
+  const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
+  const atual = Math.min(pagina, paginas - 1);
+  const daPagina = filtrados.slice(atual * POR_PAGINA, (atual + 1) * POR_PAGINA);
+  const temBusca = todos.length > POR_PAGINA;
+  // Com páginas, a lista guarda sempre a mesma altura: virar a página não pula o painel.
+  const vagas = paginas > 1 ? POR_PAGINA - daPagina.length : 0;
+
+  return (
+    <div>
+      <div role="tablist" aria-label="Tipo de som" className="flex gap-1 rounded-lg bg-muted p-1">
+        {abas.map(a => {
+          const ativa = a.id === aba;
+          const temEscolhida = abaDaFaixa(escolhida) === a.id;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="tab"
+              aria-selected={ativa}
+              onClick={() => trocarAba(a.id)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                ativa ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <a.Icone className="h-3.5 w-3.5" />
+              {a.rotulo}
+              <span className="tabular-nums opacity-60">{listas[a.id].length}</span>
+              {temEscolhida && !ativa && (
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" title="A faixa escolhida está aqui" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {temBusca && (
+        <div className="relative mt-2">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={busca}
+            onChange={e => { setBusca(e.target.value); setPagina(0); }}
+            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música ou artista' : 'Buscar playlist'}
+            aria-label="Buscar na lista"
+            className="h-8 pl-8 pr-8 text-xs"
+          />
+          {busca && (
+            <button
+              type="button"
+              onClick={() => { setBusca(''); setPagina(paginaDe(aba, escolhida)); }}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Limpar busca"
+              title="Limpar busca"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      <div role="tabpanel" className="mt-2 space-y-1.5">
+        {daPagina.map(x => (
+          <LinhaFaixa
+            key={x.id}
+            id={x.id}
+            info={x.info}
+            escolhida={escolhida === x.id}
+            tocando={noAr === x.id}
+            onRemover={x.onRemover}
+          />
+        ))}
+        {filtrados.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">
+            {termo ? <>Nada com «{busca.trim()}».</> : 'Nenhuma playlist ainda. Cole um link abaixo.'}
+          </p>
+        )}
+        {Array.from({ length: vagas }, (_, i) => <div key={`vaga-${i}`} className={ALTURA_LINHA} aria-hidden />)}
+      </div>
+
+      {paginas > 1 && (
+        <div className="mt-2 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setPagina(atual - 1)}
+            disabled={atual === 0}
+            aria-label="Página anterior"
+            title="Página anterior"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-1.5">
+            {paginas <= 8 ? Array.from({ length: paginas }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setPagina(i)}
+                aria-label={`Página ${i + 1}`}
+                aria-current={i === atual ? 'page' : undefined}
+                className={cn(
+                  'h-1.5 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  i === atual ? 'w-4 bg-foreground/70' : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60',
+                )}
+              />
+            )) : null}
+            <span className="ml-1 text-[11px] tabular-nums text-muted-foreground">{atual + 1} de {paginas}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setPagina(atual + 1)}
+            disabled={atual === paginas - 1}
+            aria-label="Próxima página"
+            title="Próxima página"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {aba === 'playlists' && playlists && <NovaPlaylist playlists={playlists} />}
+    </div>
+  );
+}
+
 interface PropsFaixa {
   id: string;
   info: InfoFaixa;
@@ -277,30 +458,7 @@ interface PropsFaixa {
   tocando: boolean;
 }
 
-/** Os três sons: blocos lado a lado, cada um com a sua cor. */
-function BlocoFaixa({ id, info, escolhida, tocando }: PropsFaixa) {
-  return (
-    <button
-      type="button"
-      onClick={() => escolher(id)}
-      aria-pressed={escolhida}
-      title={info.descricao}
-      className={cn(
-        'som-bloco group flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        info.tom,
-        escolhida ? 'som-bloco-escolhido' : 'border-border hover:bg-muted/60',
-      )}
-    >
-      <span className="som-icone flex h-9 w-9 items-center justify-center rounded-lg">
-        {tocando ? <Equalizador /> : <info.Icone className="h-[18px] w-[18px]" />}
-      </span>
-      <span className="text-xs font-medium leading-tight">{info.nome}</span>
-    </button>
-  );
-}
-
-/** Lo-fi e playlists: uma linha, com a descrição ao lado. */
+/** Uma faixa: o ícone na cor dela, o nome e a descrição. */
 function LinhaFaixa({ id, info, escolhida, tocando, onRemover }: PropsFaixa & { onRemover?: () => void }) {
   return (
     <div
