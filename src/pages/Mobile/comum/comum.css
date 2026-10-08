@@ -125,10 +125,52 @@
 .v-seg button[aria-pressed='true'] {
   background: #fff; color: #14261f; box-shadow: 0 1px 2px rgba(12, 31, 46, 0.14);
 }
-.v-seg-unidade button { padding: 5px 9px; font-size: 11.5px; }
+.v-seg-unidade button { padding: 4px 10px; font-size: 11.5px; min-height: 26px; }
 .v-faixa-topo {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin: 2px 16px 12px; flex-wrap: wrap;
+}
+
+/*
+ * A visão (Eu · Equipe · Setor) é a régua larga do topo (08/10/2026): ocupa a
+ * linha, cada opção com o mesmo peso, e o marcador branco é UM só, que desliza
+ * até a visão atual (`--i` de `--n`, postos pelo TrocaDeVisao). A cor
+ * selecionada é o verde-petróleo do cartão (`--v-cheio`).
+ */
+.v-visoes {
+  position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  width: 100%; padding: 4px; border-radius: 14px;
+  background: rgba(20, 38, 31, 0.07); box-shadow: inset 0 0 0 1px rgba(20, 38, 31, 0.05);
+}
+.v-visoes::before {
+  content: ''; position: absolute; top: 4px; bottom: 4px; left: 4px;
+  width: calc((100% - 8px) / var(--n, 2)); border-radius: 10px;
+  background: #fff; box-shadow: 0 1px 3px rgba(12, 31, 46, 0.14), 0 0 0 1px rgba(12, 31, 46, 0.04);
+  transform: translateX(calc(100% * var(--i, 0)));
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.v-visoes button {
+  position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; padding: 0 8px; border: 0; border-radius: 10px; background: none;
+  font-size: 13.5px; font-weight: 600; color: rgba(20, 38, 31, 0.55);
+  transition: color 0.2s ease; -webkit-tap-highlight-color: transparent;
+}
+.v-visoes button svg { width: 16px; height: 16px; flex: none; stroke-width: 2.2; }
+.v-visoes button[aria-pressed='true'] { color: #1f6b5c; }
+.v-visoes button:active { transform: scale(0.97); }
+.v-visoes button:focus-visible { outline: 2px solid #1f6b5c; outline-offset: -2px; }
+
+/* H.O. | Bruto: miúdo e com rótulo, para não ler como mais uma visão. */
+.v-unidade {
+  display: inline-flex; align-items: center; gap: 8px; margin-left: auto;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: rgba(20, 38, 31, 0.5);
+}
+.v-unidade .v-seg { padding: 2px; border-radius: 9px; }
+.v-unidade .v-seg button { text-transform: none; letter-spacing: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .v-visoes::before { transition: none; }
 }
 
 /* ── Cartão de resumo (equipe / setor) ────────────────────────────────── */

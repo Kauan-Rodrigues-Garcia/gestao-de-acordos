@@ -149,6 +149,25 @@
 .dark, .dark-grey, .deep-blue { color-scheme: dark; }
 
 /*
+ * App do celular (`.no-app`, posta pelo `TemaDoApp` do App.tsx): o iPhone dá
+ * zoom na página ao focar campo com letra menor que 16px, e a tela fica
+ * ampliada depois de enviar. Era o que acontecia ao tocar na caixa de mensagem
+ * e na busca do chat (text-sm / text-xs). Fora das camadas de propósito: vence
+ * o utilitário do Tailwind sem `!important`. Só no toque — no computador o
+ * `localhost` mantém o tamanho desenhado.
+ */
+@media (pointer: coarse) {
+  .no-app textarea,
+  .no-app input:not([type]),
+  .no-app input[type='text'],
+  .no-app input[type='search'],
+  .no-app input[type='email'],
+  .no-app input[type='password'],
+  .no-app input[type='tel'],
+  .no-app input[type='number'] { font-size: 16px; }
+}
+
+/*
  * Faixa de luminosidade para TEXTO pintado com cor de sinal.
  *
  * Quartil, projeção e meta usam hex fixos (`#22c55e`, `#f59e0b`...) que servem

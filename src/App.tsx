@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
@@ -29,7 +29,7 @@ import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
 import { SoNoEnderecoDoApp } from '@/pages/Mobile/comum/SoNoEnderecoDoApp';
-import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao } from '@/lib/mobile/preferencia';
+import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao, temaSoClaro } from '@/lib/mobile/preferencia';
 
 /**
  * As rotas da cobrança, declaradas uma vez.
@@ -188,6 +188,24 @@ function VersionWatcher(): null {
 }
 
 /**
+ * Avisa o App quando a rota entra ou sai do app do celular, que é sempre claro
+ * (`temaSoClaro`). Mora DENTRO do Router porque a troca de rota do
+ * `HashRouter` é `pushState`, que não dispara `hashchange`; o tema é decidido
+ * FORA dele, no `ThemeProvider`.
+ *
+ * A classe `no-app` no `<html>` é a do CSS que só vale no app (index.css).
+ */
+function TemaDoApp({ onMudar }: { onMudar: (soClaro: boolean) => void }): null {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const soClaro = temaSoClaro(undefined, pathname);
+    document.documentElement.classList.toggle('no-app', soClaro);
+    onMudar(soClaro);
+  }, [pathname, onMudar]);
+  return null;
+}
+
+/**
  * A rota `/` por produto.
  *
  * O Dashboard é da cobrança inteiro — recebimento, acordo, ticket médio e
@@ -338,6 +356,7 @@ export default function App() {
   // Modo leve (`lib/modoLeve.ts`): o framer-motion do app inteiro para de animar.
   // Fora dele fica o de sempre — `never` é o padrão da biblioteca.
   const leve = useModoLeve();
+  const [soClaro, setSoClaro] = useState(() => temaSoClaro());
   return (
     <ErrorBoundary scope="App" fallbackMessage="Erro crítico na aplicação. Recarregue a página.">
     <MotionConfig reducedMotion={leve ? 'always' : 'never'}>
@@ -357,6 +376,9 @@ export default function App() {
       attribute="class" defaultTheme="system" enableSystem
       themes={NOMES_TEMAS} enableColorScheme={false}
       disableTransitionOnChange
+      // O app do celular é só claro — ver `temaSoClaro`. Não grava nada: ao
+      // voltar para o site, o tema escolhido continua lá.
+      forcedTheme={soClaro ? 'light' : undefined}
     >
       <AuthProvider>
         <EmpresaProvider>
@@ -372,6 +394,7 @@ export default function App() {
         <Router>
           {/* Dentro do Router: a versão nova entra na próxima troca de tela. */}
           <VersionWatcher />
+          <TemaDoApp onMudar={setSoClaro} />
           {/* App aberto como instalado no celular: registra quem instalou. */}
           <RegistroAppInstalado />
           {/* DENTRO do Router: o rastreio lê a rota atual com `useLocation`, e
@@ -679,6 +702,7 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
+
 
               {/* Fechamento [BP] — a planilha de fechamento da gerência. Quem
                   abre é `ver_fechamento`; o setor que aparece sai do escopo da

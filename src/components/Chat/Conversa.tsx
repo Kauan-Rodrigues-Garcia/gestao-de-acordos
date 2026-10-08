@@ -751,9 +751,10 @@ export function Conversa({
       {/* Cabeçalho */}
       <header className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border shrink-0">
         {!expandido && onVoltar && (
-          <button onClick={onVoltar} className="p-1 -ml-1 rounded hover:bg-muted transition-colors"
+          <button onClick={onVoltar}
+                  className="p-1 -ml-1 rounded hover:bg-muted transition-colors pointer-coarse:p-2 pointer-coarse:-ml-2"
                   aria-label="Voltar para a lista">
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 pointer-coarse:w-5 pointer-coarse:h-5" />
           </button>
         )}
         <AvatarChat
@@ -1107,7 +1108,7 @@ export function Conversa({
             </span>
             <span className="text-[11px] text-muted-foreground">gravando…</span>
 
-            <Button size="icon" className="h-8 w-8 shrink-0 rounded-full"
+            <Button size="icon" className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-10 pointer-coarse:w-10"
                     onClick={() => void pararEAnexar()} aria-label="Concluir a gravação">
               <Check className="w-4 h-4" />
             </Button>
@@ -1116,7 +1117,7 @@ export function Conversa({
         <div className="flex items-end gap-1">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Emoji">
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 pointer-coarse:h-10 pointer-coarse:w-10" aria-label="Emoji">
                 <Smile className="w-4 h-4" />
               </Button>
             </PopoverTrigger>
@@ -1133,7 +1134,7 @@ export function Conversa({
           </Popover>
 
           <label className="shrink-0">
-            <Button variant="ghost" size="icon" className="h-8 w-8 pointer-events-none" asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10" asChild>
               <span><Paperclip className="w-4 h-4" /></span>
             </Button>
             <input type="file" multiple className="sr-only"
@@ -1156,12 +1157,12 @@ export function Conversa({
             e evita dois botões redondos disputando a mesma quina.
           */}
           {temAlgoParaEnviar ? (
-            <Button size="icon" className="h-8 w-8 shrink-0 rounded-full"
+            <Button size="icon" className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-10 pointer-coarse:w-10"
                     onClick={() => void enviar()} aria-label="Enviar">
               <Send className="w-4 h-4" />
             </Button>
           ) : (
-            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full"
+            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-10 pointer-coarse:w-10"
                     onClick={() => void gravador.iniciar()}
                     disabled={!gravador.suportado}
                     title={gravador.suportado ? 'Gravar áudio' : 'Este navegador não grava áudio'}
@@ -1397,7 +1398,12 @@ function AcoesBalao({
   // Mensagem sem conteúdo (expurgada) não se responde nem se curte.
   if (m.expurgado_em) return null;
   return (
-    <div className="flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+    <div className={cn(
+      'flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100',
+      // No celular não há hover: responder e curtir ficavam inalcançáveis.
+      // Ficam à vista, discretos, até o dedo tocar.
+      'pointer-coarse:opacity-60',
+    )}>
       <button
         type="button"
         onClick={() => onResponder(m)}

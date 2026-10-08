@@ -51,6 +51,24 @@ export function ehEnderecoDoApp(
 }
 
 /**
+ * O app do celular é SEMPRE no tema claro (Cleber, 08/10/2026) — o chat
+ * inclusive. O tema mora no `localStorage` do endereço, e no `app.` ele é o
+ * «Sistema»: celular no modo escuro abria o chat escuro, que não foi desenhado
+ * para isso, sobre as telas do app, que só existem no claro.
+ *
+ * Vale no endereço do app inteiro (login incluído) e nas rotas `/m…` de onde
+ * mais elas abrem (localhost, preview). A rota vem do hash (`HashRouter`):
+ * `#/m`, `#/m/equipe`, `#/m?chat=…` — e não `#/modo-tv` nem `#/meus-chips`.
+ * O `index.html` repete esta conta antes da primeira pintura.
+ */
+export function temaSoClaro(
+  host: string = typeof window === 'undefined' ? '' : window.location.hostname,
+  rota: string = typeof window === 'undefined' ? '' : window.location.hash,
+): boolean {
+  return ehEnderecoDoApp(host) || /^#?\/m(\/|\?|$)/.test(rota);
+}
+
+/**
  * A tela do celular (`/m…`) só abre no endereço do app (Cleber, 07/10/2026).
  * No endereço do site (`www.`, `pagueplay.`) ela manda para o `app.` — ver
  * `SoNoEnderecoDoApp`. `localhost` fica liberado para o desenvolvimento, e o

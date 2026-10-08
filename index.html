@@ -58,6 +58,10 @@
           if (t === 'system') {
             t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
+          // O app do celular é só claro (temaSoClaro, src/lib/mobile/preferencia.ts).
+          var soClaro = location.hostname.toLowerCase().indexOf('app.') === 0
+            || /^#\/m(\/|\?|$)/.test(location.hash);
+          if (soClaro) { t = 'light'; d.classList.add('no-app'); }
           if (validos.indexOf(t) !== -1) d.classList.add(t);
           if (localStorage.getItem('menuLateralEscuro') === 'true') d.classList.add('menu-lateral-escuro');
         } catch (e) { /* modo privado: fica o claro */ }

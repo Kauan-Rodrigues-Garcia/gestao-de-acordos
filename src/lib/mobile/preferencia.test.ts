@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   CHAVE_VERSAO, decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, ehEnderecoDoApp, gravarVersao, lerVersao,
-  mobileNesteEndereco, urlNoApp,
+  mobileNesteEndereco, temaSoClaro, urlNoApp,
   ofereceVersaoCelular,
   type AmbienteTela,
 } from './preferencia';
@@ -231,5 +231,22 @@ describe('a tela do celular só no endereço do app (07/10/2026)', () => {
   it('monta o endereço da mesma tela no app', () => {
     expect(urlNoApp('/m/equipe?aba=hoje')).toBe('https://app.gestaodeacordos.com.br/#/m/equipe?aba=hoje');
     expect(urlNoApp('m')).toBe('https://app.gestaodeacordos.com.br/#/m');
+  });
+});
+
+describe('temaSoClaro — o app é sempre claro (08/10/2026)', () => {
+  it('no endereço do app, em qualquer rota (login incluído)', () => {
+    expect(temaSoClaro('app.gestaodeacordos.com.br', '#/login')).toBe(true);
+    expect(temaSoClaro('app.gestaodeacordos.com.br', '')).toBe(true);
+  });
+  it('nas rotas /m de outro endereço', () => {
+    for (const rota of ['#/m', '#/m/equipe', '#/m/setor', '#/m?chat=abc', '/m/equipe']) {
+      expect(temaSoClaro('localhost', rota)).toBe(true);
+    }
+  });
+  it('o resto do site segue o tema escolhido', () => {
+    for (const rota of ['', '#/', '#/dashboard', '#/modo-tv', '#/meus-chips', '#/mobile']) {
+      expect(temaSoClaro('www.gestaodeacordos.com.br', rota)).toBe(false);
+    }
   });
 });

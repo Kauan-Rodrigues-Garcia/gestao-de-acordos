@@ -403,6 +403,9 @@ export function ListaConversas({
                     // A terceira coluna fica reservada para o contador. Texto
                     // grande só encolhe a coluna do meio, inclusive a 360 px.
                     'w-full grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
+                    // No toque os três pontos ficam sempre à vista (não há
+                    // hover): a linha abre espaço para eles à direita.
+                    'pointer-coarse:pr-11',
                     selecionada === c.id ? 'bg-muted' : 'hover:bg-muted/50',
                   )}
                 >
@@ -484,6 +487,12 @@ export function ListaConversas({
                         'absolute right-1 top-1 rounded p-1 transition-opacity',
                         'bg-background shadow-sm hover:bg-muted',
                         'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
+                        // Celular: sem mouse, o hover nunca chega — o menu
+                        // (fixar, mídia, excluir) ficava inalcançável. Fica
+                        // sempre visível, no meio da altura, no espaço que a
+                        // linha reservou, sem cobrir a hora.
+                        'pointer-coarse:opacity-100 pointer-coarse:top-1/2 pointer-coarse:-translate-y-1/2',
+                        'pointer-coarse:right-1.5 pointer-coarse:p-2 pointer-coarse:bg-transparent pointer-coarse:shadow-none',
                         // Com o menu aberto o mouse já saiu da linha: sem isto o
                         // gatilho some por baixo do próprio menu.
                         'data-[state=open]:opacity-100',
