@@ -12,6 +12,42 @@ import { CampaignCore, type CampaignItem, type Discounts } from './lib/campaign-
 export interface OperadorCampanha {
   id: string;
   nome: string;
+  /** Para a lista do passo 3 (09/10/2026): a foto e a equipe no setor. */
+  foto_url?: string | null;
+  equipe_id?: string | null;
+  equipe_nome?: string | null;
+}
+
+/** Filtro de equipe do passo 3: `todas`, `sem` (sem equipe) ou o id da equipe. */
+export type FiltroEquipe = 'todas' | 'sem' | string;
+
+export function casaEquipe(o: Pick<OperadorCampanha, 'equipe_id'>, filtro: FiltroEquipe): boolean {
+  if (filtro === 'todas') return true;
+  if (filtro === 'sem') return !o.equipe_id;
+  return o.equipe_id === filtro;
+}
+
+/** «Luciano» vira «Equipe Luciano»; quem já se chama «Equipe …» fica como está. */
+export function rotuloEquipe(nome: string): string {
+  return /^equipe\b/i.test(nome.trim()) ? nome.trim() : `Equipe ${nome.trim()}`;
+}
+
+/** As equipes que aparecem na lista, com quantos operadores cada uma tem. */
+export function equipesDaLista(
+  operadores: readonly OperadorCampanha[],
+): { id: FiltroEquipe; nome: string; qtd: number }[] {
+  const mapa = new Map<string, { id: string; nome: string; qtd: number }>();
+  let semEquipe = 0;
+  for (const o of operadores) {
+    if (!o.equipe_id) { semEquipe++; continue; }
+    const atual = mapa.get(o.equipe_id) ?? { id: o.equipe_id, nome: o.equipe_nome || 'Equipe sem nome', qtd: 0 };
+    atual.qtd++;
+    mapa.set(o.equipe_id, atual);
+  }
+  const lista: { id: FiltroEquipe; nome: string; qtd: number }[] =
+    [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  if (semEquipe > 0) lista.push({ id: 'sem', nome: 'Sem equipe', qtd: semEquipe });
+  return lista;
 }
 
 /**

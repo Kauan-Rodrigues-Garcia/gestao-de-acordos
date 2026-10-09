@@ -64,30 +64,42 @@ export async function listarOperadoresParaCampanha(
   empresaId: string, setorId: string,
 ): Promise<OperadorCampanha[]> {
   const [{ data: doSetor, error: e1 }, { data: equipes, error: e2 }] = await Promise.all([
-    supabase.from('perfis').select('id, nome')
+    supabase.from('perfis').select('id, nome, foto_url, equipe_id')
       .eq('empresa_id', empresaId).eq('setor_id', setorId)
       .eq('perfil', 'operador').eq('ativo', true),
-    supabase.from('equipes').select('id').eq('empresa_id', empresaId).eq('setor_id', setorId),
+    supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId).eq('setor_id', setorId),
   ]);
   if (e1) throw e1;
   if (e2) throw e2;
 
-  const lista = new Map<string, OperadorCampanha>();
-  for (const p of (doSetor ?? []) as OperadorCampanha[]) lista.set(p.id, p);
+  // Só as equipes DESTE setor dão nome ao filtro; equipe de outro setor conta
+  // como «sem equipe» aqui.
+  const nomeEquipe = new Map(((equipes ?? []) as { id: string; nome: string }[]).map(e => [e.id, e.nome]));
+  const comEquipe = (p: { id: string; nome: string; foto_url: string | null; equipe_id: string | null }, equipeId: string | null) => ({
+    id: p.id, nome: p.nome, foto_url: p.foto_url,
+    equipe_id: equipeId && nomeEquipe.has(equipeId) ? equipeId : null,
+    equipe_nome: equipeId ? (nomeEquipe.get(equipeId) ?? null) : null,
+  });
 
-  const equipeIds = ((equipes ?? []) as { id: string }[]).map(e => e.id);
-  if (equipeIds.length > 0) {
+  type PerfilLido = { id: string; nome: string; foto_url: string | null; equipe_id: string | null };
+  const lista = new Map<string, OperadorCampanha>();
+  for (const p of (doSetor ?? []) as PerfilLido[]) lista.set(p.id, comEquipe(p, p.equipe_id));
+
+  if (nomeEquipe.size > 0) {
     const { data: clones, error: e3 } = await supabase.from('equipe_operadores_clones')
-      .select('operador_id').eq('empresa_id', empresaId).in('equipe_id', equipeIds);
+      .select('operador_id, equipe_id').eq('empresa_id', empresaId).in('equipe_id', [...nomeEquipe.keys()]);
     if (e3) throw e3;
-    const faltando = [...new Set(((clones ?? []) as { operador_id: string }[])
-      .map(c => c.operador_id).filter(id => !lista.has(id)))];
-    if (faltando.length > 0) {
+    // O clone entra no setor pela equipe do clone.
+    const equipeDoClone = new Map<string, string>();
+    for (const c of (clones ?? []) as { operador_id: string; equipe_id: string }[]) {
+      if (!lista.has(c.operador_id)) equipeDoClone.set(c.operador_id, c.equipe_id);
+    }
+    if (equipeDoClone.size > 0) {
       // Da mesma empresa: o envio só aceita operador da empresa da campanha.
-      const { data: perfisClones, error: e4 } = await supabase.from('perfis').select('id, nome')
-        .in('id', faltando).eq('empresa_id', empresaId).eq('perfil', 'operador').eq('ativo', true);
+      const { data: perfisClones, error: e4 } = await supabase.from('perfis').select('id, nome, foto_url, equipe_id')
+        .in('id', [...equipeDoClone.keys()]).eq('empresa_id', empresaId).eq('perfil', 'operador').eq('ativo', true);
       if (e4) throw e4;
-      for (const p of (perfisClones ?? []) as OperadorCampanha[]) lista.set(p.id, p);
+      for (const p of (perfisClones ?? []) as PerfilLido[]) lista.set(p.id, comEquipe(p, equipeDoClone.get(p.id) ?? null));
     }
   }
   return [...lista.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));

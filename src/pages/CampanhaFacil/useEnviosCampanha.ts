@@ -15,7 +15,10 @@ import { toast } from 'sonner';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { Perfil } from '@/lib/supabase';
 import type { CampaignItem, Discounts } from './lib/campaign-core';
-import { casaNome, repartirPorOperador, type OperadorCampanha, type ParteRedistribuida } from './envios';
+import {
+  casaEquipe, casaNome, equipesDaLista, repartirPorOperador,
+  type FiltroEquipe, type OperadorCampanha, type ParteRedistribuida,
+} from './envios';
 import {
   listarOperadoresParaCampanha, listarSetoresParaCampanha,
   liberarCampanha, listarHistorico, repassarEnvios, ativarLote, excluirLote, editarLote,
@@ -44,10 +47,16 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
   const [carregandoOperadores, setCarregandoOperadores] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState('');
-  /** A lista do passo 3, filtrada pelo nome. A seleção vale para todos, filtrados ou não. */
+  const [filtroEquipe, setFiltroEquipe] = useState<FiltroEquipe>('todas');
+  /** As equipes do setor que têm operador na lista — o filtro do passo 3. */
+  const equipes = useMemo(() => equipesDaLista(operadores), [operadores]);
+  /**
+   * A lista do passo 3, filtrada pelo nome e pela equipe (09/10/2026). A
+   * seleção vale para todos, filtrados ou não.
+   */
   const operadoresVisiveis = useMemo(
-    () => operadores.filter((o) => casaNome(o.nome, busca)),
-    [operadores, busca],
+    () => operadores.filter((o) => casaNome(o.nome, busca) && casaEquipe(o, filtroEquipe)),
+    [operadores, busca, filtroEquipe],
   );
 
   const [historico, setHistorico] = useState<LoteCampanha[]>([]);
@@ -76,6 +85,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     if (!empresaId || !setorId) { setOperadores([]); setSelecionados(new Set()); return; }
     let ativo = true;
     setCarregandoOperadores(true);
+    setFiltroEquipe('todas');
     listarOperadoresParaCampanha(empresaId, setorId)
       .then((lista) => {
         if (!ativo) return;
@@ -210,6 +220,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
   return {
     setorFixo, setores, setorId, setSetorId: setSetorEscolhido,
     operadores, operadoresVisiveis, busca, setBusca,
+    equipes, filtroEquipe, setFiltroEquipe,
     carregandoOperadores, selecionados, operadoresSelecionados,
     alternar, marcarTodos, desmarcarTodos,
     empresaId, historico, carregandoHistorico, recarregarHistorico,

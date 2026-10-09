@@ -11,7 +11,12 @@
     interest: 0,
     bundle: 15,
     annual: 25,
+    // Pix Automático em 21x (09/10/2026): desconto sobre o valor com juros.
+    pix_automatico: 5,
   });
+
+  /** Pix Automático: sempre em 21 parcelas. */
+  const PIX_AUTO_PARCELAS = 21;
 
   const DEFAULT_SENDERS = Object.freeze([]);
 
@@ -1087,6 +1092,10 @@ Contrato: *{{contrato}}*
       interest: { label: "Desconto dos juros", value: discounts.interest },
       bundle: { label: "Desconto da junção", value: discounts.bundle },
       annual: { label: "Desconto do plano anual", value: discounts.annual },
+      pix_automatico: {
+        label: "Desconto do Pix Automático",
+        value: discounts.pix_automatico ?? DEFAULT_DISCOUNTS.pix_automatico,
+      },
     };
     const parsedDiscounts = Object.fromEntries(
       Object.entries(discountFields).map(([key, field]) => [
@@ -1114,6 +1123,13 @@ Contrato: *{{contrato}}*
       : null;
     const cardSettlement = financialDataAvailable && settlement > 0 ? roundUp(settlement / 12) : (financialDataAvailable ? 0 : null);
     const cardAnnual = financialDataAvailable && annual > 0 ? roundUp(annual / 12) : (financialDataAvailable ? 0 : null);
+    // Pix Automático em 21 parcelas (09/10/2026): o valor com juros ÷ 21; com
+    // desconto, o valor com juros menos o % configurado, ÷ 21. Arredonda para
+    // cima, como o cartão.
+    const pixAuto = financialDataAvailable ? roundUp(valueWithInterest / PIX_AUTO_PARCELAS) : null;
+    const pixAutoDiscount = financialDataAvailable
+      ? roundUp((valueWithInterest * (1 - rates.pix_automatico)) / PIX_AUTO_PARCELAS)
+      : null;
 
     const issues = [];
     const blockingIssues = [];
@@ -1167,6 +1183,8 @@ Contrato: *{{contrato}}*
       annual,
       cardSettlement,
       cardAnnual,
+      pixAuto,
+      pixAutoDiscount,
       saleType,
       company: mapCompany(saleType),
       phone: contact,
@@ -1201,11 +1219,14 @@ Contrato: *{{contrato}}*
       anual: formatCurrency(item.annual),
       cartao_quitacao: formatCurrency(item.cardSettlement),
       cartao_anual: formatCurrency(item.cardAnnual),
+      pix_automatico_21x: formatCurrency(item.pixAuto),
+      pix_automatico_desconto_21x: formatCurrency(item.pixAutoDiscount),
       pct_atraso: formatPercent(discounts.overdue),
       pct_quitacao: formatPercent(discounts.settlement),
       pct_juros: formatPercent(discounts.interest),
       pct_juncao: formatPercent(discounts.bundle),
       pct_anual: formatPercent(discounts.annual),
+      pct_pix_automatico: formatPercent(discounts.pix_automatico ?? DEFAULT_DISCOUNTS.pix_automatico),
       link: item.shortLink,
     };
   }
@@ -1215,7 +1236,7 @@ Contrato: *{{contrato}}*
   }
 
   function templateRequiresFinancialData(template) {
-    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao|cartao_anual)\s*}}/i
+    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao|cartao_anual|pix_automatico_21x|pix_automatico_desconto_21x)\s*}}/i
       .test(String(template ?? ""));
   }
 

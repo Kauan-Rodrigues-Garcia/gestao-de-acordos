@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
-  Globe, Layers, Repeat, ThumbsDown, ThumbsUp,
+  Globe, History, Layers, Repeat, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
 import { useCampanhasWhatsapp } from './useCampanhasWhatsapp';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
+import { HistoricoOperador } from './HistoricoOperador';
 import {
   filtrar, proximoPendente, telefoneLegivel, textoDoContato,
   type Contato, type Filtro, type ModoAbrir,
@@ -53,6 +54,8 @@ export default function CampanhasWhatsapp() {
   const [limite, setLimite] = useState(POR_PAGINA);
   const [editando, setEditando] = useState<Contato | null>(null);
   const [ajuda, setAjuda] = useState<'mesma-aba' | 'trocar-app' | null>(null);
+  const [aba, setAba] = useState<'enviar' | 'historico'>('enviar');
+  const lotesAtuais = useMemo(() => new Set(w.campanhas.map((c) => c.lote_id)), [w.campanhas]);
 
   // Outra campanha ou outro filtro: volta ao começo da lista.
   useEffect(() => { setLimite(POR_PAGINA); }, [w.selecionada?.id, filtro, busca]);
@@ -71,6 +74,7 @@ export default function CampanhasWhatsapp() {
             enviar à mão. As duas contam como enviada.
           </p>
         </div>
+        {aba === 'enviar' && (
         <div className="flex flex-col items-end gap-1.5">
           <SeletorModo modo={w.modo} onChange={w.setModo} />
           {w.modo === 'web' ? (
@@ -94,9 +98,42 @@ export default function CampanhasWhatsapp() {
             </button>
           )}
         </div>
+        )}
       </header>
 
-      {w.carregando ? (
+      <div role="tablist" aria-label="Campanhas" className="flex gap-1 border-b border-border">
+        {([
+          ['enviar', 'Para enviar', <Send key="i" className="h-4 w-4" />],
+          ['historico', 'Meu histórico', <History key="i" className="h-4 w-4" />],
+        ] as const).map(([v, rotulo, icone]) => (
+          <button
+            key={v} type="button" role="tab" aria-selected={aba === v} onClick={() => setAba(v)}
+            className={cn(
+              '-mb-px flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+              aba === v ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {icone}{rotulo}
+            {v === 'enviar' && w.campanhas.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 text-xs tabular-nums text-primary">{w.campanhas.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'historico' ? (
+        <HistoricoOperador
+          votosAtuais={w.avaliacoes}
+          lotesAtuais={lotesAtuais}
+          onAbrir={(loteId) => {
+            const c = w.campanhas.find((x) => x.lote_id === loteId);
+            if (!c) return false;
+            w.selecionar(c.id);
+            setAba('enviar');
+            return true;
+          }}
+        />
+      ) : w.carregando ? (
         <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando suas campanhas…
         </div>
@@ -108,6 +145,7 @@ export default function CampanhasWhatsapp() {
               <p className="font-semibold">Nenhuma campanha no momento</p>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                 Quando o líder liberar uma campanha para você, ela aparece aqui e você recebe uma notificação.
+                As que já passaram ficam em «Meu histórico».
               </p>
             </div>
           </CardContent>

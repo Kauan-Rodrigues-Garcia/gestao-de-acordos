@@ -20,14 +20,21 @@ import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
   fetchDescontos, salvarDesconto, excluirDesconto,
   fetchOcultas, ocultarMensagemPadrao, restaurarMensagensPadrao,
+  fetchFavoritas, definirFavorita,
   type CampanhaMensagem, type CampanhaDesconto,
 } from './campanhaFacil.service';
 
-const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual'];
+const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual', 'pix_automatico'];
 const PAGE_SIZE = 25;
 
 export interface ImportProgress { value: number; label: string; detail: string }
-export type StatusFilter = 'all' | 'Revisar';
+/** `critico` = só os registros com pendência grave (o card do aviso leva até eles). */
+export type StatusFilter = 'all' | 'Revisar' | 'critico';
+
+/** Pendência grave: a que estraga o texto da mensagem (valor que vira R$ 0). */
+export function temPendenciaGrave(i: Pick<CampaignItem, 'hasBlockingIssues' | 'blockingIssues'>): boolean {
+  return i.hasBlockingIssues || (i.blockingIssues?.length ?? 0) > 0;
+}
 
 /**
  * Como está a campanha carregada. **Nenhum destes estados impede exportar** —
@@ -92,6 +99,11 @@ export function useCampanhaFacil() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [isProcessing, setIsProcessing] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  /**
+   * Linhas que o líder tirou da campanha (pela pendência grave): não vão para
+   * operador nenhum, nem para o Excel. Zera ao trocar o arquivo.
+   */
+  const [removidos, setRemovidos] = useState<Set<number>>(new Set());
 
   // ── Configuração (form) ────────────────────────────────────────────────────
   const [templateId, setTemplateId] = useState<string>(CampaignCore.TEMPLATES[0].id);
@@ -129,6 +141,30 @@ export function useCampanhaFacil() {
     return () => { ativo = false; };
   }, [empresaId]);
 
+  // ── Favoritas: de cada líder, não da empresa (20261009180000) ──────────────
+  const [favoritas, setFavoritas] = useState<string[]>([]);
+  useEffect(() => {
+    if (!empresaId) return;
+    let ativo = true;
+    fetchFavoritas(empresaId)
+      .then((ids) => { if (ativo) setFavoritas(ids); })
+      .catch((err) => console.warn('[CampanhaFacil] favoritas:', err));
+    return () => { ativo = false; };
+  }, [empresaId]);
+
+  const alternarFavorita = useCallback(async (id: string) => {
+    if (!empresaId) return;
+    const era = favoritas.includes(id);
+    setFavoritas((f) => (era ? f.filter((x) => x !== id) : [...f, id]));
+    try {
+      await definirFavorita(empresaId, id, !era);
+    } catch (err) {
+      console.error('[CampanhaFacil] favorita:', err);
+      setFavoritas((f) => (era ? [...f, id] : f.filter((x) => x !== id)));
+      toast.error('Não foi possível salvar a favorita. Tente de novo.');
+    }
+  }, [empresaId, favoritas]);
+
   // ── Templates disponíveis ──────────────────────────────────────────────────
   const templates = useMemo<Template[]>(() => {
     const builtIns = CampaignCore.TEMPLATES.filter((t) => !hiddenIds.has(t.id));
@@ -136,6 +172,12 @@ export function useCampanhaFacil() {
   }, [hiddenIds, userMessages]);
 
   const isUserTemplate = useCallback((id: string) => userMessages.some((m) => m.id === id), [userMessages]);
+
+  /** As favoritas que ainda existem na lista, na ordem em que foram marcadas. */
+  const templatesFavoritos = useMemo(
+    () => favoritas.map((id) => templates.find((t) => t.id === id)).filter((t): t is Template => !!t),
+    [favoritas, templates],
+  );
 
   const selectedTemplate = useMemo<Template>(() => {
     return templates.find((t) => t.id === templateId) ?? templates[0] ?? CampaignCore.TEMPLATES[0];
@@ -216,12 +258,15 @@ export function useCampanhaFacil() {
    */
   const campanhaPorId = useMemo<CampaignItem[]>(() => {
     if (!parsed) return [];
-    return CampaignCore.buildCampaign(parsed.records, {
+    const registros = removidos.size > 0
+      ? parsed.records.filter((r) => !removidos.has(r.rowNumber))
+      : parsed.records;
+    return CampaignCore.buildCampaign(registros, {
       discounts: discountsApplied,
       senders: operadoresSelecionados.map((o) => o.id),
       template: selectedTemplateBody,
     });
-  }, [parsed, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+  }, [parsed, removidos, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
 
   /** A mesma campanha, com o NOME em `sender` — é o que a tela e o Excel mostram. */
   const campaign = useMemo<CampaignItem[]>(() => {
@@ -243,7 +288,8 @@ export function useCampanhaFacil() {
     return campaign
       .map((item, index) => ({ item, index }))
       .filter(({ item }) => {
-        if (statusFilter !== 'all' && item.status !== statusFilter) return false;
+        if (statusFilter === 'critico' && !temPendenciaGrave(item)) return false;
+        if (statusFilter === 'Revisar' && item.status !== 'Revisar') return false;
         if (!query) return true;
         return [item.name, item.cpf, item.phone, item.contract, item.company, item.sender]
           .some((v) => String(v || '').toLocaleLowerCase('pt-BR').includes(query));
@@ -264,9 +310,28 @@ export function useCampanhaFacil() {
     // `critical` conta o que o core marcou como pendência grave. É contagem para
     // avisar, não trava: o nome antigo (`blocking`) descrevia um bloqueio que
     // não existe mais.
-    const critical = campaign.filter((i) => i.hasBlockingIssues || (i.blockingIssues?.length ?? 0) > 0).length;
+    const critical = campaign.filter(temPendenciaGrave).length;
     return { total: campaign.length, ready, review, critical, senderCount: sendersList.length };
   }, [campaign, sendersList]);
+
+  // Sem nenhuma pendência grave sobrando, o filtro delas não faz sentido.
+  useEffect(() => {
+    if (statusFilter === 'critico' && stats.critical === 0) setStatusFilter('all');
+  }, [statusFilter, stats.critical]);
+
+  /** Tira da campanha todos os que têm pendência grave agora. */
+  const removerPendenciasGraves = useCallback(() => {
+    const linhas = campaign.filter(temPendenciaGrave).map((i) => i.rowNumber);
+    if (linhas.length === 0) return;
+    setRemovidos((r) => new Set([...r, ...linhas]));
+    setSelectedRowNumber(null);
+    toast.success(`${linhas.length.toLocaleString('pt-BR')} ${linhas.length === 1 ? 'cliente tirado' : 'clientes tirados'} da campanha. Não vão para nenhum operador.`);
+  }, [campaign]);
+
+  const devolverRemovidos = useCallback(() => {
+    setRemovidos(new Set());
+    toast.success('Os clientes tirados voltaram para a campanha.');
+  }, []);
 
   const workspaceState: WorkspaceState =
     stats.critical > 0 ? 'critical'
@@ -335,6 +400,7 @@ export function useCampanhaFacil() {
       }
 
       setParsed(result);
+      setRemovidos(new Set());
       setFileName(file.name);
       setSelectedRowNumber(null);
       setPage(1);
@@ -360,6 +426,7 @@ export function useCampanhaFacil() {
 
   const removeMailing = useCallback(() => {
     setParsed(null);
+    setRemovidos(new Set());
     setFileName('');
     setSelectedRowNumber(null);
     setPage(1);
@@ -586,11 +653,13 @@ export function useCampanhaFacil() {
     search, setSearch, statusFilter, setStatusFilter,
     isProcessing, importProgress, relatorioSemValores,
     stats, workspaceState,
+    removidos: removidos.size, removerPendenciasGraves, devolverRemovidos,
     // templates
     // `setTemplateId` exposto é o `escolherTemplate`, que recusa as bloqueadas.
     // O cru fica interno de propósito — a tela não deve ter como burlar a regra.
     templates, templateId, setTemplateId: escolherTemplate, selectedTemplate, selectedTemplateBody,
     isUserTemplate, hiddenCount: hiddenIds.size,
+    favoritas, templatesFavoritos, alternarFavorita,
     templatesBloqueados, mensagemBloqueada,
     // config
     sendersList, envios,

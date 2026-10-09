@@ -68,6 +68,30 @@ export async function avaliarCampanha(loteId: string, bom: Avaliacao | null): Pr
   if (error) throw error;
 }
 
+// ── Histórico do operador (20261009180000) ───────────────────────────────────
+
+export interface Participacao {
+  lote_id: string;
+  titulo: string;
+  liberada_por: string | null;
+  setor_nome: string | null;
+  lancada_em: string;
+  encerrada_em: string | null;
+  ativa: boolean;
+  total: number;
+  enviados: number;
+  nao_enviados: number;
+  /** O voto que a pessoa deu: `true` bom retorno, `false` sem retorno, `null` não avaliou. */
+  bom: boolean | null;
+}
+
+/** As campanhas de que esta pessoa participou, da mais nova para a mais antiga. */
+export async function minhasParticipacoes(): Promise<Participacao[]> {
+  const { data, error } = await db.rpc('fn_campanha_facil_minhas_participacoes');
+  if (error) throw error;
+  return (data ?? []) as Participacao[];
+}
+
 /** `null` volta para a mensagem original. */
 export async function editarMensagem(id: string, texto: string | null): Promise<void> {
   const { data, error } = await db.from('campanha_facil_contatos').update({ mensagem_editada: texto }).eq('id', id).select('id');

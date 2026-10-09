@@ -15,7 +15,7 @@ import { useRef, useState } from 'react';
 import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
   ChevronLeft, ChevronRight, MessageSquare, Percent,
-  AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send,
+  AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send, Filter, UserX, Undo2, Star,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -40,14 +40,14 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
-import { useCampanhaFacil, type WorkspaceState } from './useCampanhaFacil';
+import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceState } from './useCampanhaFacil';
 import { SeletorOperadores } from './SeletorOperadores';
 import { HistoricoCampanhas } from './HistoricoCampanhas';
 import { VariableChips, insertVariable } from './VariaveisMensagem';
 
 const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string][] = [
   ['overdue', 'Parcela em atraso'], ['settlement', 'Quitação'], ['interest', 'Valor com juros'],
-  ['bundle', 'Junção'], ['annual', 'Anual'],
+  ['bundle', 'Junção'], ['annual', 'Anual'], ['pix_automatico', 'Pix Automático'],
 ];
 
 export default function CampanhaFacil() {
@@ -125,6 +125,11 @@ export default function CampanhaFacil() {
   }
   function openSendersHint() {
     document.getElementById('cf-senders')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  /** O card da pendência grave: filtra a tabela e rola até ela. */
+  function verPendenciasGraves() {
+    cf.setStatusFilter('critico');
+    requestAnimationFrame(() => document.getElementById('cf-tabela')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
   function openLiberar() {
     if (!cf.campaign.length) return;
@@ -252,29 +257,88 @@ export default function CampanhaFacil() {
                   </p>
                 </div>
               )}
-              <Select value={cf.templateId} onValueChange={cf.setTemplateId}>
-                <SelectTrigger><SelectValue placeholder="Selecione uma mensagem" /></SelectTrigger>
-                <SelectContent>
-                  {categorias.map((cat) => (
-                    <SelectGroup key={cat}>
-                      <SelectLabel>{cat}</SelectLabel>
-                      {cf.templates.filter((t) => t.category === cat).map((t) => {
-                        const bloqueada = cf.templatesBloqueados.has(t.id);
-                        return (
-                          <SelectItem key={t.id} value={t.id} disabled={bloqueada}>
-                            {t.name}
-                            {bloqueada && (
-                              <span className="ml-2 text-[10px] text-muted-foreground">
-                                usa valores
-                              </span>
+              {/* Favoritas: de cada líder, fixadas no topo (09/10/2026). */}
+              {cf.templatesFavoritos.length > 0 && (
+                <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 p-2">
+                  <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                    <Star className="h-3 w-3 fill-current" /> Minhas favoritas
+                  </p>
+                  <ul className="space-y-0.5">
+                    {cf.templatesFavoritos.map((t) => {
+                      const bloqueada = cf.templatesBloqueados.has(t.id);
+                      const escolhida = t.id === cf.selectedTemplate.id;
+                      return (
+                        <li key={t.id} className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={bloqueada}
+                            onClick={() => cf.setTemplateId(t.id)}
+                            title={bloqueada ? 'Usa valores que este relatório não tem' : `Usar “${t.name}”`}
+                            className={cn(
+                              'min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                              escolhida ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent',
+                              bloqueada && 'cursor-not-allowed opacity-50 hover:bg-transparent',
                             )}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
+                          >
+                            {t.name}
+                            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">{t.category}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void cf.alternarFavorita(t.id)}
+                            aria-label={`Tirar “${t.name}” das favoritas`}
+                            title="Tirar das favoritas"
+                            className="rounded-md p-1.5 text-amber-500 hover:bg-amber-500/10"
+                          >
+                            <Star className="h-3.5 w-3.5 fill-current" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <Select value={cf.templateId} onValueChange={cf.setTemplateId}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione uma mensagem" /></SelectTrigger>
+                  <SelectContent>
+                    {categorias.map((cat) => (
+                      <SelectGroup key={cat}>
+                        <SelectLabel>{cat}</SelectLabel>
+                        {cf.templates.filter((t) => t.category === cat).map((t) => {
+                          const bloqueada = cf.templatesBloqueados.has(t.id);
+                          return (
+                            <SelectItem key={t.id} value={t.id} disabled={bloqueada}>
+                              {cf.favoritas.includes(t.id) && <Star className="mr-1 inline h-3 w-3 fill-amber-400 text-amber-400" />}
+                              {t.name}
+                              {bloqueada && (
+                                <span className="ml-2 text-[10px] text-muted-foreground">
+                                  usa valores
+                                </span>
+                              )}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(() => {
+                  const fav = cf.favoritas.includes(cf.selectedTemplate.id);
+                  return (
+                    <Button
+                      type="button" variant="outline" size="icon"
+                      className={cn('h-10 w-10 shrink-0', fav && 'border-amber-400/60 bg-amber-400/10')}
+                      onClick={() => void cf.alternarFavorita(cf.selectedTemplate.id)}
+                      aria-pressed={fav}
+                      aria-label={fav ? 'Tirar das favoritas' : 'Fixar nas favoritas'}
+                      title={fav ? 'Tirar das favoritas' : 'Fixar nas favoritas'}
+                    >
+                      <Star className={cn('h-4 w-4', fav ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground')} />
+                    </Button>
+                  );
+                })()}
+              </div>
               {cf.mensagemBloqueada && (
                 <p className="text-xs text-destructive">
                   A mensagem selecionada usa valores que este relatório não tem.
@@ -417,18 +481,57 @@ export default function CampanhaFacil() {
                 </div>
               </div>
 
+              {/* Pendência grave: o card leva até os registros e deixa tirá-los
+                  da campanha (09/10/2026). */}
+              {cf.stats.critical > 0 && (
+                <div className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
+                  <button
+                    type="button"
+                    onClick={verPendenciasGraves}
+                    className="min-w-0 flex-1 text-left"
+                    title="Mostrar só esses registros na tabela"
+                  >
+                    <strong>
+                      {cf.stats.critical.toLocaleString('pt-BR')} {cf.stats.critical === 1 ? 'registro com pendência grave' : 'registros com pendência grave'}.
+                    </strong>{' '}
+                    <span className="text-muted-foreground">
+                      Clique para ver quais são e o motivo. Se continuarem, saem marcados como “Revisar”.
+                    </span>
+                  </button>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={verPendenciasGraves}>
+                      <Filter className="h-3.5 w-3.5" /> Ver {cf.stats.critical === 1 ? 'o registro' : 'os registros'}
+                    </Button>
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={cf.removerPendenciasGraves}
+                    >
+                      <UserX className="h-3.5 w-3.5" /> Tirar da campanha
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {cf.removidos > 0 && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                  <UserX className="h-4 w-4 text-muted-foreground" />
+                  <span>
+                    <strong>{cf.removidos.toLocaleString('pt-BR')}</strong>{' '}
+                    {cf.removidos === 1 ? 'cliente tirado' : 'clientes tirados'} da campanha. Não vão para nenhum operador nem para o Excel.
+                  </span>
+                  <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={cf.devolverRemovidos}>
+                    <Undo2 className="mr-1 h-3.5 w-3.5" /> Devolver à campanha
+                  </Button>
+                </div>
+              )}
+
               {/* Banner de validação */}
-              {(cf.stats.critical > 0 || cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
+              {cf.stats.critical === 0 && (cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
                   <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
                   <div>
-                    {cf.stats.critical > 0 ? (
-                      <><strong>{cf.stats.critical.toLocaleString('pt-BR')} registros com pendência grave.</strong>{' '}
-                        <span className="text-muted-foreground">
-                          A exportação continua liberada — essas linhas saem marcadas como “Revisar”, com o motivo na
-                          coluna PENDÊNCIAS.
-                        </span></>
-                    ) : cf.sendersList.length === 0 ? (
+                    {cf.sendersList.length === 0 ? (
                       <><strong>Marque quem encaminhará a campanha.</strong>{' '}
                         <span className="text-muted-foreground">Escolha os operadores do setor no passo 3.</span></>
                     ) : (
@@ -450,13 +553,36 @@ export default function CampanhaFacil() {
 
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
                 {/* Tabela */}
-                <Card>
+                <Card id="cf-tabela" className={cn(cf.statusFilter === 'critico' && 'border-amber-500/50')}>
                   <CardContent className="p-4">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <h3 className="text-sm font-semibold">{cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}</h3>
-                        <p className="text-xs text-muted-foreground">{cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}</p>
+                        <h3 className="text-sm font-semibold">
+                          {cf.statusFilter === 'critico'
+                            ? 'Registros com pendência grave'
+                            : cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}
+                          {cf.statusFilter === 'critico' && (
+                            <>
+                              {' · '}
+                              <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => cf.setStatusFilter('all')}>
+                                ver todos
+                              </button>
+                            </>
+                          )}
+                        </p>
                       </div>
+                      {cf.statusFilter === 'critico' && cf.filtered.length > 0 && (
+                        <Button
+                          size="sm" variant="outline"
+                          className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={cf.removerPendenciasGraves}
+                        >
+                          <UserX className="h-3.5 w-3.5" /> Tirar {cf.filtered.length === 1 ? 'este' : `estes ${cf.filtered.length.toLocaleString('pt-BR')}`} da campanha
+                        </Button>
+                      )}
                       <div className="flex items-center gap-2">
                         <div className="relative">
                           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -468,11 +594,12 @@ export default function CampanhaFacil() {
                           />
                         </div>
                         {cf.stats.review > 0 && (
-                          <Select value={cf.statusFilter} onValueChange={(v) => cf.setStatusFilter(v as 'all' | 'Revisar')}>
-                            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
+                          <Select value={cf.statusFilter} onValueChange={(v) => cf.setStatusFilter(v as StatusFilter)}>
+                            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">Todos</SelectItem>
                               <SelectItem value="Revisar">Precisam revisão</SelectItem>
+                              {cf.stats.critical > 0 && <SelectItem value="critico">Pendência grave</SelectItem>}
                             </SelectContent>
                           </Select>
                         )}
@@ -520,7 +647,11 @@ export default function CampanhaFacil() {
                               </TableCell>
                               {cf.stats.review > 0 && (
                                 <TableCell>
-                                  {item.status !== 'Pronto' && (
+                                  {temPendenciaGrave(item) ? (
+                                    <span title={item.issues.join(', ')} className="text-xs font-medium text-destructive">
+                                      {item.blockingIssues.join(' · ') || item.issues[0] || 'Pendência grave'}
+                                    </span>
+                                  ) : item.status !== 'Pronto' && (
                                     <span title={item.issues.join(', ')} className="text-xs font-medium text-amber-600 dark:text-amber-400">
                                       {item.issues[0] || 'Revisar'}
                                     </span>

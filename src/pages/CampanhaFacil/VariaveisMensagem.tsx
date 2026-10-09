@@ -11,7 +11,12 @@ export const VARIABLE_LABELS: [string, string][] = [
   ['quitacao', 'Quitação'], ['valor_com_juros', 'Valor atualizado'], ['juncao', 'Junção'],
   ['anual', 'Plano anual'], ['cartao_quitacao', '12x quitação'], ['cartao_anual', '12x anual'],
   ['pct_atraso', '% parcela'], ['pct_quitacao', '% quitação'], ['pct_juncao', '% junção'],
-  ['pct_anual', '% anual'], ['protocolo', 'Protocolo'], ['atendimento', '0800 da empresa'], ['link', 'Link'],
+  ['pct_anual', '% anual'],
+  // Pix Automático em 21x (09/10/2026): valor com juros ÷ 21, e com o desconto
+  // configurado em «Descontos e cálculos».
+  ['pix_automatico_21x', 'Pix Automático 21x'], ['pix_automatico_desconto_21x', 'Pix Automático c/ desconto 21x'],
+  ['pct_pix_automatico', '% Pix Automático'],
+  ['protocolo', 'Protocolo'], ['atendimento', '0800 da empresa'], ['link', 'Link'],
 ];
 
 export function insertVariable(ref: RefObject<HTMLTextAreaElement>, value: string, setValue: (v: string) => void, variable: string) {

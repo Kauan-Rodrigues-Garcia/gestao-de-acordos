@@ -5,8 +5,12 @@
  * editável por toda a empresa (tabelas campanha_facil_* — ver migration
  * 20260723a). O gate "só BookPlay" é da UI; a isolação por empresa é do RLS.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Discounts } from './lib/campaign-core';
+
+/** Para o que nasceu depois dos tipos gerados (favoritas, `pix_automatico`). */
+const dbSemTipos = supabase as unknown as SupabaseClient;
 
 export interface CampanhaMensagem {
   id: string;
@@ -25,7 +29,7 @@ export interface CampanhaDesconto {
   discounts: Discounts;
 }
 
-const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual'];
+const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual', 'pix_automatico'];
 
 function toDiscounts(row: Record<string, unknown>): Discounts {
   return {
@@ -34,6 +38,7 @@ function toDiscounts(row: Record<string, unknown>): Discounts {
     interest: Number(row.interest) || 0,
     bundle: Number(row.bundle) || 0,
     annual: Number(row.annual) || 0,
+    pix_automatico: Number(row.pix_automatico) || 0,
   };
 }
 
@@ -89,13 +94,14 @@ export async function excluirMensagem(id: string): Promise<void> {
 // ─── Configurações de desconto ───────────────────────────────────────────────
 
 export async function fetchDescontos(empresaId: string): Promise<CampanhaDesconto[]> {
-  const { data, error } = await supabase
+  // `pix_automatico` (20261009180000) nasceu depois dos tipos gerados.
+  const { data, error } = await dbSemTipos
     .from('campanha_facil_descontos')
-    .select('id, nome, overdue, settlement, interest, bundle, annual')
+    .select('id, nome, overdue, settlement, interest, bundle, annual, pix_automatico')
     .eq('empresa_id', empresaId)
     .order('nome', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
     id: row.id as string,
     nome: row.nome as string,
     discounts: toDiscounts(row as Record<string, unknown>),
@@ -145,6 +151,34 @@ export async function salvarDesconto(params: {
 export async function excluirDesconto(id: string): Promise<void> {
   const { error } = await supabase.from('campanha_facil_descontos').delete().eq('id', id);
   if (error) throw error;
+}
+
+// ─── Mensagens favoritas (de cada líder, 20261009180000) ─────────────────────
+
+export async function fetchFavoritas(empresaId: string): Promise<string[]> {
+  const { data, error } = await dbSemTipos
+    .from('campanha_facil_mensagens_favoritas')
+    .select('template_id')
+    .eq('empresa_id', empresaId)
+    .order('criado_em', { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as { template_id: string }[]).map((r) => r.template_id);
+}
+
+/** A policy só deixa mexer nas próprias: `perfil_id` o banco preenche. */
+export async function definirFavorita(empresaId: string, templateId: string, favorita: boolean): Promise<void> {
+  if (favorita) {
+    const { error } = await dbSemTipos
+      .from('campanha_facil_mensagens_favoritas')
+      .upsert({ empresa_id: empresaId, template_id: templateId }, { onConflict: 'perfil_id,empresa_id,template_id', ignoreDuplicates: true });
+    if (error) throw error;
+  } else {
+    const { error } = await dbSemTipos
+      .from('campanha_facil_mensagens_favoritas')
+      .delete()
+      .eq('empresa_id', empresaId).eq('template_id', templateId);
+    if (error) throw error;
+  }
 }
 
 // ─── Mensagens padrão ocultadas ──────────────────────────────────────────────

@@ -8,6 +8,8 @@ export interface Discounts {
   interest: number;
   bundle: number;
   annual: number;
+  /** % de desconto do Pix Automático 21x sobre o valor com juros (09/10/2026). */
+  pix_automatico: number;
 }
 
 export interface Template {
@@ -90,6 +92,10 @@ export interface CampaignItem {
   annual: number | null;
   cardSettlement: number | null;
   cardAnnual: number | null;
+  /** Parcela do Pix Automático: valor com juros ÷ 21. */
+  pixAuto: number | null;
+  /** Parcela do Pix Automático com o desconto: valor com juros × (1 − %) ÷ 21. */
+  pixAutoDiscount: number | null;
   saleType: string;
   company: string;
   phone: string;
