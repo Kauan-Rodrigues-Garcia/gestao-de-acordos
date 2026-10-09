@@ -21,6 +21,7 @@ import {
   contar, linkWhatsApp, textoDoContato,
   type Contato, type ModoAbrir, type StatusContato,
 } from './whatsapp';
+import { entregarNaAbaAberta, ponteInstalada } from './ponteWhatsapp';
 
 const CHAVE_MODO = 'campanhas-whatsapp:modo';
 
@@ -145,22 +146,39 @@ export function useCampanhasWhatsapp() {
     if (atual.status !== 'enviado') void marcar(atual, 'enviado');
   }, [marcar]);
 
+  // O script «mesma aba» foi instalado? Relido ao voltar para a aba (a pessoa
+  // instala em outra aba e volta).
+  const [mesmaAba, setMesmaAba] = useState(ponteInstalada);
+  useEffect(() => {
+    const reler = () => setMesmaAba(ponteInstalada());
+    window.addEventListener('focus', reler);
+    document.addEventListener('visibilitychange', reler);
+    return () => {
+      window.removeEventListener('focus', reler);
+      document.removeEventListener('visibilitychange', reler);
+    };
+  }, []);
+
   /**
    * Abre a conversa com a mensagem pronta e marca como enviada — «enviado é a
    * partir do momento que a pessoa clica para enviar».
    *
-   * O WhatsApp Web abre sempre na MESMA aba (janela com nome): enviar a
-   * campanha inteira não enche o navegador de abas.
+   * WhatsApp Web: o nome da janela NÃO acha a aba aberta (o WhatsApp isola a
+   * aba e cada clique abria uma nova). Com o script «mesma aba», a conversa vai
+   * para a aba que já está aberta; sem ele, ou sem aba aberta, abre uma.
    */
   const enviar = useCallback((c: Contato, qual: QualNumero = 1) => {
     const numero = qual === 2 ? c.whatsapp2 : c.whatsapp;
     if (!numero) return;
-    const url = linkWhatsApp(numero, textoDoContato(c), modo);
+    const texto = textoDoContato(c);
+    const url = linkWhatsApp(numero, texto, modo);
+    const abrirAba = () => { window.open(url, 'gestao-whatsapp-web')?.focus(); };
     if (modo === 'app') {
       window.location.href = url;
+    } else if (ponteInstalada()) {
+      void entregarNaAbaAberta(numero, texto).then((entregue) => { if (!entregue) abrirAba(); });
     } else {
-      const janela = window.open(url, 'gestao-whatsapp-web');
-      janela?.focus();
+      abrirAba();
     }
     marcarEnviada(c);
   }, [modo, marcarEnviada]);
@@ -186,6 +204,6 @@ export function useCampanhasWhatsapp() {
   return {
     perfilId, carregando, campanhas, selecionada, selecionar, recarregar,
     contatos, carregandoContatos, contagem,
-    modo, setModo, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
+    modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
   };
 }

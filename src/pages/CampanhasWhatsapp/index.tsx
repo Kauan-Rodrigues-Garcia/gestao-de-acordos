@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
-  Globe,
+  Globe, Layers, Repeat,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
 import { useCampanhasWhatsapp } from './useCampanhasWhatsapp';
+import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
 import {
   filtrar, proximoPendente, telefoneLegivel, textoDoContato,
   type Contato, type Filtro, type ModoAbrir,
@@ -51,6 +52,7 @@ export default function CampanhasWhatsapp() {
   const [busca, setBusca] = useState('');
   const [limite, setLimite] = useState(POR_PAGINA);
   const [editando, setEditando] = useState<Contato | null>(null);
+  const [ajuda, setAjuda] = useState<'mesma-aba' | 'trocar-app' | null>(null);
 
   // Outra campanha ou outro filtro: volta ao começo da lista.
   useEffect(() => { setLimite(POR_PAGINA); }, [w.selecionada?.id, filtro, busca]);
@@ -69,7 +71,29 @@ export default function CampanhasWhatsapp() {
             enviar à mão. As duas contam como enviada.
           </p>
         </div>
-        <SeletorModo modo={w.modo} onChange={w.setModo} />
+        <div className="flex flex-col items-end gap-1.5">
+          <SeletorModo modo={w.modo} onChange={w.setModo} />
+          {w.modo === 'web' ? (
+            <button
+              type="button" onClick={() => setAjuda('mesma-aba')}
+              className={cn(
+                'inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline',
+                w.mesmaAba ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {w.mesmaAba
+                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Sempre na mesma aba</>
+                : <><Layers className="h-3.5 w-3.5" /> Abre uma aba nova a cada envio? Resolver</>}
+            </button>
+          ) : (
+            <button
+              type="button" onClick={() => setAjuda('trocar-app')}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              <Repeat className="h-3.5 w-3.5" /> Escolher ou trocar o aplicativo
+            </button>
+          )}
+        </div>
       </header>
 
       {w.carregando ? (
@@ -204,6 +228,8 @@ export default function CampanhasWhatsapp() {
           onCopiou={() => w.marcarEnviada(editando)}
         />
       )}
+      {ajuda === 'mesma-aba' && <DialogoMesmaAba instalado={w.mesmaAba} onFechar={() => setAjuda(null)} />}
+      {ajuda === 'trocar-app' && <DialogoTrocarApp onFechar={() => setAjuda(null)} />}
     </div>
   );
 }
