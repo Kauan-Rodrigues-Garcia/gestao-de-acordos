@@ -48,7 +48,6 @@ import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/lib/supabase';
-import { assinarTabela } from '@/lib/realtime';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -188,35 +187,31 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => () => clearAutoTimers(), []);
 
-  // ── Realtime: escuta mudanças de foto_url na tabela perfis ──────────────
-  // Garante que a foto atualiza em tempo real para TODOS os usuários conectados
+  // ── A foto do próprio perfil no menu ─────────────────────────────────────
+  // Até 09/10/2026 era Postgres Changes em `perfis` — uma assinatura por aba
+  // aberta (215), conferida no banco a cada mudança de qualquer perfil, só
+  // para a foto trocada em OUTRA aba aparecer nesta. Agora: quem troca a foto
+  // vê na hora (`handleFotoUpload`), e as outras abas releem ao voltar a ficar
+  // visíveis — no máximo uma vez por minuto.
   useEffect(() => {
     if (!perfil?.id) return;
     const perfilId = perfil.id;
+    let ultimaLeitura = 0;
 
     const sincronizar = () => {
+      ultimaLeitura = Date.now();
       void supabase.from('perfis').select('foto_url').eq('id', perfilId).maybeSingle()
         .then(({ data }) => {
           if (data?.foto_url) setFotoUrl(data.foto_url as string);
         });
     };
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible' && Date.now() - ultimaLeitura > 60_000) sincronizar();
+    };
 
     sincronizar();
-
-    // Canal compartilhado: dedup por tópico + reconexão automática.
-    return assinarTabela(
-      {
-        topico:  `perfil-foto-${perfilId}`,
-        escutas: [{ tabela: 'perfis', evento: 'UPDATE', filtro: `id=eq.${perfilId}` }],
-      },
-      {
-        onEvento: (payload) => {
-          const novaFoto = (payload.new as { foto_url?: string | null } | null)?.foto_url ?? null;
-          setFotoUrl(novaFoto ? novaFoto + '?t=' + Date.now() : null);
-        },
-        onReconectado: sincronizar,
-      },
-    );
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
   }, [perfil?.id]);
 
   async function handleFotoUpload(file: File) {
@@ -233,7 +228,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const urlFinal = publicUrl + '?t=' + Date.now();
       const { error: dbErr } = await supabase.from('perfis').update({ foto_url: urlFinal }).eq('id', perfil.id);
       if (dbErr) throw dbErr;
-      // O realtime subscription vai atualizar fotoUrl automaticamente
+      setFotoUrl(urlFinal);
       toast.success('Foto de perfil atualizada!');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

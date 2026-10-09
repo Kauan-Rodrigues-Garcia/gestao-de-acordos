@@ -40,7 +40,7 @@ import { idsDaEmpresa } from '@/services/notificacoes.service';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaRelatorio } from './analiticoComum';
 import { lerComCache } from '@/lib/cacheCurto';
-import { chaveComposicao, invalidarComposicaoEquipes, VALIDADE_COMPOSICAO_MS } from './composicaoCache';
+import { chaveComposicao, invalidarComposicaoEquipes, PREFIXO_COMPOSICAO, VALIDADE_COMPOSICAO_MS } from './composicaoCache';
 import { buscarPessoasDoRetrato } from './pessoasDoMes';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
@@ -2208,7 +2208,7 @@ async function semLiderNaEquipeDeAlternativo(
 ): Promise<ComposicaoEquipes> {
   try {
     const [setoresRes, altDoMes, lideresDoMes] = await Promise.all([
-      supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
+      buscarChaveAlternativoDosSetores(empresaId),
       buscarAlternativosDoRetrato(empresaId, mes),
       comp.doRetrato && mes
         ? tabelaSemTipo<LinhaComposicaoLider>('composicao_mes_lider')
@@ -2710,7 +2710,7 @@ export async function buscarFontesDeEscopo(
 ): Promise<FontesDeEscopo> {
   const [{ equipes, operadorEquipeMap, equipesExtrasPorOperador }, alt, altDoMes] = await Promise.all([
     buscarEquipesComOperadores(empresaId, mes),
-    supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
+    buscarChaveAlternativoDosSetores(empresaId),
     buscarAlternativosDoRetrato(empresaId, mes),
   ]);
 
@@ -2731,6 +2731,31 @@ export async function buscarFontesDeEscopo(
     equipesExtrasPorOperador,
     setorDaEquipe: mapaSetorDaEquipe(equipes),
   };
+}
+
+/**
+ * A chave `alternativo` de HOJE de cada setor da empresa, com a mesma forma
+ * da resposta do PostgREST (`{ data, error }`) que os três leitores já tratam.
+ *
+ * Guardada com a composição — mesmo prefixo, então `invalidarComposicaoEquipes`
+ * descarta as duas juntas (09/10/2026: 16 mil leituras em 26 h, uma por
+ * releitura do analítico em cada aba).
+ */
+export function buscarChaveAlternativoDosSetores(
+  empresaId: string,
+): Promise<{ data: { id: string; alternativo: boolean | null }[] | null; error: { message: string } | null }> {
+  return lerComCache(
+    `${PREFIXO_COMPOSICAO}alternativos:${empresaId}`,
+    VALIDADE_COMPOSICAO_MS,
+    async () => {
+      const { data, error } = await supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId);
+      return {
+        data: (data as { id: string; alternativo: boolean | null }[] | null) ?? null,
+        error: error ? { message: error.message } : null,
+      };
+    },
+    { guardarSe: r => !r.error },
+  );
 }
 
 /**

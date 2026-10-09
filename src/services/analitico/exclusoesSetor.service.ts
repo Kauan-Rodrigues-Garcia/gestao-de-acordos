@@ -11,6 +11,7 @@
  * vez de a aba quebrar.
  */
 import { supabase } from '@/lib/supabase';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 import { ORIGEM_SEM_OPERADOR, type OrigemKey } from './composicaoAcumulado';
 
 const TABELA = 'analitico_exclusoes_setor';
@@ -38,10 +39,21 @@ interface LinhaExclusao {
  * Uma query para o mês inteiro porque diretoria/admin renderiza vários setores
  * em sequência — uma por setor multiplicaria idas ao banco por nada.
  */
-export async function buscarExclusoesSetor(
+export function buscarExclusoesSetor(
   empresaId: string,
   mes:       string,   // 'yyyy-MM'
 ): Promise<ResultadoExclusoes> {
+  // Guardada por 5 min e compartilhada entre quem pede junto (09/10/2026: 9,3
+  // mil leituras em 26 h, a cada releitura do analítico). Muda quando alguém
+  // salva a composição do setor — `salvarExclusoesSetor` descarta na hora.
+  return lerComCache(`${PREFIXO_EXCLUSOES}${empresaId}:${mes}`, 5 * 60_000,
+    () => lerExclusoesSetor(empresaId, mes),
+    { guardarSe: r => r.dbAtiva });
+}
+
+const PREFIXO_EXCLUSOES = 'exclusoes-setor:';
+
+async function lerExclusoesSetor(empresaId: string, mes: string): Promise<ResultadoExclusoes> {
   try {
     const { data, error } = await supabase
       .from(TABELA)
@@ -89,6 +101,7 @@ export async function salvarExclusoesSetor(params: {
   usuarioId?: string | null;
 }): Promise<boolean> {
   const { empresaId, setorId, mes, excluidas, usuarioId } = params;
+  invalidarCache(PREFIXO_EXCLUSOES);
   try {
     const { error: errDel } = await supabase
       .from(TABELA)
@@ -112,6 +125,7 @@ export async function salvarExclusoesSetor(params: {
     }));
 
     const { error } = await supabase.from(TABELA).insert(linhas);
+    invalidarCache(PREFIXO_EXCLUSOES);
     if (error) {
       console.warn('[exclusoesSetor] erro ao gravar:', error.message);
       return false;

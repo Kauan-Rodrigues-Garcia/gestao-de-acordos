@@ -6,7 +6,7 @@
  * lógica ativada.
  */
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
@@ -61,24 +61,15 @@ export function useDiretoExtraConfig(): UseDiretoExtraConfigResult {
 
   useEffect(() => { refetch(); }, [refetch]);
 
-  // Realtime — canal compartilhado (dedup por tópico + reconexão automática).
+  // Sinal «mudou» da empresa (20261009201000; era Postgres Changes).
   // `onReconectado` relê: as mudanças de configuração ocorridas durante a queda
   // não voltam como evento, e config errada em cache muda o vínculo do acordo.
   useEffect(() => {
     if (!empresaId) return;
-    return assinarTabela(
-      {
-        topico:  `rt-direto-extra-${empresaId}`,
-        escutas: [{
-          tabela: 'direto_extra_config',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
-      },
-      {
-        onEvento:      () => { void refetch(); },
-        onReconectado: () => { void refetch(); },
-      },
-    );
+    return assinarSinal('direto_extra', empresaId, {
+      onMudou:       () => { void refetch(); },
+      onReconectado: () => { void refetch(); },
+    });
   }, [empresaId, refetch]);
 
   const isAtivoParaUsuario = useCallback(

@@ -11,6 +11,17 @@
  */
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { invalidarCache } from '@/lib/cacheCurto';
+
+/**
+ * A biblioteca guardada pela sobreposição das comemorações
+ * (`buscarComemoracoes`, 5 min). Quem muda a biblioteca descarta na hora.
+ */
+export const PREFIXO_MIDIAS = 'comemoracoes:midias:';
+
+function invalidarMidiasGuardadas(): void {
+  invalidarCache(PREFIXO_MIDIAS);
+}
 
 /**
  * `imagem` separada de `gif` desde a 20260801a.
@@ -303,6 +314,7 @@ export async function enviarMidia(params: {
     };
   }
 
+  invalidarMidiasGuardadas();
   return { ok: true, erro: null, dados: data as MidiaComemoracao };
 }
 
@@ -332,6 +344,7 @@ export async function fixarMidia(
       dados: null,
     };
   }
+  invalidarMidiasGuardadas();
   return { ok: true, erro: null, dados: (data ?? null) as MidiaComemoracao | null };
 }
 
@@ -341,6 +354,7 @@ export async function excluirMidia(midia: MidiaComemoracao): Promise<Resultado> 
     logger.warn('[comemoracaoMidias] erro ao excluir:', error.message);
     return { ok: false, erro: 'Não foi possível excluir a mídia.', dados: null };
   }
+  invalidarMidiasGuardadas();
   // O arquivo vai depois: se esta parte falhar sobra um órfão no bucket, o que
   // é bem melhor que uma linha apontando para arquivo que não existe mais.
   await supabase.storage.from(BUCKET).remove([midia.caminho]);

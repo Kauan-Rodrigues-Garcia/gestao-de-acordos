@@ -11,10 +11,9 @@
  * recebido de cada um da mesma resposta.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import {
   buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarAlternativosDoRetrato,
-  buscarTotalOrfaosPorSetor, buscarTotalPorSetor, mapaSetorDaEquipe,
+  buscarChaveAlternativoDosSetores, buscarTotalOrfaosPorSetor, buscarTotalPorSetor, mapaSetorDaEquipe,
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
@@ -60,7 +59,7 @@ export function useAcumuladoDoSetorNoMes(params: {
           buscarTotalOrfaosPorSetor(empresaId, mes),
           buscarTotalPorSetor(empresaId, mes, exclusoes),
           buscarEquipesComOperadores(empresaId, mes),
-          supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
+          buscarChaveAlternativoDosSetores(empresaId),
           // O Receptivo é da BookPlay; na PaguePlay o card de setor não o soma.
           isPaguePlay
             ? Promise.resolve({ porSetor: {} as Record<string, { acumulado: number }> })

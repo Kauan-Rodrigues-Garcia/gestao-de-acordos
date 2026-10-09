@@ -67,6 +67,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { lerComCache } from '@/lib/cacheCurto';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { getTodayISO } from '@/lib/index';
@@ -167,9 +168,13 @@ export function useLideroEquipe(): Lideranca {
       return;
     }
     setCarregando(true);
+    // Guardadas por 10 min e compartilhadas entre quem pergunta junto
+    // (09/10/2026: 4,9 mil leituras de `equipe_lideres` e outras tantas de
+    // `metas` em 26 h, uma por montagem do Dashboard). Virar líder ou ganhar
+    // meta é coisa de uma vez por mês.
     const [souLider, tenhoMeta] = await Promise.all([
-      perguntarSeLidero(meuId),
-      perguntarSeTenhoMeta(empresaId, meuId),
+      lerComCache(`lidero:${meuId}`, 10 * 60_000, () => perguntarSeLidero(meuId)),
+      lerComCache(`tenho-meta:${empresaId}:${meuId}`, 10 * 60_000, () => perguntarSeTenhoMeta(empresaId, meuId)),
     ]);
     if (!vivoRef.current) return;
     setLidero(souLider);

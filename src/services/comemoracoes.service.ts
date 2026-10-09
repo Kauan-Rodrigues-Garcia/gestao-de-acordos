@@ -17,7 +17,7 @@ import { validarAgendamento } from '@/pages/Comemoracoes/janela';
 import {
   layoutDoJson, layoutParaJson, ehLayoutPadrao, type LayoutComemoracao,
 } from '@/pages/Comemoracoes/layout';
-import { listarMidias } from './comemoracaoMidias.service';
+import { PREFIXO_MIDIAS, listarMidias } from './comemoracaoMidias.service';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -205,8 +205,10 @@ export async function buscarComemoracoes(
       .order('inicia_em', { ascending: false }),
     buscarPessoas(empresaId),
     // null = migration da fase 2 ainda não aplicada; sem mídia própria, o
-    // catálogo cobre tudo e a tela não muda.
-    listarMidias(empresaId),
+    // catálogo cobre tudo e a tela não muda. Guardada por 5 min (09/10/2026:
+    // 16 mil leituras em 26 h de uma biblioteca de no máximo 30 arquivos);
+    // quem envia, fixa ou exclui descarta na hora — `invalidarMidiasGuardadas`.
+    lerComCache(`${PREFIXO_MIDIAS}${empresaId}`, 5 * 60_000, () => listarMidias(empresaId)),
   ]);
 
   if (error) {

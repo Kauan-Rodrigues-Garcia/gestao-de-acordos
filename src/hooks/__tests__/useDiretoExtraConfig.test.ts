@@ -186,9 +186,11 @@ describe('useDiretoExtraConfig', () => {
       await new Promise(r => setTimeout(r, 0));
     });
 
+    // Desde 20261009201000 a mudança chega pelo sinal «mudou», que sorteia
+    // até 3 s antes de entregar (`REGRAS_SINAL.direto_extra`).
     await waitFor(() => {
       expect(result.current.configs).toHaveLength(2);
-    });
+    }, { timeout: 4_000 });
 
     expect(mockFetchDiretoExtraConfigs).toHaveBeenCalledTimes(2);
   });

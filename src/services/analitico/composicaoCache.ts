@@ -13,11 +13,15 @@
 import { invalidarCache } from '@/lib/cacheCurto';
 
 /**
- * Noventa segundos: um acordo salvo por qualquer operador fazia todo painel
+ * Cinco minutos. Um acordo salvo por qualquer operador fazia todo painel
  * aberto reler a composição — seis consultas por releitura, 21 mil vezes por
- * dia. Com a validade, é no máximo uma releitura a cada minuto e meio por aba.
+ * dia (17/09/2026: virou 90 s). Em 09/10/2026, com a máquina sem memória, a
+ * composição ainda era o maior bloco de leituras repetidas: a de `perfis`
+ * com equipes (57 ms) rodou 7.938 vezes em 26 h, mais `setores`, `equipes`,
+ * `equipe_membros` e `perfis_transferencias`. Equipe muda poucas vezes por
+ * dia, e quem grava invalida na hora; as outras abas veem em até 5 min.
  */
-export const VALIDADE_COMPOSICAO_MS = 90 * 1000;
+export const VALIDADE_COMPOSICAO_MS = 5 * 60 * 1000;
 
 export const PREFIXO_COMPOSICAO = 'composicao:';
 

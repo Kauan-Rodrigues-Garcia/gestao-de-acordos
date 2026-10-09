@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { lerComCache } from '@/lib/cacheCurto';
 import { marcaDaCidade, type Marca } from '@/lib/marca';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -13,19 +14,27 @@ import { produtoDaEmpresa } from '@/lib/produto';
 
 const cache = new Map<string, Marca | null>();
 
-async function lerMarcaDoSetor(setorId: string): Promise<Marca | null> {
-  if (cache.has(setorId)) return cache.get(setorId) ?? null;
-  const { data: setor } = await supabase
-    .from('setores').select('cidade_id').eq('id', setorId).maybeSingle();
-  const cidadeId = (setor as { cidade_id?: string | null } | null)?.cidade_id ?? null;
-  let marca: Marca | null = null;
-  if (cidadeId) {
-    const { data: cidade } = await supabase
-      .from('rh_celulas').select('nome').eq('id', cidadeId).maybeSingle();
-    marca = marcaDaCidade((cidade as { nome?: string } | null)?.nome);
-  }
-  cache.set(setorId, marca);
-  return marca;
+/**
+ * Uma leitura por setor por sessão, e a busca em curso é compartilhada: a
+ * página monta vários componentes com `useMarca` ao mesmo tempo, e cada um
+ * buscava sozinho antes de o primeiro guardar — 7 mil leituras de `setores`
+ * e 6,8 mil de `rh_celulas` em 26 h (09/10/2026).
+ */
+function lerMarcaDoSetor(setorId: string): Promise<Marca | null> {
+  if (cache.has(setorId)) return Promise.resolve(cache.get(setorId) ?? null);
+  return lerComCache(`marca:${setorId}`, 30 * 60 * 1000, async () => {
+    const { data: setor } = await supabase
+      .from('setores').select('cidade_id').eq('id', setorId).maybeSingle();
+    const cidadeId = (setor as { cidade_id?: string | null } | null)?.cidade_id ?? null;
+    let marca: Marca | null = null;
+    if (cidadeId) {
+      const { data: cidade } = await supabase
+        .from('rh_celulas').select('nome').eq('id', cidadeId).maybeSingle();
+      marca = marcaDaCidade((cidade as { nome?: string } | null)?.nome);
+    }
+    cache.set(setorId, marca);
+    return marca;
+  });
 }
 
 export function useMarca(): Marca | null {

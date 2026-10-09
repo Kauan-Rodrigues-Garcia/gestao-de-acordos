@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
   buscarComemoracoes, buscarParabens, parabenizar, finalizarComemoracao,
@@ -79,21 +80,16 @@ export function useComemoracoes(empresaId: string | null, habilitado = true) {
 
   useEffect(() => { setLoading(true); void recarregar(); }, [recarregar]);
 
+  // Sinal «mudou» da empresa (20261009201000) — era Postgres Changes, uma
+  // assinatura por aba conferida no banco a cada mudança. Relê em vez de usar
+  // o que chega: os homenageados vêm de outra tabela e o `setores_alvo` é
+  // preenchido por trigger.
   useEffect(() => {
     if (!empresaId || !habilitado || !dbAtiva) return;
-    return assinarTabela(
-      {
-        topico:  `rt-comemoracoes-${empresaId}`,
-        escutas: [{ tabela: 'comemoracoes', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      {
-        // Relê em vez de aplicar o payload: os homenageados vêm de outra tabela
-        // e o `setores_alvo` é preenchido por trigger — o INSERT chega antes de
-        // qualquer um dos dois estar pronto.
-        onEvento:      () => { void recarregarRef.current(); },
-        onReconectado: () => { void recarregarRef.current(); },
-      },
-    );
+    return assinarSinal('comemoracoes', empresaId, {
+      onMudou:       () => { void recarregarRef.current(); },
+      onReconectado: () => { void recarregarRef.current(); },
+    });
   }, [empresaId, habilitado, dbAtiva]);
 
   /** Agora corrigido pelo relógio do servidor. */

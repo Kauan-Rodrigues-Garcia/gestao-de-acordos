@@ -32,7 +32,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SituacaoUsuario } from '@/lib/supabase';
-import { assinarTabela } from '@/lib/realtime';
 import { assinarSinal } from '@/lib/sinais';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
@@ -84,18 +83,15 @@ export function useDesafios(ativo: boolean): UsoDesafios {
   });
 
   // Ativar ou encerrar uma campanha aparece para quem está com a aba aberta.
+  // Sinal «mudou» (20261009201000): chega também para as empresas de uma
+  // campanha multiempresa, o que o Postgres Changes filtrado não fazia.
   useEffect(() => {
     if (!habilitado || !empresaId) return;
-    return assinarTabela(
-      {
-        topico:  `desafios-${empresaId}`,
-        escutas: [{ tabela: 'desafios', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      {
-        onEvento:      () => { void queryClient.invalidateQueries({ queryKey: chave }); },
-        onReconectado: () => { void queryClient.invalidateQueries({ queryKey: chave }); },
-      },
-    );
+    const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
+    return assinarSinal('desafios', empresaId, {
+      onMudou:       (s) => { if (s.tabela !== 'desafios_setores') invalidar(); },
+      onReconectado: invalidar,
+    });
   }, [habilitado, empresaId, queryClient, chave]);
 
   const desafios = query.data?.data ?? SEM_DESAFIOS;
@@ -162,13 +158,10 @@ export function useSetoresDoDesafio(ativo: boolean, autorId?: string | null): Us
   useEffect(() => {
     if (!habilitado || !empresaId) return;
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
-    return assinarTabela(
-      {
-        topico:  `desafios-setores-${empresaId}`,
-        escutas: [{ tabela: 'desafios_setores', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      { onEvento: invalidar, onReconectado: invalidar },
-    );
+    return assinarSinal('desafios', empresaId, {
+      onMudou:       (s) => { if (s.tabela === 'desafios_setores' || !s.tabela) invalidar(); },
+      onReconectado: invalidar,
+    });
   }, [habilitado, empresaId, queryClient, chave]);
 
   const porSetor = query.data?.porSetor ?? SEM_SETORES;
@@ -251,13 +244,10 @@ export function useDesafioEmCartaz(ativo: boolean): UsoDesafioEmCartaz {
 
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
 
-    return assinarTabela(
-      {
-        topico:  `desafios-${empresaId}`,
-        escutas: [{ tabela: 'desafios', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      { onEvento: invalidar, onReconectado: invalidar },
-    );
+    return assinarSinal('desafios', empresaId, {
+      onMudou:       (s) => { if (s.tabela !== 'desafios_setores') invalidar(); },
+      onReconectado: invalidar,
+    });
   }, [habilitado, empresaId, queryClient, chave]);
 
   const emCartaz = query.data ?? SEM_DESAFIOS;

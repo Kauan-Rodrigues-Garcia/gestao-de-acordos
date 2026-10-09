@@ -51,9 +51,14 @@ import { assinarTabela } from '@/lib/realtime';
 
 /**
  * Os tópicos que o banco escreve: migration 20260917110000, e `diario`
- * (recebimento diário da PaguePlay) na 20260928180000.
+ * (recebimento diário da PaguePlay) na 20260928180000. Desde 20261009201000
+ * as configurações também: `comemoracoes`, `desafios` (desafios e
+ * desafios_setores), `direto_extra` e `comissao` (as cinco tabelas) — eram
+ * Postgres Changes, 1.387 assinaturas conferidas uma a uma no banco.
  */
-export type NomeSinal = 'analitico' | 'permissoes' | 'vendas' | 'rh' | 'diario';
+export type NomeSinal =
+  | 'analitico' | 'permissoes' | 'vendas' | 'rh' | 'diario'
+  | 'comemoracoes' | 'desafios' | 'direto_extra' | 'comissao';
 
 export interface SinalMudou {
   /** Tabela que mudou (`rh` cobre duas, `permissoes` também). */
@@ -92,6 +97,12 @@ export const REGRAS_SINAL: Record<NomeSinal, RegraPortao> = {
   // Importação em blocos: um sinal por bloco. O mínimo junta a importação
   // inteira numa releitura, como fazia o antigo debounce de 1,5 s por linha.
   diario:     { minimoMs: 5_000,  espalhamentoMs: 3_000 },
+  // Configurações: mudam poucas vezes por dia. A comemoração é a festa na
+  // tela de todo mundo — o sorteio é curto para ela começar quase junto.
+  comemoracoes: { minimoMs: 0, espalhamentoMs: 1_000 },
+  desafios:     { minimoMs: 0, espalhamentoMs: 3_000 },
+  direto_extra: { minimoMs: 0, espalhamentoMs: 3_000 },
+  comissao:     { minimoMs: 0, espalhamentoMs: 3_000 },
 };
 
 export function topicoDoSinal(nome: NomeSinal, empresaId: string): string {

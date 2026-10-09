@@ -13,7 +13,7 @@
  * anterior enquanto a nova não chega.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { criarAgrupador } from '@/lib/agrupador';
 import { buscarConfigsDoMes } from './comissao.service';
 import type { BonusComissao } from './bonus';
@@ -60,23 +60,13 @@ export function useConfigsComissao(params: {
   useEffect(() => {
     if (!ativo || !empresaId || !dbAtiva) return;
     const grupo = criarAgrupador(recarregar, { esperaMs: 300, tetoMs: 1_200 });
-    const sair = assinarTabela(
-      {
-        topico: `rt-comissao-${empresaId}`,
-        escutas: [
-          { tabela: 'comissao_config', filtro: `empresa_id=eq.${empresaId}` },
-          // Sem coluna de empresa: a RLS de leitura filtra os eventos.
-          { tabela: 'comissao_faixas' },
-          { tabela: 'comissao_config_usuarios', filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'comissao_bonus', filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'comissao_bonus_usuarios' },
-        ],
-      },
-      {
-        onEvento: () => grupo.avisar(),
-        onReconectado: () => grupo.avisar(),
-      },
-    );
+    // Sinal «mudou» da empresa para as cinco tabelas (20261009201000; eram
+    // cinco assinaturas de Postgres Changes por aba). Faixas e usuários do
+    // bônus não têm empresa: o banco acha pela configuração/bônus.
+    const sair = assinarSinal('comissao', empresaId, {
+      onMudou: () => grupo.avisar(),
+      onReconectado: () => grupo.avisar(),
+    });
     return () => { grupo.cancelar(); sair(); };
   }, [ativo, empresaId, dbAtiva, recarregar]);
 

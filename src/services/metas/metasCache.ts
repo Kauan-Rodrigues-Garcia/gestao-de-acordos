@@ -9,7 +9,12 @@
  */
 import { invalidarCache } from '@/lib/cacheCurto';
 
-export const VALIDADE_METAS_MS = 90 * 1000;
+/**
+ * Cinco minutos (era 90 s até 09/10/2026, quando `metas` ainda somava ~35 mil
+ * leituras em 26 h). Meta muda quando alguém salva a tela de Metas, e quem
+ * salva invalida na hora; as outras abas veem em até 5 min.
+ */
+export const VALIDADE_METAS_MS = 5 * 60 * 1000;
 export const PREFIXO_METAS = 'metas:';
 
 export function invalidarMetasGuardadas(): void {
