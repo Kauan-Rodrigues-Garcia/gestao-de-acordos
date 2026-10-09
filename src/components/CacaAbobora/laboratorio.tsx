@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { ensaioFaixa, ensaioLimpar, ensaioOutroMatou, ensaioSoltar, ensaioSumir } from './caca';
-import { ESPERA_S, ensaioArrancar, ensaioCurarChefao, ensaioFugir, ensaioLimparChefao, ensaioPularContagem, ensaioRobos, ensaioSoltarChefao } from './chefao';
+import { ESPERA_S, PRAZO_MIN, ensaioArrancar, ensaioCurarChefao, ensaioFugir, ensaioLimparChefao, ensaioPularContagem, ensaioRobos, ensaioSoltarChefao } from './chefao';
 import { CHEFAO } from './chefaoArte';
 import { ZUMBIS } from './zumbis';
 import { SpriteZumbi } from './SpriteZumbi';
@@ -64,9 +64,9 @@ export default function Laboratorio() {
           </div>
           <p className="zb-lab-rotulo zb-lab-chefao"><SpriteZumbi zumbi={CHEFAO} soCabeca escala={1} /> Chefão: o Rei do Pop zumbi</p>
           <div className="zb-lab-botoes">
-            <button type="button" className="zb-lab-btn principal" onClick={() => { setRobos(false); ensaioSoltarChefao(120, 3, ESPERA_S, 30); }}>Soltar o chefão</button>
+            <button type="button" className="zb-lab-btn principal" onClick={() => { setRobos(false); ensaioSoltarChefao(120, PRAZO_MIN, ESPERA_S, 30); }}>Soltar o chefão</button>
             <button type="button" className="zb-lab-btn" onClick={ensaioPularContagem}>Pular contagem</button>
-            <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioSoltarChefao(120, 3, 0, 30); }}>Soltar sem contagem</button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioSoltarChefao(120, PRAZO_MIN, 0, 30); }}>Soltar sem contagem</button>
             <button
               type="button"
               className="zb-lab-btn"

@@ -102,14 +102,25 @@ const FOLGA_EXPIRA_MS = 3_000;
  */
 export const ESPERA_S = 60;
 
+/**
+ * Quanto tempo ele fica na tela depois de chegar, antes de fugir dançando.
+ * Era 5; caiu para 2 em 09/10/2026 (pedido do usuário). O banco aceita de 1 a
+ * 15 (`fn_chefao_soltar`): o número vai na chamada, sem migration.
+ */
+export const PRAZO_MIN = 2;
+
 // ── Quanto de vida ──────────────────────────────────────────────────────────
 //
 // A conta (09/10/2026): uma pessoa clica 3 a 4 vezes por segundo; num alvo que
 // dança, acerta uns 45%, e ele desvia de uns 30% dos certeiros; com os
-// headshots (3), dá ~1,8 de dano por segundo por pessoa. Em uns 2,5 minutos
-// úteis (os 5 de prazo, menos as Fúrias e o tempo de achar a mira), são ~250
-// por pessoa. Como não dá para saber quantos vão jogar (logado não é jogando),
-// a vida CRESCE com quem entra: `vida_por_pessoa` a cada caçador novo.
+// headshots (3), dá ~1,8 de dano por segundo por pessoa.
+//
+// Com `PRAZO_MIN` = 2: das 120 s saem as duas Fúrias (40 s e 80 s, 6,5 s
+// cada, intocável) e o tempo de achar a mira — sobram ~95 s úteis, ~170 por
+// pessoa: é o Médio. (Com os 5 min de antes eram ~2,5 min úteis e 250.) Como
+// não dá para saber quantos vão jogar (logado não é jogando), a vida CRESCE
+// com quem entra: `vida_por_pessoa` a cada caçador novo. Mudou o prazo, refaça
+// esta conta — senão ele foge sempre (ou cai em segundos).
 
 export interface Dificuldade {
   nome: string;
@@ -120,9 +131,9 @@ export interface Dificuldade {
 }
 
 export const DIFICULDADES: readonly Dificuldade[] = [
-  { nome: 'Fácil', base: 300, porPessoa: 150 },
-  { nome: 'Médio', base: 500, porPessoa: 250 },
-  { nome: 'Difícil', base: 800, porPessoa: 400 },
+  { nome: 'Fácil', base: 200, porPessoa: 100 },
+  { nome: 'Médio', base: 300, porPessoa: 170 },
+  { nome: 'Difícil', base: 500, porPessoa: 270 },
 ];
 
 /** A vida que ele terá com `pessoas` caçadores. */
@@ -455,7 +466,7 @@ const NOMES_DE_ENSAIO = [
 ];
 
 /** Solta um chefão de mentira — só na tela de quem está no laboratório. */
-export function ensaioSoltarChefao(vida = 120, minutos = 3, esperaS = 0, porPessoa = 0): void {
+export function ensaioSoltarChefao(vida = 120, minutos = PRAZO_MIN, esperaS = 0, porPessoa = 0): void {
   ultimoEnsaio -= 1;
   const chega = Date.now() + esperaS * 1000;
   publicar({

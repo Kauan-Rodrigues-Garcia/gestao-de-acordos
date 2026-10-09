@@ -90,6 +90,18 @@ describe('o estado do chefão', () => {
   });
 });
 
+describe('o prazo', () => {
+  it('ele fica 2 minutos depois de chegar, e a vida foi refeita para isso', async () => {
+    const { PRAZO_MIN, DIFICULDADES } = await import('./chefao');
+    expect(PRAZO_MIN).toBe(2);
+    ensaioSoltarChefao(100);
+    const r = estadoChefao()!;
+    expect(Date.parse(r.expira_em) - Date.parse(r.solta_em)).toBe(2 * 60_000);
+    // ~1,8 de dano/s × ~95 s úteis ≈ 170 por pessoa no Médio (a conta em `chefao.ts`).
+    expect(DIFICULDADES.find(d => d.nome === 'Médio')!.porPessoa).toBe(170);
+  });
+});
+
 describe('o ensaio (localhost)', () => {
   it('o lote tira vida, entra no ranking e quem tira a última gota dá o golpe final', async () => {
     ensaioSoltarChefao(10, 3);

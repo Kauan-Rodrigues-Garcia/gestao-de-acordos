@@ -13,7 +13,7 @@
  * 20261007200000 e `CacaAbobora/caca.ts`.
  *
  * Embaixo, o CHEFÃO (09/10/2026): o Rei do Pop zumbi, que todo mundo derruba
- * junto. O super_admin escolhe a vida e solta; ele fica 5 min na tela. Ver
+ * junto. O super_admin escolhe a vida e solta; ele fica 2 min na tela. Ver
  * `CacaAbobora/chefao.ts` e a migration 20261009120000. E quem parece estar
  * atirando de autoclick (`CacaAbobora/autoclick.ts`): só aqui, só para ele.
  */
@@ -36,7 +36,7 @@ import {
 } from '@/components/CacaAbobora/caca';
 import { CHEFAO } from '@/components/CacaAbobora/chefaoArte';
 import {
-  DIFICULDADES, ESPERA_S, chefaoChegando, chefaoNaTela, lerSuspeitos, soltarChefao, useChefao, vidaCom,
+  DIFICULDADES, ESPERA_S, PRAZO_MIN, chefaoChegando, chefaoNaTela, lerSuspeitos, soltarChefao, useChefao, vidaCom,
   type RodadaChefao,
 } from '@/components/CacaAbobora/chefao';
 import { ordenarFichas, type Avaliacao, type FichaDeCliques, type Nivel } from '@/components/CacaAbobora/autoclick';
@@ -117,7 +117,8 @@ function Recorde({ titulo, r, icone }: { titulo: string; r: RodadaAbobora | null
  * pessoas, para o admin ter uma ideia antes de soltar.
  */
 const EXEMPLOS_DE_PESSOAS = [10, 30, 60] as const;
-const MINUTOS_DO_CHEFAO = 5;
+/** Quanto ele fica depois de chegar (`PRAZO_MIN` em `chefao.ts`, onde está a conta da vida). */
+const MINUTOS_DO_CHEFAO = PRAZO_MIN;
 
 /** Com ele na tela, a lista se atualiza sozinha a cada tanto. */
 const RELER_SUSPEITOS_MS = 15_000;

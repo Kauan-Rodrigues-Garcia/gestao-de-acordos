@@ -159,7 +159,7 @@ aparece um ranking de quem ajudou.
 | `chefaoMovimento.ts` | A física: inércia, pulo em arco com amasso na queda, deslize de costas, o passinho da Fúria, o tranco de dor. Puro, testado. |
 | `chefaoEfeitos.ts` | Sangue no chão (45 s, até 90 manchas), o braço que voa e quica, o pingo do toco, o rastro, a poeira, as notas. |
 | `sons.ts` | Acerto, «hee-hee», chegada, queda e uma batida de fundo ORIGINAL (não é a música do clipe). |
-| `admin/CacaAboboraConfig.tsx` | «Soltar o chefão» com Fácil 200 / Médio 500 / Difícil 1200 de vida, 5 min na tela. |
+| `admin/CacaAboboraConfig.tsx` | «Soltar o chefão» com Fácil / Médio / Difícil (`DIFICULDADES`), 2 min na tela (`PRAZO_MIN`). |
 
 Ferimentos (09/10, tarde): abaixo de 70% de vida fica machucado; abaixo de 45% perde o braço de
 trás; abaixo de 20%, o da frente (com a luva), um olho e mostra a costela. O braço voa com física e
@@ -175,13 +175,13 @@ do que já é baixo (`VOLUME_DO_OPERADOR` em `sons.ts`). Hee-hee no máximo 1 a 
 
 **Fúria igual para todos:** a cada 40 s desde a chegada (`solta_em`) e quando a vida DO BANCO cruza a perda de um braço — nunca sorteada por tela.
 
-**Vida que cresce:** `vida_por_pessoa` — cada caçador novo (primeiro tiro) soma vida. Níveis em `DIFICULDADES` (`chefao.ts`): Fácil 300 + 150/pessoa, Médio 500 + 250, Difícil 800 + 400. Conta: ~1,8 de dano/s por pessoa × ~2,5 min úteis ≈ 250.
+**Vida que cresce:** `vida_por_pessoa` — cada caçador novo (primeiro tiro) soma vida. Níveis em `DIFICULDADES` (`chefao.ts`): Fácil 200 + 100/pessoa, Médio 300 + 170, Difícil 500 + 270. Conta: ~1,8 de dano/s por pessoa × ~95 s úteis (os 2 min de `PRAZO_MIN` menos as duas Fúrias e a mira) ≈ 170. Eram 5 min e 250/pessoa até 09/10/2026.
 
 **Esconder o chefão:** um X no MEIO da barra do topo (por cima da faixa), da contagem até o fim (`BotaoChefao.tsx`). Um clique esconde («Esconder o chefão»), outro mostra de novo («Mostrar o chefão»). Escondido, a pessoa não vê nem ouve nada dele; guardado por pessoa no navegador, vale também para o próximo.
 
 **Sangue:** manchas 15 s, braço no chão 25 s, a poça da morte dele 12 s + 8 s desbotando.
 
-**Contagem:** soltar o chefão começa 1 minuto de contagem na tela de todos (`ESPERA_S`). O banco grava a chegada em `solta_em` (`fn_chefao_soltar(vida, minutos, espera_s)`), recusa tiro antes dela, e o prazo de 5 min conta da chegada. Nos últimos 10 s, tique; nos últimos 5, o número grande no meio.
+**Contagem:** soltar o chefão começa 1 minuto de contagem na tela de todos (`ESPERA_S`). O banco grava a chegada em `solta_em` (`fn_chefao_soltar(vida, minutos, espera_s)`), recusa tiro antes dela, e o prazo de 2 min (`PRAZO_MIN`; eram 5) conta da chegada. Nos últimos 10 s, tique; nos últimos 5, o número grande no meio.
 
 Regras: corpo tira 1, cabeça 3. O banco aceita no máximo 12 acertos por lote e 1 lote a cada 600 ms
 por pessoa, e avisa todos no máximo a cada 2 s (sempre quando ele cai ou foge). Quem tira a
