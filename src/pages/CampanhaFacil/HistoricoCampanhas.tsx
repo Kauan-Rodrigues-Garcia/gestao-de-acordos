@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRightLeft, CalendarDays, CheckCircle2, Clock, History, Loader2, Pencil, Power, PowerOff,
-  RefreshCw, Send, Trash2, XCircle,
+  RefreshCw, Send, ThumbsDown, ThumbsUp, Trash2, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -178,8 +178,66 @@ function LinhaLote({ l, onClick }: { l: LoteCampanha; onClick: () => void }) {
           {l.setor_nome ? ` · ${l.setor_nome}` : ''}
         </p>
       </div>
+      {(l.votos_bom > 0 || l.votos_ruim > 0) && (
+        <span
+          className="inline-flex shrink-0 items-center gap-2 text-[11px] font-medium tabular-nums"
+          title={`${n(l.votos_bom)} bom retorno · ${n(l.votos_ruim)} sem retorno`}
+        >
+          <span className="inline-flex items-center gap-0.5 text-emerald-700 dark:text-emerald-400">
+            <ThumbsUp className="h-3 w-3" />{n(l.votos_bom)}
+          </span>
+          <span className="inline-flex items-center gap-0.5 text-red-700 dark:text-red-400">
+            <ThumbsDown className="h-3 w-3" />{n(l.votos_ruim)}
+          </span>
+        </span>
+      )}
       <SeloSituacao s={situacaoDoLote(l)} />
     </button>
+  );
+}
+
+/**
+ * O que a operação achou do retorno: cada operador vota uma vez, joinha ou
+ * mãozinha para baixo (20261009150000). O líder vê só os números.
+ */
+function RetornoDaOperacao({ lote, operadores }: { lote: LoteCampanha; operadores: number }) {
+  const votos = lote.votos_bom + lote.votos_ruim;
+  const pctBom = votos > 0 ? Math.round((lote.votos_bom / votos) * 100) : 0;
+  return (
+    <section className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-sm font-semibold">Retorno segundo a operação</h3>
+        <span className="text-xs text-muted-foreground">
+          {votos === 0
+            ? 'ninguém avaliou ainda'
+            : `${n(votos)} ${votos === 1 ? 'avaliou' : 'avaliaram'}${operadores > 0 ? ` de ${n(operadores)}` : ''}`}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+          <ThumbsUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <div>
+            <p className="text-lg font-bold tabular-nums leading-tight text-emerald-700 dark:text-emerald-400">{n(lote.votos_bom)}</p>
+            <p className="text-[11px] text-muted-foreground">bom retorno</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2">
+          <ThumbsDown className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <div>
+            <p className="text-lg font-bold tabular-nums leading-tight text-red-700 dark:text-red-400">{n(lote.votos_ruim)}</p>
+            <p className="text-[11px] text-muted-foreground">sem retorno</p>
+          </div>
+        </div>
+      </div>
+      {votos > 0 && (
+        <div
+          className="flex h-1.5 overflow-hidden rounded-full bg-red-500/70"
+          role="img" aria-label={`${pctBom}% avaliou bom retorno`}
+        >
+          <div className="bg-emerald-500" style={{ width: `${pctBom}%` }} />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -247,10 +305,13 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
   const [acao, setAcao] = useState<null | 'repasse' | 'editar' | 'excluir' | 'desativar'>(null);
   const [ocupado, setOcupado] = useState(false);
 
-  const carregar = useCallback(async () => {
+  const { recarregarHistorico } = envios;
+  const carregar = useCallback(async (comHistorico = false) => {
     if (!aberta) return;
     setCarregando(true);
     try {
+      // O histórico traz a contagem de votos da campanha.
+      if (comHistorico) void recarregarHistorico();
       setEnviosLote(await enviosDoLote(lote.id));
       setAtualizadoEm(new Date());
     } catch (err) {
@@ -258,7 +319,7 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
     } finally {
       setCarregando(false);
     }
-  }, [aberta, lote.id]);
+  }, [aberta, lote.id, recarregarHistorico]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -318,6 +379,8 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
           <Numero rotulo="faltam" valor={Math.max(pendentes, 0)} />
         </div>
 
+        <RetornoDaOperacao lote={lote} operadores={placar.length} />
+
         {/* Quem encaminhou */}
         <section className="space-y-2">
           <div className="flex items-center gap-2">
@@ -328,7 +391,7 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
             {aberta && (
               <Button
                 variant="outline" size="sm" className="ml-auto h-7 gap-1.5 text-xs"
-                onClick={() => void carregar()} disabled={carregando}
+                onClick={() => void carregar(true)} disabled={carregando}
               >
                 <RefreshCw className={cn('h-3.5 w-3.5', carregando && 'animate-spin')} /> Atualizar
               </Button>

@@ -8,6 +8,9 @@
  *
  * O líder pode desativar ou excluir a campanha (20261007190000): o banco manda
  * o sinal `campanhas:<operador>` e a aba aberta relê na hora — a campanha some.
+ *
+ * O operador avalia o retorno de cada campanha — joinha ou mãozinha para baixo
+ * (20261009150000); o líder vê a contagem no histórico.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -16,7 +19,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { assinarTabela } from '@/lib/realtime';
 import { copiarTextoSilencioso } from '@/lib/clipboard';
 import { listarMinhasCampanhas, type EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
-import { CampanhaIndisponivel, definirStatus, editarMensagem, listarContatos } from './campanhasWhatsapp.service';
+import {
+  CampanhaIndisponivel, avaliarCampanha, definirStatus, editarMensagem, listarContatos, minhasAvaliacoes,
+  type Avaliacao,
+} from './campanhasWhatsapp.service';
 import {
   contar, linkWhatsApp, textoDoContato,
   type Contato, type ModoAbrir, type StatusContato,
@@ -195,6 +201,41 @@ export function useCampanhasWhatsapp() {
     marcarEnviada(c);
   }, [marcarEnviada]);
 
+  // ── Avaliação do retorno: um voto por campanha (lote), não por envio ──
+  const [avaliacoes, setAvaliacoes] = useState<Map<string, Avaliacao>>(new Map());
+  const avaliacoesRef = useRef(avaliacoes);
+  avaliacoesRef.current = avaliacoes;
+  const chaveLotes = useMemo(() => [...new Set(campanhas.map(c => c.lote_id))].sort().join(','), [campanhas]);
+
+  useEffect(() => {
+    if (!chaveLotes) { setAvaliacoes(new Map()); return; }
+    let ativo = true;
+    minhasAvaliacoes(chaveLotes.split(','))
+      .then((m) => { if (ativo) setAvaliacoes(m); })
+      .catch((err) => console.warn('[CampanhasWhatsapp] avaliações:', err));
+    return () => { ativo = false; };
+  }, [chaveLotes]);
+
+  /** Clicar no voto que já está marcado tira o voto. */
+  const avaliar = useCallback(async (loteId: string, bom: Avaliacao) => {
+    const antes = avaliacoesRef.current.get(loteId);
+    const novo = antes === bom ? null : bom;
+    const trocar = (v: Avaliacao | null | undefined) => setAvaliacoes((m) => {
+      const x = new Map(m);
+      if (v === null || v === undefined) x.delete(loteId); else x.set(loteId, v);
+      return x;
+    });
+    trocar(novo);
+    try {
+      await avaliarCampanha(loteId, novo);
+      if (novo !== null) toast.success(novo ? 'Obrigado! Você marcou que a campanha teve bom retorno.' : 'Obrigado! Você marcou que a campanha não deu retorno.');
+    } catch (err) {
+      trocar(antes);
+      console.error('[CampanhasWhatsapp] avaliar:', err);
+      toast.error('Não foi possível salvar a sua avaliação. Tente de novo.');
+    }
+  }, []);
+
   const salvarMensagem = useCallback((c: Contato, texto: string | null) => {
     const limpo = texto === null || texto.trim() === '' || texto === c.mensagem ? null : texto;
     return alterar(c.id, { mensagem_editada: limpo }, () => editarMensagem(c.id, limpo),
@@ -205,5 +246,6 @@ export function useCampanhasWhatsapp() {
     perfilId, carregando, campanhas, selecionada, selecionar, recarregar,
     contatos, carregandoContatos, contagem,
     modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
+    avaliacoes, avaliar,
   };
 }

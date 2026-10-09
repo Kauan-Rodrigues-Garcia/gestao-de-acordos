@@ -206,6 +206,9 @@ export interface LoteCampanha {
   encerrada_em: string | null;
   /** Congelado quando a campanha encerra; antes disso, é ao vivo (`placarDoLote`). */
   placar: PlacarOperador[] | null;
+  /** Quantos operadores votaram que o retorno foi bom / que não deu (20261009150000). */
+  votos_bom: number;
+  votos_ruim: number;
 }
 
 export type SituacaoLote = 'ativa' | 'desativada' | 'encerrada';
@@ -217,7 +220,8 @@ export function situacaoDoLote(l: Pick<LoteCampanha, 'ativa' | 'encerrada_em'>):
 
 const COLUNAS_LOTE =
   'id, empresa_id, setor_id, setor_nome, titulo, arquivo_nome, modelo, sem_valores, total, ativa, '
-  + 'lancada_em, desativada_em, relancada_em, editada_em, criado_em, expira_em, encerrada_em, placar';
+  + 'lancada_em, desativada_em, relancada_em, editada_em, criado_em, expira_em, encerrada_em, placar, '
+  + 'votos_bom, votos_ruim';
 
 /** As campanhas que ESTE líder lançou, da mais nova para a mais antiga. */
 export async function listarHistorico(autorId: string): Promise<LoteCampanha[]> {

@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
-  Globe, Layers, Repeat,
+  Globe, Layers, Repeat, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -122,6 +122,7 @@ export default function CampanhasWhatsapp() {
             {w.campanhas.map((c) => (
               <CartaoCampanha
                 key={c.id} c={c} ativa={c.id === w.selecionada?.id} onClick={() => w.selecionar(c.id)}
+                voto={w.avaliacoes.get(c.lote_id)}
               />
             ))}
           </nav>
@@ -161,6 +162,11 @@ export default function CampanhasWhatsapp() {
                     </div>
                     <Progress value={pct(contagem.enviados, contagem.total)} className="h-2" />
                   </div>
+
+                  <AvaliacaoCampanha
+                    voto={w.avaliacoes.get(w.selecionada.lote_id)}
+                    onVotar={(bom) => void w.avaliar(w.selecionada!.lote_id, bom)}
+                  />
 
                   <div className="flex flex-wrap items-center gap-2">
                     <div role="tablist" aria-label="Situação" className="flex flex-wrap gap-1 rounded-lg bg-muted/60 p-1">
@@ -259,7 +265,50 @@ function SeletorModo({ modo, onChange }: { modo: ModoAbrir; onChange: (m: ModoAb
   );
 }
 
-function CartaoCampanha({ c, ativa, onClick }: { c: EnvioResumo; ativa: boolean; onClick: () => void }) {
+/**
+ * «Joinha verde: a campanha teve bom retorno. Mãozinha vermelha: não teve.»
+ * Clicar no que já está marcado tira o voto. O líder vê só a contagem.
+ */
+function AvaliacaoCampanha({ voto, onVotar }: { voto: boolean | undefined; onVotar: (bom: boolean) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+      <p className="text-sm">
+        <span className="font-medium">Como foi o retorno desta campanha?</span>
+        <span className="block text-xs text-muted-foreground">
+          {voto === undefined ? 'Sua avaliação vai para o líder.' : 'Avaliação enviada ao líder. Pode trocar quando quiser.'}
+        </span>
+      </p>
+      <div className="ml-auto flex gap-2" role="group" aria-label="Avaliar o retorno da campanha">
+        <Button
+          type="button" variant="outline" size="sm" aria-pressed={voto === true} onClick={() => onVotar(true)}
+          className={cn(
+            'h-9 gap-1.5',
+            voto === true
+              ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white'
+              : 'text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400',
+          )}
+        >
+          <ThumbsUp className="h-4 w-4" /> Bom retorno
+        </Button>
+        <Button
+          type="button" variant="outline" size="sm" aria-pressed={voto === false} onClick={() => onVotar(false)}
+          className={cn(
+            'h-9 gap-1.5',
+            voto === false
+              ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 hover:text-white'
+              : 'text-red-700 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400',
+          )}
+        >
+          <ThumbsDown className="h-4 w-4" /> Sem retorno
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CartaoCampanha({ c, ativa, onClick, voto }: {
+  c: EnvioResumo; ativa: boolean; onClick: () => void; voto: boolean | undefined;
+}) {
   const total = c.progresso.total || c.qtd;
   const feito = c.progresso.enviados;
   const completa = total > 0 && feito >= total;
@@ -277,7 +326,11 @@ function CartaoCampanha({ c, ativa, onClick }: { c: EnvioResumo; ativa: boolean;
       </div>
       <Progress value={pct(feito, total)} className="h-1.5" />
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <span className="tabular-nums">{feito.toLocaleString('pt-BR')}/{total.toLocaleString('pt-BR')} enviadas</span>
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          {feito.toLocaleString('pt-BR')}/{total.toLocaleString('pt-BR')} enviadas
+          {voto === true && <ThumbsUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" aria-label="Você avaliou: bom retorno" />}
+          {voto === false && <ThumbsDown className="h-3 w-3 text-red-600 dark:text-red-400" aria-label="Você avaliou: sem retorno" />}
+        </span>
         <span>{quando(c.criado_em)}</span>
       </div>
     </button>

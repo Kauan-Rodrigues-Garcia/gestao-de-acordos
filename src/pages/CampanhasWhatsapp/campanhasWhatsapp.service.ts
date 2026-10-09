@@ -46,6 +46,28 @@ export async function definirStatus(id: string, status: StatusContato): Promise<
   if ((data ?? []).length === 0) throw new CampanhaIndisponivel();
 }
 
+// ── Avaliação do retorno (20261009150000) ───────────────────────────────────
+
+/** O voto do operador na campanha: `true` = bom retorno, `false` = não deu. */
+export type Avaliacao = boolean;
+
+/** Os votos desta pessoa nas campanhas dadas (a policy só devolve os dela). */
+export async function minhasAvaliacoes(loteIds: readonly string[]): Promise<Map<string, Avaliacao>> {
+  const mapa = new Map<string, Avaliacao>();
+  if (loteIds.length === 0) return mapa;
+  const { data, error } = await db.from('campanha_facil_avaliacoes')
+    .select('lote_id, bom').in('lote_id', [...new Set(loteIds)]);
+  if (error) throw error;
+  for (const r of (data ?? []) as { lote_id: string; bom: boolean }[]) mapa.set(r.lote_id, r.bom);
+  return mapa;
+}
+
+/** `null` tira o voto. */
+export async function avaliarCampanha(loteId: string, bom: Avaliacao | null): Promise<void> {
+  const { error } = await db.rpc('fn_campanha_facil_avaliar', { p_lote: loteId, p_bom: bom });
+  if (error) throw error;
+}
+
 /** `null` volta para a mensagem original. */
 export async function editarMensagem(id: string, texto: string | null): Promise<void> {
   const { data, error } = await db.from('campanha_facil_contatos').update({ mensagem_editada: texto }).eq('id', id).select('id');
