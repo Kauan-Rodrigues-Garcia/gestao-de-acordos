@@ -7,7 +7,7 @@ import { ALTURA, QUADROS, TODOS_OS_QUADROS, montarQuadro, type Imagem, type Nome
 /** A sombra no chão, embaixo dos pés (a última linha do sprite). */
 const SOMBRA = { y: ALTURA - 1, de: 6, ate: 16 };
 
-function imagemParaPixels(img: Imagem, comSombra: boolean): ImageData {
+export function imagemParaPixels(img: Imagem, comSombra: boolean): ImageData {
   const dados = new ImageData(img.largura, img.altura);
   const px = dados.data;
   if (comSombra) {

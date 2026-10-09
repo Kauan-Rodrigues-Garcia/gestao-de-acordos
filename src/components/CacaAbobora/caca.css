@@ -373,6 +373,7 @@
 .zb-lab-corpo { padding: 0 10px 12px; display: grid; gap: 8px; }
 .zb-lab-nota { margin: 0; font-size: 11px; opacity: .7; }
 .zb-lab-rotulo { margin: 2px 0 0; font-size: 12px; color: var(--zb-toxico); }
+.zb-lab-chefao { display: flex; align-items: center; gap: 6px; color: #ff8fd0; }
 .zb-lab-zumbis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .zb-lab-zumbi {
   display: grid;
@@ -398,3 +399,583 @@
 .zb-lab-btn:hover { --zb-borda: var(--zb-toxico); }
 .zb-lab-btn:active { transform: translateY(2px); }
 .zb-lab-btn.principal { color: #0b1a06; background: var(--zb-toxico); --zb-borda: var(--zb-toxico-escuro); font-weight: 700; }
+
+/* ── O chefão (09/10/2026) ────────────────────────────────────────────────────
+   O Rei do Pop zumbi (`cenaChefao.tsx`). Mora numa lâmina presa à JANELA em
+   cima do palco, não ao conteúdo como o zumbi comum: ele anda pela tela toda
+   e precisa estar à vista enquanto a pessoa rola. A lâmina não pega clique;
+   só o corpo dele pega. */
+.zb-chefao-palco {
+  position: fixed;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+.zb-chefao {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+@keyframes zb-holofote {
+  from { opacity: .65; transform: scaleX(.9); }
+  to   { opacity: 1;   transform: scaleX(1.06); }
+}
+.zb-chefao.entrando { overflow: hidden; }
+.zb-chefao.entrando .zb-chefao-sprite { animation: zb-sobe 1s steps(20, end) both; }
+.zb-chefao-corpo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+  pointer-events: auto;
+  cursor: var(--zb-mira);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.zb-chefao-sprite { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+/* O clarão do acerto. */
+.zb-chefao-corpo.levou .zb-chefao-sprite { filter: brightness(2.4) saturate(.2); }
+
+/* Os textos que sobem: o dano, o desvio, o nome do passo. */
+.zb-chefao-texto {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--zb-arcade);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--zb-ouro);
+  text-shadow:
+    2px 0 0 #120c16, -2px 0 0 #120c16, 0 2px 0 #120c16, 0 -2px 0 #120c16, 2px 2px 0 #120c16;
+  animation: zb-chefao-texto .9s steps(9, end) forwards;
+}
+.zb-chefao-texto.hs {
+  color: #fff;
+  font-size: 12px;
+  text-shadow:
+    2px 0 0 var(--zb-sangue-escuro), -2px 0 0 var(--zb-sangue-escuro),
+    0 2px 0 var(--zb-sangue-escuro), 0 -2px 0 var(--zb-sangue-escuro), 3px 3px 0 var(--zb-sangue);
+}
+.zb-chefao-texto.esquiva { color: var(--zb-toxico); }
+.zb-chefao-texto.passo { color: #ff8fd0; font-size: 11px; animation-duration: 1.5s; animation-timing-function: steps(15, end); }
+.zb-chefao-texto.final { color: var(--zb-ouro); font-size: 16px; animation-duration: 2.2s; animation-timing-function: steps(22, end); }
+@keyframes zb-chefao-texto {
+  0%   { transform: translate(-50%, 0) scale(.6); opacity: 1; }
+  15%  { transform: translate(-50%, -14px) scale(1.15); }
+  30%  { transform: translate(-50%, -20px) scale(1); }
+  80%  { opacity: 1; }
+  100% { transform: translate(-50%, -38px) scale(1); opacity: 0; }
+}
+
+/* O respingo de cada acerto: quadradinhos que voam e caem. */
+.zb-chefao-gota {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  pointer-events: none;
+  background: var(--zb-sangue);
+  animation: zb-chefao-gota .55s steps(8, end) forwards;
+}
+.zb-chefao-gota.escura { background: var(--zb-sangue-escuro); }
+@keyframes zb-chefao-gota {
+  from { transform: translate(0, 0); opacity: 1; }
+  60%  { opacity: 1; }
+  to   { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+}
+
+/* ── O placar de cima: a vida de todos, o relógio e o topo do ranking ──── */
+.zb-chefao-hud {
+  --zb-borda: var(--zb-sangue);
+  --zb-b: 2px;
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 8px 12px;
+  color: var(--zb-osso);
+  background: var(--zb-noite);
+  font-family: var(--zb-texto);
+  font-size: 12px;
+  line-height: 1.25;
+  pointer-events: none;
+  box-shadow:
+    0 calc(-1 * var(--zb-b)) 0 0 var(--zb-borda),
+    0 var(--zb-b) 0 0 var(--zb-borda),
+    calc(-1 * var(--zb-b)) 0 0 0 var(--zb-borda),
+    var(--zb-b) 0 0 0 var(--zb-borda),
+    0 6px 0 0 rgb(0 0 0 / .35);
+  transform: translateX(-50%);
+  animation: zb-chefao-hud .5s steps(5, end) both;
+}
+@keyframes zb-chefao-hud {
+  from { transform: translate(-50%, -140%); }
+  to   { transform: translate(-50%, 0); }
+}
+.zb-chefao-hud-cabeca { flex: none; image-rendering: pixelated; }
+.zb-chefao-hud-meio { display: grid; gap: 4px; min-width: 0; }
+.zb-chefao-hud-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--zb-arcade);
+  font-size: 9px;
+  color: #fff;
+  white-space: nowrap;
+}
+.zb-chefao-hud-relogio { color: var(--zb-ouro); }
+.zb-chefao-hud-relogio.urgente { color: #ff5a5a; animation: zb-pisca .5s steps(1, end) infinite; }
+@keyframes zb-pisca { 50% { opacity: .35; } }
+.zb-chefao-vida {
+  position: relative;
+  width: 240px;
+  max-width: 100%;
+  height: 12px;
+  background: #2a0609;
+  box-shadow: 0 -2px 0 0 #120c16, 0 2px 0 0 #120c16, -2px 0 0 0 #120c16, 2px 0 0 0 #120c16;
+}
+.zb-chefao-vida-barra {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(to bottom, #ff6b6b 0 3px, var(--zb-sangue) 3px 9px, var(--zb-sangue-escuro) 9px);
+  transition: width .3s steps(4, end);
+}
+.zb-chefao-vida-numero {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--zb-arcade);
+  font-size: 7px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #120c16;
+}
+.zb-chefao-hud-linha { font-size: 11px; color: rgb(236 229 208 / .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zb-chefao-hud-linha b { color: var(--zb-toxico); }
+.zb-chefao-top {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0 0 0 10px;
+  list-style: none;
+  border-left: 2px solid #2a2230;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.zb-chefao-top li { display: flex; gap: 6px; }
+.zb-chefao-top .pos { font-family: var(--zb-arcade); font-size: 8px; color: var(--zb-ouro); padding-top: 2px; }
+.zb-chefao-top .dano { margin-left: auto; padding-left: 8px; font-family: var(--zb-arcade); font-size: 8px; color: var(--zb-osso); padding-top: 2px; }
+.zb-chefao-top .eu { color: var(--zb-toxico); }
+@media (max-width: 640px) {
+  .zb-chefao-top { display: none; }
+  .zb-chefao-vida { width: 180px; }
+}
+
+/* ── O ranking final ─────────────────────────────────────────────────────── */
+.zb-chefao-final {
+  --zb-borda: var(--zb-ouro);
+  --zb-b: 3px;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 60;
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 16px;
+  color: var(--zb-osso);
+  background: var(--zb-noite);
+  font-family: var(--zb-texto);
+  font-size: 13px;
+  line-height: 1.35;
+  box-shadow:
+    0 calc(-1 * var(--zb-b)) 0 0 var(--zb-borda),
+    0 var(--zb-b) 0 0 var(--zb-borda),
+    calc(-1 * var(--zb-b)) 0 0 0 var(--zb-borda),
+    var(--zb-b) 0 0 0 var(--zb-borda),
+    0 10px 0 0 rgb(0 0 0 / .4);
+  transform: translate(-50%, -50%);
+  animation: zb-chefao-final .45s steps(6, end) both;
+}
+.zb-chefao-final.fugiu { --zb-borda: #ff8fd0; }
+@keyframes zb-chefao-final {
+  from { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+.zb-chefao-final-topo { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.zb-chefao-final-topo canvas { flex: none; image-rendering: pixelated; }
+.zb-chefao-final-topo > div { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.zb-chefao-final-titulo {
+  font-family: var(--zb-arcade);
+  font-size: 12px;
+  line-height: 1.4;
+  color: #fff;
+  text-shadow: 2px 2px 0 var(--zb-sangue), 4px 4px 0 var(--zb-sangue-escuro);
+}
+.zb-chefao-final.fugiu .zb-chefao-final-titulo { text-shadow: 2px 2px 0 #a3246f, 4px 4px 0 #4a0f33; }
+.zb-chefao-final-golpe { color: var(--zb-ouro); }
+.zb-chefao-final-golpe b { color: #fff; }
+.zb-chefao-final-sub { font-size: 12px; color: rgb(236 229 208 / .75); }
+.zb-chefao-final-fechar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--zb-osso);
+  background: #1e1824;
+  border: 0;
+  font-family: var(--zb-arcade);
+  font-size: 10px;
+  cursor: pointer;
+  box-shadow: 0 -2px 0 0 #3d3644, 0 2px 0 0 #3d3644, -2px 0 0 0 #3d3644, 2px 0 0 0 #3d3644;
+}
+.zb-chefao-final-fechar:hover { background: #2a2230; }
+.zb-chefao-final-fechar:focus-visible { outline: 2px solid var(--zb-ouro); outline-offset: 3px; }
+.zb-chefao-lista { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.zb-chefao-lista li {
+  display: grid;
+  grid-template-columns: 26px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #161019;
+}
+.zb-chefao-lista li.eu { background: #1b2a15; box-shadow: inset 3px 0 0 var(--zb-toxico); }
+.zb-chefao-lista .pos { font-family: var(--zb-arcade); font-size: 10px; text-align: center; color: rgb(236 229 208 / .7); }
+.zb-chefao-lista li:nth-child(1) .pos { color: #ffd34d; }
+.zb-chefao-lista li:nth-child(2) .pos { color: #d7dbe4; }
+.zb-chefao-lista li:nth-child(3) .pos { color: #e09a5b; }
+.zb-chefao-avatar {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  object-fit: cover;
+  background: #2a2230;
+  color: var(--zb-osso);
+  font-family: var(--zb-arcade);
+  font-size: 9px;
+}
+.zb-chefao-lista .quem { display: grid; gap: 3px; min-width: 0; }
+.zb-chefao-lista .nome { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.zb-chefao-lista .nome > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zb-chefao-lista .barra { height: 4px; background: #2a2230; }
+.zb-chefao-lista .barra > i { display: block; height: 100%; background: var(--zb-sangue); }
+.zb-chefao-lista li:nth-child(1) .barra > i { background: var(--zb-ouro); }
+.zb-chefao-lista .numeros { display: grid; justify-items: end; gap: 2px; }
+.zb-chefao-lista .dano { font-family: var(--zb-arcade); font-size: 10px; color: #fff; }
+.zb-chefao-lista .detalhe { display: flex; align-items: center; gap: 4px; font-size: 11px; color: rgb(236 229 208 / .7); }
+.zb-chefao-lista .detalhe svg { color: #ff5a5a; }
+.zb-chefao-golpe {
+  flex: none;
+  padding: 1px 5px;
+  font-family: var(--zb-arcade);
+  font-size: 7px;
+  color: #120c16;
+  background: var(--zb-ouro);
+}
+.zb-chefao-final-eu { margin: 10px 0 0; font-size: 12px; color: var(--zb-toxico); }
+.zb-chefao-final-vazio { margin: 0; color: rgb(236 229 208 / .7); }
+
+/* ── O chefão: o chão, a Fúria, o sangue e o rastro (09/10/2026, tarde) ─────── */
+
+/* O holofote fica no chão, separado do corpo: no pulo, ele sobe e o holofote
+   fica, encolhendo. */
+.zb-chefao-chao {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+}
+.zb-chefao-chao::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 132px;
+  height: 26px;
+  margin-left: -66px;
+  background: radial-gradient(ellipse at center, rgb(255 225 77 / .42) 0%, rgb(255 225 77 / .16) 45%, transparent 70%);
+  animation: zb-holofote 1.2s steps(4, end) infinite alternate;
+}
+/* Na Fúria, o holofote vira pista de dança: troca de cor em degraus. */
+.zb-chefao-chao:has(+ .zb-chefao.furia)::before {
+  background: radial-gradient(ellipse at center, rgb(255 143 208 / .55) 0%, rgb(255 143 208 / .2) 45%, transparent 70%);
+  animation: zb-holofote .3s steps(2, end) infinite alternate, zb-pista 1.2s steps(4, end) infinite;
+}
+@keyframes zb-pista { to { filter: hue-rotate(360deg); } }
+
+/* A aura da Fúria: anéis em degrau girando em volta dele, e o contorno do
+   corpo aceso em rosa e dourado, trocando. */
+.zb-chefao-aura {
+  position: absolute;
+  inset: -18px -26px -6px;
+  display: none;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 60%, rgb(255 143 208 / .28) 0%, rgb(255 211 77 / .14) 40%, transparent 68%);
+  animation: zb-aura .5s steps(3, end) infinite alternate;
+}
+.zb-chefao-aura::before,
+.zb-chefao-aura::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  background: #ffd34d;
+  box-shadow:
+    0 -58px 0 #fff, 42px -40px 0 #ff8fd0, 58px 0 0 #ffd34d, 40px 42px 0 #fff,
+    0 58px 0 #ff8fd0, -42px 40px 0 #ffd34d, -58px 0 0 #fff, -40px -42px 0 #ff8fd0;
+  animation: zb-aura-gira 1.1s steps(8, end) infinite;
+}
+.zb-chefao-aura::after {
+  transform: scale(.7);
+  animation-duration: .8s;
+  animation-direction: reverse;
+  opacity: .8;
+}
+@keyframes zb-aura { from { opacity: .6; transform: scale(.94); } to { opacity: 1; transform: scale(1.06); } }
+@keyframes zb-aura-gira { to { transform: rotate(360deg); } }
+.zb-chefao.furia .zb-chefao-aura { display: block; }
+.zb-chefao.furia .zb-chefao-sprite {
+  animation: zb-contorno .36s steps(2, end) infinite;
+}
+@keyframes zb-contorno {
+  from { filter: drop-shadow(3px 0 0 #ff8fd0) drop-shadow(-3px 0 0 #ff8fd0) drop-shadow(0 3px 0 #ffd34d) drop-shadow(0 -3px 0 #ffd34d); }
+  to   { filter: drop-shadow(3px 0 0 #ffd34d) drop-shadow(-3px 0 0 #ffd34d) drop-shadow(0 3px 0 #ff8fd0) drop-shadow(0 -3px 0 #ff8fd0); }
+}
+/* O instante em que os olhos acendem: ele pisca branco. */
+.zb-chefao.acendendo .zb-chefao-sprite { animation: zb-acende .65s steps(6, end) both; }
+@keyframes zb-acende {
+  0%, 30%, 60% { filter: brightness(1); }
+  15%, 45%, 75% { filter: brightness(2.6) saturate(0); }
+  100% { filter: brightness(1.2); }
+}
+/* Os olhos acesos: um pixel branco com halo amarelo, que acompanha o corpo. */
+.zb-chefao-olho {
+  position: absolute;
+  background: #fffbe6;
+  box-shadow: 0 0 4px 2px #ffe14d, 0 0 10px 4px rgb(255 225 77 / .6);
+  pointer-events: none;
+}
+
+/* A mancha de sangue no chão: os 15 s de `MANCHA_MS` — fica 10 s e desbota
+   em degraus nos últimos 5. */
+.zb-chefao-mancha {
+  position: absolute;
+  pointer-events: none;
+  image-rendering: pixelated;
+  opacity: .85;
+  animation: zb-mancha 15s steps(1, end) forwards;
+}
+@keyframes zb-mancha {
+  0%   { opacity: .85; }
+  66%  { opacity: .7; }
+  76%  { opacity: .5; }
+  86%  { opacity: .3; }
+  94%  { opacity: .12; }
+  100% { opacity: 0; }
+}
+/* O pingo que cai do toco até o chão. */
+.zb-chefao-pingo {
+  position: absolute;
+  width: 3px;
+  height: 6px;
+  background: var(--zb-sangue);
+  pointer-events: none;
+  animation: zb-pingo .3s cubic-bezier(.5, 0, 1, 1) forwards;
+}
+@keyframes zb-pingo { to { transform: translateY(var(--queda)); } }
+
+/* O braço arrancado: voa (a física é do JS), fica no chão e apaga. */
+.zb-chefao-pedaco {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+  transition: opacity 6s steps(6, end);
+}
+.zb-chefao-pedaco.some { opacity: 0; }
+
+/* O rastro: cópias que ficam para trás e apagam. */
+.zb-chefao-rastro {
+  position: absolute;
+  pointer-events: none;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+  animation: zb-rastro .42s steps(5, end) forwards;
+}
+.zb-chefao-rastro.furia { filter: sepia(1) saturate(5) hue-rotate(280deg) brightness(1.2); animation-name: zb-rastro-furia; }
+@keyframes zb-rastro-furia { from { opacity: .3; } to { opacity: 0; } }
+@keyframes zb-rastro { from { opacity: .45; } to { opacity: 0; } }
+
+/* A poeira do pulo e do deslize. */
+.zb-chefao-poeira {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #b8ad98;
+  pointer-events: none;
+  animation: zb-poeira .5s steps(6, end) forwards;
+}
+@keyframes zb-poeira {
+  from { transform: translate(0, 0) scale(1); opacity: .8; }
+  to   { transform: translate(var(--dx), var(--dy)) scale(1.8); opacity: 0; }
+}
+
+/* As notas da Fúria: colcheias em pixel subindo. */
+.zb-chefao-nota {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  pointer-events: none;
+  background: #ff8fd0;
+  box-shadow: 4px -4px 0 #ff8fd0, 4px -8px 0 #ff8fd0, 4px -12px 0 #ff8fd0, 8px -12px 0 #ff8fd0, 12px -8px 0 #ff8fd0;
+  animation: zb-nota 1.3s steps(13, end) forwards;
+}
+.zb-chefao-nota.dupla {
+  background: #ffd34d;
+  box-shadow: 4px -4px 0 #ffd34d, 4px -8px 0 #ffd34d, 4px -12px 0 #ffd34d, 8px -12px 0 #ffd34d, 12px -12px 0 #ffd34d,
+    16px -12px 0 #ffd34d, 16px -8px 0 #ffd34d, 16px -4px 0 #ffd34d, 12px 0 0 #ffd34d;
+}
+@keyframes zb-nota {
+  from { transform: translate(0, 0); opacity: 1; }
+  to   { transform: translate(var(--dx), -70px); opacity: 0; }
+}
+
+.zb-chefao-texto.furia {
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 2px 0 0 #a3246f, -2px 0 0 #a3246f, 0 2px 0 #a3246f, 0 -2px 0 #a3246f, 3px 3px 0 #ffd34d;
+  animation-duration: 2s;
+  animation-timing-function: steps(20, end);
+}
+
+/* O placar na Fúria. */
+.zb-chefao-hud.furia { --zb-borda: #ff8fd0; }
+.zb-chefao-hud-furia { color: #ff8fd0; font-weight: 700; animation: zb-pisca .4s steps(1, end) infinite; }
+
+/* ── A contagem antes de ele chegar (09/10/2026) ──────────────────────────── */
+.zb-chefao-contagem { --zb-borda: var(--zb-ouro); }
+.zb-chefao-contagem-relogio {
+  font-family: var(--zb-arcade);
+  font-size: 22px;
+  line-height: 1.1;
+  color: var(--zb-ouro);
+  text-shadow: 2px 2px 0 var(--zb-sangue-escuro);
+}
+.zb-chefao-contagem-relogio.urgente { color: #ff5a5a; animation: zb-pisca 1s steps(1, end) infinite; }
+/* O 5, 4, 3, 2, 1 no meio da tela: entra grande e encolhe, em degraus. */
+.zb-chefao-numerao {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  pointer-events: none;
+  font-family: var(--zb-arcade);
+  font-size: 96px;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    6px 0 0 var(--zb-sangue-escuro), -6px 0 0 var(--zb-sangue-escuro),
+    0 6px 0 var(--zb-sangue-escuro), 0 -6px 0 var(--zb-sangue-escuro),
+    10px 10px 0 rgb(0 0 0 / .45);
+  animation: zb-numerao 1s steps(10, end) forwards;
+}
+@keyframes zb-numerao {
+  0%   { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+  15%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  75%  { transform: translate(-50%, -50%) scale(.9); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+}
+@media (max-width: 640px) {
+  .zb-chefao-numerao { font-size: 64px; }
+  .zb-chefao-contagem-relogio { font-size: 18px; }
+}
+
+/* ── O banquete (09/10/2026): a vítima, o «+N», e o botão do super_admin ─── */
+.zb-vitima {
+  position: absolute;
+  pointer-events: none;
+}
+.zb-vitima-sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+}
+/* Entra andando «do nada»: vai aparecendo enquanto anda. */
+.zb-vitima.chegando { animation: zb-vitima-surge .5s steps(5, end) both; }
+/* Viu o chefão: treme, de braços para cima, até o bote. */
+.zb-vitima.treme .zb-vitima-sprite { animation: zb-vitima-treme .12s steps(2, end) infinite; }
+.zb-vitima.some { opacity: 0; transition: opacity .35s steps(4, end); }
+@keyframes zb-vitima-surge {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes zb-vitima-treme {
+  0%   { transform: translateX(-2px); }
+  100% { transform: translateX(2px); }
+}
+/* Os ossos que sobram: três pixels-osso cruzados, que desbotam. */
+.zb-vitima-ossos {
+  position: absolute;
+  width: 6px;
+  height: 3px;
+  margin: -3px 0 0 -9px;
+  background: var(--zb-osso);
+  box-shadow: 9px 0 0 var(--zb-osso), 3px -3px 0 var(--zb-osso), 12px 3px 0 #b9b19a, -3px 3px 0 #b9b19a;
+  pointer-events: none;
+  animation: zb-ossos 10s steps(20, end) forwards;
+}
+@keyframes zb-ossos { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+
+.zb-chefao-texto.cura {
+  color: var(--zb-toxico);
+  font-size: 12px;
+  animation-duration: 1.1s;
+  animation-timing-function: steps(11, end);
+}
+/* Comendo: um contorno verde piscando — o sinal de «imune». */
+.zb-chefao.comendo .zb-chefao-sprite {
+  filter: drop-shadow(2px 0 0 var(--zb-toxico)) drop-shadow(-2px 0 0 var(--zb-toxico));
+  animation: zb-pisca .5s steps(1, end) infinite;
+}
+.zb-chefao-hud.comendo { --zb-borda: var(--zb-toxico); }
+.zb-chefao-hud-cura { color: var(--zb-toxico); font-weight: 700; animation: zb-pisca .4s steps(1, end) infinite; }
+.zb-chefao-curar {
+  align-self: stretch;
+  padding: 0 10px;
+  font-family: var(--zb-arcade);
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--zb-noite);
+  background: var(--zb-toxico);
+  border: 0;
+  box-shadow: inset -2px -2px 0 rgb(0 0 0 / .35), inset 2px 2px 0 rgb(255 255 255 / .35);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.zb-chefao-curar:hover:not(:disabled) { filter: brightness(1.15); }
+.zb-chefao-curar:active:not(:disabled) { box-shadow: inset 2px 2px 0 rgb(0 0 0 / .35); }
+.zb-chefao-curar:disabled { opacity: .5; cursor: default; }
+.zb-chefao-curar:focus-visible { outline: 2px solid var(--zb-ouro); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .zb-chefao-curar { max-width: 72px; white-space: normal; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zb-vitima-sprite, .zb-chefao.comendo .zb-chefao-sprite, .zb-chefao-hud-cura { animation: none; }
+}

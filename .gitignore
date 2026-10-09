@@ -117,3 +117,9 @@ work/
 # saía lá.
 scripts/robo59/dist/
 scripts/robo59/.env
+
+# --- Áudio local do chefão da Caça aos Zumbis ---
+# Arquivos baixados por quem testa (música e vozes de terceiros): só no
+# localhost, nunca no repositório nem no deploy. Sem eles, o chefão usa os
+# sons sintetizados de CacaAbobora/sons.ts.
+public/sons/chefao/

@@ -44,9 +44,10 @@ import {
   type Evento, type Tiro,
 } from './fisica';
 import {
-  somAcerto, somBaque, somCerebro, somCrava, somGemido, somPlof, somPop, somRicochete, somTiro,
+  somAcerto, somBaque, somCerebro, somCrava, somGemido, somPlof, somPop, somTiro,
 } from './sons';
 import { pegarCamada, type Camada } from './camada';
+import { furo } from './furo';
 import { SpriteZumbi } from './SpriteZumbi';
 import { quadrosDoZumbi } from './pixels';
 import './caca.css';
@@ -73,7 +74,7 @@ const ICONES = {
 } as const;
 const CORES_ICONE: Record<string, string> = { w: 'currentColor', k: 'transparent', y: 'currentColor' };
 
-function IconePixel({ nome, tam = 2, className }: { nome: keyof typeof ICONES; tam?: number; className?: string }) {
+export function IconePixel({ nome, tam = 2, className }: { nome: keyof typeof ICONES; tam?: number; className?: string }) {
   const linhas = ICONES[nome];
   const w = linhas[0].length, h = linhas.length;
   return (
@@ -140,7 +141,7 @@ function useCamada(): Camada | null {
 
 // ── A morte, com física ─────────────────────────────────────────────────────
 
-interface Morte {
+export interface Morte {
   tiro: Tiro;
   impacto: { x: number; y: number };
   quadro: number;
@@ -167,8 +168,16 @@ const SOME_MS = 30_000;
  * as poças e os respingos — ficam, mais claros, por `RESQUICIO_MS`.
  * Não pegam clique. Em coordenadas do conteúdo: rolam com a página.
  */
-function PalcoDaMorte({ camada, zumbi, morte, x, y, aoAcabar }: {
-  camada: Camada; zumbi: Zumbi; morte: Morte; x: number; y: number; aoAcabar: () => void;
+export function PalcoDaMorte({
+  camada, zumbi, morte, x, y, aoAcabar, escala = ESCALA, resquicioMs = RESQUICIO_MS, someMs = SOME_MS,
+}: {
+  /** Só a folha: o chefão põe a morte na camada dele, presa à janela. */
+  camada: Pick<Camada, 'folha'>; zumbi: Zumbi; morte: Morte; x: number; y: number; aoAcabar: () => void;
+  /** O zumbi comum é 2×; o chefão, maior. */
+  escala?: number;
+  /** Quanto a poça fica e quanto leva desbotando (o chefão usa menos). */
+  resquicioMs?: number;
+  someMs?: number;
 }) {
   const chaoRef = useRef<HTMLCanvasElement>(null);
   const restoRef = useRef<HTMLCanvasElement>(null);
@@ -206,16 +215,18 @@ function PalcoDaMorte({ camada, zumbi, morte, x, y, aoAcabar }: {
 
   // O resquício fica um tempo e apaga.
   useEffect(() => {
-    const some = setTimeout(() => setEtapa('some'), RESQUICIO_MS);
-    const acaba = setTimeout(() => fim.current(), RESQUICIO_MS + SOME_MS);
+    const some = setTimeout(() => setEtapa('some'), resquicioMs);
+    const acaba = setTimeout(() => fim.current(), resquicioMs + someMs);
     return () => { clearTimeout(some); clearTimeout(acaba); };
+    // Os tempos valem desde a morte; não reiniciam.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const estilo: CSSProperties = {
-    left: x - ORIGEM_X * ESCALA,
-    top: y - ORIGEM_Y * ESCALA,
-    width: PALCO_L * ESCALA,
-    height: PALCO_A * ESCALA,
+    left: x - ORIGEM_X * escala,
+    top: y - ORIGEM_Y * escala,
+    width: PALCO_L * escala,
+    height: PALCO_A * escala,
     transform: morte.lado < 0 ? 'scaleX(-1)' : undefined,
   };
   return createPortal(
@@ -225,7 +236,7 @@ function PalcoDaMorte({ camada, zumbi, morte, x, y, aoAcabar }: {
         width={PALCO_L}
         height={PALCO_A}
         className={`zb-palco zb-palco-chao${etapa !== 'cena' ? ' resquicio' : ''}${etapa === 'some' ? ' some' : ''}`}
-        style={estilo}
+        style={etapa === 'some' && someMs !== SOME_MS ? { ...estilo, transitionDuration: `${someMs}ms` } : estilo}
         aria-hidden="true"
       />
       <canvas
@@ -262,18 +273,6 @@ function LetreiroHeadshot({ camada, x, y }: { camada: Camada; x: number; y: numb
     <div className="zb-letreiro" style={{ left: x, top: y }} aria-hidden="true">HEADSHOT!</div>,
     camada.folha,
   );
-}
-
-/** O tiro que pegou na parede: um furo e um pouco de poeira. */
-function furo(x: number, y: number) {
-  somTiro();
-  somRicochete();
-  const el = document.createElement('div');
-  el.className = 'zb-furo';
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 700);
 }
 
 // ── O zumbi escondido ───────────────────────────────────────────────────────

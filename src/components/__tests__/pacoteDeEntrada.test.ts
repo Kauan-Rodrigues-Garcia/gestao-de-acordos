@@ -51,12 +51,24 @@ describe('pacote de entrada', () => {
   });
 
   it('a Caça aos Zumbis só baixa a cena (e a física) quando há zumbi ou faixa', () => {
+    // A cena do chefão (`cenaChefao.tsx`) usa a morte da cena comum: ela mesma
+    // só é baixada quando o chefão aparece (regra abaixo).
     const daqui = arquivosDoApp(join(RAIZ, 'components', 'CacaAbobora'))
-      .filter(f => !f.endsWith('cena.tsx'));
+      .filter(f => !f.endsWith('cena.tsx') && !f.endsWith('cenaChefao.tsx'));
     for (const f of [...daqui, join(RAIZ, 'components', 'Layout.tsx')]) {
       const imports = importsEstaticos(readFileSync(f, 'utf8'));
       expect(imports, relative(RAIZ, f)).not.toContain('./cena');
       expect(imports, relative(RAIZ, f)).not.toContain('@/components/CacaAbobora/cena');
+    }
+  });
+
+  it('o chefão da caça só baixa a cena dele quando ele aparece', () => {
+    const daqui = arquivosDoApp(join(RAIZ, 'components', 'CacaAbobora'))
+      .filter(f => !f.endsWith('cenaChefao.tsx'));
+    for (const f of [...daqui, join(RAIZ, 'components', 'Layout.tsx')]) {
+      const imports = importsEstaticos(readFileSync(f, 'utf8'));
+      expect(imports, relative(RAIZ, f)).not.toContain('./cenaChefao');
+      expect(imports, relative(RAIZ, f)).not.toContain('@/components/CacaAbobora/cenaChefao');
     }
   });
 

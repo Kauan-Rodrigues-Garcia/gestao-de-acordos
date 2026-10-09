@@ -10,8 +10,11 @@
  */
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { ensaioFaixa, ensaioLimpar, ensaioOutroMatou, ensaioSoltar, ensaioSumir } from './caca';
+import { ESPERA_S, ensaioArrancar, ensaioCurarChefao, ensaioFugir, ensaioLimparChefao, ensaioPularContagem, ensaioRobos, ensaioSoltarChefao } from './chefao';
+import { CHEFAO } from './chefaoArte';
 import { ZUMBIS } from './zumbis';
 import { SpriteZumbi } from './SpriteZumbi';
 import './caca.css';
@@ -19,6 +22,7 @@ import './caca.css';
 export default function Laboratorio() {
   const [aberto, setAberto] = useState(true);
   const [zumbi, setZumbi] = useState(0);
+  const [robos, setRobos] = useState(false);
   // A faixa de ensaio leva a foto de quem está logado: é a foto que o banco
   // grava (`perfis.foto_url`) quando a pessoa mata de verdade.
   const foto = useAuthOpcional()?.perfil?.foto_url ?? null;
@@ -57,6 +61,31 @@ export default function Laboratorio() {
             <button type="button" className="zb-lab-btn" onClick={() => ensaioFaixa({ zumbi, headshot: true, rapida: false, headshotRapido: false, foto })}>Headshot</button>
             <button type="button" className="zb-lab-btn" onClick={() => ensaioFaixa({ zumbi, headshot: true, rapida: true, headshotRapido: true, foto })}>Os dois recordes</button>
             <button type="button" className="zb-lab-btn" onClick={ensaioLimpar}>Limpar</button>
+          </div>
+          <p className="zb-lab-rotulo zb-lab-chefao"><SpriteZumbi zumbi={CHEFAO} soCabeca escala={1} /> Chefão: o Rei do Pop zumbi</p>
+          <div className="zb-lab-botoes">
+            <button type="button" className="zb-lab-btn principal" onClick={() => { setRobos(false); ensaioSoltarChefao(120, 3, ESPERA_S, 30); }}>Soltar o chefão</button>
+            <button type="button" className="zb-lab-btn" onClick={ensaioPularContagem}>Pular contagem</button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioSoltarChefao(120, 3, 0, 30); }}>Soltar sem contagem</button>
+            <button
+              type="button"
+              className="zb-lab-btn"
+              aria-pressed={robos}
+              onClick={() => { ensaioRobos(!robos); setRobos(!robos); }}
+            >
+              {robos ? 'Parar os robôs' : 'Robôs atirando'}
+            </button>
+            <button type="button" className="zb-lab-btn" onClick={() => ensaioArrancar(0.3)}>Arrancar 30%</button>
+            <button
+              type="button"
+              className="zb-lab-btn"
+              title="O banquete: uma pessoa entra andando, ele a devora e recupera 25% (imune por 12 s)"
+              onClick={() => { const erro = ensaioCurarChefao(); if (erro) toast(erro); }}
+            >
+              Recuperar vida
+            </button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioFugir(); }}>Fugir</button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioLimparChefao(); }}>Limpar</button>
           </div>
         </div>
       )}

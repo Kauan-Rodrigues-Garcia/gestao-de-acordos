@@ -137,3 +137,72 @@ O que **falta**: `20261007200000_caca_zumbis.sql`. Ela faz o seguinte:
 Dois arquivos que já estavam soltos no computador de casa antes desta sessão **não entraram**
 no commit, porque não são desta tarefa e ninguém sabe de onde vieram:
 `src/hooks/usePendentesDeAgendamento.ts` e `src/lib/reagendamento.ts`. Eles continuam só lá.
+
+---
+
+## 8. O chefão: o Rei do Pop zumbi (09/10/2026)
+
+> **ESTADO EM 09/10/2026: código pronto e testado no localhost (ensaio). A migration
+> `20261009120000_chefao_rei_do_pop.sql` está ESCRITA e NÃO APLICADA.** Sem ela, o botão
+> «Soltar o chefão» dá erro e nada aparece para ninguém; o resto da caça segue igual.
+
+Pedido: no modo de soltar zumbi, um chefão zumbi «clássico» (o Rei do Pop do clipe de terror),
+que todo mundo derruba junto. Ele dança os passinhos, anda pela tela, desvia dos tiros, e no fim
+aparece um ranking de quem ajudou.
+
+| Arquivo | O que é |
+|---|---|
+| `chefaoArte.ts` | O sprite (um `Zumbi` de `zumbis.ts` com 4 poses: braços estendidos, garras, caídos, chute) e os 7 passos: garras, moonwalk, giro → ponta do pé, antigravidade, chute, marcha. Cada passo tem a sua chance de desvio. `pontoNaArte` desfaz a inclinação e o espelho no tiro. |
+| `chefao.ts` | O estado: a vida de todos, o ranking, os tiros em lote (1 s), o ensaio com robôs. Ouve o sinal `chefao` no tópico da caça (`caca.ts`). |
+| `cenaChefao.tsx` | O chefão na tela (lâmina presa à JANELA, não ao conteúdo), o placar de cima e o ranking final. Baixado só quando ele aparece. |
+| `furo.ts` | O tiro na parede, agora dividido entre as duas cenas. |
+| `chefaoMovimento.ts` | A física: inércia, pulo em arco com amasso na queda, deslize de costas, o passinho da Fúria, o tranco de dor. Puro, testado. |
+| `chefaoEfeitos.ts` | Sangue no chão (45 s, até 90 manchas), o braço que voa e quica, o pingo do toco, o rastro, a poeira, as notas. |
+| `sons.ts` | Acerto, «hee-hee», chegada, queda e uma batida de fundo ORIGINAL (não é a música do clipe). |
+| `admin/CacaAboboraConfig.tsx` | «Soltar o chefão» com Fácil 200 / Médio 500 / Difícil 1200 de vida, 5 min na tela. |
+
+Ferimentos (09/10, tarde): abaixo de 70% de vida fica machucado; abaixo de 45% perde o braço de
+trás; abaixo de 20%, o da frente (com a luva), um olho e mostra a costela. O braço voa com física e
+fica no chão. Ao perder um braço, e sozinho a cada 35–55 s, entra na **Fúria do Rei**: os olhos
+acendem, aura e notas, e por 6,5 s desvia de todos os tiros. Tem chapéu (voa quando ele cai), a
+pose com a mão na aba e o moonwalk com um pé na ponta e o outro deslizando.
+
+Som: tudo tem versão sintetizada (a trilha é ORIGINAL, funk 8 bits em mi menor). Se existir a pasta
+`public/sons/chefao/` com `trilha.mp3`, `hee-hee.mp3` e `gritos.mp3`, eles tocam no lugar — as vozes são
+cortadas do silêncio sozinhas, e a trilha começa em 1:25 (`INICIO_DA_TRILHA_S` = 85,1 s, colado num bumbo), a pedido. A pasta está no `.gitignore` (áudio de terceiros, só no localhost de quem
+testou); no deploy toca o sintetizado. Volume: operador (não super_admin) SEMPRE a 12% (era 50%; baixou em 09/10), super_admin a 100%
+do que já é baixo (`VOLUME_DO_OPERADOR` em `sons.ts`). Hee-hee no máximo 1 a cada 4 s e só em parte dos desvios; grito 1 a cada 7 s. Com o chefão na tela, TODO som da caça (tiro, ricochete, morte) vai nessa escala, não só os dele. Ao surgir, ele solta um hee-hee.
+
+**Fúria igual para todos:** a cada 40 s desde a chegada (`solta_em`) e quando a vida DO BANCO cruza a perda de um braço — nunca sorteada por tela.
+
+**Vida que cresce:** `vida_por_pessoa` — cada caçador novo (primeiro tiro) soma vida. Níveis em `DIFICULDADES` (`chefao.ts`): Fácil 300 + 150/pessoa, Médio 500 + 250, Difícil 800 + 400. Conta: ~1,8 de dano/s por pessoa × ~2,5 min úteis ≈ 250.
+
+**Esconder o chefão:** um X no MEIO da barra do topo (por cima da faixa), da contagem até o fim (`BotaoChefao.tsx`). Um clique esconde («Esconder o chefão»), outro mostra de novo («Mostrar o chefão»). Escondido, a pessoa não vê nem ouve nada dele; guardado por pessoa no navegador, vale também para o próximo.
+
+**Sangue:** manchas 15 s, braço no chão 25 s, a poça da morte dele 12 s + 8 s desbotando.
+
+**Contagem:** soltar o chefão começa 1 minuto de contagem na tela de todos (`ESPERA_S`). O banco grava a chegada em `solta_em` (`fn_chefao_soltar(vida, minutos, espera_s)`), recusa tiro antes dela, e o prazo de 5 min conta da chegada. Nos últimos 10 s, tique; nos últimos 5, o número grande no meio.
+
+Regras: corpo tira 1, cabeça 3. O banco aceita no máximo 12 acertos por lote e 1 lote a cada 600 ms
+por pessoa, e avisa todos no máximo a cada 2 s (sempre quando ele cai ou foge). Quem tira a
+última gota dá o GOLPE FINAL. Passou o prazo, ele foge no moonwalk. O desvio e a posição são da
+tela de cada um; só a vida e o ranking são de todos.
+
+**Testar no localhost:** `http://localhost:8080/?zumbis#/` → Laboratório → «Soltar o chefão»,
+«Robôs atirando», «Pular contagem», «Soltar sem contagem», «Arrancar 30%» (para ver os ferimentos), «Fugir». Nada vai para o banco.
+
+**Revisão de lançamento (09/10/2026) — para não derrubar o Realtime nem o banco:**
+
+- Aviso a cada 2 s (era 700 ms). Cada aviso vai a TODA aba logada, até a de quem escondeu o chefão: com ~150 abas eram ~210 mensagens/s na cota do Realtime (a mesma do chat e da presença); agora ~75. Quem atira não perde nada, porque a resposta do próprio lote já traz a vida de todos.
+- `fn_chefao_acertar` decide sem trava tudo o que não tira vida (prazo, contagem, freio, nome) e só depois entra na fila da linha. Na fila confere o freio de novo, escreve a linha uma vez só (`avisado_em` junto) e calcula o estado uma vez (o mesmo vai no aviso e na resposta). `lock_timeout` de 2 s: com o banco afogado, o lote falha em vez de prender conexão do app.
+- O freio responde `freio: true`, e o app devolve esses tiros ao próximo lote. Antes, eram perdidos em silêncio quando a rede juntava dois lotes.
+- No app: cada aba começa o relógio do lote num ponto sorteado do segundo (todas montam a cena com o mesmo aviso, então nasceriam alinhadas) e só tem um lote no ar por vez. A releitura «está quieto» acontece uma vez por silêncio, com sorteio, e nunca na contagem. Antes era a cada 4 s em toda aba, o que dava ~40 leituras/s no minuto da contagem.
+- `chefao.sql.test.ts` roda a migration num Postgres de verdade (PGlite) e atira nela.
+- Antes de soltar o primeiro: conferir no painel do Supabase o plano e a cota de mensagens do Realtime (Settings → Realtime / Usage).
+
+**O banquete — recuperar vida (09/10/2026):** botão «+ RECUPERAR VIDA» no placar, só para o super_admin (e «Recuperar vida» no Laboratório). `fn_chefao_curar` devolve 25% da vida máxima (no máximo o que falta), marca `cura_em`/`cura_ate` (12 s) e soma 12 s ao prazo. Em toda tela, ao mesmo tempo: uma pessoa (pixel art genérica, por partes, roupa sorteada pela `cura_semente`) entra andando e assobiando; ele segue dançando, PARA e a vê («!», «FOME!»), ela se assusta e congela («SOCORRO!»), ele corre (`CORRIDA`) e dá o bote; ela cai, e ele come (`BANQUETE`) arrancando braço, braço, perna, perna e cabeça (`DESMEMBRA` em `cenaChefao.tsx`; os pedaços voam e ficam no chão) e roendo o tronco até sobrar osso. A barra sobe a cada mordida, com «+N». IMUNE o tempo todo: a tela mostra «IMUNE!» e o banco devolve `curando: true` sem tirar vida. Erros: `JA_COMENDO`, `VIDA_CHEIA`, `AINDA_CHEGANDO`. Correr e comer ficam fora de `PASSOS` (o sorteio da dança nunca escolhe).
+
+**Autoclick (09/10/2026):** `autoclick.ts` ouve os cliques da página durante a luta e cada lote leva `p_cliques` e `p_suspeita` (bits: 1 ritmo de máquina, 2 rápido demais, 4 script — fortes; 8 botão sempre igual, 16 mouse parado — fracas). O banco soma em `chefao_golpes` (`cliques`, `lotes`, `suspeitas` = lotes com pista forte, `motivos`) e conta sozinho os lotes no teto de 12 (`lotes_no_teto`). Suspeito = script, ou 3+ lotes com pista forte, ou metade de 8+ lotes no teto. Só o super_admin vê (`fn_chefao_suspeitos`, Configurações → Geral → «Quem parece autoclick?»); fora do aviso e do ranking. Não tira dano de ninguém. Clique de script (`isTrusted` falso) nem vira tiro. No ensaio, o robô «Leandro Duarte» atira de autoclick.
+
+**Para ligar de verdade:** aplicar a migration (só com o «pode», regra do `CLAUDE.md`), depois
+Configurações → Geral → «Soltar o chefão».

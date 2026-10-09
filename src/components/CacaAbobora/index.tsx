@@ -12,14 +12,23 @@
  * quando há zumbi ou faixa. A regra inteira está em `caca.ts` e nas migrations
  * 20261005120000 e 20261007200000.
  *
+ * O chefão (o Rei do Pop zumbi, 09/10/2026) vem junto, dentro de
+ * `<AboboraDaCaca />`: a cena dele (`cenaChefao.tsx`) também só é baixada
+ * quando ele está na tela. A regra está em `chefao.ts` e na migration
+ * 20261009120000.
+ *
  * No localhost há ainda o laboratório (`?zumbis` no endereço): solta zumbis de
  * mentira, sem banco, para ver tudo funcionando. Fora do `npm run dev` ele nem
  * existe no pacote.
  */
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { comNovaTentativa } from '@/lib/sobDemanda';
+import { useAuthOpcional } from '@/hooks/useAuth';
 import { aboboraNaTela, faixaNaTela, useCacaAbobora } from './caca';
+import { EU_NO_ENSAIO, chefaoNaTela, useChefao, useChefaoDesligado } from './chefao';
+
+export { BotaoChefao } from './BotaoChefao';
 
 const carregarCena = comNovaTentativa(() => import('./cena'));
 
@@ -27,6 +36,9 @@ const carregarCena = comNovaTentativa(() => import('./cena'));
 const ALTURA_FAIXA = 32;
 const FaixaAbobora = lazy(() => carregarCena().then(m => ({ default: m.FaixaAbobora })));
 const CenaCaca     = lazy(() => carregarCena().then(m => ({ default: m.CenaCaca })));
+
+const carregarChefao = comNovaTentativa(() => import('./cenaChefao'));
+const CenaChefao = lazy(() => carregarChefao().then(m => ({ default: m.CenaChefao })));
 
 const Laboratorio = import.meta.env.DEV ? lazy(() => import('./laboratorio')) : null;
 const comLaboratorio = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('zumbis');
@@ -71,7 +83,31 @@ export function AboboraDaCaca({ empresaId }: { empresaId: string | null | undefi
           <CenaCaca rodada={caca.rodada} naTela={naTela} />
         </Suspense>
       )}
+      <ChefaoDaCaca />
       {Laboratorio && comLaboratorio() && <Suspense fallback={null}><Laboratorio /></Suspense>}
     </>
+  );
+}
+
+/**
+ * O chefão: montado quando ele aparece, e assim fica (com a chave da rodada)
+ * até ele cair ou fugir e o ranking fechar.
+ */
+function ChefaoDaCaca() {
+  const rodada = useChefao();
+  const auth = useAuthOpcional();
+  const usuario = auth?.user?.id ?? null;
+  const superAdmin = auth?.perfil?.perfil === 'super_admin';
+  // Quem escondeu o chefão (o X no meio da barra do topo) não vê nada dele.
+  const desligado = useChefaoDesligado(auth?.perfil?.id);
+  const ativo = chefaoNaTela(rodada, Date.now());
+  const [cena, setCena] = useState<number | null>(null);
+  useEffect(() => { if (ativo && rodada) setCena(rodada.id); }, [ativo, rodada]);
+  const acabar = useCallback(() => setCena(null), []);
+  if (!rodada || cena !== rodada.id || desligado) return null;
+  return (
+    <Suspense fallback={null}>
+      <CenaChefao key={rodada.id} rodada={rodada} eu={rodada.id < 0 ? EU_NO_ENSAIO : usuario} superAdmin={superAdmin} aoAcabar={acabar} />
+    </Suspense>
   );
 }
