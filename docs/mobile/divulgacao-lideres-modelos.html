@@ -253,6 +253,38 @@ img.peca { display: block; }
 .m-blo .url b { display: block; font-size: 25px; font-weight: 800; margin-top: 3px; color: #4fd18f; letter-spacing: -.01em; }
 .m-blo .url span { display: block; font-size: 15.5px; color: #cfdde1; margin-top: 6px; line-height: 1.35; }
 
+
+/* ═════════ 6 · DIRETO (2 + 5, letra grande) ═════════ */
+.m-dir { background: #f4f7f6; color: #0e1b26; font-family: var(--texto); }
+.m-dir::before { content: ''; position: absolute; left: -260px; top: 470px; width: 900px; height: 900px; border-radius: 50%; background: radial-gradient(circle, rgba(52,194,122,.20), transparent 65%); }
+.m-dir > * { position: absolute; }
+.m-dir .marca { left: 72px; top: 62px; display: flex; align-items: center; gap: 14px; font-size: 25px; font-weight: 700; }
+.m-dir .marca img { width: 54px; height: 54px; border-radius: 14px; }
+.m-dir .selo { right: 72px; top: 68px; font-size: 21px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: #1f6b5c; padding: 10px 20px; border-radius: 999px; }
+.m-dir h2 { left: 72px; top: 152px; margin: 0; font-family: var(--display); font-weight: 800; font-size: 96px; line-height: .96; letter-spacing: -.04em; }
+.m-dir h2 span { color: #1f6b5c; }
+.m-dir .sub { left: 74px; top: 354px; margin: 0; font-size: 33px; line-height: 1.25; color: #3e4f58; font-weight: 500; }
+.m-dir .sub b { color: #0e1b26; font-weight: 700; }
+.m-dir .fone { left: 82px; top: 497px; zoom: .88; }
+.m-dir .lado { left: 466px; top: 448px; width: 542px; display: flex; flex-direction: column; gap: 20px; }
+.m-dir .lado h3 { margin: 0 0 2px; display: flex; align-items: center; gap: 12px; font-family: var(--display); font-size: 42px; font-weight: 800; letter-spacing: -.02em; line-height: 1.05; }
+.m-dir .lado h3 svg { width: 38px; height: 38px; color: #1f6b5c; flex: none; }
+.m-dir .quando { margin: 0 0 9px 4px; display: flex; align-items: center; gap: 10px; font-size: 25px; font-weight: 700; color: #1f6b5c; }
+.m-dir .quando i { width: 10px; height: 10px; border-radius: 50%; background: #34c27a; box-shadow: 0 0 0 5px rgba(52,194,122,.2); flex: none; }
+.m-dir .ntg { display: grid; grid-template-columns: 58px 1fr; gap: 16px; align-items: start; background: #fff; border-radius: 26px; padding: 18px 20px 18px 18px;
+  box-shadow: 0 22px 44px -26px rgba(14,27,38,.35), 0 0 0 1px #e1e8eb; }
+.m-dir .ntg img { width: 58px; height: 58px; border-radius: 15px; }
+.m-dir .ntg small { display: flex; justify-content: space-between; font-size: 17px; color: #6a7784; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+.m-dir .ntg small span { text-transform: none; font-weight: 500; }
+.m-dir .ntg b { display: block; font-size: 26px; line-height: 1.2; margin-top: 2px; }
+.m-dir .ntg em { display: block; font-style: normal; font-size: 22px; line-height: 1.3; color: #3e4f58; margin-top: 2px; }
+.m-dir .pe { left: 72px; right: 72px; bottom: 54px; box-sizing: border-box; background: #0e1b26; color: #fff; border-radius: 28px; padding: 24px 30px; display: grid; grid-template-columns: 1fr auto; gap: 6px 24px; align-items: center; }
+.m-dir .pe small { grid-column: 1; font-size: 21px; color: #a9bcc4; }
+.m-dir .pe b { grid-column: 1; font-size: 40px; font-weight: 800; color: #4fd18f; letter-spacing: -.015em; line-height: 1.05; }
+.m-dir .pe ol { grid-column: 2; grid-row: 1 / span 2; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.m-dir .pe li { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; }
+.m-dir .pe li i { font-style: normal; width: 32px; height: 32px; border-radius: 50%; background: #4fd18f; color: #0e1b26; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 17px; }
+
 .ficticio { position: absolute; font-size: 12.5px; letter-spacing: .03em; z-index: 4; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
@@ -267,6 +299,7 @@ img.peca { display: block; }
       <button type="button" role="tab" data-m="car"><b>3</b>Cartoon</button>
       <button type="button" role="tab" data-m="det"><b>4</b>Detalhado</button>
       <button type="button" role="tab" data-m="blo"><b>5</b>Tela de bloqueio</button>
+      <button type="button" role="tab" data-m="dir"><b>6</b>Direto</button>
     </div>
   </header>
 
@@ -350,6 +383,30 @@ img.peca { display: block; }
         </div>
       </section>
       <div class="rodape"><span>Para instalar: abra <b>app.gestaodeacordos.com.br</b> no celular, toque em Instalar app e depois em Ativar avisos.</span><span>Valores fictícios</span></div>
+    </article>
+
+    <!-- 6 · Direto -->
+    <article class="peca m-dir" data-m="dir" hidden>
+      <div class="marca"><img data-icone alt="">Gestão de Acordos</div>
+      <div class="selo">Para líderes</div>
+      <h2>Sua equipe<br><span>no celular.</span></h2>
+      <p class="sub">Recebido, meta e projeção da <b>sua equipe</b>, ao longo do dia.</p>
+      <div class="fone fino" data-tela="equipe"></div>
+      <div class="lado">
+        <h3><span data-ic="bell"></span>E avisa na hora</h3>
+        <div><p class="quando"><i></i>Quando alguém bate meta</p>
+          <div class="ntg"><img data-icone alt=""><div><small>Acordos<span>agora</span></small><b>Ana Paula R. alcançou a 1ª meta</b><em>Equipe Aurora</em></div></div></div>
+        <div><p class="quando"><i></i>Quando a equipe bate a meta</p>
+          <div class="ntg"><img data-icone alt=""><div><small>Acordos<span>agora</span></small><b>Equipe Aurora alcançou a meta</b><em>Parabéns! Meta do mês concluída.</em></div></div></div>
+        <div><p class="quando"><i></i>A cada hora</p>
+          <div class="ntg"><img data-icone alt=""><div><small>Acordos<span>14:00</span></small><b>Equipe Aurora · R$ 2.860,00</b><em>Recebido hoje: R$ 11.240,00</em></div></div></div>
+      </div>
+      <div class="pe">
+        <small>Para instalar, abra no celular</small>
+        <b>app.gestaodeacordos.com.br</b>
+        <ol><li><i>1</i>Instalar app</li><li><i>2</i>Ativar avisos</li></ol>
+      </div>
+      <div class="ficticio" style="right:76px;bottom:20px;color:#8c9ba2;font-size:15px">Valores fictícios</div>
     </article>
 
     <!-- 5 · Tela de bloqueio -->
@@ -485,12 +542,13 @@ img.peca { display: block; }
     min: '<b>Minimalista</b>: fundo claro, muito respiro, um celular e um aviso só. Passa a ideia em dois segundos.',
     car: '<b>Cartoon</b>: amarelo, contornos grossos e balões de fala saindo do celular. Chama atenção no meio das conversas do WhatsApp.',
     det: '<b>Detalhado</b>: guia rápido. Cada parte da tela da equipe explicada com uma seta, e os três avisos com exemplo.',
-    blo: '<b>Tela de bloqueio</b>: o foco são as notificações. O celular aparece bloqueado, com os avisos chegando.'
+    blo: '<b>Tela de bloqueio</b>: o foco são as notificações. O celular aparece bloqueado, com os avisos chegando.',
+    dir: '<b>Direto</b>: o 2 com o 5. Letra grande, o print do app e os três avisos em cards grandes, que dá para ler mesmo pequeno no WhatsApp.'
   };
   var encaixe = document.getElementById('encaixe');
   var pecas = encaixe.querySelectorAll('.peca');
-  var atual = 'noite';
-  try { atual = localStorage.getItem('modelo-lideres') || 'noite'; } catch (e) {}
+  var atual = 'dir';
+  try { atual = localStorage.getItem('modelo-lideres-v2') || 'dir'; } catch (e) {}
   if (!DESC[atual]) atual = 'noite';
   function encaixar() {
     var topo = document.querySelector('.g-topo').getBoundingClientRect().bottom;
@@ -507,7 +565,7 @@ img.peca { display: block; }
     pecas.forEach(function (p) { p.hidden = p.dataset.m !== m; });
     document.querySelectorAll('.g-opcoes button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.m === m)); });
     document.getElementById('g-desc').innerHTML = DESC[m];
-    try { localStorage.setItem('modelo-lideres', m); } catch (e) {}
+    try { localStorage.setItem('modelo-lideres-v2', m); } catch (e) {}
     encaixar();
   }
   document.querySelectorAll('.g-opcoes button').forEach(function (b) { b.addEventListener('click', function () { mostrar(b.dataset.m); }); });
