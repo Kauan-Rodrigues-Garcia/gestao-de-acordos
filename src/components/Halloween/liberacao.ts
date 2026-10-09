@@ -30,14 +30,43 @@ interface Consulta extends PromiseLike<{ data: { liberado_em: string } | null; e
 }
 const tabela = () => (supabase.from as unknown as (t: string) => Consulta)('halloween_liberacao');
 
-async function ler(): Promise<void> {
+/**
+ * A resposta guardada no navegador (09/10/2026: a tabela, vazia, era lida 5
+ * mil vezes em 26 h — uma por carregamento de página). Liberado é para sempre:
+ * guardado, nunca mais se pergunta. «Ainda não» vale 5 min; enquanto a página
+ * está aberta, quem avisa a liberação é o sinal `permissoes`.
+ */
+const CHAVE_GUARDADA = 'halloween:liberacao';
+const VALIDADE_NAO_LIBERADO_MS = 5 * 60_000;
+
+function lerGuardada(): { liberadoEm: string | null; em: number } | null {
+  try {
+    const bruto = localStorage.getItem(CHAVE_GUARDADA);
+    if (!bruto) return null;
+    const v = JSON.parse(bruto) as { liberadoEm?: unknown; em?: unknown };
+    return { liberadoEm: typeof v.liberadoEm === 'string' ? v.liberadoEm : null, em: Number(v.em) || 0 };
+  } catch { return null; }
+}
+
+function guardar(valor: string | null): void {
+  try { localStorage.setItem(CHAVE_GUARDADA, JSON.stringify({ liberadoEm: valor, em: Date.now() })); } catch { /* sem armazenamento */ }
+}
+
+async function ler(forcar: boolean): Promise<void> {
+  const guardada = forcar ? null : lerGuardada();
+  if (guardada && (guardada.liberadoEm || Date.now() - guardada.em < VALIDADE_NAO_LIBERADO_MS)) {
+    if (guardada.liberadoEm !== liberadoEm) { liberadoEm = guardada.liberadoEm; avisar(); }
+    return;
+  }
   const { data, error } = await tabela().select('liberado_em').limit(1).maybeSingle();
-  const novo = error ? null : (data?.liberado_em ?? null);
+  if (error) return;
+  const novo = data?.liberado_em ?? null;
+  guardar(novo);
   if (novo !== liberadoEm) { liberadoEm = novo; avisar(); }
 }
 
 function carregar(forcar = false): Promise<void> {
-  if (!carregando || forcar) carregando = ler().catch((): void => undefined);
+  if (!carregando || forcar) carregando = ler(forcar).catch((): void => undefined);
   return carregando;
 }
 
@@ -71,6 +100,7 @@ export async function liberarHalloween(): Promise<{ erro: string | null }> {
   };
   const { data, error } = await cliente.rpc('fn_halloween_liberar');
   if (error) return { erro: error.message };
+  if (data) guardar(data);
   if (data && data !== liberadoEm) { liberadoEm = data; avisar(); }
   return { erro: null };
 }

@@ -131,7 +131,15 @@ export interface OuvinteTabela {
    * dados aqui.
    */
   onReconectado?: () => void;
+  /**
+   * O canal entrou (`conectado`), caiu (`caido` — a reconexão já está
+   * trabalhando) ou foi recusado pela RLS (`barrado`). Para indicador de tela;
+   * reler continua sendo trabalho do `onReconectado`.
+   */
+  onEstado?: (estado: EstadoCanal) => void;
 }
+
+export type EstadoCanal = 'conectado' | 'caido' | 'barrado';
 
 // ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -300,6 +308,7 @@ function criarCanal(topico: string, reg: Registro): void {
       limparTimers(reg);
       reg.tentativas = 0;
       reg.falhas     = 0;
+      avisarEstado(reg, 'conectado');
       if (reg.caiu) {
         reg.caiu = false;
         logger.info(`[realtime] ${topico}: reconectado`);
@@ -313,8 +322,10 @@ function criarCanal(topico: string, reg: Registro): void {
       // Recusa de permissão: insistir devolve a mesma recusa. Ver o cabeçalho.
       if (status === 'CHANNEL_ERROR' && ehRecusaDePermissao(err)) {
         barrar(topico, reg, err);
+        avisarEstado(reg, 'barrado');
         return;
       }
+      avisarEstado(reg, 'caido');
       /*
        * A PRIMEIRA falha de um ciclo não é defeito. Quando o WebSocket cai,
        * TODO canal aberto dispara `CHANNEL_ERROR` no mesmo instante, sempre com
@@ -334,9 +345,14 @@ function criarCanal(topico: string, reg: Registro): void {
     if (status === 'CLOSED') {
       // Fechado sem ser por nós: a biblioteca não reentra canal fechado.
       reg.caiu = true;
+      avisarEstado(reg, 'caido');
       agendarRecriacao(topico, reg);
     }
   });
+}
+
+function avisarEstado(reg: Registro, estado: EstadoCanal): void {
+  for (const ouvinte of [...reg.ouvintes]) ouvinte.onEstado?.(estado);
 }
 
 function avisarReconectado(topico: string, reg: Registro): void {

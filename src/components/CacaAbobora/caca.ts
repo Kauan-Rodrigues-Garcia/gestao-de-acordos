@@ -24,6 +24,7 @@
 import { useEffect, useReducer, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
+import { lerComCache } from '@/lib/cacheCurto';
 import { aceitarChefao, lerChefao } from './chefao';
 
 export type SituacaoRodada = 'solta' | 'achada' | 'sumiu';
@@ -203,13 +204,23 @@ async function lerUltima(): Promise<void> {
   if (!error && data) aceitarRodada(data, false);
 }
 
+/**
+ * A leitura de ENTRADA, guardada por 1 min e compartilhada (09/10/2026: 17 mil
+ * leituras em 26 h — cada troca de tela desmontava e remontava a faixa, e a
+ * remontagem relia). Depois de uma queda a releitura é sempre fresca
+ * (`lerUltima` direto): é ela que recupera o aviso perdido.
+ */
+function lerUltimaNaEntrada(): Promise<void> {
+  return lerComCache('caca:ultima-rodada', 60_000, lerUltima);
+}
+
 // Um canal por empresa, dividido por quem estiver ouvindo.
 const canais = new Map<string, { cancelar: () => void; usos: number }>();
 
 function assinar(empresaId: string): () => void {
   let canal = canais.get(empresaId);
   if (!canal) {
-    void lerUltima().catch((): void => undefined);
+    void lerUltimaNaEntrada().catch((): void => undefined);
     void lerChefao().catch((): void => undefined);
     // O chefão (`chefao.ts`) fala no mesmo tópico, com o sinal `chefao`.
     const cancelar = assinarTabela(

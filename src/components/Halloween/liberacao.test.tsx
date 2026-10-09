@@ -77,6 +77,8 @@ beforeEach(() => {
   banco.leituras = 0;
   banco.rpcs = [];
   banco.ouvintes.clear();
+  // A resposta fica guardada no navegador (09/10/2026): cada caso começa sem ela.
+  localStorage.clear();
 });
 
 describe('Liberar o Halloween para todos', () => {
@@ -158,6 +160,34 @@ describe('quem está logado quando o Halloween é liberado', () => {
     const { result } = renderHook(() => useHalloweenLiberado('emp-1'));
     await waitFor(() => expect(banco.leituras).toBe(1));
     expect(result.current).toBe(false);
+  });
+
+  it('liberado fica guardado no navegador: a próxima página nem pergunta', async () => {
+    banco.linha = { liberado_em: '2026-10-01T15:00:00Z' };
+    const primeira = await carregarModulos();
+    const a = renderHook(() => primeira.useHalloweenLiberado('emp-1'));
+    await waitFor(() => expect(a.result.current).toBe(true));
+    expect(banco.leituras).toBe(1);
+
+    // Outra carga de página (módulo novo): responde do guardado.
+    const segunda = await carregarModulos();
+    const b = renderHook(() => segunda.useHalloweenLiberado('emp-1'));
+    await waitFor(() => expect(b.result.current).toBe(true));
+    expect(banco.leituras).toBe(1);
+  });
+
+  it('«ainda não» guardado vale 5 min; depois pergunta de novo', async () => {
+    const agora = Date.now();
+    localStorage.setItem('halloween:liberacao', JSON.stringify({ liberadoEm: null, em: agora - 60_000 }));
+    const m1 = await carregarModulos();
+    renderHook(() => m1.useHalloweenLiberado('emp-1'));
+    await act(async () => { await Promise.resolve(); });
+    expect(banco.leituras).toBe(0);
+
+    localStorage.setItem('halloween:liberacao', JSON.stringify({ liberadoEm: null, em: agora - 6 * 60_000 }));
+    const m2 = await carregarModulos();
+    renderHook(() => m2.useHalloweenLiberado('emp-1'));
+    await waitFor(() => expect(banco.leituras).toBe(1));
   });
 
   it('a mensagem de outubro fica pendente para quem ainda não viu e não desligou', async () => {

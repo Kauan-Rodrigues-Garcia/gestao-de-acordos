@@ -34,6 +34,8 @@ const liso = (f: string) => fs.readFileSync(path.join(MIGRATIONS, f), 'utf8')
 const SAIRAM = [
   'comemoracoes', 'desafios', 'desafios_setores', 'direto_extra_config', 'perfis',
   'comissao_config', 'comissao_faixas', 'comissao_config_usuarios', 'comissao_bonus', 'comissao_bonus_usuarios',
+  // 20261009220000: aviso com os ids, relidos com a RLS de quem ouve.
+  'acordos',
 ];
 
 describe('tempo real das configurações vai pelo sinal', () => {
@@ -55,7 +57,7 @@ describe('tempo real das configurações vai pelo sinal', () => {
 
   it('a migration tira as dez tabelas da publicação e cria os 27 gatilhos', () => {
     const sql = liso('20261009201000_sinais_das_configuracoes.sql');
-    for (const t of SAIRAM) expect(sql).toContain(`'${t}'`);
+    for (const t of SAIRAM.filter(x => x !== 'acordos')) expect(sql).toContain(`'${t}'`);
     expect(sql).toContain('ALTER PUBLICATION supabase_realtime DROP TABLE public.%I');
     expect(sql).toContain('<> 27 THEN');
   });
@@ -71,6 +73,23 @@ describe('tempo real das configurações vai pelo sinal', () => {
     expect(sql).toContain('SELECT unnest(n.empresas) FROM novas n');
     expect(sql).toContain("'public.fn_realtime_sinal_comissao_filhas(''config_id'')'");
     expect(sql).toContain("'public.fn_realtime_sinal_comissao_filhas(''bonus_id'')'");
+  });
+});
+
+describe('acordos: o aviso não leva conteúdo', () => {
+  const sql = liso('20261009220000_acordos_pelo_sinal.sql');
+  it('o payload é só operação e ids (ou recarregar)', () => {
+    expect(sql).toContain("jsonb_build_object('operacao', tg_op, 'ids', r.ids)");
+    expect(sql).toContain("jsonb_build_object('operacao', tg_op, 'recarregar', true)");
+    // Nenhum campo do acordo além de id/empresa/operador entra na montagem.
+    expect(sql).not.toMatch(/nome_cliente|nr_cliente|valor|whatsapp/);
+  });
+  it('o tópico da empresa exige escopo além de «os meus»', () => {
+    expect(sql).toContain('(SELECT public.fn_user_escopo_acordos()) >= 1');
+    expect(sql).toContain("= 'acordos-op'::text) AND (SELECT public.fn_realtime_posso_ouvir_usuario(");
+  });
+  it('acordos sai da publicação', () => {
+    expect(sql).toContain('ALTER PUBLICATION supabase_realtime DROP TABLE public.acordos');
   });
 });
 
