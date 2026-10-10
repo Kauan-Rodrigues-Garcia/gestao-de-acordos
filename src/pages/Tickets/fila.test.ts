@@ -17,7 +17,7 @@ import type { Ticket } from '@/services/tickets.service';
 import {
   contarSegmentos, filtrarFila, ordenarFila, agruparFila, estaParado,
   temperatura, tempoSemMovimento, textoDeIdade, pertenceAoSegmento,
-  CRITERIOS_VAZIOS, LIMITE_PARADO_MS,
+  fracaoDoPavio, textoDoLimite, CRITERIOS_VAZIOS, LIMITE_PARADO_MS,
 } from './fila';
 
 const AGORA = Date.parse('2026-08-23T12:00:00Z');
@@ -293,5 +293,31 @@ describe('textoDeIdade', () => {
     expect(textoDeIdade(3 * HORA)).toBe('há 3 h');
     expect(textoDeIdade(2 * 24 * HORA)).toBe('há 2 d');
     expect(textoDeIdade(45 * 24 * HORA)).toBe('há 1 mês');
+  });
+});
+
+// ── Pavio ────────────────────────────────────────────────────────────────────
+
+describe('fracaoDoPavio', () => {
+  const parado = (h: number, p: Partial<Ticket> = {}) =>
+    ticket({ atualizadoEm: new Date(AGORA - h * HORA).toISOString(), ...p });
+
+  it('queima na proporção do limite da prioridade', () => {
+    expect(fracaoDoPavio(parado(4, { prioridade: 'alta' }), AGORA)).toBeCloseTo(0.5); // 4 h de 8 h
+    expect(fracaoDoPavio(parado(1, { prioridade: 'urgente' }), AGORA)).toBeCloseTo(0.5); // 1 h de 2 h
+  });
+
+  it('para em 1 quando passou do limite — a cor é que diz que passou', () => {
+    expect(fracaoDoPavio(parado(50, { prioridade: 'normal' }), AGORA)).toBe(1);
+  });
+
+  it('encerrado não tem pavio', () => {
+    expect(fracaoDoPavio(parado(500, { status: 'concluido' }), AGORA)).toBe(0);
+  });
+
+  it('o limite vira texto de gente', () => {
+    expect(textoDoLimite('urgente')).toBe('2 h');
+    expect(textoDoLimite('normal')).toBe('1 d');
+    expect(textoDoLimite('baixa')).toBe('3 d');
   });
 });

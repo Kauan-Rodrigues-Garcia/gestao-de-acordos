@@ -93,25 +93,21 @@ export function QuadroTickets({
               soltar(status, e.dataTransfer.getData('text/plain'));
             }}
             className={cn(
-              'flex flex-col min-h-0 w-64 md:w-72 shrink-0 rounded-xl border transition-colors',
+              'flex flex-col min-h-0 w-72 shrink-0 rounded-xl border transition-colors',
               ehAlvo
-                ? 'border-primary bg-primary/5'
-                : 'border-border/70 bg-muted/30',
+                ? 'border-primary border-dashed bg-primary/[0.06]'
+                : 'border-transparent bg-muted/50',
             )}
           >
-            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/70">
-              <span className={cn(
-                'text-[11px] px-1.5 py-0.5 rounded-full border leading-none',
-                STATUS_TICKET[status].cor,
-              )}>
-                {STATUS_TICKET[status].label}
-              </span>
-              <span className="ml-auto text-xs font-mono text-muted-foreground tabular-nums">
+            <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', STATUS_TICKET[status].ponto)} />
+              <span className="text-sm font-semibold">{STATUS_TICKET[status].label}</span>
+              <span className="rounded-full bg-background px-1.5 font-mono text-[11px] leading-5 text-muted-foreground tabular-nums">
                 {daColuna.length}
               </span>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+            <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-2">
               {daColuna.map(t => (
                 <CartaoTicket
                   key={t.id}
@@ -131,7 +127,7 @@ export function QuadroTickets({
 
               {!daColuna.length && (
                 // Coluna vazia sem explicação parece defeito de carregamento.
-                <p className="text-[11px] text-muted-foreground/70 text-center px-2 py-6 leading-relaxed">
+                <p className="rounded-lg border border-dashed border-border text-[11px] text-muted-foreground text-center px-3 py-6 leading-relaxed">
                   {VAZIO_DA_COLUNA[status]}
                 </p>
               )}

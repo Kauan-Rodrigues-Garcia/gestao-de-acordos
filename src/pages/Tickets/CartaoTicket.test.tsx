@@ -139,4 +139,18 @@ describe('<CartaoTicket />', () => {
     );
     expect(screen.getByText(/PaguePlay/)).toBeInTheDocument();
   });
+  it('o pavio queima na proporção do limite da prioridade', () => {
+    const { container } = montar(ticket({
+      prioridade: 'alta', atualizadoEm: new Date(AGORA - 4 * HORA).toISOString(),
+    }));
+    const aceso = container.querySelector<HTMLElement>('.tk-pavio > i');
+    expect(aceso?.style.getPropertyValue('--pavio')).toBe('0.500'); // 4 h de 8 h
+  });
+
+  it('ticket encerrado não tem pavio aceso', () => {
+    const { container } = montar(ticket({
+      status: 'concluido', atualizadoEm: new Date(AGORA - 90 * HORA).toISOString(),
+    }));
+    expect(container.querySelector('.tk-pavio > i')).toBeNull();
+  });
 });

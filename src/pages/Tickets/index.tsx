@@ -38,17 +38,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Plus, ShieldCheck, Inbox, Loader2, Search, Rows3, Columns3, X,
+  Plus, ShieldCheck, Inbox, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ItemVivo } from '@/components/LinhaViva';
 import { iguaisProfundo } from '@/lib/dadosVivos';
 import { chaveDeCache, lerInstantaneo, gravarInstantaneo } from '@/lib/cacheInstantaneo';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -62,22 +58,21 @@ import {
   listarTickets, buscarFotosDosPerfis, mudarStatus, type Ticket,
 } from '@/services/tickets.service';
 import {
-  STATUS_TICKET, ORDEM_STATUS, PRIORIDADES, CATEGORIAS, rotuloCategoria,
+  STATUS_TICKET, PRIORIDADES, rotuloCategoria,
   type StatusTicket, type PrioridadeTicket,
 } from './categorias';
 import {
   filtrarFila, ordenarFila, agruparFila, contarSegmentos, textoDeIdade,
-  ORDENS, CRITERIOS_VAZIOS,
+  CRITERIOS_VAZIOS,
   type Segmento, type Ordem, type Agrupamento, type CriteriosFila,
 } from './fila';
 import { CartaoTicket } from './CartaoTicket';
 import { ResumoFila } from './ResumoFila';
 import { QuadroTickets } from './QuadroTickets';
+import { BarraFiltros, type Visao } from './BarraFiltros';
 import NovoTicketDialog from './NovoTicketDialog';
 import DetalheTicket from './DetalheTicket';
 import PainelAtendentes from './PainelAtendentes';
-
-type Visao = 'fila' | 'quadro';
 
 /** Onde ficam as preferências de exibição. Não é dado — é gosto de quem usa. */
 const CHAVE_PREFERENCIAS = 'tickets:preferencias:v1';
@@ -181,9 +176,15 @@ export default function Tickets() {
     catch { /* modo privado; a tela funciona sem lembrar do gosto */ }
   }, [preferencias]);
 
-  function mudar<K extends keyof CriteriosFila>(campo: K, valor: CriteriosFila[K]): void {
+  const mudar = useCallback(<K extends keyof CriteriosFila>(campo: K, valor: CriteriosFila[K]): void => {
     setCriterios(c => ({ ...c, [campo]: valor }));
-  }
+  }, []);
+
+  // Limpar tira os filtros e a busca, mas fica no recorte: quem está em
+  // «Comigo» e limpa os filtros quer ver tudo o que é seu, não a fila inteira.
+  const limpar = useCallback(() => {
+    setCriterios(c => ({ ...CRITERIOS_VAZIOS, segmento: c.segmento }));
+  }, []);
 
   /*
    * O relógio da tela.
@@ -330,6 +331,13 @@ export default function Tickets() {
     criterios.busca.trim() !== '' || !!criterios.status || !!criterios.categoria
     || !!criterios.prioridade || !!criterios.responsavel || !!criterios.empresaId;
 
+  const definirVisao = (v: Visao) => {
+    setPreferencias(p => ({ ...p, visao: v }));
+    // O quadro divide a largura em quatro colunas; com um ticket aberto ao
+    // lado não sobraria espaço para nenhuma delas.
+    if (v === 'quadro') fechar();
+  };
+
   return (
     // `p-4 md:p-6`: o `<main>` do Layout não tem respiro próprio — cada tela põe
     // o dela. A altura desconta esse padding além do cabeçalho, senão a lista
@@ -337,26 +345,26 @@ export default function Tickets() {
     <div className="flex flex-col h-[calc(100vh-7rem)] md:h-[calc(100vh-8rem)] min-h-0 p-4 md:p-6 gap-3">
 
       {/* ── Cabeçalho ────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold leading-tight">Tickets</h1>
-          <p className="text-xs text-muted-foreground">
+          <h1 className="text-xl font-semibold tracking-tight leading-tight">Tickets</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
             {acesso.podeAtender
-              ? 'Você resolve tickets. Assuma o que for seu para receber as mensagens dele.'
+              ? 'Assuma o que for seu para receber as mensagens dele.'
               : 'Seus pedidos e os do seu setor.'}
-            {atualizadoEm && (
-              <span className="ml-1.5 text-muted-foreground/70">
-                · atualizado {textoDeIdade(Math.max(0, agora - atualizadoEm))}
-                {atualizando && ' · buscando…'}
-              </span>
-            )}
           </p>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {atualizadoEm && (
+            <span className="hidden sm:inline text-[11px] text-muted-foreground/80 mr-1">
+              {atualizando ? 'buscando…' : `atualizado ${textoDeIdade(Math.max(0, agora - atualizadoEm))}`}
+            </span>
+          )}
           {acesso.podeAtender && (
-            <Button variant="outline" size="sm" className="gap-1.5"
-              onClick={() => setPainelAberto(true)}>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5"
+              onClick={() => setPainelAberto(true)}
+              title="Quem vê a aba e quem resolve tickets">
               <ShieldCheck className="w-4 h-4" />
               <span className="hidden sm:inline">
                 {acesso.liberadoParaLideranca ? 'Aba liberada' : 'Aba fechada'}
@@ -364,14 +372,14 @@ export default function Tickets() {
             </Button>
           )}
           {acesso.podeAbrir && (
-            <Button size="sm" className="gap-1.5" onClick={() => setNovoAberto(true)}>
+            <Button size="sm" className="h-9 gap-1.5" onClick={() => setNovoAberto(true)}>
               <Plus className="w-4 h-4" /> Novo ticket
             </Button>
           )}
         </div>
       </div>
 
-      {/* ── Contadores, que também são o filtro ──────────────────────────── */}
+      {/* ── Recortes (contador e filtro ao mesmo tempo) ──────────────────── */}
       <ResumoFila
         contagem={contagem}
         segmento={criterios.segmento}
@@ -379,124 +387,21 @@ export default function Tickets() {
         carregando={carregando}
       />
 
-      {/* ── Filtros e modo de exibição ───────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border">
-        <div className="relative flex-1 min-w-[10rem] max-w-sm">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={buscaRef}
-            value={criterios.busca}
-            onChange={e => mudar('busca', e.target.value)}
-            placeholder="Buscar por número, assunto ou pessoa…"
-            className="h-8 pl-8 pr-7 text-xs"
-          />
-          {criterios.busca && (
-            <button
-              onClick={() => mudar('busca', '')}
-              title="Limpar busca"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        <SeletorCurto
-          valor={criterios.status ?? 'todos'}
-          onMudar={v => mudar('status', v === 'todos' ? null : v as StatusTicket)}
-          rotuloVazio="Todo estado"
-          largura="w-36"
-          opcoes={ORDEM_STATUS.map(s => ({ valor: s, label: STATUS_TICKET[s].label }))}
-        />
-
-        <SeletorCurto
-          valor={criterios.categoria ?? 'todos'}
-          onMudar={v => mudar('categoria', v === 'todos' ? null : v)}
-          rotuloVazio="Toda categoria"
-          largura="w-40"
-          /* Todas as categorias, e não só as do produto (`categoriasDoProduto`,
-             que o formulário usa). O formulário decide o que se pode ABRIR
-             hoje; o filtro precisa alcançar o que já foi aberto — inclusive um
-             chamado gravado numa categoria que o produto desta empresa deixou
-             de oferecer. Uma categoria a mais no filtro devolve zero linhas; um
-             ticket fora de toda opção do filtro fica inalcançável. */
-          opcoes={CATEGORIAS.map(c => ({ valor: c.key, label: c.label }))}
-        />
-
-        <SeletorCurto
-          valor={criterios.prioridade ?? 'todos'}
-          onMudar={v => mudar('prioridade', v === 'todos' ? null : v as PrioridadeTicket)}
-          rotuloVazio="Toda prioridade"
-          largura="w-36"
-          opcoes={(Object.keys(PRIORIDADES) as PrioridadeTicket[])
-            .map(p => ({ valor: p, label: PRIORIDADES[p].label }))}
-        />
-
-        {responsaveis.length > 0 && (
-          <SeletorCurto
-            valor={criterios.responsavel ?? 'todos'}
-            onMudar={v => mudar('responsavel', v === 'todos' ? null : v)}
-            rotuloVazio="Qualquer responsável"
-            largura="w-44"
-            opcoes={[
-              { valor: 'ninguem', label: 'Sem responsável' },
-              ...responsaveis.map(r => ({ valor: r.id, label: r.nome })),
-            ]}
-          />
-        )}
-
-        {veDuasEmpresas && empresas.length > 1 && (
-          <SeletorCurto
-            valor={criterios.empresaId ?? 'todos'}
-            onMudar={v => mudar('empresaId', v === 'todos' ? null : v)}
-            rotuloVazio="As duas empresas"
-            largura="w-40"
-            opcoes={empresas.map(e => ({ valor: e.id, label: e.nome }))}
-          />
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <SeletorCurto
-            valor={preferencias.ordem}
-            onMudar={v => setPreferencias(p => ({ ...p, ordem: v as Ordem }))}
-            largura="w-44"
-            opcoes={ORDENS.map(o => ({ valor: o.chave, label: o.label }))}
-          />
-
-          {preferencias.visao === 'fila' && (
-            <SeletorCurto
-              valor={preferencias.agrupar}
-              onMudar={v => setPreferencias(p => ({ ...p, agrupar: v as Agrupamento }))}
-              largura="w-40"
-              opcoes={[
-                { valor: 'nenhum',     label: 'Sem agrupar' },
-                { valor: 'status',     label: 'Agrupar por estado' },
-                { valor: 'prioridade', label: 'Agrupar por prioridade' },
-                { valor: 'categoria',  label: 'Agrupar por categoria' },
-              ]}
-            />
-          )}
-
-          {/* O quadro divide a largura em quatro colunas; com um ticket aberto
-              ao lado não sobraria espaço para nenhuma delas. */}
-          <div className="flex rounded-md border border-border overflow-hidden">
-            <BotaoVisao
-              ativo={preferencias.visao === 'fila'}
-              onClick={() => setPreferencias(p => ({ ...p, visao: 'fila' }))}
-              titulo="Ver como fila"
-            >
-              <Rows3 className="w-3.5 h-3.5" />
-            </BotaoVisao>
-            <BotaoVisao
-              ativo={preferencias.visao === 'quadro'}
-              onClick={() => { setPreferencias(p => ({ ...p, visao: 'quadro' })); fechar(); }}
-              titulo="Ver como quadro"
-            >
-              <Columns3 className="w-3.5 h-3.5" />
-            </BotaoVisao>
-          </div>
-        </div>
-      </div>
+      {/* ── Busca, filtros e modo ────────────────────────────────────────── */}
+      <BarraFiltros
+        criterios={criterios}
+        mudar={mudar}
+        limpar={limpar}
+        buscaRef={buscaRef}
+        responsaveis={responsaveis}
+        empresas={veDuasEmpresas ? empresas : []}
+        ordem={preferencias.ordem}
+        onOrdem={o => setPreferencias(p => ({ ...p, ordem: o }))}
+        agrupar={preferencias.agrupar}
+        onAgrupar={a => setPreferencias(p => ({ ...p, agrupar: a }))}
+        visao={preferencias.visao}
+        onVisao={definirVisao}
+      />
 
       {/* ── Corpo ────────────────────────────────────────────────────────── */}
       {preferencias.visao === 'quadro' && !aberto ? (
@@ -511,45 +416,50 @@ export default function Tickets() {
         />
       ) : (
         <div className="flex flex-1 min-h-0 gap-4">
-          {/* Lista */}
+          {/* Lista: uma superfície só, com as linhas dentro. A largura dela é
+              que decide a forma da linha (`tickets.css`). */}
           <div className={cn(
-            'flex flex-col min-h-0',
-            aberto ? 'hidden md:flex md:w-80 lg:w-96' : 'flex-1',
+            'tk-lista flex flex-col min-h-0 rounded-xl border border-border bg-card overflow-hidden',
+            aberto ? 'hidden md:flex md:w-[22rem] lg:w-[26rem] shrink-0' : 'flex-1',
           )}>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1.5">
+            <div className="flex-1 overflow-y-auto">
               {carregando && <EsqueletoFila />}
 
               {listaVazia && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Inbox className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">
-                    {temFiltro ? 'Nenhum ticket com esse recorte.' : 'Nenhum ticket por aqui.'}
+                <div className="flex flex-col items-center text-center px-6 py-16 text-muted-foreground">
+                  <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                    <Inbox className="w-5 h-5 opacity-60" />
+                  </span>
+                  <p className="text-sm font-medium text-foreground">
+                    {temFiltro ? 'Nenhum ticket com esse recorte' : TEXTO_VAZIO[criterios.segmento]}
                   </p>
-                  {temFiltro && (
-                    <Button variant="ghost" size="sm" className="mt-2 text-xs"
-                      onClick={() => setCriterios({ ...CRITERIOS_VAZIOS, segmento: criterios.segmento })}>
+                  {temFiltro ? (
+                    <Button variant="link" size="sm" className="mt-1 text-xs" onClick={limpar}>
                       Limpar filtros
+                    </Button>
+                  ) : acesso.podeAbrir && criterios.segmento === 'fila' && (
+                    <Button variant="link" size="sm" className="mt-1 text-xs" onClick={() => setNovoAberto(true)}>
+                      Abrir um ticket
                     </Button>
                   )}
                 </div>
               )}
 
               {grupos.map(grupo => (
-                <div key={grupo.chave || 'unico'} className="space-y-2">
+                <div key={grupo.chave || 'unico'}>
                   {preferencias.agrupar !== 'nenhum' && (
-                    <div className="flex items-center gap-2 pt-1.5 first:pt-0">
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-muted px-4 py-1.5 md:pl-5">
+                      <span className="text-[11px] font-semibold text-foreground/80">
                         {rotuloDoGrupo(preferencias.agrupar, grupo.chave)}
                       </span>
-                      <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+                      <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
                         {grupo.tickets.length}
                       </span>
-                      <span className="flex-1 h-px bg-border" />
                     </div>
                   )}
 
                   {/* `initial={false}` cobre a primeira pintura; `novos` cobre
-                      o resto. Juntos, só se mexe o cartão que acabou de chegar. */}
+                      o resto. Juntos, só se mexe a linha que acabou de chegar. */}
                   <AnimatePresence initial={false}>
                     {grupo.tickets.map(t => (
                       <ItemVivo key={t.id} nova={novos.has(t.id)}>
@@ -568,11 +478,18 @@ export default function Tickets() {
                 </div>
               ))}
             </div>
+
+            {!carregando && visiveis.length > 0 && (
+              <div className="border-t border-border px-4 py-1.5 md:pl-5 text-[11px] text-muted-foreground">
+                {visiveis.length === 1 ? '1 ticket' : `${visiveis.length} tickets`}
+                {temFiltro && ' neste recorte'}
+              </div>
+            )}
           </div>
 
           {/* Ticket aberto */}
           {aberto && (
-            <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden">
+            <div className="flex-1 min-w-0 min-h-0 rounded-xl border border-border bg-card overflow-hidden">
               <DetalheTicket
                 ticket={aberto}
                 podeAtender={acesso.podeAtender}
@@ -588,7 +505,11 @@ export default function Tickets() {
       )}
 
       <NovoTicketDialog aberto={novoAberto} onFechar={() => setNovoAberto(false)}
-        onCriado={() => { void recarregar(); }} />
+        onCriado={id => {
+          // Quem acabou de abrir quase sempre tem um print para mandar: o
+          // ticket novo já abre ao lado, com a caixa de mensagem pronta.
+          void recarregar().then(() => { if (id) abrir(id); });
+        }} />
       <PainelAtendentes aberto={painelAberto} onFechar={() => setPainelAberto(false)}
         liberado={acesso.liberadoParaLideranca}
         onMudou={() => { acesso.recarregar(); void recarregar(); }} />
@@ -596,56 +517,17 @@ export default function Tickets() {
   );
 }
 
+/** A frase da lista vazia SEM filtro: o recorte vazio também é notícia. */
+const TEXTO_VAZIO: Record<Segmento, string> = {
+  fila:       'Nada na fila. Tudo respondido.',
+  meus:       'Nada com você agora.',
+  sem_dono:   'Todo ticket aberto tem alguém cuidando.',
+  parados:    'Nada parado além do limite.',
+  encerrados: 'Nenhum ticket encerrado ainda.',
+  todos:      'Nenhum ticket por aqui.',
+};
+
 // ── Peças pequenas ───────────────────────────────────────────────────────────
-
-/**
- * Um seletor de uma linha, com a opção "tudo" embutida.
- *
- * Existe porque a barra tem seis deles e o `<Select>` cru pede oito linhas de
- * JSX cada. `'todos'` é o valor sentinela: o Radix não aceita `value=""` num
- * `SelectItem` — ele o reserva para "sem seleção" e o item simplesmente não
- * aparece na lista.
- */
-function SeletorCurto({
-  valor, onMudar, opcoes, rotuloVazio, largura = 'w-36',
-}: {
-  valor: string;
-  onMudar: (v: string) => void;
-  opcoes: { valor: string; label: string }[];
-  rotuloVazio?: string;
-  largura?: string;
-}) {
-  return (
-    <Select value={valor} onValueChange={onMudar}>
-      <SelectTrigger className={cn('h-8 text-xs', largura)}><SelectValue /></SelectTrigger>
-      <SelectContent className="max-h-72">
-        {rotuloVazio && <SelectItem value="todos">{rotuloVazio}</SelectItem>}
-        {opcoes.map(o => (
-          <SelectItem key={o.valor} value={o.valor}>{o.label}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function BotaoVisao({
-  ativo, onClick, titulo, children,
-}: { ativo: boolean; onClick: () => void; titulo: string; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={titulo}
-      aria-pressed={ativo}
-      className={cn(
-        'px-2.5 py-1.5 transition-colors',
-        ativo ? 'bg-primary text-primary-foreground' : 'bg-transparent hover:bg-accent',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
 
 /**
  * O esqueleto da PRIMEIRA carga, e só dela.
@@ -656,17 +538,16 @@ function BotaoVisao({
  */
 function EsqueletoFila() {
   return (
-    <div className="space-y-2" aria-hidden="true">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="rounded-lg border border-border p-3 animate-pulse">
-          <div className="flex gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
-            <div className="flex-1 space-y-2">
-              <div className="h-2.5 w-24 rounded bg-muted" />
-              <div className="h-3.5 w-3/4 rounded bg-muted" />
-              <div className="h-2.5 w-1/2 rounded bg-muted/60" />
-            </div>
+    <div aria-hidden="true">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="border-b border-border px-4 py-3 md:pl-5 animate-pulse space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="h-2.5 w-10 rounded bg-muted" />
+            <div className="h-2.5 w-20 rounded bg-muted" />
+            <div className="ml-auto h-2.5 w-10 rounded bg-muted" />
           </div>
+          <div className="h-3.5 rounded bg-muted" style={{ width: `${55 + ((i * 37) % 35)}%` }} />
+          <div className="h-2.5 w-1/3 rounded bg-muted/60" />
         </div>
       ))}
     </div>

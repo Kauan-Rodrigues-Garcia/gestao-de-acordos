@@ -1,0 +1,66 @@
+/*
+ * Tickets — a geometria da linha e o pavio. Cor fica nas classes do Tailwind
+ * (que acompanham o tema); aqui mora só o que é forma.
+ *
+ * ## Uma linha, duas formas
+ *
+ * A mesma marcação serve à lista larga e à lista estreita (com o ticket aberto
+ * ao lado), por consulta de CONTÊINER e não de tela: o que decide é a largura
+ * da lista, que muda sem a tela mudar. Larga, é uma linha de tabela — número,
+ * estado, assunto, quem está com ele, idade. Estreita, empilha em três linhas.
+ */
+
+.tk-lista { container-type: inline-size; }
+
+.tk-linha-grade {
+  display: grid;
+  align-items: center;
+  column-gap: .75rem;
+  row-gap: .2rem;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  /* A origem atravessa a coluna flexível: item que cruza só colunas
+     automáticas estica essas colunas até caber, e empurrava o responsável. */
+  grid-template-areas:
+    'num estado prio idade'
+    'assunto assunto assunto assunto'
+    'origem origem origem dono';
+}
+.tk-num     { grid-area: num; }
+.tk-estado  { grid-area: estado; }
+.tk-prio    { grid-area: prio; }
+.tk-idade   { grid-area: idade; justify-self: end; }
+.tk-assunto { grid-area: assunto; min-width: 0; }
+.tk-origem  { grid-area: origem; min-width: 0; }
+.tk-dono    { grid-area: dono; justify-self: end; min-width: 0; }
+
+@container (min-width: 46rem) {
+  .tk-linha-grade {
+    row-gap: .1rem;
+    grid-template-columns: 3.75rem 8.25rem minmax(0, 1fr) 11rem 4.75rem;
+    grid-template-areas:
+      'num estado assunto dono idade'
+      'num prio   origem  dono idade';
+  }
+  .tk-dono { justify-self: start; }
+}
+
+/* No quadro a coluna já diz o estado: a linha de cima fica só número e idade. */
+.tk-quadro .tk-linha-grade {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'num prio idade'
+    'assunto assunto assunto'
+    'origem origem origem'
+    'dono dono dono';
+}
+.tk-quadro .tk-dono { justify-self: start; }
+
+/*
+ * O pavio: a divisória da linha queima da esquerda para a direita conforme o
+ * tempo sem movimento chega no limite da prioridade (`fracaoDoPavio`). A
+ * largura entra por `--pavio` (0 a 1) num `scale`, que a placa de vídeo compõe
+ * sem refazer o layout quando o relógio da tela anda.
+ */
+.tk-pavio { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; pointer-events: none; }
+.tk-pavio > i { position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--pavio, 0)); border-radius: 0 2px 2px 0; }
+.tk-quadro .tk-pavio { left: 10px; right: 10px; bottom: 6px; border-radius: 2px; overflow: hidden; }

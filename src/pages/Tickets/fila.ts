@@ -115,6 +115,27 @@ export function temperatura(t: Ticket, agora = Date.now()): Temperatura {
   return 'em_dia';
 }
 
+/**
+ * O pavio: quanto do tempo sem movimento que a prioridade tolera já queimou.
+ *
+ * 0 é «acabou de andar», 1 é «chegou no limite» — e para em 1, porque passar
+ * do limite já é dito pela cor (`temperatura`), e um pavio que estoura a linha
+ * não diria nada a mais. Encerrado não tem pavio: ele chegou onde ia.
+ *
+ * É o que a linha da fila desenha na própria divisória (ver `CartaoTicket`),
+ * para «o que está apodrecendo?» ser respondido de relance, sem abrir nada.
+ */
+export function fracaoDoPavio(t: Ticket, agora = Date.now()): number {
+  if (estaFechado(t)) return 0;
+  return Math.min(1, tempoSemMovimento(t, agora) / LIMITE_PARADO_MS[t.prioridade]);
+}
+
+/** «8 h», «3 d»: o limite da prioridade, para a frase do pavio. */
+export function textoDoLimite(p: PrioridadeTicket): string {
+  const horas = LIMITE_PARADO_MS[p] / HORA;
+  return horas < 24 ? `${horas} h` : `${horas / 24} d`;
+}
+
 // ── Segmentação ──────────────────────────────────────────────────────────────
 
 export function pertenceAoSegmento(

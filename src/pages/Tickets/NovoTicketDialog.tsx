@@ -26,15 +26,18 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { abrirTicket } from '@/services/tickets.service';
+import { cn } from '@/lib/utils';
 import {
-  categoriasDoProduto, ABAS_DO_SISTEMA, PRIORIDADES,
+  categoriasDoProduto, ABAS_DO_SISTEMA, PRIORIDADES, ORDEM_PRIORIDADE,
   type CampoCategoria, type PrioridadeTicket,
 } from './categorias';
+import { iconeDaCategoria } from './icones';
 
 interface Props {
   aberto: boolean;
   onFechar: () => void;
-  onCriado: () => void;
+  /** Recebe o id do ticket novo: a tela o abre na hora. */
+  onCriado: (id: string | null) => void;
 }
 
 interface Opcao { id: string; nome: string; foto?: string | null }
@@ -129,7 +132,7 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
       });
       if (r.erro) { toast.error(r.erro); return; }
       toast.success('Ticket aberto. Quem atende já foi notificado.');
-      limpar(); onCriado(); onFechar();
+      limpar(); onCriado(r.id); onFechar();
     } finally { setSalvando(false); }
   }
 
@@ -171,69 +174,103 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle>Novo ticket</DialogTitle>
           <DialogDescription>
-            A liderança do seu setor acompanha este ticket. Os campos extras são opcionais —
-            o que faltar dá para conversar no chat, com print e áudio.
+            A liderança do seu setor acompanha este ticket. Depois de abrir, ele já fica aberto
+            na tela: dá para colar o print direto na conversa.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Categoria</Label>
-            <Select value={categoria} onValueChange={v => { setCategoria(v); setCampos({}); }}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent className="max-h-64">
-                {categorias.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+        <div className="px-6 pb-2 space-y-5">
+          {/* A categoria decide os campos — por isso ela vem primeiro e à vista,
+              e não escondida numa lista suspensa. */}
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-medium mb-2">Sobre o que é?</legend>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {categorias.map(c => {
+                const Icone = iconeDaCategoria(c.key);
+                const ativa = c.key === categoria;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    aria-pressed={ativa}
+                    onClick={() => { setCategoria(c.key); setCampos({}); }}
+                    className={cn(
+                      'flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left text-xs leading-snug transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      ativa
+                        ? 'border-primary bg-primary/[0.08] text-foreground'
+                        : 'border-border text-foreground/80 hover:border-primary/40 hover:bg-accent/50',
+                    )}
+                  >
+                    <Icone className={cn('w-4 h-4 mt-px shrink-0', ativa ? 'text-primary' : 'text-muted-foreground')} />
+                    <span className="font-medium">{c.label}</span>
+                  </button>
+                );
+              })}
+            </div>
             {definicao && (
               <p className="text-[11px] text-muted-foreground">{definicao.descricao}</p>
             )}
-          </div>
+          </fieldset>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Assunto</Label>
-            <Input value={assunto} onChange={e => setAssunto(e.target.value)}
+            <Label htmlFor="ticket-assunto" className="text-xs">Assunto</Label>
+            <Input id="ticket-assunto" value={assunto} onChange={e => setAssunto(e.target.value)}
               placeholder="Uma frase que diga o pedido" className="h-9" maxLength={140} />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Detalhes</Label>
-            <Textarea value={descricao} onChange={e => setDescricao(e.target.value)}
+            <Label htmlFor="ticket-detalhes" className="text-xs">Detalhes</Label>
+            <Textarea id="ticket-detalhes" value={descricao} onChange={e => setDescricao(e.target.value)}
               placeholder="O que aconteceu, o que já tentou, o que precisa" rows={4} />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Prioridade</Label>
-            <Select value={prioridade} onValueChange={v => setPrioridade(v as PrioridadeTicket)}>
-              <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(PRIORIDADES).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <p className="text-xs font-medium">Prioridade</p>
+            <div className="inline-flex rounded-lg border border-border p-0.5" role="radiogroup" aria-label="Prioridade">
+              {ORDEM_PRIORIDADE.map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  role="radio"
+                  aria-checked={prioridade === p}
+                  onClick={() => setPrioridade(p)}
+                  className={cn(
+                    'rounded-md px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    prioridade === p
+                      ? 'bg-foreground text-background font-medium'
+                      : cn('hover:bg-accent', PRIORIDADES[p].cor),
+                  )}
+                >
+                  {PRIORIDADES[p].label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">{AJUDA_PRIORIDADE[prioridade]}</p>
           </div>
 
           {!!definicao?.campos.length && (
-            <div className="rounded-md border border-border p-3 space-y-3">
+            <div className="rounded-lg bg-muted/50 p-3 space-y-3">
               <p className="text-[11px] text-muted-foreground">
-                Informações adicionais — opcionais, mas encurtam a conversa.
+                Opcionais, mas encurtam a conversa.
               </p>
-              {definicao.campos.map(c => (
-                <div key={c.key} className="space-y-1.5">
-                  <Label className="text-xs">{c.label}</Label>
-                  {campoExtra(c)}
-                </div>
-              ))}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {definicao.campos.map(c => (
+                  <div key={c.key} className="space-y-1.5">
+                    <Label className="text-xs">{c.label}</Label>
+                    {campoExtra(c)}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 border-t border-border mt-4">
           <Button variant="outline" onClick={onFechar} disabled={salvando}>Cancelar</Button>
           <Button onClick={salvar} disabled={salvando} className="gap-2">
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -244,6 +281,17 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
     </Dialog>
   );
 }
+
+/**
+ * O que cada prioridade quer dizer, na régua de quem atende: é o limite de
+ * tempo sem movimento antes de o ticket virar «parado» (`fila.ts`).
+ */
+const AJUDA_PRIORIDADE: Record<PrioridadeTicket, string> = {
+  baixa:   'Dá para esperar a semana.',
+  normal:  'Para o dia útil seguinte.',
+  alta:    'Precisa andar hoje.',
+  urgente: 'A operação está parada por causa disto.',
+};
 
 /**
  * Escolher uma pessoa digitando o nome.

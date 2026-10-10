@@ -207,13 +207,21 @@ export const ABAS_DO_SISTEMA: { valor: string; permissao?: string }[] = [
 export type StatusTicket =
   | 'aberto' | 'em_andamento' | 'pendente' | 'concluido' | 'recusado' | 'cancelado';
 
-export const STATUS_TICKET: Record<StatusTicket, { label: string; cor: string }> = {
-  aberto:       { label: 'Aberto',       cor: 'bg-blue-500/15 text-blue-600 border-blue-500/30' },
-  em_andamento: { label: 'Em andamento', cor: 'bg-amber-500/15 text-amber-600 border-amber-500/30' },
-  pendente:     { label: 'Pendente',     cor: 'bg-purple-500/15 text-purple-600 border-purple-500/30' },
-  concluido:    { label: 'Concluído',    cor: 'bg-green-500/15 text-green-600 border-green-500/30' },
-  recusado:     { label: 'Recusado',     cor: 'bg-destructive/15 text-destructive border-destructive/30' },
-  cancelado:    { label: 'Cancelado',    cor: 'bg-muted text-muted-foreground border-border' },
+/**
+ * Cada estado tem um ponto de cor (`ponto`) e uma etiqueta (`cor`).
+ *
+ * As cores dos estados ficam FORA do vermelho e do âmbar de propósito: esses
+ * dois já falam de prioridade (urgente, alta) e de tempo parado (o pavio). Um
+ * «em andamento» âmbar ao lado de um pavio âmbar diria duas coisas com a mesma
+ * cor. Recusado é a exceção — é saída, não pede atenção de ninguém.
+ */
+export const STATUS_TICKET: Record<StatusTicket, { label: string; cor: string; ponto: string }> = {
+  aberto:       { label: 'Aberto',       ponto: 'bg-sky-500',     cor: 'bg-sky-500/12 text-sky-700 border-sky-500/30 dark:text-sky-300' },
+  em_andamento: { label: 'Em andamento', ponto: 'bg-indigo-500',  cor: 'bg-indigo-500/12 text-indigo-700 border-indigo-500/30 dark:text-indigo-300' },
+  pendente:     { label: 'Pendente',     ponto: 'bg-fuchsia-500', cor: 'bg-fuchsia-500/12 text-fuchsia-700 border-fuchsia-500/30 dark:text-fuchsia-300' },
+  concluido:    { label: 'Concluído',    ponto: 'bg-emerald-500', cor: 'bg-emerald-500/12 text-emerald-700 border-emerald-500/30 dark:text-emerald-300' },
+  recusado:     { label: 'Recusado',     ponto: 'bg-rose-400',    cor: 'bg-rose-500/12 text-rose-700 border-rose-500/30 dark:text-rose-300' },
+  cancelado:    { label: 'Cancelado',    ponto: 'bg-muted-foreground/40', cor: 'bg-muted text-muted-foreground border-border' },
 };
 
 /** Estados que já não pedem nada de ninguém — somem do "em aberto". */
@@ -224,9 +232,12 @@ export type PrioridadeTicket = 'baixa' | 'normal' | 'alta' | 'urgente';
 export const PRIORIDADES: Record<PrioridadeTicket, { label: string; cor: string }> = {
   baixa:   { label: 'Baixa',   cor: 'text-muted-foreground' },
   normal:  { label: 'Normal',  cor: 'text-foreground' },
-  alta:    { label: 'Alta',    cor: 'text-amber-600' },
+  alta:    { label: 'Alta',    cor: 'text-amber-600 dark:text-amber-400' },
   urgente: { label: 'Urgente', cor: 'text-destructive font-semibold' },
 };
+
+/** A ordem da prioridade nos seletores: do mais calmo ao mais quente. */
+export const ORDEM_PRIORIDADE: PrioridadeTicket[] = ['baixa', 'normal', 'alta', 'urgente'];
 
 /**
  * A ordem em que os estados aparecem — no quadro, nos agrupamentos e nos
