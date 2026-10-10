@@ -62,6 +62,7 @@ import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
 import { useModoLeve } from '@/lib/modoLeve';
+import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/aguenta';
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
@@ -274,12 +275,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // teias, os chapéus e a marca. Chuva, névoa, vultos, aranha, fantasmas,
   // lanterna e morcegos não montam.
   const leve = useModoLeve();
+  // O mesmo recolhimento, sozinho, em máquina sem placa de vídeo ou quando a
+  // tela sufoca com o tema (`Halloween/aguenta.ts`). Só o tema: o resto do
+  // sistema continua como a pessoa deixou.
+  const halloweenParado = useHalloweenParado(hw.ligado);
+  const halloweenSoParado = leve || halloweenParado;
   const cenaHalloween = useMemo(() => {
     const cena = cenaDaRota(pathname, marcaPaguePlay);
-    return leve
+    return halloweenSoParado
       ? { teias: cena.teias, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null }
       : cena;
-  }, [pathname, marcaPaguePlay, leve]);
+  }, [pathname, marcaPaguePlay, halloweenSoParado]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -360,6 +366,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     impersonando: !!getImpersonacaoAtiva(),
   });
   const halloween = hw.ligado && !esperandoCarta;
+  useVigiaDoHalloween(halloween && !halloweenSoParado);
 
   /*
    * A campanha que o menu anuncia.
@@ -1032,7 +1039,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="relative flex-1 min-h-0 flex flex-col bg-background">
             <Suspense fallback={null}>{temFundo(cenaHalloween) && <FundoHalloween cena={cenaHalloween} />}</Suspense>
             {conteudo}
-            {!leve && (
+            {!halloweenSoParado && (
               <Suspense fallback={null}>
                 <SobreposicaoHalloween cena={cenaHalloween} />
                 <RevoadaHalloween />

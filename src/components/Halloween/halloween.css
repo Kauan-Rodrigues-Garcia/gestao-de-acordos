@@ -107,9 +107,16 @@
 
 /* ── Vultos atrás do vidro fosco (Analítico) — ver VultoNoVidro.tsx ─────── */
 /* Leve: o desfoque de cada vulto é fixo; só opacidade e posição se animam
-   (compostas pela placa de vídeo, sem redesenhar). `--luz` (0 a 1) é a
-   lâmpada, escrita pelo JS. */
-.hw-vidro { position: absolute; inset: 0; --luz: 1; --vulto: #030305; }
+   (compostas pela placa de vídeo, sem redesenhar). `--lampada` (0 a 1) é a
+   lâmpada, escrita pelo JS direto na luz e na sombra de cada vulto.
+
+   Não herdada de propósito (09/10/2026). Antes era `--luz`, escrita na caixa
+   de fora: variável comum é herdada, então cada piscada da lâmpada (umas cinco
+   por segundo) mudava o estilo de todos os descendentes — e o navegador
+   repintava o SVG desfocado de cada vulto, que devia ser pintado uma vez por
+   aparição. Medido na bancada `playground/desempenho`. */
+@property --lampada { syntax: '<number>'; inherits: false; initial-value: 1; }
+.hw-vidro { position: absolute; inset: 0; --vulto: #030305; }
 .hw-vidro.claro { --vulto: #1e2026; }
 
 .hw-vulto { position: absolute; width: 200px; height: 400px; transform-origin: 50% 100%; scale: var(--escala, 1); color: var(--vulto);
@@ -120,7 +127,7 @@
 /* A lâmpada atrás de cada um: é ela que recorta o vulto no escuro. */
 .hw-vulto-luz { position: absolute; left: 50%; top: 42%; width: 520px; height: 620px; translate: -50% -50%; border-radius: 50%;
   background: radial-gradient(closest-side, rgb(210 216 228 / .3), rgb(170 178 196 / .12) 48%, transparent);
-  opacity: var(--luz); transition: opacity 40ms linear;
+  opacity: var(--lampada); transition: opacity 40ms linear;
   /* Camada própria: a lâmpada pisca dezenas de vezes por minuto, e sem ela cada piscada repintava o degradê inteiro. */
   will-change: opacity; }
 .hw-vidro.claro .hw-vulto-luz { background: radial-gradient(closest-side, rgb(255 255 255 / .7), rgb(255 255 255 / .25) 50%, transparent); }
@@ -131,7 +138,7 @@
 
 .hw-vulto-sombra { position: absolute; inset: 0; opacity: var(--forca, .8); }
 /* No claro a lâmpada não recorta (o fundo já é claro): ela dá contraste. */
-.hw-vidro.claro .hw-vulto-sombra { opacity: calc(var(--forca, .8) * (.5 + .5 * var(--luz))); }
+.hw-vidro.claro .hw-vulto-sombra { opacity: calc(var(--forca, .8) * (.5 + .5 * var(--lampada))); }
 /* Desfoque e esmaecido da base vêm dentro do SVG (`VultoNoVidro`): pintados uma vez, a camada só se move. */
 .hw-vulto-corpo { position: absolute; left: -60px; top: -40px; width: 320px; height: 440px; display: block; overflow: visible; fill: currentColor;
   will-change: transform; }

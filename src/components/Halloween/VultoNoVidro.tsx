@@ -15,8 +15,9 @@
  * - O desfoque de cada vulto é FIXO (sorteado na aparição). Só se anima
  *   opacidade e posição, que a placa de vídeo compõe sem redesenhar: o vulto
  *   desfocado é pintado uma vez por aparição.
- * - A lâmpada é uma variável CSS (`--luz`) escrita direto no elemento — pisca
- *   dezenas de vezes por minuto e não redesenha o React.
+ * - A lâmpada é uma variável CSS não herdada (`--lampada`) escrita só na luz e
+ *   na sombra de cada vulto — pisca dezenas de vezes por minuto, não redesenha
+ *   o React e não toca no SVG desfocado (ver `halloween.css`).
  * - Cada vulto cuida dos próprios tempos; piscar redesenha só aquele vulto.
  */
 import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -260,7 +261,13 @@ export function VultoNoVidro({ claro }: { claro: boolean }) {
     if (!el) return;
     let vivo = true;
     let t: ReturnType<typeof setTimeout> | undefined;
-    const luz = (v: number) => el.style.setProperty('--luz', v.toFixed(2));
+    // Só nos elementos que leem a lâmpada: escrever na caixa de fora mudava o
+    // estilo de todos os vultos e fazia o navegador repintar o desfoque deles.
+    const luz = (v: number) => {
+      const valor = v.toFixed(2);
+      el.querySelectorAll<HTMLElement>('.hw-vulto-luz, .hw-vulto-sombra')
+        .forEach(alvo => alvo.style.setProperty('--lampada', valor));
+    };
     const tocar = (passos: [number, number][]) => {
       let i = 0;
       const passo = () => {
