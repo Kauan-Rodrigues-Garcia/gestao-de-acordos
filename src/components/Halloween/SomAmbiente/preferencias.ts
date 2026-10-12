@@ -12,8 +12,8 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
 /** Os temas de terror que vêm de fábrica, na ordem do painel. */
 export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
-/** As músicas para escutar que vêm de fábrica. Trocadas em 08/10/2026. */
-export const MUSICAS = ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo'] as const;
+/** As músicas para escutar que vêm de fábrica. Trocadas em 08/10/2026; «Raindance» entrou na frente em 11/10/2026. */
+export const MUSICAS = ['raindance', 'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo'] as const;
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
@@ -28,6 +28,7 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   stranger: '/sounds/halloween-stranger-things.mp3',
   pesadelo: '/sounds/halloween-hora-do-pesadelo.mp3',
   pecadores: '/sounds/halloween-pecadores-eu-menti-pra-voce.mp3',
+  raindance: '/sounds/halloween-raindance.mp3',
   rainha: '/sounds/halloween-rainha-da-finesse.mp3',
   boladao: '/sounds/halloween-eu-to-boladao.mp3',
   numb: '/sounds/halloween-numb.mp3',
@@ -53,7 +54,8 @@ export const GANHO: Record<FaixaEmbutida, number> = {
   stranger: 1.04,   // -13,3
   pesadelo: 1.22,   // -14,7
   pecadores: 1.37,  // -15,7
-  rainha: 0.58,     // -8,3
+  raindance: 0.64,  // -9,1 (11/10/2026)
+  rainha:0.58,     // -8,3
   boladao: 0.58,    // -8,3
   numb: 0.54,       // -7,6
   byob: 0.56,       // -8,0
@@ -64,8 +66,8 @@ export const GANHO: Record<FaixaEmbutida, number> = {
 /**
  * Faixas que saíram da fábrica e quem fica no lugar delas para quem as tinha
  * escolhido. «Talvez Você Precise de Mim», do Veigh, saiu em 05/10/2026;
- * «Puxa o Lança» e «Na Relíquia do 2T», em 08/10/2026. Vão todas para a
- * primeira das músicas.
+ * «Puxa o Lança» e «Na Relíquia do 2T», em 08/10/2026. Vão todas para
+ * «Rainha da Finesse», que era a primeira das músicas quando elas saíram.
  */
 const SUBSTITUTAS: Record<string, FaixaEmbutida> = { veigh: 'rainha', puxalanca: 'rainha', reliquia: 'rainha' };
 

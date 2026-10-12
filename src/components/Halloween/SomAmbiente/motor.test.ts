@@ -18,7 +18,7 @@ describe('motor do Som ambiente', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
     expect(ordemDasFaixas(prefs)).toEqual([
       'halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores',
-      'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo',
+      'raindance', 'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo',
       'youtube:playlist:X',
     ]);
     expect(vizinha(prefs, 'gemebaixo', 1)).toBe('youtube:playlist:X');
@@ -31,7 +31,7 @@ describe('motor do Som ambiente', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
     expect(ordemDasFaixas(prefs, false)).toEqual([
       'halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores',
-      'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo',
+      'raindance', 'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo',
     ]);
     expect(vizinha(prefs, 'gemebaixo', 1, false)).toBe('halloween');
   });
@@ -48,7 +48,7 @@ describe('motor do Som ambiente', () => {
 
   it('no fim de uma faixa de fábrica, a sequência segue só pelas de fábrica', () => {
     expect(proximaEmbutida('halloween')).toBe('sexta13');
-    expect(proximaEmbutida('pecadores')).toBe('rainha');
+    expect(proximaEmbutida('pecadores')).toBe('raindance');
     expect(proximaEmbutida('gemebaixo')).toBe('halloween');
   });
 
