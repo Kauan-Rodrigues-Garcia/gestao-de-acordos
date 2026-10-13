@@ -86,7 +86,9 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
           <DialogTitle>Importar Ranking de quitação</DialogTitle>
           <DialogDescription>
             O relatório mensal de parcelas pagas do ERP (ex.: SETEMBRO.xls). Entram os acordos
-            com «Situação Atual» Quitação e a data da quitação dentro do mês.
+            com «Situação Atual» Quitação e a data da quitação dentro do mês — e a Junção que
+            quitou o contrato (saldo zerado e data da quitação). Pagamento desmembrado no mesmo
+            contrato conta como uma quitação.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,6 +123,12 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
               </div>
             </div>
 
+            {previa.quitadosPorJuncao > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {previa.quitadosPorJuncao} quitaç{previa.quitadosPorJuncao === 1 ? 'ão veio' : 'ões vieram'} de
+                Junção que fechou o contrato.
+              </p>
+            )}
             {previa.quitadosForaDoMes > 0 && (
               <p className="text-xs text-muted-foreground">
                 {previa.quitadosForaDoMes} acordo{previa.quitadosForaDoMes === 1 ? '' : 's'} quit{previa.quitadosForaDoMes === 1 ? 'ou' : 'aram'} em

@@ -13,6 +13,19 @@
  *   - um acordo conta UMA vez (Cód. Acordo), com o «Valor Acordo» — o arquivo
  *     tem uma linha por parcela paga.
  *
+ * Junção que quita (análise de 13/10/2026, relatórios de setembro e outubro):
+ *
+ *   - «Data da quitação» é do CONTRATO (Nr. Documento): quando ele quita, o ERP
+ *     carimba a data em todos os acordos dele. A Junção que juntou as parcelas
+ *     até o fim do contrato vem com saldo zerado E a data; a Junção que só
+ *     juntou parcelas atrasadas vem sem a data (ou com saldo) — essa não conta;
+ *   - pagamento desmembrado (ex.: Pix como Quitação + cartão como Junção, mesmo
+ *     contrato, mesma data) é UMA quitação, com a soma dos acordos. O código
+ *     gravado é o do acordo Quitação, se houver.
+ *
+ * «Nr. Documento» e «Valor Restante» são opcionais: sem eles, cada acordo
+ * conta sozinho e a Junção vale só com a data.
+ *
  * O mês do arquivo é o mês da maioria das «Dt. Pgto» (o relatório é de um mês
  * de pagamentos; data zerada do ERP, 30/12/1899, não conta).
  *
@@ -37,6 +50,8 @@ export interface RelatorioQuitacao {
   linhasLidas: number;
   /** Acordos quitados, mas em outro mês — ficam para o relatório daquele mês. */
   quitadosForaDoMes: number;
+  /** Quantas das quitações do mês vieram de uma Junção (sozinha ou somada a outro acordo). */
+  quitadosPorJuncao: number;
   erros: string[];
 }
 
@@ -47,6 +62,12 @@ const COLUNAS = {
   situacaoAtual: 'situacaoatual',
   valorAcordo: 'valoracordo',
   dataQuitacao: 'datadaquitacao',
+} as const;
+
+/** Opcionais: refinam a regra (Junção, desmembrado) quando o relatório os traz. */
+const OPCIONAIS = {
+  nrDocumento: 'nr.documento',
+  valorRestante: 'valorrestante',
 } as const;
 
 const ROTULOS: Record<keyof typeof COLUNAS, string> = {
@@ -80,7 +101,8 @@ function mesDoArquivo(datas: (Date | null)[]): string | null {
 }
 
 export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
-  const vazio = (erro: string): RelatorioQuitacao => ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, erros: [erro] });
+  const vazio = (erro: string): RelatorioQuitacao =>
+    ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, erros: [erro] });
   if (rows.length < 2) return vazio('Planilha sem dados.');
 
   const cab = (rows[0] ?? []).map(norm);
@@ -97,21 +119,57 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const mes = mesDoArquivo(linhas.map(r => toDate(r[idx.dtPgto])));
   if (!mes) return { ...vazio('Não foi possível saber o mês do relatório pela coluna «Dt. Pgto».'), linhasLidas: linhas.length };
 
-  const porAcordo = new Map<string, AcordoQuitado>();
+  const iNr = cab.indexOf(OPCIONAIS.nrDocumento);
+  const iRestante = cab.indexOf(OPCIONAIS.valorRestante);
+
+  // 1º os acordos que quitam (um por Cód. Acordo); 2º os do mesmo contrato viram uma quitação.
+  type Quitou = AcordoQuitado & { contrato: string; juncao: boolean };
+  const porAcordo = new Map<string, Quitou>();
   const foraDoMes = new Set<string>();
   for (const r of linhas) {
-    if (norm(r[idx.situacaoAtual]) !== 'quitacao') continue;
+    const situacao = norm(r[idx.situacaoAtual]);
+    const juncao = situacao === 'juncao';
+    if (situacao !== 'quitacao' && !juncao) continue;
     const cod = String(r[idx.codAcordo] ?? '').trim();
     const operador = String(r[idx.operador] ?? '').trim();
     const valor = numero(r[idx.valorAcordo]);
     const quitou = toDate(r[idx.dataQuitacao]);
     if (!cod || !operador || valor == null || !quitou) continue;
+    // Junção só quita com saldo zerado e a data real (a zerada do ERP é 1899).
+    if (juncao && (quitou.getFullYear() < 2000 || (iRestante >= 0 && numero(r[iRestante]) !== 0))) continue;
+    const contrato = (iNr >= 0 ? String(r[iNr] ?? '').trim() : '') || `acordo:${cod}`;
     const dia = iso(quitou);
-    if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(cod); continue; }
-    if (!porAcordo.has(cod)) porAcordo.set(cod, { cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia });
+    if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(contrato); continue; }
+    if (!porAcordo.has(cod)) {
+      porAcordo.set(cod, { cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao });
+    }
   }
 
-  return { mes, acordos: [...porAcordo.values()], linhasLidas: linhas.length, quitadosForaDoMes: foraDoMes.size, erros: [] };
+  const porContrato = new Map<string, Quitou & { codDeJuncao: boolean }>();
+  for (const a of porAcordo.values()) {
+    const chave = `${a.contrato}|${a.operador_usuario}`;
+    const atual = porContrato.get(chave);
+    if (!atual) { porContrato.set(chave, { ...a, codDeJuncao: a.juncao }); continue; }
+    atual.valor_acordo = Math.round((atual.valor_acordo + a.valor_acordo) * 100) / 100;
+    atual.juncao ||= a.juncao;
+    // O código que fica é o do acordo Quitação (a Junção só soma).
+    if (atual.codDeJuncao && !a.juncao) {
+      atual.cod_acordo = a.cod_acordo;
+      atual.data_quitacao = a.data_quitacao;
+      atual.codDeJuncao = false;
+    }
+  }
+
+  const quitacoes = [...porContrato.values()];
+  return {
+    mes,
+    acordos: quitacoes.map(({ cod_acordo, operador_usuario, valor_acordo, data_quitacao }) =>
+      ({ cod_acordo, operador_usuario, valor_acordo, data_quitacao })),
+    linhasLidas: linhas.length,
+    quitadosForaDoMes: foraDoMes.size,
+    quitadosPorJuncao: quitacoes.filter(q => q.juncao).length,
+    erros: [],
+  };
 }
 
 /** Lê o arquivo do ERP. Carrega o xlsx só aqui (~484 KB): a aba em si não precisa dele. */
@@ -120,7 +178,7 @@ export async function lerRelatorioQuitacao(arquivo: File): Promise<RelatorioQuit
   const wb = read(await arquivo.arrayBuffer(), { cellDates: true });
   const nome = wb.SheetNames.find(n => norm(n) === 'informacoes') ?? wb.SheetNames[0];
   const ws = nome ? wb.Sheets[nome] : undefined;
-  if (!ws) return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, erros: ['Planilha vazia ou inválida.'] };
+  if (!ws) return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, erros: ['Planilha vazia ou inválida.'] };
   return extrairQuitacoes(utils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][]);
 }
 

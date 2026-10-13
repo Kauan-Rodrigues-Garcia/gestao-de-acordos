@@ -48,6 +48,47 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
     expect(r.erros[0]).toContain('Data da quitação');
   });
 
+  describe('Junção', () => {
+    const CAB_JUNCAO = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    const j = (cod: string, nr: string, op: string, valor: number, restante: number, atual: string, quitou: string | null) =>
+      [cod, nr, op, d('2026-10-07'), valor, restante, atual, quitou ? d(quitou) : null];
+
+    it('conta a Junção que quitou o contrato (saldo zerado e data da quitação)', () => {
+      const r = extrairQuitacoes([
+        CAB_JUNCAO,
+        // Troca de plano: juntou as parcelas até o fim do contrato.
+        j('10', '900', 'TAIS', 1671.6, 0, 'Junção', '2026-10-08'),
+        // Junção das parcelas atrasadas: saldo zerado, mas o contrato não quitou.
+        j('11', '901', 'TAIS', 1393, 0, 'Junção', null),
+        // Junção ainda pagando.
+        j('12', '902', 'TAIS', 1481.55, 781.55, 'Junção', null),
+      ]);
+      expect(r.acordos).toEqual([{ cod_acordo: '10', operador_usuario: 'TAIS', valor_acordo: 1671.6, data_quitacao: '2026-10-08' }]);
+      expect(r.quitadosPorJuncao).toBe(1);
+    });
+
+    it('pagamento desmembrado (Pix Quitação + cartão Junção) é uma quitação, com a soma', () => {
+      const r = extrairQuitacoes([
+        CAB_JUNCAO,
+        j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07'),
+        j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07'),
+        j('5847011', '13008491', 'TAIS', 700, 0, 'Quitação', '2026-10-07'),
+      ]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5847011', operador_usuario: 'TAIS', valor_acordo: 3500, data_quitacao: '2026-10-07' }]);
+      expect(resumoPorOperador(r.acordos)).toEqual([{ operador: 'TAIS', quitacoes: 1, valor: 3500 }]);
+    });
+
+    it('sem «Nr. Documento» nem «Valor Restante»: Junção vale com a data, cada acordo sozinho', () => {
+      const r = extrairQuitacoes([
+        CAB,
+        linha('20', 'ANA', '2026-09-02', 1643.4, 'Junção', '2026-09-09'),
+        linha('21', 'ANA', '2026-09-02', 1306, 'Junção', null),
+        linha('22', 'ANA', '2026-09-02', 500, 'Quitação', '2026-09-09'),
+      ]);
+      expect(r.acordos.map(a => a.cod_acordo).sort()).toEqual(['20', '22']);
+    });
+  });
+
   it('aceita datas como número serial do Excel e valor em texto pt-BR', () => {
     // 46267 = 2026-09-02.
     const r = extrairQuitacoes([CAB, ['9', 1, 'ANA', 46267, 100, 'Quitação', '1.234,50', 'Quitação', 46267]]);
