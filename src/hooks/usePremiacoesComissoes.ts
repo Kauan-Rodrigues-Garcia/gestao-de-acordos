@@ -24,7 +24,6 @@ import { supabase } from '@/lib/supabase';
 import { ehMesAtual, partesDoMes } from '@/lib/mesReferencia';
 import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { useTenant } from '@/lib/tenant-config';
-import { assinarTabela } from '@/lib/realtime';
 import { assinarSinal } from '@/lib/sinais';
 import { criarAgrupador } from '@/lib/agrupador';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
@@ -218,13 +217,10 @@ export function usePremiacoesComissoes(params: {
     const cancelarAnalitico = assinarSinal('analitico', empresaId, {
       onMudou: agrupador.avisar, onReconectado: reler,
     });
-    const cancelarAjustes = assinarTabela(
-      { topico: `rt-ajustes-${empresaId}`, escutas: [{ tabela: 'analitico_ajustes_manuais' }] },
-      {
-        onEvento: () => { invalidarSomasDeAjuste(); agrupador.avisar(); },
-        onReconectado: () => { invalidarSomasDeAjuste(); reler(); },
-      },
-    );
+    const cancelarAjustes = assinarSinal('ajustes', empresaId, {
+      onMudou: () => { invalidarSomasDeAjuste(); agrupador.avisar(); },
+      onReconectado: () => { invalidarSomasDeAjuste(); reler(); },
+    });
     return () => { agrupador.cancelar(); cancelarAnalitico(); cancelarAjustes(); };
   }, [ativo, empresaId, carregar]);
 

@@ -12,7 +12,10 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REGRAS_SINAL } from '@/lib/sinais';
+import { REGRAS_SINAL, type NomeAviso } from '@/lib/sinais';
+
+/** Os tópicos de `assinarAviso` — o tipo não existe em tempo de execução. */
+const NOMES_AVISO: NomeAviso[] = ['solicitacoes', 'tickets', 'parabens'];
 
 const RAIZ = path.resolve(__dirname, '../../..');
 const SRC = path.join(RAIZ, 'src');
@@ -62,10 +65,11 @@ describe('tempo real das configurações vai pelo sinal', () => {
     expect(sql).toContain('<> 27 THEN');
   });
 
-  it('todo nome de sinal do app está na policy que deixa ouvir', () => {
-    const sql = liso('20261009201000_sinais_das_configuracoes.sql');
+  it('todo nome de sinal e de aviso do app está na policy que deixa ouvir', () => {
+    // A última migration que reescreve a policy é a que vale.
+    const sql = liso('20261013170000_realtime_sem_postgres_changes.sql');
     const lista = sql.match(/ALTER POLICY sinal_mudou_receber[^;]*;/)?.[0] ?? '';
-    for (const nome of Object.keys(REGRAS_SINAL)) expect(lista).toContain(`'${nome}'::text`);
+    for (const nome of [...Object.keys(REGRAS_SINAL), ...NOMES_AVISO]) expect(lista).toContain(`'${nome}'::text`);
   });
 
   it('desafios avisam também as empresas da campanha multiempresa', () => {
@@ -107,5 +111,49 @@ describe('RLS: função de permissão uma vez por consulta', () => {
       expect(p.replace(/\(SELECT public\.fn_[a-z_]+\([^)]*\)\)/g, '').replace(/\(SELECT auth\.uid\(\)\)/g, ''))
         .not.toMatch(/public\.fn_(?!ticket_visivel)[a-z_]+\(\)|auth\.uid\(\)/);
     }
+  });
+});
+
+/**
+ * 13/10/2026 (20261013170000): a publicação `supabase_realtime` ficou vazia.
+ * Enquanto existir UMA assinatura de tabela o Realtime sonda o WAL inteiro
+ * (`list_changes`, 28,8% do banco) — e tabela fora da publicação só fica muda.
+ */
+describe('nenhum Postgres Changes no app', () => {
+  it('nenhum código assina tabela', () => {
+    const achados: string[] = [];
+    for (const f of arquivosTs(SRC)) {
+      const texto = fs.readFileSync(f, 'utf8');
+      if (/escutas:\s*\[[^\]]*\btabela:\s*['"`]/.test(texto) || /['"]postgres_changes['"]\s*,\s*\{/.test(texto)) {
+        // `realtime.ts` é a implementação: ele sabe assinar tabela, ninguém pede.
+        if (!f.endsWith(`${path.sep}lib${path.sep}realtime.ts`)) achados.push(path.relative(RAIZ, f));
+      }
+    }
+    expect(achados).toEqual([]);
+  });
+
+  it('a migration esvazia a publicação e confere', () => {
+    const sql = liso('20261013170000_realtime_sem_postgres_changes.sql');
+    expect(sql).toContain("WHERE pubname = 'supabase_realtime' AND schemaname = 'public' LOOP EXECUTE format('ALTER PUBLICATION supabase_realtime DROP TABLE public.%I', t)");
+    expect(sql).toContain('A publicação supabase_realtime ainda tem tabela.');
+  });
+
+  it('o aviso com os ids não monta payload com conteúdo', () => {
+    const sql = liso('20261013170000_realtime_sem_postgres_changes.sql');
+    const corpo = sql.match(/FUNCTION public\.fn_realtime_avisar_ids\(\)[\s\S]*?\$function\$;/)?.[0] ?? '';
+    expect(corpo).toContain("'ids', r.ids, 'autores', r.autores");
+    expect(corpo).not.toMatch(/conteudo|texto|frase|nome_cliente|assunto/);
+  });
+});
+
+describe('perfis_select em conjunto (20261013171000)', () => {
+  const sql = liso('20261013171000_perfis_select_em_conjunto.sql');
+  const policy = sql.match(/ALTER POLICY perfis_select[^;]*;/)?.[0] ?? '';
+  it('setor e equipe viram conjunto calculado uma vez', () => {
+    expect(policy).toContain('WHEN 2 THEN (id IN (SELECT public.fn_perfis_dos_meus_setores()))');
+    expect(policy).toContain('WHEN 1 THEN (id IN (SELECT public.fn_perfis_das_minhas_equipes()))');
+  });
+  it('nada na policy recebe a linha como argumento', () => {
+    expect(policy).not.toMatch(/\(perfis\.id\)|\(id\)/);
   });
 });

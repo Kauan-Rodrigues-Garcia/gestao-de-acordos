@@ -55,10 +55,14 @@ import { assinarTabela } from '@/lib/realtime';
  * as configurações também: `comemoracoes`, `desafios` (desafios e
  * desafios_setores), `direto_extra` e `comissao` (as cinco tabelas) — eram
  * Postgres Changes, 1.387 assinaturas conferidas uma a uma no banco.
+ * Desde 20261013170000, o resto das listas que só eram relidas:
+ * `autorizacoes`, `contribuicao` (receptivo), `numeros` (as quatro tabelas de
+ * números/chips) e `ajustes` (ajuste manual do analítico).
  */
 export type NomeSinal =
   | 'analitico' | 'permissoes' | 'vendas' | 'rh' | 'diario'
-  | 'comemoracoes' | 'desafios' | 'direto_extra' | 'comissao';
+  | 'comemoracoes' | 'desafios' | 'direto_extra' | 'comissao'
+  | 'autorizacoes' | 'contribuicao' | 'numeros' | 'ajustes';
 
 export interface SinalMudou {
   /** Tabela que mudou (`rh` cobre duas, `permissoes` também). */
@@ -103,6 +107,11 @@ export const REGRAS_SINAL: Record<NomeSinal, RegraPortao> = {
   desafios:     { minimoMs: 0, espalhamentoMs: 3_000 },
   direto_extra: { minimoMs: 0, espalhamentoMs: 3_000 },
   comissao:     { minimoMs: 0, espalhamentoMs: 3_000 },
+  // Pedido de autorização: há alguém esperando a resposta do outro lado.
+  autorizacoes: { minimoMs: 0, espalhamentoMs: 500 },
+  contribuicao: { minimoMs: 0, espalhamentoMs: 2_000 },
+  numeros:      { minimoMs: 0, espalhamentoMs: 1_000 },
+  ajustes:      { minimoMs: 0, espalhamentoMs: 1_000 },
 };
 
 export function topicoDoSinal(nome: NomeSinal, empresaId: string): string {
@@ -229,4 +238,70 @@ export function assinarSinal(
     }
     cancelarCanal();
   };
+}
+
+// ── Aviso com os ids (20261013170000) ────────────────────────────────────────
+//
+// Conversa e mural não toleram a fila do sinal: a mensagem nova tem de chegar
+// agora. O banco manda, por comando e sem fila, SÓ quais registros mudaram —
+// `{ tabela, operacao, ids, autores }`, nunca o conteúdo — e a tela relê o que
+// é dela com a RLS de sempre. Mesmo desenho de `acordos` (20261009220000).
+//
+// Sem portão de aba escondida, de propósito: a notificação do sistema
+// operacional é justamente para a janela que está atrás de outra.
+
+/** Os tópicos de aviso com ids que o banco escreve. */
+export type NomeAviso = 'solicitacoes' | 'tickets' | 'parabens';
+
+export interface AvisoIds {
+  tabela:     string;
+  operacao:   'INSERT' | 'UPDATE' | 'DELETE';
+  /** O pedido, o ticket, a comemoração — o registro que a tela relê. */
+  ids:        string[];
+  /** Autor da mensagem, quem leu, quem parabenizou. Vazio quando não há. */
+  autores:    string[];
+  /** Comando grande demais (acima de 200 ids): releia tudo. */
+  recarregar: boolean;
+}
+
+export interface OuvinteAviso {
+  onAviso?:       (aviso: AvisoIds) => void;
+  /** O canal caiu e voltou: avisos do intervalo se perderam — releia. */
+  onReconectado?: () => void;
+}
+
+const textos = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+
+export function normalizarAviso(payload: Record<string, unknown>): AvisoIds {
+  return {
+    tabela:     String(payload.tabela ?? ''),
+    operacao:   (payload.operacao as AvisoIds['operacao']) ?? 'UPDATE',
+    ids:        textos(payload.ids),
+    autores:    textos(payload.autores),
+    recarregar: payload.recarregar === true,
+  };
+}
+
+/**
+ * O aviso diz respeito a este registro? «Recarregar» diz respeito a todos.
+ */
+export function avisoToca(aviso: AvisoIds, id: string | null | undefined): boolean {
+  return aviso.recarregar || (!!id && aviso.ids.includes(id));
+}
+
+/**
+ * Ouve o aviso com ids de uma empresa. Consumidores do mesmo tópico dividem um
+ * canal.
+ *
+ * @returns função de cancelamento para o cleanup do `useEffect`.
+ */
+export function assinarAviso(nome: NomeAviso, empresaId: string, ouvinte: OuvinteAviso): () => void {
+  return assinarTabela(
+    { topico: `${nome}:${empresaId}`, escutas: [{ sinal: 'mudou' }] },
+    {
+      onSinal:       (payload) => ouvinte.onAviso?.(normalizarAviso(payload)),
+      onReconectado: () => ouvinte.onReconectado?.(),
+    },
+  );
 }

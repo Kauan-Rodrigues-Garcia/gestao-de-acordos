@@ -38,7 +38,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { escopoEfetivo } from '@/lib/permissoes-escopo';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista } from '@/lib/dadosVivos';
 import {
   listarCelulares, listarNumeros,
@@ -119,19 +119,10 @@ export function useMeusChips(): Retorno {
 
   useEffect(() => {
     if (!empresaId || visao === null) return;
-    return assinarTabela(
-      {
-        topico: `chips:${empresaId}`,
-        escutas: [
-          { tabela: 'numeros_whatsapp',  filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'numeros_celulares', filtro: `empresa_id=eq.${empresaId}` },
-        ],
-      },
-      {
-        onEvento:      () => { void carregar(); },
-        onReconectado: () => { void carregar(); },
-      },
-    );
+    return assinarSinal('numeros', empresaId, {
+      onMudou:       () => { void carregar(); },
+      onReconectado: () => { void carregar(); },
+    });
   }, [empresaId, visao, carregar]);
 
   // `posse === 'setor'` em ambos: o que ainda está no Núcleo não chega aqui,

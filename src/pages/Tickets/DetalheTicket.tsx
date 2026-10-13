@@ -62,7 +62,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { tetoDeUpload } from '@/lib/tetoDeUpload';
 import { useRelogioLento } from '@/hooks/useRelogioLento';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarAviso, avisoToca } from '@/lib/sinais';
 import { criarAgrupador } from '@/lib/agrupador';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
@@ -145,9 +145,9 @@ export default function DetalheTicket({
   /*
    * A conversa chega sozinha.
    *
-   * O filtro por `ticket_id` vale para INSERT, que é o único evento que este
-   * chat produz — mensagem não é editada nem apagada. A RLS continua de pé no
-   * canal: quem não pode ler o ticket não recebe a linha.
+   * Pelo aviso `tickets` da empresa (20261013170000): o banco diz QUAIS tickets
+   * tiveram mensagem ou evento, sem conteúdo, e aqui só interessa este. A
+   * releitura passa pela RLS — quem não pode ler o ticket não lê a conversa.
    *
    * O agrupador existe porque uma ação escreve DOIS registros: a mudança de
    * estado insere em `tickets_eventos` e o gatilho pode inserir em
@@ -156,21 +156,15 @@ export default function DetalheTicket({
    */
   useEffect(() => {
     const grupo = criarAgrupador(() => { void reler(); }, { esperaMs: 150, tetoMs: 800 });
-    const cancelar = assinarTabela(
-      {
-        topico: `rt-ticket-${ticket.id}`,
-        escutas: [
-          { tabela: 'tickets_mensagens', evento: 'INSERT', filtro: `ticket_id=eq.${ticket.id}` },
-          { tabela: 'tickets_eventos',   evento: 'INSERT', filtro: `ticket_id=eq.${ticket.id}` },
-        ],
+    const cancelar = assinarAviso('tickets', ticket.empresaId, {
+      onAviso: (aviso) => {
+        if (aviso.tabela === 'tickets') return;
+        if (avisoToca(aviso, ticket.id)) grupo.avisar();
       },
-      {
-        onEvento:      () => grupo.avisar(),
-        onReconectado: () => { grupo.cancelar(); void reler(); },
-      },
-    );
+      onReconectado: () => { grupo.cancelar(); void reler(); },
+    });
     return () => { grupo.cancelar(); cancelar(); };
-  }, [ticket.id, reler]);
+  }, [ticket.id, ticket.empresaId, reler]);
 
   /**
    * Mensagem e evento na mesma ordem em que aconteceram.

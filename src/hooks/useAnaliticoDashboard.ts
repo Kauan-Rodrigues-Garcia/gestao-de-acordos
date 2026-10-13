@@ -143,6 +143,12 @@ const DEBOUNCE_IMPORTACAO_MS = 1_500;
  */
 const MINIMO_SO_UPDATE_MS = 5 * 60_000;
 
+/**
+ * Validade da leitura do mês. Igual ao teto do «só UPDATE»: além disso nada
+ * chegaria mais cedo de qualquer jeito, e o INSERT/DELETE do sinal invalida antes.
+ */
+const STALE_DASHBOARD_MS = MINIMO_SO_UPDATE_MS;
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 interface ResultadoDashboard {
@@ -176,6 +182,10 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   const query = useQuery<ResultadoDashboard>({
     queryKey: chave,
     enabled:  habilitado,
+    // Quem diz que o mês mudou é o sinal `analitico` (invalida a chave na hora,
+    // fresca ou não). O minuto padrão só fazia cada volta ao Dashboard reler o
+    // mês inteiro — 17 mil chamadas em 5 dias, 4,1% do banco (13/10/2026).
+    staleTime: STALE_DASHBOARD_MS,
     queryFn:  async () => {
       const { data, dbAtiva } = await buscarAnaliticoDashboardMes(empresaId as string, mes);
       return { linhas: data, dbAtiva };

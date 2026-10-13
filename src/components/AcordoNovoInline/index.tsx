@@ -27,7 +27,6 @@ import {
 import { ultimoDiaProxMes } from '@/lib/vencimentos';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { solicitarAutorizacao } from '@/services/autorizacaoPedidos.service';
-import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   operadorEstaDesligado, transferirAcordoDeDesligado,
@@ -80,7 +79,6 @@ export function AcordoNovoInline({
   const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const navigate    = useNavigate();
-  const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const { tags: empresaTags }  = useEmpresaTags();
   const { temPermissao }       = useCargoPermissoes();
@@ -517,8 +515,12 @@ export function AcordoNovoInline({
       const label           = isPaguePlay ? 'Código' : 'NR';
 
       if (nrParaVerificar && empresa?.id) {
-        const conflitoDb    = await verificarNrRegistro(nrParaVerificar, empresa.id, campoCampo);
-        const conflitoFinal = conflitoDb ?? verificarConflito(nrParaVerificar, campoCampo);
+        // O banco é a única fonte: a consulta falha FECHADO (lança) e o gatilho
+        // de 20260809d recusa o NR de outro operador na gravação. O cache local
+        // dos ~10,7 mil NRs da empresa que existia aqui era lido inteiro a cada
+        // abertura (0,7 s, 4,2% do banco) para servir de reserva desta consulta
+        // — removido em 13/10/2026.
+        const conflitoFinal = await verificarNrRegistro(nrParaVerificar, empresa.id, campoCampo);
 
         if (conflitoFinal) {
           if (conflitoFinal.operadorId === perfil.id) {
@@ -683,7 +685,6 @@ export function AcordoNovoInline({
           return;
         }
       }
-      void nrLoading; void nrRefetch;
 
       const inserido = await executarSalvar(payload);
       if (inserido) {

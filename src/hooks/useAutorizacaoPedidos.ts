@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import {
   listarPedidos, type PedidoAutorizacao,
 } from '@/services/autorizacaoPedidos.service';
@@ -63,15 +63,10 @@ export function useAutorizacaoPedidos(ativo: boolean): EstadoAutorizacoes {
       timer.current = setTimeout(recarregar, DEBOUNCE_MS);
     };
 
-    // O tópico leva a empresa porque o filtro leva. Dois tópicos com o mesmo
-    // nome e escutas diferentes compartilhariam um canal só — ver `realtime.ts`.
-    const desassinar = assinarTabela(
-      {
-        topico: `autorizacoes-${empresa.id}`,
-        escutas: [{ tabela: 'autorizacoes_pedidos', filtro: `empresa_id=eq.${empresa.id}` }],
-      },
-      { onEvento: agendar, onReconectado: recarregar },
-    );
+    // Sinal do banco, um por comando (20261013170000) — era Postgres Changes.
+    const desassinar = assinarSinal('autorizacoes', empresa.id, {
+      onMudou: agendar, onReconectado: recarregar,
+    });
 
     return () => {
       if (timer.current) clearTimeout(timer.current);

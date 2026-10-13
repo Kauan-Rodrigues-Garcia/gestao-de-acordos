@@ -125,27 +125,6 @@ export default function Tickets() {
 
   const carregar = useCallback(() => listarTickets(escopo), [escopo]);
 
-  const {
-    dados: tickets, carregando, atualizando, atualizadoEm, entraram, recarregar,
-  } = useDadosVivos<Ticket>({
-    carregar,
-    chave: t => t.id,
-    // Profunda: o ticket carrega `campos`, que é `jsonb` — a comparação rasa
-    // acharia toda linha diferente e a reconciliação não teria servido para nada.
-    iguais: iguaisProfundo,
-    ativo: !!empresaId && acesso.podeVerAba,
-    chaveCache: chaveDeCache('tickets', escopo ?? 'todas', meuId),
-    assinar: {
-      topico: `rt-tickets-${escopo ?? 'todas'}`,
-      // Sem filtro no canal: a RLS já decide que linha chega, e um filtro por
-      // empresa aqui esconderia justamente a outra fila de quem enxerga as duas.
-      escutas: [{ tabela: 'tickets' }],
-    },
-    agrupamento: { esperaMs: 250, tetoMs: 1_200 },
-  });
-
-  const fotos = useFotosDePerfis(!!empresaId && acesso.podeVerAba);
-
   const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([]);
   useEffect(() => {
     if (!veDuasEmpresas) return;
@@ -156,6 +135,32 @@ export default function Tickets() {
     })();
     return () => { vivo = false; };
   }, [veDuasEmpresas]);
+
+  // O aviso `tickets` do banco vem por empresa (20261013170000): quem enxerga
+  // as duas filas ouve as duas.
+  const assinaturas = useMemo(() => {
+    const ids = escopo ? [escopo] : empresas.map(e => e.id);
+    return ids.map(id => ({ topico: `tickets:${id}`, escutas: [{ sinal: 'mudou' }] }));
+  }, [escopo, empresas]);
+
+  const {
+    dados: tickets, carregando, atualizando, atualizadoEm, entraram, recarregar,
+  } = useDadosVivos<Ticket>({
+    carregar,
+    chave: t => t.id,
+    // Profunda: o ticket carrega `campos`, que é `jsonb` — a comparação rasa
+    // acharia toda linha diferente e a reconciliação não teria servido para nada.
+    iguais: iguaisProfundo,
+    ativo: !!empresaId && acesso.podeVerAba,
+    chaveCache: chaveDeCache('tickets', escopo ?? 'todas', meuId),
+    assinar: assinaturas,
+    // Mensagem e evento são da conversa (DetalheTicket); a lista muda quando o
+    // próprio ticket muda.
+    aceitarSinal: p => p.tabela === 'tickets',
+    agrupamento: { esperaMs: 250, tetoMs: 1_200 },
+  });
+
+  const fotos = useFotosDePerfis(!!empresaId && acesso.podeVerAba);
 
   const nomeDaEmpresa = useMemo(
     () => new Map(empresas.map(e => [e.id, e.nome])),

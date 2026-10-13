@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista, reconciliarItem } from '@/lib/dadosVivos';
 import { LIMITE_POR_CELULAR, vagasNoCelular } from '@/services/numeros/numerosRegras';
 import {
@@ -108,27 +108,16 @@ export function useControleNumeros(): Retorno {
   useEffect(() => { primeiraCarga.current = true; setLoading(true); }, [empresaId]);
   useEffect(() => { void carregar(); }, [carregar]);
 
-  // Realtime nas três tabelas. O tópico leva a empresa porque as escutas são
-  // filtradas por ela — dois consumidores de empresas diferentes não podem
-  // compartilhar canal.
+  // Sinal `numeros` da empresa: celulares, números, config e lixeira
+  // (20261013170000 — era Postgres Changes nas três tabelas).
   useEffect(() => {
     if (!empresaId) return;
-    return assinarTabela(
-      {
-        topico: `numeros:${empresaId}`,
-        escutas: [
-          { tabela: 'numeros_celulares', filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'numeros_whatsapp',  filtro: `empresa_id=eq.${empresaId}` },
-          { tabela: 'numeros_config',    filtro: `empresa_id=eq.${empresaId}` },
-        ],
-      },
-      {
-        onEvento:      () => { void carregar(); },
-        // O canal caiu e voltou: os eventos do intervalo se perderam, então a
-        // releitura aqui não é redundante com a de cima.
-        onReconectado: () => { void carregar(); },
-      },
-    );
+    return assinarSinal('numeros', empresaId, {
+      onMudou:       () => { void carregar(); },
+      // O canal caiu e voltou: os avisos do intervalo se perderam, então a
+      // releitura aqui não é redundante com a de cima.
+      onReconectado: () => { void carregar(); },
+    });
   }, [empresaId, carregar]);
 
   const aparelhos = useMemo<CelularComNumeros[]>(() => {

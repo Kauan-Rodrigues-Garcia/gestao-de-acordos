@@ -7,15 +7,17 @@
  * operacional só dispara com a janela do navegador ATRÁS de outra coisa — senão
  * seriam três avisos da mesma mensagem.
  *
- * O realtime é mockado: guardamos o `onEvento` que o hook registra e disparamos
- * o payload à mão, que é o que o Supabase faria.
+ * Desde 20261013170000 o tempo real é o aviso `solicitacoes:<empresa>` do
+ * banco: só os ids do pedido e do autor, nunca o conteúdo. O realtime é
+ * mockado: a mensagem entra no "banco" de mentira e o aviso é disparado à mão,
+ * que é o que o gatilho faria.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-type Ouvinte = { onEvento?: (p: unknown) => void; onReconectado?: () => void };
+type Ouvinte = { onSinal?: (p: Record<string, unknown>, s: string) => void; onReconectado?: () => void };
 const ouvintesPorTopico = new Map<string, Ouvinte[]>();
 
 vi.mock('@/lib/realtime', () => ({
@@ -31,20 +33,22 @@ vi.mock('@/lib/realtime', () => ({
   },
 }));
 
-/** Mensagens que a query de contagem enxerga. Cada teste ajusta se precisar. */
-let mensagensNoBanco: unknown[] = [];
+interface Msg { solicitacao_id: string; autor_id: string; criado_em: string; conteudo?: string }
 
-// Desde 16/08/2026 a contagem é recortada pelos pedidos que estão na tela
-// (`.in('solicitacao_id', …)`) em vez de varrer a empresa — daí o `in` aqui.
+/** Mensagens que as consultas enxergam. Cada teste ajusta se precisar. */
+let mensagensNoBanco: Msg[] = [];
+
+// Duas consultas tocam as mensagens: a contagem (recortada pelos pedidos na
+// tela, `.in(...)`) e a notificação (a última do pedido, `.order().limit(1)`).
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: () => {
-      const resposta = Promise.resolve({ data: mensagensNoBanco, error: null });
       const alvo = {
         select: () => alvo,
         eq: () => alvo,
-        in: () => resposta,
-        then: (r: (v: unknown) => unknown) => resposta.then(r),
+        order: () => alvo,
+        in: () => Promise.resolve({ data: mensagensNoBanco, error: null }),
+        limit: () => Promise.resolve({ data: mensagensNoBanco.slice(-1), error: null }),
       };
       return alvo;
     },
@@ -76,20 +80,25 @@ vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: 
 
 import { useSolicitacoesWhatsapp } from './useSolicitacoesWhatsapp';
 
-const TOPICO_MSG = 'rt-sol-wpp-msg-emp';
+const TOPICO = 'solicitacoes:emp';
 
-/** Dispara um INSERT de mensagem para todos os ouvintes do tópico de mensagens. */
-function chegaMensagem(over: Partial<{ id: string; solicitacao_id: string; autor_id: string; conteudo: string }> = {}) {
-  const payload = {
-    eventType: 'INSERT',
-    new: {
-      id: 'msg-1', solicitacao_id: 'sol-1', autor_id: 'outro',
-      conteudo: 'Cliente respondeu, pode seguir', lida_em: null,
-      criado_em: new Date().toISOString(), empresa_id: 'emp',
-      ...over,
-    },
+function avisar(payload: Record<string, unknown>) {
+  for (const o of ouvintesPorTopico.get(TOPICO) ?? []) o.onSinal?.(payload, 'mudou');
+}
+
+/** Grava uma mensagem no "banco" e manda o aviso, como o gatilho faria. */
+function chegaMensagem(over: Partial<Msg> = {}) {
+  const msg: Msg = {
+    solicitacao_id: 'sol-1', autor_id: 'outro',
+    conteudo: 'Cliente respondeu, pode seguir',
+    criado_em: new Date(Date.now() + mensagensNoBanco.length).toISOString(),
+    ...over,
   };
-  for (const o of ouvintesPorTopico.get(TOPICO_MSG) ?? []) o.onEvento?.(payload);
+  mensagensNoBanco = [...mensagensNoBanco, msg];
+  avisar({
+    tabela: 'solicitacoes_whatsapp_mensagens', operacao: 'INSERT',
+    ids: [msg.solicitacao_id], autores: [msg.autor_id],
+  });
 }
 
 let notificacoes: { titulo: string; corpo: string; tag: string }[] = [];
@@ -123,17 +132,17 @@ function janelaAtras() {
 }
 
 describe('notificação de mensagem nova', () => {
-  it('notifica quando a janela do navegador está atrás', async () => {
+  it('notifica quando a janela do navegador está atrás — o texto vem da releitura, não do aviso', async () => {
     janelaAtras();
     const { result } = montar();
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => { chegaMensagem(); });
 
-    expect(notificacoes).toHaveLength(1);
+    await waitFor(() => expect(notificacoes).toHaveLength(1));
     expect(notificacoes[0].titulo).toContain('MARIA SILVA');
     expect(notificacoes[0].corpo).toBe('Cliente respondeu, pode seguir');
-    expect(result.current.naoLidas['sol-1']).toBe(1);
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(1));
   });
 
   it('NÃO notifica com a janela à frente — o card e o sino já avisam', async () => {
@@ -142,9 +151,9 @@ describe('notificação de mensagem nova', () => {
 
     act(() => { chegaMensagem(); });
 
-    expect(notificacoes).toHaveLength(0);
     // ...mas a mensagem continua contando no badge da aba
-    expect(result.current.naoLidas['sol-1']).toBe(1);
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(1));
+    expect(notificacoes).toHaveLength(0);
   });
 
   it('não notifica o eco da própria mensagem', async () => {
@@ -154,10 +163,10 @@ describe('notificação de mensagem nova', () => {
 
     act(() => { chegaMensagem({ autor_id: 'eu' }); });
 
+    // O total da thread conta a minha mensagem também.
+    await waitFor(() => expect(result.current.totaisMensagens['sol-1']).toBe(1));
     expect(notificacoes).toHaveLength(0);
     expect(result.current.naoLidas['sol-1']).toBeUndefined();
-    // ...mas o total da thread conta a minha mensagem também
-    expect(result.current.totaisMensagens['sol-1']).toBe(1);
   });
 
   it('notifica a cada mensagem que chega, não só a primeira', async () => {
@@ -165,11 +174,13 @@ describe('notificação de mensagem nova', () => {
     const { result } = montar();
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => { chegaMensagem({ id: 'msg-1', conteudo: 'primeira' }); });
-    act(() => { chegaMensagem({ id: 'msg-2', conteudo: 'segunda' }); });
+    act(() => { chegaMensagem({ conteudo: 'primeira' }); });
+    await waitFor(() => expect(notificacoes).toHaveLength(1));
+    act(() => { chegaMensagem({ conteudo: 'segunda' }); });
+    await waitFor(() => expect(notificacoes).toHaveLength(2));
 
     expect(notificacoes.map(n => n.corpo)).toEqual(['primeira', 'segunda']);
-    expect(result.current.naoLidas['sol-1']).toBe(2);
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(2));
   });
 
   it('sem permissão do SO, a contagem continua subindo', async () => {
@@ -180,17 +191,32 @@ describe('notificação de mensagem nova', () => {
 
     act(() => { chegaMensagem(); });
 
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(1));
     expect(notificacoes).toHaveLength(0);
-    expect(result.current.naoLidas['sol-1']).toBe(1);
+  });
+
+  it('aviso de pedido que não está na tela não reconta nem notifica', async () => {
+    janelaAtras();
+    const { result } = montar();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => { chegaMensagem({ solicitacao_id: 'sol-de-outro-setor' }); });
+    await new Promise(r => setTimeout(r, 400));
+
+    expect(notificacoes).toHaveLength(0);
+    expect(result.current.totaisMensagens['sol-de-outro-setor']).toBeUndefined();
   });
 });
 
 describe('badge de não lidas é de cada um (migration 20260731d)', () => {
-  const MSG = {
+  const MSG: Msg = {
     solicitacao_id: 'sol-1',
     autor_id:       'outro',
     criado_em:      '2026-07-31T10:00:00.000Z',
   };
+  const avisoDeLeitura = (quem: string) => avisar({
+    tabela: 'solicitacoes_whatsapp_leitura', operacao: 'UPDATE', ids: ['sol-1'], autores: [quem],
+  });
 
   it('o líder abrir a conversa NÃO apaga o meu badge', async () => {
     // Era o bug: `lida_em` era um carimbo por mensagem, então a leitura de
@@ -199,13 +225,12 @@ describe('badge de não lidas é de cada um (migration 20260731d)', () => {
     const { result } = montar();
     await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(1));
 
-    // O líder lê depois da mensagem e o realtime avisa a minha tela.
+    // O líder lê depois da mensagem e o aviso chega à minha tela.
     leiturasNoBanco = [{
       solicitacao_id: 'sol-1', usuario_id: 'lider', lido_ate: '2026-07-31T23:00:00.000Z',
     }];
-    await act(async () => {
-      for (const o of ouvintesPorTopico.get('rt-sol-wpp-leitura-emp') ?? []) o.onEvento?.({});
-    });
+    act(() => { avisoDeLeitura('lider'); });
+    await new Promise(r => setTimeout(r, 400));
 
     expect(result.current.naoLidas['sol-1']).toBe(1);
   });
@@ -218,10 +243,8 @@ describe('badge de não lidas é de cada um (migration 20260731d)', () => {
     leiturasNoBanco = [{
       solicitacao_id: 'sol-1', usuario_id: 'eu', lido_ate: '2026-07-31T23:00:00.000Z',
     }];
-    await act(async () => {
-      for (const o of ouvintesPorTopico.get('rt-sol-wpp-leitura-emp') ?? []) o.onEvento?.({});
-    });
+    act(() => { avisoDeLeitura('eu'); });
 
-    expect(result.current.naoLidas['sol-1']).toBeUndefined();
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBeUndefined());
   });
 });

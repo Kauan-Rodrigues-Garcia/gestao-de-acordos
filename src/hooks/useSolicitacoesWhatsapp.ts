@@ -7,14 +7,15 @@
  *   useSolicitacoesWhatsapp — a lista, com status ao vivo e aviso de mensagem nova
  *   useChatSolicitacao      — a thread de um pedido, com leitura e "digitando"
  *
- * Os dois assinam o MESMO tópico de mensagens (`rt-sol-wpp-msg-{empresa}`) e o
- * `assinarTabela` deduplica: um canal só, dois consumidores. Cada um filtra o
- * que lhe interessa no handler.
+ * Os dois ouvem o MESMO aviso do banco (`solicitacoes:{empresa}`, migration
+ * 20261013170000): um canal só, dois consumidores. O aviso traz só os ids dos
+ * pedidos que mudaram; cada um filtra o que lhe interessa e relê.
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarAviso, avisoToca } from '@/lib/sinais';
+import { criarAgrupador } from '@/lib/agrupador';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { logger } from '@/lib/logger';
 import {
@@ -144,21 +145,6 @@ export function useSolicitacoesWhatsapp(
 
   useEffect(() => { if (habilitado) pedirPermissaoNotificacao(); }, [habilitado]);
 
-  // ── Realtime dos pedidos: status ao vivo ───────────────────────────────────
-  useEffect(() => {
-    if (!empresaId || !habilitado || !dbAtiva) return;
-    return assinarTabela(
-      {
-        topico:  `rt-sol-wpp-${empresaId}`,
-        escutas: [{ tabela: 'solicitacoes_whatsapp', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      {
-        onEvento:      () => { void recarregarRef.current(); },
-        onReconectado: () => { void recarregarRef.current(); },
-      },
-    );
-  }, [empresaId, habilitado, dbAtiva]);
-
   // ── Contagens: total da thread e não lidas ─────────────────────────────────
   // O total mostra que existe histórico anexado sem precisar abrir a conversa;
   // as não lidas alimentam o badge.
@@ -233,86 +219,67 @@ export function useSolicitacoesWhatsapp(
     return typeof document !== 'undefined' && document.hidden;
   }, []);
 
-  // ── Realtime das mensagens: badge + notificação do SO ──────────────────────
-  // A RLS do realtime já filtra: só chega mensagem de thread que o usuário pode
-  // ver. Mesmo tópico do useChatSolicitacao — o assinarTabela deduplica.
-  useEffect(() => {
-    if (!empresaId || !usuarioId || !habilitado || !dbAtiva) return;
-    return assinarTabela(
-      {
-        topico:  `rt-sol-wpp-msg-${empresaId}`,
-        escutas: [{
-          tabela: 'solicitacoes_whatsapp_mensagens',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
-      },
-      {
-        onEvento: (payload) => {
-          if (!montadoRef.current) return;
+  /**
+   * Notificação do SO para mensagem de outra pessoa com a janela atrás.
+   *
+   * O aviso do banco não leva o conteúdo (vai para a empresa inteira); a última
+   * mensagem do pedido é lida aqui, com a RLS de quem ouve — quem não pode ver a
+   * conversa não lê o texto.
+   */
+  const notificarMensagemNova = useCallback(async (solicitacaoId: string) => {
+    if (!empresaId || !usuarioId) return;
+    const { data } = await supabase
+      .from('solicitacoes_whatsapp_mensagens')
+      .select('conteudo, autor_id')
+      .eq('empresa_id', empresaId)
+      .eq('solicitacao_id', solicitacaoId)
+      .order('criado_em', { ascending: false })
+      .limit(1);
+    const ultima = (data?.[0] ?? null) as { conteudo: string; autor_id: string } | null;
+    if (!ultima || ultima.autor_id === usuarioId || !montadoRef.current) return;
+    // O nome do autor não vem aqui (é join); a lista já tem o pedido, então
+    // usamos o cliente para dar contexto.
+    const pedido = solicitacoesRef.current.find(s => s.id === solicitacaoId);
+    const quem   = pedido?.nome_cliente ?? pedido?.codigo_cliente ?? 'Solicitação';
+    notificarSO(`Nova mensagem — ${quem}`, ultima.conteudo.slice(0, 120), `sol-wpp-${solicitacaoId}`);
+  }, [empresaId, usuarioId]);
 
-          if (payload.eventType === 'INSERT') {
-            const nova = payload.new as unknown as MensagemSolicitacao;
+  const notificarMensagemNovaRef = useRef(notificarMensagemNova);
+  notificarMensagemNovaRef.current = notificarMensagemNova;
 
-            // O total conta TODA mensagem, inclusive a minha: é o tamanho do
-            // histórico anexado ao atendimento, não um contador de pendências.
-            setTotaisMensagens(prev => ({
-              ...prev,
-              [nova.solicitacao_id]: (prev[nova.solicitacao_id] ?? 0) + 1,
-            }));
-
-            if (nova.autor_id === usuarioId) return;   // eco do próprio envio
-
-            setNaoLidas(prev => ({
-              ...prev,
-              [nova.solicitacao_id]: (prev[nova.solicitacao_id] ?? 0) + 1,
-            }));
-
-            // Com a janela à frente quem avisa é o card + sino (ver janelaAtras).
-            if (!janelaAtras()) return;
-
-            // O nome do autor não vem no payload do realtime (é join); a lista
-            // já tem o pedido, então usamos o cliente para dar contexto.
-            const pedido = solicitacoesRef.current.find(s => s.id === nova.solicitacao_id);
-            const quem   = pedido?.nome_cliente ?? pedido?.codigo_cliente ?? 'Solicitação';
-            notificarSO(
-              `Nova mensagem — ${quem}`,
-              nova.conteudo.slice(0, 120),
-              `sol-wpp-${nova.solicitacao_id}`,
-            );
-            return;
-          }
-
-          // UPDATE/DELETE de mensagem é raro (correção manual); reler é barato.
-          void recarregarContagensRef.current();
-        },
-        onReconectado: () => { void recarregarContagensRef.current(); },
-      },
-    );
-  }, [empresaId, usuarioId, habilitado, dbAtiva, janelaAtras]);
-
-  // ── Realtime dos cursores de leitura ───────────────────────────────────────
-  // Tópico próprio: `assinarTabela` avisa em DEV quando o mesmo tópico é
-  // reutilizado com escutas diferentes, e este ouve outra tabela.
+  // ── Tempo real: pedidos, mensagens e cursores de leitura ───────────────────
+  // Um aviso por empresa com os ids dos pedidos que mudaram (20261013170000 —
+  // eram três assinaturas de Postgres Changes). O mesmo tópico do
+  // `useChatSolicitacao`: o canal é um só.
   //
-  // O que chega aqui é quase sempre a leitura de OUTRA pessoa. Recontar mesmo
-  // assim é o que mantém o badge honesto quando eu abro a conversa numa segunda
-  // aba: o cursor anda no banco e as duas telas acompanham.
+  // Contagens relidas, não somadas no braço: o aviso diz que o pedido teve
+  // mensagem, não quantas. A leitura de OUTRA pessoa também reconta — é o que
+  // mantém o badge honesto quando eu abro a conversa numa segunda aba.
   useEffect(() => {
-    if (!empresaId || !usuarioId || !habilitado || !dbAtiva) return;
-    return assinarTabela(
-      {
-        topico:  `rt-sol-wpp-leitura-${empresaId}`,
-        escutas: [{
-          tabela: 'solicitacoes_whatsapp_leitura',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
+    if (!empresaId || !habilitado || !dbAtiva) return;
+    const contar = criarAgrupador(() => { void recarregarContagensRef.current(); }, { esperaMs: 300, tetoMs: 1_500 });
+    const cancelar = assinarAviso('solicitacoes', empresaId, {
+      onAviso: (aviso) => {
+        if (!montadoRef.current) return;
+        if (aviso.tabela === 'solicitacoes_whatsapp' || aviso.recarregar) {
+          void recarregarRef.current();
+          if (aviso.recarregar) contar.avisar();
+          return;
+        }
+        const naTela = aviso.ids.filter(id => solicitacoesRef.current.some(s => s.id === id));
+        if (!naTela.length) return;
+        contar.avisar();
+
+        // Com a janela à frente quem avisa é o card + sino (ver janelaAtras).
+        // Só eu escrevendo = eco do próprio envio.
+        if (aviso.tabela !== 'solicitacoes_whatsapp_mensagens' || aviso.operacao !== 'INSERT') return;
+        if (!janelaAtras() || aviso.autores.every(a => a === usuarioId)) return;
+        for (const id of naTela) void notificarMensagemNovaRef.current(id);
       },
-      {
-        onEvento:      () => { void recarregarContagensRef.current(); },
-        onReconectado: () => { void recarregarContagensRef.current(); },
-      },
-    );
-  }, [empresaId, usuarioId, habilitado, dbAtiva]);
+      onReconectado: () => { void recarregarRef.current(); contar.avisar(); },
+    });
+    return () => { contar.cancelar(); cancelar(); };
+  }, [empresaId, usuarioId, habilitado, dbAtiva, janelaAtras]);
 
   /**
    * Zera o badge local ao abrir a thread.
@@ -413,62 +380,26 @@ export function useChatSolicitacao(params: {
     void marcarConversaLida({ empresaId, solicitacaoId, usuarioId });
   }, [solicitacaoId, usuarioId, empresaId, mensagens, leituras, loading]);
 
-  // ── Realtime das mensagens (mesmo tópico da lista — deduplica) ─────────────
+  // ── Tempo real: mensagens e cursores desta conversa ────────────────────────
+  // Mesmo aviso da lista (um canal só). O canal é da empresa toda; aqui só
+  // interessa esta thread. Relê em vez de aplicar: o aviso não traz conteúdo, e
+  // a conversa precisa do join do autor (nome e foto). O cursor de outra pessoa
+  // é o que acende o ✓✓.
   useEffect(() => {
     if (!empresaId || !solicitacaoId) return;
-    return assinarTabela(
-      {
-        topico:  `rt-sol-wpp-msg-${empresaId}`,
-        escutas: [{
-          tabela: 'solicitacoes_whatsapp_mensagens',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
+    return assinarAviso('solicitacoes', empresaId, {
+      onAviso: (aviso) => {
+        if (!montadoRef.current || aviso.tabela === 'solicitacoes_whatsapp') return;
+        if (avisoToca(aviso, solicitacaoId)) void recarregarRef.current();
       },
-      {
-        onEvento: (payload) => {
-          if (!montadoRef.current) return;
-          const linha = (payload.new ?? payload.old) as unknown as
-            { solicitacao_id?: string } | null;
-          // O canal é da empresa toda; aqui só interessa esta thread.
-          if (linha?.solicitacao_id !== solicitacaoId) return;
-          // Relê em vez de aplicar o payload: precisamos do join do autor
-          // (nome e foto), que o realtime não manda.
-          void recarregarRef.current();
-        },
-        onReconectado: () => { void recarregarRef.current(); },
-      },
-    );
-  }, [empresaId, solicitacaoId]);
-
-  // ── Realtime dos cursores: o ✓✓ acende quando o outro lê ───────────────────
-  // Mesmo tópico da lista, que o `assinarTabela` deduplica em um canal só.
-  useEffect(() => {
-    if (!empresaId || !solicitacaoId) return;
-    return assinarTabela(
-      {
-        topico:  `rt-sol-wpp-leitura-${empresaId}`,
-        escutas: [{
-          tabela: 'solicitacoes_whatsapp_leitura',
-          filtro: `empresa_id=eq.${empresaId}`,
-        }],
-      },
-      {
-        onEvento: (payload) => {
-          if (!montadoRef.current) return;
-          const linha = (payload.new ?? payload.old) as unknown as
-            { solicitacao_id?: string } | null;
-          if (linha?.solicitacao_id !== solicitacaoId) return;
-          void recarregarRef.current();
-        },
-        onReconectado: () => { void recarregarRef.current(); },
-      },
-    );
+      onReconectado: () => { void recarregarRef.current(); },
+    });
   }, [empresaId, solicitacaoId]);
 
   // ── "Digitando" via broadcast ──────────────────────────────────────────────
   // Efêmero de propósito: não é dado, é sinal. Vai por broadcast e não por
   // tabela — nada a persistir, nada a reler depois. Por isso NÃO passa pelo
-  // `assinarTabela`, que cuida só de postgres_changes.
+  // `assinarTabela`: é canal público entre navegadores, não aviso do banco.
   const canalDigitandoRef = useRef<RealtimeChannel | null>(null);
   const timerDigitandoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ultimoAvisoRef    = useRef(0);

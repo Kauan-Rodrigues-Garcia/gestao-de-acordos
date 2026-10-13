@@ -34,7 +34,7 @@ import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useHoPercentual } from '@/lib/hoPercentual';
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import { useTenant } from '@/lib/tenant-config';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarMapa } from '@/lib/dadosVivos';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
@@ -392,16 +392,10 @@ export function DesempenhoEquipes({
   // "Se um editar, edita para todos": o evento chega por WebSocket e a aba relê.
   useEffect(() => {
     if (isPP || !contribDbAtiva) return;
-    return assinarTabela(
-      {
-        topico:  `rt-contrib-receptivo-${empresaId}`,
-        escutas: [{ tabela: 'contribuicao_receptivo', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      {
-        onEvento:      () => { void recarregarContribRef.current(); },
-        onReconectado: () => { void recarregarContribRef.current(); },
-      },
-    );
+    return assinarSinal('contribuicao', empresaId, {
+      onMudou:       () => { void recarregarContribRef.current(); },
+      onReconectado: () => { void recarregarContribRef.current(); },
+    });
   }, [isPP, contribDbAtiva, empresaId]);
 
   /** O lápis do card: grava só a meta. O acumulado vem do 59. */

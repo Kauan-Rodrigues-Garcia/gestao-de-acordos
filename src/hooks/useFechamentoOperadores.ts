@@ -32,7 +32,6 @@ import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { partesDoMes } from '@/lib/mesReferencia';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
-import { assinarTabela } from '@/lib/realtime';
 import { assinarSinal } from '@/lib/sinais';
 import { invalidarSomasDeAjuste } from '@/services/analitico/ajusteManual.service';
 import { criarAgrupador } from '@/lib/agrupador';
@@ -234,20 +233,17 @@ export function useFechamentoOperadores({
     if (!ativo || !empresaId) return;
     const agrupador = criarAgrupador(() => { void carregar(); }, { esperaMs: 1_500, tetoMs: 6_000 });
     const reler = () => { void carregar(); };
-    // O analítico vem por sinal do banco (um aviso por comando). O ajuste manual
-    // segue linha a linha, no mesmo tópico da tela de ajustes — um canal só.
+    // O analítico e o ajuste manual vêm por sinal do banco (um aviso por
+    // comando); o do ajuste é o mesmo tópico da tela de ajustes — um canal só.
     const cancelarAnalitico = assinarSinal('analitico', empresaId, {
       onMudou: agrupador.avisar, onReconectado: reler,
     });
-    const cancelarAjustes = assinarTabela(
-      { topico: `rt-ajustes-${empresaId}`, escutas: [{ tabela: 'analitico_ajustes_manuais' }] },
-      {
-        // As somas de ajuste ficam guardadas por segundos (`somasPorOperador`):
-        // o card mudou em outra tela, então a releitura não pode usar a guardada.
-        onEvento: () => { invalidarSomasDeAjuste(); agrupador.avisar(); },
-        onReconectado: () => { invalidarSomasDeAjuste(); reler(); },
-      },
-    );
+    const cancelarAjustes = assinarSinal('ajustes', empresaId, {
+      // As somas de ajuste ficam guardadas por segundos (`somasPorOperador`):
+      // o card mudou em outra tela, então a releitura não pode usar a guardada.
+      onMudou: () => { invalidarSomasDeAjuste(); agrupador.avisar(); },
+      onReconectado: () => { invalidarSomasDeAjuste(); reler(); },
+    });
     return () => { agrupador.cancelar(); cancelarAnalitico(); cancelarAjustes(); };
   }, [ativo, empresaId, carregar]);
 

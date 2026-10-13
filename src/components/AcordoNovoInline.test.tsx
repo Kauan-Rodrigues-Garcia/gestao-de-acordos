@@ -57,14 +57,6 @@ vi.mock('@/hooks/useRegistrarPixAoPagar', () => ({
 }));
 
 // 3) hooks
-const verificarConflitoCache = vi.fn().mockReturnValue(null);
-vi.mock('@/hooks/useNrRegistros', () => ({
-  useNrRegistros: () => ({
-    verificarConflito: verificarConflitoCache,
-    loading: false,
-    refetch: vi.fn(),
-  }),
-}));
 
 const isAtivoParaUsuarioMock = vi.fn().mockReturnValue(false);
 vi.mock('@/hooks/useDiretoExtraConfig', () => ({
@@ -310,7 +302,6 @@ afterAll(() => { vi.useRealTimers(); });
 
 beforeEach(() => {
   verificarNrRegistroMock.mockReset();
-  verificarConflitoCache.mockReset().mockReturnValue(null);
   criarNotificacaoMock.mockReset().mockResolvedValue(undefined);
   isAtivoParaUsuarioMock.mockReset().mockReturnValue(false);
   fetchIsDiretoExtraAtivoMock.mockReset().mockResolvedValue(false);

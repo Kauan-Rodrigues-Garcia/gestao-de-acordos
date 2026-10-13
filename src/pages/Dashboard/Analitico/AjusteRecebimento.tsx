@@ -64,6 +64,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useDadosVivos } from '@/hooks/useDadosVivos';
 import { chaveDeCache } from '@/lib/cacheInstantaneo';
 import { iguaisProfundo } from '@/lib/dadosVivos';
+import { topicoDoSinal } from '@/lib/sinais';
 import { valorDigitadoParaNumero } from './ajusteValor';
 import {
   listarAjustes, listarEventos, lancarAjuste, editarAjuste, cancelarAjuste,
@@ -114,9 +115,10 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
     // O card é compartilhado: quando a Brenda edita, a tela do Amauri precisa
     // mudar sozinha. Sem realtime, o card único só evita a duplicata depois de
     // um F5 — e o F5 é justamente o que ninguém dá antes de digitar.
+    // Sinal `ajustes` do banco (20261013170000), o mesmo canal do Fechamento.
     assinar: empresaId ? {
-      topico: `rt-ajustes-${empresaId}`,
-      escutas: [{ tabela: 'analitico_ajustes_manuais' }],
+      topico: topicoDoSinal('ajustes', empresaId),
+      escutas: [{ sinal: 'mudou' }],
     } : undefined,
   });
 

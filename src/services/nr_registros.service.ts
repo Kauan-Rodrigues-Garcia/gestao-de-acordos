@@ -239,23 +239,6 @@ export async function liberarNrPorAcordoId(acordoId: string): Promise<{ ok: bool
 }
 
 /**
- * Busca todos os NRs registrados de uma empresa (para cache inicial).
- */
-export async function fetchNrRegistros(empresaId: string): Promise<NrRegistro[]> {
-  const { data, error } = await supabase
-    .from('nr_registros')
-    .select('*')
-    .eq('empresa_id', empresaId)
-    .order('atualizado_em', { ascending: false });
-
-  if (error) {
-    console.warn('[nr_registros.service] fetchNrRegistros error:', error.message);
-    return [];
-  }
-  return (data as NrRegistro[]) ?? [];
-}
-
-/**
  * Verifica em lote quais NRs de uma lista já estão registrados.
  * Usado na importação em massa.
  * Retorna Map: nrValue → NrConflito

@@ -52,7 +52,7 @@ import { reconciliarComDiff, type OpcoesReconciliacao } from '@/lib/dadosVivos';
 import { gravarInstantaneo, lerInstantaneo } from '@/lib/cacheInstantaneo';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { criarAgrupador, type OpcoesAgrupador } from '@/lib/agrupador';
-import { assinarTabela, type EscutaTabela } from '@/lib/realtime';
+import { assinarTabela, type Escuta } from '@/lib/realtime';
 
 export interface AssinaturaDadosVivos {
   /**
@@ -61,7 +61,12 @@ export interface AssinaturaDadosVivos {
    * recebe silenciosamente as escutas do primeiro.
    */
   topico: string;
-  escutas: EscutaTabela[];
+  /**
+   * Tabela (Postgres Changes) ou sinal do banco (`{ sinal: 'mudou' }`, com o
+   * tópico exato que o gatilho escreve). Desde 20261013170000 o app não assina
+   * mais tabela nenhuma — ver `sinais.ts`.
+   */
+  escutas: Escuta[];
 }
 
 export interface UseDadosVivosOpcoes<T> extends OpcoesReconciliacao<T> {
@@ -91,8 +96,16 @@ export interface UseDadosVivosOpcoes<T> extends OpcoesReconciliacao<T> {
    * frequente. Ligue nas telas que as pessoas de fato recarregam.
    */
   persistirCache?: boolean;
-  /** Assina tabelas e relê em silêncio quando elas mudam. */
-  assinar?: AssinaturaDadosVivos;
+  /**
+   * Assina e relê em silêncio quando muda. Uma lista para mais de um tópico —
+   * a fila de tickets de quem enxerga as duas empresas ouve as duas.
+   */
+  assinar?: AssinaturaDadosVivos | AssinaturaDadosVivos[];
+  /**
+   * Sinal que não interessa a esta lista (ex.: mensagem no tópico dos
+   * tickets, que só a conversa relê). Ausente = todo sinal relê.
+   */
+  aceitarSinal?: (payload: Record<string, unknown>) => boolean;
   /** Janela de agrupamento dos eventos de tempo real. */
   agrupamento?: OpcoesAgrupador;
   /**
@@ -130,8 +143,11 @@ export interface UseDadosVivosResultado<T> {
 export function useDadosVivos<T>({
   carregar, chave, iguais, ativo = true,
   chaveCache, persistirCache = false,
-  assinar, agrupamento, pausarOculto = true,
+  assinar, aceitarSinal, agrupamento, pausarOculto = true,
 }: UseDadosVivosOpcoes<T>): UseDadosVivosResultado<T> {
+  // Por ref: a função chega nova a cada render e não pode refazer o canal.
+  const aceitarSinalRef = useRef(aceitarSinal);
+  aceitarSinalRef.current = aceitarSinal;
   const [dados, setDados]             = useState<T[]>([]);
   const [carregando, setCarregando]   = useState(true);
   const [atualizando, setAtualizando] = useState(false);
@@ -263,29 +279,33 @@ export function useDadosVivos<T>({
    * tela. A reconexão NÃO passa pelo agrupador — ela significa "houve um buraco
    * no histórico de eventos" e merece releitura na hora.
    */
-  const topico  = assinar?.topico;
-  const escutas = assinar?.escutas;
-  const escutasSerializadas = useMemo(() => JSON.stringify(escutas ?? null), [escutas]);
+  // Serializada: quem chama monta o objeto a cada render, e a identidade nova
+  // não pode derrubar e refazer o canal.
+  const assinaturasSerializadas = useMemo(
+    () => JSON.stringify(assinar ? [assinar].flat().filter(a => a.topico && a.escutas.length) : []),
+    [assinar],
+  );
   const esperaMs = agrupamento?.esperaMs;
   const tetoMs   = agrupamento?.tetoMs;
 
   useEffect(() => {
-    if (!ativo || !topico) return;
-    const lista = JSON.parse(escutasSerializadas) as EscutaTabela[] | null;
-    if (!lista?.length) return;
+    if (!ativo) return;
+    const lista = JSON.parse(assinaturasSerializadas) as AssinaturaDadosVivos[];
+    if (!lista.length) return;
 
     const grupo = criarAgrupador(() => { void recarregar(); }, { esperaMs, tetoMs });
 
-    const cancelar = assinarTabela(
-      { topico, escutas: lista },
-      {
-        onEvento:      () => grupo.avisar(),
-        onReconectado: () => { grupo.cancelar(); void recarregar(); },
+    const cancelar = lista.map(a => assinarTabela(a, {
+      onEvento:      () => grupo.avisar(),
+      onSinal:       (payload) => {
+        if (aceitarSinalRef.current && !aceitarSinalRef.current(payload)) return;
+        grupo.avisar();
       },
-    );
+      onReconectado: () => { grupo.cancelar(); void recarregar(); },
+    }));
 
-    return () => { grupo.cancelar(); cancelar(); };
-  }, [ativo, topico, escutasSerializadas, esperaMs, tetoMs, recarregar]);
+    return () => { grupo.cancelar(); for (const c of cancelar) c(); };
+  }, [ativo, assinaturasSerializadas, esperaMs, tetoMs, recarregar]);
 
   /* A volta para a aba paga o que ficou devendo — uma vez, não uma por evento. */
   useEffect(() => {

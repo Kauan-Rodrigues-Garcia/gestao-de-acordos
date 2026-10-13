@@ -106,9 +106,7 @@ import {
   registrarNr,
   transferirNr,
   liberarNr,
-  liberarNrPorAcordoId,
-  fetchNrRegistros,
-  verificarNrsEmLote,
+  liberarNrPorAcordoId,  verificarNrsEmLote,
 } from './nr_registros.service';
 
 beforeEach(() => {
@@ -340,35 +338,6 @@ describe('liberarNrPorAcordoId', () => {
     const r = await liberarNrPorAcordoId('a1');
     expect(r).toEqual({ ok: false, error: 'nope' });
     warn.mockRestore();
-  });
-});
-
-// ── fetchNrRegistros ────────────────────────────────────────────────────────
-
-describe('fetchNrRegistros', () => {
-  it('retorna lista ordenada por atualizado_em desc', async () => {
-    nextResult = {
-      data: [{ id: 'r1', nr_value: '777' }, { id: 'r2', nr_value: '888' }],
-      error: null,
-    };
-    const r = await fetchNrRegistros('e1');
-    expect(r).toHaveLength(2);
-    expect(calls[0].order).toEqual({ col: 'atualizado_em', opts: { ascending: false } });
-    expect(calls[0].filters).toContainEqual(['eq', 'empresa_id', 'e1']);
-  });
-
-  it('retorna [] quando há erro', async () => {
-    nextResult = { data: null, error: { message: 'fail' } };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const r = await fetchNrRegistros('e1');
-    expect(r).toEqual([]);
-    warn.mockRestore();
-  });
-
-  it('retorna [] quando data é null sem erro', async () => {
-    nextResult = { data: null, error: null };
-    const r = await fetchNrRegistros('e1');
-    expect(r).toEqual([]);
   });
 });
 

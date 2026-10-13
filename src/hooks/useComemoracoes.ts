@@ -10,8 +10,7 @@
  * A conta de "está no ar?" mora em `janela.ts`, fora daqui, para ter teste.
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { assinarTabela } from '@/lib/realtime';
-import { assinarSinal } from '@/lib/sinais';
+import { assinarAviso, assinarSinal, avisoToca } from '@/lib/sinais';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
   buscarComemoracoes, buscarParabens, parabenizar, finalizarComemoracao,
@@ -271,24 +270,16 @@ export function useParabens(params: {
 
   useEffect(() => { void recarregar(); }, [recarregar]);
 
+  // Aviso `parabens` da empresa (20261013170000), sem fila: é o mural ao vivo
+  // da festa. Chega só QUAL comemoração recebeu parabéns; o nome e a foto de
+  // quem parabenizou vêm na releitura.
   useEffect(() => {
-    if (!comemoracaoId) return;
-    return assinarTabela(
-      {
-        topico:  `rt-parabens-${comemoracaoId}`,
-        escutas: [{
-          tabela: 'comemoracao_parabens',
-          filtro: `comemoracao_id=eq.${comemoracaoId}`,
-        }],
-      },
-      {
-        // Relê em vez de aplicar o payload: o nome e a foto de quem
-        // parabenizou vêm de outra tabela, e o realtime não faz join.
-        onEvento:      () => { void recarregarRef.current(); },
-        onReconectado: () => { void recarregarRef.current(); },
-      },
-    );
-  }, [comemoracaoId]);
+    if (!comemoracaoId || !empresaId) return;
+    return assinarAviso('parabens', empresaId, {
+      onAviso:       (aviso) => { if (avisoToca(aviso, comemoracaoId)) void recarregarRef.current(); },
+      onReconectado: () => { void recarregarRef.current(); },
+    });
+  }, [comemoracaoId, empresaId]);
 
   /** Eu já parabenizei esta comemoração? */
   const jaParabenizei = useMemo(

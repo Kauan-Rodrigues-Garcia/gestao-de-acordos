@@ -10,7 +10,7 @@
  * hooks), e só passa a empresa quando a pessoa pode ver a aba.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarSinal } from '@/lib/sinais';
 import { reconciliarLista } from '@/lib/dadosVivos';
 import { listarLixeira, type LixeiraNumeroRow } from '@/services/numeros/numeros.service';
 
@@ -59,16 +59,10 @@ export function useLixeiraNumeros(empresaId: string | null): EstadoLixeiraNumero
   // Outra pessoa exclui ou restaura com a aba aberta: sem isto, só depois de um F5.
   useEffect(() => {
     if (!empresaId) return;
-    return assinarTabela(
-      {
-        topico: `numeros-lixeira:${empresaId}`,
-        escutas: [{ tabela: 'numeros_lixeira', filtro: `empresa_id=eq.${empresaId}` }],
-      },
-      {
-        onEvento:      () => { void carregar(); },
-        onReconectado: () => { void carregar(); },
-      },
-    );
+    return assinarSinal('numeros', empresaId, {
+      onMudou:       () => { void carregar(); },
+      onReconectado: () => { void carregar(); },
+    });
   }, [empresaId, carregar]);
 
   return { itens, loading, erro, recarregar: carregar };
