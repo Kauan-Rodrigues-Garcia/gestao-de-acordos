@@ -20,6 +20,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { copiarTexto } from '@/lib/clipboard';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
 import { useCampanhasWhatsapp } from './useCampanhasWhatsapp';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
@@ -433,8 +434,8 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
             <Campo rotulo="Contrato (NR)" valor={c.contrato} />
             <Campo rotulo="Empresa" valor={c.empresa_cliente} />
-            <Campo rotulo="WhatsApp" valor={fone} />
-            <Campo rotulo="Fone 2" valor={fone2} />
+            <Campo rotulo="WhatsApp" valor={fone} copiavel />
+            <Campo rotulo="Fone 2" valor={fone2} copiavel />
           </dl>
         </div>
 
@@ -491,11 +492,29 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
   );
 }
 
-function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+/**
+ * `copiavel`: o número vai só com os dígitos, sem o 55 — cola em qualquer
+ * discador ou na busca do WhatsApp. Copiar o número não conta como enviada.
+ */
+function Campo({ rotulo, valor, copiavel }: { rotulo: string; valor: string | null; copiavel?: boolean }) {
+  const texto = valor?.trim() ?? '';
+  const digitos = texto.replace(/\D/g, '');
   return (
     <div className="min-w-0">
       <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{rotulo}</dt>
-      <dd className="truncate tabular-nums">{valor?.trim() || '—'}</dd>
+      <dd className="flex min-w-0 items-center gap-1">
+        <span className="truncate tabular-nums">{texto || '—'}</span>
+        {copiavel && digitos && (
+          <button
+            type="button"
+            onClick={() => void copiarTexto(digitos, `${rotulo} copiado`, `Não foi possível copiar o ${rotulo}.`)}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title={`Copiar o ${rotulo}`} aria-label={`Copiar o ${rotulo}`}
+          >
+            <Copy className="h-3 w-3" />
+          </button>
+        )}
+      </dd>
     </div>
   );
 }

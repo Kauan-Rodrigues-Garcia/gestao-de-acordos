@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
-  enviosDoLote, listarOperadoresParaCampanha, mensagensDoLote, placarDosEnvios, situacaoDoLote,
+  enviosDoLote, listarOperadoresParaCampanha, mensagensDoLote, placarDosEnvios, situacaoDoLote, votosDoLote,
   type EnvioResumo, type LoteCampanha, type PlacarOperador, type SituacaoLote,
 } from './campanhaFacilEnvios.service';
 import { redistribuir, type MensagemDaCampanha, type OperadorCampanha } from './envios';
@@ -198,7 +198,8 @@ function LinhaLote({ l, onClick }: { l: LoteCampanha; onClick: () => void }) {
 
 /**
  * O que a operação achou do retorno: cada operador vota uma vez, joinha ou
- * mãozinha para baixo (20261009150000). O líder vê só os números.
+ * mãozinha para baixo (20261009150000). Aqui ficam os números; o voto de cada
+ * um aparece na linha dele em «Quem encaminhou» (20261013120000).
  */
 function RetornoDaOperacao({ lote, operadores }: { lote: LoteCampanha; operadores: number }) {
   const votos = lote.votos_bom + lote.votos_ruim;
@@ -333,6 +334,17 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
     return () => { vivo = false; };
   }, [aberta, lote.empresa_id, lote.setor_id]);
 
+  // Quem votou o quê (13/10/2026). Também na encerrada: o voto sobrevive à
+  // faxina. Relê quando a contagem muda ou o líder clica em Atualizar.
+  const [votos, setVotos] = useState<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    let vivo = true;
+    votosDoLote(lote.id)
+      .then((v) => { if (vivo) setVotos(v); })
+      .catch((err) => console.warn('[CampanhaFacil] votos da campanha:', err));
+    return () => { vivo = false; };
+  }, [lote.id, lote.votos_bom, lote.votos_ruim, atualizadoEm]);
+
   const placar: Placar[] = aberta ? placarDosEnvios(enviosLote) : (lote.placar ?? []);
   const soma = placar.reduce(
     (s, o) => ({ total: s.total + o.total, enviados: s.enviados + o.enviados, nao: s.nao + o.nao_enviados }),
@@ -352,8 +364,13 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
     }
   }
 
+  // Editar e repassar abrem NO LUGAR desta janela, não por cima dela: com duas
+  // janelas modais empilhadas, o ponteiro sumia dentro do campo da mensagem
+  // ao editar a campanha desativada (13/10/2026). Fechou, esta volta.
+  const janelaPorCima = acao === 'editar' || acao === 'repasse';
+
   return (
-    <Dialog open onOpenChange={(v) => { if (!v && !ocupado) onFechar(); }}>
+    <Dialog open={!janelaPorCima} onOpenChange={(v) => { if (!v && !ocupado) onFechar(); }}>
       <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start gap-2 pr-6">
@@ -408,7 +425,7 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
             <p className="py-4 text-sm text-muted-foreground">Sem registro por operador.</p>
           ) : (
             <ul className="divide-y divide-border rounded-lg border border-border">
-              {placar.map((o) => <LinhaPlacar key={o.operador_id} o={o} />)}
+              {placar.map((o) => <LinhaPlacar key={o.operador_id} o={o} voto={votos.get(o.operador_id)} />)}
             </ul>
           )}
         </section>
@@ -533,7 +550,8 @@ function Numero({ rotulo, valor, tom }: { rotulo: string; valor: number; tom?: '
   );
 }
 
-function LinhaPlacar({ o }: { o: Placar }) {
+/** `voto`: true = joinha, false = mão para baixo, undefined = não votou. */
+function LinhaPlacar({ o, voto }: { o: Placar; voto?: boolean }) {
   const faltam = Math.max(o.total - o.enviados - o.nao_enviados, 0);
   const pct = o.total > 0 ? Math.round((o.enviados / o.total) * 100) : 0;
   const completo = o.total > 0 && faltam === 0;
@@ -544,6 +562,16 @@ function LinhaPlacar({ o }: { o: Placar }) {
           ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Concluiu" />
           : <Clock className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Faltando" />}
         <span className="min-w-0 flex-1 truncate font-medium">{o.nome}</span>
+        {voto === true && (
+          <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-500/10 p-1" title="Votou: bom retorno">
+            <ThumbsUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-label="Votou bom retorno" />
+          </span>
+        )}
+        {voto === false && (
+          <span className="inline-flex shrink-0 items-center rounded-full bg-red-500/10 p-1" title="Votou: sem retorno">
+            <ThumbsDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-label="Votou sem retorno" />
+          </span>
+        )}
         {o.repasse && <Badge variant="secondary" className="h-4 px-1 text-[10px]">repasse</Badge>}
         <span className="shrink-0 tabular-nums text-muted-foreground">
           <strong className="text-foreground">{n(o.enviados)}</strong>/{n(o.total)}

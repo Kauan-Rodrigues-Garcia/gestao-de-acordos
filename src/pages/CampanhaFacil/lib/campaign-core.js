@@ -1033,6 +1033,9 @@ Contrato: *{{contrato}}*
     return digits;
   }
 
+  // Sempre com centavos: «R$ 100,00» (Cleber, 13/10/2026). Os valores já
+  // chegam arredondados para cima em reais inteiros (`roundUp`), então na
+  // prática os centavos saem ,00.
   function formatCurrency(value) {
     if (value === null || value === undefined || value === "") return "";
     const number = Number(value);
@@ -1040,8 +1043,8 @@ Contrato: *{{contrato}}*
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(number);
   }
 

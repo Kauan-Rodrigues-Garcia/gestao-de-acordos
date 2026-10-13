@@ -251,6 +251,19 @@ export async function listarHistorico(autorId: string): Promise<LoteCampanha[]> 
   return todos;
 }
 
+/**
+ * O voto de cada operador na campanha: `true` = bom retorno, `false` = não
+ * deu. Quem não votou fica fora do mapa. O líder lê pela policy da
+ * 20261013120000; sem ela aplicada, a leitura volta vazia e a tela segue só
+ * com os números.
+ */
+export async function votosDoLote(loteId: string): Promise<Map<string, boolean>> {
+  const { data, error } = await db.from('campanha_facil_avaliacoes')
+    .select('operador_id, bom').eq('lote_id', loteId);
+  if (error) throw error;
+  return new Map(((data ?? []) as { operador_id: string; bom: boolean }[]).map(v => [v.operador_id, v.bom]));
+}
+
 export interface Progresso { total: number; enviados: number; nao_enviados: number }
 
 export interface EnvioResumo {
