@@ -67,7 +67,7 @@ describe('seletor de faixas', () => {
     expect(within(screen.getByRole('tabpanel')).queryByText('Provavelmente')).toBeNull();
   });
 
-  it('cinco temas e quatro músicas cabem numa página, sem busca', () => {
+  it('cinco temas e cinco músicas cabem numa página, sem busca', () => {
     render(<PainelSomAmbiente />);
     expect(faixasNaTela()).toHaveLength(TEMAS_DE_TERROR.length);
     fireEvent.click(screen.getByRole('tab', { name: /Músicas/ }));
@@ -101,7 +101,7 @@ describe('seletor de faixas', () => {
     render(<PainelSomAmbiente />);
     publicar({ prefs: { ...PADRAO, faixa: MUSICAS[MUSICAS.length - 1], playlists: [] } });
     expect(screen.getByRole('tab', { name: /Músicas/ })).toHaveAttribute('aria-selected', 'true');
-    expect(within(screen.getByRole('tabpanel')).getByText('Raindance')).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).getByText('Leão')).toBeInTheDocument();
   });
 
   it('completo: tem a aba Playlists, com as da pessoa e o campo de adicionar', () => {

@@ -12,8 +12,8 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
 /** Os temas de terror que vêm de fábrica, na ordem do painel. Trocados em 13/10/2026. */
 export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'stranger'] as const;
-/** As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026; «Raindance» ficou. */
-export const MUSICAS = ['provavelmente', 'doiwannaknow', 'novobalanco', 'raindance'] as const;
+/** As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026 («Raindance» ficou; «Leão» entrou no fim no mesmo dia). */
+export const MUSICAS = ['provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao'] as const;
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
@@ -31,6 +31,7 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   doiwannaknow: '/sounds/halloween-arctic-monkeys-do-i-wanna-know.mp3',
   novobalanco: '/sounds/halloween-veigh-novo-balanco.mp3',
   raindance: '/sounds/halloween-raindance.mp3',
+  leao: '/sounds/halloween-marilia-mendonca-leao.mp3',
 };
 
 /**
@@ -58,6 +59,7 @@ export const GANHO: Record<FaixaEmbutida, number> = {
   doiwannaknow: 0.68,  // -9,6
   novobalanco: 0.71,   // -10,0
   raindance: 0.64,     // -9,1 (11/10/2026)
+  leao: 0.50,          // -7,0 (13/10/2026) — a mais alta da lista
 };
 
 /**

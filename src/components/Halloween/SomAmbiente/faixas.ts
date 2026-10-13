@@ -80,6 +80,12 @@ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
     nome: 'Raindance', descricao: 'Dave, com Tems', capa: capa('raindance'), Icone: Music,
     cor: { fundo: 'hsl(40 22% 13%)', destaque: 'hsl(43 90% 62%)' },
   },
+  // Capa amarela com o vestido verde-azulado: o fundo vem do vestido, o
+  // destaque do dourado do título «Decretos Reais».
+  leao: {
+    nome: 'Leão', descricao: 'Marília Mendonça', capa: capa('leao'), Icone: Music,
+    cor: { fundo: 'hsl(186 34% 13%)', destaque: 'hsl(44 88% 58%)' },
+  },
 };
 
 const COR_SPOTIFY: CorFaixa = { fundo: 'hsl(141 30% 11%)', destaque: 'hsl(141 70% 48%)' };
