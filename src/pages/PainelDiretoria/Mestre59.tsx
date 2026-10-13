@@ -127,6 +127,8 @@ export function Mestre59({ empresaId, mes }: Props) {
   const [lendo, setLendo]       = useState(false);
   const [progresso, setProgresso] = useState<ProgressoCarga | null>(null);
   const [expandido, setExpandido] = useState<string | null>(null);
+  /** O super_admin pediu reescrever tudo e falta o segundo clique. */
+  const [confirmandoCompleto, setConfirmandoCompleto] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -157,7 +159,7 @@ export function Mestre59({ empresaId, mes }: Props) {
 
   // Trocar de mês invalida a prévia: ela foi montada para outro período, e
   // subi-la aqui gravaria o retrato no mês errado.
-  useEffect(() => { setPrevia(null); setExpandido(null); }, [mes]);
+  useEffect(() => { setPrevia(null); setExpandido(null); setConfirmandoCompleto(false); }, [mes]);
 
   // ── Leitura do arquivo ────────────────────────────────────────────────────
 
@@ -202,8 +204,9 @@ export function Mestre59({ empresaId, mes }: Props) {
     }
   }, []);
 
-  const confirmar = useCallback(async () => {
+  const confirmar = useCallback(async (completo = false) => {
     if (!previa) return;
+    setConfirmandoCompleto(false);
     setProgresso({ enviadas: 0, total: previa.linhas.length, fase: 'abrindo' });
     try {
       const r = await importarMestre59({
@@ -212,6 +215,7 @@ export function Mestre59({ empresaId, mes }: Props) {
         arquivoNome: previa.arquivoNome,
         conteudo: previa.conteudo,
         linhas: previa.linhas,
+        completo,
         onProgresso: setProgresso,
       });
       const mudancas = [
@@ -220,8 +224,12 @@ export function Mestre59({ empresaId, mes }: Props) {
         r.equipes_novas   ? `${r.equipes_novas} equipe(s) nova(s)` : null,
         r.equipes_sumiram ? `${r.equipes_sumiram} equipe(s) sumiram` : null,
       ].filter(Boolean);
+      const porDiferenca = r.modo === 'diferenca';
       toast.success(
-        `Retrato de ${r.mes} substituído: ${r.linhas.toLocaleString('pt-BR')} linhas, ${formatBRL(r.total_recebido)}.`
+        porDiferenca
+          ? `Retrato de ${r.mes} atualizado: ${r.linhas.toLocaleString('pt-BR')} linhas, ${formatBRL(r.total_recebido)} — `
+            + `${(r.linhas_inseridas ?? 0).toLocaleString('pt-BR')} entraram e ${(r.linhas_removidas ?? 0).toLocaleString('pt-BR')} saíram.`
+          : `Retrato de ${r.mes} reescrito por completo: ${r.linhas.toLocaleString('pt-BR')} linhas, ${formatBRL(r.total_recebido)}.`
         + (mudancas.length ? ` ${mudancas.join(' · ')}.` : ''),
       );
       setPrevia(null);
@@ -232,7 +240,6 @@ export function Mestre59({ empresaId, mes }: Props) {
       setProgresso(null);
     }
   }, [previa, empresaId, carregar]);
-
 
   // ── Somas do cabeçalho ────────────────────────────────────────────────────
 
@@ -357,23 +364,42 @@ export function Mestre59({ empresaId, mes }: Props) {
                 )}
                 {loteVigente && (
                   <p className="text-xs text-muted-foreground mt-1.5">
-                    Isto <strong>substitui</strong> o retrato atual de {previa.mes} por completo.
-                    Nada fora do 59 é tocado.
+                    Só a <strong>diferença</strong> é gravada: as linhas que entraram e as que saíram do
+                    retrato de {previa.mes}. Nada fora do 59 é tocado.
+                  </p>
+                )}
+                {confirmandoCompleto && (
+                  <p className="text-xs text-warning mt-1.5 flex items-start gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Isto <strong>apaga o retrato atual inteiro</strong> de {previa.mes} e grava o do arquivo,
+                      linha por linha — mais lento e mais pesado para o banco. Use só para conferir algo errado.
+                    </span>
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="h-9"
-                  onClick={() => setPrevia(null)} disabled={!!progresso}>
+                  onClick={() => { setPrevia(null); setConfirmandoCompleto(false); }} disabled={!!progresso}>
                   Cancelar
                 </Button>
+                {loteVigente && (
+                  <Button
+                    variant={confirmandoCompleto ? 'destructive' : 'outline'} size="sm" className="h-9 rounded-xl"
+                    onClick={() => (confirmandoCompleto ? void confirmar(true) : setConfirmandoCompleto(true))}
+                    disabled={!!progresso}
+                    title="Emergência: reescreve o retrato inteiro, como a importação fazia antes"
+                  >
+                    {confirmandoCompleto ? 'Sim, reescrever tudo' : 'Reescrever tudo'}
+                  </Button>
+                )}
                 <Button size="sm" className="h-9 rounded-xl" onClick={() => void confirmar()} disabled={!!progresso}>
                   {progresso ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}
                   {progresso
                     ? (progresso.fase === 'promovendo'
                         ? 'Trocando o retrato…'
                         : `Enviando ${progresso.enviadas.toLocaleString('pt-BR')} / ${progresso.total.toLocaleString('pt-BR')}`)
-                    : 'Confirmar e substituir'}
+                    : (loteVigente ? 'Confirmar e atualizar' : 'Confirmar e carregar')}
                 </Button>
               </div>
             </div>

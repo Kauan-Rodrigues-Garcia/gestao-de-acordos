@@ -319,6 +319,16 @@ export interface ResultadoPromocao {
   grupos_voltaram: number;
   equipes_novas: number;
   equipes_sumiram: number;
+  /**
+   * Como o retrato foi trocado (20261013180000). `diferenca`: só as linhas que
+   * entraram e saíram foram gravadas; `completo`: o retrato inteiro foi
+   * reescrito (primeiro lote do mês, ou pedido do super_admin). Ausente em
+   * resposta de antes da migration.
+   */
+  modo?: 'diferenca' | 'completo';
+  linhas_inseridas?: number;
+  linhas_removidas?: number;
+  linhas_mantidas?: number;
 }
 
 /** SHA-256 do conteúdo, em hex. Ver o cabeçalho sobre por que não `mtime`. */
@@ -381,9 +391,15 @@ export async function importarMestre59(params: {
   arquivoNome: string;
   conteudo: string;
   linhas: readonly LinhaMestre59[];
+  /**
+   * Reescreve o retrato inteiro, como a importação sempre fez, em vez de gravar
+   * só a diferença. É o botão de emergência do super_admin: o servidor recusa
+   * quem não for.
+   */
+  completo?: boolean;
   onProgresso?: (p: ProgressoCarga) => void;
 }): Promise<ResultadoPromocao> {
-  const { empresaId, mes, arquivoNome, conteudo, linhas, onProgresso } = params;
+  const { empresaId, mes, arquivoNome, conteudo, linhas, completo = false, onProgresso } = params;
   if (linhas.length === 0) throw new Error('Nada para importar: o arquivo não tem linhas válidas.');
 
   onProgresso?.({ enviadas: 0, total: linhas.length, fase: 'abrindo' });
@@ -411,7 +427,10 @@ export async function importarMestre59(params: {
     }
 
     onProgresso?.({ enviadas: linhas.length, total: linhas.length, fase: 'promovendo' });
-    const { data, error } = await rpcSemTipo<ResultadoPromocao>('fn_mestre_promover_lote', { p_lote_id: loteId });
+    const { data, error } = await rpcSemTipo<ResultadoPromocao>(
+      'fn_mestre_promover_lote',
+      completo ? { p_lote_id: loteId, p_completo: true } : { p_lote_id: loteId },
+    );
     // Mesmo com erro: um timeout do cliente não prova que o banco desistiu.
     esquecerLeiturasDo59();
     if (error || !data) throw new Error(error?.message ?? 'Promoção do lote não devolveu resultado.');
