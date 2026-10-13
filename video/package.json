@@ -1,0 +1,25 @@
+{
+  "name": "video-gestao-de-acordos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "estudio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts Operador out/gestao-de-acordos-operador.mp4",
+    "transcrever": "node scripts/transcrever.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.535",
+    "@remotion/google-fonts": "4.0.535",
+    "@remotion/install-whisper-cpp": "4.0.535",
+    "@remotion/media-utils": "4.0.535",
+    "@remotion/shapes": "4.0.535",
+    "@remotion/transitions": "4.0.535",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.535"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}

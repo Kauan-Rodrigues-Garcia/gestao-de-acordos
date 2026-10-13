@@ -1,0 +1,826 @@
+{
+  "cena-01": [
+    {
+      "palavra": "Quanto",
+      "inicioMs": 80,
+      "fimMs": 550
+    },
+    {
+      "palavra": "você",
+      "inicioMs": 550,
+      "fimMs": 850
+    },
+    {
+      "palavra": "já",
+      "inicioMs": 850,
+      "fimMs": 1080
+    },
+    {
+      "palavra": "recebeu",
+      "inicioMs": 1080,
+      "fimMs": 1600
+    },
+    {
+      "palavra": "hoje?",
+      "inicioMs": 1600,
+      "fimMs": 2200
+    },
+    {
+      "palavra": "Sabe",
+      "inicioMs": 2200,
+      "fimMs": 2610
+    },
+    {
+      "palavra": "me",
+      "inicioMs": 2610,
+      "fimMs": 2810
+    },
+    {
+      "palavra": "falar",
+      "inicioMs": 2810,
+      "fimMs": 3420
+    },
+    {
+      "palavra": "de",
+      "inicioMs": 3420,
+      "fimMs": 3530
+    },
+    {
+      "palavra": "cabeça?",
+      "inicioMs": 3530,
+      "fimMs": 4600
+    }
+  ],
+  "cena-02": [
+    {
+      "palavra": "Chega",
+      "inicioMs": 80,
+      "fimMs": 340
+    },
+    {
+      "palavra": "de",
+      "inicioMs": 340,
+      "fimMs": 480
+    },
+    {
+      "palavra": "perder",
+      "inicioMs": 480,
+      "fimMs": 900
+    },
+    {
+      "palavra": "tempo",
+      "inicioMs": 900,
+      "fimMs": 1250
+    },
+    {
+      "palavra": "procurando",
+      "inicioMs": 1250,
+      "fimMs": 1930
+    },
+    {
+      "palavra": "informação.",
+      "inicioMs": 1930,
+      "fimMs": 2880
+    },
+    {
+      "palavra": "Com",
+      "inicioMs": 2880,
+      "fimMs": 3100
+    },
+    {
+      "palavra": "o",
+      "inicioMs": 3100,
+      "fimMs": 3170
+    },
+    {
+      "palavra": "gestão",
+      "inicioMs": 3170,
+      "fimMs": 3770
+    },
+    {
+      "palavra": "de",
+      "inicioMs": 3770,
+      "fimMs": 3840
+    },
+    {
+      "palavra": "acordos,",
+      "inicioMs": 3840,
+      "fimMs": 4510
+    },
+    {
+      "palavra": "tudo",
+      "inicioMs": 4510,
+      "fimMs": 4780
+    },
+    {
+      "palavra": "chega",
+      "inicioMs": 4780,
+      "fimMs": 5110
+    },
+    {
+      "palavra": "até",
+      "inicioMs": 5110,
+      "fimMs": 5420
+    },
+    {
+      "palavra": "você",
+      "inicioMs": 5420,
+      "fimMs": 5710
+    },
+    {
+      "palavra": "em",
+      "inicioMs": 5710,
+      "fimMs": 6050
+    },
+    {
+      "palavra": "instantes.",
+      "inicioMs": 6050,
+      "fimMs": 6680
+    }
+  ],
+  "cena-03": [
+    {
+      "palavra": "Seu",
+      "inicioMs": 140,
+      "fimMs": 290
+    },
+    {
+      "palavra": "dia",
+      "inicioMs": 290,
+      "fimMs": 590
+    },
+    {
+      "palavra": "já",
+      "inicioMs": 590,
+      "fimMs": 900
+    },
+    {
+      "palavra": "começa",
+      "inicioMs": 900,
+      "fimMs": 1580
+    },
+    {
+      "palavra": "organizado",
+      "inicioMs": 1580,
+      "fimMs": 2770
+    },
+    {
+      "palavra": "em",
+      "inicioMs": 2770,
+      "fimMs": 2810
+    },
+    {
+      "palavra": "um",
+      "inicioMs": 2810,
+      "fimMs": 2940
+    },
+    {
+      "palavra": "sistema",
+      "inicioMs": 2940,
+      "fimMs": 3530
+    },
+    {
+      "palavra": "onde",
+      "inicioMs": 3530,
+      "fimMs": 4020
+    },
+    {
+      "palavra": "cada",
+      "inicioMs": 4020,
+      "fimMs": 4220
+    },
+    {
+      "palavra": "detalhe",
+      "inicioMs": 4220,
+      "fimMs": 4720
+    },
+    {
+      "palavra": "faz",
+      "inicioMs": 4720,
+      "fimMs": 5080
+    },
+    {
+      "palavra": "uma",
+      "inicioMs": 5080,
+      "fimMs": 5220
+    },
+    {
+      "palavra": "diferença",
+      "inicioMs": 5220,
+      "fimMs": 5980
+    },
+    {
+      "palavra": "positiva.",
+      "inicioMs": 5980,
+      "fimMs": 6800
+    }
+  ],
+  "cena-04": [
+    {
+      "palavra": "Fechou",
+      "inicioMs": 120,
+      "fimMs": 390
+    },
+    {
+      "palavra": "com",
+      "inicioMs": 390,
+      "fimMs": 590
+    },
+    {
+      "palavra": "cliente?",
+      "inicioMs": 590,
+      "fimMs": 1470
+    },
+    {
+      "palavra": "Registre",
+      "inicioMs": 1470,
+      "fimMs": 2010
+    },
+    {
+      "palavra": "o",
+      "inicioMs": 2010,
+      "fimMs": 2200
+    },
+    {
+      "palavra": "acordo",
+      "inicioMs": 2200,
+      "fimMs": 2600
+    },
+    {
+      "palavra": "em",
+      "inicioMs": 2600,
+      "fimMs": 2780
+    },
+    {
+      "palavra": "segundos.",
+      "inicioMs": 2780,
+      "fimMs": 3500
+    },
+    {
+      "palavra": "Valor,",
+      "inicioMs": 3500,
+      "fimMs": 4000
+    },
+    {
+      "palavra": "parcelas,",
+      "inicioMs": 4000,
+      "fimMs": 4720
+    },
+    {
+      "palavra": "vencimento...",
+      "inicioMs": 4720,
+      "fimMs": 6270
+    },
+    {
+      "palavra": "Salvo?",
+      "inicioMs": 6270,
+      "fimMs": 6950
+    },
+    {
+      "palavra": "Pronto!",
+      "inicioMs": 6950,
+      "fimMs": 7600
+    }
+  ],
+  "cena-05": [
+    {
+      "palavra": "Cada",
+      "inicioMs": 70,
+      "fimMs": 300
+    },
+    {
+      "palavra": "acordo",
+      "inicioMs": 300,
+      "fimMs": 760
+    },
+    {
+      "palavra": "fica",
+      "inicioMs": 760,
+      "fimMs": 1060
+    },
+    {
+      "palavra": "na",
+      "inicioMs": 1060,
+      "fimMs": 1310
+    },
+    {
+      "palavra": "sua",
+      "inicioMs": 1310,
+      "fimMs": 1440
+    },
+    {
+      "palavra": "mão.",
+      "inicioMs": 1440,
+      "fimMs": 2120
+    },
+    {
+      "palavra": "Pago,",
+      "inicioMs": 2120,
+      "fimMs": 2840
+    },
+    {
+      "palavra": "pendente",
+      "inicioMs": 2840,
+      "fimMs": 3820
+    },
+    {
+      "palavra": "e,",
+      "inicioMs": 3820,
+      "fimMs": 4040
+    },
+    {
+      "palavra": "se",
+      "inicioMs": 4040,
+      "fimMs": 4190
+    },
+    {
+      "palavra": "precisar,",
+      "inicioMs": 4190,
+      "fimMs": 5130
+    },
+    {
+      "palavra": "reagenda",
+      "inicioMs": 5130,
+      "fimMs": 5600
+    },
+    {
+      "palavra": "com",
+      "inicioMs": 5600,
+      "fimMs": 5840
+    },
+    {
+      "palavra": "dois",
+      "inicioMs": 5840,
+      "fimMs": 6160
+    },
+    {
+      "palavra": "cliques.",
+      "inicioMs": 6160,
+      "fimMs": 6880
+    }
+  ],
+  "cena-06": [
+    {
+      "palavra": "E",
+      "inicioMs": 100,
+      "fimMs": 160
+    },
+    {
+      "palavra": "o",
+      "inicioMs": 160,
+      "fimMs": 200
+    },
+    {
+      "palavra": "melhor,",
+      "inicioMs": 200,
+      "fimMs": 1100
+    },
+    {
+      "palavra": "você",
+      "inicioMs": 1100,
+      "fimMs": 1370
+    },
+    {
+      "palavra": "acompanha",
+      "inicioMs": 1370,
+      "fimMs": 2220
+    },
+    {
+      "palavra": "quanto",
+      "inicioMs": 2220,
+      "fimMs": 2470
+    },
+    {
+      "palavra": "já",
+      "inicioMs": 2470,
+      "fimMs": 2690
+    },
+    {
+      "palavra": "recebeu",
+      "inicioMs": 2690,
+      "fimMs": 3310
+    },
+    {
+      "palavra": "e",
+      "inicioMs": 3310,
+      "fimMs": 3350
+    },
+    {
+      "palavra": "quanto",
+      "inicioMs": 3350,
+      "fimMs": 3810
+    },
+    {
+      "palavra": "falta",
+      "inicioMs": 3810,
+      "fimMs": 4170
+    },
+    {
+      "palavra": "para",
+      "inicioMs": 4170,
+      "fimMs": 4520
+    },
+    {
+      "palavra": "bater",
+      "inicioMs": 4520,
+      "fimMs": 4870
+    },
+    {
+      "palavra": "a",
+      "inicioMs": 4870,
+      "fimMs": 4940
+    },
+    {
+      "palavra": "meta,",
+      "inicioMs": 4940,
+      "fimMs": 5490
+    },
+    {
+      "palavra": "atualizado",
+      "inicioMs": 5490,
+      "fimMs": 6140
+    },
+    {
+      "palavra": "o",
+      "inicioMs": 6140,
+      "fimMs": 6230
+    },
+    {
+      "palavra": "dia",
+      "inicioMs": 6230,
+      "fimMs": 6500
+    },
+    {
+      "palavra": "todo.",
+      "inicioMs": 6500,
+      "fimMs": 7160
+    }
+  ],
+  "cena-07": [
+    {
+      "palavra": "Quer",
+      "inicioMs": 120,
+      "fimMs": 280
+    },
+    {
+      "palavra": "saber",
+      "inicioMs": 280,
+      "fimMs": 630
+    },
+    {
+      "palavra": "como",
+      "inicioMs": 630,
+      "fimMs": 910
+    },
+    {
+      "palavra": "está",
+      "inicioMs": 910,
+      "fimMs": 1250
+    },
+    {
+      "palavra": "a",
+      "inicioMs": 1250,
+      "fimMs": 1330
+    },
+    {
+      "palavra": "sua",
+      "inicioMs": 1330,
+      "fimMs": 1530
+    },
+    {
+      "palavra": "equipe",
+      "inicioMs": 1530,
+      "fimMs": 2000
+    },
+    {
+      "palavra": "e",
+      "inicioMs": 2000,
+      "fimMs": 2080
+    },
+    {
+      "palavra": "o",
+      "inicioMs": 2080,
+      "fimMs": 2210
+    },
+    {
+      "palavra": "seu",
+      "inicioMs": 2210,
+      "fimMs": 2400
+    },
+    {
+      "palavra": "setor?",
+      "inicioMs": 2400,
+      "fimMs": 3040
+    },
+    {
+      "palavra": "Está",
+      "inicioMs": 3040,
+      "fimMs": 3650
+    },
+    {
+      "palavra": "tudo",
+      "inicioMs": 3650,
+      "fimMs": 4040
+    },
+    {
+      "palavra": "aqui,",
+      "inicioMs": 4040,
+      "fimMs": 4630
+    },
+    {
+      "palavra": "e",
+      "inicioMs": 4630,
+      "fimMs": 4700
+    },
+    {
+      "palavra": "você",
+      "inicioMs": 4700,
+      "fimMs": 5100
+    },
+    {
+      "palavra": "sabe",
+      "inicioMs": 5100,
+      "fimMs": 5330
+    },
+    {
+      "palavra": "exatamente",
+      "inicioMs": 5330,
+      "fimMs": 6020
+    },
+    {
+      "palavra": "onde",
+      "inicioMs": 6020,
+      "fimMs": 6300
+    },
+    {
+      "palavra": "está!",
+      "inicioMs": 6300,
+      "fimMs": 6880
+    }
+  ],
+  "cena-08": [
+    {
+      "palavra": "Quer",
+      "inicioMs": 130,
+      "fimMs": 250
+    },
+    {
+      "palavra": "mandar",
+      "inicioMs": 250,
+      "fimMs": 620
+    },
+    {
+      "palavra": "um",
+      "inicioMs": 620,
+      "fimMs": 740
+    },
+    {
+      "palavra": "lembrete",
+      "inicioMs": 740,
+      "fimMs": 1220
+    },
+    {
+      "palavra": "para",
+      "inicioMs": 1220,
+      "fimMs": 1470
+    },
+    {
+      "palavra": "o",
+      "inicioMs": 1470,
+      "fimMs": 1530
+    },
+    {
+      "palavra": "cliente?",
+      "inicioMs": 1530,
+      "fimMs": 2200
+    },
+    {
+      "palavra": "Tem",
+      "inicioMs": 2200,
+      "fimMs": 2410
+    },
+    {
+      "palavra": "mensagem",
+      "inicioMs": 2410,
+      "fimMs": 3010
+    },
+    {
+      "palavra": "pronta!",
+      "inicioMs": 3010,
+      "fimMs": 3660
+    },
+    {
+      "palavra": "Um",
+      "inicioMs": 3660,
+      "fimMs": 3820
+    },
+    {
+      "palavra": "clique",
+      "inicioMs": 3820,
+      "fimMs": 4290
+    },
+    {
+      "palavra": "e",
+      "inicioMs": 4290,
+      "fimMs": 4470
+    },
+    {
+      "palavra": "já",
+      "inicioMs": 4470,
+      "fimMs": 4610
+    },
+    {
+      "palavra": "está",
+      "inicioMs": 4610,
+      "fimMs": 5110
+    },
+    {
+      "palavra": "no",
+      "inicioMs": 5110,
+      "fimMs": 5160
+    },
+    {
+      "palavra": "WhatsApp!",
+      "inicioMs": 5160,
+      "fimMs": 6060
+    }
+  ],
+  "cena-09": [
+    {
+      "palavra": "Precisa",
+      "inicioMs": 100,
+      "fimMs": 450
+    },
+    {
+      "palavra": "do",
+      "inicioMs": 450,
+      "fimMs": 580
+    },
+    {
+      "palavra": "seu",
+      "inicioMs": 580,
+      "fimMs": 770
+    },
+    {
+      "palavra": "líder?",
+      "inicioMs": 770,
+      "fimMs": 1470
+    },
+    {
+      "palavra": "Fala",
+      "inicioMs": 1470,
+      "fimMs": 1680
+    },
+    {
+      "palavra": "com",
+      "inicioMs": 1680,
+      "fimMs": 1890
+    },
+    {
+      "palavra": "ele",
+      "inicioMs": 1890,
+      "fimMs": 2100
+    },
+    {
+      "palavra": "sem",
+      "inicioMs": 2100,
+      "fimMs": 2310
+    },
+    {
+      "palavra": "sair",
+      "inicioMs": 2310,
+      "fimMs": 2590
+    },
+    {
+      "palavra": "do",
+      "inicioMs": 2590,
+      "fimMs": 2730
+    },
+    {
+      "palavra": "sistema.",
+      "inicioMs": 2730,
+      "fimMs": 3480
+    }
+  ],
+  "cena-10": [
+    {
+      "palavra": "E",
+      "inicioMs": 80,
+      "fimMs": 130
+    },
+    {
+      "palavra": "quando",
+      "inicioMs": 130,
+      "fimMs": 930
+    },
+    {
+      "palavra": "a",
+      "inicioMs": 930,
+      "fimMs": 1050
+    },
+    {
+      "palavra": "meta",
+      "inicioMs": 1050,
+      "fimMs": 1720
+    },
+    {
+      "palavra": "vem,",
+      "inicioMs": 1720,
+      "fimMs": 2240
+    },
+    {
+      "palavra": "todos",
+      "inicioMs": 2240,
+      "fimMs": 2640
+    },
+    {
+      "palavra": "comemoram",
+      "inicioMs": 2640,
+      "fimMs": 3470
+    },
+    {
+      "palavra": "com",
+      "inicioMs": 3470,
+      "fimMs": 3750
+    },
+    {
+      "palavra": "você!",
+      "inicioMs": 3750,
+      "fimMs": 4320
+    }
+  ],
+  "cena-11": [
+    {
+      "palavra": "no",
+      "inicioMs": 70,
+      "fimMs": 160
+    },
+    {
+      "palavra": "computador",
+      "inicioMs": 160,
+      "fimMs": 1180
+    },
+    {
+      "palavra": "ou",
+      "inicioMs": 1180,
+      "fimMs": 1240
+    },
+    {
+      "palavra": "no",
+      "inicioMs": 1240,
+      "fimMs": 1360
+    },
+    {
+      "palavra": "celular.",
+      "inicioMs": 1360,
+      "fimMs": 2160
+    }
+  ],
+  "cena-12": [
+    {
+      "palavra": "Gestão",
+      "inicioMs": 110,
+      "fimMs": 1010
+    },
+    {
+      "palavra": "de",
+      "inicioMs": 1010,
+      "fimMs": 1120
+    },
+    {
+      "palavra": "acordos,",
+      "inicioMs": 1120,
+      "fimMs": 2150
+    },
+    {
+      "palavra": "ajudando",
+      "inicioMs": 2150,
+      "fimMs": 2850
+    },
+    {
+      "palavra": "você",
+      "inicioMs": 2850,
+      "fimMs": 3140
+    },
+    {
+      "palavra": "a",
+      "inicioMs": 3140,
+      "fimMs": 3200
+    },
+    {
+      "palavra": "bater",
+      "inicioMs": 3200,
+      "fimMs": 3580
+    },
+    {
+      "palavra": "sua",
+      "inicioMs": 3580,
+      "fimMs": 3810
+    },
+    {
+      "palavra": "meta.",
+      "inicioMs": 3810,
+      "fimMs": 4160
+    }
+  ]
+}
