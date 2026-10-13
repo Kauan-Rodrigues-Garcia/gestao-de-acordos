@@ -1,0 +1,205 @@
+/* GERADO por scripts/css-do-app.mjs a partir de ../src/pages/Mobile/mobile.css. Não edite aqui. */
+/*
+ * Tela mínima do celular (`/m`). Visual aprovado em 30/09/2026 —
+ * docs/mobile/prototipo-m.html. Tudo escopado em `.tela-mobile`: este arquivo
+ * só carrega com a rota (chunk lazy) e não vaza para o resto do site.
+ *
+ * As cores do cartão principal são as do ícone do app (docs/mobile/gerar-icone.py).
+ */
+
+.tela-mobile {
+  --m-tinta: #0e1b26;
+  --m-tinta-2: #6a7784;
+  --m-papel: #f4f6f7;
+  --m-cartao: #ffffff;
+  --m-linha: #e7ebee;
+  --m-azul-esc: #0a2a4a;
+  --m-verde-esc: #0b3a1e;
+  --m-azul: #38bdf8;
+  --m-verde: #4ade5a;
+  --m-verde-texto: #15803d;
+  --m-verde-fundo: #e8f7ec;
+
+  min-height: 100dvh;
+  background: var(--m-papel);
+  color: var(--m-tinta);
+  font-family: Figtree, system-ui, sans-serif;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tela-mobile { position: relative; isolation: isolate; }
+/* O conteúdo acima do fundo vivo (`FundoVivo`, fixo, z-index 0). */
+.tela-mobile .m-conteudo { max-width: 480px; margin: 0 auto; position: relative; z-index: 1; }
+.tela-mobile .m-num {
+  font-family: 'Bricolage Grotesque', Figtree, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.tela-mobile button { font: inherit; color: inherit; cursor: pointer; }
+.tela-mobile :focus-visible { outline: 2px solid var(--m-azul); outline-offset: 2px; }
+
+/* ── Topo ─────────────────────────────────────────────────────────────── */
+.tela-mobile .m-topo {
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 22px 16px;
+}
+.tela-mobile .m-quem { flex: 1; min-width: 0; line-height: 1.2; }
+.tela-mobile .m-nome { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tela-mobile .m-sub { font-size: 12.5px; color: var(--m-tinta-2); }
+.tela-mobile .m-sino {
+  width: 38px; height: 38px; border-radius: 12px; background: var(--m-cartao);
+  border: 1px solid var(--m-linha); display: grid; place-items: center; position: relative;
+}
+.tela-mobile .m-sino i {
+  position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--m-verde); box-shadow: 0 0 0 2px #fff;
+}
+
+/* Troca Eu / Equipe do elite que lidera (visão da equipe: /m/equipe) */
+.tela-mobile .m-troca { display: flex; background: #e6ebe9; border-radius: 10px; padding: 3px; flex: none; }
+.tela-mobile .m-troca button { font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 8px; color: var(--m-tinta-2); background: none; border: 0; }
+.tela-mobile .m-troca button[aria-pressed='true'] { background: var(--m-cartao); color: var(--m-tinta); box-shadow: 0 1px 2px rgba(12, 31, 46, 0.12); }
+
+/* ── Rótulo em caixa alta ─────────────────────────────────────────────── */
+.tela-mobile .m-rot {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--m-tinta-2);
+}
+
+/* ── Cartões brancos ──────────────────────────────────────────────────── */
+.tela-mobile .m-cartao {
+  background: rgba(255, 255, 255, 0.92); border-radius: 20px;
+  margin: 12px 16px 0; padding: 18px 20px;
+}
+.tela-mobile .m-comissao-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tela-mobile .m-selo {
+  white-space: nowrap; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px;
+  background: var(--m-verde-fundo); color: var(--m-verde-texto);
+}
+.tela-mobile .m-comissao .m-valor { font-size: 34px; color: var(--m-tinta); margin-top: 8px; }
+.tela-mobile .m-comissao p { font-size: 13.5px; color: var(--m-tinta-2); margin-top: 6px; line-height: 1.45; }
+.tela-mobile .m-comissao p b { color: var(--m-tinta); }
+.tela-mobile .m-prox {
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--m-linha);
+  display: grid; gap: 4px; font-size: 13.5px; color: var(--m-tinta-2);
+}
+.tela-mobile .m-prox b { color: var(--m-tinta); }
+.tela-mobile .m-prox .m-num { font-weight: 700; }
+.tela-mobile .m-prox .m-verde { color: var(--m-verde-texto); }
+
+.tela-mobile .m-dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 16px 0; }
+.tela-mobile .m-dupla.m-uma { grid-template-columns: 1fr; }
+.tela-mobile .m-dupla .m-cartao { margin: 0; padding: 16px; }
+.tela-mobile .m-dupla .m-rot { font-size: 11.5px; }
+.tela-mobile .m-dupla .m-v { font-size: 24px; font-weight: 700; margin-top: 6px; }
+.tela-mobile .m-dupla .m-v .m-de { font-size: 15px; color: var(--m-tinta-2); font-weight: 500; }
+.tela-mobile .m-dupla .m-d { font-size: 12.5px; color: var(--m-tinta-2); margin-top: 4px; }
+
+/* ── Pagamentos ───────────────────────────────────────────────────────── */
+.tela-mobile .m-titulo {
+  display: flex; justify-content: space-between; align-items: baseline; margin: 22px 22px 8px;
+}
+.tela-mobile .m-titulo h2 { font-size: 16px; font-weight: 700; }
+.tela-mobile .m-titulo button { font-size: 13px; color: var(--m-tinta-2); background: none; border: 0; padding: 4px 0; }
+.tela-mobile .m-lista {
+  margin: 0 16px; background: rgba(255, 255, 255, 0.92); border-radius: 20px; padding: 2px 16px;
+}
+.tela-mobile .m-pg { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--m-linha); }
+.tela-mobile .m-pg:last-child { border-bottom: 0; }
+.tela-mobile .m-pg-q { flex: 1; min-width: 0; }
+.tela-mobile .m-pg-c { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tela-mobile .m-pg-h { font-size: 12.5px; color: var(--m-tinta-2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tela-mobile .m-pg-h .m-nr { font-weight: 600; color: var(--m-tinta); font-variant-numeric: tabular-nums; }
+.tela-mobile .m-pg-h .m-novo-tag { color: var(--m-verde-texto); font-weight: 600; }
+.tela-mobile .m-pg-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.tela-mobile .m-pg-v { font-weight: 700; font-size: 15.5px; white-space: nowrap; }
+.tela-mobile .m-pg.m-novo .m-pg-v { color: var(--m-verde-texto); }
+.tela-mobile .m-pg-f { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--m-tinta-2); white-space: nowrap; }
+.tela-mobile .m-pg-f i { width: 7px; height: 7px; border-radius: 50%; }
+.tela-mobile .m-vazio { padding: 18px 0; font-size: 14px; color: var(--m-tinta-2); text-align: center; }
+
+/* ── Quartil ──────────────────────────────────────────────────────────── */
+.tela-mobile .m-quartil-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tela-mobile .m-selo-q {
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--m-papel);
+}
+.tela-mobile .m-selo-q i { width: 7px; height: 7px; border-radius: 50%; }
+.tela-mobile .m-faixas { margin-top: 10px; }
+.tela-mobile .m-faixa {
+  display: grid; grid-template-columns: 8px 1fr 84px 84px; gap: 10px; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid var(--m-linha); font-size: 14px;
+}
+.tela-mobile .m-faixa:last-child { border-bottom: 0; }
+.tela-mobile .m-faixa > i { width: 8px; height: 8px; border-radius: 50%; }
+.tela-mobile .m-faixa > span:nth-child(3), .tela-mobile .m-faixa > span:nth-child(4) { text-align: right; white-space: nowrap; }
+.tela-mobile .m-faixa-n { font-weight: 600; }
+.tela-mobile .m-faixa-n small { font-weight: 500; color: var(--m-tinta-2); }
+.tela-mobile .m-faixa-cab { padding: 4px 0 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--m-tinta-2); }
+.tela-mobile .m-verde-txt { color: var(--m-verde-texto); font-weight: 600; }
+.tela-mobile .m-cinza { color: var(--m-tinta-2); }
+.tela-mobile .m-quartil-nota { font-size: 12px; color: var(--m-tinta-2); margin-top: 8px; line-height: 1.4; }
+
+/* ── Pagamento que saiu ───────────────────────────────────────────────── */
+.tela-mobile .m-saida { background: #fbf1ef; }
+.tela-mobile .m-saida-topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.tela-mobile .m-saida-topo button { font-size: 13px; font-weight: 600; background: none; border: 0; color: var(--m-tinta-2); padding: 4px 0; }
+.tela-mobile .m-saida-linha { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; margin-top: 8px; }
+.tela-mobile .m-saida-linha .m-num { color: #c0453b; font-weight: 700; white-space: nowrap; }
+.tela-mobile .m-saida p { font-size: 12.5px; color: var(--m-tinta-2); margin-top: 8px; }
+
+/* ── Card de ação (ativar avisos / instalar) e rodapé ─────────────────── */
+.tela-mobile .m-acao { display: flex; gap: 14px; align-items: center; }
+.tela-mobile .m-acao-txt { flex: 1; font-size: 13.5px; color: var(--m-tinta-2); line-height: 1.4; }
+.tela-mobile .m-acao-txt b { display: block; color: var(--m-tinta); font-size: 15px; margin-bottom: 2px; }
+.tela-mobile .m-rodape { display: flex; flex-direction: column; gap: 10px; margin: 20px 16px 0; }
+.tela-mobile .m-btn {
+  height: 50px; border-radius: 16px; border: 0; font-weight: 600; font-size: 15px;
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+}
+.tela-mobile .m-btn.m-pri { background: var(--m-tinta); color: #fff; }
+.tela-mobile .m-btn.m-sec { background: transparent; border: 1px solid var(--m-linha); }
+.tela-mobile .m-links { display: flex; justify-content: center; gap: 28px; margin-top: 4px; }
+.tela-mobile .m-links button { background: none; border: 0; font-size: 13.5px; color: var(--m-tinta-2); padding: 8px 0; }
+
+/* ── Passo a passo do iPhone ──────────────────────────────────────────── */
+.tela-mobile .m-folha-fundo {
+  position: fixed; inset: 0; background: rgba(12, 31, 46, 0.45); z-index: 50;
+  display: flex; align-items: flex-end;
+}
+.tela-mobile .m-folha {
+  width: 100%; background: var(--m-cartao); border-radius: 24px 24px 0 0;
+  padding: 22px 22px calc(22px + env(safe-area-inset-bottom));
+}
+.tela-mobile .m-folha h3 { font-size: 18px; font-weight: 700; }
+.tela-mobile .m-folha ol { margin: 14px 0 18px; padding-left: 20px; display: grid; gap: 10px; font-size: 15px; }
+
+/* ── Carregando ───────────────────────────────────────────────────────── */
+.tela-mobile .m-esq { border-radius: 22px; background: #e6ecea; animation: m-pulsa 1.4s ease-in-out infinite; }
+@keyframes m-pulsa { 50% { opacity: 0.55; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tela-mobile .m-esq { animation: none; }
+}
+
+/* ── Escolha do operador (super admin, teste) ─────────────────────────── */
+.tela-mobile .m-busca {
+  width: 100%; margin-top: 14px; height: 44px; border-radius: 12px;
+  border: 1px solid var(--m-linha); padding: 0 14px; font: inherit; font-size: 15px;
+  background: var(--m-papel); color: var(--m-tinta);
+}
+.tela-mobile .m-pg-botao {
+  width: 100%; background: none; border: 0; border-bottom: 1px solid var(--m-linha);
+  text-align: left;
+}
+.tela-mobile .m-pg-botao:last-child { border-bottom: 0; }
+.tela-mobile .m-pg-botao:disabled { opacity: 0.6; }
+
+/* ── Avisos de pagamento ──────────────────────────────────────────────── */
+.tela-mobile .m-sino { color: var(--m-tinta); }
+.tela-mobile .m-avisos-icone {
+  width: 42px; height: 42px; border-radius: 14px; flex: none; display: grid; place-items: center;
+  color: #fff; background: linear-gradient(135deg, var(--m-azul-esc), var(--m-verde-esc));
+}
+.tela-mobile .m-btn:disabled { opacity: 0.6; }

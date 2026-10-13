@@ -1,24 +1,25 @@
-// Cenas 3–11: o sistema aberto. O ícone da cena 2 cresce e vira a janela
-// (mesma peça, sem corte); dentro dela a câmera passeia, o cursor clica e as
-// telas se trocam no ritmo da narração.
+// Cenas 3–11: o sistema aberto. O ícone da cena 2 cresce e vira a janela do
+// navegador (mesma peça, sem corte); dentro dela a câmera passeia, o cursor
+// clica e as telas se trocam no ritmo da narração.
 
-import { useMemo } from 'react';
-import { AbsoluteFill, Img, useCurrentFrame } from 'remotion';
-import { APP_A, APP_L, ESCALA_JANELA, ICONE, JANELA } from '../app/layout';
-import { Moldura, tituloDe } from '../app/Moldura';
-import { Acordos } from '../app/paginas/Acordos';
-import { Campanhas } from '../app/paginas/Campanhas';
-import { ChatLider } from '../app/paginas/ChatLider';
+import { useLayoutEffect, useMemo, useRef } from 'react';
+import { AbsoluteFill, Img, staticFile, useCurrentFrame } from 'remotion';
+import { Lock, RotateCw } from 'lucide-react';
+import { Avisos, type Aviso } from '../app/Avisos';
+import { Casca } from '../app/Casca';
+import { APP_A, APP_L, BARRA_NAV, ESCALA_JANELA, ICONE, JANELA, JANELA_A } from '../app/layout';
+import { Acordos, DialogosAcordos } from '../app/paginas/Acordos';
+import { Chat } from '../app/paginas/Chat';
+import { Comemoracao } from '../app/paginas/Comemoracao';
 import { Dashboard } from '../app/paginas/Dashboard';
-import { Desempenho, META_DIA, RECEBIDO_1, RECEBIDO_2 } from '../app/paginas/Desempenho';
-import { Inicio } from '../app/paginas/Inicio';
+import { DesempenhoDia } from '../app/paginas/DesempenhoDia';
 import { NovoAcordo } from '../app/paginas/NovoAcordo';
-import { cameraDoRoteiro, cliquesMenu, menuAtivo, rotaDoCursor, telas, tempoApp, type Camera } from '../app/roteiro';
+import { WhatsApp } from '../app/paginas/WhatsApp';
+import { cameraDoRoteiro, cliquesDaCasca, rotaDoCursor, telaEm, tempoApp, type Camera } from '../app/roteiro';
 import { Celular, CEL_A, CEL_L } from '../componentes/Celular';
 import { Cursor } from '../componentes/Cursor';
-import { logoSrc } from '../componentes/Poeira';
 import { ACELERA, entre, mola, ms, s, SUAVE, SUAVE_IDA_VOLTA } from '../movimento';
-import { Comemoracao } from './Comemoracao';
+import { SOMBRA_FLUTUA } from '../tema';
 import { Manchete } from './Manchete';
 
 function cameraEm(frame: number, chaves: Camera[]) {
@@ -43,38 +44,56 @@ function cameraEm(frame: number, chaves: Camera[]) {
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
-export const SecaoApp: React.FC = () => {
+/**
+ * Só no `npm run medir`: depois de desenhar o quadro, anota onde ficou cada
+ * elemento com `data-alvo` (em coordenadas do app) e escreve no console.
+ */
+const Medidor: React.FC<{ raiz: React.RefObject<HTMLDivElement | null> }> = ({ raiz }) => {
+  const f = useCurrentFrame();
+  useLayoutEffect(() => {
+    const r = raiz.current;
+    if (!r) return;
+    const caixa = r.getBoundingClientRect();
+    const esc = caixa.width / APP_L;
+    const medidas: Record<string, number[]> = {};
+    r.querySelectorAll<HTMLElement>('[data-alvo]').forEach((el) => {
+      const b = el.getBoundingClientRect();
+      if (b.width === 0 && b.height === 0) return;
+      medidas[el.dataset.alvo!] = [
+        Math.round((b.left - caixa.left) / esc),
+        Math.round((b.top - caixa.top) / esc),
+        Math.round(b.width / esc),
+        Math.round(b.height / esc),
+      ];
+    });
+    console.warn(`ALVOS|${f}|${JSON.stringify(medidas)}`);
+  });
+  return null;
+};
+
+export const SecaoApp: React.FC<{ medir?: boolean }> = ({ medir = false }) => {
   const f = useCurrentFrame();
   const t = useMemo(() => tempoApp(), []);
   const rota = useMemo(() => rotaDoCursor(t), [t]);
   const chavesCamera = useMemo(() => cameraDoRoteiro(t), [t]);
-  const lista = useMemo(() => telas(t), [t]);
-  const cliques = useMemo(() => cliquesMenu(t), [t]);
+  const cliques = useMemo(() => cliquesDaCasca(t), [t]);
+  const raiz = useRef<HTMLDivElement>(null);
 
   if (f < t.expandir) return null;
 
-  // ── menu ativo e troca ──
-  const ativo = menuAtivo(t, f);
-  const i = lista.findIndex((x) => x.id === ativo);
-  const trocaEm = lista[i].entra;
-  const anterior = i > 0 ? lista[i - 1].id : ativo;
-
-  // ── meta do dia (pílula do cabeçalho) ──
-  const recebidoCena6 =
-    RECEBIDO_1 * entre(f, t.contaRecebido, t.contaRecebido + ms(1500), 0, 1, SUAVE) +
-    (RECEBIDO_2 - RECEBIDO_1) * entre(f, t.atualizado + ms(250), t.atualizado + ms(900), 0, 1, SUAVE);
-  const metaBase = f < t.contaRecebido ? 3450 : Math.max(3450, recebidoCena6);
-  const meta = Math.min(1.02, metaBase / META_DIA + entre(f, t.metaEnche - ms(100), t.metaEnche + ms(500), 0, 1.02 - RECEBIDO_2 / META_DIA, SUAVE));
-  const metaBrilho = Math.min(entre(f, t.metaEnche + ms(300), t.metaEnche + ms(600), 0, 1), entre(f, t.c11.inicio, t.c11.inicio + ms(400), 1, 0));
+  const { atual, anterior, indice } = telaEm(t, f);
+  const c = t.clique;
+  const desempenhoAberto = f >= c.desempenho && f < c.fecharDia + ms(40);
 
   // ── o ícone vira janela ──
   const m = entre(f, t.expandir, t.expandir + s(0.95), 0, 1, SUAVE);
+  const alturaFinal = JANELA_A;
   const ret = {
     x: lerp(ICONE.cx - ICONE.lado / 2, JANELA.x, m),
     y: lerp(ICONE.cy - ICONE.lado / 2, JANELA.y, m),
     l: lerp(ICONE.lado, JANELA.l, m),
-    a: lerp(ICONE.lado, JANELA.a, m),
-    r: lerp(ICONE.raio, 18, m),
+    a: lerp(ICONE.lado, alturaFinal, m),
+    r: lerp(ICONE.raio, 14, m),
   };
   const iconeSome = entre(f, t.expandir + ms(120), t.expandir + ms(520), 1, 0);
   const appSurge = entre(f, t.expandir + ms(250), t.expandir + ms(700), 0, 1);
@@ -84,31 +103,44 @@ export const SecaoApp: React.FC = () => {
   const cel = mola(f, t.celular - ms(160));
   // ── cena 12: tudo recolhe ──
   const recolhe = entre(f, t.c12.inicio, t.c12.inicio + ms(450), 0, 1, ACELERA);
-  if (recolhe >= 1) return null;
+  if (recolhe >= 1 && !medir) return null;
 
-  const centroJanela = { x: JANELA.x + JANELA.l / 2, y: JANELA.y + JANELA.a / 2 };
+  const centroJanela = { x: JANELA.x + JANELA.l / 2, y: JANELA.y + alturaFinal / 2 };
   const dx = (700 - centroJanela.x) * vaiEsq;
-  const dy = (610 - centroJanela.y) * vaiEsq;
-  const escJanela = (1 - 0.34 * vaiEsq) * (1 - 0.08 * recolhe);
+  const dy = (620 - centroJanela.y) * vaiEsq;
+  const escJanela = (1 - 0.32 * vaiEsq) * (1 - 0.06 * recolhe);
 
   const cam = cameraEm(f, chavesCamera);
   const camTransform = `translate(${APP_L / 2 - cam.x * cam.z}px, ${APP_A / 2 - cam.y * cam.z}px) scale(${cam.z})`;
+
+  const avisos: Aviso[] = [
+    { de: t.toastNovo, ate: c.acordos - ms(100), titulo: 'Acordo criado! 3 parcelas negociadas.' },
+    { de: c.pago + ms(120), ate: c.reagendar - ms(60), titulo: 'Acordo marcado como Pago!', descricao: 'Errou? O botão «Desfazer» fica na linha por 5 minutos.', acao: 'Desfazer' },
+    { de: c.confirmar + ms(480), ate: c.desempenho - ms(60), titulo: 'Parcela 3/4 reagendada para 13/11/2026!' },
+  ];
 
   const manchetes = [
     { de: t.c3.inicio + ms(80), ate: t.c4.inicio, texto: 'Seu dia, *organizado*' },
     { de: t.c4.inicio, ate: t.c5.inicio, texto: 'Acordo registrado *em segundos*' },
     { de: t.c5.inicio, ate: t.c6.inicio, texto: 'Cada acordo *na sua mão*' },
     { de: t.c6.inicio, ate: t.c7.inicio, texto: 'Seu recebimento, *ao vivo*' },
-    { de: t.c7.inicio, ate: t.c8.inicio, texto: 'Sua equipe e seu setor, *num só lugar*' },
+    { de: t.c7.inicio, ate: t.c8.inicio, texto: 'Você, sua equipe e seu setor, *num só lugar*' },
     { de: t.c8.inicio, ate: t.c9.inicio, texto: 'Mensagens *prontas*' },
     { de: t.c9.inicio, ate: t.c10.inicio, texto: 'Seu líder *a um clique*' },
     { de: t.c10.inicio + ms(200), ate: t.c11.inicio, texto: 'Bateu a meta? *Todos comemoram*' },
     { de: t.c11.inicio + ms(80), ate: t.c12.inicio, texto: 'No computador *ou no celular*' },
   ];
 
+  const pagina = (() => {
+    const visita = indice >= 3 ? 2 : 1;
+    if (atual.id === 'dashboard') return <Dashboard key={`d${indice}`} t={t} entra={atual.entra} visita={visita} />;
+    if (atual.id === 'novo') return <NovoAcordo key="n" t={t} entra={atual.entra} />;
+    return <Acordos key={`a${indice}`} t={t} entra={atual.entra} visita={visita} />;
+  })();
+
   return (
     <AbsoluteFill style={{ opacity: 1 - recolhe, filter: recolhe > 0 ? `blur(${recolhe * 8}px)` : undefined }}>
-      {/* ── a janela ── */}
+      {/* ── a janela do navegador ── */}
       <div
         style={{
           position: 'absolute',
@@ -118,49 +150,80 @@ export const SecaoApp: React.FC = () => {
           height: ret.a,
           borderRadius: ret.r,
           overflow: 'hidden',
-          background: '#0a1a24',
-          border: '1px solid rgba(255,255,255,0.09)',
-          boxShadow: '0 50px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4), 0 0 140px rgba(41,168,224,0.10)',
+          background: '#ffffff',
+          boxShadow: `${SOMBRA_FLUTUA}, 0 0 0 1px rgba(15,27,38,${0.08 * m})`,
           transform: `translate(${dx}px, ${dy}px) scale(${escJanela})`,
           transformOrigin: '50% 50%',
         }}
       >
+        {/* barra do navegador (fixa: a câmera mexe só no conteúdo) */}
+        <div
+          className="font-sans"
+          style={{
+            position: 'absolute',
+            left: ret.l / 2 - JANELA.l / 2,
+            top: ret.a / 2 - alturaFinal / 2,
+            width: JANELA.l,
+            height: BARRA_NAV,
+            background: '#e9edf1',
+            borderBottom: '1px solid #d7dde3',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+            padding: '0 16px',
+            boxSizing: 'border-box',
+            opacity: appSurge,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 8 }}>
+            {['#ff5f57', '#febc2e', '#28c840'].map((cor) => (
+              <div key={cor} style={{ width: 12, height: 12, borderRadius: 6, background: cor }} />
+            ))}
+          </div>
+          <RotateCw size={14} color="#7b8794" />
+          <div style={{ margin: '0 auto', transform: 'translateX(-40px)', width: 460, height: 24, borderRadius: 7, background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12.5, color: '#4b5865' }}>
+            <Lock size={11} /> gestaodeacordos.com.br
+          </div>
+        </div>
+
+        {/* o app, com a câmera */}
         <div
           style={{
             position: 'absolute',
             left: ret.l / 2 - JANELA.l / 2,
-            top: ret.a / 2 - JANELA.a / 2,
+            top: ret.a / 2 - alturaFinal / 2 + BARRA_NAV,
             width: APP_L,
             height: APP_A,
             transform: `scale(${ESCALA_JANELA})`,
             transformOrigin: '0 0',
             opacity: appSurge,
+            overflow: 'hidden',
           }}
         >
-          <div style={{ position: 'absolute', inset: 0, transform: camTransform, transformOrigin: '0 0' }}>
-            <Moldura
+          <div ref={raiz} style={{ position: 'absolute', left: 0, top: 0, width: APP_L, height: APP_A, transform: camTransform, transformOrigin: '0 0' }}>
+            <Casca
               aparece={t.conteudo}
-              ativo={ativo}
-              trocaEm={trocaEm}
-              anterior={anterior}
-              cliquesMenu={cliques}
-              titulo={tituloDe(ativo)}
-              tituloDesde={trocaEm}
-              meta={meta}
-              metaBrilho={metaBrilho}
-              avisoChat={t.avisoChat}
-              chatLidoEm={t.clique.chat}
+              ativo={atual.menu}
+              anterior={anterior.menu}
+              trocaEm={atual.entra - ms(60)}
+              cliques={cliques}
+              desempenhoAberto={desempenhoAberto}
+              sobre={
+                <>
+                  <DesempenhoDia t={t} />
+                  <DialogosAcordos t={t} />
+                  <WhatsApp t={t} />
+                  <Chat t={t} />
+                  <Comemoracao t={t} />
+                  <Avisos avisos={avisos} />
+                </>
+              }
             >
-              {lista.map((tela) => {
-                const P = { inicio: Inicio, novo: NovoAcordo, acordos: Acordos, desempenho: Desempenho, dashboard: Dashboard, campanhas: null } as const;
-                if (tela.id === 'campanhas') return <Campanhas key={tela.id} t={t} entra={tela.entra} sai={tela.sai} zapSai={t.c9.inicio} />;
-                const Comp = P[tela.id as Exclude<keyof typeof P, 'campanhas'>];
-                return Comp ? <Comp key={tela.id} t={t} entra={tela.entra} sai={tela.sai} /> : null;
-              })}
-              <ChatLider t={t} fecha={t.c10.inicio} />
-            </Moldura>
-            <Cursor pontos={rota.pontos} cliques={rota.cliques} escalaInversa={1 / cam.z / ESCALA_JANELA} visivelDe={t.c3.inicio} visivelAte={t.explode - ms(150)} />
+              {pagina}
+            </Casca>
+            <Cursor pontos={rota.pontos} cliques={rota.cliques} escalaInversa={1 / cam.z / ESCALA_JANELA} visivelDe={t.c3.inicio} visivelAte={t.metaVem - ms(100)} />
           </div>
+          {medir && <Medidor raiz={raiz} />}
         </div>
 
         {/* o ícone, sumindo enquanto a janela abre */}
@@ -175,7 +238,7 @@ export const SecaoApp: React.FC = () => {
               opacity: iconeSome,
             }}
           >
-            <Img src={logoSrc('app-512.png')} style={{ width: '100%', height: '100%' }} />
+            <Img src={staticFile('marca/app-512.png')} style={{ width: '100%', height: '100%' }} />
           </div>
         )}
       </div>
@@ -185,9 +248,9 @@ export const SecaoApp: React.FC = () => {
         <div
           style={{
             position: 'absolute',
-            left: 1450 - CEL_L / 2 + (1 - cel) * 700,
-            top: 610 - CEL_A / 2,
-            transform: `scale(${0.95 * (1 - 0.08 * recolhe)}) rotate(${(1 - cel) * 8}deg)`,
+            left: 1460 - CEL_L / 2 + (1 - cel) * 700,
+            top: 612 - CEL_A / 2,
+            transform: `scale(${0.92 * (1 - 0.06 * recolhe)}) rotate(${(1 - cel) * 8}deg)`,
             transformOrigin: '50% 50%',
           }}
         >
@@ -195,7 +258,6 @@ export const SecaoApp: React.FC = () => {
         </div>
       )}
 
-      <Comemoracao t={t} />
       <Manchete itens={manchetes} />
     </AbsoluteFill>
   );

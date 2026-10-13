@@ -1,212 +1,264 @@
 // Cena 1 — «Quanto você já recebeu hoje? Sabe me falar de cabeça?»
-// Planilha, relatório, recado no WhatsApp e post-it flutuando… e se desfazendo
-// em poeira enquanto a pergunta fica no ar.
+//
+// O jeito antigo, flutuando em volta da pergunta: a planilha que alguém está
+// varrendo linha por linha, o relatório que não termina de atualizar, o recado
+// no WhatsApp e o post-it. Nada some: no «Chega» da cena 2 as peças se
+// organizam numa pilha no centro, a pilha se recolhe num ponto de luz e de lá
+// nascem as duas logos (Cena02Virada).
 
 import { AbsoluteFill, useCurrentFrame } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/Caveat';
-import { Desintegrar } from '../componentes/Desintegrar';
 import { cena, palavra } from '../linhaDoTempo';
-import { entrada, ms, s } from '../movimento';
-import { COR, FONTE, FONTE_MONO } from '../tema';
+import { ACELERA, entrada, entre, mola, ms, SUAVE, SUAVE_IDA_VOLTA } from '../movimento';
+import { COR, FONTE, FONTE_MONO, GRADIENTE_MARCA } from '../tema';
 
-const caveat = loadFont('normal', { weights: ['600'], subsets: ['latin'] });
+/** Onde fica o centro da pilha (e de onde nascem as logos). */
+export const CENTRO_PILHA = { x: 960, y: 470 };
 
-export type Emissor = {
-  id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  inicio: number;
-  duracao: number;
-  cores: string[];
-  quantidade: number;
-};
-
-// ── posições (px na tela 1920×1080) ────────────────────────────────────────
-const PLAN = { x: 150, y: 290, w: 900 };
-const PLAN_TITULO = 44;
-const PLAN_CABECALHO = 40;
-const PLAN_LINHA = 50;
-const LINHAS = [
-  ['20/10/2026', '12574531', '20/10/2026', 'R$ 187,00', 'BOLETO', 'PAGO'],
-  ['20/10/2026', '12611851', '21/10/2026', 'R$ 151,00', 'BOLETO', 'VERIFICAR'],
-  ['21/10/2026', '12672495', '22/10/2026', 'R$ 205,15', 'BOLETO', 'PAGO'],
-  ['21/10/2026', '12663342', '22/10/2026', 'R$ 126,00', 'PIX', '???'],
-  ['22/10/2026', '12640101', '30/10/2026', 'R$ 199,19', 'BOLETO', 'PAGO'],
-  ['22/10/2026', '12584260', '30/10/2026', 'R$ 186,75', 'PIX', 'VERIFICAR'],
-  ['23/10/2026', '12644109', '01/11/2026', 'R$ 688,00', 'PIX', 'PAGO'],
-  ['23/10/2026', '12660751', '01/11/2026', 'R$ 422,00', 'BOLETO', '???'],
-];
-const COLUNAS = [150, 140, 160, 150, 130, 170];
-const REL = { x: 1150, y: 215, w: 600, h: 620 };
-const ZAP = { x: 1030, y: 840, w: 560, h: 116 };
-const POSTIT = { x: 120, y: 790, w: 300, h: 190 };
-const PERGUNTA = { x: 360, y: 92, w: 1200, h: 150 };
-
-export function tempos() {
+export function temposCena1() {
   const c = cena('cena-01');
-  const recebeu = palavra('cena-01', 'recebeu');
   return {
-    entra: c.inicio,
-    linhas: LINHAS.map((_, i) => recebeu + ms(i * 120)),
-    postit: palavra('cena-01', 'hoje'),
-    relatorio: palavra('cena-01', 'sabe'),
-    zap: palavra('cena-01', 'falar'),
-    planilhaTopo: palavra('cena-01', 'de'),
-    pergunta: cena('cena-02').inicio + s(0.05),
+    inicio: c.inicio,
+    organiza: palavra('cena-02', 'chega'),
+    recolhe: palavra('cena-02', 'procurando'),
   };
 }
 
-export function emissores(): Emissor[] {
-  const t = tempos();
-  const linhaY = (i: number) => PLAN.y + PLAN_TITULO + PLAN_CABECALHO + i * PLAN_LINHA;
-  return [
-    ...LINHAS.map((_, i) => ({
-      id: `linha-${i}`,
-      x: PLAN.x,
-      y: linhaY(i),
-      w: PLAN.w,
-      h: PLAN_LINHA,
-      inicio: t.linhas[i],
-      duracao: s(1.1),
-      cores: ['#2ea043', '#3fb950', '#e6f4ea', '#1a7f37'],
-      quantidade: 70,
-    })),
-    { id: 'plan-topo', x: PLAN.x, y: PLAN.y, w: PLAN.w, h: PLAN_TITULO + PLAN_CABECALHO, inicio: t.planilhaTopo, duracao: s(1.0), cores: ['#1f6f3a', '#0d1117', '#c9d1d9'], quantidade: 80 },
-    { id: 'relatorio', ...REL, inicio: t.relatorio, duracao: s(1.8), cores: ['#f3f5f8', '#d0d7de', '#29a8e0', '#8c959f'], quantidade: 360 },
-    { id: 'postit', ...POSTIT, inicio: t.postit, duracao: s(1.2), cores: ['#ffe066', '#f5c518', '#3d3d3d'], quantidade: 100 },
-    { id: 'zap', ...ZAP, inicio: t.zap, duracao: s(1.2), cores: ['#005c4b', '#e9edef', '#25d366'], quantidade: 120 },
-    { id: 'pergunta', ...PERGUNTA, inicio: t.pergunta, duracao: s(1.1), cores: ['#e8eef4', '#93a3b3', '#5cc8f5'], quantidade: 180 },
-  ];
-}
+type Peca = { id: string; x: number; y: number; l: number; a: number; rot: number; entra: number; fase: number };
 
-/** Flutuação lenta e independente para cada peça. */
-function flutua(frame: number, fase: number, amp = 6) {
-  const t = frame / 60;
-  return `translate(${Math.sin(t * 0.6 + fase) * amp}px, ${Math.cos(t * 0.5 + fase) * amp}px)`;
-}
+const PECAS: Peca[] = [
+  { id: 'planilha', x: 400, y: 255, l: 600, a: 350, rot: -3.5, entra: 6, fase: 0.3 },
+  { id: 'relatorio', x: 1515, y: 265, l: 460, a: 400, rot: 3, entra: 16, fase: 1.7 },
+  { id: 'postit', x: 330, y: 845, l: 270, a: 220, rot: -6, entra: 26, fase: 4.4 },
+  { id: 'zap', x: 1490, y: 855, l: 540, a: 176, rot: -2, entra: 36, fase: 3.1 },
+];
+
+const SOMBRA_PECA = '0 1px 2px rgba(15,27,38,0.06), 0 14px 30px rgba(15,27,38,0.10), 0 40px 70px rgba(15,27,38,0.08)';
 
 export const Cena01Problema: React.FC = () => {
   const f = useCurrentFrame();
-  const t = tempos();
-  const PALAVRAS_1 = ['Quanto', 'você', 'já', 'recebeu', 'hoje?'];
-  const PALAVRAS_2 = ['Sabe', 'me', 'falar', 'de', 'cabeça?'];
+  const t = temposCena1();
+  if (f > t.recolhe + ms(500)) return null;
+
+  const empurra = 1 + 0.035 * entre(f, 0, t.organiza, 0, 1, (x) => x);
 
   return (
-    <AbsoluteFill style={{ fontFamily: FONTE }}>
-      {/* ── pergunta ── */}
-      <div style={{ position: 'absolute', left: PERGUNTA.x, top: PERGUNTA.y }}>
-        <Desintegrar id="pergunta" inicio={t.pergunta} duracao={s(1.1)} largura={PERGUNTA.w} altura={PERGUNTA.h} semente={11}>
-          <div style={{ textAlign: 'center', width: PERGUNTA.w }}>
-            <div style={{ fontSize: 64, fontWeight: 700, color: COR.texto, letterSpacing: -1.5 }}>
-              {PALAVRAS_1.map((p) => (
-                <span key={p} style={{ display: 'inline-block', marginRight: 18, ...entrada(f, palavra('cena-01', p), 0, { deslocY: 22, duracaoMs: 450 }) }}>
-                  {p}
-                </span>
-              ))}
-            </div>
-            <div style={{ fontSize: 40, fontWeight: 500, color: COR.textoSuave, marginTop: 10 }}>
-              {PALAVRAS_2.map((p, i) => (
-                <span key={p + i} style={{ display: 'inline-block', marginRight: 12, ...entrada(f, palavra('cena-01', p), 0, { deslocY: 16, duracaoMs: 420 }) }}>
-                  {p}
-                </span>
-              ))}
-            </div>
+    <AbsoluteFill style={{ fontFamily: FONTE, transform: `scale(${empurra})` }}>
+      {PECAS.map((p, i) => {
+        // entrada: vem de fora, desfocada, e assenta com mola
+        const e = mola(f, p.entra);
+        const deCentro = { x: p.x - 960, y: p.y - 540 };
+        const dist = Math.hypot(deCentro.x, deCentro.y) || 1;
+        const fora = 70 * (1 - e);
+        const flutua = {
+          x: Math.sin(f / 60 * 0.7 + p.fase) * 6,
+          y: Math.cos(f / 60 * 0.55 + p.fase) * 7,
+        };
+        // organiza: vai para a pilha no centro, um depois do outro
+        const ini = t.organiza + ms(i * 55);
+        const o = entre(f, ini, ini + ms(620), 0, 1, SUAVE_IDA_VOLTA);
+        const alvo = { x: CENTRO_PILHA.x + (i - 1.5) * 6, y: CENTRO_PILHA.y + (i - 1.5) * 7 };
+        const escalaPilha = 280 / p.l;
+        // recolhe: a pilha encolhe até virar um ponto
+        const r = entre(f, t.recolhe - ms(60), t.recolhe + ms(320), 0, 1, ACELERA);
+        const x = p.x + (deCentro.x / dist) * fora + flutua.x * (1 - o) + (alvo.x - p.x) * o;
+        const y = p.y + (deCentro.y / dist) * fora + flutua.y * (1 - o) + (alvo.y - p.y) * o;
+        const esc = (0.94 + 0.06 * e) * (1 + (escalaPilha - 1) * o) * (1 - r);
+        const rot = p.rot * (1 - o) + (i - 1.5) * 2.2 * o;
+        return (
+          <div
+            key={p.id}
+            style={{
+              position: 'absolute',
+              left: x - p.l / 2,
+              top: y - p.a / 2,
+              width: p.l,
+              height: p.a,
+              transform: `rotate(${rot}deg) scale(${esc})`,
+              opacity: Math.min(1, e * 1.6) * (1 - entre(f, t.recolhe + ms(140), t.recolhe + ms(320), 0, 1)),
+              filter: e < 0.98 ? `blur(${(1 - e) * 10}px)` : undefined,
+              zIndex: i,
+            }}
+          >
+            {p.id === 'planilha' && <Planilha f={f} />}
+            {p.id === 'relatorio' && <Relatorio f={f} />}
+            {p.id === 'postit' && <PostIt f={f} />}
+            {p.id === 'zap' && <Recado f={f} />}
           </div>
-        </Desintegrar>
-      </div>
+        );
+      })}
 
-      {/* ── planilha ── */}
-      <div style={{ position: 'absolute', left: PLAN.x, top: PLAN.y, ...entrada(f, t.entra, 0, { deslocY: 30, duracaoMs: 900 }) }}>
-        <div style={{ transform: flutua(f, 0.3), filter: 'drop-shadow(0 30px 50px rgba(0,0,0,0.55))' }}>
-          <Desintegrar id="plan-topo" inicio={t.planilhaTopo} duracao={s(1.0)} largura={PLAN.w} altura={PLAN_TITULO + PLAN_CABECALHO} semente={5}>
-            <div style={{ height: PLAN_TITULO, background: '#1f6f3a', borderRadius: '10px 10px 0 0', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, color: '#e6f4ea', fontSize: 17, fontWeight: 600 }}>
-              <span style={{ background: '#e6f4ea', color: '#1f6f3a', borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 14 }}>X</span>
-              acordos_outubro_FINAL (3).xlsx
+      <Brilho f={f} em={t.recolhe + ms(120)} />
+      <Pergunta f={f} sai={t.organiza - ms(40)} />
+    </AbsoluteFill>
+  );
+};
+
+// ── a pergunta ──────────────────────────────────────────────────────────
+const LINHA_1 = ['Quanto', 'você', 'já', 'recebeu', 'hoje?'];
+const LINHA_2 = ['Sabe', 'me', 'falar', 'de', 'cabeça?'];
+
+const Pergunta: React.FC<{ f: number; sai: number }> = ({ f, sai }) => {
+  const saindo = (i: number) => {
+    const p = entre(f, sai + ms(i * 22), sai + ms(i * 22 + 300), 0, 1, ACELERA);
+    return { opacity: 1 - p, transform: `translateY(${-p * 26}px)`, filter: p > 0 ? `blur(${p * 6}px)` : undefined };
+  };
+  const sublinha = entre(f, palavra('cena-01', 'hoje') + ms(150), palavra('cena-01', 'hoje') + ms(700), 0, 1, SUAVE);
+  return (
+    <div style={{ position: 'absolute', top: 452, width: 1920, textAlign: 'center' }}>
+      <div style={{ fontSize: 78, fontWeight: 800, letterSpacing: -2.2, color: COR.texto, lineHeight: 1.05 }}>
+        {LINHA_1.map((w, i) => {
+          const e = entrada(f, palavra('cena-01', w), 0, { deslocY: 28, duracaoMs: 520 });
+          const destaque = i >= 3;
+          return (
+            <span key={w} style={{ display: 'inline-block', marginRight: 20, position: 'relative', ...e, ...(f >= sai ? saindo(i) : {}) }}>
+              <span style={destaque ? { background: GRADIENTE_MARCA, WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}>{w}</span>
+              {destaque && (
+                <span style={{ position: 'absolute', left: 0, right: i === 4 ? 0 : -20, bottom: -6, height: 5, borderRadius: 3, background: GRADIENTE_MARCA, transform: `scaleX(${sublinha})`, transformOrigin: 'left' }} />
+              )}
+            </span>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 42, fontWeight: 600, color: COR.textoSuave, marginTop: 22, letterSpacing: -0.6 }}>
+        {LINHA_2.map((w, i) => (
+          <span key={w + i} style={{ display: 'inline-block', marginRight: 13, ...entrada(f, palavra('cena-01', w), 0, { deslocY: 18, duracaoMs: 460 }), ...(f >= sai ? saindo(5 + i) : {}) }}>
+            {w}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/** O ponto de luz em que a pilha se recolhe (e de onde as logos vão nascer). */
+const Brilho: React.FC<{ f: number; em: number }> = ({ f, em }) => {
+  const p = entre(f, em - ms(120), em + ms(520), 0, 1, SUAVE);
+  if (p <= 0 || p >= 1) return null;
+  const r = 40 + 380 * p;
+  return (
+    <>
+      <div style={{ position: 'absolute', left: CENTRO_PILHA.x - r, top: CENTRO_PILHA.y - r, width: r * 2, height: r * 2, borderRadius: '50%', background: `radial-gradient(circle, rgba(56,189,248,${0.32 * (1 - p)}) 0%, rgba(74,222,128,${0.18 * (1 - p)}) 40%, transparent 70%)` }} />
+      <div style={{ position: 'absolute', left: CENTRO_PILHA.x - r * 0.6, top: CENTRO_PILHA.y - r * 0.6, width: r * 1.2, height: r * 1.2, borderRadius: '50%', border: `2px solid rgba(31,143,209,${0.35 * (1 - p)})` }} />
+    </>
+  );
+};
+
+// ── as peças do jeito antigo ────────────────────────────────────────────
+const LINHAS = [
+  ['13/10', '12574531', 'R$ 187,00', 'BOLETO', 'PAGO'],
+  ['13/10', '12611851', 'R$ 151,00', 'BOLETO', 'VERIFICAR'],
+  ['13/10', '12672495', 'R$ 205,15', 'PIX', 'PAGO'],
+  ['13/10', '12663342', 'R$ 126,00', 'PIX', '???'],
+  ['13/10', '12640101', 'R$ 199,19', 'BOLETO', 'PAGO'],
+  ['13/10', '12584260', 'R$ 186,75', 'CARTÃO', 'VERIFICAR'],
+];
+const COLS = [70, 110, 120, 100, 120];
+
+const Planilha: React.FC<{ f: number }> = ({ f }) => {
+  // alguém procurando linha por linha: a seleção desce e volta
+  const ciclo = ((f - 40) / 22) % (LINHAS.length * 2);
+  const linhaSel = f < 40 ? -1 : Math.floor(ciclo < LINHAS.length ? ciclo : LINHAS.length * 2 - ciclo - 0.001);
+  return (
+    <div style={{ width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', boxShadow: SOMBRA_PECA, border: '1px solid rgba(15,27,38,0.08)', fontFamily: FONTE }}>
+      <div style={{ height: 36, background: '#1e7145', color: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', fontSize: 14, fontWeight: 600 }}>
+        <span style={{ background: '#fff', color: '#1e7145', borderRadius: 4, padding: '0 6px', fontWeight: 800, fontSize: 12 }}>X</span>
+        acordos_outubro_FINAL (3).xlsx
+      </div>
+      <div style={{ height: 30, borderBottom: '1px solid #e3e7eb', display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', fontSize: 13, color: '#556270', background: '#f8fafb' }}>
+        <span style={{ fontStyle: 'italic', color: '#8a96a3' }}>fx</span>
+        <span style={{ fontFamily: FONTE_MONO, fontSize: 12.5 }}>=SOMA(C2:C7)</span>
+      </div>
+      <div style={{ display: 'flex', background: '#f1f4f6', borderBottom: '1px solid #e3e7eb', fontSize: 12, fontWeight: 700, color: '#556270', height: 28, alignItems: 'center', paddingLeft: 36 }}>
+        {['DATA', 'NR', 'VALOR', 'TIPO', 'STATUS'].map((c, i) => (
+          <div key={c} style={{ width: COLS[i], textAlign: 'center' }}>{c}</div>
+        ))}
+      </div>
+      {LINHAS.map((l, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', height: 33, borderBottom: '1px solid #eef1f3', fontFamily: FONTE_MONO, fontSize: 13, color: '#24313d', background: i === linhaSel ? 'rgba(250,204,21,0.22)' : undefined, position: 'relative' }}>
+          <div style={{ width: 36, textAlign: 'center', color: '#a0aab4', fontSize: 11, background: '#f6f8f9', alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid #e3e7eb' }}>{i + 2}</div>
+          {l.map((v, j) => (
+            <div key={j} style={{ width: COLS[j], textAlign: 'center', fontWeight: j === 4 ? 700 : 500, color: j === 4 ? (v === 'PAGO' ? '#15803d' : v === '???' ? '#b91c1c' : '#b45309') : undefined }}>
+              {v}
             </div>
-            <div style={{ height: PLAN_CABECALHO, background: '#0d1117', display: 'flex', alignItems: 'center', color: '#e6edf3', fontSize: 15, fontWeight: 700 }}>
-              {['DATA', 'NR', 'VENCIMENTO', 'VALOR', 'TIPO', 'STATUS'].map((c, i) => (
-                <div key={c} style={{ width: COLUNAS[i], textAlign: 'center' }}>{c}</div>
-              ))}
-            </div>
-          </Desintegrar>
-          {LINHAS.map((linha, i) => (
-            <Desintegrar key={i} id={`linha-${i}`} inicio={t.linhas[i]} duracao={s(1.1)} largura={PLAN.w} altura={PLAN_LINHA} semente={20 + i}>
-              <div
-                style={{
-                  height: PLAN_LINHA,
-                  background: i % 2 ? '#2b9a45' : '#2ea043',
-                  borderTop: '1px solid rgba(0,0,0,0.35)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: '#0b1f12',
-                  fontSize: 17,
-                  fontFamily: FONTE_MONO,
-                  fontWeight: 500,
-                  borderRadius: i === LINHAS.length - 1 ? '0 0 10px 10px' : 0,
-                }}
-              >
-                {linha.map((v, j) => (
-                  <div key={j} style={{ width: COLUNAS[j], textAlign: 'center', fontWeight: j === 5 ? 700 : 500, color: j === 5 && v !== 'PAGO' ? '#5a1010' : undefined }}>
-                    {v}
-                  </div>
-                ))}
-              </div>
-            </Desintegrar>
+          ))}
+          {i === linhaSel && <div style={{ position: 'absolute', inset: 0, border: '2px solid #1e7145', pointerEvents: 'none' }} />}
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', height: 34, fontFamily: FONTE_MONO, fontSize: 13, fontWeight: 700, background: '#f8fafb', paddingLeft: 36 }}>
+        <div style={{ width: COLS[0] + COLS[1], textAlign: 'center', color: '#556270' }}>TOTAL</div>
+        <div style={{ width: COLS[2], textAlign: 'center', color: '#b91c1c' }}>#VALOR!</div>
+      </div>
+    </div>
+  );
+};
+
+const Relatorio: React.FC<{ f: number }> = ({ f }) => {
+  const progresso = Math.min(87, 20 + f * 0.45);
+  return (
+    <div style={{ width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', boxShadow: SOMBRA_PECA, border: '1px solid rgba(15,27,38,0.08)', fontFamily: FONTE }}>
+      <div style={{ height: 36, background: '#f3f4f6', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', fontSize: 14, fontWeight: 600, color: '#374151' }}>
+        <span style={{ background: '#dc2626', color: '#fff', borderRadius: 4, padding: '0 5px', fontWeight: 800, fontSize: 11 }}>PDF</span>
+        relatorio_59_exportado.pdf
+      </div>
+      <div style={{ padding: '22px 26px' }}>
+        <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 700, letterSpacing: 1 }}>RELATÓRIO 59 · EXPORTADO 07:02</div>
+        <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: '#111827' }}>Recebimentos do mês</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 110, marginTop: 18, borderBottom: '2px solid #e5e7eb' }}>
+          {[48, 72, 60, 96, 84, 110, 70, 92, 102].map((h, i) => (
+            <div key={i} style={{ flex: 1, height: h, background: i === 8 ? '#93c5fd' : '#e5e7eb', borderRadius: '4px 4px 0 0' }} />
           ))}
         </div>
-      </div>
-
-      {/* ── relatório ── */}
-      <div style={{ position: 'absolute', left: REL.x, top: REL.y, ...entrada(f, t.entra, 2, { passoMs: 120, deslocY: 30, duracaoMs: 900 }) }}>
-        <div style={{ transform: `${flutua(f, 1.7)} rotate(2.5deg)`, filter: 'drop-shadow(0 30px 50px rgba(0,0,0,0.55))' }}>
-          <Desintegrar id="relatorio" inicio={t.relatorio} duracao={s(1.8)} largura={REL.w} altura={REL.h} semente={7}>
-            <div style={{ width: REL.w, height: REL.h, background: '#f3f5f8', borderRadius: 12, padding: 40, boxSizing: 'border-box', color: '#24292f' }}>
-              <div style={{ fontSize: 14, color: '#8c959f', fontWeight: 600, letterSpacing: 1 }}>RELATÓRIO 59 · EXPORTADO 07:02</div>
-              <div style={{ fontSize: 30, fontWeight: 700, marginTop: 8 }}>Recebimentos do mês</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 170, marginTop: 34, borderBottom: '2px solid #d0d7de' }}>
-                {[60, 95, 72, 130, 110, 150, 88, 120, 140].map((h, i) => (
-                  <div key={i} style={{ flex: 1, height: h, background: i === 8 ? '#29a8e0' : '#c8d1da', borderRadius: '4px 4px 0 0' }} />
-                ))}
-              </div>
-              {[0.92, 0.78, 0.86, 0.6, 0.82, 0.7, 0.5].map((w, i) => (
-                <div key={i} style={{ height: 12, width: `${w * 100}%`, background: '#d8dee4', borderRadius: 6, marginTop: i === 0 ? 34 : 16 }} />
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 34, fontFamily: FONTE_MONO, fontSize: 22, fontWeight: 600 }}>
-                <span style={{ color: '#57606a' }}>TOTAL</span>
-                <span>R$ ??.???,??</span>
-              </div>
-            </div>
-          </Desintegrar>
+        {[0.9, 0.72, 0.84, 0.6].map((w, i) => (
+          <div key={i} style={{ height: 10, width: `${w * 100}%`, background: '#eef0f3', borderRadius: 5, marginTop: i === 0 ? 20 : 12 }} />
+        ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20, fontFamily: FONTE_MONO, fontSize: 18, fontWeight: 700 }}>
+          <span style={{ color: '#6b7280' }}>TOTAL</span>
+          <span style={{ color: '#111827' }}>R$ ??.???,??</span>
+        </div>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#6b7280' }}>
+          <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#eef0f3', overflow: 'hidden' }}>
+            <div style={{ width: `${progresso}%`, height: '100%', background: '#9ca3af' }} />
+          </div>
+          Atualizando… {Math.round(progresso)}%
         </div>
       </div>
+    </div>
+  );
+};
 
-      {/* ── recado no WhatsApp ── */}
-      <div style={{ position: 'absolute', left: ZAP.x, top: ZAP.y, ...entrada(f, t.entra, 4, { passoMs: 120, deslocY: 24, duracaoMs: 800 }) }}>
-        <div style={{ transform: flutua(f, 3.1, 5), filter: 'drop-shadow(0 20px 36px rgba(0,0,0,0.5))' }}>
-          <Desintegrar id="zap" inicio={t.zap} duracao={s(1.2)} largura={ZAP.w} altura={ZAP.h} semente={13}>
-            <div style={{ width: ZAP.w, height: ZAP.h, background: COR.whatsappBalao, borderRadius: '16px 16px 4px 16px', padding: '16px 20px', boxSizing: 'border-box', color: '#e9edef' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#53bdeb' }}>Supervisão</div>
-              <div style={{ fontSize: 21, marginTop: 4 }}>Alguém conferiu se o 12663342 pagou?? 🤔</div>
-              <div style={{ fontSize: 13, color: '#8696a0', textAlign: 'right', marginTop: 2 }}>09:41 ✓✓</div>
-            </div>
-          </Desintegrar>
+const PostIt: React.FC<{ f: number }> = ({ f }) => {
+  const escreve = entre(f, palavra('cena-01', 'cabeca') - ms(200), palavra('cena-01', 'cabeca') + ms(500), 0, 1, SUAVE);
+  return (
+    <div style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg, #fff3a3, #fde68a)', boxShadow: SOMBRA_PECA, padding: 24, boxSizing: 'border-box', fontFamily: 'Caveat', color: '#3f3a2a', fontSize: 38, lineHeight: 1.1, fontWeight: 600 }}>
+      ligar p/ cliente 15h!!
+      <div style={{ clipPath: `inset(0 ${100 - escreve * 100}% 0 0)`, marginTop: 10, color: '#b45309' }}>meta = ???</div>
+    </div>
+  );
+};
+
+const Recado: React.FC<{ f: number }> = ({ f }) => {
+  const chega = palavra('cena-01', 'falar') - ms(150);
+  const digitando = f < chega;
+  return (
+    <div style={{ width: '100%', height: '100%', borderRadius: 16, background: '#fff', boxShadow: SOMBRA_PECA, border: '1px solid rgba(15,27,38,0.08)', padding: '14px 18px', boxSizing: 'border-box', fontFamily: FONTE }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 17, background: '#d9fdd3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#0f7a5a' }}>SV</div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#111b21' }}>Supervisão · Play 5</div>
+          <div style={{ fontSize: 12, color: '#667781' }}>{digitando ? 'Carlos está digitando…' : '15:41'}</div>
         </div>
       </div>
-
-      {/* ── post-it ── */}
-      <div style={{ position: 'absolute', left: POSTIT.x, top: POSTIT.y, ...entrada(f, t.entra, 3, { passoMs: 120, deslocY: 24, duracaoMs: 800 }) }}>
-        <div style={{ transform: `${flutua(f, 4.4, 5)} rotate(-6deg)`, filter: 'drop-shadow(0 18px 30px rgba(0,0,0,0.5))' }}>
-          <Desintegrar id="postit" inicio={t.postit} duracao={s(1.2)} largura={POSTIT.w} altura={POSTIT.h} semente={17}>
-            <div style={{ width: POSTIT.w, height: POSTIT.h, background: 'linear-gradient(160deg, #ffe680, #f5c518)', padding: 22, boxSizing: 'border-box', fontFamily: caveat.fontFamily, color: '#3d3d3d', fontSize: 36, lineHeight: 1.05 }}>
-              ligar p/ cliente 15h!!
-              <br />
-              meta = ???
-            </div>
-          </Desintegrar>
-        </div>
+      <div style={{ marginTop: 12, display: 'inline-block', background: '#f0f2f5', borderRadius: '4px 14px 14px 14px', padding: '10px 14px', fontSize: 17, color: '#111b21', ...(digitando ? {} : entrada(f, chega, 0, { deslocY: 10, duracaoMs: 360 })) }}>
+        {digitando ? (
+          <span style={{ letterSpacing: 4, color: '#8696a0' }}>
+            {[0, 1, 2].map((i) => (
+              <span key={i} style={{ opacity: 0.35 + 0.65 * Math.max(0, Math.sin(f / 7 - i * 0.9)) }}>●</span>
+            ))}
+          </span>
+        ) : (
+          'Alguém conferiu se o 12663342 pagou?? 🤔'
+        )}
       </div>
-    </AbsoluteFill>
+    </div>
   );
 };

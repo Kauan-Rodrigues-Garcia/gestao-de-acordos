@@ -1,49 +1,31 @@
-// Coordenadas do app «de mentira» (1600×900, a tela interna da janela).
-// O cursor mira nestes pontos, então tudo que é clicável mora aqui.
+// Medidas fixas do app «de mentira» e da janela que o mostra.
+//
+// O app é desenhado em 1600×874 (o tamanho de uma tela de computador, como o
+// app real roda) e reduzido para caber na janela do vídeo. Onde cada coisa
+// clicável fica NÃO é escrito aqui à mão: `npm run medir` tira as posições do
+// próprio desenho (os elementos com `data-alvo`) e grava `alvos.json`.
 
 export const APP_L = 1600;
-export const APP_A = 900;
+export const APP_A = 874;
 
-export const BARRA = 46; // barra do navegador
-export const SIDEBAR = 250;
-export const CABECALHO = 66;
+/** Larguras e alturas do `Layout.tsx` real. */
+export const SIDEBAR = 240;
+export const CABECALHO = 56;
+/** Bloco do logo no menu: py-5 + logo de 32 px + borda. */
+export const LOGO_ALTURA = 73;
+/** Item do menu: py-2.5 + linha de 20 px, mais o space-y-0.5. */
+export const MENU_PASSO = 42;
+/** Topo do primeiro item do menu (dentro do menu lateral). */
+export const MENU_TOPO = LOGO_ALTURA + 12;
 
-export const CONTEUDO = {
-  x: SIDEBAR + 32,
-  y: BARRA + CABECALHO + 26,
-  l: APP_L - SIDEBAR - 64,
-  a: APP_A - BARRA - CABECALHO - 52,
-};
-
-export type IdMenu = 'inicio' | 'desempenho' | 'dashboard' | 'acordos' | 'novo' | 'campanhas' | 'calendario' | 'tickets';
-
-export const MENU: { id: IdMenu; rotulo: string; icone: string }[] = [
-  { id: 'inicio', rotulo: 'Início', icone: 'casa' },
-  { id: 'desempenho', rotulo: 'Desempenho do Dia', icone: 'raio' },
-  { id: 'dashboard', rotulo: 'Dashboard', icone: 'grade' },
-  { id: 'acordos', rotulo: 'Acordos', icone: 'doc' },
-  { id: 'novo', rotulo: 'Novo Acordo', icone: 'mais' },
-  { id: 'campanhas', rotulo: 'Campanhas de WhatsApp', icone: 'enviar' },
-  { id: 'calendario', rotulo: 'Calendário', icone: 'calendario' },
-  { id: 'tickets', rotulo: 'Tickets', icone: 'ticket' },
-];
-
-export const MENU_Y0 = BARRA + 92;
-export const MENU_PASSO = 50;
-
-/** Centro (onde o cursor clica) de um item do menu lateral. */
-export function pontoMenu(id: IdMenu) {
-  const i = MENU.findIndex((m) => m.id === id);
-  return { x: 96, y: MENU_Y0 + i * MENU_PASSO + 20 };
-}
-
-/** Ícones do cabeçalho. */
-export const SINO = { x: APP_L - 168, y: BARRA + CABECALHO / 2 };
-export const CHAT = { x: APP_L - 118, y: BARRA + CABECALHO / 2 };
+export type IdMenu = 'dashboard' | 'chips' | 'acordos' | 'novo' | 'lixeira' | 'analitico' | 'campanhas';
 
 // ── a janela na tela (1920×1080) ────────────────────────────────────────
-export const JANELA = { x: 240, y: 212, l: 1440, a: 810 };
+/** Barra do navegador, em px da tela. */
+export const BARRA_NAV = 38;
+export const JANELA = { x: 240, y: 196, l: 1440 };
 export const ESCALA_JANELA = JANELA.l / APP_L;
+export const JANELA_A = BARRA_NAV + Math.round(APP_A * ESCALA_JANELA);
 
 // ── o ícone do app na cena 2 (tela) ─────────────────────────────────────
 export const ICONE = { cx: 960, cy: 452, lado: 260, raio: 60 };

@@ -1,37 +1,50 @@
 // O roteiro das cenas 3–11: quando cada clique acontece (amarrado às palavras
-// da narração), para onde o cursor anda e para onde a câmera olha.
+// da narração), qual tela está aberta, para onde o cursor anda e para onde a
+// câmera olha.
+//
+// O cursor e a câmera miram em ALVOS — elementos com `data-alvo` nas telas.
+// As posições vêm de `alvos.json`, que `npm run medir` grava a partir do
+// próprio desenho. Mudou uma tela? Rode de novo e o cursor acha o lugar novo.
 
 import { cena, palavra } from '../linhaDoTempo';
 import { ms, s } from '../movimento';
 import { temposCena2 } from '../cenas/Cena02Virada';
 import type { PontoCursor } from '../componentes/Cursor';
-import { CHAT, CONTEUDO, pontoMenu, type IdMenu } from './layout';
+import alvosJson from './alvos.json';
+import { APP_A, APP_L, type IdMenu } from './layout';
 
-// ── alvos clicáveis (coordenadas do app 1600×900) ─────────────────────
-export const ALVO = {
-  // Novo acordo
-  campoValor: { x: 745, y: 414 },
-  chip3x: { x: 851, y: 516 },
-  campoVencimento: { x: 1105, y: 414 },
-  salvar: { x: 1183, y: 786 },
-  // Acordos
-  linha: (i: number) => 270 + i * 64 + 32,
-  statusX: CONTEUDO.x + 960,
-  reagendar: { x: 1404, y: 270 + 3 * 64 + 32 },
-  diaNovo: { x: 1336, y: 719 },
-  // Dashboard
-  abaEquipe: { x: 501, y: 162 },
-  abaSetor: { x: 647, y: 162 },
-  linhaVoce: { x: 640, y: 300 + 2 * 74 + 37 },
-  // Campanhas
-  cartaoLembrete: { x: 560, y: 330 },
-  estrelaLembrete: { x: 318, y: 460 },
-  enviarLembrete: { x: 829, y: 460 },
-  // Chat
-  chat: CHAT,
-  enviarChat: { x: 1538, y: 842 },
-};
+// ── alvos medidos ───────────────────────────────────────────────────────
+export type Retangulo = { x: number; y: number; l: number; a: number };
+/** Por alvo: [frame a partir do qual vale, x, y, largura, altura]. */
+const ALVOS = alvosJson as unknown as Record<string, [number, number, number, number, number][]>;
+const avisados = new Set<string>();
 
+/** O retângulo do alvo no frame `f` (a medida mais recente até ali). */
+export function alvo(nome: string, f: number): Retangulo {
+  const lista = ALVOS[nome];
+  if (!lista || lista.length === 0) {
+    if (!avisados.has(nome)) {
+      avisados.add(nome);
+      console.warn(`[roteiro] alvo "${nome}" sem medida — rode npm run medir`);
+    }
+    return { x: APP_L / 2 - 40, y: APP_A / 2 - 20, l: 80, a: 40 };
+  }
+  let escolhido = lista[0];
+  for (const m of lista) {
+    if (m[0] <= f) escolhido = m;
+    else break;
+  }
+  const [, x, y, l, a] = escolhido;
+  return { x, y, l, a };
+}
+
+/** Ponto dentro do alvo: (0,0) é o centro; `fx`/`fy` em fração da largura/altura. */
+export function ponto(nome: string, f: number, fx = 0, fy = 0) {
+  const r = alvo(nome, f);
+  return { x: r.x + r.l / 2 + fx * r.l, y: r.y + r.a / 2 + fy * r.a };
+}
+
+// ── tempos ──────────────────────────────────────────────────────────────
 export function tempoApp() {
   const t2 = temposCena2();
   const c3 = cena('cena-03');
@@ -46,171 +59,238 @@ export function tempoApp() {
   const c12 = cena('cena-12');
 
   const clique = {
+    // cena 4 — novo acordo
     novo: palavra('cena-04', 'registre') - ms(80),
-    valor: palavra('cena-04', 'valor') - ms(120),
-    parcelas: palavra('cena-04', 'parcelas'),
-    vencimento: palavra('cena-04', 'vencimento'),
-    salvar: palavra('cena-04', 'salvo'),
-    acordos: c5.voz - ms(220),
+    nr: palavra('cena-04', 'acordo') - ms(60),
+    valor: palavra('cena-04', 'valor') - ms(100),
+    parcelas: palavra('cena-04', 'parcelas') - ms(40),
+    vencimento: palavra('cena-04', 'vencimento') - ms(40),
+    dia: palavra('cena-04', 'vencimento') + ms(620),
+    salvar: palavra('cena-04', 'salvo') - ms(30),
+    // cena 5 — acordos
+    acordos: c5.voz - ms(200),
     pago: palavra('cena-05', 'pago'),
-    reagendar: palavra('cena-05', 'reagenda'),
-    dia: palavra('cena-05', 'cliques'),
-    desempenho: c6.voz - ms(220),
-    dashboard: c7.voz - ms(200),
-    abaEquipe: palavra('cena-07', 'equipe') - ms(60),
-    abaSetor: palavra('cena-07', 'setor') - ms(60),
-    campanhas: c8.voz - ms(220),
-    estrela: palavra('cena-08', 'mensagem'),
-    enviar: palavra('cena-08', 'clique'),
-    chat: palavra('cena-09', 'lider'),
-    enviarChat: palavra('cena-09', 'sistema'),
+    reagendar: palavra('cena-05', 'reagenda') + ms(60),
+    confirmar: palavra('cena-05', 'cliques') + ms(120),
+    // cena 6 — desempenho do dia
+    desempenho: c6.voz - ms(160),
+    // cena 7 — dashboard, equipe e setor
+    fecharDia: c7.inicio + ms(60),
+    dashboard: c7.voz + ms(160),
+    equipe: palavra('cena-07', 'equipe') - ms(40),
+    setor: palavra('cena-07', 'setor') - ms(40),
+    minhaVisao: palavra('cena-07', 'voce') - ms(60),
+    // cena 8 — lembrete no WhatsApp
+    acordos2: c8.voz - ms(200),
+    whats: palavra('cena-08', 'lembrete') + ms(160),
+    mensagem: palavra('cena-08', 'clique') + ms(40),
+    enviarZap: palavra('cena-08', 'whatsapp') + ms(80),
+    // cena 9 — chat com o líder
+    chat: palavra('cena-09', 'lider') - ms(40),
+    campoChat: palavra('cena-09', 'fala') - ms(60),
+    enviarChat: palavra('cena-09', 'sistema') + ms(60),
   };
 
-  const t = {
+  return {
     expandir: t2.expandir,
     janelaPronta: t2.expandir + s(0.95),
-    conteudo: t2.expandir + s(0.55),
+    conteudo: t2.expandir + s(0.5),
     c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
     clique,
-    // cena 3 — detalhes que acendem
+    // cena 3 — os detalhes que acendem
+    organizado: palavra('cena-03', 'organizado'),
     detalhes: [
       palavra('cena-03', 'cada'),
       palavra('cena-03', 'detalhe'),
       palavra('cena-03', 'faz'),
       palavra('cena-03', 'diferenca'),
     ],
+    rolaDash: palavra('cena-03', 'faz') - ms(60),
     // cena 4
-    digitaCliente: clique.novo + ms(420),
-    toast: palavra('cena-04', 'pronto'),
+    digitaNr: clique.nr + ms(120),
+    toastNovo: palavra('cena-04', 'pronto'),
     // cena 5
     pendente: palavra('cena-05', 'pendente'),
     // cena 6
     contaRecebido: palavra('cena-06', 'acompanha'),
-    anelMeta: palavra('cena-06', 'quanto', 1),
     falta: palavra('cena-06', 'falta'),
     atualizado: palavra('cena-06', 'atualizado'),
     // cena 7
     tudoAqui: palavra('cena-07', 'tudo'),
-    voce: palavra('cena-07', 'voce'),
+    ondeEsta: palavra('cena-07', 'exatamente'),
     // cena 8
-    lembrete: palavra('cena-08', 'lembrete'),
-    whatsapp: palavra('cena-08', 'ja'),
+    whatsApp: palavra('cena-08', 'mensagem'),
+    abreZap: palavra('cena-08', 'clique') + ms(220),
     // cena 9
-    avisoChat: c9.inicio + ms(80),
-    digitaChat: palavra('cena-09', 'fala'),
+    respostaLider: c9.fim - ms(260),
     // cena 10
-    metaEnche: palavra('cena-10', 'meta'),
+    metaVem: palavra('cena-10', 'meta'),
     explode: palavra('cena-10', 'todos'),
-    reacoes: [palavra('cena-10', 'comemoram'), palavra('cena-10', 'com'), palavra('cena-10', 'voce')],
+    baloes: [palavra('cena-10', 'comemoram'), palavra('cena-10', 'com') + ms(60), palavra('cena-10', 'voce') + ms(60), palavra('cena-10', 'voce') + ms(380)],
     // cena 11
     computador: palavra('cena-11', 'computador'),
     celular: palavra('cena-11', 'celular'),
-    // cena 12
-    fecha: c12.inicio,
   };
-  return t;
 }
 
 export type TempoApp = ReturnType<typeof tempoApp>;
 
-/** Qual tela está aberta, e desde quando. */
-export function telas(t: TempoApp): { id: IdMenu; entra: number; sai: number }[] {
+// ── telas ───────────────────────────────────────────────────────────────
+export type IdTela = 'dashboard' | 'novo' | 'acordos';
+
+/** Qual página está no conteúdo, e desde quando. */
+export function telas(t: TempoApp): { id: IdTela; menu: IdMenu; entra: number }[] {
+  const c = t.clique;
   return [
-    { id: 'inicio', entra: t.conteudo, sai: t.clique.novo + ms(60) },
-    { id: 'novo', entra: t.clique.novo + ms(60), sai: t.clique.acordos + ms(60) },
-    { id: 'acordos', entra: t.clique.acordos + ms(60), sai: t.clique.desempenho + ms(60) },
-    { id: 'desempenho', entra: t.clique.desempenho + ms(60), sai: t.clique.dashboard + ms(60) },
-    { id: 'dashboard', entra: t.clique.dashboard + ms(60), sai: t.clique.campanhas + ms(60) },
-    { id: 'campanhas', entra: t.clique.campanhas + ms(60), sai: Infinity },
+    { id: 'dashboard', menu: 'dashboard', entra: t.conteudo },
+    { id: 'novo', menu: 'novo', entra: c.novo + ms(60) },
+    { id: 'acordos', menu: 'acordos', entra: c.acordos + ms(60) },
+    { id: 'dashboard', menu: 'dashboard', entra: c.dashboard + ms(60) },
+    { id: 'acordos', menu: 'acordos', entra: c.acordos2 + ms(60) },
   ];
 }
 
-export function menuAtivo(t: TempoApp, frame: number): IdMenu {
-  const atual = [...telas(t)].reverse().find((x) => frame >= x.entra);
-  return atual?.id ?? 'inicio';
+export function telaEm(t: TempoApp, f: number) {
+  const lista = telas(t);
+  let i = 0;
+  for (let k = 0; k < lista.length; k++) if (f >= lista[k].entra) i = k;
+  return { atual: lista[i], anterior: lista[Math.max(0, i - 1)], indice: i };
 }
 
-export function cliquesMenu(t: TempoApp): { id: IdMenu; f: number }[] {
+export function cliquesDaCasca(t: TempoApp) {
+  const c = t.clique;
   return [
-    { id: 'novo', f: t.clique.novo },
-    { id: 'acordos', f: t.clique.acordos },
-    { id: 'desempenho', f: t.clique.desempenho },
-    { id: 'dashboard', f: t.clique.dashboard },
-    { id: 'campanhas', f: t.clique.campanhas },
+    { id: 'menu-novo', f: c.novo },
+    { id: 'menu-acordos', f: c.acordos },
+    { id: 'menu-desempenho', f: c.desempenho },
+    { id: 'menu-dashboard', f: c.dashboard },
+    { id: 'menu-acordos', f: c.acordos2 },
   ];
 }
+
+// ── cursor ──────────────────────────────────────────────────────────────
+/** O cursor chega um instante antes do clique, como a mão de verdade. */
+const ANTES_DO_CLIQUE = ms(120);
 
 export function rotaDoCursor(t: TempoApp): { pontos: PontoCursor[]; cliques: number[] } {
   const c = t.clique;
-  const m = (id: IdMenu, f: number) => ({ f, ...pontoMenu(id) });
+  /** Vai até o alvo e clica em `f`. */
+  const clica = (nome: string, f: number, viagemMs = 650, fx = 0, fy = 0): PontoCursor => ({ f: f - ANTES_DO_CLIQUE, ...ponto(nome, f, fx, fy), viagemMs });
+  /** Só passa por cima (aponta), chegando em `f`. */
+  const aponta = (nome: string, f: number, viagemMs = 650, fx = 0, fy = 0): PontoCursor => ({ f, ...ponto(nome, f + 1, fx, fy), viagemMs });
+
   const pontos: PontoCursor[] = [
-    { f: t.c3.inicio, x: 900, y: 640 },
-    // cena 3: passeia pelos detalhes que acendem
-    { f: t.detalhes[0] + ms(60), x: 440, y: 330, viagemMs: 700 },
-    { f: t.detalhes[1] + ms(60), x: 980, y: 520, viagemMs: 520 },
-    { f: t.detalhes[2] + ms(60), x: 1300, y: 600, viagemMs: 520 },
-    { f: t.detalhes[3] + ms(60), x: 1250, y: 790, viagemMs: 520 },
-    // cena 4
-    m('novo', c.novo),
-    { f: c.valor, ...ALVO.campoValor, viagemMs: 600 },
-    { f: c.parcelas, ...ALVO.chip3x, viagemMs: 420 },
-    { f: c.vencimento, ...ALVO.campoVencimento, viagemMs: 480 },
-    { f: c.salvar, ...ALVO.salvar, viagemMs: 700 },
-    // cena 5
-    m('acordos', c.acordos),
-    { f: c.pago - ms(40), x: ALVO.statusX, y: ALVO.linha(1), viagemMs: 700 },
-    { f: t.pendente - ms(40), x: ALVO.statusX, y: ALVO.linha(0), viagemMs: 420 },
-    { f: c.reagendar, ...ALVO.reagendar, viagemMs: 650 },
-    { f: c.dia, ...ALVO.diaNovo, viagemMs: 420 },
-    // cena 6
-    m('desempenho', c.desempenho),
-    { f: t.contaRecebido + ms(200), x: 640, y: 330, viagemMs: 800 },
-    { f: t.falta + ms(80), x: 1380, y: 345, viagemMs: 700 },
+    { f: t.c3.inicio, x: 1120, y: 640 },
+    // cena 3 — passeia pelos detalhes
+    aponta('dash-total', t.detalhes[0] + ms(40), 760, 0.15, 0.1),
+    aponta('dash-projecao', t.detalhes[1] + ms(60), 520, 0.1, 0),
+    aponta('dash-donut', t.detalhes[2] + ms(60), 560, 0.12, 0.05),
+    aponta('dash-evolucao', t.detalhes[3] + ms(260), 700, 0.18, 0.1),
+    // cena 4 — novo acordo
+    clica('menu-novo', c.novo, 820, -0.18, 0),
+    clica('novo-nr', c.nr, 620, -0.2, 0),
+    clica('novo-valor', c.valor, 520, -0.2, 0),
+    clica('novo-parcelas', c.parcelas, 460, -0.2, 0),
+    clica('novo-vencimento', c.vencimento, 460, -0.15, 0),
+    clica('cal-dia-20', c.dia, 420),
+    clica('novo-salvar', c.salvar, 640, -0.1, 0),
+    // cena 5 — acordos
+    clica('menu-acordos', c.acordos, 820, -0.25, 0),
+    clica('acao-pago-a3', c.pago, 760),
+    aponta('status-a1', t.pendente + ms(40), 520, 0.15, 0.2),
+    clica('acao-reagendar-a2', c.reagendar, 620),
+    clica('reagendar-confirmar', c.confirmar, 540, -0.1, 0),
+    // cena 6 — desempenho do dia
+    clica('menu-desempenho', c.desempenho, 820, -0.2, 0),
+    aponta('dia-recebido', t.contaRecebido + ms(220), 700, 0.25, 0.1),
+    aponta('dia-meta', t.falta + ms(60), 560, 0.2, 0.2),
     // cena 7
-    m('dashboard', c.dashboard),
-    { f: c.abaEquipe, ...ALVO.abaEquipe, viagemMs: 650 },
-    { f: c.abaSetor, ...ALVO.abaSetor, viagemMs: 420 },
-    { f: t.voce, ...ALVO.linhaVoce, viagemMs: 650 },
+    clica('dia-fechar', c.fecharDia, 640),
+    clica('menu-dashboard', c.dashboard, 640, -0.2, 0),
+    clica('escopo-equipe', c.equipe, 620),
+    clica('escopo-setor', c.setor, 420),
+    clica('escopo-individual', c.minhaVisao, 560),
+    aponta('dash-quartil', t.ondeEsta + ms(180), 640, 0.15, 0.05),
     // cena 8
-    m('campanhas', c.campanhas),
-    { f: t.lembrete + ms(100), ...ALVO.cartaoLembrete, viagemMs: 650 },
-    { f: c.estrela, ...ALVO.estrelaLembrete, viagemMs: 520 },
-    { f: c.enviar, ...ALVO.enviarLembrete, viagemMs: 600 },
+    clica('menu-acordos', c.acordos2, 760, -0.25, 0),
+    clica('acao-whats-a1', c.whats, 760),
+    aponta('msg-opcao-0', t.whatsApp + ms(120), 560, -0.25, -0.1),
+    clica('msg-opcao-0', c.mensagem, 300, -0.2, 0),
+    clica('zap-enviar', c.enviarZap, 720),
     // cena 9
-    { f: c.chat, x: ALVO.chat.x, y: ALVO.chat.y, viagemMs: 700 },
-    { f: t.digitaChat, x: 1340, y: 842, viagemMs: 500 },
-    { f: c.enviarChat, ...ALVO.enviarChat, viagemMs: 520 },
+    clica('chat-bolha', c.chat, 900),
+    clica('chat-campo', c.campoChat, 560, -0.25, 0),
+    clica('chat-enviar', c.enviarChat, 560),
   ];
   const cliques = [
-    c.novo, c.valor, c.parcelas, c.vencimento, c.salvar,
-    c.acordos, c.reagendar, c.dia,
+    c.novo, c.nr, c.valor, c.parcelas, c.vencimento, c.dia, c.salvar,
+    c.acordos, c.pago, c.reagendar, c.confirmar,
     c.desempenho,
-    c.dashboard, c.abaEquipe, c.abaSetor,
-    c.campanhas, c.estrela, c.enviar,
-    c.chat, c.enviarChat,
+    c.fecharDia, c.dashboard, c.equipe, c.setor, c.minhaVisao,
+    c.acordos2, c.whats, c.mensagem, c.enviarZap,
+    c.chat, c.campoChat, c.enviarChat,
   ];
   return { pontos, cliques };
 }
 
+// ── câmera ──────────────────────────────────────────────────────────────
 export type Camera = { f: number; z: number; x: number; y: number; durMs?: number };
+
+const GERAL = { z: 1, x: APP_L / 2, y: APP_A / 2 };
+
+/** O menor retângulo que contém todos. */
+function uniao(...rs: Retangulo[]): Retangulo {
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  const x2 = Math.max(...rs.map((r) => r.x + r.l));
+  const y2 = Math.max(...rs.map((r) => r.y + r.a));
+  return { x, y, l: x2 - x, a: y2 - y };
+}
+
+/** Aproxima até o retângulo caber na tela com `folga` em volta. */
+function enquadra(r: Retangulo, folga = 48, zMax = 1.6) {
+  const z = Math.max(1, Math.min(zMax, APP_L / (r.l + 2 * folga), APP_A / (r.a + 2 * folga)));
+  return { z, x: r.x + r.l / 2, y: r.y + r.a / 2 };
+}
 
 /** Para onde a câmera olha (x, y no app) e quanto aproxima (z). */
 export function cameraDoRoteiro(t: TempoApp): Camera[] {
   const c = t.clique;
+  const em = (f: number, quadro: { z: number; x: number; y: number }, durMs = 900): Camera => ({ f, ...quadro, durMs });
+  const A = (nome: string, f: number) => alvo(nome, f);
+  const toast = { x: APP_L - 32 - 356, y: 32, l: 356, a: 70 };
+  const cartaoMeta = { x: 512, y: 16, l: 576, a: 330 };
   return [
-    { f: t.janelaPronta, z: 1, x: 800, y: 450 },
-    { f: t.detalhes[0], z: 1.06, x: 840, y: 520, durMs: 2200 },
-    { f: c.novo + ms(500), z: 1.16, x: 925, y: 500, durMs: 900 },
-    { f: c.salvar + ms(600), z: 1.08, x: 900, y: 470, durMs: 700 },
-    { f: c.acordos + ms(450), z: 1.1, x: 960, y: 420, durMs: 800 },
-    { f: c.reagendar + ms(150), z: 1.22, x: 1180, y: 540, durMs: 800 },
-    { f: c.desempenho + ms(450), z: 1.08, x: 900, y: 420, durMs: 800 },
-    { f: t.anelMeta, z: 1.14, x: 1060, y: 360, durMs: 900 },
-    { f: c.dashboard + ms(450), z: 1.04, x: 900, y: 500, durMs: 800 },
-    { f: t.voce + ms(150), z: 1.3, x: 680, y: 470, durMs: 900 },
-    { f: c.campanhas + ms(450), z: 1.06, x: 880, y: 480, durMs: 800 },
-    { f: t.whatsapp + ms(200), z: 1.12, x: 1080, y: 470, durMs: 800 },
-    { f: c.chat + ms(300), z: 1.16, x: 1180, y: 560, durMs: 800 },
-    { f: t.c10.inicio + ms(400), z: 1, x: 800, y: 450, durMs: 700 },
+    em(t.janelaPronta, GERAL),
+    // cena 3: o painel inteiro, depois os cards, depois o gráfico
+    em(t.organizado + ms(500), enquadra(A('dash-cards', t.organizado), 56), 1900),
+    em(t.detalhes[3] + ms(500), enquadra(A('dash-evolucao', t.detalhes[3] + ms(600)), 56), 1000),
+    // cena 4: o formulário inteiro, de perto
+    em(c.novo + ms(200), GERAL, 700),
+    em(c.nr + ms(260), enquadra(A('novo-form', c.nr), 40), 900),
+    em(t.toastNovo + ms(180), GERAL, 700),
+    // cena 5
+    em(c.pago + ms(160), enquadra(uniao(toast, A('linha-a1', c.pago), A('linha-a4', c.pago)), 40), 800),
+    em(c.reagendar + ms(260), enquadra(A('reagendar-modal', c.reagendar + ms(300)), 110), 700),
+    em(c.confirmar + ms(520), GERAL, 700),
+    // cena 6: a gaveta, e depois o dinheiro do dia bem de perto
+    em(c.desempenho + ms(520), enquadra(A('dia-gaveta', c.desempenho + ms(500)), 40), 900),
+    em(t.atualizado + ms(120), enquadra(uniao(A('dia-recebido', t.atualizado), A('dia-meta', t.atualizado)), 70), 800),
+    // cena 7
+    em(c.dashboard + ms(260), GERAL, 700),
+    em(c.equipe + ms(60), enquadra(uniao(A('escopo', c.equipe), A('dash-cards', c.equipe)), 40), 700),
+    em(t.tudoAqui + ms(260), GERAL, 800),
+    em(t.ondeEsta + ms(260), enquadra(A('dash-quartil', t.ondeEsta), 150, 1.45), 800),
+    // cena 8
+    em(c.acordos2 + ms(300), GERAL, 700),
+    em(c.whats + ms(320), enquadra(A('msg-dialogo', c.whats + ms(400)), 70), 600),
+    em(t.abreZap + ms(380), enquadra({ x: 330, y: 70, l: 1040, a: 720 }, 24), 700),
+    // cena 9
+    em(t.c9.inicio + ms(400), GERAL, 600),
+    em(c.chat + ms(520), enquadra(A('chat-janela', c.chat + ms(600)), 36), 800),
+    // cena 10: o card da comemoração de perto; depois abre para os balões
+    em(t.c10.inicio + ms(260), GERAL, 500),
+    em(t.metaVem + ms(420), enquadra(cartaoMeta, 70, 1.4), 650),
+    em(t.baloes[0] + ms(380), GERAL, 700),
   ];
 }

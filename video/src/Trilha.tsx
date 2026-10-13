@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import { Audio, getStaticFiles, interpolate, Sequence, staticFile } from 'remotion';
 import { rotaDoCursor, tempoApp } from './app/roteiro';
+import { temposCena1 } from './cenas/Cena01Problema';
 import { temposCena2 } from './cenas/Cena02Virada';
 import duracoes from './duracoes.json';
 import { cena, CENAS, palavra, TOTAL_FRAMES, type IdCena } from './linhaDoTempo';
@@ -20,20 +21,42 @@ const Som: React.FC<Efeito> = ({ arquivo, em, volume }) => (
 
 export const Trilha: React.FC = () => {
   const efeitos = useMemo<Efeito[]>(() => {
+    const t1 = temposCena1();
     const t2 = temposCena2();
     const t = tempoApp();
+    const c = t.clique;
     const { cliques } = rotaDoCursor(t);
+    /** Toques de tecla espalhados por uma digitação. */
+    const teclas = (inicio: number, duracaoMs: number, quantas: number, volume = 0.16): Efeito[] =>
+      Array.from({ length: quantas }, (_, i) => ({ arquivo: 'tecla.wav', em: inicio + Math.round((ms(duracaoMs) * i) / quantas), volume: volume * (0.8 + 0.4 * ((i * 7) % 5) / 4) }));
     return [
-      { arquivo: 'areia.wav', em: palavra('cena-01', 'recebeu') - ms(80), volume: 0.32 },
-      { arquivo: 'succao.wav', em: t2.convergeEm, volume: 0.38 },
+      // abertura
+      { arquivo: 'whoosh.wav', em: 4, volume: 0.14 },
+      { arquivo: 'pop.wav', em: palavra('cena-01', 'falar') - ms(150), volume: 0.18 },
+      { arquivo: 'whoosh.wav', em: t1.organiza - ms(30), volume: 0.3 },
+      { arquivo: 'succao.wav', em: t1.recolhe - ms(500), volume: 0.34 },
+      { arquivo: 'pop.wav', em: t2.nascem, volume: 0.22 },
       { arquivo: 'impacto.wav', em: t2.fundir - ms(40), volume: 0.5 },
       { arquivo: 'whoosh.wav', em: t2.expandir - ms(60), volume: 0.4 },
-      ...cliques.map((c) => ({ arquivo: 'clique.wav', em: c, volume: 0.42 })),
-      { arquivo: 'ding.wav', em: t.toast - ms(60), volume: 0.3 },
-      { arquivo: 'ding.wav', em: t.clique.pago, volume: 0.16 },
-      { arquivo: 'ding.wav', em: t.atualizado + ms(250), volume: 0.16 },
-      { arquivo: 'whoosh.wav', em: t.whatsapp - ms(80), volume: 0.24 },
-      { arquivo: 'chat-notificacao.mp3', em: t.avisoChat, volume: 0.45 },
+      // cliques e digitação
+      ...cliques.map((em) => ({ arquivo: 'clique.wav', em, volume: 0.4 })),
+      ...teclas(t.digitaNr, 420, 8),
+      ...teclas(c.valor + ms(140), 320, 6),
+      ...teclas(c.parcelas + ms(150), 60, 1),
+      ...teclas(c.campoChat + ms(140), 1050, 18, 0.13),
+      // o que responde na tela
+      { arquivo: 'pop.wav', em: c.vencimento + ms(60), volume: 0.16 },
+      { arquivo: 'ding.wav', em: t.toastNovo - ms(40), volume: 0.3 },
+      { arquivo: 'ding.wav', em: c.pago + ms(100), volume: 0.18 },
+      { arquivo: 'pop.wav', em: c.reagendar + ms(60), volume: 0.18 },
+      { arquivo: 'ding.wav', em: c.confirmar + ms(470), volume: 0.16 },
+      { arquivo: 'pop.wav', em: c.desempenho + ms(40), volume: 0.2 },
+      { arquivo: 'ding.wav', em: t.atualizado + ms(200), volume: 0.2 },
+      { arquivo: 'pop.wav', em: c.whats + ms(60), volume: 0.16 },
+      { arquivo: 'whoosh.wav', em: t.abreZap - ms(40), volume: 0.24 },
+      { arquivo: 'whoosh.wav', em: t.c9.inicio + ms(20), volume: 0.18 },
+      { arquivo: 'pop.wav', em: c.chat + ms(80), volume: 0.2 },
+      { arquivo: 'chat-notificacao.mp3', em: t.respostaLider, volume: 0.45 },
       { arquivo: 'festa.wav', em: t.explode - ms(60), volume: 0.42 },
       { arquivo: 'whoosh.wav', em: t.computador - ms(120), volume: 0.26 },
       { arquivo: 'whoosh.wav', em: t.celular - ms(220), volume: 0.26 },

@@ -1,194 +1,337 @@
-// Cena 5 — «Cada acordo fica na sua mão. Pago, pendente… e, se precisar,
-// reagenda com dois cliques.»
+// Acordos — `pages/Acordos/index.tsx` da BookPlay: cabeçalho com o mês,
+// abas (Todos · Verificar · Pagos / Quitados · Não Pagos · Pix Automático),
+// filtros e a tabela agrupada por dia (`AcordosTableBody` + `LinhaDoDiaAcordos`).
+// Por cima, quando a narração pede: o ModalReagendar e a escolha da mensagem
+// de WhatsApp (`EscolherMensagemWhatsapp`).
 
+import {
+  CalendarClock, CalendarDays, CalendarIcon, CheckCircle, ChevronDown, ChevronLeft, ChevronRight,
+  Edit, MessageSquare, MessageSquareText, Plus, RefreshCw, Search, Send, Trash2, Undo2, X, Zap,
+} from 'lucide-react';
+import { Fragment } from 'react';
 import { useCurrentFrame } from 'remotion';
-import { Icone } from '../../componentes/Icone';
-import { aperto, entrada, entre, mola, ms, saida } from '../../movimento';
-import { COR, FONTE_MONO, GRADIENTE_MARCA } from '../../tema';
-import { CONTEUDO } from '../layout';
+import { cn } from '@/lib/utils';
+import { aperto, entrada, entre, ms } from '../../movimento';
+import { ACORDOS_AMANHA, ACORDOS_HOJE, MENSAGENS, type Acordo, type Status } from '../dados';
 import type { TempoApp } from '../roteiro';
-import { brl, Card, Destaque, Numero, Selo, type TipoSelo } from '../ui';
+import { CodigoNR, Destaque, formatBRL, SeloStatus, SeloTipo } from '../ui';
 
-type Linha = { insc: string; nome: string; venc: string; valor: number; tipo: 'boleto' | 'cartao'; selo: TipoSelo; rotulo: string };
+type Props = { t: TempoApp; entra: number; visita: 1 | 2 };
 
-const LINHAS: Linha[] = [
-  { insc: '907544', nome: 'Maria Aparecida Souza', venc: '20/10/2026', valor: 416.67, tipo: 'boleto', selo: 'pendente', rotulo: 'Pendente' },
-  { insc: '821724', nome: 'Marcos Vinícius Lima', venc: '20/10/2026', valor: 1867.4, tipo: 'cartao', selo: 'pendente', rotulo: 'Pendente' },
-  { insc: '34345', nome: 'Antônio Carlos Reis', venc: '21/10/2026', valor: 4545, tipo: 'boleto', selo: 'pago', rotulo: 'Pago' },
-  { insc: '324234', nome: 'Luciana Freitas', venc: '17/10/2026', valor: 265.9, tipo: 'boleto', selo: 'naoPago', rotulo: 'Não pago' },
-  { insc: '909474', nome: 'Fernanda Rocha', venc: '24/10/2026', valor: 1042, tipo: 'boleto', selo: 'pendente', rotulo: 'Pendente' },
-  { insc: '553120', nome: 'Roberto Nunes', venc: '25/10/2026', valor: 780.4, tipo: 'boleto', selo: 'pago', rotulo: 'Pago' },
-  { insc: '771045', nome: 'Patrícia Gomes', venc: '28/10/2026', valor: 1222.68, tipo: 'boleto', selo: 'pendente', rotulo: 'Pendente' },
-];
+const CELULA = 'px-3 py-2 align-middle';
+const CABECALHO = 'px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide';
 
-const COL = { insc: 312, nome: 432, venc: 690, valor: 832, tipo: 1010, status: 1180, acoes: 1340 };
-const Y_LINHA = (i: number) => 270 + i * 64;
-
-/** Um valor que troca rolando: o velho sobe e some, o novo sobe e entra. */
-const Troca: React.FC<{ em: number; antes: React.ReactNode; depois: React.ReactNode }> = ({ em, antes, depois }) => {
+export const Acordos: React.FC<Props> = ({ t, entra, visita }) => {
   const f = useCurrentFrame();
-  const p = entre(f, em, em + ms(380), 0, 1);
-  if (p <= 0) return <>{antes}</>;
-  if (p >= 1) return <>{depois}</>;
-  return (
-    <span style={{ position: 'relative', display: 'inline-block' }}>
-      <span style={{ display: 'inline-block', opacity: 1 - p, transform: `translateY(${-p * 14}px)`, filter: `blur(${p * 3}px)` }}>{antes}</span>
-      <span style={{ position: 'absolute', left: 0, top: 0, display: 'inline-block', opacity: p, transform: `translateY(${(1 - p) * 14}px)`, filter: `blur(${(1 - p) * 3}px)`, whiteSpace: 'nowrap' }}>{depois}</span>
-    </span>
-  );
-};
-
-export const Acordos: React.FC<{ t: TempoApp; entra: number; sai: number }> = ({ t, entra, sai }) => {
-  const f = useCurrentFrame();
-  if (f < entra || f >= sai + ms(300)) return null;
   const c = t.clique;
-  const e = (i: number) => entrada(f, entra, i, { passoMs: 40 });
 
-  const pop = mola(f, c.reagendar + ms(60));
-  const popAberto = f >= c.reagendar + ms(60) && f < c.dia + ms(240);
-  const popFecha = entre(f, c.dia + ms(120), c.dia + ms(260), 1, 0);
-  const reagendado = c.dia + ms(200);
-  const novaLinha = Math.max(0, 1 - (f - entra) / ms(1600));
+  // estado das linhas no frame atual
+  const pagoA3 = f >= c.pago + ms(90);
+  const reagendouA2 = f >= c.confirmar + ms(450);
+  const statusDe = (a: Acordo): Status => (a.id === 'a3' && pagoA3 ? 'pago' : a.status);
+
+  const destaquePendente = visita === 1 ? Math.min(entre(f, t.pendente, t.pendente + ms(240), 0, 1), entre(f, c.reagendar - ms(400), c.reagendar - ms(150), 1, 0)) : 0;
+
+  const E = (i: number) => entrada(f, entra, i, { passoMs: 45 });
+
+  const linha = (a: Acordo, noDia: number, i: number) => {
+    const status = statusDe(a);
+    const desfazivel = a.id === 'a3' && pagoA3;
+    const podeAgendar = a.id === 'a2' && !reagendouA2;
+    const virou = a.id === 'a3' ? entre(f, c.pago + ms(60), c.pago + ms(360), 0, 1) : 1;
+    return (
+      <tr
+        key={a.id}
+        data-alvo={`linha-${a.id}`}
+        className={cn('h-[52px] border-b border-border/50', noDia % 2 === 0 && 'bg-muted/10')}
+        style={E(4 + i)}
+      >
+        <td className={CELULA}><input type="checkbox" readOnly className="rounded border-border" /></td>
+        <td className={cn(CELULA, 'overflow-hidden')}><CodigoNR codigo={a.nr} /></td>
+        <td className={cn(CELULA, 'overflow-hidden')}>
+          <p className="min-w-0 truncate font-medium text-foreground">{a.cliente}</p>
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
+            {a.instituicao} · <span className="font-mono">{a.whatsapp}</span>
+          </p>
+        </td>
+        <td className={cn(CELULA, 'whitespace-nowrap')}>
+          <span className={cn('font-mono', a.vencimento === '13/10/2026' && status !== 'pago' && 'text-warning font-semibold')}>{a.vencimento}</span>
+        </td>
+        <td className={cn(CELULA, 'text-right font-mono font-semibold text-foreground whitespace-nowrap')}>{formatBRL(a.valor)}</td>
+        <td className={cn(CELULA, 'overflow-hidden')}><SeloTipo tipo={a.tipo} /></td>
+        <td className={cn(CELULA, 'text-center font-mono text-muted-foreground')}>{a.parcela}</td>
+        <td className={CELULA}>
+          <span className="relative inline-flex">
+            <SeloStatus
+              alvo={`status-${a.id}`}
+              status={status}
+              style={a.id === 'a3' && pagoA3 ? { transform: `scale(${1 + 0.18 * Math.sin(virou * Math.PI)})` } : undefined}
+            />
+            {a.id === 'a1' && <Destaque forca={destaquePendente} raio={10} folga={4} />}
+          </span>
+        </td>
+        <td className={CELULA}>
+          <div className="flex items-center justify-end gap-0.5">
+            {status !== 'pago' && (
+              <span data-alvo={`acao-pago-${a.id}`} className="inline-flex items-center justify-center rounded-md w-8 h-8 text-success" style={{ scale: String(a.id === 'a3' ? aperto(f, c.pago) : 1) }}>
+                <CheckCircle className="w-4 h-4" />
+              </span>
+            )}
+            {desfazivel && (
+              <span className="inline-flex items-center justify-center rounded-md w-8 h-8 text-amber-600" style={entrada(f, c.pago + ms(60), 0, { deslocY: 6, duracaoMs: 260 })}>
+                <Undo2 className="w-4 h-4" />
+              </span>
+            )}
+            {podeAgendar && (
+              <span data-alvo={`acao-reagendar-${a.id}`} className="inline-flex items-center justify-center rounded-md w-8 h-8 text-blue-600" style={{ scale: String(aperto(f, c.reagendar)) }}>
+                <CalendarClock className="w-4 h-4" />
+              </span>
+            )}
+            <span data-alvo={`acao-whats-${a.id}`} className="inline-flex items-center justify-center rounded-md w-8 h-8 text-success" style={{ scale: String(a.id === 'a1' ? aperto(f, c.whats) : 1) }}>
+              <MessageSquare className="w-4 h-4" />
+            </span>
+            <span className="inline-flex items-center justify-center rounded-md w-8 h-8"><Edit className="w-4 h-4" /></span>
+            <span className="w-px h-5 bg-border mx-1 shrink-0" />
+            <span className="inline-flex items-center justify-center rounded-md w-8 h-8 text-destructive/60"><Trash2 className="w-4 h-4" /></span>
+            <span className="ml-0.5 flex h-8 w-6 shrink-0 items-center justify-center rounded text-muted-foreground"><ChevronDown className="h-4 w-4" /></span>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const grupo = (rotulo: string, hoje: boolean, lista: Acordo[], i0: number) => {
+    const st = lista.map(statusDe);
+    const pend = st.filter((s) => s === 'verificar_pendente').length;
+    const pagos = st.filter((s) => s === 'pago').length;
+    const nao = st.filter((s) => s === 'nao_pago').length;
+    return (
+      <Fragment key={rotulo}>
+        <tr className={cn('border-b border-border', hoje ? 'bg-primary/10' : 'bg-muted/40')} style={E(i0)}>
+          <td colSpan={9} className="px-3 py-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <span className="flex items-center gap-6">
+                <input type="checkbox" readOnly className="rounded border-border" />
+                <span className={cn('flex items-center gap-1.5 font-semibold', hoje ? 'text-primary' : 'text-foreground')}>
+                  <CalendarDays className={cn('h-3.5 w-3.5', hoje ? 'text-primary' : 'text-muted-foreground')} />
+                  {rotulo}
+                </span>
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {lista.length} acordos
+                {' · '}<strong className="font-semibold text-warning">{pend} pendente{pend === 1 ? '' : 's'}</strong>
+                {' · '}<strong className="font-semibold text-success">{pagos} pago{pagos === 1 ? '' : 's'}</strong>
+                {' · '}<strong className="font-semibold text-destructive">{nao} não pago{nao === 1 ? '' : 's'}</strong>
+              </span>
+            </div>
+          </td>
+        </tr>
+        {lista.map((a, k) => linha(a, k, i0 + 1 + k))}
+      </Fragment>
+    );
+  };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, ...(f >= sai ? saida(f, sai) : {}) }}>
-      <Card style={{ position: 'absolute', left: CONTEUDO.x, top: 138, width: CONTEUDO.l, height: 736, ...e(0) }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: COR.texto }}>Meus acordos</div>
-          <Selo tipo="boleto">outubro · 42</Selo>
-          <div style={{ marginLeft: 'auto', width: 300, height: 38, borderRadius: 10, border: `1px solid ${COR.borda}`, background: '#0a131c', color: COR.textoFraco, display: 'flex', alignItems: 'center', padding: '0 12px', fontSize: 14 }}>Buscar por nome ou inscrição…</div>
-        </div>
-      </Card>
-
-      {/* cabeçalho da tabela */}
-      <div style={{ position: 'absolute', left: CONTEUDO.x, top: 226, width: CONTEUDO.l, height: 44, borderTop: `1px solid ${COR.borda}`, borderBottom: `1px solid ${COR.borda}`, ...e(1) }}>
-        {[
-          ['INSCRIÇÃO', COL.insc],
-          ['CLIENTE', COL.nome],
-          ['VENCIMENTO', COL.venc],
-          ['VALOR', COL.valor],
-          ['TIPO', COL.tipo],
-          ['STATUS', COL.status],
-          ['AÇÕES', COL.acoes + 120],
-        ].map(([r, x]) => (
-          <div key={r as string} style={{ position: 'absolute', left: (x as number) - CONTEUDO.x, top: 13, fontSize: 13, fontWeight: 700, color: COR.textoSuave, letterSpacing: 0.6, width: r === 'VALOR' ? 140 : undefined, textAlign: r === 'VALOR' ? 'right' : 'left' }}>
-            {r}
-          </div>
-        ))}
-      </div>
-
-      {LINHAS.map((l, i) => {
-        const y = Y_LINHA(i);
-        const viraPago = i === 1;
-        const eReagendada = i === 3;
-        return (
-          <div key={l.insc} style={{ position: 'absolute', left: CONTEUDO.x, top: y, width: CONTEUDO.l, height: 64, borderBottom: `1px solid ${COR.borda}`, background: i === 0 ? `rgba(92,200,245,${0.12 * novaLinha})` : undefined, ...e(2 + i) }}>
-            <div style={{ position: 'absolute', left: COL.insc - CONTEUDO.x, top: 21, fontFamily: FONTE_MONO, fontSize: 16, fontWeight: 600, color: COR.texto }}>{l.insc}</div>
-            <div style={{ position: 'absolute', left: COL.nome - CONTEUDO.x, top: 21, fontSize: 16, color: COR.texto }}>{l.nome}</div>
-            <div style={{ position: 'absolute', left: COL.venc - CONTEUDO.x, top: 21, fontFamily: FONTE_MONO, fontSize: 15, color: COR.texto }}>
-              {eReagendada ? <Troca em={reagendado} antes={l.venc} depois={<span style={{ color: COR.azulClaro }}>27/10/2026</span>} /> : l.venc}
-            </div>
-            <Numero style={{ position: 'absolute', left: COL.valor - CONTEUDO.x, top: 21, width: 140, textAlign: 'right', fontSize: 16, color: COR.texto }}>{brl(l.valor)}</Numero>
-            <div style={{ position: 'absolute', left: COL.tipo - CONTEUDO.x, top: 17 }}>
-              <Selo tipo={l.tipo}>{l.tipo === 'boleto' ? 'Boleto / PIX' : 'Cartão de Crédito'}</Selo>
-            </div>
-            <div style={{ position: 'absolute', left: COL.status - CONTEUDO.x, top: 17 }}>
-              <div style={{ position: 'relative', display: 'inline-block' }}>
-                {viraPago ? (
-                  <Troca em={c.pago} antes={<Selo tipo="pendente">Pendente</Selo>} depois={<Selo tipo="pago">✓ Pago</Selo>} />
-                ) : eReagendada ? (
-                  <Troca em={reagendado} antes={<Selo tipo="naoPago">Não pago</Selo>} depois={<Selo tipo="pendente">Reagendado</Selo>} />
-                ) : (
-                  <Selo tipo={l.selo}>{l.rotulo}</Selo>
-                )}
-                {viraPago && <Destaque ativo={Math.min(entre(f, c.pago, c.pago + ms(200), 0, 1), entre(f, t.pendente, t.pendente + ms(250), 1, 0))} raio={999} />}
-                {i === 0 && <Destaque ativo={Math.min(entre(f, t.pendente, t.pendente + ms(200), 0, 1), entre(f, c.reagendar - ms(300), c.reagendar, 1, 0))} raio={999} style={{ borderColor: 'rgba(245,165,36,0.9)', boxShadow: '0 0 22px rgba(245,165,36,0.45)' }} />}
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="p-6">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="flex items-center justify-between mb-5" style={E(0)}>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">Acordos</h1>
+              <div className="flex items-center gap-1 mt-2">
+                <span className="inline-flex items-center justify-center rounded-md border border-input h-6 w-6"><ChevronLeft className="w-3 h-3" /></span>
+                <span className="text-xs font-semibold min-w-[100px] text-center text-muted-foreground">outubro de 2026</span>
+                <span className="inline-flex items-center justify-center rounded-md border border-input h-6 w-6"><ChevronRight className="w-3 h-3" /></span>
+                <span className="inline-flex items-center rounded-md h-6 text-xs text-muted-foreground px-2">Mês atual</span>
               </div>
+              <p className="text-sm text-muted-foreground mt-0.5">38 acordo(s) no total</p>
             </div>
-            {/* ações */}
-            <div style={{ position: 'absolute', left: COL.acoes - CONTEUDO.x, top: 14, display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div
-                style={{
-                  width: 104,
-                  height: 36,
-                  borderRadius: 8,
-                  border: `1px solid ${eReagendada ? 'rgba(74,222,128,0.6)' : 'transparent'}`,
-                  color: COR.verdeClaro,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  opacity: eReagendada ? 1 : 0,
-                  background: eReagendada && popAberto ? 'rgba(34,197,94,0.15)' : undefined,
-                  transform: eReagendada ? `scale(${aperto(f, c.reagendar)})` : undefined,
-                }}
-              >
-                Reagendar
-              </div>
-              <Icone nome="editar" tamanho={19} cor={COR.textoSuave} />
-              <Icone nome="lixo" tamanho={19} cor="#e5484d" />
+            <div className="flex gap-2 flex-wrap justify-end">
+              <span className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium h-9 rounded-md px-3 gap-1.5 border border-success/40 text-success">
+                <MessageSquare className="w-3.5 h-3.5" /> Lembretes do dia (4)
+              </span>
+              <span className="inline-flex items-center justify-center rounded-md border border-input w-8 h-8 relative">
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-green-500" />
+              </span>
+              <span className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium h-9 rounded-md px-3 gap-1.5 shadow-sm bg-primary text-primary-foreground">
+                <Plus className="w-4 h-4" /> Novo Acordo
+              </span>
             </div>
           </div>
-        );
-      })}
 
-      {/* calendário do reagendamento */}
-      {popAberto && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 1225,
-            top: 520,
-            width: 302,
-            borderRadius: 14,
-            background: COR.cardElevado,
-            border: `1px solid ${COR.bordaForte}`,
-            boxShadow: '0 30px 70px rgba(0,0,0,0.6)',
-            padding: '14px 18px 16px',
-            boxSizing: 'border-box',
-            transformOrigin: '180px 0',
-            transform: `scale(${0.9 + 0.1 * pop})`,
-            opacity: Math.min(1, pop * 1.5) * popFecha,
-          }}
-        >
-          <div style={{ fontSize: 14, fontWeight: 700, color: COR.texto }}>Reagendar para</div>
-          <div style={{ position: 'relative', height: 186, marginTop: 10 }}>
-            {Array.from({ length: 31 }).map((_, k) => {
-              const dia = k + 1;
-              const pos = dia + 3; // 1º de outubro de 2026 é quinta
-              const col = pos % 7;
-              const lin = Math.floor(pos / 7);
-              const eNovo = dia === 27;
-              const escolhido = eNovo && f >= c.dia;
-              return (
-                <div
-                  key={dia}
-                  style={{
-                    position: 'absolute',
-                    left: col * 38,
-                    top: lin * 34 + 6 - 34 * 0,
-                    width: 34,
-                    height: 30,
-                    borderRadius: 8,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontFamily: FONTE_MONO,
-                    fontSize: 13,
-                    color: escolhido ? '#05090f' : dia < 20 ? COR.textoFraco : COR.texto,
-                    background: escolhido ? GRADIENTE_MARCA : undefined,
-                    transform: eNovo ? `scale(${aperto(f, c.dia)})` : undefined,
-                    fontWeight: escolhido ? 700 : 500,
-                  }}
-                >
-                  {dia}
+          <div className="flex items-center gap-1 mb-4 border-b border-border" style={E(1)}>
+            {['Todos', 'Verificar', 'Pagos / Quitados', 'Não Pagos'].map((r, i) => (
+              <span key={r} className={cn('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px', i === 0 ? 'border-primary text-primary' : 'border-transparent text-muted-foreground')}>
+                {r}
+              </span>
+            ))}
+            <span className="ml-auto flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px border-transparent text-muted-foreground">
+              <Zap className="w-3.5 h-3.5" /> Pix Automático
+            </span>
+          </div>
+
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm border-border mb-4" style={E(2)}>
+            <div className="p-3">
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="flex w-full items-center rounded-md border border-input bg-background px-3 py-2 pl-8 h-8 text-sm text-muted-foreground">Buscar NR, nome, WhatsApp...</div>
                 </div>
-              );
-            })}
+                <div className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 w-32 h-8 text-sm">
+                  <span className="text-muted-foreground">Tipo</span>
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="inline-flex items-center rounded-md border border-input w-40 h-8 text-xs justify-start gap-2 font-mono px-2 text-muted-foreground">
+                    <CalendarIcon className="w-3 h-3 shrink-0" /> Filtrar data
+                  </div>
+                  <span className="h-8 inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-xs text-muted-foreground">
+                    <MessageSquareText className="h-3.5 w-3.5 text-success" /> Mensagens
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm border-border" style={E(3)}>
+            <table className="w-full min-w-[1000px] table-fixed text-xs caption-bottom">
+              <colgroup>
+                <col className="w-[40px]" />
+                <col className="w-[120px]" />
+                <col />
+                <col className="w-[100px]" />
+                <col className="w-[110px]" />
+                <col className="w-[132px]" />
+                <col className="w-[80px]" />
+                <col className="w-[104px]" />
+                <col className="w-[232px]" />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className={CABECALHO}><input type="checkbox" readOnly className="rounded border-border" /></th>
+                  <th className={cn(CABECALHO, 'text-left')}>NR</th>
+                  <th className={cn(CABECALHO, 'text-left')}>Cliente</th>
+                  <th className={cn(CABECALHO, 'text-left')}>Vencimento</th>
+                  <th className={cn(CABECALHO, 'text-right')}>Valor</th>
+                  <th className={cn(CABECALHO, 'text-left')}>Tipo</th>
+                  <th className={cn(CABECALHO, 'text-center')}>Parcelas</th>
+                  <th className={cn(CABECALHO, 'text-left')}>Status</th>
+                  <th className={cn(CABECALHO, 'text-right')}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grupo('Hoje · 13/10/2026', true, ACORDOS_HOJE, 4)}
+                {grupo('Amanhã · 14/10/2026', false, ACORDOS_AMANHA, 9)}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
+
+// ── Os diálogos (Radix Dialog no app: fundo preto a 80% e o card no meio) ─
+
+const Dialogo: React.FC<{ f: number; abre: number; fecha: number; largura: number; alvo: string; children: React.ReactNode }> = ({ f, abre, fecha, largura, alvo, children }) => {
+  if (f < abre || f >= fecha + ms(200)) return null;
+  const p = entre(f, abre, abre + ms(200), 0, 1);
+  const s = entre(f, fecha, fecha + ms(160), 0, 1);
+  const vis = p * (1 - s);
+  return (
+    <div className="absolute inset-0" style={{ zIndex: 60 }}>
+      <div className="absolute inset-0 bg-black/80" style={{ opacity: vis }} />
+      <div
+        data-alvo={alvo}
+        className="absolute left-1/2 top-1/2 grid w-full gap-4 border bg-background p-6 shadow-lg rounded-lg font-sans"
+        style={{
+          maxWidth: largura,
+          opacity: vis,
+          transform: `translate(-50%, -50%) scale(${0.95 + 0.05 * p - 0.05 * s})`,
+        }}
+      >
+        {children}
+        <span className="absolute right-4 top-4 rounded-sm opacity-70"><X className="h-4 w-4" /></span>
+      </div>
+    </div>
+  );
+};
+
+export const DialogosAcordos: React.FC<{ t: TempoApp }> = ({ t }) => {
+  const f = useCurrentFrame();
+  const c = t.clique;
+  const salvando = f >= c.confirmar + ms(60);
+  return (
+    <>
+      <Dialogo f={f} abre={c.reagendar + ms(60)} fecha={c.confirmar + ms(420)} largura={384} alvo="reagendar-modal">
+        <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+          <h2 className="flex items-center gap-2 text-primary text-sm font-semibold leading-none tracking-tight">
+            <CalendarClock className="w-4 h-4 shrink-0" />
+            Reagendar Próxima Parcela
+          </h2>
+          <div className="pt-1 space-y-1">
+            <p className="text-sm text-foreground/80">
+              Parcela <strong className="font-mono text-foreground">3/4</strong> — defina data e valor.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Parcela atual (2/4) venceu em <strong>13/10/2026</strong>.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-4 py-1">
+          <div className="space-y-1">
+            <label className="text-xs font-medium leading-none">Vencimento da próxima parcela *</label>
+            <div className="inline-flex items-center rounded-md border border-input w-full h-8 text-xs justify-start gap-2 font-mono px-2 font-medium">
+              <CalendarIcon className="w-3 h-3 shrink-0 text-muted-foreground" /> 13/11/2026
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium leading-none">Valor (R$) *</label>
+            <div className="flex w-full items-center rounded-md border border-input bg-background px-3 py-2 h-8 text-xs font-mono">312,40</div>
+          </div>
+        </div>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 pt-1">
+          <span className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium h-9 rounded-md px-3 border border-input bg-transparent">Cancelar</span>
+          <span
+            data-alvo="reagendar-confirmar"
+            className={cn('inline-flex items-center justify-center whitespace-nowrap text-sm font-medium h-9 rounded-md px-3 gap-1.5 bg-primary text-primary-foreground', salvando && 'opacity-50')}
+            style={{ scale: String(aperto(f, c.confirmar)) }}
+          >
+            {salvando ? <RefreshCw className="w-3 h-3" style={{ rotate: `${(f - c.confirmar) * 8}deg` }} /> : <CalendarClock className="w-3 h-3" />}
+            {salvando ? 'Reagendando...' : 'Confirmar'}
+          </span>
+        </div>
+      </Dialogo>
+
+      <Dialogo f={f} abre={c.whats + ms(60)} fecha={c.mensagem + ms(80)} largura={512} alvo="msg-dialogo">
+        <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+          <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
+            <Send className="h-4 w-4 text-success" /> Qual mensagem mandar?
+          </h2>
+          <p className="text-sm text-muted-foreground">Para Marcos Oliveira. O texto já está com os dados do cliente.</p>
+        </div>
+        <div className="space-y-2">
+          {MENSAGENS.map((m, i) => {
+            const acesa = i === 0 && f >= t.whatsApp + ms(100);
+            return (
+              <div
+                key={m.titulo}
+                data-alvo={`msg-opcao-${i}`}
+                className={cn('w-full rounded-lg border border-border p-3 text-left', acesa && 'border-success/50 bg-success/5')}
+                style={{ scale: String(i === 0 ? aperto(f, c.mensagem) : 1) }}
+              >
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  {m.titulo}
+                  {i === 0 && <span className="text-[10px] font-medium text-success">· padrão</span>}
+                </p>
+                <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-[11px] text-muted-foreground">{m.texto}</p>
+              </div>
+            );
+          })}
+        </div>
+      </Dialogo>
+    </>
+  );
+};
+

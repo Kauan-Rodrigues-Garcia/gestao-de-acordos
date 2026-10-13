@@ -1,7 +1,6 @@
 // Cena 12 — «Gestão de Acordos. Ajudando você a bater sua meta!»
 
-import { AbsoluteFill, Img, useCurrentFrame } from 'remotion';
-import { logoSrc } from '../componentes/Poeira';
+import { AbsoluteFill, Img, staticFile, useCurrentFrame } from 'remotion';
 import { cena, palavra, TOTAL_FRAMES } from '../linhaDoTempo';
 import { entrada, entre, mola, ms } from '../movimento';
 import { COR, FONTE, GRADIENTE_MARCA } from '../tema';
@@ -25,7 +24,7 @@ export const Cena12Fechamento: React.FC = () => {
   const nome = palavra('cena-12', 'gestao');
   const lema = palavra('cena-12', 'ajudando');
   const url = palavra('cena-12', 'meta') + ms(350);
-  const brilho = 0.5 + 0.5 * Math.sin(((f - c.inicio) / 60) * 1.6);
+  const respira = 0.5 + 0.5 * Math.sin(((f - c.inicio) / 60) * 1.6);
   const apaga = entre(f, TOTAL_FRAMES - ms(900), TOTAL_FRAMES - 1, 0, 1);
 
   return (
@@ -33,21 +32,20 @@ export const Cena12Fechamento: React.FC = () => {
       <div
         style={{
           position: 'absolute',
-          top: 200,
+          top: 196,
           width: 210,
           height: 210,
           borderRadius: 50,
           overflow: 'hidden',
           transform: `scale(${0.5 + 0.5 * icone})`,
           opacity: Math.min(1, icone * 1.6),
-          boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 ${70 + 30 * brilho}px rgba(74,222,128,0.20), 0 0 140px rgba(92,200,245,0.18)`,
-          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: `0 30px 60px rgba(15,27,38,0.20), 0 8px 20px rgba(15,27,38,0.10), 0 0 ${50 + 30 * respira}px rgba(56,189,248,0.22)`,
         }}
       >
-        <Img src={logoSrc('app-512.png')} style={{ width: '100%', height: '100%' }} />
+        <Img src={staticFile('marca/app-512.png')} style={{ width: '100%', height: '100%' }} />
       </div>
 
-      <div style={{ position: 'absolute', top: 460, fontSize: 92, fontWeight: 800, letterSpacing: -2.5, color: COR.texto }}>
+      <div style={{ position: 'absolute', top: 452, fontSize: 92, fontWeight: 800, letterSpacing: -2.6, color: COR.texto }}>
         {NOME.split('').map((ch, i) => (
           <span key={i} style={{ display: 'inline-block', whiteSpace: 'pre', ...entrada(f, nome, i, { passoMs: 26, deslocY: 26, duracaoMs: 520 }) }}>
             {ch}
@@ -55,7 +53,7 @@ export const Cena12Fechamento: React.FC = () => {
         ))}
       </div>
 
-      <div style={{ position: 'absolute', top: 600, fontSize: 46, fontWeight: 600, color: COR.textoSuave, letterSpacing: -0.6 }}>
+      <div style={{ position: 'absolute', top: 594, fontSize: 46, fontWeight: 600, color: COR.textoSuave, letterSpacing: -0.6 }}>
         {LEMA.map((x, i) => (
           <span
             key={i}
@@ -74,25 +72,26 @@ export const Cena12Fechamento: React.FC = () => {
       <div
         style={{
           position: 'absolute',
-          top: 740,
+          top: 734,
           height: 54,
           padding: '0 26px',
           borderRadius: 999,
-          border: '1px solid rgba(92,200,245,0.35)',
-          background: 'rgba(15,26,36,0.8)',
+          border: '1px solid rgba(15,27,38,0.10)',
+          background: 'rgba(255,255,255,0.85)',
+          boxShadow: '0 10px 30px rgba(15,27,38,0.08)',
           display: 'flex',
           alignItems: 'center',
           fontSize: 22,
           fontWeight: 600,
           color: COR.texto,
-          letterSpacing: 0.4,
+          letterSpacing: 0.3,
           ...entrada(f, url, 0, { deslocY: 14, duracaoMs: 600 }),
         }}
       >
-        app.gestaodeacordos.com.br
+        gestaodeacordos.com.br
       </div>
 
-      <AbsoluteFill style={{ background: '#000', opacity: apaga }} />
+      <AbsoluteFill style={{ background: '#ffffff', opacity: apaga }} />
     </AbsoluteFill>
   );
 };

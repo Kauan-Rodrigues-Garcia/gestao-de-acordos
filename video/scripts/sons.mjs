@@ -131,3 +131,27 @@ gravar('festa.wav', 2.4, (a, n) => {
     a[i] = v;
   }
 });
+
+// ── v2 (no fim do arquivo para não mudar o ruído dos sons de cima) ─────────
+
+// tecla: o toque curto de um teclado baixo
+gravar('tecla.wav', 0.05, (a, n) => {
+  let lp = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / TAXA;
+    const r = ruido();
+    lp += (r - lp) * 0.3;
+    a[i] = lp * Math.exp(-t * 160) * 0.8 + Math.sin(PI2 * 1500 * t) * Math.exp(-t * 220) * 0.25;
+  }
+});
+
+// pop: uma bolha macia (aviso, janela que abre)
+gravar('pop.wav', 0.22, (a, n) => {
+  let fase = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / TAXA;
+    const f = 420 + 520 * (1 - Math.exp(-t * 40));
+    fase += (PI2 * f) / TAXA;
+    a[i] = Math.sin(fase) * Math.exp(-t * 26) * Math.min(1, t / 0.003);
+  }
+});

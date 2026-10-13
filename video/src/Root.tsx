@@ -4,5 +4,5 @@ import { TOTAL_FRAMES } from './linhaDoTempo';
 import { FPS } from './movimento';
 
 export const Root: React.FC = () => (
-  <Composition id="Operador" component={Video} durationInFrames={TOTAL_FRAMES} fps={FPS} width={1920} height={1080} />
+  <Composition id="Operador" component={Video} durationInFrames={TOTAL_FRAMES} fps={FPS} width={1920} height={1080} defaultProps={{ medir: false }} />
 );

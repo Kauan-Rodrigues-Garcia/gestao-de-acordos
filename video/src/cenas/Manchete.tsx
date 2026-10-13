@@ -3,7 +3,7 @@
 
 import { useCurrentFrame } from 'remotion';
 import { entrada, ms, saida } from '../movimento';
-import { COR, FONTE } from '../tema';
+import { COR, FONTE, GRADIENTE_MARCA } from '../tema';
 
 export type ItemManchete = { de: number; ate: number; texto: string };
 
@@ -19,7 +19,7 @@ function partes(texto: string) {
   });
 }
 
-export const Manchete: React.FC<{ itens: ItemManchete[]; y?: number }> = ({ itens, y = 78 }) => {
+export const Manchete: React.FC<{ itens: ItemManchete[]; y?: number }> = ({ itens, y = 70 }) => {
   const f = useCurrentFrame();
   return (
     <>
@@ -35,7 +35,7 @@ export const Manchete: React.FC<{ itens: ItemManchete[]; y?: number }> = ({ iten
               width: 1920,
               textAlign: 'center',
               fontFamily: FONTE,
-              fontSize: 54,
+              fontSize: 56,
               fontWeight: 800,
               letterSpacing: -1.4,
               color: COR.texto,
@@ -50,7 +50,7 @@ export const Manchete: React.FC<{ itens: ItemManchete[]; y?: number }> = ({ iten
                   marginRight: 16,
                   ...entrada(f, it.de, i, { passoMs: 70, deslocY: 22, duracaoMs: 520 }),
                   ...(p.destaque
-                    ? { background: 'linear-gradient(120deg, #4ade80, #5cc8f5)', WebkitBackgroundClip: 'text', color: 'transparent' }
+                    ? { background: GRADIENTE_MARCA, WebkitBackgroundClip: 'text', color: 'transparent' }
                     : {}),
                 }}
               >

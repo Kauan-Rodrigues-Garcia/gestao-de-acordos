@@ -1,199 +1,175 @@
-// Cena 4 — «Fechou com o cliente? Registre o acordo em segundos. Valor,
-// parcelas, vencimento… salvo? Pronto!»
+// Novo Acordo — a página `pages/AcordoForm` com o formulário da BookPlay
+// (`AcordoNovoInline/FormBP.tsx`): Dados Principais, Tipo e Status, Dados do
+// Cliente, Observações e o «Salvar Acordo».
 
+import { ArrowLeft, FileText, Hash, Info, Save, User, Wallet, X } from 'lucide-react';
 import { useCurrentFrame } from 'remotion';
-import { Icone } from '../../componentes/Icone';
-import { aperto, entrada, entre, mola, ms, saida } from '../../movimento';
-import { COR, FONTE_MONO, GRADIENTE_MARCA } from '../../tema';
+import { cn } from '@/lib/utils';
+import { aperto, entrada, entre, ms } from '../../movimento';
+import { HOJE, NOVO, OPERADORA } from '../dados';
 import type { TempoApp } from '../roteiro';
-import { Rotulo } from '../ui';
+import { BotaoData, Calendario, Campo, digitado, Rotulo, Selecao } from './Campos';
 
-const P = { x: 545, y: 150, l: 760, a: 690 };
+type Props = { t: TempoApp; entra: number };
 
-/** Texto sendo digitado: uma letra a cada `msPorLetra`. */
-function digitado(frame: number, inicio: number, texto: string, msPorLetra = 45) {
-  if (frame < inicio) return '';
-  const n = Math.floor(((frame - inicio) / 60) * (1000 / msPorLetra));
-  return texto.slice(0, Math.min(texto.length, n));
-}
-
-const Campo: React.FC<{ x: number; y: number; l: number; rotulo: string; valor: string; foco: number; mono?: boolean; icone?: string; style?: React.CSSProperties }> = ({ x, y, l, rotulo, valor, foco, mono, icone, style }) => {
-  const quadro = useCurrentFrame();
-  return (
-  <div style={{ position: 'absolute', left: x, top: y, width: l, ...style }}>
-    <Rotulo style={{ fontSize: 12 }}>{rotulo}</Rotulo>
-    <div
-      style={{
-        marginTop: 8,
-        height: 52,
-        borderRadius: 10,
-        background: '#0a131c',
-        border: `1px solid ${foco > 0 ? `rgba(92,200,245,${0.35 + 0.65 * foco})` : COR.borda}`,
-        boxShadow: foco > 0 ? `0 0 0 ${4 * foco}px rgba(41,168,224,0.18)` : undefined,
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 16px',
-        gap: 10,
-        boxSizing: 'border-box',
-        fontSize: 18,
-        color: COR.texto,
-        fontFamily: mono ? FONTE_MONO : undefined,
-        fontWeight: 500,
-      }}
-    >
-      {icone && <Icone nome={icone} tamanho={18} cor={COR.textoSuave} />}
-      {valor}
-      {foco > 0.5 && <span style={{ width: 2, height: 22, background: COR.azulClaro, opacity: Math.floor(quadro / 32) % 2 === 0 ? 1 : 0 }} />}
-    </div>
-  </div>
-  );
-};
-
-export const NovoAcordo: React.FC<{ t: TempoApp; entra: number; sai: number }> = ({ t, entra, sai }) => {
+export const NovoAcordo: React.FC<Props> = ({ t, entra }) => {
   const f = useCurrentFrame();
-  if (f < entra || f >= sai + ms(300)) return null;
   const c = t.clique;
-  const painel = mola(f, entra);
-  const e = (i: number) => entrada(f, entra + ms(120), i, { passoMs: 40 });
 
-  const focoCampo = (de: number, ate: number) => Math.min(entre(f, de, de + ms(150), 0, 1), entre(f, ate, ate + ms(150), 1, 0));
-  const salvo = f >= c.salvar + ms(150);
-  const pronto = entre(f, t.toast - ms(100), t.toast + ms(250), 0, 1);
+  const nr = digitado(NOVO.nr, f, t.digitaNr, 420);
+  const valor = digitado(NOVO.valor, f, c.valor + ms(140), 320);
+  const parcelas = f >= c.parcelas + ms(160) ? NOVO.parcelas : '1';
+  const vencimento = f >= c.dia + ms(60) ? NOVO.vencimento : null;
+  const salvando = f >= c.salvar + ms(60) && f < t.toastNovo;
 
-  const parcelaEscolhida = f >= c.parcelas ? 3 : 0;
-  const escalaChip3 = aperto(f, c.parcelas);
+  const foco = (de: number, ate: number) => f >= de + ms(40) && f < ate;
+  const calendarioAberto = f >= c.vencimento + ms(60) && f < c.dia + ms(120);
+  const cal = entre(f, c.vencimento + ms(60), c.vencimento + ms(260), 0, 1);
+  const calSai = entre(f, c.dia + ms(60), c.dia + ms(160), 0, 1);
+
+  const E = (i: number) => entrada(f, entra, i, { passoMs: 45 });
 
   return (
-    <div style={{ position: 'absolute', inset: 0, ...(f >= sai ? saida(f, sai) : {}) }}>
-      {/* fundo escurecido */}
-      <div style={{ position: 'absolute', left: 250, top: 112, right: 0, bottom: 0, background: `rgba(3,7,12,${0.55 * entre(f, entra, entra + ms(300), 0, 1)})` }} />
-      <div
-        style={{
-          position: 'absolute',
-          left: P.x,
-          top: P.y,
-          width: P.l,
-          height: P.a,
-          borderRadius: 18,
-          background: COR.cardElevado,
-          border: `1px solid ${COR.bordaForte}`,
-          boxShadow: '0 40px 90px rgba(0,0,0,0.6)',
-          transform: `translateY(${(1 - painel) * 40}px) scale(${0.94 + 0.06 * painel})`,
-          opacity: Math.min(1, painel * 1.6),
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ height: 4, background: GRADIENTE_MARCA }} />
-        <div style={{ position: 'absolute', left: 32, top: 30, ...e(0) }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: COR.texto }}>Novo acordo</div>
-          <div style={{ fontSize: 15, color: COR.textoSuave, marginTop: 4 }}>Preencha e salve — o resto o sistema faz.</div>
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex items-center gap-3 mb-6" style={E(0)}>
+          <span className="inline-flex items-center justify-center rounded-md h-8 w-8"><ArrowLeft className="w-4 h-4" /></span>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Novo Acordo</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              <span className="font-medium text-foreground">{OPERADORA.nome}</span>
+              <span className="text-primary"> · {OPERADORA.setor}</span>
+            </p>
+          </div>
         </div>
-        <Campo x={32} y={110} l={696} rotulo="Cliente · inscrição" valor={digitado(f, t.digitaCliente, 'Maria Aparecida Souza · 907544', 28)} foco={focoCampo(t.digitaCliente - ms(100), c.valor)} icone="usuarios" style={e(1)} />
-        <Campo x={32} y={214} l={336} rotulo="Valor total" valor={digitado(f, c.valor + ms(80), 'R$ 1.250,00', 55)} foco={focoCampo(c.valor, c.parcelas - ms(60))} mono style={e(2)} />
-        <Campo x={392} y={214} l={336} rotulo="1º vencimento" valor={digitado(f, c.vencimento + ms(80), '20/10/2026', 45)} foco={focoCampo(c.vencimento, c.salvar - ms(300))} mono icone="calendario" style={e(3)} />
 
-        <div style={{ position: 'absolute', left: 32, top: 318, ...e(4) }}>
-          <Rotulo style={{ fontSize: 12 }}>Parcelas</Rotulo>
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-            {[1, 2, 3, 4, 5, 6].map((n) => {
-              const sel = n === parcelaEscolhida;
-              return (
-                <div
-                  key={n}
-                  style={{
-                    width: 100,
-                    height: 48,
-                    borderRadius: 10,
-                    border: `1px solid ${sel ? 'rgba(92,200,245,0.9)' : COR.borda}`,
-                    background: sel ? 'rgba(41,168,224,0.18)' : '#0a131c',
-                    color: sel ? COR.azulClaro : COR.textoSuave,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontFamily: FONTE_MONO,
-                    fontSize: 17,
-                    fontWeight: 600,
-                    transform: n === 3 ? `scale(${escalaChip3})` : undefined,
-                  }}
-                >
-                  {n}x
+        <div className="rounded-xl border border-border" style={E(1)} data-alvo="novo-form">
+          <div className="bg-primary/5 border-b-2 border-primary/30 rounded-xl px-4 py-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                  <Save className="w-4 h-4" /> Novo Acordo — Bookplay
+                </p>
+                <span className="inline-flex items-center justify-center rounded-md w-7 h-7"><X className="w-4 h-4" /></span>
+              </div>
+
+              <div className="relative z-20" style={E(2)}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Hash className="w-3 h-3" /> Dados Principais
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Rotulo>NR *</Rotulo>
+                    <Campo alvo="novo-nr" f={f} valor={nr} placeholder="Código do acordo" mono foco={foco(c.nr, c.valor)} />
+                  </div>
+                  <div className="space-y-1 relative">
+                    <Rotulo>Vencimento *</Rotulo>
+                    <BotaoData alvo="novo-vencimento" valor={vencimento} foco={calendarioAberto} />
+                    {calendarioAberto && (
+                      <div
+                        className="absolute left-0 z-50 w-auto rounded-md border bg-popover p-0 text-popover-foreground shadow-md"
+                        style={{
+                          top: 'calc(100% + 4px)',
+                          opacity: cal * (1 - calSai),
+                          transform: `translateY(${(1 - cal) * -8}px) scale(${0.95 + 0.05 * cal})`,
+                          transformOrigin: 'top left',
+                        }}
+                      >
+                        <Calendario hoje={HOJE.dia} marcado={f >= c.dia ? NOVO.vencimentoDia : null} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Rotulo>Valor *</Rotulo>
+                    <Campo alvo="novo-valor" f={f} valor={valor} placeholder="0,00" mono foco={foco(c.valor, c.parcelas)} />
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-          <div style={{ marginTop: 10, fontSize: 14, color: COR.textoSuave, fontFamily: FONTE_MONO, opacity: entre(f, c.parcelas + ms(100), c.parcelas + ms(400), 0, 1) }}>
-            3 × R$ 416,67
-          </div>
-        </div>
+                {parcelas !== '1' && (
+                  <div
+                    className="mt-2 h-8 inline-flex items-center gap-2 px-3 rounded-md border text-xs font-medium bg-background text-foreground border-input"
+                    style={entrada(f, c.parcelas + ms(160), 0, { deslocY: 6, duracaoMs: 300 })}
+                  >
+                    <Wallet className="w-3 h-3 shrink-0" />
+                    1º pagamento é entrada?
+                  </div>
+                )}
+                <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-2.5 py-1.5">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>Preencha o <strong>Valor</strong> com o valor de <strong>cada parcela</strong>, não o valor total do acordo.</span>
+                </div>
+              </div>
 
-        <div style={{ position: 'absolute', left: 32, top: 438, ...e(5) }}>
-          <Rotulo style={{ fontSize: 12 }}>Forma de pagamento</Rotulo>
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-            <div style={{ height: 44, padding: '0 18px', borderRadius: 10, border: '1px solid rgba(74,222,128,0.6)', background: 'rgba(34,197,94,0.12)', color: COR.verdeClaro, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 600 }}>Boleto / PIX</div>
-            <div style={{ height: 44, padding: '0 18px', borderRadius: 10, border: `1px solid ${COR.borda}`, background: '#0a131c', color: COR.textoSuave, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 500 }}>Cartão de Crédito</div>
-          </div>
-        </div>
+              <div style={E(3)}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <FileText className="w-3 h-3" /> Tipo e Status
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Rotulo>Forma de Pagamento</Rotulo>
+                    <Selecao valor="Boleto" />
+                  </div>
+                  <div className="space-y-1">
+                    <Rotulo>Parcelas</Rotulo>
+                    <Campo alvo="novo-parcelas" f={f} valor={parcelas} mono foco={foco(c.parcelas, c.vencimento)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Rotulo>Status</Rotulo>
+                    <Selecao valor="Pendente" />
+                  </div>
+                </div>
+              </div>
 
-        {/* botões */}
-        <div style={{ position: 'absolute', right: 32, bottom: 28, display: 'flex', gap: 12, ...e(6) }}>
-          <div style={{ height: 52, padding: '0 22px', borderRadius: 10, border: `1px solid ${COR.borda}`, color: COR.textoSuave, display: 'flex', alignItems: 'center', fontSize: 16, fontWeight: 600 }}>Cancelar</div>
-          <div
-            style={{
-              width: 180,
-              height: 52,
-              borderRadius: 10,
-              background: salvo ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #29a8e0, #1d8cc4)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              fontSize: 16,
-              fontWeight: 700,
-              transform: `scale(${aperto(f, c.salvar)})`,
-              boxShadow: salvo ? '0 0 30px rgba(34,197,94,0.45)' : '0 10px 24px rgba(41,168,224,0.3)',
-            }}
-          >
-            {salvo ? (
-              <>
-                <Icone nome="check" tamanho={18} cor="#fff" espessura={3} /> Salvo
-              </>
-            ) : (
-              'Salvar acordo'
-            )}
+              <div style={E(4)}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <User className="w-3 h-3" /> Dados do Cliente
+                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1 col-span-2">
+                    <Rotulo>Nome do Cliente</Rotulo>
+                    <Campo f={f} valor="" placeholder="Nome completo" />
+                  </div>
+                  <div className="space-y-1">
+                    <Rotulo>WhatsApp</Rotulo>
+                    <Campo f={f} valor="" placeholder="(11) 99999-9999" mono />
+                  </div>
+                  <div className="space-y-1">
+                    <Rotulo>Instituição</Rotulo>
+                    <Selecao valor="Selecione..." placeholder />
+                  </div>
+                </div>
+              </div>
+
+              <div style={E(5)}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <FileText className="w-3 h-3" /> Observações
+                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                </p>
+                <div className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs text-muted-foreground" style={{ height: 52 }}>
+                  Observações opcionais...
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 border-t border-primary/20" style={E(6)}>
+                <span
+                  data-alvo="novo-salvar"
+                  className={cn(
+                    'inline-flex items-center justify-center whitespace-nowrap text-sm font-medium h-9 rounded-md px-3 gap-2 bg-primary text-primary-foreground shadow-sm',
+                    salvando && 'opacity-50',
+                  )}
+                  style={{ scale: String(aperto(f, c.salvar)) }}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {salvando ? 'Salvando...' : 'Salvar Acordo'}
+                </span>
+                <span className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium h-9 rounded-md px-3 gap-1.5 border border-border bg-transparent">
+                  <X className="w-3.5 h-3.5" /> Cancelar
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* aviso de sucesso */}
-      {pronto > 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            right: 36,
-            top: 130,
-            width: 360,
-            padding: '16px 18px',
-            borderRadius: 14,
-            background: '#0f2418',
-            border: '1px solid rgba(74,222,128,0.5)',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-            display: 'flex',
-            gap: 12,
-            alignItems: 'center',
-            opacity: pronto,
-            transform: `translateX(${(1 - mola(f, t.toast - ms(100))) * 60}px)`,
-          }}
-        >
-          <div style={{ width: 38, height: 38, borderRadius: 19, background: 'rgba(74,222,128,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icone nome="check" tamanho={20} cor={COR.verdeClaro} espessura={3} />
-          </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: COR.texto }}>Acordo registrado!</div>
-            <div style={{ fontSize: 14, color: COR.textoSuave, marginTop: 2 }}>Maria Aparecida · 3 × R$ 416,67</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

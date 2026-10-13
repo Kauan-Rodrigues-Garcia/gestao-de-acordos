@@ -1,0 +1,38 @@
+/* O visual do app dentro do vídeo: Tailwind v4 + o CSS do próprio app. */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Fontes locais (as mesmas do app: Inter e JetBrains Mono). */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/inter/800.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+@import "@fontsource/caveat/600.css";
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
+@import "@fontsource/figtree/700.css";
+@import "@fontsource/bricolage-grotesque/700.css";
+
+@import "./app.css";
+@import "./mobile.css";
+@import "./mobile-comum.css";
+
+/* Onde o Tailwind procura classes: as telas do vídeo e os componentes do app. */
+@source "../";
+@source "../../../src/components/ui";
+
+/*
+ * No vídeo, quem anima é o quadro (Remotion), nunca o relógio do navegador:
+ * transição e animação de CSS rodariam em tempo real entre um quadro e outro
+ * e sairiam congeladas no meio, diferentes a cada render.
+ */
+*, *::before, *::after {
+  transition: none !important;
+  animation: none !important;
+}
