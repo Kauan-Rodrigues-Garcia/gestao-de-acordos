@@ -123,9 +123,10 @@ import {
 import { FormaChip } from '@/pages/Analitico/Diario/FormaChip';
 import { normDiario } from '@/services/diario/diarioComum';
 import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
-// O mapa de calor operador × dia — o outro formato da MESMA lista, agora
-// somando do analítico. Continua no diretório do diário; a fonte é que mudou.
-import { DiaDetalhado, type CelulaDoMapa } from '@/pages/Analitico/Diario/DiaDetalhado';
+// O mapa do mês — o outro formato da MESMA lista: um calendário com filtro
+// de operador. A fonte por empresa continua em `fonteDoMapa`.
+import { MapaDoMes, type CelulaDoMapa } from '@/pages/Analitico/MapaDoMes/MapaDoMes';
+import { feriadosNacionais } from '@/lib/feriadosNacionais';
 import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
 import {
   limparDadosDoDia, limparMesDiario, buscarResumoMensalDiario,
@@ -1235,7 +1236,9 @@ export function AnaliticoLider({
    */
   const noRecorteDia = recorte.modo === 'dia';
   const metasDoMes = useMetaDiariaOperadores({
-    ativo: abaVisivel === 'operadores' && noRecorteDia,
+    // O Mapa do mês também lê daqui: os feriados cadastrados são o que fecha
+    // a régua de baixas (dias úteis), a mesma das metas.
+    ativo: abaVisivel === 'operadores' && (noRecorteDia || visaoOperadores === 'mapa'),
     empresaId,
     mes,
   });
@@ -1358,6 +1361,53 @@ export function AnaliticoLider({
       ?? '—',
     [isPP, nomesDoDiario, nomesDoAnalitico],
   );
+
+  /*
+   * Fotos de quem está no mapa e não está na lista. Na PaguePlay o mapa soma do
+   * diário, e há operador ali que o resumo do analítico não traz — sem esta
+   * busca ele apareceria só com as iniciais. Uma consulta, só dos que faltam.
+   */
+  const [fotosDoMapa, setFotosDoMapa] = useState<Record<string, string | null>>({});
+  const idsSemFoto = useMemo(() => {
+    const ids = new Set<string>();
+    for (const l of linhasDoMapa) {
+      if (l.operador_id && !(l.operador_id in fotos)) ids.add(l.operador_id);
+    }
+    return [...ids].sort().join(',');
+  }, [linhasDoMapa, fotos]);
+  useEffect(() => {
+    if (!idsSemFoto || visaoOperadores !== 'mapa') return;
+    let vivo = true;
+    void supabase
+      .from('perfis')
+      .select('id, foto_url')
+      .in('id', idsSemFoto.split(','))
+      .then(({ data }) => {
+        if (!vivo) return;
+        setFotosDoMapa(atual => {
+          const m = { ...atual };
+          for (const p of ((data ?? []) as { id: string; foto_url: string | null }[])) m[p.id] = p.foto_url;
+          return m;
+        });
+      });
+    return () => { vivo = false; };
+  }, [idsSemFoto, visaoOperadores]);
+  const fotosNoMapa = useMemo(() => ({ ...fotosDoMapa, ...fotos }), [fotosDoMapa, fotos]);
+  const equipeDoOperadorNoMapa = useCallback(
+    (id: string) => operadorEquipeMap[id]?.equipe_nome ?? null,
+    [operadorEquipeMap],
+  );
+
+  /*
+   * Os dias que não abrem baixa, além do fim de semana: os feriados nacionais
+   * (banco não compensa neles) somados aos cadastrados nas metas do mês — a
+   * mesma lista que tira dia útil da meta diária.
+   */
+  const feriadosDoMapa = useMemo(() => {
+    const ano = Number(mes.slice(0, 4));
+    const nacionais = feriadosNacionais(ano).map(f => f.dia).filter(d => d.startsWith(`${mes}-`));
+    return [...new Set([...nacionais, ...metasDoMes.feriados])];
+  }, [mes, metasDoMes.feriados]);
 
   /*
    * O mapa é um objeto do MÊS, e no recorte Dia a lista responde pelo dia (e
@@ -1982,10 +2032,13 @@ export function AnaliticoLider({
           {/* O mapa desenha o próprio vazio (e a nota do que ficou sem
               operador), então não passa pelo bloco de "nenhum dado" abaixo. */}
           {!carregandoConteudo && visaoEfetiva === 'mapa' && (
-            <DiaDetalhado
+            <MapaDoMes
               linhas={linhasDoMapa}
               mes={mes}
               nomeDoOperador={nomeDoOperadorNoMapa}
+              fotos={fotosNoMapa}
+              equipeDoOperador={equipeDoOperadorNoMapa}
+              feriados={feriadosDoMapa}
               hojeISO={hojeISO}
             />
           )}

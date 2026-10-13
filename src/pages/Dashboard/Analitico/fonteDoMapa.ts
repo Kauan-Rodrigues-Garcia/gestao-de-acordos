@@ -23,7 +23,7 @@
  * `useMemo` de um componente de 1.900 linhas, sem nada que a exercitasse. Aqui
  * a regra é pura, tem teste e quebra alto quando alguém a inverter.
  */
-import type { CelulaDoMapa } from '@/pages/Analitico/Diario/DiaDetalhado';
+import type { CelulaDoMapa } from '@/pages/Analitico/MapaDoMes/contas';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 
 export interface FonteDoMapa {

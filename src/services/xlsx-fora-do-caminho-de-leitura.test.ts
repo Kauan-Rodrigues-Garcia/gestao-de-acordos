@@ -45,7 +45,7 @@ const CAMINHO_DE_LEITURA = [
   // diário sair do código. Quem herdou o papel delas — o mapa do mês e a faixa
   // de pulso do recorte Dia — entra no lugar: são as telas que hoje EXIBEM o
   // recebimento, e a trava tem de segui-las, não o nome antigo do arquivo.
-  'pages/Analitico/Diario/DiaDetalhado.tsx',
+  'pages/Analitico/MapaDoMes/MapaDoMes.tsx',
   'pages/Analitico/FaixaPulso.tsx',
   'pages/Analitico/Diario/FormaChip.tsx',
   'hooks/useAnalitico.ts',

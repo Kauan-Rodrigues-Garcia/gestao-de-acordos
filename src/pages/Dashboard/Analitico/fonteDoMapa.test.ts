@@ -21,7 +21,7 @@
 import { describe, it, expect } from 'vitest';
 import { celulasDoMapa } from './fonteDoMapa';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
-import type { CelulaDoMapa } from '@/pages/Analitico/Diario/DiaDetalhado';
+import type { CelulaDoMapa } from '@/pages/Analitico/MapaDoMes/contas';
 
 function doDiario(
   operador_id: string | null, data_pagamento: string, valor_recebido: number,
