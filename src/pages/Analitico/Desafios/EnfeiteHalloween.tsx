@@ -17,6 +17,7 @@ import { carregarFonte } from '@/components/Halloween/fonte';
 export const FONTE_TITULO_HALLOWEEN = "'Creepster', ui-sans-serif, system-ui, sans-serif";
 
 /** Declara a Creepster na primeira vez que um cartaz de Halloween aparece. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook irmão do enfeite: DesafioHero e PainelDesafio importam os três juntos.
 export function useFonteHalloween(ativo: boolean) {
   useEffect(() => { if (ativo) carregarFonte(); }, [ativo]);
 }

@@ -5,6 +5,7 @@
  */
 import type { RefObject } from 'react';
 
+// eslint-disable-next-line react-refresh/only-export-components -- a lista dos chips; o teste do Pix Automático confere as variáveis por ela.
 export const VARIABLE_LABELS: [string, string][] = [
   ['primeiro_nome', 'Primeiro nome'], ['nome', 'Nome completo'], ['cpf', 'CPF'],
   ['empresa', 'Empresa'], ['contrato', 'Contrato'], ['parcela_desconto', 'Parcela'],
@@ -19,6 +20,7 @@ export const VARIABLE_LABELS: [string, string][] = [
   ['protocolo', 'Protocolo'], ['atendimento', '0800 da empresa'], ['link', 'Link'],
 ];
 
+// eslint-disable-next-line react-refresh/only-export-components -- irmã dos chips: o editor e a edição da campanha usam as duas juntas.
 export function insertVariable(ref: RefObject<HTMLTextAreaElement>, value: string, setValue: (v: string) => void, variable: string) {
   const el = ref.current;
   const token = `{{${variable}}}`;
