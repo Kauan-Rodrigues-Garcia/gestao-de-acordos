@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
   estadoDoAcordo, barraEstados, metaDoDia, variacao,
   diasUteisAnteriores, mediaDiasUteisAnteriores,
-  resumoPixDia, fatiasPorTag,
+  resumoPixDia, fatiasPorTag, niveisDoPainelDoDia,
 } from './desempenhoDia';
 
 // 2026-08: agosto de 2026 começa num sábado. Dias úteis = 21.
@@ -265,5 +265,59 @@ describe('fatiasPorTag', () => {
   it('tag apagada não some da conta, ganha rótulo', () => {
     const fatias = fatiasPorTag([{ valor: 100, tag_ids: ['sumiu'] }], tags);
     expect(fatias[0].nome).toBe('Tag removida');
+  });
+});
+
+describe('niveisDoPainelDoDia', () => {
+  /** `temPermissao` sobre um mapa só, como o hook faz com cargo + exceção. */
+  const comMapa = (mapa: Record<string, boolean>) => ({
+    gravadas: [mapa],
+    temPermissao: (c: string) => !!mapa[c],
+  });
+
+  /*
+   * O caso que motivou as chaves: o operador da BookPlay tem setor e equipe no
+   * Dashboard (20260903220000). Com as chaves do painel gravadas, só elas valem.
+   */
+  it('com as chaves do painel gravadas, ignora os níveis do Dashboard', () => {
+    const r = niveisDoPainelDoDia({
+      ...comMapa({
+        desempenho_dia_escopo_individual: true,
+        desempenho_dia_escopo_equipe: false,
+        desempenho_dia_escopo_setor: false,
+        desempenho_dia_escopo_todos_setores: false,
+      }),
+      niveisDashboard: ['individual', 'equipe', 'setor'],
+    });
+    expect(r).toEqual(['individual']);
+  });
+
+  it('o painel de Permissões pode ampliar: setor ligado vale', () => {
+    const r = niveisDoPainelDoDia({
+      ...comMapa({ desempenho_dia_escopo_individual: true, desempenho_dia_escopo_setor: true }),
+      niveisDashboard: ['individual'],
+    });
+    expect(r).toEqual(['individual', 'setor']);
+  });
+
+  /*
+   * Antes da migration ninguém tem as chaves, e «ausente vale negado» poria o
+   * líder e a gerência em «Os seus números». Até lá, vale o Dashboard.
+   */
+  it('sem nenhuma chave do painel gravada, vale a régua do Dashboard', () => {
+    const r = niveisDoPainelDoDia({
+      ...comMapa({ dashboard_escopo_equipe: true }),
+      niveisDashboard: ['individual', 'equipe'],
+    });
+    expect(r).toEqual(['individual', 'equipe']);
+  });
+
+  it('basta uma chave gravada, inclusive como exceção da pessoa', () => {
+    const r = niveisDoPainelDoDia({
+      gravadas: [{}, { desempenho_dia_escopo_individual: true }],
+      temPermissao: c => c === 'desempenho_dia_escopo_individual',
+      niveisDashboard: ['individual', 'setor'],
+    });
+    expect(r).toEqual(['individual']);
   });
 });

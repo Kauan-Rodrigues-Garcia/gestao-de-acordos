@@ -196,8 +196,6 @@ export const GRUPOS_PERMISSAO = [
   'Tickets',
   // Chat interno, 25/08/2026. Substitui a "Pomba" do sistema da empresa.
   'Chat',
-  // Modo TV, 01/09/2026. A apresentação que roda no PC ligado à TV por HDMI.
-  'Modo TV',
   // Controle de Números, 10/09/2026. O módulo do setor Núcleo de Inteligência
   // e Gestão. Guarda as chaves das DUAS pontas — a do Núcleo e a dos setores —
   // porque elas descrevem o mesmo caminho de um número, visto dos dois lados.
@@ -1428,6 +1426,36 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Ver no Dashboard qualquer setor, com o filtro de setor disponível',
     grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: { gerencia: true, diretoria: true },
   },
+  /*
+   * O alcance do painel Desempenho do Dia, 13/10/2026.
+   *
+   * Separado do alcance do Dashboard de propósito: o operador da BookPlay tem
+   * `dashboard_escopo_setor` e `_equipe`, e com eles o painel do dia mostrava
+   * o recebimento da equipe, quando o que ele quer ver é o próprio. Com chaves
+   * próprias, estreitar o painel não estreita o Dashboard. Os padrões repetem
+   * os do Dashboard; a migration 20261013180000 copia o valor que cada cargo
+   * já tinha lá, menos no operador, que nasce só com o individual.
+   */
+  {
+    key: 'desempenho_dia_escopo_individual', label: 'Desempenho do Dia: os próprios números',
+    descricao: 'Ver no painel Desempenho do Dia o recebimento da própria pessoa',
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: TODOS,
+  },
+  {
+    key: 'desempenho_dia_escopo_equipe', label: 'Desempenho do Dia: a equipe',
+    descricao: 'Ver no painel Desempenho do Dia o recebimento das equipes que a pessoa lidera',
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
+  },
+  {
+    key: 'desempenho_dia_escopo_setor', label: 'Desempenho do Dia: o setor',
+    descricao: 'Ver no painel Desempenho do Dia o recebimento do setor inteiro, com o seletor de equipe',
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: LIDERANCA,
+  },
+  {
+    key: 'desempenho_dia_escopo_todos_setores', label: 'Desempenho do Dia: a empresa',
+    descricao: 'Ver no painel Desempenho do Dia o recebimento da empresa inteira',
+    grupo: 'Dashboard', produtos: COBRANCA_E_COMERCIAL, padrao: { gerencia: true, diretoria: true },
+  },
   {
     key: 'dashboard_comissao', label: 'Dashboard: ver a própria comissão',
     descricao: 'Card de comissão e a tela Ver comissão no próprio Dashboard',
@@ -1916,71 +1944,6 @@ export const PERMISSOES: PermissaoMeta[] = [
       + 'ligue aqui para abrir a exceção a outro cargo — a alteração muda um mês '
       + 'cujo relatório já circulou',
     grupo: 'Ações específicas', padrao: {},
-  },
-
-  // ── Modo TV ──────────────────────────────────────────────────────────────
-  //
-  // Todas nascem com `padrao: {}` — desligadas para TODO cargo configurável.
-  // É o pedido da fase 1: enquanto o Modo TV está sendo provado na parede, só
-  // quem tem acesso total abre a aba. Isso não é teto: no dia em que o setor
-  // for cuidar da própria TV, o painel liga a chave e pronto, sem deploy.
-  //
-  // O palco (`/tv/:slug`) NÃO consulta nada disto: ele é público de propósito e
-  // fala com uma RPC só. Estas chaves guardam a MESA, que é onde se decide o
-  // que a operação inteira vai ver.
-  {
-    key: 'ver_modo_tv', label: 'Modo TV',
-    descricao: 'Abrir a mesa do Modo TV e ver o que está no ar em cada tela',
-    grupo: 'Modo TV', tenants: ['bookplay'], padrao: {},
-  },
-  {
-    key: 'tv_editar_cenas', label: 'TV: montar cenas',
-    descricao:
-      'Criar, montar e apagar as cenas do setor. Mexe só na prévia — não troca '
-      + 'o que está na parede',
-    grupo: 'Modo TV', tenants: ['bookplay'], padrao: {},
-    depende: {
-      chaves: ['ver_modo_tv'],
-      motivo: 'A mesa precisa estar aberta para haver onde montar a cena.',
-    },
-  },
-  {
-    /*
-     * Separada de `tv_editar_cenas` de propósito, e é a separação que mais
-     * importa aqui: montar a cena e decidir que ela vai para a parede da
-     * empresa inteira são decisões diferentes. É como funciona redação de
-     * transmissão — alguém prepara, outro alguém põe no ar.
-     *
-     * Permite dar a um líder o preparo da cena da campanha sem dar a ele o
-     * poder de trocar sozinho o que todo mundo está vendo.
-     */
-    key: 'tv_cortar', label: 'TV: mandar ao ar',
-    descricao:
-      'Trocar a cena que está na TV. É a permissão que muda o que a operação '
-      + 'inteira vê naquele instante',
-    grupo: 'Modo TV', tenants: ['bookplay'], padrao: {},
-    depende: {
-      chaves: ['ver_modo_tv'],
-      motivo: 'Sem a mesa aberta não há de onde cortar.',
-    },
-  },
-  {
-    key: 'tv_gerenciar_telas', label: 'TV: cadastrar telas',
-    descricao: 'Criar tela, definir o endereço público dela e aposentar tela antiga',
-    grupo: 'Modo TV', tenants: ['bookplay'], padrao: {},
-    depende: {
-      chaves: ['ver_modo_tv'],
-      motivo: 'A mesa precisa estar aberta para haver onde cadastrar a tela.',
-    },
-  },
-  {
-    key: 'tv_enviar_midia', label: 'TV: enviar imagem',
-    descricao: 'Subir imagem para a biblioteca do Modo TV e remover o que subiu',
-    grupo: 'Modo TV', tenants: ['bookplay'], padrao: {},
-    depende: {
-      chaves: ['ver_modo_tv'],
-      motivo: 'A biblioteca vive dentro da mesa.',
-    },
   },
 
   // ── Controle de Números ──────────────────────────────────────────────────

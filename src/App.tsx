@@ -118,10 +118,6 @@ const MeusChips         = lazy(() => import('@/pages/MeusChips'));
 // O painel do Nucleo. Lazy como o resto, e aqui isso poupa o bundle de quase
 // todo mundo: um cargo so nasce com a chave.
 const DashboardAdm      = lazy(() => import('@/pages/DashboardAdm'));
-const ModoTV            = lazy(() => import('@/pages/ModoTV'));
-// O palco. Lazy como o resto, e aqui isso importa por um motivo extra: o PC da
-// TV baixa SÓ este pedaço, e não a mesa nem o Gestão inteiro.
-const TvPalco           = lazy(() => import('@/pages/TvPalco'));
 // Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
 // Gestão e nunca descobre o Easter Egg não baixa um byte dele.
 const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
@@ -767,31 +763,6 @@ export default function App() {
                   <CreatorsLab />
                 </ProtectedRoute>
               } />
-
-              {/*
-                Modo TV — a mesa. Atrás do painel como todo o resto: a chave
-                `ver_modo_tv` nasce desligada para todo cargo configurável, então
-                hoje só quem tem acesso total abre.
-              */}
-              <Route path={ROUTE_PATHS.MODO_TV} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_modo_tv">
-                    <ModoTV />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
-
-              {/*
-                O palco da TV toma a tela inteira: sem `LayoutWrapper` e sem
-                `PublicRoute` (que mandaria a TV para o Dashboard).
-
-                Exige login desde a auditoria de segurança de 06/10/2026 — a
-                RPC devolvia nome, foto e recebido do setor para quem soubesse
-                o endereço. A TV entra uma vez com uma conta da empresa e a
-                sessão fica salva; `fn_tv_palco` só mostra tela da empresa de
-                quem está logado (migration 20261006260000).
-              */}
-              <Route path={ROUTE_PATHS.TV_PALCO} element={<ProtectedRoute><TvPalco /></ProtectedRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

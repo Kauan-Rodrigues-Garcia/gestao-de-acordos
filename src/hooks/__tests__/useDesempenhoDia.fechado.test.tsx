@@ -73,7 +73,7 @@ vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: { id: 'e-1' }, tenantSlug: 'bookplay' }),
 }));
 vi.mock('@/hooks/useCargoPermissoes', () => ({
-  useCargoPermissoes: () => ({ temPermissao: () => false }),
+  useCargoPermissoes: () => ({ temPermissao: () => false, permissoes: {}, excecoes: {} }),
 }));
 vi.mock('@/lib/supabase', () => ({
   supabase: {

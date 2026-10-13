@@ -26,7 +26,7 @@ import {
 } from '@/services/desempenhoDia/desempenhoDia.service';
 import {
   barraEstados, metaDoDia, variacao, mediaDiasUteisAnteriores,
-  resumoPixDia, fatiasPorTag,
+  resumoPixDia, fatiasPorTag, niveisDoPainelDoDia,
   type BarraEstados, type MetaDoDia, type Variacao,
   type ResumoPixDia, type FatiaTag,
 } from '@/lib/desempenhoDia';
@@ -113,13 +113,17 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const { temPermissao } = useCargoPermissoes();
-  // O painel vive no Dashboard, entao usa a regua do Dashboard. Memoizado
-  // porque `niveisLiberados` devolve um array novo a cada chamada e ele entra
-  // na dependencia do efeito abaixo.
+  const { temPermissao, permissoes, excecoes } = useCargoPermissoes();
+  // Os níveis do PRÓPRIO painel (`desempenho_dia_escopo_*`), com a régua do
+  // Dashboard só enquanto a migration não as gravou — ver `niveisDoPainelDoDia`.
+  // Memoizado porque a lista entra na dependência do efeito abaixo.
   const niveis = useMemo(
-    () => niveisLiberados('dashboard', temPermissao),
-    [temPermissao],
+    () => niveisDoPainelDoDia({
+      gravadas: [permissoes, excecoes],
+      temPermissao,
+      niveisDashboard: niveisLiberados('dashboard', temPermissao),
+    }),
+    [permissoes, excecoes, temPermissao],
   );
 
   const [escopoBase, setEscopoBase] = useState<EscopoDoDia | null>(null);

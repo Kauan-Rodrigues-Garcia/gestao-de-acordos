@@ -377,11 +377,17 @@ export interface EscopoDoDia {
  * Ninguém perde alcance: os níveis são um superconjunto das listas antigas em
  * todo cargo. E quem quiser desfazer qualquer um dos dois ganhos agora mexe no
  * painel, não aqui.
+ *
+ * ## Desde 13/10/2026 os níveis são do PRÓPRIO painel
+ *
+ * `desempenho_dia_escopo_*`, e não mais os do Dashboard — ver
+ * `useDesempenhoDia`. Esta função não mudou: continua recebendo uma lista de
+ * níveis, e não sabe de onde ela veio.
  */
 export async function resolverEscopoDoDia(params: {
   empresaId: string;
   perfilId: string;
-  /** Os níveis de `dashboard` liberados para esta pessoa. */
+  /** Os níveis do painel do dia liberados para esta pessoa. */
   niveis: readonly NivelEscopo[];
   setorId: string | null;
 }): Promise<EscopoDoDia> {

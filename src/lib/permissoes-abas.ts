@@ -35,7 +35,6 @@ export type ModuloPermissaoId =
   | 'campanhas_whatsapp'
   | 'importar_excel'
   | 'chat'
-  | 'modo_tv'
   | 'controle_numeros'
   | 'meus_chips'
   | 'fechamento'
@@ -251,17 +250,6 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   },
   {
     /*
-     * Sem `escopo`: o alcance do Modo TV não vem de níveis por aba, vem da
-     * TELA. Cada tela pertence a um setor, e a cena só vai para a tela do
-     * próprio setor — a regra mora em `fn_tv_cortar`, não numa escala de
-     * "equipe / setor / todos".
-     */
-    id: 'modo_tv', rotulo: 'Modo TV', interruptor: 'ver_modo_tv',
-    descricao: 'A apresentação na TV do setor: cenas, quem monta e quem manda ao ar.',
-    grupos: ['Modo TV'], tenants: ['bookplay'],
-  },
-  {
-    /*
      * O Controle de Números é UM grupo de catálogo e DOIS cards, e a divisão
      * não é cosmética: são as duas pontas do mesmo caminho, e quem configura
      * uma quase nunca configura a outra.
@@ -452,6 +440,11 @@ const SECOES_DASHBOARD: Record<string, string> = {
   excluir_em_lote: 'Acordos',
   acordos_autorizar_tabulacao: 'Acordos',
   acordos_capturar_erp: 'Acordos',
+  // O painel do topo, e não a tela: estreitar um não estreita o outro.
+  desempenho_dia_escopo_individual: 'Desempenho do Dia: quem vê',
+  desempenho_dia_escopo_equipe: 'Desempenho do Dia: quem vê',
+  desempenho_dia_escopo_setor: 'Desempenho do Dia: quem vê',
+  desempenho_dia_escopo_todos_setores: 'Desempenho do Dia: quem vê',
 };
 
 function secaoDaPermissao(modulo: ModuloPermissaoId, chave: string): string {

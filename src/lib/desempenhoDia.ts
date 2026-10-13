@@ -24,6 +24,7 @@
 
 import { listarDiasUteis } from '@/lib/diasUteis';
 import { partesDoMes } from '@/lib/mesReferencia';
+import { NIVEIS_ESCOPO, type NivelEscopo } from '@/lib/permissoes-escopo';
 
 // ─── Barra de três estados ───────────────────────────────────────────────────
 
@@ -304,4 +305,55 @@ export function fatiasPorTag(
       };
     })
     .sort((a, b) => b.valor - a.valor);
+}
+
+// ─── Quem vê o quê ───────────────────────────────────────────────────────────
+
+/** As chaves de alcance do painel, uma por nível. */
+const CHAVES_ESCOPO_DIA = [
+  'desempenho_dia_escopo_individual',
+  'desempenho_dia_escopo_equipe',
+  'desempenho_dia_escopo_setor',
+  'desempenho_dia_escopo_todos_setores',
+] as const;
+
+/**
+ * Os níveis do painel do dia que esta pessoa tem.
+ *
+ * ## Níveis próprios, e não os do Dashboard (13/10/2026)
+ *
+ * O painel lia os níveis do Dashboard. Na BookPlay o operador tem
+ * `dashboard_escopo_setor` e `_equipe` (20260903220000), e com eles o painel
+ * abria no recebimento da equipe ou do setor, quando a pergunta do operador é
+ * «quanto EU recebi hoje». Desligar os níveis do Dashboard resolveria o painel
+ * e estreitaria o Dashboard junto; por isso o painel ganhou as próprias chaves,
+ * e o painel de Permissões decide cada uma sem mexer na outra.
+ *
+ * ## Enquanto a migration não chega
+ *
+ * Chave ausente vale negado (`useCargoPermissoes`). Sem nenhuma das quatro
+ * gravada, todo mundo cairia em «Os seus números» — inclusive o líder e a
+ * gerência. Então, se NENHUMA delas existe para a pessoa, vale a régua antiga,
+ * a do Dashboard. Basta uma estar gravada para as novas mandarem.
+ */
+export function niveisDoPainelDoDia(params: {
+  /** As permissões do cargo e as exceções da pessoa, como vieram do banco. */
+  gravadas: readonly Record<string, unknown>[];
+  temPermissao: (chave: string) => boolean;
+  /** Os níveis do Dashboard: a régua de antes da migration. */
+  niveisDashboard: readonly NivelEscopo[];
+}): NivelEscopo[] {
+  const { gravadas, temPermissao, niveisDashboard } = params;
+  const migrada = CHAVES_ESCOPO_DIA.some(c => gravadas.some(mapa => c in mapa));
+  if (!migrada) return [...niveisDashboard];
+
+  // Por extenso, e não montadas por prefixo: o contrato do catálogo
+  // (`permissoes-catalogo.test.ts`) só reconhece a chave escrita na chamada.
+  const ligado: Record<NivelEscopo, boolean> = {
+    individual:    temPermissao('desempenho_dia_escopo_individual'),
+    equipe:        temPermissao('desempenho_dia_escopo_equipe'),
+    setor:         temPermissao('desempenho_dia_escopo_setor'),
+    todos_setores: temPermissao('desempenho_dia_escopo_todos_setores'),
+  };
+  return NIVEIS_ESCOPO.filter(n => ligado[n]);
 }
