@@ -107,7 +107,7 @@ export default function PesquisaExperienciaConfig() {
     setSalvando(true);
     try {
       await ligarPesquisa(ligar);
-      toast.success(ligar ? 'Pesquisa liberada para todo mundo' : 'Pesquisa desligada');
+      toast.success(ligar ? 'Pesquisa liberada para a cobrança' : 'Pesquisa desligada');
       await queryClient.invalidateQueries({ queryKey: ['pesquisa-experiencia'] });
     } catch (e) {
       toast.error('Não deu para mudar a pesquisa', { description: (e as Error).message });
@@ -132,7 +132,8 @@ export default function PesquisaExperienciaConfig() {
               </span>
             </CardTitle>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Pergunta para cada pessoa, uma vez só, como está sendo usar o sistema. Desligada, ninguém vê a
+              Pergunta para cada pessoa da cobrança, uma vez só, como está sendo usar o sistema. O comercial não
+              participa: fica fora do total e da contagem. Desligada, ninguém vê a
               pergunta; as respostas que já chegaram continuam aqui.
             </p>
           </div>
@@ -142,13 +143,13 @@ export default function PesquisaExperienciaConfig() {
             </Button>
             <div className="text-right text-xs">
               <div className="font-semibold">{ligada ? 'Liberada' : 'Desligada'}</div>
-              <div className="text-muted-foreground">{ligada ? 'aparece para todo mundo' : 'ninguém vê a pergunta'}</div>
+              <div className="text-muted-foreground">{ligada ? 'aparece para a cobrança' : 'ninguém vê a pergunta'}</div>
             </div>
             <Switch
               checked={ligada}
               disabled={!podeLigar || salvando || isLoading || !!error}
               onCheckedChange={v => setConfirmar(v)}
-              aria-label="Liberar a pesquisa para todos"
+              aria-label="Liberar a pesquisa para a cobrança"
               title={podeLigar ? undefined : 'Só o super admin liga e desliga a pesquisa'}
             />
           </div>
@@ -180,7 +181,7 @@ export default function PesquisaExperienciaConfig() {
                 <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Responderam</div>
                 <div className="text-2xl font-bold tabular-nums">{resumo.total}</div>
                 <div className="text-xs tabular-nums text-muted-foreground">
-                  {publico != null ? `de ${publico} pessoas · ${pct(resumo.total, publico)}%` : 'pessoas'}
+                  {publico != null ? `de ${publico} pessoas da cobrança · ${pct(resumo.total, publico)}%` : 'pessoas'}
                 </div>
               </div>
               {ORDEM_RESUMO.map(n => (
@@ -287,7 +288,7 @@ export default function PesquisaExperienciaConfig() {
       <AlertDialog open={confirmar !== null} onOpenChange={o => { if (!o) setConfirmar(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{confirmar ? 'Liberar a pesquisa para todo mundo?' : 'Desligar a pesquisa?'}</AlertDialogTitle>
+            <AlertDialogTitle>{confirmar ? 'Liberar a pesquisa para a cobrança?' : 'Desligar a pesquisa?'}</AlertDialogTitle>
             <AlertDialogDescription>
               {confirmar
                 ? 'Quem está on-line recebe a pergunta em até 5 minutos, e quem entrar depois recebe ao entrar. Cada pessoa responde uma vez só; não tem «agora não».'
