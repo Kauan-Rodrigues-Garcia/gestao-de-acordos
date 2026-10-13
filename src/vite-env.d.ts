@@ -15,6 +15,8 @@ interface ImportMetaEnv {
   /** Endereço do app do celular. Padrão: https://app.gestaodeacordos.com.br */
   readonly VITE_APP_URL?: string;
   readonly VITE_SENTRY_DSN?: string;
+  /** Chave da YouTube Data API v3 (busca do Som ambiente). Restrinja por referenciador. */
+  readonly VITE_YOUTUBE_API_KEY?: string;
 }
 
 interface ImportMeta {

@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 
 describe('seletor de faixas', () => {
-  it('enxuto: abas Temas e Músicas, sem Playlists, abrindo na aba da faixa escolhida', () => {
+  it('enxuto: abas Temas e Músicas, sem YouTube, abrindo na aba da faixa escolhida', () => {
     render(<PainelSomAmbiente />);
     const abas = screen.getAllByRole('tab').map(t => t.textContent);
     expect(abas).toEqual([`Temas${TEMAS_DE_TERROR.length}`, `Músicas${MUSICAS.length}`]);
@@ -79,7 +79,7 @@ describe('seletor de faixas', () => {
   it('lista que passa de uma página vira páginas, com busca sem acento', () => {
     motor.snap = { ...motor.snap, completo: true, volumeMax: 100, prefs: { ...PADRAO, playlists: MUITAS } };
     render(<PainelSomAmbiente />);
-    fireEvent.click(screen.getByRole('tab', { name: /Playlists/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /YouTube/ }));
     expect(faixasNaTela()).toHaveLength(POR_PAGINA);
     expect(screen.getByText('1 de 2')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
@@ -104,12 +104,12 @@ describe('seletor de faixas', () => {
     expect(within(screen.getByRole('tabpanel')).getByText('Leão')).toBeInTheDocument();
   });
 
-  it('completo: tem a aba Playlists, com as da pessoa e o campo de adicionar', () => {
+  it('completo: tem a aba YouTube, com as da pessoa e o campo de busca', () => {
     motor.snap = { ...motor.snap, completo: true, volumeMax: 100 };
     render(<PainelSomAmbiente />);
-    fireEvent.click(screen.getByRole('tab', { name: /Playlists/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /YouTube/ }));
     expect(within(screen.getByRole('tabpanel')).getByText('Foco')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Link do Spotify ou YouTube')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Buscar música ou artista no YouTube')).toBeInTheDocument();
   });
 });
 

@@ -84,6 +84,10 @@ export interface PlaylistSalva {
   /** O link como a pessoa colou, para relê-lo se a regra de leitura mudar. */
   url: string;
   nome: string;
+  /** Miniatura (música achada na busca do YouTube). Sem ela, vale o ícone. */
+  capa?: string;
+  /** Canal / artista (música achada na busca do YouTube). */
+  descricao?: string;
 }
 
 export interface PreferenciasSom {
@@ -110,7 +114,7 @@ export const VOLUME_PADRAO = 15;
 const VOLUME_PADRAO_ANTIGO = 20;
 /** Versão do que vai gravado. A 2 é a do padrão em 15%. */
 const VERSAO = 2;
-export const LIMITE_PLAYLISTS = 12;
+export const LIMITE_PLAYLISTS = 40;
 
 export const PADRAO: PreferenciasSom = {
   faixa: 'halloween',
@@ -141,7 +145,9 @@ export function normalizar(bruto: unknown): PreferenciasSom {
       const id = chaveDoLink(link);
       if (playlists.some(x => x.id === id)) continue;
       const nome = typeof p.nome === 'string' && p.nome.trim() ? p.nome.trim().slice(0, 60) : link.rotulo;
-      playlists.push({ id, url: p.url, nome });
+      const capa = typeof p.capa === 'string' && p.capa.startsWith('https://i.ytimg.com/') ? p.capa : undefined;
+      const descricao = typeof p.descricao === 'string' && p.descricao.trim() ? p.descricao.trim().slice(0, 80) : undefined;
+      playlists.push({ id, url: p.url, nome, ...(capa ? { capa } : {}), ...(descricao ? { descricao } : {}) });
       if (playlists.length >= LIMITE_PLAYLISTS) break;
     }
   }

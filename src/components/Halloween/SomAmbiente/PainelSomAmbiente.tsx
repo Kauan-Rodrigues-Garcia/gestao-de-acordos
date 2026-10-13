@@ -6,10 +6,10 @@
  * «Tocar ao entrar».
  *
  * Duas versões, decididas pelo motor (`completo`):
- *   - super_admin: tudo acima, mais a aba «Playlists» (as da pessoa), volume
- *     de 0 a 100;
- *   - os demais: enxuta — só as de fábrica, sem a aba «Playlists» (não dá
- *     para adicionar música) e volume de 0 a 50.
+ *   - super_admin: tudo acima, mais a aba «YouTube»: busca qualquer música no
+ *     YouTube (`youtube.ts`), toca e guarda na lista da pessoa; volume de 0 a 100;
+ *   - os demais: enxuta — só as de fábrica, sem a aba «YouTube» (não dá para
+ *     buscar nem adicionar música) e volume de 0 a 50.
  *
  * Mora com o tema de Halloween e só aparece quando o tema está liberado para
  * a pessoa (`useHalloween().disponivel`, no `Layout`). Tudo que muda aqui vai
@@ -21,17 +21,18 @@
 import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type FormEvent } from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
-  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2,
-  ChevronLeft, ChevronRight, Ghost, ListMusic, Music, Search,
+  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
+  ChevronLeft, ChevronRight, Ghost, ListEnd, ListPlus, Music, Search, Youtube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { chaveDoLink, lerLink } from './links';
+import { ErroBusca, buscaConfigurada, buscarMusicas, urlDoVideo, type ResultadoYoutube } from './youtube';
 import {
-  ALTURA_PALCO, alternar, ancorarPalco, buscar, definirRepetir, definirTocarAoEntrar, definirVolume,
-  escolher, progresso, pular, salvarPlaylists, useSomAmbiente,
+  ALTURA_PALCO, adicionarNaFila, alternar, ancorarPalco, buscar, definirRepetir, definirTocarAoEntrar, definirVolume,
+  escolher, limparFila, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
   LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
@@ -47,7 +48,7 @@ const mmss = (seg: number) => {
 };
 
 export function PainelSomAmbiente() {
-  const { estado, prefs, silenciado, noAr, playerAberto, completo, volumeMax, erro } = useSomAmbiente();
+  const { estado, prefs, silenciado, noAr, playerAberto, completo, volumeMax, erro, fila = [] } = useSomAmbiente();
   const escolhida = prefs.faixa;
   const info = infoDaFaixa(escolhida, prefs.playlists) ?? EMBUTIDAS.halloween;
   const tocando = estado === 'tocando' && !silenciado;
@@ -58,7 +59,11 @@ export function PainelSomAmbiente() {
   // O espaço do player externo. O iframe não mora aqui (ver `motor.ts`): o
   // motor o encaixa por cima deste retângulo enquanto o painel está aberto.
   const palco = useRef<HTMLDivElement>(null);
-  const mostrarPalco = externa && noAr === escolhida && playerAberto;
+  // O YouTube toca só o som: o vídeo fica escondido (o motor o mantém vivo fora
+  // da tela). Só reaparece se o navegador recusar o autoplay — aí a pessoa
+  // precisa apertar o play nele. O Spotify mostra o player sempre.
+  const mostrarPalco = externa && noAr === escolhida && playerAberto
+    && (spotify || estado === 'aguardando');
   useEffect(() => {
     ancorarPalco(mostrarPalco ? palco.current : null);
     return () => ancorarPalco(null);
@@ -206,6 +211,7 @@ export function PainelSomAmbiente() {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <SeletorFaixas
           escolhida={escolhida}
+          fila={fila}
           noAr={tocando ? noAr : null}
           playlists={completo ? prefs.playlists : null}
         />
@@ -303,8 +309,10 @@ interface ItemDaLista {
  *
  * `playlists`: as da pessoa; `null` na versão enxuta, que não tem a aba.
  */
-function SeletorFaixas({ escolhida, noAr, playlists }: {
+function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
   escolhida: string;
+  /** Ids na fila, na ordem em que tocam. */
+  fila: string[];
   /** O que está tocando de fato (`null` se nada). */
   noAr: string | null;
   playlists: PlaylistSalva[] | null;
@@ -321,7 +329,7 @@ function SeletorFaixas({ escolhida, noAr, playlists }: {
   const abas: { id: Aba; rotulo: string; Icone: typeof Ghost }[] = [
     { id: 'temas', rotulo: 'Temas', Icone: Ghost },
     { id: 'musicas', rotulo: 'Músicas', Icone: Music },
-    ...(playlists ? [{ id: 'playlists' as const, rotulo: 'Playlists', Icone: ListMusic }] : []),
+    ...(playlists ? [{ id: 'playlists' as const, rotulo: 'YouTube', Icone: Youtube }] : []),
   ];
 
   const paginaDe = (aba: Aba, id: string) =>
@@ -395,13 +403,15 @@ function SeletorFaixas({ escolhida, noAr, playlists }: {
         })}
       </div>
 
+      {aba === 'playlists' && playlists && <BuscaYoutube playlists={playlists} escolhida={escolhida} fila={fila} />}
+
       {temBusca && (
         <div className="relative mt-2">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={busca}
             onChange={e => { setBusca(e.target.value); setPagina(0); }}
-            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música ou artista' : 'Buscar playlist'}
+            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música ou artista' : 'Filtrar a sua lista'}
             aria-label="Buscar na lista"
             className="h-8 pl-8 pr-8 text-xs"
           />
@@ -432,7 +442,7 @@ function SeletorFaixas({ escolhida, noAr, playlists }: {
         ))}
         {filtrados.length === 0 && (
           <p className="py-4 text-center text-xs text-muted-foreground">
-            {termo ? <>Nada com «{busca.trim()}».</> : 'Nenhuma playlist ainda. Cole um link abaixo.'}
+            {termo ? <>Nada com «{busca.trim()}».</> : 'Sua lista está vazia. Busque uma música acima.'}
           </p>
         )}
         {Array.from({ length: vagas }, (_, i) => <div key={`vaga-${i}`} className={ALTURA_LINHA} aria-hidden />)}
@@ -480,8 +490,6 @@ function SeletorFaixas({ escolhida, noAr, playlists }: {
           </Button>
         </div>
       )}
-
-      {aba === 'playlists' && playlists && <NovaPlaylist playlists={playlists} />}
     </div>
   );
 }
@@ -546,63 +554,214 @@ function LinhaFaixa({ id, info, escolhida, tocando, onRemover }: PropsFaixa & { 
   );
 }
 
-function NovaPlaylist({ playlists }: { playlists: PlaylistSalva[] }) {
-  const [link, setLink] = useState('');
-  const [nome, setNome] = useState('');
+/**
+ * A busca de músicas do YouTube. Só dispara no Enter / botão (cada busca gasta
+ * 1% da cota do dia de todo mundo — ver `youtube.ts`). Clicar num resultado
+ * guarda a música na lista da pessoa e toca.
+ */
+function BuscaYoutube({ playlists, escolhida, fila }: { playlists: PlaylistSalva[]; escolhida: string; fila: string[] }) {
+  const [texto, setTexto] = useState('');
+  const [resultados, setResultados] = useState<ResultadoYoutube[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const abortar = useRef<AbortController | null>(null);
+  const configurada = buscaConfigurada();
   const cheia = playlists.length >= LIMITE_PLAYLISTS;
 
-  const adicionar = (e: FormEvent) => {
+  useEffect(() => () => abortar.current?.abort(), []);
+
+  const buscarAgora = async (e: FormEvent) => {
     e.preventDefault();
-    const lido = lerLink(link);
-    if (!lido) {
-      setAviso('Cole o link de uma playlist, álbum ou música do Spotify, ou de uma playlist ou vídeo do YouTube.');
-      return;
-    }
-    const id = chaveDoLink(lido);
-    if (playlists.some(p => p.id === id)) {
-      setAviso('Essa já está na sua lista.');
-      escolher(id);
-      return;
-    }
-    const nova: PlaylistSalva = { id, url: link.trim(), nome: nome.trim().slice(0, 60) || lido.rotulo };
-    salvarPlaylists([...playlists, nova]);
-    escolher(id);
-    setLink('');
-    setNome('');
+    const termo = texto.trim();
+    if (termo.length < 2) return;
+    abortar.current?.abort();
+    const ctrl = new AbortController();
+    abortar.current = ctrl;
+    setBuscando(true);
     setAviso(null);
+    try {
+      const itens = await buscarMusicas(termo, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      setResultados(itens);
+      if (itens.length === 0) setAviso(`Nada encontrado para «${termo}».`);
+    } catch (err) {
+      if (ctrl.signal.aborted) return;
+      setResultados(null);
+      setAviso(err instanceof ErroBusca ? err.message : 'Não deu para buscar agora. Tente de novo.');
+    } finally {
+      if (!ctrl.signal.aborted) setBuscando(false);
+    }
   };
 
-  if (cheia) {
-    return <p className="mt-2 text-xs text-muted-foreground">Lista cheia ({LIMITE_PLAYLISTS}). Tire uma para adicionar outra.</p>;
-  }
+  const limpar = () => {
+    abortar.current?.abort();
+    setTexto('');
+    setResultados(null);
+    setAviso(null);
+    setBuscando(false);
+  };
+
+  /** Garante a música na lista salva e devolve o id; `null` se a lista está cheia. */
+  const guardar = (r: ResultadoYoutube): string | null => {
+    const url = urlDoVideo(r.video);
+    const lido = lerLink(url);
+    if (!lido) return null;
+    const id = chaveDoLink(lido);
+    if (!playlists.some(p => p.id === id)) {
+      if (cheia) {
+        setAviso(`Sua lista está cheia (${LIMITE_PLAYLISTS}). Tire uma música para guardar outra.`);
+        return null;
+      }
+      const nova: PlaylistSalva = {
+        id, url, nome: r.titulo.slice(0, 60), capa: r.capa, ...(r.canal ? { descricao: r.canal } : {}),
+      };
+      salvarPlaylists([...playlists, nova]);
+    }
+    setAviso(null);
+    return id;
+  };
+  const tocarAgora = (r: ResultadoYoutube) => {
+    const id = guardar(r);
+    if (id) escolher(id);
+  };
+  const naFila = (r: ResultadoYoutube) => {
+    const id = guardar(r);
+    if (id) adicionarNaFila(id);
+  };
 
   return (
-    <form onSubmit={adicionar} className="mt-2 space-y-1.5">
-      <div className="flex gap-1.5">
-        <Input
-          value={link}
-          onChange={e => { setLink(e.target.value); setAviso(null); }}
-          placeholder="Link do Spotify ou YouTube"
-          aria-label="Link da playlist"
-          className="h-8 text-xs"
-          inputMode="url"
-        />
-        <Button type="submit" size="sm" className="h-8 shrink-0 gap-1 px-2.5" disabled={!link.trim()}>
-          <Plus className="h-3.5 w-3.5" /> Adicionar
+    <div className="mt-2">
+      <form onSubmit={buscarAgora} className="flex gap-1.5">
+        <div className="relative flex-1">
+          <Youtube className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={texto}
+            onChange={e => { setTexto(e.target.value); if (!e.target.value) limpar(); }}
+            placeholder="Buscar música ou artista no YouTube"
+            aria-label="Buscar música no YouTube"
+            className="h-8 pl-8 text-xs"
+            maxLength={100}
+            disabled={!configurada}
+          />
+        </div>
+        <Button
+          type="submit"
+          size="sm"
+          className="h-8 shrink-0 gap-1 px-2.5"
+          disabled={!configurada || buscando || texto.trim().length < 2}
+        >
+          {buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Buscar
         </Button>
-      </div>
-      {link.trim() && (
-        <Input
-          value={nome}
-          onChange={e => setNome(e.target.value)}
-          placeholder="Nome na lista (opcional)"
-          aria-label="Nome da playlist"
-          className="h-8 text-xs"
-          maxLength={60}
-        />
+      </form>
+
+      {!configurada && (
+        <p className="mt-1.5 text-xs text-muted-foreground" role="status">
+          A busca do YouTube ainda não foi configurada neste ambiente (falta a chave da API).
+        </p>
       )}
-      {aviso && <p className="text-xs text-destructive" role="alert">{aviso}</p>}
-    </form>
+      {aviso && <p className="mt-1.5 text-xs text-destructive" role="alert">{aviso}</p>}
+
+      {fila.length > 0 && (
+        <div className="mt-2 flex items-center justify-between rounded-lg bg-muted/70 px-2.5 py-1.5 text-xs">
+          <span className="flex items-center gap-1.5">
+            <ListEnd className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>
+              Na fila: <span className="font-medium tabular-nums">{fila.length}</span>{' '}
+              {fila.length === 1 ? 'música' : 'músicas'}
+            </span>
+          </span>
+          <button type="button" onClick={limparFila} className="text-muted-foreground hover:text-foreground">
+            Limpar fila
+          </button>
+        </div>
+      )}
+
+      {resultados && resultados.length > 0 && (
+        <section className="mt-2" aria-label="Resultados da busca">
+          <div className="flex items-center justify-between px-1 pb-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Resultados</p>
+            <button type="button" onClick={limpar} className="text-[11px] text-muted-foreground hover:text-foreground">
+              Limpar
+            </button>
+          </div>
+          <div className="space-y-0.5">
+            {resultados.map(r => {
+              const id = `youtube:video:${r.video}`;
+              const info = infoDaPlaylist({ id, url: urlDoVideo(r.video), nome: r.titulo, capa: r.capa, descricao: r.canal || 'YouTube' });
+              return (
+                <LinhaResultado
+                  key={r.video}
+                  info={info}
+                  tocandoAgora={escolhida === id}
+                  naFila={fila.includes(id)}
+                  aoTocar={() => tocarAgora(r)}
+                  aoEnfileirar={() => naFila(r)}
+                />
+              );
+            })}
+          </div>
+          <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
+            A música que você usar fica guardada na sua lista abaixo.
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Um resultado da busca: a capa, o nome e dois botões discretos — «Tocar agora»
+ * e «Adicionar à fila». Os botões ficam sempre à vista (no celular não há hover).
+ */
+function LinhaResultado({ info, tocandoAgora, naFila, aoTocar, aoEnfileirar }: {
+  info: InfoFaixa;
+  tocandoAgora: boolean;
+  naFila: boolean;
+  aoTocar: () => void;
+  aoEnfileirar: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'som-cores flex items-center gap-2.5 rounded-lg p-1.5 pr-1.5 transition-colors',
+        tocandoAgora ? 'som-linha-escolhida' : 'hover:bg-muted/70',
+      )}
+      style={estiloDaFaixa(info) as CSSProperties}
+    >
+      <CapaFaixa info={info} className="h-10 w-10 rounded-md" />
+      <span className="min-w-0 flex-1">
+        <span className="som-linha-nome block truncate text-[13px] font-medium leading-tight">{info.nome}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{info.descricao}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={aoEnfileirar}
+          disabled={naFila}
+          aria-label={naFila ? `«${info.nome}» já está na fila` : `Adicionar «${info.nome}» à fila`}
+          title={naFila ? 'Já está na fila' : 'Adicionar à fila'}
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors',
+            'hover:border-foreground/30 hover:bg-muted hover:text-foreground',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:hover:bg-transparent',
+            naFila && 'som-tinta border-transparent',
+          )}
+        >
+          <ListPlus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={aoTocar}
+          aria-label={`Tocar «${info.nome}» agora`}
+          title="Tocar agora"
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition-transform',
+            'hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          )}
+        >
+          <Play className="h-4 w-4 translate-x-px fill-current" />
+        </button>
+      </span>
+    </div>
   );
 }

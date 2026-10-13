@@ -71,6 +71,11 @@ export interface InstantaneoSom {
   erro: string | null;
   /** De quem é a sessão do som (a posição da faixa é gravada por pessoa). */
   perfil: string | null;
+  /**
+   * A fila: ids de playlists salvas que tocam, na ordem, antes de a sequência
+   * normal andar. Só na memória da aba — recarregar a página a esvazia.
+   */
+  fila: string[];
 }
 
 /** Teto de volume de quem não é super_admin. */
@@ -102,7 +107,7 @@ export function vizinha(prefs: PreferenciasSom, atual: string, passo: 1 | -1, co
 
 let snap: InstantaneoSom = {
   estado: 'parado', prefs: PADRAO, silenciado: false, noAr: null, playerAberto: false,
-  completo: false, volumeMax: VOLUME_MAX_ENXUTO, erro: null, perfil: null,
+  completo: false, volumeMax: VOLUME_MAX_ENXUTO, erro: null, perfil: null, fila: [],
 };
 const ouvintes = new Set<() => void>();
 
@@ -185,7 +190,7 @@ export function soltarSessao(perfilId: string): void {
     encerramento = null;
     pararTudo();
     perfilAtual = null;
-    publicar({ prefs: PADRAO, estado: 'parado', noAr: null, playerAberto: false, erro: null, perfil: null });
+    publicar({ prefs: PADRAO, estado: 'parado', noAr: null, playerAberto: false, erro: null, perfil: null, fila: [] });
   }, 2500);
 }
 
@@ -267,7 +272,7 @@ function elementoAudio(): HTMLAudioElement | null {
     if (a !== audio || !carregada) return;
     if (perfilAtual) esquecerPosicao(perfilAtual);
     if (!querTocar) return;
-    tocar(proximaEmbutida(carregada));
+    tocar(sairDaFila() ?? proximaEmbutida(carregada));
   });
   a.addEventListener('loadedmetadata', () => {
     if (a !== audio || pendente === null) return;
@@ -546,6 +551,13 @@ function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExte
       if (typeof ps === 'number') estadoYt = ps;
     }
     if (estadoYt === undefined || minha !== geracaoExterno) return;
+    // Acabou um vídeo sozinho (uma música da busca): repete ou segue a lista.
+    // Playlist inteira do YouTube cuida da própria ordem e fica de fora.
+    if (estadoYt === 0 && link.tipo === 'video') {
+      if (!querTocar || snap.silenciado) return;
+      if (snap.prefs.repetir) { comando('seekTo', [0, true]); comando('playVideo'); } else pular(1);
+      return;
+    }
     if (estadoYt === 1) { querTocar = true; publicar({ estado: 'tocando', erro: null }); }
     else if (estadoYt === 2) publicar({ estado: snap.silenciado ? snap.estado : 'pausado' });
     else if (estadoYt === 3 && snap.estado !== 'tocando') publicar({ estado: 'carregando' });
@@ -728,7 +740,41 @@ export function escolher(faixa: string): void {
 }
 
 export function pular(passo: 1 | -1): void {
-  tocar(vizinha(snap.prefs, snap.prefs.faixa, passo, snap.completo));
+  // Para a frente, a fila tem a vez antes da sequência.
+  const daFila = passo === 1 ? sairDaFila() : null;
+  tocar(daFila ?? vizinha(snap.prefs, snap.prefs.faixa, passo, snap.completo));
+}
+
+// ── A fila ───────────────────────────────────────────────────────────────────
+
+/** Tira a primeira da fila (a que toca agora), sem deixar passar uma que não existe mais. */
+function sairDaFila(): string | null {
+  if (!snap.completo) return null;
+  const restante = [...snap.fila];
+  while (restante.length) {
+    const id = restante.shift()!;
+    if (snap.prefs.playlists.some(p => p.id === id)) {
+      publicar({ fila: restante });
+      return id;
+    }
+  }
+  if (snap.fila.length) publicar({ fila: [] });
+  return null;
+}
+
+/** Põe uma música salva no fim da fila. A mesma não entra duas vezes seguidas. */
+export function adicionarNaFila(id: string): void {
+  if (!snap.completo || !snap.prefs.playlists.some(p => p.id === id)) return;
+  if (snap.fila.includes(id)) return;
+  publicar({ fila: [...snap.fila, id] });
+}
+
+export function tirarDaFila(id: string): void {
+  if (snap.fila.includes(id)) publicar({ fila: snap.fila.filter(x => x !== id) });
+}
+
+export function limparFila(): void {
+  if (snap.fila.length) publicar({ fila: [] });
 }
 
 export function definirVolume(volume: number): void {
@@ -756,6 +802,9 @@ export function salvarPlaylists(playlists: PreferenciasSom['playlists'], faixa?:
     : PADRAO.faixa);
   const saiuDoAr = snap.noAr && !ehEmbutida(snap.noAr) && !playlists.some(p => p.id === snap.noAr);
   mudarPrefs({ ...snap.prefs, playlists, faixa: novaFaixa });
+  if (snap.fila.some(id => !playlists.some(p => p.id === id))) {
+    publicar({ fila: snap.fila.filter(id => playlists.some(p => p.id === id)) });
+  }
   if (saiuDoAr) {
     soltarExterno();
     publicar({ estado: 'parado', noAr: null });

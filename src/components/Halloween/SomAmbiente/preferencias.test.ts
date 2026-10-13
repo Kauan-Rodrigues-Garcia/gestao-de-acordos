@@ -94,6 +94,20 @@ describe('preferências do Som ambiente', () => {
     expect(p.playlists[0]).toEqual({ id: 'spotify:playlist:37i9dQZF1DX8Uebhn9wzrS', url: SPOTIFY, nome: 'Spotify · Playlist' });
   });
 
+  it('música da busca do YouTube guarda capa e canal; capa de fora é descartada', () => {
+    const p = normalizar({
+      playlists: [
+        { url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk', nome: 'Lo-fi', capa: 'https://i.ytimg.com/vi/jfKfPfyJRdk/mqdefault.jpg', descricao: 'Lofi Girl' },
+        { url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', nome: 'Outra', capa: 'https://evil.example/x.jpg' },
+      ],
+    });
+    expect(p.playlists[0]).toEqual({
+      id: 'youtube:video:jfKfPfyJRdk', url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk', nome: 'Lo-fi',
+      capa: 'https://i.ytimg.com/vi/jfKfPfyJRdk/mqdefault.jpg', descricao: 'Lofi Girl',
+    });
+    expect(p.playlists[1].capa).toBeUndefined();
+  });
+
   it('mantém a playlist escolhida quando ela está salva', () => {
     const p = normalizar({ faixa: 'spotify:playlist:37i9dQZF1DX8Uebhn9wzrS', playlists: [{ url: SPOTIFY, nome: 'Foco' }] });
     expect(p.faixa).toBe('spotify:playlist:37i9dQZF1DX8Uebhn9wzrS');

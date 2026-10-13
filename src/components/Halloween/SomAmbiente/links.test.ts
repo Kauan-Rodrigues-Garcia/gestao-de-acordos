@@ -77,7 +77,8 @@ describe('endereços dos players', () => {
     const video = lerLink('https://youtu.be/jfKfPfyJRdk')!;
     const uv = new URL(enderecoYoutube(video, 'https://gestao.exemplo'));
     expect(uv.pathname).toBe('/embed/jfKfPfyJRdk');
-    // Vídeo sozinho só repete com `playlist=` apontando para ele.
-    expect(uv.searchParams.get('playlist')).toBe('jfKfPfyJRdk');
+    // Vídeo sozinho não repete no player: o motor decide o que vem depois.
+    expect(uv.searchParams.get('loop')).toBe('0');
+    expect(uv.searchParams.get('playlist')).toBeNull();
   });
 });

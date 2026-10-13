@@ -118,8 +118,9 @@ export function enderecoYoutube(link: LinkExterno, origem: string): string {
     const base = link.video ? `/embed/${link.video}` : '/embed/videoseries';
     return `https://www.youtube-nocookie.com${base}?${p}`;
   }
-  // Vídeo sozinho repete com `playlist=` apontando para ele mesmo.
-  p.set('playlist', link.id);
+  // Vídeo sozinho NÃO repete: quando acaba, o motor passa para a próxima da
+  // lista (ou repete, se a pessoa pediu — ver `motor.ts`).
+  p.set('loop', '0');
   return `https://www.youtube-nocookie.com/embed/${link.id}?${p}`;
 }
 

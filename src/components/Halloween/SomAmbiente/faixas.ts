@@ -95,7 +95,8 @@ export function infoDaPlaylist(p: PlaylistSalva): InfoFaixa {
   const youtube = p.id.startsWith('youtube:');
   return {
     nome: p.nome,
-    descricao: youtube ? 'YouTube' : 'Spotify',
+    descricao: p.descricao ?? (youtube ? 'YouTube' : 'Spotify'),
+    ...(p.capa ? { capa: p.capa } : {}),
     Icone: youtube ? Youtube : ListMusic,
     cor: youtube ? COR_YOUTUBE : COR_SPOTIFY,
   };
