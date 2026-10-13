@@ -12,12 +12,7 @@ export default tseslint.config(
   // `coverage` entrou junto com `dist`: os dois são gerados e ignorados pelo
   // git, e o relatório do v8 traz JS de terceiros (prettify, sorter) que o
   // lint reclamava — seis avisos sobre arquivos que nem estão no repositório.
-  // `examples/` entra pelo mesmo motivo de `arquivo-morto`: é material de
-  // referência, não código vivo. O README dele diz, com todas as letras,
-  // «refer to the relevant logic rather than using directly» — não está em
-  // tsconfig nenhum, ninguém o importa, e não vai para o bundle. Lintar ali
-  // rendia 13 avisos sobre código de exemplo da Stripe.
-  { ignores: ["dist", "coverage", "arquivo-morto", "examples", "src/lib/database.types.ts", "scripts/robo59/robo59.mjs"] },
+  { ignores: ["dist", "coverage", "arquivo-morto", "src/lib/database.types.ts", "scripts/robo59/robo59.mjs"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
