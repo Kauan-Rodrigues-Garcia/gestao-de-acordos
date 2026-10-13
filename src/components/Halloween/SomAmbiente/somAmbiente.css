@@ -177,27 +177,44 @@
 
 /* ── O visor do header (BotaoSomAmbiente) ──────────────────────────────────── */
 
-/* Abre e fecha por largura e fundo — duas propriedades, sem layout em cascata
-   (o botão tem 32 px de altura fixa e `overflow: hidden`). */
+/* Abre e fecha por largura, altura e fundo; o botão tem `overflow: hidden`. */
 .som-visor {
   background: transparent;
-  transition: width .32s cubic-bezier(.22, 1, .36, 1), background-color .3s ease;
+  transition: width .32s cubic-bezier(.22, 1, .36, 1), height .32s cubic-bezier(.22, 1, .36, 1),
+    background-color .3s ease, box-shadow .3s ease;
 }
 .som-visor-aberto {
   background: var(--som-fundo);
-  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / .08);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / .09), 0 6px 16px -8px hsl(0 0% 0% / .6);
 }
 .som-visor-fone { transition: opacity .16s ease; }
 .som-visor-info { transition: opacity .2s ease .1s; }
-.som-visor-estado { transition: opacity .12s ease; }
-.som-visor:hover .som-visor-estado,
-.som-visor:focus-within .som-visor-estado { opacity: 0; }
 
-/* Os controles entram sobre um degradê, para o nome sumir por baixo deles. */
-.som-visor-controles {
-  background: linear-gradient(90deg, transparent 0, var(--som-fundo) 1.25rem);
-  transition: opacity .15s ease;
+/* O disco: a capa gira enquanto toca e para quando pausa. Gira só a imagem — o
+   ícone de quem não tem capa (playlists) fica parado. Como o equalizador, não
+   consulta `prefers-reduced-motion`: é o sinal de que está tocando. */
+.som-disco { position: relative; display: block; flex: none; height: 32px; width: 32px; }
+.som-disco img {
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px hsl(0 0% 0% / .45);
+  animation: som-disco 7s linear infinite;
 }
+.som-disco[data-pausado] img { animation-play-state: paused; }
+/* O furo do vinil, na cor da pílula. */
+.som-disco:has(img)::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 9999px;
+  background: var(--som-fundo);
+  box-shadow: 0 0 0 2px hsl(0 0% 0% / .35);
+}
+@keyframes som-disco { to { transform: rotate(360deg); } }
+
 .som-visor-botao {
   display: inline-flex;
   align-items: center;
@@ -209,6 +226,9 @@
 .som-visor-botao:hover { background: hsl(0 0% 100% / .22); color: #fff; }
 .som-visor-botao:active { transform: scale(.92); }
 .som-visor-botao:focus-visible { outline: 2px solid hsl(0 0% 100% / .9); outline-offset: 1px; }
+/* O play, na cor da capa. */
+.som-visor-play { background: var(--som-destaque); color: hsl(0 0% 6%); }
+.som-visor-play:hover { background: var(--som-destaque); color: hsl(0 0% 6%); filter: brightness(1.1); }
 
 @media (prefers-reduced-motion: reduce) {
   .som-visor, .som-visor-info, .som-visor-fone { transition-duration: .01s; transition-delay: 0s; }

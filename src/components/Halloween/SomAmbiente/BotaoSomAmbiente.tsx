@@ -12,10 +12,10 @@
  *
  * ## O visor (13/10/2026)
  *
- * Sem música, é o fone de sempre. Tocando, ele se expande num visor: a capa, o
- * nome e as barrinhas do equalizador — o mesmo desenho de uma linha da lista.
- * Com o mouse em cima, o equalizador dá lugar a anterior / pausar / próxima;
- * clicar em qualquer outro ponto abre o painel.
+ * Sem música, é o fone de sempre. Tocando, ele se expande numa pílula na cor
+ * da capa: a capa vira um disco que gira enquanto toca (e para quando pausa),
+ * com o nome, o autor e anterior / pausar / próxima sempre à mostra. Clicar em
+ * qualquer outro ponto abre o painel.
  *
  * Pausou, o visor NÃO some: fica `PAUSA_MS` à espera. Passado o prazo sem
  * voltar a tocar, ele se recolhe de volta no fone. O prazo não corre enquanto o
@@ -98,8 +98,8 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
         onMouseEnter={() => setSobre(true)}
         onMouseLeave={() => setSobre(false)}
         className={cn(
-          'som-cores som-visor group relative h-8 shrink-0 overflow-hidden rounded-full',
-          aparece ? 'som-visor-aberto w-[228px] max-w-[calc(100vw-8.5rem)]' : 'w-8',
+          'som-cores som-visor relative shrink-0 overflow-hidden rounded-full',
+          aparece ? 'som-visor-aberto h-10 w-[248px] max-w-[calc(100vw-8.5rem)]' : 'h-8 w-8',
         )}
         style={aparece && info ? estiloDaFaixa(info) as React.CSSProperties : undefined}
       >
@@ -129,21 +129,22 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
               )}
             </span>
 
-            {/* O visor: a capa, o nome e o estado. */}
+            {/* O visor: o disco, o nome e o autor. A direita fica livre para
+                os controles, que moram por cima. */}
             {info && (
               <span
                 className={cn(
-                  'som-visor-info flex min-w-0 flex-1 items-center gap-2 pl-1',
+                  'som-visor-info flex min-w-0 flex-1 items-center gap-2.5 pl-1 pr-[92px]',
                   aparece ? 'opacity-100' : 'pointer-events-none opacity-0',
                 )}
                 aria-hidden
               >
-                <CapaFaixa info={info} className="h-6 w-6 rounded-md" icone="h-3.5 w-3.5" />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium leading-none">{info.nome}</span>
-                <span className="som-visor-estado mr-2 flex h-4 w-5 shrink-0 items-center justify-center">
-                  {tocando
-                    ? <Equalizador className="text-[color:var(--som-destaque)]" />
-                    : <Pause className="h-3 w-3 fill-current opacity-70" />}
+                <span className="som-disco" data-pausado={noArAgora ? undefined : ''}>
+                  <CapaFaixa info={info} className="h-8 w-8 rounded-full" icone="h-4 w-4" />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="truncate text-[12.5px] font-semibold leading-none">{info.nome}</span>
+                  <span className="truncate text-[10.5px] leading-none text-white/65">{info.descricao}</span>
                 </span>
               </span>
             )}
@@ -154,10 +155,7 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
             botão não é HTML válido. Só existem com o visor aberto. */}
         {aparece && (
           <span
-            className={cn(
-              'som-visor-controles absolute inset-y-0 right-0 flex items-center gap-0.5 pl-6 pr-1',
-              'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
-            )}
+            className="absolute inset-y-0 right-2 flex items-center gap-0.5"
           >
             <button
               type="button" className="som-visor-botao h-6 w-6"
@@ -166,7 +164,7 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
               <SkipBack className="h-3.5 w-3.5 fill-current" />
             </button>
             <button
-              type="button" className="som-visor-botao h-7 w-7 bg-white/15"
+              type="button" className="som-visor-botao som-visor-play h-7 w-7"
               onClick={alternar}
               aria-label={tocando || estado === 'carregando' ? 'Pausar' : 'Tocar'}
               title={tocando || estado === 'carregando' ? 'Pausar' : 'Tocar'}
