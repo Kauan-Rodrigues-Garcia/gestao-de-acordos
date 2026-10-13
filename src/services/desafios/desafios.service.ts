@@ -162,6 +162,8 @@ export function normalizarRegra(bruto: unknown, tipo: TipoDesafio): RegraDesafio
     metaColetiva:   numeroOuNulo(o.metaColetiva),
     participantes:  normalizarParticipantes(o.participantes),
     premios:        normalizarPremios(o.premios),
+    condicaoPremio: typeof o.condicaoPremio === 'string' && o.condicaoPremio.trim()
+      ? o.condicaoPremio.trim() : null,
     // `proprio` é o padrão e o que toda campanha anterior fazia. Só a disputa
     // entre líderes pede o outro.
     fonteResultado: o.fonteResultado === 'equipe_liderada' ? 'equipe_liderada' : 'proprio',

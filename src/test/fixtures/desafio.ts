@@ -21,6 +21,7 @@ export const desafioFixture: Desafio = {
       { posicao: 4, premio: 'Almoço especial', icone: '🍴' },
       { posicao: 5, premio: 'Almoço especial', icone: '🍴' },
     ],
+    condicaoPremio: null,
     fonteResultado: 'equipe_liderada', fonteMeta: 'projecao_equipe', agregacaoLider: 'equipe_unica',
   },
   visual: {

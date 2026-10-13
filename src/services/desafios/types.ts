@@ -158,6 +158,15 @@ export interface RegraDesafio {
    */
   premios: PremioPorPosicao[];
   /**
+   * A condição para LEVAR o prêmio, além da colocação — ex.: «o líder precisa
+   * bater a meta e o setor entregar acima de 85%». `null` = sem condição.
+   *
+   * É aviso, não cálculo: a tela mostra num card na aba e no painel do menu, e
+   * o ranking continua ordenando todo mundo. Quem confere a condição no
+   * fechamento é a operação.
+   */
+  condicaoPremio: string | null;
+  /**
    * De onde sai o número de cada participante.
    *
    * `proprio` — o recebimento da própria pessoa. É o padrão e o caso de toda

@@ -164,6 +164,7 @@ interface Formulario {
   nome: string;
   descricao: string;
   premio: string;
+  condicaoPremio: string;
   dataInicio: string;
   dataFim: string;
   tipo: TipoDesafio;
@@ -203,7 +204,7 @@ const PARTICIPACAO_VAZIA: ParticipantesDesafio = {
 function formularioVazio(): Formulario {
   const hoje = hojeISO();
   return {
-    nome: '', descricao: '', premio: '',
+    nome: '', descricao: '', premio: '', condicaoPremio: '',
     dataInicio: hoje, dataFim: hoje,
     tipo: 'bater_meta',
     escopoDisputa: 'empresa', premiacao: 'melhor_colocado',
@@ -227,6 +228,7 @@ function formularioDe(d: Desafio): Formulario {
     nome: d.nome,
     descricao: d.descricao ?? '',
     premio: d.premio ?? '',
+    condicaoPremio: d.regra.condicaoPremio ?? '',
     dataInicio: d.dataInicio,
     dataFim: d.dataFim,
     tipo: d.tipo,
@@ -414,6 +416,7 @@ export function PaginaDesafio({
         metaColetiva: metaOuNulo(form.metaColetiva),
         participantes: participacao,
         premios,
+        condicaoPremio: form.condicaoPremio.trim() || null,
         fonteResultado: form.fonteResultado,
         fonteMeta: form.fonteMeta,
         agregacaoLider: form.agregacaoLider,
@@ -910,6 +913,21 @@ export function PaginaDesafio({
           </div>
 
           <EditorPremios valor={premios} onChange={setPremios} />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="desafio-condicao-premio">Condição para levar o prêmio</Label>
+            <Textarea
+              id="desafio-condicao-premio"
+              value={form.condicaoPremio}
+              onChange={e => setForm(f => ({ ...f, condicaoPremio: e.target.value }))}
+              placeholder="O líder precisa bater a meta e o setor precisa entregar acima de 85% do resultado."
+              rows={3}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Aparece num card na aba e no painel do menu. É só aviso: o ranking
+              continua mostrando todo mundo na ordem.
+            </p>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">

@@ -91,6 +91,7 @@ function desafio(over: OverDesafio = {}): Desafio {
         convidados: [],
       },
       premios: [],
+      condicaoPremio: null,
       fonteResultado: 'proprio',
       fonteMeta: 'individual',
       agregacaoLider: 'equipe_unica',

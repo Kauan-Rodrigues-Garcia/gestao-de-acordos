@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { ClassificacaoDesafio } from '@/pages/Analitico/Desafios/ClassificacaoDesafio';
+import { CondicaoPremio } from '@/pages/Analitico/Desafios/CondicaoPremio';
 import { RankingEquipes } from '@/pages/Analitico/Desafios/RankingEquipes';
 import { dataBR, estiloDaCampanha, hojeISO, percentualCheio } from '@/pages/Analitico/Desafios/tema';
 import { EnfeiteHalloween, FONTE_TITULO_HALLOWEEN, useFonteHalloween } from '@/pages/Analitico/Desafios/EnfeiteHalloween';
@@ -148,6 +149,8 @@ export function PainelDesafioVisual({ desafio, aberto, onClose, resultado, carre
                 {!desafio.regra.premios.length && desafio.premio && (
                   <p className="flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-foreground"><Gift className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />{desafio.premio}</p>
                 )}
+                <CondicaoPremio texto={desafio.regra.condicaoPremio} />
+
 
                 {semParticipantes ? (
                   <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">Nenhum participante neste recorte do desafio.</p>

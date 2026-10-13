@@ -29,6 +29,16 @@ describe('PainelDesafio', () => {
     expect(screen.getByRole('button', { name: 'Prêmio do 1º lugar: Tablet Samsung' })).toBeInTheDocument();
   });
 
+  it('mostra a regra para levar o prêmio quando a campanha tem uma, e nada quando não tem', () => {
+    const texto = 'O líder precisa bater a meta e o setor precisa entregar acima de 85% do resultado.';
+    const desafio = { ...desafioFixture, regra: { ...desafioFixture.regra, condicaoPremio: texto } };
+    const { rerender } = render(<PainelDesafio desafio={desafio} aberto onClose={vi.fn()} />);
+    expect(within(screen.getByRole('complementary', { name: 'Regra para levar o prêmio' })).getByText(texto)).toBeInTheDocument();
+
+    rerender(<PainelDesafio desafio={desafioFixture} aberto onClose={vi.fn()} />);
+    expect(screen.queryByRole('complementary', { name: 'Regra para levar o prêmio' })).not.toBeInTheDocument();
+  });
+
   it('usa o mesmo recorte da consulta e não busca a campanha com a gaveta fechada', () => {
     const { rerender } = render(<PainelDesafio desafio={desafioFixture} aberto onClose={vi.fn()} />);
     expect(mocks.resultado).toHaveBeenLastCalledWith(desafioFixture, { operadorId: 'p4', setorDeCadastro: 'setor-teste' });

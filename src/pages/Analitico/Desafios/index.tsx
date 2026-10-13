@@ -42,6 +42,7 @@ import { estiloDaCampanha } from './tema';
 import type { Desafio } from '@/services/desafios/types';
 import { ehCorridaDeProjecao } from '@/services/desafios/calcularDesafio';
 import { ArteDesafio } from './ArteDesafio';
+import { CondicaoPremio } from './CondicaoPremio';
 import { CatalogoDesafios } from './CatalogoDesafios';
 import { DesafioHero } from './DesafioHero';
 import { IndicadoresDesafio } from './IndicadoresDesafio';
@@ -391,6 +392,8 @@ export function AbaDesafios({
 
       {/* A arte de divulgação, logo abaixo do Hero. Some quando não há uma. */}
       <ArteDesafio desafio={aberta} />
+
+      <CondicaoPremio texto={aberta.regra.condicaoPremio} />
 
       {calculando && !resultado && <EsqueletoDesafio />}
 
