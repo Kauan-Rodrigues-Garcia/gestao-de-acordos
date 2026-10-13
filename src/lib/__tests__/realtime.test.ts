@@ -82,6 +82,8 @@ const mockRemoveChannel = vi.fn((c: CanalFalso) => {
   return Promise.resolve('ok');
 });
 const mockConnect = vi.fn();
+/** O `onAuthStateChange` do supervisor — registrado uma vez para o arquivo todo. */
+const auth = { cb: null as ((evento: string, sessao: { access_token?: string } | null) => void) | null };
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -90,6 +92,9 @@ vi.mock('@/lib/supabase', () => ({
     realtime: {
       isConnected: () => socket.conectado,
       connect:     () => mockConnect(),
+    },
+    auth: {
+      onAuthStateChange: (cb: typeof auth.cb) => { auth.cb = cb; },
     },
   },
 }));
@@ -729,5 +734,42 @@ describe('assinarTabela — «Unauthorized» suspende o tópico', () => {
     canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
 
     expect(topicosAtivos()).toEqual(['permissoes:e1']);
+  });
+
+  // 13/10/2026: o supabase-js reemite `SIGNED_IN` com a MESMA sessão a cada
+  // volta do foco. Religar ali era um join recusado a cada ~1,5 min por pessoa.
+  it('SIGNED_IN com o mesmo token (volta do foco) não religa', () => {
+    assinarSinal('permissoes', 'e1', { onMudou: vi.fn() });
+    auth.cb?.('SIGNED_IN', { access_token: 'tok-foco' });
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
+    mockChannel.mockClear();
+
+    auth.cb?.('SIGNED_IN', { access_token: 'tok-foco' });
+    auth.cb?.('SIGNED_IN', { access_token: 'tok-foco' });
+
+    expect(mockChannel).not.toHaveBeenCalled();
+  });
+
+  it('token novo (renovação ou outro login) religa uma vez', () => {
+    assinarSinal('permissoes', 'e1', { onMudou: vi.fn() });
+    auth.cb?.('SIGNED_IN', { access_token: 'tok-antigo' });
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
+    mockChannel.mockClear();
+
+    auth.cb?.('TOKEN_REFRESHED', { access_token: 'tok-renovado' });
+
+    expect(mockChannel).toHaveBeenCalledTimes(1);
+    expect(mockChannel.mock.calls[0][0]).toBe('permissoes:e1');
+  });
+
+  it('INITIAL_SESSION só registra o token: não religa', () => {
+    assinarSinal('permissoes', 'e1', { onMudou: vi.fn() });
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR', RECUSA);
+    mockChannel.mockClear();
+
+    auth.cb?.('INITIAL_SESSION', { access_token: 'tok-inicial' });
+    auth.cb?.('SIGNED_IN', { access_token: 'tok-inicial' });
+
+    expect(mockChannel).not.toHaveBeenCalled();
   });
 });

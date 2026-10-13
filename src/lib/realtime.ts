@@ -44,7 +44,8 @@
  *
  * Então recusa de permissão SUSPENDE o tópico: o canal sai (o que zera o
  * `rejoinTimer` da biblioteca), nenhum timer fica armado, e o registro espera.
- * O que muda a resposta é a SESSÃO — e é ela que religa, no `onAuthStateChange`.
+ * O que muda a resposta é a SESSÃO — e é ela que religa, no `onAuthStateChange`,
+ * quando o token muda (o `SIGNED_IN` da volta do foco traz o mesmo e não conta).
  * Continua valendo o de sempre: quem não devia assinar não assina (ver a guarda
  * de sessão em `useCargoPermissoes`); isto é a rede de baixo.
  *
@@ -459,10 +460,23 @@ function ativarSupervisor(): void {
 
   // Sessão nova religa o que a RLS tinha recusado. Opcional no acesso porque os
   // mocks de `@/lib/supabase` nos testes não trazem `auth`.
+  //
+  // «Sessão nova» é TOKEN novo, não o evento (13/10/2026): o supabase-js
+  // reemite `SIGNED_IN` com a mesma sessão a cada volta do foco para a aba, e
+  // cada reemissão religava o barrado — um join recusado a cada ~1,5 min por
+  // operador que alterna entre o ERP e o sistema (444 erros em 2 h, 28 pessoas,
+  // todos em `acordos:<empresa>`). `INITIAL_SESSION` só registra o token.
   const auth = (supabase as {
-    auth?: { onAuthStateChange?: (cb: (evento: string) => void) => unknown };
+    auth?: {
+      onAuthStateChange?: (cb: (evento: string, sessao: { access_token?: string } | null) => void) => unknown;
+    };
   }).auth;
-  auth?.onAuthStateChange?.((evento) => {
+  let ultimoToken: string | null = null;
+  auth?.onAuthStateChange?.((evento, sessao) => {
+    const token = sessao?.access_token ?? null;
+    const mudou = token !== ultimoToken;
+    ultimoToken = token;
+    if (!mudou) return;
     if (evento === 'SIGNED_IN' || evento === 'TOKEN_REFRESHED') religarBarrados();
   });
 }

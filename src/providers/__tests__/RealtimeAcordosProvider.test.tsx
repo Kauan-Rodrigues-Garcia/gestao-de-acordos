@@ -14,10 +14,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 const {
-  mockPerfilRef, mockEmpresaRef, ouvintesPorTopico, saidas, idsPedidosRef, linhasRelidasRef, erroRef,
+  mockPerfilRef, mockEmpresaRef, mockPermissoesRef, ouvintesPorTopico, saidas, idsPedidosRef, linhasRelidasRef, erroRef,
 } = vi.hoisted(() => ({
   mockPerfilRef:     { current: null as unknown },
   mockEmpresaRef:    { current: null as unknown },
+  mockPermissoesRef: { current: {} as Record<string, boolean> },
   ouvintesPorTopico: new Map<string, {
     onSinal?: (p: Record<string, unknown>, s: string) => void;
     onReconectado?: () => void;
@@ -32,6 +33,9 @@ const {
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ perfil: mockPerfilRef.current }) }));
 vi.mock('@/hooks/useEmpresa', () => ({ useEmpresa: () => ({ empresa: mockEmpresaRef.current }) }));
 vi.mock('@/lib/mobile/rota', () => ({ useNaRotaDoCelular: () => false }));
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => ({ permissoes: mockPermissoesRef.current }),
+}));
 
 vi.mock('@/lib/realtime', () => ({
   assinarTabela: vi.fn((assinatura: { topico: string }, ouvinte: object) => {
@@ -55,7 +59,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
-  RealtimeAcordosProvider, useRealtimeAcordos, juntarAviso, AGRUPAR_MS, TOLERANCIA_QUEDA_MS,
+  RealtimeAcordosProvider, useRealtimeAcordos, juntarAviso, ouveAEmpresa, AGRUPAR_MS, TOLERANCIA_QUEDA_MS,
   type AcordoRealtimeEvent,
 } from '@/providers/RealtimeAcordosProvider';
 import { assinarTabela } from '@/lib/realtime';
@@ -93,7 +97,9 @@ describe('RealtimeAcordosProvider — aviso com os ids', () => {
     linhasRelidasRef.current = [];
     erroRef.current = null;
     mockEmpresaRef.current = { id: EMPRESA_ID };
-    mockPerfilRef.current = { id: EU, empresa_id: EMPRESA_ID };
+    mockPerfilRef.current = { id: EU, empresa_id: EMPRESA_ID, perfil: 'lider' };
+    // Líder com a aba Acordos na equipe: passa na policy da empresa.
+    mockPermissoesRef.current = { ver_acordos: true, acordos_escopo_equipe: true };
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -103,6 +109,36 @@ describe('RealtimeAcordosProvider — aviso com os ids', () => {
     for (const chamada of vi.mocked(assinarTabela).mock.calls) {
       expect(chamada[0].escutas).toEqual([{ sinal: 'mudou' }]);
     }
+  });
+
+  it('operador (só os próprios) não assina o tópico da empresa — a RLS recusaria', () => {
+    mockPerfilRef.current = { id: EU, empresa_id: EMPRESA_ID, perfil: 'operador' };
+    mockPermissoesRef.current = { ver_acordos: true, acordos_escopo_individual: true };
+    renderHook(() => useRealtimeAcordos(), { wrapper: wrapper() });
+    expect([...ouvintesPorTopico.keys()]).toEqual([`acordos-op:${EU}`]);
+  });
+
+  it('permissões que chegam depois ligam a empresa sem refazer o tópico do dono', () => {
+    mockPermissoesRef.current = {};
+    const { rerender } = renderHook(() => useRealtimeAcordos(), { wrapper: wrapper() });
+    expect([...ouvintesPorTopico.keys()]).toEqual([`acordos-op:${EU}`]);
+
+    mockPermissoesRef.current = { ver_acordos: true, acordos_escopo_setor: true };
+    rerender();
+
+    expect(ouvintesPorTopico.has(`acordos:${EMPRESA_ID}`)).toBe(true);
+    expect(saidas.current).toBe(0);
+  });
+
+  it('aviso no tópico da empresa entra no mesmo agrupamento', async () => {
+    linhasRelidasRef.current = [acordo('a9')];
+    const handler = vi.fn();
+    const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: wrapper() });
+    act(() => { result.current.subscribe('t', handler); });
+
+    await aviso(`acordos:${EMPRESA_ID}`, { operacao: 'UPDATE', ids: ['a9'] });
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'UPDATE' }));
   });
 
   it('sem empresa ou sem perfil não assina nada', () => {
@@ -274,5 +310,33 @@ describe('juntarAviso', () => {
     const p = vazio();
     juntarAviso(p, { operacao: 'INSERT', recarregar: true });
     expect(p.recarregar).toBe(true);
+  });
+});
+
+/** Espelho de `fn_user_escopo_acordos() >= 1 OR fn_user_is_super_admin()`. */
+describe('ouveAEmpresa', () => {
+  it('super_admin passa sem olhar o mapa', () => {
+    expect(ouveAEmpresa('super_admin', {})).toBe(true);
+  });
+
+  it('só os próprios (individual) não passa', () => {
+    expect(ouveAEmpresa('operador', { ver_acordos: true, acordos_escopo_individual: true })).toBe(false);
+  });
+
+  it('escopo além dos meus numa aba ligada passa', () => {
+    expect(ouveAEmpresa('lider', { ver_painel_lider: true, painel_lider_escopo_equipe: true })).toBe(true);
+    expect(ouveAEmpresa('gerencia', { ver_pix_automatico: true, pix_escopo_todos_setores: true })).toBe(true);
+  });
+
+  it('escopo numa aba DESLIGADA não conta', () => {
+    expect(ouveAEmpresa('lider', { ver_acordos: false, acordos_escopo_setor: true })).toBe(false);
+  });
+
+  it('dashboard não tem interruptor: o escopo dele basta', () => {
+    expect(ouveAEmpresa('lider', { dashboard_escopo_setor: true })).toBe(true);
+  });
+
+  it('mapa vazio (permissões ainda carregando) não passa', () => {
+    expect(ouveAEmpresa('lider', {})).toBe(false);
   });
 });

@@ -118,6 +118,10 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'presença entre empresas: só super_admin enxerga quem está on-line fora da própria.',
   },
+  'providers/RealtimeAcordosProvider.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'espelho da policy `acordos_sinal_empresa` (`OR fn_user_is_super_admin()`): decide só se vale ASSINAR o aviso da empresa, para não pedir um join que o servidor recusaria. Não libera dado — a releitura passa pela RLS de acordos.',
+  },
   'components/Layout.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',

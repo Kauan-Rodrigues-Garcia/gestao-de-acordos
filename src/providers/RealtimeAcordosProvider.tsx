@@ -14,8 +14,7 @@
  *  Agora o banco manda, por comando, SÓ os ids que mudaram:
  *    `acordos-op:<eu>`       os meus acordos — todo mundo ouve
  *    `acordos:<empresa>`     os da empresa — só quem tem escopo além de «os
- *                            meus»; para os outros a RLS recusa o canal e o
- *                            `assinarTabela` o deixa quieto
+ *                            meus» (`ouveAEmpresa`, espelho da policy)
  *  e a tela relê esses ids com a RLS de sempre. Ninguém recebe o conteúdo de
  *  um acordo que não pode ler: o aviso não leva conteúdo, e a releitura volta
  *  vazia para o que está fora do alcance.
@@ -45,6 +44,7 @@ import { supabase, type Acordo } from '@/lib/supabase';
 import { assinarTabela, type EstadoCanal } from '@/lib/realtime';
 import { useAuth }    from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes, type PermissoesMap } from '@/hooks/useCargoPermissoes';
 import { useNaRotaDoCelular } from '@/lib/mobile/rota';
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
@@ -73,6 +73,7 @@ export const TOLERANCIA_QUEDA_MS = 3_000;
 const IDS_POR_LEITURA = 100;
 
 const SELECT_COMPLETO = '*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)';
+const ESCUTAS = [{ sinal: 'mudou' }];
 
 interface RealtimeContextValue {
   /** Estado da conexão — use para indicador visual */
@@ -126,6 +127,37 @@ export function juntarAviso(p: Pendentes, aviso: Record<string, unknown>): void 
   for (const id of ids) destino.add(id);
 }
 
+/**
+ * As abas que leem `acordos` e o interruptor de cada uma — as mesmas de
+ * `fn_user_escopo_acordos()` (migration 20260823010000). Dashboard não tem
+ * interruptor.
+ */
+const ABAS_DE_ACORDOS: ReadonlyArray<readonly [aba: string, chave: string | null]> = [
+  ['dashboard',        null],
+  ['acordos',          'ver_acordos'],
+  ['lixeira',          'ver_lixeira'],
+  ['pix',              'ver_pix_automatico'],
+  ['painel_lider',     'ver_painel_lider'],
+  ['painel_diretoria', 'ver_painel_diretoria'],
+];
+const NIVEIS_ALEM_DOS_MEUS = ['equipe', 'setor', 'todos_setores'] as const;
+
+/**
+ * A pessoa passa na policy `acordos_sinal_empresa`? Espelho, em memória, de
+ * `fn_user_escopo_acordos() >= 1 OR fn_user_is_super_admin()`.
+ *
+ * Lê as permissões do CARGO, sem as exceções da pessoa — é o que a função do
+ * banco lê. Assinar sem passar não traz nada: o servidor recusa o join e loga
+ * um ERROR (13/10/2026: era a maior parte do vermelho do Realtime).
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- pura, exportada para teste.
+export function ouveAEmpresa(cargo: string | null | undefined, permissoesDoCargo: PermissoesMap): boolean {
+  if (cargo === 'super_admin') return true;
+  return ABAS_DE_ACORDOS.some(([aba, chave]) =>
+    (chave === null || permissoesDoCargo[chave] === true)
+    && NIVEIS_ALEM_DOS_MEUS.some(nivel => permissoesDoCargo[`${aba}_escopo_${nivel}`] === true));
+}
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
@@ -142,6 +174,11 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
   // Registry: id → callback
   const subscribersRef = useRef<Map<string, Subscriber>>(new Map());
   const mountedRef     = useRef(true);
+  /** Onde os avisos do tópico da empresa entram — o agrupamento do tópico do dono. */
+  const receptorRef    = useRef<{
+    aoAviso:      (payload: Record<string, unknown>) => void;
+    aoReconectar: () => void;
+  } | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -159,6 +196,9 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
 
   const empresaId = empresa?.id ?? perfil?.empresa_id ?? null;
   const perfilId  = perfil?.id ?? null;
+  // Enquanto as permissões carregam vale «não»: o tópico entra quando chegarem.
+  const { permissoes: permissoesDoCargo } = useCargoPermissoes();
+  const ouveEmpresa = ouveAEmpresa(perfil?.perfil, permissoesDoCargo);
 
   useEffect(() => {
     if (!empresaId || !perfilId) return;
@@ -213,8 +253,9 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       avisar({ eventType: 'UPDATE' });
     };
 
-    // O indicador segue o tópico do dono — todo mundo o ouve. O da empresa pode
-    // ser recusado (operador), e isso não é queda.
+    // O indicador segue o tópico do dono — todo mundo o ouve. O da empresa
+    // ainda pode ser recusado (permissão mudou e o mapa não chegou), e isso não
+    // é queda.
     const aoEstado = (estado: EstadoCanal) => {
       if (!vivo || !mountedRef.current) return;
       if (estado === 'conectado') {
@@ -231,24 +272,34 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     };
 
     setStatus('connecting');
-    const escutas = [{ sinal: 'mudou' }];
     const sairDono = assinarTabela(
-      { topico: `acordos-op:${perfilId}`, escutas },
+      { topico: `acordos-op:${perfilId}`, escutas: ESCUTAS },
       { onSinal: aoAviso, onReconectado: aoReconectar, onEstado: aoEstado },
     );
-    const sairEmpresa = assinarTabela(
-      { topico: `acordos:${empresaId}`, escutas },
-      { onSinal: aoAviso, onReconectado: aoReconectar },
-    );
+    receptorRef.current = { aoAviso, aoReconectar };
 
     return () => {
       vivo = false;
+      receptorRef.current = null;
       if (timerAgrupar) clearTimeout(timerAgrupar);
       if (timerQueda) clearTimeout(timerQueda);
       sairDono();
-      sairEmpresa();
     };
   }, [empresaId, perfilId, queryClient, naRotaDoCelular]);
+
+  // O tópico da empresa em efeito próprio: as permissões chegam depois do
+  // perfil, e ligar este não pode derrubar e refazer o do dono. Os avisos caem
+  // no mesmo agrupamento do efeito de cima (declarado antes, roda antes).
+  useEffect(() => {
+    if (!empresaId || !perfilId || naRotaDoCelular || !ouveEmpresa) return;
+    return assinarTabela(
+      { topico: `acordos:${empresaId}`, escutas: ESCUTAS },
+      {
+        onSinal:       (payload) => receptorRef.current?.aoAviso(payload),
+        onReconectado: () => receptorRef.current?.aoReconectar(),
+      },
+    );
+  }, [empresaId, perfilId, ouveEmpresa, naRotaDoCelular]);
 
   return (
     <RealtimeContext.Provider value={{ status, subscribe, unsubscribe }}>
