@@ -52,3 +52,34 @@
   min-height: 34px;
 }
 .tela-equipe .s-chips button[aria-pressed='true'] { background: #14261f; color: #fff; border-color: #14261f; }
+
+/* ── Plantão Elite (13/10/2026) ───────────────────────────────────────── */
+.tela-equipe .s-plantao-nav {
+  display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px;
+  margin: 0 16px 10px; padding: 6px; border-radius: 16px; background: rgba(255, 255, 255, 0.78);
+}
+.tela-equipe .s-plantao-nav button {
+  height: 40px; border: 0; border-radius: 12px; background: rgba(20, 38, 31, 0.06);
+  font-size: 22px; line-height: 1; color: var(--e-tinta);
+}
+.tela-equipe .s-plantao-nav button:disabled { opacity: 0.3; }
+.tela-equipe .s-plantao-dia { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.tela-equipe .s-plantao-dia b { font-size: 15px; }
+.tela-equipe .s-plantao-dia span { font-size: 12px; color: var(--e-grafite); }
+.tela-equipe .s-plantao-hoje {
+  display: block; margin: -2px auto 10px; border: 0; background: none;
+  font-size: 13px; font-weight: 600; color: #1f6b5c;
+}
+/* A folha na largura do aparelho; a tabela rola de lado dentro dela. */
+.tela-equipe .s-plantao-folha { margin: 0 16px; }
+.tela-equipe .s-plantao-folha .folha-elite { padding: 16px; }
+/* Resumo do dia: três quadros não cabem lado a lado no celular — a dupla em
+ * cima, o total do setor embaixo. `!important` vence a coluna inline da folha;
+ * a cópia que vira imagem (largura fixa) fica como na web. */
+.tela-equipe .s-plantao-folha .folha-elite .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.tela-equipe .s-plantao-folha .folha-elite .grid > :last-child { grid-column: 1 / -1; }
+/* A cópia que vira imagem: inteira, fora da tela, sem ocupar lugar. */
+.tela-equipe .s-plantao-copia {
+  position: fixed; left: -10000px; top: 0; pointer-events: none;
+}
+.tela-equipe .e-btn:disabled { opacity: 0.55; }

@@ -34,6 +34,7 @@ import { useMinhaComissao, type MinhaComissao } from '@/services/comissao/useMin
 import { temCardComissao } from '@/services/comissao/temCardComissao';
 import { ouvirAvisosDoServiceWorker } from '@/lib/mobile/sw';
 import { degrausComAmanha, type DegrauComAmanha } from '@/lib/projecaoMetas';
+import { alvoDoDia, type AlvoDoDia } from '@/lib/mobile/alvoDoDia';
 import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
 
 const CHAVE_VISTO_ATE = 'mobile:visto-ate';
@@ -108,6 +109,11 @@ export interface TelaMobile {
     projecaoPct: number;
     degraus: DegrauComAmanha[];
   } | null;
+  /**
+   * Onde a pessoa tem que estar hoje e no próximo dia útil (13/10/2026). A
+   * mesma projeção do Quartil; `null` sem meta ou com a meta do mês batida.
+   */
+  alvo: AlvoDoDia | null;
   fotoUrl: string | null;
 
   recarregar: () => void;
@@ -279,6 +285,12 @@ export function useTelaMobile(): TelaMobile {
       quartis: painel.quartis,
     }),
   } : null;
+  const alvo = proj && painel.metaDupla.recebidoTotal < painel.metaDupla.metaTotal
+    ? alvoDoDia({
+        recebido: painel.metaDupla.recebidoTotal, esperado: proj.esperado, metaDiaria: proj.metaDiaria,
+        hojeISO: hoje, feriados: painel.feriados,
+      })
+    : null;
 
   const dia = Number(hoje.slice(8, 10));
   const doDia = painel.porDia[dia];
@@ -306,6 +318,7 @@ export function useTelaMobile(): TelaMobile {
     saidas,
     dispensarSaidas,
     quartil,
+    alvo,
     fotoUrl: perfil?.foto_url ?? null,
     recarregar,
   };

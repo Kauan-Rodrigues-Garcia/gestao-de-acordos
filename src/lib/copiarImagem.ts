@@ -204,3 +204,42 @@ export async function copiarImagemDoElemento(
   baixar(await png, nomeArquivo);
   return 'baixado';
 }
+
+export type ResultadoCompartilharImagem = 'compartilhado' | 'cancelado';
+
+/** O aparelho abre a folha de compartilhar com arquivo? (celular sim; quase nenhum computador.) */
+export function podeCompartilharImagem(): boolean {
+  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function' || typeof File === 'undefined') return false;
+  try {
+    return navigator.canShare?.({ files: [new File([], 'teste.png', { type: 'image/png' })] }) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** O PNG de um elemento, sem copiar nem baixar — para quem quer o arquivo pronto antes do toque. */
+export function gerarPngDoElemento(el: HTMLElement, fundo = '#FCFCFC'): Promise<Blob> {
+  return gerarPng(el, fundo);
+}
+
+/**
+ * A imagem direto para a folha de compartilhar do celular (WhatsApp, etc.) —
+ * o «copiar e mandar» do app (13/10/2026). Recebe o PNG JÁ PRONTO: o iPhone só
+ * abre a folha logo depois do toque, e gerar a imagem ali (o html2canvas leva
+ * um ou dois segundos) faria o Safari recusar. Quem chama confere antes
+ * `podeCompartilharImagem`; fechar a folha sem escolher é `cancelado`.
+ */
+export async function compartilharPng(
+  png: Blob,
+  nomeArquivo: string,
+  titulo: string,
+): Promise<ResultadoCompartilharImagem> {
+  const arquivo = new File([png], nomeArquivo, { type: 'image/png' });
+  try {
+    await navigator.share({ files: [arquivo], title: titulo });
+    return 'compartilhado';
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return 'cancelado';
+    throw e;
+  }
+}

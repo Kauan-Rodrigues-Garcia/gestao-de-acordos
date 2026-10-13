@@ -8,6 +8,7 @@ import { valorCurto } from '@/lib/mobile/formato';
 import type { EquipeNaTela } from './montarEquipe';
 import { Linha, TabelaFaixas } from './partes';
 import { BarraMeta, DinheiroAnimado, PctAnimado } from '../comum/partesComuns';
+import { CartaoAlvoDoDia } from '../comum/CartaoAlvoDoDia';
 
 function inteiro(v: number): string {
   return `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
@@ -39,6 +40,10 @@ export function AbaEquipe({ equipe, rodape }: { equipe: EquipeNaTela; rodape: Re
           <div className="v-linha">Sem meta configurada para a equipe neste mês.</div>
         )}
       </section>
+
+      {equipe.alvo && !metaBatida && (
+        <CartaoAlvoDoDia alvo={equipe.alvo} titulo="Onde a equipe precisa estar" unidadeHO={equipe.emHO} />
+      )}
 
       {meta !== null && d.projecaoPct !== null && diferenca !== null && (
         <p className="e-frase">

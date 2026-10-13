@@ -15,6 +15,7 @@ import { ROUTE_PATHS } from '@/lib/index';
 import { ehSuperAdmin } from '@/lib/mobile/preferencia';
 import { acessoDasVisoes, ehGerencia, rotaDaVisao } from '@/lib/mobile/visoes';
 import { useUnidadeApp } from '@/lib/mobile/unidadeApp';
+import { useTenant } from '@/lib/tenant-config';
 import { registrarServiceWorker } from '@/lib/mobile/sw';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
@@ -32,16 +33,19 @@ import { AbaSetor } from './AbaSetor';
 import { AbaQuartisSetor } from './AbaQuartisSetor';
 import { EquipesRecolhiveis } from './EquipesRecolhiveis';
 import { AvisosDoSetor } from './AvisosDoSetor';
+import { AbaPlantao } from './AbaPlantao';
 import { hojeDoConjunto } from './contas';
 import '../equipe/equipe.css';
 import './setor.css';
 
-type Aba = 'setor' | 'quartis' | 'grafico' | 'hoje';
-const ABAS: { id: Aba; rotulo: string; icone: 'equipe' | 'quartis' | 'grafico' | 'hoje' }[] = [
+type Aba = 'setor' | 'quartis' | 'grafico' | 'hoje' | 'plantao';
+const ABAS: { id: Aba; rotulo: string; icone: 'equipe' | 'quartis' | 'grafico' | 'hoje' | 'plantao' }[] = [
   { id: 'setor', rotulo: 'Setor', icone: 'equipe' },
   { id: 'quartis', rotulo: 'Quartis', icone: 'quartis' },
   { id: 'grafico', rotulo: 'Gráfico', icone: 'grafico' },
   { id: 'hoje', rotulo: 'Hoje', icone: 'hoje' },
+  // Só com a chave do Plantão Elite (BookPlay) — ver `AbaPlantao`.
+  { id: 'plantao', rotulo: 'Plantão', icone: 'plantao' },
 ];
 
 const TODO_O_SETOR = '__setor__';
@@ -59,9 +63,14 @@ function TelaDoSetor() {
   const { temPermissao } = useCargoPermissoes();
   const navigate = useNavigate();
   const location = useLocation();
+  // Plantão Elite: a mesma chave da aba do Painel Líder, que nasce só na
+  // BookPlay e na gerência é ligada por exceção em quem é do Receptivo.
+  const tenant = useTenant();
+  const temPlantao = tenant.slug === 'bookplay' && temPermissao('painel_lider_sub_elite');
+  const abas = ABAS.filter(a => a.id !== 'plantao' || temPlantao);
   const [aba, setAba] = useState<Aba>(() => {
     const pedida = new URLSearchParams(location.search).get('aba');
-    return ABAS.some(a => a.id === pedida) ? (pedida as Aba) : 'setor';
+    return abas.some(a => a.id === pedida) ? (pedida as Aba) : 'setor';
   });
   const [doHoje, setDoHoje] = useState<string>(TODO_O_SETOR);
   const [passoIPhone, setPassoIPhone] = useState(false);
@@ -162,6 +171,7 @@ function TelaDoSetor() {
                 rodape={<EquipesRecolhiveis equipes={tela.equipes} linhas={tela.linhasPessoas}
                   mes={tela.mes} hojeISO={tela.hojeISO} />} />
             )}
+            {aba === 'plantao' && temPlantao && <AbaPlantao empresaId={tela.empresaId} rodape={rodape} />}
             {aba === 'hoje' && (
               <>
                 <div className="s-chips" role="group" aria-label="De quem é o Hoje">
@@ -190,8 +200,8 @@ function TelaDoSetor() {
       <ChatDoApp acimaDoRodape={temSetor ? 72 : 0} />
 
       {temSetor && !tela.carregando && (
-        <nav className="e-abas" aria-label="Abas">
-          {ABAS.map(a => (
+        <nav className="e-abas" aria-label="Abas" style={{ gridTemplateColumns: `repeat(${abas.length}, 1fr)` }}>
+          {abas.map(a => (
             <button key={a.id} type="button" aria-current={aba === a.id ? 'page' : undefined}
               onClick={() => setAba(a.id)}>
               <IconeAba aba={a.icone} />{a.rotulo}

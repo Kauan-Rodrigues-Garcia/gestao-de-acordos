@@ -12,20 +12,18 @@
  * Quem decide a dupla é o banco: quem está numa dupla recebe a dela em
  * qualquer data; os demais, a dupla do dia (ímpar/par).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Calendar, ChevronLeft, ChevronRight, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { getTodayISO } from '@/lib/index';
-import { assinarSinal } from '@/lib/sinais';
 import { COR_GESTAO } from '@/lib/relatorioGestao';
 import { copiarImagemDoElemento } from '@/lib/copiarImagem';
 import {
-  buscarPlantaoElite, faixasApuradas, horaAgoraSaoPaulo, montarQuadroElite,
-  outroDiaDePlantao, plantaoDoDia, primeiroNome, ultimoDiaDoPlantao,
-  type LinhaQuadroElite, type RespostaPlantaoElite,
+  primeiroNome,
+  type LinhaQuadroElite, type QuadroElite, type RespostaPlantaoElite,
 } from '@/services/plantaoElite/plantaoElite';
+import { usePlantaoElite } from './usePlantaoElite';
 
 /** Cor do Gestão com `#` — a folha usa só estas, nunca as variáveis do tema. */
 const cor = (k: keyof typeof COR_GESTAO) => `#${COR_GESTAO[k]}`;
@@ -70,69 +68,18 @@ interface Props {
 }
 
 export function PlantaoElite({ empresaId }: Props) {
-  const hoje = getTodayISO();
-  const [data, setData] = useState(hoje);
-  const [resposta, setResposta] = useState<RespostaPlantaoElite | null>(null);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
+  const {
+    hoje, data, setData, resposta, quadro, carregando, erro, carregar,
+    plantaoFixo, anterior, seguinte, diaDeEntrada, foraDoPlantao, nomeArquivo,
+  } = usePlantaoElite(empresaId);
   const [copiando, setCopiando] = useState(false);
   const folhaRef = useRef<HTMLDivElement>(null);
-  /** A última busca pedida: resposta de busca antiga não sobrescreve a nova. */
-  const pedido = useRef(0);
-  /** A data de entrada já foi acertada para o plantão da pessoa? Uma vez só. */
-  const diaAcertado = useRef(false);
-
-  const carregar = useCallback(async (silencioso = false) => {
-    const meu = ++pedido.current;
-    if (!silencioso) setCarregando(true);
-    try {
-      const r = await buscarPlantaoElite(empresaId, data);
-      if (meu !== pedido.current) return;
-      setResposta(r);
-      setErro(null);
-
-      // Quem é da dupla e abriu a aba em dia da outra dupla cai no último dia
-      // do próprio plantão — o quadro de hoje seria o de um dia sem plantão.
-      if (!diaAcertado.current) {
-        diaAcertado.current = true;
-        if (r.sou_da_dupla && plantaoDoDia(data) !== r.plantao) {
-          setData(ultimoDiaDoPlantao(data, r.plantao));
-        }
-      }
-    } catch (e) {
-      if (meu !== pedido.current) return;
-      setErro(e instanceof Error ? e.message : 'Não foi possível ler o plantão.');
-    } finally {
-      if (meu === pedido.current) setCarregando(false);
-    }
-  }, [empresaId, data]);
-
-  useEffect(() => { void carregar(); }, [carregar]);
-
-  // O robô do 59 sobe o analítico de hora em hora: o sinal do banco avisa, e o
-  // quadro relê em silêncio (o portão do sinal já espaça as releituras).
-  useEffect(() => {
-    const reler = () => { void carregar(true); };
-    return assinarSinal('analitico', empresaId, { onMudou: reler, onReconectado: reler });
-  }, [empresaId, carregar]);
-
-  const quadro = useMemo(() => (resposta
-    ? montarQuadroElite(resposta, faixasApuradas(data, hoje, horaAgoraSaoPaulo()))
-    : null), [resposta, data, hoje]);
-
-  // A dupla da pessoa manda na navegação: as setas pulam os dias da outra.
-  const plantaoFixo = resposta?.sou_da_dupla ? resposta.plantao : null;
-  const anterior = outroDiaDePlantao(data, -1, plantaoFixo);
-  const seguinte = outroDiaDePlantao(data, 1, plantaoFixo);
-  const diaDeEntrada = plantaoFixo ? ultimoDiaDoPlantao(hoje, plantaoFixo) : hoje;
-  const foraDoPlantao = !!resposta && plantaoDoDia(data) !== resposta.plantao;
 
   const copiar = async () => {
     if (!folhaRef.current || !resposta) return;
     setCopiando(true);
     try {
-      const nomes = resposta.membros.map(m => primeiroNome(m.nome)).join('-');
-      const r = await copiarImagemDoElemento(folhaRef.current, `plantao-elite-${data}-${nomes}.png`);
+      const r = await copiarImagemDoElemento(folhaRef.current, nomeArquivo);
       if (r === 'copiado') toast.success('Imagem copiada. É só colar no WhatsApp.');
       else toast.success('O navegador não deixou copiar: a imagem foi baixada.');
     } catch (e) {
@@ -142,13 +89,8 @@ export function PlantaoElite({ empresaId }: Props) {
     }
   };
 
-  const maiorHora = quadro
-    ? Math.max(0, ...quadro.linhas.map(l => l.totalHora), quadro.depois?.totalHora ?? 0)
-    : 0;
-
   return (
     <div className="space-y-4">
-      <style>{CSS_FOLHA}</style>
 
       {/* ── Barra: data, recarregar, copiar ─────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -214,103 +156,135 @@ export function PlantaoElite({ empresaId }: Props) {
 
       {/* ── A folha: o que aparece aqui é o que vai na imagem ─────────────── */}
       {quadro && resposta && quadro.membros.length > 0 && (
-        <div
-          ref={folhaRef}
-          className={cn('folha-elite w-full max-w-[760px] rounded-2xl p-5 sm:p-6 transition-opacity', carregando && 'opacity-60')}
-          style={{ background: cor('fundo'), color: cor('texto'), border: `1px solid ${cor('borda')}` }}
-        >
-          {/* Cabeçalho */}
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: cor('primario') }}>
-                Plantão Elite · {resposta.setor?.nome ?? 'Receptivo'}
-              </div>
-              <div className="mt-1 text-xl font-bold leading-tight">
-                Plantão {ROTULO_PLANTAO[resposta.plantao]} — {quadro.membros.map(m => primeiroNome(m.nome)).join(' & ')}
-              </div>
-              <div className="mt-0.5 text-sm" style={{ color: cor('fraco') }}>
-                {dataPorExtenso(data)}
-                {foraDoPlantao && (
-                  <span className="ml-2 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold align-middle"
-                    style={{ background: cor('alertaFundo'), color: cor('alerta') }}>
-                    fora do dia do plantão
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: cor('fraco') }}>
-                Total do plantão
-              </div>
-              <div className="text-2xl font-bold tabular-nums" style={{ color: cor('primario') }}>
-                {moeda.format(quadro.totalPlantao)}
-              </div>
-            </div>
-          </div>
-
-          {/* Faixas. No celular a tabela rola dentro da folha. */}
-          <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-[13px] tabular-nums" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr style={{ background: cor('suave'), color: cor('fraco') }}>
-                <th className="text-left font-semibold text-[11px] uppercase tracking-wide py-2 pl-3 rounded-l-lg">Hora</th>
-                {quadro.membros.map(m => (
-                  <th key={m.id} className="text-right font-semibold text-[11px] uppercase tracking-wide py-2 px-2">
-                    {primeiroNome(m.nome)} (R$)
-                  </th>
-                ))}
-                <th className="text-left font-semibold text-[11px] uppercase tracking-wide py-2 px-2 w-[28%]">Na hora (R$)</th>
-                <th className="text-right font-semibold text-[11px] uppercase tracking-wide py-2 pr-3 rounded-r-lg">Acumulado (R$)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quadro.linhas.map(l => (
-                <LinhaFaixa key={l.faixa} linha={l} maiorHora={maiorHora} />
-              ))}
-              {quadro.depois && <LinhaFaixa linha={quadro.depois} maiorHora={maiorHora} destaque />}
-            </tbody>
-          </table>
-          </div>
-
-          {/* Resumo do dia */}
-          <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: cor('fraco') }}>
-            Resumo do dia
-          </div>
-          <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${quadro.membros.length + 1}, minmax(0, 1fr))` }}>
-            {quadro.membros.map((m, i) => (
-              <div key={m.id} className="rounded-xl px-3 py-2.5" style={{ background: cor('cartao'), border: `1px solid ${cor('bordaSuave')}` }}>
-                <div className="text-xs font-semibold truncate">{primeiroNome(m.nome)}</div>
-                <div className="mt-1 text-base font-bold tabular-nums">{moeda.format(quadro.porMembro[i].total)}</div>
-                <div className="text-[11px] tabular-nums" style={{ color: cor('fraco') }}>
-                  Média do dia {moeda.format(quadro.porMembro[i].media)}
-                </div>
-              </div>
-            ))}
-            <div className="rounded-xl px-3 py-2.5" style={{ background: cor('realce'), border: `1px solid ${cor('primarioClaro')}` }}>
-              <div className="text-xs font-semibold truncate" style={{ color: cor('primarioEscuro') }}>
-                Total do {resposta.setor?.nome ?? 'Receptivo'} no dia
-              </div>
-              <div className="mt-1 text-base font-bold tabular-nums" style={{ color: cor('primarioEscuro') }}>
-                {resposta.setor ? moeda.format(resposta.setor.total) : '—'}
-              </div>
-              <div className="text-[11px]" style={{ color: cor('fraco') }}>
-                {resposta.setor ? `${resposta.setor.qtd} pagamento${resposta.setor.qtd === 1 ? '' : 's'}` : 'sem setor'}
-              </div>
-            </div>
-          </div>
-
-          {/* Rodapé */}
-          <div className="mt-4 pt-3 flex items-center justify-between gap-3 flex-wrap text-[11px]"
-            style={{ color: cor('tenue'), borderTop: `1px solid ${cor('bordaSuave')}` }}>
-            <span className="font-semibold" style={{ color: cor('primarioEscuro') }}>Gestão</span>
-            <span>
-              Faixa pela hora em que o pagamento chegou ao analítico
-              {resposta.ultima_chegada ? ` · atualizado às ${horaDaChegada(resposta.ultima_chegada, data)}` : ''}
-            </span>
-          </div>
-        </div>
+        <FolhaPlantaoElite folhaRef={folhaRef} resposta={resposta} quadro={quadro} data={data}
+          foraDoPlantao={foraDoPlantao} carregando={carregando} />
       )}
     </div>
+  );
+}
+
+/**
+ * A folha do plantão — o que aparece na tela É a imagem que vai para o
+ * WhatsApp. Exportada para o app do celular (13/10/2026), que a mostra rolando
+ * na largura do aparelho e fotografa uma cópia de largura fixa (`larguraFixa`),
+ * para a imagem não sair cortada.
+ */
+export function FolhaPlantaoElite({
+  resposta, quadro, data, foraDoPlantao, carregando = false, larguraFixa = false, folhaRef,
+}: {
+  resposta: RespostaPlantaoElite;
+  quadro: QuadroElite;
+  data: string;
+  foraDoPlantao: boolean;
+  carregando?: boolean;
+  /** 760 px cravados, sem rolagem: a cópia que vira imagem no celular. */
+  larguraFixa?: boolean;
+  folhaRef?: React.Ref<HTMLDivElement>;
+}) {
+  const maiorHora = Math.max(0, ...quadro.linhas.map(l => l.totalHora), quadro.depois?.totalHora ?? 0);
+  return (
+    <>
+      <style>{CSS_FOLHA}</style>
+      <div
+        ref={folhaRef}
+        className={cn(
+          'folha-elite rounded-2xl p-5 sm:p-6 transition-opacity',
+          larguraFixa ? 'w-[760px]' : 'w-full max-w-[760px]',
+          carregando && 'opacity-60',
+        )}
+        style={{ background: cor('fundo'), color: cor('texto'), border: `1px solid ${cor('borda')}` }}
+      >
+        {/* Cabeçalho */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: cor('primario') }}>
+              Plantão Elite · {resposta.setor?.nome ?? 'Receptivo'}
+            </div>
+            <div className="mt-1 text-xl font-bold leading-tight">
+              Plantão {ROTULO_PLANTAO[resposta.plantao]} — {quadro.membros.map(m => primeiroNome(m.nome)).join(' & ')}
+            </div>
+            <div className="mt-0.5 text-sm" style={{ color: cor('fraco') }}>
+              {dataPorExtenso(data)}
+              {foraDoPlantao && (
+                <span className="ml-2 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold align-middle"
+                  style={{ background: cor('alertaFundo'), color: cor('alerta') }}>
+                  fora do dia do plantão
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: cor('fraco') }}>
+              Total do plantão
+            </div>
+            <div className="text-2xl font-bold tabular-nums" style={{ color: cor('primario') }}>
+              {moeda.format(quadro.totalPlantao)}
+            </div>
+          </div>
+        </div>
+    
+        {/* Faixas. No celular a tabela rola dentro da folha. */}
+        <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-[13px] tabular-nums" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead>
+            <tr style={{ background: cor('suave'), color: cor('fraco') }}>
+              <th className="text-left font-semibold text-[11px] uppercase tracking-wide py-2 pl-3 rounded-l-lg">Hora</th>
+              {quadro.membros.map(m => (
+                <th key={m.id} className="text-right font-semibold text-[11px] uppercase tracking-wide py-2 px-2">
+                  {primeiroNome(m.nome)} (R$)
+                </th>
+              ))}
+              <th className="text-left font-semibold text-[11px] uppercase tracking-wide py-2 px-2 w-[28%]">Na hora (R$)</th>
+              <th className="text-right font-semibold text-[11px] uppercase tracking-wide py-2 pr-3 rounded-r-lg">Acumulado (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quadro.linhas.map(l => (
+              <LinhaFaixa key={l.faixa} linha={l} maiorHora={maiorHora} />
+            ))}
+            {quadro.depois && <LinhaFaixa linha={quadro.depois} maiorHora={maiorHora} destaque />}
+          </tbody>
+        </table>
+        </div>
+    
+        {/* Resumo do dia */}
+        <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: cor('fraco') }}>
+          Resumo do dia
+        </div>
+        <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${quadro.membros.length + 1}, minmax(0, 1fr))` }}>
+          {quadro.membros.map((m, i) => (
+            <div key={m.id} className="rounded-xl px-3 py-2.5" style={{ background: cor('cartao'), border: `1px solid ${cor('bordaSuave')}` }}>
+              <div className="text-xs font-semibold truncate">{primeiroNome(m.nome)}</div>
+              <div className="mt-1 text-base font-bold tabular-nums">{moeda.format(quadro.porMembro[i].total)}</div>
+              <div className="text-[11px] tabular-nums" style={{ color: cor('fraco') }}>
+                Média do dia {moeda.format(quadro.porMembro[i].media)}
+              </div>
+            </div>
+          ))}
+          <div className="rounded-xl px-3 py-2.5" style={{ background: cor('realce'), border: `1px solid ${cor('primarioClaro')}` }}>
+            <div className="text-xs font-semibold truncate" style={{ color: cor('primarioEscuro') }}>
+              Total do {resposta.setor?.nome ?? 'Receptivo'} no dia
+            </div>
+            <div className="mt-1 text-base font-bold tabular-nums" style={{ color: cor('primarioEscuro') }}>
+              {resposta.setor ? moeda.format(resposta.setor.total) : '—'}
+            </div>
+            <div className="text-[11px]" style={{ color: cor('fraco') }}>
+              {resposta.setor ? `${resposta.setor.qtd} pagamento${resposta.setor.qtd === 1 ? '' : 's'}` : 'sem setor'}
+            </div>
+          </div>
+        </div>
+    
+        {/* Rodapé */}
+        <div className="mt-4 pt-3 flex items-center justify-between gap-3 flex-wrap text-[11px]"
+          style={{ color: cor('tenue'), borderTop: `1px solid ${cor('bordaSuave')}` }}>
+          <span className="font-semibold" style={{ color: cor('primarioEscuro') }}>Gestão</span>
+          <span>
+            Faixa pela hora em que o pagamento chegou ao analítico
+            {resposta.ultima_chegada ? ` · atualizado às ${horaDaChegada(resposta.ultima_chegada, data)}` : ''}
+          </span>
+        </div>
+      </div>
+    </>
   );
 }
 

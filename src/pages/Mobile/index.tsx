@@ -22,6 +22,7 @@ import {
   AvisoSaidas, CartaoComissao, CartaoQuartil, CartaoRecebido, ListaPagamentos, ParHojeRanking,
 } from './partes';
 import { FotoOuLogo, FundoVivo } from './comum/partesComuns';
+import { CartaoAlvoDoDia } from './comum/CartaoAlvoDoDia';
 import { mesPorExtenso } from '@/pages/Dashboard/Analitico/mensagemOperador';
 import { useTelaMobile } from './useTelaMobile';
 import { EscolherOperador } from './EscolherOperador';
@@ -177,6 +178,9 @@ function TelaDoOperador() {
               unidadeHO={tela.emHO}
               semRelatorio={tela.semRelatorio}
             />
+            {tela.alvo && (
+              <CartaoAlvoDoDia alvo={tela.alvo} titulo="Onde você precisa estar" unidadeHO={tela.emHO} />
+            )}
             {tela.comissao && <CartaoComissao comissao={tela.comissao} />}
             <ParHojeRanking
               hoje={tela.recebidoHoje}

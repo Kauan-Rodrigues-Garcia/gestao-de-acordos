@@ -6,6 +6,7 @@
  */
 import { diasUteisDecorridos, diasUteisDoMes } from '@/lib/diasUteis';
 import { calcularProjecao } from '@/lib/projecaoMetas';
+import { alvoDoDia, type AlvoDoDia } from './alvoDoDia';
 
 export interface RitmoDoConjunto {
   meta: number;
@@ -21,6 +22,8 @@ export interface RitmoDoConjunto {
   fecha: number;
   /** Quanto falta para a meta (zero se já passou). */
   falta: number;
+  /** Onde tem que estar hoje e no próximo dia útil. `null` em mês que já fechou. */
+  alvo: AlvoDoDia | null;
 }
 
 export function ritmoDoConjunto(e: {
@@ -52,5 +55,9 @@ export function ritmoDoConjunto(e: {
     pctMeta: (e.recebido / meta) * 100,
     fecha: decorridos > 0 ? (e.recebido / decorridos) * totalUteis : e.recebido,
     falta: Math.max(0, meta - e.recebido),
+    alvo: e.mes < mesAtual ? null : alvoDoDia({
+      recebido: e.recebido, esperado: p.esperado, metaDiaria: p.metaDiaria,
+      hojeISO: e.hojeISO, feriados: e.feriados,
+    }),
   };
 }

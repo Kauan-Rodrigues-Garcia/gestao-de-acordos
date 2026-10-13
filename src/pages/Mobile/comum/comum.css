@@ -185,3 +185,23 @@
 }
 .v-resumo-grade b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .v-resumo-grade i { font-style: normal; font-size: 12px; color: var(--v-tinta-2); }
+
+/* ── Onde precisa estar: hoje e amanhã (13/10/2026) ───────────────────── */
+/* Mesmo cartão pastel, em lavanda névoa: lê como «o alvo», não como o recebido. */
+.v-cartao.v-alvo { --v-cartao: #e4e6f1; --v-tinta-2: #565b73; margin-top: 12px; padding: 16px 20px; }
+/* Logo abaixo do Resumo, herda o respiro que o Resumo dava ao que vem depois. */
+.v-resumo + .v-alvo { margin-top: 0; margin-bottom: 12px; }
+.v-alvo-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+.v-alvo-grade > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.v-alvo-grade > div + div { padding-left: 14px; border-left: 1px solid rgba(20, 24, 46, 0.12); }
+.v-alvo-grade small {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--v-tinta-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.v-alvo-grade b {
+  font-family: 'Bricolage Grotesque', Figtree, sans-serif; font-size: 21px; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1.15;
+}
+.v-alvo-grade i { font-style: normal; font-size: 12.5px; color: var(--v-tinta-2); }
+.v-alvo-grade i.v-alvo-ok { color: #1f8a5b; font-weight: 600; }
+.v-alvo-grade i.v-alvo-atras { color: #c0453b; font-weight: 600; }

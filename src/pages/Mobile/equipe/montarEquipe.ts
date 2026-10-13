@@ -16,6 +16,7 @@
  */
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
+import { alvoDoDia, type AlvoDoDia } from '@/lib/mobile/alvoDoDia';
 import type { QuartilConfig } from '@/lib/supabase';
 import {
   operadoresDaEquipe,
@@ -75,6 +76,8 @@ export interface EquipeNaTela {
   decorridos: number;
   /** Esperado até hoje (meta diária × decorridos). `null` sem meta. */
   esperado: number | null;
+  /** Onde a equipe tem que estar hoje e no próximo dia útil. `null` sem meta. */
+  alvo: AlvoDoDia | null;
   detalhe: DetalheEquipe;
   quartis: QuartilConfig[];
   /** Operadores com meta, melhor projeção primeiro. */
@@ -134,6 +137,12 @@ export function montarEquipe(fontes: FontesEquipe, equipeId: string): EquipeNaTe
   const esperado = meta !== null && meta > 0 && dias.totalUteis > 0
     ? (meta / dias.totalUteis) * Math.max(dias.decorridos, 1)
     : null;
+  const alvo = esperado !== null && meta !== null
+    ? alvoDoDia({
+        recebido: acumulado, esperado, metaDiaria: meta / dias.totalUteis,
+        hojeISO: fontes.hojeISO, feriados: fontes.feriados,
+      })
+    : null;
 
   const nomeDaEquipe = new Map(fontes.equipes.map(e => [e.id, e.nome] as const));
   const { porSetor, semMeta } = montarLinhasQuartil({
@@ -162,6 +171,7 @@ export function montarEquipe(fontes: FontesEquipe, equipeId: string): EquipeNaTe
     totalUteis: dias.totalUteis,
     decorridos: dias.decorridos,
     esperado,
+    alvo,
     detalhe,
     quartis,
     linhas,
