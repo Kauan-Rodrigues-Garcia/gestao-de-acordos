@@ -17,23 +17,23 @@ describe('motor do Som ambiente', () => {
   it('próxima e anterior dão a volta pela lista, com as playlists no fim', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
     expect(ordemDasFaixas(prefs)).toEqual([
-      'halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores',
-      'raindance', 'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo',
+      'saw', 'deadsilence', 'it', 'halloween', 'stranger',
+      'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance',
       'youtube:playlist:X',
     ]);
-    expect(vizinha(prefs, 'gemebaixo', 1)).toBe('youtube:playlist:X');
-    expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('halloween');
-    expect(vizinha(prefs, 'halloween', -1)).toBe('youtube:playlist:X');
-    expect(vizinha(prefs, 'sumiu', 1)).toBe('halloween');
+    expect(vizinha(prefs, 'raindance', 1)).toBe('youtube:playlist:X');
+    expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('saw');
+    expect(vizinha(prefs, 'saw', -1)).toBe('youtube:playlist:X');
+    expect(vizinha(prefs, 'sumiu', 1)).toBe('saw');
   });
 
   it('enxuto: sem playlists na lista e no anterior/próxima', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
     expect(ordemDasFaixas(prefs, false)).toEqual([
-      'halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores',
-      'raindance', 'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo',
+      'saw', 'deadsilence', 'it', 'halloween', 'stranger',
+      'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance',
     ]);
-    expect(vizinha(prefs, 'gemebaixo', 1, false)).toBe('halloween');
+    expect(vizinha(prefs, 'raindance', 1, false)).toBe('saw');
   });
 
   it('enxuto: volume até 50 e faixa de fábrica; completo não muda nada', () => {
@@ -47,20 +47,21 @@ describe('motor do Som ambiente', () => {
   });
 
   it('no fim de uma faixa de fábrica, a sequência segue só pelas de fábrica', () => {
-    expect(proximaEmbutida('halloween')).toBe('sexta13');
-    expect(proximaEmbutida('pecadores')).toBe('raindance');
-    expect(proximaEmbutida('gemebaixo')).toBe('halloween');
+    expect(proximaEmbutida('halloween')).toBe('stranger');
+    expect(proximaEmbutida('stranger')).toBe('provavelmente');
+    expect(proximaEmbutida('raindance')).toBe('saw');
   });
 
   it('cada faixa tem o seu ganho, e o volume final nunca passa de 1', () => {
     for (const f of FAIXAS_EMBUTIDAS) {
       expect(GANHO[f]).toBeGreaterThan(0.5);
-      expect(GANHO[f]).toBeLessThan(1.6);
+      // «Every 27 Years» veio a -20,3 LUFS: o único ganho acima de 2.
+      expect(GANHO[f]).toBeLessThan(2.5);
     }
     // A mais baixa sobe, a mais alta desce, no mesmo controle.
-    expect(volumeDaFaixa(40, 'candyman')).toBeGreaterThan(volumeDaFaixa(40, 'numb'));
-    expect(volumeDaFaixa(100, 'candyman')).toBe(1);
-    expect(volumeDaFaixa(0, 'candyman')).toBe(0);
+    expect(volumeDaFaixa(40, 'it')).toBeGreaterThan(volumeDaFaixa(40, 'raindance'));
+    expect(volumeDaFaixa(100, 'it')).toBe(1);
+    expect(volumeDaFaixa(0, 'it')).toBe(0);
     expect(volumeDaFaixa(40, null)).toBe(ganhoDoVolume(40));
   });
 });

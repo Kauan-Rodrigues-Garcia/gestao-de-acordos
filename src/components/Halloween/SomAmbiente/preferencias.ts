@@ -10,10 +10,10 @@
  */
 import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
-/** Os temas de terror que vêm de fábrica, na ordem do painel. */
-export const TEMAS_DE_TERROR = ['halloween', 'sexta13', 'candyman', 'stranger', 'pesadelo', 'pecadores'] as const;
-/** As músicas para escutar que vêm de fábrica. Trocadas em 08/10/2026; «Raindance» entrou na frente em 11/10/2026. */
-export const MUSICAS = ['raindance', 'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo'] as const;
+/** Os temas de terror que vêm de fábrica, na ordem do painel. Trocados em 13/10/2026. */
+export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'stranger'] as const;
+/** As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026; «Raindance» ficou. */
+export const MUSICAS = ['provavelmente', 'doiwannaknow', 'novobalanco', 'raindance'] as const;
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
@@ -22,19 +22,15 @@ export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = FAIXAS_EMBUTIDAS;
 
 /** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
 export const ARQUIVOS: Record<FaixaEmbutida, string> = {
+  saw: '/sounds/halloween-saw-hello-zepp.mp3',
+  deadsilence: '/sounds/halloween-dead-silence.mp3',
+  it: '/sounds/halloween-it-every-27-years.mp3',
   halloween: '/sounds/halloween-john-carpenter.mp3',
-  sexta13: '/sounds/halloween-sexta-feira-13.mp3',
-  candyman: '/sounds/halloween-candyman.mp3',
   stranger: '/sounds/halloween-stranger-things.mp3',
-  pesadelo: '/sounds/halloween-hora-do-pesadelo.mp3',
-  pecadores: '/sounds/halloween-pecadores-eu-menti-pra-voce.mp3',
+  provavelmente: '/sounds/halloween-hungria-provavelmente.mp3',
+  doiwannaknow: '/sounds/halloween-arctic-monkeys-do-i-wanna-know.mp3',
+  novobalanco: '/sounds/halloween-veigh-novo-balanco.mp3',
   raindance: '/sounds/halloween-raindance.mp3',
-  rainha: '/sounds/halloween-rainha-da-finesse.mp3',
-  boladao: '/sounds/halloween-eu-to-boladao.mp3',
-  numb: '/sounds/halloween-numb.mp3',
-  byob: '/sounds/halloween-byob.mp3',
-  bicho: '/sounds/halloween-coisas-que-aprendi-com-o-bicho.mp3',
-  gemebaixo: '/sounds/halloween-geme-baixo.mp3',
 };
 
 /**
@@ -45,31 +41,40 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * nem estourado nem sumido. `ganho = 10^((-13 - medido) / 20)`. As músicas de
  * 08/10/2026 vieram do YouTube bem mais altas (-8,3 a -7,6) e descem.
  *
+ * As de 13/10/2026 foram medidas do mesmo jeito (BS.1770, decodificadas no
+ * Chromium; a régua conferida contra Raindance, Halloween e Stranger Things,
+ * a 0,1 dB do que estava anotado). «Every 27 Years» veio muito baixa: o ganho
+ * passa de 2, e no volume alto ela bate no teto de 100% do navegador.
+ *
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
 export const GANHO: Record<FaixaEmbutida, number> = {
-  halloween: 0.82,  // -11,3
-  sexta13: 0.89,    // -12,0
-  candyman: 1.41,   // -16,0
-  stranger: 1.04,   // -13,3
-  pesadelo: 1.22,   // -14,7
-  pecadores: 1.37,  // -15,7
-  raindance: 0.64,  // -9,1 (11/10/2026)
-  rainha:0.58,     // -8,3
-  boladao: 0.58,    // -8,3
-  numb: 0.54,       // -7,6
-  byob: 0.56,       // -8,0
-  bicho: 0.56,      // -8,0
-  gemebaixo: 0.58,  // -8,2
+  saw: 0.97,           // -12,7
+  deadsilence: 0.86,   // -11,7
+  it: 2.30,            // -20,3
+  halloween: 0.82,     // -11,3
+  stranger: 1.04,      // -13,3
+  provavelmente: 0.95, // -12,5
+  doiwannaknow: 0.68,  // -9,6
+  novobalanco: 0.71,   // -10,0
+  raindance: 0.64,     // -9,1 (11/10/2026)
 };
 
 /**
  * Faixas que saíram da fábrica e quem fica no lugar delas para quem as tinha
- * escolhido. «Talvez Você Precise de Mim», do Veigh, saiu em 05/10/2026;
- * «Puxa o Lança» e «Na Relíquia do 2T», em 08/10/2026. Vão todas para
- * «Rainha da Finesse», que era a primeira das músicas quando elas saíram.
+ * escolhido. A posição salva para o F5 não é trocada: a de faixa que saiu só
+ * é descartada (`lerPosicao`).
+ *
+ * Temas que saíram em 13/10/2026 vão para «Halloween», o padrão; músicas — as
+ * de 13/10 e as que já tinham saído antes (Veigh em 05/10, «Puxa o Lança» e
+ * «Na Relíquia do 2T» em 08/10) — para «Provavelmente», a primeira das músicas.
  */
-const SUBSTITUTAS: Record<string, FaixaEmbutida> = { veigh: 'rainha', puxalanca: 'rainha', reliquia: 'rainha' };
+const SUBSTITUTAS: Record<string, FaixaEmbutida> = {
+  sexta13: 'halloween', candyman: 'halloween', pesadelo: 'halloween', pecadores: 'halloween',
+  rainha: 'provavelmente', boladao: 'provavelmente', numb: 'provavelmente', byob: 'provavelmente',
+  bicho: 'provavelmente', gemebaixo: 'provavelmente',
+  veigh: 'provavelmente', puxalanca: 'provavelmente', reliquia: 'provavelmente',
+};
 
 export interface PlaylistSalva {
   /** `chaveDoLink` — também evita a mesma playlist duas vezes. */

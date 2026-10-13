@@ -18,8 +18,8 @@ describe('preferências do Som ambiente', () => {
   });
 
   it('grava e lê por pessoa', () => {
-    gravarPreferencias('p1', { faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true, playlists: [] });
-    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'candyman', volume: 55, tocarAoEntrar: true, repetir: true });
+    gravarPreferencias('p1', { faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, playlists: [] });
+    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true });
     expect(lerPreferencias('p2')).toEqual(PADRAO);
   });
 
@@ -49,7 +49,7 @@ describe('preferências do Som ambiente', () => {
   it('faixa que não existe mais (playlist removida ou som antigo) volta para o padrão', () => {
     expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('halloween');
     expect(normalizar({ faixa: 'chuva' }).faixa).toBe('halloween');
-    expect(normalizar({ faixa: 'pecadores' }).faixa).toBe('pecadores');
+    expect(normalizar({ faixa: 'stranger' }).faixa).toBe('stranger');
   });
 
   it('quem tinha a faixa do Batman, que saiu do projeto, volta ao padrão', () => {
@@ -57,8 +57,8 @@ describe('preferências do Som ambiente', () => {
   });
 
   it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
-    gravarPosicao('p1', { faixa: 'candyman', t: 83.27 });
-    expect(lerPosicao('p1')).toEqual({ faixa: 'candyman', t: 83.3 });
+    gravarPosicao('p1', { faixa: 'saw', t: 83.27 });
+    expect(lerPosicao('p1')).toEqual({ faixa: 'saw', t: 83.3 });
     expect(lerPosicao('p2')).toBeNull();
     esquecerPosicao('p1');
     expect(lerPosicao('p1')).toBeNull();
@@ -66,17 +66,21 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
     localStorage.setItem('som-ambiente-posicao:p1', '{quebrado');
     expect(lerPosicao('p1')).toBeNull();
-    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'sexta13', t: -5 }));
-    expect(lerPosicao('p1')).toEqual({ faixa: 'sexta13', t: 0 });
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'stranger', t: -5 }));
+    expect(lerPosicao('p1')).toEqual({ faixa: 'stranger', t: 0 });
+    // Faixa que saiu em 13/10 também não volta no F5.
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'candyman', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
     // Faixa que saiu do projeto (o Batman) não volta no F5.
     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: 10 }));
     expect(lerPosicao('p1')).toBeNull();
   });
 
-  it('quem tinha uma música que saiu fica com «Rainha da Finesse»', () => {
-    expect(normalizar({ faixa: 'veigh' }).faixa).toBe('rainha');
-    expect(normalizar({ faixa: 'puxalanca' }).faixa).toBe('rainha');
-    expect(normalizar({ faixa: 'reliquia' }).faixa).toBe('rainha');
+  it('quem tinha um tema que saiu fica com «Halloween»; uma música, com «Provavelmente»', () => {
+    for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores']) expect(normalizar({ faixa: t }).faixa).toBe('halloween');
+    for (const m of ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia']) {
+      expect(normalizar({ faixa: m }).faixa).toBe('provavelmente');
+    }
   });
 
   it('playlists: descarta link ruim, repetido e o que passa do limite', () => {

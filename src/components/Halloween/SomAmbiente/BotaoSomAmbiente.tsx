@@ -29,7 +29,8 @@ import { PainelSobDemanda } from '@/components/PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { cn } from '@/lib/utils';
 import { dentroDoPalco, iniciarSessao, soltarSessao, useSomAmbiente } from './motor';
-import { infoDaFaixa } from './faixas';
+import { estiloDaFaixa, infoDaFaixa } from './faixas';
+import { CapaFaixa } from './CapaFaixa';
 import { Equalizador } from './Equalizador';
 import { anunciarSeNova } from './anuncio';
 import './somAmbiente.css';
@@ -161,30 +162,33 @@ function CardTocandoAgora({ faixa, playlists, ancora, aoAbrir, aoSumir }: {
           onBlur={() => setSegurando(false)}
           data-som-tocando-agora
           className={cn(
-            'fixed z-[70] flex w-[280px] max-w-[calc(100vw-16px)] items-center gap-3 rounded-2xl border border-border',
-            'bg-popover p-3 pr-4 text-left text-popover-foreground shadow-lg',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            info.tom,
+            'som-cores fixed z-[70] w-[280px] max-w-[calc(100vw-16px)] rounded-2xl text-left shadow-xl',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           )}
-          style={{ top: pos.top, right: pos.right }}
+          style={{ top: pos.top, right: pos.right, ...estiloDaFaixa(info) }}
           initial={reduzir ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.97 }}
           animate={reduzir ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
           exit={reduzir ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           aria-label={`Tocando agora: ${info.nome}, ${info.descricao}. Abrir o Som ambiente`}
         >
-          {/* A ponta que aponta para o fone. */}
+          {/* A ponta que aponta para o fone, na cor do disco. */}
           <span
             aria-hidden
-            className="absolute -top-[6px] right-[18px] h-3 w-3 rotate-45 border-l border-t border-border bg-popover"
+            className="absolute -top-[5px] right-[18px] h-3 w-3 rotate-45 rounded-[2px] bg-[color:var(--som-fundo)]"
           />
-          <span className="som-icone flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-            <Equalizador />
-          </span>
-          <span className="min-w-0" role="status" aria-live="polite">
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tocando agora</span>
-            <span className="block truncate text-sm font-semibold leading-tight">{info.nome}</span>
-            <span className="block truncate text-xs text-muted-foreground">{info.descricao}</span>
+          {/* O mesmo «Tocando agora» do painel, em miniatura: a capa, na cor dela. */}
+          <span className="som-heroi relative flex items-center gap-3 rounded-2xl p-2.5 pr-4">
+            {info.capa && <img src={info.capa} alt="" aria-hidden decoding="async" className="som-heroi-aura" />}
+            <CapaFaixa info={info} className="som-capa-grande h-11 w-11 rounded-md" />
+            <span className="min-w-0" role="status" aria-live="polite">
+              <span className="som-heroi-fraco flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em]">
+                <Equalizador className="text-[color:var(--som-destaque)]" />
+                Tocando agora
+              </span>
+              <span className="mt-0.5 block truncate text-sm font-semibold leading-tight">{info.nome}</span>
+              <span className="som-heroi-suave block truncate text-xs">{info.descricao}</span>
+            </span>
           </span>
         </motion.button>
       )}

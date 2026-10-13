@@ -77,14 +77,14 @@ describe('Tocando agora', () => {
   it('música seguinte anuncia; e a primeira de uma sessão nova também', () => {
     const { unmount } = render(<BotaoSomAmbiente perfilId="p1" />);
     noAr('halloween');
-    noAr('sexta13');
-    expect(screen.getByText(/Sexta/)).toBeInTheDocument();
+    noAr('saw');
+    expect(screen.getByText(/Hello Zepp/)).toBeInTheDocument();
 
     // Saiu do sistema (nada no ar) e entrou de novo.
     noAr(null, 'parado');
     unmount();
     render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('sexta13');
+    noAr('saw');
     expect(card()).not.toBeNull();
   });
 });

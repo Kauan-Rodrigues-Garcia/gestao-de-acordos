@@ -18,14 +18,14 @@
  *
  * Baixa sob demanda (ver `BotaoSomAmbiente`).
  */
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type FormEvent } from 'react';
+import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, Plus, X, Loader2,
   ChevronLeft, ChevronRight, Ghost, ListMusic, Music, Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { chaveDoLink, lerLink } from './links';
@@ -36,7 +36,8 @@ import {
 import {
   LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
 } from './preferencias';
-import { EMBUTIDAS, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
+import { EMBUTIDAS, estiloDaFaixa, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
+import { CapaFaixa } from './CapaFaixa';
 import { Equalizador } from './Equalizador';
 import './somAmbiente.css';
 
@@ -76,61 +77,58 @@ export function PainelSomAmbiente() {
   const fracao = prefs.volume / volumeMax;
   const IconeVolume = prefs.volume === 0 ? VolumeX : fracao < 0.34 ? Volume : fracao < 0.67 ? Volume1 : Volume2;
 
+  // Tocando, a linha de estado só confirma: o nome e o artista já estão acima.
   const legenda = silenciado
     ? 'Pausado enquanto a mensagem de outubro toca'
     : estado === 'erro' && erro ? erro
     : carregando ? (externa ? 'Abrindo o player…' : 'Carregando a música…')
     : estado === 'aguardando' ? (mostrarPalco ? 'Aperte o play no player abaixo' : 'Começa no seu próximo clique na tela')
-    : tocando ? info.descricao
+    : tocando ? 'Tocando'
     : estado === 'pausado' ? 'Pausado'
-    : 'Escolha um som e aperte o play';
+    : 'Aperte o play para começar';
+
+  const tipo = externa ? (spotify ? 'Playlist do Spotify' : 'Do YouTube')
+    : (TEMAS_DE_TERROR as readonly string[]).includes(escolhida) ? 'Tema de terror' : 'Música';
 
   return (
-    <div className="flex max-h-[min(640px,calc(100vh-80px))] flex-col">
-      {/* ── Agora tocando ── */}
-      <div className={cn('som-palco-topo relative px-4 pb-3 pt-4', info.tom)}>
-        <div className="flex items-center gap-3">
-          <div className="som-icone flex h-11 w-11 shrink-0 items-center justify-center rounded-xl">
-            {tocando ? <Equalizador className="som-eq-grande" /> : <info.Icone className="h-5 w-5" />}
-          </div>
+    <div className="flex max-h-[min(660px,calc(100vh-80px))] flex-col">
+      {/* ── Tocando agora: a capa do disco, na cor dela ── */}
+      <section
+        aria-label="Tocando agora"
+        className="som-cores som-heroi relative px-4 pb-4 pt-3.5"
+        style={estiloDaFaixa(info) as CSSProperties}
+      >
+        {info.capa && (
+          <img key={info.capa} src={info.capa} alt="" aria-hidden decoding="async" className="som-heroi-aura" />
+        )}
+
+        <p className="som-heroi-fraco text-[10px] font-semibold uppercase tracking-[0.16em]">{tipo}</p>
+
+        <div className="mt-2.5 flex items-center gap-3.5">
+          <CapaFaixa info={info} className="som-capa-grande h-[72px] w-[72px] rounded-lg" icone="h-7 w-7" />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Som ambiente</p>
-            <p className="truncate text-sm font-semibold leading-tight">{info.nome}</p>
+            <p className="truncate text-[15px] font-semibold leading-snug tracking-[-0.01em]">{info.nome}</p>
+            <p className="som-heroi-suave truncate text-[12.5px] leading-snug">{info.descricao}</p>
             <p
-              className={cn('truncate text-xs', estado === 'erro' ? 'text-destructive' : 'text-muted-foreground')}
+              className={cn(
+                'mt-1.5 flex items-center gap-1.5 truncate text-[11px]',
+                estado === 'erro' ? 'text-red-300' : 'som-heroi-fraco',
+              )}
               aria-live="polite"
             >
-              {legenda}
+              {tocando && <Equalizador className="shrink-0 text-[color:var(--som-destaque)]" />}
+              <span className="truncate">{legenda}</span>
             </p>
           </div>
         </div>
 
         {!externa && <BarraProgresso ativa={noAr === escolhida && estado !== 'parado'} />}
 
-        <div className="mt-2 flex items-center justify-center gap-2">
-          {/* Mesma largura do «Repetir», para o play ficar no centro. */}
-          <span className="h-9 w-9" aria-hidden />
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => pular(-1)} aria-label="Faixa anterior" title="Faixa anterior">
-            <SkipBack className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            className="som-play h-11 w-11 rounded-full shadow-sm"
-            onClick={alternar}
-            aria-label={tocando || carregando ? 'Pausar' : 'Tocar'}
-            title={tocando || carregando ? 'Pausar' : 'Tocar'}
-          >
-            {carregando ? <Loader2 className="h-5 w-5 animate-spin" />
-              : tocando ? <Pause className="h-5 w-5" />
-              : <Play className="h-5 w-5 translate-x-px" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => pular(1)} aria-label="Próxima faixa" title="Próxima faixa">
-            <SkipForward className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn('h-9 w-9 rounded-full', prefs.repetir ? 'text-primary' : 'text-muted-foreground')}
+        {/* O play fica no centro: «Repetir» de um lado, a mesma largura vazia do outro. */}
+        <div className={cn('grid grid-cols-[36px_1fr_36px] items-center', externa ? 'mt-3' : 'mt-1.5')}>
+          <button
+            type="button"
+            className="som-heroi-botao h-9 w-9"
             onClick={() => definirRepetir(!prefs.repetir)}
             disabled={externa}
             aria-pressed={prefs.repetir}
@@ -138,41 +136,61 @@ export function PainelSomAmbiente() {
             title={prefs.repetir ? 'Repetindo esta música — clique para tocar em sequência' : 'Tocando em sequência — clique para repetir esta música'}
           >
             {prefs.repetir ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
-          </Button>
+          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button type="button" className="som-heroi-botao h-10 w-10" onClick={() => pular(-1)} aria-label="Faixa anterior" title="Faixa anterior">
+              <SkipBack className="h-[18px] w-[18px] fill-current" />
+            </button>
+            <button
+              type="button"
+              className="som-play h-12 w-12"
+              onClick={alternar}
+              aria-label={tocando || carregando ? 'Pausar' : 'Tocar'}
+              title={tocando || carregando ? 'Pausar' : 'Tocar'}
+            >
+              {carregando ? <Loader2 className="h-5 w-5 animate-spin" />
+                : tocando ? <Pause className="h-5 w-5 fill-current" />
+                : <Play className="h-5 w-5 translate-x-px fill-current" />}
+            </button>
+            <button type="button" className="som-heroi-botao h-10 w-10" onClick={() => pular(1)} aria-label="Próxima faixa" title="Próxima faixa">
+              <SkipForward className="h-[18px] w-[18px] fill-current" />
+            </button>
+          </div>
+          <span aria-hidden />
         </div>
 
-        <div className="mt-3 flex items-center gap-2.5">
+        <div className="mt-2 flex items-center gap-2.5">
           <button
             type="button"
             onClick={alternarMudo}
-            className="rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="som-heroi-botao h-7 w-7"
             aria-label={prefs.volume === 0 ? 'Tirar do mudo' : 'Deixar mudo'}
             title={prefs.volume === 0 ? 'Tirar do mudo' : 'Deixar mudo'}
           >
             <IconeVolume className="h-4 w-4" />
           </button>
-          <Slider
+          <BarraSom
             value={[prefs.volume]}
             min={0}
             max={volumeMax}
             step={1}
             onValueChange={([v]) => definirVolume(v)}
-            aria-label={volumeMax < 100 ? `Volume, até ${volumeMax}%` : 'Volume'}
+            rotulo={volumeMax < 100 ? `Volume, até ${volumeMax}%` : 'Volume'}
             className="flex-1"
           />
           <span
-            className="w-9 text-right text-xs tabular-nums text-muted-foreground"
+            className="som-heroi-fraco w-8 text-right text-[11px] tabular-nums"
             title={volumeMax < 100 ? `Máximo de ${volumeMax}%` : undefined}
           >
             {prefs.volume}%
           </span>
         </div>
         {spotify && (
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
+          <p className="som-heroi-fraco mt-1.5 text-[11px]">
             O Spotify não deixa outro site mexer no volume: use o do computador.
           </p>
         )}
-      </div>
+      </section>
 
       {mostrarPalco && (
         <div className="px-4 pb-3">
@@ -185,7 +203,7 @@ export function PainelSomAmbiente() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <SeletorFaixas
           escolhida={escolhida}
           noAr={tocando ? noAr : null}
@@ -220,9 +238,8 @@ function BarraProgresso({ ativa }: { ativa: boolean }) {
   const duracao = p?.duracao ?? 0;
   const atual = arrastando ?? p?.atual ?? 0;
   return (
-    <div className="mt-3 flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
-      <span className="w-8 text-right">{mmss(atual)}</span>
-      <Slider
+    <div className="mt-3.5">
+      <BarraSom
         value={[duracao ? Math.min(atual, duracao) : 0]}
         min={0}
         max={duracao || 1}
@@ -230,11 +247,29 @@ function BarraProgresso({ ativa }: { ativa: boolean }) {
         disabled={!ativa || !duracao}
         onValueChange={([v]) => setArrastando(v)}
         onValueCommit={([v]) => { buscar(v); setArrastando(null); setP(progresso()); }}
-        aria-label="Posição na música"
-        className="flex-1"
+        rotulo="Posição na música"
       />
-      <span className="w-8">{duracao ? mmss(duracao) : '–:––'}</span>
+      <div className="som-heroi-fraco mt-0.5 flex justify-between text-[10.5px] tabular-nums">
+        <span>{mmss(atual)}</span>
+        <span>{duracao ? mmss(duracao) : '–:––'}</span>
+      </div>
     </div>
+  );
+}
+
+/**
+ * A barra do «Tocando agora» (posição e volume): fina e branca, como num
+ * player; o pino aparece ao passar o mouse e o cheio ganha a cor da capa.
+ * O `Slider` do sistema é grosso e na cor do tema — destoaria sobre a capa.
+ */
+function BarraSom({ rotulo, className, ...props }: ComponentPropsWithoutRef<typeof SliderPrimitive.Root> & { rotulo: string }) {
+  return (
+    <SliderPrimitive.Root className={cn('som-barra', className)} {...props}>
+      <SliderPrimitive.Track className="som-barra-trilho">
+        <SliderPrimitive.Range className="som-barra-cheio" />
+      </SliderPrimitive.Track>
+      <SliderPrimitive.Thumb className="som-barra-pino" aria-label={rotulo} />
+    </SliderPrimitive.Root>
   );
 }
 
@@ -243,8 +278,8 @@ type Aba = 'temas' | 'musicas' | 'playlists';
 /** Faixas por página. Lista que cresce vira mais páginas, nunca uma rolagem sem fim. */
 export const POR_PAGINA = 5;
 
-/** Altura de uma `LinhaFaixa` (ícone de 32px + respiro + borda): as vagas vazias da última página. */
-const ALTURA_LINHA = 'h-[50px]';
+/** Altura de uma `LinhaFaixa` (capa de 40px + respiro): as vagas vazias da última página. */
+const ALTURA_LINHA = 'h-[52px]';
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
@@ -384,7 +419,7 @@ function SeletorFaixas({ escolhida, noAr, playlists }: {
         </div>
       )}
 
-      <div role="tabpanel" className="mt-2 space-y-1.5">
+      <div role="tabpanel" className="mt-2 space-y-0.5">
         {daPagina.map(x => (
           <LinhaFaixa
             key={x.id}
@@ -458,29 +493,42 @@ interface PropsFaixa {
   tocando: boolean;
 }
 
-/** Uma faixa: o ícone na cor dela, o nome e a descrição. */
+/**
+ * Uma faixa: a capa, o nome e o artista. A escolhida ganha um véu na cor da
+ * capa e o nome nessa cor; a que toca, o equalizador; passar o mouse mostra
+ * o play sobre a capa.
+ */
 function LinhaFaixa({ id, info, escolhida, tocando, onRemover }: PropsFaixa & { onRemover?: () => void }) {
   return (
     <div
       className={cn(
-        'som-bloco group flex items-center gap-2 rounded-xl border pr-1 transition-colors',
-        info.tom,
-        escolhida ? 'som-bloco-escolhido' : 'border-border hover:bg-muted/60',
+        'som-cores group flex items-center gap-1 rounded-lg pr-1 transition-colors',
+        escolhida ? 'som-linha-escolhida' : 'hover:bg-muted/70',
       )}
+      style={estiloDaFaixa(info) as CSSProperties}
     >
       <button
         type="button"
         onClick={() => escolher(id)}
         aria-pressed={escolhida}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-2 pl-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="som-icone flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-          {tocando ? <Equalizador /> : <info.Icone className="h-4 w-4" />}
+        <span className="relative shrink-0">
+          <CapaFaixa info={info} className="h-10 w-10 rounded-md" />
+          {!tocando && (
+            <span
+              aria-hidden
+              className="absolute inset-0 hidden items-center justify-center rounded-md bg-black/50 text-white group-hover:flex"
+            >
+              <Play className="h-4 w-4 translate-x-px fill-current" />
+            </span>
+          )}
         </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium leading-tight">{info.nome}</span>
-          <span className="block truncate text-xs text-muted-foreground">{info.descricao}</span>
+        <span className="min-w-0 flex-1">
+          <span className="som-linha-nome block truncate text-[13px] font-medium leading-tight">{info.nome}</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{info.descricao}</span>
         </span>
+        {tocando && <Equalizador className="som-tinta mr-1.5 shrink-0" />}
       </button>
       {onRemover && (
         <Button
