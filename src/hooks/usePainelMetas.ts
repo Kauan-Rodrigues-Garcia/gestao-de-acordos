@@ -110,6 +110,8 @@ export interface DadosPainelMetas {
   semRelatorio: boolean;
 
   diasUteisTotal: number;
+  /** Feriados cadastrados do mês — os mesmos que tiram dia útil da meta. */
+  feriados: string[];
   diasUteisPassados: number;
   diasUteisRestantes: number;
 
@@ -784,6 +786,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     semRelatorio: analitico.carregado && analitico.linhas.length === 0,
 
     diasUteisTotal,
+    feriados,
     diasUteisPassados,
     // Sempre derivado, nunca recalculado por outro caminho: os três números
     // precisam fechar entre si na tela.

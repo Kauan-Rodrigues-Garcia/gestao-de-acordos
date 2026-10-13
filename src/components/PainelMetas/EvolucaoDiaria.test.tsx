@@ -8,8 +8,8 @@
  * O destaque do dia corrente depende de `diaDeHoje` chegar `null` em mês
  * fechado — quem decide isso é `usePainelMetas` (`noMesAtual`), coberto lá.
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { EvolucaoDiaria } from './EvolucaoDiaria';
 import { opacidadeDaBarra, OPACIDADES } from './opacidadeBarra';
 
@@ -114,5 +114,52 @@ describe('EvolucaoDiaria — rodapé', () => {
     render(<EvolucaoDiaria porDia={{}} mes="2026-08" metaDiaria={META_DIARIA} diaDeHoje={11} />);
     expect(screen.getByText('0 dias com recebimento')).toBeInTheDocument();
     expect(screen.queryByText(/Melhor dia/)).not.toBeInTheDocument();
+  });
+});
+
+describe('EvolucaoDiaria — por baixa', () => {
+  // A escolha fica no navegador; cada teste começa por dia.
+  beforeEach(() => { localStorage.clear(); });
+
+  it('abre por dia e troca para baixa', () => {
+    render(<EvolucaoDiaria porDia={PADRAO} mes="2026-08" metaDiaria={META_DIARIA} diaDeHoje={11} />);
+    expect(screen.getByRole('button', { name: 'Dia' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Baixa' }));
+    expect(screen.getByRole('button', { name: 'Baixa' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Meta por baixa')).toBeInTheDocument();
+    expect(screen.getByText(/Meta\/baixa/)).toBeInTheDocument();
+  });
+
+  it('conta as baixas do mês e soma o fim de semana na baixa anterior', () => {
+    // Agosto/2026: 21 dias úteis. 01 (sáb) entra na baixa 1; 08 (sáb) e 09
+    // (dom) na baixa da sexta 07 — que vira uma baixa só.
+    render(
+      <EvolucaoDiaria
+        porDia={{ ...PADRAO, 9: { bruto: 1_000, ho: 0, qtd: 1 } }}
+        mes="2026-08" metaDiaria={META_DIARIA} diaDeHoje={11}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Baixa' }));
+    expect(screen.getByText('4 baixas com recebimento de 21')).toBeInTheDocument();
+  });
+
+  it('feriado não abre baixa', () => {
+    render(
+      <EvolucaoDiaria
+        porDia={PADRAO} mes="2026-08" metaDiaria={null} diaDeHoje={null}
+        feriados={['2026-08-10']}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Baixa' }));
+    // 10/08 vira parte da baixa de sexta 07, junto com 08/08.
+    expect(screen.getByText('3 baixas com recebimento de 20')).toBeInTheDocument();
+  });
+
+  it('lembra a escolha', () => {
+    const { unmount } = render(<EvolucaoDiaria porDia={PADRAO} mes="2026-08" metaDiaria={null} diaDeHoje={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Baixa' }));
+    unmount();
+    render(<EvolucaoDiaria porDia={PADRAO} mes="2026-08" metaDiaria={null} diaDeHoje={null} />);
+    expect(screen.getByRole('button', { name: 'Baixa' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

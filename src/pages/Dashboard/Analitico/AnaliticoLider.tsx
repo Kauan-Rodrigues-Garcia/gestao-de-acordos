@@ -126,7 +126,6 @@ import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
 // O mapa do mês — o outro formato da MESMA lista: um calendário com filtro
 // de operador. A fonte por empresa continua em `fonteDoMapa`.
 import { MapaDoMes, type CelulaDoMapa } from '@/pages/Analitico/MapaDoMes/MapaDoMes';
-import { feriadosNacionais } from '@/lib/feriadosNacionais';
 import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
 import {
   limparDadosDoDia, limparMesDiario, buscarResumoMensalDiario,
@@ -1399,15 +1398,12 @@ export function AnaliticoLider({
   );
 
   /*
-   * Os dias que não abrem baixa, além do fim de semana: os feriados nacionais
-   * (banco não compensa neles) somados aos cadastrados nas metas do mês — a
-   * mesma lista que tira dia útil da meta diária.
+   * Os dias que não abrem baixa, além do fim de semana: os feriados
+   * cadastrados nas metas do mês — a MESMA lista que tira dia útil da meta e
+   * que a Evolução diária do Dashboard usa. Uma régua só: o mês tem tantas
+   * baixas quantos dias úteis a meta conta, nas duas telas.
    */
-  const feriadosDoMapa = useMemo(() => {
-    const ano = Number(mes.slice(0, 4));
-    const nacionais = feriadosNacionais(ano).map(f => f.dia).filter(d => d.startsWith(`${mes}-`));
-    return [...new Set([...nacionais, ...metasDoMes.feriados])];
-  }, [mes, metasDoMes.feriados]);
+  const feriadosDoMapa = metasDoMes.feriados;
 
   /*
    * O mapa é um objeto do MÊS, e no recorte Dia a lista responde pelo dia (e
@@ -1423,9 +1419,12 @@ export function AnaliticoLider({
    * `carregandoLista` — esse responde pela lista, que no mês sai dos resumos.
    * Sem esta conta, o mapa piscaria "nenhum recebimento vinculado a operador"
    * durante a busca do mês, que é a leitura oposta da verdadeira.
+   *
+   * E espera os feriados: sem eles o mapa abriria com a régua de baixas
+   * errada e corrigiria um instante depois.
    */
   const carregandoConteudo =
-    carregandoLista || (visaoEfetiva === 'mapa' && !dashboardCarregado);
+    carregandoLista || (visaoEfetiva === 'mapa' && (!dashboardCarregado || !metasDoMes.carregado));
 
   /**
    * O detalhe do operador NO RECORTE DIA — a tabela do recebimento diário.

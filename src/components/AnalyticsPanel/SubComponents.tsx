@@ -9,11 +9,14 @@ import { itemVariants } from './constants';
 import { corTexto } from '@/lib/temas';
 // ── CustomTooltip ─────────────────────────────────────────────────────────────
 
-export function CustomTooltip({ active, payload, label }: PropsTooltipGrafico) {
+export function CustomTooltip({ active, payload, label, titulo }: PropsTooltipGrafico & {
+  /** Título do balão. Sem ele, «Dia {label}». */
+  titulo?: (label: PropsTooltipGrafico['label']) => string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-border/80 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs text-popover-foreground">
-      <p className="font-semibold mb-1.5 text-foreground">Dia {label}</p>
+      <p className="font-semibold mb-1.5 text-foreground">{titulo ? titulo(label) : `Dia ${label}`}</p>
       <div className="space-y-1">
         {payload.map((entry, i) => (
           <div key={i} className="flex items-center gap-2">

@@ -190,6 +190,7 @@ export function PainelMetas({
           <EvolucaoDiaria
             porDia={dados.porDia}
             agendadoPorDia={dados.agendadoPorDia}
+            feriados={dados.feriados}
             mes={mes}
             unidade={dados.unidade}
             metaDiaria={projecaoEmTela?.metaDiaria ?? null}

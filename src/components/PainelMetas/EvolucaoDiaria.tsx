@@ -19,9 +19,17 @@
  *
  * A meta diária é a MESMA que os cards usam (`calcularProjecao`). Passar outra
  * daqui reabriria exatamente a divergência que este painel existe para fechar.
+ *
+ * ## Dia × Baixa
+ *
+ * «Baixa» é a régua da operação (coluna D.U.): uma barra por dia útil, com o
+ * fim de semana e o feriado somados na baixa do dia útil anterior. Os feriados
+ * são os MESMOS que tiram dia útil da meta, então o mês tem tantas baixas
+ * quantos dias úteis a meta conta — e a régua da meta diária vale, sem conta
+ * nenhuma, como meta por baixa.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ComposedChart, Bar, Line, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer,
@@ -35,6 +43,26 @@ import type { UnidadeValor } from '@/lib/unidadeValor';
 import { CHART_RECEBIDO, CHART_AGENDADO } from '@/components/AnalyticsPanel/constants';
 import { CustomTooltip } from '@/components/AnalyticsPanel/SubComponents';
 import { OPACIDADES, opacidadeDaBarra } from './opacidadeBarra';
+import { baixasDoMes } from '@/lib/baixasDoMes';
+import { cn } from '@/lib/utils';
+
+type Visao = 'dia' | 'baixa';
+const CHAVE_VISAO = 'evolucao-diaria-visao';
+
+/** A escolha fica no navegador de quem olha; sem armazenamento, abre por dia. */
+function visaoSalva(): Visao {
+  try { return localStorage.getItem(CHAVE_VISAO) === 'baixa' ? 'baixa' : 'dia'; } catch { return 'dia'; }
+}
+
+/** Padrão estável: `= []` na assinatura criaria um array novo a cada render. */
+const SEM_FERIADOS: readonly string[] = [];
+
+const SIGLA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+/** '2026-10-09' → 'sex 09/10'. */
+function diaCurto(iso: string): string {
+  const [a, m, d] = iso.split('-').map(Number);
+  return `${SIGLA[new Date(a, m - 1, d).getDay()]} ${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+}
 
 export interface PontoAgendado {
   /** Dia do mês, 1..31. */
@@ -57,6 +85,8 @@ interface EvolucaoDiariaProps {
   metaDiaria: number | null;
   /** Dia de hoje, ou `null` num mês fechado (não existe "hoje" no passado). */
   diaDeHoje: number | null;
+  /** Feriados do mês ('yyyy-MM-dd') — os mesmos da meta. Fecham a régua de baixas. */
+  feriados?: readonly string[];
 }
 
 function formatYAxis(valor: number): string {
@@ -66,11 +96,17 @@ function formatYAxis(valor: number): string {
 }
 
 export function EvolucaoDiaria({
-  porDia, agendadoPorDia = [], mes, metaDiaria, diaDeHoje, unidade = 'bruto',
+  porDia, agendadoPorDia = [], mes, metaDiaria, diaDeHoje, unidade = 'bruto', feriados = SEM_FERIADOS,
 }: EvolucaoDiariaProps) {
   // O agendado é ACORDO: em H.O. converte pelo percentual configurado.
   const ho = useHoPercentual();
   const { tickColor, gridColor } = useAxisColors();
+  const [visao, setVisaoState] = useState<Visao>(visaoSalva);
+  const setVisao = (v: Visao) => {
+    setVisaoState(v);
+    try { localStorage.setItem(CHAVE_VISAO, v); } catch { /* fica só nesta tela */ }
+  };
+  const porBaixa = visao === 'baixa';
 
   const agendadoMap = useMemo(() => {
     const m = new Map<number, number>();
@@ -89,17 +125,39 @@ export function EvolucaoDiaria({
     // gravado. Em modo H.O. ele é estimado pela constante, que é a única
     // tradução possível. O recebido, esse, continua vindo da coluna real.
     const emHO = unidade === 'ho';
+    const recebidoDe = (dia: number) => (emHO ? porDia[dia]?.ho : porDia[dia]?.bruto) ?? 0;
+    const agendadoDe = (dia: number) => (agendadoMap.get(dia) ?? 0) * (emHO ? ho : 1);
+
+    if (porBaixa) {
+      const hojeISO = diaDeHoje ? `${mes}-${String(diaDeHoje).padStart(2, '0')}` : '';
+      return baixasDoMes(mes, feriados, hojeISO).map(b => {
+        const dias = b.dias.map(iso => Number(iso.slice(8, 10)));
+        return {
+          dia: String(b.numero),
+          titulo: `Baixa ${b.numero} · ${diaCurto(b.diaUtil)}`,
+          hoje: b.atual,
+          recebido: dias.reduce((s, d) => s + recebidoDe(d), 0),
+          agendado: dias.reduce((s, d) => s + agendadoDe(d), 0),
+        };
+      });
+    }
+
     return Array.from({ length: diasNoMes(mes) }, (_, i) => {
       const dia = i + 1;
-      const agendadoBruto = agendadoMap.get(dia) ?? 0;
       return {
         dia: String(dia).padStart(2, '0'),
-        diaNum: dia,
-        recebido: (emHO ? porDia[dia]?.ho : porDia[dia]?.bruto) ?? 0,
-        agendado: emHO ? agendadoBruto * ho : agendadoBruto,
+        titulo: `Dia ${String(dia).padStart(2, '0')}`,
+        hoje: dia === diaDeHoje,
+        recebido: recebidoDe(dia),
+        agendado: agendadoDe(dia),
       };
     });
-  }, [porDia, agendadoMap, mes, unidade, ho]);
+  }, [porDia, agendadoMap, mes, unidade, ho, porBaixa, feriados, diaDeHoje]);
+
+  const tituloDe = useMemo(() => {
+    const m = new Map(dados.map(d => [d.dia, d.titulo] as const));
+    return (label: unknown) => m.get(String(label)) ?? String(label);
+  }, [dados]);
 
   const { diasComRecebimento, totalMes, melhorDia } = useMemo(() => {
     let dias = 0, soma = 0, melhor = 0;
@@ -114,9 +172,31 @@ export function EvolucaoDiaria({
     <Card className="border-border/70 bg-card shadow-sm">
       <CardHeader className="pb-1 pt-4 px-4">
         <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-1">
-          <CardTitle className="text-sm font-semibold text-foreground">
-            Evolução diária
-          </CardTitle>
+          <div className="flex items-center gap-2.5">
+            <CardTitle className="text-sm font-semibold text-foreground">
+              Evolução diária
+            </CardTitle>
+            {/* Discreta de propósito: é um jeito de ler o mesmo gráfico, não
+                outro gráfico — não pode competir com o título. */}
+            <div role="group" aria-label="Agrupar por" className="inline-flex rounded-md bg-muted p-0.5">
+              {(['dia', 'baixa'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVisao(v)}
+                  aria-pressed={visao === v}
+                  className={cn(
+                    'rounded-[5px] px-2 py-0.5 text-[10px] font-medium transition-colors',
+                    visao === v
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {v === 'dia' ? 'Dia' : 'Baixa'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex items-center gap-3.5 text-[10px] text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-2 h-2 rounded-[2px]" style={{ background: CHART_RECEBIDO }} />
@@ -146,7 +226,7 @@ export function EvolucaoDiaria({
                   className="inline-block w-3.5 border-t border-dashed"
                   style={{ borderColor: tickColor }}
                 />
-                Meta diária
+                {porBaixa ? 'Meta por baixa' : 'Meta diária'}
               </span>
             )}
           </div>
@@ -175,7 +255,7 @@ export function EvolucaoDiaria({
               width={50}
             />
             <Tooltip
-              content={<CustomTooltip />}
+              content={<CustomTooltip titulo={tituloDe} />}
               cursor={{ fill: gridColor, fillOpacity: 0.2 }}
             />
 
@@ -206,8 +286,8 @@ export function EvolucaoDiaria({
                   fillOpacity={opacidadeDaBarra(d.recebido, metaDiaria)}
                   // Hoje ganha contorno, não outra cor: trocar a cor perderia
                   // a informação de alcançou/não alcançou a meta.
-                  stroke={d.diaNum === diaDeHoje ? CHART_RECEBIDO : undefined}
-                  strokeWidth={d.diaNum === diaDeHoje ? 1.5 : 0}
+                  stroke={d.hoje ? CHART_RECEBIDO : undefined}
+                  strokeWidth={d.hoje ? 1.5 : 0}
                 />
               ))}
             </Bar>
@@ -229,20 +309,21 @@ export function EvolucaoDiaria({
 
         <div className="flex items-center justify-center gap-x-3 gap-y-1 flex-wrap px-2 text-[10px] text-muted-foreground">
           <span>
-            {diasComRecebimento} dia{diasComRecebimento !== 1 ? 's' : ''} com recebimento
+            {diasComRecebimento} {porBaixa ? 'baixa' : 'dia'}{diasComRecebimento !== 1 ? 's' : ''} com recebimento
+            {porBaixa && ` de ${dados.length}`}
           </span>
           <span aria-hidden>·</span>
           <span>Total <strong className="text-foreground tabular-nums font-mono">{formatBRL(totalMes)}</strong></span>
           {melhorDia > 0 && (
             <>
               <span aria-hidden>·</span>
-              <span>Melhor dia <strong className="text-foreground tabular-nums font-mono">{formatBRL(melhorDia)}</strong></span>
+              <span>{porBaixa ? 'Melhor baixa' : 'Melhor dia'} <strong className="text-foreground tabular-nums font-mono">{formatBRL(melhorDia)}</strong></span>
             </>
           )}
           {metaDiaria !== null && (
             <>
               <span aria-hidden>·</span>
-              <span>Meta/dia <strong className="text-foreground tabular-nums font-mono">{formatBRL(metaDiaria)}</strong></span>
+              <span>{porBaixa ? 'Meta/baixa' : 'Meta/dia'} <strong className="text-foreground tabular-nums font-mono">{formatBRL(metaDiaria)}</strong></span>
             </>
           )}
         </div>
