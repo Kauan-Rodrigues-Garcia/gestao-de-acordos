@@ -24,6 +24,7 @@ import {
   type FantasmaTransferencia, type MarcaTransferido,
   type CreditoDeOrigem, type RecebidoForaDoSetor,
 } from './fantasmaTransferencia';
+import { chavePessoaSetor } from './escopoAnalitico';
 import { equipesLideradasPorPessoa, equipesDaPessoa } from '@/services/equipes/equipeDoLider';
 import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
 import { liderNaoContaEmEquipeDeAlternativo } from './liderEmAlternativo';
@@ -2665,6 +2666,48 @@ export async function buscarParesForaDoSetor(empresaId: string, mes: string): Pr
   });
   if (error || !data) return new Set();
   return new Set(data.map(r => `${r.operador_id}|${r.setor_id}`));
+}
+
+/** A regra «a linha conta só no setor da pessoa», em pares — ver `buscarRegraSetorDaPessoa`. */
+export interface RegraSetorDaPessoa {
+  /** Pares `pessoa|setor` que não contam para a pessoa onde ela está. */
+  foraDoSetor: Set<string>;
+  /** equipe de origem → pares `pessoa|setor` que ela recebe de quem foi transferido. */
+  creditosPorEquipe: Record<string, Set<string>>;
+}
+
+/**
+ * O que o card da equipe no Painel Líder aplica, em forma de pares, para quem
+ * soma linhas cruas chegar no mesmo número (o Dashboard, 13/10/2026).
+ *
+ * Uma chamada à RPC serve as duas metades: `buscarParesForaDoSetor` e
+ * `buscarCreditosDeOrigem` fazem a mesma leitura cada um. Quem decide se a
+ * regra vale é o banco — `fn_analitico_recebido_fora_do_setor` só devolve
+ * linhas onde ela existe (Nosso produto, a partir de 09/2026); fora disso, e em
+ * qualquer erro, sai vazio e a equipe soma todas as linhas dos membros, como
+ * antes.
+ */
+export async function buscarRegraSetorDaPessoa(
+  empresaId: string, mes: string,
+): Promise<RegraSetorDaPessoa> {
+  const vazia: RegraSetorDaPessoa = { foraDoSetor: new Set(), creditosPorEquipe: {} };
+  const [{ data, error }, fantasmas] = await Promise.all([
+    rpcSemTipo<RecebidoForaDoSetor[]>('fn_analitico_recebido_fora_do_setor', {
+      p_empresa_id: empresaId, p_mes: mes, p_inicio: null, p_fim: null,
+    }),
+    buscarFantasmasDoMes(empresaId, mes),
+  ]);
+  if (error || !data?.length) return vazia;
+
+  const creditosPorEquipe: Record<string, Set<string>> = {};
+  for (const c of creditosDeOrigem(fantasmas.filter(f => f.tipo === 'setor'), data)) {
+    if (!c.setorId) continue;
+    (creditosPorEquipe[c.equipeId] ??= new Set()).add(chavePessoaSetor(c.perfilId, c.setorId));
+  }
+  return {
+    foraDoSetor: new Set(data.map(r => chavePessoaSetor(r.operador_id, r.setor_id))),
+    creditosPorEquipe,
+  };
 }
 
 /** Congela o retrato do mês. Chamado depois de importar o analítico daquele

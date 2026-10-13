@@ -12,8 +12,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  buscarFontesDeEscopo, operadoresDaEquipe, operadoresDoSetor,
-  type FontesDeEscopo,
+  buscarFontesDeEscopo, buscarRegraSetorDaPessoa, operadoresDaEquipe, operadoresDoSetor,
+  type FontesDeEscopo, type RegraSetorDaPessoa,
 } from '@/services/analitico/analitico.service';
 import {
   escopoDeSetor, setorSomaPorUsuarios, temCarimboDeSetor, ESCOPO_EMPRESA,
@@ -134,6 +134,42 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
     return () => { cancelado = true; };
   }, [ativo, empresaId, mes, chaveExclusoes]);
 
+  /**
+   * «A linha conta só no setor da pessoa», em pares (13/10/2026) — a regra que
+   * o card da equipe no Painel Líder aplica e o recorte de equipe daqui não
+   * aplicava. Só o recorte de EQUIPE usa: setor soma pelo carimbo, e operador é
+   * a pessoa inteira.
+   *
+   * Relida a cada `linhas` nova, e não por cache: a importação do 59 é o que
+   * cria par novo, e é ela que troca as linhas. Sem linhas não há o que
+   * filtrar, e nada é buscado.
+   *
+   * Guardada com a chave do mês: trocar de mês não pode aplicar, nem por um
+   * quadro, os pares do mês anterior.
+   */
+  const precisaRegra = ativo && !!empresaId && !!mes && !!equipeId && !operadorId;
+  const chaveRegra = chaveDeCache('escopo-regra-setor', empresaId, mes);
+  const [regra, setRegra] = useState<{ chave: string; valor: RegraSetorDaPessoa } | null>(() => {
+    const guardado = precisaRegra ? valorInstantaneo<RegraSetorDaPessoa>(chaveRegra) : null;
+    return guardado ? { chave: chaveRegra, valor: guardado } : null;
+  });
+  const temLinhas = linhas.length > 0;
+  useEffect(() => {
+    if (!precisaRegra || !temLinhas) return;
+    const guardado = valorInstantaneo<RegraSetorDaPessoa>(chaveRegra);
+    if (guardado) setRegra(r => (r?.chave === chaveRegra ? r : { chave: chaveRegra, valor: guardado }));
+
+    let cancelado = false;
+    void buscarRegraSetorDaPessoa(empresaId as string, mes as string).then(valor => {
+      if (cancelado) return;
+      setRegra({ chave: chaveRegra, valor });
+      gravarInstantaneo(chaveRegra, valor);
+    });
+    return () => { cancelado = true; };
+    // `linhas` (e não só `temLinhas`) de propósito: cada importação relê.
+  }, [precisaRegra, temLinhas, empresaId, mes, chaveRegra, linhas]);
+  const regraDoMes = regra?.chave === chaveRegra ? regra.valor : null;
+
   /** Setor de uma pessoa — equipe primeiro, cadastro na falta dela. */
   const setorDoOperador = useMemo(
     () => (id: string) => fontes?.operadorEquipeMap[id]?.setor_id ?? null,
@@ -148,7 +184,18 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
     if (!equipeId && !setorId) return ESCOPO_EMPRESA;
     if (!fontes) return null;
     if (equipeId) {
-      return { tipo: 'equipe', operadores: operadoresDaEquipe(equipeId, fontes) };
+      const operadores = operadoresDaEquipe(equipeId, fontes);
+      if (!precisaRegra) return { tipo: 'equipe', operadores };
+      // Com linhas na tela e a regra ainda a caminho, segura: mostrar o número
+      // com as linhas de fora e corrigi-lo meio segundo depois é a divergência
+      // que isto veio tirar. Erro na leitura devolve regra vazia — nunca trava.
+      if (temLinhas && !regraDoMes) return null;
+      return {
+        tipo: 'equipe',
+        operadores,
+        foraDoSetor: regraDoMes?.foraDoSetor,
+        creditos:    regraDoMes?.creditosPorEquipe[equipeId],
+      };
     }
     return escopoDeSetor({
       setorId: setorId!,
@@ -162,7 +209,7 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
       setorDoOperador,
     });
   }, [ativo, operadorId, equipeId, setorId, fontes, isPaguePlay, carimboDisponivel,
-      exclusoes, setorDoOperador]);
+      exclusoes, setorDoOperador, precisaRegra, temLinhas, regraDoMes]);
 
   return { escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador, pendente: escopo === null };
 }

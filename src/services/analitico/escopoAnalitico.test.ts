@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   linhaNoEscopo, escopoDeSetor, temCarimboDeSetor,
-  setorSomaPorUsuarios, ESCOPO_EMPRESA,
+  setorSomaPorUsuarios, chavePessoaSetor, ESCOPO_EMPRESA,
   type EscopoAnalitico, type LinhaEscopavel,
 } from './escopoAnalitico';
 
@@ -59,6 +59,56 @@ describe('escopo de equipe', () => {
     // Somá-la aqui creditaria a uma equipe o recebimento de alguém que o
     // sistema não sabe quem é.
     expect(linhaNoEscopo(orfaPlay4, escopo)).toBe(false);
+  });
+});
+
+describe('escopo de equipe — a linha conta só no setor da pessoa (13/10/2026)', () => {
+  // Ana é do Play 4 e tem linha carimbada no Play 5: o Painel Líder não a conta
+  // na equipe, e o Dashboard passou a não contar também.
+  const linhaAnaNoPlay5: LinhaEscopavel = { operador_id: ANA, setor_id: PLAY5 };
+  const escopo: EscopoAnalitico = {
+    tipo: 'equipe',
+    operadores: new Set([ANA]),
+    foraDoSetor: new Set([chavePessoaSetor(ANA, PLAY5)]),
+  };
+
+  it('tira a linha do membro carimbada fora do setor dele', () => {
+    expect(linhaNoEscopo(linhaAnaNoPlay5, escopo)).toBe(false);
+  });
+
+  it('mantém as linhas do membro no setor dele', () => {
+    expect(linhaNoEscopo(linhaAna, escopo)).toBe(true);
+  });
+
+  it('linha sem carimbo conta, como no resumo por operador', () => {
+    expect(linhaNoEscopo({ operador_id: ANA, setor_id: null }, escopo)).toBe(true);
+    expect(linhaNoEscopo({ operador_id: ANA }, escopo)).toBe(true);
+  });
+
+  it('sem os pares, nada muda: toda linha do membro conta', () => {
+    const semRegra: EscopoAnalitico = { tipo: 'equipe', operadores: new Set([ANA]) };
+    expect(linhaNoEscopo(linhaAnaNoPlay5, semRegra)).toBe(true);
+  });
+
+  it('quem saiu por transferência deixa na equipe de origem o que recebeu lá', () => {
+    // Bruno foi para o Play 5; a linha dele no Play 4 é crédito desta equipe,
+    // embora ele não seja mais membro. A do Play 5 não é.
+    const comCredito: EscopoAnalitico = {
+      ...escopo,
+      creditos: new Set([chavePessoaSetor(BRUNO, PLAY4)]),
+    };
+    expect(linhaNoEscopo({ operador_id: BRUNO, setor_id: PLAY4 }, comCredito)).toBe(true);
+    expect(linhaNoEscopo({ operador_id: BRUNO, setor_id: PLAY5 }, comCredito)).toBe(false);
+  });
+
+  it('crédito vale mesmo que o par esteja em foraDoSetor (é de lá que ele sai)', () => {
+    const comCredito: EscopoAnalitico = {
+      tipo: 'equipe',
+      operadores: new Set(),
+      foraDoSetor: new Set([chavePessoaSetor(BRUNO, PLAY4)]),
+      creditos: new Set([chavePessoaSetor(BRUNO, PLAY4)]),
+    };
+    expect(linhaNoEscopo({ operador_id: BRUNO, setor_id: PLAY4 }, comCredito)).toBe(true);
   });
 });
 

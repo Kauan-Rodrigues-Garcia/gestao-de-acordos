@@ -23,7 +23,10 @@
  *                        operador cadastrado (órfã). É o total do arquivo.
  *   operador           → as linhas dele.
  *   equipe             → linhas dos membros (+ clones que contam). Órfã não
- *                        entra: ela tem setor, não tem equipe.
+ *                        entra: ela tem setor, não tem equipe. Linha do membro
+ *                        carimbada fora do setor dele no mês não entra; a de
+ *                        quem saiu por transferência, no setor de origem, entra
+ *                        (`foraDoSetor`/`creditos`, iguais ao Painel Líder).
  *   setor NORMAL       → linhas CARIMBADAS com o setor na importação. Operador
  *                        emprestado para outro setor (clone) NÃO muda o total, e
  *                        as órfãs do setor entram. É "o que chegou no relatório
@@ -62,7 +65,27 @@ export interface LinhaEscopavel {
 export type EscopoAnalitico =
   | { tipo: 'empresa' }
   | { tipo: 'operador'; operadorId: string }
-  | { tipo: 'equipe'; operadores: ReadonlySet<string> }
+  | {
+      tipo: 'equipe';
+      operadores: ReadonlySet<string>;
+      /**
+       * Pares `pessoa|setor` cujo recebimento NÃO conta para a pessoa onde ela
+       * está — a linha caiu num setor que não é o dela no mês (Nosso produto,
+       * 29/09/2026; ver `chavePessoaSetor`). Omitido = toda linha do membro conta.
+       *
+       * Sem isto o Dashboard somava na equipe as linhas que o membro tinha em
+       * outro setor, e o Painel Líder não: R$ 18.897,63 de diferença na ARI/THAIS
+       * em 13/10/2026, de duas pessoas cadastradas no Play 1 com o recebimento
+       * todo carimbado em Manutenção.
+       */
+      foraDoSetor?: ReadonlySet<string>;
+      /**
+       * Pares `pessoa|setor` que esta equipe recebe de quem saiu dela por
+       * transferência de setor (`creditosDeOrigem`) — a pessoa já não é membro,
+       * mas o que recebeu no setor de origem fica aqui.
+       */
+      creditos?: ReadonlySet<string>;
+    }
   | {
       /**
        * Vários recortes somados — o recorte de N setores do Painel Líder.
@@ -95,6 +118,11 @@ export type EscopoAnalitico =
     };
 
 export const ESCOPO_EMPRESA: EscopoAnalitico = { tipo: 'empresa' };
+
+/** A chave `pessoa|setor` de `foraDoSetor` e `creditos` — a mesma de `buscarParesForaDoSetor`. */
+export function chavePessoaSetor(operadorId: string, setorId: string): string {
+  return `${operadorId}|${setorId}`;
+}
 
 /**
  * O total deste setor sai da soma dos usuários, em vez do carimbo do relatório?
@@ -174,10 +202,17 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
     case 'operador':
       return linha.operador_id === escopo.operadorId;
 
-    case 'equipe':
+    case 'equipe': {
       // Órfã não tem equipe — ficaria sempre de fora de qualquer equipe, então
       // somá-la aqui seria atribuir a alguém o recebimento de ninguém.
-      return linha.operador_id !== null && escopo.operadores.has(linha.operador_id);
+      if (linha.operador_id === null) return false;
+      // Linha sem carimbo não tem setor a comparar: conta, como no
+      // `fn_analitico_resumo_por_operador` (`li.setor IS NULL`).
+      const par = linha.setor_id ? chavePessoaSetor(linha.operador_id, linha.setor_id) : null;
+      if (par && escopo.creditos?.has(par)) return true;
+      if (!escopo.operadores.has(linha.operador_id)) return false;
+      return !(par && escopo.foraDoSetor?.has(par));
+    }
 
     case 'uniao':
       return escopo.partes.some(p => linhaNoEscopo(linha, p));

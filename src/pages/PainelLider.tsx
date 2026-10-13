@@ -19,7 +19,7 @@
  * Métricas são SEMPRE do mês selecionado (por vencimento), refletindo a
  * atribuição de recebimento por vencimento usada no resto do sistema.
  */
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   Users, Calendar, ChevronRight, ChevronLeft, RefreshCw, Loader2,
   TrendingUp, Radio, BarChart3, LineChart, SlidersHorizontal, Clock,
@@ -63,6 +63,7 @@ import {
 } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { setoresDosFiltros } from '@/lib/setoresDosFiltros';
+import { assinarSinal } from '@/lib/sinais';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
@@ -337,6 +338,14 @@ export default function PainelLider() {
   const [loadingDiario, setLoadingDiario] = useState(false);
   // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
   const [diarioReloadKey, setDiarioReloadKey] = useState(0);
+  // Sobe quando o analítico muda no banco (sinal `analitico`: o 59 de hora em
+  // hora, ou um 58 importado). Antes o painel só relia no botão acima, e quem o
+  // deixava aberto via o número de horas atrás enquanto o Dashboard, que ouve o
+  // mesmo sinal, já mostrava o novo (13/10/2026).
+  const [analiticoVersao, setAnaliticoVersao] = useState(0);
+  // Qual carga foi a última com esqueleto. A releitura pelo sinal é silenciosa:
+  // o número troca no lugar, sem a tela piscar de hora em hora.
+  const ultimaCargaAnalitico = useRef<string | null>(null);
 
   // A composição DEPENDE do mês, e recarrega ao trocá-lo.
   //
@@ -378,7 +387,10 @@ export default function PainelLider() {
       return;
     }
     let cancel = false;
-    setLoadingAnalitico(true);
+    // Mesmo mês, mesma empresa e sem clique em recarregar = veio do sinal.
+    const carga = `${empresa.id}|${mesStr}|${diarioReloadKey}`;
+    if (ultimaCargaAnalitico.current !== carga) setLoadingAnalitico(true);
+    ultimaCargaAnalitico.current = carga;
     // As exclusões entram no `buscarTotalPorSetor`, senão este painel mostraria
     // o setor com as origens que a aba Analítico já tirou do acumulado.
     void buscarExclusoesSetor(empresa.id, mesStr).then(({ porSetor: exclusoes }) => {
@@ -428,7 +440,27 @@ export default function PainelLider() {
       }
     });
     return () => { cancel = true; };
-  }, [mostrarAbasAnaliticas, empresa?.id, mesStr, diarioReloadKey]);
+  }, [mostrarAbasAnaliticas, empresa?.id, mesStr, diarioReloadKey, analiticoVersao]);
+
+  // O analítico mudou no banco → relê os resumos. Mesmo sinal, mesmo debounce e
+  // mesmo piso para «só UPDATE» do `useAnaliticoDashboard`: a importação manda
+  // vários avisos seguidos, e tabulação (UPDATE) não muda o recebido.
+  useEffect(() => {
+    if (!mostrarAbasAnaliticas || !empresa?.id) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const reler = () => setAnaliticoVersao(v => v + 1);
+    const cancelar = assinarSinal('analitico', empresa.id, {
+      onMudou: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => { debounce = null; reler(); }, 1_500);
+      },
+      onReconectado: reler,
+    }, { minimoSoUpdateMs: 5 * 60_000 });
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      cancelar();
+    };
+  }, [mostrarAbasAnaliticas, empresa?.id]);
 
   /**
    * A regra do gráfico é a MESMA do card Total recebido.
