@@ -925,7 +925,7 @@ export interface CodigoDeSetor {
    * ser uma lista — «79, 38», o principal primeiro (20261014120000).
    */
   codigo_erp: string | null;
-  /** As carteiras que esses códigos encontram no 59 importado, juntas por « · ». */
+  /** As carteiras que esses códigos encontram no 59 importado, juntas por « / ». */
   carteira:   string | null;
   /**
    * O código está preenchido E existe no 59.

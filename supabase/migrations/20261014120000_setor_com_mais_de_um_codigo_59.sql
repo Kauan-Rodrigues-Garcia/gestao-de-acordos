@@ -32,7 +32,7 @@
 --
 -- A assinatura e o retorno das duas RPCs da tela ficam IGUAIS: `codigo_erp`
 -- volta como texto («79, 38») e `carteira`/`desvinculou` juntam os nomes com
--- « · ». Tela antiga aberta continua funcionando com um código só.
+-- « / ». Tela antiga aberta continua funcionando com um código só.
 --
 -- ── Como o dinheiro muda de setor ────────────────────────────────────────────
 -- O analítico não lê o código: lê `mestre_grupos.setor_id`, que o código
@@ -80,7 +80,7 @@ SECURITY DEFINER
 SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-  -- UPDATE que não encosta nos códigos segue o caminho normal: renomear setor e
+  -- UPDATE que nao encosta nos codigos segue o caminho normal: renomear setor e
   -- ativar/desativar continuam sendo de quem tem `setores_criar_editar`.
   IF NEW.codigo_erp IS NOT DISTINCT FROM OLD.codigo_erp
      AND NEW.codigos_erp_extras IS NOT DISTINCT FROM OLD.codigos_erp_extras THEN
@@ -111,8 +111,8 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Um código é de um setor só; a ordem só desempata dado incoerente, e aí
-  -- quem tem o código como principal ganha.
+  -- Um codigo e de um setor so; a ordem so desempata dado incoerente, e ai
+  -- quem tem o codigo como principal ganha.
   SELECT s.id INTO v_setor
     FROM public.setores s
    WHERE s.empresa_id = NEW.empresa_id
@@ -163,16 +163,17 @@ BEGIN
       USING ERRCODE = 'insufficient_privilege';
   END IF;
 
-  -- A lista, na ordem digitada, sem vazio e sem repetido. Campo em branco é
-  -- «sem código» (array vazio), não string vazia.
+  -- A lista, na ordem digitada, sem vazio e sem repetido. Campo em branco e
+  -- sem codigo (array vazio), nao string vazia. Separador e tudo que nao e
+  -- letra, numero, ponto, hifen ou sublinhado: virgula, ponto e virgula, espaco.
   SELECT COALESCE(array_agg(t.c ORDER BY t.o), '{}')
     INTO v_codigos
     FROM (
-      SELECT btrim(x) AS c, min(n) AS o
-        FROM unnest(regexp_split_to_array(COALESCE(p_codigo, ''), '[,;[:space:]]+'))
+      SELECT x AS c, min(n) AS o
+        FROM unnest(regexp_split_to_array(COALESCE(p_codigo, ''), '[^0-9A-Za-z_.-]+'))
              WITH ORDINALITY AS u(x, n)
-       WHERE btrim(x) <> ''
-       GROUP BY btrim(x)
+       WHERE x <> ''
+       GROUP BY x
     ) t;
 
   SELECT s.empresa_id,
@@ -183,7 +184,7 @@ BEGIN
     RAISE EXCEPTION 'SETOR_NAO_ENCONTRADO: setor % nao existe.', p_setor_id;
   END IF;
 
-  -- Um código pertence a um setor só — principal ou extra, tanto faz.
+  -- Um codigo pertence a um setor so, principal ou extra.
   SELECT s.nome, c INTO v_dono, v_em_uso
     FROM public.setores s
     CROSS JOIN unnest(v_codigos) AS c
@@ -197,13 +198,16 @@ BEGIN
       v_em_uso, v_dono;
   END IF;
 
+  -- O primeiro e o principal; os demais, extras.
   UPDATE public.setores s
      SET codigo_erp         = v_codigos[1],
-         codigos_erp_extras = COALESCE(v_codigos[2:], '{}')
+         codigos_erp_extras = ARRAY(
+           SELECT e.c FROM unnest(v_codigos) WITH ORDINALITY AS e(c, n)
+            WHERE e.n > 1 ORDER BY e.n)
    WHERE s.id = p_setor_id;
 
-  -- Os códigos que SAÍRAM soltam a carteira que eles haviam amarrado neste
-  -- setor. Carteira que pertence a outro setor não é assunto daqui.
+  -- Os codigos que SAIRAM soltam a carteira que eles haviam amarrado neste
+  -- setor. Carteira que pertence a outro setor nao e assunto daqui.
   WITH solta AS (
     UPDATE public.mestre_grupos g
        SET setor_id         = NULL,
@@ -218,7 +222,7 @@ BEGIN
        AND g.setor_id = p_setor_id
     RETURNING g.nome_grupo_filtro
   )
-  SELECT string_agg(solta.nome_grupo_filtro, ' · ' ORDER BY solta.nome_grupo_filtro)
+  SELECT string_agg(solta.nome_grupo_filtro, ' / ' ORDER BY solta.nome_grupo_filtro)
     INTO v_soltou FROM solta;
 
   IF cardinality(v_codigos) > 0 THEN
@@ -237,9 +241,9 @@ BEGIN
     )
     SELECT count(*) > 0 INTO v_vinculou FROM amarra;
 
-    -- Todas as carteiras que os códigos encontram, as já vinculadas inclusive:
-    -- a tela precisa dos nomes para confirmar que os números são os certos.
-    SELECT string_agg(g.nome_grupo_filtro, ' · '
+    -- Todas as carteiras que os codigos encontram, as ja vinculadas inclusive:
+    -- a tela precisa dos nomes para confirmar que os numeros sao os certos.
+    SELECT string_agg(g.nome_grupo_filtro, ' / '
                       ORDER BY array_position(v_codigos, g.cod_grupo_filtro))
       INTO v_carteira
       FROM public.mestre_grupos g
@@ -253,7 +257,7 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public.fn_setor_definir_codigo_erp(uuid, text) IS
-  'Grava os CodGrupoFiltro do setor («79, 38»: o primeiro e o principal), solta '
+  'Grava os CodGrupoFiltro do setor (lista 79, 38: o primeiro e o principal), solta '
   'a carteira dos codigos que sairam e amarra a dos que entraram. So '
   'super_admin. E a unica via de vinculo de carteira desde 20260910190216; '
   'lista desde 20261014120000.';
@@ -289,7 +293,7 @@ AS $function$
       SELECT array_remove(ARRAY[s.codigo_erp], NULL) || s.codigos_erp_extras AS cods
     ) c
     CROSS JOIN LATERAL (
-      SELECT string_agg(mg.nome_grupo_filtro, ' · '
+      SELECT string_agg(mg.nome_grupo_filtro, ' / '
                         ORDER BY array_position(c.cods, mg.cod_grupo_filtro)) AS nomes,
              count(*) AS achados
         FROM public.mestre_grupos mg
