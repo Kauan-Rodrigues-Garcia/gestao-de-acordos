@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
 import type { EscopoPainel } from './escopoDoPainel';
 import type { EquipeAnalitico } from '@/services/analitico/analitico.service';
 
-interface ItemFiltro {
+export interface ItemFiltro {
   id: string;
   nome: string;
   /** Linha de apoio no card — o setor da equipe, quando há mais de um em foco. */
@@ -68,8 +68,11 @@ function rotuloDaSelecao(
   return marcados.map(nome).join(', ');
 }
 
-/** Lista de cards marcáveis dentro de um popover. */
-function SeletorMultiplo({
+/**
+ * Lista de cards marcáveis dentro de um popover. Também é o filtro de equipes
+ * da Campanha Fácil (14/10/2026): o mesmo gesto nas duas telas.
+ */
+export function SeletorMultiplo({
   icone: Icone, itens, marcados, onMarcados, vazio, plural, larguraBotao,
 }: {
   icone: typeof Building2;

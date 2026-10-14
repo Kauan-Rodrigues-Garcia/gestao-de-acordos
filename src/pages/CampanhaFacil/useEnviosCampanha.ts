@@ -16,7 +16,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { Perfil } from '@/lib/supabase';
 import type { CampaignItem, Discounts } from './lib/campaign-core';
 import {
-  casaEquipes, casaNome, equipesDaLista, repartirPorOperador,
+  casaEquipes, casaNome, equipesDaLista, marcacaoAoTrocarEquipes, repartirPorOperador,
   type FiltroEquipe, type OperadorCampanha, type ParteRedistribuida,
 } from './envios';
 import {
@@ -48,28 +48,27 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState('');
   /**
-   * As equipes escolhidas no filtro do passo 3 — várias de uma vez desde
-   * 14/10/2026. Vazio = todas.
+   * As equipes escolhidas no filtro do passo 3, o mesmo seletor do Painel
+   * Líder (14/10/2026). Vazio = todas. Elas definem quem pode receber: a lista
+   * mostra só os operadores e os líderes delas, e quem fica fora não recebe.
    */
-  const [filtroEquipes, setFiltroEquipes] = useState<ReadonlySet<FiltroEquipe>>(new Set());
-  /** As equipes do setor que têm operador na lista, e a de liderança. */
+  const [filtroEquipes, setFiltroEquipes] = useState<FiltroEquipe[]>([]);
+  /** As equipes do setor que têm alguém na lista, com «Sem equipe» no fim. */
   const equipes = useMemo(() => equipesDaLista(operadores), [operadores]);
-  /**
-   * A lista do passo 3, filtrada pelo nome e pelas equipes (09/10/2026). A
-   * seleção vale para todos, filtrados ou não.
-   */
-  const operadoresVisiveis = useMemo(
-    () => operadores.filter((o) => casaNome(o.nome, busca) && casaEquipes(o, filtroEquipes)),
-    [operadores, busca, filtroEquipes],
+  /** Quem é das equipes escolhidas: são estes que podem ser marcados. */
+  const operadoresDoRecorte = useMemo(
+    () => operadores.filter((o) => casaEquipes(o, filtroEquipes)),
+    [operadores, filtroEquipes],
   );
-  const alternarEquipe = useCallback((id: FiltroEquipe) => {
-    setFiltroEquipes((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
-    });
-  }, []);
-  const limparEquipes = useCallback(() => setFiltroEquipes(new Set()), []);
+  /** A lista do passo 3: o recorte, filtrado pelo nome (09/10/2026). */
+  const operadoresVisiveis = useMemo(
+    () => operadoresDoRecorte.filter((o) => casaNome(o.nome, busca)),
+    [operadoresDoRecorte, busca],
+  );
+  const escolherEquipes = useCallback((ids: FiltroEquipe[]) => {
+    setSelecionados((prev) => marcacaoAoTrocarEquipes(operadores, prev, filtroEquipes, ids));
+    setFiltroEquipes(ids);
+  }, [operadores, filtroEquipes]);
 
   const [historico, setHistorico] = useState<LoteCampanha[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(true);
@@ -98,7 +97,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     if (!empresaId || !setorId) { setOperadores([]); setSelecionados(new Set()); return; }
     let ativo = true;
     setCarregandoOperadores(true);
-    setFiltroEquipes(new Set());
+    setFiltroEquipes([]);
     listarOperadoresParaCampanha(empresaId, setorId)
       .then((lista) => {
         if (!ativo) return;
@@ -133,13 +132,17 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
       return n;
     });
   }, []);
-  const marcarTodos = useCallback(() => setSelecionados(new Set(operadores.map((o) => o.id))), [operadores]);
+  const marcarTodos = useCallback(
+    () => setSelecionados(new Set(operadoresDoRecorte.map((o) => o.id))), [operadoresDoRecorte]);
   const desmarcarTodos = useCallback(() => setSelecionados(new Set()), []);
 
-  /** Na ordem da lista (alfabética) — é a ordem do rodízio. */
+  /**
+   * Na ordem da lista (alfabética) — é a ordem do rodízio. Só do recorte: a
+   * marcação já acompanha as equipes, e isto garante que ninguém de fora vá.
+   */
   const operadoresSelecionados = useMemo(
-    () => operadores.filter((o) => selecionados.has(o.id)),
-    [operadores, selecionados],
+    () => operadoresDoRecorte.filter((o) => selecionados.has(o.id)),
+    [operadoresDoRecorte, selecionados],
   );
 
   /**
@@ -232,8 +235,8 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
 
   return {
     setorFixo, setores, setorId, setSetorId: setSetorEscolhido,
-    operadores, operadoresVisiveis, busca, setBusca,
-    equipes, filtroEquipes, alternarEquipe, limparEquipes,
+    operadores, operadoresDoRecorte, operadoresVisiveis, busca, setBusca,
+    equipes, filtroEquipes, escolherEquipes,
     carregandoOperadores, selecionados, operadoresSelecionados,
     alternar, marcarTodos, desmarcarTodos,
     empresaId, historico, carregandoHistorico, recarregarHistorico,

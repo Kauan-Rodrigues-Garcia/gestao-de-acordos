@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Participacao } from './campanhasWhatsapp.service';
 import { casaVoto, porMes, resumirHistorico, situacaoDaParticipacao } from './historico';
-import { casaEquipe, casaEquipes, equipesDaLista, rotuloEquipe } from '@/pages/CampanhaFacil/envios';
+import {
+  casaEquipe, casaEquipes, equipesDaLista, marcacaoAoTrocarEquipes, resumoDaEquipe, rotuloEquipe,
+} from '@/pages/CampanhaFacil/envios';
 
 function p(over: Partial<Participacao>): Participacao {
   return {
@@ -40,9 +42,9 @@ describe('filtro de equipe do passo 3', () => {
   ];
   it('lista as equipes com a contagem, «Sem equipe» no fim', () => {
     expect(equipesDaLista(ops)).toEqual([
-      { id: 'e2', nome: 'Equipe Rosa', qtd: 1 },
-      { id: 'e1', nome: 'Luciano', qtd: 2 },
-      { id: 'sem', nome: 'Sem equipe', qtd: 1 },
+      { id: 'e2', nome: 'Equipe Rosa', operadores: 1, lideres: 0 },
+      { id: 'e1', nome: 'Luciano', operadores: 2, lideres: 0 },
+      { id: 'sem', nome: 'Sem equipe', operadores: 1, lideres: 0 },
     ]);
   });
   it('filtra por equipe e por sem equipe', () => {
@@ -54,14 +56,36 @@ describe('filtro de equipe do passo 3', () => {
     expect(ops.filter(o => casaEquipes(o, new Set(['e2', 'sem']))).map(o => o.nome)).toEqual(['Bia', 'Davi']);
     expect(ops.filter(o => casaEquipes(o, new Set()))).toHaveLength(4);
   });
-  it('os líderes ficam só na «Equipe de liderança»', () => {
-    const comLider = [...ops, { id: '5', nome: 'Lia', equipe_id: null, equipe_nome: null, lider: true }];
-    expect(equipesDaLista(comLider).at(-1)).toEqual({ id: 'lideranca', nome: 'Equipe de liderança', qtd: 1 });
-    expect(equipesDaLista(comLider).find(e => e.id === 'sem')?.qtd).toBe(1);
-    expect(comLider.filter(o => casaEquipe(o, 'lideranca')).map(o => o.nome)).toEqual(['Lia']);
-    expect(comLider.filter(o => casaEquipe(o, 'sem')).map(o => o.nome)).toEqual(['Davi']);
-    expect(comLider.filter(o => casaEquipes(o, new Set(['e1', 'lideranca']))).map(o => o.nome))
-      .toEqual(['Ana', 'Caio', 'Lia']);
+  // Lia lidera duas equipes; Rui é líder do setor sem equipe.
+  const lia = {
+    id: '5', nome: 'Lia', equipe_id: null, equipe_nome: null, lider: true,
+    equipes_lider: [{ id: 'e1', nome: 'Luciano' }, { id: 'e2', nome: 'Equipe Rosa' }],
+  };
+  const rui = { id: '6', nome: 'Rui', equipe_id: null, equipe_nome: null, lider: true, equipes_lider: [] };
+  const comLideres = [...ops, lia, rui];
+
+  it('o líder aparece em cada equipe que lidera; sem equipe, em «Sem equipe»', () => {
+    expect(equipesDaLista(comLideres)).toEqual([
+      { id: 'e2', nome: 'Equipe Rosa', operadores: 1, lideres: 1 },
+      { id: 'e1', nome: 'Luciano', operadores: 2, lideres: 1 },
+      { id: 'sem', nome: 'Sem equipe', operadores: 1, lideres: 1 },
+    ]);
+    expect(comLideres.filter(o => casaEquipe(o, 'e1')).map(o => o.nome)).toEqual(['Ana', 'Caio', 'Lia']);
+    expect(comLideres.filter(o => casaEquipe(o, 'e2')).map(o => o.nome)).toEqual(['Bia', 'Lia']);
+    expect(comLideres.filter(o => casaEquipe(o, 'sem')).map(o => o.nome)).toEqual(['Davi', 'Rui']);
+    expect(resumoDaEquipe({ operadores: 2, lideres: 1 })).toBe('2 operadores · 1 líder');
+  });
+
+  it('trocar as equipes: quem sai é desmarcado, operador que entra vem marcado, líder não', () => {
+    const todosOps = new Set(['1', '2', '3', '4']);
+    // De «todas» para só e1: ficam Ana e Caio, marcados; Lia aparece, desmarcada.
+    const soE1 = marcacaoAoTrocarEquipes(comLideres, todosOps, [], ['e1']);
+    expect([...soE1].sort()).toEqual(['1', '3']);
+    // Marcou a Lia e desmarcou o Caio; agora entra e2: Bia chega marcada, o resto fica.
+    const ajustado = new Set(['1', '5']);
+    expect([...marcacaoAoTrocarEquipes(comLideres, ajustado, ['e1'], ['e1', 'e2'])].sort()).toEqual(['1', '2', '5']);
+    // Volta para «todas»: Davi chega marcado, Rui (líder) não.
+    expect([...marcacaoAoTrocarEquipes(comLideres, ajustado, ['e1'], [])].sort()).toEqual(['1', '2', '4', '5']);
   });
   it('não repete «Equipe» no nome', () => {
     expect(rotuloEquipe('Luciano')).toBe('Equipe Luciano');

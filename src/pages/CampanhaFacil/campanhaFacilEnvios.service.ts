@@ -103,7 +103,7 @@ export async function listarOperadoresParaCampanha(
     }
   }
 
-  for (const l of await listarLideresDoSetor(empresaId, setorId, [...nomeEquipe.keys()])) {
+  for (const l of await listarLideresDoSetor(empresaId, setorId, nomeEquipe)) {
     if (!lista.has(l.id)) lista.set(l.id, l);
   }
   // Operadores primeiro, líderes no fim — a ordem do rodízio.
@@ -112,22 +112,29 @@ export async function listarOperadoresParaCampanha(
 }
 
 /**
- * Os líderes do setor, para a «Equipe de liderança» do passo 3 (14/10/2026).
+ * Os líderes do setor, para o passo 3 (14/10/2026), cada um com as equipes do
+ * setor que lidera — é por elas que ele aparece no filtro de equipes.
  *
  * Líder do setor é quem tem cargo `lider` com o `setor_id` dele, e também quem
  * lidera uma equipe do setor pela `equipe_lideres` (o líder clonado de outro
- * setor). A `equipe_lideres` pode faltar: aí fica só o primeiro grupo.
+ * setor). A `equipe_lideres` pode faltar: aí fica só o primeiro grupo, sem
+ * equipe.
  */
 async function listarLideresDoSetor(
-  empresaId: string, setorId: string, equipesDoSetor: readonly string[],
+  empresaId: string, setorId: string, equipesDoSetor: ReadonlyMap<string, string>,
 ): Promise<OperadorCampanha[]> {
-  const ids = new Set<string>();
-  if (equipesDoSetor.length > 0) {
+  const equipesDoLider = new Map<string, { id: string; nome: string }[]>();
+  if (equipesDoSetor.size > 0) {
     const { data, error } = await supabase.from('equipe_lideres')
-      .select('lider_id').eq('empresa_id', empresaId).in('equipe_id', [...equipesDoSetor]);
+      .select('lider_id, equipe_id').eq('empresa_id', empresaId).in('equipe_id', [...equipesDoSetor.keys()]);
     if (error) console.warn('[CampanhaFacil] líderes das equipes:', error);
-    for (const l of (data ?? []) as { lider_id: string }[]) ids.add(l.lider_id);
+    for (const l of (data ?? []) as { lider_id: string; equipe_id: string }[]) {
+      const lista = equipesDoLider.get(l.lider_id) ?? [];
+      if (!lista.some((e) => e.id === l.equipe_id)) lista.push({ id: l.equipe_id, nome: equipesDoSetor.get(l.equipe_id) ?? '' });
+      equipesDoLider.set(l.lider_id, lista);
+    }
   }
+  const ids = new Set(equipesDoLider.keys());
 
   const cols = 'id, nome, foto_url';
   const [{ data: doSetor, error: e1 }, vinculados] = await Promise.all([
@@ -143,7 +150,10 @@ async function listarLideresDoSetor(
 
   const lideres = new Map<string, OperadorCampanha>();
   for (const p of [...(doSetor ?? []), ...(vinculados.data ?? [])] as { id: string; nome: string; foto_url: string | null }[]) {
-    lideres.set(p.id, { id: p.id, nome: p.nome, foto_url: p.foto_url, equipe_id: null, equipe_nome: null, lider: true });
+    lideres.set(p.id, {
+      id: p.id, nome: p.nome, foto_url: p.foto_url, equipe_id: null, equipe_nome: null, lider: true,
+      equipes_lider: equipesDoLider.get(p.id) ?? [],
+    });
   }
   return [...lideres.values()];
 }
