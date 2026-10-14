@@ -32,10 +32,15 @@ export { BotaoChefao } from './BotaoChefao';
 
 const carregarCena = comNovaTentativa(() => import('./cena'));
 
-/** Altura da faixa, em px — a mesma do `.zb-faixa` no CSS. */
-const ALTURA_FAIXA = 32;
+/** Altura da faixa, em px — a mesma do `.zb-faixa` e do `.bx-faixa` no CSS. */
+const ALTURA_FAIXA = { zumbis: 32, bruxas: 52 } as const;
 const FaixaAbobora = lazy(() => carregarCena().then(m => ({ default: m.FaixaAbobora })));
 const CenaCaca     = lazy(() => carregarCena().then(m => ({ default: m.CenaCaca })));
+
+// As bruxas (14/10/2026): a cena e a faixa só baixam quando a rodada é de bruxa.
+const carregarBruxas = comNovaTentativa(() => import('./bruxas/cenaBruxas'));
+const CenaBruxas = lazy(() => carregarBruxas().then(m => ({ default: m.CenaBruxas })));
+const FaixaBruxas = lazy(() => comNovaTentativa(() => import('./bruxas/FaixaCaca'))().then(m => ({ default: m.FaixaBruxas })));
 
 const carregarChefao = comNovaTentativa(() => import('./cenaChefao'));
 const CenaChefao = lazy(() => carregarChefao().then(m => ({ default: m.CenaChefao })));
@@ -56,11 +61,13 @@ export function FaixaDaCaca({ empresaId }: { empresaId: string | null | undefine
           // role a coluna inteira, a faixa fica no alto e à vista.
           className="sticky top-0 z-[35] flex-shrink-0 overflow-hidden"
           initial={{ height: 0 }}
-          animate={{ height: ALTURA_FAIXA }}
+          animate={{ height: ALTURA_FAIXA[rodada.tema] }}
           exit={{ height: 0 }}
           transition={{ duration: 0.45, ease: [0.65, 0, 0.35, 1] }}
         >
-          <Suspense fallback={null}><FaixaAbobora rodada={rodada} /></Suspense>
+          <Suspense fallback={null}>
+            {rodada.tema === 'bruxas' ? <FaixaBruxas rodada={rodada} /> : <FaixaAbobora rodada={rodada} />}
+          </Suspense>
         </motion.div>
       )}
     </AnimatePresence>
@@ -69,18 +76,31 @@ export function FaixaDaCaca({ empresaId }: { empresaId: string | null | undefine
 
 export function AboboraDaCaca({ empresaId }: { empresaId: string | null | undefined }) {
   const caca = useCacaAbobora(empresaId);
+  const auth = useAuthOpcional();
   const naTela = aboboraNaTela(caca, Date.now());
-  // Depois do primeiro zumbi a cena fica montada: a morte e o recado precisam
-  // sobreviver à rodada, que vira «achada» no tiro.
-  const [montada, setMontada] = useState(false);
-  useEffect(() => { if (naTela) setMontada(true); }, [naTela]);
+  const tema = caca.rodada?.tema ?? 'zumbis';
+  // Cada cena só vê as rodadas do seu tema: a de zumbi não desenha bruxa.
+  const doZumbi = tema === 'zumbis' ? caca.rodada : null;
+  const daBruxa = tema === 'bruxas' ? caca.rodada : null;
+  // Depois do primeiro zumbi (ou da primeira bruxa) a cena fica montada: a
+  // morte e o recado precisam sobreviver à rodada, que vira «achada» no tiro.
+  const [montada, setMontada] = useState({ zumbis: false, bruxas: false });
+  useEffect(() => {
+    if (naTela) setMontada(m => (m[tema] ? m : { ...m, [tema]: true }));
+  }, [naTela, tema]);
+  const eu = (caca.rodada?.id ?? 0) < 0 ? EU_NO_ENSAIO : auth?.user?.id ?? 'eu';
   // O laboratório fica sempre no mesmo lugar da árvore: se mudasse de lugar
   // quando o primeiro zumbi sai, remontaria e perderia o zumbi escolhido.
   return (
     <>
-      {(montada || naTela) && (
+      {(montada.zumbis || (naTela && tema === 'zumbis')) && (
         <Suspense fallback={null}>
-          <CenaCaca rodada={caca.rodada} naTela={naTela} />
+          <CenaCaca rodada={doZumbi} naTela={naTela && tema === 'zumbis'} />
+        </Suspense>
+      )}
+      {(montada.bruxas || (naTela && tema === 'bruxas')) && (
+        <Suspense fallback={null}>
+          <CenaBruxas rodada={daBruxa} naTela={naTela && tema === 'bruxas'} eu={eu} />
         </Suspense>
       )}
       <ChefaoDaCaca />

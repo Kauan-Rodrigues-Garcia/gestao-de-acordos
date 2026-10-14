@@ -14,10 +14,10 @@ import path from 'node:path';
 const CSS = fs.readFileSync(path.resolve(__dirname, '../../index.css'), 'utf8');
 
 describe('Modo leve e a Caça aos Zumbis', () => {
-  it('a regra que encurta as animações deixa as classes zb-* de fora', () => {
+  it('a regra que encurta as animações deixa as classes zb-* (zumbis) e bx-* (bruxas) de fora', () => {
     const regra = CSS.slice(CSS.indexOf('html[data-leve] *'), CSS.indexOf('animation-duration: 1ms'));
-    expect(regra).toContain('html[data-leve] *:not([class^="zb-"], [class*=" zb-"]),');
-    expect(regra).toContain('html[data-leve] *:not([class^="zb-"], [class*=" zb-"])::before,');
-    expect(regra).toContain('html[data-leve] *:not([class^="zb-"], [class*=" zb-"])::after {');
+    expect(regra).toContain('html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"]),');
+    expect(regra).toContain('html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"])::before,');
+    expect(regra).toContain('html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"])::after {');
   });
 });

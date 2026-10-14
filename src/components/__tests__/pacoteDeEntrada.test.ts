@@ -72,6 +72,19 @@ describe('pacote de entrada', () => {
     }
   });
 
+  it('a Caça às Bruxas só baixa a cena e a faixa quando a rodada é de bruxa', () => {
+    // Dentro de `bruxas/` elas se importam à vontade: tudo ali já é sob demanda
+    // (o laboratório, `bruxas/laboratorio.ts`, é uma página à parte, só no dev).
+    const daqui = arquivosDoApp(join(RAIZ, 'components', 'CacaAbobora'))
+      .filter(f => !/[\\/]bruxas[\\/]/.test(f));
+    for (const f of [...daqui, join(RAIZ, 'components', 'Layout.tsx')]) {
+      const imports = importsEstaticos(readFileSync(f, 'utf8'));
+      for (const peca of ['./bruxas/cenaBruxas', './bruxas/FaixaCaca', './bruxas/palco', './bruxas/faixa']) {
+        expect(imports, `${relative(RAIZ, f)} → ${peca}`).not.toContain(peca);
+      }
+    }
+  });
+
   it('o Som ambiente só baixa o painel quando alguém abre', () => {
     const daqui = arquivosDoApp(join(RAIZ, 'components', 'Halloween', 'SomAmbiente'))
       .filter(f => !f.endsWith('PainelSomAmbiente.tsx'));

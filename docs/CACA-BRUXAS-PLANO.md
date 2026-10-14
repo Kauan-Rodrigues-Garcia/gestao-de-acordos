@@ -1,6 +1,9 @@
 # Caça às Bruxas — plano (semana que vem da gincana)
 
-> **ESTADO EM 14/10/2026:** elenco novo (8 personagens, 4 fofos que só desmaiam) e a faixa decorada. Antes, **em 09/10/2026:** a bruxa existe só no **laboratório local**
+> **ESTADO EM 14/10/2026 (noite):** a caça de verdade está pronta no app — falta aplicar a
+> migration `20261014200000_caca_bruxas` e escolher «Bruxas» em Configurações (§5).
+>
+> **14/10/2026:** elenco novo (8 personagens, 4 fofos que só desmaiam) e a faixa decorada. Antes, **em 09/10/2026:** a bruxa existe só no **laboratório local**
 > (`npm run dev` → http://localhost:8080/lab-bruxas.html). Nada no banco, nada no
 > menu, nada no deploy. A caça de verdade continua sendo a dos zumbis.
 
@@ -122,17 +125,46 @@ com tempo médio e o mais rápido.
 5. A bruxa voa **presa à janela** (atravessa a tela por cima da rolagem) ou **presa à página** como o zumbi? Voando, presa à janela faz mais sentido.
 6. Quanto tempo a mancha fica (hoje 40 s; o zumbi é 1 min a 30%).
 
-## 5. Fase 2 — ligar na caça de verdade (NÃO feita)
+## 5. Fase 2 — a caça de verdade (feita em 14/10/2026)
 
-Precisa de migration, então **só com o «pode»** (regra do `CLAUDE.md`):
+**App pronto; falta só aplicar a migration** `20261014200000_caca_bruxas.sql` (SQL
+Editor do Supabase, com o «pode» — regra do `CLAUDE.md`). Antes dela, nada muda: o
+app trata toda rodada como zumbi e o tiro cai nas versões antigas da função.
 
-- `abobora_caca`: coluna `tema text DEFAULT 'zumbis'` (`'zumbis' | 'bruxas'`), escolhida no cartão de Configurações → Geral. O super_admin troca o tema da semana.
-- `abobora_rodadas`: coluna `bruxa smallint` (0–7, sorteio sem repetir no dia, igual `zumbi`) e `tiro text` (`'cabeca' | 'corpo' | 'vassoura'`), para quem não atirou ver a bruxa morrer do jeito do vencedor e para um possível recorde de vassourada. `headshot` continua.
-- `fn_abobora_soltar` sorteia `bruxa` quando o tema é bruxas; `fn_abobora_pegar` recebe o tipo do tiro.
-- **Finalizar e o «2x»** (para todo mundo ver): `abobora_rodadas.finalizada_por` (+ nome), gravada por uma `fn_abobora_finalizar(rodada)` que só aceita o primeiro clique numa rodada de fofo. A faixa mostra o 2x quando `finalizada_por = achada_por`; nas outras telas o palco recebe `finalizarPorOutro(quem)` pelo realtime. Sem isso, o 2x só existe na tela de quem atirou.
-- App: `index.tsx` carrega `bruxas/palco.ts` sob demanda (como a cena do zumbi) quando a rodada é de bruxa; a faixa diz «Fulano **derrubou a bruxa** primeiro, em X s» com HEADSHOT / VASSOURADA.
-- Prazo: o «sumiu» do banco vira `fugirTodas()` (ela vai embora rindo).
-- O teste `pacoteDeEntrada.test.ts` continua valendo: nada das bruxas no pacote de entrada.
+### Como ativar
+
+1. Aplicar a migration (é só aditiva: colunas novas com padrão `zumbis` / NULL / false).
+2. Configurações → Geral → cartão da caça → **Tema: 🧙 Bruxas**. Vale da próxima rodada em
+   diante; a que estiver na tela fica como está.
+3. Ligar a caça para o dia (como sempre), ou «Soltar uma bruxa agora» para testar.
+
+### O banco
+
+- `abobora_caca.tema` (`zumbis` | `bruxas`), trocado só por `fn_abobora_tema` (super_admin).
+- `abobora_rodadas`: `tema` (vai na rodada — quem não é super_admin não lê a configuração),
+  `bruxa` (0–7, sorteio sem repetir no dia, como `zumbi`), `tiro` (`cabeca` | `corpo` |
+  `vassoura`), `finalizada_em/_por/_por_nome` e `dobrado`.
+- `fn_abobora_soltar` sorteia a bruxa quando o tema é bruxas.
+- `fn_abobora_pegar(bigint, boolean, text)` grava o `tiro` (aba antiga, sem ele, cai no default).
+- `fn_abobora_finalizar(rodada)`: só fofo (0, 2, 4, 6 — amarrado a `BRUXAS` por teste), só
+  rodada achada, até 20 s do tiro, o primeiro clique leva (trava da linha). `dobrado` =
+  quem finalizou é quem derrubou.
+- O Broadcast já manda a linha inteira: a finalização chega a todas as telas sozinha.
+
+### O app
+
+- `index.tsx` escolhe pelo `rodada.tema`: zumbi → `cena.tsx`; bruxa → `bruxas/cenaBruxas.tsx`
+  e a faixa `bruxas/FaixaCaca.tsx` (52 px). As duas só baixam quando há bruxa
+  (`pacoteDeEntrada.test.ts` cobra).
+- `cenaBruxas.tsx`: a bruxa voa por cima do conteúdo, presa à janela (decisão 5). O chão é o
+  pé da janela (decisão 4): a caixa do palco vai do alto do conteúdo até o fim da tela e não
+  encolhe quando a faixa abre — senão o corpo caía abaixo da borda e não dava para finalizar.
+- Quem não atirou vê ela cair do jeito do vencedor (`tiro`); a finalização de outra pessoa
+  chega pela rodada e o fofo morre na tela de todos. O meu tiro perdido para outra pessoa
+  corrige quem derrubou no palco (`trocarQuem`), para o «2x!» do chão não mentir.
+- Modo leve: as classes `bx-*` ficam fora do corte de animação, como as `zb-*`.
+- Ensaio sem banco: `?zumbis` no endereço (localhost) → «Bruxas» no laboratório: soltar,
+  outro derrubou (cabeça/corpo/vassoura), outro finalizou, tempo acabou.
 
 ## 6. Ideias que ficaram de fora (para escolher)
 

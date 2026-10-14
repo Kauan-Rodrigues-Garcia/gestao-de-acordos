@@ -76,6 +76,8 @@ export interface OpcoesPalco {
   /** Quantos px da arte o chão fica acima da borda de baixo (o corpo deitado tem de caber). */
   margemChao?: number;
   aoEvento?: (e: EventoPalco) => void;
+  /** Quem atira nesta tela (o id da pessoa, na caça de verdade). Padrão: `EU`. */
+  eu?: string;
 }
 
 interface Morcego { x: number; y: number; vx: number; vy: number; t: number; lado: 1 | -1; fugindo: boolean }
@@ -156,6 +158,7 @@ export class PalcoBruxas {
   private observador: ResizeObserver | null = null;
   private _dificuldade: Dificuldade;
   private readonly aoEvento?: (e: EventoPalco) => void;
+  private readonly eu: string;
   /** Câmera lenta (1 = normal). Só no laboratório. */
   lenta = 1;
   /** Pinta por cima de cada bruxa a área de cada tiro. Só no laboratório. */
@@ -168,6 +171,7 @@ export class PalcoBruxas {
     this.margemChao = opcoes.margemChao ?? 10;
     this._dificuldade = opcoes.dificuldade ?? DIFICULDADE_PADRAO;
     this.aoEvento = opcoes.aoEvento;
+    this.eu = opcoes.eu ?? EU;
     this.raiz = document.createElement('div');
     this.raiz.className = 'bx-palco';
     this.canvasChao = document.createElement('canvas');
@@ -273,11 +277,29 @@ export class PalcoBruxas {
   }
 
   /** «Outra pessoa finalizou»: o primeiro fofo desacordado leva o tiro no meio do corpo. */
-  finalizarPorOutro(quem = 'outro'): void {
-    const qv = this.quedas.find(o => this.finalizavel(o));
+  finalizarPorOutro(quem = 'outro', id?: number): void {
+    // Com `id`, só o corpo daquela bruxa (outro de rodada anterior pode estar no chão).
+    const qv = this.quedas.find(o => (id === undefined || o.dona?.id === id) && this.finalizavel(o));
     if (!qv) return;
     const c = caixaDoCorpo(qv.q)!;
     this.finalizarQueda(qv, quem, (c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2);
+  }
+
+  /**
+   * Quem derrubou a última que caiu, de novo: o tiro desta tela derrubou na
+   * hora, mas o banco disse que outra pessoa chegou primeiro. É quem o «2x»
+   * compara com quem finalizar.
+   */
+  trocarQuem(quem: string): void {
+    for (let i = this.quedas.length - 1; i >= 0; i--) {
+      const d = this.quedas[i].dona;
+      if (d) { d.quem = quem; return; }
+    }
+  }
+
+  /** Há alguma no ar? */
+  get temViva(): boolean {
+    return this.vivas.length > 0;
   }
 
   /** O tempo acabou: todas vão embora rindo. */
@@ -352,7 +374,7 @@ export class PalcoBruxas {
       this.aoEvento?.({ tipo: 'chapeu', bruxa: v.bruxa });
       return;
     }
-    this.matar(v, alvo, { x: lx, y: ly }, EU);
+    this.matar(v, alvo, { x: lx, y: ly }, this.eu);
   }
 
   private matar(v: Viva, morte: Morte, impacto: { x: number; y: number }, quem: string): void {
@@ -410,7 +432,7 @@ export class PalcoBruxas {
         e.preventDefault();
         e.stopPropagation();
         const r = this.raiz.getBoundingClientRect();
-        this.finalizarQueda(qv, EU, (e.clientX - r.left) / this.escala, (e.clientY - r.top) / this.escala);
+        this.finalizarQueda(qv, this.eu, (e.clientX - r.left) / this.escala, (e.clientY - r.top) / this.escala);
       });
       this.raiz.appendChild(caixa);
       qv.caixa = caixa;

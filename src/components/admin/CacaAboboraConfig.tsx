@@ -18,7 +18,7 @@
  * atirando de autoclick (`CacaAbobora/autoclick.ts`): só aqui, só para ele.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bot, Crosshair, Loader2, Music2, RefreshCw, Skull, Zap } from 'lucide-react';
+import { Bot, Crosshair, Loader2, Music2, RefreshCw, Skull, Sparkles, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,9 +31,10 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { SpriteZumbi } from '@/components/CacaAbobora/SpriteZumbi';
 import { ZUMBIS, zumbiDaRodada } from '@/components/CacaAbobora/zumbis';
 import {
-  formatarTempo, lerPainelCaca, ligarCaca, soltarAboboraAgora, useCacaAbobora,
-  type PainelCaca, type RodadaAbobora,
+  formatarTempo, lerPainelCaca, ligarCaca, mudarTemaCaca, nomeCurto, soltarAboboraAgora, useCacaAbobora,
+  type PainelCaca, type RodadaAbobora, type TemaCaca,
 } from '@/components/CacaAbobora/caca';
+import { bruxaDaRodada } from '@/components/CacaAbobora/bruxas/arte';
 import { CHEFAO } from '@/components/CacaAbobora/chefaoArte';
 import {
   DIFICULDADES, ESPERA_S, PRAZO_MIN, chefaoChegando, chefaoNaTela, lerSuspeitos, soltarChefao, useChefao, vidaCom,
@@ -53,12 +54,25 @@ const RELER_MS = 20_000;
 
 const ETIQUETA = 'inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold';
 
+/** As palavras de cada tema, para o cartão falar do que está valendo. */
+const PALAVRAS: Record<TemaCaca, { titulo: string; um: string; Um: string; emoji: string; voltou: string }> = {
+  zumbis: { titulo: 'Caça aos Zumbis', um: 'um zumbi', Um: 'Zumbi', emoji: '🧟', voltou: 'voltou para a cova' },
+  bruxas: { titulo: 'Caça às Bruxas', um: 'uma bruxa', Um: 'Bruxa', emoji: '🧙', voltou: 'foi embora rindo' },
+};
+
 function LinhaRodada({ r }: { r: RodadaAbobora }) {
   const zumbi = zumbiDaRodada(r);
+  const bruxa = r.tema === 'bruxas' ? bruxaDaRodada(r) : null;
   return (
     <li className="flex items-center gap-3 py-2 text-xs">
       <span className="w-11 shrink-0 font-mono tabular-nums text-muted-foreground">{hora(r.solta_em)}</span>
-      <SpriteZumbi zumbi={zumbi} soCabeca morta={r.situacao === 'achada'} escala={1} titulo={zumbi.nome} className="shrink-0" />
+      {bruxa ? (
+        <span className="flex w-28 shrink-0 items-center gap-1 truncate text-violet-700 dark:text-violet-300" title={bruxa.nome}>
+          <Sparkles className="h-3 w-3 shrink-0" />{bruxa.nome.replace(/^(o|a) /, '')}
+        </span>
+      ) : (
+        <SpriteZumbi zumbi={zumbi} soCabeca morta={r.situacao === 'achada'} escala={1} titulo={zumbi.nome} className="shrink-0" />
+      )}
       {r.situacao === 'solta' && (
         <span className="flex items-center gap-1.5 font-medium text-lime-700 dark:text-lime-400">
           <span className="relative flex h-2 w-2">
@@ -90,9 +104,20 @@ function LinhaRodada({ r }: { r: RodadaAbobora }) {
               <Crosshair className="h-2.5 w-2.5" /> headshot mais rápido
             </span>
           )}
+          {r.tiro === 'vassoura' && (
+            <span className={cn(ETIQUETA, 'bg-orange-500/15 text-orange-700 dark:text-orange-400')}>VASSOURADA</span>
+          )}
+          {r.dobrado && (
+            <span className={cn(ETIQUETA, 'bg-red-700 text-amber-300')}>2x · derrubou e finalizou</span>
+          )}
+          {r.finalizada_por && !r.dobrado && (
+            <span className="shrink-0 text-muted-foreground">finalizada por {nomeCurto(r.finalizada_por_nome)}</span>
+          )}
         </span>
       )}
-      {r.situacao === 'sumiu' && <span className="text-muted-foreground">Ninguém matou — voltou para a cova</span>}
+      {r.situacao === 'sumiu' && (
+        <span className="text-muted-foreground">Ninguém acertou — {PALAVRAS[r.tema].voltou}</span>
+      )}
       {r.origem === 'teste' && (
         <span className="ml-auto shrink-0 rounded border border-border px-1.5 text-[10px] text-muted-foreground">na mão</span>
       )}
@@ -352,6 +377,31 @@ export default function CacaAboboraConfig() {
   const ultimaAntes = doDia.length === 0 ? (painel?.rodadas ?? [])[0] ?? null : null;
   // O desenho do cartão: o que está na tela, ou o último que saiu.
   const zumbiDoCartao = naTela ? zumbiDaRodada(naTela) : doDia[0] ? zumbiDaRodada(doDia[0]) : ZUMBIS[0];
+  // O tema que o cron solta. Sem a coluna (migration 20261014200000 pendente), zumbis.
+  const temaNoBanco = painel?.config?.tema;
+  const tema: TemaCaca = temaNoBanco ?? 'zumbis';
+  const p = PALAVRAS[tema];
+  const [trocandoTema, setTrocandoTema] = useState(false);
+  const nomeNaTela = (r: RodadaAbobora) => (r.tema === 'bruxas' ? bruxaDaRodada(r).nome : zumbiDaRodada(r).nome);
+
+  async function escolherTema(novo: TemaCaca) {
+    if (trocandoTema || novo === tema) return;
+    setTrocandoTema(true);
+    const { erro } = await mudarTemaCaca(novo);
+    await reler();
+    setTrocandoTema(false);
+    if (erro) {
+      toast.error('Não foi possível trocar o tema', {
+        description: /fn_abobora_tema|PGRST202/.test(erro)
+          ? 'O banco ainda não tem as bruxas (migration 20261014200000_caca_bruxas).'
+          : erro,
+      });
+      return;
+    }
+    toast.success(`${PALAVRAS[novo].titulo} ${PALAVRAS[novo].emoji}`, {
+      description: `A partir da próxima rodada sai ${PALAVRAS[novo].um}. A que estiver na tela fica como está.`,
+    });
+  }
 
   async function virar(ligar: boolean) {
     if (salvando) return;
@@ -363,10 +413,10 @@ export default function CacaAboboraConfig() {
       toast.error('Não foi possível salvar', { description: erro });
       return;
     }
-    toast.success(ligar ? 'Caça aos Zumbis ligada 🧟' : 'Caça aos Zumbis desligada', {
+    toast.success(ligar ? `${p.titulo} ligada ${p.emoji}` : `${p.titulo} desligada`, {
       description: ligar
-        ? 'O primeiro zumbi sai entre 30 min e 1h10. Vale só para hoje.'
-        : 'Se havia um zumbi na tela, ele voltou para a cova para todos.',
+        ? `${p.Um === 'Bruxa' ? 'A primeira bruxa' : 'O primeiro zumbi'} sai entre 30 min e 1h10. Vale só para hoje.`
+        : `Se havia ${p.um} na tela, ${p.Um === 'Bruxa' ? 'ela foi embora' : 'ele voltou para a cova'} para todos.`,
     });
   }
 
@@ -378,17 +428,17 @@ export default function CacaAboboraConfig() {
     setConfirmandoSoltar(false);
     if (erro) {
       toast.error('Não deu para soltar', {
-        description: erro.includes('JA_TEM_UMA') ? 'Já tem um zumbi na tela.' : erro,
+        description: erro.includes('JA_TEM_UMA') ? 'Já tem uma rodada na tela.' : erro,
       });
       return;
     }
-    toast.success('Zumbi solto 🧟', { description: 'Está na tela de todo mundo agora.' });
+    toast.success(`${p.Um} ${p.Um === 'Bruxa' ? 'solta' : 'solto'} ${p.emoji}`, { description: 'Está na tela de todo mundo agora.' });
   }
 
   let situacao: string;
-  if (naTela) situacao = `Tem um zumbi na tela agora — ${zumbiDaRodada(naTela).nome}, desde as ${hora(naTela.solta_em)}.`;
-  else if (ligadaHoje && painel?.config?.proxima_em) situacao = `Próximo zumbi por volta das ${hora(painel.config.proxima_em)}.`;
-  else if (ligadaHoje) situacao = 'Sem próximo zumbi hoje — o sorteio passaria da meia-noite.';
+  if (naTela) situacao = `Tem ${PALAVRAS[naTela.tema].um} na tela agora — ${nomeNaTela(naTela)}, desde as ${hora(naTela.solta_em)}.`;
+  else if (ligadaHoje && painel?.config?.proxima_em) situacao = `Próxima rodada (${p.um}) por volta das ${hora(painel.config.proxima_em)}.`;
+  else if (ligadaHoje) situacao = 'Sem próxima rodada hoje — o sorteio passaria da meia-noite.';
   else situacao = 'Desligada. Ao ligar, vale só para hoje; amanhã é preciso ligar de novo.';
 
   return (
@@ -397,13 +447,57 @@ export default function CacaAboboraConfig() {
         <div className="flex items-start gap-3">
           <SpriteZumbi zumbi={zumbiDoCartao} animado={ligadaHoje || !!naTela} escala={1} className="shrink-0" titulo={zumbiDoCartao.nome} />
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-sm font-semibold">Caça aos Zumbis</CardTitle>
+            <CardTitle className="text-sm font-semibold">{p.titulo}</CardTitle>
             <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
-              Um zumbi sobe da terra na tela de todo mundo, num canto longe de botões, a cada 30 min a
-              1h10 — um diferente a cada vez no dia. Quem acertar primeiro leva: tiro na cabeça é
-              HEADSHOT. O nome (e a foto, se tiver) passa na faixa do topo por 10 minutos. Ninguém
-              matou em 15 min, ele volta para a cova.
+              {tema === 'bruxas' ? (
+                <>
+                  Uma bruxa chega voando na vassoura na tela de todo mundo, a cada 30 min a 1h10 — uma
+                  diferente a cada vez no dia. Quem acertar primeiro leva: cabeça é HEADSHOT, vassoura é
+                  VASSOURADA, chapéu não derruba. Os fofos (bruxinha, gatinha, gato e fantasminha) caem
+                  desmaiados: quem clicar neles no chão finaliza, e se for quem derrubou ganha o 2x. O
+                  nome e a foto passam na faixa do topo por 10 minutos. Ninguém acertou em 15 min, ela
+                  vai embora rindo.
+                </>
+              ) : (
+                <>
+                  Um zumbi sobe da terra na tela de todo mundo, num canto longe de botões, a cada 30 min a
+                  1h10 — um diferente a cada vez no dia. Quem acertar primeiro leva: tiro na cabeça é
+                  HEADSHOT. O nome (e a foto, se tiver) passa na faixa do topo por 10 minutos. Ninguém
+                  matou em 15 min, ele volta para a cova.
+                </>
+              )}
             </p>
+            {painel?.disponivel && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="font-semibold uppercase tracking-wide text-muted-foreground">Tema</span>
+                <div className="inline-flex rounded-md border border-border p-0.5" role="radiogroup" aria-label="Tema da caça">
+                  {(['zumbis', 'bruxas'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="radio"
+                      aria-checked={tema === t}
+                      disabled={trocandoTema || temaNoBanco === undefined}
+                      onClick={() => { void escolherTema(t); }}
+                      className={cn(
+                        'rounded px-2 py-0.5 font-medium transition-colors disabled:opacity-60',
+                        tema === t
+                          ? (t === 'bruxas' ? 'bg-violet-600 text-white' : 'bg-lime-600 text-white')
+                          : 'text-muted-foreground hover:bg-muted',
+                      )}
+                    >
+                      {PALAVRAS[t].emoji} {t === 'zumbis' ? 'Zumbis' : 'Bruxas'}
+                    </button>
+                  ))}
+                </div>
+                {trocandoTema && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                {temaNoBanco === undefined && (
+                  <span className="text-muted-foreground">
+                    As bruxas chegam com a migration <span className="font-mono">20261014200000_caca_bruxas</span>.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           {painel?.disponivel && (
             <div className="flex shrink-0 items-center gap-2 pt-0.5">
@@ -463,7 +557,7 @@ export default function CacaAboboraConfig() {
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Hoje</p>
               {doDia.length === 0 ? (
                 <p className="py-2 text-xs text-muted-foreground">
-                  Nenhum zumbi hoje ainda.
+                  Nenhuma rodada hoje ainda.
                   {ultimaAntes && (
                     <> O último foi em {diaCurto(ultimaAntes.dia)} às {hora(ultimaAntes.solta_em)}
                       {ultimaAntes.situacao === 'achada'
@@ -486,7 +580,7 @@ export default function CacaAboboraConfig() {
                 disabled={!!naTela || soltando}
                 onClick={() => setConfirmandoSoltar(true)}
               >
-                <Skull className="h-3.5 w-3.5" /> Soltar um zumbi agora
+                <Skull className="h-3.5 w-3.5" /> Soltar {p.um} agora
               </Button>
             </div>
 
@@ -498,10 +592,10 @@ export default function CacaAboboraConfig() {
       <AlertDialog open={confirmandoSoltar} onOpenChange={v => !soltando && setConfirmandoSoltar(v)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Soltar um zumbi agora?</AlertDialogTitle>
+            <AlertDialogTitle>Soltar {p.um} agora?</AlertDialogTitle>
             <AlertDialogDescription>
-              Ele sobe agora na tela de todo mundo que está logado, nas duas empresas, e vale como
-              qualquer outro: quem matar primeiro passa na faixa.
+              {tema === 'bruxas' ? 'Ela chega voando agora' : 'Ele sobe agora'} na tela de todo mundo que está logado, nas
+              duas empresas, e vale como qualquer rodada: quem acertar primeiro passa na faixa.
               {ligadaHoje ? ' O próximo do sorteio é remarcado para depois deste.' : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>

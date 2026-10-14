@@ -62,3 +62,15 @@
   75%  { transform: translate(-50%, -190%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -230%) scale(1); opacity: 0; }
 }
+
+/* Onde o palco mora na caça de verdade (`cenaBruxas.tsx`): fixo em cima da
+   parte visível do conteúdo, como a camada dos zumbis — acima de cabeçalho de
+   tabela grudado, abaixo de diálogo (50). Só as caixas de tiro pegam clique. */
+.bx-hospedeiro {
+  position: fixed;
+  /* O pé na janela: o alto e a largura vêm de `criarHospedeiro`. */
+  bottom: 0;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}

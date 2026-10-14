@@ -1152,10 +1152,13 @@
    a exceção, o recado «você matou» e o HEADSHOT! sumiam em 1 ms (as animações
    terminam invisíveis) e a faixa do topo parava no meio do nome. Custa pouco:
    um zumbi por vez, que já pausa com a aba escondida.
+
+   As bruxas (classes `bx-*`, 14/10/2026) ficam de fora pelo mesmo motivo: sem
+   elas a faixa parava e o HEADSHOT!, o «2x!» e o FINALIZADA! sumiam na hora.
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-leve] *:not([class^="zb-"], [class*=" zb-"]),
-html[data-leve] *:not([class^="zb-"], [class*=" zb-"])::before,
-html[data-leve] *:not([class^="zb-"], [class*=" zb-"])::after {
+html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"]),
+html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"])::before,
+html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"])::after {
   animation-duration: 1ms !important;
   animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;

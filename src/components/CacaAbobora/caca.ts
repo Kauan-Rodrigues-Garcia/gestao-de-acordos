@@ -20,12 +20,18 @@
  * Configurações perguntam a mesma coisa, e a resposta não pode divergir.
  *
  * Tabela ausente (migration pendente) = nenhuma rodada: nada aparece.
+ *
+ * ## Bruxas (14/10/2026, migration 20261014200000)
+ *
+ * A rodada diz o tema (`tema`): zumbi ou bruxa. Na de bruxa vêm também qual
+ * (`bruxa`), onde o tiro pegou (`tiro`) e, nos fofos, quem finalizou no chão
+ * (`finalizada_por`, `dobrado` = o «2x»). Antes da migration, tudo é zumbi.
  */
 import { useEffect, useReducer, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { lerComCache } from '@/lib/cacheCurto';
-import { aceitarChefao, lerChefao } from './chefao';
+import { EU_NO_ENSAIO, aceitarChefao, lerChefao } from './chefao';
 
 export type SituacaoRodada = 'solta' | 'achada' | 'sumiu';
 
@@ -51,7 +57,25 @@ export interface RodadaAbobora {
   headshot:           boolean;
   /** O headshot mais rápido do dia (precisa de outro headshot no dia para bater). */
   headshot_mais_rapido_do_dia: boolean;
+  /**
+   * O que a rodada desenha (migration 20261014200000). Antes dela, e em toda
+   * rodada de zumbi, `'zumbis'`.
+   */
+  tema:               TemaCaca;
+  /** Qual das `BRUXAS` saiu (`bruxas/arte.ts`). `null` nas de zumbi. */
+  bruxa:              number | null;
+  /** Onde o tiro do vencedor pegou. `null` antes da migration 20261014200000. */
+  tiro:               TiroCaca | null;
+  /** O fofo desacordado levou o segundo tiro, no chão: quem e quando. */
+  finalizada_em:      string | null;
+  finalizada_por:     string | null;
+  finalizada_por_nome: string | null;
+  /** Quem finalizou é quem derrubou: o «2x» da faixa. */
+  dobrado:            boolean;
 }
+
+export type TemaCaca = 'zumbis' | 'bruxas';
+export type TiroCaca = 'cabeca' | 'corpo' | 'vassoura';
 
 /**
  * Quanto tempo o nome de quem achou fica passando na faixa. 10 min (Cleber,
@@ -100,6 +124,13 @@ export function normalizarRodada(bruto: unknown): RodadaAbobora | null {
     zumbi:              r.zumbi == null || !Number.isFinite(Number(r.zumbi)) ? null : Number(r.zumbi),
     headshot:           r.headshot === true,
     headshot_mais_rapido_do_dia: r.headshot_mais_rapido_do_dia === true,
+    tema:               r.tema === 'bruxas' ? 'bruxas' : 'zumbis',
+    bruxa:              r.bruxa == null || !Number.isFinite(Number(r.bruxa)) ? null : Number(r.bruxa),
+    tiro:               r.tiro === 'cabeca' || r.tiro === 'corpo' || r.tiro === 'vassoura' ? r.tiro : null,
+    finalizada_em:      texto(r.finalizada_em),
+    finalizada_por:     texto(r.finalizada_por),
+    finalizada_por_nome: texto(r.finalizada_por_nome),
+    dobrado:            r.dobrado === true,
   };
 }
 
@@ -131,7 +162,9 @@ export function juntarRodada(
   if (nova.situacao !== 'achada') faixaAte = 0;
   const igual = antes && antes.id === nova.id && antes.situacao === nova.situacao
     && antes.achada_em === nova.achada_em && antes.mais_rapida_do_dia === nova.mais_rapida_do_dia
-    && antes.headshot === nova.headshot && antes.headshot_mais_rapido_do_dia === nova.headshot_mais_rapido_do_dia;
+    && antes.headshot === nova.headshot && antes.headshot_mais_rapido_do_dia === nova.headshot_mais_rapido_do_dia
+    // A finalização chega depois, na mesma rodada já achada.
+    && antes.finalizada_em === nova.finalizada_em && antes.dobrado === nova.dobrado;
   if (igual && faixaAte === atual.faixaAte) return atual;
   return { rodada: nova, faixaAte };
 }
@@ -295,13 +328,21 @@ export interface ResultadoPegar {
  * o parâmetro (PostgREST responde PGRST202): manda de novo sem ele, e o tiro
  * vale como um tiro qualquer.
  */
-export async function pegarAbobora(rodadaId: number, headshot = false): Promise<ResultadoPegar> {
-  if (rodadaId < 0) return pegarNoEnsaio(rodadaId, headshot);
-  let { data, error } = await rpc<{ ganhou?: boolean; rodada?: unknown } | null>(
-    'fn_abobora_pegar', { p_rodada: rodadaId, p_headshot: headshot },
-  );
-  if (error && /PGRST202|p_headshot/.test(`${(error as { code?: string }).code ?? ''} ${error.message}`)) {
-    ({ data, error } = await rpc<{ ganhou?: boolean; rodada?: unknown } | null>('fn_abobora_pegar', { p_rodada: rodadaId }));
+export async function pegarAbobora(rodadaId: number, headshot = false, tiro?: TiroCaca): Promise<ResultadoPegar> {
+  if (rodadaId < 0) return pegarNoEnsaio(rodadaId, headshot, tiro);
+  type Resposta = { ganhou?: boolean; rodada?: unknown } | null;
+  const naoConhece = (e: { message: string } | null, param: string) =>
+    !!e && new RegExp(`PGRST202|${param}`).test(`${(e as { code?: string }).code ?? ''} ${e.message}`);
+  // Do mais novo para o mais antigo: com o tiro (20261014200000), com o
+  // headshot (20261007200000), só a rodada.
+  let { data, error } = tiro
+    ? await rpc<Resposta>('fn_abobora_pegar', { p_rodada: rodadaId, p_headshot: headshot, p_tiro: tiro })
+    : await rpc<Resposta>('fn_abobora_pegar', { p_rodada: rodadaId, p_headshot: headshot });
+  if (tiro && naoConhece(error, 'p_tiro')) {
+    ({ data, error } = await rpc<Resposta>('fn_abobora_pegar', { p_rodada: rodadaId, p_headshot: headshot }));
+  }
+  if (naoConhece(error, 'p_headshot')) {
+    ({ data, error } = await rpc<Resposta>('fn_abobora_pegar', { p_rodada: rodadaId }));
   }
   if (error) return { ganhou: false, rodada: null, erro: error.message };
   const rodada = normalizarRodada(data?.rodada);
@@ -325,6 +366,8 @@ function rodadaDeEnsaio(p: Partial<RodadaAbobora>): RodadaAbobora {
     semente: Math.floor(Math.random() * 2 ** 31), origem: 'teste', situacao: 'solta',
     achada_em: null, achada_por: null, achada_por_nome: null, achada_por_foto: null, ms: null,
     mais_rapida_do_dia: false, zumbi: 0, headshot: false, headshot_mais_rapido_do_dia: false,
+    tema: 'zumbis', bruxa: null, tiro: null,
+    finalizada_em: null, finalizada_por: null, finalizada_por_nome: null, dobrado: false,
     ...p,
   };
 }
@@ -371,12 +414,75 @@ export function ensaioLimpar(): void {
   if (estado.rodada && estado.rodada.id < 0) publicar({ rodada: null, faixaAte: 0 });
 }
 
-function pegarNoEnsaio(rodadaId: number, headshot: boolean): ResultadoPegar {
+function pegarNoEnsaio(rodadaId: number, headshot: boolean, tiro?: TiroCaca): ResultadoPegar {
   const r = estado.rodada;
   if (!r || r.id !== rodadaId || r.situacao !== 'solta') return { ganhou: false, rodada: r, erro: null };
-  const morta = matarNoEnsaio(r, 'Você (ensaio)', headshot);
+  // Na bruxa, quem atirou é «você» do ensaio (o mesmo do chefão): é o que o
+  // «2x» compara.
+  const extra: Partial<RodadaAbobora> = r.tema === 'bruxas'
+    ? { tiro: tiro ?? (headshot ? 'cabeca' : 'corpo'), achada_por: EU_NO_ENSAIO }
+    : {};
+  const morta = matarNoEnsaio(r, 'Você (ensaio)', headshot, extra);
   aceitarRodada(morta, true);
   return { ganhou: true, rodada: morta, erro: null };
+}
+
+/** Solta uma bruxa de mentira — só na tela de quem está no laboratório. */
+export function ensaioSoltarBruxa(bruxa: number): void {
+  ultimoEnsaio -= 1;
+  publicar({ rodada: rodadaDeEnsaio({ tema: 'bruxas', zumbi: null, bruxa }), faixaAte: 0 });
+}
+
+/** Outra pessoa derrubou a bruxa de mentira, do jeito escolhido. */
+export function ensaioOutroDerrubou(tiro: TiroCaca): void {
+  const r = estado.rodada;
+  if (!r || r.id >= 0 || r.situacao !== 'solta' || r.tema !== 'bruxas') return;
+  aceitarRodada(matarNoEnsaio(r, 'Ana Paula Moura Silva', tiro === 'cabeca', { tiro, achada_por: 'outra-pessoa' }), true);
+}
+
+/** Outra pessoa finalizou o fofo de mentira no chão. */
+export function ensaioOutroFinalizou(): void {
+  const r = estado.rodada;
+  if (!r || r.id >= 0 || r.situacao !== 'achada' || r.tema !== 'bruxas' || r.finalizada_por) return;
+  aceitarRodada(finalizadaNoEnsaio(r, 'outra-pessoa', 'Ana Paula Moura Silva'), true);
+}
+
+function finalizadaNoEnsaio(r: RodadaAbobora, quem: string, nome: string): RodadaAbobora {
+  return {
+    ...r, finalizada_em: new Date().toISOString(), finalizada_por: quem, finalizada_por_nome: nome,
+    dobrado: quem === r.achada_por,
+  };
+}
+
+// ── O segundo tiro: finalizar o fofo desacordado ─────────────────────────────
+
+/**
+ * As bruxas fofas, pelo índice em `BRUXAS` (`bruxas/arte.ts`): não morrem no
+ * tiro, caem desacordadas e podem ser finalizadas. A migration 20261014200000
+ * confere a mesma lista (`fn_abobora_finalizar`); um teste amarra as duas.
+ */
+export const BRUXAS_FOFAS: readonly number[] = [0, 2, 4, 6];
+
+export interface ResultadoFinalizar {
+  finalizou: boolean;
+  rodada:    RodadaAbobora | null;
+  erro:      string | null;
+}
+
+/** Quem clicar primeiro no fofo desacordado leva. A resposta já atualiza a faixa. */
+export async function finalizarBruxa(rodadaId: number): Promise<ResultadoFinalizar> {
+  if (rodadaId < 0) {
+    const r = estado.rodada;
+    if (!r || r.id !== rodadaId || r.situacao !== 'achada' || r.finalizada_por) return { finalizou: false, rodada: r, erro: null };
+    const f = finalizadaNoEnsaio(r, EU_NO_ENSAIO, 'Você (ensaio)');
+    aceitarRodada(f, true);
+    return { finalizou: true, rodada: f, erro: null };
+  }
+  const { data, error } = await rpc<{ finalizou?: boolean; rodada?: unknown } | null>('fn_abobora_finalizar', { p_rodada: rodadaId });
+  if (error) return { finalizou: false, rodada: null, erro: error.message };
+  const rodada = normalizarRodada(data?.rodada);
+  if (rodada) aceitarRodada(rodada, true);
+  return { finalizou: data?.finalizou === true, rodada, erro: null };
 }
 
 // ── O painel do super_admin (Configurações → Geral) ──────────────────────────
@@ -388,6 +494,8 @@ export interface ConfigCaca {
   desligada_em:       string | null;
   desligada_por_nome: string | null;
   proxima_em:         string | null;
+  /** O que o cron solta. Ausente antes da migration 20261014200000 (= zumbis). */
+  tema?:              TemaCaca;
 }
 
 export interface PainelCaca {
@@ -412,6 +520,12 @@ export async function lerPainelCaca(): Promise<PainelCaca> {
     rodadas:    (rods.data ?? []).map(normalizarRodada).filter((r): r is RodadaAbobora => r !== null),
     hoje:       hoje.error ? null : hoje.data,
   };
+}
+
+/** Troca o tema da caça (zumbis ou bruxas). Vale da próxima rodada em diante. */
+export async function mudarTemaCaca(tema: TemaCaca): Promise<{ erro: string | null }> {
+  const { error } = await rpc<null>('fn_abobora_tema', { p_tema: tema });
+  return { erro: error?.message ?? null };
 }
 
 export async function ligarCaca(ligar: boolean): Promise<{ erro: string | null }> {

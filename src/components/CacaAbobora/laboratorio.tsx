@@ -12,7 +12,10 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useAuthOpcional } from '@/hooks/useAuth';
-import { ensaioFaixa, ensaioLimpar, ensaioOutroMatou, ensaioSoltar, ensaioSumir } from './caca';
+import {
+  ensaioFaixa, ensaioLimpar, ensaioOutroDerrubou, ensaioOutroFinalizou, ensaioOutroMatou, ensaioSoltar, ensaioSoltarBruxa, ensaioSumir,
+} from './caca';
+import { BRUXAS } from './bruxas/arte';
 import { ESPERA_S, PRAZO_MIN, ensaioArrancar, ensaioCurarChefao, ensaioFugir, ensaioLimparChefao, ensaioPularContagem, ensaioRobos, ensaioSoltarChefao } from './chefao';
 import { CHEFAO } from './chefaoArte';
 import { ZUMBIS } from './zumbis';
@@ -23,6 +26,7 @@ export default function Laboratorio() {
   const [aberto, setAberto] = useState(true);
   const [zumbi, setZumbi] = useState(0);
   const [robos, setRobos] = useState(false);
+  const [bruxa, setBruxa] = useState(0);
   // A faixa de ensaio leva a foto de quem está logado: é a foto que o banco
   // grava (`perfis.foto_url`) quando a pessoa mata de verdade.
   const foto = useAuthOpcional()?.perfil?.foto_url ?? null;
@@ -61,6 +65,18 @@ export default function Laboratorio() {
             <button type="button" className="zb-lab-btn" onClick={() => ensaioFaixa({ zumbi, headshot: true, rapida: false, headshotRapido: false, foto })}>Headshot</button>
             <button type="button" className="zb-lab-btn" onClick={() => ensaioFaixa({ zumbi, headshot: true, rapida: true, headshotRapido: true, foto })}>Os dois recordes</button>
             <button type="button" className="zb-lab-btn" onClick={ensaioLimpar}>Limpar</button>
+          </div>
+          <p className="zb-lab-rotulo">Bruxas (a caça de verdade, com rodada de mentira)</p>
+          <select className="zb-lab-btn" value={bruxa} onChange={e => setBruxa(Number(e.target.value))} aria-label="Qual bruxa">
+            {BRUXAS.map((b, i) => <option key={b.id} value={i}>{b.nome.replace(/^(o|a) /, '')}{b.fofa ? ' (fofa)' : ''}</option>)}
+          </select>
+          <div className="zb-lab-botoes">
+            <button type="button" className="zb-lab-btn principal" onClick={() => ensaioSoltarBruxa(bruxa)}>Soltar bruxa</button>
+            <button type="button" className="zb-lab-btn" onClick={() => ensaioOutroDerrubou('cabeca')}>Outro: headshot</button>
+            <button type="button" className="zb-lab-btn" onClick={() => ensaioOutroDerrubou('corpo')}>Outro: corpo</button>
+            <button type="button" className="zb-lab-btn" onClick={() => ensaioOutroDerrubou('vassoura')}>Outro: vassoura</button>
+            <button type="button" className="zb-lab-btn" onClick={ensaioOutroFinalizou}>Outro finalizou</button>
+            <button type="button" className="zb-lab-btn" onClick={ensaioSumir}>Tempo acabou</button>
           </div>
           <p className="zb-lab-rotulo zb-lab-chefao"><SpriteZumbi zumbi={CHEFAO} soCabeca escala={1} /> Chefão: o Rei do Pop zumbi</p>
           <div className="zb-lab-botoes">
