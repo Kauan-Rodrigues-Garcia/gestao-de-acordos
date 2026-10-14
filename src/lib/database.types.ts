@@ -7284,6 +7284,7 @@ export type Database = {
           ativo: boolean
           atualizado_em: string
           codigo_erp: string | null
+          codigos_erp_extras: string[]
           criado_em: string
           descricao: string | null
           empresa_id: string
@@ -7297,6 +7298,7 @@ export type Database = {
           ativo?: boolean
           atualizado_em?: string
           codigo_erp?: string | null
+          codigos_erp_extras?: string[]
           criado_em?: string
           descricao?: string | null
           empresa_id: string
@@ -7310,6 +7312,7 @@ export type Database = {
           ativo?: boolean
           atualizado_em?: string
           codigo_erp?: string | null
+          codigos_erp_extras?: string[]
           criado_em?: string
           descricao?: string | null
           empresa_id?: string

@@ -920,9 +920,12 @@ export interface CodigoDeSetor {
   setor_id:   string;
   setor_nome: string;
   ativo:      boolean;
-  /** `CodGrupoFiltro`. `null` = ainda não configurado. */
+  /**
+   * `CodGrupoFiltro`. `null` = ainda não configurado. Desde 14/10/2026 pode
+   * ser uma lista — «79, 38», o principal primeiro (20261014120000).
+   */
   codigo_erp: string | null;
-  /** A carteira que esse código encontra no 59 importado, se encontra. */
+  /** As carteiras que esses códigos encontram no 59 importado, juntas por « · ». */
   carteira:   string | null;
   /**
    * O código está preenchido E existe no 59.
@@ -944,7 +947,24 @@ export async function buscarCodigosDeSetor(empresaId: string): Promise<CodigoDeS
 }
 
 /**
- * Grava o código do 59 num setor.
+ * Os códigos como o banco devolve: na ordem digitada, sem repetido, separados
+ * por «, ». Aceita vírgula, ponto e vírgula ou espaço entre eles — a mesma
+ * regra de `fn_setor_definir_codigo_erp`.
+ */
+export function normalizarCodigos(texto: string | null | undefined): string {
+  const lista = String(texto ?? '').split(/[,;\s]+/).map(c => c.trim()).filter(Boolean);
+  return [...new Set(lista)].join(', ');
+}
+
+/** Os códigos de um setor, um por item. */
+export function listaDeCodigos(texto: string | null | undefined): string[] {
+  const n = normalizarCodigos(texto);
+  return n ? n.split(', ') : [];
+}
+
+/**
+ * Grava o código do 59 num setor — ou vários, separados por vírgula: o Play
+ * Mix Marília recebe a carteira do Play 4 desde 14/10/2026 («79, 38»).
  *
  * Devolve a carteira que o código encontrou — é o que a tela mostra de volta,
  * e é a confirmação de que o número digitado é o certo. Só `super_admin`: o

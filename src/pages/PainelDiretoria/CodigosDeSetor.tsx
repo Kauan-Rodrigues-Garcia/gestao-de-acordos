@@ -45,6 +45,14 @@
  * código encontrou. Código que o 59 não conhece aparece em âmbar: não é erro
  * (pode ser carteira que ainda vai chegar), é um aviso para conferir.
  *
+ * ## Mais de um código no mesmo setor
+ *
+ * Desde 14/10/2026 o campo aceita uma lista: «79, 38». Foi o Play 4, que
+ * deixou de existir e virou o Play Mix Marília — a carteira dele continua
+ * chegando no 59 com o código próprio, e o dinheiro tem de contar no Play Mix.
+ * Um código continua pertencendo a UM setor só; o que mudou é que um setor
+ * pode reivindicar mais de um. O primeiro da lista é o principal.
+ *
  * ## Quem edita
  *
  * `super_admin`, e a tela não é a única guarda: `fn_setor_definir_codigo_erp`
@@ -62,7 +70,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
-  buscarCodigosDeSetor, definirCodigoDeSetor, buscarResumoGrupos,
+  buscarCodigosDeSetor, definirCodigoDeSetor, buscarResumoGrupos, listaDeCodigos, normalizarCodigos,
   type CodigoDeSetor, type GrupoDoMestre,
 } from '@/services/mestre/mestre.service';
 
@@ -104,8 +112,8 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
   useEffect(() => { void carregar(); }, [carregar, versao]);
 
   async function salvar(s: CodigoDeSetor) {
-    const digitado = (rascunho[s.setor_id] ?? '').trim();
-    const atual = s.codigo_erp ?? '';
+    const digitado = normalizarCodigos(rascunho[s.setor_id]);
+    const atual = normalizarCodigos(s.codigo_erp);
     if (digitado === atual) return;
 
     setSalvando(s.setor_id);
@@ -144,7 +152,7 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
   /** Códigos já reivindicados, para a lista de referência dizer quem é de quem. */
   const donoDoCodigo = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of setores) if (s.codigo_erp) m.set(s.codigo_erp, s.setor_nome);
+    for (const s of setores) for (const c of listaDeCodigos(s.codigo_erp)) m.set(c, s.setor_nome);
     return m;
   }, [setores]);
 
@@ -177,7 +185,8 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             O <code className="text-xs bg-muted px-1 py-0.5 rounded">CodGrupoFiltro</code> é
             único por carteira. Com ele preenchido, a carteira do 59 encontra o setor
-            sozinha — inclusive as que ainda vão aparecer.
+            sozinha — inclusive as que ainda vão aparecer. Um setor pode ter mais de um
+            código, separados por vírgula (ex.: <code className="text-xs bg-muted px-1 py-0.5 rounded">79, 38</code>).
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -195,7 +204,7 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
       <div className="rounded-lg border border-border divide-y divide-border">
         {setores.map(s => {
           const digitado = rascunho[s.setor_id] ?? s.codigo_erp ?? '';
-          const mudou = digitado.trim() !== (s.codigo_erp ?? '');
+          const mudou = normalizarCodigos(digitado) !== normalizarCodigos(s.codigo_erp);
           const ocupado = salvando === s.setor_id;
 
           return (
@@ -209,12 +218,13 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
 
               <input
                 value={digitado}
-                inputMode="numeric"
-                placeholder="código"
+                inputMode="text"
+                placeholder="código(s)"
+                aria-label={`Código do 59 de ${s.setor_nome}`}
                 disabled={ocupado}
                 onChange={e => setRascunho(r => ({ ...r, [s.setor_id]: e.target.value }))}
                 onKeyDown={e => { if (e.key === 'Enter') void salvar(s); }}
-                className="w-24 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                className="w-28 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
               />
 
               <div className="min-w-[220px] flex-1 text-xs">
@@ -227,10 +237,13 @@ export default function CodigosDeSetor({ empresaId, mes, versao = 0 }: Props) {
                   </span>
                 ) : s.codigo_erp ? (
                   /* Código digitado que o 59 não conhece. Ver o cabeçalho: não é
-                     erro, é o aviso que impede dinheiro de sumir em silêncio. */
+                     erro, é o aviso que impede dinheiro de sumir em silêncio.
+                     Com vários códigos, mostra as carteiras que achou. */
                   <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    não está no 59 deste mês
+                    {s.carteira
+                      ? `${s.carteira} — algum código não está no 59 deste mês`
+                      : 'não está no 59 deste mês'}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">sem código</span>

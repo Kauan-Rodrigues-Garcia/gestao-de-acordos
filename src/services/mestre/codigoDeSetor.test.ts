@@ -22,7 +22,7 @@ vi.mock('@/lib/supabaseSemTipo', () => ({
 }));
 vi.mock('@/lib/supabase', () => ({ supabase: { rpc: () => Promise.resolve({ error: null }) } }));
 
-import { definirCodigoDeSetor, buscarCodigosDeSetor } from './mestre.service';
+import { definirCodigoDeSetor, buscarCodigosDeSetor, listaDeCodigos, normalizarCodigos } from './mestre.service';
 
 describe('definirCodigoDeSetor', () => {
   beforeEach(() => {
@@ -136,5 +136,26 @@ describe('buscarCodigosDeSetor', () => {
   it('erro do banco sobe para quem chamou', async () => {
     mock.resposta = { data: null, error: { message: 'permission denied' } };
     await expect(buscarCodigosDeSetor('emp-1')).rejects.toThrow('permission denied');
+  });
+});
+
+/*
+ * Um setor com mais de um código (14/10/2026): o Play Mix Marília recebe a
+ * carteira do Play 4. A tela compara o digitado com o salvo por esta forma —
+ * «79,38» e «79, 38» são a mesma coisa e não pedem «Salvar».
+ */
+describe('normalizarCodigos', () => {
+  it('aceita vírgula, ponto e vírgula e espaço, sem repetir', () => {
+    expect(normalizarCodigos('79,38')).toBe('79, 38');
+    expect(normalizarCodigos(' 79 ; 38  38 ')).toBe('79, 38');
+    expect(normalizarCodigos('25')).toBe('25');
+  });
+  it('vazio é vazio', () => {
+    expect(normalizarCodigos(null)).toBe('');
+    expect(normalizarCodigos(' , ')).toBe('');
+    expect(listaDeCodigos(null)).toEqual([]);
+  });
+  it('a lista mantém a ordem — o primeiro é o principal', () => {
+    expect(listaDeCodigos('79, 38')).toEqual(['79', '38']);
   });
 });
