@@ -232,12 +232,18 @@ export const JUNTAS_CHIBI = {
 
 const r = (c: string, n: number) => c.repeat(n);
 
+/**
+ * As duas orelhas (Cleber, 14/10/2026: «coloque mais uma orelha»). A da
+ * esquerda nasce debaixo do chapeuzinho e desponta à esquerda do cone,
+ * inclinada para fora; a parte de baixo dela fica atrás da aba.
+ */
 const CABECA_GATO_FILAS = (olho: string): Fila[] => [
-  [38, 'oo'],
-  [37, 'o44o'],
-  [36, 'o4xx4o'],
-  [35, 'o44xx44o'],
-  [34, 'o44444444o'],
+  [18, 'oo'],
+  [18, 'o44o' + r('.', 16) + 'oo'],
+  [18, 'o4xx4o' + r('.', 13) + 'o44o'],
+  [18, 'o44xx44o' + r('.', 10) + 'o4xx4o'],
+  [18, 'o4444444o' + r('.', 8) + 'o44xx44o'],
+  [19, 'o444444o' + r('.', 7) + 'o44444444o'],
   [19, '..' + r('o', 15) + r('4', 5) + 'o..'],
   [19, '.o' + r('4', 19) + '33' + 'o.'],
   [19, 'o' + r('4', 20) + '333' + 'o'],
@@ -255,8 +261,9 @@ const CABECA_GATO_FILAS = (olho: string): Fila[] => [
 
 /** A cabeça de gato: de boca fechada, e «rindo» (olhinho fechado de alegria). */
 export const CABECA_GATO: Grade[] = [
-  d(5, CABECA_GATO_FILAS('yy')),
-  d(5, CABECA_GATO_FILAS('oo').map((f, i) => (i === 10 || i === 12 ? [19, 'o' + r('4', 27 - 20) + '44' + r('4', 5) + '44' + r('4', 4) + '333' + 'o'] as const : f))),
+  d(4, CABECA_GATO_FILAS('yy')),
+  // As linhas 11 e 13 são as do olho (a 0 é a ponta da orelha da esquerda, em y 4).
+  d(4, CABECA_GATO_FILAS('oo').map((f, i) => (i === 11 || i === 13 ? [19, 'o' + r('4', 27 - 20) + '44' + r('4', 5) + '44' + r('4', 4) + '333' + 'o'] as const : f))),
 ];
 
 /** Os bigodes, para fora da cara. */
@@ -350,12 +357,28 @@ export const RABO: Grade[] = [
 
 const r4 = (n: number) => r('4', n);
 
+/**
+ * O alto da cabeça: uma cúpula, em degraus de 2 e 1 pixel, com a luz à
+ * esquerda e a sombra (3) do lado direito. Era uma caixa de cantos retos
+ * (Cleber, 14/10/2026: «a cabeça está quadrada»).
+ */
+const CUPULA: Fila[] = [
+  [26, r('o', 11)],
+  [23, 'ooo' + r4(10) + '3ooo'],
+  [21, 'oo' + r4(14) + '333oo'],
+  [20, 'o' + r4(18) + '333o'],
+];
+
+/**
+ * A emenda com o lençol: a mesma primeira linha dele (`LENCOL_CIMA`). Parada,
+ * cai em cima dela e não muda nada; na gargalhada a cabeça sobe 1 pixel e
+ * ela tapa a risca que abria entre a cabeça e o corpo.
+ */
+const EMENDA: Fila = [19, 'o' + '2233' + r4(13) + '332222' + 'o'];
+
 export const CABECA_FANTASMA: Grade[] = [
   d(10, [
-    [21, r('o', 21)],
-    [20, 'o' + r4(19) + '33' + 'o'],
-    [19, 'o' + r4(20) + '333' + 'o'],
-    [19, 'o' + r4(20) + '333' + 'o'],
+    ...CUPULA,
     [19, 'o' + r4(7) + 'oo' + r4(5) + 'oo' + r4(4) + '333' + 'o'],
     [19, 'o' + r4(7) + 'oo' + r4(5) + 'oo' + r4(4) + '333' + 'o'],
     [19, 'o' + r4(7) + 'oo' + r4(5) + 'oo' + r4(4) + '332' + 'o'],
@@ -364,12 +387,10 @@ export const CABECA_FANTASMA: Grade[] = [
     [19, 'o' + r4(19) + '3322' + 'o'],
     [19, 'o' + '33' + r4(17) + '3322' + 'o'],
     [19, 'o' + '233' + r4(15) + '33222' + 'o'],
+    EMENDA,
   ]),
   d(10, [
-    [21, r('o', 21)],
-    [20, 'o' + r4(19) + '33' + 'o'],
-    [19, 'o' + r4(20) + '333' + 'o'],
-    [19, 'o' + r4(20) + '333' + 'o'],
+    ...CUPULA,
     [19, 'o' + r4(7) + 'oo' + r4(5) + 'oo' + r4(4) + '333' + 'o'],
     [19, 'o' + r4(6) + 'o44o' + r4(3) + 'o44o' + r4(3) + '333' + 'o'],
     [19, 'o' + r4(23) + 'o'],
@@ -378,6 +399,7 @@ export const CABECA_FANTASMA: Grade[] = [
     [19, 'o' + r4(10) + 'mmm' + r4(6) + '3322' + 'o'],
     [19, 'o' + '33' + r4(17) + '3322' + 'o'],
     [19, 'o' + '233' + r4(15) + '33222' + 'o'],
+    EMENDA,
   ]),
 ];
 

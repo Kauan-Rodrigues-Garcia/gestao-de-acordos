@@ -1,7 +1,7 @@
 /* O laboratório das bruxas (só localhost). Prefixo `lb-`. */
 
 html, body { margin: 0; height: 100%; overflow: hidden; }
-body { background: #0b0a12; font-family: 'Pixelify Sans', ui-monospace, Consolas, monospace; }
+body { background: #0b0a12; font-family: 'Pixelify Sans', ui-monospace, Consolas, monospace; font-variant-ligatures: none; }
 #lab { position: fixed; inset: 0; }
 .lb-fundo, .lb-palco { position: absolute; inset: 0; }
 .lb-palco { z-index: 5; pointer-events: none; }
@@ -54,7 +54,7 @@ body { background: #0b0a12; font-family: 'Pixelify Sans', ui-monospace, Consolas
 
 /* ── O painel ────────────────────────────────────────────────────────────── */
 .lb-painel {
-  position: fixed; left: 16px; top: 52px; z-index: 20; width: 300px; max-height: calc(100vh - 68px); overflow: auto;
+  position: fixed; left: 16px; top: 64px; z-index: 20; width: 300px; max-height: calc(100vh - 80px); overflow: auto;
   background: #120e1c; color: #e8e2f4; font-size: 14px;
   box-shadow: 0 -2px 0 #4a2c6e, 0 2px 0 #4a2c6e, -2px 0 0 #4a2c6e, 2px 0 0 #4a2c6e, 6px 6px 0 rgb(0 0 0 / .4);
 }

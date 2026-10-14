@@ -71,6 +71,36 @@ bandeirinhas de Halloween, estrelinhas piscando, o rosto do personagem (olho em
 X se morreu), a foto ou as iniciais numa moldura dourada e o nome entre
 brilhinhos. Nos fofos é rosa, com coração, e diz «nocauteou».
 
+### Atualização da tarde (14/10/2026)
+
+- **Velocidade padrão: Insana** (`DIFICULDADE_PADRAO` em `voo.ts`).
+- **Finalizar o fofo desacordado**: enquanto o fofo está desmaiado no chão (até o corpo
+  começar a apagar, 9 s), quem clicar nele **finaliza**: as estrelinhas param, o olho
+  apaga, e aí ele sangra e deixa poça (`finalizar` em `queda.ts`). O palco avisa com
+  `{ tipo: 'finalizou', id, quem, dobrado }`; o `matou` passou a trazer `id` e `quem`.
+- **O «2x»**: se quem finaliza é **quem derrubou**, o letreiro no chão é «2x!» e a faixa
+  ganha o selo **2X · derrubou e finalizou**, deixa de ser cor-de-rosa e mostra o rosto
+  de olho apagado (sem a etiqueta «Nocaute»: ele morreu).
+- **Faixa com mais destaque**: 52 px de altura (era 40), foto de quem acertou com
+  36 px (era 22) numa moldura que pisca em branco, nome em 21 px, rosto maior.
+- **Fantasminha**: a cabeça era uma caixa de cantos retos; virou cúpula. E a risca
+  escura que abria entre a cabeça e o lençol na gargalhada foi tapada.
+- **Gatinha (e o Gato, que usa a mesma cabeça)**: ganhou a segunda orelha, despontando à
+  esquerda do chapeuzinho.
+- **PC fraco** (mesmo desenho, menos trabalho), medido com a CPU 6× mais lenta e sem GPU:
+  - O quadro do tiro travava 83–167 ms; agora 50–67 ms (só o primeiro tiro da página,
+    com o navegador ainda aquecendo, continua mais lento).
+  - A faixa montava centenas de `<rect>` SVG (um por pixel de ícone) e um canvas por
+    cópia do rosto. Agora o ícone é um `<path>` por cor, montado uma vez e clonado; o
+    rosto é uma `<img>` em cache; as cópias do recado são clones de um modelo.
+  - O chão (sangue e poças) só é juntado de novo quando muda; as poças só são
+    repintadas quando crescem ou quando cai mancha nova.
+  - O sprite sem chapéu fica pronto no tempo ocioso depois de a bruxa aparecer, não
+    no instante do tiro no chapéu.
+  - No laboratório, a faixa entra no quadro seguinte ao tiro. **Na fase 2, fazer igual**:
+    montar a faixa num `requestAnimationFrame` depois do tiro, não no mesmo quadro.
+  - Uma rodada normal (3 no ar + faixa correndo) já ficava em 60 fps nessas condições.
+
 ## 3. Como testar
 
 ```
@@ -85,7 +115,7 @@ com tempo médio e o mais rápido.
 
 ## 4. Para decidir (Cleber)
 
-1. **Velocidade padrão**: Normal (42) ou Rápida (60)? Testar no laboratório.
+1. ~~**Velocidade padrão**~~: **Insana** (14/10/2026).
 2. **Tiro na vassoura vale como morte** no placar (hoje mata)? E o recorde de «vassourada» além do headshot?
 3. **Chapéu não mata**: manter? (é a pegadinha de quem mira alto).
 4. **Onde é o chão** na tela de verdade: a borda de baixo da área visível (como no laboratório) ou um chão a ~150 px abaixo de onde ela morreu? No sistema, a borda de baixo faz ela cair a tela inteira.
@@ -99,6 +129,7 @@ Precisa de migration, então **só com o «pode»** (regra do `CLAUDE.md`):
 - `abobora_caca`: coluna `tema text DEFAULT 'zumbis'` (`'zumbis' | 'bruxas'`), escolhida no cartão de Configurações → Geral. O super_admin troca o tema da semana.
 - `abobora_rodadas`: coluna `bruxa smallint` (0–7, sorteio sem repetir no dia, igual `zumbi`) e `tiro text` (`'cabeca' | 'corpo' | 'vassoura'`), para quem não atirou ver a bruxa morrer do jeito do vencedor e para um possível recorde de vassourada. `headshot` continua.
 - `fn_abobora_soltar` sorteia `bruxa` quando o tema é bruxas; `fn_abobora_pegar` recebe o tipo do tiro.
+- **Finalizar e o «2x»** (para todo mundo ver): `abobora_rodadas.finalizada_por` (+ nome), gravada por uma `fn_abobora_finalizar(rodada)` que só aceita o primeiro clique numa rodada de fofo. A faixa mostra o 2x quando `finalizada_por = achada_por`; nas outras telas o palco recebe `finalizarPorOutro(quem)` pelo realtime. Sem isso, o 2x só existe na tela de quem atirou.
 - App: `index.tsx` carrega `bruxas/palco.ts` sob demanda (como a cena do zumbi) quando a rodada é de bruxa; a faixa diz «Fulano **derrubou a bruxa** primeiro, em X s» com HEADSHOT / VASSOURADA.
 - Prazo: o «sumiu» do banco vira `fugirTodas()` (ela vai embora rindo).
 - O teste `pacoteDeEntrada.test.ts` continua valendo: nada das bruxas no pacote de entrada.

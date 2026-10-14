@@ -5,8 +5,8 @@ import {
 } from './arte';
 import { cor32 } from '../fisica';
 import { etiquetasDaFaixa, feitoDaFaixa, formatarTempo, fraseDaFaixa, iniciais } from './faixa';
-import { avancar, chapeuVoando, criarQueda, type Morte } from './queda';
-import { VELOCIDADES, avancarVoo, criarVoo, fugir, type Zona } from './voo';
+import { avancar, caixaDoCorpo, chapeuVoando, criarQueda, finalizar, type Morte } from './queda';
+import { DIFICULDADE_PADRAO, VELOCIDADES, avancarVoo, criarVoo, fugir, type Zona } from './voo';
 
 /** As cores de sangue da queda (`queda.ts`). */
 const SANGUE = new Set(['#6e0a12', '#9e1219', '#c8202a', '#e0262b', '#5a0810', '#b81a24'].map(cor32));
@@ -105,6 +105,10 @@ describe('voo', () => {
     expect(andou / 60).toBeGreaterThan(VELOCIDADES.normal * 0.4);
   });
 
+  it('a velocidade padrão é a Insana', () => {
+    expect(DIFICULDADE_PADRAO).toBe('insana');
+  });
+
   it('quando o tempo acaba, foge para fora', () => {
     const v = criarVoo(zona, VELOCIDADES.normal, semente(3));
     fugir(v, zona);
@@ -152,6 +156,38 @@ describe('queda', () => {
       }
     });
   }
+
+  it('o fofo desacordado leva o segundo tiro e morre: sangra, olho apaga, assenta', () => {
+    for (let n = 0; n < 16; n++) {
+      if (!BRUXAS[n % BRUXAS.length].fofa) continue;
+      const q = criarQueda(entrada('corpo', n));
+      expect(caixaDoCorpo(q)).toBeNull(); // caindo: ainda não dá para finalizar
+      for (let t = 0; t < 4; t += 1 / 30) avancar(q, 1 / 30);
+      const c = caixaDoCorpo(q)!;
+      expect(c, `fofo ${n}`).not.toBeNull();
+      expect(c.y1).toBeLessThanOrEqual(q.chao + 2);
+      const cabeca = q.ossos.find(o => o.nome === 'cabeca')!.rec;
+      expect(finalizar(q, (c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2)).toBe(true);
+      expect(q.tonta).toBe(false);
+      expect(caixaDoCorpo(q)).toBeNull();
+      expect(finalizar(q, c.x0, c.y0)).toBe(false); // não finaliza duas vezes
+      // O olho apagou: a cabeça é outro recorte, do mesmo tamanho e no mesmo lugar.
+      const nova = q.ossos.find(o => o.nome === 'cabeca')!.rec;
+      expect(nova).not.toBe(cabeca);
+      expect([nova.w, nova.h, nova.x0, nova.y0]).toEqual([cabeca.w, cabeca.h, cabeca.x0, cabeca.y0]);
+      for (let t = 0; t < 10 && !q.quieta; t += 1 / 30) avancar(q, 1 / 30);
+      expect(q.quieta).toBe(true);
+      expect(q.pocas.length).toBeGreaterThan(0);
+      expect([...q.manchas.values()].some(cor => SANGUE.has(cor)), `fofo ${n}`).toBe(true);
+    }
+  });
+
+  it('bruxa que não é fofa já morreu na queda: não há o que finalizar', () => {
+    const q = criarQueda(entrada('corpo', BRUXAS.findIndex(b => !b.fofa)));
+    for (let t = 0; t < 4; t += 1 / 30) avancar(q, 1 / 30);
+    expect(caixaDoCorpo(q)).toBeNull();
+    expect(finalizar(q, q.pontos[0].x, q.pontos[0].y)).toBe(false);
+  });
 
   it('a vassoura que cai sozinha às vezes quebra e às vezes não', () => {
     let quebrou = 0, inteira = 0;
@@ -201,6 +237,14 @@ describe('faixa', () => {
     expect(etiquetasDaFaixa({ bruxa, morte: 'vassoura' })).toEqual(['vassourada']);
     expect(etiquetasDaFaixa({ bruxa: fofa, morte: 'corpo', rapida: true })).toEqual(['nocaute', 'rapido']);
     expect(etiquetasDaFaixa({ bruxa, morte: 'corpo' })).toEqual([]);
+  });
+
+  it('o «2x»: quem derrubou o fofo e finalizou no chão', () => {
+    const d = { nome: 'Mariana Souza', bruxa: fofa, morte: 'corpo' as const, ms: 12_400, dobrado: true };
+    expect(etiquetasDaFaixa(d)).toEqual(['dobro']); // morreu: não é mais nocaute
+    expect(etiquetasDaFaixa({ ...d, morte: 'cabeca' })).toEqual(['dobro', 'headshot']);
+    expect(fraseDaFaixa(d))
+      .toBe(`Mariana Souza nocauteou ${fofa.nome} primeiro em 12,4 s — e finalizou no chão com o segundo tiro (2x).`);
   });
 
   it('tempo e iniciais', () => {

@@ -13,8 +13,8 @@ import '../caca.css';
 import './bruxas.css';
 import './laboratorio.css';
 import { BRUXAS, VOO, MS_POR_QUADRO } from './arte';
-import { PalcoBruxas, type EventoPalco } from './palco';
-import { montarFaixa } from './faixa';
+import { EU, PalcoBruxas, type EventoPalco } from './palco';
+import { montarFaixa, type DadosFaixa } from './faixa';
 import { quadrosDa } from './pixels';
 import { VELOCIDADES, type Dificuldade } from './voo';
 import type { Morte } from './queda';
@@ -81,6 +81,9 @@ const PAINEL = `
       <button type="button" class="lb-btn" data-morte="vassoura">Vassoura</button>
     </div>
     <div class="lb-linha">
+      <button type="button" class="lb-btn" data-acao="finalizar">Outra pessoa finalizou (o desmaiado)</button>
+    </div>
+    <div class="lb-linha">
       <button type="button" class="lb-btn" data-acao="fugir">Tempo acabou (fugir)</button>
       <button type="button" class="lb-btn" data-acao="limpar">Limpar tudo</button>
     </div>
@@ -99,7 +102,7 @@ const PAINEL = `
       <li><i style="background:#c850ff"></i>Chapéu: não mata, ela fica brava</li>
       <li><i style="background:#c8c8c8"></i>Capa e cabelo (ou rabo): raspão</li>
     </ul>
-    <p class="lb-nota">Fofos: bruxinha, gatinha, gato e fantasminha não morrem. Caem desacordados, sem sangue, e contam igual.</p>
+    <p class="lb-nota">Fofos: bruxinha, gatinha, gato e fantasminha não morrem: caem desacordados, sem sangue, e contam igual. Clique no fofo desmaiado para finalizar; se foi você quem derrubou, a faixa ganha o «2x».</p>
     <label class="lb-rotulo" for="lb-nome-faixa">Nome na faixa</label>
     <input id="lb-nome-faixa" class="lb-campo" value="Mariana Souza" autocomplete="off">
     <div class="lb-placar"></div>
@@ -117,22 +120,67 @@ window.addEventListener('resize', () => ajustarFaixa?.());
 const fundo = raiz.querySelector<HTMLDivElement>('.lb-fundo')!;
 const painel = raiz.querySelector<HTMLDivElement>('.lb-painel')!;
 
-const placar = { mortas: 0, headshots: 0, vassouradas: 0, chapeus: 0, raspoes: 0, erros: 0, fugiram: 0, tempos: [] as number[] };
+const placar = {
+  mortas: 0, headshots: 0, vassouradas: 0, finalizadas: 0, dobradas: 0,
+  chapeus: 0, raspoes: 0, erros: 0, fugiram: 0, tempos: [] as number[],
+};
 let sempre = false;
 let escolhida = 0;
+
+/** Uma foto de mentira (rosto em pixel com a inicial), para ver o tamanho dela na faixa. */
+function fotoDeMentira(letra: string, cor: string): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' shape-rendering='crispEdges'>`
+    + `<rect width='36' height='36' fill='${cor}'/><rect x='12' y='7' width='12' height='12' fill='#f2d3b3'/>`
+    + `<rect x='6' y='22' width='24' height='14' fill='#f2d3b3' opacity='.85'/>`
+    + `<text x='18' y='34' font-family='monospace' font-size='12' font-weight='700' fill='${cor}' text-anchor='middle'>${letra}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/** Quem atirou: você (o nome do campo, com foto) ou a «outra pessoa» dos botões (sem foto: as iniciais). */
+function pessoa(quem: string): { nome: string; foto: string | null } {
+  if (quem !== EU) return { nome: 'Outra Pessoa', foto: null };
+  const nome = painel.querySelector<HTMLInputElement>('#lb-nome-faixa')!.value.trim() || 'Alguém';
+  return { nome, foto: fotoDeMentira(nome[0]?.toUpperCase() ?? '?', '#7c3aed') };
+}
+
+/** O que está na faixa: o «2x» só vale para a mesma bruxa e a mesma pessoa. */
+let naFaixa: { dados: DadosFaixa; id: number; quem: string } | null = null;
+
+/**
+ * A faixa entra no quadro seguinte ao tiro, não no mesmo (PC fraco): o quadro
+ * do tiro já monta a queda, e somar a faixa a ele é o que dava o tranco.
+ */
+let faixaPedida = 0;
+function mostrarFaixa(): void {
+  cancelAnimationFrame(faixaPedida);
+  faixaPedida = requestAnimationFrame(() => {
+    if (!naFaixa) { lugarDaFaixa.replaceChildren(); ajustarFaixa = null; return; }
+    const f = montarFaixa(naFaixa.dados);
+    lugarDaFaixa.replaceChildren(f.el);
+    f.ajustar();
+    ajustarFaixa = f.ajustar;
+  });
+}
 
 function aoEvento(e: EventoPalco): void {
   if (e.tipo === 'matou') {
     const recorde = !placar.tempos.length || e.ms < Math.min(...placar.tempos);
-    const nome = painel.querySelector<HTMLInputElement>('#lb-nome-faixa')!.value.trim() || 'Alguém';
-    const f = montarFaixa({ nome, bruxa: e.bruxa, morte: e.morte, ms: e.ms, rapida: recorde, hsRapido: recorde && e.morte === 'cabeca' });
-    lugarDaFaixa.replaceChildren(f.el);
-    f.ajustar();
-    ajustarFaixa = f.ajustar;
+    naFaixa = {
+      dados: { ...pessoa(e.quem), bruxa: e.bruxa, morte: e.morte, ms: e.ms, rapida: recorde, hsRapido: recorde && e.morte === 'cabeca' },
+      id: e.id, quem: e.quem,
+    };
+    mostrarFaixa();
     placar.mortas++;
     placar.tempos.push(e.ms);
     if (e.morte === 'cabeca') placar.headshots++;
     if (e.morte === 'vassoura') placar.vassouradas++;
+  } else if (e.tipo === 'finalizou') {
+    placar.finalizadas++;
+    if (e.dobrado) placar.dobradas++;
+    if (e.dobrado && naFaixa && naFaixa.id === e.id && naFaixa.quem === e.quem) {
+      naFaixa = { ...naFaixa, dados: { ...naFaixa.dados, dobrado: true } };
+      mostrarFaixa();
+    }
   } else if (e.tipo === 'chapeu') placar.chapeus++;
   else if (e.tipo === 'raspao') placar.raspoes++;
   else if (e.tipo === 'errou') placar.erros++;
@@ -152,6 +200,8 @@ function mostrarPlacar(): void {
     <div><b>${placar.mortas}</b>abatidas</div>
     <div><b>${placar.headshots}</b>headshots</div>
     <div><b>${placar.vassouradas}</b>vassouradas</div>
+    <div><b>${placar.finalizadas}</b>finalizadas</div>
+    <div><b>${placar.dobradas}</b>2x</div>
     <div><b>${placar.chapeus}</b>chapéus</div>
     <div><b>${placar.erros + placar.raspoes}</b>erros</div>
     <div><b>${placar.fugiram}</b>fugiram</div>
@@ -209,7 +259,8 @@ painel.addEventListener('click', e => {
   if (acao === 'sorteada') palco.soltar();
   if (acao === 'tres') for (let i = 0; i < 3; i++) setTimeout(() => palco.soltar(), i * 250);
   if (acao === 'fugir') palco.fugirTodas();
-  if (acao === 'limpar') palco.limpar();
+  if (acao === 'finalizar') palco.finalizarPorOutro();
+  if (acao === 'limpar') { palco.limpar(); naFaixa = null; mostrarFaixa(); }
   if (dif) { palco.dificuldade = dif as Dificuldade; marcar('dif', 'dif', dif); }
   if (morte) palco.matarPorOutro(morte as Morte);
   if (f) trocarFundo(f);

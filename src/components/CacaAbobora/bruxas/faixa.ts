@@ -8,6 +8,14 @@
  * dourada e o nome entre brilhinhos. Nos fofos a faixa é rosa, com coração:
  * ninguém morreu, a bruxinha só desmaiou.
  *
+ * ## Mais destaque e o «2x» (14/10/2026)
+ *
+ * A faixa cresceu (52 px) e a foto de quem acertou também (36 px, era 22), numa
+ * moldura que pisca: é a foto que a operação procura. O fofo desacordado pode
+ * levar um segundo tiro no chão e morrer (`finalizar` em `queda.ts`); se quem
+ * finalizou é quem derrubou, a faixa ganha o selo «2x · derrubou e finalizou»
+ * e deixa de ser cor-de-rosa.
+ *
  * Sem React, como o palco: devolve o elemento pronto. A parte que decide o
  * texto (`fraseDaFaixa`, `etiquetasDaFaixa`) é pura e testada.
  */
@@ -24,6 +32,11 @@ export interface DadosFaixa {
   ms: number | null;
   rapida?: boolean;
   hsRapido?: boolean;
+  /**
+   * Fofo: quem derrubou também finalizou no chão (os dois tiros são da mesma
+   * pessoa). A faixa ganha o selo «2x» e a bruxinha aparece morta.
+   */
+  dobrado?: boolean;
 }
 
 /** «12,4 s», «1 min 05 s». */
@@ -49,17 +62,19 @@ export function fraseDaFaixa(d: DadosFaixa): string {
     + ` em ${formatarTempo(d.ms)}`
     + (d.rapida ? ' — o mais rápido do dia' : '')
     + (d.hsRapido ? ' — o headshot mais rápido do dia' : '')
+    + (d.dobrado ? ' — e finalizou no chão com o segundo tiro (2x)' : '')
     + '.';
 }
 
-export type Etiqueta = 'headshot' | 'vassourada' | 'nocaute' | 'rapido' | 'hsRapido';
+export type Etiqueta = 'dobro' | 'headshot' | 'vassourada' | 'nocaute' | 'rapido' | 'hsRapido';
 
-/** As etiquetas do recado, na ordem em que aparecem. */
-export function etiquetasDaFaixa(d: Pick<DadosFaixa, 'bruxa' | 'morte' | 'rapida' | 'hsRapido'>): Etiqueta[] {
+/** As etiquetas do recado, na ordem em que aparecem. O «2x» vem primeiro: é o que mais conta. */
+export function etiquetasDaFaixa(d: Pick<DadosFaixa, 'bruxa' | 'morte' | 'rapida' | 'hsRapido' | 'dobrado'>): Etiqueta[] {
   const e: Etiqueta[] = [];
+  if (d.dobrado) e.push('dobro');
   if (d.morte === 'cabeca') e.push('headshot');
   if (d.morte === 'vassoura') e.push('vassourada');
-  if (d.bruxa.fofa && d.morte === 'corpo') e.push('nocaute');
+  if (d.bruxa.fofa && d.morte === 'corpo' && !d.dobrado) e.push('nocaute');
   if (d.rapida) e.push('rapido');
   if (d.hsRapido) e.push('hsRapido');
   return e;
@@ -85,33 +100,79 @@ const ICONES = {
 } as const;
 const CORES_ICONE: Record<string, string> = { w: 'currentColor', g: '#3aa04a', o: '#ff8a1f', y: '#2a0e08' };
 
+const cacheIcone = new Map<string, SVGSVGElement>();
+
+/**
+ * O ícone em pixel. Montado uma vez por tamanho e classe e depois clonado
+ * (PC fraco, 14/10/2026): era um `<rect>` por pixel em cada cópia do recado,
+ * centenas de elementos por faixa. Agora é um `<path>` por cor — o mesmo
+ * desenho, com `crispEdges`, quadradinho por quadradinho.
+ */
 function icone(nome: keyof typeof ICONES, tam = 2, classe = ''): SVGSVGElement {
-  const l = ICONES[nome], w = l[0].length, h = l.length;
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  svg.setAttribute('width', String(w * tam));
-  svg.setAttribute('height', String(h * tam));
-  svg.setAttribute('shape-rendering', 'crispEdges');
-  svg.setAttribute('aria-hidden', 'true');
-  if (classe) svg.setAttribute('class', classe);
-  l.forEach((linha, j) => [...linha].forEach((c, i) => {
-    if (c === '.') return;
-    const r = document.createElementNS(ns, 'rect');
-    r.setAttribute('x', String(i)); r.setAttribute('y', String(j));
-    r.setAttribute('width', '1'); r.setAttribute('height', '1');
-    r.setAttribute('fill', CORES_ICONE[c] ?? 'currentColor');
-    svg.appendChild(r);
-  }));
-  return svg;
+  const chave = `${nome}:${tam}:${classe}`;
+  let modelo = cacheIcone.get(chave);
+  if (!modelo) {
+    const l = ICONES[nome], w = l[0].length, h = l.length;
+    const ns = 'http://www.w3.org/2000/svg';
+    modelo = document.createElementNS(ns, 'svg');
+    modelo.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    modelo.setAttribute('width', String(w * tam));
+    modelo.setAttribute('height', String(h * tam));
+    modelo.setAttribute('shape-rendering', 'crispEdges');
+    modelo.setAttribute('aria-hidden', 'true');
+    if (classe) modelo.setAttribute('class', classe);
+    const porCor = new Map<string, string>();
+    l.forEach((linha, j) => [...linha].forEach((c, i) => {
+      if (c === '.') return;
+      porCor.set(c, `${porCor.get(c) ?? ''}M${i} ${j}h1v1h-1z`);
+    }));
+    for (const [c, caminho] of porCor) {
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', caminho);
+      p.setAttribute('fill', CORES_ICONE[c] ?? 'currentColor');
+      modelo.appendChild(p);
+    }
+    cacheIcone.set(chave, modelo);
+  }
+  return modelo.cloneNode(true) as SVGSVGElement;
 }
 
 // ── O rosto da bruxa ───────────────────────────────────────────────────────
 
 const cacheRosto = new Map<string, HTMLCanvasElement>();
+const cacheUrlRosto = new Map<string, string>();
 
 /** A cabeça com o chapéu, recortada: o ícone da faixa. Morta: olho apagado. */
 export function rostoDaBruxa(b: Bruxa, morta: boolean): HTMLCanvasElement {
+  const c = canvasDoRosto(b, morta);
+  const copia = document.createElement('canvas');
+  copia.width = c.width; copia.height = c.height;
+  copia.getContext('2d')?.drawImage(c, 0, 0);
+  copia.className = 'bx-faixa-rosto';
+  return copia;
+}
+
+/**
+ * O mesmo rosto como `<img>` (PC fraco, 14/10/2026): a faixa repete o recado
+ * umas dez vezes, e canvas não se clona — cada cópia era um canvas novo.
+ * A imagem sai uma vez em PNG e as cópias usam o mesmo endereço.
+ */
+function imgDoRosto(b: Bruxa, morta: boolean): HTMLImageElement {
+  const chave = `${b.id}:${morta}`;
+  const c = canvasDoRosto(b, morta);
+  let url = cacheUrlRosto.get(chave);
+  if (!url) { url = c.toDataURL(); cacheUrlRosto.set(chave, url); }
+  const img = el('img', 'bx-faixa-rosto');
+  // O tamanho vem antes da imagem decodificar: a faixa mede o recado logo em seguida.
+  img.width = c.width;
+  img.height = c.height;
+  img.alt = '';
+  img.decoding = 'sync';
+  img.src = url;
+  return img;
+}
+
+function canvasDoRosto(b: Bruxa, morta: boolean): HTMLCanvasElement {
   const chave = `${b.id}:${morta}`;
   let c = cacheRosto.get(chave);
   if (!c) {
@@ -128,16 +189,13 @@ export function rostoDaBruxa(b: Bruxa, morta: boolean): HTMLCanvasElement {
     c = canvasDaImagem(recorte, false);
     cacheRosto.set(chave, c);
   }
-  const copia = document.createElement('canvas');
-  copia.width = c.width; copia.height = c.height;
-  copia.getContext('2d')?.drawImage(c, 0, 0);
-  copia.className = 'bx-faixa-rosto';
-  return copia;
+  return c;
 }
 
 // ── A faixa ────────────────────────────────────────────────────────────────
 
 const ROTULO: Record<Etiqueta, { texto: string; icone: keyof typeof ICONES; classe: string }> = {
+  dobro: { texto: 'derrubou e finalizou', icone: 'mira', classe: 'bx-tag-dobro' },
   headshot: { texto: 'HEADSHOT', icone: 'mira', classe: 'bx-tag-hs' },
   vassourada: { texto: 'VASSOURADA', icone: 'vassoura', classe: 'bx-tag-vassoura' },
   nocaute: { texto: 'Nocaute', icone: 'coracao', classe: 'bx-tag-nocaute' },
@@ -154,8 +212,10 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, classe: string, texto
 
 function umRecado(d: DadosFaixa): HTMLSpanElement {
   const r = el('span', 'bx-faixa-recado');
-  r.appendChild(icone(d.bruxa.fofa ? 'coracao' : 'abobora', 2, 'bx-faixa-separa'));
-  r.appendChild(rostoDaBruxa(d.bruxa, !d.bruxa.fofa));
+  // Fofo finalizado morreu: a faixa deixa de ser a cor-de-rosa do desmaio.
+  const fofo = d.bruxa.fofa && !d.dobrado;
+  r.appendChild(icone(fofo ? 'coracao' : 'abobora', 2, 'bx-faixa-separa'));
+  r.appendChild(imgDoRosto(d.bruxa, !fofo));
 
   const moldura = el('span', 'bx-faixa-moldura');
   if (d.foto) {
@@ -179,13 +239,16 @@ function umRecado(d: DadosFaixa): HTMLSpanElement {
   for (const e of etiquetasDaFaixa(d)) {
     const t = ROTULO[e];
     const tag = el('span', `bx-tag ${t.classe}`);
+    // «2x»: o número grande e as duas miras, um tiro de cada vez.
+    if (e === 'dobro') tag.appendChild(el('b', 'bx-tag-dobro-num', '2x'));
     tag.appendChild(icone(t.icone, 2));
+    if (e === 'dobro') tag.appendChild(icone(t.icone, 2));
     tag.appendChild(document.createTextNode(t.texto));
     r.appendChild(tag);
   }
   r.appendChild(el('span', 'bx-faixa-feito', `${feitoDaFaixa(d)} primeiro, em`));
   r.appendChild(el('span', 'bx-faixa-tempo', formatarTempo(d.ms)));
-  r.appendChild(icone(d.bruxa.fofa ? 'coracao' : 'morcego', 2, 'bx-faixa-separa'));
+  r.appendChild(icone(fofo ? 'coracao' : 'morcego', 2, 'bx-faixa-separa'));
   return r;
 }
 
@@ -197,7 +260,7 @@ const VELOCIDADE = 70;
  * cobrem a largura e quanto tempo dura a volta); de novo se a janela mudar.
  */
 export function montarFaixa(d: DadosFaixa): { el: HTMLDivElement; ajustar: () => void } {
-  const faixa = el('div', `bx-faixa${d.bruxa.fofa ? ' bx-faixa-fofa' : ''}`);
+  const faixa = el('div', `bx-faixa${d.bruxa.fofa && !d.dobrado ? ' bx-faixa-fofa' : ''}`);
   const sr = el('span', 'bx-faixa-sr', fraseDaFaixa(d));
   sr.setAttribute('role', 'status');
   faixa.appendChild(sr);
@@ -206,17 +269,26 @@ export function montarFaixa(d: DadosFaixa): { el: HTMLDivElement; ajustar: () =>
   trilho.setAttribute('aria-hidden', 'true');
   faixa.appendChild(trilho);
 
+  // Um recado montado; as cópias são clones dele (sem canvas dentro, clonar
+  // sai igual). Só a foto precisa do aviso de erro de novo em cada cópia.
+  const modelo = umRecado(d);
+  const copia = (): HTMLElement => {
+    const r = modelo.cloneNode(true) as HTMLElement;
+    const foto = r.querySelector<HTMLImageElement>('.bx-faixa-foto');
+    const moldura = foto?.parentElement;
+    if (foto && moldura) foto.addEventListener('error', () => { moldura.textContent = iniciais(d.nome); });
+    return r;
+  };
   const ajustar = () => {
     trilho.textContent = '';
     const g1 = el('div', 'bx-faixa-grupo');
     trilho.appendChild(g1);
-    g1.appendChild(umRecado(d));
+    g1.appendChild(copia());
     const um = (g1.firstElementChild as HTMLElement).offsetWidth || 600;
     const copias = Math.max(2, Math.ceil(faixa.offsetWidth / um) + 1);
-    for (let i = 1; i < copias; i++) g1.appendChild(umRecado(d));
-    // O segundo grupo é montado de novo, não clonado: canvas clonado vem em branco.
+    for (let i = 1; i < copias; i++) g1.appendChild(copia());
     const g2 = el('div', 'bx-faixa-grupo');
-    for (let i = 0; i < copias; i++) g2.appendChild(umRecado(d));
+    for (let i = 0; i < copias; i++) g2.appendChild(copia());
     trilho.appendChild(g2);
     trilho.style.setProperty('--bx-dur', `${Math.max(14, g1.offsetWidth / VELOCIDADE)}s`);
   };

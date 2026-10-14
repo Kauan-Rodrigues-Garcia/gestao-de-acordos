@@ -32,6 +32,9 @@ export const VELOCIDADES: Readonly<Record<Dificuldade, number>> = {
   insana: 85,
 };
 
+/** A velocidade de quem não escolhe: a Insana (decisão de 14/10/2026). */
+export const DIFICULDADE_PADRAO: Dificuldade = 'insana';
+
 export type Modo = 'chega' | 'cruzeiro' | 'mergulho' | 'sobe' | 'paira' | 'brava' | 'foge' | 'fora';
 
 /** Onde o CENTRO do sprite pode ir. */

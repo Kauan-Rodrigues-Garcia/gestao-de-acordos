@@ -29,8 +29,14 @@ import {
   ALTURA, BRUXAS, LARGURA, MORCEGO, MS_POR_QUADRO, NUMERO_DA_PARTE, PARTE_DO_NUMERO, PRIMEIRO_RINDO, VOO,
   alvoDaParte, centroDaParte, type Bruxa, type Rastro,
 } from './arte';
-import { FLASH_S, avancar, cabecaDaQueda, chapeuVoando, criarQueda, poseDoOsso, type Evento, type Morte, type Queda } from './queda';
-import { VELOCIDADES, avancarVoo, balanco, criarVoo, enfurecer, fugir, rindo, type Dificuldade, type EventoVoo, type Voo, type Zona } from './voo';
+import {
+  FLASH_S, avancar, cabecaDaQueda, caixaDoCorpo, chapeuVoando, criarQueda, finalizar, poseDoOsso,
+  type Evento, type Morte, type Queda,
+} from './queda';
+import {
+  DIFICULDADE_PADRAO, VELOCIDADES, avancarVoo, balanco, criarVoo, enfurecer, fugir, rindo,
+  type Dificuldade, type EventoVoo, type Voo, type Zona,
+} from './voo';
 import { esquecer, girado, miniatura, quadrosDa } from './pixels';
 import {
   somBonk, somBrava, somChapeu, somDesmaio, somEspatifa, somGargalhada, somGrito, somMiau, somPuf, somRasga, somVassouraQuebra, somVento, somVidro,
@@ -46,9 +52,17 @@ export const MANCHA_S = 40;
 const MANCHA_APAGA_S = 8;
 const MANCHA_CLARA = 0.45;
 
+/** Quem atirou nesta tela. Os outros chegam com o nome que quem chamou der. */
+export const EU = 'eu';
+
+/** De quem é o corpo: a bruxa, e quem a derrubou (para saber se quem finaliza é a mesma pessoa). */
+interface Dona { id: number; bruxa: Bruxa; quem: string }
+
 export type EventoPalco =
-  /** `bruxa.fofa`: caiu desacordada, não morreu. Conta igual na gincana. */
-  | { tipo: 'matou'; bruxa: Bruxa; morte: Morte; ms: number }
+  /** `bruxa.fofa`: caiu desacordada, não morreu. Conta igual na gincana. `quem` atirou. */
+  | { tipo: 'matou'; id: number; bruxa: Bruxa; morte: Morte; ms: number; quem: string }
+  /** O fofo desacordado levou o segundo tiro e morreu. `dobrado`: quem finalizou é quem derrubou (o «2x»). */
+  | { tipo: 'finalizou'; id: number; bruxa: Bruxa; quem: string; dobrado: boolean }
   | { tipo: 'chapeu'; bruxa: Bruxa }
   | { tipo: 'raspao'; bruxa: Bruxa }
   | { tipo: 'errou' }
@@ -81,11 +95,19 @@ interface Viva {
 
 interface QuedaViva {
   q: Queda;
+  /** De quem é o corpo: a bruxa e quem a derrubou. */
+  dona: Dona | null;
+  /** A caixa de clique enquanto ela está desacordada no chão. */
+  caixa: HTMLDivElement | null;
   /** O chão desta queda, num canvas próprio (apaga sozinho no fim). */
   chao: HTMLCanvasElement;
   cChao: CanvasRenderingContext2D;
   t: number;
   ids: Set<number>;
+  /** O que já está pintado: o raio de cada poça, se chegou mancha no último quadro, e a transparência. */
+  raios: number[];
+  sujou: boolean;
+  alfa: number;
 }
 
 interface Particula {
@@ -127,6 +149,8 @@ export class PalcoBruxas {
   private antes = 0;
   private pausaAte = 0;
   private tremeAte = 0;
+  /** O chão de todas precisa ser juntado de novo (entrou ou saiu queda, mudou o tamanho). */
+  private chaoMudou = true;
   private acordar: ReturnType<typeof setTimeout> | undefined;
   private ultimoBaque = 0;
   private observador: ResizeObserver | null = null;
@@ -142,7 +166,7 @@ export class PalcoBruxas {
   constructor(host: HTMLElement, opcoes: OpcoesPalco = {}) {
     this.escala = opcoes.escala ?? 2;
     this.margemChao = opcoes.margemChao ?? 10;
-    this._dificuldade = opcoes.dificuldade ?? 'normal';
+    this._dificuldade = opcoes.dificuldade ?? DIFICULDADE_PADRAO;
     this.aoEvento = opcoes.aoEvento;
     this.raiz = document.createElement('div');
     this.raiz.className = 'bx-palco';
@@ -174,6 +198,7 @@ export class PalcoBruxas {
       c.style.height = `${h * this.escala}px`;
     }
     this.cChao.imageSmoothingEnabled = false;
+    this.chaoMudou = true;
     this.cAcao.imageSmoothingEnabled = false;
     this.pedirQuadro();
   }
@@ -229,19 +254,30 @@ export class PalcoBruxas {
     this.fumaca(voo.x, voo.y, bruxa);
     somPuf();
     setTimeout(somGargalhada, 160);
+    // PC fraco: o sprite sem chapéu (o tiro no chapéu) fica pronto no tempo
+    // ocioso, não no instante do tiro, que é quando um quadro perdido aparece.
+    quandoOcioso(() => quadrosDa(bruxa, true));
     this.aoEvento?.({ tipo: 'soltou', bruxa });
     this.pedirQuadro();
     return v.id;
   }
 
   /** «Outra pessoa matou»: a primeira bruxa viva morre como o vencedor matou. */
-  matarPorOutro(morte: Morte): void {
+  matarPorOutro(morte: Morte, quem = 'outro'): void {
     const v = this.vivas[0];
     if (!v) return;
     const img = quadrosDa(v.bruxa, v.semChapeu).imagens[v.quadro];
     const parte = morte === 'cabeca' ? 'cabeca' : morte === 'vassoura' ? 'vassoura' : 'tronco';
     somTiro();
-    this.matar(v, morte, centroDaParte(img, NUMERO_DA_PARTE[parte]));
+    this.matar(v, morte, centroDaParte(img, NUMERO_DA_PARTE[parte]), quem);
+  }
+
+  /** «Outra pessoa finalizou»: o primeiro fofo desacordado leva o tiro no meio do corpo. */
+  finalizarPorOutro(quem = 'outro'): void {
+    const qv = this.quedas.find(o => this.finalizavel(o));
+    if (!qv) return;
+    const c = caixaDoCorpo(qv.q)!;
+    this.finalizarQueda(qv, quem, (c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2);
   }
 
   /** O tempo acabou: todas vão embora rindo. */
@@ -253,12 +289,13 @@ export class PalcoBruxas {
   /** Apaga tudo: bruxas, corpos e sangue. */
   limpar(): void {
     for (const v of this.vivas) v.caixa.remove();
-    for (const q of this.quedas) esquecer(q.ids);
+    for (const q of this.quedas) { esquecer(q.ids); q.caixa?.remove(); }
     this.vivas = [];
     this.quedas = [];
     this.particulas = [];
     this.morcegos = [];
     this.cChao.clearRect(0, 0, this.larg, this.alt);
+    this.chaoMudou = true;
     this.cAcao.clearRect(0, 0, this.larg, this.alt);
   }
 
@@ -315,10 +352,10 @@ export class PalcoBruxas {
       this.aoEvento?.({ tipo: 'chapeu', bruxa: v.bruxa });
       return;
     }
-    this.matar(v, alvo, { x: lx, y: ly });
+    this.matar(v, alvo, { x: lx, y: ly }, EU);
   }
 
-  private matar(v: Viva, morte: Morte, impacto: { x: number; y: number }): void {
+  private matar(v: Viva, morte: Morte, impacto: { x: number; y: number }, quem: string): void {
     const s = this.posSprite(v);
     this.vivas = this.vivas.filter(o => o !== v);
     v.caixa.remove();
@@ -335,16 +372,66 @@ export class PalcoBruxas {
     this.adicionarQueda(criarQueda({
       bruxa: v.bruxa, quadro: v.quadro, lado: v.voo.lado, x: s.x, y: s.y, vx: v.voo.vx, vy: v.voo.vy,
       morte, impacto, chao: this.chao, largura: this.larg, semChapeu: v.semChapeu,
-    }));
-    this.aoEvento?.({ tipo: 'matou', bruxa: v.bruxa, morte, ms: performance.now() - v.nasceu });
+    }), { id: v.id, bruxa: v.bruxa, quem });
+    this.aoEvento?.({ tipo: 'matou', id: v.id, bruxa: v.bruxa, morte, ms: performance.now() - v.nasceu, quem });
   }
 
-  private adicionarQueda(q: Queda): void {
+  private adicionarQueda(q: Queda, dona: Dona | null = null): void {
     const chao = document.createElement('canvas');
     chao.width = this.larg;
     chao.height = this.alt;
     const cChao = chao.getContext('2d')!;
-    this.quedas.push({ q, chao, cChao, t: 0, ids: new Set() });
+    this.quedas.push({ q, dona, caixa: null, chao, cChao, t: 0, ids: new Set(), raios: [], sujou: false, alfa: NaN });
+    this.chaoMudou = true;
+    this.pedirQuadro();
+  }
+
+  // ── O fofo desacordado ───────────────────────────────────────────────────
+
+  /** Desacordado no chão e ainda à vista (o corpo não começou a apagar). */
+  private finalizavel(qv: QuedaViva): boolean {
+    return qv.t < CORPO_S && caixaDoCorpo(qv.q) !== null;
+  }
+
+  /** Põe, tira e acompanha a caixa de clique de quem está desacordado no chão. */
+  private caixaNoChao(qv: QuedaViva): void {
+    const c = this.finalizavel(qv) ? caixaDoCorpo(qv.q) : null;
+    if (!c) {
+      if (qv.caixa) { qv.caixa.remove(); qv.caixa = null; }
+      return;
+    }
+    if (!qv.caixa) {
+      const caixa = document.createElement('div');
+      caixa.className = 'bx-caixa bx-caixa-chao';
+      caixa.setAttribute('role', 'button');
+      caixa.setAttribute('aria-label', 'Desmaiou! Atire de novo para finalizar');
+      caixa.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = this.raiz.getBoundingClientRect();
+        this.finalizarQueda(qv, EU, (e.clientX - r.left) / this.escala, (e.clientY - r.top) / this.escala);
+      });
+      this.raiz.appendChild(caixa);
+      qv.caixa = caixa;
+    }
+    const k = this.escala;
+    qv.caixa.style.width = `${Math.round((c.x1 - c.x0) * k)}px`;
+    qv.caixa.style.height = `${Math.round((c.y1 - c.y0) * k)}px`;
+    qv.caixa.style.transform = `translate(${Math.round(c.x0 * k)}px, ${Math.round(c.y0 * k)}px)`;
+  }
+
+  private finalizarQueda(qv: QuedaViva, quem: string, x: number, y: number): void {
+    if (!this.finalizavel(qv) || !finalizar(qv.q, x, y)) return;
+    qv.caixa?.remove();
+    qv.caixa = null;
+    somTiro();
+    somCerebro();
+    this.pausaAte = performance.now() + 70;
+    this.tremeAte = performance.now() + 160;
+    const dobrado = qv.dona?.quem === quem;
+    this.letreiro(dobrado ? '2x!' : 'FINALIZADA!', x, y - 10, dobrado ? 'dobro' : 'final');
+    if (qv.dona) this.aoEvento?.({ tipo: 'finalizou', id: qv.dona.id, bruxa: qv.dona.bruxa, quem, dobrado });
     this.pedirQuadro();
   }
 
@@ -398,7 +485,7 @@ export class PalcoBruxas {
     }
   }
 
-  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'vassoura' | 'chapeu' | 'fofo'): void {
+  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'vassoura' | 'chapeu' | 'fofo' | 'final' | 'dobro'): void {
     const el = document.createElement('div');
     el.className = `bx-letreiro bx-letreiro-${tipo}`;
     el.textContent = texto;
@@ -539,6 +626,7 @@ export class PalcoBruxas {
         avancar(qv.q, dt);
         for (const e of qv.q.eventos.splice(0)) this.tocarQueda(e);
       }
+      this.caixaNoChao(qv);
       if (!qv.q.quieta) mexe = true;
       if (this.apagando(qv)) mexe = true;
       // Desacordada: as estrelinhas rodam enquanto o corpo está no chão.
@@ -546,8 +634,9 @@ export class PalcoBruxas {
     }
     const acabou = this.quedas.filter(qv => qv.t > MANCHA_S + MANCHA_APAGA_S);
     if (acabou.length) {
-      for (const qv of acabou) esquecer(qv.ids);
+      for (const qv of acabou) { esquecer(qv.ids); qv.caixa?.remove(); }
       this.quedas = this.quedas.filter(qv => !acabou.includes(qv));
+      this.chaoMudou = true;
       mexe = true;
     }
     return mexe;
@@ -572,16 +661,25 @@ export class PalcoBruxas {
 
   private desenhar(agora: number): void {
     // O chão: cada queda pinta só o que chegou; o chão de todas se junta com a
-    // transparência de cada uma.
-    this.cChao.clearRect(0, 0, this.larg, this.alt);
+    // transparência de cada uma. Só quando algo mudou (PC fraco, 14/10/2026):
+    // canvas que não é tocado não é recomposto pelo navegador, e o chão
+    // parado é a maior parte do tempo.
+    let mudou = this.chaoMudou;
+    this.chaoMudou = false;
     for (const qv of this.quedas) {
-      pintarChaoNovo(qv);
+      if (pintarChaoNovo(qv)) mudou = true;
       const a = alfaMancha(qv.t);
-      if (a <= 0) continue;
-      this.cChao.globalAlpha = a;
-      this.cChao.drawImage(qv.chao, 0, 0);
+      if (a !== qv.alfa) { qv.alfa = a; mudou = true; }
     }
-    this.cChao.globalAlpha = 1;
+    if (mudou) {
+      this.cChao.clearRect(0, 0, this.larg, this.alt);
+      for (const qv of this.quedas) {
+        if (qv.alfa <= 0) continue;
+        this.cChao.globalAlpha = qv.alfa;
+        this.cChao.drawImage(qv.chao, 0, 0);
+      }
+      this.cChao.globalAlpha = 1;
+    }
 
     const c = this.cAcao;
     c.clearRect(0, 0, this.larg, this.alt);
@@ -629,9 +727,21 @@ function alfaMancha(t: number): number {
 }
 
 /** As manchas novas e as poças (que só crescem) no canvas do chão da queda. */
-function pintarChaoNovo(qv: QuedaViva): void {
+/**
+ * Pinta no chão da queda o que mudou. Devolve se pintou alguma coisa.
+ *
+ * As poças cobrem as manchas que caem dentro delas: antes elas eram pintadas
+ * de novo a cada quadro. Agora só quando o raio de alguma muda ou quando
+ * chegou mancha no quadro anterior — dá o mesmo desenho, sem repintar o
+ * que já está lá.
+ */
+function pintarChaoNovo(qv: QuedaViva): boolean {
   const { q, cChao: c } = qv;
-  for (const p of q.pocas) {
+  let raioMudou = q.pocas.length !== qv.raios.length;
+  for (let i = 0; i < q.pocas.length && !raioMudou; i++) raioMudou = Math.round(q.pocas[i].r) !== qv.raios[i];
+  const repinta = raioMudou || qv.sujou;
+  if (repinta) qv.raios = q.pocas.map(p => Math.round(p.r));
+  for (const p of repinta ? q.pocas : []) {
     const r = Math.round(p.r);
     if (r < 1) continue;
     const ry = Math.max(1, Math.round(r * 0.3));
@@ -650,7 +760,8 @@ function pintarChaoNovo(qv: QuedaViva): void {
       c.fillRect(p.cx - Math.round(r * 0.4), p.cy - Math.max(0, ry - 1), r >= 9 ? 2 : 1, 1);
     }
   }
-  if (!q.novas.length) return;
+  qv.sujou = q.novas.length > 0;
+  if (!qv.sujou) return repinta;
   for (const k of q.novas) {
     const cor = q.manchas.get(k);
     if (cor === undefined) continue;
@@ -658,6 +769,7 @@ function pintarChaoNovo(qv: QuedaViva): void {
     c.fillRect(k % 4096, Math.floor(k / 4096), 1, 1);
   }
   q.novas.length = 0;
+  return true;
 }
 
 function desenharQueda(c: CanvasRenderingContext2D, qv: QuedaViva): void {
@@ -745,4 +857,10 @@ function desenharAreas(c: CanvasRenderingContext2D, partes: Uint8Array, x: numbe
     c.fillStyle = COR_DA_AREA[alvoDaParte(PARTE_DO_NUMERO[n]!)];
     c.fillRect(x + (lado > 0 ? i : LARGURA - 1 - i), y + j, 1, 1);
   }
+}
+
+/** Roda quando o navegador estiver à toa (ou logo depois, onde não há `requestIdleCallback`). */
+function quandoOcioso(f: () => void): void {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => f(), { timeout: 2000 });
+  else setTimeout(f, 300);
 }

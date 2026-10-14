@@ -227,6 +227,10 @@ export interface Queda {
   /** Fofo: não sangra; no chão, fica desacordado (estrelinhas rodando). */
   fofa: boolean;
   tonta: boolean;
+  /** O fofo desacordado levou o segundo tiro no chão (`finalizar`): agora morreu. */
+  finalizada: boolean;
+  /** Troca o rosto pelo de olho apagado (só nos fofos; quem chama é `finalizar`). */
+  apagarOlhos: (() => void) | null;
 }
 
 const NOMES_JUNTAS = Object.keys(JUNTAS) as Junta[];
@@ -292,7 +296,7 @@ export function criarQueda(e: Entrada): Queda {
     t: 0, morte: e.morte, pontos: [], varas: [], ossos: [], soltos: [], gotas: [], pocas: [],
     manchas: new Map(), novas: [], jorros: [], eventos: [], chao: e.chao, largura: e.largura,
     espatifou: false, debate: false, flash: null, explodir: null, aleatorio: a, quieta: false, calmaria: 0,
-    fofa: !!e.bruxa.fofa, tonta: false,
+    fofa: !!e.bruxa.fofa, tonta: false, finalizada: false, apagarOlhos: null,
   };
   const juntas = juntasDa(e.bruxa);
 
@@ -339,6 +343,16 @@ export function criarQueda(e: Entrada): Queda {
       ax: pa.x - e.x - rec.x0, ay: pa.y - e.y - rec.y0,
       ang0: Math.atan2(pb.y - pa.y, pb.x - pa.x), vivo: true,
     });
+  }
+  if (m.fofa) {
+    m.apagarOlhos = () => {
+      const cab = m.ossos.find(o => o.nome === 'cabeca');
+      const def = OSSOS.find(o => o.nome === 'cabeca');
+      if (!cab || !def) return;
+      const rec = recortar(montarQuadro(e.bruxa, q, { quais: p => def.partes.includes(p), semChapeu: true, sem: semEles, morta: true }), esp);
+      // Só troca se o recorte cai no mesmo lugar (o olho muda de cor, não de forma).
+      if (rec && rec.x0 === cab.rec.x0 && rec.y0 === cab.rec.y0 && rec.w === cab.rec.w && rec.h === cab.rec.h) cab.rec = rec;
+    };
   }
 
   // A vassoura: um corpo rígido só, a vara com a palha.
@@ -675,6 +689,53 @@ function espatifar(m: Queda, v: number): void {
   }
 }
 
+// ── O fofo desacordado: finalizar ─────────────────────────────────────────
+
+/**
+ * Onde está quem desmaiou (px da arte), com folga para o clique: o retângulo
+ * das juntas. `null` se não há desacordado para finalizar.
+ */
+export function caixaDoCorpo(m: Queda): { x0: number; y0: number; x1: number; y1: number } | null {
+  if (!m.tonta || m.finalizada) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of m.pontos) {
+    if (!p.vivo) continue;
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+  }
+  if (x0 === Infinity) return null;
+  const folga = RAIO + 3;
+  // Em cima, folga a mais: as estrelinhas rodam sobre a cabeça.
+  return { x0: x0 - folga, y0: y0 - folga - 6, x1: x1 + folga, y1: Math.min(m.chao + 2, y1 + folga) };
+}
+
+/**
+ * O segundo tiro, em quem caiu desacordado (Cleber, 14/10/2026): o fofo, que
+ * não morria, agora morre — as estrelinhas param, o olho apaga e, aí sim,
+ * sangra no chão. Devolve `false` se não havia o que finalizar.
+ */
+export function finalizar(m: Queda, x: number, y: number): boolean {
+  if (!m.tonta || m.finalizada) return false;
+  m.finalizada = true;
+  m.tonta = false;
+  m.calmaria = 0;
+  m.quieta = false;
+  m.apagarOlhos?.();
+  // A junta mais perto do tiro leva o tranco e passa a sangrar.
+  let perto = J.quadril, d = Infinity;
+  m.pontos.forEach((p, i) => {
+    if (!p.vivo) return;
+    const dd = Math.hypot(p.x - x, p.y - y);
+    if (dd < d) { d = dd; perto = i; }
+  });
+  espirrar(m, x, y, 42, 50, 170, 0);
+  const alvo = m.pontos[perto];
+  alvo.ay -= 120 * PASSO;
+  m.jorros.push({ de: () => ({ x: alvo.x, y: alvo.y - 1, dx: 0, dy: -1 }), ate: m.t + 1.2, taxa: 45, sobra: 0 });
+  m.pocas.push({ cx: Math.round(alvo.x), cy: m.chao, r: 2, max: 16, cor: SANGUE_VIVO, borda: SANGUE_ESCURO });
+  m.eventos.push({ tipo: 'cerebro' });
+  return true;
+}
+
 function jorrar(m: Queda, j: Jorro, dt: number): void {
   const de = j.de();
   if (!de) return;
@@ -845,7 +906,7 @@ export function chapeuVoando(e: Omit<Entrada, 'morte'>): Queda {
     t: FLASH_S, morte: 'corpo', pontos: [], varas: [], ossos: [], soltos: [], gotas: [], pocas: [],
     manchas: new Map(), novas: [], jorros: [], eventos: [], chao: e.chao, largura: e.largura,
     espatifou: true, debate: false, flash: null, explodir: null, aleatorio: a, quieta: false, calmaria: 0,
-    fofa: !!e.bruxa.fofa, tonta: false,
+    fofa: !!e.bruxa.fofa, tonta: false, finalizada: false, apagarOlhos: null,
   };
   const rec = recortar(montarQuadro(e.bruxa, e.quadro, { quais: p => p === 'chapeu' }), esp);
   if (!rec) return m;

@@ -18,10 +18,12 @@
   /* As bandeirinhas: laranja, roxa e verde, penduradas num fio. */
   --bx-f-bandeiras: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23120a1a'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff8a1f'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%238a3ad0'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%236abf3a'/%3E%3C/svg%3E");
   position: relative;
-  height: 40px;
+  height: 52px;
   overflow: hidden;
   color: var(--bx-f-texto);
   font-family: 'Pixelify Sans', ui-monospace, Consolas, monospace;
+  /* A Pixelify troca «fi» por um glifo que lê como «A» («finalizou», «Rafinha»). */
+  font-variant-ligatures: none;
   background:
     var(--bx-f-bandeiras) 0 0 / 42px 8px repeat-x,
     linear-gradient(0deg, var(--bx-f-borda) 0 2px, transparent 2px),
@@ -85,28 +87,28 @@
 .bx-faixa-recado {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  height: 30px;
+  gap: 11px;
+  height: 42px;
   padding: 0 26px 0 0;
   white-space: nowrap;
   font-size: 14px;
   letter-spacing: .02em;
 }
 .bx-faixa-separa { flex: none; color: var(--bx-f-separa); }
-.bx-faixa-rosto { flex: none; height: 24px; width: auto; image-rendering: pixelated; }
+.bx-faixa-rosto { flex: none; height: 32px; width: auto; image-rendering: pixelated; }
 
 /* A foto, ou as iniciais, numa moldura dourada em degrau. */
 .bx-faixa-moldura {
   flex: none;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 36px;
+  height: 36px;
   overflow: hidden;
   color: #fff;
   background: var(--bx-f-moldura-fundo);
   font-family: 'Press Start 2P', ui-monospace, Consolas, monospace;
-  font-size: 7px;
+  font-size: 11px;
   box-shadow: 0 -2px 0 0 var(--bx-f-moldura), 0 2px 0 0 var(--bx-f-moldura), -2px 0 0 0 var(--bx-f-moldura), 2px 0 0 0 var(--bx-f-moldura);
 }
 .bx-faixa-foto { width: 100%; height: 100%; object-fit: cover; }
@@ -115,7 +117,7 @@
 .bx-faixa-nome { display: inline-flex; align-items: center; gap: 5px; }
 .bx-faixa-nome b {
   font-weight: 700;
-  font-size: 17px;
+  font-size: 21px;
   color: var(--bx-f-nome);
   text-shadow:
     1px 0 0 var(--bx-f-nome-sombra), -1px 0 0 var(--bx-f-nome-sombra),
@@ -165,4 +167,44 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* A moldura da foto pisca, como placar: parada na cor da faixa a maior parte
+   do tempo, um clarão branco com halo. É o que puxa o olho para a foto. */
+.bx-faixa-moldura { margin: 0 2px; animation: bx-faixa-moldura 1.6s steps(1, end) infinite; }
+@keyframes bx-faixa-moldura {
+  0%, 70% {
+    box-shadow: 0 -2px 0 0 var(--bx-f-moldura), 0 2px 0 0 var(--bx-f-moldura), -2px 0 0 0 var(--bx-f-moldura), 2px 0 0 0 var(--bx-f-moldura);
+  }
+  71%, 100% {
+    box-shadow:
+      0 -2px 0 0 #fff, 0 2px 0 0 #fff, -2px 0 0 0 #fff, 2px 0 0 0 #fff,
+      0 -4px 0 0 color-mix(in srgb, var(--bx-f-moldura) 45%, transparent), 0 4px 0 0 color-mix(in srgb, var(--bx-f-moldura) 45%, transparent),
+      -4px 0 0 0 color-mix(in srgb, var(--bx-f-moldura) 45%, transparent), 4px 0 0 0 color-mix(in srgb, var(--bx-f-moldura) 45%, transparent);
+  }
+}
+
+/* «2x»: os dois tiros foram da mesma pessoa. O número grande, em fliperama. */
+.bx-tag-dobro {
+  --bx-t-borda: #c8202a;
+  gap: 4px;
+  padding: 3px 8px 2px 3px;
+  color: #ffd34d;
+  background: #2a0a0e;
+  animation: bx-faixa-dobro 1s steps(1, end) infinite;
+}
+.bx-tag-dobro-num {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1;
+  color: #fff;
+  padding: 3px 5px 2px;
+  margin-right: 2px;
+  background: #c8202a;
+  text-shadow: 2px 2px 0 #6e0a12;
+}
+@keyframes bx-faixa-dobro {
+  0%, 60% { background: #2a0a0e; }
+  61%, 100% { background: #4a0f16; }
 }
