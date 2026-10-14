@@ -7,8 +7,10 @@
  * só filtra a lista: quem está marcado continua marcado fora do filtro.
  * Desde 09/10/2026 cada um aparece com a foto do perfil, e a lista filtra por
  * equipe — «Só esta equipe» marca exatamente quem aparece.
+ * Desde 14/10/2026 dá para escolher várias equipes de uma vez, e os líderes do
+ * setor aparecem na «Equipe de liderança» (desmarcados) para entrar na campanha.
  */
-import { Loader2, Search, X } from 'lucide-react';
+import { Check, Loader2, Search, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,7 +19,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { rotuloEquipe } from './envios';
+import { EQUIPE_LIDERANCA, rotuloEquipe } from './envios';
 import type { useEnviosCampanha } from './useEnviosCampanha';
 
 type Envios = ReturnType<typeof useEnviosCampanha>;
@@ -29,14 +31,16 @@ function iniciais(nome: string): string {
 export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; destacarVazio: boolean }) {
   const {
     setorFixo, setores, setorId, setSetorId, busca, setBusca,
-    equipes, filtroEquipe, setFiltroEquipe,
+    equipes, filtroEquipes, alternarEquipe, limparEquipes,
     operadores, operadoresVisiveis, carregandoOperadores, selecionados, alternar, marcarTodos, desmarcarTodos,
   } = envios;
   const marcados = selecionados.size;
-  const filtrando = busca.trim() !== '' || filtroEquipe !== 'todas';
+  const comEquipe = filtroEquipes.size > 0;
+  const filtrando = busca.trim() !== '' || comEquipe;
   const visiveisMarcados = operadoresVisiveis.filter((o) => selecionados.has(o.id)).length;
   const todosVisiveis = operadoresVisiveis.length > 0 && visiveisMarcados === operadoresVisiveis.length;
-  const soEstaMarcada = filtroEquipe !== 'todas' && todosVisiveis && marcados === operadoresVisiveis.length;
+  const soEstaMarcada = comEquipe && todosVisiveis && marcados === operadoresVisiveis.length;
+  const lideresMarcados = operadores.filter((o) => o.lider && selecionados.has(o.id)).length;
 
   /** Com filtro, o botão age só sobre quem aparece. */
   function alternarVisiveis() {
@@ -46,7 +50,7 @@ export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; d
     }
   }
 
-  /** Marca exatamente quem aparece no filtro de equipe, e desmarca o resto. */
+  /** Marca exatamente quem aparece nas equipes escolhidas, e desmarca o resto. */
   function soEstaEquipe() {
     const visiveis = new Set(operadoresVisiveis.map((o) => o.id));
     for (const o of operadores) {
@@ -78,15 +82,17 @@ export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; d
       ) : (
         <>
           {equipes.length > 1 && (
-            <Select value={filtroEquipe} onValueChange={setFiltroEquipe}>
-              <SelectTrigger className="h-9 text-sm" aria-label="Filtrar por equipe"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as equipes ({operadores.length})</SelectItem>
-                {equipes.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>{e.id === 'sem' ? e.nome : rotuloEquipe(e.nome)} ({e.qtd})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por equipe">
+              <ChipEquipe ativo={!comEquipe} onClick={limparEquipes}>
+                Todas as equipes ({operadores.length})
+              </ChipEquipe>
+              {equipes.map((e) => (
+                <ChipEquipe key={e.id} ativo={filtroEquipes.has(e.id)} onClick={() => alternarEquipe(e.id)}
+                  destaque={e.id === EQUIPE_LIDERANCA}>
+                  {e.id === 'sem' ? e.nome : rotuloEquipe(e.nome)} ({e.qtd})
+                </ChipEquipe>
+              ))}
+            </div>
           )}
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -111,8 +117,10 @@ export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; d
               {marcados} de {operadores.length} marcados
             </span>
             <span className="flex gap-3">
-              {filtroEquipe !== 'todas' && operadoresVisiveis.length > 0 && !soEstaMarcada && (
-                <Button variant="link" className="h-auto p-0 text-xs" onClick={soEstaEquipe}>Só esta equipe</Button>
+              {comEquipe && operadoresVisiveis.length > 0 && !soEstaMarcada && (
+                <Button variant="link" className="h-auto p-0 text-xs" onClick={soEstaEquipe}>
+                  {filtroEquipes.size === 1 ? 'Só esta equipe' : 'Só estas equipes'}
+                </Button>
               )}
               {operadoresVisiveis.length > 0 && (
                 <Button variant="link" className="h-auto p-0 text-xs" onClick={alternarVisiveis}>
@@ -136,7 +144,9 @@ export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; d
                   </Avatar>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate leading-tight">{o.nome}</span>
-                    {o.equipe_nome && filtroEquipe === 'todas' && (
+                    {o.lider ? (
+                      <span className="block truncate text-[11px] leading-tight text-primary">Liderança</span>
+                    ) : o.equipe_nome && filtroEquipes.size !== 1 && (
                       <span className="block truncate text-[11px] leading-tight text-muted-foreground">{rotuloEquipe(o.equipe_nome)}</span>
                     )}
                   </span>
@@ -148,11 +158,31 @@ export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; d
             {marcados === 0
               ? 'Marque quem vai encaminhar.'
               : marcados === 1
-                ? 'A campanha inteira vai para 1 operador.'
-                : `Mensagens divididas em rodízio entre ${marcados} operadores.`}
+                ? `A campanha inteira vai para 1 ${lideresMarcados === 1 ? 'líder' : 'operador'}.`
+                : `Mensagens divididas em rodízio entre ${marcados} pessoas${lideresMarcados > 0 ? ` (${lideresMarcados} ${lideresMarcados === 1 ? 'líder' : 'líderes'})` : ''}.`}
           </p>
         </>
       )}
     </div>
+  );
+}
+
+/** Uma equipe do filtro: liga e desliga, e várias podem ficar ligadas. */
+function ChipEquipe({ ativo, destaque, onClick, children }: {
+  ativo: boolean; destaque?: boolean; onClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button" aria-pressed={ativo} onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors',
+        ativo
+          ? 'border-primary bg-primary text-primary-foreground'
+          : cn('border-border bg-background hover:bg-accent', destaque ? 'text-primary' : 'text-foreground'),
+      )}
+    >
+      {ativo && <Check className="h-3 w-3" />}
+      {children}
+    </button>
   );
 }

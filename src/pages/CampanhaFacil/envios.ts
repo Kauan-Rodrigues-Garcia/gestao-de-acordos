@@ -16,15 +16,41 @@ export interface OperadorCampanha {
   foto_url?: string | null;
   equipe_id?: string | null;
   equipe_nome?: string | null;
+  /**
+   * Líder do setor (14/10/2026). Fica na «Equipe de liderança» do passo 3 e
+   * não começa marcado: o comum é a campanha ir só para os operadores.
+   */
+  lider?: boolean;
 }
 
-/** Filtro de equipe do passo 3: `todas`, `sem` (sem equipe) ou o id da equipe. */
-export type FiltroEquipe = 'todas' | 'sem' | string;
+/** A equipe de liderança do passo 3: só os líderes do setor, montada na lista. */
+export const EQUIPE_LIDERANCA = 'lideranca';
 
-export function casaEquipe(o: Pick<OperadorCampanha, 'equipe_id'>, filtro: FiltroEquipe): boolean {
+/**
+ * Filtro de equipe do passo 3: `todas`, `sem` (sem equipe), `lideranca` (os
+ * líderes do setor) ou o id da equipe.
+ */
+export type FiltroEquipe = 'todas' | 'sem' | typeof EQUIPE_LIDERANCA | string;
+
+export function casaEquipe(o: Pick<OperadorCampanha, 'equipe_id' | 'lider'>, filtro: FiltroEquipe): boolean {
   if (filtro === 'todas') return true;
+  if (filtro === EQUIPE_LIDERANCA) return !!o.lider;
+  // Líder não entra nas equipes de operadores: ele mora na de liderança.
+  if (o.lider) return false;
   if (filtro === 'sem') return !o.equipe_id;
   return o.equipe_id === filtro;
+}
+
+/**
+ * Várias equipes de uma vez (14/10/2026): casa com qualquer uma delas.
+ * Nenhuma escolhida = todas.
+ */
+export function casaEquipes(
+  o: Pick<OperadorCampanha, 'equipe_id' | 'lider'>, filtros: ReadonlySet<FiltroEquipe>,
+): boolean {
+  if (filtros.size === 0) return true;
+  for (const f of filtros) if (casaEquipe(o, f)) return true;
+  return false;
 }
 
 /** «Luciano» vira «Equipe Luciano»; quem já se chama «Equipe …» fica como está. */
@@ -32,13 +58,18 @@ export function rotuloEquipe(nome: string): string {
   return /^equipe\b/i.test(nome.trim()) ? nome.trim() : `Equipe ${nome.trim()}`;
 }
 
-/** As equipes que aparecem na lista, com quantos operadores cada uma tem. */
+/**
+ * As equipes que aparecem na lista, com quantos operadores cada uma tem. A
+ * «Equipe de liderança» vem no fim, se o setor tiver líder na lista.
+ */
 export function equipesDaLista(
   operadores: readonly OperadorCampanha[],
 ): { id: FiltroEquipe; nome: string; qtd: number }[] {
   const mapa = new Map<string, { id: string; nome: string; qtd: number }>();
   let semEquipe = 0;
+  let lideres = 0;
   for (const o of operadores) {
+    if (o.lider) { lideres++; continue; }
     if (!o.equipe_id) { semEquipe++; continue; }
     const atual = mapa.get(o.equipe_id) ?? { id: o.equipe_id, nome: o.equipe_nome || 'Equipe sem nome', qtd: 0 };
     atual.qtd++;
@@ -47,6 +78,7 @@ export function equipesDaLista(
   const lista: { id: FiltroEquipe; nome: string; qtd: number }[] =
     [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   if (semEquipe > 0) lista.push({ id: 'sem', nome: 'Sem equipe', qtd: semEquipe });
+  if (lideres > 0) lista.push({ id: EQUIPE_LIDERANCA, nome: 'Equipe de liderança', qtd: lideres });
   return lista;
 }
 

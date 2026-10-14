@@ -102,7 +102,50 @@ export async function listarOperadoresParaCampanha(
       for (const p of (perfisClones ?? []) as PerfilLido[]) lista.set(p.id, comEquipe(p, equipeDoClone.get(p.id) ?? null));
     }
   }
-  return [...lista.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  for (const l of await listarLideresDoSetor(empresaId, setorId, [...nomeEquipe.keys()])) {
+    if (!lista.has(l.id)) lista.set(l.id, l);
+  }
+  // Operadores primeiro, líderes no fim — a ordem do rodízio.
+  return [...lista.values()].sort((a, b) =>
+    Number(!!a.lider) - Number(!!b.lider) || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/**
+ * Os líderes do setor, para a «Equipe de liderança» do passo 3 (14/10/2026).
+ *
+ * Líder do setor é quem tem cargo `lider` com o `setor_id` dele, e também quem
+ * lidera uma equipe do setor pela `equipe_lideres` (o líder clonado de outro
+ * setor). A `equipe_lideres` pode faltar: aí fica só o primeiro grupo.
+ */
+async function listarLideresDoSetor(
+  empresaId: string, setorId: string, equipesDoSetor: readonly string[],
+): Promise<OperadorCampanha[]> {
+  const ids = new Set<string>();
+  if (equipesDoSetor.length > 0) {
+    const { data, error } = await supabase.from('equipe_lideres')
+      .select('lider_id').eq('empresa_id', empresaId).in('equipe_id', [...equipesDoSetor]);
+    if (error) console.warn('[CampanhaFacil] líderes das equipes:', error);
+    for (const l of (data ?? []) as { lider_id: string }[]) ids.add(l.lider_id);
+  }
+
+  const cols = 'id, nome, foto_url';
+  const [{ data: doSetor, error: e1 }, vinculados] = await Promise.all([
+    supabase.from('perfis').select(cols)
+      .eq('empresa_id', empresaId).eq('setor_id', setorId).eq('perfil', 'lider').eq('ativo', true),
+    ids.size > 0
+      ? supabase.from('perfis').select(cols)
+        .in('id', [...ids]).eq('empresa_id', empresaId).eq('perfil', 'lider').eq('ativo', true)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (e1) throw e1;
+  if (vinculados.error) throw vinculados.error;
+
+  const lideres = new Map<string, OperadorCampanha>();
+  for (const p of [...(doSetor ?? []), ...(vinculados.data ?? [])] as { id: string; nome: string; foto_url: string | null }[]) {
+    lideres.set(p.id, { id: p.id, nome: p.nome, foto_url: p.foto_url, equipe_id: null, equipe_nome: null, lider: true });
+  }
+  return [...lideres.values()];
 }
 
 /** Setores da empresa, para quem não é preso a um (gerência para cima). */

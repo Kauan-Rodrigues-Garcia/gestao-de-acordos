@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Participacao } from './campanhasWhatsapp.service';
 import { casaVoto, porMes, resumirHistorico, situacaoDaParticipacao } from './historico';
-import { casaEquipe, equipesDaLista, rotuloEquipe } from '@/pages/CampanhaFacil/envios';
+import { casaEquipe, casaEquipes, equipesDaLista, rotuloEquipe } from '@/pages/CampanhaFacil/envios';
 
 function p(over: Partial<Participacao>): Participacao {
   return {
@@ -49,6 +49,19 @@ describe('filtro de equipe do passo 3', () => {
     expect(ops.filter(o => casaEquipe(o, 'e1')).map(o => o.nome)).toEqual(['Ana', 'Caio']);
     expect(ops.filter(o => casaEquipe(o, 'sem')).map(o => o.nome)).toEqual(['Davi']);
     expect(ops.filter(o => casaEquipe(o, 'todas'))).toHaveLength(4);
+  });
+  it('várias equipes de uma vez; nenhuma escolhida = todas', () => {
+    expect(ops.filter(o => casaEquipes(o, new Set(['e2', 'sem']))).map(o => o.nome)).toEqual(['Bia', 'Davi']);
+    expect(ops.filter(o => casaEquipes(o, new Set()))).toHaveLength(4);
+  });
+  it('os líderes ficam só na «Equipe de liderança»', () => {
+    const comLider = [...ops, { id: '5', nome: 'Lia', equipe_id: null, equipe_nome: null, lider: true }];
+    expect(equipesDaLista(comLider).at(-1)).toEqual({ id: 'lideranca', nome: 'Equipe de liderança', qtd: 1 });
+    expect(equipesDaLista(comLider).find(e => e.id === 'sem')?.qtd).toBe(1);
+    expect(comLider.filter(o => casaEquipe(o, 'lideranca')).map(o => o.nome)).toEqual(['Lia']);
+    expect(comLider.filter(o => casaEquipe(o, 'sem')).map(o => o.nome)).toEqual(['Davi']);
+    expect(comLider.filter(o => casaEquipes(o, new Set(['e1', 'lideranca']))).map(o => o.nome))
+      .toEqual(['Ana', 'Caio', 'Lia']);
   });
   it('não repete «Equipe» no nome', () => {
     expect(rotuloEquipe('Luciano')).toBe('Equipe Luciano');

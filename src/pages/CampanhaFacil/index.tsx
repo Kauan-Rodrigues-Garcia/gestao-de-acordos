@@ -376,7 +376,7 @@ export default function CampanhaFacil() {
           {/* Passo 3 — Responsáveis: operadores do setor, marcados */}
           <Card id="cf-senders">
             <CardContent className="space-y-2 p-4">
-              <StepTitle n={3} title="Quem encaminhará" subtitle="Marque os operadores do setor" />
+              <StepTitle n={3} title="Quem encaminhará" subtitle="Marque os operadores do setor — e líderes, se quiser" />
               <SeletorOperadores envios={cf.envios} destacarVazio={!!cf.parsed} />
             </CardContent>
           </Card>
