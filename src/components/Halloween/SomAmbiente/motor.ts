@@ -40,7 +40,7 @@
 import { useSyncExternalStore } from 'react';
 import { enderecoYoutube, uriSpotify, type LinkExterno } from './links';
 import {
-  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, PADRAO, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
+  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, TEMAS_DE_TERROR, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
   lerPosicao, lerPreferencias, linkDaPlaylist,
   type FaixaEmbutida, type PreferenciasSom,
 } from './preferencias';
@@ -239,11 +239,14 @@ let ultimaGravacao = 0;
 
 /**
  * A faixa de fábrica seguinte — é por onde a sequência anda quando uma acaba.
- * O tema especial, quando acaba, vai para a primeira da sequência.
+ * Anda dentro do próprio grupo e dá a volta nele: a última música volta à
+ * primeira música, não cai nos temas de terror (pedido de 14/10/2026); o
+ * mesmo vale para os temas.
  */
 export function proximaEmbutida(faixa: FaixaEmbutida): FaixaEmbutida {
-  const i = FAIXAS_DA_SEQUENCIA.indexOf(faixa);
-  return FAIXAS_DA_SEQUENCIA[(i + 1) % FAIXAS_DA_SEQUENCIA.length];
+  const grupo: readonly FaixaEmbutida[] = (MUSICAS as readonly string[]).includes(faixa) ? MUSICAS : TEMAS_DE_TERROR;
+  const i = grupo.indexOf(faixa);
+  return grupo[(i + 1) % grupo.length];
 }
 
 /** O volume escolhido, já com o ganho da faixa que está carregada (`GANHO`). */
@@ -462,9 +465,22 @@ function posicionarPalco() {
   if (!palco) return;
   const r = ancora?.isConnected ? ancora.getBoundingClientRect() : null;
   if (r && r.width > 0) {
+    /*
+     * O palco é `fixed` no `body`, fora do painel — então o painel não o
+     * recorta. Com zoom alto o painel rola (14/10/2026), e sem este corte o
+     * player ficava por cima do cabeçalho ou do resto da tela ao rolar. Corta
+     * no retângulo visível da área que rola.
+     */
+    const caixa = ancora?.closest('[data-som-rolagem]')?.getBoundingClientRect();
+    const cimaCortado  = caixa ? Math.max(0, caixa.top - r.top) : 0;
+    const baixoCortado = caixa ? Math.max(0, r.top + ALTURA_PALCO - caixa.bottom) : 0;
+    const escondido = cimaCortado + baixoCortado >= ALTURA_PALCO;
     Object.assign(palco.style, {
       left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${ALTURA_PALCO}px`,
-      pointerEvents: 'auto', opacity: '1',
+      clipPath: cimaCortado || baixoCortado
+        ? `inset(${cimaCortado}px 0 ${baixoCortado}px 0 round 12px)`
+        : '',
+      pointerEvents: escondido ? 'none' : 'auto', opacity: '1',
     });
   } else {
     // Fora da tela, mas vivo: `display: none` faria alguns players pausarem.

@@ -86,6 +86,42 @@ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
     nome: 'Leão', descricao: 'Marília Mendonça', capa: capa('leao'), Icone: Music,
     cor: { fundo: 'hsl(186 34% 13%)', destaque: 'hsl(44 88% 58%)' },
   },
+  // As de 14/10/2026, cores tiradas olhando a capa.
+  // A parede escura da favela e o creme do título.
+  poesiaacustica: {
+    nome: 'Poesia Acústica #6', descricao: 'Era uma Vez · Pineapple StormTv', capa: capa('poesiaacustica'), Icone: Music,
+    cor: { fundo: 'hsl(28 20% 12%)', destaque: 'hsl(50 80% 70%)' },
+  },
+  // O céu azul atrás do Veigh.
+  vidachique: {
+    nome: 'Vida Chique', descricao: 'Veigh', capa: capa('vidachique'), Icone: Music,
+    cor: { fundo: 'hsl(205 30% 13%)', destaque: 'hsl(203 70% 64%)' },
+  },
+  // O diabinho roxo no fundo preto.
+  malvadinho: {
+    nome: 'Malvadinho', descricao: 'MC Luuky · DJ JB Mix', capa: capa('malvadinho'), Icone: Music,
+    cor: { fundo: 'hsl(282 32% 10%)', destaque: 'hsl(286 72% 64%)' },
+  },
+  // O palco azul do «Ao Vivo».
+  infiel: {
+    nome: 'Infiel', descricao: 'Marília Mendonça', capa: capa('infiel'), Icone: Music,
+    cor: { fundo: 'hsl(232 40% 13%)', destaque: 'hsl(226 85% 68%)' },
+  },
+  // A tinta azul-marinho e o pêssego de «Bloom».
+  innerbloom: {
+    nome: 'Innerbloom', descricao: 'RÜFÜS DU SOL', capa: capa('innerbloom'), Icone: Music,
+    cor: { fundo: 'hsl(222 36% 13%)', destaque: 'hsl(22 72% 70%)' },
+  },
+  // A faixa marrom do topo e o cáqui do violão.
+  deixemeir: {
+    nome: 'Deixe Me Ir', descricao: '1Kilo · Baviera, Pablo Martins e Knust', capa: capa('deixemeir'), Icone: Music,
+    cor: { fundo: 'hsl(35 26% 12%)', destaque: 'hsl(42 42% 64%)' },
+  },
+  // Papel cru com quatro quadrantes; o laranja é o único tom vivo.
+  somebody: {
+    nome: 'Somebody That I Used To Know', descricao: 'Gotye, com Kimbra', capa: capa('somebody'), Icone: Music,
+    cor: { fundo: 'hsl(36 10% 12%)', destaque: 'hsl(30 88% 56%)' },
+  },
 };
 
 const COR_SPOTIFY: CorFaixa = { fundo: 'hsl(141 30% 11%)', destaque: 'hsl(141 70% 48%)' };

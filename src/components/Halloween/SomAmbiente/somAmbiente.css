@@ -137,6 +137,17 @@
 
 /* ── Lista ─────────────────────────────────────────────────────────────────── */
 
+/* A barra da própria lista: mais visível que a global (6 px, quase sumida),
+   para ficar claro que dá para rolar. O respiro à direita a afasta das linhas. */
+.som-lista {
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 50%, transparent) transparent;
+}
+.som-lista::-webkit-scrollbar { width: 8px; }
+.som-lista::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--muted-foreground) 45%, transparent); border-radius: 9999px; }
+.som-lista::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--muted-foreground) 70%, transparent); }
+
 /* Pela tinta, não pelo destaque: o neutro de capa preto e branco a 10% some
    no fundo branco. */
 .som-linha-escolhida { background: color-mix(in oklab, var(--som-tinta) 11%, transparent); }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   VOLUME_MAX_ENXUTO, dentroDosLimites, ganhoDoVolume, ordemDasFaixas, proximaEmbutida, vizinha, volumeDaFaixa,
 } from './motor';
-import { FAIXAS_EMBUTIDAS, GANHO, PADRAO } from './preferencias';
+import { FAIXAS_EMBUTIDAS, GANHO, MUSICAS, PADRAO, TEMAS_DE_TERROR } from './preferencias';
 
 describe('motor do Som ambiente', () => {
   it('volume: 0 cala, 100 é cheio, e o padrão fica baixo', () => {
@@ -19,9 +19,10 @@ describe('motor do Som ambiente', () => {
     expect(ordemDasFaixas(prefs)).toEqual([
       'saw', 'deadsilence', 'it', 'halloween', 'stranger',
       'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao',
+      'poesiaacustica', 'vidachique', 'malvadinho', 'infiel', 'innerbloom', 'deixemeir', 'somebody',
       'youtube:playlist:X',
     ]);
-    expect(vizinha(prefs, 'leao', 1)).toBe('youtube:playlist:X');
+    expect(vizinha(prefs, 'somebody', 1)).toBe('youtube:playlist:X');
     expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('saw');
     expect(vizinha(prefs, 'saw', -1)).toBe('youtube:playlist:X');
     expect(vizinha(prefs, 'sumiu', 1)).toBe('saw');
@@ -32,8 +33,9 @@ describe('motor do Som ambiente', () => {
     expect(ordemDasFaixas(prefs, false)).toEqual([
       'saw', 'deadsilence', 'it', 'halloween', 'stranger',
       'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao',
+      'poesiaacustica', 'vidachique', 'malvadinho', 'infiel', 'innerbloom', 'deixemeir', 'somebody',
     ]);
-    expect(vizinha(prefs, 'leao', 1, false)).toBe('saw');
+    expect(vizinha(prefs, 'somebody', 1, false)).toBe('saw');
   });
 
   it('enxuto: volume até 50 e faixa de fábrica; completo não muda nada', () => {
@@ -46,19 +48,23 @@ describe('motor do Som ambiente', () => {
     expect(dentroDosLimites({ ...PADRAO, volume: 30 }, false).volume).toBe(30);
   });
 
-  it('no fim de uma faixa de fábrica, a sequência segue só pelas de fábrica', () => {
+  it('no fim de uma faixa de fábrica, a sequência fica no grupo dela e dá a volta', () => {
     expect(proximaEmbutida('halloween')).toBe('stranger');
-    expect(proximaEmbutida('stranger')).toBe('provavelmente');
     expect(proximaEmbutida('raindance')).toBe('leao');
-    expect(proximaEmbutida('leao')).toBe('saw');
+    expect(proximaEmbutida('leao')).toBe('poesiaacustica');
+    // A última música volta à primeira música, não cai nos temas (14/10/2026).
+    expect(proximaEmbutida('somebody')).toBe('provavelmente');
+    expect(proximaEmbutida(MUSICAS[MUSICAS.length - 1])).toBe(MUSICAS[0]);
+    // E o último tema volta ao primeiro tema.
+    expect(proximaEmbutida(TEMAS_DE_TERROR[TEMAS_DE_TERROR.length - 1])).toBe(TEMAS_DE_TERROR[0]);
   });
 
   it('cada faixa tem o seu ganho, e o volume final nunca passa de 1', () => {
     for (const f of FAIXAS_EMBUTIDAS) {
       // «Leão» veio a -7,0 LUFS: o menor ganho, exatamente 0,5.
       expect(GANHO[f]).toBeGreaterThanOrEqual(0.5);
-      // «Every 27 Years» veio a -20,3 LUFS: o único ganho acima de 2.
-      expect(GANHO[f]).toBeLessThan(2.5);
+      // «Somebody That I Used To Know» veio a -22,1 LUFS: o maior ganho, 2,86.
+      expect(GANHO[f]).toBeLessThan(3);
     }
     // A mais baixa sobe, a mais alta desce, no mesmo controle.
     expect(volumeDaFaixa(40, 'it')).toBeGreaterThan(volumeDaFaixa(40, 'leao'));

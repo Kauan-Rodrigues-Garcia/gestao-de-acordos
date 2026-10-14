@@ -12,12 +12,18 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
 /** Os temas de terror que vêm de fábrica, na ordem do painel. Trocados em 13/10/2026. */
 export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'stranger'] as const;
-/** As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026 («Raindance» ficou; «Leão» entrou no fim no mesmo dia). */
-export const MUSICAS = ['provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao'] as const;
+/**
+ * As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026 («Raindance» ficou; «Leão» entrou no fim no mesmo dia).
+ * Sete entraram no fim em 14/10/2026, de «Poesia Acústica #6» a «Somebody That I Used To Know».
+ */
+export const MUSICAS = [
+  'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao',
+  'poesiaacustica', 'vidachique', 'malvadinho', 'infiel', 'innerbloom', 'deixemeir', 'somebody',
+] as const;
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
-/** A sequência que o player percorre sozinho: todas as de fábrica, na ordem do painel. */
+/** A ordem do anterior/próxima: todas as de fábrica, na ordem do painel. */
 export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = FAIXAS_EMBUTIDAS;
 
 /** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
@@ -32,6 +38,13 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   novobalanco: '/sounds/halloween-veigh-novo-balanco.mp3',
   raindance: '/sounds/halloween-raindance.mp3',
   leao: '/sounds/halloween-marilia-mendonca-leao.mp3',
+  poesiaacustica: '/sounds/halloween-poesia-acustica-6.mp3',
+  vidachique: '/sounds/halloween-veigh-vida-chique.mp3',
+  malvadinho: '/sounds/halloween-mc-luuky-malvadinho.mp3',
+  infiel: '/sounds/halloween-marilia-mendonca-infiel.mp3',
+  innerbloom: '/sounds/halloween-rufus-du-sol-innerbloom.mp3',
+  deixemeir: '/sounds/halloween-1kilo-deixe-me-ir.mp3',
+  somebody: '/sounds/halloween-gotye-somebody.mp3',
 };
 
 /**
@@ -47,6 +60,10 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * a 0,1 dB do que estava anotado). «Every 27 Years» veio muito baixa: o ganho
  * passa de 2, e no volume alto ela bate no teto de 100% do navegador.
  *
+ * As de 14/10/2026 também (a régua de novo conferida em Raindance, Halloween e
+ * Stranger Things). «Somebody That I Used To Know» veio ainda mais baixa que
+ * «Every 27 Years»: ganho 2,86, e o teto chega mais cedo.
+ *
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
 export const GANHO: Record<FaixaEmbutida, number> = {
@@ -60,6 +77,13 @@ export const GANHO: Record<FaixaEmbutida, number> = {
   novobalanco: 0.71,   // -10,0
   raindance: 0.64,     // -9,1 (11/10/2026)
   leao: 0.50,          // -7,0 (13/10/2026) — a mais alta da lista
+  poesiaacustica: 0.94, // -12,4 (14/10/2026)
+  vidachique: 0.74,    // -10,4
+  malvadinho: 0.72,    // -10,2
+  infiel: 0.65,        // -9,2
+  innerbloom: 0.73,    // -10,3
+  deixemeir: 0.92,     // -12,3
+  somebody: 2.86,      // -22,1 — a mais baixa da lista
 };
 
 /**
@@ -99,7 +123,7 @@ export interface PreferenciasSom {
   tocarAoEntrar: boolean;
   /**
    * Repete a faixa de fábrica. Desligado, elas tocam em sequência, como uma
-   * playlist, e voltam à primeira depois da última.
+   * playlist, e voltam à primeira do grupo (músicas ou temas) depois da última.
    */
   repetir: boolean;
   playlists: PlaylistSalva[];

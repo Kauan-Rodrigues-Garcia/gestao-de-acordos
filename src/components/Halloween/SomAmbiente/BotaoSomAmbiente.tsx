@@ -185,6 +185,9 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
 
       <PopoverContent
         align="end"
+        // Folga da borda da tela: a altura disponível que o painel lê
+        // (`--radix-popover-content-available-height`) já desconta os 8 px.
+        collisionPadding={8}
         className={cn('max-w-[calc(100vw-16px)] p-0 overflow-hidden', completo ? 'w-[340px]' : 'w-[300px]')}
         // O player do Spotify/YouTube mora fora do painel (ver `motor.ts`):
         // clicar nele não pode fechar o painel.

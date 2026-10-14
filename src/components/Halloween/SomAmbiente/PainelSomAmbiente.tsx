@@ -22,7 +22,7 @@ import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSPro
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
-  ChevronLeft, ChevronRight, Ghost, ListEnd, ListPlus, Music, Search, Youtube,
+  Ghost, ListEnd, ListPlus, Music, Search, Youtube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,12 +95,22 @@ export function PainelSomAmbiente() {
   const tipo = externa ? (spotify ? 'Playlist do Spotify' : 'Do YouTube')
     : (TEMAS_DE_TERROR as readonly string[]).includes(escolhida) ? 'Tema de terror' : 'Música';
 
+  /*
+   * A altura é a que o Popover diz que cabe (`--radix-popover-content-available-
+   * height`), não `100vh − 80px`: com zoom alto no navegador a tela útil fica
+   * com 200–300 px, e o painel cortava embaixo — o volume sumia sem jeito de
+   * alcançar (14/10/2026). Quando nem o «Tocando agora» cabe, o painel INTEIRO
+   * rola (`data-som-rolagem`, que o motor usa para recortar o player externo).
+   */
   return (
-    <div className="flex max-h-[min(660px,calc(100vh-80px))] flex-col">
+    <div
+      data-som-rolagem
+      className="flex max-h-[min(660px,var(--radix-popover-content-available-height,calc(100vh-80px)))] flex-col overflow-y-auto overscroll-contain"
+    >
       {/* ── Tocando agora: a capa do disco, na cor dela ── */}
       <section
         aria-label="Tocando agora"
-        className="som-cores som-heroi relative px-4 pb-4 pt-3.5"
+        className="som-cores som-heroi relative shrink-0 px-4 pb-4 pt-3.5"
         style={estiloDaFaixa(info) as CSSProperties}
       >
         {info.capa && (
@@ -198,7 +208,7 @@ export function PainelSomAmbiente() {
       </section>
 
       {mostrarPalco && (
-        <div className="px-4 pb-3">
+        <div className="shrink-0 px-4 pb-3">
           <div
             ref={palco}
             className="rounded-xl bg-muted"
@@ -208,7 +218,9 @@ export function PainelSomAmbiente() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      {/* `min-h` para a lista não encolher até sumir em tela baixa: ali quem
+          rola é o painel inteiro. */}
+      <div className="min-h-[132px] flex-1 overflow-y-auto px-3 py-3">
         <SeletorFaixas
           escolhida={escolhida}
           fila={fila}
@@ -217,7 +229,7 @@ export function PainelSomAmbiente() {
         />
       </div>
 
-      <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-border px-4 py-3">
+      <label className="flex shrink-0 cursor-pointer items-center justify-between gap-3 border-t border-border px-4 py-3">
         <span className="min-w-0">
           <span className="block text-sm font-medium">Tocar ao entrar no sistema</span>
           <span className="block text-xs text-muted-foreground">Começa sozinho, com a última música e volume escolhidos</span>
@@ -281,11 +293,18 @@ function BarraSom({ rotulo, className, ...props }: ComponentPropsWithoutRef<type
 
 type Aba = 'temas' | 'musicas' | 'playlists';
 
-/** Faixas por página. Lista que cresce vira mais páginas, nunca uma rolagem sem fim. */
-export const POR_PAGINA = 5;
+/**
+ * Faixas que aparecem de uma vez; passando disso, a própria lista rola, com a
+ * barra dela (14/10/2026 — antes eram páginas de 5, e com 12 músicas eram três).
+ */
+export const LINHAS_VISIVEIS = 5;
 
-/** Altura de uma `LinhaFaixa` (capa de 40px + respiro): as vagas vazias da última página. */
-const ALTURA_LINHA = 'h-[52px]';
+/**
+ * Altura da lista com `LINHAS_VISIVEIS` linhas: cada `LinhaFaixa` tem 52 px
+ * (capa de 40 px + respiro) e 2 px entre elas (`space-y-0.5`). Meia linha a
+ * mais aparece cortada embaixo, para ficar claro que há mais para rolar.
+ */
+const ALTURA_LISTA = 'max-h-[294px]';
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
@@ -302,10 +321,10 @@ interface ItemDaLista {
 }
 
 /**
- * Temas de terror e músicas em abas separadas (e «Playlists», no completo),
- * cada uma em páginas de `POR_PAGINA`. Com mais de uma página aparece a busca,
- * por nome ou artista, sem acento. Abre — e volta, a cada troca pelo
- * anterior/próxima — na aba e na página da faixa escolhida.
+ * Temas de terror e músicas em abas separadas (e «Playlists», no completo).
+ * A lista mostra `LINHAS_VISIVEIS` e rola por dentro; passando disso aparece
+ * também a busca, por nome ou artista, sem acento. Abre — e volta, a cada
+ * troca pelo anterior/próxima — na aba da faixa escolhida, rolada até ela.
  *
  * `playlists`: as da pessoa; `null` na versão enxuta, que não tem a aba.
  */
@@ -332,33 +351,44 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
     ...(playlists ? [{ id: 'playlists' as const, rotulo: 'YouTube', Icone: Youtube }] : []),
   ];
 
-  const paginaDe = (aba: Aba, id: string) =>
-    Math.max(0, Math.floor(listas[aba].findIndex(x => x.id === id) / POR_PAGINA));
-
   const abaInicial = () => {
     const a = abaDaFaixa(escolhida);
     return a === 'playlists' && !playlists ? 'temas' : a;
   };
   const [aba, setAba] = useState<Aba>(abaInicial);
-  const [pagina, setPagina] = useState(() => paginaDe(abaInicial(), escolhida));
   const [busca, setBusca] = useState('');
+  const lista = useRef<HTMLDivElement>(null);
 
   // Trocou a faixa (anterior/próxima, ou a sequência andou): vai até ela.
   const ultima = useRef(escolhida);
   useEffect(() => {
     if (ultima.current === escolhida) return;
     ultima.current = escolhida;
-    const a = abaInicial();
-    setAba(a);
+    setAba(abaInicial());
     setBusca('');
-    setPagina(paginaDe(a, escolhida));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escolhida]);
+
+  /*
+   * Rola a lista — só ela — até a escolhida, ao abrir, ao trocar de aba ou de
+   * faixa e ao limpar a busca. `scrollIntoView` não serve: rolaria também o
+   * painel e a página.
+   */
+  const buscando = busca !== '';
+  useEffect(() => {
+    const caixa = lista.current;
+    if (buscando) return;
+    const linha = caixa?.querySelector<HTMLElement>(`[data-faixa="${CSS.escape(escolhida)}"]`);
+    if (!caixa || !linha) return;
+    const topo = linha.getBoundingClientRect().top - caixa.getBoundingClientRect().top + caixa.scrollTop;
+    if (topo < caixa.scrollTop || topo + linha.offsetHeight > caixa.scrollTop + caixa.clientHeight) {
+      caixa.scrollTop = Math.max(0, topo - (caixa.clientHeight - linha.offsetHeight) / 2);
+    }
+  }, [aba, escolhida, buscando]);
 
   const trocarAba = (a: Aba) => {
     setAba(a);
     setBusca('');
-    setPagina(paginaDe(a, escolhida));
   };
 
   const todos = listas[aba];
@@ -366,12 +396,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
   const filtrados = termo
     ? todos.filter(x => semAcento(`${x.info.nome} ${x.info.descricao}`).includes(termo))
     : todos;
-  const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
-  const atual = Math.min(pagina, paginas - 1);
-  const daPagina = filtrados.slice(atual * POR_PAGINA, (atual + 1) * POR_PAGINA);
-  const temBusca = todos.length > POR_PAGINA;
-  // Com páginas, a lista guarda sempre a mesma altura: virar a página não pula o painel.
-  const vagas = paginas > 1 ? POR_PAGINA - daPagina.length : 0;
+  const temBusca = todos.length > LINHAS_VISIVEIS;
 
   return (
     <div>
@@ -410,7 +435,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={busca}
-            onChange={e => { setBusca(e.target.value); setPagina(0); }}
+            onChange={e => { setBusca(e.target.value); if (lista.current) lista.current.scrollTop = 0; }}
             placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música ou artista' : 'Filtrar a sua lista'}
             aria-label="Buscar na lista"
             className="h-8 pl-8 pr-8 text-xs"
@@ -418,7 +443,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
           {busca && (
             <button
               type="button"
-              onClick={() => { setBusca(''); setPagina(paginaDe(aba, escolhida)); }}
+              onClick={() => setBusca('')}
               className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
               aria-label="Limpar busca"
               title="Limpar busca"
@@ -429,8 +454,12 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
         </div>
       )}
 
-      <div role="tabpanel" className="mt-2 space-y-0.5">
-        {daPagina.map(x => (
+      <div
+        ref={lista}
+        role="tabpanel"
+        className={cn('som-lista mt-2 space-y-0.5 overflow-y-auto overscroll-contain', ALTURA_LISTA)}
+      >
+        {filtrados.map(x => (
           <LinhaFaixa
             key={x.id}
             id={x.id}
@@ -445,51 +474,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
             {termo ? <>Nada com «{busca.trim()}».</> : 'Sua lista está vazia. Busque uma música acima.'}
           </p>
         )}
-        {Array.from({ length: vagas }, (_, i) => <div key={`vaga-${i}`} className={ALTURA_LINHA} aria-hidden />)}
       </div>
-
-      {paginas > 1 && (
-        <div className="mt-2 flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setPagina(atual - 1)}
-            disabled={atual === 0}
-            aria-label="Página anterior"
-            title="Página anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center gap-1.5">
-            {paginas <= 8 ? Array.from({ length: paginas }, (_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setPagina(i)}
-                aria-label={`Página ${i + 1}`}
-                aria-current={i === atual ? 'page' : undefined}
-                className={cn(
-                  'h-1.5 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  i === atual ? 'w-4 bg-foreground/70' : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60',
-                )}
-              />
-            )) : null}
-            <span className="ml-1 text-[11px] tabular-nums text-muted-foreground">{atual + 1} de {paginas}</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setPagina(atual + 1)}
-            disabled={atual === paginas - 1}
-            aria-label="Próxima página"
-            title="Próxima página"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -509,6 +494,7 @@ interface PropsFaixa {
 function LinhaFaixa({ id, info, escolhida, tocando, onRemover }: PropsFaixa & { onRemover?: () => void }) {
   return (
     <div
+      data-faixa={id}
       className={cn(
         'som-cores group flex items-center gap-1 rounded-lg pr-1 transition-colors',
         escolhida ? 'som-linha-escolhida' : 'hover:bg-muted/70',
