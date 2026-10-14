@@ -295,6 +295,13 @@ function gemido(c: AudioContext): void {
   o.stop(t + 1.25); lfo.stop(t + 1.25);
 }
 
+/**
+ * As peças do sintetizador, para outros sons da caça que moram fora daqui
+ * (as bruxas, `bruxas/sons.ts`). Passam pelo mesmo `VOLUME` e pela mesma
+ * escala do chefão.
+ */
+export const sintetizador = { tocar, tom, chiado, bolha, envelope, ruido, entre };
+
 // ── O chefão (09/10/2026) ───────────────────────────────────────────────────
 //
 // O Rei do Pop zumbi. Os sons dele são curtos, porque se repetem muito (cento
