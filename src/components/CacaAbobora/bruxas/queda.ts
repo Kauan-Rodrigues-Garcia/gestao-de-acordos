@@ -1,6 +1,14 @@
 /**
  * queda.ts — a morte da bruxa: o tiro, a queda da vassoura e o espatifar no chão.
  *
+ * ## Os fofos não morrem (Cleber, 14/10/2026)
+ *
+ * A bruxinha fofa, a gatinha, o gato e a fantasminha (`Bruxa.fofa`) levam o
+ * tiro e caem do mesmo jeito, mas sem sangue, sem estourar e sem perder braço:
+ * no tiro saem estrelinhas, no chão sobe poeira (sem mancha), e ela fica
+ * desacordada com as estrelinhas rodando na cabeça (`Queda.tonta`). A gincana
+ * conta igual: quem acertou primeiro.
+ *
  * Puro (sem DOM), como `../fisica.ts`: simula em pixels da arte, e quem pinta
  * (`palco.ts`) só lê o estado. Tudo anda em passos fixos de 1/120 s — a queda
  * é a mesma em qualquer computador.
@@ -33,7 +41,7 @@
  */
 import { cor32 } from '../fisica';
 import {
-  ALTURA, BOLETO, JUNTAS, LARGURA, OSSOS, QUADROS, montarEnfeite, montarQuadro,
+  ALTURA, BOLETO, JUNTAS, LARGURA, OSSOS, QUADROS, juntasDa, montarEnfeite, montarQuadro,
   type Bruxa, type Enfeite, type Imagem, type Junta, type Miniatura, type NomeParte, type Solta,
 } from './arte';
 
@@ -63,6 +71,9 @@ const OSSO = cor32('#efe6cc');
 const BRANCO = cor32('#ffffff');
 const LASCA = ['#c49563', '#8a5e33', '#f6dc8a'].map(cor32);
 const VIDRO = ['#e8fff0', '#a8ffc8'].map(cor32);
+/** As estrelinhas do tiro num fofo, e a poeira da queda. */
+const ESTRELINHAS = ['#ffd34d', '#fff4a0', '#ffffff', '#ffb4e0'].map(cor32);
+const POEIRA = ['#d8d0c4', '#b8b0a4', '#ece6dc'].map(cor32);
 
 // ── Recortes ───────────────────────────────────────────────────────────────
 
@@ -162,7 +173,11 @@ export interface Solto {
   cor?: number;
 }
 
-interface Gota { x: number; y: number; vx: number; vy: number; cor: number; tam: number; sangue: boolean; chao: number; fim?: boolean }
+interface Gota {
+  x: number; y: number; vx: number; vy: number; cor: number; tam: number; sangue: boolean; chao: number; fim?: boolean;
+  /** Some ao tocar o chão, sem manchar (estrelinha, poeira). */
+  some?: boolean;
+}
 
 export interface Poca { cx: number; cy: number; r: number; max: number; cor: number; borda: number }
 
@@ -175,7 +190,10 @@ export type Evento =
   | { tipo: 'vidro' }
   | { tipo: 'miau' }
   | { tipo: 'cerebro' }
-  | { tipo: 'grito' };
+  | { tipo: 'grito' }
+  /** O fofo levou o tiro (estrelinhas) e caiu desacordado. */
+  | { tipo: 'bonk' }
+  | { tipo: 'desmaia'; forca: number };
 
 export interface Queda {
   t: number;
@@ -206,6 +224,9 @@ export interface Queda {
   /** Nada mais se mexe: quem desenha pode parar de simular. */
   quieta: boolean;
   calmaria: number;
+  /** Fofo: não sangra; no chão, fica desacordado (estrelinhas rodando). */
+  fofa: boolean;
+  tonta: boolean;
 }
 
 const NOMES_JUNTAS = Object.keys(JUNTAS) as Junta[];
@@ -271,7 +292,9 @@ export function criarQueda(e: Entrada): Queda {
     t: 0, morte: e.morte, pontos: [], varas: [], ossos: [], soltos: [], gotas: [], pocas: [],
     manchas: new Map(), novas: [], jorros: [], eventos: [], chao: e.chao, largura: e.largura,
     espatifou: false, debate: false, flash: null, explodir: null, aleatorio: a, quieta: false, calmaria: 0,
+    fofa: !!e.bruxa.fofa, tonta: false,
   };
+  const juntas = juntasDa(e.bruxa);
 
   // O clarão: a bruxa inteira, branca, por um instante.
   const inteira = recortar(montarQuadro(e.bruxa, q, { semChapeu: e.semChapeu }), esp);
@@ -290,7 +313,7 @@ export function criarQueda(e: Entrada): Queda {
     return q.desloca[parte] ?? [0, 0];
   };
   for (const n of NOMES_JUNTAS) {
-    const [jx, jy] = JUNTAS[n];
+    const [jx, jy] = juntas[n];
     const [dx, dy] = deslocaDa(n);
     const p = mundo(jx + dx, jy + dy);
     // Velocidade inicial = a do voo (Verlet guarda o ponto anterior).
@@ -364,7 +387,20 @@ export function criarQueda(e: Entrada): Queda {
       }
     }
 
-    if (e.morte === 'cabeca') {
+    if (m.fofa) {
+      // Fofo: estrelinhas no lugar do sangue, e o tranco do tiro. Nada estoura.
+      for (let i = 0; i < 26; i++) {
+        const ang = a() * Math.PI * 2, vel = rnd(50, 150);
+        m.gotas.push({ ...gota(m, imp.x, imp.y, Math.cos(ang) * vel, Math.sin(ang) * vel - 40, ESTRELINHAS[i % ESTRELINHAS.length], i % 4 ? 1 : 2, false), some: true });
+      }
+      m.eventos.push({ tipo: 'bonk' });
+      if (e.morte === 'cabeca') empurrar(m, ['cabeca', 'pescoco'], -e.lado * 90, -50);
+      else if (e.morte === 'corpo') empurrar(m, ['pescoco', 'ombroF', 'ombroT', 'quadril'], -e.lado * 70, -60);
+      else {
+        m.debate = true;
+        empurrar(m, NOMES_JUNTAS, 0, -70);
+      }
+    } else if (e.morte === 'cabeca') {
       // A cabeça estoura: cada pixel dela vira um pedaço.
       const cab = m.ossos.find(o => o.nome === 'cabeca');
       if (cab) {
@@ -608,6 +644,16 @@ function espatifar(m: Queda, v: number): void {
   const forca = Math.min(1, v / 320);
   const p = m.pontos[J.quadril], n = m.pontos[J.pescoco];
   const x = (p.x + n.x) / 2;
+  if (m.fofa) {
+    // Desacordado: uma nuvenzinha de poeira que não suja o chão, e as estrelinhas.
+    m.eventos.push({ tipo: 'desmaia', forca });
+    for (let i = 0; i < 18; i++) {
+      const ang = Math.PI + m.aleatorio() * Math.PI, vel = 25 + m.aleatorio() * 70;
+      m.gotas.push({ ...gota(m, x + (m.aleatorio() - 0.5) * 12, m.chao - 2, Math.cos(ang) * vel, Math.sin(ang) * vel * 0.6, POEIRA[i % POEIRA.length], 1, false), some: true });
+    }
+    m.tonta = true;
+    return;
+  }
   m.eventos.push({ tipo: 'espatifa', forca });
   const a = m.aleatorio;
   // O respingo: um leque baixo e largo, que suja o chão longe.
@@ -652,6 +698,7 @@ function moverGota(m: Queda, g: Gota, dt: number): void {
   g.x += g.vx * dt;
   g.y += g.vy * dt;
   if (g.y + g.tam - 1 < g.chao) return;
+  if (g.some) { g.fim = true; return; }
   if (!g.sangue && g.vy > 90) {
     // Pedaço quica uma vez antes de assentar.
     g.y = g.chao - g.tam + 1;
@@ -798,6 +845,7 @@ export function chapeuVoando(e: Omit<Entrada, 'morte'>): Queda {
     t: FLASH_S, morte: 'corpo', pontos: [], varas: [], ossos: [], soltos: [], gotas: [], pocas: [],
     manchas: new Map(), novas: [], jorros: [], eventos: [], chao: e.chao, largura: e.largura,
     espatifou: true, debate: false, flash: null, explodir: null, aleatorio: a, quieta: false, calmaria: 0,
+    fofa: !!e.bruxa.fofa, tonta: false,
   };
   const rec = recortar(montarQuadro(e.bruxa, e.quadro, { quais: p => p === 'chapeu' }), esp);
   if (!rec) return m;
@@ -823,6 +871,12 @@ export function chapeuVoando(e: Omit<Entrada, 'morte'>): Queda {
 export function poseDoOsso(m: Queda, o: Osso): { x: number; y: number; giro: number } {
   const p = m.pontos[o.de], b = m.pontos[o.para];
   return { x: p.x, y: p.y, giro: quantizar(Math.atan2(b.y - p.y, b.x - p.x) - o.ang0) };
+}
+
+/** Onde está a cabeça (para as estrelinhas de quem desmaiou). */
+export function cabecaDaQueda(m: Queda): { x: number; y: number } | null {
+  const p = m.pontos[J.cabeca];
+  return p && p.vivo ? { x: p.x, y: p.y } : null;
 }
 
 export function gotasNoAr(m: Queda): readonly Gota[] {

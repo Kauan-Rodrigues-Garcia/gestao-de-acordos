@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALTURA, BRUXAS, JUNTAS, LARGURA, NUMERO_DA_PARTE, ORDEM, PARTE_DO_NUMERO, QUADROS,
-  alvoDaParte, bruxaDaRodada, montarQuadro, parteNoPonto,
+  alvoDaParte, bruxaDaRodada, juntasDa, montarQuadro, parteNoPonto,
 } from './arte';
+import { cor32 } from '../fisica';
+import { etiquetasDaFaixa, feitoDaFaixa, formatarTempo, fraseDaFaixa, iniciais } from './faixa';
 import { avancar, chapeuVoando, criarQueda, type Morte } from './queda';
 import { VELOCIDADES, avancarVoo, criarVoo, fugir, type Zona } from './voo';
+
+/** As cores de sangue da queda (`queda.ts`). */
+const SANGUE = new Set(['#6e0a12', '#9e1219', '#c8202a', '#e0262b', '#5a0810', '#b81a24'].map(cor32));
 
 /** Sorteio repetível (mulberry32). */
 function semente(n: number): () => number {
@@ -25,7 +30,10 @@ describe('arte das bruxas', () => {
         const img = montarQuadro(b, q);
         expect(img.cores.length).toBe(LARGURA * ALTURA);
         const presentes = new Set(img.partes);
-        for (const p of ORDEM) expect(presentes.has(NUMERO_DA_PARTE[p]), `${b.id} q${q} ${p}`).toBe(true);
+        for (const p of ORDEM) {
+          if (b.semPartes?.includes(p)) continue;
+          expect(presentes.has(NUMERO_DA_PARTE[p]), `${b.id} q${q} ${p}`).toBe(true);
+        }
       }
     }
   });
@@ -41,12 +49,21 @@ describe('arte das bruxas', () => {
   });
 
   it('as juntas caem nas peças certas (o boneco nasce encaixado no sprite)', () => {
-    const img = montarQuadro(BRUXAS[0], 0);
-    const em = (j: keyof typeof JUNTAS) => PARTE_DO_NUMERO[parteNoPonto(img, JUNTAS[j][0], JUNTAS[j][1])];
-    expect(em('cabeca')).toBe('cabeca');
-    // O pescoço fica na divisa do queixo com o tronco.
-    expect(['tronco', 'cabeca']).toContain(em('pescoco'));
-    expect(em('peF')).toBe('pernaFrente');
+    for (const b of BRUXAS) {
+      const img = montarQuadro(b, 0);
+      const j = juntasDa(b);
+      const em = (n: keyof typeof JUNTAS) => PARTE_DO_NUMERO[parteNoPonto(img, j[n][0], j[n][1])];
+      expect(em('cabeca'), b.id).toBe('cabeca');
+      // O pescoço fica na divisa do queixo com o tronco.
+      expect(['tronco', 'cabeca'], b.id).toContain(em('pescoco'));
+      if (!b.semPartes?.includes('pernaFrente')) expect(em('peF'), b.id).toBe('pernaFrente');
+    }
+  });
+
+  it('metade é fofa e metade não, alternando: um personagem de cada vez', () => {
+    expect(BRUXAS.filter(b => b.fofa)).toHaveLength(4);
+    BRUXAS.forEach((b, i) => expect(!!b.fofa, b.id).toBe(i % 2 === 0));
+    expect(new Set(BRUXAS.map(b => b.id)).size).toBe(BRUXAS.length);
   });
 
   it('o tiro em cada peça faz o que foi pedido', () => {
@@ -103,8 +120,9 @@ describe('queda', () => {
   });
 
   for (const morte of ['cabeca', 'corpo', 'vassoura'] as const) {
-    it(`${morte}: cai, espatifa no chão, suja de sangue e assenta`, () => {
-      for (let n = 0; n < 8; n++) {
+    it(`${morte}: a bruxa cai, espatifa no chão, suja de sangue e assenta`, () => {
+      for (let n = 0; n < 16; n++) {
+        if (BRUXAS[n % BRUXAS.length].fofa) continue;
         const q = criarQueda(entrada(morte, n));
         for (let t = 0; t < 14 && !q.quieta; t += 1 / 30) avancar(q, 1 / 30);
         expect(q.espatifou, `bruxa ${n}`).toBe(true);
@@ -114,6 +132,23 @@ describe('queda', () => {
         for (const p of q.pontos) if (p.vivo) expect(p.y).toBeLessThanOrEqual(q.chao);
         if (morte === 'cabeca') expect(q.ossos.find(o => o.nome === 'cabeca')?.vivo).toBe(false);
         else expect(q.ossos.find(o => o.nome === 'cabeca')?.vivo).toBe(true);
+      }
+    });
+
+    it(`${morte}: o fofo cai desacordado, sem sangue, sem estourar`, () => {
+      for (let n = 0; n < 16; n++) {
+        if (!BRUXAS[n % BRUXAS.length].fofa) continue;
+        const q = criarQueda(entrada(morte, n));
+        for (let t = 0; t < 14 && !q.quieta; t += 1 / 30) avancar(q, 1 / 30);
+        expect(q.espatifou, `fofo ${n}`).toBe(true);
+        expect(q.tonta).toBe(true);
+        expect(q.pocas).toHaveLength(0);
+        // Lasca de madeira da vassoura pode sujar o chão; sangue, nenhum.
+        expect([...q.manchas.values()].some(c => SANGUE.has(c)), `fofo ${n}`).toBe(false);
+        // Ninguém perde a cabeça nem o braço.
+        expect(q.ossos.every(o => o.vivo)).toBe(true);
+        expect(q.varas.every(v => v.viva)).toBe(true);
+        for (const p of q.pontos) if (p.vivo) expect(p.y).toBeLessThanOrEqual(q.chao);
       }
     });
   }
@@ -143,5 +178,35 @@ describe('queda', () => {
     expect(q.soltos).toHaveLength(1);
     for (let t = 0; t < 12; t += 1 / 30) avancar(q, 1 / 30);
     expect(q.soltos[0].modo).toBe('parada');
+  });
+});
+
+describe('faixa', () => {
+  const bruxa = BRUXAS.find(b => !b.fofa)!;
+  const fofa = BRUXAS.find(b => b.fofa)!;
+
+  it('diz o que a pessoa fez, do jeito de cada uma', () => {
+    expect(feitoDaFaixa({ bruxa, morte: 'corpo' })).toBe(`abateu ${bruxa.nome}`);
+    expect(feitoDaFaixa({ bruxa: fofa, morte: 'cabeca' })).toBe(`nocauteou ${fofa.nome}`);
+    expect(feitoDaFaixa({ bruxa: fofa, morte: 'vassoura' })).toBe(`derrubou ${fofa.nome} da vassoura`);
+  });
+
+  it('a frase inteira, com headshot e recorde', () => {
+    expect(fraseDaFaixa({ nome: 'Mariana Souza', bruxa, morte: 'cabeca', ms: 12_400, rapida: true }))
+      .toBe(`Mariana Souza abateu ${bruxa.nome} primeiro, com um headshot, em 12,4 s — o mais rápido do dia.`);
+  });
+
+  it('as etiquetas: headshot, vassourada, nocaute do fofo e recordes', () => {
+    expect(etiquetasDaFaixa({ bruxa, morte: 'cabeca', hsRapido: true })).toEqual(['headshot', 'hsRapido']);
+    expect(etiquetasDaFaixa({ bruxa, morte: 'vassoura' })).toEqual(['vassourada']);
+    expect(etiquetasDaFaixa({ bruxa: fofa, morte: 'corpo', rapida: true })).toEqual(['nocaute', 'rapido']);
+    expect(etiquetasDaFaixa({ bruxa, morte: 'corpo' })).toEqual([]);
+  });
+
+  it('tempo e iniciais', () => {
+    expect(formatarTempo(65_000)).toBe('1 min 05 s');
+    expect(formatarTempo(null)).toBe('—');
+    expect(iniciais('Mariana de Souza')).toBe('MS');
+    expect(iniciais('Ana')).toBe('A');
   });
 });

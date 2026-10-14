@@ -54,7 +54,7 @@ body { background: #0b0a12; font-family: 'Pixelify Sans', ui-monospace, Consolas
 
 /* ── O painel ────────────────────────────────────────────────────────────── */
 .lb-painel {
-  position: fixed; left: 16px; top: 16px; z-index: 20; width: 300px; max-height: calc(100vh - 32px); overflow: auto;
+  position: fixed; left: 16px; top: 52px; z-index: 20; width: 300px; max-height: calc(100vh - 68px); overflow: auto;
   background: #120e1c; color: #e8e2f4; font-size: 14px;
   box-shadow: 0 -2px 0 #4a2c6e, 0 2px 0 #4a2c6e, -2px 0 0 #4a2c6e, 2px 0 0 #4a2c6e, 6px 6px 0 rgb(0 0 0 / .4);
 }
@@ -81,3 +81,17 @@ body { background: #0b0a12; font-family: 'Pixelify Sans', ui-monospace, Consolas
 .lb-placar div.largo { grid-column: 1 / -1; }
 .lb-placar b { font-family: 'Press Start 2P', monospace; font-size: 11px; color: #fff; }
 .lb-fps { margin: 8px 0 0; font-size: 11px; color: #6a6080; }
+
+/* A faixa de quem acertou, no alto da tela (como a barra do sistema). */
+.lb-faixa { position: fixed; left: 0; right: 0; top: 0; z-index: 30; }
+.lb-campo {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: #ece5f5;
+  background: #1e1430;
+  border: 0;
+  box-shadow: 0 -2px 0 0 #3a2c52, 0 2px 0 0 #3a2c52, -2px 0 0 0 #3a2c52, 2px 0 0 0 #3a2c52;
+}
+.lb-campo:focus-visible { outline: 2px solid #9dff5c; outline-offset: 2px; }

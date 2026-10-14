@@ -50,6 +50,8 @@
 }
 .bx-letreiro-vassoura { --bx-sombra: #5a3a1e; }
 .bx-letreiro-chapeu { --bx-sombra: #4a2c6e; font-size: 10px; }
+/* Fofo: rosa, sem sangue. */
+.bx-letreiro-fofo { --bx-sombra: #c83a78; color: #fff4a0; }
 @keyframes bx-letreiro {
   0%   { transform: translate(-50%, -60%) scale(.5); color: #fff; opacity: 1; }
   12%  { transform: translate(-50%, -110%) scale(1.25); color: #ffd34d; }

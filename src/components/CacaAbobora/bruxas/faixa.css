@@ -1,0 +1,168 @@
+/*
+ * A faixa das bruxas: o letreiro com o nome de quem derrubou a bruxa.
+ * Prefixo `bx-faixa`. Sempre noite, no tema claro e no escuro (é um letreiro,
+ * não um pedaço da tela), como a dos zumbis. Arte em pixel: borda em degrau,
+ * animação em passos, nada de canto arredondado.
+ */
+
+.bx-faixa {
+  --bx-f-fundo: #140c20;
+  --bx-f-fundo-2: #1e1430;
+  --bx-f-texto: #ece5f5;
+  --bx-f-nome: #ffd34d;
+  --bx-f-nome-sombra: #6a3a08;
+  --bx-f-moldura: #ffd34d;
+  --bx-f-moldura-fundo: #4a1f78;
+  --bx-f-borda: #6a2aa8;
+  --bx-f-separa: #c070e8;
+  /* As bandeirinhas: laranja, roxa e verde, penduradas num fio. */
+  --bx-f-bandeiras: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23120a1a'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff8a1f'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%238a3ad0'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%236abf3a'/%3E%3C/svg%3E");
+  position: relative;
+  height: 40px;
+  overflow: hidden;
+  color: var(--bx-f-texto);
+  font-family: 'Pixelify Sans', ui-monospace, Consolas, monospace;
+  background:
+    var(--bx-f-bandeiras) 0 0 / 42px 8px repeat-x,
+    linear-gradient(0deg, var(--bx-f-borda) 0 2px, transparent 2px),
+    repeating-linear-gradient(90deg, var(--bx-f-fundo) 0 4px, var(--bx-f-fundo-2) 4px 8px);
+  image-rendering: pixelated;
+}
+
+/* Fofo: ninguém morreu. Rosa e lilás, coração no lugar da abóbora. */
+.bx-faixa-fofa {
+  --bx-f-fundo: #2a1030;
+  --bx-f-fundo-2: #34143c;
+  --bx-f-texto: #fff0f8;
+  --bx-f-nome: #fff4a0;
+  --bx-f-nome-sombra: #c83a78;
+  --bx-f-moldura: #ff9ac0;
+  --bx-f-moldura-fundo: #c83a78;
+  --bx-f-borda: #ff7ab0;
+  --bx-f-separa: #ff7ab0;
+  --bx-f-bandeiras: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23120a1a'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff9ac0'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ffffff'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23c8a0ff'/%3E%3C/svg%3E");
+}
+
+/* As pontas apagam na noite, em degraus. */
+.bx-faixa::before,
+.bx-faixa::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 2px;
+  width: 48px;
+  z-index: 3;
+  pointer-events: none;
+}
+.bx-faixa::before { left: 0; background: linear-gradient(90deg, var(--bx-f-fundo) 0 16px, color-mix(in srgb, var(--bx-f-fundo) 66%, transparent) 16px 32px, color-mix(in srgb, var(--bx-f-fundo) 33%, transparent) 32px 48px); }
+.bx-faixa::after { right: 0; background: linear-gradient(-90deg, var(--bx-f-fundo) 0 16px, color-mix(in srgb, var(--bx-f-fundo) 66%, transparent) 16px 32px, color-mix(in srgb, var(--bx-f-fundo) 33%, transparent) 32px 48px); }
+
+/* Estrelinhas piscando no fundo, em dois tempos. */
+.bx-faixa-estrelas {
+  position: absolute;
+  inset: 8px 0 2px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, #fff4c0 0 1px, transparent 1.5px) 7px 6px / 63px 30px,
+    radial-gradient(circle, #c8a0ff 0 1px, transparent 1.5px) 36px 20px / 81px 30px;
+  animation: bx-faixa-pisca 1.6s steps(2, jump-none) infinite;
+}
+@keyframes bx-faixa-pisca { from { opacity: .9; } to { opacity: .25; } }
+
+.bx-faixa-trilho {
+  position: absolute;
+  inset: 8px auto 2px 0;
+  z-index: 2;
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: bx-faixa-corre var(--bx-dur, 30s) linear infinite;
+}
+.bx-faixa:hover .bx-faixa-trilho { animation-play-state: paused; }
+.bx-faixa-grupo { display: flex; align-items: center; }
+@keyframes bx-faixa-corre { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+.bx-faixa-recado {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 30px;
+  padding: 0 26px 0 0;
+  white-space: nowrap;
+  font-size: 14px;
+  letter-spacing: .02em;
+}
+.bx-faixa-separa { flex: none; color: var(--bx-f-separa); }
+.bx-faixa-rosto { flex: none; height: 24px; width: auto; image-rendering: pixelated; }
+
+/* A foto, ou as iniciais, numa moldura dourada em degrau. */
+.bx-faixa-moldura {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  color: #fff;
+  background: var(--bx-f-moldura-fundo);
+  font-family: 'Press Start 2P', ui-monospace, Consolas, monospace;
+  font-size: 7px;
+  box-shadow: 0 -2px 0 0 var(--bx-f-moldura), 0 2px 0 0 var(--bx-f-moldura), -2px 0 0 0 var(--bx-f-moldura), 2px 0 0 0 var(--bx-f-moldura);
+}
+.bx-faixa-foto { width: 100%; height: 100%; object-fit: cover; }
+
+/* O nome: grande, dourado, contornado, entre dois brilhinhos que piscam. */
+.bx-faixa-nome { display: inline-flex; align-items: center; gap: 5px; }
+.bx-faixa-nome b {
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--bx-f-nome);
+  text-shadow:
+    1px 0 0 var(--bx-f-nome-sombra), -1px 0 0 var(--bx-f-nome-sombra),
+    0 1px 0 var(--bx-f-nome-sombra), 0 -1px 0 var(--bx-f-nome-sombra),
+    2px 2px 0 rgb(0 0 0 / .45);
+}
+.bx-faixa-brilho { flex: none; color: var(--bx-f-nome); animation: bx-faixa-brilha .9s steps(2, jump-none) infinite; }
+.bx-faixa-brilho-2 { animation-delay: .45s; }
+@keyframes bx-faixa-brilha { from { opacity: 1; } to { opacity: .2; } }
+
+.bx-faixa-tempo {
+  font-family: 'Press Start 2P', ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  color: #ffd34d;
+  padding: 4px 6px 3px;
+  background: #1e1428;
+  box-shadow: 0 -2px 0 0 #6a4a10, 0 2px 0 0 #6a4a10, -2px 0 0 0 #6a4a10, 2px 0 0 0 #6a4a10;
+}
+
+/* As etiquetas. A Press Start 2P não tem maiúscula com acento: palavra
+   acentuada vai na Pixelify. */
+.bx-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 2px;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  --bx-t-borda: #3a2c52;
+  box-shadow: 0 -2px 0 0 var(--bx-t-borda), 0 2px 0 0 var(--bx-t-borda), -2px 0 0 0 var(--bx-t-borda), 2px 0 0 0 var(--bx-t-borda);
+}
+.bx-tag svg { flex: none; }
+.bx-tag-hs { --bx-t-borda: #6e0a12; color: #fff; background: #c8202a; font-family: 'Press Start 2P', ui-monospace, monospace; font-weight: 400; font-size: 8px; padding: 4px 6px 3px; }
+.bx-tag-vassoura { --bx-t-borda: #8a3a08; color: #2a1200; background: #ff8a1f; font-family: 'Press Start 2P', ui-monospace, monospace; font-weight: 400; font-size: 8px; padding: 4px 6px 3px; }
+.bx-tag-nocaute { --bx-t-borda: #c83a78; color: #fff; background: #ff7ab0; }
+.bx-tag-rapido { --bx-t-borda: #8a6a10; color: #2a1a00; background: #ffd34d; }
+.bx-tag-hs-rapido { --bx-t-borda: #c8202a; color: #ffd34d; background: #2a0a0e; }
+
+.bx-faixa-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

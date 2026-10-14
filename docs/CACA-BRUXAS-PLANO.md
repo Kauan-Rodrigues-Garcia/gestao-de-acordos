@@ -1,6 +1,6 @@
 # Caça às Bruxas — plano (semana que vem da gincana)
 
-> **ESTADO EM 09/10/2026:** a bruxa existe só no **laboratório local**
+> **ESTADO EM 14/10/2026:** elenco novo (8 personagens, 4 fofos que só desmaiam) e a faixa decorada. Antes, **em 09/10/2026:** a bruxa existe só no **laboratório local**
 > (`npm run dev` → http://localhost:8080/lab-bruxas.html). Nada no banco, nada no
 > menu, nada no deploy. A caça de verdade continua sendo a dos zumbis.
 
@@ -40,18 +40,36 @@
 
 No chão, sempre: **ESPATIFA** — respingo largo e baixo, poça que cresce, o corpo sangra para a poça, tremida de tela; bateu forte, às vezes **um braço se solta**. A vassoura que caiu sozinha quebra em ~55% das vezes (`CHANCE_DE_QUEBRAR`), com lascas.
 
-### As 8 bruxas (cada uma cai do seu jeito)
+### O elenco (14/10/2026): um personagem por rodada, fofo e assustador alternando
 
-| Bruxa | Detalhe | Na queda | Rastro |
-|---|---|---|---|
-| Clássica | verde, verruga no nariz | — | faíscas verdes |
-| Feiticeira Ruiva | sardas, olho verde | **a poção do cinto estoura no chão** (poça verde, vidro) | brasas |
-| Anciã | cabelo branco, remendos | **o gato pula fora, cai de pé e foge aos pulos** (miau) | poeira |
-| do Pântano | cogumelo no chapéu | o cogumelo voa | vagalumes |
-| da Lua | lua e estrelas no chapéu | — | estrelinhas |
-| Vampira | presas, gola alta | **o morcego que voa junto foge** | névoa vermelha |
-| Catrina | caveira pintada, flores | as flores descem planando | pétalas de cempasúchil |
-| da Cobrança | fone de operadora, crachá | **voam boletos** | moedas caindo |
+Pedido do Cleber: «uma bruxa de cada, diferentezinha… uma mais fofinha, uma
+que é a Hello Kitty, uma mais feia, um gato que é uma bruxa». Os desenhos
+novos estão em `figurinos.ts` (peças inteiras trocadas por personagem).
+
+| # | Personagem | Desenho | Fofo? | Rastro |
+|---|---|---|---|---|
+| 0 | Bruxinha Fofa | chibi: cabeça grande, franja roxa, olhão com brilho, chapelão de fita | sim | estrelinhas |
+| 1 | Bruxa Feiosa | pele verde com verruga, narigão adunco, olho arregalado, fivela dourada; a poção do cinto estoura no chão | não | faíscas verdes |
+| 2 | Gatinha Bruxa | gatinha branca de cabeça redonda, flor na orelha, chapeuzinho azul com estrela, rabinho | sim | estrelinhas rosa |
+| 3 | Vampira | presas, gola alta; o morcego que voa junto foge | não | névoa vermelha |
+| 4 | Gato Bruxo | gato preto, olho amarelo de fenda, cachecol vermelho | sim | faíscas |
+| 5 | Catrina | caveira pintada, flores de cempasúchil | não | pétalas |
+| 6 | Fantasminha | lençol de chapéu laranja; a ponta do lençol ondula no lugar da capa | sim | vagalumes |
+| 7 | Bruxa da Cobrança | fone de operadora, crachá; voam boletos | não | moedas |
+
+A Gatinha Bruxa é «no estilo» da Hello Kitty (gatinha branca, flor, chapéu),
+sem copiar a personagem: a Hello Kitty é marca registrada da Sanrio.
+
+**Os fofos não morrem.** Levam o tiro do mesmo jeito (cabeça, corpo, vassoura;
+chapéu e raspão também), mas sem sangue, sem estourar e sem perder braço: no
+tiro saem estrelinhas («BONK!», «NOCAUTE!»), caem e ficam **desacordados** no
+chão com estrelinhas rodando na cabeça. Para a gincana conta igual: quem
+acertou primeiro.
+
+**A faixa** (`faixa.ts`): o letreiro corre como o dos zumbis, decorado —
+bandeirinhas de Halloween, estrelinhas piscando, o rosto do personagem (olho em
+X se morreu), a foto ou as iniciais numa moldura dourada e o nome entre
+brilhinhos. Nos fofos é rosa, com coração, e diz «nocauteou».
 
 ## 3. Como testar
 

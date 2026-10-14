@@ -29,11 +29,11 @@ import {
   ALTURA, BRUXAS, LARGURA, MORCEGO, MS_POR_QUADRO, NUMERO_DA_PARTE, PARTE_DO_NUMERO, PRIMEIRO_RINDO, VOO,
   alvoDaParte, centroDaParte, type Bruxa, type Rastro,
 } from './arte';
-import { FLASH_S, avancar, chapeuVoando, criarQueda, poseDoOsso, type Evento, type Morte, type Queda } from './queda';
+import { FLASH_S, avancar, cabecaDaQueda, chapeuVoando, criarQueda, poseDoOsso, type Evento, type Morte, type Queda } from './queda';
 import { VELOCIDADES, avancarVoo, balanco, criarVoo, enfurecer, fugir, rindo, type Dificuldade, type EventoVoo, type Voo, type Zona } from './voo';
 import { esquecer, girado, miniatura, quadrosDa } from './pixels';
 import {
-  somBrava, somChapeu, somEspatifa, somGargalhada, somGrito, somMiau, somPuf, somRasga, somVassouraQuebra, somVento, somVidro,
+  somBonk, somBrava, somChapeu, somDesmaio, somEspatifa, somGargalhada, somGrito, somMiau, somPuf, somRasga, somVassouraQuebra, somVento, somVidro,
 } from './sons';
 
 const MAX_PARTICULAS = 420;
@@ -47,6 +47,7 @@ const MANCHA_APAGA_S = 8;
 const MANCHA_CLARA = 0.45;
 
 export type EventoPalco =
+  /** `bruxa.fofa`: caiu desacordada, não morreu. Conta igual na gincana. */
   | { tipo: 'matou'; bruxa: Bruxa; morte: Morte; ms: number }
   | { tipo: 'chapeu'; bruxa: Bruxa }
   | { tipo: 'raspao'; bruxa: Bruxa }
@@ -324,8 +325,12 @@ export class PalcoBruxas {
     if (v.morcego) { v.morcego.fugindo = true; this.morcegos.push(v.morcego); }
     // O tranco do tiro: o jogo congela um instante (é o que dá peso ao acerto).
     this.pausaAte = performance.now() + 70;
-    if (morte === 'cabeca') { somCerebro(); this.letreiro('HEADSHOT!', s.x + LARGURA / 2, s.y, 'hs'); }
-    else if (morte === 'vassoura') this.letreiro('VASSOURADA!', s.x + LARGURA / 2, s.y + 22, 'vassoura');
+    const fofa = !!v.bruxa.fofa;
+    if (morte === 'cabeca') {
+      if (!fofa) somCerebro();
+      this.letreiro(fofa ? 'BONK!' : 'HEADSHOT!', s.x + LARGURA / 2, s.y, fofa ? 'fofo' : 'hs');
+    } else if (morte === 'vassoura') this.letreiro('VASSOURADA!', s.x + LARGURA / 2, s.y + 22, 'vassoura');
+    else if (fofa) this.letreiro('NOCAUTE!', s.x + LARGURA / 2, s.y + 6, 'fofo');
     else somAcerto();
     this.adicionarQueda(criarQueda({
       bruxa: v.bruxa, quadro: v.quadro, lado: v.voo.lado, x: s.x, y: s.y, vx: v.voo.vx, vy: v.voo.vy,
@@ -393,7 +398,7 @@ export class PalcoBruxas {
     }
   }
 
-  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'vassoura' | 'chapeu'): void {
+  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'vassoura' | 'chapeu' | 'fofo'): void {
     const el = document.createElement('div');
     el.className = `bx-letreiro bx-letreiro-${tipo}`;
     el.textContent = texto;
@@ -428,6 +433,8 @@ export class PalcoBruxas {
       case 'miau': somMiau(); break;
       case 'grito': somGrito(); break;
       case 'cerebro': break;
+      case 'bonk': somBonk(); break;
+      case 'desmaia': somDesmaio(e.forca); break;
     }
   }
 
@@ -534,6 +541,8 @@ export class PalcoBruxas {
       }
       if (!qv.q.quieta) mexe = true;
       if (this.apagando(qv)) mexe = true;
+      // Desacordada: as estrelinhas rodam enquanto o corpo está no chão.
+      if (qv.q.tonta && qv.t < CORPO_S + CORPO_APAGA_S) mexe = true;
     }
     const acabou = this.quedas.filter(qv => qv.t > MANCHA_S + MANCHA_APAGA_S);
     if (acabou.length) {
@@ -583,6 +592,7 @@ export class PalcoBruxas {
       if (a <= 0) continue;
       c.globalAlpha = a;
       desenharQueda(c, qv);
+      if (qv.q.tonta) desenharTontura(c, qv.q, agora);
     }
     c.globalAlpha = 1;
     for (const v of this.vivas) {
@@ -673,6 +683,29 @@ function desenharQueda(c: CanvasRenderingContext2D, qv: QuedaViva): void {
   for (const gt of q.gotas) {
     c.fillStyle = corCss(gt.cor);
     c.fillRect(Math.round(gt.x), Math.round(gt.y), gt.tam, gt.tam);
+  }
+}
+
+/**
+ * As estrelinhas rodando em cima da cabeça de quem desmaiou: três, numa
+ * elipse achatada (o chão tem fundo), a de trás mais apagada.
+ */
+const ESTRELA_TONTA = ['..y..', '.yyy.', 'yywyy', '.yyy.', '..y..'];
+function desenharTontura(c: CanvasRenderingContext2D, q: Queda, agora: number): void {
+  const cab = cabecaDaQueda(q);
+  if (!cab) return;
+  const t = agora / 1000;
+  for (let i = 0; i < 3; i++) {
+    const a = t * 3.2 + (i * Math.PI * 2) / 3;
+    const x = Math.round(cab.x + Math.cos(a) * 9) - 2;
+    const y = Math.round(cab.y - 9 + Math.sin(a) * 3) - 2;
+    const atras = Math.sin(a) < 0;
+    for (let j = 0; j < 5; j++) for (let k = 0; k < 5; k++) {
+      const ch = ESTRELA_TONTA[j][k];
+      if (ch === '.') continue;
+      c.fillStyle = ch === 'w' ? '#ffffff' : atras ? '#c8a020' : '#ffd34d';
+      c.fillRect(x + k, y + j, 1, 1);
+    }
   }
 }
 

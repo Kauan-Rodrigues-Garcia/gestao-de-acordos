@@ -27,6 +27,11 @@
  * Luz do alto à esquerda, como nos zumbis.
  */
 
+import {
+  BIGODES, BRACINHO_FRENTE, CABECA_FEIOSA, FIVELA, BRACINHO_LENCOL, BRACINHO_TRAS, CABECA_FANTASMA, CABECA_GATO, CABECONA, CACHOS, CAPINHA, CHAPELAO,
+  CHAPEUZINHO, ESTRELA, FLOR, JUNTAS_CHIBI, LENCOL, NADA, PERNINHA_FRENTE, PERNINHA_TRAS, PONTA_LENCOL, RABO, VESTIDINHO,
+} from './figurinos';
+
 export const LARGURA = 48;
 export const ALTURA = 38;
 
@@ -344,7 +349,7 @@ const TOPETE = d(7, [
  *   cai     voa girando e quica (cogumelo, óculos, fone)
  *   plana   desce devagar, balançando (crachá, flores)
  *   quebra  cai e estoura no chão com uma poça da cor dele (a poção)
- *   gato    pula fora, cai de pé e foge aos saltos (o gato da Anciã)
+ *   gato    pula fora, cai de pé e foge aos saltos (nenhum personagem usa hoje)
  */
 export type Solta = 'cai' | 'plana' | 'quebra' | 'gato';
 
@@ -365,7 +370,7 @@ export type Rastro = 'faisca' | 'brasa' | 'poeira' | 'vagalume' | 'estrela' | 'n
 
 export interface Bruxa {
   id: string;
-  /** Como aparece no painel: «a Bruxa da Lua». */
+  /** Como aparece no painel: «a Gatinha Bruxa». */
   nome: string;
   paleta: Paleta;
   enfeites: readonly Enfeite[];
@@ -375,7 +380,20 @@ export interface Bruxa {
   companheiro?: 'morcego';
   /** Na morte, além do sangue, voam papéis (os boletos da Bruxa da Cobrança). */
   papeis?: boolean;
+  /**
+   * Fofa (a bruxinha, a gatinha, o gato, a fantasminha): não morre, não
+   * sangra, não explode. Leva o tiro, cai e fica desacordada no chão, com
+   * estrelinhas rodando. Para a gincana conta igual: quem acertou primeiro.
+   */
+  fofa?: boolean;
+  /** As juntas do boneco, para quem tem outro corpo (cabeça grande, sem pernas). */
+  juntas?: Partial<Record<Junta, readonly [number, number]>>;
+  /** Peças que este personagem não tem (a fantasminha não tem perna). */
+  semPartes?: readonly NomeParte[];
+  /** Sem o chapéu, o cabelo arrepiado. `null`: não tem (o gato, a fantasminha). */
+  topete?: Grade | null;
 }
+
 
 const COMUM: Paleta = {
   o: '#170f1f', y: '#ffe14d', Y: '#8a6d1f', m: '#2a0812', t: '#efe6cc', n: '#efe6cc',
@@ -389,119 +407,75 @@ function paleta(...partes: Readonly<Record<string, string>>[]): Paleta {
   return Object.assign({}, COMUM, ...partes);
 }
 
-/** O gato preto da Anciã, sentado na palha, de olho na tela. */
-const GATO = d(12, [
-  [11, 'o..o'],
-  [10, 'oXooXo'],
-  [10, 'oXxxxo'],
-  [10, 'oxZxZxo'],
-  [5, 'oo..oxxnxxo'],
-  [4, 'oXo..oxxxxo'],
-  [4, 'oxo.oXxxxxo'],
-  [5, 'oxoXxxxxxxo'],
-  [5, 'oXxxxxxxxxxo'],
-  [6, 'oooooooooooo'],
-]);
-
 export const BRUXAS: readonly Bruxa[] = [
   {
-    id: 'classica',
-    nome: 'a Bruxa Clássica',
+    id: 'fofinha',
+    nome: 'a Bruxinha Fofa',
+    fofa: true,
     paleta: paleta({
-      1: '#2c4a2a', 2: '#4f8a3a', 3: '#7cbf4a', 4: '#b8e070',
-      a: '#2a1840', b: '#4a2c6e', c: '#7048a0',
-      d: '#1d1030', e: '#3a2058', l: '#8a1c3c', F: '#c03a5a',
-      k: '#1a1222', K: '#33283f', L: '#5e4c74', s: '#7a2a9a',
-      h: '#141018', H: '#2e2638', j: '#5a4e6a',
-      i: '#1c1424', I: '#8a5ab8', 5: '#5a7a3a', 6: '#c8d890',
-      x: '#3a6a2a',
+      1: '#b8707a', 2: '#e8a898', 3: '#ffd8c8', 4: '#fff0e6',
+      a: '#120e18', b: '#2a2234', c: '#4a3e5a', z: '#8a3ad0',
+      d: '#120e18', e: '#2a2234', l: '#6a2aa8', F: '#a868e8',
+      k: '#120e18', K: '#262030', L: '#4a405a', s: '#8a3ad0',
+      h: '#4a1f78', H: '#7a3ab8', j: '#b478f0',
+      i: '#f4f0fa', I: '#8a3ad0',
+      y: '#4a1a96', Y: '#3a1a5a', n: '#ffffff', X: '#b48aff', x: '#ff8ab4',
+      m: '#a83050',
     }),
+    trocas: {
+      chapeu: CHAPELAO, cabeca: CABECONA, cabelo: CACHOS, tronco: VESTIDINHO, capa: CAPINHA,
+      bracoFrente: [BRACINHO_FRENTE], bracoTras: [BRACINHO_TRAS],
+      pernaFrente: [PERNINHA_FRENTE], pernaTras: [PERNINHA_TRAS],
+    },
+    juntas: JUNTAS_CHIBI,
+    enfeites: [],
+    rastro: { tipo: 'estrela', cores: ['#ffd34d', '#ffb4e0', '#c8a0ff'] },
+  },
+  {
+    id: 'feiosa',
+    nome: 'a Bruxa Feiosa',
+    paleta: paleta({
+      1: '#2c4a1a', 2: '#4f8a2a', 3: '#86c03a', 4: '#c4e86a', q: '#5a3a1a', n: '#f4f0dc',
+      a: '#2a1440', b: '#4e2a72', c: '#7a4ab0',
+      d: '#1a0c28', e: '#3a1c58', l: '#8a1c2c', F: '#c8303a',
+      k: '#2a1440', K: '#4e2a72', L: '#7a4ab0', s: '#a8202a',
+      h: '#5a5a66', H: '#9a9aa6', j: '#d8d8e2',
+      i: '#1c1424', I: '#7a4ab0', 5: '#4e2a72', 6: '#c4e86a',
+      x: '#3aff6a', X: '#c8ffd0', z: '#8a6a3a',
+    }),
+    trocas: { cabeca: CABECA_FEIOSA },
     enfeites: [
-      // A verruga na ponta do nariz.
-      enfeite('cabeca', d(14, [[39, 'x']])),
+      enfeite('chapeu', FIVELA),
+      // A poção pendurada no cinto: estoura no chão.
+      enfeite('tronco', d(23, [[31, 'oz'], [30, 'oxxo'], [29, 'oxXxxo'], [29, 'oxxxxo'], [30, 'oooo']]), { solta: 'quebra' }),
     ],
     rastro: { tipo: 'faisca', cores: ['#9dff5c', '#d4ff9a', '#4fbf2a'] },
   },
   {
-    id: 'ruiva',
-    nome: 'a Feiticeira Ruiva',
+    id: 'gatinha',
+    nome: 'a Gatinha Bruxa',
+    fofa: true,
+    topete: null,
     paleta: paleta({
-      1: '#a2564a', 2: '#d48a70', 3: '#f2b896', 4: '#ffe0c8',
-      a: '#0c3424', b: '#17573c', c: '#2a8a58',
-      d: '#140a10', e: '#2a1a22', l: '#b8862a', F: '#f0c050',
-      k: '#2a0e14', K: '#4e1a26', L: '#7e3242', s: '#d9a52b',
-      h: '#6a1a0c', H: '#c0401a', j: '#ff8a3a',
-      i: '#1a1410', I: '#e8e0d0', 5: '#7e3242', 6: '#f0c050',
-      y: '#3aff8a', Y: '#1a8a4a', m: '#7a1a20',
-      x: '#3aff6a', X: '#c8ffd0', z: '#8a6a3a',
+      o: '#1f1a2e', 1: '#a8a0c0', 2: '#cfc8e0', 3: '#eeeaf6', 4: '#ffffff',
+      x: '#ff9ac0', X: '#ff5a9a', n: '#fff4a0', y: '#1f1a2e', Y: '#1f1a2e', z: '#ffd34d', T: '#1f1a2e',
+      k: '#16285a', K: '#2e52a8', L: '#5a8ae8', s: '#ff5a9a', G: '#ffd34d',
+      a: '#c83a78', b: '#ff7ab0', c: '#ffb4d4',
+      d: '#16285a', e: '#2e52a8', l: '#ff7ab0', F: '#ffb4d4',
+      i: '#ffffff', I: '#eeeaf6', g: '#cfc8e0', u: '#ffffff',
     }),
+    trocas: {
+      chapeu: CHAPEUZINHO, cabeca: CABECA_GATO, cabelo: RABO, tronco: VESTIDINHO, capa: CAPINHA,
+      bracoFrente: [BRACINHO_FRENTE], bracoTras: [BRACINHO_TRAS],
+      pernaFrente: [PERNINHA_FRENTE], pernaTras: [PERNINHA_TRAS],
+    },
+    juntas: JUNTAS_CHIBI,
     enfeites: [
-      // A poção pendurada no cinto.
-      enfeite('tronco', d(23, [[31, 'oz'], [30, 'oxxo'], [29, 'oxXxxo'], [29, 'oxxxxo'], [30, 'oooo']]), { solta: 'quebra' }),
-      // As sardas.
-      enfeite('cabeca', d(14, [[32, '2.2']])),
+      enfeite('cabeca', BIGODES),
+      enfeite('cabeca', FLOR, { solta: 'plana' }),
+      enfeite('chapeu', ESTRELA),
     ],
-    rastro: { tipo: 'brasa', cores: ['#ff8a3a', '#ffd04a', '#ff4a1a'] },
-  },
-  {
-    id: 'ancia',
-    nome: 'a Bruxa Anciã',
-    paleta: paleta({
-      1: '#3e4038', 2: '#62665a', 3: '#8a8e7c', 4: '#b4b8a2',
-      a: '#2e2016', b: '#4e3826', c: '#6e5238',
-      d: '#1a1410', e: '#2e2420', l: '#4a5a2a', F: '#6e8a3e',
-      k: '#2a1e16', K: '#4a3626', L: '#6e5640', s: '#3a5a2a',
-      h: '#7a7a84', H: '#b8b8c2', j: '#f0f0f6',
-      i: '#2a2420', I: '#6e5a40', 5: '#7a6a3a', 6: '#c8b070',
-      y: '#ff7a3a', Y: '#8a3a1a',
-      x: '#2a2636', X: '#5a5470', Z: '#ffd030', n: '#e88aa8',
-    }),
-    enfeites: [
-      enfeite('palha', GATO, { solta: 'gato' }),
-      // A verruga e as rugas.
-      enfeite('cabeca', d(12, [[31, '1'], [38, 'o'], null, [31, '1']])),
-      // Remendo no chapéu.
-      enfeite('chapeu', d(5, [[26, '56'], [26, '65']])),
-    ],
-    rastro: { tipo: 'poeira', cores: ['#b4b0a0', '#8a8678', '#d8d4c4'] },
-  },
-  {
-    id: 'pantano',
-    nome: 'a Bruxa do Pântano',
-    paleta: paleta({
-      1: '#1e3a3a', 2: '#2e6a5a', 3: '#4e9a7a', 4: '#8acaa0',
-      a: '#1e2412', b: '#3a4222', c: '#5a6232',
-      d: '#0e1a12', e: '#1e3022', l: '#4a3a1a', F: '#7a5a2a',
-      k: '#142012', K: '#2a3e1e', L: '#4a6a32', s: '#7a4a1e',
-      h: '#1a2e12', H: '#3a5a1e', j: '#7aa83a',
-      i: '#1a2412', I: '#5a7a2a', 5: '#6a4a2a', 6: '#a07a4a',
-      y: '#e0ff40', Y: '#6a7a1a',
-      x: '#c8202a', X: '#f0e8d8',
-    }),
-    enfeites: [
-      // O cogumelo crescendo no chapéu.
-      enfeite('chapeu', d(2, [[29, 'ooooo'], [28, 'oxXxxxo'], [28, 'oxxxXxo'], [29, 'ooXXo'], [30, 'oXo']]), { solta: 'cai' }),
-    ],
-    rastro: { tipo: 'vagalume', cores: ['#e0ff40', '#a0ff60', '#fff8a0'] },
-  },
-  {
-    id: 'lua',
-    nome: 'a Bruxa da Lua',
-    paleta: paleta({
-      1: '#2a3a5a', 2: '#4a6a8e', 3: '#7a9ac0', 4: '#b4d0ec',
-      a: '#101a40', b: '#1e306a', c: '#34509a',
-      d: '#080c20', e: '#141c40', l: '#c8b060', F: '#ffe08a',
-      k: '#0e1230', K: '#1e2a5a', L: '#34488a', s: '#ffd34d',
-      h: '#5a6a8a', H: '#9aaac8', j: '#e8f0ff',
-      i: '#0e1230', I: '#ffd34d', 5: '#34488a', 6: '#ffd34d',
-      y: '#9ae8ff', Y: '#3a6a8a',
-      x: '#ffd34d', X: '#fff4c0',
-    }),
-    enfeites: [
-      // A lua crescente e as estrelas no chapéu.
-      enfeite('chapeu', d(3, [[29, 'X'], null, [27, 'xx'], [26, 'x...X'], [26, 'xx'], [31, 'X']])),
-    ],
-    rastro: { tipo: 'estrela', cores: ['#ffd34d', '#fff4c0', '#9ae8ff'] },
+    rastro: { tipo: 'estrela', cores: ['#ff9ac0', '#fff4a0', '#9ad0ff'] },
   },
   {
     id: 'vampira',
@@ -521,6 +495,34 @@ export const BRUXAS: readonly Bruxa[] = [
     ],
     rastro: { tipo: 'nevoa', cores: ['#b81a2a', '#6a1020', '#ff4a5a'] },
     companheiro: 'morcego',
+  },
+  {
+    id: 'gato',
+    nome: 'o Gato Bruxo',
+    fofa: true,
+    topete: null,
+    paleta: paleta({
+      o: '#0c0a10', 1: '#0c0a10', 2: '#16121d', 3: '#221c2c', 4: '#322a40',
+      x: '#c85a8a', y: '#ffd34d', Y: '#8a6d1f', z: '#ff7ab0', T: '#e8e4f0',
+      k: '#2a0e3a', K: '#5a2a8a', L: '#8a5ac0', s: '#ffd34d', G: '#ffd34d',
+      a: '#0c0a10', b: '#322a40', c: '#4a4058',
+      d: '#3a0a14', e: '#7a1a2a', l: '#ffd34d', F: '#fff0a0',
+      i: '#322a40', I: '#221c2c', g: '#322a40', u: '#4a4058',
+    }),
+    trocas: {
+      chapeu: CHAPEUZINHO, cabeca: CABECA_GATO, cabelo: RABO, tronco: VESTIDINHO, capa: CAPINHA,
+      bracoFrente: [BRACINHO_FRENTE], bracoTras: [BRACINHO_TRAS],
+      pernaFrente: [PERNINHA_FRENTE], pernaTras: [PERNINHA_TRAS],
+    },
+    juntas: JUNTAS_CHIBI,
+    enfeites: [
+      enfeite('cabeca', BIGODES),
+      // A pupila em fenda.
+      enfeite('cabeca', d(15, [[28, 'o......o'], [28, 'o......o'], [28, 'o......o']])),
+      // O cachecol vermelho, com a ponta solta para trás.
+      enfeite('tronco', d(22, [[28, 'oRRRRRo'], [25, 'ooRRrRo'], [23, 'oRRro'], [22, 'oRro']])),
+    ],
+    rastro: { tipo: 'faisca', cores: ['#ffd34d', '#fff0a0', '#c8a0ff'] },
   },
   {
     id: 'catrina',
@@ -544,6 +546,26 @@ export const BRUXAS: readonly Bruxa[] = [
       enfeite('cabeca', d(11, [[31, 'z'], [30, 'zxz'], [31, 'z']])),
     ],
     rastro: { tipo: 'petala', cores: ['#ff8a1a', '#ffd04a', '#ff5a1a'] },
+  },
+  {
+    id: 'fantasminha',
+    nome: 'a Fantasminha',
+    fofa: true,
+    topete: null,
+    paleta: paleta({
+      o: '#2a2238', 1: '#a098bc', 2: '#c8c0dc', 3: '#ece8f6', 4: '#ffffff',
+      x: '#ffb4d0', m: '#5a1a3a', t: '#ff6a9a',
+      k: '#7a2a08', K: '#d4600e', L: '#ff9a3a', s: '#3a1a5a', G: '#ffd34d',
+    }),
+    trocas: {
+      chapeu: CHAPELAO, cabeca: CABECA_FANTASMA, cabelo: [NADA], tronco: LENCOL, capa: PONTA_LENCOL,
+      bracoFrente: [BRACINHO_LENCOL], bracoTras: [BRACINHO_TRAS],
+      pernaFrente: [NADA], pernaTras: [NADA],
+    },
+    semPartes: ['cabelo', 'pernaFrente', 'pernaTras'],
+    juntas: JUNTAS_CHIBI,
+    enfeites: [],
+    rastro: { tipo: 'vagalume', cores: ['#ffffff', '#d8f0ff', '#ffd34d'] },
   },
   {
     id: 'cobranca',
@@ -688,7 +710,7 @@ export function montarQuadro(b: Bruxa, quadro: Quadro | number, o: OpcoesMontar 
     const n = NUMERO_DA_PARTE[parte];
     for (const e of b.enfeites) if (e.parte === parte && e.atras && enfeiteVale(e, o)) pintar(img, e, pal, n, dx, dy);
     pintar(img, gradeDa(b, parte, q.v[parte] ?? 0), pal, n, dx, dy, troca);
-    if (parte === 'cabeca' && o.semChapeu) pintar(img, TOPETE, pal, n, dx, dy);
+    if (parte === 'cabeca' && o.semChapeu && b.topete !== null) pintar(img, b.topete ?? TOPETE, pal, n, dx, dy);
     for (const e of b.enfeites) if (e.parte === parte && !e.atras && enfeiteVale(e, o)) pintar(img, e, pal, n, dx, dy);
   }
   return img;
@@ -747,6 +769,11 @@ export const JUNTAS = {
   peT: [26, 33],
 } as const satisfies Record<string, readonly [number, number]>;
 export type Junta = keyof typeof JUNTAS;
+
+/** As juntas de quem tem outro corpo (a cabeça grande da bruxinha, os gatos). */
+export function juntasDa(b: Bruxa): Record<Junta, readonly [number, number]> {
+  return { ...JUNTAS, ...b.juntas };
+}
 
 /** Cada peça do boneco: quais partes do sprite, e entre que juntas ela vai. Na ordem de pintura. */
 export const OSSOS: readonly { nome: string; partes: readonly NomeParte[]; de: Junta; para: Junta }[] = [

@@ -14,6 +14,7 @@ import './bruxas.css';
 import './laboratorio.css';
 import { BRUXAS, VOO, MS_POR_QUADRO } from './arte';
 import { PalcoBruxas, type EventoPalco } from './palco';
+import { montarFaixa } from './faixa';
 import { quadrosDa } from './pixels';
 import { VELOCIDADES, type Dificuldade } from './voo';
 import type { Morte } from './queda';
@@ -93,11 +94,14 @@ const PAINEL = `
     <label class="lb-check"><input type="checkbox" data-opcao="areas"> Mostrar as áreas de tiro</label>
     <ul class="lb-legenda">
       <li><i style="background:#ff2840"></i>Cabeça: HEADSHOT</li>
-      <li><i style="background:#ffd228"></i>Corpo: cai sangrando</li>
+      <li><i style="background:#ffd228"></i>Corpo: cai sangrando (os fofos caem desacordados)</li>
       <li><i style="background:#3ca0ff"></i>Vassoura: parte no ar, ela cai se debatendo</li>
       <li><i style="background:#c850ff"></i>Chapéu: não mata, ela fica brava</li>
-      <li><i style="background:#c8c8c8"></i>Capa e cabelo: raspão</li>
+      <li><i style="background:#c8c8c8"></i>Capa e cabelo (ou rabo): raspão</li>
     </ul>
+    <p class="lb-nota">Fofos: bruxinha, gatinha, gato e fantasminha não morrem. Caem desacordados, sem sangue, e contam igual.</p>
+    <label class="lb-rotulo" for="lb-nome-faixa">Nome na faixa</label>
+    <input id="lb-nome-faixa" class="lb-campo" value="Mariana Souza" autocomplete="off">
     <div class="lb-placar"></div>
     <p class="lb-fps"></p>
   </div>
@@ -106,7 +110,10 @@ const PAINEL = `
 // ── Montagem ───────────────────────────────────────────────────────────────
 
 const raiz = document.getElementById('lab')!;
-raiz.innerHTML = `<div class="lb-fundo"></div><div class="lb-palco"></div>${PAINEL}`;
+raiz.innerHTML = `<div class="lb-fundo"></div><div class="lb-palco"></div><div class="lb-faixa"></div>${PAINEL}`;
+const lugarDaFaixa = raiz.querySelector<HTMLDivElement>('.lb-faixa')!;
+let ajustarFaixa: (() => void) | null = null;
+window.addEventListener('resize', () => ajustarFaixa?.());
 const fundo = raiz.querySelector<HTMLDivElement>('.lb-fundo')!;
 const painel = raiz.querySelector<HTMLDivElement>('.lb-painel')!;
 
@@ -116,6 +123,12 @@ let escolhida = 0;
 
 function aoEvento(e: EventoPalco): void {
   if (e.tipo === 'matou') {
+    const recorde = !placar.tempos.length || e.ms < Math.min(...placar.tempos);
+    const nome = painel.querySelector<HTMLInputElement>('#lb-nome-faixa')!.value.trim() || 'Alguém';
+    const f = montarFaixa({ nome, bruxa: e.bruxa, morte: e.morte, ms: e.ms, rapida: recorde, hsRapido: recorde && e.morte === 'cabeca' });
+    lugarDaFaixa.replaceChildren(f.el);
+    f.ajustar();
+    ajustarFaixa = f.ajustar;
     placar.mortas++;
     placar.tempos.push(e.ms);
     if (e.morte === 'cabeca') placar.headshots++;

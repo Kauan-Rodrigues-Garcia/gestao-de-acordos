@@ -204,3 +204,34 @@ export function somMiau(): void {
     o.stop(t + 0.45);
   });
 }
+
+/** O tiro num fofo: «bonk» de desenho animado e um tilintar de estrelinhas. */
+export function somBonk(): void {
+  tocar(c => {
+    tom(c, { tipo: 'sine', de: 720, para: 180, pico: 0.35, dura: 0.16 });
+    tom(c, { tipo: 'triangle', de: 1600, para: 1500, pico: 0.12, dura: 0.08, em: c.currentTime + 0.1 });
+    tom(c, { tipo: 'triangle', de: 2100, para: 2000, pico: 0.1, dura: 0.08, em: c.currentTime + 0.17 });
+    tom(c, { tipo: 'triangle', de: 2600, para: 2500, pico: 0.08, dura: 0.1, em: c.currentTime + 0.24 });
+  });
+}
+
+/** O fofo bate no chão e apaga: «boing» que murcha, sem respingo. */
+export function somDesmaio(forca: number): void {
+  tocar(c => {
+    const t = c.currentTime;
+    tom(c, { tipo: 'sine', de: 220, para: 90, pico: 0.25 + 0.2 * forca, dura: 0.22 });
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(380, t + 0.05);
+    o.frequency.exponentialRampToValueAtTime(140, t + 0.5);
+    const vib = c.createOscillator();
+    vib.frequency.value = 14;
+    const prof = c.createGain();
+    prof.gain.value = 40;
+    vib.connect(prof);
+    prof.connect(o.frequency);
+    o.connect(envelope(c, 0.22, 0.01, 0.45, t + 0.05));
+    o.start(t + 0.05); vib.start(t + 0.05);
+    o.stop(t + 0.6); vib.stop(t + 0.6);
+  });
+}
