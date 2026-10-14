@@ -39,6 +39,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros, type SetorCandidatoAoFiltro } from '@/lib/setoresDosFiltros';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
@@ -115,13 +116,19 @@ export function Mestre59Detalhe({ empresaId, mes, grupo, aoMudar }: Props) {
 
   // Os destinos possíveis são TODOS os setores da empresa, e não só os que têm
   // grupo no relatório: a equipe está no lugar errado justamente quando o setor
-  // certo não aparece no arquivo (o Digital, por exemplo).
+  // certo não aparece no arquivo (o Digital, por exemplo). Setor inativo (o
+  // Play 4, desde 14/10/2026) não é destino dali para a frente: mandar dinheiro
+  // para ele seria esconder dinheiro. Num mês passado ele ainda existia.
   useEffect(() => {
     let cancel = false;
-    void supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome')
-      .then(({ data }) => { if (!cancel) setTodosSetores((data as EquipeDoSetor[]) ?? []); });
+    void supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO).eq('empresa_id', empresaId).order('nome')
+      .then(({ data }) => {
+        if (cancel) return;
+        const lista = (data ?? []) as unknown as (EquipeDoSetor & SetorCandidatoAoFiltro)[];
+        setTodosSetores(setoresDosFiltros(lista, { mes }).map(({ id, nome }) => ({ id, nome })));
+      });
     return () => { cancel = true; };
-  }, [empresaId]);
+  }, [empresaId, mes]);
 
   const mover = useCallback(async (
     subgrupo: string, destino: DestinoEquipe, setorId: string | null,

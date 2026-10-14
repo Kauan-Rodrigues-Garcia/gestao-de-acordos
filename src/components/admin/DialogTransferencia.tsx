@@ -169,8 +169,9 @@ export function DialogTransferencia({
     if (destinoEmpresa === empresaId) { setSetoresDestino(setores); return; }
     let cancel = false;
     setCarregandoDestino(true);
+    // Setor inativo não recebe ninguém (o da própria empresa já vem filtrado).
     void supabase.from('setores')
-      .select('*').eq('empresa_id', destinoEmpresa).order('nome')
+      .select('*').eq('empresa_id', destinoEmpresa).eq('ativo', true).order('nome')
       .then(({ data }) => {
         if (cancel) return;
         setSetoresDestino((data as Setor[]) ?? []);

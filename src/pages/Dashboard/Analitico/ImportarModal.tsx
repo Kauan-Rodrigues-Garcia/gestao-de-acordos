@@ -41,6 +41,9 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
   /**
    * Setores que podem ser o dono do relatório.
    *
+   * Setor INATIVO também fica de fora (o Play 4, desde 14/10/2026): não existe
+   * mais, e importar para ele esconderia o recebimento.
+   *
    * Setor ALTERNATIVO fica de fora: por definição ele não tem relatório próprio
    * (recebe via clones de outros setores — migration 20260724a). Deixá-lo na
    * lista é oferecer uma escolha que produz um carimbo impossível, e o
@@ -58,6 +61,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
         .from('setores')
         .select('id, nome, alternativo')
         .eq('empresa_id', empresa.id)
+        .eq('ativo', true)
         .order('nome');
       if (cancelado) return;
       if (!comFlag.error) {
@@ -66,7 +70,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
         return;
       }
       const semFlag = await supabase
-        .from('setores').select('id, nome').eq('empresa_id', empresa.id).order('nome');
+        .from('setores').select('id, nome').eq('empresa_id', empresa.id).eq('ativo', true).order('nome');
       if (!cancelado) setSetores((semFlag.data as { id: string; nome: string }[]) ?? []);
     })();
     return () => { cancelado = true; };

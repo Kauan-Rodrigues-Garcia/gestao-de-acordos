@@ -49,6 +49,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
+import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros, type SetorCandidatoAoFiltro } from '@/lib/setoresDosFiltros';
 import { AbaDesafios } from '@/pages/Analitico/Desafios';
 import { Faixa } from './componentes';
 
@@ -65,12 +66,17 @@ export default function DesafiosComercial({ embutido = false }: { embutido?: boo
     if (!empresaId) { setSetores([]); return; }
     void supabase
       .from('setores')
-      .select('id, nome')
+      .select(COLUNAS_SETOR_DO_FILTRO)
       .eq('empresa_id', empresaId)
       .order('nome')
-      // Ordem escolhida na aba Setores; `order('nome')` é o desempate.
+      // Ordem escolhida na aba Setores; `order('nome')` é o desempate. Setor
+      // inativo e de sistema ficam fora, como em todo filtro (`setoresDosFiltros`).
       .then(({ data }) => setSetores(
-        aplicarOrdemSetores((data as { id: string; nome: string }[]) ?? [], empresaId),
+        aplicarOrdemSetores(
+          setoresDosFiltros((data ?? []) as unknown as ({ id: string; nome: string } & SetorCandidatoAoFiltro)[])
+            .map(({ id, nome }) => ({ id, nome })),
+          empresaId,
+        ),
       ));
   }, [empresaId]);
 
