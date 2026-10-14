@@ -23,7 +23,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { comNovaTentativa } from '@/lib/sobDemanda';
+import { comNovaTentativa, precarregarQuandoOcioso } from '@/lib/sobDemanda';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { aboboraNaTela, faixaNaTela, useCacaAbobora } from './caca';
 import { EU_NO_ENSAIO, chefaoNaTela, useChefao, useChefaoDesligado } from './chefao';
@@ -40,10 +40,25 @@ const CenaCaca     = lazy(() => carregarCena().then(m => ({ default: m.CenaCaca 
 // As bruxas (14/10/2026): a cena e a faixa só baixam quando a rodada é de bruxa.
 const carregarBruxas = comNovaTentativa(() => import('./bruxas/cenaBruxas'));
 const CenaBruxas = lazy(() => carregarBruxas().then(m => ({ default: m.CenaBruxas })));
-const FaixaBruxas = lazy(() => comNovaTentativa(() => import('./bruxas/FaixaCaca'))().then(m => ({ default: m.FaixaBruxas })));
+const carregarFaixaBruxas = comNovaTentativa(() => import('./bruxas/FaixaCaca'));
+const FaixaBruxas = lazy(() => carregarFaixaBruxas().then(m => ({ default: m.FaixaBruxas })));
 
 const carregarChefao = comNovaTentativa(() => import('./cenaChefao'));
 const CenaChefao = lazy(() => carregarChefao().then(m => ({ default: m.CenaChefao })));
+
+/**
+ * Os pedaços da caça descem quando o app abre, com a tela já assentada — não
+ * na hora em que a bruxa sai (Cleber, 14/10/2026: o site caiu nas duas bruxas).
+ *
+ * Baixando na hora da rodada, todas as abas pediam o arquivo no mesmo
+ * segundo. Quem estava com a aba aberta de antes do último deploy pedia um
+ * arquivo que o deploy apagou, e a recarga por arquivo perdido
+ * (`lib/versaoNova.ts`) recarregava a página — 230 pessoas abrindo o app no
+ * mesmo minuto, 11 mil pedidos ao banco, o PostgREST sem conexão. Baixado na
+ * abertura, o pedaço é da mesma versão da aba e já está na memória quando a
+ * rodada chega: deploy depois disso não pega ninguém.
+ */
+const PEDACOS_DA_CACA = [carregarCena, carregarBruxas, carregarFaixaBruxas, carregarChefao] as const;
 
 const Laboratorio = import.meta.env.DEV ? lazy(() => import('./laboratorio')) : null;
 const comLaboratorio = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('zumbis');
@@ -89,6 +104,7 @@ export function AboboraDaCaca({ empresaId }: { empresaId: string | null | undefi
     if (naTela) setMontada(m => (m[tema] ? m : { ...m, [tema]: true }));
   }, [naTela, tema]);
   const eu = (caca.rodada?.id ?? 0) < 0 ? EU_NO_ENSAIO : auth?.user?.id ?? 'eu';
+  useEffect(() => precarregarQuandoOcioso(PEDACOS_DA_CACA, 15_000), []);
   // O laboratório fica sempre no mesmo lugar da árvore: se mudasse de lugar
   // quando o primeiro zumbi sai, remontaria e perderia o zumbi escolhido.
   return (
