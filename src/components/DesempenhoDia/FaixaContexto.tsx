@@ -38,7 +38,7 @@ export function FaixaContexto({ diretoExtra, pix, tags }: FaixaContextoProps) {
   if (!temDiretoExtra && !temPix && !temTags) return null;
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {temDiretoExtra && <BlocoDiretoExtra {...diretoExtra!} semMovimento={!!semMovimento} />}
       {temPix && <BlocoPix pix={pix!} />}
       {temTags && <BlocoTags tags={tags} semMovimento={!!semMovimento} />}
@@ -60,7 +60,7 @@ function BlocoDiretoExtra({
   const pctDireto = total > 0 ? (direto / total) * 100 : 0;
 
   return (
-    <section className="space-y-2 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5">
+    <section className="space-y-2">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         <Link2 className="mr-1 inline h-3 w-3" />
         Direto e Extra
@@ -101,7 +101,7 @@ function BlocoDiretoExtra({
 
 function BlocoPix({ pix }: { pix: ResumoPixDia }) {
   return (
-    <section className="space-y-1.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5">
+    <section className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           <Zap className="mr-1 inline h-3 w-3" />
@@ -136,7 +136,7 @@ function BlocoPix({ pix }: { pix: ResumoPixDia }) {
 
 function BlocoTags({ tags, semMovimento }: { tags: FatiaTag[]; semMovimento: boolean }) {
   return (
-    <section className="space-y-2 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5">
+    <section className="space-y-2">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         <Tag className="mr-1 inline h-3 w-3" />
         Recebido por tag

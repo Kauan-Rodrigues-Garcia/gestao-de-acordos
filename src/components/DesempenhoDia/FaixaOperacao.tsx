@@ -25,7 +25,7 @@ interface FaixaOperacaoProps {
 
 export function FaixaOperacao({ estados, formalizados, valorPago }: FaixaOperacaoProps) {
   return (
-    <section className="space-y-2.5 rounded-xl border border-border/60 bg-card/60 px-3 py-3">
+    <section className="space-y-2.5">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Minha operação
