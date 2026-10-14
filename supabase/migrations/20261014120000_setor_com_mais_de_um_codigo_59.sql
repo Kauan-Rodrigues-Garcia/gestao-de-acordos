@@ -8,39 +8,39 @@
 --
 -- O 59 continua trazendo a carteira do Play 4 com o código dela (38, pelo
 -- registro de 20260910190216), e o Play Mix Marília tem o seu (79). Até aqui um
--- setor guardava UM código (`setores.codigo_erp`), então não havia como as duas
+-- setor guardava UM código (setores.codigo_erp), então não havia como as duas
 -- carteiras caírem no mesmo setor.
 --
 -- ── O desenho ────────────────────────────────────────────────────────────────
--- `setores.codigos_erp_extras` guarda os códigos ALÉM do principal. O principal
--- continua em `codigo_erp`, com o índice único de sempre — nada que lê a coluna
+-- setores.codigos_erp_extras guarda os códigos ALÉM do principal. O principal
+-- continua em codigo_erp, com o índice único de sempre — nada que lê a coluna
 -- muda. A regra que importa continua valendo: um código pertence a UM setor só.
 -- O que muda é que um setor pode reivindicar mais de um.
 --
 -- Na aba Códigos (Painel Diretoria) o campo aceita a lista separada por
 -- vírgula: «79, 38». O primeiro é o principal.
 --
--- Mexe em quatro funções, e só nelas — são as únicas que leem `codigo_erp`
+-- Mexe em quatro funções, e só nelas — são as únicas que leem codigo_erp
 -- (conferido por busca em todas as migrations):
 --
---   • fn_setor_codigo_erp_so_super_admin — a trava vale para a coluna nova;
+--   • fn_setor_codigo_erp_so_super_admin — a trava vale para a coluna nova,
 --   • fn_mestre_grupo_herda_setor        — carteira nova acha o setor por
---                                          qualquer um dos códigos;
+--                                          qualquer um dos códigos,
 --   • fn_setor_definir_codigo_erp        — recebe a lista, solta o que saiu e
---                                          amarra o que entrou;
+--                                          amarra o que entrou,
 --   • fn_setores_codigos_erp             — a aba mostra a lista e as carteiras.
 --
--- A assinatura e o retorno das duas RPCs da tela ficam IGUAIS: `codigo_erp`
--- volta como texto («79, 38») e `carteira`/`desvinculou` juntam os nomes com
+-- A assinatura e o retorno das duas RPCs da tela ficam IGUAIS: codigo_erp
+-- volta como texto («79, 38») e carteira/desvinculou juntam os nomes com
 -- « / ». Tela antiga aberta continua funcionando com um código só.
 --
 -- ── Como o dinheiro muda de setor ────────────────────────────────────────────
--- O analítico não lê o código: lê `mestre_grupos.setor_id`, que o código
+-- O analítico não lê o código: lê mestre_grupos.setor_id, que o código
 -- preenche. Quando a carteira 38 passa a apontar para o Play Mix Marília, a
 -- próxima carga do 59 do mês (o robô sobe de hora em hora) projeta as linhas
--- dela no Play Mix Marília, e a sincronização (`fn_mestre_sincronizar_
--- analitico_aplicar`) move as linhas que estavam no Play 4 — o conflito pela
--- chave (empresa, código, data, forma, login) atualiza o `setor_id`.
+-- dela no Play Mix Marília, e a sincronização (fn_mestre_sincronizar_
+-- analitico_aplicar) move as linhas que estavam no Play 4 — o conflito pela
+-- chave (empresa, código, data, forma, login) atualiza o setor_id.
 --
 -- Mês anterior não muda: a sincronização só reescreve o mês do lote que entrou.
 --
@@ -52,8 +52,8 @@
 -- ── Como voltar atrás ────────────────────────────────────────────────────────
 -- As versões anteriores das funções estão em 20260910184908 (trava e gatilho),
 -- 20260910190808 (definir) e 20260910192814 (listar). Antes de voltar, apague
--- os extras pela aba (senão a carteira fica presa sem código que a justifique);
--- depois `ALTER TABLE public.setores DROP COLUMN codigos_erp_extras`.
+-- os extras pela aba (senão a carteira fica presa sem código que a justifique),
+-- depois remover a coluna codigos_erp_extras de setores.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 begin;
@@ -81,7 +81,7 @@ SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
   -- UPDATE que nao encosta nos codigos segue o caminho normal: renomear setor e
-  -- ativar/desativar continuam sendo de quem tem `setores_criar_editar`.
+  -- ativar/desativar continuam sendo de quem tem setores_criar_editar.
   IF NEW.codigo_erp IS NOT DISTINCT FROM OLD.codigo_erp
      AND NEW.codigos_erp_extras IS NOT DISTINCT FROM OLD.codigos_erp_extras THEN
     RETURN NEW;
@@ -111,7 +111,7 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Um codigo e de um setor so; a ordem so desempata dado incoerente, e ai
+  -- Um codigo e de um setor so, a ordem so desempata dado incoerente, e ai
   -- quem tem o codigo como principal ganha.
   SELECT s.id INTO v_setor
     FROM public.setores s
@@ -134,9 +134,9 @@ $function$;
 
 -- ═══ 4. Gravar os códigos, e resolver na hora ═══════════════════════════════
 --
--- Mesma assinatura e mesmo retorno de 20260910190808 (CREATE OR REPLACE basta).
--- `p_codigo` agora pode ser uma lista: «79, 38» (vírgula, ponto e vírgula ou
--- espaço). Repetido conta uma vez; o primeiro é o principal.
+-- Mesma assinatura e mesmo retorno de 20260910190808, entao basta substituir.
+-- p_codigo agora pode ser uma lista: «79, 38» (vírgula, ponto e vírgula ou
+-- espaço). Repetido conta uma vez, o primeiro é o principal.
 
 CREATE OR REPLACE FUNCTION public.fn_setor_definir_codigo_erp(
   p_setor_id uuid,
@@ -147,8 +147,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public', 'pg_temp'
 AS $function$
-DECLARE
-  v_empresa  uuid;
+DECLARE v_empresa uuid;
   v_codigos  text[];
   v_antigos  text[];
   v_dono     text;
@@ -198,7 +197,7 @@ BEGIN
       v_em_uso, v_dono;
   END IF;
 
-  -- O primeiro e o principal; os demais, extras.
+  -- O primeiro e o principal, os demais, extras.
   UPDATE public.setores s
      SET codigo_erp         = v_codigos[1],
          codigos_erp_extras = ARRAY(
@@ -267,8 +266,8 @@ GRANT EXECUTE ON FUNCTION public.fn_setor_definir_codigo_erp(uuid, text) TO auth
 
 -- ═══ 5. O que a aba lê ══════════════════════════════════════════════════════
 --
--- Mesmas colunas de 20260910192814. `codigo_erp` é a lista em texto; `carteira`
--- junta as que os códigos encontram; `carteira_ok` só quando TODOS encontram.
+-- Mesmas colunas de 20260910192814. codigo_erp é a lista em texto, carteira
+-- junta as que os códigos encontram, carteira_ok só quando TODOS encontram.
 
 CREATE OR REPLACE FUNCTION public.fn_setores_codigos_erp(p_empresa_id uuid)
 RETURNS TABLE (
