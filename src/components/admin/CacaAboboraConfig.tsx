@@ -16,6 +16,10 @@
  * junto. O super_admin escolhe a vida e solta; ele fica 2 min na tela. Ver
  * `CacaAbobora/chefao.ts` e a migration 20261009120000. E quem parece estar
  * atirando de autoclick (`CacaAbobora/autoclick.ts`): só aqui, só para ele.
+ *
+ * Os dois temas são separados (Cleber, 14/10/2026): com bruxas, o cartão
+ * mostra as bruxas (desenho, cores, palavras) e o chefão some — o Rei do Pop
+ * é do tema zumbi.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Bot, Crosshair, Loader2, Music2, RefreshCw, Skull, Sparkles, Zap } from 'lucide-react';
@@ -34,7 +38,8 @@ import {
   formatarTempo, lerPainelCaca, ligarCaca, mudarTemaCaca, nomeCurto, soltarAboboraAgora, useCacaAbobora,
   type PainelCaca, type RodadaAbobora, type TemaCaca,
 } from '@/components/CacaAbobora/caca';
-import { bruxaDaRodada } from '@/components/CacaAbobora/bruxas/arte';
+import { BRUXAS, bruxaDaRodada } from '@/components/CacaAbobora/bruxas/arte';
+import { SpriteBruxa } from '@/components/CacaAbobora/bruxas/SpriteBruxa';
 import { CHEFAO } from '@/components/CacaAbobora/chefaoArte';
 import {
   DIFICULDADES, ESPERA_S, PRAZO_MIN, chefaoChegando, chefaoNaTela, lerSuspeitos, soltarChefao, useChefao, vidaCom,
@@ -67,8 +72,9 @@ function LinhaRodada({ r }: { r: RodadaAbobora }) {
     <li className="flex items-center gap-3 py-2 text-xs">
       <span className="w-11 shrink-0 font-mono tabular-nums text-muted-foreground">{hora(r.solta_em)}</span>
       {bruxa ? (
-        <span className="flex w-28 shrink-0 items-center gap-1 truncate text-violet-700 dark:text-violet-300" title={bruxa.nome}>
-          <Sparkles className="h-3 w-3 shrink-0" />{bruxa.nome.replace(/^(o|a) /, '')}
+        <span className="flex w-32 shrink-0 items-center gap-1.5 text-violet-700 dark:text-violet-300" title={bruxa.nome}>
+          <SpriteBruxa bruxa={bruxa} soCabeca morta={r.situacao === 'achada' && !bruxa.fofa} className="shrink-0" />
+          <span className="truncate">{bruxa.nome.replace(/^(o|a) /, '')}</span>
         </span>
       ) : (
         <SpriteZumbi zumbi={zumbi} soCabeca morta={r.situacao === 'achada'} escala={1} titulo={zumbi.nome} className="shrink-0" />
@@ -79,7 +85,7 @@ function LinhaRodada({ r }: { r: RodadaAbobora }) {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime-500 opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-lime-500" />
           </span>
-          Na tela agora — volta para a cova às {hora(r.expira_em)} se ninguém matar
+          Na tela agora — {bruxa ? 'vai embora' : 'volta para a cova'} às {hora(r.expira_em)} se ninguém {bruxa ? 'acertar' : 'matar'}
         </span>
       )}
       {r.situacao === 'achada' && (
@@ -376,11 +382,15 @@ export default function CacaAboboraConfig() {
   const recordeHs = maisRapido(mortos.filter(r => r.headshot));
   const ultimaAntes = doDia.length === 0 ? (painel?.rodadas ?? [])[0] ?? null : null;
   // O desenho do cartão: o que está na tela, ou o último que saiu.
-  const zumbiDoCartao = naTela ? zumbiDaRodada(naTela) : doDia[0] ? zumbiDaRodada(doDia[0]) : ZUMBIS[0];
   // O tema que o cron solta. Sem a coluna (migration 20261014200000 pendente), zumbis.
   const temaNoBanco = painel?.config?.tema;
   const tema: TemaCaca = temaNoBanco ?? 'zumbis';
   const p = PALAVRAS[tema];
+  const bruxas = tema === 'bruxas';
+  // O desenho do cartão, do tema escolhido: o que está na tela, ou o último que saiu.
+  const doTema = naTela?.tema === tema ? naTela : doDia.find(r => r.tema === tema) ?? null;
+  const zumbiDoCartao = doTema ? zumbiDaRodada(doTema) : ZUMBIS[0];
+  const bruxaDoCartao = doTema ? bruxaDaRodada(doTema) : BRUXAS[0];
   const [trocandoTema, setTrocandoTema] = useState(false);
   const nomeNaTela = (r: RodadaAbobora) => (r.tema === 'bruxas' ? bruxaDaRodada(r).nome : zumbiDaRodada(r).nome);
 
@@ -442,14 +452,16 @@ export default function CacaAboboraConfig() {
   else situacao = 'Desligada. Ao ligar, vale só para hoje; amanhã é preciso ligar de novo.';
 
   return (
-    <Card className={cn('overflow-hidden', ligadaHoje ? 'border-lime-500/50' : 'border-border')}>
+    <Card className={cn('overflow-hidden', ligadaHoje ? (bruxas ? 'border-violet-500/50' : 'border-lime-500/50') : 'border-border')}>
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
-          <SpriteZumbi zumbi={zumbiDoCartao} animado={ligadaHoje || !!naTela} escala={1} className="shrink-0" titulo={zumbiDoCartao.nome} />
+          {bruxas
+            ? <SpriteBruxa bruxa={bruxaDoCartao} animado={ligadaHoje || !!naTela} className="shrink-0" titulo={bruxaDoCartao.nome} />
+            : <SpriteZumbi zumbi={zumbiDoCartao} animado={ligadaHoje || !!naTela} escala={1} className="shrink-0" titulo={zumbiDoCartao.nome} />}
           <div className="min-w-0 flex-1">
             <CardTitle className="text-sm font-semibold">{p.titulo}</CardTitle>
             <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
-              {tema === 'bruxas' ? (
+              {bruxas ? (
                 <>
                   Uma bruxa chega voando na vassoura na tela de todo mundo, a cada 30 min a 1h10 — uma
                   diferente a cada vez no dia. Quem acertar primeiro leva: cabeça é HEADSHOT, vassoura é
@@ -506,8 +518,8 @@ export default function CacaAboboraConfig() {
                 checked={ligadaHoje}
                 disabled={salvando}
                 onCheckedChange={v => { void virar(v); }}
-                aria-label={ligadaHoje ? 'Desligar a Caça aos Zumbis' : 'Ligar a Caça aos Zumbis para hoje'}
-                className="data-[state=checked]:bg-lime-600"
+                aria-label={ligadaHoje ? `Desligar a ${p.titulo}` : `Ligar a ${p.titulo} para hoje`}
+                className={bruxas ? 'data-[state=checked]:bg-violet-600' : 'data-[state=checked]:bg-lime-600'}
               />
             </div>
           )}
@@ -527,10 +539,12 @@ export default function CacaAboboraConfig() {
           <>
             <div className={cn(
               'rounded-lg px-3 py-2.5 text-xs',
-              ligadaHoje || naTela ? 'bg-lime-500/10 text-foreground' : 'bg-muted/60 text-muted-foreground',
+              ligadaHoje || naTela
+                ? (bruxas ? 'bg-violet-500/10 text-foreground' : 'bg-lime-500/10 text-foreground')
+                : 'bg-muted/60 text-muted-foreground',
             )}>
               {ligadaHoje && (
-                <p className="mb-0.5 font-semibold text-lime-700 dark:text-lime-400">
+                <p className={cn('mb-0.5 font-semibold', bruxas ? 'text-violet-700 dark:text-violet-300' : 'text-lime-700 dark:text-lime-400')}>
                   Ligada hoje, {diaCurto(hoje)}, até 23h59
                   {painel.config?.ligada_por_nome ? ` · por ${painel.config.ligada_por_nome} às ${hora(painel.config.ligada_em)}` : ''}
                 </p>
@@ -541,12 +555,12 @@ export default function CacaAboboraConfig() {
             <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
               <div className="rounded-lg border border-border px-2 py-2">
                 <p className="text-lg font-bold tabular-nums">{doDia.length}</p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">soltos hoje</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{bruxas ? 'soltas hoje' : 'soltos hoje'}</p>
               </div>
               <div className="rounded-lg border border-border px-2 py-2">
                 <p className="text-lg font-bold tabular-nums">{mortos.length}</p>
                 <p className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  <Skull className="h-2.5 w-2.5" /> mortos
+                  {bruxas ? <><Sparkles className="h-2.5 w-2.5" /> derrubadas</> : <><Skull className="h-2.5 w-2.5" /> mortos</>}
                 </p>
               </div>
               <Recorde titulo="mais rápido" r={recorde} icone={<Zap className="h-2.5 w-2.5 shrink-0" />} />
@@ -559,10 +573,10 @@ export default function CacaAboboraConfig() {
                 <p className="py-2 text-xs text-muted-foreground">
                   Nenhuma rodada hoje ainda.
                   {ultimaAntes && (
-                    <> O último foi em {diaCurto(ultimaAntes.dia)} às {hora(ultimaAntes.solta_em)}
+                    <> A última rodada foi em {diaCurto(ultimaAntes.dia)} às {hora(ultimaAntes.solta_em)}
                       {ultimaAntes.situacao === 'achada'
-                        ? ` — ${ultimaAntes.achada_por_nome} matou em ${formatarTempo(ultimaAntes.ms)}${ultimaAntes.headshot ? ', com headshot' : ''}.`
-                        : ' — ninguém matou.'}
+                        ? ` — ${ultimaAntes.achada_por_nome} ${ultimaAntes.tema === 'bruxas' ? 'derrubou' : 'matou'} em ${formatarTempo(ultimaAntes.ms)}${ultimaAntes.headshot ? ', com headshot' : ''}.`
+                        : ` — ninguém ${ultimaAntes.tema === 'bruxas' ? 'acertou' : 'matou'}.`}
                     </>
                   )}
                 </p>
@@ -580,11 +594,12 @@ export default function CacaAboboraConfig() {
                 disabled={!!naTela || soltando}
                 onClick={() => setConfirmandoSoltar(true)}
               >
-                <Skull className="h-3.5 w-3.5" /> Soltar {p.um} agora
+                {bruxas ? <Sparkles className="h-3.5 w-3.5" /> : <Skull className="h-3.5 w-3.5" />} Soltar {p.um} agora
               </Button>
             </div>
 
-            <SecaoChefao />
+            {/* O Rei do Pop é do tema zumbi: com bruxas, nada de chefão. */}
+            {!bruxas && <SecaoChefao />}
           </>
         )}
       </CardContent>
@@ -594,7 +609,7 @@ export default function CacaAboboraConfig() {
           <AlertDialogHeader>
             <AlertDialogTitle>Soltar {p.um} agora?</AlertDialogTitle>
             <AlertDialogDescription>
-              {tema === 'bruxas' ? 'Ela chega voando agora' : 'Ele sobe agora'} na tela de todo mundo que está logado, nas
+              {bruxas ? 'Ela chega voando agora' : 'Ele sobe agora'} na tela de todo mundo que está logado, nas
               duas empresas, e vale como qualquer rodada: quem acertar primeiro passa na faixa.
               {ligadaHoje ? ' O próximo do sorteio é remarcado para depois deste.' : ''}
             </AlertDialogDescription>

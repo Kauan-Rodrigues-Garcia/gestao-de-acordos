@@ -13,7 +13,7 @@ import '../caca.css';
 import './bruxas.css';
 import './laboratorio.css';
 import { BRUXAS, VOO, MS_POR_QUADRO } from './arte';
-import { EU, PalcoBruxas, type EventoPalco } from './palco';
+import { ESCALA_BRUXAS, EU, PalcoBruxas, type EventoPalco } from './palco';
 import { montarFaixa, type DadosFaixa } from './faixa';
 import { quadrosDa } from './pixels';
 import { VELOCIDADES, type Dificuldade } from './voo';
@@ -189,7 +189,7 @@ function aoEvento(e: EventoPalco): void {
   mostrarPlacar();
 }
 
-const palco = new PalcoBruxas(raiz.querySelector<HTMLDivElement>('.lb-palco')!, { escala: 2, aoEvento });
+const palco = new PalcoBruxas(raiz.querySelector<HTMLDivElement>('.lb-palco')!, { escala: ESCALA_BRUXAS, aoEvento });
 
 function mostrarPlacar(): void {
   const t = placar.tempos;

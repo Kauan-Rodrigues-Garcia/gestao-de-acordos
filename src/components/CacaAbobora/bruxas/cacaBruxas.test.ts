@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { BRUXAS_FOFAS, juntarRodada, normalizarRodada, type RodadaAbobora } from '../caca';
 import { BRUXAS } from './arte';
+import { DESMAIADO_S } from './palco';
 import { dadosDaRodada } from './rodada';
 
 const BRUTA = {
@@ -98,6 +99,20 @@ describe('migration da Caça às Bruxas', () => {
     expect(f).toContain('finalizada_por is not null');
     expect(f).toContain("situacao <> 'achada'");
     expect(f).toContain('dobrado = (auth.uid() = v_rodada.achada_por)');
+  });
+
+  it('desmaio de cada tela: 150 s para finalizar, e quem derrubou ainda leva o 2x depois de outro', () => {
+    const SQL2 = fs.readFileSync(
+      path.resolve(__dirname, '../../../../supabase/migrations/20261014210000_caca_bruxas_desmaio_individual.sql'), 'utf8',
+    ).toLowerCase().replace(/\s+/g, ' ');
+    const f = SQL2.slice(SQL2.indexOf('create or replace function public.fn_abobora_finalizar('));
+    expect(f).toContain('for update');
+    expect(f).toContain("interval '150 seconds'");
+    expect(f).toContain('or v_rodada.dobrado');
+    expect(f).toContain('(v_rodada.finalizada_por is not null and auth.uid() is distinct from v_rodada.achada_por)');
+    expect(f).toContain('dobrado = (auth.uid() = v_rodada.achada_por)');
+    // O banco espera mais que o corpo fica no chão.
+    expect(150).toBeGreaterThan(DESMAIADO_S + 10);
   });
 
   it('o tiro continua travando a linha e grava onde pegou', () => {

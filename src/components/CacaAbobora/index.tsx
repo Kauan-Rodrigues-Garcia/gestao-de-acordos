@@ -33,7 +33,7 @@ export { BotaoChefao } from './BotaoChefao';
 const carregarCena = comNovaTentativa(() => import('./cena'));
 
 /** Altura da faixa, em px — a mesma do `.zb-faixa` e do `.bx-faixa` no CSS. */
-const ALTURA_FAIXA = { zumbis: 32, bruxas: 52 } as const;
+const ALTURA_FAIXA = { zumbis: 32, bruxas: 40 } as const;
 const FaixaAbobora = lazy(() => carregarCena().then(m => ({ default: m.FaixaAbobora })));
 const CenaCaca     = lazy(() => carregarCena().then(m => ({ default: m.CenaCaca })));
 

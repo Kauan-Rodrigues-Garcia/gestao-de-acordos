@@ -47,8 +47,17 @@ const MAX_PARTICULAS = 420;
 /** Quanto o corpo fica no chão antes de apagar, e quanto leva apagando (s). */
 export const CORPO_S = 9;
 const CORPO_APAGA_S = 1.2;
+/**
+ * O fofo desmaiado é de cada tela (Cleber, 14/10/2026): fica no chão até 2 min
+ * esperando o clique de quem está olhando. Quem clicar finaliza só na própria
+ * tela, e o corpo some 20 s depois. O clique de outra pessoa não mexe aqui.
+ */
+export const DESMAIADO_S = 120;
+export const FINALIZADO_S = 20;
 /** A mancha: inteira até o corpo apagar, depois mais clara até `MANCHA_S`, e então some. */
 export const MANCHA_S = 40;
+/** O mesmo, contado do fim do corpo (que no fofo não é `CORPO_S`). */
+const MANCHA_DEPOIS_S = MANCHA_S - CORPO_S;
 const MANCHA_APAGA_S = 8;
 const MANCHA_CLARA = 0.45;
 
@@ -69,8 +78,14 @@ export type EventoPalco =
   | { tipo: 'fugiu'; bruxa: Bruxa }
   | { tipo: 'soltou'; bruxa: Bruxa };
 
+/**
+ * A escala da caça e do laboratório. Era 2; ficou grande demais (Cleber).
+ * Com 1,5 a tela de densidade 2 continua nítida (3 px por pixel da arte).
+ */
+export const ESCALA_BRUXAS = 1.5;
+
 export interface OpcoesPalco {
-  /** Quantos px da tela por pixel da arte (inteiro). */
+  /** Quantos px da tela por pixel da arte. */
   escala?: number;
   dificuldade?: Dificuldade;
   /** Quantos px da arte o chão fica acima da borda de baixo (o corpo deitado tem de caber). */
@@ -105,6 +120,8 @@ interface QuedaViva {
   chao: HTMLCanvasElement;
   cChao: CanvasRenderingContext2D;
   t: number;
+  /** Quando o corpo começa a apagar (s): `CORPO_S`, ou mais no fofo desmaiado. */
+  fim: number;
   ids: Set<number>;
   /** O que já está pintado: o raio de cada poça, se chegou mancha no último quadro, e a transparência. */
   raios: number[];
@@ -403,7 +420,7 @@ export class PalcoBruxas {
     chao.width = this.larg;
     chao.height = this.alt;
     const cChao = chao.getContext('2d')!;
-    this.quedas.push({ q, dona, caixa: null, chao, cChao, t: 0, ids: new Set(), raios: [], sujou: false, alfa: NaN });
+    this.quedas.push({ q, dona, caixa: null, chao, cChao, t: 0, fim: q.fofa && dona ? DESMAIADO_S : CORPO_S, ids: new Set(), raios: [], sujou: false, alfa: NaN });
     this.chaoMudou = true;
     this.pedirQuadro();
   }
@@ -412,7 +429,7 @@ export class PalcoBruxas {
 
   /** Desacordado no chão e ainda à vista (o corpo não começou a apagar). */
   private finalizavel(qv: QuedaViva): boolean {
-    return qv.t < CORPO_S && caixaDoCorpo(qv.q) !== null;
+    return qv.t < qv.fim && caixaDoCorpo(qv.q) !== null;
   }
 
   /** Põe, tira e acompanha a caixa de clique de quem está desacordado no chão. */
@@ -445,6 +462,8 @@ export class PalcoBruxas {
 
   private finalizarQueda(qv: QuedaViva, quem: string, x: number, y: number): void {
     if (!this.finalizavel(qv) || !finalizar(qv.q, x, y)) return;
+    qv.fim = qv.t + FINALIZADO_S;
+    this.chaoMudou = true;
     qv.caixa?.remove();
     qv.caixa = null;
     somTiro();
@@ -652,9 +671,9 @@ export class PalcoBruxas {
       if (!qv.q.quieta) mexe = true;
       if (this.apagando(qv)) mexe = true;
       // Desacordada: as estrelinhas rodam enquanto o corpo está no chão.
-      if (qv.q.tonta && qv.t < CORPO_S + CORPO_APAGA_S) mexe = true;
+      if (qv.q.tonta && qv.t < qv.fim + CORPO_APAGA_S) mexe = true;
     }
-    const acabou = this.quedas.filter(qv => qv.t > MANCHA_S + MANCHA_APAGA_S);
+    const acabou = this.quedas.filter(qv => qv.t > qv.fim + MANCHA_DEPOIS_S + MANCHA_APAGA_S);
     if (acabou.length) {
       for (const qv of acabou) { esquecer(qv.ids); qv.caixa?.remove(); }
       this.quedas = this.quedas.filter(qv => !acabou.includes(qv));
@@ -665,14 +684,15 @@ export class PalcoBruxas {
   }
 
   private apagando(qv: QuedaViva): boolean {
-    return (qv.t > CORPO_S && qv.t < CORPO_S + CORPO_APAGA_S) || (qv.t > MANCHA_S && qv.t < MANCHA_S + MANCHA_APAGA_S + 0.1);
+    const mancha = qv.fim + MANCHA_DEPOIS_S;
+    return (qv.t > qv.fim && qv.t < qv.fim + CORPO_APAGA_S) || (qv.t > mancha && qv.t < mancha + MANCHA_APAGA_S + 0.1);
   }
 
   /** Em quantos segundos algo muda sozinho (a próxima etapa de apagar). */
   private proximaMudanca(): number | null {
     let prox: number | null = null;
     for (const qv of this.quedas) {
-      for (const marco of [CORPO_S, MANCHA_S]) {
+      for (const marco of [qv.fim, qv.fim + MANCHA_DEPOIS_S]) {
         if (qv.t < marco) { prox = prox === null ? marco - qv.t : Math.min(prox, marco - qv.t); break; }
       }
     }
@@ -690,7 +710,7 @@ export class PalcoBruxas {
     this.chaoMudou = false;
     for (const qv of this.quedas) {
       if (pintarChaoNovo(qv)) mudou = true;
-      const a = alfaMancha(qv.t);
+      const a = alfaMancha(qv.t, qv.fim);
       if (a !== qv.alfa) { qv.alfa = a; mudou = true; }
     }
     if (mudou) {
@@ -708,7 +728,7 @@ export class PalcoBruxas {
     // O rastro fica atrás de quem voa.
     for (const p of this.particulas) desenharParticula(c, p, agora);
     for (const qv of this.quedas) {
-      const a = alfaCorpo(qv.t);
+      const a = alfaCorpo(qv.t, qv.fim);
       if (a <= 0) continue;
       c.globalAlpha = a;
       desenharQueda(c, qv);
@@ -736,16 +756,17 @@ function vizinho(partes: Uint8Array, x: number, y: number): number {
   return 0;
 }
 
-function alfaCorpo(t: number): number {
-  if (t < CORPO_S) return 1;
-  return Math.max(0, 1 - (t - CORPO_S) / CORPO_APAGA_S);
+function alfaCorpo(t: number, fim: number): number {
+  if (t < fim) return 1;
+  return Math.max(0, 1 - (t - fim) / CORPO_APAGA_S);
 }
 
-function alfaMancha(t: number): number {
-  if (t < CORPO_S) return 1;
-  if (t < CORPO_S + CORPO_APAGA_S) return 1 - (1 - MANCHA_CLARA) * ((t - CORPO_S) / CORPO_APAGA_S);
-  if (t < MANCHA_S) return MANCHA_CLARA;
-  return Math.max(0, MANCHA_CLARA * (1 - (t - MANCHA_S) / MANCHA_APAGA_S));
+function alfaMancha(t: number, fim: number): number {
+  const mancha = fim + MANCHA_DEPOIS_S;
+  if (t < fim) return 1;
+  if (t < fim + CORPO_APAGA_S) return 1 - (1 - MANCHA_CLARA) * ((t - fim) / CORPO_APAGA_S);
+  if (t < mancha) return MANCHA_CLARA;
+  return Math.max(0, MANCHA_CLARA * (1 - (t - mancha) / MANCHA_APAGA_S));
 }
 
 /** As manchas novas e as poças (que só crescem) no canvas do chão da queda. */

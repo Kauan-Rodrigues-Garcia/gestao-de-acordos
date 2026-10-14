@@ -4,13 +4,15 @@
  * O mesmo letreiro da caça dos zumbis (o recado corre sem parar, em dois
  * grupos iguais para o laço não ter emenda), decorado de Halloween: as
  * bandeirinhas no alto, estrelinhas piscando, o rosto da bruxa (de olho
- * apagado, se ela morreu), a foto ou as iniciais de quem acertou numa moldura
+ * apagado, se ela morreu), a foto de quem acertou (se tiver) numa moldura
  * dourada e o nome entre brilhinhos. Nos fofos a faixa é rosa, com coração:
  * ninguém morreu, a bruxinha só desmaiou.
  *
  * ## Mais destaque e o «2x» (14/10/2026)
  *
- * A faixa cresceu (52 px) e a foto de quem acertou também (36 px, era 22), numa
+ * A faixa tem 40 px (era 52 em 14/10, achada grande demais) e a foto de quem
+ * acertou 26 px. Só aparece com foto: sem foto (ou foto quebrada) não há
+ * quadrado nenhum, nem com iniciais (Cleber, 14/10/2026). A foto fica numa
  * moldura que pisca: é a foto que a operação procura. O fofo desacordado pode
  * levar um segundo tiro no chão e morrer (`finalizar` em `queda.ts`); se quem
  * finalizou é quem derrubou, a faixa ganha o selo «2x · derrubou e finalizou»
@@ -20,8 +22,8 @@
  * texto (`fraseDaFaixa`, `etiquetasDaFaixa`) é pura e testada.
  */
 import './faixa.css';
-import { montarQuadro, type Bruxa } from './arte';
-import { canvasDaImagem } from './pixels';
+import type { Bruxa } from './arte';
+import { cabecaDaBruxa } from './pixels';
 import type { Morte } from './queda';
 
 export interface DadosFaixa {
@@ -139,18 +141,17 @@ function icone(nome: keyof typeof ICONES, tam = 2, classe = ''): SVGSVGElement {
 
 // ── O rosto da bruxa ───────────────────────────────────────────────────────
 
-const cacheRosto = new Map<string, HTMLCanvasElement>();
-const cacheUrlRosto = new Map<string, string>();
-
 /** A cabeça com o chapéu, recortada: o ícone da faixa. Morta: olho apagado. */
 export function rostoDaBruxa(b: Bruxa, morta: boolean): HTMLCanvasElement {
-  const c = canvasDoRosto(b, morta);
+  const c = cabecaDaBruxa(b, morta);
   const copia = document.createElement('canvas');
   copia.width = c.width; copia.height = c.height;
   copia.getContext('2d')?.drawImage(c, 0, 0);
   copia.className = 'bx-faixa-rosto';
   return copia;
 }
+
+const cacheUrlRosto = new Map<string, string>();
 
 /**
  * O mesmo rosto como `<img>` (PC fraco, 14/10/2026): a faixa repete o recado
@@ -159,7 +160,7 @@ export function rostoDaBruxa(b: Bruxa, morta: boolean): HTMLCanvasElement {
  */
 function imgDoRosto(b: Bruxa, morta: boolean): HTMLImageElement {
   const chave = `${b.id}:${morta}`;
-  const c = canvasDoRosto(b, morta);
+  const c = cabecaDaBruxa(b, morta);
   let url = cacheUrlRosto.get(chave);
   if (!url) { url = c.toDataURL(); cacheUrlRosto.set(chave, url); }
   const img = el('img', 'bx-faixa-rosto');
@@ -170,26 +171,6 @@ function imgDoRosto(b: Bruxa, morta: boolean): HTMLImageElement {
   img.decoding = 'sync';
   img.src = url;
   return img;
-}
-
-function canvasDoRosto(b: Bruxa, morta: boolean): HTMLCanvasElement {
-  const chave = `${b.id}:${morta}`;
-  let c = cacheRosto.get(chave);
-  if (!c) {
-    const img = montarQuadro(b, 0, { quais: p => p === 'cabeca' || p === 'chapeu', morta });
-    let x0 = img.largura, y0 = img.altura, x1 = -1, y1 = -1;
-    img.cores.forEach((cor, i) => {
-      if (!cor) return;
-      const x = i % img.largura, y = Math.floor(i / img.largura);
-      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
-    });
-    const w = x1 - x0 + 1, h = y1 - y0 + 1;
-    const recorte = { largura: w, altura: h, cores: new Array<string | null>(w * h).fill(null), partes: new Uint8Array(w * h) };
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) recorte.cores[j * w + i] = img.cores[(y0 + j) * img.largura + x0 + i];
-    c = canvasDaImagem(recorte, false);
-    cacheRosto.set(chave, c);
-  }
-  return c;
 }
 
 // ── A faixa ────────────────────────────────────────────────────────────────
@@ -217,18 +198,17 @@ function umRecado(d: DadosFaixa): HTMLSpanElement {
   r.appendChild(icone(fofo ? 'coracao' : 'abobora', 2, 'bx-faixa-separa'));
   r.appendChild(imgDoRosto(d.bruxa, !fofo));
 
-  const moldura = el('span', 'bx-faixa-moldura');
+  // Quadrado só com foto. Foto que não carrega leva o quadrado junto.
   if (d.foto) {
+    const moldura = el('span', 'bx-faixa-moldura');
     const img = el('img', 'bx-faixa-foto');
     img.src = d.foto;
     img.alt = '';
     img.loading = 'eager';
-    img.addEventListener('error', () => { moldura.textContent = iniciais(d.nome); });
+    img.addEventListener('error', () => moldura.remove());
     moldura.appendChild(img);
-  } else {
-    moldura.textContent = iniciais(d.nome);
+    r.appendChild(moldura);
   }
-  r.appendChild(moldura);
 
   const nome = el('span', 'bx-faixa-nome');
   nome.appendChild(icone('brilho', 1, 'bx-faixa-brilho'));
@@ -276,7 +256,7 @@ export function montarFaixa(d: DadosFaixa): { el: HTMLDivElement; ajustar: () =>
     const r = modelo.cloneNode(true) as HTMLElement;
     const foto = r.querySelector<HTMLImageElement>('.bx-faixa-foto');
     const moldura = foto?.parentElement;
-    if (foto && moldura) foto.addEventListener('error', () => { moldura.textContent = iniciais(d.nome); });
+    if (foto && moldura) foto.addEventListener('error', () => moldura.remove());
     return r;
   };
   const ajustar = () => {

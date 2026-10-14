@@ -15,9 +15,11 @@
  *                      chegou primeiro, o banco diz.
  *   o tiro de outro    a rodada chega «achada»: quem não atirou vê ela cair do
  *                      jeito do vencedor (`rodada.tiro`).
- *   fofo no chão       desmaiado; quem clicar finaliza (`finalizarBruxa`). Se
- *                      outra pessoa finalizar, a rodada chega com
- *                      `finalizada_por` e ele morre aqui também.
+ *   fofo no chão       desmaiado, e de cada tela (Cleber, 14/10/2026): fica
+ *                      até 2 min esperando; quem clicar finaliza só na
+ *                      própria tela (`finalizarBruxa` registra) e o corpo
+ *                      some 20 s depois. O clique de outra pessoa não mexe
+ *                      aqui (`DESMAIADO_S` e `FINALIZADO_S` em `palco.ts`).
  *   ninguém acertou    a rodada «sumiu»: ela vai embora rindo.
  *
  * O «2x» (quem derrubou também finalizou) é o banco que decide
@@ -30,7 +32,7 @@ import { finalizarBruxa, nomeCurto, pegarAbobora, type RodadaAbobora } from '../
 import '../caca.css';
 import './bruxas.css';
 import { bruxaDaRodada, BRUXAS } from './arte';
-import { PalcoBruxas, type EventoPalco } from './palco';
+import { ESCALA_BRUXAS, PalcoBruxas, type EventoPalco } from './palco';
 import type { Morte } from './queda';
 
 /** O tiro do vencedor, para quem não atirou ver igual (rodada de antes de `tiro`: cabeça ou corpo). */
@@ -43,7 +45,7 @@ function tiroDaRodada(r: RodadaAbobora): Morte {
  * da janela (`bottom: 0` no CSS).
  *
  * O alto é medido UMA vez. A faixa, quando abre (no tiro), empurra o conteúdo
- * 52 px para baixo; se a caixa acompanhasse, o chão — que a queda guardou na
+ * 40 px para baixo; se a caixa acompanhasse, o chão — que a queda guardou na
  * hora do tiro — ficaria abaixo da borda, e o corpo caído (e o clique para
  * finalizar) sumiria. Com o pé preso na janela, o chão não sai do lugar. Só a
  * largura acompanha o conteúdo (o menu lateral abrindo e fechando).
@@ -93,7 +95,7 @@ export function CenaBruxas({ rodada, naTela, eu }: {
     carregarFontesPixel();
     const host = criarHospedeiro();
     const aoEvento = (e: EventoPalco) => { void tratar(e); };
-    const palco = new PalcoBruxas(host.el, { escala: 2, eu, aoEvento });
+    const palco = new PalcoBruxas(host.el, { escala: ESCALA_BRUXAS, eu, aoEvento });
     palcoRef.current = palco;
 
     async function tratar(e: EventoPalco): Promise<void> {
@@ -155,11 +157,6 @@ export function CenaBruxas({ rodada, naTela, eu }: {
       if (!v.caiu && palco.temViva) {
         v.caiu = true;
         palco.matarPorOutro(tiroDaRodada(rodada), rodada.achada_por ?? 'outro');
-      }
-      // Outra pessoa finalizou o fofo: ele morre aqui também.
-      if (rodada.finalizada_por && !v.finalizou) {
-        v.finalizou = true;
-        palco.finalizarPorOutro(rodada.finalizada_por, v.bruxa);
       }
     } else if ((rodada.situacao === 'sumiu' || !naTela) && !v.foi && !v.caiu) {
       v.foi = true;

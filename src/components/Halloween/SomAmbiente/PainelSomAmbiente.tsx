@@ -18,7 +18,7 @@
  *
  * Baixa sob demanda (ver `BotaoSomAmbiente`).
  */
-import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
@@ -101,6 +101,11 @@ export function PainelSomAmbiente() {
    * com 200–300 px, e o painel cortava embaixo — o volume sumia sem jeito de
    * alcançar (14/10/2026). Quando nem o «Tocando agora» cabe, o painel INTEIRO
    * rola (`data-som-rolagem`, que o motor usa para recortar o player externo).
+   *
+   * Uma rolagem só (Cleber, 14/10/2026: eram duas, a do meio e a da lista): o
+   * meio não rola, quem encolhe e rola é a lista de músicas. Os resultados da
+   * busca do YouTube entram nessa mesma lista. O painel inteiro só rola quando
+   * nem a lista no mínimo cabe (zoom alto).
    */
   return (
     <div
@@ -218,21 +223,21 @@ export function PainelSomAmbiente() {
         </div>
       )}
 
-      {/* `min-h` para a lista não encolher até sumir em tela baixa: ali quem
-          rola é o painel inteiro. */}
-      <div className="min-h-[132px] flex-1 overflow-y-auto px-3 py-3">
-        <SeletorFaixas
-          escolhida={escolhida}
-          fila={fila}
-          noAr={tocando ? noAr : null}
-          playlists={completo ? prefs.playlists : null}
-        />
-      </div>
+      {/* O meio não rola: a lista dentro dele é que encolhe e rola. */}
+      <SeletorFaixas
+        escolhida={escolhida}
+        fila={fila}
+        noAr={tocando ? noAr : null}
+        playlists={completo ? prefs.playlists : null}
+      />
 
-      <label className="flex shrink-0 cursor-pointer items-center justify-between gap-3 border-t border-border px-4 py-3">
+      <label
+        className="flex shrink-0 cursor-pointer items-center justify-between gap-3 border-t border-border px-4 py-2.5"
+        title="Começa sozinho, com a última música e volume escolhidos"
+      >
         <span className="min-w-0">
-          <span className="block text-sm font-medium">Tocar ao entrar no sistema</span>
-          <span className="block text-xs text-muted-foreground">Começa sozinho, com a última música e volume escolhidos</span>
+          <span className="block text-[13px] font-medium leading-tight">Tocar ao entrar no sistema</span>
+          <span className="block truncate text-[11px] text-muted-foreground">Com a última música e volume escolhidos</span>
         </span>
         <Switch checked={prefs.tocarAoEntrar} onCheckedChange={definirTocarAoEntrar} aria-label="Tocar ao entrar no sistema" />
       </label>
@@ -302,9 +307,24 @@ export const LINHAS_VISIVEIS = 5;
 /**
  * Altura da lista com `LINHAS_VISIVEIS` linhas: cada `LinhaFaixa` tem 52 px
  * (capa de 40 px + respiro) e 2 px entre elas (`space-y-0.5`). Meia linha a
- * mais aparece cortada embaixo, para ficar claro que há mais para rolar.
+ * mais aparece cortada embaixo, para ficar claro que há mais para rolar. Tela
+ * baixa: encolhe até duas linhas e meia, nunca some.
  */
-const ALTURA_LISTA = 'max-h-[294px]';
+const ALTURA_LISTA = 'max-h-[294px] min-h-[134px]';
+
+/**
+ * O mínimo do meio (abas, buscas e a lista no mínimo), em px. O meio encolhe
+ * até aqui; abaixo disso quem rola é o painel inteiro. Em CSS puro não sai: a
+ * coluna flex mede o mínimo pelo conteúdo inteiro da lista, não pelo
+ * `min-h` dela. Arredondado para cima — sobrar é melhor que a lista invadir
+ * o rodapé.
+ */
+function minimoDoMeio(temBusca: boolean, youtube: boolean, fila: number): number {
+  const base = 12 + 36 + 8 + 134 + 8; // respiro, abas, respiro, lista, respiro
+  const busca = temBusca ? 40 : 0;
+  const yt = youtube ? 40 + 24 + (fila > 0 ? 40 : 0) : 0; // campo, aviso, «Na fila»
+  return base + busca + yt;
+}
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
@@ -398,9 +418,43 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
     : todos;
   const temBusca = todos.length > LINHAS_VISIVEIS;
 
+  // A única caixa que rola. Na aba do YouTube, os resultados da busca vêm
+  // dentro dela, em cima da lista guardada.
+  const caixaDaLista = (topo?: ReactNode) => (
+    <div
+      ref={lista}
+      role="tabpanel"
+      className={cn('som-lista mt-2 space-y-0.5 overflow-y-auto overscroll-contain', ALTURA_LISTA)}
+    >
+      {topo}
+      {topo && listas[aba].length > 0 && (
+        <p className="px-1 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sua lista</p>
+      )}
+      {filtrados.map(x => (
+        <LinhaFaixa
+          key={x.id}
+          id={x.id}
+          info={x.info}
+          escolhida={escolhida === x.id}
+          tocando={noAr === x.id}
+          onRemover={x.onRemover}
+        />
+      ))}
+      {filtrados.length === 0 && (
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          {termo ? <>Nada com «{busca.trim()}».</> : 'Sua lista está vazia. Busque uma música acima.'}
+        </p>
+      )}
+    </div>
+  );
+  const naAbaYoutube = aba === 'playlists' && !!playlists;
+
   return (
-    <div>
-      <div role="tablist" aria-label="Tipo de som" className="flex gap-1 rounded-lg bg-muted p-1">
+    <div
+      className="flex min-h-0 flex-col px-3 pb-2 pt-3"
+      style={{ minHeight: minimoDoMeio(temBusca, naAbaYoutube, fila.length) }}
+    >
+      <div role="tablist" aria-label="Tipo de som" className="flex shrink-0 gap-1 rounded-lg bg-muted p-1">
         {abas.map(a => {
           const ativa = a.id === aba;
           const temEscolhida = abaDaFaixa(escolhida) === a.id;
@@ -428,10 +482,12 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
         })}
       </div>
 
-      {aba === 'playlists' && playlists && <BuscaYoutube playlists={playlists} escolhida={escolhida} fila={fila} />}
+      {naAbaYoutube && (
+        <BuscaYoutube playlists={playlists} escolhida={escolhida} fila={fila} lista={caixaDaLista} />
+      )}
 
       {temBusca && (
-        <div className="relative mt-2">
+        <div className="relative mt-2 shrink-0">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={busca}
@@ -454,27 +510,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
         </div>
       )}
 
-      <div
-        ref={lista}
-        role="tabpanel"
-        className={cn('som-lista mt-2 space-y-0.5 overflow-y-auto overscroll-contain', ALTURA_LISTA)}
-      >
-        {filtrados.map(x => (
-          <LinhaFaixa
-            key={x.id}
-            id={x.id}
-            info={x.info}
-            escolhida={escolhida === x.id}
-            tocando={noAr === x.id}
-            onRemover={x.onRemover}
-          />
-        ))}
-        {filtrados.length === 0 && (
-          <p className="py-4 text-center text-xs text-muted-foreground">
-            {termo ? <>Nada com «{busca.trim()}».</> : 'Sua lista está vazia. Busque uma música acima.'}
-          </p>
-        )}
-      </div>
+      {!naAbaYoutube && caixaDaLista()}
     </div>
   );
 }
@@ -545,7 +581,16 @@ function LinhaFaixa({ id, info, escolhida, tocando, onRemover }: PropsFaixa & { 
  * 1% da cota do dia de todo mundo — ver `youtube.ts`). Clicar num resultado
  * guarda a música na lista da pessoa e toca.
  */
-function BuscaYoutube({ playlists, escolhida, fila }: { playlists: PlaylistSalva[]; escolhida: string; fila: string[] }) {
+/**
+ * `lista`: monta a caixa que rola (a do `SeletorFaixas`) com os resultados em
+ * cima — a busca não tem rolagem própria.
+ */
+function BuscaYoutube({ playlists, escolhida, fila, lista }: {
+  playlists: PlaylistSalva[];
+  escolhida: string;
+  fila: string[];
+  lista: (topo?: ReactNode) => ReactNode;
+}) {
   const [texto, setTexto] = useState('');
   const [resultados, setResultados] = useState<ResultadoYoutube[] | null>(null);
   const [buscando, setBuscando] = useState(false);
@@ -616,54 +661,56 @@ function BuscaYoutube({ playlists, escolhida, fila }: { playlists: PlaylistSalva
   };
 
   return (
-    <div className="mt-2">
-      <form onSubmit={buscarAgora} className="flex gap-1.5">
-        <div className="relative flex-1">
-          <Youtube className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={texto}
-            onChange={e => { setTexto(e.target.value); if (!e.target.value) limpar(); }}
-            placeholder="Buscar música ou artista no YouTube"
-            aria-label="Buscar música no YouTube"
-            className="h-8 pl-8 text-xs"
-            maxLength={100}
-            disabled={!configurada}
-          />
-        </div>
-        <Button
-          type="submit"
-          size="sm"
-          className="h-8 shrink-0 gap-1 px-2.5"
-          disabled={!configurada || buscando || texto.trim().length < 2}
-        >
-          {buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Buscar
-        </Button>
-      </form>
+    <>
+      <div className="mt-2 shrink-0">
+        <form onSubmit={buscarAgora} className="flex gap-1.5">
+          <div className="relative flex-1">
+            <Youtube className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={texto}
+              onChange={e => { setTexto(e.target.value); if (!e.target.value) limpar(); }}
+              placeholder="Buscar música ou artista no YouTube"
+              aria-label="Buscar música no YouTube"
+              className="h-8 pl-8 text-xs"
+              maxLength={100}
+              disabled={!configurada}
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            className="h-8 shrink-0 gap-1 px-2.5"
+            disabled={!configurada || buscando || texto.trim().length < 2}
+          >
+            {buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Buscar
+          </Button>
+        </form>
 
-      {!configurada && (
-        <p className="mt-1.5 text-xs text-muted-foreground" role="status">
-          A busca do YouTube ainda não foi configurada neste ambiente (falta a chave da API).
-        </p>
-      )}
-      {aviso && <p className="mt-1.5 text-xs text-destructive" role="alert">{aviso}</p>}
+        {!configurada && (
+          <p className="mt-1.5 text-xs text-muted-foreground" role="status">
+            A busca do YouTube ainda não foi configurada neste ambiente (falta a chave da API).
+          </p>
+        )}
+        {aviso && <p className="mt-1.5 text-xs text-destructive" role="alert">{aviso}</p>}
 
-      {fila.length > 0 && (
-        <div className="mt-2 flex items-center justify-between rounded-lg bg-muted/70 px-2.5 py-1.5 text-xs">
-          <span className="flex items-center gap-1.5">
-            <ListEnd className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>
-              Na fila: <span className="font-medium tabular-nums">{fila.length}</span>{' '}
-              {fila.length === 1 ? 'música' : 'músicas'}
+        {fila.length > 0 && (
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-muted/70 px-2.5 py-1.5 text-xs">
+            <span className="flex items-center gap-1.5">
+              <ListEnd className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>
+                Na fila: <span className="font-medium tabular-nums">{fila.length}</span>{' '}
+                {fila.length === 1 ? 'música' : 'músicas'}
+              </span>
             </span>
-          </span>
-          <button type="button" onClick={limparFila} className="text-muted-foreground hover:text-foreground">
-            Limpar fila
-          </button>
-        </div>
-      )}
+            <button type="button" onClick={limparFila} className="text-muted-foreground hover:text-foreground">
+              Limpar fila
+            </button>
+          </div>
+        )}
+      </div>
 
-      {resultados && resultados.length > 0 && (
-        <section className="mt-2" aria-label="Resultados da busca">
+      {lista(resultados && resultados.length > 0 && (
+        <section aria-label="Resultados da busca">
           <div className="flex items-center justify-between px-1 pb-1">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Resultados</p>
             <button type="button" onClick={limpar} className="text-[11px] text-muted-foreground hover:text-foreground">
@@ -690,8 +737,8 @@ function BuscaYoutube({ playlists, escolhida, fila }: { playlists: PlaylistSalva
             A música que você usar fica guardada na sua lista abaixo.
           </p>
         </section>
-      )}
-    </div>
+      ))}
+    </>
   );
 }
 

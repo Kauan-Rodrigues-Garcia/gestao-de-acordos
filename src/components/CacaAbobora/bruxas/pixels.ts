@@ -10,7 +10,7 @@
  * do pixel mais perto, em passos de 15° (`PASSO_ANGULO`), e guardado. O canvas
  * nunca gira nada sozinho (giro do canvas suaviza a borda).
  */
-import { ALTURA, LARGURA, QUADROS, montarQuadro, type Bruxa, type Imagem, type Miniatura } from './arte';
+import { ALTURA, LARGURA, NUMERO_DA_PARTE, QUADROS, montarQuadro, type Bruxa, type Imagem, type Miniatura } from './arte';
 import { PASSO_ANGULO, type Recorte } from './queda';
 import { cor32 } from '../fisica';
 
@@ -63,6 +63,43 @@ export function quadrosDa(b: Bruxa, semChapeu: boolean): QuadrosDaBruxa {
 /** O ícone da bruxa parada (para o painel). */
 export function retrato(b: Bruxa): HTMLCanvasElement {
   return quadrosDa(b, false).direita[0];
+}
+
+const cacheCabeca = new Map<string, HTMLCanvasElement>();
+
+/**
+ * A cabeça com o chapéu, recortada (o ícone da faixa e do painel). Morta:
+ * olho apagado. Guardada: quem quiser mexer copia.
+ */
+export function cabecaDaBruxa(b: Bruxa, morta: boolean): HTMLCanvasElement {
+  const chave = `${b.id}:${morta}`;
+  let c = cacheCabeca.get(chave);
+  if (!c) {
+    const img = montarQuadro(b, 0, { quais: p => p === 'cabeca' || p === 'chapeu', morta });
+    // A ponta do chapéu que dobra para trás (ou a aba larga) deixava o rosto
+    // miúdo no ícone: o recorte vai só até 3 px além do rosto, dos lados.
+    const cabeca = NUMERO_DA_PARTE.cabeca;
+    let cx0 = img.largura, cx1 = -1;
+    img.partes.forEach((n, i) => {
+      if (n !== cabeca) return;
+      const x = i % img.largura;
+      cx0 = Math.min(cx0, x); cx1 = Math.max(cx1, x);
+    });
+    const [lim0, lim1] = cx1 < 0 ? [0, img.largura - 1] : [cx0 - 3, cx1 + 3];
+    let x0 = img.largura, y0 = img.altura, x1 = -1, y1 = -1;
+    img.cores.forEach((cor, i) => {
+      if (!cor) return;
+      const x = i % img.largura, y = Math.floor(i / img.largura);
+      if (x < lim0 || x > lim1) return;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    });
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    const recorte: Imagem = { largura: w, altura: h, cores: new Array<string | null>(w * h).fill(null), partes: new Uint8Array(w * h) };
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) recorte.cores[j * w + i] = img.cores[(y0 + j) * img.largura + x0 + i];
+    c = canvasDaImagem(recorte, false);
+    cacheCabeca.set(chave, c);
+  }
+  return c;
 }
 
 const cacheMini = new Map<Miniatura, HTMLCanvasElement[]>();
