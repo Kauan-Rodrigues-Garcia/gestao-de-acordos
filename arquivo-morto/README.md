@@ -43,3 +43,4 @@ alcançando a história dele.
 | [`ouvidoria/`](ouvidoria/README.md) | 05/09/2026 | A aba saiu do produto |
 | [`modo-tv/`](modo-tv/README.md) | 13/10/2026 | O Modo TV não será utilizado |
 | [`pesquisa-experiencia/`](pesquisa-experiencia/README.md) | 15/10/2026 | A pesquisa já foi feita; o card só poluía a aba Geral |
+| [`comemoracoes-1.0/`](comemoracoes-1.0/README.md) | 15/10/2026 | A Comemorações 2.0 virou a versão oficial |

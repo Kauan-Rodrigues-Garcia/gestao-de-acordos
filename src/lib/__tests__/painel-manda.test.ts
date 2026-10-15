@@ -158,13 +158,6 @@ const EXCECOES: Record<string, Excecao> = {
       + 'também é): só ele vê o botão «Recuperar vida» e ouve o chefão a 100% — operador fica a 12%. '
       + 'Não libera tela nem dado: quem decide são as RPCs `fn_chefao_*`, que conferem fn_user_is_super_admin().',
   },
-  'pages/Comemoracoes/index.tsx': {
-    linhas: 1, familia: 'chave-mestra',
-    motivo:
-      'pré-estreia da Comemorações 2.0 (pedido do Cleber em 15/10/2026): até ser aprovada, só o super_admin '
-      + 'vê o botão «Testar a 2.0». Não libera tela nem dado — quem cria continua sendo decidido por '
-      + '`comemoracoes_gerenciar`, e o cargo deixa de decidir quando a 2.0 virar a aba de todos.',
-  },
   'pages/AdminSetoresAba.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a cidade do setor é do super_admin (decisão do kauan em 02/10/2026) — quem decide é o gatilho de 20261003140000.',

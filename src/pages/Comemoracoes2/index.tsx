@@ -3,8 +3,9 @@
  *
  * Pedido do Cleber em 15/10/2026: refazer do zero, com o card virando um
  * cartão com papel de parede, GIFs buscados no GIPHY e um estúdio mais fácil
- * de ler. Enquanto está em teste, só o super_admin chega aqui, pelo botão
- * "Testar a 2.0" da aba atual (`pages/Comemoracoes/index.tsx`).
+ * de ler. É a versão oficial desde 15/10/2026: a aba Comemorações abre aqui
+ * para quem tem `comemoracoes_gerenciar`, os mesmos cargos de antes. O editor
+ * 1.0 está em `arquivo-morto/comemoracoes-1.0`.
  *
  * O que NÃO mudou de propósito: quem pode criar, para quem a festa vai, o
  * disparo agendado, o volume e a pergunta do clone — são regras de negócio já
@@ -12,7 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
-import { ArrowLeft, Loader2, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react';
+import { Loader2, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,7 +40,7 @@ const HISTORICO_MS = 30 * 24 * 3_600_000;
 
 type Aba = 'criar' | 'historico';
 
-export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
+export default function Comemoracoes2() {
   const { perfil, equipesLideradas } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -156,12 +157,7 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
             <Sparkles className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-              Comemorações
-              <span className="rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                2.0 · teste
-              </span>
-            </h1>
+            <h1 className="text-xl font-bold tracking-tight">Comemorações</h1>
             <p className="text-xs text-muted-foreground">Monte o card e mande para a tela de quem bateu a meta.</p>
           </div>
         </div>
@@ -170,11 +166,6 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
             onClick={() => void recarregar()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
-          {onVoltar && (
-            <Button variant="outline" className="h-9 gap-1.5 text-xs" onClick={onVoltar}>
-              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a versão atual
-            </Button>
-          )}
         </div>
       </header>
 

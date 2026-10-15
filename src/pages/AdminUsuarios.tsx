@@ -65,7 +65,8 @@ import { setorEntraNosFiltros } from '@/lib/setoresDosFiltros';
 // Lazy: a aba Comemorações arrasta o editor de layout, o catálogo de sons e a
 // biblioteca de mídia. Enquanto era rota própria, só baixava para quem a abria;
 // o carregamento sob demanda mantém esse comportamento agora que virou aba.
-const Comemoracoes = lazy(() => import('@/pages/Comemoracoes'));
+// A 2.0 é a oficial desde 15/10/2026; o editor 1.0 está em arquivo-morto/comemoracoes-1.0.
+const Comemoracoes = lazy(() => import('@/pages/Comemoracoes2'));
 // As duas abas do Comercial. Lazy pelo mesmo motivo: quem abre Usuários na
 // cobrança não tem por que baixar a tela de metas de vendas nem a de feedback.
 const MetasVendas = lazy(() => import('@/pages/Vendas/Metas'));

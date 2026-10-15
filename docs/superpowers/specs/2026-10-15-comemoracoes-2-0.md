@@ -1,6 +1,6 @@
 # Comemorações 2.0 — design
 
-**Data:** 15/10/2026 · **Pedido:** Cleber · **Estado:** em teste (só super_admin)
+**Data:** 15/10/2026 · **Pedido:** Cleber · **Estado:** oficial desde 15/10/2026 (para quem tem `comemoracoes_gerenciar`; o editor 1.0 está em `arquivo-morto/comemoracoes-1.0`)
 **Sucede:** `2026-08-01-comemoracoes-v2-design.md` no visual; as regras de plateia, volume, agendamento e clone continuam as mesmas.
 
 ## O que muda
@@ -67,6 +67,5 @@ A 2.0 grava também as colunas da 1.0 (`efeito`, `anim_texto`, `som`, `volume`..
 
 ## Pendente
 
-- Aprovar o visual e liberar a 2.0 para todos (tirar o portão de super_admin em `pages/Comemoracoes/index.tsx`).
 - Aplicar a migration (com autorização) e cadastrar `GIPHY_API_KEY` na Vercel.
 - "Quem bateu a meta" ainda cruza metas com o Analítico pela empresa inteira, sem separar por regra do setor (Cofen × Nosso produto). Ver `CLAUDE.md`.
