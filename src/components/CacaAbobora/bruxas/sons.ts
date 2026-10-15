@@ -280,31 +280,11 @@ export function somDor(): void {
   });
 }
 
-/** O tiro no bloco (o caldeirão): o «toc» seco de quem quebra pedra. */
+/** O bloco rachando (ela, quando racha mais um estágio): o «toc» seco de quem quebra pedra. */
 export function somBloco(): void {
   tocar(c => {
     chiado(c, { pico: 0.35, dura: 0.06, filtro: 'bandpass', freq: entre(900, 1300), q: 2.5 });
     tom(c, { tipo: 'square', de: 240, para: 160, pico: 0.1, dura: 0.05 });
-  });
-}
-
-/** O bloco quebrou: o esfarelar e a poção derramando. */
-export function somBlocoQuebra(): void {
-  tocar(c => {
-    const t = c.currentTime;
-    for (let i = 0; i < 4; i++) chiado(c, { pico: 0.4, dura: 0.07, filtro: 'bandpass', freq: entre(600, 1400), q: 1.5, em: t + i * 0.035 });
-    chiado(c, { pico: 0.4, dura: 0.7, filtro: 'lowpass', freq: 1600, freqFim: 200, q: 4, taxa: 0.5, em: t + 0.08 });
-    for (let i = 0; i < 6; i++) bolha(c, t + entre(0.1, 0.6), entre(150, 400), entre(0.1, 0.18));
-  });
-}
-
-/** O caldeirão posto no chão: o baque do ferro e o borbulhar. */
-export function somCaldeirao(): void {
-  tocar(c => {
-    const t = c.currentTime;
-    tom(c, { tipo: 'triangle', de: 140, para: 60, pico: 0.45, dura: 0.18, em: t });
-    chiado(c, { pico: 0.2, dura: 0.08, filtro: 'bandpass', freq: 700, em: t });
-    for (let i = 0; i < 8; i++) bolha(c, t + 0.2 + i * entre(0.08, 0.16), entre(90, 220), entre(0.14, 0.24));
   });
 }
 
@@ -396,6 +376,22 @@ export function somXp(): void {
     const f = entre(1500, 2600);
     tom(c, { tipo: 'sine', de: f, para: f * 1.01, pico: 0.14, dura: 0.12 });
     tom(c, { tipo: 'sine', de: f * 1.5, para: f * 1.5, pico: 0.06, dura: 0.08, em: c.currentTime + 0.03 });
+  });
+}
+
+/**
+ * O Totem da Imortalidade: o «vuuum» mágico do jogo — um sopro que sobe, o
+ * acorde brilhante em cascata e o tremor grave por baixo.
+ */
+export function somTotem(): void {
+  tocar(c => {
+    const t = c.currentTime + 0.01;
+    chiado(c, { pico: 0.4, dura: 0.9, filtro: 'bandpass', freq: 500, freqFim: 4200, q: 1.2, taxa: 0.7, ataque: 0.05, em: t });
+    tom(c, { tipo: 'sawtooth', de: 70, para: 140, pico: 0.22, dura: 0.8, em: t });
+    [523, 659, 784, 988, 1175, 1568].forEach((f, i) => {
+      tom(c, { tipo: 'triangle', de: f, para: f * 1.01, pico: 0.12, dura: 0.9 - i * 0.08, em: t + 0.12 + i * 0.06 });
+      tom(c, { tipo: 'sine', de: f * 2, para: f * 2.02, pico: 0.05, dura: 0.5, em: t + 0.14 + i * 0.06 });
+    });
   });
 }
 

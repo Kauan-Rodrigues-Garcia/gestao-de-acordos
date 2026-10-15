@@ -223,29 +223,63 @@
   .bxc-contagem-relogio { font-size: 18px; }
 }
 
-/* ── A conquista (o aviso do canto do Minecraft) ────────────────────────── */
+/* ── A conquista (a toast do Minecraft) ─────────────────────────────────
+   A caixa, o ícone e as letras vêm prontos num canvas em pixels da GUI
+   (`toastDeConquista`), ampliado 2× sem suavizar. Entra pela direita colada
+   no canto de cima, como no jogo, fica e sai pelo mesmo lado. */
 .bxc-conquista {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 300px;
-  padding: 8px 14px 8px 10px;
-  font-family: var(--bxc-texto);
-  background: #212121;
-  border: 2px solid #555555;
-  box-shadow: 0 0 0 2px #0e0b14, inset 0 0 0 2px #121212, 0 6px 0 rgba(0, 0, 0, .35);
-  animation: bxc-conquista-entra .45s steps(6, end), bxc-conquista-sai .45s steps(6, end) 6s forwards;
+  top: 0;
+  right: 0;
+  image-rendering: pixelated;
+  animation:
+    bxc-conquista-entra .6s cubic-bezier(.2, .8, .3, 1),
+    bxc-conquista-sai .6s cubic-bezier(.7, 0, .8, .2) var(--bxc-toast-ms, 5000ms) forwards;
 }
-.bxc-conquista-icone { width: 48px; height: 72px; flex: none; image-rendering: pixelated; object-fit: contain; }
-.bxc-conquista-texto { display: grid; gap: 2px; text-shadow: 2px 2px 0 #3f3f3f; }
-.bxc-conquista-texto b { font-size: 15px; color: #ff55ff; }
-.bxc-conquista-texto span { font-size: 15px; font-weight: 700; color: #ffffff; }
-.bxc-conquista-texto small { font-size: 12px; color: #aaaaaa; }
-@keyframes bxc-conquista-entra { from { transform: translateX(120%); } }
-@keyframes bxc-conquista-sai { to { transform: translateX(120%); } }
+@keyframes bxc-conquista-entra { from { transform: translateX(100%); } }
+@keyframes bxc-conquista-sai { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) {
   .bxc-conquista { animation: none; }
+}
+
+/* ── O Totem da Imortalidade ────────────────────────────────────────────── */
+/* O totem ao lado do nome na barra, enquanto ela está protegida. */
+.bxc-nome { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.bxc-nome-totem { width: 18px; height: 18px; image-rendering: pixelated; animation: bxc-pisca 1.2s steps(1, end) infinite; }
+.bxc-nome-totem[hidden] { display: none; }
+/* A Absorção: a vida dourada por cima da barra. */
+.bxc-vida em {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: linear-gradient(#fff3a0, #f8c820 50%, #c88a10);
+  box-shadow: inset -2px 0 0 #8a5a08;
+  transition: width .18s steps(3);
+}
+.bxc-letreiro.totem { color: #f8e040; font-size: 22px; text-shadow: 2px 2px 0 #3a2a04, -1px -1px 0 #3a2a04; }
+/* O ídolo no meio da tela: sobe de baixo, cresce, gira (o giro do jogo, que
+   achata e desachata) e some no alto. */
+.bxc-totem {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34vmin;
+  height: 34vmin;
+  image-rendering: pixelated;
+  pointer-events: none;
+  animation: bxc-totem 2s cubic-bezier(.15, .7, .4, 1) forwards;
+}
+@keyframes bxc-totem {
+  0%   { transform: translate(-50%, 40%) scale(.15) scaleX(1); opacity: 1; }
+  18%  { transform: translate(-50%, -50%) scale(1.25) scaleX(1); }
+  32%  { transform: translate(-50%, -52%) scale(1.1) scaleX(-1); }
+  46%  { transform: translate(-50%, -55%) scale(1.05) scaleX(1); }
+  60%  { transform: translate(-50%, -58%) scale(1) scaleX(-1); opacity: 1; }
+  100% { transform: translate(-50%, -95%) scale(.9) scaleX(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bxc-totem { animation: bxc-aviso 2s steps(1, end) forwards; transform: translate(-50%, -50%); }
+  .bxc-nome-totem { animation: none; }
 }

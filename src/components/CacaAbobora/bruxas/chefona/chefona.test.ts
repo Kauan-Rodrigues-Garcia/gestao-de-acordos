@@ -8,10 +8,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NUMERO_DA_PARTE, alvoDaParte, parteNoPonto } from '../arte';
 import {
-  ALTURA_MC, CORES_MC, DROPS, LARGURA_MC, PIXEL_MC, QUADROS_MC, TEXELS_ALTURA, TEXELS_LARGURA,
+  ALTURA_MC, CORES_MC, DROPS, GARRAFA, LARGURA_MC, MODELO, PIXEL_MC, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC,
+  PRIMEIRO_SEGURANDO_MC, PRIMEIRO_TOTEM_MC, QUADROS_FLUTUANDO, QUADROS_MC, TEXELS_ALTURA, TEXELS_LARGURA, TOTEM,
   cabecaMC, comContorno, estagioDoDano, montarBruxaMC, montarTexels, rachar, rachaduras,
 } from './arte';
-import { estagioDeQuebra } from './caldeirao';
+import { glifoMC, larguraTextoMC } from './fonteMC';
 import { ENCANTO, letrasComRuna, paraGalatico } from './galatico';
 import {
   ATRIBUTO_TEXTO, FEITICOS, FILTROS_VISAO, FILTRO_LENTIDAO, LISTA_FEITICOS, PASSO_VISAO_MS, alvosPorAtributo, disponivel,
@@ -43,6 +44,16 @@ describe('o modelo da bruxa do Minecraft', () => {
     }
   });
 
+  it('a grade da referência: 18 × 42, simétrica nas medidas (chapéu 2/4/6/8/10, rosto 8, ombros 16, manto 10)', () => {
+    expect(MODELO).toHaveLength(TEXELS_ALTURA);
+    for (const l of MODELO) expect(l).toHaveLength(TEXELS_LARGURA);
+    const largura = (y: number) => MODELO[y].replace(/\./g, '').length;
+    expect([1, 2, 4, 6, 8].map(largura)).toEqual([2, 4, 6, 8, 10]);
+    expect(largura(14)).toBe(8);
+    expect(largura(22)).toBe(16);
+    expect(largura(30)).toBe(10);
+  });
+
   it('como na referência: pedra verde no chapéu, olhos roxos, monocelha, nariz laranja, faixa verde, pés cinza e contorno', () => {
     const cores = new Set(montarTexels(0).cores);
     for (const c of [CORES_MC.pedra, CORES_MC.olhoRoxo, CORES_MC.monocelha, CORES_MC.nariz, CORES_MC.faixa, CORES_MC.peLuz, CORES_MC.contorno]) {
@@ -55,6 +66,22 @@ describe('o modelo da bruxa do Minecraft', () => {
     expect(new Set(narizes).size).toBe(2);
   });
 
+  it('a animação anda em texels inteiros: respira, pés, olhos fechados e o braço erguido', () => {
+    const topo = (q: number) => Math.floor(montarTexels(q).cores.findIndex(c => c === CORES_MC.pedraLuz) / TEXELS_LARGURA);
+    // Respirando, o chapéu desce exatamente um texel.
+    expect(topo(3) - topo(0)).toBe(1);
+    // Gargalhando, a cabeça sobe um texel.
+    expect(topo(0) - topo(PRIMEIRO_RINDO_MC)).toBe(1);
+    // Os quadros do ciclo de flutuar são todos diferentes.
+    const quadros = Array.from({ length: QUADROS_FLUTUANDO }, (_, q) => montarTexels(q).cores.join());
+    expect(new Set(quadros).size).toBe(QUADROS_FLUTUANDO);
+    // Olhos fechados quando apanha e gargalhando.
+    for (const q of [PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC]) expect(montarTexels(q).cores).not.toContain(CORES_MC.olhoBranco);
+    // O braço sobe ao lado do rosto para segurar a poção, beber e erguer o totem.
+    const bracos = (q: number) => montarTexels(q).partes.filter(p => p === NUMERO_DA_PARTE.bracoFrente).length;
+    for (const q of [PRIMEIRO_SEGURANDO_MC, PRIMEIRO_BEBENDO_MC, PRIMEIRO_TOTEM_MC]) expect(bracos(q)).toBeGreaterThan(bracos(0));
+  });
+
   it('cada texel vira PIXEL_MC × PIXEL_MC pixels, e o tiro acha a peça', () => {
     const img = montarBruxaMC(0);
     expect(img.largura).toBe(TEXELS_LARGURA * PIXEL_MC);
@@ -63,18 +90,18 @@ describe('o modelo da bruxa do Minecraft', () => {
     const no = (x: number, y: number) => parteNoPonto(img, x * PIXEL_MC, y * PIXEL_MC);
     // O rosto é cabeça (o crítico); a pedra é chapéu; o ombro, o manto e o pé.
     expect(alvoDaParte('cabeca')).toBe('cabeca');
-    expect(no(8, 18)).toBe(NUMERO_DA_PARTE.cabeca);
-    expect(no(10, 7)).toBe(NUMERO_DA_PARTE.chapeu);
-    expect(no(3, 25)).toBe(NUMERO_DA_PARTE.bracoFrente);
-    expect(no(7, 35)).toBe(NUMERO_DA_PARTE.tronco);
-    expect(no(7, 43)).toBe(NUMERO_DA_PARTE.pernaFrente);
+    expect(no(7, 15)).toBe(NUMERO_DA_PARTE.cabeca);
+    expect(no(8, 6)).toBe(NUMERO_DA_PARTE.chapeu);
+    expect(no(3, 22)).toBe(NUMERO_DA_PARTE.bracoFrente);
+    expect(no(6, 31)).toBe(NUMERO_DA_PARTE.tronco);
+    expect(no(7, 39)).toBe(NUMERO_DA_PARTE.pernaFrente);
     // Fora dela, nada.
     expect(parteNoPonto(img, 0, 0)).toBe(0);
   });
 
-  it('o retrato da contagem e da conquista é a cabeça com o chapéu', () => {
+  it('o retrato da contagem é a cabeça com o chapéu', () => {
     const c = cabecaMC();
-    expect(c.altura).toBe(24);
+    expect(c.altura).toBe(21);
     expect(c.cores).toContain(CORES_MC.pedra);
     expect(c.cores).not.toContain(CORES_MC.ombroFundo);
   });
@@ -89,11 +116,30 @@ describe('o modelo da bruxa do Minecraft', () => {
       expect(c.linhas).toHaveLength(16);
       for (const l of c.linhas) {
         expect(l).toHaveLength(16);
-        // A garrafa vazia não tem líquido: o L e o l ficam transparentes nela.
-        for (const ch of l) if (ch !== '.' && !(d.nome === 'Garrafa de Vidro' && 'Ll'.includes(ch))) expect(c.cores[ch], `${d.nome} «${ch}»`).toBeTruthy();
+        // A garrafa vazia não tem líquido: L, l, D e h ficam transparentes nela.
+        for (const ch of l) if (ch !== '.' && !(d.nome === 'Garrafa de Vidro' && 'LlDh'.includes(ch))) expect(c.cores[ch], `${d.nome} «${ch}»`).toBeTruthy();
       }
     }
   });
+
+  it('toda poção é a mesma garrafa da referência, só trocando a cor do líquido', () => {
+    const pocoes = DROPS.filter(d => d.nome.startsWith('Poção'));
+    expect(pocoes).toHaveLength(3);
+    for (const p of pocoes) {
+      expect(p.linhas).toBe(GARRAFA);
+      for (const vidro of ['C', 'K', 'c', 'g', 'w']) expect(p.cores[vidro]).toBe(pocoes[0].cores[vidro]);
+    }
+    expect(new Set(pocoes.map(p => p.cores.L)).size).toBe(3);
+  });
+
+  it('o Totem da Imortalidade: 16 × 16, olhos de esmeralda, e o contorno não apaga o dourado escuro', () => {
+    expect(TOTEM.linhas).toHaveLength(16);
+    const c = comContorno(TOTEM);
+    for (const l of c.linhas) for (const ch of l) if (ch !== '.') expect(c.cores[ch], ch).toBeTruthy();
+    expect(c.cores.o).toBe(TOTEM.cores.o);
+    expect(c.linhas.join('')).toContain('#');
+  });
+
 });
 
 describe('o dano: ela racha como bloco', () => {
@@ -119,11 +165,6 @@ describe('o dano: ela racha como bloco', () => {
     for (const i of rachaduras(1)) expect(rachaduras(3).has(i)).toBe(true);
   });
 
-  it('o caldeirão racha em dez estágios até quebrar', () => {
-    expect(estagioDeQuebra(1)).toBe(0);
-    expect(estagioDeQuebra(0.55)).toBe(4);
-    expect(estagioDeQuebra(0)).toBe(9);
-  });
 });
 
 describe('movimento da Bruxa do Pântano', () => {
@@ -328,5 +369,26 @@ describe('a força e o Encantamento', () => {
     enc.desfazer();
     expect(raiz.style.filter).toBe('blur(0px)');
     expect(document.getElementById('bx-distorcao')).toBeNull();
+  });
+});
+
+describe('a letra do Minecraft (a da conquista)', () => {
+  it('toda letra tem 8 linhas da mesma largura, com o acento composto nas minúsculas', () => {
+    for (const ch of 'Desafio concluído! Quem Mandou Jogar Poção? áãâéêíóôõúçÁ0123456789') {
+      const g = glifoMC(ch);
+      expect(g, ch).toHaveLength(8);
+      for (const l of g) expect(l.length, ch).toBe(g[0].length);
+    }
+    // O til do ã fica nas linhas de cima, o corpo é o do a.
+    expect(glifoMC('ã').slice(2)).toEqual(glifoMC('a').slice(2));
+    expect(glifoMC('ã')[0]).toContain('#');
+    // A cedilha vai na perna.
+    expect(glifoMC('ç')[7]).toContain('#');
+  });
+
+  it('a largura soma as letras e 1 pixel entre elas', () => {
+    expect(larguraTextoMC('A')).toBe(5);
+    expect(larguraTextoMC('Ai')).toBe(5 + 1 + 1);
+    expect(larguraTextoMC('')).toBe(0);
   });
 });

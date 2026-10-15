@@ -2,18 +2,31 @@
  * arte.ts — a Bruxa do Pântano, a chefona da Caça às Bruxas (15/10/2026).
  *
  * O que o Rei do Pop foi para os zumbis (o Thriller), ela é para as bruxas:
- * a referência é a BRUXA DO MINECRAFT, a que mora na cabana do pântano. O
- * desenho segue a referência que o usuário mandou (15/10/2026): chapéu preto
- * de degraus com a pedra verde na frente, rosto bege com a monocelha preta e
- * os olhos roxos, o narigão laranja, a gola e a faixa verdes, os ombros roxos
- * largos (os braços cruzados do aldeão), o manto roxo e os pés cinza, tudo
- * com contorno escuro. A fumaça roxa que sai do chapéu o palco solta.
+ * a referência é a BRUXA DO MINECRAFT, a que mora na cabana do pântano.
  *
- * Não usa o esqueleto de 48×38 das bruxas de vassoura (`../arte.ts`): ela fica
- * de frente, em pé, como no jogo. O modelo é desenhado em TEXELS (o pixel da
- * textura do Minecraft, 22 × 46 com o contorno), e cada texel vira `PIXEL_MC`
- * × `PIXEL_MC` pixels da arte. A cor de cada texel tem o ruído das texturas
- * do jogo (um sorteio fixo entre tons), então nada fica chapado.
+ * ## O modelo é a imagem de referência, texel a texel
+ *
+ * O desenho foi tirado da imagem que o usuário mandou (15/10/2026), contando
+ * os texels dela: a grade `MODELO` tem 18 × 42 texels e cada letra é uma cor
+ * da referência. De cima para baixo: a ponta do chapéu (2 de largura), o
+ * degrau de cima (4), o degrau da pedra verde (6 e 8, com a pedra de 4 × 3),
+ * a aba larga em três tons (10); o rosto bege de 8 com as laterais na sombra,
+ * a monocelha preta, os olhos brancos por fora e roxos por dentro, o narigão
+ * laranja de 2 que passa do queixo; a gola verde por baixo do nariz; os ombros
+ * roxos de 16 (os braços cruzados do aldeão), mais claros embaixo e com o vão
+ * escuro no meio; o manto de 10 com a faixa verde de 2 entre dois vincos; e os
+ * pés cinza, com a costura. O contorno escuro em volta vem de `contornar`.
+ *
+ * Cada texel vira `PIXEL_MC` × `PIXEL_MC` pixels da arte. Algumas letras têm
+ * ruído (um sorteio fixo entre tons, como nas texturas do jogo).
+ *
+ * ## As animações
+ *
+ * Tudo em passos de texel inteiro, para a pixel art não borrar: o corpo de cima
+ * «respira» (desce um texel e volta), a ponta do chapéu balança, o nariz mexe
+ * (o do jogo, que mexe quando ela bebe), um pé de cada vez fica pendurado na
+ * levitação, ela fecha os olhos quando apanha, joga a cabeça para trás quando
+ * gargalha, e ergue o braço para segurar a poção ou o totem.
  *
  * As peças usam os mesmos nomes e números de `../arte.ts` (`NUMERO_DA_PARTE`):
  * o tiro por peça, o crítico na cabeça e o dano vêm de `alvoDaParte`.
@@ -21,8 +34,8 @@
 import { NUMERO_DA_PARTE, type Imagem, type NomeParte } from '../arte';
 
 /** O modelo em texels, com o contorno. */
-export const TEXELS_LARGURA = 22;
-export const TEXELS_ALTURA = 46;
+export const TEXELS_LARGURA = 18;
+export const TEXELS_ALTURA = 42;
 /** Quantos pixels da arte cada texel ocupa. */
 export const PIXEL_MC = 2;
 /** O sprite em pixels da arte. */
@@ -35,67 +48,219 @@ export const ESCALA_CHEFONA = 3;
 export const NOME_CHEFONA = 'Bruxa do Pântano';
 
 /** Onde fica a ponta do chapéu (texel): de lá sai a fumaça roxa. */
-export const PONTA_DO_CHAPEU = { x: 10.5, y: 1 } as const;
+export const PONTA_DO_CHAPEU = { x: 9, y: 1 } as const;
+/** A mão erguida (texel, lado para onde ela olha): onde fica a garrafa que ela vai jogar. */
+export const MAO_ERGUIDA = { x: 15, y: 10 } as const;
+/** A mão erguida bem alto (o totem). */
+export const MAO_NO_ALTO = { x: 15, y: 6 } as const;
+/** A boca (texel): onde a garrafa encosta quando ela bebe. */
+export const BOCA = { x: 11, y: 16 } as const;
+/** A outra mão (texel), onde ela segura o totem enquanto está protegida. */
+export const OUTRA_MAO = { x: 1, y: 21 } as const;
 
-// ── As cores (as da referência) ────────────────────────────────────────────
+// ── As cores (tiradas da referência) ───────────────────────────────────────
 
 export const CORES_MC = {
-  contorno: '#0e0b14',
-  chapeu: ['#1a1a1c', '#222226', '#2a2a2e'],
-  chapeuLuz: '#3c3c42',
-  chapeuSombra: '#0f0f12',
-  pedra: '#1ec83a',
-  pedraLuz: '#7aff86',
-  pedraSombra: '#0f8a22',
-  pele: ['#cdb59c', '#c6ad93', '#d4bea6'],
-  peleSombra: '#a8907a',
-  monocelha: '#141014',
-  olhoBranco: '#f2f0f4',
-  olhoRoxo: '#7a3ac8',
-  nariz: '#d07848',
-  narizSombra: '#a0522a',
-  gola: '#1f8a2a',
-  golaSombra: '#145a1c',
-  faixa: '#1f8a2a',
-  faixaLuz: '#3ab048',
-  faixaSombra: '#145a1c',
-  ombro: ['#6a1fb0', '#7226b8', '#6420a8'],
-  ombroLuz: '#8a3ad0',
-  ombroSombra: '#4a148a',
-  ombroFundo: '#34106a',
-  manto: ['#5a1a9a', '#621ea4', '#541892'],
-  mantoSombra: '#3e1272',
-  pe: ['#6a6a6e', '#5e5e62', '#747478'],
-  peLuz: '#8a8a8e',
-  peSombra: '#3e3e42',
+  contorno: '#0d0a12',
+  chapeu: ['#232325', '#202022', '#262628'],
+  chapeuEscuro: ['#151517', '#131315', '#18181a'],
+  chapeuSombra: '#0c0c0e',
+  chapeuLuz: '#2c2c2e',
+  pedraSombra: '#0c3a12',
+  pedra: '#0b8a1a',
+  pedraLuz: '#16c826',
+  peleTopo: '#a08672',
+  pele: ['#b49b88', '#ae9581', '#b8a08d'],
+  peleLuz: '#c0a895',
+  peleSombra: '#7a6150',
+  queixo: '#76695d',
+  monocelha: '#20180f',
+  olhoBranco: '#fdfcff',
+  olhoRoxo: '#5e2c74',
+  narizLuz: '#c47446',
+  nariz: '#b2643a',
+  narizSombra: '#6a3418',
+  pontaNariz: '#9a8570',
+  golaSombra: '#0b3603',
+  gola: '#135407',
+  ombro: ['#3e0a6c', '#3a0866', '#420c72'],
+  ombroLuz: ['#4c1084', '#48107e', '#521488'],
+  ombroSombra: '#2a0650',
+  ombroFundo: '#1c0636',
+  manto: ['#3c0868', '#380664', '#3e0a6c'],
+  mantoLuz: '#46107a',
+  vinco: '#1a0630',
+  faixa: '#105204',
+  faixaLuz: '#186a08',
+  peTopo: '#1a1a1a',
+  peMeio: '#2e2a26',
+  pe: ['#464646', '#424242', '#4a4a4a'],
+  peLuz: '#575757',
+  peSombra: '#222222',
 } as const;
 
+type Camada = 'pe' | 'manto' | 'corpo' | 'cabeca' | 'chapeu' | 'braco';
+
+interface Letra { cor: string | readonly string[]; parte: NomeParte; camada: Camada }
+
+const C = CORES_MC;
+
+/** Cada letra do `MODELO`: a cor, a peça (para o tiro) e a camada (para a animação). */
+const LETRAS: Readonly<Record<string, Letra>> = {
+  // O chapéu
+  H: { cor: C.chapeu, parte: 'chapeu', camada: 'chapeu' },
+  h: { cor: C.chapeuEscuro, parte: 'chapeu', camada: 'chapeu' },
+  k: { cor: C.chapeuSombra, parte: 'chapeu', camada: 'chapeu' },
+  j: { cor: C.chapeuLuz, parte: 'chapeu', camada: 'chapeu' },
+  e: { cor: C.pedraSombra, parte: 'chapeu', camada: 'chapeu' },
+  g: { cor: C.pedra, parte: 'chapeu', camada: 'chapeu' },
+  G: { cor: C.pedraLuz, parte: 'chapeu', camada: 'chapeu' },
+  // O rosto
+  '1': { cor: C.peleTopo, parte: 'cabeca', camada: 'cabeca' },
+  s: { cor: C.pele, parte: 'cabeca', camada: 'cabeca' },
+  S: { cor: C.peleLuz, parte: 'cabeca', camada: 'cabeca' },
+  t: { cor: C.peleSombra, parte: 'cabeca', camada: 'cabeca' },
+  q: { cor: C.queixo, parte: 'cabeca', camada: 'cabeca' },
+  b: { cor: C.monocelha, parte: 'cabeca', camada: 'cabeca' },
+  W: { cor: C.olhoBranco, parte: 'cabeca', camada: 'cabeca' },
+  p: { cor: C.olhoRoxo, parte: 'cabeca', camada: 'cabeca' },
+  N: { cor: C.narizLuz, parte: 'cabeca', camada: 'cabeca' },
+  n: { cor: C.nariz, parte: 'cabeca', camada: 'cabeca' },
+  m: { cor: C.narizSombra, parte: 'cabeca', camada: 'cabeca' },
+  u: { cor: C.pontaNariz, parte: 'cabeca', camada: 'cabeca' },
+  // A gola e os ombros
+  c: { cor: C.golaSombra, parte: 'tronco', camada: 'corpo' },
+  C: { cor: C.gola, parte: 'tronco', camada: 'corpo' },
+  o: { cor: C.ombro, parte: 'bracoFrente', camada: 'corpo' },
+  O: { cor: C.ombroLuz, parte: 'bracoFrente', camada: 'corpo' },
+  d: { cor: C.ombroSombra, parte: 'bracoFrente', camada: 'corpo' },
+  D: { cor: C.ombroFundo, parte: 'bracoFrente', camada: 'corpo' },
+  // O manto
+  r: { cor: C.manto, parte: 'tronco', camada: 'manto' },
+  R: { cor: C.mantoLuz, parte: 'tronco', camada: 'manto' },
+  x: { cor: C.vinco, parte: 'tronco', camada: 'manto' },
+  v: { cor: C.faixa, parte: 'tronco', camada: 'manto' },
+  V: { cor: C.faixaLuz, parte: 'tronco', camada: 'manto' },
+  // Os pés
+  f: { cor: C.peTopo, parte: 'pernaFrente', camada: 'pe' },
+  a: { cor: C.peMeio, parte: 'pernaFrente', camada: 'pe' },
+  A: { cor: C.pe, parte: 'pernaFrente', camada: 'pe' },
+  z: { cor: C.peLuz, parte: 'pernaFrente', camada: 'pe' },
+  y: { cor: C.peSombra, parte: 'pernaFrente', camada: 'pe' },
+  // O braço erguido (só nos quadros de segurar, beber e totem)
+  M: { cor: C.pele, parte: 'bracoFrente', camada: 'braco' },
+  T: { cor: C.peleSombra, parte: 'bracoFrente', camada: 'braco' },
+};
+
+/**
+ * A bruxa da referência, de frente, sem o contorno de fora (18 × 42).
+ * Linhas: 1 ponta · 2–3 degrau · 4–7 degrau da pedra · 8–10 aba · 11–18 rosto ·
+ * 18–25 ombros · 19–20 gola · 26 vinco · 27–36 manto · 37–40 pés.
+ */
+export const MODELO: readonly string[] = [
+  '..................',
+  '........HH........',
+  '.......hhhh.......',
+  '.......hhhk.......',
+  '......HHHHHH......',
+  '......heggeh......',
+  '.....HhgGGghH.....',
+  '.....HheggehH.....',
+  '....jjjjjjjjjj....',
+  '....hhhhhhhhhh....',
+  '....kkkkkkkkkk....',
+  '.....11111111.....',
+  '.....tsSssSst.....',
+  '.....tbbbbbbt.....',
+  '.....tWpsspWt.....',
+  '.....tssNnsst.....',
+  '.....tSsNnSst.....',
+  '.....tssNnsst.....',
+  '..ooooqqmmqqoooo..',
+  '.ooooodcuucdooooo.',
+  '.oooooDdCCdDooooo.',
+  '.OOOOOOoDDoOOOOOO.',
+  '.OOOOOOoDDoOOOOOO.',
+  '.OOOOOOOddOOOOOOO.',
+  '.dddddddDDddddddd.',
+  '..DDDDDDDDDDDDDD..',
+  '....xxxxxxxxxx....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '....rRrxvVxrRr....',
+  '.....RrxvVxrR.....',
+  '.....ffffffff.....',
+  '.....aaafaaaa.....',
+  '.....zAAyAAAA.....',
+  '.....zAAyAAzA.....',
+  '..................',
+];
+
+/** As linhas do nariz e a do queixo (no `MODELO`). */
+const NARIZ_DE = 15;
+const LINHA_QUEIXO = 18;
+/** As colunas de cada pé (o esquerdo leva a costura). */
+const PE_ESQUERDO = [5, 8] as const;
+const PE_DIREITO = [9, 12] as const;
+const PRIMEIRA_LINHA_PE = 37;
+
 // ── Os quadros ─────────────────────────────────────────────────────────────
-//
-// 0–3 flutuando (o nariz mexe e a ponta do chapéu balança), 4–5 gargalhando
-// (a cabeça vai para trás: quando joga poção, bebe ou fica tonta).
+
+export type Braco = 'cruzado' | 'erguido' | 'boca' | 'alto';
 
 export interface QuadroMC {
   /** O nariz desce um texel (o nariz que mexe sozinho, do jogo). */
-  nariz: number;
+  nariz: 0 | 1;
   /** A ponta do chapéu: −1, 0 ou 1 texel para o lado. */
-  ponta: number;
-  /** A cabeça e o chapéu sobem (gargalhando). */
-  cabecaSobe: number;
-  /** Um pé levanta (o «andar» no ar): −1 o esquerdo, 1 o direito. */
-  passo: number;
+  ponta: -1 | 0 | 1;
+  /** O corpo de cima desce um texel (a respiração). */
+  respira: 0 | 1;
+  /** A cabeça e o chapéu sobem (gargalhando, bebendo). */
+  cabecaSobe: 0 | 1;
+  /** Um pé fica pendurado: −1 o esquerdo, 1 o direito. */
+  passo: -1 | 0 | 1;
+  olhos: 'abertos' | 'fechados';
+  braco: Braco;
 }
 
+const q = (o: Partial<QuadroMC>): QuadroMC => ({ nariz: 0, ponta: 0, respira: 0, cabecaSobe: 0, passo: 0, olhos: 'abertos', braco: 'cruzado', ...o });
+
 export const QUADROS_MC: readonly QuadroMC[] = [
-  { nariz: 0, ponta: 0, cabecaSobe: 0, passo: 0 },
-  { nariz: 1, ponta: 0, cabecaSobe: 0, passo: 1 },
-  { nariz: 0, ponta: 1, cabecaSobe: 0, passo: 0 },
-  { nariz: 1, ponta: -1, cabecaSobe: 0, passo: -1 },
-  { nariz: 0, ponta: 1, cabecaSobe: 1, passo: 0 },
-  { nariz: 1, ponta: 0, cabecaSobe: 1, passo: 0 },
+  // 0–5 flutuando: respira, a ponta balança, o nariz mexe, um pé de cada vez.
+  q({}),
+  q({ ponta: 1, nariz: 1, passo: 1 }),
+  q({ ponta: 1, respira: 1, passo: 1 }),
+  q({ respira: 1 }),
+  q({ ponta: -1, respira: 1, nariz: 1, passo: -1 }),
+  q({ ponta: -1, passo: -1 }),
+  // 6–7 gargalhando: cabeça para trás, olhos fechados, o chapéu sacudindo.
+  q({ cabecaSobe: 1, olhos: 'fechados', ponta: 1 }),
+  q({ cabecaSobe: 1, olhos: 'fechados', ponta: -1, nariz: 1, respira: 1 }),
+  // 8–9 segurando a poção no alto, pronta para jogar.
+  q({ braco: 'erguido', ponta: 1 }),
+  q({ braco: 'erguido', ponta: -1, nariz: 1, respira: 1 }),
+  // 10–11 bebendo: cabeça para trás, a garrafa na boca, o nariz mexendo.
+  q({ braco: 'boca', cabecaSobe: 1 }),
+  q({ braco: 'boca', cabecaSobe: 1, nariz: 1 }),
+  // 12–13 apanhando ou tonta: olhos fechados.
+  q({ olhos: 'fechados', respira: 1 }),
+  q({ olhos: 'fechados', nariz: 1, ponta: 1 }),
+  // 14–15 erguendo o totem bem alto.
+  q({ braco: 'alto', cabecaSobe: 1, ponta: 1 }),
+  q({ braco: 'alto', cabecaSobe: 1, ponta: -1, nariz: 1 }),
 ];
-export const QUADROS_FLUTUANDO = 4;
-export const PRIMEIRO_RINDO_MC = 4;
+export const QUADROS_FLUTUANDO = 6;
+export const PRIMEIRO_RINDO_MC = 6;
+export const PRIMEIRO_SEGURANDO_MC = 8;
+export const PRIMEIRO_BEBENDO_MC = 10;
+export const PRIMEIRO_DOR_MC = 12;
+export const PRIMEIRO_TOTEM_MC = 14;
 
 /** Um sorteio fixo por ponto (0–1): o mesmo tom no mesmo texel, sempre. */
 export function acaso(x: number, y: number, s: number): number {
@@ -103,7 +268,10 @@ export function acaso(x: number, y: number, s: number): number {
   return v - Math.floor(v);
 }
 
-const tom = (lista: readonly string[], x: number, y: number, s: number) => lista[Math.floor(acaso(x, y, s) * lista.length)];
+/** A cor da letra no texel (com o ruído fixo, quando a letra tem vários tons). */
+function corDa(l: Letra, x: number, y: number): string {
+  return typeof l.cor === 'string' ? l.cor : l.cor[Math.floor(acaso(x, y, 7) * l.cor.length)];
+}
 
 /** Os texels do modelo: cor e peça de cada um. */
 export interface Texels {
@@ -131,108 +299,69 @@ function contornar(t: Texels, w: number, h: number, cor: string): void {
   t.partes = partes;
 }
 
-/** O modelo de frente, texel a texel. */
+/** As camadas, de trás para a frente. */
+const ORDEM_CAMADAS: readonly Camada[] = ['pe', 'manto', 'corpo', 'cabeca', 'chapeu'];
+
+/** O braço erguido, do lado para onde ela olha: manga roxa e a mão. */
+function braco(tipo: Braco, por: (x: number, y: number, l: string) => void, dy: number): void {
+  if (tipo === 'cruzado') return;
+  if (tipo === 'boca') {
+    // A mão sobe até a boca, rente ao rosto (a garrafa cobre o resto).
+    for (let y = 15; y <= 17; y++) { por(13, y + dy, 'O'); por(14, y + dy, 'd'); }
+    por(12, 14 + dy, 'M');
+    por(13, 14 + dy, 'M');
+    return;
+  }
+  const mao = tipo === 'alto' ? MAO_NO_ALTO.y + 1 : MAO_ERGUIDA.y + 1;
+  for (let y = mao + 2; y <= 17; y++) { por(14, y + dy, 'O'); por(15, y + dy, 'd'); }
+  por(14, mao + dy, 'M');
+  por(15, mao + dy, 'T');
+  por(14, mao + 1 + dy, 'M');
+  por(15, mao + 1 + dy, 'T');
+}
+
+/** O modelo de frente, texel a texel, no quadro pedido. */
 export function montarTexels(quadro: number): Texels {
-  const q = QUADROS_MC[((quadro % QUADROS_MC.length) + QUADROS_MC.length) % QUADROS_MC.length];
+  const qd = QUADROS_MC[((quadro % QUADROS_MC.length) + QUADROS_MC.length) % QUADROS_MC.length];
   const W = TEXELS_LARGURA, H = TEXELS_ALTURA;
   const t: Texels = { cores: new Array(W * H).fill(null), partes: new Uint8Array(W * H) };
-  const por = (x: number, y: number, cor: string, parte: NomeParte) => {
+  const por = (x: number, y: number, letra: string, xo = x, yo = y) => {
     if (x < 0 || y < 0 || x >= W || y >= H) return;
-    t.cores[y * W + x] = cor;
-    t.partes[y * W + x] = NUMERO_DA_PARTE[parte];
+    const l = LETRAS[letra];
+    t.cores[y * W + x] = corDa(l, xo, yo);
+    t.partes[y * W + x] = NUMERO_DA_PARTE[l.parte];
   };
-  const C = CORES_MC;
-  const sobe = q.cabecaSobe;
-
-  // ── Os pés cinza (um levanta no passo) ──
-  for (const [x0, lado] of [[6, -1], [11, 1]] as const) {
-    const ergue = q.passo === lado ? 1 : 0;
-    for (let y = 41; y <= 44 - ergue; y++) {
-      for (let x = x0; x < x0 + 5; x++) {
-        let cor: string = tom(C.pe, x, y, 1);
-        if (y === 41) cor = C.peSombra;
-        else if (x === x0) cor = C.peLuz;
-        else if (x === x0 + 4) cor = C.peSombra;
-        por(x, y, cor, 'pernaFrente');
+  const dyCorpo = qd.respira;
+  const dyCabeca = qd.respira - qd.cabecaSobe;
+  for (const camada of ORDEM_CAMADAS) {
+    // Gargalhando, a cabeça sobe e aparece o pescoço onde estava o queixo.
+    if (camada === 'cabeca' && qd.cabecaSobe) for (let x = 6; x <= 11; x++) por(x, LINHA_QUEIXO + dyCorpo, 't');
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const ch = MODELO[y][x];
+        const l = LETRAS[ch];
+        if (!l || l.camada !== camada) continue;
+        let ny = y, nx = x;
+        if (camada === 'corpo') ny += dyCorpo;
+        else if (camada === 'cabeca' || camada === 'chapeu') ny += dyCabeca;
+        if (camada === 'chapeu' && y === PONTA_DO_CHAPEU.y) nx += qd.ponta;
+        if (camada === 'pe') {
+          const [a, b] = qd.passo < 0 ? PE_ESQUERDO : PE_DIREITO;
+          if (qd.passo && x >= a && x <= b) ny -= 1;
+          // O pé que subiu esconde o topo atrás do manto: some a linha de cima.
+          if (qd.passo && x >= a && x <= b && y === PRIMEIRA_LINHA_PE) continue;
+        }
+        if (camada === 'cabeca' && 'Nnmu'.includes(ch) && qd.nariz) {
+          // O nariz desce: onde ele estava no alto vira pele.
+          if (y === NARIZ_DE) por(nx, ny, 's', x, y);
+          ny += 1;
+        }
+        const letra = qd.olhos === 'fechados' && (ch === 'W' || ch === 'p') ? 'q' : ch;
+        por(nx, ny, letra, x, y);
       }
     }
   }
-
-  // ── O manto de baixo, com a faixa verde no meio ──
-  for (let y = 31; y <= 40; y++) {
-    for (let x = 5; x <= 16; x++) {
-      let cor: string = tom(C.manto, x, y, 2);
-      if (x === 5 || x === 16) cor = C.mantoSombra;
-      if (x === 10) cor = C.faixaLuz;
-      if (x === 11) cor = C.faixa;
-      if ((x === 10 || x === 11) && y === 40) cor = C.faixaSombra;
-      por(x, y, cor, 'tronco');
-    }
-  }
-
-  // ── Os ombros largos (os braços cruzados por baixo da capa) ──
-  for (let y = 22; y <= 30; y++) {
-    for (let x = 1; x <= 20; x++) {
-      let cor: string = tom(C.ombro, x, y, 3);
-      if (y === 22) cor = C.ombroLuz;
-      if (y === 26) cor = C.ombroSombra;
-      if (y >= 29) cor = C.ombroFundo;
-      if ((x === 1 || x === 20) && y < 29) cor = C.ombroSombra;
-      // A dobra do meio, onde os braços se cruzam.
-      if ((x === 10 || x === 11) && y >= 27 && y < 29) cor = C.ombroSombra;
-      por(x, y, cor, 'bracoFrente');
-    }
-  }
-  // A gola verde, por baixo do nariz.
-  for (let x = 8; x <= 13; x++) {
-    por(x, 22, C.gola, 'tronco');
-    por(x, 23, x === 8 || x === 13 ? C.golaSombra : C.gola, 'tronco');
-  }
-
-  // ── A cabeça (10 × 9), por baixo da aba do chapéu ──
-  const cy = 13 - sobe;
-  // Gargalhando, a cabeça sobe e aparece o pescoço.
-  if (sobe) for (let x = 8; x <= 13; x++) por(x, 21, C.peleSombra, 'cabeca');
-  for (let y = cy; y < cy + 9; y++) {
-    for (let x = 6; x <= 15; x++) {
-      const borda = x === 6 || x === 15 || y === cy + 8;
-      por(x, y, borda ? C.peleSombra : tom(C.pele, x, y, 4), 'cabeca');
-    }
-  }
-  // A monocelha preta e os olhos: branco por fora, roxo por dentro.
-  for (let x = 7; x <= 14; x++) por(x, cy + 2, C.monocelha, 'cabeca');
-  por(7, cy + 3, C.olhoBranco, 'cabeca');
-  por(8, cy + 3, C.olhoRoxo, 'cabeca');
-  por(13, cy + 3, C.olhoRoxo, 'cabeca');
-  por(14, cy + 3, C.olhoBranco, 'cabeca');
-  // O narigão laranja: do olho até passar do queixo. Ele mexe.
-  const ny = cy + 3 + q.nariz;
-  for (let y = ny; y <= cy + 9; y++) {
-    por(10, y, C.nariz, 'cabeca');
-    por(11, y, C.narizSombra, 'cabeca');
-  }
-  por(10, cy + 9, C.narizSombra, 'cabeca');
-
-  // ── O chapéu: ponta, degrau de cima, degrau da pedra verde, aba ──
-  const hy = -sobe;
-  const chapeu = (x: number, y: number, cor?: string) => por(x, y + hy, cor ?? tom(C.chapeu, x, y, 5), 'chapeu');
-  for (let x = 4; x <= 17; x++) {
-    chapeu(x, 10, C.chapeuLuz);
-    chapeu(x, 11);
-    chapeu(x, 12, C.chapeuSombra);
-  }
-  for (let y = 6; y <= 9; y++) for (let x = 6; x <= 15; x++) chapeu(x, y, x === 15 ? C.chapeuSombra : undefined);
-  // A pedra verde na frente do chapéu.
-  for (let y = 6; y <= 9; y++) {
-    for (let x = 9; x <= 12; x++) {
-      const meio = (x === 10 || x === 11) && (y === 7 || y === 8);
-      chapeu(x, y, meio ? (y === 7 && x === 10 ? C.pedraLuz : C.pedra) : C.pedraSombra);
-    }
-  }
-  for (let y = 2; y <= 5; y++) for (let x = 8; x <= 13; x++) chapeu(x, y, x === 13 ? C.chapeuSombra : undefined);
-  chapeu(10 + q.ponta, 1);
-  chapeu(11 + q.ponta, 1);
-
+  braco(qd.braco, (x, y, l) => por(x, y, l), dyCorpo);
   contornar(t, W, H, C.contorno);
   return t;
 }
@@ -279,8 +408,8 @@ export function rachaduras(estagio: number): Set<number> {
   const s = new Set<number>();
   const e = Math.max(0, Math.min(3, estagio));
   for (let k = 0; k < RACHADURAS_POR_ESTAGIO[e]; k++) {
-    let x = 4 + Math.floor(acaso(k, 1, 11) * 14);
-    let y = 6 + Math.floor(acaso(k, 2, 13) * 34);
+    let x = 4 + Math.floor(acaso(k, 1, 11) * 10);
+    let y = 4 + Math.floor(acaso(k, 2, 13) * 34);
     for (let p = 0; p < PASSOS_POR_ESTAGIO[e]; p++) {
       s.add(y * TEXELS_LARGURA + x);
       const r = acaso(k, p, 17);
@@ -306,16 +435,16 @@ export function montarBruxaMC(quadro: number, estagio = 0): Imagem {
   return texelsParaImagem(rachar(montarTexels(quadro), estagio));
 }
 
-/** Só a cabeça com o chapéu (o retrato da contagem e da conquista), em texels. */
+/** Só a cabeça com o chapéu e a gola (o retrato da contagem), em texels. */
 export function cabecaMC(): Imagem {
   const t = montarTexels(0);
-  const x0 = 3, x1 = 18, y1 = 23;
+  const x0 = 3, x1 = 14, y1 = 20;
   const w = x1 - x0 + 1, h = y1 + 1;
   const img: Imagem = { largura: w, altura: h, cores: new Array(w * h).fill(null), partes: new Uint8Array(w * h) };
   for (let y = 0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    // Do ombro só entra a gola: o retrato fecha no queixo.
+    // Do ombro não entra nada: o retrato fecha na gola.
     const parte = t.partes[y * TEXELS_LARGURA + x];
-    if (y >= 22 && parte !== NUMERO_DA_PARTE.cabeca && parte !== NUMERO_DA_PARTE.tronco) continue;
+    if (parte === NUMERO_DA_PARTE.bracoFrente) continue;
     img.cores[y * w + x - x0] = t.cores[y * TEXELS_LARGURA + x];
   }
   return img;
@@ -323,98 +452,143 @@ export function cabecaMC(): Imagem {
 
 // ── A garrafa de poção e os itens (os da referência, 16 × 16) ──────────────
 //
-// A garrafa do jogo: rolha laranja, boca e gargalo de vidro azulado, o bojo
-// redondo com o líquido (L), o brilho do líquido (l), o fundo escuro (D) e os
-// reflexos brancos do vidro (w). Sem líquido, é a Garrafa de Vidro.
+// A garrafa da referência: rolha laranja (C) presa num aro de vidro, com a
+// rolha aparecendo clara pelo vidro (K) e escura embaixo (c); o gargalo oco
+// (só as duas paredes de vidro, g); os ombros; o bojo redondo com o vidro
+// em volta, o líquido (L), o brilho do líquido (l), o fundo escuro (D), o
+// reflexo comprido do vidro (w) e o quadradinho rosado de luz (h). TODA poção
+// é esta garrafa, só trocando as cores do líquido. Sem líquido, é a Garrafa
+// de Vidro.
 
 export interface Item { nome: string; linhas: readonly string[]; cores: Readonly<Record<string, string>> }
 
 export const GARRAFA: readonly string[] = [
   '......CCCC......',
-  '......cccc......',
-  '.....gwwwwg.....',
-  '......gwwg......',
-  '......gLLg......',
-  '....ggLLLLgg....',
-  '...gwlLLLLLLg...',
-  '..gwllLLLLLLLg..',
-  '.gwlLLLLLLLLLLg.',
-  '.gwLLLLLLLLLLLg.',
-  '.gwLLLLLLLLLDLg.',
-  '.gLLLLLLLLLDDLg.',
-  '.gLLLLLLLLDDDLg.',
-  '..gLLLLLLLLLLg..',
-  '...gwwwwwwwwg...',
+  '.....gKKKKg.....',
+  '.....gccccg.....',
+  '......g..g......',
+  '......g..g......',
+  '.....gg..gg.....',
+  '....gwhLLLDg....',
+  '...gLLwLLLLDg...',
+  '..gLLLwLLLLLDg..',
+  '..gLLLwLLLLlDg..',
+  '..gLLLLLLLgLDg..',
+  '..gDLLLLLLgLDg..',
+  '..gDDLLLLLLDDg..',
+  '...gDDDDlDDDg...',
   '....gggggggg....',
+  '................',
 ];
 
-const VIDRO = { C: '#d08a50', c: '#8a4a24', g: '#9ec4e8', w: '#f0f8ff' } as const;
+const VIDRO = { C: '#d0783a', K: '#ecc0a0', c: '#a2501e', g: '#cfe4f6', w: '#ffffff' } as const;
 
-/** As cores de uma poção: o líquido, o brilho e o fundo. */
-export function coresDaPocao(cor: string, clara: string, escura: string): Record<string, string> {
-  return { ...VIDRO, L: cor, l: clara, D: escura };
+/** A cor misturada com branco (`k` de 0 a 1): o quadradinho de luz. */
+function clarear(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const canal = (s: number) => Math.round(((n >> s) & 255) + (255 - ((n >> s) & 255)) * k).toString(16).padStart(2, '0');
+  return `#${canal(16)}${canal(8)}${canal(0)}`;
 }
 
-/** Uma linha de 16 com `s` começando na coluna `c`. */
-const em = (c: number, s: string) => ('.'.repeat(c) + s + '.'.repeat(16)).slice(0, 16);
+/** As cores de uma poção: o líquido, o brilho e o fundo (o resto é a garrafa, igual para todas). */
+export function coresDaPocao(cor: string, clara: string, escura: string): Record<string, string> {
+  return { ...VIDRO, L: cor, l: clara, D: escura, h: clarear(cor, 0.55) };
+}
 
-const BASTAO: readonly string[] = Array.from({ length: 16 }, (_, r) => {
-  if (r < 1 || r > 14) return '.'.repeat(16);
-  // A vareta na diagonal, de baixo à esquerda para cima à direita, em gomos.
-  return em(14 - r, r % 3 === 0 ? 'wd' : 'Ww');
-});
+/** O Bastão de Bruxa: a vareta na diagonal, em gomos claros e escuros. */
+const BASTAO: readonly string[] = [
+  '................',
+  '.............dd.',
+  '............dWd.',
+  '...........dwd..',
+  '..........dWd...',
+  '.........dwd....',
+  '........dWd.....',
+  '.......dwd......',
+  '......dWd.......',
+  '.....dwd........',
+  '....dWd.........',
+  '...dwd..........',
+  '..dWd...........',
+  '.dwd............',
+  '.dd.............',
+  '................',
+];
 
+/** O montinho de pó (o mesmo para a redstone e a glowstone, só trocando a cor). */
 const MONTE: readonly string[] = [
   '................',
   '................',
-  '................',
-  '.......R........',
-  '......rHr.......',
-  '.....rRRRr..R...',
-  '...r.RRHRRr.rR..',
-  '..rRrRRRRRRrRr..',
-  '.rRRHRRrRRRHRRr.',
-  '.rRRRRRRRRRRRRr.',
-  '..rRRRrRRHRRRr..',
-  '...rRRRRRRRRr...',
+  '.......rr.......',
+  '......rRHr......',
+  '.....rRHRRr.....',
+  '....rRRmHRRr....',
+  '...rHRRRRRmRr...',
+  '..rHHRRmRRHRRr..',
+  '.rRHRRRRRRRmRRr.',
+  '.rRRHRmRRRHRRRr.',
+  '..rRmRRrRRRmrr..',
+  '...rrRRRRmRrr...',
   '....rrRRRRrr....',
   '......rrrr......',
   '................',
   '................',
 ];
 
+const OLHO: readonly string[] = [
+  '................',
+  '................',
+  '....rrrrrr......',
+  '...rHHRRRRr.....',
+  '..rHHRRRRRRr....',
+  '..rHRkkRRRRr....',
+  '..rRRkkkRRMr....',
+  '..rRRRRRRRMr....',
+  '...rrRRRRRMr....',
+  '.....rrRRRMr....',
+  '.......rRRMr....',
+  '.......rRRRRrr..',
+  '........rRRRMRr.',
+  '........rRRrrr..',
+  '.........rr.....',
+  '................',
+];
+
 /** Os drops dela, como na referência: cada um sai 0 ou 1 vez. */
 export const DROPS: readonly Item[] = [
-  { nome: 'Poção de Cura', linhas: GARRAFA, cores: coresDaPocao('#d81c2c', '#ff7a7a', '#8a0a14') },
+  { nome: 'Poção de Cura', linhas: GARRAFA, cores: coresDaPocao('#d01a24', '#ff6a6a', '#860a12') },
   { nome: 'Poção de Veneno', linhas: GARRAFA, cores: coresDaPocao('#4e8a1c', '#8ac83a', '#2a5a10') },
   { nome: 'Poção de Fraqueza', linhas: GARRAFA, cores: coresDaPocao('#7a2ae0', '#b88aff', '#4a1090') },
-  { nome: 'Garrafa de Vidro', linhas: GARRAFA, cores: { ...VIDRO, D: '#c8e0f4' } },
-  { nome: 'Bastão de Bruxa', linhas: BASTAO, cores: { W: '#b0844e', w: '#7a5228', d: '#4a2e14' } },
-  { nome: 'Pó de Redstone', linhas: MONTE, cores: { r: '#6a0a08', R: '#d01a10', H: '#ff6a5a' } },
-  { nome: 'Pó de Glowstone', linhas: MONTE, cores: { r: '#8a5a10', R: '#f0b81a', H: '#fff8a0' } },
-  {
-    nome: 'Olho de Aranha',
-    linhas: [
-      '................',
-      '................',
-      '.....rrrr.......',
-      '....rHHRRr......',
-      '...rHHRRRRr.....',
-      '...rHRkkRRr.....',
-      '...rRRkkRRr.....',
-      '...rRRRRRRr.....',
-      '....rRRRRRRr....',
-      '.....rrRRRRr....',
-      '.......rRRRr....',
-      '........rRRr....',
-      '.........rRRr...',
-      '..........rRr...',
-      '...........r....',
-      '................',
-    ],
-    cores: { r: '#6a0a1a', R: '#c8304a', H: '#ff8aa0', k: '#1a0a0e' },
-  },
+  { nome: 'Garrafa de Vidro', linhas: GARRAFA, cores: { ...VIDRO } },
+  { nome: 'Bastão de Bruxa', linhas: BASTAO, cores: { W: '#b8864a', w: '#94642e', d: '#3e2810' } },
+  { nome: 'Pó de Redstone', linhas: MONTE, cores: { r: '#5a0606', R: '#c41410', m: '#8a0a08', H: '#ff3a2a' } },
+  { nome: 'Pó de Glowstone', linhas: MONTE, cores: { r: '#7a5208', R: '#eab21c', m: '#c48a14', H: '#fff27a' } },
+  { nome: 'Olho de Aranha', linhas: OLHO, cores: { r: '#5a0818', R: '#c02a48', M: '#9a1a34', H: '#ff96aa', k: '#1a0a0e' } },
 ];
+
+/** O Totem da Imortalidade do jogo: o ídolo dourado de olhos e barriga de esmeralda. */
+export const TOTEM: Item = {
+  nome: 'Totem da Imortalidade',
+  linhas: [
+    '................',
+    '.....oooooo.....',
+    '....owYYYYYo....',
+    '....oYGYYGYo....',
+    '....oyYYYYyo....',
+    '.....oyyyyo.....',
+    '.oooooYYYYooooo.',
+    'oYYYYYYwYYYYYYYo',
+    'oyyyoYYYYYYoyyyo',
+    '.ooo.oYGGYo.ooo.',
+    '.....oYYYYo.....',
+    '.....oyYYyo.....',
+    '......oYYo......',
+    '......oyyo......',
+    '.......oo.......',
+    '................',
+  ],
+  cores: { o: '#6a4608', Y: '#f8d64a', y: '#c8921a', w: '#fff6b0', G: '#36dc58' },
+};
 
 /** O item com contorno escuro de 1 pixel (para ler na tela clara do Gestão). */
 export function comContorno(it: Item): Item {
@@ -424,5 +598,10 @@ export function comContorno(it: Item): Item {
     if (ch !== '.') return ch;
     return cheio(x + 1, y) || cheio(x - 1, y) || cheio(x, y + 1) || cheio(x, y - 1) ? 'o' : '.';
   }).join(''));
+  // O totem usa `o` para o dourado escuro: o contorno de fora ganha outra letra.
+  if ('o' in it.cores) {
+    const fora = linhas.map((l, y) => [...l].map((ch, x) => (ch === 'o' && it.linhas[y][x] === '.' ? '#' : ch)).join(''));
+    return { ...it, linhas: fora, cores: { ...it.cores, '#': CORES_MC.contorno } };
+  }
   return { ...it, linhas, cores: { ...it.cores, o: CORES_MC.contorno } };
 }

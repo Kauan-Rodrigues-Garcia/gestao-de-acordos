@@ -18,7 +18,7 @@ import { montarFaixa, type DadosFaixa } from './faixa';
 import { canvasDaImagem, quadrosDa } from './pixels';
 import { VELOCIDADES, type Dificuldade } from './voo';
 import type { Morte } from './queda';
-import { NOME_CHEFONA, QUADROS_FLUTUANDO, montarBruxaMC } from './chefona/arte';
+import { ALTURA_MC, LARGURA_MC, NOME_CHEFONA, QUADROS_FLUTUANDO, montarBruxaMC } from './chefona/arte';
 import { FEITICOS, LISTA_FEITICOS, alvosPorAtributo, type NomeFeitico } from './chefona/feiticos';
 import { MANOBRAS, NOME_MANOBRA, type Manobra } from './chefona/movimento';
 import { ESPERA_PADRAO_S, PalcoChefona, PRAZO_PADRAO_S, VIDA_PADRAO, type EventoChefona } from './chefona/palcoChefona';
@@ -75,7 +75,7 @@ const PAINEL = `
   <div class="lb-corpo">
     <p class="lb-nota">Só no localhost · nada vai para o banco · clique na bruxa para atirar</p>
     <p class="lb-rotulo">Chefona: a ${NOME_CHEFONA}</p>
-    <div class="lb-chefona-retrato"><canvas width="44" height="92"></canvas><span>A bruxa do Minecraft. Vida de time, joga poção na tela, bebe poção para desviar e se cura no caldeirão.</span></div>
+    <div class="lb-chefona-retrato"><canvas width="${LARGURA_MC}" height="${ALTURA_MC}"></canvas><span>A bruxa do Minecraft. Vida de time, joga poção na tela, bebe poção para desviar. A cura e o totem são no botão.</span></div>
     <div class="lb-linha">
       <button type="button" class="lb-btn principal" data-chefona="soltar">Soltar (contagem de 1 min)</button>
       <button type="button" class="lb-btn" data-chefona="pular">Pular contagem</button>
@@ -85,7 +85,8 @@ const PAINEL = `
       <button type="button" class="lb-btn" data-chefona="robos" aria-pressed="false">Robôs atirando</button>
       <button type="button" class="lb-btn" data-chefona="arrancar">Arrancar 30%</button>
       <button type="button" class="lb-btn" data-chefona="furia">Fúria</button>
-      <button type="button" class="lb-btn" data-chefona="curar">Caldeirão</button>
+      <button type="button" class="lb-btn" data-chefona="curar">Tomar Poção de Cura</button>
+      <button type="button" class="lb-btn" data-chefona="proteger">Feitiço de proteção (totem)</button>
     </div>
     <div class="lb-linha">
       <select class="lb-btn" data-escolha="feitico" aria-label="Qual poção">${LISTA_FEITICOS.map(f => `<option value="${f}">${FEITICOS[f].titulo}</option>`).join('')}</select>
@@ -334,7 +335,9 @@ let ultimoDaChefona = '';
 function aoEventoChefona(e: EventoChefona): void {
   if (e.tipo === 'feitico') ultimoDaChefona = `poção: ${FEITICOS[e.feitico].titulo} (${Math.round(e.forca * 100)}%, ${Math.round(e.duracaoMs / 1000)} s)`;
   else if (e.tipo === 'curou') ultimoDaChefona = `bebeu a Poção de Cura: vida ${e.vida}`;
-  else if (e.tipo === 'caldeiraoQuebrado') ultimoDaChefona = 'caldeirão quebrado';
+  else if (e.tipo === 'bebendo') ultimoDaChefona = 'bebendo a Poção de Cura';
+  else if (e.tipo === 'protegida') ultimoDaChefona = 'protegida pelo Totem da Imortalidade';
+  else if (e.tipo === 'totem') ultimoDaChefona = 'o totem a salvou: 1 de vida, Absorção e Regeneração';
   else if (e.tipo === 'quebrou') ultimoDaChefona = `quebraram: ${FEITICOS[e.feitico].titulo}`;
   else if (e.tipo === 'manobra') ultimoDaChefona = `manobra: ${NOME_MANOBRA[e.manobra]}`;
   else if (e.tipo === 'furia') ultimoDaChefona = 'FÚRIA';
@@ -386,6 +389,7 @@ painel.addEventListener('click', e => {
       break;
     case 'pular': chefona.pularContagem(); break;
     case 'curar': chefona.curar(); break;
+    case 'proteger': chefona.proteger(); break;
     case 'robos':
       if (robos) pararRobos();
       else {
@@ -412,7 +416,7 @@ setInterval(() => {
       ? `contagem: ${s.contagem} s`
       : `${s.fase}${s.furia ? ' (fúria)' : ''} · vida ${s.vida}/${s.vidaMax} · rachaduras ${s.estagio}/3`
         + ` · força das poções ${Math.round(s.forca * 100)}% · ${Math.ceil(s.restante)} s`
-        + `${s.caldeirao !== null ? ` · caldeirão ${s.caldeirao} tiros` : ''}`
+        + `${s.protegida ? ' · com totem' : ''}${s.absorcao ? ` · absorção ${s.absorcao}` : ''}`
         + `${s.feiticos.length ? ` · ativos: ${s.feiticos.map(f => FEITICOS[f].titulo).join(', ')}` : ''}`
         + `${ultimoDaChefona ? ` · ${ultimoDaChefona}` : ''}`;
   painel.querySelector('.lb-chefona-estado')!.textContent = linha;

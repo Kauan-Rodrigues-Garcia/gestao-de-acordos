@@ -4,8 +4,7 @@
  * A chefona é a BRUXA DO MINECRAFT (`arte.ts`). Um motor sem React, como o
  * `../palco.ts` das bruxas comuns: recebe um elemento e põe nele um canvas de
  * baixa resolução (um pixel do canvas = um pixel da arte, ampliado pelo CSS
- * sem suavizar), as caixas de tiro (a dela e a do caldeirão), a barra de
- * chefe, a contagem e os letreiros.
+ * sem suavizar), a caixa de tiro, a barra de chefe, a contagem e os letreiros.
  *
  * ## A luta
  *
@@ -24,9 +23,14 @@
  * - O forte é o ENCANTAMENTO: a mesa de encantamento aparece no chão, as
  *   runas do Alfabeto Galáctico voam para o livro e giram em volta dela, a
  *   frase dela se escreve em runas no alto, e a página distorce.
- * - Com metade da vida (e de novo perto do fim) ela põe o CALDEIRÃO da
- *   cabana do pântano e bebe a Poção de Cura. O caldeirão leva tiro e racha
- *   como bloco, até quebrar.
+ * - A CURA é de quem comanda (`curar()`, o botão do laboratório): ela para,
+ *   leva a Poção de Cura à boca, bebe (os goles, o nariz mexendo) e a vida
+ *   volta de uma vez, como a Vida Instantânea do jogo.
+ * - O FEITIÇO DE PROTEÇÃO (`proteger()`) é o Totem da Imortalidade: ela ergue
+ *   o totem e passa a segurá-lo. O golpe que a mataria não mata: o totem
+ *   estoura na tela (o ídolo dourado subindo e girando, as partículas verdes e
+ *   amarelas), ela fica com 1 de vida, ganha Absorção (a parte dourada da
+ *   barra) e Regeneração. Um totem por feitiço.
  * - Com pouca vida, a FÚRIA: mais rápida, joga mais, desvia mais.
  * - Vida zero: a morte do Minecraft — vermelha, cai, tomba de lado, some num
  *   «puf» de fumaça branca e deixa os drops dela (garrafa, redstone, pedra
@@ -43,14 +47,15 @@ import { somAcerto, somCerebro, somTiro, somTique } from '../../sons';
 import { NUMERO_DA_PARTE, PARTE_DO_NUMERO, alvoDaParte, centroDaParte, parteNoPonto, type Imagem, type NomeParte } from '../arte';
 import { canvasDaImagem, miniatura } from '../pixels';
 import {
-  somArremesso, somBeber, somBloco, somBlocoQuebra, somBrava, somCaldeirao, somConquista, somCura, somDor, somEncantamento,
-  somGargalhada, somMorte, somOnda, somPuf, somPufMorte, somTeleporte, somVento, somVidro, somXp,
+  somArremesso, somBeber, somBloco, somBrava, somConquista, somCura, somDor, somEncantamento,
+  somGargalhada, somMorte, somOnda, somPuf, somPufMorte, somTeleporte, somTotem, somVento, somVidro, somXp,
 } from '../sons';
 import {
-  ALTURA_MC, DROPS, ESCALA_CHEFONA, GARRAFA, LARGURA_MC, NOME_CHEFONA, PIXEL_MC, PONTA_DO_CHAPEU, PRIMEIRO_RINDO_MC,
-  QUADROS_FLUTUANDO, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC, type Item,
+  ALTURA_MC, BOCA, DROPS, ESCALA_CHEFONA, GARRAFA, LARGURA_MC, MAO_ERGUIDA, MAO_NO_ALTO, NOME_CHEFONA, OUTRA_MAO, PIXEL_MC,
+  PONTA_DO_CHAPEU, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC, PRIMEIRO_SEGURANDO_MC, PRIMEIRO_TOTEM_MC,
+  QUADROS_FLUTUANDO, TOTEM, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC, type Item,
 } from './arte';
-import { ALTURA_CALDEIRAO, COR_CURA, LARGURA_CALDEIRAO, PONTOS_CALDEIRAO, desenharCaldeirao } from './caldeirao';
+import { escreverMC, larguraTextoMC } from './fonteMC';
 import {
   FEITICOS, FEITICO_FORTE, LISTA_FEITICOS, alvoDaPocao, alvosPorAtributo, disponivel, duracaoDoFeitico,
   forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
@@ -107,16 +112,27 @@ const LIMIAR_DESVIO_FURIA = 4;
 const CHANCE_DESVIO = 0.07;
 const CHANCE_DESVIO_FURIA = 0.12;
 const FOLGA_MANOBRA_S = 2.2;
-/** O caldeirão: quanto da vida ele devolve, em quanto tempo, e quando ela o chama. */
+/** A Poção de Cura: quanto da vida ela devolve e quanto tempo ela leva bebendo (o gole do jogo é 1,6 s). */
 export const CURA_FRACAO = 0.22;
+const BEBER_S = 1.8;
+/** A cor da Poção de Cura (a da Vida Instantânea do jogo). */
+const COR_CURA = '#f82423';
+/** O feitiço de proteção: quanto tempo ela leva erguendo o totem. */
+const PROTEGER_S = 1.3;
+/** O totem salvou: a Absorção (fração da vida máxima, a parte dourada) e a Regeneração. */
+export const ABSORCAO_FRACAO = 0.1;
+export const REGEN_FRACAO = 0.15;
+const REGEN_S = 8;
 /** A conquista de quem ajudou a derrubar a chefona (o desafio do Minecraft). */
 export const CONQUISTA = {
   titulo: 'Desafio concluído!',
   nome: 'Quem Mandou Jogar Poção?',
   descricao: `Ajudou a derrubar a ${NOME_CHEFONA}`,
 } as const;
-const CURA_S = 6;
-const CURA_EM: readonly number[] = [0.5, 0.2];
+/** A toast do jogo: a cor do título de desafio (§d) e quanto tempo ela fica. */
+const COR_DESAFIO = '#ff55ff';
+const SOMBRA_DESAFIO = '#3f153f';
+const TOAST_MS = 5000;
 /** A morte: gravidade, o tombo de lado, o tempo deitada e quanto os drops ficam. */
 const GRAVIDADE = 330;
 const TOMBO_S = 0.45;
@@ -133,13 +149,15 @@ const CORES_PORTAL = ['#c040ff', '#8a1ad0', '#e0a0ff', '#2a0a4a'] as const;
 const CORES_FUMACA = ['#ffffff', '#e8e8e8', '#c8c8c8', '#a8a8a8'] as const;
 const CORES_CRITICO = ['#fff4c8', '#e8c890', '#ffffff'] as const;
 const CORES_CURA = [COR_CURA, '#ff8a8a', '#ffc0c0'] as const;
+/** As partículas do totem (verdes e amarelas, as do jogo) e as da Regeneração (rosa). */
+const CORES_TOTEM = ['#c8ff3a', '#86e020', '#4ec81a', '#f8e040', '#ffd020', '#fff6a0'] as const;
+const CORES_REGEN = ['#cd5cab', '#e88ad0', '#f4b8e4'] as const;
 const CORES_MANTO = ['#6a1fb0', '#5a1a9a', '#8a3ad0', '#1f8a2a', '#1a1a1c'] as const;
 /** A fumaça roxa que sai da ponta do chapéu (a da referência). */
 const CORES_FUMACA_CHAPEU = ['#8a1ad0', '#a83ae8', '#6a10a8', '#c070ff'] as const;
-const CORES_FERRO = ['#3c3c40', '#4a4a50', '#6a6a72', '#232326'] as const;
 
 export type Fase =
-  | 'fora' | 'chegando' | 'entrando' | 'voando' | 'conjurando' | 'tonta' | 'curando'
+  | 'fora' | 'chegando' | 'entrando' | 'voando' | 'conjurando' | 'tonta' | 'curando' | 'protegendo'
   | 'caindo' | 'tombando' | 'fugindo';
 
 export type EventoChefona =
@@ -152,9 +170,10 @@ export type EventoChefona =
   | { tipo: 'conjurando'; feitico: NomeFeitico }
   | { tipo: 'feitico'; feitico: NomeFeitico; forca: number; duracaoMs: number }
   | { tipo: 'quebrou'; feitico: NomeFeitico }
-  | { tipo: 'caldeirao' }
+  | { tipo: 'bebendo' }
   | { tipo: 'curou'; vida: number }
-  | { tipo: 'caldeiraoQuebrado' }
+  | { tipo: 'protegida' }
+  | { tipo: 'totem'; vida: number }
   | { tipo: 'furia' }
   | { tipo: 'derrotada'; segundos: number }
   | { tipo: 'fugiu' }
@@ -182,16 +201,11 @@ interface Anel { x: number; y: number; r: number; vr: number; vida: number; max:
 /** A garrafa voando em arco até o alvo. */
 interface Garrafa { feitico: NomeFeitico; t: number; dura: number; de: { x: number; y: number }; ate: { x: number; y: number }; altura: number }
 
-interface Caldeirao {
-  x: number;
-  pontos: number;
-  tremor: number;
-  t: number;
-  aparecendo: number;
-  saindo: boolean;
-}
+/** A Poção de Cura na boca: o tempo bebendo, quanto ela vai curar e o próximo gole. */
+interface Cura { t: number; total: number; proximoGole: number }
 
-interface Cura { etapa: 'indo' | 'bebendo'; curado: number; total: number; proximoNumero: number; proximoGole: number }
+/** A Regeneração que o totem deixa: quanto falta curar e o ritmo. */
+interface Regen { resta: number; porSegundo: number; proximoNumero: number }
 
 interface Queda { vy: number; vx: number }
 
@@ -266,6 +280,41 @@ function garrafa(cor: string, clara: string): HTMLCanvasElement {
   return miniatura(it)[0];
 }
 
+/** O item como imagem (um canvas novo a cada chamada: para pôr na página). */
+function imagemDoItem(it: Item): Imagem {
+  const w = it.linhas[0].length, h = it.linhas.length;
+  const img: Imagem = { largura: w, altura: h, cores: new Array(w * h).fill(null), partes: new Uint8Array(w * h) };
+  it.linhas.forEach((l, j) => [...l].forEach((ch, i) => { if (ch !== '.') img.cores[j * w + i] = it.cores[ch] ?? null; }));
+  return img;
+}
+
+/**
+ * A toast de conquista do jogo, em pixels da interface (1 = 1 pixel da GUI):
+ * 160 × 32 (cresce se o nome for comprido), cantos cortados, contorno preto,
+ * borda cinza, fundo escuro; o ícone em (8, 8), o título em (30, 7) e o nome
+ * em (30, 18).
+ */
+export function toastDeConquista(titulo: string, nome: string, icone: HTMLCanvasElement): HTMLCanvasElement {
+  const w = Math.max(160, 30 + Math.max(larguraTextoMC(titulo), larguraTextoMC(nome)) + 8), h = 32;
+  const cv = document.createElement('canvas');
+  cv.width = w;
+  cv.height = h;
+  const c = cv.getContext('2d')!;
+  const caixa = (x: number, y: number, cw: number, ch: number, cor: string) => {
+    // Retângulo com o canto de 1 pixel cortado.
+    c.fillStyle = cor;
+    c.fillRect(x + 1, y, cw - 2, ch);
+    c.fillRect(x, y + 1, cw, ch - 2);
+  };
+  caixa(0, 0, w, h, '#000000');
+  caixa(1, 1, w - 2, h - 2, '#555555');
+  caixa(2, 2, w - 4, h - 4, '#212121');
+  c.drawImage(icone, 8, 8);
+  escreverMC(c, titulo, 30, 7, COR_DESAFIO, SOMBRA_DESAFIO);
+  escreverMC(c, nome, 30, 18, '#ffffff', '#3f3f3f');
+  return cv;
+}
+
 let teiaPronta: HTMLCanvasElement | null = null;
 /** A teia de aranha do jogo: oito fios e dois anéis, com sombra para ler no claro. */
 function teia(): HTMLCanvasElement {
@@ -301,7 +350,6 @@ export class PalcoChefona {
   private readonly canvas: HTMLCanvasElement;
   private readonly c: CanvasRenderingContext2D;
   private readonly caixa: HTMLDivElement;
-  private readonly caixaCaldeirao: HTMLDivElement;
   private readonly barra: HTMLDivElement;
   private readonly escala: number;
   private readonly alvos: AlvosFeitico;
@@ -322,7 +370,7 @@ export class PalcoChefona {
   private furia = false;
   private tFase = 0;
   private dorAte = 0;
-  /** Esta tela acertou ao menos um tiro (nela ou no caldeirão): ganha a conquista. */
+  /** Esta tela acertou ao menos um tiro (nela): ganha a conquista. */
   private ajudei = false;
   private relogioConquista: ReturnType<typeof setTimeout> | undefined;
   private ultimaDor = 0;
@@ -340,9 +388,12 @@ export class PalcoChefona {
   private aneis: Anel[] = [];
   private clarao = 0;
   private sobraRastro = 0;
-  private caldeirao: Caldeirao | null = null;
   private cura: Cura | null = null;
-  private curasFeitas = 0;
+  /** Segura o Totem da Imortalidade: o próximo golpe fatal não mata. */
+  private protegida = false;
+  /** A Absorção (vida dourada, gasta antes da vida) e a Regeneração do totem. */
+  private absorcao = 0;
+  private regen: Regen | null = null;
   private mesa: Mesa | null = null;
   private runas: RunaVoando[] = [];
   private teias: Teia[] = [];
@@ -366,13 +417,18 @@ export class PalcoChefona {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'bxc-canvas';
     this.caixa = this.novaCaixa(`A ${NOME_CHEFONA}! Atire nela`, (x, y) => this.atirar(x, y));
-    this.caixaCaldeirao = this.novaCaixa('O caldeirão! Atire para quebrar', () => this.atirarCaldeirao(true));
     this.barra = document.createElement('div');
     this.barra.className = 'bxc-barra';
     this.barra.hidden = true;
-    this.barra.innerHTML = '<div class="bxc-nome"></div><div class="bxc-vida"><i></i><b></b><span></span></div><div class="bxc-tempo"></div>';
-    this.barra.querySelector('.bxc-nome')!.textContent = NOME_CHEFONA;
-    this.raiz.append(this.canvas, this.caixaCaldeirao, this.caixa, this.barra);
+    this.barra.innerHTML = '<div class="bxc-nome"><span></span></div><div class="bxc-vida"><i></i><b></b><em></em><span></span></div><div class="bxc-tempo"></div>';
+    this.barra.querySelector('.bxc-nome span')!.textContent = NOME_CHEFONA;
+    // O totem ao lado do nome enquanto ela está protegida.
+    const iconeTotem = canvasDaImagem(imagemDoItem(contornado(TOTEM)), false);
+    iconeTotem.className = 'bxc-nome-totem';
+    iconeTotem.title = 'Protegida pelo Totem da Imortalidade';
+    iconeTotem.hidden = true;
+    this.barra.querySelector('.bxc-nome')!.appendChild(iconeTotem);
+    this.raiz.append(this.canvas, this.caixa, this.barra);
     host.appendChild(this.raiz);
     this.c = this.canvas.getContext('2d')!;
     this.medir();
@@ -436,7 +492,7 @@ export class PalcoChefona {
       feiticos: [...this.ativos.keys()], restante: Math.max(0, this.prazo - this.tempo),
       estagio: this.estagio, forca: forcaDoFeitico(this.fracao),
       contagem: this.fase === 'chegando' ? Math.max(0, Math.ceil((this.chegaEm - performance.now()) / 1000)) : 0,
-      caldeirao: this.caldeirao ? this.caldeirao.pontos : null,
+      protegida: this.protegida, absorcao: Math.round(this.absorcao),
       drops: this.drops.length, orbes: this.orbes.length,
     };
   }
@@ -471,7 +527,10 @@ export class PalcoChefona {
     this.desmontarContagem();
     this.tempo = 0;
     this.furia = false;
-    this.curasFeitas = 0;
+    this.protegida = false;
+    this.absorcao = 0;
+    this.regen = null;
+    this.cura = null;
     this.estagioVisto = 0;
     this.ajudei = false;
     this.proximoFeitico = PRIMEIRO_FEITICO_S;
@@ -488,11 +547,10 @@ export class PalcoChefona {
     this.acordar();
   }
 
-  /** Tiro de outra pessoa (os robôs do laboratório): numa peça sorteada, ou no caldeirão. */
+  /** Tiro de outra pessoa (os robôs do laboratório): numa peça sorteada. */
   tiroDeOutro(): void {
     const corpo = this.corpo;
     if (!corpo || !this.atingivel()) return;
-    if (this.caldeirao && !this.caldeirao.saindo && Math.random() < 0.35) { this.atirarCaldeirao(false); return; }
     if (invulneravel(corpo)) {
       if (Math.random() < 0.25) this.letreiro('ESQUIVOU!', corpo.x, corpo.y - 20, 'esquiva');
       return;
@@ -505,7 +563,7 @@ export class PalcoChefona {
   /** Tira uma fração da vida de uma vez (o «arrancar» do laboratório). */
   arrancar(fracao: number): void {
     if (!this.corpo || !this.atingivel()) return;
-    this.vida -= this.vidaMax * fracao;
+    this.tirarVida(this.vidaMax * fracao);
     this.doer();
     this.depoisDoDano();
   }
@@ -524,12 +582,20 @@ export class PalcoChefona {
     this.fazerManobra(m);
   }
 
-  /** Põe o caldeirão já. */
+  /** Ela bebe a Poção de Cura (quem escolhe a hora é quem comanda: o botão). */
   curar(): void {
-    if (!this.corpo || !['voando', 'entrando'].includes(this.fase)) return;
+    if (!this.corpo || !['voando', 'entrando'].includes(this.fase) || this.vida >= this.vidaMax) return;
     this.corpo.manobra = null;
     this.corpo.visivel = true;
     this.iniciarCura();
+  }
+
+  /** O feitiço de proteção: ela ergue o Totem da Imortalidade e passa a segurá-lo. */
+  proteger(): void {
+    if (!this.corpo || this.protegida || !['voando', 'entrando'].includes(this.fase)) return;
+    this.corpo.manobra = null;
+    this.corpo.visivel = true;
+    this.iniciarProtecao();
   }
 
   enfurecer(): void {
@@ -545,7 +611,7 @@ export class PalcoChefona {
     this.corpo.visivel = true;
     this.conjuro = null;
     this.voando = null;
-    this.encerrarCaldeirao(false);
+    this.cura = null;
     this.encerrarMesa();
     this.mudarFase('fugindo');
     somGargalhada();
@@ -557,15 +623,17 @@ export class PalcoChefona {
   limpar(): void {
     this.desfazerTodos();
     clearTimeout(this.relogioConquista);
-    this.raiz.querySelectorAll('.bxc-conquista').forEach(a => a.remove());
+    this.raiz.querySelectorAll('.bxc-conquista, .bxc-totem').forEach(a => a.remove());
     this.desmontarContagem();
     this.fase = 'fora';
     this.corpo = null;
     this.conjuro = null;
     this.voando = null;
     this.queda = null;
-    this.caldeirao = null;
     this.cura = null;
+    this.protegida = false;
+    this.absorcao = 0;
+    this.regen = null;
     this.mesa = null;
     this.runas = [];
     this.teias = [];
@@ -575,7 +643,6 @@ export class PalcoChefona {
     this.aneis = [];
     this.acertos = [];
     this.caixa.style.display = 'none';
-    this.caixaCaldeirao.style.display = 'none';
     this.barra.hidden = true;
     for (const l of this.letreiros) l.remove();
     this.letreiros = [];
@@ -644,19 +711,35 @@ export class PalcoChefona {
   // ── O tiro ───────────────────────────────────────────────────────────────
 
   private atingivel(): boolean {
-    return ['entrando', 'voando', 'conjurando', 'tonta', 'curando'].includes(this.fase);
+    return ['entrando', 'voando', 'conjurando', 'tonta', 'curando', 'protegendo'].includes(this.fase);
   }
 
+  /**
+   * O quadro da pose de agora. Flutuando, um ciclo de 6 (respira, o chapéu
+   * balança, os pés); cada ação tem os seus 2, em ritmo próprio: o nariz mexe
+   * rápido bebendo, a gargalhada sacode, o apanhar fecha os olhos.
+   */
   private quadroAtual(): number {
-    const f = Math.max(0, Math.floor((this.relogio * 1000) / 160));
-    if (['conjurando', 'tonta', 'fugindo', 'caindo', 'tombando'].includes(this.fase)
-      || (this.fase === 'curando' && this.cura?.etapa === 'bebendo')) return PRIMEIRO_RINDO_MC + (f % 2);
-    return f % QUADROS_FLUTUANDO;
+    const t = this.relogio * 1000;
+    const par = (ms: number) => Math.floor(t / ms) % 2;
+    switch (this.fase) {
+      case 'conjurando':
+        return this.conjuro?.feitico === FEITICO_FORTE ? PRIMEIRO_RINDO_MC + par(140) : PRIMEIRO_SEGURANDO_MC + par(180);
+      case 'curando': return PRIMEIRO_BEBENDO_MC + par(90);
+      case 'protegendo': return PRIMEIRO_TOTEM_MC + par(150);
+      case 'tonta': case 'caindo': case 'tombando': return PRIMEIRO_DOR_MC + par(200);
+      case 'fugindo': return PRIMEIRO_RINDO_MC + par(140);
+      default:
+        if (performance.now() < this.dorAte) return PRIMEIRO_DOR_MC;
+        // Acabou de jogar a garrafa: a gargalhada.
+        if (this.fase === 'voando' && this.tFase < 0.5 && this.voando) return PRIMEIRO_RINDO_MC + par(120);
+        return Math.floor(t / 150) % QUADROS_FLUTUANDO;
+    }
   }
 
   private centroSprite(): { x: number; y: number } {
     const corpo = this.corpo!;
-    const flutua = !['caindo', 'tombando', 'curando'].includes(this.fase);
+    const flutua = !['caindo', 'tombando'].includes(this.fase);
     return { x: corpo.x, y: corpo.y + (flutua ? balanco(this.relogio) : 0) };
   }
 
@@ -715,7 +798,7 @@ export class PalcoChefona {
     let dano = DANO[alvo];
     if (this.fase === 'conjurando') dano *= MULT_CONJURANDO;
     if (this.fase === 'tonta') dano *= MULT_TONTA;
-    this.vida -= dano;
+    this.tirarVida(dano);
     if (meu) this.ajudei = true;
     this.doer();
     // O empurrão do golpe, como no jogo (só voando: na manobra e na cura ela está presa ao caminho).
@@ -755,8 +838,18 @@ export class PalcoChefona {
     if (agora - this.ultimaDor > 220) { this.ultimaDor = agora; somDor(); }
   }
 
+  /** O dano gasta primeiro a Absorção (a vida dourada do totem), depois a vida. */
+  private tirarVida(dano: number): void {
+    const abs = Math.min(this.absorcao, dano);
+    this.absorcao -= abs;
+    this.vida -= dano - abs;
+  }
+
   private depoisDoDano(): void {
-    if (this.vida <= 0) { this.derrotar(); return; }
+    if (this.vida <= 0) {
+      if (this.protegida) this.usarTotem(); else this.derrotar();
+      return;
+    }
     // Rachou mais um estágio: as lascas grandes do bloco.
     if (this.estagio > this.estagioVisto) {
       this.estagioVisto = this.estagio;
@@ -813,129 +906,159 @@ export class PalcoChefona {
     this.aoEvento?.({ tipo: 'furia' });
   }
 
-  // ── O caldeirão ──────────────────────────────────────────────────────────
+  // ── A Poção de Cura ──────────────────────────────────────────────────────
 
   private iniciarCura(): void {
-    const z = this.zona();
     const corpo = this.corpo!;
-    this.curasFeitas += 1;
-    const folga = LARGURA_CALDEIRAO / 2 + LARG + 4;
-    this.caldeirao = {
-      x: Math.max(folga, Math.min(this.larg - folga, corpo.x + corpo.lado * 40)),
-      pontos: PONTOS_CALDEIRAO, tremor: 0, t: 0, aparecendo: 0, saindo: false,
-    };
-    this.cura = { etapa: 'indo', curado: 0, total: this.vidaMax * CURA_FRACAO, proximoNumero: 0, proximoGole: 0 };
-    this.efeito(this.caldeirao.x, z.chao - 8, CORES_CURA, 24);
-    somCaldeirao();
+    this.cura = { t: 0, total: Math.min(this.vidaMax * CURA_FRACAO, this.vidaMax - this.vida), proximoGole: 0 };
     this.mudarFase('curando');
-    this.aviso('O caldeirão!', 'Ela vai beber a Poção de Cura: quebre o caldeirão a tiro');
+    somGargalhada();
+    this.aviso('Ela vai beber a Poção de Cura!', 'Atirem nela enquanto ela bebe');
     this.letreiro('POÇÃO DE CURA!', corpo.x, corpo.y - ALT / 2 - 8, 'cura');
-    this.aoEvento?.({ tipo: 'caldeirao' });
+    this.aoEvento?.({ tipo: 'bebendo' });
   }
 
-  /** Onde ela fica para beber: ao lado do caldeirão, com o pé no chão. */
-  private alvoDaCura(): { x: number; y: number } {
-    const z = this.zona();
-    const cal = this.caldeirao!;
-    const lado = this.corpo!.x <= cal.x ? -1 : 1;
-    return { x: cal.x + lado * (LARGURA_CALDEIRAO / 2 + LARG / 2 - 2), y: z.chao - ALT / 2 };
-  }
-
+  /** Bebendo: parada no ar, a garrafa na boca, os goles e as gotas. No fim a vida volta de uma vez. */
   private passoCura(dt: number): void {
     const corpo = this.corpo!;
     const cura = this.cura!;
-    const cal = this.caldeirao!;
-    const alvo = this.alvoDaCura();
-    if (cura.etapa === 'indo') {
-      const k = Math.min(1, dt * 2.6);
-      corpo.vx = (alvo.x - corpo.x) * 2.6;
-      corpo.x += (alvo.x - corpo.x) * k;
-      corpo.y += (alvo.y - corpo.y) * k;
-      // Olha para o caldeirão.
-      corpo.lado = cal.x >= corpo.x ? 1 : -1;
-      if (Math.hypot(alvo.x - corpo.x, alvo.y - corpo.y) < 3 && cal.aparecendo >= 1) {
-        cura.etapa = 'bebendo';
-        somGargalhada();
-      }
-      return;
-    }
-    // Bebendo: a garrafa na boca, as partículas da cura e a vida voltando.
-    corpo.x = alvo.x;
-    corpo.y = alvo.y;
-    corpo.lado = cal.x >= corpo.x ? 1 : -1;
-    const passo = (cura.total / CURA_S) * dt;
-    const falta = this.vidaMax - this.vida;
-    const ganho = Math.min(passo, cura.total - cura.curado, falta);
-    this.vida += ganho;
-    cura.curado += passo;
-    cura.proximoNumero -= dt;
+    pairar(corpo, dt);
+    cura.t += dt;
     cura.proximoGole -= dt;
-    if (cura.proximoNumero <= 0) {
-      cura.proximoNumero = 0.6;
-      this.letreiro(`+${Math.max(1, Math.round((cura.total / CURA_S) * 0.6))}`, corpo.x + entre(-8, 8), corpo.y - ALT / 2 - 4, 'cura');
-    }
-    if (cura.proximoGole <= 0) { cura.proximoGole = 1.1; somBeber(); setTimeout(somCura, 380); }
-    if (Math.random() < dt * 30) {
-      // As espirais da Poção de Cura subindo em volta dela.
+    if (cura.proximoGole <= 0) { cura.proximoGole = 0.55; somBeber(); }
+    const boca = this.paraTela(BOCA.x * PIXEL_MC, BOCA.y * PIXEL_MC);
+    if (Math.random() < dt * 26) {
+      // As gotas da poção escorrendo da boca (as partículas de beber do jogo).
       this.particula({
-        x: corpo.x + entre(-LARG / 2, LARG / 2), y: corpo.y + entre(-ALT / 4, ALT / 2), vx: entre(-4, 4), vy: entre(-26, -12), vida: entre(0.6, 1),
-        cor: sorteia(CORES_CURA), tam: 1, g: 0, forma: 'espiral',
+        x: boca.x + entre(-3, 3), y: boca.y + entre(-2, 2), vx: entre(-25, 25), vy: entre(-40, -5), vida: entre(0.35, 0.6),
+        cor: sorteia(CORES_CURA), tam: 1, g: GRAVIDADE * 0.7, forma: 'ponto',
       });
     }
-    if (cura.curado >= cura.total || falta <= 0) this.encerrarCaldeirao(true);
+    if (cura.t >= BEBER_S) this.terminarCura();
   }
 
-  private atirarCaldeirao(meu: boolean): void {
-    const cal = this.caldeirao;
-    if (!cal || cal.saindo || cal.aparecendo < 0.5) return;
-    const z = this.zona();
-    cal.pontos -= 1;
-    cal.tremor = 2;
-    const topo = z.chao - ALTURA_CALDEIRAO + 8;
-    if (meu) { somTiro(); somBloco(); this.ajudei = true; }
-    this.estilhacos(cal.x, topo + 8, CORES_FERRO, 5);
-    if (meu) this.letreiro('TOC!', cal.x + entre(-8, 8), topo - 6, 'dano');
-    if (cal.pontos <= 0) this.quebrarCaldeirao();
-  }
-
-  private quebrarCaldeirao(): void {
-    const cal = this.caldeirao!;
-    const z = this.zona();
-    somBlocoQuebra();
-    this.estilhacos(cal.x, z.chao - 16, CORES_FERRO, 36);
-    for (let i = 0; i < 26; i++) {
+  /** O último gole: a Vida Instantânea, de uma vez, com as espirais vermelhas. */
+  private terminarCura(): void {
+    const corpo = this.corpo!;
+    const ganho = Math.max(0, Math.min(this.cura!.total, this.vidaMax - this.vida));
+    this.vida += ganho;
+    this.cura = null;
+    somCura();
+    setTimeout(somGargalhada, 300);
+    for (let i = 0; i < 40; i++) {
       this.particula({
-        x: cal.x + entre(-12, 12), y: z.chao - 26, vx: entre(-110, 110), vy: entre(-150, -30), vida: entre(0.8, 1.6),
-        cor: sorteia(CORES_CURA), tam: sorteia([1, 2, 2]), g: GRAVIDADE, forma: 'ponto', gruda: true,
+        x: corpo.x + entre(-LARG / 2, LARG / 2), y: corpo.y + entre(-ALT / 2, ALT / 2), vx: entre(-12, 12), vy: entre(-40, -10),
+        vida: entre(0.7, 1.2), cor: sorteia(CORES_CURA), tam: 1, g: 0, forma: 'espiral',
       });
     }
-    this.letreiro('CALDEIRÃO QUEBRADO!', cal.x, z.chao - 46, 'quebra');
-    this.caldeirao = null;
-    this.cura = null;
-    this.caixaCaldeirao.style.display = 'none';
-    this.aoEvento?.({ tipo: 'caldeiraoQuebrado' });
-    if (this.fase === 'curando') {
-      somBrava();
-      this.mudarFase('tonta');
-    }
+    this.anel(corpo.x, corpo.y, '#ff8a8a', 70, 0.5);
+    this.letreiro(`+${Math.round(ganho)}`, corpo.x, corpo.y - ALT / 2 - 4, 'cura');
+    this.aviso('Ela bebeu a Poção de Cura!', `Recuperou ${Math.round(ganho)} de vida`);
+    this.aoEvento?.({ tipo: 'curou', vida: Math.round(this.vida) });
+    novoAlvo(corpo, this.zona(), Math.random);
+    this.mudarFase('voando');
   }
 
-  /** A cura acabou (bebeu tudo) ou foi interrompida (fuga, morte): o caldeirão some. */
-  private encerrarCaldeirao(bebeu: boolean): void {
-    if (this.caldeirao) {
-      this.caldeirao.saindo = true;
-      this.efeito(this.caldeirao.x, this.zona().chao - 10, CORES_FUMACA, 16);
+  // ── O feitiço de proteção: o Totem da Imortalidade ──────────────────────
+
+  private iniciarProtecao(): void {
+    const c = this.corpo!;
+    this.mudarFase('protegendo');
+    somEncantamento();
+    this.letreiro('FEITIÇO DE PROTEÇÃO!', c.x, c.y - ALT / 2 - 10, 'totem');
+    this.aviso('Feitiço de proteção!', 'Ela ergueu o Totem da Imortalidade: o golpe final não vai derrubá-la');
+  }
+
+  private passoProtecao(dt: number): void {
+    const corpo = this.corpo!;
+    pairar(corpo, dt);
+    const totem = this.paraTela(MAO_NO_ALTO.x * PIXEL_MC, MAO_NO_ALTO.y * PIXEL_MC - 8);
+    // O brilho dourado subindo do totem enquanto ela o ergue.
+    if (Math.random() < dt * 40) {
+      const a = Math.random() * Math.PI * 2, r = entre(10, 26);
+      this.particula({
+        x: totem.x + Math.cos(a) * r, y: totem.y + Math.sin(a) * r, vx: -Math.cos(a) * r * 2, vy: -Math.sin(a) * r * 2,
+        vida: 0.5, cor: sorteia(CORES_TOTEM), tam: 1, g: 0, forma: Math.random() < 0.4 ? 'estrela' : 'ponto',
+      });
     }
-    this.caixaCaldeirao.style.display = 'none';
-    if (bebeu && this.corpo) {
-      this.cura = null;
-      somGargalhada();
-      this.aviso('Ela bebeu a Poção de Cura!', `Recuperou ${Math.round(CURA_FRACAO * 100)}% da vida`);
-      this.aoEvento?.({ tipo: 'curou', vida: Math.round(this.vida) });
-      novoAlvo(this.corpo, this.zona(), Math.random);
-      this.mudarFase('voando');
-    }
+    if (this.tFase < PROTEGER_S) return;
+    this.protegida = true;
+    somCura();
+    this.anel(totem.x, totem.y, '#f8e040', 60, 0.45);
+    this.aoEvento?.({ tipo: 'protegida' });
+    novoAlvo(corpo, this.zona(), Math.random);
+    this.mudarFase('voando');
+  }
+
+  /**
+   * O golpe fatal com o totem na mão: no jogo, o totem some da mão, o ídolo
+   * sobe girando no meio da tela, as partículas verdes e amarelas explodem e o
+   * mob fica com 1 de vida, Absorção e Regeneração.
+   */
+  private usarTotem(): void {
+    const corpo = this.corpo!;
+    this.protegida = false;
+    this.vida = 1;
+    this.absorcao = this.vidaMax * ABSORCAO_FRACAO;
+    const total = this.vidaMax * REGEN_FRACAO;
+    this.regen = { resta: total, porSegundo: total / REGEN_S, proximoNumero: 0.8 };
+    // A poção que ela preparava e a que bebia se perdem no susto.
+    if (this.conjuro) { this.conjuro = null; this.encerrarMesa(); }
     this.cura = null;
+    corpo.manobra = null;
+    corpo.visivel = true;
+    corpo.giro = 0;
+    this.pausa(140);
+    somTotem();
+    this.clarao = 0.35;
+    this.tremeAte = performance.now() + 350;
+    for (let i = 0; i < 140; i++) {
+      const a = Math.random() * Math.PI * 2, v = entre(30, 170);
+      this.particula({
+        x: corpo.x + entre(-6, 6), y: corpo.y + entre(-ALT / 3, ALT / 3), vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40,
+        vida: entre(0.9, 1.8), cor: sorteia(CORES_TOTEM), tam: sorteia([1, 1, 2]), g: 90, forma: Math.random() < 0.3 ? 'cruz' : 'ponto',
+      });
+    }
+    this.anel(corpo.x, corpo.y, '#c8ff3a', 160, 0.7);
+    this.anel(corpo.x, corpo.y, '#f8e040', 110, 0.9);
+    this.mostrarTotem();
+    this.letreiro('TOTEM DA IMORTALIDADE!', corpo.x, corpo.y - ALT / 2 - 10, 'totem');
+    this.aviso('Ela não caiu!', 'O Totem da Imortalidade a salvou: Absorção e Regeneração');
+    this.aoEvento?.({ tipo: 'totem', vida: 1 });
+    this.folgaManobra = FOLGA_MANOBRA_S;
+    this.mudarFase('voando');
+  }
+
+  /** O ídolo no meio da tela: sobe, cresce, gira como no jogo e some. */
+  private mostrarTotem(): void {
+    this.raiz.querySelectorAll('.bxc-totem').forEach(a => a.remove());
+    const el = canvasDaImagem(imagemDoItem(contornado(TOTEM)), false);
+    el.className = 'bxc-totem';
+    el.setAttribute('aria-hidden', 'true');
+    this.raiz.appendChild(el);
+    setTimeout(() => el.remove(), 2100);
+  }
+
+  /** A Regeneração: a vida voltando aos poucos, com as espirais rosa. */
+  private passoRegen(dt: number): void {
+    const r = this.regen;
+    const corpo = this.corpo;
+    if (!r || !corpo) return;
+    const ganho = Math.min(r.resta, r.porSegundo * dt, this.vidaMax - this.vida);
+    this.vida += ganho;
+    r.resta -= r.porSegundo * dt;
+    r.proximoNumero -= dt;
+    if (r.proximoNumero <= 0) {
+      r.proximoNumero = 1.2;
+      this.letreiro(`+${Math.max(1, Math.round(r.porSegundo * 1.2))}`, corpo.x + entre(-8, 8), corpo.y - ALT / 2 - 4, 'cura');
+    }
+    if (corpo.visivel && Math.random() < dt * 10) {
+      this.particula({
+        x: corpo.x + entre(-LARG / 2, LARG / 2), y: corpo.y + entre(-ALT / 2, ALT / 3), vx: entre(-4, 4), vy: entre(-18, -8),
+        vida: entre(0.6, 1), cor: sorteia(CORES_REGEN), tam: 1, g: 0, forma: 'espiral',
+      });
+    }
+    if (r.resta <= 0 || this.vida >= this.vidaMax) this.regen = null;
   }
 
   // ── As poções ────────────────────────────────────────────────────────────
@@ -1109,8 +1232,9 @@ export class PalcoChefona {
     corpo.manobra = null;
     corpo.visivel = true;
     corpo.giro = 0;
-    if (this.caldeirao) this.quebrarCaldeirao();
-    this.encerrarCaldeirao(false);
+    this.cura = null;
+    this.regen = null;
+    this.absorcao = 0;
     this.encerrarMesa();
     this.desfazerTodos();
     this.mudarFase('caindo');
@@ -1240,7 +1364,7 @@ export class PalcoChefona {
   }
 
   private vivo(): boolean {
-    return this.fase !== 'fora' || this.particulas.length > 0 || this.aneis.length > 0 || !!this.caldeirao
+    return this.fase !== 'fora' || this.particulas.length > 0 || this.aneis.length > 0
       || !!this.mesa || this.runas.length > 0 || this.teias.length > 0 || this.drops.length > 0 || this.orbes.length > 0;
   }
 
@@ -1274,9 +1398,6 @@ export class PalcoChefona {
             break;
           }
           if (this.voando) break;
-          // O caldeirão: na metade da vida e perto do fim, uma vez cada.
-          const devida = CURA_EM[this.curasFeitas];
-          if (devida !== undefined && this.fracao <= devida && !this.caldeirao) { this.iniciarCura(); break; }
           this.proximoFeitico -= dt;
           if (this.proximoFeitico <= 0) {
             const [a, b] = this.furia ? INTERVALO_FURIA : INTERVALO;
@@ -1303,8 +1424,11 @@ export class PalcoChefona {
           if (this.tFase >= TONTA_S) { corpo.giro = 0; novoAlvo(corpo, z, Math.random); this.mudarFase('voando'); }
           break;
         case 'curando':
-          if (this.cura && this.caldeirao) this.passoCura(dt);
+          if (this.cura) this.passoCura(dt);
           else { novoAlvo(corpo, z, Math.random); this.mudarFase('voando'); }
+          break;
+        case 'protegendo':
+          this.passoProtecao(dt);
           break;
         case 'fugindo': {
           const dir = corpo.x < this.larg / 2 ? -1 : 1;
@@ -1332,7 +1456,7 @@ export class PalcoChefona {
           break;
       }
     }
-    if (this.corpo && this.atingivel()) this.rastro(dt);
+    if (this.corpo && this.atingivel()) { this.rastro(dt); this.passoRegen(dt); }
     if (this.voando) {
       const g = this.voando;
       g.t += dt;
@@ -1343,7 +1467,6 @@ export class PalcoChefona {
         this.aplicarFeitico(g.feitico);
       }
     }
-    this.passoCaldeirao(dt);
     this.passoMesa(dt);
     for (const r of this.runas) r.t += dt;
     this.runas = this.runas.filter(r => r.t < r.dura);
@@ -1353,22 +1476,6 @@ export class PalcoChefona {
     this.moverParticulas(dt);
     this.atualizarBarra();
     this.posicionarCaixas();
-  }
-
-  private passoCaldeirao(dt: number): void {
-    const cal = this.caldeirao;
-    if (!cal) return;
-    cal.t += dt;
-    cal.tremor = Math.max(0, cal.tremor - dt * 10);
-    if (cal.saindo) {
-      cal.aparecendo -= dt * 2;
-      if (cal.aparecendo <= 0) this.caldeirao = null;
-    } else cal.aparecendo = Math.min(1, cal.aparecendo + dt * 1.8);
-    // As espirais da poção que saem da boca, como de caldeirão com poção no jogo.
-    if (!cal.saindo && Math.random() < dt * 8) {
-      const z = this.zona();
-      this.particula({ x: cal.x + entre(-10, 10), y: z.chao - ALTURA_CALDEIRAO, vx: entre(-4, 4), vy: entre(-22, -10), vida: entre(0.8, 1.4), cor: sorteia(CORES_CURA), tam: 1, g: -4, forma: 'espiral' });
-    }
   }
 
   /** As espirais da poção entrando na garrafa enquanto ela prepara. */
@@ -1386,9 +1493,9 @@ export class PalcoChefona {
     this.particula({ x, y, vx: (m.x - x) * 2, vy: (m.y - y) * 2, vida: 0.45, cor: Math.random() < 0.3 ? info.corClara : info.cor, tam: 1, g: 0, forma: Math.random() < 0.3 ? 'estrela' : 'espiral' });
   }
 
-  /** Onde fica a garrafa erguida (acima do ombro, do lado para onde ela olha). */
+  /** Onde fica a garrafa erguida (na mão, acima do ombro, do lado para onde ela olha). */
   private paraTelaMaoErguida(): { x: number; y: number } {
-    return this.paraTela(LARG + 2, ALT * 0.28);
+    return this.paraTela(MAO_ERGUIDA.x * PIXEL_MC, MAO_ERGUIDA.y * PIXEL_MC - 6);
   }
 
   /** As partículas de bruxa (roxas) e as da Levitação embaixo do pé. */
@@ -1406,7 +1513,7 @@ export class PalcoChefona {
     this.sobraRastro += dt * (this.furia ? 30 : 18);
     while (this.sobraRastro >= 1) {
       this.sobraRastro -= 1;
-      if (this.fase !== 'curando' && Math.random() < 0.6) {
+      if (Math.random() < 0.6) {
         const p = this.paraTela(entre(4, LARG - 4), ALT - entre(0, 4));
         this.particula({ x: p.x, y: p.y, vx: entre(-6, 6), vy: entre(4, 16), vida: entre(0.4, 0.8), cor: sorteia(CORES_LEVITACAO), tam: 1, g: 0, forma: 'espiral' });
       } else {
@@ -1466,12 +1573,19 @@ export class PalcoChefona {
     const barra = this.barra.querySelector('i') as HTMLElement;
     const largura = `${(k * 100).toFixed(1)}%`;
     if (barra.style.width !== largura) barra.style.width = largura;
-    // A cura em andamento aparece na barra, listrada, à frente da vida.
+    // A Poção de Cura na boca aparece na barra, listrada, à frente da vida (o que ela vai ganhar).
     const cura = this.barra.querySelector('.bxc-vida b') as HTMLElement;
-    const resto = this.cura ? Math.max(0, this.cura.total - this.cura.curado) / this.vidaMax : 0;
+    const resto = this.cura ? this.cura.total / this.vidaMax : 0;
     const larguraCura = `${(Math.min(1 - k, resto) * 100).toFixed(1)}%`;
     if (cura.style.width !== larguraCura) { cura.style.width = larguraCura; cura.style.left = largura; }
-    const texto = `${Math.max(0, Math.ceil(this.vida))} / ${this.vidaMax}`;
+    // A Absorção do totem: a parte dourada, por cima, gasta antes da vida.
+    const abs = this.barra.querySelector('.bxc-vida em') as HTMLElement;
+    const larguraAbs = `${(Math.min(1, this.absorcao / this.vidaMax) * 100).toFixed(1)}%`;
+    if (abs.style.width !== larguraAbs) abs.style.width = larguraAbs;
+    const icone = this.barra.querySelector<HTMLCanvasElement>('.bxc-nome-totem')!;
+    if (icone.hidden === this.protegida) icone.hidden = !this.protegida;
+    const dourada = this.absorcao >= 1 ? ` + ${Math.ceil(this.absorcao)}` : '';
+    const texto = `${Math.max(0, Math.ceil(this.vida))}${dourada} / ${this.vidaMax}`;
     const span = this.barra.querySelector('.bxc-vida span')!;
     if (span.textContent !== texto) span.textContent = texto;
     const resta = Math.max(0, Math.ceil(this.prazo - this.tempo));
@@ -1490,14 +1604,6 @@ export class PalcoChefona {
       this.caixa.style.height = `${(ALT + folga * 2) * this.escala}px`;
       this.caixa.style.transform = `translate(${Math.round((s.x - LARG / 2 - folga) * this.escala)}px, ${Math.round((s.y - ALT / 2 - folga) * this.escala)}px)`;
     }
-    const cal = this.caldeirao;
-    if (cal && !cal.saindo && cal.aparecendo > 0.5) {
-      const z = this.zona();
-      this.caixaCaldeirao.style.display = '';
-      this.caixaCaldeirao.style.width = `${LARGURA_CALDEIRAO * this.escala}px`;
-      this.caixaCaldeirao.style.height = `${ALTURA_CALDEIRAO * this.escala}px`;
-      this.caixaCaldeirao.style.transform = `translate(${Math.round((cal.x - LARGURA_CALDEIRAO / 2) * this.escala)}px, ${Math.round((z.chao - ALTURA_CALDEIRAO) * this.escala)}px)`;
-    } else this.caixaCaldeirao.style.display = 'none';
   }
 
   // ── O desenho ────────────────────────────────────────────────────────────
@@ -1514,10 +1620,6 @@ export class PalcoChefona {
     }
     this.desenharTeias(agora);
     this.desenharMesa();
-    if (this.caldeirao) {
-      const cal = this.caldeirao;
-      desenharCaldeirao(c, cal.x, this.zona().chao, { t: cal.t, inteiro: cal.pontos / PONTOS_CALDEIRAO, tremor: cal.tremor, aparecendo: Math.max(0, cal.aparecendo) });
-    }
     this.desenharDrops();
     this.desenharAneis();
     for (const p of this.particulas) this.desenharParticula(p);
@@ -1709,19 +1811,37 @@ export class PalcoChefona {
       c.drawImage(img, -LARG / 2, -ALT / 2);
     }
     c.restore();
-    // A garrafa: erguida enquanto ela prepara, na boca enquanto bebe.
+    // A garrafa: erguida na mão enquanto ela prepara (sacudindo em passos de pixel), na boca enquanto bebe.
     const preparando = this.fase === 'conjurando' && !!this.conjuro && this.conjuro.feitico !== FEITICO_FORTE;
-    const bebendo = this.fase === 'curando' && this.cura?.etapa === 'bebendo';
-    if (preparando || bebendo) {
-      const info = preparando ? FEITICOS[this.conjuro!.feitico] : { cor: COR_CURA, corClara: '#ff8a8a' };
+    if (preparando) {
+      const info = FEITICOS[this.conjuro!.feitico];
       const g = garrafa(info.cor, info.corClara);
-      const p = preparando ? this.paraTelaMaoErguida() : this.paraTela(LARG * 0.66, ALT * 0.42);
+      const p = this.paraTelaMaoErguida();
+      c.drawImage(g, Math.round(p.x - g.width / 2), Math.round(p.y - g.height / 2 - (Math.floor(agora / 180) % 2)));
+    }
+    if (this.fase === 'curando' && this.cura) {
+      const g = garrafa(COR_CURA, '#ff8a8a');
+      const boca = this.paraTela(BOCA.x * PIXEL_MC, BOCA.y * PIXEL_MC);
+      // Vira a garrafa em passos de 45° (como item do jogo, sem borrar o pixel) até o fundo ficar
+      // para cima, com o gargalo na boca; cada gole dá um tranco de 1 pixel.
+      const giro = -corpo.lado * (this.cura.t < 0.25 ? Math.PI / 2 : (Math.PI * 3) / 4);
+      const gole = Math.floor(agora / 140) % 2;
+      const gx = boca.x - 7 * Math.sin(giro), gy = boca.y + 7 * Math.cos(giro) - gole;
       c.save();
-      c.translate(Math.round(p.x), Math.round(p.y + (preparando ? Math.sin(agora / 120) * 1.5 : 0)));
-      // Bebendo, o gargalo vai para a boca.
-      if (bebendo) c.rotate(-corpo.lado * 2.4);
+      c.translate(Math.round(gx), Math.round(gy));
+      c.rotate(giro);
       c.drawImage(g, -g.width / 2, -g.height / 2);
       c.restore();
+    }
+    // O totem: erguido bem alto no feitiço, e depois na outra mão enquanto ela está protegida.
+    const totem = miniatura(contornado(TOTEM))[0];
+    if (this.fase === 'protegendo') {
+      const p = this.paraTela(MAO_NO_ALTO.x * PIXEL_MC, MAO_NO_ALTO.y * PIXEL_MC - 8);
+      const sobe = Math.round(Math.min(1, this.tFase / 0.3) * 4);
+      c.drawImage(totem, Math.round(p.x - totem.width / 2), Math.round(p.y - totem.height / 2 - sobe));
+    } else if (this.protegida && !morrendo) {
+      const p = this.paraTela(OUTRA_MAO.x * PIXEL_MC, OUTRA_MAO.y * PIXEL_MC);
+      c.drawImage(totem, Math.round(p.x - totem.width / 2), Math.round(p.y - totem.height / 2 + (Math.floor(agora / 300) % 2)));
     }
     if (this.fase === 'tonta') {
       // As estrelinhas rodando em volta do chapéu.
@@ -1796,7 +1916,7 @@ export class PalcoChefona {
 
   // ── Letreiros ────────────────────────────────────────────────────────────
 
-  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'esquiva' | 'feitico' | 'dano' | 'quebra' | 'cura'): void {
+  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'esquiva' | 'feitico' | 'dano' | 'quebra' | 'cura' | 'totem'): void {
     const el = document.createElement('div');
     el.className = `bxc-letreiro ${tipo}`;
     el.textContent = texto;
@@ -1813,25 +1933,25 @@ export class PalcoChefona {
   }
 
   /**
-   * A conquista de quem ajudou: o aviso do canto do jogo, com o retrato dela,
-   * «Desafio concluído!» em roxo (a cor dos desafios no Minecraft) e o nome.
+   * A conquista de quem ajudou, como a toast do Minecraft: a caixa escura de
+   * 160 × 32 com a borda cinza e os cantos cortados, o ícone do item (a Poção
+   * de Cura, 16 × 16) à esquerda, «Desafio concluído!» na cor dos desafios
+   * (§d, rosa) e o nome em branco embaixo, na letra do jogo, com a sombra.
+   * Entra deslizando pela direita, no canto de cima, fica 5 s e sai.
    */
   private mostrarConquista(): void {
     this.raiz.querySelectorAll('.bxc-conquista').forEach(a => a.remove());
-    const el = document.createElement('div');
+    const el = toastDeConquista(CONQUISTA.titulo, CONQUISTA.nome, miniatura(DROPS[0])[0]);
     el.className = 'bxc-conquista';
     el.setAttribute('role', 'status');
-    el.innerHTML = '<div class="bxc-conquista-texto"><b></b><span></span><small></small></div>';
-    el.querySelector('b')!.textContent = CONQUISTA.titulo;
-    el.querySelector('span')!.textContent = CONQUISTA.nome;
-    el.querySelector('small')!.textContent = CONQUISTA.descricao;
-    const icone = canvasDaImagem(cabecaMC(), false);
-    icone.className = 'bxc-conquista-icone';
-    el.prepend(icone);
+    el.setAttribute('aria-label', `${CONQUISTA.titulo} ${CONQUISTA.nome}. ${CONQUISTA.descricao}`);
+    el.style.width = `${el.width * 2}px`;
+    el.style.height = `${el.height * 2}px`;
+    el.style.setProperty('--bxc-toast-ms', `${TOAST_MS}ms`);
     this.raiz.appendChild(el);
     somConquista();
     this.aoEvento?.({ tipo: 'conquista', nome: CONQUISTA.nome });
-    setTimeout(() => el.remove(), 6500);
+    setTimeout(() => el.remove(), TOAST_MS + 1300);
   }
 
   private aviso(titulo: string, sub: string): void {

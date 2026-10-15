@@ -103,5 +103,5 @@ body { background: #0b0a12; font-family: 'Pixelify Sans', ui-monospace, Consolas
 
 /* A chefona no painel. */
 .lb-chefona-retrato { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 12px; color: #b8aed0; }
-.lb-chefona-retrato canvas { width: 44px; height: 92px; flex: none; image-rendering: pixelated; background: #1d1430; box-shadow: 0 0 0 2px #b040e0; padding: 4px 10px; }
+.lb-chefona-retrato canvas { width: 36px; height: 84px; flex: none; image-rendering: pixelated; background: #1d1430; box-shadow: 0 0 0 2px #b040e0; padding: 4px 10px; }
 .lb-chefona-estado { min-height: 2.6em; }
