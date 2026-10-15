@@ -4,6 +4,7 @@
  * edição de uma campanha já lançada (HistoricoCampanhas).
  */
 import type { RefObject } from 'react';
+import { flushSync } from 'react-dom';
 
 // eslint-disable-next-line react-refresh/only-export-components -- a lista dos chips; o teste do Pix Automático confere as variáveis por ela.
 export const VARIABLE_LABELS: [string, string][] = [
@@ -20,6 +21,15 @@ export const VARIABLE_LABELS: [string, string][] = [
   ['protocolo', 'Protocolo'], ['atendimento', '0800 da empresa'], ['link', 'Link'],
 ];
 
+/**
+ * Põe `{{variavel}}` onde estava o cursor e devolve o cursor logo depois dela.
+ *
+ * A tela fica onde estava (15/10/2026: «sempre desce pra baixo»). Trocar o
+ * `value` de uma textarea leva o cursor ao FIM do texto, e o navegador rola a
+ * caixa até lá; o `focus()` comum ainda rola a janela até a caixa. Por isso o
+ * texto entra já aplicado (`flushSync`), o foco vem com `preventScroll` e a
+ * rolagem da caixa volta à de antes do clique — sem um quadro pintado no fim.
+ */
 // eslint-disable-next-line react-refresh/only-export-components -- irmã dos chips: o editor e a edição da campanha usam as duas juntas.
 export function insertVariable(ref: RefObject<HTMLTextAreaElement>, value: string, setValue: (v: string) => void, variable: string) {
   const el = ref.current;
@@ -28,12 +38,12 @@ export function insertVariable(ref: RefObject<HTMLTextAreaElement>, value: strin
   const start = el.selectionStart ?? el.value.length;
   const end = el.selectionEnd ?? el.value.length;
   const next = el.value.slice(0, start) + token + el.value.slice(end);
-  setValue(next);
-  requestAnimationFrame(() => {
-    el.focus();
-    const caret = start + token.length;
-    el.setSelectionRange(caret, caret);
-  });
+  const rolagem = el.scrollTop;
+  flushSync(() => setValue(next));
+  el.focus({ preventScroll: true });
+  const caret = start + token.length;
+  el.setSelectionRange(caret, caret);
+  el.scrollTop = rolagem;
 }
 
 export function VariableChips({ onInsert, ocultar }: { onInsert: (variable: string) => void; ocultar?: readonly string[] }) {
