@@ -818,7 +818,7 @@ export default function CampanhaFacil() {
             <AlertDialogDescription>
               {cf.stats.total.toLocaleString('pt-BR')} contatos com a mensagem “{cf.selectedTemplate.name}”, divididos
               entre {cf.sendersList.length} {cf.sendersList.length === 1 ? 'operador' : 'operadores'}. Cada um recebe
-              uma notificação e envia a parte dele pela aba Campanhas de WhatsApp. Fica disponível por 2 dias.
+              uma notificação e envia a parte dele pela aba Campanhas de WhatsApp. Fica disponível até o fim do mês.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {reviewCount > 0 && (
