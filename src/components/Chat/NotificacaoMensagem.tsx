@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { AvatarChat } from './comum';
 
@@ -7,9 +8,11 @@ interface Props {
   mensagem: string;
   onAbrir: () => void;
   onFechar: () => void;
+  /** No lugar da foto/iniciais — o escudo do aviso de autorização. */
+  avatar?: ReactNode;
 }
 
-export function NotificacaoMensagem({ nome, foto, mensagem, onAbrir, onFechar }: Props) {
+export function NotificacaoMensagem({ nome, foto, mensagem, onAbrir, onFechar, avatar }: Props) {
   return (
     <div className="relative flex w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl">
       <button
@@ -18,7 +21,7 @@ export function NotificacaoMensagem({ nome, foto, mensagem, onAbrir, onFechar }:
         className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 pr-9 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         aria-label={`Abrir conversa com ${nome}`}
       >
-        <AvatarChat nome={nome} foto={foto} tamanho={42} />
+        {avatar ?? <AvatarChat nome={nome} foto={foto} tamanho={42} />}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">{nome}</span>
           <span className="mt-0.5 block line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">

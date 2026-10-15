@@ -53,6 +53,7 @@ import {
 } from '@/lib/notificacao-chat';
 import { prepararSomChat, tocarSomChat } from '@/lib/som-chat';
 import { useAutorizacaoPedidos } from '@/hooks/useAutorizacaoPedidos';
+import { EscudoAutorizacoes } from '@/components/Autorizacoes/EscudoAutorizacoes';
 import { buscarNomeDoAlvo } from '@/services/comemoracoes.service';
 import type { PedidoAutorizacao } from '@/services/autorizacaoPedidos.service';
 import {
@@ -430,6 +431,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
       <NotificacaoMensagem
         nome={tituloRef.current}
         foto={null}
+        avatar={<EscudoAutorizacoes tamanho={42} alerta />}
         mensagem={`${nome} ${acao} o ${p.nr_label} ${p.nr_valor}${mais}`}
         onFechar={() => toastFlutuante.dismiss(id)}
         onAbrir={() => { toastFlutuante.dismiss(id); abrirAutorizacoes(); }}

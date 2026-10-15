@@ -20,9 +20,10 @@
  * e recusar, em `components/Autorizacoes/CartaoAutorizacao.tsx`.
  */
 import { useMemo } from 'react';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CartaoAutorizacao } from '@/components/Autorizacoes/CartaoAutorizacao';
+import { EscudoAutorizacoes as Escudo } from '@/components/Autorizacoes/EscudoAutorizacoes';
 import { estaPendente, type ResumoAutorizacoes } from '@/components/Autorizacoes/resumoChat';
 import type { PedidoAutorizacao } from '@/services/autorizacaoPedidos.service';
 import { horaCurta, rotuloDoDia } from './formatos';
@@ -32,23 +33,6 @@ export interface AutorizacoesNoChat {
   resumo:     ResumoAutorizacoes;
   selecionada: boolean;
   onAbrir:    () => void;
-}
-
-function Escudo({ tamanho, alerta }: { tamanho: number; alerta: boolean }) {
-  return (
-    <span className="relative flex shrink-0 items-center justify-center rounded-full text-white"
-      style={{
-        width: tamanho, height: tamanho,
-        background: alerta
-          ? 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'
-          : 'linear-gradient(135deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 70%, #000) 100%)',
-      }}>
-      {alerta && (
-        <span aria-hidden="true" className="absolute -inset-1 animate-ping rounded-full border-2 border-amber-500/60" />
-      )}
-      <ShieldCheck style={{ width: tamanho * 0.5, height: tamanho * 0.5 }} />
-    </span>
-  );
 }
 
 /** A linha na lista de conversas. Sem menu: não se apaga nem se desafixa. */
