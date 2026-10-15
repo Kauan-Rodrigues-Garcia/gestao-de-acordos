@@ -866,9 +866,21 @@ Contrato: *{{contrato}}*
     return /^(NULL|N\/A|NA|NULO)$/i.test(text) ? "" : text;
   }
 
+  // Os nomes de coluna que o código pede são poucos e fixos: normalizados uma
+  // vez (15/10/2026), e não a cada campo de cada cliente.
+  const CABECALHO_NORMALIZADO = new Map();
+  function headerKey(name) {
+    let key = CABECALHO_NORMALIZADO.get(name);
+    if (key === undefined) {
+      key = normalizeHeader(name);
+      CABECALHO_NORMALIZADO.set(name, key);
+    }
+    return key;
+  }
+
   function getField(record, ...names) {
     for (const name of names) {
-      const value = cleanValue(record.normalized[normalizeHeader(name)]);
+      const value = cleanValue(record.normalized[headerKey(name)]);
       if (value !== "") return value;
     }
     return "";
@@ -1036,21 +1048,28 @@ Contrato: *{{contrato}}*
   // Sempre com centavos: «R$ 100,00» (Cleber, 13/10/2026). Os valores já
   // chegam arredondados para cima em reais inteiros (`roundUp`), então na
   // prática os centavos saem ,00.
+  //
+  // Os formatadores são criados UMA vez (15/10/2026). Eram criados a cada
+  // valor — 15 por cliente — e montar uma campanha de 10 mil clientes levava
+  // 4 s, refeitos a cada percentual digitado. O texto que sai é o mesmo.
+  const FORMATO_REAIS = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const FORMATO_PERCENTUAL = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+
   function formatCurrency(value) {
     if (value === null || value === undefined || value === "") return "";
     const number = Number(value);
     if (!Number.isFinite(number)) return "";
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(number);
+    return FORMATO_REAIS.format(number);
   }
 
   function formatPercent(value) {
     const number = parseNumber(value);
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(number)}%`;
+    return `${FORMATO_PERCENTUAL.format(number)}%`;
   }
 
   function deriveRecord(record, discounts = DEFAULT_DISCOUNTS) {

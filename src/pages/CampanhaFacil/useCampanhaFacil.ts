@@ -283,18 +283,29 @@ export function useCampanhaFacil() {
   const selectedItem = selectedIndex >= 0 ? campaign[selectedIndex] : null;
 
   // ── Filtro + paginação ─────────────────────────────────────────────────────
+  /**
+   * O texto em que a busca procura, já em minúsculas, uma vez por campanha
+   * (15/10/2026). Antes cada tecla passava 6 campos de cada cliente por
+   * `toLocaleLowerCase` — 60 mil conversões por letra num mailing de 10 mil.
+   * O separador impede que o fim de um campo e o começo do outro casem juntos.
+   */
+  const textoDeBusca = useMemo(
+    () => campaign.map((item) => [item.name, item.cpf, item.phone, item.contract, item.company, item.sender]
+      .map((v) => String(v || '').toLocaleLowerCase('pt-BR')).join('\u0000')),
+    [campaign],
+  );
+
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('pt-BR');
     return campaign
       .map((item, index) => ({ item, index }))
-      .filter(({ item }) => {
+      .filter(({ item, index }) => {
         if (statusFilter === 'critico' && !temPendenciaGrave(item)) return false;
         if (statusFilter === 'Revisar' && item.status !== 'Revisar') return false;
         if (!query) return true;
-        return [item.name, item.cpf, item.phone, item.contract, item.company, item.sender]
-          .some((v) => String(v || '').toLocaleLowerCase('pt-BR').includes(query));
+        return textoDeBusca[index].includes(query);
       });
-  }, [campaign, search, statusFilter]);
+  }, [campaign, textoDeBusca, search, statusFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.max(1, Math.min(page, pageCount));

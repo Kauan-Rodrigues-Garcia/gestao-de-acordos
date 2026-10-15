@@ -44,6 +44,8 @@ import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceS
 import { SeletorOperadores } from './SeletorOperadores';
 import { HistoricoCampanhas } from './HistoricoCampanhas';
 import { VariableChips, insertVariable } from './VariaveisMensagem';
+import { CampoPercentual } from './CampoPercentual';
+import { textoDoPercentual } from './percentual';
 
 const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string][] = [
   ['overdue', 'Parcela em atraso'], ['settlement', 'Quitação'], ['interest', 'Valor com juros'],
@@ -113,6 +115,12 @@ export default function CampanhaFacil() {
     );
   }
 
+  /** O botão e o Enter do nome: sem nome, o aviso aparece e o diálogo fica. */
+  async function salvarConfiguracao() {
+    if (!discountName.trim()) { void cf.saveDiscountPreset(discountName); return; }
+    await cf.saveDiscountPreset(discountName);
+    setSaveDiscountOpen(false);
+  }
   function openEdit() {
     setEditValue(cf.selectedTemplateBody);
     setEditOpen(true);
@@ -414,15 +422,7 @@ export default function CampanhaFacil() {
                   {DISCOUNT_FIELDS.map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5 text-xs">
                       <span className="text-muted-foreground">{label}</span>
-                      <span className="flex items-center gap-0.5">
-                        <Input
-                          type="number" min={0} max={100} step="0.01"
-                          value={cf.discountsInput[key]}
-                          onChange={(e) => cf.setDiscount(key, e.target.value)}
-                          className="h-7 w-16 px-1.5 text-right text-xs"
-                        />
-                        <span className="text-muted-foreground">%</span>
-                      </span>
+                      <CampoPercentual rotulo={label} valor={cf.discountsInput[key]} aoMudar={(n) => cf.setDiscount(key, n)} />
                     </label>
                   ))}
                 </div>
@@ -845,17 +845,22 @@ export default function CampanhaFacil() {
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs font-medium">Nome da configuração</label>
-              <Input value={discountName} maxLength={80} onChange={(e) => setDiscountName(e.target.value)} placeholder="Ex.: Campanha de julho" />
+              <Input
+                value={discountName} maxLength={80} autoFocus
+                onChange={(e) => setDiscountName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void salvarConfiguracao(); } }}
+                placeholder="Ex.: Campanha de julho"
+              />
             </div>
             <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs sm:grid-cols-3">
               {DISCOUNT_FIELDS.map(([key, label]) => (
-                <div key={key}><p className="text-muted-foreground">{label}</p><p className="font-semibold">{cf.discountsInput[key]}%</p></div>
+                <div key={key}><p className="text-muted-foreground">{label}</p><p className="font-semibold">{textoDoPercentual(cf.discountsInput[key])}%</p></div>
               ))}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveDiscountOpen(false)}>Cancelar</Button>
-            <Button onClick={async () => { if (discountName.trim()) { await cf.saveDiscountPreset(discountName); setSaveDiscountOpen(false); } else { cf.saveDiscountPreset(discountName); } }}>
+            <Button onClick={() => { void salvarConfiguracao(); }}>
               Salvar configuração
             </Button>
           </DialogFooter>

@@ -92,9 +92,16 @@ function pushResult(table: string, result: MockResult) {
   resultsByTable[table].push(result);
 }
 
+/** Os recortes de data pedidos em `acordos`: `['gte', 'vencimento', '2026-04-01']`. */
+const recortesAcordos: [string, string, unknown][] = [];
+
 function createBuilder(table: string) {
   const builder: Record<string, unknown> = {};
   const chain = () => builder;
+  const recorte = (op: string) => (coluna: string, valor: unknown) => {
+    if (table === 'acordos') recortesAcordos.push([op, coluna, valor]);
+    return builder;
+  };
 
   builder.select = vi.fn(chain);
   builder.insert = vi.fn(chain);
@@ -102,8 +109,8 @@ function createBuilder(table: string) {
   builder.delete = vi.fn(chain);
   builder.eq     = vi.fn(chain);
   builder.neq    = vi.fn(chain);
-  builder.gte    = vi.fn(chain);
-  builder.lte    = vi.fn(chain);
+  builder.gte    = vi.fn(recorte('gte'));
+  builder.lte    = vi.fn(recorte('lte'));
   builder.in     = vi.fn(chain);
   builder.or     = vi.fn(chain);
   builder.order  = vi.fn(chain);
@@ -343,6 +350,7 @@ beforeEach(() => {
   // Limpar filas entre testes
   Object.keys(resultsByTable).forEach(k => { delete resultsByTable[k]; });
   defaultResult = { data: null, error: null };
+  recortesAcordos.length = 0;
 
   /*
    * O cache instantâneo, que era o que fazia esta suíte piscar: este arquivo
@@ -433,6 +441,18 @@ describe('useAnalytics', () => {
 
       const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
+    });
+
+    // Até 15/10/2026 vinha o histórico inteiro, a cada rajada do tempo real, e
+    // os derivados descartavam tudo que não era do mês.
+    it('busca só os acordos do mês analisado, não o histórico', async () => {
+      setupOperadorResults([], null);
+
+      const { result } = renderHook(() => useAnalyticsDoCenario());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(recortesAcordos).toContainEqual(['gte', 'vencimento', '2026-04-01']);
+      expect(recortesAcordos).toContainEqual(['lte', 'vencimento', '2026-04-30']);
     });
 
     it('calcula métricas de acordos do mês corretamente', async () => {

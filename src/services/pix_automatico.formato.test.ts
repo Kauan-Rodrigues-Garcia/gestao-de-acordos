@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 // createClient() explode em teste por falta de VITE_SUPABASE_URL.
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
 
-import { formatarLinhaPix, formatarCopiaPix } from './pix_automatico.service';
+import { formatarLinhaPix, formatarCopiaPix, formatarCopiaPixPorOperador } from './pix_automatico.service';
 
 describe('formatarLinhaPix', () => {
   it('leva só o código do acordo', () => {
@@ -50,5 +50,49 @@ describe('formatarCopiaPix', () => {
 
   it('devolve string vazia sem acordos', () => {
     expect(formatarCopiaPix([])).toBe('');
+  });
+});
+
+describe('formatarCopiaPixPorOperador', () => {
+  const de = (op: string, nome: string | null, nr: string, comissao: number, ajuste?: number) =>
+    ({ acordo: { nr_cliente: nr, operador_id: op, operador_nome: nome }, comissao, ajuste });
+
+  it('agrupa por operador, com o nome, o total de cada um e o total geral', () => {
+    const texto = formatarCopiaPixPorOperador([
+      de('op-2', 'Maria', '333', 10),
+      de('op-1', 'João', '111', 8.33),
+      de('op-2', 'Maria', '444', 5),
+      de('op-1', 'João', '222', 1.67),
+    ]);
+    expect(texto).toBe(
+      'João\n111\n222\nTotal João: R$ 10,00\n\n' +
+      'Maria\n333\n444\nTotal Maria: R$ 15,00\n\n' +
+      'Total geral: R$ 25,00',
+    );
+  });
+
+  it('com um operador só, não repete o total como total geral', () => {
+    const texto = formatarCopiaPixPorOperador([de('op-1', 'João', '111', 8.33)]);
+    expect(texto).toBe('João\n111\nTotal João: R$ 8,33');
+  });
+
+  it('a correção fica no grupo do operador, antes do total dele', () => {
+    const texto = formatarCopiaPixPorOperador([
+      de('op-1', 'João', '111', 35, 10),
+      de('op-2', 'Maria', '222', 20),
+    ]);
+    expect(texto).toBe(
+      'João\n111\nCorreção no 111: +R$ 10,00\nTotal João: R$ 35,00\n\n' +
+      'Maria\n222\nTotal Maria: R$ 20,00\n\n' +
+      'Total geral: R$ 55,00',
+    );
+  });
+
+  it('sem nome, o grupo sai com travessão', () => {
+    expect(formatarCopiaPixPorOperador([de('op-1', null, 'A', 1)])).toBe('—\nA\nTotal —: R$ 1,00');
+  });
+
+  it('devolve string vazia sem acordos', () => {
+    expect(formatarCopiaPixPorOperador([])).toBe('');
   });
 });
