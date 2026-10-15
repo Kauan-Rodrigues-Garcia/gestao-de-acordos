@@ -90,14 +90,20 @@ function situacaoNaObs(codigo: SituacaoFechamento | null): string | null {
   return !codigo || codigo === 'assiduo' ? null : rotuloSituacao(codigo);
 }
 
+/** Os textos fixos da Obs. — `resultadoDaLinha` os reconhece para não repeti-los no selo. */
+const TEXTO_NAO_BATEU = 'Não bateu a 1ª meta';
+const TEXTO_SEM_META = 'Sem meta no mês';
+const TEXTO_SEM_CIDADE = 'Setor sem cidade no RH';
+const textoSemConfig = (tipo: TipoRemuneracao) => `${ROTULO_TIPO[tipo]} não configurada no mês`;
+
 function motivo(r: ResultadoComissao | null, tipo: TipoRemuneracao, parcial: boolean): {
   estado: EstadoPremiacao; valor: number | null; faixa: number | null; texto: string;
 } {
   const nomeTipo = ROTULO_TIPO[tipo].toLowerCase();
   if (!r) return { estado: 'sem_config', valor: null, faixa: null, texto: 'Cálculo indisponível' };
-  if (r.motivo === 'sem_meta') return { estado: 'sem_meta', valor: null, faixa: null, texto: 'Sem meta no mês' };
+  if (r.motivo === 'sem_meta') return { estado: 'sem_meta', valor: null, faixa: null, texto: TEXTO_SEM_META };
   if (r.motivo === 'sem_config') {
-    return { estado: 'sem_config', valor: null, faixa: null, texto: `${ROTULO_TIPO[tipo]} não configurada no mês` };
+    return { estado: 'sem_config', valor: null, faixa: null, texto: textoSemConfig(tipo) };
   }
   if (!r.atual) {
     const falta = r.faixas.find(f => !f.atingida)?.falta ?? null;
@@ -106,8 +112,8 @@ function motivo(r: ResultadoComissao | null, tipo: TipoRemuneracao, parcial: boo
       valor: 0,
       faixa: null,
       texto: falta !== null && falta > 0
-        ? `Não bateu a 1ª meta · ${parcial ? 'falta' : 'faltou'} ${formatBRL(falta)}`
-        : 'Não bateu a 1ª meta',
+        ? `${TEXTO_NAO_BATEU} · ${parcial ? 'falta' : 'faltou'} ${formatBRL(falta)}`
+        : TEXTO_NAO_BATEU,
     };
   }
   const partes = [`${r.atual.ordem}ª meta`];
@@ -141,7 +147,7 @@ export function montarLinhaPremiacao(e: EntradaLinhaPremiacao): LinhaPremiacao {
       premiacao: null,
       estado: 'sem_cidade',
       faixa: null,
-      obs: [situacao, 'Setor sem cidade no RH'].filter(Boolean).join(' · '),
+      obs: [situacao, TEXTO_SEM_CIDADE].filter(Boolean).join(' · '),
     };
   }
 
@@ -219,6 +225,139 @@ export function resumirPremiacoes(linhas: readonly LinhaPremiacao[]): ResumoPrem
   r.premiacao.total = Math.round(r.premiacao.total * 100) / 100;
   r.comissao.total = Math.round(r.comissao.total * 100) / 100;
   return r;
+}
+
+// ── A leitura para a diretoria (15/10/2026) ────────────────────────────────
+//
+// Pedido de 15/10/2026: a aba precisava ser apresentável — o resultado de cada
+// pessoa num selo só, e o mês resumido por setor (ou equipe) e por meta
+// atingida antes da lista de nomes. Tudo sai das mesmas `linhas`: a tela e o
+// HTML mostram os mesmos números.
+
+export type TomResultado = 'sucesso' | 'neutro' | 'tenue';
+
+export interface ResultadoLinha {
+  /** «2ª meta», «Não bateu», «Sem meta»... */
+  rotulo: string;
+  tom: TomResultado;
+  /** A Obs. sem o que o rótulo já diz. Vazio quando não sobra nada. */
+  detalhe: string;
+}
+
+/** O resultado da pessoa num selo, e o resto da Obs. como detalhe. */
+export function resultadoDaLinha(
+  l: Pick<LinhaPremiacao, 'estado' | 'faixa' | 'tipo' | 'obs'>,
+): ResultadoLinha {
+  let rotulo: string;
+  let tom: TomResultado;
+  let repetido: string[];
+  switch (l.estado) {
+    case 'bateu':
+      rotulo = l.faixa !== null ? `${l.faixa}ª meta` : 'Bateu';
+      tom = 'sucesso';
+      repetido = [rotulo];
+      break;
+    case 'nao_bateu':
+      rotulo = 'Não bateu'; tom = 'neutro'; repetido = [TEXTO_NAO_BATEU];
+      break;
+    case 'sem_meta':
+      rotulo = 'Sem meta'; tom = 'tenue'; repetido = [TEXTO_SEM_META];
+      break;
+    case 'sem_config':
+      rotulo = 'Sem configuração'; tom = 'tenue';
+      repetido = l.tipo ? [textoSemConfig(l.tipo)] : [];
+      break;
+    default:
+      rotulo = 'Sem cidade'; tom = 'tenue'; repetido = [TEXTO_SEM_CIDADE];
+  }
+  const detalhe = (l.obs ? l.obs.split(' · ') : [])
+    .filter(p => !repetido.includes(p))
+    .join(' · ');
+  return { rotulo, tom, detalhe };
+}
+
+export type ChaveGrupo = 'setor' | 'equipe';
+
+export interface GrupoPremiacao {
+  chave: string;
+  nome: string;
+  /** Cidade e tipo do setor (no grupo por equipe, os do setor da equipe). */
+  celula: string | null;
+  tipo: TipoRemuneracao | null;
+  pessoas: number;
+  bateram: number;
+  total: number;
+}
+
+const centavos = (v: number) => Math.round(v * 100) / 100;
+
+/** O valor que a linha recebe, na coluna do tipo dela. */
+const valorDaLinha = (l: LinhaPremiacao) => (l.tipo ? valorDoTipo(l, l.tipo) : null) ?? 0;
+
+/** O recorte agrupado por setor ou por equipe, do maior valor ao menor. */
+export function agruparPremiacoes(linhas: readonly LinhaPremiacao[], chave: ChaveGrupo): GrupoPremiacao[] {
+  const grupos = new Map<string, GrupoPremiacao>();
+  for (const l of linhas) {
+    const id = chave === 'setor' ? (l.setorId ?? `nome:${l.setorNome}`) : (l.equipeNome ?? '');
+    const nome = chave === 'setor' ? l.setorNome : (l.equipeNome ?? 'Sem equipe');
+    let g = grupos.get(id);
+    if (!g) {
+      g = { chave: id, nome, celula: l.celula, tipo: l.tipo, pessoas: 0, bateram: 0, total: 0 };
+      grupos.set(id, g);
+    }
+    g.pessoas++;
+    if (l.estado === 'bateu') g.bateram++;
+    g.total += valorDaLinha(l);
+  }
+  return [...grupos.values()]
+    .map(g => ({ ...g, total: centavos(g.total) }))
+    .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/** Vários setores → por setor; um setor só → por equipe, se houver mais de uma. */
+export function chaveDoAgrupamento(linhas: readonly LinhaPremiacao[]): ChaveGrupo | null {
+  if (new Set(linhas.map(l => l.setorId ?? l.setorNome)).size > 1) return 'setor';
+  if (new Set(linhas.map(l => l.equipeNome ?? '')).size > 1) return 'equipe';
+  return null;
+}
+
+export interface FaixaPremiacao {
+  faixa: number;
+  pessoas: number;
+  total: number;
+}
+
+export interface DistribuicaoFaixas {
+  /** Da 1ª meta em diante, só as que alguém bateu. */
+  faixas: FaixaPremiacao[];
+  naoBateram: number;
+  /** Sem meta, sem configuração ou sem cidade: fora da conta. */
+  semValor: number;
+}
+
+export function distribuirPorFaixa(linhas: readonly LinhaPremiacao[]): DistribuicaoFaixas {
+  const por = new Map<number, FaixaPremiacao>();
+  let naoBateram = 0;
+  let semValor = 0;
+  for (const l of linhas) {
+    if (l.estado === 'nao_bateu') { naoBateram++; continue; }
+    if (l.estado !== 'bateu') { semValor++; continue; }
+    if (l.faixa === null) continue;
+    const f = por.get(l.faixa) ?? { faixa: l.faixa, pessoas: 0, total: 0 };
+    f.pessoas++;
+    f.total += valorDaLinha(l);
+    por.set(l.faixa, f);
+  }
+  return {
+    faixas: [...por.values()].map(f => ({ ...f, total: centavos(f.total) })).sort((a, b) => a.faixa - b.faixa),
+    naoBateram,
+    semValor,
+  };
+}
+
+/** Fração de 0 a 1 → «37,5%». */
+export function formatarPercentual(fracao: number): string {
+  return `${(fracao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
 /**

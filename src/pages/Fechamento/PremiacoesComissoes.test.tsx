@@ -50,8 +50,8 @@ function montar(linhas: LinhaPremiacao[]) {
 describe('<PremiacoesComissoes />', () => {
   it('Birigui: só a coluna e o card de Premiação, sem Comissão', () => {
     montar([linha({}), linha({ operadorId: 'op2', nome: 'Bia Souza', premiacao: 0, estado: 'nao_bateu', faixa: null })]);
-    expect(screen.getByText('PREMIAÇÃO (R$)')).toBeTruthy();
-    expect(screen.queryByText('COMISSÃO (R$)')).toBeNull();
+    expect(screen.getByText('Premiação (R$)')).toBeTruthy();
+    expect(screen.queryByText('Comissão (R$)')).toBeNull();
     expect(screen.getByText('Premiação · Birigui')).toBeTruthy();
     expect(screen.queryByText(/^Comissão ·/)).toBeNull();
     // No lugar do «Total a pagar», quantos bateram.
@@ -59,24 +59,35 @@ describe('<PremiacoesComissoes />', () => {
     expect(screen.queryByText('Total a pagar')).toBeNull();
   });
 
-  it('quem bateu: valor em selo verde, tamanho médio, e a meta escrita ao lado', () => {
-    montar([linha({})]);
+  it('quem bateu: valor em verde, tamanho médio, e a meta no selo de resultado', () => {
+    montar([linha({ obs: '2ª meta · benefício do setor' })]);
     const valor = screen.getAllByText(/811,30/).find(e => e.className.includes('text-success'));
     expect(valor).toBeTruthy();
-    // 19/09/2026: médio, não grande — o destaque é o selo.
     expect(valor!.className).toContain('text-[13px]');
     expect(valor!.className).toContain('font-semibold');
-    // O selo ao lado do valor (a Obs. também diz «2ª meta», em texto comum).
-    expect(screen.getAllByText('2ª meta').some(e => e.className.includes('rounded-full'))).toBe(true);
+    // 15/10/2026: a meta fica só no selo; a Observação não a repete.
+    expect(screen.getAllByText('2ª meta').filter(e => e.className.includes('rounded-full'))).toHaveLength(1);
+    expect(screen.getByText('benefício do setor')).toBeTruthy();
+  });
+
+  it('vários setores: resumo por setor e subtotal no detalhamento', () => {
+    montar([
+      linha({}),
+      linha({ operadorId: 'op2', nome: 'Bia', setorId: 's2', setorNome: 'Play 2', premiacao: 0, estado: 'nao_bateu', faixa: null, obs: 'Não bateu a 1ª meta' }),
+    ]);
+    expect(screen.getByText('Resultado por setor')).toBeTruthy();
+    expect(screen.getByText('Por meta atingida')).toBeTruthy();
+    expect(screen.getAllByText('1 de 1 bateram').length).toBeGreaterThan(0);
+    expect(screen.getByText('Não bateu')).toBeTruthy();
   });
 
   it('todos os setores com as duas cidades: as duas colunas e o total a pagar', () => {
     montar([
       linha({}),
-      linha({ operadorId: 'op3', nome: 'Bruno', setorNome: 'Play 4', celula: 'Marília', tipo: 'comissao', comissao: 500, premiacao: null }),
+      linha({ operadorId: 'op3', nome: 'Bruno', setorId: 's4', setorNome: 'Play 4', celula: 'Marília', tipo: 'comissao', comissao: 500, premiacao: null }),
     ]);
-    expect(screen.getByText('PREMIAÇÃO (R$)')).toBeTruthy();
-    expect(screen.getByText('COMISSÃO (R$)')).toBeTruthy();
+    expect(screen.getByText('Premiação (R$)')).toBeTruthy();
+    expect(screen.getByText('Comissão (R$)')).toBeTruthy();
     expect(screen.getByText('Total a pagar')).toBeTruthy();
   });
 });

@@ -22,7 +22,7 @@ function linha(over: Partial<LinhaPremiacao>): LinhaPremiacao {
 const LINHAS = [
   linha({}),
   linha({ operadorId: 'b', nome: 'Bia Souza', cracha: null, premiacao: 0, estado: 'nao_bateu', faixa: null, obs: 'Não bateu a 1ª meta' }),
-  linha({ operadorId: 'c', nome: 'Bruno <b>&</b> Cia', setorNome: 'Play 4', celula: 'Marília', tipo: 'comissao', comissao: 500, premiacao: null }),
+  linha({ operadorId: 'c', nome: 'Bruno <b>&</b> Cia', setorId: 's4', setorNome: 'Play 4', celula: 'Marília', tipo: 'comissao', comissao: 500, premiacao: null }),
 ];
 const BIRIGUI = LINHAS.slice(0, 2);
 
@@ -64,10 +64,20 @@ describe('montarHtmlPremiacoes', () => {
     expect(h).toContain('Total a pagar');
   });
 
-  it('quem bateu: selo verde com a meta ao lado; quem não bateu: R$ 0,00 comum', () => {
+  it('quem bateu: selo de resultado e valor em verde; quem não bateu: R$ 0,00 comum', () => {
     const h = html(BIRIGUI);
-    expect(h).toMatch(/2ª meta<\/span> <span class="valor-ok">R\$\s811,30<\/span>/);
+    expect(h).toContain('<span class="res sucesso">2ª meta</span>');
+    expect(h).toMatch(/<span class="valor-pago">R\$\s811,30<\/span>/);
+    expect(h).toContain('<span class="res neutro">Não bateu</span>');
     expect(h).toMatch(/<span class="fraco">R\$\s0,00<\/span>/);
+  });
+
+  it('para a diretoria: resumo por setor, por meta atingida e subtotal por setor', () => {
+    const h = html();
+    expect(h).toContain('Resultado por setor');
+    expect(h).toContain('Por meta atingida');
+    expect(h).toContain('<tr class="grupo">');
+    expect(h).toContain('Detalhamento por pessoa');
   });
 
   it('avisa quando o mês está aberto', () => {

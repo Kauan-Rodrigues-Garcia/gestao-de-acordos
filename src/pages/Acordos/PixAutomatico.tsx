@@ -302,8 +302,14 @@ export function PixAutomatico() {
    * `aprovar_pix_automatico` e em `podeAgirSobreOutros`, abaixo.
    */
   const niveisPix = useMemo(() => niveisLiberados('pix', temPermissao), [temPermissao]);
-  const podeVerDeOutros     = niveisPix.includes('setor');
   const podeVerTodosSetores = niveisPix.includes('todos_setores');
+  /*
+   * O nível `setor` precisa de um setor para recortar (15/10/2026). Sem setor
+   * no cadastro, `setorEscopo` abaixo virava `null` — e `null` nas consultas é
+   * «sem filtro»: o líder sem setor recebia o Pix da EMPRESA inteira. Quem não
+   * tem setor e não tem `todos_setores` fica só com os próprios registros.
+   */
+  const podeVerDeOutros     = niveisPix.includes('setor') && (podeVerTodosSetores || !!perfil?.setor_id);
 
   /*
    * AÇÃO sobre registro alheio.
