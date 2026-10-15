@@ -50,7 +50,7 @@
  * e «PIX BOLETO» em Boleto. Ver `agregarFormas`.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -59,7 +59,6 @@ import {
   ArrowUpRight, ArrowDownRight, Sparkles, ListFilter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
@@ -79,12 +78,12 @@ import type {
 } from '@/services/analitico/analitico.service';
 import { filtrarResumos, type VinculosOperador } from './agregacaoLider';
 import {
-  agregarFormas, somaDasFormas, ordenarGrupos, insightsFormas,
+  agregarFormas, ordenarGrupos, insightsFormas,
   periodoEhMesTodo, formatarShare, montarTextoResumoFormas,
-  CHAVE_SEM_OPERADOR,
   type FiltroTabulacaoFormas, type GrupoFormas,
 } from './agregacaoFormas';
 import { corTexto } from '@/lib/temas';
+import { DetalheGrupoForma } from './DetalheGrupoForma';
 
 /** Quantas linhas da tabela cruzada aparecem antes do "carregar mais". */
 const LINHAS_PAGE = 20;
@@ -155,6 +154,14 @@ export function FormasPagamento({
     () => filtrarResumos(resumos, { setorId, equipeId }, vinculos),
     [resumos, setorId, equipeId, vinculos],
   );
+
+  // O setor é da página e a equipe é dividida com Ranking/Destaques: os dois
+  // mudam fora deste seletor. Quem saiu do recorte é solto — senão o seletor
+  // ficava sem a pessoa escolhida e o painel, vazio, com cara de «sem dado».
+  useEffect(() => {
+    if (!operadorId || resumos.length === 0) return;
+    if (!operadoresDoRecorte.some(r => r.operador_id === operadorId)) setOperadorId(null);
+  }, [operadorId, operadoresDoRecorte, resumos.length]);
 
   const dadosDoOperador = useMemo(() => {
     const m = new Map<string, { nome: string; usuario: string }>();
@@ -702,88 +709,14 @@ export function FormasPagamento({
               </div>
             </CardHeader>
             <CardContent className="p-0 border-t">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/30">
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                        {agrupamento === 'operador' ? 'OPERADOR' : 'EQUIPE'}
-                      </th>
-                      {formasVisiveis.map(rotulo => (
-                        <th key={rotulo} className="text-right px-3 py-2 font-semibold text-muted-foreground whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1">
-                            <span className="inline-block w-1.5 h-1.5 rounded-full"
-                              style={{ background: corDaForma(rotulo) }} />
-                            {rotulo.toUpperCase()}
-                          </span>
-                        </th>
-                      ))}
-                      <th className="text-right px-3 py-2 font-semibold text-muted-foreground">TOTAL</th>
-                      <th className="text-right px-3 py-2 font-semibold text-muted-foreground">FORMA FORTE</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {grupos.slice(0, visiveis).map(g => {
-                      const total = somaDasFormas(g.porForma, selecao);
-                      const forte = formaMaisForte(g, formasVisiveis);
-                      const orfa  = g.chave === CHAVE_SEM_OPERADOR;
-                      return (
-                        <tr key={g.chave} className="hover:bg-muted/20">
-                          <td className="px-3 py-2">
-                            <span className={cn('font-semibold', orfa && 'text-amber-600 dark:text-amber-400')}>
-                              {g.rotulo}
-                            </span>
-                            {g.detalhe && (
-                              <span className="block text-[10px] text-muted-foreground font-mono truncate max-w-[160px]">
-                                {g.detalhe}
-                              </span>
-                            )}
-                          </td>
-                          {formasVisiveis.map(rotulo => {
-                            const valor = g.porForma[rotulo] ?? 0;
-                            return (
-                              <td key={rotulo} className={cn(
-                                'px-3 py-2 text-right font-mono tabular-nums',
-                                valor === 0 && 'text-muted-foreground/40',
-                              )}>
-                                {valor === 0 ? '—' : formatBRL(valor)}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-2 text-right font-mono font-bold text-primary tabular-nums">
-                            {formatBRL(total)}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {forte && (
-                              <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap"
-                                style={{ borderColor: `${corDaForma(forte.rotulo)}80`, color: corTexto(corDaForma(forte.rotulo)) }}>
-                                {forte.rotulo} {formatarShare(forte.share)}
-                              </Badge>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-muted/30 border-t border-border">
-                      <td className="px-3 py-2 font-semibold text-muted-foreground">
-                        {grupos.length} {agrupamento === 'operador' ? 'operador' : 'equipe'}
-                        {grupos.length !== 1 ? 's' : ''}
-                      </td>
-                      {formasVisiveis.map(rotulo => (
-                        <td key={rotulo} className="px-3 py-2 text-right font-mono font-semibold tabular-nums">
-                          {formatBRL(detalhe.formas.find(f => f.rotulo === rotulo)?.bruto ?? 0)}
-                        </td>
-                      ))}
-                      <td className="px-3 py-2 text-right font-mono font-bold text-primary tabular-nums">
-                        {formatBRL(totalSelecionado)}
-                      </td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <DetalheGrupoForma
+                grupos={grupos}
+                visiveis={visiveis}
+                formas={formasVisiveis}
+                selecao={selecao}
+                total={totalSelecionado}
+                unidade={agrupamento}
+              />
               {visiveis < grupos.length && (
                 <div className="flex justify-center py-2 border-t border-border">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs"
@@ -830,25 +763,4 @@ function formatYAxis(v: number): string {
 /** 'yyyy-MM-dd' → 'dd/MM'. */
 function fmtDia(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
-/**
- * A forma que mais pesa na linha, entre as visíveis.
- *
- * É a coluna que transforma a tabela em leitura: "esse operador vive de Pix",
- * "essa equipe depende de cartão". Sem ela, cruzar dez colunas de reais com o
- * olho é o trabalho que a tela deveria ter feito.
- */
-function formaMaisForte(
-  g: GrupoFormas, visiveis: readonly string[],
-): { rotulo: string; share: number } | null {
-  let melhor: { rotulo: string; valor: number } | null = null;
-  let total = 0;
-  for (const rotulo of visiveis) {
-    const valor = g.porForma[rotulo] ?? 0;
-    total += valor;
-    if (valor > 0 && (!melhor || valor > melhor.valor)) melhor = { rotulo, valor };
-  }
-  if (!melhor || total <= 0) return null;
-  return { rotulo: melhor.rotulo, share: Math.round((melhor.valor / total) * 1000) / 10 };
 }

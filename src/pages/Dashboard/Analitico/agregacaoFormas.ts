@@ -430,3 +430,25 @@ export function montarTextoResumoFormas(params: {
   ];
   return linhas.filter((l): l is string => l !== null).join('\n');
 }
+
+/** Uma forma dentro da linha de um operador ou equipe. */
+export interface FatiaDoGrupo {
+  rotulo: string;
+  valor: number;
+  /** 0–100, uma casa. */
+  share: number;
+}
+
+/**
+ * As formas visíveis de uma linha, da maior para a menor, sem as zeradas — a
+ * barra da lista «por operador × forma». A primeira é a forma principal.
+ */
+export function fatiasDoGrupo(g: GrupoFormas, formas: readonly string[]): FatiaDoGrupo[] {
+  const total = formas.reduce((s, r) => s + (g.porForma[r] ?? 0), 0);
+  if (total <= 0) return [];
+  return formas
+    .map(rotulo => ({ rotulo, valor: g.porForma[rotulo] ?? 0 }))
+    .filter(f => f.valor > 0)
+    .sort((a, b) => b.valor - a.valor)
+    .map(f => ({ ...f, share: Math.round((f.valor / total) * 1000) / 10 }));
+}
