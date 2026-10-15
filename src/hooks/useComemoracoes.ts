@@ -36,7 +36,12 @@ const VAZIO: readonly string[] = [];
 
 // ── Lista ────────────────────────────────────────────────────────────────────
 
-export function useComemoracoes(empresaId: string | null, habilitado = true) {
+export function useComemoracoes(
+  empresaId: string | null,
+  habilitado = true,
+  /** Quanto do passado ler. Ausente = 24 h, que é o que o overlay precisa. */
+  desdeMs?: number,
+) {
   const [comemoracoes, setComemoracoes] = useState<Comemoracao[]>([]);
   const [loading, setLoading]           = useState(true);
   const [dbAtiva, setDbAtiva]           = useState(true);
@@ -58,7 +63,7 @@ export function useComemoracoes(empresaId: string | null, habilitado = true) {
 
   const recarregar = useCallback(async () => {
     if (!empresaId || !habilitado) { setLoading(false); return; }
-    const res = await buscarComemoracoes(empresaId);
+    const res = await buscarComemoracoes(empresaId, desdeMs);
     if (!montadoRef.current) return;
     if (res.agoraServidor) {
       desvioRef.current = desvioDoServidor(res.agoraServidor, Date.now());
@@ -72,7 +77,7 @@ export function useComemoracoes(empresaId: string | null, habilitado = true) {
     setDbAtiva(res.dbAtiva);
     setErro(res.erro);
     setLoading(false);
-  }, [empresaId, habilitado]);
+  }, [empresaId, habilitado, desdeMs]);
 
   const recarregarRef = useRef(recarregar);
   recarregarRef.current = recarregar;

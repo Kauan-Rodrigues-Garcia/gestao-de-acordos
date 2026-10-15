@@ -14,6 +14,7 @@
 import type { PessoaComemoracao } from '@/services/comemoracoes.service';
 import type { LayoutComemoracao } from './layout';
 import type { EfeitoId, SomId } from './catalogo';
+import type { DesignCard } from '@/components/comemoracao2/design';
 
 export const EVENTO_TESTE = 'comemoracao:testar';
 
@@ -34,6 +35,8 @@ export interface ComemoracaoTeste {
   animTexto?:   string;
   /** Percentual do volume padrão. Ausente = 100. */
   volume?:      number;
+  /** Card da 2.0. Ausente = card da 1.0. */
+  design?:      DesignCard | null;
 }
 
 /** Dispara o ensaio na própria tela. */

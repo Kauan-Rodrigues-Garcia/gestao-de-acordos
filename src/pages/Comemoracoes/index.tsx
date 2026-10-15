@@ -9,12 +9,12 @@
  * `modo="editor"`: é o que garante que o que o líder monta seja o que os
  * outros veem.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   PartyPopper, Sparkles, Trophy, Users, Loader2, Trash2, Ban, Volume2,
   ShieldAlert, RefreshCw, Search, X, CalendarClock, Play, RotateCcw, Clock,
-  Image as ImageIcon, AlertTriangle, Lock,
+  Image as ImageIcon, AlertTriangle, Lock, FlaskConical,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,67 @@ import { CardComemoracao } from '@/components/comemoracao/CardComemoracao';
 
 const DURACAO_PADRAO_S = 20;
 
+// ── Comemorações 2.0 (teste) ─────────────────────────────────────────────────
+//
+// A aba refeita fica atrás de um botão que só o super_admin vê, até ser
+// aprovada. `lazy`: quem não é super_admin nem baixa o código dela.
+const Comemoracoes2 = lazy(() => import('@/pages/Comemoracoes2'));
+
+const CHAVE_V2 = 'comemoracoes:usar-2.0';
+
+function lerPreferenciaV2(): boolean {
+  try { return localStorage.getItem(CHAVE_V2) === '1'; } catch { return false; }
+}
+
+function gravarPreferenciaV2(ligada: boolean): void {
+  try {
+    if (ligada) localStorage.setItem(CHAVE_V2, '1');
+    else localStorage.removeItem(CHAVE_V2);
+  } catch { /* sem storage: vale só nesta abertura */ }
+}
+
+/**
+ * Porta da aba: a 1.0 para todo mundo; o super_admin escolhe entre a 1.0 e a
+ * 2.0 em teste, e a escolha fica lembrada neste navegador.
+ */
+export default function ComemoracoesPorta() {
+  const { perfil } = useAuth();
+  const superAdmin = perfil?.perfil === 'super_admin';
+  const [v2, setV2] = useState(lerPreferenciaV2);
+
+  function trocar(ligar: boolean) {
+    gravarPreferenciaV2(ligar);
+    setV2(ligar);
+  }
+
+  if (superAdmin && v2) {
+    return (
+      <Suspense fallback={
+        <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      }>
+        <Comemoracoes2 onVoltar={() => trocar(false)} />
+      </Suspense>
+    );
+  }
+
+  return (
+    <>
+      {superAdmin && (
+        <div className="mx-6 mt-4 flex max-w-6xl flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-amber-500/60 bg-amber-500/10 px-3 py-2">
+          <p className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+            <FlaskConical className="h-4 w-4" />
+            <span><strong>Comemorações 2.0</strong> em teste. Só super admin vê este aviso.</span>
+          </p>
+          <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => trocar(true)}>
+            <Sparkles className="h-3.5 w-3.5" /> Testar a 2.0
+          </Button>
+        </div>
+      )}
+      <ComemoracoesAtual />
+    </>
+  );
+}
+
 function dataHora(iso: string): string {
   try {
     return new Date(iso).toLocaleString('pt-BR', {
@@ -85,7 +146,7 @@ function paraInputLocal(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export default function Comemoracoes() {
+function ComemoracoesAtual() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();

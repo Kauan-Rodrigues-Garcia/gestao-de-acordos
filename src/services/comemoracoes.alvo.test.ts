@@ -14,15 +14,19 @@ const mocks = vi.hoisted(() => ({
   chamadas: [] as Chamada[],
   /** Erro devolvido no próximo insert de homenageados, se houver. */
   erroHomenageados: null as { code?: string; message?: string } | null,
+  /** Erro devolvido no próximo insert da comemoração, se houver. */
+  erroComemoracao: null as { code?: string; message?: string } | null,
 }));
 
 vi.mock('@/lib/supabase', () => {
   const construtor = (tabela: string) => ({
     insert(payload: unknown) {
       mocks.chamadas.push({ tabela, payload });
-      const erro = tabela === 'comemoracao_homenageados' ? mocks.erroHomenageados : null;
+      const erro = tabela === 'comemoracao_homenageados' ? mocks.erroHomenageados
+        : tabela === 'comemoracoes' ? mocks.erroComemoracao : null;
       // Um erro só: o segundo insert (a repetição sem a coluna) tem que passar.
-      if (erro) mocks.erroHomenageados = null;
+      if (erro && tabela === 'comemoracao_homenageados') mocks.erroHomenageados = null;
+      if (erro && tabela === 'comemoracoes') mocks.erroComemoracao = null;
       const resultado = { data: { id: 'c-1' }, error: erro };
       return {
         select: () => ({ single: () => Promise.resolve(resultado) }),
@@ -37,6 +41,7 @@ vi.mock('@/lib/supabase', () => {
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn() } }));
 
 import { criarComemoracao } from './comemoracoes.service';
+import { designPadrao } from '@/components/comemoracao2/design';
 
 const BASE = {
   empresaId: 'emp', criadoPor: 'eu',
@@ -53,6 +58,7 @@ function payloadDa(tabela: string): Record<string, unknown> | undefined {
 beforeEach(() => {
   mocks.chamadas = [];
   mocks.erroHomenageados = null;
+  mocks.erroComemoracao = null;
 });
 
 describe('exibir apenas para a equipe', () => {
@@ -154,5 +160,29 @@ describe('mensagem de migration ausente aponta a certa', () => {
     expect(r.erro).toMatch(/20260810a/);
 
     (supabase as { from: unknown }).from = original;
+  });
+});
+
+describe('card da Comemoração 2.0', () => {
+  it('o design vai na coluna `design`, enxuto', async () => {
+    const design = { ...designPadrao(), papel: 'neon', selo: '  META DE OUTUBRO  ' };
+    await criarComemoracao({ ...BASE, operadorIds: ['ana'], design });
+    const enviado = payloadDa('comemoracoes')?.design as Record<string, unknown>;
+    expect(enviado).toMatchObject({ versao: 2, papel: 'neon', selo: 'META DE OUTUBRO' });
+  });
+
+  it('comemoração da 1.0 nem manda a coluna — banco sem a migration segue criando', async () => {
+    await criarComemoracao({ ...BASE, operadorIds: ['ana'] });
+    expect(payloadDa('comemoracoes')).not.toHaveProperty('design');
+  });
+
+  it('banco sem a coluna: diz qual migration falta, em vez do erro cru do PostgREST', async () => {
+    mocks.erroComemoracao = {
+      code: 'PGRST204',
+      message: "Could not find the 'design' column of 'comemoracoes' in the schema cache",
+    };
+    const r = await criarComemoracao({ ...BASE, operadorIds: ['ana'], design: designPadrao() });
+    expect(r.ok).toBe(false);
+    expect(r.erro).toBe('A migration 20261015120000_comemoracoes_2_0 ainda não foi aplicada no banco.');
   });
 });

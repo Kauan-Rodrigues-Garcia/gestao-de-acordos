@@ -10,6 +10,7 @@
  *   • um parabéns por pessoa   → PK composta de `comemoracao_parabens`
  */
 import { supabase } from '@/lib/supabase';
+import type { Json } from '@/lib/database.types';
 import { logger } from '@/lib/logger';
 import { lerComCache } from '@/lib/cacheCurto';
 import type { EfeitoId, SomId } from '@/pages/Comemoracoes/catalogo';
@@ -18,6 +19,9 @@ import {
   layoutDoJson, layoutParaJson, ehLayoutPadrao, type LayoutComemoracao,
 } from '@/pages/Comemoracoes/layout';
 import { PREFIXO_MIDIAS, listarMidias } from './comemoracaoMidias.service';
+import {
+  designDoJson, designParaJson, type DesignCard,
+} from '@/components/comemoracao2/design';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +85,11 @@ export interface Comemoracao {
   cancelada_em:  string | null;
   /** Preenchida ao terminar. Finalizada nunca mais dispara (20260801a). */
   finalizada_em: string | null;
+  /**
+   * Card da Comemoração 2.0 (20261015120000). null = comemoração da 1.0, que
+   * segue desenhada pelo card antigo.
+   */
+  design:        DesignCard | null;
   criado_em:     string;
   /** Preenchido pelo service a partir de `comemoracao_homenageados`. */
   homenageados:  PessoaComemoracao[];
@@ -128,6 +137,8 @@ export interface NovaComemoracao {
    * perfil dele. Ver `pages/Comemoracoes/clones.ts`.
    */
   setoresPorOperador?: Record<string, string[]>;
+  /** Card da 2.0. Ausente = comemoração da 1.0. */
+  design?: DesignCard;
 }
 
 interface Resultado<T = null> {
@@ -145,7 +156,10 @@ function tabelaAusente(erro: { code?: string; message?: string } | null): boolea
 /** A tabela existe, mas é da versão anterior — falta a 20260801a. */
 function colunaAusente(erro: { code?: string; message?: string } | null): boolean {
   if (!erro) return false;
-  return erro.code === '42703' || /column .* does not exist/i.test(erro.message ?? '');
+  // 42703 vem do Postgres; PGRST204 é o PostgREST dizendo que a coluna não
+  // está no cache do schema — o caso de um INSERT com coluna nova.
+  return erro.code === '42703' || erro.code === 'PGRST204'
+    || /column .* does not exist|could not find the .* column/i.test(erro.message ?? '');
 }
 
 // ── Leitura ──────────────────────────────────────────────────────────────────
@@ -226,9 +240,10 @@ export async function buscarComemoracoes(
     Comemoracao,
     | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
     | 'modelo' | 'anim_texto' | 'volume' | 'alvo_tipo' | 'equipe_id' | 'setor_id'
-    | 'empresa_inteira' | 'finalizada_em' | 'equipes_alvo' | 'somente_equipe'
+    | 'empresa_inteira' | 'finalizada_em' | 'equipes_alvo' | 'somente_equipe' | 'design'
   > & {
     layout?: unknown;
+    design?: unknown;
     modelo?:          string | null;
     anim_texto?:      string | null;
     volume?:          number | null;
@@ -252,6 +267,8 @@ export async function buscarComemoracoes(
       // O layout vem de uma coluna JSONB: pode ter qualquer coisa dentro, então
       // é saneado antes de chegar à tela.
       layout: layoutDoJson(linha.layout),
+      // Também JSONB livre: saneado campo a campo. Ausente = comemoração 1.0.
+      design: designDoJson(linha.design),
       gif_url: linha.gif_midia_id ? porId.get(linha.gif_midia_id)?.url ?? null : null,
       som_url: som?.url ?? null,
       som_inicio_s: Number(som?.inicio_s ?? 0),
@@ -377,6 +394,9 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
       // Meta de setor é a empresa inteira por definição: estreitar para uma
       // equipe não faz sentido, e a tela nem oferece.
       ...(p.somenteEquipe && alvo !== 'setor' ? { somente_equipe: true } : {}),
+      // Só a 2.0 manda `design`: a 1.0 continua criando sem esbarrar na coluna
+      // num banco que ainda não tem a 20261015120000.
+      ...(p.design ? { design: designParaJson(p.design) as Json } : {}),
     })
     .select('id')
     .single();
@@ -388,8 +408,9 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
     if (colunaAusente(error)) {
       // Qual migration falta depende de QUAL coluna o banco não conhece —
       // mandar sempre para a 20260801a fazia a pessoa aplicar a errada.
-      const qual = /somente_equipe|equipes_alvo/.test(error?.message ?? '')
-        ? '20260810a' : '20260801a';
+      const msg = error?.message ?? '';
+      const qual = /design/.test(msg) ? '20261015120000_comemoracoes_2_0'
+        : /somente_equipe|equipes_alvo/.test(msg) ? '20260810a' : '20260801a';
       return { ok: false, erro: `A migration ${qual} ainda não foi aplicada no banco.`, dados: null };
     }
     logger.warn('[comemoracoes] erro ao criar:', error?.message);

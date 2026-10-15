@@ -1736,6 +1736,30 @@ export type Database = {
           },
         ]
       }
+      comemoracao_gif_buscas: {
+        Row: {
+          atualizado_em: string
+          criado_por: string | null
+          empresa_id: string
+          resultados: Json
+          termo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          resultados?: Json
+          termo: string
+        }
+        Update: {
+          atualizado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          resultados?: Json
+          termo?: string
+        }
+        Relationships: []
+      }
       comemoracao_homenageados: {
         Row: {
           comemoracao_id: string
@@ -1907,6 +1931,7 @@ export type Database = {
           cancelada_em: string | null
           criado_em: string
           criado_por: string | null
+          design: Json | null
           duracao_s: number
           efeito: string
           empresa_id: string
@@ -1934,6 +1959,7 @@ export type Database = {
           cancelada_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          design?: Json | null
           duracao_s?: number
           efeito?: string
           empresa_id: string
@@ -1961,6 +1987,7 @@ export type Database = {
           cancelada_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          design?: Json | null
           duracao_s?: number
           efeito?: string
           empresa_id?: string

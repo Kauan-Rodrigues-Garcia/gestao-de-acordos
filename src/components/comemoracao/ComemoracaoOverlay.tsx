@@ -26,6 +26,7 @@ import { ouvirTeste, type ComemoracaoTeste } from '@/pages/Comemoracoes/testeLoc
 import { CardComemoracao } from './CardComemoracao';
 import { EfeitoComemoracao } from './EfeitoComemoracao';
 import { BaloesParabens } from './BaloesParabens';
+import { CenaV2 } from '@/components/comemoracao2/CenaV2';
 
 export function ComemoracaoOverlay() {
   const { perfil }  = useAuth();
@@ -179,6 +180,7 @@ export function ComemoracaoOverlay() {
         animTexto: teste.animTexto,
         efeito:   efeitoValido(teste.efeito),
         duracaoS: teste.duracaoS,
+        design:   teste.design ?? null,
         fechar:   () => setTeste(null),
         ehTeste:  true,
       }
@@ -193,6 +195,7 @@ export function ComemoracaoOverlay() {
           animTexto: atual.anim_texto,
           efeito:   efeitoValido(atual.efeito),
           duracaoS: atual.duracao_s,
+          design:   atual.design ?? null,
           fechar,
           ehTeste:  false,
         }
@@ -205,7 +208,30 @@ export function ComemoracaoOverlay() {
       {atual && <BaloesParabens parabens={parabens} />}
 
     <AnimatePresence>
-      {emCena && (
+      {/* Comemoração 2.0: card sólido com papel de parede. A 1.0 segue abaixo. */}
+      {emCena?.design && (
+        <CenaV2
+          key={emCena.chave}
+          titulo={emCena.titulo}
+          mensagem={emCena.mensagem}
+          homenageados={emCena.homenageados}
+          design={emCena.design}
+          duracaoS={emCena.duracaoS}
+          ehTeste={emCena.ehTeste}
+          onFechar={emCena.fechar}
+          mudo={mudo}
+          onAlternarMudo={alternarMudo}
+          parabens={{
+            pode:     podeParabenizar,
+            jaDei:    jaParabenizei,
+            enviando,
+            total:    parabens.length,
+            quem:     quemParabenizar,
+            onDar:    () => void enviarParabens(),
+          }}
+        />
+      )}
+      {emCena && !emCena.design && (
         <motion.div
           key={emCena.chave}
           // O container inteiro ignora o mouse: sem isto a comemoração de um
