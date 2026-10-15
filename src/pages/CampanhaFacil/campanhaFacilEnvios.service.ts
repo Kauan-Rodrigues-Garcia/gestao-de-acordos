@@ -25,8 +25,11 @@ import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDo
 /** As tabelas nasceram depois dos tipos gerados — mesmo recurso do numeros.service. */
 const db = supabase as unknown as SupabaseClient;
 
-/** Quanto tempo a campanha fica na aba do operador. Espelha a migration. */
-export const DIAS_VALIDADE_ENVIO = 2;
+/*
+ * Quanto tempo a campanha fica na aba do operador: até o mês virar, no horário
+ * de Brasília (`fn_cf_fim_do_mes`, 20261015200000 — eram 2 dias). Quem decide
+ * é o banco, ao lançar; a tela só mostra o `expira_em`.
+ */
 
 /** Mensagens por pedido ao gravar: a campanha inteira num corpo só passa do limite. */
 const LOTE_GRAVAR = 500;
@@ -388,7 +391,7 @@ export async function listarMinhasCampanhas(operadorId: string): Promise<EnvioRe
 
 // ── Controle da campanha ─────────────────────────────────────────────────────
 
-/** Desativar some na hora para os operadores; reativar renova os 2 dias e avisa. */
+/** Desativar some na hora para os operadores; reativar avisa e vale até o fim do mês. */
 export async function ativarLote(loteId: string, ativa: boolean): Promise<void> {
   const { error } = await db.rpc('fn_campanha_facil_lote_ativar', { p_lote: loteId, p_ativa: ativa });
   if (error) throw error;

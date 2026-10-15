@@ -10,6 +10,7 @@
  *   • um parabéns por pessoa   → PK composta de `comemoracao_parabens`
  */
 import { supabase } from '@/lib/supabase';
+import type { Json } from '@/lib/database.types';
 import { logger } from '@/lib/logger';
 import { lerComCache } from '@/lib/cacheCurto';
 import type { EfeitoId, SomId } from '@/pages/Comemoracoes/catalogo';
@@ -18,6 +19,10 @@ import {
   layoutDoJson, layoutParaJson, ehLayoutPadrao, type LayoutComemoracao,
 } from '@/pages/Comemoracoes/layout';
 import { PREFIXO_MIDIAS, listarMidias } from './comemoracaoMidias.service';
+import {
+  designDoJson, designParaJson, type DesignCard,
+} from '@/components/comemoracao2/design';
+import { musicaDoPlayer } from '@/components/comemoracao2/musicasDoPlayer';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +61,11 @@ export interface Comemoracao {
    * da própria comemoração — o som termina junto com o card.
    */
   som_inicio_s:  number;
+  /**
+   * Multiplicador do volume para o arquivo de `som_url`. 1 = como veio; a
+   * música do player traz o ganho que deixa todas na mesma altura.
+   */
+  som_ganho:     number;
   layout:        LayoutComemoracao;
   /** Arranjo escolhido (20260801a). Só rótulo — quem manda é `layout`. */
   modelo:        string;
@@ -81,6 +91,11 @@ export interface Comemoracao {
   cancelada_em:  string | null;
   /** Preenchida ao terminar. Finalizada nunca mais dispara (20260801a). */
   finalizada_em: string | null;
+  /**
+   * Card da Comemoração 2.0 (20261015120000). null = comemoração da 1.0, que
+   * segue desenhada pelo card antigo.
+   */
+  design:        DesignCard | null;
   criado_em:     string;
   /** Preenchido pelo service a partir de `comemoracao_homenageados`. */
   homenageados:  PessoaComemoracao[];
@@ -128,6 +143,8 @@ export interface NovaComemoracao {
    * perfil dele. Ver `pages/Comemoracoes/clones.ts`.
    */
   setoresPorOperador?: Record<string, string[]>;
+  /** Card da 2.0. Ausente = comemoração da 1.0. */
+  design?: DesignCard;
 }
 
 interface Resultado<T = null> {
@@ -145,7 +162,10 @@ function tabelaAusente(erro: { code?: string; message?: string } | null): boolea
 /** A tabela existe, mas é da versão anterior — falta a 20260801a. */
 function colunaAusente(erro: { code?: string; message?: string } | null): boolean {
   if (!erro) return false;
-  return erro.code === '42703' || /column .* does not exist/i.test(erro.message ?? '');
+  // 42703 vem do Postgres; PGRST204 é o PostgREST dizendo que a coluna não
+  // está no cache do schema — o caso de um INSERT com coluna nova.
+  return erro.code === '42703' || erro.code === 'PGRST204'
+    || /column .* does not exist|could not find the .* column/i.test(erro.message ?? '');
 }
 
 // ── Leitura ──────────────────────────────────────────────────────────────────
@@ -224,11 +244,12 @@ export async function buscarComemoracoes(
   // funcionando como a de ontem em vez de quebrar.
   type Linha = Omit<
     Comemoracao,
-    | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
+    | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s' | 'som_ganho'
     | 'modelo' | 'anim_texto' | 'volume' | 'alvo_tipo' | 'equipe_id' | 'setor_id'
-    | 'empresa_inteira' | 'finalizada_em' | 'equipes_alvo' | 'somente_equipe'
+    | 'empresa_inteira' | 'finalizada_em' | 'equipes_alvo' | 'somente_equipe' | 'design'
   > & {
     layout?: unknown;
+    design?: unknown;
     modelo?:          string | null;
     anim_texto?:      string | null;
     volume?:          number | null;
@@ -247,14 +268,21 @@ export async function buscarComemoracoes(
 
   const lista = ((data ?? []) as unknown as Linha[]).map((linha) => {
     const som = somDe(linha.som_midia_id);
+    const design = designDoJson(linha.design);
+    // Música do player: mora no próprio app. Faixa que saiu cai no som do catálogo.
+    const doPlayer = musicaDoPlayer(design?.somFaixa);
     return {
       ...linha,
       // O layout vem de uma coluna JSONB: pode ter qualquer coisa dentro, então
       // é saneado antes de chegar à tela.
       layout: layoutDoJson(linha.layout),
+      // Também JSONB livre: saneado campo a campo. Ausente = comemoração 1.0.
+      design,
       gif_url: linha.gif_midia_id ? porId.get(linha.gif_midia_id)?.url ?? null : null,
-      som_url: som?.url ?? null,
-      som_inicio_s: Number(som?.inicio_s ?? 0),
+      som_url: doPlayer?.url ?? som?.url ?? null,
+      som_ganho: doPlayer?.ganho ?? 1,
+      // A 2.0 guarda o trecho escolhido para ESTA festa; sem ele, o ponto da música.
+      som_inicio_s: Number(design?.somInicioS ?? som?.inicio_s ?? 0),
       modelo:     linha.modelo     ?? 'midia_topo',
       anim_texto: linha.anim_texto ?? 'subir',
       // 100 = volume padrão de cada som. Banco sem a coluna soa como sempre.
@@ -283,6 +311,28 @@ export async function buscarComemoracoes(
     // desvio, e o relógio local serve — é o caso de quem nunca comemorou.
     agoraServidor: lista[0]?.criado_em ?? null,
   };
+}
+
+/**
+ * Nome da equipe ou do setor festejado, para o convite do parabéns ("A equipe
+ * Águias bateu a meta!").
+ *
+ * Guardado por 30 min: o nome muda quase nunca e cada tela da festa pergunta.
+ * Falha em silêncio (null): o convite fica genérico, a festa não para.
+ */
+export async function buscarNomeDoAlvo(tipo: 'equipe' | 'setor', id: string): Promise<string | null> {
+  return lerComCache(`comemoracoes:alvo:${tipo}:${id}`, 30 * 60_000, async () => {
+    const { data, error } = await supabase
+      .from(tipo === 'equipe' ? 'equipes' : 'setores')
+      .select('nome')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      logger.warn('[comemoracoes] erro ao ler nome do alvo:', error.message);
+      return null;
+    }
+    return (data as { nome?: string } | null)?.nome?.trim() || null;
+  }, { guardarSe: (nome) => !!nome });
 }
 
 /**
@@ -377,6 +427,9 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
       // Meta de setor é a empresa inteira por definição: estreitar para uma
       // equipe não faz sentido, e a tela nem oferece.
       ...(p.somenteEquipe && alvo !== 'setor' ? { somente_equipe: true } : {}),
+      // Só a 2.0 manda `design`: a 1.0 continua criando sem esbarrar na coluna
+      // num banco que ainda não tem a 20261015120000.
+      ...(p.design ? { design: designParaJson(p.design) as Json } : {}),
     })
     .select('id')
     .single();
@@ -388,8 +441,9 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
     if (colunaAusente(error)) {
       // Qual migration falta depende de QUAL coluna o banco não conhece —
       // mandar sempre para a 20260801a fazia a pessoa aplicar a errada.
-      const qual = /somente_equipe|equipes_alvo/.test(error?.message ?? '')
-        ? '20260810a' : '20260801a';
+      const msg = error?.message ?? '';
+      const qual = /design/.test(msg) ? '20261015120000_comemoracoes_2_0'
+        : /somente_equipe|equipes_alvo/.test(msg) ? '20260810a' : '20260801a';
       return { ok: false, erro: `A migration ${qual} ainda não foi aplicada no banco.`, dados: null };
     }
     logger.warn('[comemoracoes] erro ao criar:', error?.message);

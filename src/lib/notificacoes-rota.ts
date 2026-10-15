@@ -23,6 +23,11 @@ export const ROTA_ANALITICO = ROUTE_PATHS.ANALITICO;
 export const ROTA_DIARIO = `${ROUTE_PATHS.ANALITICO}?aba=diario`;
 /** Chat de solicitação de atendimento. */
 export const ROTA_SOLICITACOES = ROUTE_PATHS.SOLICITACOES_WHATSAPP;
+/**
+ * Pedido de autorização: abre o chat na conversa «Autorizações» do setor
+ * (15/10/2026). A rota não é uma tela — ver `pages/AbrirAutorizacoes`.
+ */
+export const ROTA_AUTORIZACOES = ROUTE_PATHS.AUTORIZACOES;
 
 /** Só o que o cálculo lê. */
 type Alvo = Pick<Notificacao, 'titulo' | 'rota' | 'acordo_id'>;
@@ -66,6 +71,14 @@ export function caminhoInternoSeguro(rota: unknown): string | null {
  */
 function palpitePeloTitulo(titulo: string): string | null {
   const t = titulo.toLowerCase();
+  /*
+   * Autorização ANTES de «solicitaç»: «Autorização solicitada» contém
+   * «solicitad» e levava o líder para Solicitações de WhatsApp. A resposta ao
+   * operador («aprovada»/«recusada») não tem para onde ir além do acordo, que
+   * já vem no `acordo_id` quando existe.
+   */
+  if (t.includes('autorização solicitada') || t.includes('autorizacao solicitada')) return ROTA_AUTORIZACOES;
+  if (t.includes('autorização') || t.includes('autorizacao')) return null;
   if (t.includes('diário') || t.includes('diario'))        return ROTA_DIARIO;
   if (t.includes('analítico') || t.includes('analitico'))  return ROTA_ANALITICO;
   if (t.includes('mensagem') || t.includes('solicitaç') || t.includes('solicitac')) {

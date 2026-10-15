@@ -191,7 +191,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     try {
       await ativarLote(lote.id, ativa);
       toast.success(ativa
-        ? 'Campanha liberada de novo. Os operadores foram avisados e têm mais 2 dias.'
+        ? 'Campanha liberada de novo. Os operadores foram avisados; ela vale até o fim do mês.'
         : 'Campanha desativada. Ela sumiu da aba dos operadores.');
       return true;
     } catch (err) {

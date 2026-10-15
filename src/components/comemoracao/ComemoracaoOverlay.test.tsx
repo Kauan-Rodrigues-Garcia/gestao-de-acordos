@@ -25,6 +25,7 @@ interface LinhaFake {
   setores_alvo: string[]; cancelada_em: string | null; criado_por: string | null;
   criado_em: string; empresa_id: string;
   homenageados: { id: string; nome: string; foto_url: string | null }[];
+  alvo_tipo?: string; equipe_id?: string | null;
 }
 
 interface ParabensFake {
@@ -53,6 +54,7 @@ vi.mock('@/services/comemoracoes.service', () => ({
   // estreitadas. Aqui ninguém é clone, então basta a do perfil.
   buscarMinhasEquipes: (_id: string | null, doPerfil: string | null) =>
     Promise.resolve(doPerfil ? [doPerfil] : []),
+  buscarNomeDoAlvo: () => Promise.resolve('Águias'),
 }));
 
 vi.mock('@/lib/realtime', () => ({ assinarTabela: () => () => {} }));
@@ -64,6 +66,7 @@ vi.mock('@/lib/realtime', () => ({ assinarTabela: () => () => {} }));
 // role — que é como o leitor de tela também o encontraria.
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children?: unknown }) => children as never,
+  MotionConfig: ({ children }: { children?: unknown }) => children as never,
   motion: new Proxy({}, {
     get: (_alvo, tag: string) => ({ children, ...p }: Record<string, unknown> & { children?: unknown }) => {
       const limpo = Object.fromEntries(
@@ -75,6 +78,7 @@ vi.mock('framer-motion', () => ({
 }));
 
 import { ComemoracaoOverlay } from './ComemoracaoOverlay';
+import { dispararTeste } from '@/pages/Comemoracoes/testeLocal';
 
 function linha(over: Partial<LinhaFake> = {}): LinhaFake {
   return {
@@ -202,13 +206,20 @@ describe('parabéns', () => {
     expect(screen.getByRole('button', { name: /Parabenizar o time/i })).toBeTruthy();
   });
 
-  it('O HOMENAGEADO NÃO se parabeniza', async () => {
+  it('festa de equipe convida a parabenizar a equipe', async () => {
+    linhas = [linha({ alvo_tipo: 'equipe', equipe_id: 'eq1', homenageados: [] })];
+    await montar();
+    expect(screen.getByRole('button', { name: /Parabenizar a equipe/i })).toBeTruthy();
+  });
+
+  it('O HOMENAGEADO NÃO se parabeniza — vê que está sendo aplaudido', async () => {
     // Sem esta regra a pessoa veria um botão para se aplaudir, e o próprio
-    // nome subiria entre os balões dos colegas.
+    // nome entraria no mural dos colegas.
     perfilAtual = { id: 'op1', setor_id: 's-a' };
     linhas = [linha({ homenageados: [{ id: 'op1', nome: 'Ana Silva', foto_url: null }] })];
     await montar();
     expect(screen.queryByRole('button', { name: /Parabenizar/i })).toBeNull();
+    expect(screen.getByText(/Seus colegas estão te parabenizando/)).toBeTruthy();
   });
 
   it('clicar registra o parabéns com uma frase', async () => {
@@ -235,24 +246,41 @@ describe('parabéns', () => {
     linhas = [linha()];
     await montar();
 
-    expect(screen.getByRole('button', { name: /Parabenizado/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Parabenizar Ana/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Você parabenizou Ana/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Parabenizar Ana/i })).toBeNull();
   });
 
-  it('o contador mostra quantos parabenizaram', async () => {
+  it('o mural mostra para todo mundo quem parabenizou, com a frase', async () => {
     parabensNoBanco = [
-      { comemoracao_id: 'c1', usuario_id: 'u1', frase: 'Show!', criado_em: new Date().toISOString(), pessoa: null },
-      { comemoracao_id: 'c1', usuario_id: 'u2', frase: 'Boa!',  criado_em: new Date().toISOString(), pessoa: null },
+      { comemoracao_id: 'c1', usuario_id: 'u1', frase: 'Show!', criado_em: new Date().toISOString(),
+        pessoa: { id: 'u1', nome: 'Carla Dias', foto_url: null } },
+      { comemoracao_id: 'c1', usuario_id: 'u2', frase: 'Boa!', criado_em: new Date().toISOString(),
+        pessoa: { id: 'u2', nome: 'Davi Reis', foto_url: null } },
     ];
     linhas = [linha()];
     await montar();
-    expect(screen.getByRole('button', { name: /Parabenizar Ana/i }).textContent).toContain('2');
+    const mural = screen.getByLabelText('Quem já parabenizou');
+    expect(mural.textContent).toContain('Carla');
+    expect(mural.textContent).toContain('Show!');
+    expect(mural.textContent).toContain('Davi');
   });
 
-  it('o ensaio não oferece parabenizar', async () => {
-    // Parabéns de teste sujariam o histórico da comemoração.
-    linhas = [];
+  it('o ensaio mostra o convite, e clicar não grava nada', async () => {
+    // Parabéns de teste sujariam o histórico da comemoração: o clique fica
+    // só na tela de quem está testando.
     await montar();
-    expect(screen.queryByRole('button', { name: /Parabenizar/i })).toBeNull();
+    await act(async () => {
+      dispararTeste({
+        titulo: 'META', mensagem: null, homenageados: [{ id: 'op1', nome: 'Ana Silva', foto_url: null }],
+        efeito: 'confete', som: 'nenhum', gifUrl: null, somUrl: null, somInicioS: 0, layout: {}, duracaoS: 10,
+      });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: /Parabenizar Ana/i }).click();
+      await Promise.resolve();
+    });
+    expect(parabenizarMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Quem já parabenizou').textContent).toContain('Você');
   });
 });

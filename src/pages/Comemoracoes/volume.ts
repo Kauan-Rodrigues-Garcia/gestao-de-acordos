@@ -11,12 +11,16 @@
 import type { AlvoTipo } from '@/services/comemoracoes.service';
 
 /**
- * Onde a barra nasce.
+ * Onde a barra nasce — e o que a tela recomenda.
  *
  * Era 100 (o volume cheio de cada som). Quem montava não mexia — não havia
- * motivo aparente — e a festa saía no talo na tela de todo mundo.
+ * motivo aparente — e a festa saía no talo na tela de todo mundo. Depois 25;
+ * desde 15/10/2026, 15 (Cleber): é o que não atrapalha quem está em ligação.
  */
-export const VOLUME_PADRAO = 25;
+export const VOLUME_PADRAO = 15;
+
+/** O que o aviso embaixo do volume recomenda. */
+export const VOLUME_RECOMENDADO = VOLUME_PADRAO;
 
 /** A partir daqui a tela avisa que pode atrapalhar quem está em ligação. */
 export const VOLUME_AVISO = 60;
@@ -28,7 +32,7 @@ export const VOLUME_AVISO = 60;
  * é a única comemoração que toca em quem não faz ideia de que ela existe, em
  * todos os setores ao mesmo tempo. Aqui o volume não é sugestão, é trava.
  */
-export const VOLUME_SETOR = 25;
+export const VOLUME_SETOR = VOLUME_RECOMENDADO;
 
 /** O alvo escolhido tira o controle do volume de quem monta? */
 export function volumeTravado(alvo: AlvoTipo): boolean {

@@ -52,6 +52,16 @@ import {
   deveNotificarMensagemChat, executarNotificacaoChatUmaVez, tituloComMensagensNaoLidas,
 } from '@/lib/notificacao-chat';
 import { prepararSomChat, tocarSomChat } from '@/lib/som-chat';
+import { useAutorizacaoPedidos } from '@/hooks/useAutorizacaoPedidos';
+import { EscudoAutorizacoes } from '@/components/Autorizacoes/EscudoAutorizacoes';
+import { buscarNomeDoAlvo } from '@/services/comemoracoes.service';
+import type { PedidoAutorizacao } from '@/services/autorizacaoPedidos.service';
+import {
+  CONVERSA_AUTORIZACOES, EVENTO_ABRIR_AUTORIZACOES, consumirPedidoDeAbrir,
+} from '@/components/Autorizacoes/abrirNoChat';
+import {
+  pedidosQueChegaram, resumoDasAutorizacoes, tituloDasAutorizacoes,
+} from '@/components/Autorizacoes/resumoChat';
 
 /*
  * A janela aberta, sob demanda — ver `janela.ts`.
@@ -74,6 +84,7 @@ const NovoGrupoDialog    = lazy(() => carregarJanela().then(m => ({ default: m.N
 const ConfigGrupoDialog  = lazy(() => carregarJanela().then(m => ({ default: m.ConfigGrupoDialog })));
 const GaleriaDialog      = lazy(() => carregarJanela().then(m => ({ default: m.GaleriaDialog })));
 const BoasVindasChat     = lazy(() => carregarJanela().then(m => ({ default: m.BoasVindasChat })));
+const PainelAutorizacoes = lazy(() => carregarJanela().then(m => ({ default: m.PainelAutorizacoes })));
 
 function precarregarJanela() {
   void carregarJanela().catch(() => {});
@@ -341,11 +352,108 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
   chatRef.current = chat;
   const { online, digitando, gravando, avisarAtividade } = useChatPresenca(podeVer);
 
+  /*
+   * ── Autorizações: a conversa fixa do setor (15/10/2026) ───────────────────
+   *
+   * Quem decide autorização recebe os pedidos aqui, e não mais no botão do
+   * canto (`AutorizacaoDock`, que ficou só de reserva para quem não tem chat).
+   * O hook fica ligado com a janela fechada pelo mesmo motivo do chat: é o que
+   * acende o aviso na bolha sem a pessoa abrir para descobrir.
+   */
+  const podeAutorizarTabulacao = temPermissao('acordos_autorizar_tabulacao');
+  const podeAutorizarTornarDireto = temPermissao('acordos_autorizar_tornar_direto');
+  const podeAutorizar = podeVer && (podeAutorizarTabulacao || podeAutorizarTornarDireto);
+  /*
+   * Super admin vê a fila, mas não decide no dia a dia (Cleber, 15/10/2026):
+   * sem aviso de pedido novo, sem contar na bolha, sem destaque na lista. Ele
+   * entra quando quiser conferir.
+   */
+  const autorizacoesDiscretas = perfil?.perfil === 'super_admin';
+  const autorizacoes = useAutorizacaoPedidos(podeAutorizar && !!perfil?.id);
+  const [vendoAutorizacoes, setVendoAutorizacoes] = useState(false);
+  const [nomeSetor, setNomeSetor] = useState<string | null>(null);
+  const setorDoPerfil = perfil?.setor_id ?? null;
+  useEffect(() => {
+    setNomeSetor(null);
+    if (!podeAutorizar || !setorDoPerfil) return;
+    let vivo = true;
+    void buscarNomeDoAlvo('setor', setorDoPerfil).then(n => { if (vivo) setNomeSetor(n); });
+    return () => { vivo = false; };
+  }, [podeAutorizar, setorDoPerfil]);
+  const tituloAutorizacoes = tituloDasAutorizacoes(perfil?.perfil, nomeSetor);
+  const resumoAutorizacoes = resumoDasAutorizacoes(autorizacoes.pedidos);
+  const podeDecidir = useCallback((p: PedidoAutorizacao) => (
+    p.modo === 'tornar_direto' ? podeAutorizarTornarDireto : podeAutorizarTabulacao
+  ), [podeAutorizarTabulacao, podeAutorizarTornarDireto]);
+
+  const abrirAutorizacoes = useCallback(() => {
+    chatRef.current?.abrir(null);
+    setVendoAutorizacoes(true);
+    abertoRef.current = true;
+    setAberto(true);
+  }, []);
+
+  // Abrir uma conversa de verdade tira as autorizações da tela.
+  useEffect(() => {
+    if (chat.conversaAberta) setVendoAutorizacoes(false);
+  }, [chat.conversaAberta]);
+
+  // O clique numa notificação de autorização (`/autorizacoes`) pede para abrir
+  // aqui — pelo evento, ou pela marca deixada antes de a bolha ficar pronta.
+  useEffect(() => {
+    if (!podeAutorizar) return;
+    if (consumirPedidoDeAbrir()) abrirAutorizacoes();
+    const aoPedir = () => { if (consumirPedidoDeAbrir()) abrirAutorizacoes(); };
+    window.addEventListener(EVENTO_ABRIR_AUTORIZACOES, aoPedir);
+    return () => window.removeEventListener(EVENTO_ABRIR_AUTORIZACOES, aoPedir);
+  }, [podeAutorizar, abrirAutorizacoes]);
+
+  /*
+   * Pedido novo chegou: aviso no formato de mensagem do chat, com o som do
+   * chat. A primeira carga só registra o que já existia — abrir a tela não
+   * dispara aviso de pedido antigo. Quem está com as autorizações abertas não
+   * precisa de aviso: o cartão já apareceu na frente dela.
+   */
+  const vistosRef = useRef<Set<string> | null>(null);
+  const vendoRef = useRef(vendoAutorizacoes);
+  vendoRef.current = vendoAutorizacoes;
+  const tituloRef = useRef(tituloAutorizacoes);
+  tituloRef.current = tituloAutorizacoes;
+  useEffect(() => {
+    if (!podeAutorizar || autorizacoes.carregando) return;
+    if (vistosRef.current === null) {
+      vistosRef.current = new Set(autorizacoes.pedidos.map(p => p.id));
+      return;
+    }
+    const novos = pedidosQueChegaram(vistosRef.current, autorizacoes.pedidos, perfil?.id ?? null);
+    for (const p of autorizacoes.pedidos) vistosRef.current.add(p.id);
+    if (novos.length === 0 || autorizacoesDiscretas || (abertoRef.current && vendoRef.current)) return;
+
+    const p = novos[0];
+    const nome = (p.solicitante_nome ?? '').trim().split(/\s+/)[0] || 'Alguém';
+    const acao = p.modo === 'tornar_direto' ? 'quer tornar DIRETO' : 'pede autorização para registrar';
+    const mais = novos.length > 1 ? ` (e mais ${novos.length - 1})` : '';
+    toastFlutuante.custom(id => (
+      <NotificacaoMensagem
+        nome={tituloRef.current}
+        foto={null}
+        avatar={<EscudoAutorizacoes tamanho={42} alerta />}
+        mensagem={`${nome} ${acao} o ${p.nr_label} ${p.nr_valor}${mais}`}
+        onFechar={() => toastFlutuante.dismiss(id)}
+        onAbrir={() => { toastFlutuante.dismiss(id); abrirAutorizacoes(); }}
+      />
+    ), { duration: 12_000 });
+    tocarSomChat();
+  }, [podeAutorizar, autorizacoes.carregando, autorizacoes.pedidos, perfil?.id, abrirAutorizacoes, autorizacoesDiscretas]);
+
+  /** Mensagem não lida + autorização esperando: o que a bolha conta. */
+  const avisosNaBolha = chat.naoLidasTotal + (autorizacoesDiscretas ? 0 : resumoAutorizacoes.pendentes);
+
   // Contagem da própria aba do navegador. Mensagens lidas limpam o prefixo.
   useEffect(() => {
-    document.title = tituloComMensagensNaoLidas(chat.naoLidasTotal);
+    document.title = tituloComMensagensNaoLidas(avisosNaBolha);
     return () => { document.title = 'Gestão de Acordos'; };
-  }, [chat.naoLidasTotal]);
+  }, [avisosNaBolha]);
 
   // O arquivo é diferente do som do sino. O primeiro gesto apenas antecipa o
   // download e deixa o navegador pronto para tocar quando a mensagem chegar.
@@ -378,11 +486,16 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
   avisarAberta.current = onConversaInicialAberta;
   useEffect(() => {
     if (!podeVer || !conversaInicial) return;
+    if (conversaInicial === CONVERSA_AUTORIZACOES) {
+      if (podeAutorizar) abrirAutorizacoes();
+      avisarAberta.current?.();
+      return;
+    }
     chatRef.current?.abrir(conversaInicial);
     abertoRef.current = true;
     setAberto(true);
     avisarAberta.current?.();
-  }, [podeVer, conversaInicial]);
+  }, [podeVer, conversaInicial, podeAutorizar, abrirAutorizacoes]);
 
   // Celular, aberto: a tela de trás não rola por baixo do chat.
   useEffect(() => {
@@ -512,9 +625,14 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
           'flex items-center justify-center',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         )}
-        aria-label={chat.naoLidasTotal ? `Chat, ${chat.naoLidasTotal} não lidas` : 'Abrir o chat'}
+        aria-label={avisosNaBolha
+          ? `Chat, ${[
+              chat.naoLidasTotal ? `${chat.naoLidasTotal} não lidas` : '',
+              resumoAutorizacoes.pendentes && !autorizacoesDiscretas ? `${resumoAutorizacoes.pendentes} ${resumoAutorizacoes.pendentes === 1 ? 'autorização pendente' : 'autorizações pendentes'}` : '',
+            ].filter(Boolean).join(', ')}`
+          : 'Abrir o chat'}
       >
-        {chat.naoLidasTotal > 0 && !halloween && (
+        {avisosNaBolha > 0 && !halloween && (
           <span
             aria-hidden="true"
             className="chat-alerta-pendente pointer-events-none absolute -inset-1 rounded-[18px] border-2 border-primary/70"
@@ -526,17 +644,21 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             aria-hidden="true"
             className={cn(
               'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
-              sobre || chat.naoLidasTotal > 0 ? 'opacity-100' : 'opacity-0',
+              sobre || avisosNaBolha > 0 ? 'opacity-100' : 'opacity-0',
             )}
           />
         )}
         {halloween
-          ? <AboboraChat acesa={mouseNaBolha || chat.naoLidasTotal > 0} />
-          : <IconeChat ativo={sobre || chat.naoLidasTotal > 0} />}
+          ? <AboboraChat acesa={mouseNaBolha || avisosNaBolha > 0} />
+          : <IconeChat ativo={sobre || avisosNaBolha > 0} />}
 
-        {chat.naoLidasTotal > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold flex items-center justify-center ring-2 ring-background">
-            {chat.naoLidasTotal > 99 ? '99+' : chat.naoLidasTotal}
+        {avisosNaBolha > 0 && (
+          <span className={cn(
+            'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full text-[11px] font-semibold flex items-center justify-center ring-2 ring-background',
+            // Só autorização esperando: âmbar, a cor da conversa de autorizações.
+            chat.naoLidasTotal === 0 ? 'bg-amber-500 text-white' : 'bg-destructive text-destructive-foreground',
+          )}>
+            {avisosNaBolha > 99 ? '99+' : avisosNaBolha}
           </span>
         )}
       </button>
@@ -551,8 +673,9 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
    * resolvesse (conversa nova, ainda fora da lista), a janela ficava vazia:
    * lista escondida, conversa nula, nada desenhado.
    */
-  const mostraLista = largo || !conversaAtual;
-  const mostraConversa = !!conversaAtual;
+  const mostraLista = largo || (!conversaAtual && !vendoAutorizacoes);
+  const mostraConversa = !!conversaAtual && !vendoAutorizacoes;
+  const mostraAutorizacoes = vendoAutorizacoes && podeAutorizar;
 
   /*
    * A janela inteira mora dentro da casca sob demanda: se o pedaço não descer,
@@ -666,6 +789,13 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
                 onNovaConversa={() => setNovaConversa(true)}
                 onNovoDisparo={() => setNovoDisparo(true)}
                 onNovoGrupo={podeCriarGrupo ? () => setNovoGrupo(true) : undefined}
+                autorizacoes={podeAutorizar ? {
+                  titulo: tituloAutorizacoes,
+                  resumo: resumoAutorizacoes,
+                  selecionada: vendoAutorizacoes,
+                  onAbrir: abrirAutorizacoes,
+                  discreto: autorizacoesDiscretas,
+                } : undefined}
               />
             </div>
           )}
@@ -704,7 +834,21 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             </div>
           )}
 
-          {largo && !conversaAtual && (
+          {mostraAutorizacoes && (
+            <div className="flex-1 min-w-0 min-h-0">
+              <PainelAutorizacoes
+                titulo={tituloAutorizacoes}
+                pedidos={autorizacoes.pedidos}
+                meuId={perfil?.id ?? null}
+                podeDecidir={podeDecidir}
+                onDecidido={autorizacoes.recarregar}
+                expandido={largo}
+                onVoltar={() => setVendoAutorizacoes(false)}
+              />
+            </div>
+          )}
+
+          {largo && !conversaAtual && !mostraAutorizacoes && (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-xs text-muted-foreground">Escolha uma conversa</p>
             </div>

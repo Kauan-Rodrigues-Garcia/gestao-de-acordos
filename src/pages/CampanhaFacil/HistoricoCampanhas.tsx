@@ -481,7 +481,7 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
             <AlertDialogTitle>Desativar esta campanha?</AlertDialogTitle>
             <AlertDialogDescription>
               Ela some na hora da aba Campanhas de WhatsApp de todos os operadores. O que já foi enviado fica registrado.
-              Depois você pode editar a mensagem ou quem recebe e liberar de novo. Desativada por mais de 2 dias, ela encerra.
+              Depois você pode editar a mensagem ou quem recebe e liberar de novo. Ela só encerra quando o mês virar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
