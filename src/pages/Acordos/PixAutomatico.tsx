@@ -104,7 +104,7 @@ import {
   purgarLixeiraPixExpirada, type PixLixeiraItem,
   fetchLogPix, type PixLogItem,
   setPermiteRegistroOperador, normalizarNr,
-  comissaoDe, valorAPagarDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
+  comissaoDe, valorAPagarDe, formatarCopiaPix, formatarCopiaPixPorOperador, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, quemJaDecidiuPix, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
@@ -2041,9 +2041,12 @@ export function PixAutomatico() {
     if (alvos.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
     // Só NR e comissão, com o TOTAL somado no fim quando há mais de um — ver
     // `formatarCopiaPix`. Somar isso à mão no WhatsApp é onde o erro entrava.
+    // Só aprovados é o que vai ser pago, e o Pix sai por operador: aí o texto
+    // vem agrupado, com o nome e o total de cada um.
     const total = alvos.reduce((s, a) => s + a.comissao, 0);
+    const soAprovados = alvos.every(a => a.acordo.status === 'aprovado');
     await copiarTexto(
-      formatarCopiaPix(alvos),
+      soAprovados ? formatarCopiaPixPorOperador(alvos) : formatarCopiaPix(alvos),
       alvos.length === 1
         ? 'Acordo copiado para encaminhar.'
         : `${alvos.length} acordos copiados · total ${formatCurrency(total)}.`,

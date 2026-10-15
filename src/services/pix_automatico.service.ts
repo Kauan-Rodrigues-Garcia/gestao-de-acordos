@@ -282,6 +282,54 @@ export function formatarCopiaPix(
   return [...linhas, ...correcoes, `R$ ${valorBR(total)}`].join('\n');
 }
 
+/**
+ * O "Copiar" dos APROVADOS: os códigos agrupados por operador, cada grupo com
+ * o nome em cima e o total dele embaixo, e o total geral no fim.
+ *
+ * Aprovado é o que vai ser pago, e o Pix sai por operador. Com tudo numa lista
+ * só, quem paga tinha de separar de volta, código a código, de quem era cada
+ * acordo — e o total único não dizia quanto mandar para cada um.
+ *
+ * Os grupos saem em ordem alfabética do nome. O total geral só aparece com mais
+ * de um operador: com um só, ele repetiria o total do grupo.
+ */
+export function formatarCopiaPixPorOperador(
+  itens: {
+    acordo: Pick<PixAutoAcordo, 'nr_cliente' | 'operador_id' | 'operador_nome'>;
+    /** Já com a correção somada, quando houver — ver `valorAPagarDe`. */
+    comissao: number;
+    ajuste?: number | null;
+  }[],
+): string {
+  if (itens.length === 0) return '';
+
+  const grupos = new Map<string, { nome: string; itens: typeof itens }>();
+  for (const i of itens) {
+    const g = grupos.get(i.acordo.operador_id);
+    if (g) g.itens.push(i);
+    else grupos.set(i.acordo.operador_id, { nome: i.acordo.operador_nome?.trim() || '—', itens: [i] });
+  }
+  const ordenados = [...grupos.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  const blocos = ordenados.map(g => {
+    const total = g.itens.reduce((s, i) => s + i.comissao, 0);
+    const linhas = g.itens.map(i => formatarLinhaPix(i.acordo));
+    const correcoes = g.itens
+      .filter(i => Number(i.ajuste) !== 0 && i.ajuste != null)
+      .map(i => {
+        const v = Number(i.ajuste);
+        return `Correção no ${i.acordo.nr_cliente}: ${v > 0 ? '+' : '−'}R$ ${valorBR(Math.abs(v))}`;
+      });
+    return [g.nome, ...linhas, ...correcoes, `Total ${g.nome}: R$ ${valorBR(total)}`].join('\n');
+  });
+
+  if (ordenados.length > 1) {
+    const geral = itens.reduce((s, i) => s + i.comissao, 0);
+    blocos.push(`Total geral: R$ ${valorBR(geral)}`);
+  }
+  return blocos.join('\n\n');
+}
+
 // ── Acordos ────────────────────────────────────────────────────────────────
 
 /**
