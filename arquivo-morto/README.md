@@ -42,3 +42,4 @@ alcançando a história dele.
 | [`pet/`](pet/README.md) | 05/09/2026 | O mascote foi desligado em 09/08/2026 e o código ficou órfão desde então |
 | [`ouvidoria/`](ouvidoria/README.md) | 05/09/2026 | A aba saiu do produto |
 | [`modo-tv/`](modo-tv/README.md) | 13/10/2026 | O Modo TV não será utilizado |
+| [`pesquisa-experiencia/`](pesquisa-experiencia/README.md) | 15/10/2026 | A pesquisa já foi feita; o card só poluía a aba Geral |
