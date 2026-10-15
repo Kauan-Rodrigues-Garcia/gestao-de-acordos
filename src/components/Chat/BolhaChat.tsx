@@ -363,6 +363,12 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
   const podeAutorizarTabulacao = temPermissao('acordos_autorizar_tabulacao');
   const podeAutorizarTornarDireto = temPermissao('acordos_autorizar_tornar_direto');
   const podeAutorizar = podeVer && (podeAutorizarTabulacao || podeAutorizarTornarDireto);
+  /*
+   * Super admin vê a fila, mas não decide no dia a dia (Cleber, 15/10/2026):
+   * sem aviso de pedido novo, sem contar na bolha, sem destaque na lista. Ele
+   * entra quando quiser conferir.
+   */
+  const autorizacoesDiscretas = perfil?.perfil === 'super_admin';
   const autorizacoes = useAutorizacaoPedidos(podeAutorizar && !!perfil?.id);
   const [vendoAutorizacoes, setVendoAutorizacoes] = useState(false);
   const [nomeSetor, setNomeSetor] = useState<string | null>(null);
@@ -421,7 +427,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
     }
     const novos = pedidosQueChegaram(vistosRef.current, autorizacoes.pedidos, perfil?.id ?? null);
     for (const p of autorizacoes.pedidos) vistosRef.current.add(p.id);
-    if (novos.length === 0 || (abertoRef.current && vendoRef.current)) return;
+    if (novos.length === 0 || autorizacoesDiscretas || (abertoRef.current && vendoRef.current)) return;
 
     const p = novos[0];
     const nome = (p.solicitante_nome ?? '').trim().split(/\s+/)[0] || 'Alguém';
@@ -438,10 +444,10 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
       />
     ), { duration: 12_000 });
     tocarSomChat();
-  }, [podeAutorizar, autorizacoes.carregando, autorizacoes.pedidos, perfil?.id, abrirAutorizacoes]);
+  }, [podeAutorizar, autorizacoes.carregando, autorizacoes.pedidos, perfil?.id, abrirAutorizacoes, autorizacoesDiscretas]);
 
   /** Mensagem não lida + autorização esperando: o que a bolha conta. */
-  const avisosNaBolha = chat.naoLidasTotal + resumoAutorizacoes.pendentes;
+  const avisosNaBolha = chat.naoLidasTotal + (autorizacoesDiscretas ? 0 : resumoAutorizacoes.pendentes);
 
   // Contagem da própria aba do navegador. Mensagens lidas limpam o prefixo.
   useEffect(() => {
@@ -622,7 +628,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
         aria-label={avisosNaBolha
           ? `Chat, ${[
               chat.naoLidasTotal ? `${chat.naoLidasTotal} não lidas` : '',
-              resumoAutorizacoes.pendentes ? `${resumoAutorizacoes.pendentes} ${resumoAutorizacoes.pendentes === 1 ? 'autorização pendente' : 'autorizações pendentes'}` : '',
+              resumoAutorizacoes.pendentes && !autorizacoesDiscretas ? `${resumoAutorizacoes.pendentes} ${resumoAutorizacoes.pendentes === 1 ? 'autorização pendente' : 'autorizações pendentes'}` : '',
             ].filter(Boolean).join(', ')}`
           : 'Abrir o chat'}
       >
@@ -788,6 +794,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
                   resumo: resumoAutorizacoes,
                   selecionada: vendoAutorizacoes,
                   onAbrir: abrirAutorizacoes,
+                  discreto: autorizacoesDiscretas,
                 } : undefined}
               />
             </div>

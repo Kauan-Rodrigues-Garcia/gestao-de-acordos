@@ -33,11 +33,17 @@ export interface AutorizacoesNoChat {
   resumo:     ResumoAutorizacoes;
   selecionada: boolean;
   onAbrir:    () => void;
+  /**
+   * Super admin (Cleber, 15/10/2026): não decide nada, só olha. A conversa é
+   * comum para ele — sem destaque, sem pulso, sem subir para o topo; o número
+   * de pendentes aparece discreto.
+   */
+  discreto?:  boolean;
 }
 
 /** A linha na lista de conversas. Sem menu: não se apaga nem se desafixa. */
-export function LinhaAutorizacoes({ titulo, resumo, selecionada, onAbrir }: AutorizacoesNoChat) {
-  const pendente = resumo.pendentes > 0;
+export function LinhaAutorizacoes({ titulo, resumo, selecionada, onAbrir, discreto = false }: AutorizacoesNoChat) {
+  const pendente = resumo.pendentes > 0 && !discreto;
   return (
     <button type="button" onClick={onAbrir}
       className={cn(
@@ -53,8 +59,11 @@ export function LinhaAutorizacoes({ titulo, resumo, selecionada, onAbrir }: Auto
       </div>
       <span className="flex min-w-[30px] shrink-0 flex-col items-end gap-0.5 self-stretch justify-center">
         <span className="text-[10px] text-muted-foreground">{horaCurta(resumo.ultimaEm)}</span>
-        {pendente && (
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white"
+        {resumo.pendentes > 0 && (
+          <span className={cn(
+            'flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold',
+            discreto ? 'bg-muted text-muted-foreground' : 'bg-amber-500 text-white',
+          )}
             aria-label={`${resumo.pendentes} ${resumo.pendentes === 1 ? 'autorização pendente' : 'autorizações pendentes'}`}>
             {resumo.pendentes > 99 ? '99+' : resumo.pendentes}
           </span>

@@ -278,7 +278,8 @@ export function ListaConversas({
   const comAutorizacoes = !!autorizacoes && aba === 'conversas'
     && (!palavras.length || casaBusca(chaveDeBusca(autorizacoes.titulo, 'autorizacoes'), palavras));
   const posAutorizacoes = comAutorizacoes && autorizacoes
-    ? posicaoDasAutorizacoes(filtradas, autorizacoes.resumo)
+    // Discreto (super admin): pendente não puxa para o topo, só a hora conta.
+    ? posicaoDasAutorizacoes(filtradas, autorizacoes.discreto ? { ...autorizacoes.resumo, pendentes: 0 } : autorizacoes.resumo)
     : -1;
   const linhaAutorizacoes = comAutorizacoes && autorizacoes
     ? <LinhaAutorizacoes key="autorizacoes" {...autorizacoes} />
