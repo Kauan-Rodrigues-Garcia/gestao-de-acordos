@@ -10,6 +10,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { abrir } = vi.hoisted(() => ({ abrir: vi.fn() }));
 
+// Autorizações no chat (15/10/2026): fora do escopo destes testes.
+vi.mock('@/hooks/useAutorizacaoPedidos', () => ({
+  useAutorizacaoPedidos: () => ({ pedidos: [], pendentes: [], carregando: false, recarregar: () => {} }),
+}));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ perfil: { id: 'eu', nome: 'Eu', chat_boas_vindas_em: '2026-01-01' } }) }));
 vi.mock('@/hooks/useCargoPermissoes', () => ({
   useCargoPermissoes: () => ({ temPermissao: () => true, loading: false }),

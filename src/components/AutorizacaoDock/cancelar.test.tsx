@@ -36,8 +36,11 @@ vi.mock('@/hooks/useEmpresa', () => ({
 }));
 // O dock só monta para quem autoriza — sem isto ele devolve `null` e não há o
 // que testar. A permissão real vem do painel; aqui ela é premissa do cenário.
+//
+// Sem `ver_chat`: desde 15/10/2026 a gaveta é a reserva de quem decide e NÃO
+// tem chat — quem tem chat decide pela conversa «Autorizações».
 vi.mock('@/hooks/useCargoPermissoes', () => ({
-  useCargoPermissoes: () => ({ temPermissao: () => true, loading: false }),
+  useCargoPermissoes: () => ({ temPermissao: (k: string) => k !== 'ver_chat', loading: false }),
 }));
 vi.mock('@/hooks/useEstadoLembrado', () => ({
   // Gaveta ABERTA: fechada, os cartões nem chegam ao DOM.

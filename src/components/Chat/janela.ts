@@ -19,3 +19,4 @@ export { NovoGrupoDialog } from './NovoGrupoDialog';
 export { ConfigGrupoDialog } from './ConfigGrupoDialog';
 export { GaleriaDialog } from './GaleriaDialog';
 export { BoasVindasChat } from './BoasVindasChat';
+export { PainelAutorizacoes } from './AutorizacoesChat';

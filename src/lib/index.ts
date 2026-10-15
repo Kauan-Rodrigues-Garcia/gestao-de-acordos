@@ -26,6 +26,8 @@ export const ROUTE_PATHS = {
   ANALITICO: '/analitico',
   CAMPANHA_FACIL: '/campanha-facil',
   CAMPANHAS_WHATSAPP: '/campanhas-whatsapp',
+  /** Não é tela: abre o chat na conversa «Autorizações» e volta (15/10/2026). */
+  AUTORIZACOES: '/autorizacoes',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',

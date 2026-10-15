@@ -79,6 +79,7 @@ const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const CampanhasWhatsapp = lazy(() => import('@/pages/CampanhasWhatsapp'));
+const AbrirAutorizacoes = lazy(() => import('@/pages/AbrirAutorizacoes'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
@@ -578,6 +579,16 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanha_facil">
                     <CampanhaFacil />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Autorizações — não é tela: abre o chat na conversa do setor e
+                  volta. É o destino da notificação de pedido (15/10/2026). */}
+              <Route path={ROUTE_PATHS.AUTORIZACOES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute>
+                    <AbrirAutorizacoes />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

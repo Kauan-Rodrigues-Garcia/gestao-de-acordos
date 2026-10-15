@@ -9,7 +9,7 @@
  * «Histórico» recebe o que não teve atividade válida hoje. A classificação já
  * vem do banco no horário de São Paulo; esta tela apenas separa a lista única.
  */
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import {
   ChevronDown, Images, Loader2, MessageSquarePlus, MoreVertical, Pin, PinOff,
   Plus, Search, Trash2, Users, Lock,
@@ -32,6 +32,8 @@ import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { cargosChatLiberados } from '@/lib/permissoes-chat';
 import { StatusMensagem } from './StatusMensagem';
+import { LinhaAutorizacoes, type AutorizacoesNoChat } from './AutorizacoesChat';
+import { posicaoDasAutorizacoes } from '@/components/Autorizacoes/resumoChat';
 import { estadoMensagem } from './estadoMensagem';
 
 type Aba = 'conversas' | 'historico' | 'disparos';
@@ -54,6 +56,11 @@ interface Props {
   onNovoDisparo:  () => void;
   /** Abre o diálogo de criar grupo. Ausente = sem permissão de criar. */
   onNovoGrupo?:   () => void;
+  /**
+   * A conversa fixa «Autorizações» do setor (15/10/2026). Ausente = quem olha
+   * não decide autorização, e a linha não existe.
+   */
+  autorizacoes?:  AutorizacoesNoChat;
 }
 
 interface CardDisparoProps {
@@ -216,7 +223,7 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
   onAbrir, onApagar, onFixar, onVerMidias,
-  onNovaConversa, onNovoDisparo, onNovoGrupo,
+  onNovaConversa, onNovoDisparo, onNovoGrupo, autorizacoes,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -262,6 +269,20 @@ export function ListaConversas({
   const filtradas = palavras.length
     ? listaDaAba.filter(c => casaBusca(chaveDeBusca(c.outro_nome, c.outro_usuario), palavras))
     : listaDaAba;
+
+  /*
+   * A conversa «Autorizações» só existe na aba Conversas — nunca vai para o
+   * Histórico: é a fila do setor, não uma conversa que esfria. Na busca, entra
+   * quando o termo casa com o título.
+   */
+  const comAutorizacoes = !!autorizacoes && aba === 'conversas'
+    && (!palavras.length || casaBusca(chaveDeBusca(autorizacoes.titulo, 'autorizacoes'), palavras));
+  const posAutorizacoes = comAutorizacoes && autorizacoes
+    ? posicaoDasAutorizacoes(filtradas, autorizacoes.resumo)
+    : -1;
+  const linhaAutorizacoes = comAutorizacoes && autorizacoes
+    ? <LinhaAutorizacoes key="autorizacoes" {...autorizacoes} />
+    : null;
 
   return (
     /*
@@ -378,7 +399,8 @@ export function ListaConversas({
             {carregando && (
               <p className="text-center text-xs text-muted-foreground py-8">Carregando…</p>
             )}
-            {!carregando && filtradas.length === 0 && (
+            {posAutorizacoes === 0 && linhaAutorizacoes}
+            {!carregando && filtradas.length === 0 && !linhaAutorizacoes && (
               <div className="text-center py-10 px-4">
                 <p className="text-xs text-muted-foreground">
                   {busca.trim()
@@ -395,8 +417,10 @@ export function ListaConversas({
               </div>
             )}
 
-            {filtradas.map(c => (
-              <div key={c.id} className="group relative">
+            {filtradas.map((c, i) => (
+              <Fragment key={c.id}>
+              {i > 0 && i === posAutorizacoes && linhaAutorizacoes}
+              <div className="group relative">
                 <button
                   onClick={() => onAbrir(c.id)}
                   className={cn(
@@ -524,7 +548,9 @@ export function ListaConversas({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              </Fragment>
             ))}
+            {posAutorizacoes > 0 && posAutorizacoes >= filtradas.length && linhaAutorizacoes}
           </>
         ) : (
           <>
