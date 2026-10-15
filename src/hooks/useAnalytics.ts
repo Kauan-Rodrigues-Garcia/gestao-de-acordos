@@ -529,11 +529,18 @@ export function useAnalytics(
       // então uma busca única truncava a visão do admin (empresa toda passa de
       // 1000 acordos/mês) e a série "agendado" do gráfico vinha incompleta.
       // Ordena por id para a paginação por range ser determinística.
+      //
+      // Só o mês analisado (15/10/2026). Até aqui a busca trazia o HISTÓRICO
+      // inteiro do alcance, de 1000 em 1000, e os derivados jogavam fora tudo
+      // que não era do mês (`acordosMes`, o único uso de `acordos`) — e isso a
+      // cada rajada do tempo real, em cada aba com o Dashboard aberto.
       const montarQuery = () => {
         let q = supabase
           .from('acordos')
           .select('*')
           .eq('empresa_id', empresa.id)
+          .gte('vencimento', inicio)
+          .lte('vencimento', fim)
           .order('id', { ascending: true });
 
         /*
@@ -785,7 +792,7 @@ export function useAnalytics(
         setAtualizando(false);
       }
     }
-  }, [perfil, empresa, mes, ano, mesRef, mesAnalise, setorFiltro, equipeFiltro, operadorFiltro,
+  }, [perfil, empresa, mes, ano, mesRef, mesAnalise, inicio, fim, setorFiltro, equipeFiltro, operadorFiltro,
       podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache,
       equipesDaPessoa]);
 
