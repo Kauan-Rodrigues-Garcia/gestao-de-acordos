@@ -157,10 +157,25 @@ const BACKOFF_MAX_MS  = 30_000;
  * ~150 pessoas com uma dezena de telas ouvindo cada uma. Oito segundos
  * espalham isso em ~200 leituras por segundo no pior caso, em vez de 1.500 de
  * uma vez.
+ *
+ * Não passe do `espalhamentoMs` dos sinais (`sinais.ts`, 10 s no analítico):
+ * a releitura precisa sair antes do sinal que chegou junto com a reconexão,
+ * para levá-lo junto em vez de virar uma segunda releitura.
  */
 export const ESPALHAMENTO_RELEITURA_MS = 8_000;
-/** Voltar para a aba: rápido, mas não no mesmo milissegundo para todas as abas. */
+/** Recriar canal fechado: rápido, mas não no mesmo milissegundo para todas as abas. */
 const ESPALHAMENTO_RETOMADA_MS = 1_000;
+/**
+ * Voltar para a aba, ou a rede voltar: quanto esperar, sorteado, antes de
+ * religar o socket e os canais. As duas coisas acontecem para muita gente ao
+ * mesmo tempo — a bruxa que gargalha em todas as abas, a internet do escritório
+ * que volta — e cada entrada em canal privado é uma consulta de RLS no banco.
+ * Soma com o `ESPALHAMENTO_RELEITURA_MS` de depois da entrada.
+ *
+ * 15/10/2026: com a volta religando na hora, a bruxa levou `acordos` de 108
+ * para 575 leituras num minuto, e o PostgREST matou thread por timeout.
+ */
+export const ESPALHAMENTO_VOLTA_MS = 5_000;
 
 // ── Estado do módulo ─────────────────────────────────────────────────────────
 
@@ -190,6 +205,11 @@ interface Registro {
 const registros = new Map<string, Registro>();
 
 let supervisorAtivo = false;
+/**
+ * A volta à aba já marcada (ver `ESPALHAMENTO_VOLTA_MS`). Uma por vez:
+ * alternar de aba várias vezes durante o sorteio não empilha religações.
+ */
+let timerVolta: ReturnType<typeof setTimeout> | null = null;
 
 // ── Helpers internos ─────────────────────────────────────────────────────────
 
@@ -417,8 +437,9 @@ async function recriarCanal(topico: string, reg: Registro): Promise<void> {
 }
 
 /**
- * Usuário voltou para a aba, ou a rede voltou. O socket reconecta na hora (os
- * canais com erro reentram com ele); canal FECHADO é recriado, espalhado.
+ * Usuário voltou para a aba, ou a rede voltou (já depois do sorteio de
+ * `ESPALHAMENTO_VOLTA_MS`). O socket reconecta aqui (os canais com erro
+ * reentram com ele); canal FECHADO é recriado, espalhado.
  */
 function reviverCanais(): void {
   const rt = (supabase as { realtime?: { isConnected?: () => boolean; connect?: () => void } }).realtime;
@@ -453,10 +474,18 @@ function ativarSupervisor(): void {
   if (typeof document === 'undefined' || typeof window === 'undefined') return;
   supervisorAtivo = true;
 
+  const reviverEspalhado = () => {
+    if (timerVolta) return;
+    timerVolta = setTimeout(() => {
+      timerVolta = null;
+      reviverCanais();
+    }, Math.random() * ESPALHAMENTO_VOLTA_MS);
+  };
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') reviverCanais();
+    if (document.visibilityState === 'visible') reviverEspalhado();
   });
-  window.addEventListener('online', reviverCanais);
+  window.addEventListener('online', reviverEspalhado);
 
   // Sessão nova religa o que a RLS tinha recusado. Opcional no acesso porque os
   // mocks de `@/lib/supabase` nos testes não trazem `auth`.
@@ -555,4 +584,5 @@ export function __resetRealtimeParaTestes(): void {
     if (reg.channel) void supabase.removeChannel(reg.channel);
   }
   registros.clear();
+  if (timerVolta) { clearTimeout(timerVolta); timerVolta = null; }
 }

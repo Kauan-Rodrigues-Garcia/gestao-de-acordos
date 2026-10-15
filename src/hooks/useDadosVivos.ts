@@ -52,7 +52,7 @@ import { reconciliarComDiff, type OpcoesReconciliacao } from '@/lib/dadosVivos';
 import { gravarInstantaneo, lerInstantaneo } from '@/lib/cacheInstantaneo';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { criarAgrupador, type OpcoesAgrupador } from '@/lib/agrupador';
-import { assinarTabela, type Escuta } from '@/lib/realtime';
+import { ESPALHAMENTO_VOLTA_MS, assinarTabela, type Escuta } from '@/lib/realtime';
 
 export interface AssinaturaDadosVivos {
   /**
@@ -307,17 +307,25 @@ export function useDadosVivos<T>({
     return () => { grupo.cancelar(); for (const c of cancelar) c(); };
   }, [ativo, assinaturasSerializadas, esperaMs, tetoMs, recarregar]);
 
-  /* A volta para a aba paga o que ficou devendo — uma vez, não uma por evento. */
+  /*
+   * A volta para a aba paga o que ficou devendo — uma vez, não uma por evento,
+   * e num instante sorteado dos segundos seguintes: quando todo mundo volta
+   * junto (a bruxa da caça, 15/10/2026), as abas não releem no mesmo segundo.
+   */
   useEffect(() => {
     if (!pausarOculto || typeof document === 'undefined') return;
+    let timerVolta: ReturnType<typeof setTimeout> | null = null;
     const aoVoltar = () => {
       if (document.visibilityState !== 'visible') return;
       if (!devendo.current) return;
       devendo.current = false;
-      void recarregar();
+      timerVolta = setTimeout(() => { timerVolta = null; void recarregar(); }, Math.random() * ESPALHAMENTO_VOLTA_MS);
     };
     document.addEventListener('visibilitychange', aoVoltar);
-    return () => document.removeEventListener('visibilitychange', aoVoltar);
+    return () => {
+      document.removeEventListener('visibilitychange', aoVoltar);
+      if (timerVolta) clearTimeout(timerVolta);
+    };
   }, [pausarOculto, recarregar]);
 
   return {

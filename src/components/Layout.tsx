@@ -193,11 +193,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // aberta (215), conferida no banco a cada mudança de qualquer perfil, só
   // para a foto trocada em OUTRA aba aparecer nesta. Agora: quem troca a foto
   // vê na hora (`handleFotoUpload`), e as outras abas releem ao voltar a ficar
-  // visíveis — no máximo uma vez por minuto.
+  // visíveis — no máximo uma vez a cada 10 min, e num instante sorteado dos 10 s
+  // seguintes (15/10/2026: a bruxa da caça trazia todo mundo de volta à aba no
+  // mesmo segundo, e esta leitura saía junto de todas as abas).
   useEffect(() => {
     if (!perfil?.id) return;
     const perfilId = perfil.id;
     let ultimaLeitura = 0;
+    let timerVolta: ReturnType<typeof setTimeout> | null = null;
 
     const sincronizar = () => {
       ultimaLeitura = Date.now();
@@ -207,12 +210,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         });
     };
     const aoVoltar = () => {
-      if (document.visibilityState === 'visible' && Date.now() - ultimaLeitura > 60_000) sincronizar();
+      if (document.visibilityState !== 'visible' || timerVolta) return;
+      if (Date.now() - ultimaLeitura <= 10 * 60_000) return;
+      timerVolta = setTimeout(() => { timerVolta = null; sincronizar(); }, Math.random() * 10_000);
     };
 
     sincronizar();
     document.addEventListener('visibilitychange', aoVoltar);
-    return () => document.removeEventListener('visibilitychange', aoVoltar);
+    return () => {
+      document.removeEventListener('visibilitychange', aoVoltar);
+      if (timerVolta) clearTimeout(timerVolta);
+    };
   }, [perfil?.id]);
 
   async function handleFotoUpload(file: File) {

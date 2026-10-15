@@ -105,7 +105,7 @@ vi.mock('@/lib/logger', () => ({
 
 import {
   assinarTabela, topicosAtivos, __resetRealtimeParaTestes,
-  VIGIA_MS, ESPALHAMENTO_RELEITURA_MS,
+  VIGIA_MS, ESPALHAMENTO_RELEITURA_MS, ESPALHAMENTO_VOLTA_MS,
 } from '../realtime';
 import { assinarSinal, REGRAS_SINAL } from '../sinais';
 
@@ -398,7 +398,7 @@ describe('assinarTabela — recuperação por visibilidade e rede', () => {
     canaisCriados[4].emitirStatus('CLOSED');   // próxima espera seria 30 s
 
     document.dispatchEvent(new Event('visibilitychange'));
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS + 1_000);
 
     expect(mockChannel).toHaveBeenCalledTimes(6);
   });
@@ -408,7 +408,7 @@ describe('assinarTabela — recuperação por visibilidade e rede', () => {
     canaisCriados[0].emitirStatus('SUBSCRIBED');
 
     document.dispatchEvent(new Event('visibilitychange'));
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS);
 
     expect(mockChannel).toHaveBeenCalledTimes(1);
   });
@@ -419,10 +419,30 @@ describe('assinarTabela — recuperação por visibilidade e rede', () => {
     canaisCriados[0].emitirStatus('CHANNEL_ERROR');
 
     document.dispatchEvent(new Event('visibilitychange'));
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS);
 
     expect(mockConnect).toHaveBeenCalled();
     expect(mockChannel).toHaveBeenCalledTimes(1);
+  });
+
+  // A bruxa da caça chama todo mundo de volta à aba no mesmo segundo (15/10/2026):
+  // religar na hora fazia todas as abas entrarem nos canais e relerem juntas.
+  it('voltar para a aba espera o sorteio antes de religar, e voltas seguidas religam uma vez', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    assinarTabela({ topico: 't1', escutas: ESCUTAS }, { onEvento: vi.fn() });
+    socket.conectado = false;
+    canaisCriados[0].emitirStatus('CHANNEL_ERROR');
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS * 0.5);
+    expect(mockConnect).not.toHaveBeenCalled();
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS * 0.5);
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS);
+    expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 
   it('evento "online" recria os canais fechados', async () => {
@@ -430,7 +450,7 @@ describe('assinarTabela — recuperação por visibilidade e rede', () => {
     canaisCriados[0].state = 'closed';
 
     window.dispatchEvent(new Event('online'));
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(ESPALHAMENTO_VOLTA_MS + 1_000);
 
     expect(mockChannel).toHaveBeenCalledTimes(2);
   });
