@@ -9,7 +9,7 @@
  * brilhos param para quem pediu menos movimento ao sistema.
  */
 import { useId } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 /** Brilho de quatro pontas centrado em (x, y). */
 function caminhoBrilho(x: number, y: number, r: number): string {
@@ -36,7 +36,6 @@ const BRILHOS: readonly { x: number; y: number; r: number; atraso: number }[] = 
 
 export function TrofeuIlustracao({ className }: { className?: string }) {
   const uid = useId().replace(/:/g, '');
-  const calmo = useReducedMotion();
   const g = (nome: string) => `${nome}-${uid}`;
 
   return (
@@ -107,8 +106,8 @@ export function TrofeuIlustracao({ className }: { className?: string }) {
           fill="#FFFBE8"
           style={{ transformOrigin: `${b.x}px ${b.y}px` }}
           initial={false}
-          animate={calmo ? { opacity: 0.9 } : { opacity: [0.2, 1, 0.2], scale: [0.6, 1.1, 0.6] }}
-          transition={calmo ? undefined : { duration: 2.2, delay: b.atraso, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ opacity: [0.2, 1, 0.2], scale: [0.6, 1.1, 0.6] }}
+          transition={{ duration: 2.2, delay: b.atraso, repeat: Infinity, ease: 'easeInOut' }}
         />
       ))}
     </svg>

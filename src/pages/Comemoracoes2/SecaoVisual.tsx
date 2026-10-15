@@ -1,5 +1,6 @@
 /**
- * SecaoPapel e SecaoEstilo — etapas 3 e 4: a cara do card.
+ * SecaoPapel e SecaoEstilo — etapas 3 e 4: a cara do card. `OpcoesFotos`
+ * aparece no estilo e também no palco, quando as fotos estão selecionadas.
  *
  * Papel de parede tem etapa própria porque é a escolha que mais muda o card:
  * primeiro o tema (filtro), depois a miniatura. As miniaturas são o próprio
@@ -9,8 +10,10 @@ import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  EFEITOS, ENTRADAS, FONTES, MODELOS, aplicarModelo, modeloDoDesign,
-  type EfeitoId, type EntradaId, type FonteId, type ModeloId,
+  EFEITOS, ENTRADAS, FONTES, FORMATOS_FOTO, MODELOS, MOLDURAS, TAMANHOS_FOTO, aplicarModelo,
+  modeloDoDesign,
+  type EfeitoId, type EntradaId, type FonteId, type FotosCard, type FormatoFoto, type ModeloId,
+  type MolduraId, type TamanhoFoto,
 } from '@/components/comemoracao2/design';
 import {
   PAPEIS_DE_PAREDE, TEMAS, papelDeParede, papeisDoTema, type TemaId,
@@ -115,6 +118,72 @@ export function SecaoEstilo({ r, mudar }: { r: Rascunho; mudar: MudarRascunho })
 
       <Opcoes<EfeitoId> rotulo="Efeito na chegada" opcoes={EFEITOS} valor={r.design.efeito}
         onEscolher={(id) => setDesign({ efeito: id })} />
+      <p className="-mt-1 text-[11px] text-muted-foreground">Ao trocar a entrada ou o efeito, a prévia toca sozinha.</p>
+
+      <div className="space-y-2 rounded-xl border border-border p-2.5">
+        <p className="text-xs font-semibold">Fotos de quem bateu</p>
+        <OpcoesFotos r={r} mudar={mudar} />
+      </div>
     </>
+  );
+}
+
+/** Amostra da moldura: um círculo com o aro como ele sai no card. */
+function AmostraMoldura({ moldura, destaque }: { moldura: MolduraId; destaque: string }) {
+  const aro =
+    moldura === 'branca'  ? { background: '#FFFFFF', boxShadow: '0 0 0 1px rgba(0,0,0,.15)' }
+    : moldura === 'dourada' ? { background: 'linear-gradient(135deg,#FFF3B0 0%,#E8B931 35%,#9C6A12 65%,#F8D86A 100%)' }
+    : moldura === 'neon'    ? { background: destaque, boxShadow: `0 0 6px 1px ${destaque}` }
+    : moldura === 'nenhuma' ? { background: 'transparent' }
+    : { background: destaque };
+  return (
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-[3px]" style={aro}>
+      <span className="h-full w-full rounded-full bg-gradient-to-b from-stone-300 to-stone-500" />
+    </span>
+  );
+}
+
+/**
+ * Formato, tamanho e moldura das fotos.
+ *
+ * `compacto` é a versão do palco: cabe na barra embaixo da prévia, ao lado do
+ * tamanho do elemento selecionado.
+ */
+export function OpcoesFotos({ r, mudar, compacto = false }: { r: Rascunho; mudar: MudarRascunho; compacto?: boolean }) {
+  const fotos = r.design.fotos;
+  const setFotos = (parte: Partial<FotosCard>) =>
+    mudar((a) => ({ design: { ...a.design, fotos: { ...a.design.fotos, ...parte } } }));
+  const destaque = papelDeParede(r.design.papel).destaque;
+
+  const molduras = (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-muted-foreground">Moldura</p>
+      <div role="radiogroup" aria-label="Moldura das fotos" className="flex flex-wrap gap-1.5">
+        {MOLDURAS.map((m) => (
+          <button key={m.id} type="button" role="radio" aria-checked={fotos.moldura === m.id}
+            title={m.descricao} onClick={() => setFotos({ moldura: m.id })}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg border py-1 pl-1 pr-2 text-xs font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              fotos.moldura === m.id ? 'border-primary bg-primary/10' : 'border-border bg-background hover:bg-accent',
+            )}>
+            <AmostraMoldura moldura={m.id} destaque={destaque} />
+            {m.nome}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={cn(compacto ? 'grid gap-2 sm:grid-cols-[auto_1fr]' : 'space-y-2.5')}>
+      <div className={cn(compacto ? 'flex flex-wrap gap-3' : 'space-y-2.5')}>
+        <Opcoes<FormatoFoto> rotulo="Formato" opcoes={FORMATOS_FOTO} valor={fotos.formato} colunas={2}
+          onEscolher={(id) => setFotos({ formato: id })} />
+        <Opcoes<TamanhoFoto> rotulo="Tamanho da foto" opcoes={TAMANHOS_FOTO} valor={fotos.tamanho}
+          onEscolher={(id) => setFotos({ tamanho: id })} />
+      </div>
+      {molduras}
+    </div>
   );
 }

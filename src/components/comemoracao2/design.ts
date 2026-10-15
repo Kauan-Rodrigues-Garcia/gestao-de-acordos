@@ -22,8 +22,8 @@ export const ALTURA_CARD  = 400;
 
 /** Distância mínima do centro de um elemento até a borda, em %. */
 export const MARGEM_PCT = 5;
-export const ESCALA_MIN = 0.5;
-export const ESCALA_MAX = 2;
+export const ESCALA_MIN = 0.4;
+export const ESCALA_MAX = 3;
 
 export type ElementoCard = 'selo' | 'titulo' | 'mensagem' | 'midia' | 'pessoas';
 
@@ -137,6 +137,49 @@ export const EFEITOS: readonly { id: EfeitoId; nome: string; descricao: string }
   { id: 'nenhum',   nome: 'Nenhum',   descricao: 'Só o card.' },
 ];
 
+// ── Fotos de quem bateu a meta ───────────────────────────────────────────────
+
+export type FormatoFoto = 'redonda' | 'quadrada';
+
+export const FORMATOS_FOTO: readonly { id: FormatoFoto; nome: string }[] = [
+  { id: 'redonda',  nome: 'Redonda' },
+  { id: 'quadrada', nome: 'Quadrada' },
+];
+
+export type MolduraId = 'destaque' | 'branca' | 'dourada' | 'neon' | 'nenhuma';
+
+export const MOLDURAS: readonly { id: MolduraId; nome: string; descricao: string }[] = [
+  { id: 'destaque', nome: 'Cor do fundo', descricao: 'Aro na cor de destaque do papel de parede.' },
+  { id: 'branca',   nome: 'Branca',       descricao: 'Aro branco grosso, estilo polaroide.' },
+  { id: 'dourada',  nome: 'Dourada',      descricao: 'Aro dourado de troféu.' },
+  { id: 'neon',     nome: 'Neon',         descricao: 'Aro fino que brilha.' },
+  { id: 'nenhuma',  nome: 'Sem moldura',  descricao: 'Só a foto.' },
+];
+
+export type TamanhoFoto = 'p' | 'm' | 'g' | 'gg';
+
+/** Lado da foto em pixels lógicos do card (640×400). */
+export const TAMANHOS_FOTO: readonly { id: TamanhoFoto; nome: string; px: number }[] = [
+  { id: 'p',  nome: 'Pequena', px: 38 },
+  { id: 'm',  nome: 'Média',   px: 46 },
+  { id: 'g',  nome: 'Grande',  px: 66 },
+  { id: 'gg', nome: 'Gigante', px: 90 },
+];
+
+export interface FotosCard {
+  formato: FormatoFoto;
+  moldura: MolduraId;
+  tamanho: TamanhoFoto;
+}
+
+export function fotosPadrao(): FotosCard {
+  return { formato: 'redonda', moldura: 'destaque', tamanho: 'm' };
+}
+
+export function ladoDaFoto(tamanho: TamanhoFoto): number {
+  return (TAMANHOS_FOTO.find((t) => t.id === tamanho) ?? TAMANHOS_FOTO[1]).px;
+}
+
 // ── GIF ──────────────────────────────────────────────────────────────────────
 
 export interface GifCard {
@@ -183,6 +226,19 @@ export interface DesignCard {
   /** false = o card não mostra GIF nem troféu. */
   comMidia: boolean;
   gif:      GifCard | null;
+  /** Como as fotos de quem bateu a meta aparecem. */
+  fotos:    FotosCard;
+  /**
+   * Segundo da música da empresa em que a festa começa a tocar. Mora aqui, e
+   * não na música, porque cada festa escolhe o seu trecho da mesma música.
+   * null = o ponto guardado na própria música (ou som do catálogo).
+   */
+  somInicioS: number | null;
+  /**
+   * Música do player (Som ambiente) no lugar do som do catálogo ou de uma
+   * música enviada — o id da faixa (`musicasDoPlayer.ts`). null = não é.
+   */
+  somFaixa: string | null;
   posicoes: Posicoes;
 }
 
@@ -197,6 +253,9 @@ export function designPadrao(): DesignCard {
     selo:     '',
     comMidia: modelo.comMidia,
     gif:      null,
+    fotos:    fotosPadrao(),
+    somInicioS: null,
+    somFaixa: null,
     posicoes: clonarPosicoes(modelo.posicoes),
   };
 }
@@ -267,6 +326,19 @@ export function arrastar(
   return { ...design, posicoes: { ...design.posicoes, [elemento]: nova } };
 }
 
+/**
+ * Escala nova ao puxar a alça de um elemento no palco.
+ *
+ * `distInicio` e `distAgora` são as distâncias, em pixels de tela, do centro
+ * do elemento até o ponteiro no começo e agora: afastar do centro aumenta,
+ * aproximar diminui, na mesma proporção — o canto acompanha o mouse.
+ */
+export function escalaPelaAlca(escalaInicio: number, distInicio: number, distAgora: number): number {
+  if (!(distInicio > 0) || !Number.isFinite(distAgora)) return limitar(escalaInicio, ESCALA_MIN, ESCALA_MAX);
+  const nova = escalaInicio * (distAgora / distInicio);
+  return limitar(Math.round(nova * 100) / 100, ESCALA_MIN, ESCALA_MAX);
+}
+
 export function escalar(design: DesignCard, elemento: ElementoCard, escala: number): DesignCard {
   const atual = design.posicoes[elemento];
   return {
@@ -308,6 +380,27 @@ export function nomesDoCard(pessoas: { nome: string }[]): string {
 const FONTES_IDS   = new Set<string>(FONTES.map((f) => f.id));
 const ENTRADAS_IDS = new Set<string>(ENTRADAS.map((e) => e.id));
 const EFEITOS_IDS  = new Set<string>(EFEITOS.map((e) => e.id));
+const FORMATOS_IDS = new Set<string>(FORMATOS_FOTO.map((f) => f.id));
+const MOLDURAS_IDS = new Set<string>(MOLDURAS.map((m) => m.id));
+const TAMANHOS_IDS = new Set<string>(TAMANHOS_FOTO.map((t) => t.id));
+
+/** Música de até 1 h; fora disso (ou sem número) vale o ponto da própria música. */
+function inicioDoJson(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 3600) return null;
+  return v;
+}
+
+/** Card salvo antes das opções de foto: cai no padrão, que é como ele já aparecia. */
+function fotosDoJson(v: unknown): FotosCard {
+  const base = fotosPadrao();
+  if (!v || typeof v !== 'object') return base;
+  const f = v as Record<string, unknown>;
+  return {
+    formato: FORMATOS_IDS.has(String(f.formato)) ? f.formato as FormatoFoto : base.formato,
+    moldura: MOLDURAS_IDS.has(String(f.moldura)) ? f.moldura as MolduraId : base.moldura,
+    tamanho: TAMANHOS_IDS.has(String(f.tamanho)) ? f.tamanho as TamanhoFoto : base.tamanho,
+  };
+}
 
 function numero(v: unknown, padrao: number): number {
   const n = typeof v === 'number' ? v : Number(v);
@@ -366,6 +459,9 @@ export function designDoJson(valor: unknown): DesignCard | null {
     selo:     textoCurto(v.selo, MAX_SELO),
     comMidia: v.comMidia !== false,
     gif:      gifDoJson(v.gif),
+    fotos:    fotosDoJson(v.fotos),
+    somInicioS: inicioDoJson(v.somInicioS),
+    somFaixa: typeof v.somFaixa === 'string' && /^[a-z0-9-]{1,32}$/.test(v.somFaixa) ? v.somFaixa : null,
     posicoes,
   };
 }
@@ -386,6 +482,9 @@ export function designParaJson(d: DesignCard): Record<string, unknown> {
     selo:     d.selo.trim().slice(0, MAX_SELO),
     comMidia: d.comMidia,
     gif:      d.gif,
+    fotos:    { ...d.fotos },
+    somInicioS: d.somInicioS === null ? null : Math.round(d.somInicioS * 10) / 10,
+    somFaixa: d.somFaixa,
     posicoes,
   };
 }

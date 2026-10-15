@@ -65,6 +65,11 @@ export interface MidiaComemoracao {
    * duas durações concorrentes deixariam uma delas sobrando.
    */
   inicio_s?:  number;
+  /**
+   * Setor de quem enviou (20261015180000, preenchido pelo banco). O estúdio
+   * 2.0 lista para cada um só as músicas do próprio setor.
+   */
+  setor_id?:  string | null;
   /** Fixada não expira (20260801a). */
   fixada?:    boolean;
   /** Quando a faxina apaga. NULL = fixada. */

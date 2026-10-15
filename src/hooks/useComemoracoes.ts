@@ -292,13 +292,17 @@ export function useParabens(params: {
     [parabens, usuarioId],
   );
 
-  const enviarParabens = useCallback(async () => {
+  /**
+   * `frase` vem de quem sabe o tipo da festa (pessoa, equipe, setor) — ver
+   * `pages/Comemoracoes/parabens.ts`. Ausente = a lista genérica.
+   */
+  const enviarParabens = useCallback(async (frase?: string) => {
     if (!comemoracaoId || !usuarioId || jaParabenizei) return;
     setEnviando(true);
     try {
-      // A frase é sorteada AQUI e gravada na linha, para todo mundo ver a
+      // A frase é sorteada no clique e gravada na linha, para todo mundo ver a
       // mesma. Sortear na exibição faria cada tela mostrar uma diferente.
-      await parabenizar({ comemoracaoId, usuarioId, frase: sortearFrase() });
+      await parabenizar({ comemoracaoId, usuarioId, frase: frase ?? sortearFrase() });
       await recarregarRef.current();
     } finally {
       if (montadoRef.current) setEnviando(false);

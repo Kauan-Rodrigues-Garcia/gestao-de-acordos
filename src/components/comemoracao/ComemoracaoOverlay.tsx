@@ -9,10 +9,14 @@
  *   • o card NÃO bloqueia cliques (`pointer-events-none`, exceto os botões);
  *   • dá para silenciar, e a preferência fica no navegador de cada um;
  *   • uma comemoração por vez — duas sobrepostas seriam ilegíveis.
+ *
+ * E uma de exceção: a festa anima em TODOS os PCs, inclusive no modo leve e
+ * com o "reduzir movimento" do sistema ligado (Cleber, 15/10/2026). Sem
+ * animação o card só aparecia parado — e a comemoração é o movimento.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Volume2, VolumeX, PartyPopper, Check, Loader2 } from 'lucide-react';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
+import { Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -20,13 +24,28 @@ import {
   useComemoracoes, useComemoracaoNoAr, useParabens, useMinhasEquipes,
 } from '@/hooks/useComemoracoes';
 import { tocarSomComemoracao, tocarArquivoDeSom, estaMudo, definirMudo } from '@/lib/som-comemoracao';
-import { cn } from '@/lib/utils';
 import { efeitoValido, somValido } from '@/pages/Comemoracoes/catalogo';
+import { fraseValida } from '@/pages/Comemoracoes/frases';
+import {
+  alvoDosParabens, colegasQueCabem, sortearFraseDoAlvo, type ContextoParabens,
+} from '@/pages/Comemoracoes/parabens';
+import { buscarNomeDoAlvo, type AlvoTipo, type PessoaComemoracao } from '@/services/comemoracoes.service';
+import { nomesDoCard } from '@/components/comemoracao2/design';
+import { volumeComGanho } from '@/components/comemoracao2/musicasDoPlayer';
 import { ouvirTeste, type ComemoracaoTeste } from '@/pages/Comemoracoes/testeLocal';
 import { CardComemoracao } from './CardComemoracao';
 import { EfeitoComemoracao } from './EfeitoComemoracao';
-import { BaloesParabens } from './BaloesParabens';
+import {
+  FilasParabens, PainelParabens, type ItemParabens, type PainelParabensProps,
+} from './PainelParabens';
 import { CenaV2 } from '@/components/comemoracao2/CenaV2';
+
+/** O que a cena entrega ao painel de parabéns; a cor fica com cada cena. */
+type PainelDaCena = Omit<PainelParabensProps, 'cor' | 'corTexto'>;
+
+function primeiroNome(nome: string | null | undefined): string {
+  return (nome ?? '').trim().split(/\s+/)[0] || 'Alguém';
+}
 
 export function ComemoracaoOverlay() {
   const { perfil }  = useAuth();
@@ -98,6 +117,36 @@ export function ComemoracaoOverlay() {
     pararSomRef.current?.();
   }, []);
 
+  /**
+   * Parabéns do ensaio: colegas de mentira chegando no mural e o meu clique,
+   * tudo só nesta tela. Sem isto, quem monta só veria o mural numa festa de
+   * verdade (pedido do Cleber, 15/10/2026).
+   */
+  const [itensTeste, setItensTeste] = useState<ItemParabens[]>([]);
+  const [jaDeiTeste, setJaDeiTeste] = useState(false);
+  const alvoTeste = teste ? alvoDosParabens(teste.alvoTipo, teste.homenageados.length) : 'individual';
+
+  useEffect(() => {
+    setItensTeste([]);
+    setJaDeiTeste(false);
+    if (!teste) return;
+    const timers = colegasQueCabem(teste.duracaoS).map((c) => setTimeout(() => {
+      setItensTeste((atual) => [{
+        chave: `ensaio:${c.nome}`, nome: c.nome, foto: null,
+        frase: sortearFraseDoAlvo(alvoTeste),
+      }, ...atual]);
+    }, c.aposMs));
+    return () => { for (const t of timers) clearTimeout(t); };
+  }, [teste, alvoTeste]);
+
+  const darParabensTeste = useCallback(() => {
+    setJaDeiTeste(true);
+    setItensTeste((atual) => [{
+      chave: 'ensaio:eu', nome: primeiroNome(perfil?.nome), foto: perfil?.foto_url ?? null,
+      frase: sortearFraseDoAlvo(alvoTeste), meu: true,
+    }, ...atual]);
+  }, [perfil?.nome, perfil?.foto_url, alvoTeste]);
+
   useEffect(() => {
     if (!atual) { tocadoRef.current = null; return; }
     if (tocadoRef.current === atual.id) return;
@@ -112,7 +161,8 @@ export function ComemoracaoOverlay() {
 
     if (atual.som_url) {
       pararSomRef.current = tocarArquivoDeSom(atual.som_url, false, {
-        inicio: atual.som_inicio_s, duracao: atual.duracao_s, volume,
+        inicio: atual.som_inicio_s, duracao: atual.duracao_s,
+        volume: volumeComGanho(volume, atual.som_ganho ?? 1),
       });
     } else {
       tocarSomComemoracao(somValido(atual.som), false, volume);
@@ -159,13 +209,42 @@ export function ComemoracaoOverlay() {
   const souHomenageado = !!usuarioId && !!atual?.homenageados.some((p) => p.id === usuarioId);
   const podeParabenizar = !!atual && !!usuarioId && !souHomenageado;
 
-  /** Nome que aparece no botão: um só, ou "o time". */
-  const quemParabenizar = (() => {
-    const nomes = atual?.homenageados ?? [];
-    if (!nomes.length) return '';
-    if (nomes.length === 1) return nomes[0].nome.split(' ')[0];
-    return 'o time';
-  })();
+  // Nome da equipe/setor festejado, para o convite falar dele.
+  const [nomeAlvo, setNomeAlvo] = useState<string | null>(null);
+  const alvoId = atual?.alvo_tipo === 'equipe' ? atual.equipe_id : atual?.alvo_tipo === 'setor' ? atual.setor_id : null;
+  const alvoTipoAtual = atual?.alvo_tipo;
+  useEffect(() => {
+    setNomeAlvo(null);
+    if (!alvoId || (alvoTipoAtual !== 'equipe' && alvoTipoAtual !== 'setor')) return;
+    let vivo = true;
+    void buscarNomeDoAlvo(alvoTipoAtual, alvoId).then((n) => { if (vivo) setNomeAlvo(n); });
+    return () => { vivo = false; };
+  }, [alvoId, alvoTipoAtual]);
+
+  function contexto(
+    alvoTipo: AlvoTipo | undefined, homenageados: PessoaComemoracao[], nome: string | null,
+    equipeId: string | null, setorAlvo: string | null, ehTeste: boolean,
+  ): ContextoParabens {
+    const alvo = alvoDosParabens(alvoTipo, homenageados.length);
+    const doMeuTime = !ehTeste && (
+      alvo === 'equipe' ? !!equipeId && minhasEquipes.includes(equipeId)
+      : alvo === 'setor' ? !!setorAlvo && setorAlvo === setorId
+      : false);
+    return {
+      alvo,
+      nome: alvo === 'individual' || alvo === 'grupo' ? nomesDoCard(homenageados) : (nome ?? ''),
+      doMeuTime,
+    };
+  }
+
+  // Mais novo primeiro: é o que entra em destaque no mural.
+  const itensReais: ItemParabens[] = useMemo(() => [...parabens].reverse().map((p) => ({
+    chave: p.usuario_id,
+    nome:  primeiroNome(p.pessoa?.nome),
+    foto:  p.pessoa?.foto_url ?? null,
+    frase: fraseValida(p.frase),
+    meu:   p.usuario_id === usuarioId,
+  })), [parabens, usuarioId]);
 
   // O ensaio tem precedência: quem clicou em Testar quer ver o ensaio, não uma
   // comemoração de verdade que entrou no meio.
@@ -183,6 +262,13 @@ export function ComemoracaoOverlay() {
         design:   teste.design ?? null,
         fechar:   () => setTeste(null),
         ehTeste:  true,
+        painel: ((): PainelDaCena => {
+          const ctx = contexto(teste.alvoTipo, teste.homenageados, teste.nomeAlvo ?? null, null, null, true);
+          return {
+            ctx, souHomenageado: false, pode: true, jaDei: jaDeiTeste, enviando: false,
+            onDar: darParabensTeste, itens: itensTeste,
+          };
+        })(),
       }
     : atual
       ? {
@@ -198,15 +284,18 @@ export function ComemoracaoOverlay() {
           design:   atual.design ?? null,
           fechar,
           ehTeste:  false,
+          painel: ((): PainelDaCena => {
+            const ctx = contexto(atual.alvo_tipo, atual.homenageados, nomeAlvo, atual.equipe_id, atual.setor_id, false);
+            return {
+              ctx, souHomenageado, pode: podeParabenizar, jaDei: jaParabenizei, enviando,
+              onDar: () => void enviarParabens(sortearFraseDoAlvo(ctx.alvo)), itens: itensReais,
+            };
+          })(),
         }
       : null;
 
   return (
-    <>
-      {/* Fora do AnimatePresence: os balões continuam subindo enquanto o card
-          faz a animação de saída. */}
-      {atual && <BaloesParabens parabens={parabens} />}
-
+    <MotionConfig reducedMotion="never">
     <AnimatePresence>
       {/* Comemoração 2.0: card sólido com papel de parede. A 1.0 segue abaixo. */}
       {emCena?.design && (
@@ -221,14 +310,7 @@ export function ComemoracaoOverlay() {
           onFechar={emCena.fechar}
           mudo={mudo}
           onAlternarMudo={alternarMudo}
-          parabens={{
-            pode:     podeParabenizar,
-            jaDei:    jaParabenizei,
-            enviando,
-            total:    parabens.length,
-            quem:     quemParabenizar,
-            onDar:    () => void enviarParabens(),
-          }}
+          parabens={emCena.painel}
         />
       )}
       {emCena && !emCena.design && (
@@ -249,6 +331,8 @@ export function ComemoracaoOverlay() {
           {/* Sem caixa colorida, o card precisa de largura para o texto
               respirar sobre a tela de trabalho. */}
           <div className="relative w-full max-w-xl">
+            <FilasParabens itens={emCena.painel.itens} cor="#FBBF24" />
+
             {emCena.ehTeste && (
               // Deixa claro que ninguém mais está vendo isto.
               <span className="pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-lg">
@@ -277,46 +361,14 @@ export function ComemoracaoOverlay() {
               {mudo ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
 
-            {/* Parabenizar — só na comemoração de verdade, e não para quem
-                está sendo homenageado. */}
-            {!emCena.ehTeste && podeParabenizar && (
-              <div className="absolute inset-x-0 -bottom-2 flex justify-center">
-                <motion.button
-                  type="button"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                  disabled={jaParabenizei || enviando}
-                  onClick={() => void enviarParabens()}
-                  className={cn(
-                    'pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5',
-                    'text-xs font-bold shadow-lg transition-colors',
-                    jaParabenizei
-                      ? 'cursor-default bg-emerald-600 text-white'
-                      : 'bg-amber-400 text-black hover:bg-amber-300',
-                  )}
-                >
-                  {enviando
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : jaParabenizei
-                      ? <Check className="h-3.5 w-3.5" />
-                      : <PartyPopper className="h-3.5 w-3.5" />}
-                  {jaParabenizei ? 'Parabenizado!' : `Parabenizar ${quemParabenizar}`}
-                  {parabens.length > 0 && (
-                    <span className={cn(
-                      'ml-0.5 rounded-full px-1.5 text-[10px]',
-                      jaParabenizei ? 'bg-white/25' : 'bg-black/15',
-                    )}>
-                      {parabens.length}
-                    </span>
-                  )}
-                </motion.button>
-              </div>
-            )}
+            {/* Convite e mural de parabéns — o mesmo da 2.0, no dourado da 1.0. */}
+            <div className="mt-3">
+              <PainelParabens {...emCena.painel} cor="#FBBF24" corTexto="#16110A" />
+            </div>
           </div>
         </motion.div>
       )}
     </AnimatePresence>
-    </>
+    </MotionConfig>
   );
 }

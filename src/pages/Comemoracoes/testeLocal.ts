@@ -11,7 +11,7 @@
  * Canal de `CustomEvent` no `window`: zero acoplamento, quem dispara não precisa
  * saber se o overlay está montado.
  */
-import type { PessoaComemoracao } from '@/services/comemoracoes.service';
+import type { AlvoTipo, PessoaComemoracao } from '@/services/comemoracoes.service';
 import type { LayoutComemoracao } from './layout';
 import type { EfeitoId, SomId } from './catalogo';
 import type { DesignCard } from '@/components/comemoracao2/design';
@@ -37,6 +37,10 @@ export interface ComemoracaoTeste {
   volume?:      number;
   /** Card da 2.0. Ausente = card da 1.0. */
   design?:      DesignCard | null;
+  /** Para o convite do parabéns falar como na festa de verdade. Ausente = pessoas. */
+  alvoTipo?:    AlvoTipo;
+  /** Nome da equipe ou do setor festejado. */
+  nomeAlvo?:    string | null;
 }
 
 /** Dispara o ensaio na própria tela. */

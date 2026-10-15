@@ -3,11 +3,12 @@
  *
  * Duas fontes, nesta ordem:
  *
- *   1. **Buscas salvas da empresa** (`comemoracao_gif_buscas`, migration
+ *   1. **Buscas salvas** (`comemoracao_gif_buscas`, migration
  *      20261015120000). Toda busca que dá resultado fica guardada pelo termo:
  *      quem procurar "parabéns" amanhã vê na hora, sem gastar chamada do
  *      GIPHY — e os chips de buscas salvas deixam a equipe passear pelo que
- *      os colegas já acharam.
+ *      os colegas já acharam. Desde a 20261015180000 a leitura vale para
+ *      TODAS as empresas: GIF do GIPHY é público (Cleber, 15/10/2026).
  *   2. **GIPHY**, via `/api/gifs` — a chave fica no servidor.
  *
  * Banco sem a migration: as buscas salvas caem no `localStorage` deste
@@ -113,20 +114,29 @@ function tabelaAusente(erro: { code?: string; message?: string } | null): boolea
     || /relation .* does not exist|could not find the table/i.test(erro.message ?? '');
 }
 
-/** Buscas salvas da empresa, mais recentes primeiro. */
+/**
+ * Buscas salvas de todas as empresas, mais recentes primeiro.
+ *
+ * O mesmo termo pode estar salvo por mais de uma empresa (a chave do banco é
+ * empresa + termo); fica a versão mais nova.
+ */
 export async function listarBuscasSalvas(empresaId: string, limite = 16): Promise<BuscaSalva[]> {
   if (tabelaExiste !== false) {
     const { data, error } = await supabase
       .from('comemoracao_gif_buscas')
       .select('termo, resultados, atualizado_em')
-      .eq('empresa_id', empresaId)
       .order('atualizado_em', { ascending: false })
-      .limit(limite);
+      .limit(limite * 2);
     if (!error) {
       tabelaExiste = true;
-      return (data ?? []).map((l) => ({
-        termo: l.termo, atualizado_em: l.atualizado_em, gifs: gifsDoJson(l.resultados),
-      }));
+      const vistos = new Set<string>();
+      const lista: BuscaSalva[] = [];
+      for (const l of data ?? []) {
+        if (vistos.has(l.termo)) continue;
+        vistos.add(l.termo);
+        lista.push({ termo: l.termo, atualizado_em: l.atualizado_em, gifs: gifsDoJson(l.resultados) });
+      }
+      return lista.slice(0, limite);
     }
     if (tabelaAusente(error)) tabelaExiste = false;
     else logger.warn('[gifs] erro ao listar buscas salvas:', error.message);
@@ -136,11 +146,13 @@ export async function listarBuscasSalvas(empresaId: string, limite = 16): Promis
 
 async function lerBuscaSalva(empresaId: string, termo: string): Promise<BuscaSalva | null> {
   if (tabelaExiste !== false) {
+    // De qualquer empresa: a mais nova com este termo.
     const { data, error } = await supabase
       .from('comemoracao_gif_buscas')
       .select('termo, resultados, atualizado_em')
-      .eq('empresa_id', empresaId)
       .eq('termo', termo)
+      .order('atualizado_em', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (!error) {
       tabelaExiste = true;
@@ -168,6 +180,44 @@ async function salvarBusca(empresaId: string, usuarioId: string, busca: BuscaSal
     else { logger.warn('[gifs] erro ao salvar busca:', error.message); return; }
   }
   gravarLocal(empresaId, busca);
+}
+
+// ── GIFs usados ──────────────────────────────────────────────────────────────
+
+/** A tabela de GIFs usados existe? Mesma lógica de `tabelaExiste`. */
+let usadosExiste: boolean | null = null;
+
+/**
+ * Os GIFs que entraram em comemorações de verdade, de todas as empresas, do
+ * mais recente para o mais antigo (`comemoracao_gifs_usados`, 20261015180000).
+ *
+ * null = o banco ainda não tem a tabela; o estúdio cai nos GIFs das
+ * comemorações que ele já tem em mãos.
+ */
+export async function listarGifsUsados(limite = 24): Promise<GifCard[] | null> {
+  if (usadosExiste === false) return null;
+  const { data, error } = await supabase
+    .from('comemoracao_gifs_usados')
+    .select('gif')
+    .order('usado_em', { ascending: false })
+    .limit(limite);
+  if (error) {
+    if (tabelaAusente(error)) usadosExiste = false;
+    else logger.warn('[gifs] erro ao listar GIFs usados:', error.message);
+    return null;
+  }
+  usadosExiste = true;
+  return gifsDoJson((data ?? []).map((l) => l.gif));
+}
+
+/**
+ * Anota que o GIF entrou numa comemoração. Best-effort: falhar aqui não pode
+ * atrapalhar a festa, que já foi criada.
+ */
+export async function registrarGifUsado(gif: GifCard): Promise<void> {
+  if (usadosExiste === false) return;
+  const { error } = await supabase.rpc('fn_comemoracao_gif_usado', { p_gif: gif as unknown as Json });
+  if (error && error.code !== 'PGRST202') logger.warn('[gifs] erro ao registrar GIF usado:', error.message);
 }
 
 // ── GIPHY (via /api/gifs) ────────────────────────────────────────────────────
@@ -251,4 +301,5 @@ export async function gifsEmAlta(): Promise<ResultadoGifs> {
 /** Só para teste: esquece o que se descobriu sobre a tabela. */
 export function __resetarGifs(): void {
   tabelaExiste = null;
+  usadosExiste = null;
 }

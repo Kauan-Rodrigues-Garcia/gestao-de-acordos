@@ -1760,6 +1760,27 @@ export type Database = {
         }
         Relationships: []
       }
+      comemoracao_gifs_usados: {
+        Row: {
+          gif: Json
+          gif_id: string
+          usado_em: string
+          usos: number
+        }
+        Insert: {
+          gif: Json
+          gif_id: string
+          usado_em?: string
+          usos?: number
+        }
+        Update: {
+          gif?: Json
+          gif_id?: string
+          usado_em?: string
+          usos?: number
+        }
+        Relationships: []
+      }
       comemoracao_homenageados: {
         Row: {
           comemoracao_id: string
@@ -1804,6 +1825,7 @@ export type Database = {
           id: string
           inicio_s: number
           nome: string
+          setor_id: string | null
           tipo: string
           trecho_s: number | null
           url: string
@@ -1818,6 +1840,7 @@ export type Database = {
           id?: string
           inicio_s?: number
           nome: string
+          setor_id?: string | null
           tipo: string
           trecho_s?: number | null
           url: string
@@ -1832,6 +1855,7 @@ export type Database = {
           id?: string
           inicio_s?: number
           nome?: string
+          setor_id?: string | null
           tipo?: string
           trecho_s?: number | null
           url?: string
@@ -9624,6 +9648,7 @@ export type Database = {
         }[]
       }
       fn_comemoracao_finalizar: { Args: { p_id: string }; Returns: undefined }
+      fn_comemoracao_gif_usado: { Args: { p_gif: Json }; Returns: undefined }
       fn_comemoracao_midia_fixar: {
         Args: { p_fixar: boolean; p_id: string }
         Returns: {

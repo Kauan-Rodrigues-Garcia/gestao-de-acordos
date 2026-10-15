@@ -5,11 +5,14 @@
  * MOMENTO: estoura a partir do card, cai e acaba — a festa chama a atenção na
  * chegada e depois deixa a pessoa trabalhar.
  *
- * `pointer-events: none` em tudo, e nada para quem pediu menos movimento ao
- * sistema.
+ * `pointer-events: none` em tudo. Não obedece ao "reduzir movimento" do
+ * sistema: o pedido é a festa igual em todos os PCs (Cleber, 15/10/2026).
+ *
+ * Com `conteinerRef`, o estouro fica preso dentro daquele elemento — é o
+ * "Ver animação" do palco, que não pode cobrir o resto do estúdio.
  */
 import { useEffect, useMemo, useState, type RefObject } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { EfeitoId } from './design';
 
 /** Quanto o card leva para chegar no lugar (mola do `CenaV2`). */
@@ -61,32 +64,40 @@ function Estrela({ tamanho, cor }: { tamanho: number; cor: string }) {
 }
 
 export function EfeitoV2({
-  efeito, alvoRef,
-}: { efeito: EfeitoId; alvoRef: RefObject<HTMLElement | null> }) {
-  const calmo = useReducedMotion();
+  efeito, alvoRef, conteinerRef,
+}: {
+  efeito: EfeitoId;
+  alvoRef: RefObject<HTMLElement | null>;
+  conteinerRef?: RefObject<HTMLElement | null>;
+}) {
   const [origem, setOrigem] = useState<{ x: number; y: number } | null>(null);
+  const [larguraArea, setLarguraArea] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1200));
 
   // Estoura quando o card pousa, medindo onde ele parou — medir na montagem
   // pegaria o card ainda descendo, no meio da entrada.
   useEffect(() => {
     const id = setTimeout(() => {
       const r = alvoRef.current?.getBoundingClientRect();
+      const area = conteinerRef?.current?.getBoundingClientRect();
+      const x0 = area?.left ?? 0;
+      const y0 = area?.top ?? 0;
+      if (area) setLarguraArea(area.width);
       setOrigem(r && r.width > 0
-        ? { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-        : { x: window.innerWidth / 2, y: 200 });
+        ? { x: r.left - x0 + r.width / 2, y: r.top - y0 + r.height / 2 }
+        : { x: (area?.width ?? window.innerWidth) / 2, y: area ? area.height / 2 : 200 });
     }, POUSO_MS);
     return () => clearTimeout(id);
-  }, [alvoRef]);
+  }, [alvoRef, conteinerRef]);
 
   const particulas = useMemo(
-    () => sortear(efeito === 'moedas' ? 36 : 54, efeito, typeof window !== 'undefined' ? window.innerWidth : 1200),
-    [efeito],
+    () => sortear(efeito === 'moedas' ? 36 : 54, efeito, larguraArea),
+    [efeito, larguraArea],
   );
 
-  if (efeito === 'nenhum' || calmo || !origem) return null;
+  if (efeito === 'nenhum' || !origem) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
+    <div className={`pointer-events-none ${conteinerRef ? 'absolute' : 'fixed'} inset-0 z-0 overflow-hidden`} aria-hidden="true">
       {particulas.map((p) => {
         const estilo = { left: origem.x, top: origem.y };
         if (efeito === 'estrelas') {

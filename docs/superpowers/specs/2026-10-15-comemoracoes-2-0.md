@@ -37,6 +37,34 @@ Sem a migration: o estúdio abre, o **Testar** funciona (é local), e o **Comemo
 
 A 2.0 grava também as colunas da 1.0 (`efeito`, `anim_texto`, `som`, `volume`...). Quem ainda roda o app antigo vê a festa no card antigo, sem o GIF, até a 2.0 ir para produção.
 
+## Ajustes do primeiro teste (15/10/2026, tarde)
+
+- **Fotos de quem bateu:** formato (redonda/quadrada), tamanho (pequena a gigante) e moldura (cor do fundo, branca, dourada, neon, sem). Ficam em `design.fotos`; card antigo sem o campo sai como sempre saiu.
+- **Tamanho direto no palco:** o elemento selecionado ganha alças nos cantos (`escalaPelaAlca`); a barra de porcentagem saiu. Selecionar as fotos abre as opções de foto embaixo do palco.
+- **Animação em todos os PCs:** a festa, o efeito, o troféu e as prévias ignoram o "reduzir movimento" do sistema e o modo leve (`MotionConfig reducedMotion="never"` no overlay e no estúdio).
+- **Prévia sozinha:** trocar a entrada ou o efeito toca a prévia no palco, com o efeito por cima do card.
+- **Separação por setor** (`pages/Comemoracoes2/alcance.ts`): líder e elite só escolhem pessoas, equipes e setor do próprio setor (cadastro + equipes que lideram), veem só o histórico do setor e só as músicas do setor. Gerência para cima vê a empresa.
+- **GIFs entre empresas:** buscas salvas e "Usados recentemente" valem para todas as empresas.
+- Migration `20261015180000_comemoracoes_2_0_setor_e_gifs.sql` (**não aplicada**): `comemoracao_midias.setor_id` (preenchido por trigger, com as músicas atuais indo para o setor de quem enviou), leitura de `comemoracao_gif_buscas` entre empresas, tabela `comemoracao_gifs_usados` + RPC `fn_comemoracao_gif_usado`. Sem ela: a biblioteca de músicas mostra só o que a própria pessoa enviou para quem tem setor, e "Usados recentemente" cai nos GIFs das comemorações da empresa.
+
+## Parabéns refeito (15/10/2026)
+
+`components/comemoracao/PainelParabens.tsx` + textos em `pages/Comemoracoes/parabens.ts`, usado pela 2.0 e pela 1.0:
+
+- **Convite** grande logo abaixo do card, pulsando, com chamada que se reveza e fala diferente para pessoa, grupo, equipe e setor ("Sua equipe…"/"Nosso setor…" para quem é do time). O clique estoura confete no botão, que vira "Você parabenizou…".
+- **Frases** sorteadas por tipo de festa (`FRASES_POR_ALVO`), gravadas na linha como antes.
+- **Mural "Quem já parabenizou"** para todo mundo, até a festa acabar: o mais novo entra em destaque por 4 s; os seis mais novos com frase, o resto como rostos. Sem contador. Saíram os balões que subiam e sumiam.
+- **Festejado** vê "Seus colegas estão te parabenizando!" no lugar do botão.
+- **Testar** mostra o convite e o mural: o clique e os colegas de mentira (`COLEGAS_DO_ENSAIO`) ficam só na tela de quem testa.
+- O nome da equipe/setor vem de `buscarNomeDoAlvo` (30 min de cache; falhou = convite genérico).
+
+## Som e parabéns em fila (15/10/2026, fim do dia)
+
+- **Trecho da música** (`pages/Comemoracoes2/TrechoMusica.tsx`): a linha do tempo da música com a janela da duração da festa; o começo fica em `design.somInicioS` (por festa, não por música) e o `buscarComemoracoes` o prefere ao `inicio_s` da música.
+- **Músicas do player** (`components/comemoracao2/musicasDoPlayer.ts`): as faixas de fábrica do Som ambiente, todas numa lista, com capa. A festa guarda o id em `design.somFaixa`; o volume leva o ganho de loudness da faixa (`volumeComGanho`). Faixa que sair do app cai no som do catálogo. Playlists de YouTube ficam de fora.
+- **Volume** padrão e recomendado: 15% (a trava da meta de setor também), com o aviso fixo embaixo da barra.
+- **Parabéns em duas filas** ao lado do card (`FilasParabens`), entrando devagar e alternando os lados; em tela estreita, uma fileira embaixo do botão.
+
 ## Pendente
 
 - Aprovar o visual e liberar a 2.0 para todos (tirar o portão de super_admin em `pages/Comemoracoes/index.tsx`).

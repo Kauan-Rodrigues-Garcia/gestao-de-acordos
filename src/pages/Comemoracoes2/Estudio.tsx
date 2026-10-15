@@ -29,6 +29,9 @@ import {
   EFEITOS, FONTES, MODELOS, animTextoV1, efeitoV1, modeloDoDesign, type GifCard,
 } from '@/components/comemoracao2/design';
 import { papelDeParede } from '@/components/comemoracao2/papeisDeParede';
+import { registrarGifUsado } from '@/services/gifs.service';
+import { musicaDoPlayer, volumeComGanho } from '@/components/comemoracao2/musicasDoPlayer';
+import { foraDoAlcance, setoresNoAlcance, type Alcance } from './alcance';
 import { Etapa } from './Etapa';
 import { SecaoQuem } from './SecaoQuem';
 import { SecaoTexto } from './SecaoTexto';
@@ -49,13 +52,15 @@ function dataHoraCurta(local: string): string {
 }
 
 export function Estudio({
-  r, mudar, substituir, dados, empresaId, usuarioId, comemoracoes, agoraCorrigido,
+  r, mudar, substituir, dados, alcance, empresaId, usuarioId, comemoracoes, agoraCorrigido,
   nomeDoMes, aoEnviar, onMusicasMudaram,
 }: {
   r: Rascunho;
   mudar: MudarRascunho;
   substituir: (r: Rascunho) => void;
   dados: DadosEstudio;
+  /** Líder/elite: só o próprio setor. `dados` já chega filtrado. */
+  alcance: Alcance;
   empresaId: string;
   usuarioId: string;
   comemoracoes: Comemoracao[];
@@ -76,7 +81,8 @@ export function Estudio({
     return validarAgendamento(d.toISOString(), agoraCorrigido());
   }, [r.agendar, r.quando, agoraCorrigido]);
 
-  const falta = pendencias(r, erroAgendamento);
+  const fora = foraDoAlcance(r, dados, alcance);
+  const falta = fora ? [...pendencias(r, erroAgendamento), fora] : pendencias(r, erroAgendamento);
   const plateia = contarPlateia(r, dados.pessoas, dados.equipes);
   const volume = volumeEfetivo(r.volume, r.alvoTipo);
   const mapas: MapasVinculo = useMemo(
@@ -95,6 +101,9 @@ export function Estudio({
     return lista;
   }, [comemoracoes]);
 
+  // Música do player escolhida (ganha de uma música enviada e do catálogo).
+  const doPlayer = musicaDoPlayer(r.design.somFaixa);
+
   function testar() {
     dispararTeste({
       titulo:       r.titulo.trim() || 'META BATIDA!',
@@ -103,20 +112,30 @@ export function Estudio({
       efeito:       efeitoV1(r.design.efeito),
       som:          r.som,
       gifUrl:       null,
-      somUrl:       r.musica?.url ?? null,
-      somInicioS:   Number(r.musica?.inicio_s ?? 0),
+      somUrl:       doPlayer?.url ?? r.musica?.url ?? null,
+      somInicioS:   Number(r.design.somInicioS ?? r.musica?.inicio_s ?? 0),
       layout:       {},
       animTexto:    animTextoV1(r.design.entrada),
-      volume,
+      // O ensaio toca o arquivo com este volume: a música do player já vai com o ganho dela.
+      volume:       doPlayer ? volumeComGanho(volume, doPlayer.ganho) : volume,
       duracaoS:     r.duracaoS,
       design:       r.design,
+      // O convite do parabéns fala como na festa de verdade.
+      alvoTipo:     r.alvoTipo,
+      nomeAlvo:     r.alvoTipo === 'equipe' ? dados.equipes.find((e) => e.id === r.equipeId)?.nome ?? null
+        : r.alvoTipo === 'setor' ? dados.setores.find((s) => s.id === r.setorId)?.nome ?? null
+        : null,
     });
   }
 
   /** Quem trabalha em dois setores gera a pergunta antes de criar. */
   function aoClicarEnviar() {
     if (r.alvoTipo !== 'operadores') { void comemorar(); return; }
-    const pend = homenageadosAmbiguos(r.escolhidos.map((p) => p.id), mapas);
+    // Para o líder restrito, só os setores dele contam: o clone que também
+    // trabalha em outro setor é comemorado aqui, e a pergunta nem aparece.
+    const pend = homenageadosAmbiguos(r.escolhidos.map((p) => p.id), mapas)
+      .map((a) => ({ ...a, setores: setoresNoAlcance(a.setores, alcance) }))
+      .filter((a) => a.setores.length > 1);
     if (pend.length === 0) { void comemorar(); return; }
     setRespostas(Object.fromEntries(pend.map((a) => [a.operadorId, TODOS_OS_SETORES])));
     setAmbiguos(pend);
@@ -135,7 +154,8 @@ export function Estudio({
         duracaoS: r.duracaoS,
         operadorIds,
         iniciaEm: r.agendar ? new Date(r.quando).toISOString() : undefined,
-        somMidiaId: r.musica?.id ?? null,
+        // Música do player vai no `design`; a coluna da música enviada fica vazia.
+        somMidiaId: doPlayer ? null : r.musica?.id ?? null,
         animTexto: animTextoV1(r.design.entrada),
         volume,
         alvoTipo: r.alvoTipo,
@@ -143,11 +163,15 @@ export function Estudio({
         setorId:  r.alvoTipo === 'setor'  ? r.setorId  : null,
         somenteEquipe: r.alvoTipo !== 'setor' && r.somenteEquipe,
         setoresPorOperador: r.alvoTipo === 'operadores'
-          ? Object.fromEntries(operadorIds.map((id) => [id, setoresEscolhidosPara(id, escolhas[id], mapas)]))
+          ? Object.fromEntries(operadorIds.map((id) => [
+              id, setoresNoAlcance(setoresEscolhidosPara(id, escolhas[id], mapas), alcance),
+            ]))
           : undefined,
         design: r.design,
       });
       if (!ok) { toast.error(erro ?? 'Não foi possível enviar a comemoração.'); return; }
+      // Entra em "Usados recentemente" para todo mundo.
+      if (r.design.comMidia && r.design.gif) void registrarGifUsado(r.design.gif);
       toast.success(r.agendar ? 'Comemoração agendada.' : 'Comemoração no ar!');
       setAmbiguos([]);
       setRespostas({});
@@ -176,7 +200,7 @@ export function Estudio({
     EFEITOS.find((e) => e.id === r.design.efeito)?.nome,
   ].join(' · ');
   const resumoGif = !r.design.comMidia ? 'Sem imagem (só texto)' : r.design.gif ? (r.design.gif.titulo || 'GIF escolhido') : 'Troféu (sem GIF)';
-  const resumoSom = `${r.musica?.nome ?? SONS.find((s) => s.id === r.som)?.nome ?? '—'} · ${volume}%`;
+  const resumoSom = `${doPlayer?.nome ?? r.musica?.nome ?? SONS.find((s) => s.id === r.som)?.nome ?? '—'} · ${volume}%`;
   const resumoQuando = `${r.agendar ? dataHoraCurta(r.quando) : 'Agora'} · ${r.duracaoS}s na tela`;
 
   const etapa = (n: number) => ({ numero: n, aberta: aberta === n, onAbrir: () => setAberta(aberta === n ? 0 : n) });

@@ -6,13 +6,14 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  VOLUME_PADRAO, VOLUME_AVISO, VOLUME_SETOR,
+  VOLUME_PADRAO, VOLUME_AVISO, VOLUME_RECOMENDADO, VOLUME_SETOR,
   volumeTravado, volumeEfetivo, volumeAtrapalha,
 } from './volume';
 
 describe('padrão', () => {
-  it('nasce em 25%, não no volume cheio', () => {
-    expect(VOLUME_PADRAO).toBe(25);
+  it('nasce em 15%, o recomendado para não atrapalhar ligação', () => {
+    expect(VOLUME_PADRAO).toBe(15);
+    expect(VOLUME_RECOMENDADO).toBe(VOLUME_PADRAO);
   });
 
   it('o padrão não dispara o aviso — senão ele viraria paisagem', () => {

@@ -11,9 +11,11 @@
  */
 import { useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Loader2, PartyPopper, Volume2, VolumeX, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Volume2, VolumeX, X } from 'lucide-react';
 import type { PessoaComemoracao } from '@/services/comemoracoes.service';
+import {
+  FilasParabens, PainelParabens, type PainelParabensProps,
+} from '@/components/comemoracao/PainelParabens';
 import { CardV2 } from './CardV2';
 import { EfeitoV2 } from './EfeitoV2';
 import type { DesignCard } from './design';
@@ -29,14 +31,8 @@ export interface CenaV2Props {
   onFechar:     () => void;
   mudo:         boolean;
   onAlternarMudo: () => void;
-  parabens: {
-    pode:      boolean;
-    jaDei:     boolean;
-    enviando:  boolean;
-    total:     number;
-    quem:      string;
-    onDar:     () => void;
-  };
+  /** Convite e mural de parabéns. A cor vem do papel de parede. */
+  parabens: Omit<PainelParabensProps, 'cor' | 'corTexto'>;
 }
 
 const BOTAO_REDONDO =
@@ -65,6 +61,9 @@ export function CenaV2({
 
       {/* Acima do efeito: o confete sai de trás do card e nunca cobre o texto. */}
       <div className="relative z-10 w-full max-w-[600px]">
+        {/* Quem parabenizou, em duas filas penduradas nas laterais do card. */}
+        <FilasParabens itens={parabens.itens} cor={papel.destaque} />
+
         {ehTeste && (
           <span className="absolute -top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neutral-900 shadow-lg">
             Teste · só você vê
@@ -96,35 +95,9 @@ export function CenaV2({
           </button>
         </div>
 
-        {!ehTeste && parabens.pode && (
-          <div className="mt-3 flex justify-center">
-            <motion.button
-              type="button"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.9 }}
-              disabled={parabens.jaDei || parabens.enviando}
-              onClick={parabens.onDar}
-              className={cn(
-                'pointer-events-auto inline-flex items-center gap-2 rounded-full px-4 py-2',
-                'text-sm font-bold shadow-xl transition-transform',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
-                !parabens.jaDei && 'hover:scale-[1.04] active:scale-95',
-              )}
-              style={parabens.jaDei
-                ? { background: '#10B981', color: '#fff' }
-                : { background: papel.destaque, color: papel.claro ? '#fff' : '#16110A' }}
-            >
-              {parabens.enviando
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : parabens.jaDei ? <Check className="h-4 w-4" /> : <PartyPopper className="h-4 w-4" />}
-              {parabens.jaDei ? 'Parabéns enviado!' : `Dar parabéns${parabens.quem ? ` para ${parabens.quem}` : ''}`}
-              {parabens.total > 0 && (
-                <span className="rounded-full bg-black/15 px-1.5 text-[11px]">{parabens.total}</span>
-              )}
-            </motion.button>
-          </div>
-        )}
+        <div className="mt-3">
+          <PainelParabens {...parabens} cor={papel.destaque} corTexto={papel.claro ? '#FFFFFF' : '#16110A'} />
+        </div>
       </div>
     </motion.div>
   );

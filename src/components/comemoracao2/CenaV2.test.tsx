@@ -23,6 +23,7 @@ vi.mock('@/services/comemoracoes.service', () => ({
   parabenizar: vi.fn(),
   finalizarComemoracao: vi.fn(),
   buscarMinhasEquipes: () => Promise.resolve([]),
+  buscarNomeDoAlvo: () => Promise.resolve(null),
 }));
 // As fontes vêm do Google: no teste não há rede, e a letra não é o que se testa.
 vi.mock('./carregarFontes', () => ({ carregarFontesDoCard: vi.fn() }));
@@ -31,6 +32,7 @@ vi.mock('@/lib/sinais', () => ({ assinarSinal: () => () => {}, assinarAviso: () 
 // Movimento reduzido: sem partículas e sem animação, só a estrutura.
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children?: unknown }) => children as never,
+  MotionConfig: ({ children }: { children?: unknown }) => children as never,
   useReducedMotion: () => true,
   motion: new Proxy({}, {
     get: (_alvo, tag: string) => ({ children, ...p }: Record<string, unknown> & { children?: unknown }) => {

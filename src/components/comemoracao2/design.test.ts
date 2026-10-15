@@ -9,8 +9,8 @@ import { describe, it, expect } from 'vitest';
 import {
   ALTURA_CARD, ESCALA_MAX, LARGURA_CARD, MARGEM_PCT, MODELOS,
   aplicarModelo, animTextoV1, arrastar, designDoJson, designPadrao, designParaJson,
-  efeitoV1, escalaDoCard, escalar, larguraDoTexto, modeloDoDesign, nomesDoCard,
-  urlDeGifConfiavel,
+  ESCALA_MIN, efeitoV1, escalaDoCard, escalaPelaAlca, escalar, ladoDaFoto, larguraDoTexto,
+  modeloDoDesign, nomesDoCard, urlDeGifConfiavel,
 } from './design';
 import { PAPEIS_DE_PAREDE, TEMAS, papelDeParede, papeisDoTema, PAPEL_PADRAO } from './papeisDeParede';
 
@@ -187,5 +187,45 @@ describe('papéis de parede', () => {
 
   it('nenhum fundo puxa arquivo de fora — tudo é gradiente em CSS', () => {
     for (const p of PAPEIS_DE_PAREDE) expect(p.fundo).not.toMatch(/url\(/i);
+  });
+});
+
+describe('fotos de quem bateu', () => {
+  it('card salvo antes das opções de foto sai como sempre saiu', () => {
+    const d = designDoJson({ versao: 2 });
+    expect(d?.fotos).toEqual({ formato: 'redonda', moldura: 'destaque', tamanho: 'm' });
+  });
+
+  it('o que foi escolhido vai e volta do banco', () => {
+    const d = { ...designPadrao(), fotos: { formato: 'quadrada' as const, moldura: 'dourada' as const, tamanho: 'gg' as const } };
+    expect(designDoJson(designParaJson(d))?.fotos).toEqual(d.fotos);
+  });
+
+  it('valor desconhecido cai no padrão, campo a campo', () => {
+    const d = designDoJson({ versao: 2, fotos: { formato: 'oval', moldura: 'neon', tamanho: 'xl' } });
+    expect(d?.fotos).toEqual({ formato: 'redonda', moldura: 'neon', tamanho: 'm' });
+  });
+
+  it('tamanhos crescem na ordem', () => {
+    expect(ladoDaFoto('p')).toBeLessThan(ladoDaFoto('m'));
+    expect(ladoDaFoto('m')).toBeLessThan(ladoDaFoto('g'));
+    expect(ladoDaFoto('g')).toBeLessThan(ladoDaFoto('gg'));
+  });
+});
+
+describe('escalaPelaAlca', () => {
+  it('afastar o canto do centro aumenta na mesma proporção', () => {
+    expect(escalaPelaAlca(1, 100, 150)).toBe(1.5);
+    expect(escalaPelaAlca(1.2, 100, 50)).toBe(0.6);
+  });
+
+  it('respeita os limites', () => {
+    expect(escalaPelaAlca(1, 100, 1000)).toBe(ESCALA_MAX);
+    expect(escalaPelaAlca(1, 100, 1)).toBe(ESCALA_MIN);
+  });
+
+  it('clique em cima do centro não zera nem quebra', () => {
+    expect(escalaPelaAlca(1.3, 0, 40)).toBe(1.3);
+    expect(escalaPelaAlca(1.3, 50, Number.NaN)).toBe(1.3);
   });
 });

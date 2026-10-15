@@ -1,9 +1,11 @@
 /**
  * SecaoGif — etapa 5: o GIF do card, buscado no GIPHY.
  *
- * Abre nos GIFs em alta. As buscas que alguém da empresa já fez aparecem como
- * atalhos ("Buscas salvas") e abrem na hora, sem gastar chamada do GIPHY. Sem
- * GIF — ou se o GIPHY cair — o card usa o troféu desenhado no app.
+ * Abre com os GIFs que já entraram em alguma comemoração ("Usados
+ * recentemente") e os GIFs em alta. As buscas que alguém já fez aparecem como
+ * atalhos e abrem na hora, sem gastar chamada do GIPHY. Os dois valem para
+ * todas as empresas e setores: GIF do GIPHY é público (Cleber, 15/10/2026).
+ * Sem GIF — ou se o GIPHY cair — o card usa o troféu desenhado no app.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Loader2, RefreshCw, Search, TriangleAlert } from 'lucide-react';
@@ -11,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
-  buscarGifs, gifsEmAlta, listarBuscasSalvas, normalizarTermo,
+  buscarGifs, gifsEmAlta, listarBuscasSalvas, listarGifsUsados, normalizarTermo,
   type BuscaSalva, type ResultadoGifs,
 } from '@/services/gifs.service';
 import { aplicarModelo, type GifCard } from '@/components/comemoracao2/design';
@@ -29,7 +31,10 @@ export function SecaoGif({
   mudar: MudarRascunho;
   empresaId: string;
   usuarioId: string;
-  /** GIFs das últimas comemorações — reaproveitar sem buscar. */
+  /**
+   * GIFs das comemorações que o estúdio já tem em mãos — reserva para quando
+   * o banco ainda não tem a lista de GIFs usados.
+   */
   recentes: GifCard[];
 }) {
   const [termo, setTermo] = useState('');
@@ -40,6 +45,8 @@ export function SecaoGif({
   const [carregando, setCarregando] = useState(false);
   const [aviso, setAviso] = useState<{ tipo: 'nao-configurado' | 'erro'; texto: string } | null>(null);
   const [salvas, setSalvas] = useState<BuscaSalva[]>([]);
+  const [usados, setUsados] = useState<GifCard[] | null>(null);
+  const [verTodosUsados, setVerTodosUsados] = useState(false);
   const pedidoRef = useRef(0);
   /** Último termo pedido — o atraso da digitação não repete o que o clique já buscou. */
   const termoPedidoRef = useRef<string | null>(null);
@@ -73,8 +80,9 @@ export function SecaoGif({
     let vivo = true;
     void (async () => {
       setCarregando(true);
-      const [res] = await Promise.all([gifsEmAlta(), recarregarSalvas()]);
+      const [res, listaUsados] = await Promise.all([gifsEmAlta(), listarGifsUsados(), recarregarSalvas()]);
       if (!vivo) return;
+      setUsados(listaUsados);
       tratar(res, false);
       setCarregando(false);
     })();
@@ -114,6 +122,8 @@ export function SecaoGif({
 
   const atual = r.design.gif;
   const atalhos = salvas.length > 0 ? salvas.map((s) => s.termo) : SUGESTOES;
+  const usadosLista = usados ?? recentes;
+  const usadosVisiveis = verTodosUsados ? usadosLista : usadosLista.slice(0, 8);
 
   return (
     <>
@@ -128,7 +138,7 @@ export function SecaoGif({
 
       <div className="space-y-1">
         <p className="text-[11px] font-medium text-muted-foreground">
-          {salvas.length > 0 ? 'Buscas salvas da equipe' : 'Experimente'}
+          {salvas.length > 0 ? 'Buscas já feitas (abrem na hora)' : 'Experimente'}
         </p>
         <div className="flex flex-wrap gap-1">
           {atalhos.map((t) => (
@@ -155,11 +165,19 @@ export function SecaoGif({
         </div>
       )}
 
-      {recentes.length > 0 && !buscado && (
+      {usadosLista.length > 0 && (
         <div className="space-y-1">
-          <p className="text-[11px] font-medium text-muted-foreground">Usados recentemente</p>
-          <div className="grid grid-cols-4 gap-1.5">
-            {recentes.slice(0, 4).map((g) => (
+          <div className="flex items-baseline justify-between">
+            <p className="text-[11px] font-medium text-muted-foreground">Usados recentemente · todas as equipes</p>
+            {usadosLista.length > 8 && (
+              <button type="button" onClick={() => setVerTodosUsados((v) => !v)}
+                className="text-[11px] text-muted-foreground hover:text-foreground">
+                {verTodosUsados ? 'Ver menos' : `Ver todos (${usadosLista.length})`}
+              </button>
+            )}
+          </div>
+          <div className="grid max-h-[220px] grid-cols-4 gap-1.5 overflow-y-auto pr-1">
+            {usadosVisiveis.map((g) => (
               <Miniatura key={g.id} gif={g} ativo={atual?.id === g.id} onClick={() => escolher(g)} />
             ))}
           </div>

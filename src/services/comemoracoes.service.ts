@@ -22,6 +22,7 @@ import { PREFIXO_MIDIAS, listarMidias } from './comemoracaoMidias.service';
 import {
   designDoJson, designParaJson, type DesignCard,
 } from '@/components/comemoracao2/design';
+import { musicaDoPlayer } from '@/components/comemoracao2/musicasDoPlayer';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,11 @@ export interface Comemoracao {
    * da própria comemoração — o som termina junto com o card.
    */
   som_inicio_s:  number;
+  /**
+   * Multiplicador do volume para o arquivo de `som_url`. 1 = como veio; a
+   * música do player traz o ganho que deixa todas na mesma altura.
+   */
+  som_ganho:     number;
   layout:        LayoutComemoracao;
   /** Arranjo escolhido (20260801a). Só rótulo — quem manda é `layout`. */
   modelo:        string;
@@ -238,7 +244,7 @@ export async function buscarComemoracoes(
   // funcionando como a de ontem em vez de quebrar.
   type Linha = Omit<
     Comemoracao,
-    | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
+    | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s' | 'som_ganho'
     | 'modelo' | 'anim_texto' | 'volume' | 'alvo_tipo' | 'equipe_id' | 'setor_id'
     | 'empresa_inteira' | 'finalizada_em' | 'equipes_alvo' | 'somente_equipe' | 'design'
   > & {
@@ -262,16 +268,21 @@ export async function buscarComemoracoes(
 
   const lista = ((data ?? []) as unknown as Linha[]).map((linha) => {
     const som = somDe(linha.som_midia_id);
+    const design = designDoJson(linha.design);
+    // Música do player: mora no próprio app. Faixa que saiu cai no som do catálogo.
+    const doPlayer = musicaDoPlayer(design?.somFaixa);
     return {
       ...linha,
       // O layout vem de uma coluna JSONB: pode ter qualquer coisa dentro, então
       // é saneado antes de chegar à tela.
       layout: layoutDoJson(linha.layout),
       // Também JSONB livre: saneado campo a campo. Ausente = comemoração 1.0.
-      design: designDoJson(linha.design),
+      design,
       gif_url: linha.gif_midia_id ? porId.get(linha.gif_midia_id)?.url ?? null : null,
-      som_url: som?.url ?? null,
-      som_inicio_s: Number(som?.inicio_s ?? 0),
+      som_url: doPlayer?.url ?? som?.url ?? null,
+      som_ganho: doPlayer?.ganho ?? 1,
+      // A 2.0 guarda o trecho escolhido para ESTA festa; sem ele, o ponto da música.
+      som_inicio_s: Number(design?.somInicioS ?? som?.inicio_s ?? 0),
       modelo:     linha.modelo     ?? 'midia_topo',
       anim_texto: linha.anim_texto ?? 'subir',
       // 100 = volume padrão de cada som. Banco sem a coluna soa como sempre.
@@ -300,6 +311,28 @@ export async function buscarComemoracoes(
     // desvio, e o relógio local serve — é o caso de quem nunca comemorou.
     agoraServidor: lista[0]?.criado_em ?? null,
   };
+}
+
+/**
+ * Nome da equipe ou do setor festejado, para o convite do parabéns ("A equipe
+ * Águias bateu a meta!").
+ *
+ * Guardado por 30 min: o nome muda quase nunca e cada tela da festa pergunta.
+ * Falha em silêncio (null): o convite fica genérico, a festa não para.
+ */
+export async function buscarNomeDoAlvo(tipo: 'equipe' | 'setor', id: string): Promise<string | null> {
+  return lerComCache(`comemoracoes:alvo:${tipo}:${id}`, 30 * 60_000, async () => {
+    const { data, error } = await supabase
+      .from(tipo === 'equipe' ? 'equipes' : 'setores')
+      .select('nome')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      logger.warn('[comemoracoes] erro ao ler nome do alvo:', error.message);
+      return null;
+    }
+    return (data as { nome?: string } | null)?.nome?.trim() || null;
+  }, { guardarSe: (nome) => !!nome });
 }
 
 /**

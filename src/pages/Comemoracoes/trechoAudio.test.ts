@@ -7,7 +7,9 @@
  * acontecer na frente do time.
  */
 import { describe, it, expect } from 'vitest';
-import { limitarInicio, sobraApos, formatarSegundos, SOBRA_MIN_S } from './trechoAudio';
+import {
+  limitarInicio, sobraApos, formatarSegundos, inicioMaximo, inicioPeloPonto, SOBRA_MIN_S,
+} from './trechoAudio';
 
 describe('limitarInicio', () => {
   it('ponto normal passa intacto', () => {
@@ -81,5 +83,26 @@ describe('formatarSegundos', () => {
   it('valor inválido vira 0:00 em vez de NaN na tela', () => {
     expect(formatarSegundos(NaN)).toBe('0:00');
     expect(formatarSegundos(-5)).toBe('0:00');
+  });
+});
+
+describe('inicioMaximo', () => {
+  it('a festa inteira cabe na música', () => {
+    expect(inicioMaximo(180, 15)).toBe(165);
+  });
+  it('música mais curta que a festa começa do zero', () => {
+    expect(inicioMaximo(10, 15)).toBe(0);
+    expect(inicioMaximo(NaN, 15)).toBe(0);
+  });
+});
+
+describe('inicioPeloPonto', () => {
+  it('o ponto clicado vira o meio do trecho', () => {
+    expect(inicioPeloPonto(0.5, 180, 20)).toBe(80);
+  });
+  it('não passa do começo nem do fim', () => {
+    expect(inicioPeloPonto(0, 180, 20)).toBe(0);
+    expect(inicioPeloPonto(1, 180, 20)).toBe(160);
+    expect(inicioPeloPonto(2, 180, 20)).toBe(160);
   });
 });

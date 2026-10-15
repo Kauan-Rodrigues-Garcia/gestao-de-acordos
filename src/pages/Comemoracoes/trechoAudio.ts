@@ -51,3 +51,29 @@ export function formatarSegundos(s: number): string {
   const minutos = Math.floor(total / 60);
   return `${minutos}:${String(total % 60).padStart(2, '0')}`;
 }
+
+/**
+ * Até onde dá para empurrar o começo com a festa inteira ainda tocando música.
+ *
+ * Festa de 15 s numa música de 3:00: o começo vai até 2:45. Música mais curta
+ * que a festa: começa do zero (o resto da festa fica em silêncio de qualquer
+ * jeito).
+ */
+export function inicioMaximo(duracaoTotalS: number, duracaoFestaS: number): number {
+  const total = Number.isFinite(duracaoTotalS) && duracaoTotalS > 0 ? duracaoTotalS : 0;
+  const festa = Number.isFinite(duracaoFestaS) && duracaoFestaS > 0 ? duracaoFestaS : 0;
+  if (!total || festa >= total) return 0;
+  return arredondar(total - festa);
+}
+
+/**
+ * Começo da janela quando a pessoa clica ou arrasta na linha do tempo:
+ * o ponto clicado vira o MEIO do trecho, que é onde o olho está.
+ */
+export function inicioPeloPonto(fracao: number, duracaoTotalS: number, duracaoFestaS: number): number {
+  const total = Number.isFinite(duracaoTotalS) && duracaoTotalS > 0 ? duracaoTotalS : 0;
+  if (!total) return 0;
+  const f = Number.isFinite(fracao) ? Math.min(1, Math.max(0, fracao)) : 0;
+  const bruto = f * total - duracaoFestaS / 2;
+  return arredondar(Math.min(inicioMaximo(total, duracaoFestaS), Math.max(0, bruto)));
+}

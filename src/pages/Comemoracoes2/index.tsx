@@ -11,6 +11,7 @@
  * validadas, e vivem nos mesmos módulos da 1.0.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MotionConfig } from 'framer-motion';
 import { ArrowLeft, Loader2, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,9 @@ import { drenarExpurgo, listarMidias } from '@/services/comemoracaoMidias.servic
 import type { Comemoracao } from '@/services/comemoracoes.service';
 import { estadoDe } from '@/pages/Comemoracoes/janela';
 import type { CloneVinculo } from '@/pages/Comemoracoes/clones';
+import {
+  alcanceDoCriador, comemoracoesNoAlcance, dadosNoAlcance, musicasNoAlcance,
+} from './alcance';
 import { Estudio } from './Estudio';
 import { Historico } from './Historico';
 import { rascunhoDeComemoracao, rascunhoInicial, type Rascunho } from './rascunho';
@@ -36,7 +40,7 @@ const HISTORICO_MS = 30 * 24 * 3_600_000;
 type Aba = 'criar' | 'historico';
 
 export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
-  const { perfil } = useAuth();
+  const { perfil, equipesLideradas } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
 
@@ -101,10 +105,28 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
     })();
   }, [habilitado, empresaId]);
 
+  // Líder e elite só enxergam e montam festa do próprio setor (`alcance.ts`).
+  const alcance = useMemo(() => alcanceDoCriador({
+    cargo: perfil?.perfil, setorId: perfil?.setor_id, equipesLideradas, equipes: dados.equipes,
+  }), [perfil?.perfil, perfil?.setor_id, equipesLideradas, dados.equipes]);
+
+  const dadosVisiveis = useMemo(() => {
+    // Músicas: quem tem setor vê as do próprio setor; quem não tem vê todas.
+    const setoresMusica = alcance.restrito
+      ? alcance.setores
+      : new Set(perfil?.setor_id ? [perfil.setor_id] : []);
+    return dadosNoAlcance({ ...dados, musicas: musicasNoAlcance(dados.musicas, setoresMusica, usuarioId) }, alcance);
+  }, [dados, alcance, perfil?.setor_id, usuarioId]);
+
+  const comemoracoesVisiveis = useMemo(
+    () => comemoracoesNoAlcance(comemoracoes, alcance, usuarioId),
+    [comemoracoes, alcance, usuarioId],
+  );
+
   const agora = agoraCorrigido();
   const ativas = useMemo(
-    () => comemoracoes.filter((c) => estadoDe(c, agora) !== 'finalizada').length,
-    [comemoracoes, agora],
+    () => comemoracoesVisiveis.filter((c) => estadoDe(c, agora) !== 'finalizada').length,
+    [comemoracoesVisiveis, agora],
   );
   const nomeDoMes = rotuloDoMes(mesAtual()).split(' ')[0];
 
@@ -122,7 +144,10 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
     );
   }
 
+  // As prévias animam mesmo no modo leve e com "reduzir movimento": é aqui que
+  // se escolhe a entrada e o efeito, e uma prévia parada não mostra nenhum.
   return (
+    <MotionConfig reducedMotion="never">
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -182,10 +207,11 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
           r={rascunho}
           mudar={mudar}
           substituir={setRascunho}
-          dados={dados}
+          dados={dadosVisiveis}
+          alcance={alcance}
           empresaId={empresaId}
           usuarioId={usuarioId}
-          comemoracoes={comemoracoes}
+          comemoracoes={comemoracoesVisiveis}
           agoraCorrigido={agoraCorrigido}
           nomeDoMes={nomeDoMes}
           aoEnviar={recarregar}
@@ -195,7 +221,7 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
 
       {aba === 'historico' && usuarioId && (
         <Historico
-          comemoracoes={comemoracoes}
+          comemoracoes={comemoracoesVisiveis}
           usuarioId={usuarioId}
           agoraCorrigido={agoraCorrigido}
           carregando={loading}
@@ -204,5 +230,6 @@ export default function Comemoracoes2({ onVoltar }: { onVoltar?: () => void }) {
         />
       )}
     </div>
+    </MotionConfig>
   );
 }
