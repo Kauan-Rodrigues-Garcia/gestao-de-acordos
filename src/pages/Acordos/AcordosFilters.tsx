@@ -46,7 +46,10 @@ export interface AcordosFiltersProps {
   setFiltroVinculo: (v: 'todos' | 'direto' | 'extra') => void;
   statusLabels: Record<string, string>;
   tipoLabels: Record<string, string>;
+  /** Nomes para o chip do filtro ativo (qualquer operador já visto). */
   operadoresMap: Record<string, string>;
+  /** As opções do seletor de operador: só quem está no setor/equipe em foco. */
+  operadoresDoFiltro: { id: string; nome: string }[];
   filtrosAtivosCount: number;
   temFiltros: boolean;
   isPP: boolean;
@@ -70,7 +73,7 @@ export function AcordosFilters({
   filtroData, setFiltroData, filtroOperador, setFiltroOperador,
   filtroVinculo, setFiltroVinculo,
   filtroTag, setFiltroTag, tagsDisponiveis,
-  statusLabels, tipoLabels, operadoresMap,
+  statusLabels, tipoLabels, operadoresMap, operadoresDoFiltro,
   filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
   setCurrentPage, limparFiltros,
   pixAbaAtiva, setPixAbaAtiva, onAbrirMensagens,
@@ -309,7 +312,7 @@ export function AcordosFilters({
                 <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos Operadores</SelectItem>
-                  {Object.entries(operadoresMap).map(([id, nome]) => (
+                  {operadoresDoFiltro.map(({ id, nome }) => (
                     <SelectItem key={id} value={id}>{nome}</SelectItem>
                   ))}
                 </SelectContent>

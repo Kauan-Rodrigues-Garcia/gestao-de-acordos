@@ -50,7 +50,7 @@ export interface FiltrosAcordo {
  * o filtro por equipe retornaria vazio. Dedup por Set. A tabela de clones é
  * tolerada como ausente (migration pendente) — cai só nos membros reais.
  */
-async function resolverOperadoresDaEquipe(
+export async function resolverOperadoresDaEquipe(
   equipe_id: string,
   empresa_id?: string,
 ): Promise<string[]> {

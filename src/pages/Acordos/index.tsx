@@ -18,6 +18,7 @@ import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { useTagsEmUso } from '@/hooks/useTagsEmUso';
 import { supabase, Acordo } from '@/lib/supabase';
+import { resolverOperadoresDaEquipe } from '@/services/acordos.service';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { valorDemaisParcelas } from '@/lib/money';
@@ -440,24 +441,59 @@ export default function Acordos() {
   // Lista do filtro de operador. O efeito acima só conhece quem aparece na
   // PÁGINA carregada — como dropdown de filtro isso é inútil: o operador que
   // você procura está justamente na página que você ainda não abriu. Aqui vem a
-  // lista do escopo inteiro, pelo mesmo recorte de setor do filtro de equipes.
+  // lista do escopo inteiro.
+  //
+  // Desde 14/10/2026 ela segue a cascata setor → equipe, e mora numa lista
+  // PRÓPRIA. Antes ela só somava nomes ao `operadoresMap` — o mesmo mapa que dá
+  // nome às linhas da tabela —, então o seletor oferecia a empresa inteira com
+  // um setor escolhido, e ainda acumulava quem tinha passado por outras páginas.
+  // Equipe usa `resolverOperadoresDaEquipe`, a mesma função que recorta os
+  // acordos: o seletor oferece exatamente quem a lista pode mostrar.
   const podeFiltrarPorUsuario = temPermissao('filtrar_por_usuario');
+  const [operadoresDoFiltro, setOperadoresDoFiltro] = useState<{ id: string; nome: string }[] | null>(null);
   useEffect(() => {
     if (!podeFiltrarPorUsuario || !empresa?.id) return;
-    if (!verTodosSetores && !perfil?.setor_id) return;
-    let q = supabase
-      .from('perfis')
-      .select('id, nome')
-      .eq('empresa_id', empresa.id)
-      .eq('ativo', true);
-    if (!verTodosSetores && perfil?.setor_id) q = q.eq('setor_id', perfil.setor_id);
-    q.order('nome').then(({ data }) => {
-      if (!data) return;
+    const setorDaVez = verTodosSetores ? filtroSetor : (perfil?.setor_id ?? null);
+    if (!verTodosSetores && !setorDaVez) return;
+    const empresaId = empresa.id;
+    let cancelado = false;
+
+    (async () => {
+      let q = supabase
+        .from('perfis')
+        .select('id, nome')
+        .eq('empresa_id', empresaId)
+        .eq('ativo', true);
+      if (equipeFiltroAtivo) {
+        const ids = await resolverOperadoresDaEquipe(equipeFiltroAtivo, empresaId);
+        if (cancelado) return;
+        if (ids.length === 0) { setOperadoresDoFiltro([]); return; }
+        q = q.in('id', ids);
+      } else if (setorDaVez) {
+        q = q.eq('setor_id', setorDaVez);
+      }
+      const { data } = await q.order('nome');
+      if (cancelado || !data) return;
+      const lista = data as { id: string; nome: string }[];
+      setOperadoresDoFiltro(lista);
       const map: Record<string, string> = {};
-      (data as { id: string; nome: string }[]).forEach(p => { map[p.id] = p.nome; });
+      lista.forEach(p => { map[p.id] = p.nome; });
       setOperadoresMap(prev => ({ ...prev, ...map }));
-    });
-  }, [podeFiltrarPorUsuario, empresa?.id, verTodosSetores, perfil?.setor_id]);
+    })();
+
+    return () => { cancelado = true; };
+  }, [podeFiltrarPorUsuario, empresa?.id, verTodosSetores, perfil?.setor_id, filtroSetor, equipeFiltroAtivo]);
+
+  // Trocar de setor ou de equipe solta o operador que saiu do recorte — mesma
+  // regra da equipe ao trocar de setor (efeito lá em cima). Sem isto a lista
+  // ficava vazia com um nome escolhido que o seletor já não oferece.
+  useEffect(() => {
+    if (!operadoresDoFiltro || !filtroOperador || filtroOperador === 'all') return;
+    if (!operadoresDoFiltro.some(o => o.id === filtroOperador)) {
+      setFiltroOperador('');
+      setCurrentPage(1);
+    }
+  }, [operadoresDoFiltro, filtroOperador]);
 
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje       = getTodayISO();
@@ -944,6 +980,7 @@ export default function Acordos() {
           filtroTag={filtroTag || 'all'} setFiltroTag={setFiltroTag}
           tagsDisponiveis={tagsDisponiveis}
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
+          operadoresDoFiltro={operadoresDoFiltro ?? []}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}
           isPP={isPP} usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
           temPermissao={temPermissao}
