@@ -34,6 +34,21 @@
  *
  * Autoclick com intervalo sorteado e mexendo o mouse passa pelo ritmo; aí só
  * sobra a velocidade e o teto. É detecção, não trava.
+ *
+ * ## Com o mouse mexendo (15/10/2026)
+ *
+ * O autoclick «esperto» sorteia o intervalo e deixa a pessoa mexer o mouse.
+ * Duas pistas fracas novas pegam o que a mão humana não faz:
+ *
+ *   arrasto    o clique cai no meio de um arrasto rápido (> 1.500 px/s). Gente
+ *              freia o mouse para clicar, até mirando em alvo que anda; o
+ *              autoclick clica no meio do movimento, sem ligar para a mão.
+ *   mirando    14+ cliques por segundo por 2,5 s COM o mouse andando. Mirando
+ *              num alvo que se mexe, gente cai para 4–8 por segundo; 10–12 é
+ *              quem treina; 14 sustentado mirando não é mão.
+ *
+ * São fracas (não entram na máscara `& 7` do banco): explicam-se sozinhas
+ * (touchpad, mão nervosa). Juntas, ou com outra pista, a conversa é outra.
  */
 
 export const MOTIVO = {
@@ -42,6 +57,8 @@ export const MOTIVO = {
   sintetico: 4,
   seguro: 8,
   parado: 16,
+  arrasto: 32,
+  mirando: 64,
 } as const;
 
 /** As pistas que contam como suspeita (o banco usa a mesma máscara: `& 7`). */
@@ -53,6 +70,8 @@ export const NOME_DO_MOTIVO: Readonly<Record<keyof typeof MOTIVO, string>> = {
   sintetico: 'clique por script',
   seguro: 'botão sempre igual',
   parado: 'mouse parado',
+  arrasto: 'clica no meio do arrasto',
+  mirando: 'rápido demais mirando',
 };
 
 export interface Clique {
@@ -64,7 +83,18 @@ export interface Clique {
   confiavel: boolean;
   /** Quanto o botão ficou apertado, em ms (null = ainda não soltou). */
   segurou: number | null;
+  /** Velocidade do mouse na hora do clique (px/s). Ausente: não medida. */
+  vel?: number;
 }
+
+/** Arrasto: velocidade de «passada» do mouse, e que fração dos cliques cai nela. */
+const ARRASTO_PX_S = 1_500;
+const ARRASTO_FRACAO = 0.6;
+const ARRASTO_MIN = 15;
+/** Mirando: tantos cliques em tanto tempo, com o mouse andando a pelo menos tanto. */
+const MIRANDO_CLIQUES = 35;
+const MIRANDO_MS = 2_500;
+const MIRANDO_PX_S = 150;
 
 /** Quantos cliques a análise olha, e de quanto tempo para trás. */
 export const JANELA_CLIQUES = 40;
@@ -129,7 +159,42 @@ export function analisarCliques(cliques: readonly Clique[]): number {
     seguidos = cliques[i].x === cliques[i - 1].x && cliques[i].y === cliques[i - 1].y ? seguidos + 1 : 1;
     if (seguidos >= PARADO_MIN) { bits |= MOTIVO.parado; break; }
   }
+  // Com o mouse mexendo: só os cliques que têm a velocidade medida.
+  const medidos = cliques.filter((c): c is Clique & { vel: number } => typeof c.vel === 'number');
+  if (medidos.length >= ARRASTO_MIN) {
+    const noArrasto = medidos.filter(c => c.vel >= ARRASTO_PX_S).length;
+    if (noArrasto / medidos.length >= ARRASTO_FRACAO) bits |= MOTIVO.arrasto;
+  }
+  for (let i = 0, j = 0; j < medidos.length; j++) {
+    while (medidos[j].t - medidos[i].t > MIRANDO_MS) i += 1;
+    if (j - i + 1 < MIRANDO_CLIQUES) continue;
+    const vels = medidos.slice(i, j + 1).map(c => c.vel).sort((a, b) => a - b);
+    if (vels[Math.floor(vels.length / 2)] >= MIRANDO_PX_S) { bits |= MOTIVO.mirando; break; }
+  }
   return bits;
+}
+
+/** Cliques por segundo no último segundo, e o pico em qualquer segundo da janela. */
+export function cliquesPorSegundo(cliques: readonly Pick<Clique, 't'>[], agora: number): { agora: number; pico: number } {
+  const noUltimo = cliques.filter(c => agora - c.t <= 1_000).length;
+  let pico = 0;
+  for (let i = 0, j = 0; j < cliques.length; j++) {
+    while (cliques[j].t - cliques[i].t > 1_000) i += 1;
+    pico = Math.max(pico, j - i + 1);
+  }
+  return { agora: noUltimo, pico };
+}
+
+/** A velocidade do mouse (px/s) na hora `t`, pelos últimos movimentos (~60 ms para trás). */
+export function velocidadeEm(movimentos: readonly { t: number; x: number; y: number }[], t: number, x: number, y: number): number | undefined {
+  for (let i = movimentos.length - 1; i >= 0; i--) {
+    const m = movimentos[i];
+    const dt = t - m.t;
+    if (dt < 40) continue;
+    if (dt > 160) return 0;
+    return (Math.hypot(x - m.x, y - m.y) / dt) * 1000;
+  }
+  return undefined;
 }
 
 export function nomesDosMotivos(bits: number): string[] {
@@ -227,26 +292,43 @@ export interface Detector {
   colher(): Colheita;
   /** O lote não entrou (freio): o que foi colhido volta para o próximo. */
   devolver(c: Colheita): void;
+  /** O agora, sem zerar nada: cliques por segundo, o pico e as pistas (o painel do laboratório). */
+  espiar(): { cps: number; pico: number; motivos: number };
   parar(): void;
 }
+
+/** Quantos movimentos do mouse guardar (só os últimos ~200 ms importam). */
+const MOVIMENTOS = 24;
 
 /**
  * Ouve os cliques da página inteira enquanto o chefão está na tela (na fase
  * de captura, sem atrapalhar ninguém) e guarda os últimos `JANELA_CLIQUES`.
+ * Ouve também o movimento do mouse, para saber a velocidade de cada clique.
  */
 export function criarDetector(alvo: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): Detector {
   const cliques: Clique[] = [];
+  const movimentos: { t: number; x: number; y: number }[] = [];
   const apertados = new Map<number, Clique>();
   let contados = 0;
   let devolvidos = 0;
+  let ultimo = 0;
 
+  const move = (e: Event) => {
+    const p = e as PointerEvent;
+    movimentos.push({ t: p.timeStamp, x: p.clientX, y: p.clientY });
+    if (movimentos.length > MOVIMENTOS) movimentos.shift();
+  };
   const desce = (e: Event) => {
     const p = e as PointerEvent;
     if (p.button !== 0) return;
-    const c: Clique = { t: p.timeStamp, x: p.clientX, y: p.clientY, confiavel: p.isTrusted, segurou: null };
+    const c: Clique = {
+      t: p.timeStamp, x: p.clientX, y: p.clientY, confiavel: p.isTrusted, segurou: null,
+      vel: velocidadeEm(movimentos, p.timeStamp, p.clientX, p.clientY) ?? 0,
+    };
     cliques.push(c);
     apertados.set(p.pointerId, c);
     contados += 1;
+    ultimo = p.timeStamp;
     const limite = p.timeStamp - JANELA_MS;
     while (cliques.length > JANELA_CLIQUES || (cliques.length > 0 && cliques[0].t < limite)) cliques.shift();
   };
@@ -258,6 +340,7 @@ export function criarDetector(alvo: Pick<Window, 'addEventListener' | 'removeEve
     c.segurou = Math.max(0, p.timeStamp - c.t);
   };
   const opcoes = { capture: true, passive: true } as const;
+  alvo.addEventListener('pointermove', move, opcoes);
   alvo.addEventListener('pointerdown', desce, opcoes);
   alvo.addEventListener('pointerup', sobe, opcoes);
 
@@ -272,7 +355,13 @@ export function criarDetector(alvo: Pick<Window, 'addEventListener' | 'removeEve
       contados += c.cliques;
       devolvidos |= c.suspeita;
     },
+    espiar() {
+      const agora = typeof performance !== 'undefined' ? performance.now() : ultimo;
+      const { agora: cps, pico } = cliquesPorSegundo(cliques, agora);
+      return { cps, pico, motivos: analisarCliques(cliques) };
+    },
     parar() {
+      alvo.removeEventListener('pointermove', move, opcoes);
       alvo.removeEventListener('pointerdown', desce, opcoes);
       alvo.removeEventListener('pointerup', sobe, opcoes);
     },

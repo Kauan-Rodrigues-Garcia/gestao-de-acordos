@@ -1,0 +1,251 @@
+/*
+ * chefona.css — o palco da Bruxa do Pântano (a bruxa do Minecraft) e as poções na página.
+ *
+ * A Press Start 2P não tem maiúscula com acento (FEITIÇO, GESTÃO): tudo daqui
+ * vai na Pixelify, menos o HEADSHOT, que é da fonte de fliperama como nos zumbis.
+ */
+.bxc-palco {
+  --bxc-texto: 'Pixelify Sans', ui-monospace, Consolas, monospace;
+  --bxc-arcade: 'Press Start 2P', ui-monospace, Consolas, monospace;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bxc-canvas { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
+.bxc-caixa {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* ── A barra de chefe (como a do jogo: nome branco em cima, barra roxa com
+      marcas a cada 10%) ─────────────────────────────────────────────────── */
+.bxc-barra {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: min(520px, 88vw);
+  transform: translateX(-50%);
+  font-family: var(--bxc-texto);
+  color: #ffffff;
+  text-align: center;
+  text-shadow: 2px 2px 0 #3f3f3f;
+}
+.bxc-nome { font-size: 15px; font-weight: 700; letter-spacing: .04em; margin-bottom: 4px; }
+.bxc-vida {
+  position: relative;
+  height: 16px;
+  border: 2px solid #0e0a12;
+  background: #3a1f4a;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .35);
+}
+.bxc-vida i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(#f0a0ff, #b040e0 45%, #7a1ab0);
+  transition: width .18s steps(3);
+}
+/* As marcas da barra (o «notched_10» da barra de chefe do jogo). */
+.bxc-vida::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(14, 10, 18, .7) calc(10% - 2px) 10%);
+  pointer-events: none;
+}
+.bxc-vida span { position: absolute; inset: 0; z-index: 1; font-size: 11px; line-height: 12px; font-weight: 700; }
+.bxc-tempo { margin-top: 4px; font-size: 12px; font-weight: 700; opacity: .9; }
+.bxc-barra.furia .bxc-vida i { background: linear-gradient(#ffb36a, #e0402a 60%, #a01a1a); animation: bxc-pulsa .4s steps(2) infinite; }
+.bxc-barra.furia .bxc-tempo { color: #ff8a6a; }
+@keyframes bxc-pulsa { 50% { filter: brightness(1.5); } }
+
+/* ── Letreiros e avisos ──────────────────────────────────────────────────── */
+.bxc-letreiro {
+  position: absolute;
+  font-family: var(--bxc-texto);
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #170f1f, -1px -1px 0 #170f1f;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: bxc-sobe 1.15s ease-out forwards;
+}
+.bxc-letreiro.hs { font-family: var(--bxc-arcade); font-size: 14px; color: #ff3a4a; }
+.bxc-letreiro.esquiva { color: #5ae0ff; }
+.bxc-letreiro.feitico { color: #e8b0ff; font-size: 20px; }
+.bxc-letreiro.dano { color: #ffe14d; font-size: 14px; }
+.bxc-letreiro.quebra { color: #ffd34d; font-size: 22px; }
+@keyframes bxc-sobe {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(.8); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -140%) scale(1); }
+}
+
+.bxc-aviso {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 18px 7px;
+  font-family: var(--bxc-texto);
+  color: #f4e9ff;
+  background: rgba(30, 10, 42, .92);
+  border: 2px solid #b040e0;
+  box-shadow: 0 0 0 2px #170f1f, 0 6px 0 rgba(0, 0, 0, .35);
+  white-space: nowrap;
+  animation: bxc-aviso 3.4s steps(1, end) forwards, bxc-aviso-entra .25s ease-out;
+}
+.bxc-aviso b { font-size: 18px; letter-spacing: .04em; color: #e8b0ff; }
+.bxc-aviso span { font-size: 13px; opacity: .9; }
+@keyframes bxc-aviso { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes bxc-aviso-entra { from { transform: translate(-50%, -12px); } }
+
+/* ── Os feitiços na página (ver feiticos.ts) ─────────────────────────────── */
+/* O original some com fonte zero e o novo entra NO FLUXO, com o tamanho que o
+   original tinha (`--bx-enf-fs`, medido na hora): o nome mais comprido empurra
+   a aba vizinha em vez de passar por cima dela. */
+.bx-enf-texto { font-size: 0 !important; }
+.bx-enf-texto::after {
+  content: attr(data-bx-feitico);
+  display: inline-block;
+  font-size: var(--bx-enf-fs, 14px);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bx-enf-negativo::after {
+  color: #e0263a;
+  text-shadow: 0 0 8px rgba(224, 38, 58, .45);
+  animation: bx-enf-treme .22s steps(2) infinite;
+}
+.bx-enf-aba::after {
+  color: #385dc6;
+  font-style: italic;
+  text-shadow: 0 0 6px rgba(56, 93, 198, .55);
+  animation: bx-enf-flutua 1.6s ease-in-out infinite;
+}
+.bx-enf-sumido { opacity: 0 !important; transition: opacity .45s ease-in; }
+@keyframes bx-enf-treme { 50% { transform: translateX(1px); } }
+@keyframes bx-enf-flutua { 50% { transform: translateY(-2px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .bx-enf-negativo::after, .bx-enf-aba::after, .bxc-barra.furia .bxc-vida i { animation: none; }
+}
+
+/* O Encantamento: as abas viram runas (os símbolos vêm das fontes do sistema). */
+.bx-enf-galatico::after {
+  color: #7a2ad0;
+  font-family: "Segoe UI Symbol", "Segoe UI Historic", Gadugi, Ebrima, "Yu Gothic", "Cambria Math", sans-serif;
+  letter-spacing: .08em;
+  text-shadow: 0 0 6px rgba(208, 138, 255, .85), 0 0 1px #170f1f;
+  animation: bx-enf-flutua 1.1s ease-in-out infinite;
+}
+
+/* A cura em andamento, à frente da vida, na barra. */
+.bxc-vida b {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: repeating-linear-gradient(90deg, rgba(255, 138, 138, .8) 0 4px, rgba(248, 36, 35, .4) 4px 8px);
+  transition: width .2s steps(3), left .18s steps(3);
+}
+.bxc-letreiro.cura { color: #ff8a8a; font-size: 16px; }
+
+/* ── A contagem antes dela (como a do Rei do Pop) ───────────────────────── */
+.bxc-contagem {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  font-family: var(--bxc-texto);
+  color: #f4e9ff;
+  background: rgba(30, 10, 42, .94);
+  border: 2px solid #b040e0;
+  box-shadow: 0 0 0 2px #170f1f, 0 6px 0 rgba(0, 0, 0, .35);
+  white-space: nowrap;
+  animation: bxc-aviso-entra .3s ease-out;
+}
+.bxc-contagem-cabeca { image-rendering: pixelated; flex: none; }
+.bxc-contagem-meio { display: grid; gap: 3px; }
+.bxc-contagem-titulo { font-size: 14px; font-weight: 700; letter-spacing: .08em; color: #fff; }
+.bxc-contagem-relogio {
+  font-family: var(--bxc-arcade);
+  font-size: 22px;
+  line-height: 1.1;
+  color: #e8b0ff;
+  text-shadow: 2px 2px 0 #3e1656;
+}
+.bxc-contagem-relogio.urgente { color: #ff5a5a; animation: bxc-pisca 1s steps(1, end) infinite; }
+.bxc-contagem-linha { font-size: 12px; opacity: .85; }
+@keyframes bxc-pisca { 50% { opacity: .35; } }
+
+.bxc-numerao {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  pointer-events: none;
+  font-family: var(--bxc-arcade);
+  font-size: 96px;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    6px 0 0 #3e1656, -6px 0 0 #3e1656, 0 6px 0 #3e1656, 0 -6px 0 #3e1656,
+    0 0 24px rgba(176, 64, 224, .8), 10px 10px 0 rgb(0 0 0 / .45);
+  animation: bxc-numerao 1s steps(10, end) forwards;
+}
+@keyframes bxc-numerao {
+  0%   { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+  15%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  75%  { transform: translate(-50%, -50%) scale(.9); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+}
+@media (max-width: 640px) {
+  .bxc-numerao { font-size: 64px; }
+  .bxc-contagem-relogio { font-size: 18px; }
+}
+
+/* ── A conquista (o aviso do canto do Minecraft) ────────────────────────── */
+.bxc-conquista {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  padding: 8px 14px 8px 10px;
+  font-family: var(--bxc-texto);
+  background: #212121;
+  border: 2px solid #555555;
+  box-shadow: 0 0 0 2px #0e0b14, inset 0 0 0 2px #121212, 0 6px 0 rgba(0, 0, 0, .35);
+  animation: bxc-conquista-entra .45s steps(6, end), bxc-conquista-sai .45s steps(6, end) 6s forwards;
+}
+.bxc-conquista-icone { width: 48px; height: 72px; flex: none; image-rendering: pixelated; object-fit: contain; }
+.bxc-conquista-texto { display: grid; gap: 2px; text-shadow: 2px 2px 0 #3f3f3f; }
+.bxc-conquista-texto b { font-size: 15px; color: #ff55ff; }
+.bxc-conquista-texto span { font-size: 15px; font-weight: 700; color: #ffffff; }
+.bxc-conquista-texto small { font-size: 12px; color: #aaaaaa; }
+@keyframes bxc-conquista-entra { from { transform: translateX(120%); } }
+@keyframes bxc-conquista-sai { to { transform: translateX(120%); } }
+@media (prefers-reduced-motion: reduce) {
+  .bxc-conquista { animation: none; }
+}

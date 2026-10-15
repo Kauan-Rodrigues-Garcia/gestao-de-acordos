@@ -15,9 +15,14 @@ import './laboratorio.css';
 import { BRUXAS, VOO, MS_POR_QUADRO } from './arte';
 import { ESCALA_BRUXAS, EU, PalcoBruxas, type EventoPalco } from './palco';
 import { montarFaixa, type DadosFaixa } from './faixa';
-import { quadrosDa } from './pixels';
+import { canvasDaImagem, quadrosDa } from './pixels';
 import { VELOCIDADES, type Dificuldade } from './voo';
 import type { Morte } from './queda';
+import { NOME_CHEFONA, QUADROS_FLUTUANDO, montarBruxaMC } from './chefona/arte';
+import { FEITICOS, LISTA_FEITICOS, alvosPorAtributo, type NomeFeitico } from './chefona/feiticos';
+import { MANOBRAS, NOME_MANOBRA, type Manobra } from './chefona/movimento';
+import { ESPERA_PADRAO_S, PalcoChefona, PRAZO_PADRAO_S, VIDA_PADRAO, type EventoChefona } from './chefona/palcoChefona';
+import { MOTIVOS_FORTES, criarDetector, nomesDosMotivos } from '../autoclick';
 
 const FONTES = `
 @font-face { font-family: 'Press Start 2P'; src: url('/fonts/press-start-2p.woff2') format('woff2'); font-display: swap; }
@@ -29,18 +34,25 @@ document.head.appendChild(estilo);
 
 // ── O fundo de mentira ─────────────────────────────────────────────────────
 
+/*
+ * As peças com `data-alvo-feitico` são onde a Bruxa do Pântano joga poção (ver
+ * `chefona/feiticos.ts`): os valores de recebido e de projeção ficam
+ * negativos, o menu e as abas de Acordos ganham nome do Minecraft, e as linhas da
+ * tabela somem. Na caça de verdade as telas do Gestão levam a mesma marca.
+ */
 const SISTEMA = `
 <div class="lb-app">
   <header class="lb-topo"><b>Gestão de Acordos</b><span>Painel do Líder</span><i></i></header>
-  <aside class="lb-menu">${['Início', 'Acordos', 'Analítico', 'Metas', 'Desafios', 'Usuários', 'Configurações'].map((m, i) => `<a class="${i === 1 ? 'ativo' : ''}">${m}</a>`).join('')}</aside>
+  <aside class="lb-menu">${['Início', 'Acordos', 'Analítico', 'Metas', 'Desafios', 'Usuários', 'Configurações'].map((m, i) => `<a class="${i === 1 ? 'ativo' : ''}"><span data-alvo-feitico="aba">${m}</span></a>`).join('')}</aside>
   <main class="lb-conteudo">
     <h1>Acordos do mês</h1>
+    <nav class="lb-abas">${['Todos', 'Pix Automático', 'Campanha Fácil', 'Mensagens'].map((a, i) => `<a class="${i === 0 ? 'ativo' : ''}"><span data-alvo-feitico="aba">${a}</span></a>`).join('')}</nav>
     <div class="lb-cartoes">
-      ${[['Recebido hoje', 'R$ 48.312,90'], ['Meta do mês', '72%'], ['Acordos fechados', '1.284'], ['Em atraso', '96']].map(([t, v]) => `<div class="lb-cartao"><span>${t}</span><b>${v}</b></div>`).join('')}
+      ${[['Recebido hoje', 'R$ 48.312,90', true], ['Projeção do mês', 'R$ 1.284.770,00', true], ['Meta do mês', '72%', false], ['Em atraso', '96', false]].map(([t, v, alvo]) => `<div class="lb-cartao"><span>${t}</span><b><span${alvo ? ' data-alvo-feitico="valor"' : ''}>${v}</span></b></div>`).join('')}
     </div>
     <table class="lb-tabela">
       <thead><tr><th>Operador</th><th>Equipe</th><th>Acordos</th><th>Recebido</th></tr></thead>
-      <tbody>${['Ana Souza', 'Bruno Lima', 'Carla Dias', 'Diego Alves', 'Elisa Rocha', 'Fábio Nunes', 'Gabi Torres'].map((n, i) => `<tr><td>${n}</td><td>Equipe ${1 + (i % 3)}</td><td>${40 + i * 7}</td><td>R$ ${(12000 + i * 1830).toLocaleString('pt-BR')},00</td></tr>`).join('')}</tbody>
+      <tbody>${['Ana Souza', 'Bruno Lima', 'Carla Dias', 'Diego Alves', 'Elisa Rocha', 'Fábio Nunes', 'Gabi Torres'].map((n, i) => `<tr data-alvo-feitico="linha"><td>${n}</td><td>Equipe ${1 + (i % 3)}</td><td>${40 + i * 7}</td><td><span data-alvo-feitico="valor">R$ ${(12000 + i * 1830).toLocaleString('pt-BR')},00</span></td></tr>`).join('')}</tbody>
     </table>
   </main>
 </div>`;
@@ -62,6 +74,35 @@ const PAINEL = `
   <button type="button" class="lb-titulo" data-acao="recolher">Laboratório das Bruxas <span>−</span></button>
   <div class="lb-corpo">
     <p class="lb-nota">Só no localhost · nada vai para o banco · clique na bruxa para atirar</p>
+    <p class="lb-rotulo">Chefona: a ${NOME_CHEFONA}</p>
+    <div class="lb-chefona-retrato"><canvas width="44" height="92"></canvas><span>A bruxa do Minecraft. Vida de time, joga poção na tela, bebe poção para desviar e se cura no caldeirão.</span></div>
+    <div class="lb-linha">
+      <button type="button" class="lb-btn principal" data-chefona="soltar">Soltar (contagem de 1 min)</button>
+      <button type="button" class="lb-btn" data-chefona="pular">Pular contagem</button>
+      <button type="button" class="lb-btn" data-chefona="ja">Soltar sem contagem</button>
+    </div>
+    <div class="lb-linha">
+      <button type="button" class="lb-btn" data-chefona="robos" aria-pressed="false">Robôs atirando</button>
+      <button type="button" class="lb-btn" data-chefona="arrancar">Arrancar 30%</button>
+      <button type="button" class="lb-btn" data-chefona="furia">Fúria</button>
+      <button type="button" class="lb-btn" data-chefona="curar">Caldeirão</button>
+    </div>
+    <div class="lb-linha">
+      <select class="lb-btn" data-escolha="feitico" aria-label="Qual poção">${LISTA_FEITICOS.map(f => `<option value="${f}">${FEITICOS[f].titulo}</option>`).join('')}</select>
+      <button type="button" class="lb-btn" data-chefona="conjurar">Jogar poção</button>
+    </div>
+    <div class="lb-linha">
+      <select class="lb-btn" data-escolha="manobra" aria-label="Qual manobra">${MANOBRAS.map(m => `<option value="${m}">${NOME_MANOBRA[m].replace('!', '').toLowerCase()}</option>`).join('')}</select>
+      <button type="button" class="lb-btn" data-chefona="manobrar">Manobrar</button>
+    </div>
+    <div class="lb-linha">
+      <button type="button" class="lb-btn" data-chefona="fugir">Tempo acabou</button>
+      <button type="button" class="lb-btn" data-chefona="limpar">Limpar a chefona</button>
+    </div>
+    <p class="lb-fps lb-chefona-estado">—</p>
+    <p class="lb-rotulo">Seus cliques (detector de autoclick)</p>
+    <p class="lb-fps lb-autoclick">—</p>
+    <p class="lb-rotulo">Bruxas comuns</p>
     <div class="lb-skins"></div>
     <p class="lb-nome"></p>
     <div class="lb-linha">
@@ -286,5 +327,106 @@ marcar('dif', 'dif', palco.dificuldade);
 trocarFundo('noite');
 mostrarPlacar();
 
-// Para o ensaio automático (Playwright): o palco fica à mão no console.
-(window as unknown as { palco: PalcoBruxas }).palco = palco;
+// ── A chefona ──────────────────────────────────────────────────────────────
+
+/** O último acontecimento da luta, para a linha de estado do painel. */
+let ultimoDaChefona = '';
+function aoEventoChefona(e: EventoChefona): void {
+  if (e.tipo === 'feitico') ultimoDaChefona = `poção: ${FEITICOS[e.feitico].titulo} (${Math.round(e.forca * 100)}%, ${Math.round(e.duracaoMs / 1000)} s)`;
+  else if (e.tipo === 'curou') ultimoDaChefona = `bebeu a Poção de Cura: vida ${e.vida}`;
+  else if (e.tipo === 'caldeiraoQuebrado') ultimoDaChefona = 'caldeirão quebrado';
+  else if (e.tipo === 'quebrou') ultimoDaChefona = `quebraram: ${FEITICOS[e.feitico].titulo}`;
+  else if (e.tipo === 'manobra') ultimoDaChefona = `manobra: ${NOME_MANOBRA[e.manobra]}`;
+  else if (e.tipo === 'furia') ultimoDaChefona = 'FÚRIA';
+  else if (e.tipo === 'derrotada') ultimoDaChefona = `derrotada em ${Math.round(e.segundos)} s`;
+  else if (e.tipo === 'fugiu') ultimoDaChefona = 'fugiu';
+  else if (e.tipo === 'conquista') ultimoDaChefona = `conquista: ${e.nome}`;
+  if (e.tipo === 'derrotada' || e.tipo === 'fugiu') pararRobos();
+}
+
+// As poções caem no fundo de mentira (a tela do «sistema»), e a Visão
+// Noturna pinta só ele: o painel do laboratório não muda de cor.
+const chefona = new PalcoChefona(raiz, {
+  alvos: alvosPorAtributo(() => fundo, () => fundo),
+  aoEvento: aoEventoChefona,
+});
+
+// O retrato dela no painel, com o nariz mexendo.
+const retratoChefona = painel.querySelector<HTMLCanvasElement>('.lb-chefona-retrato canvas')!;
+const quadrosChefona = Array.from({ length: QUADROS_FLUTUANDO }, (_, i) => canvasDaImagem(montarBruxaMC(i), false));
+let quadroChefona = 0;
+setInterval(() => {
+  quadroChefona = (quadroChefona + 1) % quadrosChefona.length;
+  const ctx = retratoChefona.getContext('2d')!;
+  ctx.clearRect(0, 0, retratoChefona.width, retratoChefona.height);
+  ctx.drawImage(quadrosChefona[quadroChefona], 0, 0);
+}, 160);
+
+let robos: ReturnType<typeof setInterval> | undefined;
+const botaoRobos = painel.querySelector<HTMLButtonElement>('[data-chefona="robos"]')!;
+function pararRobos(): void {
+  clearInterval(robos);
+  robos = undefined;
+  botaoRobos.setAttribute('aria-pressed', 'false');
+  botaoRobos.classList.remove('ativo');
+  botaoRobos.textContent = 'Robôs atirando';
+}
+
+painel.addEventListener('click', e => {
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-chefona]');
+  if (!el) return;
+  const escolha = (q: string) => painel.querySelector<HTMLSelectElement>(`[data-escolha="${q}"]`)!.value;
+  switch (el.dataset.chefona) {
+    case 'soltar':
+    case 'ja':
+      // O feitiço precisa de tela para cair: da noite, vai para o sistema claro.
+      if (fundo.classList.contains('lb-fundo-noite')) trocarFundo('claro');
+      pararRobos();
+      chefona.soltar({ vida: VIDA_PADRAO, prazoS: PRAZO_PADRAO_S, esperaS: el.dataset.chefona === 'ja' ? 0 : ESPERA_PADRAO_S });
+      break;
+    case 'pular': chefona.pularContagem(); break;
+    case 'curar': chefona.curar(); break;
+    case 'robos':
+      if (robos) pararRobos();
+      else {
+        robos = setInterval(() => chefona.tiroDeOutro(), 160);
+        el.setAttribute('aria-pressed', 'true');
+        el.classList.add('ativo');
+        el.textContent = 'Parar os robôs';
+      }
+      break;
+    case 'arrancar': chefona.arrancar(0.3); break;
+    case 'furia': chefona.enfurecer(); break;
+    case 'conjurar': chefona.conjurar(escolha('feitico') as NomeFeitico); break;
+    case 'manobrar': chefona.manobrar(escolha('manobra') as Manobra); break;
+    case 'fugir': pararRobos(); chefona.fugir(); break;
+    case 'limpar': pararRobos(); chefona.limpar(); break;
+  }
+});
+
+setInterval(() => {
+  const s = chefona.estado;
+  const linha = s.fase === 'fora'
+    ? `fora${ultimoDaChefona ? ` · ${ultimoDaChefona}` : ''}`
+    : s.fase === 'chegando'
+      ? `contagem: ${s.contagem} s`
+      : `${s.fase}${s.furia ? ' (fúria)' : ''} · vida ${s.vida}/${s.vidaMax} · rachaduras ${s.estagio}/3`
+        + ` · força das poções ${Math.round(s.forca * 100)}% · ${Math.ceil(s.restante)} s`
+        + `${s.caldeirao !== null ? ` · caldeirão ${s.caldeirao} tiros` : ''}`
+        + `${s.feiticos.length ? ` · ativos: ${s.feiticos.map(f => FEITICOS[f].titulo).join(', ')}` : ''}`
+        + `${ultimoDaChefona ? ` · ${ultimoDaChefona}` : ''}`;
+  painel.querySelector('.lb-chefona-estado')!.textContent = linha;
+  const a = detector.espiar();
+  const pistas = nomesDosMotivos(a.motivos);
+  const forte = (a.motivos & MOTIVOS_FORTES) !== 0 || pistas.length >= 2;
+  painel.querySelector('.lb-autoclick')!.textContent = `${a.cps}/s agora · pico ${a.pico}/s`
+    + (pistas.length ? ` · ${forte ? 'SUSPEITO' : 'pista'}: ${pistas.join(', ')}` : ' · limpo');
+}, 250);
+
+// O mesmo detector da luta do Rei do Pop, ouvindo esta página: dá para ver
+// as pistas acendendo clicando na bruxa com e sem autoclick.
+const detector = criarDetector();
+
+// Para o ensaio automático (Playwright): os palcos ficam à mão no console.
+(window as unknown as { palco: PalcoBruxas; chefona: PalcoChefona }).palco = palco;
+(window as unknown as { chefona: PalcoChefona }).chefona = chefona;

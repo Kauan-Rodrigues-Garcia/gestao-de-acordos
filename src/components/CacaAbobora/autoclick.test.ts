@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  MOTIVO, analisarCliques, avaliarFicha, criarDetector, normalizarFichas, ordenarFichas,
+  MOTIVO, analisarCliques, avaliarFicha, cliquesPorSegundo, criarDetector, normalizarFichas, ordenarFichas, velocidadeEm,
   type Clique, type FichaDeCliques,
 } from './autoclick';
 
@@ -165,5 +165,41 @@ describe('o detector na tela', () => {
     const a = alvoFalso();
     criarDetector(a as unknown as Window).parar();
     expect(a.ouvintes.size).toBe(0);
+  });
+});
+
+describe('com o mouse mexendo (15/10/2026)', () => {
+  it('gente mirando num alvo que anda: 6 a 8 por segundo, freando para clicar — nada', () => {
+    const rnd = sorteio(21);
+    const humano = cliques(40, () => 125 + (rnd() - 0.5) * 60, () => ({ vel: 80 + rnd() * 400, segurou: 70 + rnd() * 40 }));
+    expect(analisarCliques(humano) & (MOTIVO.arrasto | MOTIVO.mirando)).toBe(0);
+  });
+
+  it('autoclick de intervalo sorteado com o mouse passando rápido: clica no meio do arrasto', () => {
+    const rnd = sorteio(5);
+    const robo = cliques(30, () => 90 + rnd() * 60, () => ({ vel: 1_600 + rnd() * 1_500 }));
+    expect(analisarCliques(robo) & MOTIVO.arrasto).toBe(MOTIVO.arrasto);
+  });
+
+  it('14+ por segundo sustentado com o mouse andando: rápido demais mirando', () => {
+    const rnd = sorteio(9);
+    const robo = cliques(40, () => 60 + rnd() * 10, () => ({ vel: 300 + rnd() * 200 }));
+    expect(analisarCliques(robo) & MOTIVO.mirando).toBe(MOTIVO.mirando);
+    // A mesma rapidez com o mouse parado não é «mirando» (é outra pista).
+    const parado = cliques(40, () => 60 + rnd() * 10, () => ({ vel: 0 }));
+    expect(analisarCliques(parado) & MOTIVO.mirando).toBe(0);
+  });
+
+  it('as pistas novas são fracas: não entram na máscara do banco', () => {
+    expect((MOTIVO.arrasto | MOTIVO.mirando) & 7).toBe(0);
+  });
+
+  it('velocidade do mouse no clique e cliques por segundo', () => {
+    const mov = [{ t: 0, x: 0, y: 0 }, { t: 50, x: 30, y: 40 }, { t: 100, x: 60, y: 80 }];
+    expect(velocidadeEm(mov, 100, 60, 80)).toBeCloseTo(1_000, 0);
+    expect(velocidadeEm(mov, 400, 60, 80)).toBe(0);
+    expect(velocidadeEm([], 100, 0, 0)).toBeUndefined();
+    const cs = cliques(10, () => 100);
+    expect(cliquesPorSegundo(cs, cs[9].t)).toEqual({ agora: 10, pico: 10 });
   });
 });
