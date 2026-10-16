@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, fireEvent, within } from '@testing-library/react';
-import { MUSICAS, PADRAO, TEMAS_DE_TERROR } from './preferencias';
+import { GENEROS, GENERO_DA_MUSICA, MUSICAS, PADRAO, TEMAS_DE_TERROR } from './preferencias';
 import { EMBUTIDAS } from './faixas';
 
 const motor = vi.hoisted(() => ({
@@ -78,6 +78,27 @@ describe('seletor de faixas', () => {
     expect(screen.getByRole('tabpanel')).toHaveClass('overflow-y-auto');
     expect(screen.getByRole('textbox', { name: 'Buscar na lista' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Próxima página' })).toBeNull();
+  });
+
+  it('músicas separadas por gênero: títulos na lista e a fileira filtra (16/10/2026)', () => {
+    render(<PainelSomAmbiente />);
+    fireEvent.click(screen.getByRole('tab', { name: /Músicas/ }));
+    const painel = screen.getByRole('tabpanel');
+    for (const g of GENEROS) expect(within(painel).getByText(g.rotulo)).toBeInTheDocument();
+
+    const funks = MUSICAS.filter(id => GENERO_DA_MUSICA[id] === 'funk');
+    fireEvent.click(screen.getByRole('radio', { name: /^Funk/ }));
+    expect(faixasNaTela()).toHaveLength(funks.length);
+    expect(within(screen.getByRole('tabpanel')).getByText(EMBUTIDAS.malvadinho.nome)).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).queryByText(EMBUTIDAS.leao.nome)).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: /^Todos/ }));
+    expect(faixasNaTela()).toHaveLength(MUSICAS.length);
+  });
+
+  it('as músicas ficam agrupadas: cada gênero aparece num bloco só, na ordem de GENEROS', () => {
+    const ordem = MUSICAS.map(id => GENERO_DA_MUSICA[id]).filter((g, i, l) => i === 0 || l[i - 1] !== g);
+    expect(ordem).toEqual(GENEROS.map(g => g.id));
   });
 
   it('lista longa: todas numa lista só, com busca sem acento', () => {

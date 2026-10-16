@@ -122,6 +122,37 @@ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
     nome: 'Somebody That I Used To Know', descricao: 'Gotye, com Kimbra', capa: capa('somebody'), Icone: Music,
     cor: { fundo: 'hsl(36 10% 12%)', destaque: 'hsl(30 88% 56%)' },
   },
+  // As de 16/10/2026, capas do Spotify (oEmbed) e cores tiradas olhando a capa.
+  // A fumaça marrom do salão e o dourado do título.
+  famosoima: {
+    nome: 'Famoso Ímã | O Poderoso Chatão', descricao: 'MC Lele JP, MC Poze do Rodo e MC Leozinho ZS', capa: capa('famosoima'), Icone: Music,
+    cor: { fundo: 'hsl(28 25% 11%)', destaque: 'hsl(42 80% 58%)' },
+  },
+  // O céu e a represa, e o azul das letras.
+  penaporta: {
+    nome: 'É os Pé na Porta', descricao: 'MC Leozinho ZS · Dj Lv Mdp', capa: capa('penaporta'), Icone: Music,
+    cor: { fundo: 'hsl(205 35% 14%)', destaque: 'hsl(210 85% 62%)' },
+  },
+  // O fundo azul-royal e o azul do moletom.
+  termineicomaex: {
+    nome: 'Terminei com a Ex', descricao: 'MC Rick e Mc Leozin · Dj Caio Vieira', capa: capa('termineicomaex'), Icone: Music,
+    cor: { fundo: 'hsl(232 45% 14%)', destaque: 'hsl(228 80% 66%)' },
+  },
+  // A digital preta e o vermelho do título.
+  barulhodorock: {
+    nome: 'Escuta o Barulho do Rock', descricao: 'MC VK da VS · DJ Aimi, Moura DJ e DJ Modder', capa: capa('barulhodorock'), Icone: Music,
+    cor: { fundo: 'hsl(0 8% 10%)', destaque: 'hsl(0 85% 55%)' },
+  },
+  // Papel cinza e o vermelho de «Longe».
+  longedemagnata: {
+    nome: 'Longe de Magnata', descricao: 'MC Tuto, MC Vine7, MC Joãozinho VT e Borges · Deejhay RB', capa: capa('longedemagnata'), Icone: Music,
+    cor: { fundo: 'hsl(0 6% 12%)', destaque: 'hsl(358 80% 55%)' },
+  },
+  // A casa no escuro e a porta vermelha.
+  flexiona: {
+    nome: 'Flexiona / Poder da Gestão', descricao: 'Nagalli · Veigh, MC Tuto, G.A e MC Joãozinho VT', capa: capa('flexiona'), Icone: Music,
+    cor: { fundo: 'hsl(0 10% 8%)', destaque: 'hsl(358 75% 52%)' },
+  },
 };
 
 const COR_SPOTIFY: CorFaixa = { fundo: 'hsl(141 30% 11%)', destaque: 'hsl(141 70% 48%)' };
