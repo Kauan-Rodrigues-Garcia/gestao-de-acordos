@@ -12,8 +12,9 @@
  * aqui também.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowRightLeft, CalendarDays, CheckCircle2, Clock, History, Loader2, Pencil, Power, PowerOff,
+  ArrowRightLeft, CalendarDays, CheckCircle2, Clock, History, Loader2, NotebookPen, Pencil, Power, PowerOff,
   RefreshCw, Send, ThumbsDown, ThumbsUp, Trash2, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   enviosDoLote, listarOperadoresParaCampanha, mensagensDoLote, placarDosEnvios, situacaoDoLote, votosDoLote,
-  type EnvioResumo, type LoteCampanha, type PlacarOperador, type SituacaoLote,
+  type AvaliacaoDoOperador, type EnvioResumo, type LoteCampanha, type PlacarOperador, type SituacaoLote,
 } from './campanhaFacilEnvios.service';
 import { redistribuir, type MensagemDaCampanha, type OperadorCampanha } from './envios';
 import { mensagemUsaValores } from './regras-mensagem';
@@ -88,6 +89,18 @@ export function HistoricoCampanhas({ envios }: { envios: Envios }) {
   const [aberto, setAberto] = useState<LoteCampanha | null>(null);
   const [verTudo, setVerTudo] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
+
+  // A notificação da observação (20261016120000) traz `?campanha=<id>`: abre
+  // a campanha assim que o histórico chega, e tira o parâmetro da barra.
+  const [params, setParams] = useSearchParams();
+  const pedida = params.get('campanha');
+  useEffect(() => {
+    if (!pedida) return;
+    const l = historico.find((x) => x.id === pedida);
+    if (!l) return;
+    setAberto(l);
+    setParams((p) => { const x = new URLSearchParams(p); x.delete('campanha'); return x; }, { replace: true });
+  }, [pedida, historico, setParams]);
 
   const mesAtual = chaveMes({ lancada_em: new Date().toISOString() } as LoteCampanha);
   const doMes = historico.filter((l) => chaveMes(l) === mesAtual);
@@ -189,6 +202,14 @@ function LinhaLote({ l, onClick }: { l: LoteCampanha; onClick: () => void }) {
           <span className="inline-flex items-center gap-0.5 text-red-700 dark:text-red-400">
             <ThumbsDown className="h-3 w-3" />{n(l.votos_ruim)}
           </span>
+        </span>
+      )}
+      {!!l.observacoes && (
+        <span
+          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-amber-800 dark:text-amber-300"
+          title={`${n(l.observacoes)} ${l.observacoes === 1 ? 'observação' : 'observações'} da operação`}
+        >
+          <NotebookPen className="h-3 w-3" />{n(l.observacoes)}
         </span>
       )}
       <SeloSituacao s={situacaoDoLote(l)} />
@@ -336,14 +357,14 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
 
   // Quem votou o quê (13/10/2026). Também na encerrada: o voto sobrevive à
   // faxina. Relê quando a contagem muda ou o líder clica em Atualizar.
-  const [votos, setVotos] = useState<Map<string, boolean>>(new Map());
+  const [votos, setVotos] = useState<Map<string, AvaliacaoDoOperador>>(new Map());
   useEffect(() => {
     let vivo = true;
     votosDoLote(lote.id)
       .then((v) => { if (vivo) setVotos(v); })
       .catch((err) => console.warn('[CampanhaFacil] votos da campanha:', err));
     return () => { vivo = false; };
-  }, [lote.id, lote.votos_bom, lote.votos_ruim, atualizadoEm]);
+  }, [lote.id, lote.votos_bom, lote.votos_ruim, lote.observacoes, atualizadoEm]);
 
   const placar: Placar[] = aberta ? placarDosEnvios(enviosLote) : (lote.placar ?? []);
   const soma = placar.reduce(
@@ -398,6 +419,8 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
 
         <RetornoDaOperacao lote={lote} operadores={placar.length} />
 
+        <ObservacoesDaOperacao votos={votos} nomes={new Map(placar.map((o) => [o.operador_id, o.nome]))} />
+
         {/* Quem encaminhou */}
         <section className="space-y-2">
           <div className="flex items-center gap-2">
@@ -425,7 +448,13 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
             <p className="py-4 text-sm text-muted-foreground">Sem registro por operador.</p>
           ) : (
             <ul className="divide-y divide-border rounded-lg border border-border">
-              {placar.map((o) => <LinhaPlacar key={o.operador_id} o={o} voto={votos.get(o.operador_id)} />)}
+              {placar.map((o) => (
+                <LinhaPlacar
+                  key={o.operador_id} o={o}
+                  voto={votos.get(o.operador_id)?.bom ?? undefined}
+                  observou={!!votos.get(o.operador_id)?.observacao}
+                />
+              ))}
             </ul>
           )}
         </section>
@@ -550,8 +579,52 @@ function Numero({ rotulo, valor, tom }: { rotulo: string; valor: number; tom?: '
   );
 }
 
-/** `voto`: true = joinha, false = mão para baixo, undefined = não votou. */
-function LinhaPlacar({ o, voto }: { o: Placar; voto?: boolean }) {
+/**
+ * «Um texto diferente para o líder identificar» (16/10/2026, 20261016120000):
+ * a observação de cada operador vem num bilhete âmbar, com a borda grossa e o
+ * texto entre aspas, em itálico — não se confunde com a mensagem da campanha
+ * nem com os números. Some quando ninguém escreveu nada.
+ */
+function ObservacoesDaOperacao({ votos, nomes }: {
+  votos: Map<string, AvaliacaoDoOperador>;
+  nomes: Map<string, string>;
+}) {
+  const notas = [...votos.entries()]
+    .filter(([, v]) => !!v.observacao)
+    .sort((a, b) => (b[1].observado_em ?? '').localeCompare(a[1].observado_em ?? ''));
+  if (notas.length === 0) return null;
+  return (
+    <section className="space-y-2" aria-label="Observações da operação">
+      <div className="flex items-baseline gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          <NotebookPen className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Observações da operação
+        </h3>
+        <span className="text-xs text-muted-foreground">
+          {n(notas.length)} {notas.length === 1 ? 'pessoa escreveu' : 'pessoas escreveram'}
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {notas.map(([id, v]) => (
+          <li
+            key={id}
+            className="rounded-r-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2 dark:bg-amber-400/10"
+          >
+            <p className="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+              {nomes.get(id) ?? 'Operador'}
+              {v.bom === true && <ThumbsUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" aria-label="votou bom retorno" />}
+              {v.bom === false && <ThumbsDown className="h-3 w-3 text-red-600 dark:text-red-400" aria-label="votou sem retorno" />}
+              {v.observado_em && <span className="font-normal normal-case tracking-normal text-muted-foreground">{quando(v.observado_em)}</span>}
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm italic leading-relaxed text-foreground">“{v.observacao}”</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** `voto`: true = joinha, false = mão para baixo, undefined = não votou. `observou`: deixou observação. */
+function LinhaPlacar({ o, voto, observou }: { o: Placar; voto?: boolean; observou?: boolean }) {
   const faltam = Math.max(o.total - o.enviados - o.nao_enviados, 0);
   const pct = o.total > 0 ? Math.round((o.enviados / o.total) * 100) : 0;
   const completo = o.total > 0 && faltam === 0;
@@ -570,6 +643,11 @@ function LinhaPlacar({ o, voto }: { o: Placar; voto?: boolean }) {
         {voto === false && (
           <span className="inline-flex shrink-0 items-center rounded-full bg-red-500/10 p-1" title="Votou: sem retorno">
             <ThumbsDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-label="Votou sem retorno" />
+          </span>
+        )}
+        {observou && (
+          <span className="inline-flex shrink-0 items-center rounded-full bg-amber-500/15 p-1" title="Deixou observação — veja acima">
+            <NotebookPen className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" aria-label="Deixou observação" />
           </span>
         )}
         {o.repasse && <Badge variant="secondary" className="h-4 px-1 text-[10px]">repasse</Badge>}

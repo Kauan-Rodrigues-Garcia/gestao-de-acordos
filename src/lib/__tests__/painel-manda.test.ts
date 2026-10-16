@@ -189,6 +189,12 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'super_admin alterna entre as operações sem depender da flag nem da chave de cargo.',
   },
+  'pages/CampanhaFacil/campanhaFacilEnvios.service.ts': {
+    linhas: 1, familia: 'definicao-ou-dado',
+    motivo: 'marca a Elite com o rótulo «Elite» na lista de quem recebe a campanha (16/10/2026) — é dado da '
+      + 'pessoa listada, não decisão de acesso. Quem pode liberar segue no painel (`ver_campanha_facil`, '
+      + 'conferido por `fn_cf_pode_liberar`).',
+  },
   'App.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'ReactQueryDevtools. Ferramenta de desenvolvimento, não dado do produto — não há o que o painel governe aqui.',

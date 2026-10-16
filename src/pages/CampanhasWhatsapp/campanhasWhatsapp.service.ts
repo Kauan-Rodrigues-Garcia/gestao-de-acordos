@@ -51,15 +51,35 @@ export async function definirStatus(id: string, status: StatusContato): Promise<
 /** O voto do operador na campanha: `true` = bom retorno, `false` = não deu. */
 export type Avaliacao = boolean;
 
-/** Os votos desta pessoa nas campanhas dadas (a policy só devolve os dela). */
-export async function minhasAvaliacoes(loteIds: readonly string[]): Promise<Map<string, Avaliacao>> {
-  const mapa = new Map<string, Avaliacao>();
-  if (loteIds.length === 0) return mapa;
+/**
+ * Os votos e as observações desta pessoa nas campanhas dadas (a policy só
+ * devolve os dela). Desde 20261016120000 a linha pode ter só a observação,
+ * sem voto (`bom` nulo).
+ */
+export async function minhasAvaliacoes(loteIds: readonly string[]): Promise<{
+  votos: Map<string, Avaliacao>;
+  observacoes: Map<string, string>;
+}> {
+  const votos = new Map<string, Avaliacao>();
+  const observacoes = new Map<string, string>();
+  if (loteIds.length === 0) return { votos, observacoes };
   const { data, error } = await db.from('campanha_facil_avaliacoes')
-    .select('lote_id, bom').in('lote_id', [...new Set(loteIds)]);
+    .select('lote_id, bom, observacao').in('lote_id', [...new Set(loteIds)]);
   if (error) throw error;
-  for (const r of (data ?? []) as { lote_id: string; bom: boolean }[]) mapa.set(r.lote_id, r.bom);
-  return mapa;
+  for (const r of (data ?? []) as { lote_id: string; bom: boolean | null; observacao?: string | null }[]) {
+    if (r.bom !== null) votos.set(r.lote_id, r.bom);
+    if (r.observacao) observacoes.set(r.lote_id, r.observacao);
+  }
+  return { votos, observacoes };
+}
+
+/** O máximo da observação — o mesmo `CHECK` do banco. */
+export const LIMITE_OBSERVACAO = 500;
+
+/** Grava a observação para o líder; texto vazio apaga (20261016120000). */
+export async function observarCampanha(loteId: string, texto: string): Promise<void> {
+  const { error } = await db.rpc('fn_campanha_facil_observar', { p_lote: loteId, p_texto: texto });
+  if (error) throw error;
 }
 
 /** `null` tira o voto. */

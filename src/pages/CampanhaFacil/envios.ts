@@ -28,6 +28,11 @@ export interface OperadorCampanha {
    * que fica em «Sem equipe».
    */
   equipes_lider?: { id: string; nome: string }[];
+  /**
+   * Cargo Elite (16/10/2026). Entra como operador — começa marcado e cai no
+   * rodízio —, só com o «Elite» na linha de baixo para o líder reconhecer.
+   */
+  elite?: boolean;
 }
 
 /** Filtro de equipe do passo 3: `todas`, `sem` (sem equipe) ou o id da equipe. */

@@ -43,6 +43,9 @@ function legenda(o: OperadorCampanha, umaEquipe: boolean): { texto: string; lide
     if (umaEquipe || equipes.length === 0) return { texto: equipes.length ? 'Líder' : 'Líder do setor', lider: true };
     return { texto: `Líder · ${equipes.join(', ')}`, lider: true };
   }
+  if (o.elite) {
+    return { texto: umaEquipe || !o.equipe_nome ? 'Elite' : `Elite · ${rotuloEquipe(o.equipe_nome)}`, lider: true };
+  }
   if (umaEquipe || !o.equipe_nome) return null;
   return { texto: rotuloEquipe(o.equipe_nome), lider: false };
 }

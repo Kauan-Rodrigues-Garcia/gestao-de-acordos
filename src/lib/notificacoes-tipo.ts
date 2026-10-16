@@ -178,7 +178,8 @@ const REGRAS: readonly Regra[] = [
   // líder (texto livre), que pode conter «pix», «acordo», «extra»… e cairia em
   // qualquer regra abaixo.
   {
-    casa: (_t, r) => r.startsWith('/campanha-facil/envio/') || r.startsWith('/campanhas-whatsapp'),
+    // `/campanha-facil?campanha=` é a observação do operador para o líder (20261016120000).
+    casa: (_t, r) => r.startsWith('/campanha-facil') || r.startsWith('/campanhas-whatsapp'),
     tipo: { categoria: 'campanha', urgencia: 'atencao' },
   },
 
