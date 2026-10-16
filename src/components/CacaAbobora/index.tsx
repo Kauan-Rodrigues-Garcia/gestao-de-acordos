@@ -17,6 +17,10 @@
  * quando ele está na tela. A regra está em `chefao.ts` e na migration
  * 20261009120000.
  *
+ * A chefona das bruxas (a Bruxa do Pântano, 15/10/2026) vem do mesmo jeito:
+ * `bruxas/chefona/CenaChefona.tsx`, com a regra em `bruxas/chefona/banco.ts`
+ * e na migration 20261015230000.
+ *
  * No localhost há ainda o laboratório (`?zumbis` no endereço): solta zumbis de
  * mentira, sem banco, para ver tudo funcionando. Fora do `npm run dev` ele nem
  * existe no pacote.
@@ -27,6 +31,7 @@ import { comNovaTentativa, precarregarQuandoOcioso } from '@/lib/sobDemanda';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { aboboraNaTela, faixaNaTela, useCacaAbobora } from './caca';
 import { EU_NO_ENSAIO, chefaoNaTela, useChefao, useChefaoDesligado } from './chefao';
+import { chefonaNaTela, useChefona } from './bruxas/chefona/banco';
 
 export { BotaoChefao } from './BotaoChefao';
 
@@ -46,6 +51,10 @@ const FaixaBruxas = lazy(() => carregarFaixaBruxas().then(m => ({ default: m.Fai
 const carregarChefao = comNovaTentativa(() => import('./cenaChefao'));
 const CenaChefao = lazy(() => carregarChefao().then(m => ({ default: m.CenaChefao })));
 
+// A chefona das bruxas (15/10/2026): a regra em `bruxas/chefona/banco.ts`.
+const carregarChefona = comNovaTentativa(() => import('./bruxas/chefona/CenaChefona'));
+const CenaChefona = lazy(() => carregarChefona().then(m => ({ default: m.CenaChefona })));
+
 /**
  * Os pedaços da caça descem quando o app abre, com a tela já assentada — não
  * na hora em que a bruxa sai (Cleber, 14/10/2026: o site caiu nas duas bruxas).
@@ -58,7 +67,7 @@ const CenaChefao = lazy(() => carregarChefao().then(m => ({ default: m.CenaChefa
  * abertura, o pedaço é da mesma versão da aba e já está na memória quando a
  * rodada chega: deploy depois disso não pega ninguém.
  */
-const PEDACOS_DA_CACA = [carregarCena, carregarBruxas, carregarFaixaBruxas, carregarChefao] as const;
+const PEDACOS_DA_CACA = [carregarCena, carregarBruxas, carregarFaixaBruxas, carregarChefao, carregarChefona] as const;
 
 const Laboratorio = import.meta.env.DEV ? lazy(() => import('./laboratorio')) : null;
 const comLaboratorio = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('zumbis');
@@ -119,9 +128,43 @@ export function AboboraDaCaca({ empresaId }: { empresaId: string | null | undefi
           <CenaBruxas rodada={daBruxa} naTela={naTela && tema === 'bruxas'} eu={eu} />
         </Suspense>
       )}
-      <ChefaoDaCaca />
+      <ChefesDaCaca />
       {Laboratorio && comLaboratorio() && <Suspense fallback={null}><Laboratorio /></Suspense>}
     </>
+  );
+}
+
+/**
+ * Os chefes: o Rei do Pop (zumbis) e a Bruxa do Pântano (bruxas). Quem está
+ * na tela e se é o super_admin (o volume e os botões dele) saem daqui, uma vez.
+ * Quem escondeu o chefão (o X no meio da barra do topo) não vê nenhum dos dois.
+ */
+function ChefesDaCaca() {
+  const auth = useAuthOpcional();
+  const usuario = auth?.user?.id ?? null;
+  const superAdmin = auth?.perfil?.perfil === 'super_admin';
+  const desligado = useChefaoDesligado(auth?.perfil?.id);
+  if (desligado) return null;
+  return (
+    <>
+      <ChefaoDaCaca usuario={usuario} superAdmin={superAdmin} />
+      <ChefonaDaCaca usuario={usuario} superAdmin={superAdmin} />
+    </>
+  );
+}
+
+/** A chefona: montada quando ela aparece, e assim fica até ela cair ou fugir e o ranking fechar. */
+function ChefonaDaCaca({ usuario, superAdmin }: { usuario: string | null; superAdmin: boolean }) {
+  const rodada = useChefona();
+  const ativa = chefonaNaTela(rodada, Date.now());
+  const [cena, setCena] = useState<number | null>(null);
+  useEffect(() => { if (ativa && rodada) setCena(rodada.id); }, [ativa, rodada]);
+  const acabar = useCallback(() => setCena(null), []);
+  if (!rodada || cena !== rodada.id) return null;
+  return (
+    <Suspense fallback={null}>
+      <CenaChefona key={rodada.id} rodada={rodada} eu={rodada.id < 0 ? EU_NO_ENSAIO : usuario} superAdmin={superAdmin} aoAcabar={acabar} />
+    </Suspense>
   );
 }
 
@@ -129,18 +172,13 @@ export function AboboraDaCaca({ empresaId }: { empresaId: string | null | undefi
  * O chefão: montado quando ele aparece, e assim fica (com a chave da rodada)
  * até ele cair ou fugir e o ranking fechar.
  */
-function ChefaoDaCaca() {
+function ChefaoDaCaca({ usuario, superAdmin }: { usuario: string | null; superAdmin: boolean }) {
   const rodada = useChefao();
-  const auth = useAuthOpcional();
-  const usuario = auth?.user?.id ?? null;
-  const superAdmin = auth?.perfil?.perfil === 'super_admin';
-  // Quem escondeu o chefão (o X no meio da barra do topo) não vê nada dele.
-  const desligado = useChefaoDesligado(auth?.perfil?.id);
   const ativo = chefaoNaTela(rodada, Date.now());
   const [cena, setCena] = useState<number | null>(null);
   useEffect(() => { if (ativo && rodada) setCena(rodada.id); }, [ativo, rodada]);
   const acabar = useCallback(() => setCena(null), []);
-  if (!rodada || cena !== rodada.id || desligado) return null;
+  if (!rodada || cena !== rodada.id) return null;
   return (
     <Suspense fallback={null}>
       <CenaChefao key={rodada.id} rodada={rodada} eu={rodada.id < 0 ? EU_NO_ENSAIO : usuario} superAdmin={superAdmin} aoAcabar={acabar} />

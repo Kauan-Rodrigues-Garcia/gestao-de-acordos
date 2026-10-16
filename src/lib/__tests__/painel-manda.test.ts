@@ -154,9 +154,10 @@ const EXCECOES: Record<string, Excecao> = {
   'components/CacaAbobora/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo:
-      'o chefão da caça (09/10/2026) é do super_admin como a própria caça (o cartão dela em Configurações '
-      + 'também é): só ele vê o botão «Recuperar vida» e ouve o chefão a 100% — operador fica a 12%. '
-      + 'Não libera tela nem dado: quem decide são as RPCs `fn_chefao_*`, que conferem fn_user_is_super_admin().',
+      'os chefes da caça (o Rei do Pop, 09/10/2026, e a Bruxa do Pântano, 15/10/2026) são do super_admin como a '
+      + 'própria caça (o cartão dela em Configurações também é): só ele vê os botões «Recuperar vida», «Poção de '
+      + 'Cura» e «Totem» e ouve os chefes a 100% — operador fica a 12%. Não libera tela nem dado: quem decide são '
+      + 'as RPCs `fn_chefao_*` e `fn_chefona_*`, que conferem fn_user_is_super_admin().',
   },
   'pages/AdminSetoresAba.tsx': {
     linhas: 1, familia: 'chave-mestra',

@@ -243,7 +243,7 @@ export function ordenarRanking(rs: readonly Golpeador[]): Golpeador[] {
  * - Mesma rodada com versão menor: aviso atrasado, ignorado.
  * - Acabada (derrotado ou fugiu) não volta a «ativo».
  */
-export function juntarChefao(atual: RodadaChefao | null, nova: RodadaChefao): RodadaChefao | null {
+export function juntarChefao<R extends RodadaChefao>(atual: R | null, nova: R): R | null {
   if (!atual) return nova;
   if (nova.id < atual.id) return atual;
   if (nova.id > atual.id) return nova;

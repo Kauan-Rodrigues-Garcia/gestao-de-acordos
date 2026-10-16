@@ -18,6 +18,10 @@ import {
 import { BRUXAS } from './bruxas/arte';
 import { ESPERA_S, PRAZO_MIN, ensaioArrancar, ensaioCurarChefao, ensaioFugir, ensaioLimparChefao, ensaioPularContagem, ensaioRobos, ensaioSoltarChefao } from './chefao';
 import { CHEFAO } from './chefaoArte';
+import {
+  ESPERA_S as ESPERA_CHEFONA_S, PRAZO_MIN as PRAZO_CHEFONA_MIN, curarChefona, ensaioArrancarChefona, ensaioFugirChefona,
+  ensaioLimparChefona, ensaioPularContagemChefona, ensaioRobosChefona, ensaioSoltarChefona, estadoChefona, protegerChefona,
+} from './bruxas/chefona/banco';
 import { ZUMBIS } from './zumbis';
 import { SpriteZumbi } from './SpriteZumbi';
 import './caca.css';
@@ -26,7 +30,14 @@ export default function Laboratorio() {
   const [aberto, setAberto] = useState(true);
   const [zumbi, setZumbi] = useState(0);
   const [robos, setRobos] = useState(false);
+  const [robosChefona, setRobosChefona] = useState(false);
   const [bruxa, setBruxa] = useState(0);
+  /** A Poção de Cura e o Totem do ensaio passam pelo mesmo caminho do botão do super_admin. */
+  const naChefona = (fn: (id: number) => Promise<{ erro: string | null }>) => {
+    const r = estadoChefona();
+    if (!r) { toast('Solte a chefona antes'); return; }
+    void fn(r.id).then(({ erro }) => { if (erro) toast(erro); });
+  };
   // A faixa de ensaio leva a foto de quem está logado: é a foto que o banco
   // grava (`perfis.foto_url`) quando a pessoa mata de verdade.
   const foto = useAuthOpcional()?.perfil?.foto_url ?? null;
@@ -102,6 +113,25 @@ export default function Laboratorio() {
             </button>
             <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioFugir(); }}>Fugir</button>
             <button type="button" className="zb-lab-btn" onClick={() => { setRobos(false); ensaioLimparChefao(); }}>Limpar</button>
+          </div>
+          <p className="zb-lab-rotulo">Chefona: a Bruxa do Pântano (com a vida «do banco» de mentira)</p>
+          <div className="zb-lab-botoes">
+            <button type="button" className="zb-lab-btn principal" onClick={() => { setRobosChefona(false); ensaioSoltarChefona(300, PRAZO_CHEFONA_MIN, ESPERA_CHEFONA_S, 60); }}>Soltar a chefona</button>
+            <button type="button" className="zb-lab-btn" onClick={ensaioPularContagemChefona}>Pular contagem</button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobosChefona(false); ensaioSoltarChefona(300, PRAZO_CHEFONA_MIN, 0, 60); }}>Soltar sem contagem</button>
+            <button
+              type="button"
+              className="zb-lab-btn"
+              aria-pressed={robosChefona}
+              onClick={() => { ensaioRobosChefona(!robosChefona); setRobosChefona(!robosChefona); }}
+            >
+              {robosChefona ? 'Parar os robôs' : 'Robôs atirando'}
+            </button>
+            <button type="button" className="zb-lab-btn" onClick={() => ensaioArrancarChefona(0.3)}>Arrancar 30%</button>
+            <button type="button" className="zb-lab-btn" onClick={() => naChefona(curarChefona)}>Poção de Cura</button>
+            <button type="button" className="zb-lab-btn" onClick={() => naChefona(protegerChefona)}>Totem</button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobosChefona(false); ensaioFugirChefona(); }}>Fugir</button>
+            <button type="button" className="zb-lab-btn" onClick={() => { setRobosChefona(false); ensaioLimparChefona(); }}>Limpar</button>
           </div>
         </div>
       )}

@@ -102,7 +102,8 @@ export function AcordosFilters({
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
-            {tab.label}
+            {/* A Poção Estranha da chefona das bruxas troca o nome (só visual). */}
+            <span data-alvo-feitico="aba">{tab.label}</span>
           </button>
         ))}
 
@@ -117,7 +118,7 @@ export function AcordosFilters({
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
-            <Zap className="w-3.5 h-3.5" /> Pix Automático
+            <Zap className="w-3.5 h-3.5" /> <span data-alvo-feitico="aba">Pix Automático</span>
           </button>
         )}
       </div>

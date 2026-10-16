@@ -1,6 +1,6 @@
 /**
  * BotaoChefao.tsx — o X no meio da barra do topo: esconder ou mostrar o
- * chefão (o Rei do Pop zumbi).
+ * chefão (o Rei do Pop zumbi) e a chefona (a Bruxa do Pântano).
  *
  * Pedido de 09/10/2026: «um botão de desativar o Michael Jackson caso a pessoa
  * não quiser ver» — e, na mesma tarde, que fosse um X no MEIO da barra do topo,
@@ -8,28 +8,32 @@
  * fácil»). Era um chapéu ao lado do botão de música, e um X no placar; ficou
  * um botão só.
  *
- * Aparece enquanto há um chefão — da contagem até o fim. Escondido, a pessoa
- * não vê a contagem, nem ele, nem o ranking, e não ouve nada dele; o X fica,
- * com «Mostrar o chefão», para ela voltar. A escolha fica guardada para ela
- * neste navegador (`chefao.ts`, «Não quero ver o chefão») e vale também para o
- * próximo chefão.
+ * Aparece enquanto há um chefe — da contagem até o fim. Escondido, a pessoa
+ * não vê a contagem, nem o chefe, nem o ranking, e não ouve nada dele; o X
+ * fica, com «Mostrar o chefão», para ela voltar. A escolha fica guardada para
+ * ela neste navegador (`chefao.ts`, «Não quero ver o chefão») e vale também
+ * para o próximo — e, desde 15/10/2026, para a chefona das bruxas também.
  */
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { chefaoNaTela, desligarChefao, useChefao, useChefaoDesligado } from './chefao';
+import { chefonaNaTela, useChefona } from './bruxas/chefona/banco';
 
 export function BotaoChefao({ perfilId, className }: { perfilId: string | null | undefined; className?: string }) {
   const desligado = useChefaoDesligado(perfilId);
   const chefao = useChefao();
-  if (!perfilId || !chefaoNaTela(chefao, Date.now())) return null;
+  const chefona = useChefona();
+  const bruxa = chefonaNaTela(chefona, Date.now());
+  if (!perfilId || (!chefaoNaTela(chefao, Date.now()) && !bruxa)) return null;
+  const quem = bruxa ? 'a Bruxa do Pântano' : 'o Rei do Pop zumbi';
 
   function virar() {
     if (!perfilId) return;
     desligarChefao(perfilId, !desligado);
-    toast(desligado ? 'O chefão voltou para a sua tela 🕺' : 'Chefão escondido', {
+    toast(desligado ? (bruxa ? 'A chefona voltou para a sua tela 🧙' : 'O chefão voltou para a sua tela 🕺') : 'Chefão escondido', {
       description: desligado
-        ? 'Você vê ele dançando, ouve a música e entra no ranking.'
-        : 'Você não vê nem ouve o Rei do Pop zumbi. Clique no X de novo para voltar.',
+        ? `Você vê ${quem}, ouve o som e entra no ranking.`
+        : `Você não vê nem ouve ${quem}. Clique no X de novo para voltar.`,
     });
   }
 
@@ -38,7 +42,7 @@ export function BotaoChefao({ perfilId, className }: { perfilId: string | null |
     <button
       type="button"
       onClick={virar}
-      title={desligado ? 'O chefão está escondido para você — clique para mostrar' : 'Esconder o chefão (o Rei do Pop zumbi)'}
+      title={desligado ? 'O chefão está escondido para você — clique para mostrar' : `Esconder o chefão (${quem})`}
       aria-label={rotulo}
       aria-pressed={desligado}
       className={cn(

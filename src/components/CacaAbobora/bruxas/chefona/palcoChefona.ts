@@ -38,9 +38,12 @@
  *   que voam para a barra. Toda poção ativa se desfaz na hora.
  * - Prazo acabou: ela gargalha e vai embora.
  *
- * Por enquanto vive no laboratório (`../laboratorio.ts`), sem banco: a vida
- * é desta tela. Na caça de verdade a vida será do banco, compartilhada, como
- * a do Rei do Pop (`../../chefao.ts`).
+ * No laboratório (`../laboratorio.ts`) a vida é desta tela. Na caça de
+ * verdade (`CenaChefona.tsx`, 15/10/2026) a vida é do BANCO, a mesma para
+ * todos (`banco.ts`): o palco recebe uma `FonteDoBanco` e passa a só mostrar
+ * — a vida vem dela a cada quadro, a morte, o totem e a cura acontecem quando
+ * o banco diz, e o prazo é o do banco. A bruxa voando, as poções e os desvios
+ * continuam desta tela.
  */
 import { furo } from '../../furo';
 import { somAcerto, somCerebro, somTiro, somTique } from '../../sons';
@@ -114,7 +117,7 @@ const CHANCE_DESVIO_FURIA = 0.12;
 const FOLGA_MANOBRA_S = 2.2;
 /** A Poção de Cura: quanto da vida ela devolve e quanto tempo ela leva bebendo (o gole do jogo é 1,6 s). */
 export const CURA_FRACAO = 0.22;
-const BEBER_S = 1.8;
+export const BEBER_S = 1.8;
 /** A cor da Poção de Cura (a da Vida Instantânea do jogo). */
 const COR_CURA = '#f82423';
 /** O feitiço de proteção: quanto tempo ela leva erguendo o totem. */
@@ -122,7 +125,7 @@ const PROTEGER_S = 1.3;
 /** O totem salvou: a Absorção (fração da vida máxima, a parte dourada) e a Regeneração. */
 export const ABSORCAO_FRACAO = 0.1;
 export const REGEN_FRACAO = 0.15;
-const REGEN_S = 8;
+export const REGEN_S = 8;
 /** A conquista de quem ajudou a derrubar a chefona (o desafio do Minecraft). */
 export const CONQUISTA = {
   titulo: 'Desafio concluído!',
@@ -179,10 +182,23 @@ export type EventoChefona =
   | { tipo: 'fugiu' }
   | { tipo: 'conquista'; nome: string };
 
+/**
+ * A vida de todos (a caça de verdade): o palco lê a cada quadro e mostra; o
+ * tiro desta tela vai para quem comanda, que junta em lote e manda ao banco.
+ */
+export interface FonteDoBanco {
+  /** O que a barra mostra agora: vida e Absorção (já sem os meus tiros a caminho), a máxima e o tempo que falta. */
+  ler(): { vida: number; vidaMax: number; absorcao: number; restanteS: number };
+  /** Um tiro DESTA tela acertou: o dano dele e se foi na cabeça. */
+  aoAcertar(dano: number, critico: boolean): void;
+}
+
 export interface OpcoesChefona {
   escala?: number;
   alvos?: AlvosFeitico;
   aoEvento?: (e: EventoChefona) => void;
+  /** Com o banco, a vida é dele (ver `FonteDoBanco`). Sem, é desta tela (o laboratório). */
+  banco?: FonteDoBanco;
 }
 
 /** ponto, cruz, estrela (o brilho), espiral (a partícula de efeito de poção). */
@@ -354,6 +370,11 @@ export class PalcoChefona {
   private readonly escala: number;
   private readonly alvos: AlvosFeitico;
   private readonly aoEvento?: (e: EventoChefona) => void;
+  private readonly banco?: FonteDoBanco;
+  /** O tempo que falta, pelo banco (com ele). */
+  private restanteBanco = 0;
+  /** A próxima leitura do banco é a primeira desta luta. */
+  private primeiraLeitura = true;
   private larg = 0;
   private alt = 0;
   private observador: ResizeObserver | null = null;
@@ -412,6 +433,7 @@ export class PalcoChefona {
     this.escala = opcoes.escala ?? ESCALA_CHEFONA;
     this.alvos = opcoes.alvos ?? alvosPorAtributo();
     this.aoEvento = opcoes.aoEvento;
+    this.banco = opcoes.banco;
     this.raiz = document.createElement('div');
     this.raiz.className = 'bxc-palco';
     this.canvas = document.createElement('canvas');
@@ -446,6 +468,8 @@ export class PalcoChefona {
     el.style.display = 'none';
     el.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
+      // Na caça de verdade, clique de script não vira tiro (o detector de autoclick anota).
+      if (this.banco && !e.isTrusted) return;
       e.preventDefault();
       e.stopPropagation();
       aoTiro(e.clientX, e.clientY);
@@ -523,6 +547,11 @@ export class PalcoChefona {
     if (this.fase === 'chegando') this.chegaEm = performance.now();
   }
 
+  /** Com o banco: a contagem segue a hora de chegada dele (`solta_em`), não a desta tela. */
+  chegarEm(segundos: number): void {
+    if (this.fase === 'chegando') this.chegaEm = performance.now() + Math.max(0, segundos) * 1000;
+  }
+
   private entrar(): void {
     this.desmontarContagem();
     this.tempo = 0;
@@ -532,6 +561,7 @@ export class PalcoChefona {
     this.regen = null;
     this.cura = null;
     this.estagioVisto = 0;
+    this.primeiraLeitura = true;
     this.ajudei = false;
     this.proximoFeitico = PRIMEIRO_FEITICO_S;
     this.proximoForte = PRIMEIRO_FORTE_S;
@@ -582,12 +612,22 @@ export class PalcoChefona {
     this.fazerManobra(m);
   }
 
-  /** Ela bebe a Poção de Cura (quem escolhe a hora é quem comanda: o botão). */
-  curar(): void {
-    if (!this.corpo || !['voando', 'entrando'].includes(this.fase) || this.vida >= this.vidaMax) return;
+  /**
+   * Ela bebe a Poção de Cura (quem escolhe a hora é quem comanda: o botão).
+   * Com o banco, ele já decidiu quanto (`total`) e quando: `decorridoS` é o
+   * quanto do gole já passou (o aviso chega um pouco depois).
+   */
+  curar(o: { total?: number; decorridoS?: number } = {}): void {
+    if (!this.corpo) return;
+    const pode = this.banco ? ['voando', 'entrando', 'conjurando', 'tonta'] : ['voando', 'entrando'];
+    if (!pode.includes(this.fase)) return;
+    if (!this.banco && this.vida >= this.vidaMax) return;
+    // Com o banco, a cura vale de todo jeito: a poção que ela preparava fica para depois.
+    if (this.conjuro) { this.conjuro = null; this.encerrarMesa(); }
     this.corpo.manobra = null;
     this.corpo.visivel = true;
-    this.iniciarCura();
+    this.iniciarCura(o.total);
+    if (this.cura && o.decorridoS) this.cura.t = Math.min(BEBER_S * 0.9, Math.max(0, o.decorridoS));
   }
 
   /** O feitiço de proteção: ela ergue o Totem da Imortalidade e passa a segurá-lo. */
@@ -596,6 +636,24 @@ export class PalcoChefona {
     this.corpo.manobra = null;
     this.corpo.visivel = true;
     this.iniciarProtecao();
+  }
+
+  /** Com o banco: segurando o totem ou não, sem a cena de erguer (quem chega no meio). */
+  definirProtegida(v: boolean): void {
+    if (this.fase !== 'protegendo') this.protegida = v;
+  }
+
+  /** Com o banco: o golpe fatal pegou o totem. `regen` é a Regeneração que o banco devolveu. */
+  totemEstourou(regen: number): void {
+    if (!this.corpo || !this.atingivel()) return;
+    this.usarTotem(regen);
+  }
+
+  /** Com o banco: ela caiu (vida zero lá). */
+  derrubar(): void {
+    if (this.fase === 'chegando') { this.limpar(); return; }
+    if (!this.corpo || !this.atingivel()) return;
+    this.derrotar();
   }
 
   enfurecer(): void {
@@ -800,6 +858,7 @@ export class PalcoChefona {
     if (this.fase === 'tonta') dano *= MULT_TONTA;
     this.tirarVida(dano);
     if (meu) this.ajudei = true;
+    if (meu) this.banco?.aoAcertar(dano, alvo === 'cabeca');
     this.doer();
     // O empurrão do golpe, como no jogo (só voando: na manobra e na cura ela está presa ao caminho).
     const corpo = this.corpo!;
@@ -847,6 +906,8 @@ export class PalcoChefona {
 
   private depoisDoDano(): void {
     if (this.vida <= 0) {
+      // Com o banco, quem diz se ela caiu (ou se o totem a salvou) é ele.
+      if (this.banco) { this.vida = 0; return; }
       if (this.protegida) this.usarTotem(); else this.derrotar();
       return;
     }
@@ -908,9 +969,9 @@ export class PalcoChefona {
 
   // ── A Poção de Cura ──────────────────────────────────────────────────────
 
-  private iniciarCura(): void {
+  private iniciarCura(total?: number): void {
     const corpo = this.corpo!;
-    this.cura = { t: 0, total: Math.min(this.vidaMax * CURA_FRACAO, this.vidaMax - this.vida), proximoGole: 0 };
+    this.cura = { t: 0, total: total ?? Math.min(this.vidaMax * CURA_FRACAO, this.vidaMax - this.vida), proximoGole: 0 };
     this.mudarFase('curando');
     somGargalhada();
     this.aviso('Ela vai beber a Poção de Cura!', 'Atirem nela enquanto ela bebe');
@@ -940,8 +1001,9 @@ export class PalcoChefona {
   /** O último gole: a Vida Instantânea, de uma vez, com as espirais vermelhas. */
   private terminarCura(): void {
     const corpo = this.corpo!;
-    const ganho = Math.max(0, Math.min(this.cura!.total, this.vidaMax - this.vida));
-    this.vida += ganho;
+    // Com o banco, a vida já subiu lá: a barra mostra no último gole (`vidaPorAparecer`).
+    const ganho = this.banco ? this.cura!.total : Math.max(0, Math.min(this.cura!.total, this.vidaMax - this.vida));
+    if (!this.banco) this.vida += ganho;
     this.cura = null;
     somCura();
     setTimeout(somGargalhada, 300);
@@ -995,12 +1057,15 @@ export class PalcoChefona {
    * sobe girando no meio da tela, as partículas verdes e amarelas explodem e o
    * mob fica com 1 de vida, Absorção e Regeneração.
    */
-  private usarTotem(): void {
+  private usarTotem(regenDoBanco?: number): void {
     const corpo = this.corpo!;
     this.protegida = false;
-    this.vida = 1;
-    this.absorcao = this.vidaMax * ABSORCAO_FRACAO;
-    const total = this.vidaMax * REGEN_FRACAO;
+    // Com o banco, a vida e a Absorção já vêm dele: aqui é a cena e o ritmo da Regeneração.
+    if (!this.banco) {
+      this.vida = 1;
+      this.absorcao = this.vidaMax * ABSORCAO_FRACAO;
+    }
+    const total = regenDoBanco ?? this.vidaMax * REGEN_FRACAO;
     this.regen = { resta: total, porSegundo: total / REGEN_S, proximoNumero: 0.8 };
     // A poção que ela preparava e a que bebia se perdem no susto.
     if (this.conjuro) { this.conjuro = null; this.encerrarMesa(); }
@@ -1045,7 +1110,7 @@ export class PalcoChefona {
     const corpo = this.corpo;
     if (!r || !corpo) return;
     const ganho = Math.min(r.resta, r.porSegundo * dt, this.vidaMax - this.vida);
-    this.vida += ganho;
+    if (!this.banco) this.vida += ganho;
     r.resta -= r.porSegundo * dt;
     r.proximoNumero -= dt;
     if (r.proximoNumero <= 0) {
@@ -1058,7 +1123,7 @@ export class PalcoChefona {
         vida: entre(0.6, 1), cor: sorteia(CORES_REGEN), tam: 1, g: 0, forma: 'espiral',
       });
     }
-    if (r.resta <= 0 || this.vida >= this.vidaMax) this.regen = null;
+    if (r.resta <= 0 || (!this.banco && this.vida >= this.vidaMax)) this.regen = null;
   }
 
   // ── As poções ────────────────────────────────────────────────────────────
@@ -1376,9 +1441,11 @@ export class PalcoChefona {
     if (this.fase === 'chegando') { this.passoContagem(); return; }
     const corpo = this.corpo;
     const z = this.zona();
+    if (this.banco && corpo && this.atingivel()) this.sincronizarComBanco();
     if (corpo && this.atingivel()) {
       this.tempo += dt;
-      if (this.tempo >= this.prazo) this.fugir();
+      // Com o banco, o prazo é dele: quem comanda chama `fugir()`.
+      if (!this.banco && this.tempo >= this.prazo) this.fugir();
     }
     if (corpo) {
       switch (this.fase) {
@@ -1476,6 +1543,33 @@ export class PalcoChefona {
     this.moverParticulas(dt);
     this.atualizarBarra();
     this.posicionarCaixas();
+  }
+
+  /**
+   * A vida do banco, a cada quadro. Se ela desceu sem tiro desta tela, foi o
+   * time: ela fica vermelha, e o dano conta para quebrar a poção que ela
+   * prepara (sem som: com cem pessoas atirando, o «hmf» não pararia).
+   */
+  private sincronizarComBanco(): void {
+    const b = this.banco!.ler();
+    this.vidaMax = Math.max(1, b.vidaMax);
+    this.restanteBanco = b.restanteS;
+    const queda = this.vida + this.absorcao - (b.vida + b.absorcao);
+    this.vida = b.vida;
+    this.absorcao = b.absorcao;
+    // A primeira leitura (quem chegou no meio da luta) só acerta o número: as
+    // rachaduras já estão lá, sem o «crec» de cada uma.
+    if (this.primeiraLeitura) {
+      this.primeiraLeitura = false;
+      this.estagioVisto = this.estagio;
+      if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria();
+      return;
+    }
+    if (queda > 0.5) {
+      this.dorAte = performance.now() + DOR_MS;
+      if (this.conjuro) this.conjuro.dano += queda;
+      this.depoisDoDano();
+    }
   }
 
   /** As espirais da poção entrando na garrafa enquanto ela prepara. */
@@ -1588,7 +1682,7 @@ export class PalcoChefona {
     const texto = `${Math.max(0, Math.ceil(this.vida))}${dourada} / ${this.vidaMax}`;
     const span = this.barra.querySelector('.bxc-vida span')!;
     if (span.textContent !== texto) span.textContent = texto;
-    const resta = Math.max(0, Math.ceil(this.prazo - this.tempo));
+    const resta = Math.max(0, Math.ceil(this.banco ? this.restanteBanco : this.prazo - this.tempo));
     const relogio = `${Math.floor(resta / 60)}:${String(resta % 60).padStart(2, '0')}`;
     const tempo = this.barra.querySelector('.bxc-tempo')!;
     const linha = this.furia ? `FÚRIA · ${relogio}` : relogio;

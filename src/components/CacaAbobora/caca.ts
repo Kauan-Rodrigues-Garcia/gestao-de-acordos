@@ -32,6 +32,7 @@ import { supabase } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { lerComCache } from '@/lib/cacheCurto';
 import { EU_NO_ENSAIO, aceitarChefao, lerChefao } from './chefao';
+import { aceitarChefona, lerChefona } from './bruxas/chefona/banco';
 
 export type SituacaoRodada = 'solta' | 'achada' | 'sumiu';
 
@@ -255,18 +256,23 @@ function assinar(empresaId: string): () => void {
   if (!canal) {
     void lerUltimaNaEntrada().catch((): void => undefined);
     void lerChefao().catch((): void => undefined);
-    // O chefão (`chefao.ts`) fala no mesmo tópico, com o sinal `chefao`.
+    void lerChefona().catch((): void => undefined);
+    // O chefão (`chefao.ts`) fala no mesmo tópico, com o sinal `chefao`; a
+    // chefona das bruxas (`bruxas/chefona/banco.ts`, 15/10/2026), com o sinal
+    // `chefona`. Um canal só para os três.
     const cancelar = assinarTabela(
-      { topico: `abobora:${empresaId}`, escutas: [{ sinal: 'abobora' }, { sinal: 'chefao' }] },
+      { topico: `abobora:${empresaId}`, escutas: [{ sinal: 'abobora' }, { sinal: 'chefao' }, { sinal: 'chefona' }] },
       {
         onSinal: (payload, sinal) => {
           if (sinal === 'chefao') aceitarChefao(payload);
+          else if (sinal === 'chefona') aceitarChefona(payload);
           else aceitarRodada(payload, true);
         },
         // Avisos do intervalo se perderam: a última rodada diz onde estamos.
         onReconectado: () => {
           void lerUltima().catch((): void => undefined);
           void lerChefao().catch((): void => undefined);
+          void lerChefona().catch((): void => undefined);
         },
       },
     );

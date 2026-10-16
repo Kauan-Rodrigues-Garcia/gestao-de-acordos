@@ -19,9 +19,11 @@
  *
  * Os dois temas são separados (Cleber, 14/10/2026): com bruxas, o cartão
  * mostra as bruxas (desenho, cores, palavras) e o chefão some — o Rei do Pop
- * é do tema zumbi.
+ * é do tema zumbi. No lugar dele, a CHEFONA (15/10/2026): a Bruxa do Pântano,
+ * solta do mesmo jeito (`CacaAbobora/bruxas/chefona/banco.ts`, migration
+ * 20261015230000). Um chefe de cada vez: o botão de um espera o outro sair.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Bot, Crosshair, Loader2, Music2, RefreshCw, Skull, Sparkles, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +48,12 @@ import {
   type RodadaChefao,
 } from '@/components/CacaAbobora/chefao';
 import { ordenarFichas, type Avaliacao, type FichaDeCliques, type Nivel } from '@/components/CacaAbobora/autoclick';
+import {
+  DIFICULDADES_CHEFONA, ESPERA_S as ESPERA_CHEFONA_S, PRAZO_MIN as PRAZO_CHEFONA_MIN, chefonaChegando, chefonaNaTela,
+  lerSuspeitosChefona, motivoDoErroDaChefona, soltarChefona, useChefona,
+} from '@/components/CacaAbobora/bruxas/chefona/banco';
+import { cabecaMC } from '@/components/CacaAbobora/bruxas/chefona/arte';
+import { canvasDaImagem } from '@/components/CacaAbobora/bruxas/pixels';
 import { cn } from '@/lib/utils';
 
 const FUSO = 'America/Sao_Paulo';
@@ -165,7 +173,14 @@ const NOME_DO_NIVEL: Readonly<Record<Nivel, string>> = { suspeito: 'suspeito', a
  * Quem parece estar atirando de autoclick no chefão (pedido de 09/10/2026).
  * É pista, não prova: o selo diz o porquê, e a decisão é do super_admin.
  */
-function SuspeitosDoChefao({ rodada, ativo }: { rodada: RodadaChefao; ativo: boolean }) {
+function SuspeitosDoChefao({ rodada, ativo, lerFichas = lerSuspeitos, semMigration = /fn_chefao_suspeitos|PGRST202|schema cache/, migration = '20261009120000' }: {
+  rodada: Pick<RodadaChefao, 'id'>;
+  ativo: boolean;
+  /** De qual chefe: o Rei do Pop (padrão) ou a chefona das bruxas. */
+  lerFichas?: (id: number) => Promise<{ fichas: FichaDeCliques[]; erro: string | null }>;
+  semMigration?: RegExp;
+  migration?: string;
+}) {
   const [aberto, setAberto] = useState(false);
   const [lendo, setLendo] = useState(false);
   const [lista, setLista] = useState<{ ficha: FichaDeCliques; avaliacao: Avaliacao }[] | null>(null);
@@ -173,11 +188,11 @@ function SuspeitosDoChefao({ rodada, ativo }: { rodada: RodadaChefao; ativo: boo
 
   const ler = useCallback(async () => {
     setLendo(true);
-    const r = await lerSuspeitos(rodada.id);
+    const r = await lerFichas(rodada.id);
     setLendo(false);
     setErro(r.erro);
     if (!r.erro) setLista(ordenarFichas(r.fichas));
-  }, [rodada.id]);
+  }, [rodada.id, lerFichas]);
 
   useEffect(() => { setLista(null); setErro(null); }, [rodada.id]);
   useEffect(() => {
@@ -214,7 +229,7 @@ function SuspeitosDoChefao({ rodada, ativo }: { rodada: RodadaChefao; ativo: boo
       </p>
       {erro && (
         <p className="mt-1 text-[11px] text-red-600">
-          {/fn_chefao_suspeitos|PGRST202|schema cache/.test(erro) ? 'O banco ainda não tem a lista (migration 20261009120000).' : erro}
+          {semMigration.test(erro) ? `O banco ainda não tem a lista (migration ${migration}).` : erro}
         </p>
       )}
       {lista && lista.length === 0 && <p className="mt-1 text-[11px] text-muted-foreground">Ninguém atirou ainda.</p>}
@@ -249,6 +264,9 @@ function SecaoChefao() {
   const [soltando, setSoltando] = useState(false);
   const ativo = chefaoNaTela(chefao, Date.now()) && (chefao?.id ?? 0) > 0;
   const ultimo = chefao && chefao.id > 0 ? chefao : null;
+  // Dois chefes ao mesmo tempo, não: com a chefona das bruxas na tela, ele espera.
+  const chefona = useChefona();
+  const bruxaNaTela = chefonaNaTela(chefona, Date.now()) && (chefona?.id ?? 0) > 0;
 
   async function soltar() {
     setSoltando(true);
@@ -312,7 +330,12 @@ function SecaoChefao() {
             </button>
           ))}
         </div>
-        <Button size="sm" variant="outline" className="gap-1.5" disabled={ativo || soltando} onClick={() => setConfirmando(true)}>
+        <Button
+          size="sm" variant="outline" className="gap-1.5"
+          disabled={ativo || bruxaNaTela || soltando}
+          title={bruxaNaTela ? 'A Bruxa do Pântano está na tela: espere ela cair ou fugir' : undefined}
+          onClick={() => setConfirmando(true)}
+        >
           <Music2 className="h-3.5 w-3.5" /> Soltar o chefão
         </Button>
       </div>
@@ -346,6 +369,143 @@ function SecaoChefao() {
       </AlertDialog>
     </div>
   );
+}
+
+/**
+ * A chefona das bruxas (15/10/2026): a Bruxa do Pântano, solta como o Rei do
+ * Pop. Escolher a vida, soltar, e o resultado da última. A Poção de Cura e o
+ * Totem são botões no placar dela, na tela, só para o super_admin. Ver
+ * `CacaAbobora/bruxas/chefona/banco.ts` e a migration 20261015230000.
+ */
+function SecaoChefona() {
+  const chefona = useChefona();
+  const chefao = useChefao();
+  const [nivel, setNivel] = useState(1);
+  const dificuldade = DIFICULDADES_CHEFONA[nivel];
+  const [confirmando, setConfirmando] = useState(false);
+  const [soltando, setSoltando] = useState(false);
+  const ativa = chefonaNaTela(chefona, Date.now()) && (chefona?.id ?? 0) > 0;
+  const ultima = chefona && chefona.id > 0 ? chefona : null;
+  // Dois chefes ao mesmo tempo, não (o banco também recusa).
+  const reiNaTela = chefaoNaTela(chefao, Date.now()) && (chefao?.id ?? 0) > 0;
+
+  async function soltar() {
+    setSoltando(true);
+    const { erro } = await soltarChefona(dificuldade);
+    setSoltando(false);
+    setConfirmando(false);
+    if (erro) {
+      toast.error('Não deu para soltar a chefona', { description: motivoDoErroDaChefona(erro) });
+      return;
+    }
+    toast.success('Contagem começou 🧙', { description: `A Bruxa do Pântano chega em ${ESPERA_CHEFONA_S / 60} minuto na tela de todo mundo, e fica ${PRAZO_CHEFONA_MIN} minutos.` });
+  }
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <div className="flex items-start gap-3">
+        <CabecaDaChefona />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold">Chefona: a Bruxa do Pântano</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            A bruxa do Minecraft. Antes, 1 minuto de contagem na tela de todos. Depois, todo mundo atira junto na
+            mesma vida: cabeça é crítico, e quem bate enquanto ela prepara a poção tira mais e pode quebrar a
+            garrafa. Ela voa, desvia e joga poção na tela (só visual: nada muda nos dados). Fica {PRAZO_CHEFONA_MIN} minutos;
+            se ninguém derrubar, ela foge. No fim, o ranking. Na tela, você tem os botões da Poção de Cura e do Totem.
+          </p>
+          {ultima && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {ativa && chefonaChegando(ultima, Date.now())
+                ? <span className="font-medium text-amber-600 dark:text-amber-400">Contagem na tela: ela chega às {hora(ultima.solta_em)}.</span>
+                : ativa
+                ? <span className="font-medium text-violet-600 dark:text-violet-400">Na tela agora: {ultima.vida} de {ultima.vida_max} de vida, {ultima.participantes} na caçada{ultima.protegida ? ', com o totem' : ''}.</span>
+                : ultima.situacao === 'derrotado'
+                  ? <>A última caiu às {hora(ultima.derrotado_em)}: golpe final de {ultima.golpe_final_nome}, {ultima.participantes} ajudaram{ultima.ranking[0] ? ` — quem mais tirou foi ${ultima.ranking[0].nome} (${ultima.ranking[0].dano})` : ''}.</>
+                  : <>A última fugiu às {hora(ultima.expira_em)} com {ultima.vida} de vida.</>}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1" role="radiogroup" aria-label="Vida da chefona">
+          {DIFICULDADES_CHEFONA.map((d, i) => (
+            <button
+              key={d.nome}
+              type="button"
+              role="radio"
+              aria-checked={nivel === i}
+              onClick={() => setNivel(i)}
+              title={`Começa com ${d.base} e ganha +${d.porPessoa} a cada pessoa que entra`}
+              className={cn(
+                'rounded-md border px-2 py-1 text-[11px] transition-colors',
+                nivel === i ? 'border-violet-500 bg-violet-500/10 font-semibold text-foreground' : 'border-border text-muted-foreground hover:bg-muted',
+              )}
+            >
+              {d.nome} <span className="tabular-nums opacity-70">+{d.porPessoa}/pessoa</span>
+            </button>
+          ))}
+        </div>
+        <Button
+          size="sm" variant="outline" className="gap-1.5"
+          disabled={ativa || reiNaTela || soltando}
+          title={reiNaTela ? 'O Rei do Pop zumbi está na tela: espere ele cair ou fugir' : undefined}
+          onClick={() => setConfirmando(true)}
+        >
+          <Sparkles className="h-3.5 w-3.5" /> Soltar a chefona
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        A vida cresce com quem entra na caçada: começa em <b className="tabular-nums">{dificuldade.base}</b> e
+        ganha <b className="tabular-nums">+{dificuldade.porPessoa}</b> a cada pessoa que acerta o primeiro tiro.
+        {' '}{EXEMPLOS_DE_PESSOAS.map((n, i) => (
+          <span key={n} className="tabular-nums">{i > 0 ? ' · ' : ''}{n} pessoas → {vidaCom(dificuldade, n).toLocaleString('pt-BR')}</span>
+        ))}
+      </p>
+      {chefona && (
+        <SuspeitosDoChefao
+          rodada={chefona}
+          ativo={chefonaNaTela(chefona, Date.now())}
+          lerFichas={lerSuspeitosChefona}
+          semMigration={/fn_chefona_suspeitos|PGRST202|schema cache/}
+          migration="20261015230000"
+        />
+      )}
+
+      <AlertDialog open={confirmando} onOpenChange={v => !soltando && setConfirmando(v)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Soltar a Bruxa do Pântano?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Começa agora uma contagem de 1 minuto na tela de todo mundo que está logado, nas duas
+              empresas. Depois ela aparece com {dificuldade.base} de vida (+{dificuldade.porPessoa} a cada pessoa que
+              entrar na caçada), voando por {PRAZO_CHEFONA_MIN} minutos. Os tiros de todos tiram da mesma vida; no fim
+              aparece o ranking. Ela não depende da caça estar ligada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={soltando}>Agora não</AlertDialogCancel>
+            <AlertDialogAction disabled={soltando} onClick={e => { e.preventDefault(); void soltar(); }}>
+              {soltando ? 'Soltando…' : 'Soltar a chefona'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** A cabeça da Bruxa do Pântano, em pixel, para o cartão. */
+function CabecaDaChefona() {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const c = canvasDaImagem(cabecaMC(), false);
+    c.style.width = `${c.width * 3}px`;
+    c.style.height = `${c.height * 3}px`;
+    c.style.imageRendering = 'pixelated';
+    ref.current?.appendChild(c);
+    return () => c.remove();
+  }, []);
+  return <span ref={ref} className="block shrink-0" title="Bruxa do Pântano" aria-hidden="true" />;
 }
 
 const maisRapido = (rs: RodadaAbobora[]) =>
@@ -598,8 +758,8 @@ export default function CacaAboboraConfig() {
               </Button>
             </div>
 
-            {/* O Rei do Pop é do tema zumbi: com bruxas, nada de chefão. */}
-            {!bruxas && <SecaoChefao />}
+            {/* Cada tema com o seu chefe: o Rei do Pop nos zumbis, a Bruxa do Pântano nas bruxas. */}
+            {bruxas ? <SecaoChefona /> : <SecaoChefao />}
           </>
         )}
       </CardContent>

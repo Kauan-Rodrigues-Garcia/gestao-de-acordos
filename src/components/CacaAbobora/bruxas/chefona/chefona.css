@@ -283,3 +283,64 @@
   .bxc-totem { animation: bxc-aviso 2s steps(1, end) forwards; transform: translate(-50%, -50%); }
   .bxc-nome-totem { animation: none; }
 }
+
+/* ── A caça de verdade (CenaChefona.tsx, 15/10/2026) ─────────────────────── */
+/* O placar do time: no canto de cima, à direita, fora do caminho da barra de
+   chefe (no meio) e do aviso (embaixo dela). Os botões do super_admin moram
+   aqui. Só os botões recebem clique: o resto deixa passar para a página. */
+.bxc-time {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 61;
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  max-width: 220px;
+  padding: 7px 10px;
+  font-family: 'Pixelify Sans', ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.25;
+  color: #f4e9ff;
+  background: rgba(30, 10, 42, .9);
+  border: 2px solid #b040e0;
+  box-shadow: 0 0 0 2px #170f1f, 0 4px 0 rgba(0, 0, 0, .35);
+  pointer-events: none;
+}
+.bxc-time-linha b { color: #e8b0ff; }
+.bxc-time-top { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.bxc-time-top li { display: flex; gap: 6px; align-items: baseline; }
+.bxc-time-top li.eu { color: #9dff5c; }
+.bxc-time-top .pos { color: #ffd34d; font-weight: 700; }
+.bxc-time-top .nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bxc-time-top .dano { margin-left: auto; font-weight: 700; }
+.bxc-time-botoes { display: flex; gap: 4px; margin-top: 2px; }
+.bxc-time-btn {
+  flex: 1;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #170f1f;
+  border: 0;
+  box-shadow: inset -2px -2px 0 rgba(0, 0, 0, .35), inset 2px 2px 0 rgba(255, 255, 255, .35);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.bxc-time-btn.cura { background: #ff8a8a; }
+.bxc-time-btn.totem { background: #f8e040; }
+.bxc-time-btn:hover:not(:disabled) { filter: brightness(1.12); }
+.bxc-time-btn:disabled { opacity: .5; cursor: default; }
+.bxc-time-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (max-width: 900px) {
+  /* Tela estreita: o placar desce para baixo da barra e do aviso. */
+  .bxc-time { top: auto; bottom: 12px; right: 8px; }
+  .bxc-time-top { display: none; }
+}
+
+/* O ranking final é o do Rei do Pop (caca.css), com a cor da bruxa. */
+.zb-chefao-final.bruxa { --zb-borda: #b040e0; }
+.zb-chefao-final.bruxa.fugiu { --zb-borda: #5a2a8a; }
+.zb-chefao-final.bruxa .zb-chefao-final-titulo { text-shadow: 2px 2px 0 #6a1fb0, 4px 4px 0 #2a0a4a; }
+.bxc-final-cabeca { flex: none; display: block; }
+.bxc-final-cabeca canvas { display: block; image-rendering: pixelated; }

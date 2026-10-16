@@ -598,7 +598,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <item.icon className="w-4 h-4 flex-shrink-0" />
             <AnimatePresence>
               {(sidebarOpen || mobileOpen) && (
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
+                // `data-alvo-feitico`: a Poção Estranha da chefona das bruxas troca o nome (só visual, ver CacaAbobora/bruxas/chefona/feiticos.ts).
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate" data-alvo-feitico="aba">
                   {item.label}
                 </motion.span>
               )}
