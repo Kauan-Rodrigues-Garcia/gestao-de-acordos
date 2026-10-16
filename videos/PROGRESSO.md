@@ -1,8 +1,8 @@
 # Vídeo de apresentação (operador): onde paramos
 
 Última atualização: 13/10/2026, versão 2.
-Branches: `video/apresentacao-operador` (versão 1) e `claude/awesome-cori-bhogly`
-(versão 2, por cima da 1).
+Código em `videos/` na `main` desde 16/10/2026 (antes nas branches
+`video/apresentacao-operador` e `claude/awesome-cori-bhogly`).
 
 ## 1. Objetivo
 
@@ -101,10 +101,10 @@ mais claro; a primeira tela do operador é o Dashboard».
 ## 5. Comandos
 
 ```bash
-cd video
+cd videos
 npm install                 # 1ª vez (node_modules fica fora do git)
 npm run estudio             # editor com linha do tempo no navegador
-npm run render              # out/gestao-de-acordos-operador.mp4
+npm run render              # prontos/apresentacao-operador.mp4
 npm run medir               # depois de mexer no desenho de uma tela (~3 min)
 npm run transcrever         # depois de trocar algum áudio
 node scripts/quadros.mjs 600 1500 2400   # quadros soltos em out/quadros/

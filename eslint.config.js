@@ -68,11 +68,11 @@ export default tseslint.config(
     files: ["src/lib/logger.ts"],
     rules: { "no-console": "off" },
   },
-  // `video/` é um projeto Remotion à parte (vídeo de apresentação), com o
+  // `videos/` é um projeto Remotion à parte (os vídeos do sistema), com o
   // próprio package.json. Lá não existe o fast refresh do Vite: as cenas
   // exportam os tempos junto com o componente de propósito.
   {
-    files: ["video/**"],
+    files: ["videos/**"],
     rules: { "react-refresh/only-export-components": "off" },
   },
   // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.

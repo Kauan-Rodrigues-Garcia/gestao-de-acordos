@@ -7,8 +7,8 @@
     "preestudio": "node scripts/css-do-app.mjs",
     "estudio": "remotion studio src/index.ts",
     "prerender": "node scripts/css-do-app.mjs",
-    "render": "remotion render src/index.ts Operador out/gestao-de-acordos-operador.mp4",
-    "render:autorizacoes": "remotion render src/index.ts Autorizacoes out/autorizacoes-no-chat.mp4",
+    "render": "remotion render src/index.ts Operador prontos/apresentacao-operador.mp4",
+    "render:autorizacoes": "remotion render src/index.ts Autorizacoes prontos/autorizacoes-no-chat.mp4",
     "transcrever": "node scripts/transcrever.mjs",
     "medir": "node scripts/css-do-app.mjs && node scripts/medir.mjs"
   },
