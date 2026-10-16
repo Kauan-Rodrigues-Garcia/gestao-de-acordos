@@ -12,6 +12,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { carregarFontesPixel } from '@/components/Halloween/fonte';
+import { pausar as pausarSomAmbiente } from '@/components/Halloween/SomAmbiente/motor';
 import {
   chefonaChegando, entrarNoLobbyChefona, motivoDoErroDaChefona, sairDoLobbyChefona, situacaoDaChefona,
   type RodadaChefona,
@@ -60,6 +61,8 @@ export function LobbyDaChefona({ rodada, eu, noLobby, aoAcabar }: {
       estadoInicial: inicial,
       leve: chefonaLeve(),
       aoEntrar: async () => {
+        // A trilha da batalha não toca por cima do som ambiente: ele pausa (a pessoa volta quando quiser).
+        pausarSomAmbiente();
         const { erro } = await entrarNoLobbyChefona(id);
         if (!erro) return true;
         toast.error('Não deu para entrar na batalha', { description: motivoDoErroDaChefona(erro) });
