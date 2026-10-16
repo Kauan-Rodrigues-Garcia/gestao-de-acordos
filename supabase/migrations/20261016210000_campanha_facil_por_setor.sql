@@ -60,7 +60,7 @@
 
 BEGIN;
 
-SET LOCAL lock_timeout = '15s';
+SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '120s';
 
 -- ── 1. Quem alcança o setor ─────────────────────────────────────────────────
