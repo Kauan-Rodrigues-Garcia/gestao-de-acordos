@@ -822,10 +822,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               arquivo para o que isso substituiu. */}
           <AvisoNotificacaoHeader />
 
-          {/* O X do chefão da Caça aos Zumbis, no MEIO da barra (por cima da
-              faixa): esconde e, com outro clique, mostra de novo. Só existe
-              enquanto há chefão. Ver `CacaAbobora/BotaoChefao.tsx`. */}
-          <BotaoChefao perfilId={perfil?.id} className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2" />
+          {/* O X do chefão da Caça, no meio da barra: esconde e, com outro
+              clique, mostra de novo. Só existe enquanto há chefão. Desde
+              15/10/2026 fica PENDURADO embaixo da barra, como uma aba: no meio
+              dela cobria o aviso de notificação, que também é centrado. Com a
+              chefona na tela, o «Esconder» é o do palco, ao lado dos corações.
+              Ver `CacaAbobora/BotaoChefao.tsx`. */}
+          <BotaoChefao perfilId={perfil?.id} className="absolute left-1/2 top-full z-[36] -translate-x-1/2 rounded-t-none border-t-0 shadow-sm" />
 
           {/* `shrink-0`: o bloco de ações tem tamanho próprio e não cede espaço
               para o aviso. Quem aperta quando a janela encolhe é o aviso, que

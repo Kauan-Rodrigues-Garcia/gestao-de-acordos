@@ -25,6 +25,9 @@ export function BotaoChefao({ perfilId, className }: { perfilId: string | null |
   const chefona = useChefona();
   const bruxa = chefonaNaTela(chefona, Date.now());
   if (!perfilId || (!chefaoNaTela(chefao, Date.now()) && !bruxa)) return null;
+  // Com a chefona na tela, o «Esconder» mora ao lado da barra de corações dela
+  // (`CenaChefona.tsx`): aqui no topo só o X de mostrar, para quem escondeu.
+  if (bruxa && !desligado) return null;
   const quem = bruxa ? 'a Bruxa do Pântano' : 'o Rei do Pop zumbi';
 
   function virar() {

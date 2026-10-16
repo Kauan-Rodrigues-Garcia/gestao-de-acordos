@@ -239,6 +239,288 @@ export const GRAVETO_MC: Item = {
   cores: {"A": "#493615", "B": "#281e0b", "C": "#896727", "D": "#684e1e"},
 };
 
+// ── A mesa de encantamento (o feitiço forte) ──
+
+export const MESA_TOPO_MC: Item = {
+  nome: "Mesa de Encantamento (tampo)",
+  linhas: [
+    'ABBCDDDDDDDDCBBA',
+    'BEEFGHHHHHHGFEEB',
+    'BEEFGHHHHHHGFEEB',
+    'CFFGHHHIIHHHGFFC',
+    'DGGHHIJJJJIHHGGD',
+    'DHHHIJJJJJJIHHHD',
+    'DHHHJJJJJJJJHHHD',
+    'DHHIJJJJJJJJIHHD',
+    'DHHIJJJJJJJJIHHD',
+    'DHHHJJJJJJJJHHHD',
+    'DHHHIJJJJJJIHHHD',
+    'DGGHHIJJJJIHHGGD',
+    'CFFGHHHIIHHHGFFC',
+    'BEEFGHHHHHHGFEEB',
+    'BEEFGHHHHHHGFEEB',
+    'ABBCDDDDDDDDCBBA',
+  ],
+  cores: {"A": "#ffffff", "B": "#c3fbf1", "C": "#2ccdb1", "D": "#6b002f", "E": "#a2f6e7", "F": "#4aedd1", "G": "#7f0728", "H": "#a22929", "I": "#741d32", "J": "#58162c"},
+};
+
+export const MESA_LADO_MC: Item = {
+  nome: "Mesa de Encantamento (lado)",
+  linhas: [
+    '................',
+    '................',
+    '................',
+    '................',
+    'ABBCDDDDDDDDCBBA',
+    'BEEFDGHHHHGDFEEB',
+    'BEEFIDHHHHDIFEEB',
+    'CFFJIIDHHDIIJFFC',
+    'IIJKJJIDDLJJKJJJ',
+    'KJIIJLKKJLIJLJLL',
+    'JLLILLLJLLIIJLIK',
+    'IJLLJILJLMMKJJJJ',
+    'LMMJIJJJKMJLJMJL',
+    'KKJLLLIJJJLLLIKL',
+    'IKLLJLKLLJJILIIL',
+    'JLIJILJKJILLLLLL',
+  ],
+  cores: {"A": "#ffffff", "B": "#c3fbf1", "C": "#2ccdb1", "D": "#6b002f", "E": "#a2f6e7", "F": "#4aedd1", "G": "#7f0728", "H": "#a22929", "I": "#000001", "J": "#100c1c", "K": "#271e3d", "L": "#06030b", "M": "#3b2754"},
+};
+
+export const ESTANTE_MC: Item = {
+  nome: "Estante de Livros",
+  linhas: [
+    'ABBCCDCCCBBBBCBA',
+    'AEEEFFEEEFFGHIEA',
+    'AFJJKKJJJLMJNIFA',
+    'CKPPQKJJRSTKNIUC',
+    'VQPPQKNERLMKNIUV',
+    'AQPWQPNRXLRPNHUA',
+    'AKWJKPIXFMRPIHYB',
+    'CAZZVVVZAAZZZAAC',
+    'ACCBBDBCCBBBCCDA',
+    'AFFGGFXaFEGFFGEA',
+    'AQKFNIRXKJJXaJFA',
+    'CSTYNIRXKQERXUYD',
+    'VQKYNIbcPQKRXSTV',
+    'AQPYNHbcFKQRXUYA',
+    'BKPdIHXXdPKXaYIA',
+    'AZZVVVZAAZZZZAAA',
+  ],
+  cores: {"A": "#b38c51", "B": "#9f844d", "C": "#9b7742", "D": "#7c623e", "E": "#2c2213", "F": "#362a15", "G": "#271e11", "H": "#315b8e", "I": "#2a4e7a", "J": "#41311a", "K": "#911111", "L": "#a89b0a", "M": "#897e08", "N": "#3163a3", "P": "#773007", "Q": "#bc1616", "R": "#758e11", "S": "#b5b5b5", "T": "#898989", "U": "#118e6b", "V": "#cca66c", "W": "#632805", "X": "#5e720d", "Y": "#0c6b50", "Z": "#bc9862", "a": "#556809", "b": "#494949", "c": "#3f3f3f", "d": "#695433"},
+};
+
+/** O livro da mesa: a capa (6 × 10) e a página (5 × 8), recortadas da textura do modelo. */
+export const LIVRO_CAPA_MC: Item = {
+  nome: "Livro (capa)",
+  linhas: [
+    'ABBBBC',
+    'DDDCCC',
+    'DCCCCC',
+    'CCCCCC',
+    'CCCCCC',
+    'CCCCCC',
+    'CCCCCC',
+    'DCCCCC',
+    'DDDCCC',
+    'ABBBBC',
+  ],
+  cores: {"A": "#ffd800", "B": "#a76e2d", "C": "#774e22", "D": "#875622"},
+};
+
+export const LIVRO_PAGINA_MC: Item = {
+  nome: "Livro (página)",
+  linhas: [
+    'AAAAA',
+    'BCACC',
+    'CBCCC',
+    'AAAAA',
+    'CCACB',
+    'CAAAA',
+    'BBCCC',
+    'CCAAC',
+  ],
+  cores: {"A": "#f4e9bf", "B": "#c4b78b", "C": "#dfd3a6"},
+};
+
+// ── Os corações (9 × 9) da barra de vida: os do modo hardcore, de chefe ──
+
+export const CORACAO_VAZIO_MC: Item = {
+  nome: "Coração (vazio)",
+  linhas: [
+    '..AA.AA..',
+    '.ABBABBA.',
+    'ABBBBBBBA',
+    'ABBBBBBBA',
+    'ABBBBBBBA',
+    '.ABBBBBA.',
+    '..ABBBA..',
+    '...ABA...',
+    '....A....',
+  ],
+  cores: {"A": "#000000", "B": "#282828"},
+};
+
+export const CORACAO_VAZIO_PISCA_MC: Item = {
+  nome: "Coração (vazio, piscando)",
+  linhas: [
+    '..AA.AA..',
+    '.ABBABBA.',
+    'ABBBBBBBA',
+    'ABBBBBBBA',
+    'ABBBBBBBA',
+    '.ABBBBBA.',
+    '..ABBBA..',
+    '...ABA...',
+    '....A....',
+  ],
+  cores: {"A": "#ffffff", "B": "#282828"},
+};
+
+export const CORACAO_CHEIO_MC: Item = {
+  nome: "Coração",
+  linhas: [
+    '.........',
+    '..AA.AA..',
+    '.ABAAABA.',
+    '.ABBABBA.',
+    '.CABABAC.',
+    '..CAAAC..',
+    '...CAC...',
+    '....C....',
+    '.........',
+  ],
+  cores: {"A": "#ff1313", "B": "#600707", "C": "#bb1313"},
+};
+
+export const CORACAO_METADE_MC: Item = {
+  nome: "Meio coração",
+  linhas: [
+    '.........',
+    '..AA.....',
+    '.ABAA....',
+    '.ABBA....',
+    '.CABA....',
+    '..CAA....',
+    '...CA....',
+    '....C....',
+    '.........',
+  ],
+  cores: {"A": "#ff1313", "B": "#600707", "C": "#bb1313"},
+};
+
+export const CORACAO_CHEIO_PISCA_MC: Item = {
+  nome: "Coração (piscando)",
+  linhas: [
+    '.........',
+    '..AA.AA..',
+    '.ABAAABA.',
+    '.ABBABBA.',
+    '.CABABAC.',
+    '..CAAAC..',
+    '...CAC...',
+    '....C....',
+    '.........',
+  ],
+  cores: {"A": "#ffa1a1", "B": "#b78f8f", "C": "#dea1a1"},
+};
+
+export const CORACAO_METADE_PISCA_MC: Item = {
+  nome: "Meio coração (piscando)",
+  linhas: [
+    '.........',
+    '..AA.....',
+    '.ABAA....',
+    '.ABBA....',
+    '.CABA....',
+    '..CAA....',
+    '...CA....',
+    '....C....',
+    '.........',
+  ],
+  cores: {"A": "#ffa1a1", "B": "#b78f8f", "C": "#dea1a1"},
+};
+
+export const CORACAO_OURO_MC: Item = {
+  nome: "Coração de Absorção",
+  linhas: [
+    '.........',
+    '..AA.AA..',
+    '.ABAAAAA.',
+    '.ACDAAAA.',
+    '.EACAAAE.',
+    '..EAAAE..',
+    '...EAE...',
+    '....E....',
+    '.........',
+  ],
+  cores: {"A": "#d4af37", "B": "#d0bf89", "C": "#beae77", "D": "#c7b780", "E": "#d4a200"},
+};
+
+export const CORACAO_OURO_METADE_MC: Item = {
+  nome: "Meio coração de Absorção",
+  linhas: [
+    '.........',
+    '..AA.....',
+    '.ABAA....',
+    '.ACDA....',
+    '.EACA....',
+    '..EAA....',
+    '...EA....',
+    '....E....',
+    '.........',
+  ],
+  cores: {"A": "#d4af37", "B": "#d0bf89", "C": "#beae77", "D": "#c7b780", "E": "#d4a200"},
+};
+
+export const CORACAO_CURA_MC: Item = {
+  nome: "Coração (a cura chegando)",
+  linhas: [
+    '.........',
+    '..AA.AA..',
+    '.ABAAAAA.',
+    '.AAAAAAA.',
+    '.CAAAAAC.',
+    '..CAAAC..',
+    '...CAC...',
+    '....C....',
+    '.........',
+  ],
+  cores: {"A": "#ffa1a1", "B": "#ffe3e3", "C": "#dea1a1"},
+};
+
+export const CORACAO_SECO_MC: Item = {
+  nome: "Coração (fúria)",
+  linhas: [
+    '.........',
+    '..AA.AA..',
+    '.ABCACDA.',
+    '.EDFCGDH.',
+    '.IJKCDJI.',
+    '..IJCJI..',
+    '...IJI...',
+    '....I....',
+    '.........',
+  ],
+  cores: {"A": "#3b1313", "B": "#cbcbcb", "C": "#2b2b2b", "D": "#9d9d9d", "E": "#2f0f0f", "F": "#b5b5b5", "G": "#b4b4b4", "H": "#2c0e0e", "I": "#2a0e0e", "J": "#202020", "K": "#9c9c9c"},
+};
+
+export const CORACAO_SECO_METADE_MC: Item = {
+  nome: "Meio coração (fúria)",
+  linhas: [
+    '.........',
+    '..AA.....',
+    '.ABCA....',
+    '.DEFC....',
+    '.GHIC....',
+    '..GHC....',
+    '...GH....',
+    '....G....',
+    '.........',
+  ],
+  cores: {"A": "#3b1313", "B": "#cbcbcb", "C": "#2b2b2b", "D": "#2f0f0f", "E": "#9d9d9d", "F": "#b5b5b5", "G": "#2a0e0e", "H": "#202020", "I": "#9c9c9c"},
+};
+
 /**
  * A garrafa de poção: letra é o vidro e a rolha; dígito é o líquido, no
  * cinza do `potion_overlay` (a cor da poção multiplica, como no jogo).

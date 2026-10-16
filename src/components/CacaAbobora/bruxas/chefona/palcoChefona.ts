@@ -41,6 +41,18 @@
  *   se desfaz na hora.
  *
  * Os itens e os sons são os do jogo (`texturasMC.ts`, `sonsMC.ts`, 15/10/2026).
+ *
+ * ## A barra, o escudo e o computador fraco (15/10/2026)
+ *
+ * - A vida aparece em CORAÇÕES de chefe (`coracoes.ts`): duas fileiras de 20,
+ *   os do modo hardcore, que piscam, tremem e ficam dourados como no jogo.
+ * - Enquanto ela está na tela, um ESCUDO cobre o Gestão: clique fora dela não
+ *   chega no app (ninguém abre acordo, apaga linha ou troca de aba sem querer
+ *   atirando). A rolagem passa. Quem esconde o chefão desmonta o palco e o
+ *   escudo vai junto.
+ * - Em computador fraco ela roda LEVE (`leve.ts`): 30 quadros por segundo,
+ *   menos partículas, e as poções da tela toda sem `filter`. O palco mede os
+ *   próprios quadros e liga o leve sozinho se a luta engasgar.
  * - Prazo acabou: ela gargalha e vai embora.
  *
  * No laboratório (`../laboratorio.ts`) a vida é desta tela. Na caça de
@@ -56,6 +68,10 @@ import { NUMERO_DA_PARTE, PARTE_DO_NUMERO, alvoDaParte, centroDaParte, parteNoPo
 import { canvasDaImagem, miniatura } from '../pixels';
 import { somBloco, somBrava, somCura, somOnda, somPuf, somPufMorte, somVento } from '../sons';
 import {
+  LADO, TREME_ABAIXO, coracoesDaVida, coracoesDeOuro, posicaoDoCoracao, pulinhoDaRegeneracao, tamanhoDosCoracoes,
+  type Coracao,
+} from './coracoes';
+import {
   ALTURA_MC, BOCA, COR_DA_CURA, DROPS, ESCALA_CHEFONA, GARRAFA, LARGURA_MC, MAO_ERGUIDA, MAO_NO_ALTO, NOME_CHEFONA, OUTRA_MAO,
   PEROLA, PIXEL_MC, PONTA_DO_CHAPEU, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC, PRIMEIRO_SEGURANDO_MC,
   PRIMEIRO_TOTEM_MC, QUADROS_FLUTUANDO, TEIA, TOTEM, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC,
@@ -64,8 +80,9 @@ import {
 import { escreverMC, larguraTextoMC } from './fonteMC';
 import {
   FEITICOS, FEITICO_FORTE, LISTA_FEITICOS, alvoDaPocao, alvosPorAtributo, disponivel, duracaoDoFeitico,
-  forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
+  feiticosLeves, forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
 } from './feiticos';
+import { chefonaLeve, criarVigiaDeQuadros, marcarChefonaLeve } from './leve';
 import { ENCANTO, glifo, letrasComRuna } from './galatico';
 import {
   COR_MANOBRA, NOME_MANOBRA, avancarCorpo, balanco, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, invulneravel,
@@ -75,7 +92,11 @@ import {
   prepararSonsMC, somArremesso, somBeber, somComemora, somConquista, somDor, somEncantamento, somGargalhada, somMorte,
   somNivel, somPerola, somTeleporte, somTotem, somVidro, somXp,
 } from './sonsMC';
-import { ORBES_MC } from './texturasMC';
+import {
+  CORACAO_CHEIO_MC, CORACAO_CHEIO_PISCA_MC, CORACAO_CURA_MC, CORACAO_METADE_MC, CORACAO_METADE_PISCA_MC, CORACAO_OURO_MC,
+  CORACAO_OURO_METADE_MC, CORACAO_SECO_MC, CORACAO_SECO_METADE_MC, CORACAO_VAZIO_MC, CORACAO_VAZIO_PISCA_MC, ESTANTE_MC,
+  LIVRO_CAPA_MC, LIVRO_PAGINA_MC, MESA_LADO_MC, MESA_TOPO_MC, ORBES_MC,
+} from './texturasMC';
 import './chefona.css';
 
 const LARG = LARGURA_MC;
@@ -164,6 +185,13 @@ const DROPS_S = 12;
 const ORBES_XP = 14;
 
 const MAX_PARTICULAS = 700;
+/** Leve (computador fraco): bem menos partículas, e só uma parte das que nascem. */
+const MAX_PARTICULAS_LEVE = 220;
+const SOBRA_DE_PARTICULAS_LEVE = 0.5;
+/** Cada pixel do coração vira tantos px da tela (o jogo usa a escala da interface). */
+const ESCALA_CORACAO = 3;
+/** As estantes da mesa de encantamento: a distância da mesa (px da arte). */
+const ESTANTE_LONGE = 58;
 const MAX_LETREIROS = 14;
 /** As partículas de bruxa (roxas) e as da levitação. */
 const CORES_BRUXA = ['#a040e0', '#c070ff', '#7a2ad0'] as const;
@@ -284,6 +312,15 @@ export function parteComFolga(img: Imagem, x: number, y: number): number {
   return 0;
 }
 
+/** O primeiro ancestral que rola (para a rolagem atravessar o escudo), ou a página. */
+function rolavel(el: Element | null): Element | null {
+  for (let e = el; e && e !== document.body; e = e.parentElement) {
+    const s = getComputedStyle(e);
+    if (/(auto|scroll)/.test(`${s.overflowY}${s.overflowX}`) && (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth)) return e;
+  }
+  return document.scrollingElement;
+}
+
 const sorteia = <T,>(l: readonly T[]): T => l[Math.floor(Math.random() * l.length)];
 const suave = (u: number) => u * u * (3 - 2 * u);
 
@@ -396,6 +433,60 @@ export function toastDeConquista(titulo: string, nome: string, icone: HTMLCanvas
   return cv;
 }
 
+let mesaPronta: { frente: HTMLCanvasElement; tampo: HTMLCanvasElement; estante: HTMLCanvasElement; topoEstante: HTMLCanvasElement; capa: HTMLCanvasElement; pagina: HTMLCanvasElement } | null = null;
+
+/** A textura girada 90° (o livro aberto fica deitado: a página de 5 × 8 vira 8 × 5). */
+function deitado(c: HTMLCanvasElement): HTMLCanvasElement {
+  const r = document.createElement('canvas');
+  r.width = c.height;
+  r.height = c.width;
+  const g = r.getContext('2d')!;
+  g.translate(r.width, 0);
+  g.rotate(Math.PI / 2);
+  g.drawImage(c, 0, 0);
+  return r;
+}
+/**
+ * A mesa de encantamento do jogo (15/10/2026, a primeira era desenhada à mão e
+ * ficou feia): a frente é a textura do lado (12 de altura), o tampo é a
+ * textura de cima em perspectiva (cada fileira um pouco mais larga, da de
+ * trás para a da frente), as estantes ao lado e o livro do modelo do jogo.
+ */
+function mesa() {
+  if (mesaPronta) return mesaPronta;
+  const deItem = (it: Item) => canvasDaImagem(imagemDoItem(it), false);
+  // O tampo: 6 fileiras, de 12 a 16 de largura, tiradas do topo (16 × 16).
+  const topo = imagemDoItem(MESA_TOPO_MC);
+  const tampo = document.createElement('canvas');
+  tampo.width = 16;
+  tampo.height = 6;
+  const t = tampo.getContext('2d')!;
+  for (let j = 0; j < 6; j++) {
+    const w = 12 + Math.round((j * 4) / 5), x0 = Math.round((16 - w) / 2);
+    for (let x = 0; x < w; x++) {
+      const cor = topo.cores[Math.floor((j * 16) / 6) * 16 + Math.floor((x * 16) / w)];
+      if (!cor) continue;
+      t.fillStyle = cor;
+      t.fillRect(x0 + x, j, 1, 1);
+    }
+  }
+  // O topo da estante é tábua: duas cores de madeira em listras.
+  const topoEstante = document.createElement('canvas');
+  topoEstante.width = 16;
+  topoEstante.height = 5;
+  const te = topoEstante.getContext('2d')!;
+  for (let j = 0; j < 5; j++) {
+    const w = 13 + Math.round((j * 3) / 4), x0 = Math.round((16 - w) / 2);
+    te.fillStyle = j % 2 ? '#9c7f4e' : '#b8945f';
+    te.fillRect(x0, j, w, 1);
+  }
+  mesaPronta = {
+    frente: deItem(MESA_LADO_MC), tampo, estante: deItem(ESTANTE_MC), topoEstante,
+    capa: deitado(deItem(LIVRO_CAPA_MC)), pagina: deitado(deItem(LIVRO_PAGINA_MC)),
+  };
+  return mesaPronta;
+}
+
 let teiaPronta: HTMLCanvasElement | null = null;
 /** A teia de aranha do jogo (`texturasMC.ts`), com o contorno para ler no claro. */
 function teia(): HTMLCanvasElement {
@@ -473,6 +564,19 @@ export class PalcoChefona {
   private letreiros: HTMLDivElement[] = [];
   /** Câmera lenta (1 = normal). Só no laboratório. */
   lenta = 1;
+  /** Computador fraco: menos partículas, 30 quadros por segundo, poções sem `filter` (`leve.ts`). */
+  private leve = chefonaLeve();
+  private readonly vigia = criarVigiaDeQuadros();
+  private pularDesenho = false;
+  /** O escudo que cobre o Gestão enquanto ela está na tela (clique fora dela não chega no app). */
+  private readonly escudo: HTMLDivElement;
+  private escudoLigado = false;
+  /** A barra de corações e os textos dela (guardados: são lidos a cada quadro). */
+  private readonly cvCoracoes: HTMLCanvasElement;
+  private readonly txtVida: HTMLDivElement;
+  private readonly txtTempo: HTMLDivElement;
+  private readonly iconeTotem: HTMLCanvasElement;
+  private chaveCoracoes = '';
 
   constructor(host: HTMLElement, opcoes: OpcoesChefona = {}) {
     this.escala = opcoes.escala ?? ESCALA_CHEFONA;
@@ -487,15 +591,22 @@ export class PalcoChefona {
     this.barra = document.createElement('div');
     this.barra.className = 'bxc-barra';
     this.barra.hidden = true;
-    this.barra.innerHTML = '<div class="bxc-nome"><span></span></div><div class="bxc-vida"><i></i><b></b><em></em><span></span></div><div class="bxc-tempo"></div>';
+    this.barra.innerHTML = '<div class="bxc-nome"><span></span></div><canvas class="bxc-coracoes"></canvas><div class="bxc-vida-texto"></div><div class="bxc-tempo"></div>';
     this.barra.querySelector('.bxc-nome span')!.textContent = NOME_CHEFONA;
+    this.cvCoracoes = this.barra.querySelector('.bxc-coracoes')!;
+    this.cvCoracoes.setAttribute('role', 'img');
+    this.txtVida = this.barra.querySelector('.bxc-vida-texto')!;
+    this.txtTempo = this.barra.querySelector('.bxc-tempo')!;
     // O totem ao lado do nome enquanto ela está protegida.
-    const iconeTotem = canvasDaImagem(imagemDoItem(contornado(TOTEM)), false);
-    iconeTotem.className = 'bxc-nome-totem';
-    iconeTotem.title = 'Protegida pelo Totem da Imortalidade';
-    iconeTotem.hidden = true;
-    this.barra.querySelector('.bxc-nome')!.appendChild(iconeTotem);
-    this.raiz.append(this.canvas, this.caixa, this.barra);
+    this.iconeTotem = canvasDaImagem(imagemDoItem(contornado(TOTEM)), false);
+    this.iconeTotem.className = 'bxc-nome-totem';
+    this.iconeTotem.title = 'Protegida pelo Totem da Imortalidade';
+    this.iconeTotem.hidden = true;
+    this.barra.querySelector('.bxc-nome')!.appendChild(this.iconeTotem);
+    this.escudo = this.novoEscudo();
+    this.raiz.append(this.canvas, this.escudo, this.caixa, this.barra);
+    if (this.leve) this.raiz.classList.add('leve');
+    feiticosLeves(this.leve);
     host.appendChild(this.raiz);
     this.c = this.canvas.getContext('2d')!;
     this.medir();
@@ -522,6 +633,51 @@ export class PalcoChefona {
       aoTiro(e.clientX, e.clientY);
     });
     return el;
+  }
+
+  /**
+   * O escudo: cobre a página enquanto ela está na tela. Clique nele é tiro que
+   * errou (o furo na parede), não clique no Gestão. A rolagem passa para o que
+   * estiver embaixo, para ninguém ficar preso no meio de uma lista.
+   */
+  private novoEscudo(): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'bxc-escudo';
+    el.style.display = 'none';
+    el.innerHTML = '<span class="bxc-escudo-dica"></span>';
+    el.firstElementChild!.textContent = 'O Gestão está pausado enquanto a chefona estiver na tela · «Esconder» volta ao trabalho';
+    const segurar = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+    el.addEventListener('pointerdown', e => {
+      segurar(e);
+      if (e.button !== 0) return;
+      furo(e.clientX, e.clientY);
+      this.aoEvento?.({ tipo: 'errou' });
+    });
+    for (const tipo of ['click', 'dblclick', 'auxclick', 'contextmenu', 'mousedown', 'mouseup', 'pointerup']) el.addEventListener(tipo, segurar);
+    el.addEventListener('wheel', e => {
+      el.style.pointerEvents = 'none';
+      const embaixo = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = '';
+      rolavel(embaixo)?.scrollBy({ left: e.deltaX, top: e.deltaY });
+    }, { passive: true });
+    return el;
+  }
+
+  /** Liga ou desliga o escudo (só mexe no DOM quando muda). */
+  private escudar(ligado: boolean): void {
+    if (ligado === this.escudoLigado) return;
+    this.escudoLigado = ligado;
+    this.escudo.style.display = ligado ? '' : 'none';
+  }
+
+  /** A luta engasgou: daqui em diante, leve (`leve.ts`). */
+  private ficarLeve(): void {
+    if (this.leve) return;
+    this.leve = true;
+    marcarChefonaLeve();
+    feiticosLeves(true);
+    this.raiz.classList.add('leve');
+    if (this.particulas.length > MAX_PARTICULAS_LEVE) this.particulas.splice(0, this.particulas.length - MAX_PARTICULAS_LEVE);
   }
 
   // ── Tamanho e zona ───────────────────────────────────────────────────────
@@ -749,7 +905,9 @@ export class PalcoChefona {
     this.aneis = [];
     this.acertos = [];
     this.caixa.style.display = 'none';
+    this.escudar(false);
     this.barra.hidden = true;
+    this.chaveCoracoes = '';
     for (const l of this.letreiros) l.remove();
     this.letreiros = [];
     this.raiz.querySelectorAll('.bxc-aviso, .bxc-numerao').forEach(a => a.remove());
@@ -1321,19 +1479,18 @@ export class PalcoChefona {
       return;
     }
     m.aparecendo = Math.min(1, m.aparecendo + dt * 3);
-    // As runas saem de longe e voam para o livro, como das estantes no jogo.
-    if (Math.random() < dt * 22) {
-      const livro = this.livroDaMesa();
-      const a = Math.random() * Math.PI, r = entre(40, 80);
+    // As runas saem das estantes e voam para o livro, como no jogo.
+    if (m.aparecendo >= 0.8 && Math.random() < dt * (this.leve ? 10 : 22)) {
+      const e = sorteia(this.estantesDaMesa());
       this.runas.push({
-        de: { x: livro.x + Math.cos(a) * r, y: livro.y - Math.sin(a) * r * 0.6 },
-        t: 0, dura: entre(0.7, 1.1), letra: sorteia(letrasComRuna(ENCANTO)),
+        de: { x: e.x + entre(-12, 12), y: e.y + entre(-14, 6) },
+        t: 0, dura: entre(0.8, 1.2), letra: sorteia(letrasComRuna(ENCANTO)),
       });
     }
   }
 
   private livroDaMesa(): { x: number; y: number } {
-    return { x: this.mesa?.x ?? this.larg / 2, y: this.zona().chao - 12 * PIXEL_MC - 10 };
+    return { x: this.mesa?.x ?? this.larg / 2, y: this.zona().chao - 12 * PIXEL_MC - 6 * PIXEL_MC - 9 * PIXEL_MC };
   }
 
   // ── O fim ────────────────────────────────────────────────────────────────
@@ -1473,12 +1630,17 @@ export class PalcoChefona {
     const passo = (agora: number) => {
       // O carimbo do quadro pode vir ANTES do `performance.now()` de quem acordou
       // o laço: sem o zero, o primeiro passo andava para trás.
-      let dt = Math.max(0, Math.min(0.05, (agora - this.antes) / 1000)) * this.lenta;
+      const bruto = agora - this.antes;
+      let dt = Math.max(0, Math.min(0.05, bruto / 1000)) * this.lenta;
       this.antes = agora;
+      // A luta engasgando liga o leve (a aba de fundo para o laço: salto grande não conta).
+      if (!this.leve && this.fase !== 'chegando' && bruto > 0 && bruto < 250 && this.vigia(bruto)) this.ficarLeve();
       // O tranco do último tiro: o jogo congela um instante.
       if (agora < this.pausaAte) dt = 0;
       this.avancar(dt);
-      this.desenhar(agora);
+      // Leve: desenha um quadro sim, um não (30 por segundo); a conta anda em todos.
+      this.pularDesenho = this.leve && !this.pularDesenho;
+      if (!this.pularDesenho) this.desenhar(agora);
       if (this.vivo()) this.quadroRaf = requestAnimationFrame(passo);
       else { this.quadroRaf = 0; this.c.clearRect(0, 0, this.larg, this.alt); }
     };
@@ -1702,7 +1864,10 @@ export class PalcoChefona {
   }
 
   private particula(p: Omit<Particula, 'max' | 'gruda'> & { gruda?: boolean }): void {
-    if (this.particulas.length >= MAX_PARTICULAS) this.particulas.shift();
+    if (this.leve) {
+      if (Math.random() > SOBRA_DE_PARTICULAS_LEVE) return;
+      if (this.particulas.length >= MAX_PARTICULAS_LEVE) this.particulas.shift();
+    } else if (this.particulas.length >= MAX_PARTICULAS) this.particulas.shift();
     this.particulas.push({ ...p, gruda: p.gruda ?? false, max: p.vida });
   }
 
@@ -1747,34 +1912,76 @@ export class PalcoChefona {
 
   private atualizarBarra(): void {
     if (this.barra.hidden) return;
-    const k = this.fracao;
-    const barra = this.barra.querySelector('i') as HTMLElement;
-    const largura = `${(k * 100).toFixed(1)}%`;
-    if (barra.style.width !== largura) barra.style.width = largura;
-    // A Poção de Cura na boca aparece na barra, listrada, à frente da vida (o que ela vai ganhar).
-    const cura = this.barra.querySelector('.bxc-vida b') as HTMLElement;
-    const resto = this.cura ? this.cura.total / this.vidaMax : 0;
-    const larguraCura = `${(Math.min(1 - k, resto) * 100).toFixed(1)}%`;
-    if (cura.style.width !== larguraCura) { cura.style.width = larguraCura; cura.style.left = largura; }
-    // A Absorção do totem: a parte dourada, por cima, gasta antes da vida.
-    const abs = this.barra.querySelector('.bxc-vida em') as HTMLElement;
-    const larguraAbs = `${(Math.min(1, this.absorcao / this.vidaMax) * 100).toFixed(1)}%`;
-    if (abs.style.width !== larguraAbs) abs.style.width = larguraAbs;
-    const icone = this.barra.querySelector<HTMLCanvasElement>('.bxc-nome-totem')!;
-    if (icone.hidden === this.protegida) icone.hidden = !this.protegida;
+    const agora = performance.now();
+    // Os corações só se redesenham quando algo neles muda (a chave), não a cada quadro.
+    const lista = coracoesDaVida(Math.max(0, this.vida), this.vidaMax, this.cura ? this.cura.total : 0);
+    const ouro = coracoesDeOuro(this.absorcao, this.vidaMax);
+    const pisca = agora < this.dorAte;
+    const treme = this.vida > 0 && this.fracao <= TREME_ABAIXO ? Math.floor(agora / 90) : -1;
+    const pulo = pulinhoDaRegeneracao(this.relogio, !!this.regen);
+    const seco = this.furia && Math.floor(agora / 260) % 2 === 1;
+    const chave = `${lista.join('')}|${ouro.join('')}|${pisca ? 1 : 0}|${treme}|${pulo}|${seco ? 1 : 0}`;
+    if (chave !== this.chaveCoracoes) {
+      this.chaveCoracoes = chave;
+      this.desenharCoracoes(lista, ouro, pisca, treme, pulo, seco);
+    }
+    if (this.iconeTotem.hidden === this.protegida) this.iconeTotem.hidden = !this.protegida;
     const dourada = this.absorcao >= 1 ? ` + ${Math.ceil(this.absorcao)}` : '';
     const texto = `${Math.max(0, Math.ceil(this.vida))}${dourada} / ${this.vidaMax}`;
-    const span = this.barra.querySelector('.bxc-vida span')!;
-    if (span.textContent !== texto) span.textContent = texto;
+    if (this.txtVida.textContent !== texto) {
+      this.txtVida.textContent = texto;
+      this.cvCoracoes.setAttribute('aria-label', `Vida: ${texto}`);
+    }
     const resta = Math.max(0, Math.ceil(this.banco ? this.restanteBanco : this.prazo - this.tempo));
     const relogio = `${Math.floor(resta / 60)}:${String(resta % 60).padStart(2, '0')}`;
-    const tempo = this.barra.querySelector('.bxc-tempo')!;
     const linha = this.furia ? `FÚRIA · ${relogio}` : relogio;
-    if (tempo.textContent !== linha) tempo.textContent = linha;
+    if (this.txtTempo.textContent !== linha) this.txtTempo.textContent = linha;
+  }
+
+  /**
+   * Os corações no canvas da barra, em pixel do jogo (ampliado pelo CSS sem
+   * borrar): a fileira dourada por cima (Absorção), depois as duas da vida.
+   * Cada coração é o fundo (o vazio do hardcore) e, por cima, o que ele tem.
+   */
+  private desenharCoracoes(lista: readonly Coracao[], ouro: readonly ('cheio' | 'metade')[], pisca: boolean, treme: number, pulo: number, seco: boolean): void {
+    const cv = this.cvCoracoes;
+    const comOuro = ouro.length > 0;
+    const { largura, altura } = tamanhoDosCoracoes(comOuro);
+    if (cv.width !== largura || cv.height !== altura) {
+      cv.width = largura;
+      cv.height = altura;
+      cv.style.width = `min(${largura * ESCALA_CORACAO}px, 92vw)`;
+    }
+    const c = cv.getContext('2d')!;
+    c.imageSmoothingEnabled = false;
+    c.clearRect(0, 0, largura, altura);
+    const img = (it: Item) => miniatura(it)[0];
+    const fundo = img(pisca ? CORACAO_VAZIO_PISCA_MC : CORACAO_VAZIO_MC);
+    ouro.forEach((o, i) => {
+      const x = i * 8;
+      c.drawImage(fundo, x, 0);
+      c.drawImage(img(o === 'cheio' ? CORACAO_OURO_MC : CORACAO_OURO_METADE_MC), x, 0);
+    });
+    lista.forEach((k, i) => {
+      const { x, y } = posicaoDoCoracao(i, comOuro);
+      // Treme com pouca vida (um sorteio fixo por coração e por instante), e o pulinho da Regeneração.
+      const dy = (i === pulo ? -2 : 0) + (treme >= 0 ? ((i * 7 + treme * 13) % 3) - 1 : 0);
+      c.drawImage(fundo, x, y + dy);
+      let cheio: Item | null = null;
+      if (k === 'cheio') cheio = pisca ? CORACAO_CHEIO_PISCA_MC : seco ? CORACAO_SECO_MC : CORACAO_CHEIO_MC;
+      else if (k === 'metade') cheio = pisca ? CORACAO_METADE_PISCA_MC : seco ? CORACAO_SECO_METADE_MC : CORACAO_METADE_MC;
+      else if (k === 'cura' || k === 'cura-metade') cheio = CORACAO_CURA_MC;
+      if (!cheio) return;
+      if (k === 'cura-metade') {
+        // Meio coração da cura: só a metade da esquerda.
+        c.drawImage(img(cheio), 0, 0, Math.ceil(LADO / 2), LADO, x, y + dy, Math.ceil(LADO / 2), LADO);
+      } else c.drawImage(img(cheio), x, y + dy);
+    });
   }
 
   private posicionarCaixas(): void {
     const corpo = this.corpo;
+    this.escudar(!!corpo && this.atingivel());
     if (corpo && this.atingivel()) {
       const s = this.centroSprite();
       const folga = 6;
@@ -1913,45 +2120,96 @@ export class PalcoChefona {
     }
   }
 
-  /** A mesa de encantamento no chão: tampo vermelho com diamantes, obsidiana, e o livro abrindo. */
+  /**
+   * A mesa de encantamento do jogo no chão, subindo da terra, com duas estantes
+   * ao lado (de onde as runas saem, como no jogo) e o livro flutuando em cima:
+   * abre e fecha devagar, folheia uma página de vez em quando e sobe e desce.
+   */
   private desenharMesa(): void {
     const m = this.mesa;
     if (!m) return;
     const c = this.c;
     const P = PIXEL_MC;
     const z = this.zona();
-    const T = 16, H = 12;
-    const x0 = Math.round(m.x - (T * P) / 2);
-    const sobe = Math.round((1 - Math.max(0, m.aparecendo)) * H * P);
-    const topo = z.chao - H * P + sobe;
-    const texel = (x: number, y: number, cor: string) => {
-      const py = topo + y * P;
-      if (py >= z.chao) return;
-      c.fillStyle = cor;
-      c.fillRect(x0 + x * P, py, P, Math.min(P, z.chao - py));
-    };
-    const ruido = (x: number, y: number) => { const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return v - Math.floor(v); };
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < T; x++) {
-        let cor: string;
-        if (y <= 1) cor = (x <= 1 || x >= T - 2) && y === 0 ? '#5ae8e0' : ruido(x, y) < 0.5 ? '#c02a34' : '#9a1a24';
-        else if (y === 2) cor = '#5a0a10';
-        else cor = ['#140c1e', '#1e1430', '#2a1a40'][Math.floor(ruido(x, y) * 3)];
-        if (y > 2 && ruido(y, x) < 0.06) cor = '#5a2a8a';
-        texel(x, y, cor);
-      }
+    const peca = mesa();
+    // Tudo sobe da terra: o que está abaixo do chão não aparece.
+    const sobe = (1 - Math.max(0, Math.min(1, m.aparecendo))) * 20 * P;
+    c.save();
+    c.beginPath();
+    c.rect(0, 0, this.larg, z.chao);
+    c.clip();
+    // As estantes, uma de cada lado.
+    for (const e of this.estantesDaMesa()) {
+      const x = Math.round(e.x - 8 * P), y = Math.round(z.chao - 16 * P + sobe);
+      c.drawImage(peca.topoEstante, x, y - 5 * P, 16 * P, 5 * P);
+      c.drawImage(peca.estante, x, y, 16 * P, 16 * P);
+      // A sombra do lado de baixo, para o bloco não ficar chapado.
+      c.fillStyle = 'rgba(0,0,0,.18)';
+      c.fillRect(x, y + 12 * P, 16 * P, 4 * P);
     }
+    // A mesa: o tampo em perspectiva em cima da frente (12 de altura).
+    const x0 = Math.round(m.x - 8 * P);
+    const frente = Math.round(z.chao - 16 * P + sobe);
+    const topoDaFrente = frente + 4 * P;
+    c.drawImage(peca.tampo, x0, topoDaFrente - 6 * P, 16 * P, 6 * P);
+    c.drawImage(peca.frente, x0, frente, 16 * P, 16 * P);
+    c.restore();
     if (m.aparecendo < 0.8) return;
-    // O livro flutuando em cima, abrindo e fechando.
-    const aberto = Math.floor(m.t * 3) % 4 < 2;
-    const livro = this.livroDaMesa();
-    const ly = Math.round(livro.y + Math.sin(m.t * 3) * 2);
-    const lx = Math.round(livro.x - 3 * P);
-    c.fillStyle = '#6a3a1a';
-    c.fillRect(lx, ly + P, 6 * P, P * 2);
-    c.fillStyle = '#f0e8d0';
-    if (aberto) { c.fillRect(lx, ly, 3 * P - 1, P); c.fillRect(lx + 3 * P + 1, ly, 3 * P - 1, P); }
-    else c.fillRect(lx + P, ly, 4 * P, P);
+    this.desenharLivro(m.x, topoDaFrente - 6 * P - 9 * P + Math.round(Math.sin(m.t * 2.4) * 2), m.t);
+  }
+
+  /**
+   * O livro da mesa, aberto e deitado como no jogo: duas páginas em V a partir
+   * da lombada, a capa marrom por baixo, abrindo e fechando devagar (a ponta de
+   * fora sobe e desce), e de vez em quando uma folha vira da direita para a
+   * esquerda. Desenhado coluna a coluna (1 px da arte cada), para o V ficar em
+   * degrau de pixel e não borrar.
+   */
+  private desenharLivro(cx: number, cy: number, t: number): void {
+    const c = this.c;
+    const P = PIXEL_MC;
+    const peca = mesa();
+    const pag = peca.pagina; // 8 × 5 (deitada)
+    const metade = pag.width * P; // 16 px da arte
+    const alto = pag.height * P; // 10 px da arte
+    const ergue = 3 + Math.round(2 + 2 * Math.sin(t * 2.2)); // quanto a ponta de fora sobe
+    const x0 = Math.round(cx), topo = Math.round(cy - alto / 2);
+    const coluna = (lado: -1 | 1, i: number, largura: number, extra: number) => {
+      // i: 0 na lombada, `largura − 1` na ponta. A textura é lida pela fração da largura.
+      const k = largura <= 1 ? 0 : i / (largura - 1);
+      const lift = Math.round(k * (ergue + extra));
+      const sx = Math.min(pag.width - 1, Math.floor(k * pag.width));
+      const x = lado < 0 ? x0 - 1 - i : x0 + i;
+      // A capa: dois pixels de marrom embaixo da folha, com o dourado na ponta.
+      c.fillStyle = i >= largura - 2 ? '#e8b048' : '#6b3a17';
+      c.fillRect(x, topo + alto - lift, 1, P);
+      c.drawImage(pag, lado < 0 ? pag.width - 1 - sx : sx, 0, 1, pag.height, x, topo - lift, 1, alto);
+    };
+    for (let i = 0; i < metade; i++) { coluna(-1, i, metade, 0); coluna(1, i, metade, 0); }
+    // A folha virando: a cada 1,8 s, por 0,5 s, sai da direita, fica em pé e deita na esquerda.
+    const u = (t % 1.8) / 0.5;
+    if (u < 1) {
+      const k = Math.cos(u * Math.PI);
+      const w = Math.max(1, Math.round(metade * Math.abs(k)));
+      const extra = Math.round((1 - Math.abs(k)) * 10);
+      for (let i = 0; i < w; i++) coluna(k > 0 ? 1 : -1, i, w, extra);
+    }
+    // A lombada.
+    c.fillStyle = '#3e2410';
+    c.fillRect(x0 - 1, topo, 2, alto + P);
+    // O brilho do encantamento em volta do livro, de vez em quando.
+    if (Math.random() < 0.25) {
+      this.particula({ x: cx + entre(-metade, metade), y: cy + entre(-alto, 0), vx: 0, vy: entre(-12, -4), vida: 0.5, cor: sorteia(CORES_PORTAL), tam: 1, g: 0, forma: 'ponto' });
+    }
+  }
+
+  /** Onde ficam as estantes (o meio de cada uma, px da arte), dentro da tela. */
+  private estantesDaMesa(): { x: number; y: number }[] {
+    const m = this.mesa;
+    if (!m) return [];
+    const y = this.zona().chao - 10 * PIXEL_MC;
+    const dentro = (x: number) => Math.max(10 * PIXEL_MC, Math.min(this.larg - 10 * PIXEL_MC, x));
+    return [{ x: dentro(m.x - ESTANTE_LONGE), y }, { x: dentro(m.x + ESTANTE_LONGE), y }];
   }
 
   private desenharRunasVoando(): void {

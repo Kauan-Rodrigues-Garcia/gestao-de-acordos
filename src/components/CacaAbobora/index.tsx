@@ -143,18 +143,19 @@ function ChefesDaCaca() {
   const auth = useAuthOpcional();
   const usuario = auth?.user?.id ?? null;
   const superAdmin = auth?.perfil?.perfil === 'super_admin';
-  const desligado = useChefaoDesligado(auth?.perfil?.id);
+  const perfilId = auth?.perfil?.id ?? null;
+  const desligado = useChefaoDesligado(perfilId);
   if (desligado) return null;
   return (
     <>
       <ChefaoDaCaca usuario={usuario} superAdmin={superAdmin} />
-      <ChefonaDaCaca usuario={usuario} superAdmin={superAdmin} />
+      <ChefonaDaCaca usuario={usuario} perfilId={perfilId} superAdmin={superAdmin} />
     </>
   );
 }
 
 /** A chefona: montada quando ela aparece, e assim fica até ela cair ou fugir e o ranking fechar. */
-function ChefonaDaCaca({ usuario, superAdmin }: { usuario: string | null; superAdmin: boolean }) {
+function ChefonaDaCaca({ usuario, perfilId, superAdmin }: { usuario: string | null; perfilId: string | null; superAdmin: boolean }) {
   const rodada = useChefona();
   const ativa = chefonaNaTela(rodada, Date.now());
   const [cena, setCena] = useState<number | null>(null);
@@ -163,7 +164,7 @@ function ChefonaDaCaca({ usuario, superAdmin }: { usuario: string | null; superA
   if (!rodada || cena !== rodada.id) return null;
   return (
     <Suspense fallback={null}>
-      <CenaChefona key={rodada.id} rodada={rodada} eu={rodada.id < 0 ? EU_NO_ENSAIO : usuario} superAdmin={superAdmin} aoAcabar={acabar} />
+      <CenaChefona key={rodada.id} rodada={rodada} eu={rodada.id < 0 ? EU_NO_ENSAIO : usuario} perfilId={perfilId} superAdmin={superAdmin} aoAcabar={acabar} />
     </Suspense>
   );
 }

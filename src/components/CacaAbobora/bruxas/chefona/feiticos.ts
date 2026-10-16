@@ -49,7 +49,14 @@
  *
  * Quanto mais rachada ela está, mais fraca a poção: pega menos alvos e dura
  * menos (`forca`, de 0,35 com a vida no fim a 1 com a vida cheia). Na tela
- * isso é o nível da poção, como no jogo: II forte, I fraca (`nivelDaPocao`).
+ * Na tela isso é o nível da poção, como no jogo: II forte, I fraca (`nivelDaPocao`).
+ *
+ * ## Leve (computador fraco, 15/10/2026)
+ *
+ * O `filter` no `#root` obriga o navegador a repintar o Gestão inteiro a cada
+ * quadro — num PC sem placa de vídeo isso trava a tela. Com `feiticosLeves`
+ * ligado (`leve.ts`), as poções da tela toda viram um VÉU de cor por cima da
+ * página, que só é composto, e o Encantamento não distorce (as runas ficam).
  */
 import { paraGalatico } from './galatico';
 
@@ -236,6 +243,22 @@ export const CLASSE_VEU = 'bx-enf-veu';
 
 const pilhas = new WeakMap<HTMLElement, { original: string; pedacos: Map<string, string> }>();
 
+let leve = false;
+/** Liga o jeito leve das poções da tela toda (ver «Leve» no topo). */
+export function feiticosLeves(v: boolean): void { leve = v; }
+
+/** As cores do véu leve, no lugar dos filtros. */
+export const VEU_LEVE = {
+  lentidao: 'rgba(90, 108, 129, .28)',
+  veneno: 'rgba(78, 147, 49, .2)',
+  fraqueza: 'rgba(150, 150, 150, .38)',
+  encantamento: 'rgba(122, 42, 208, .16)',
+} as const;
+/** A Visão Noturna leve: o véu pisca entre estas cores. */
+export const VISAO_LEVE: readonly string[] = [
+  'rgba(255, 255, 255, .28)', 'rgba(20, 20, 60, .35)', 'rgba(120, 160, 255, .3)', 'rgba(80, 255, 140, .22)', 'rgba(0, 0, 0, .35)', 'rgba(200, 80, 255, .25)',
+];
+
 function porFiltro(raiz: HTMLElement, chave: string, valor: string | null): void {
   let p = pilhas.get(raiz);
   if (!p) {
@@ -332,12 +355,23 @@ function sobrepor(el: HTMLElement, texto: string, classe: string): () => void {
 }
 
 /** O véu por cima da página (a Cegueira, a borda do Veneno). Some no `desfazer`. */
-function veu(tipo: 'cegueira' | 'veneno'): { el: HTMLDivElement; desfazer: () => void } {
+function veu(tipo: 'cegueira' | 'veneno' | 'tinta'): { el: HTMLDivElement; desfazer: () => void } {
   const el = document.createElement('div');
   el.className = `${CLASSE_VEU} ${CLASSE_VEU}-${tipo}`;
   el.setAttribute('aria-hidden', 'true');
   document.body.appendChild(el);
   return { el, desfazer: () => el.remove() };
+}
+
+/** A página tingida: o filtro na raiz, ou (leve) o véu daquela cor por cima. */
+function tingir(raiz: HTMLElement, chave: string, filtro: string, corLeve: string): () => void {
+  if (!leve) {
+    porFiltro(raiz, chave, filtro);
+    return () => porFiltro(raiz, chave, null);
+  }
+  const v = veu('tinta');
+  v.el.style.background = corLeve;
+  return v.desfazer;
 }
 
 /** Lança o feitiço com a força dada (1 = vida cheia). */
@@ -366,6 +400,16 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
     const raiz = alvos.raiz();
     if (!raiz) return { desfazer: () => {}, atingidos: [] };
     let i = 0;
+    if (leve) {
+      // Leve: o véu pisca de cor; a página por baixo não é repintada.
+      const v = veu('tinta');
+      v.el.style.background = VISAO_LEVE[0];
+      const relogio = setInterval(() => {
+        i = (i + 1) % VISAO_LEVE.length;
+        v.el.style.background = VISAO_LEVE[i];
+      }, PASSO_VISAO_MS);
+      return { desfazer: () => { clearInterval(relogio); v.desfazer(); }, atingidos: [raiz] };
+    }
     porFiltro(raiz, 'visao', FILTROS_VISAO[0]);
     const relogio = setInterval(() => {
       i = (i + 1) % FILTROS_VISAO.length;
@@ -379,11 +423,11 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
   if (f === 'lentidao') {
     const raiz = alvos.raiz();
     if (!raiz) return { desfazer: () => {}, atingidos: [] };
-    porFiltro(raiz, 'lentidao', FILTRO_LENTIDAO);
+    const destingir = tingir(raiz, 'lentidao', FILTRO_LENTIDAO, VEU_LEVE.lentidao);
     // As teias caem em parte das abas, dos valores e das linhas (o palco desenha).
     const todos = [...alvos.abas(), ...alvos.valores(), ...alvos.linhas()];
     const els = sortear(todos.length, Math.min(10, quantosAlvos(Math.ceil(todos.length * 0.4), forca)), r).map(i => todos[i]);
-    return { desfazer: () => porFiltro(raiz, 'lentidao', null), atingidos: [raiz, ...els] };
+    return { desfazer: destingir, atingidos: [raiz, ...els] };
   }
   if (f === 'encantamento') {
     const raiz = alvos.raiz();
@@ -391,7 +435,10 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
     // As abas viram runas, todas: o feitiço forte não escolhe.
     const abas = alvos.abas();
     const desfazAbas = abas.map(el => sobrepor(el, paraGalatico(el.textContent ?? ''), 'bx-enf-galatico'));
-    const d = filtroDistorcao();
+    // Leve: sem a distorção (o filtro SVG na página toda é o mais caro de todos); fica um véu roxo.
+    const d = leve ? null : filtroDistorcao();
+    const veuLeve = leve ? veu('tinta') : null;
+    if (veuLeve) veuLeve.el.style.background = VEU_LEVE.encantamento;
     let fase = 0;
     let passo = 0;
     const forte = 8 + 14 * forca;
@@ -407,8 +454,9 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
     return {
       desfazer: () => {
         clearInterval(relogio);
-        porFiltro(raiz, 'encantamento', null);
+        if (d) porFiltro(raiz, 'encantamento', null);
         d?.svg.remove();
+        veuLeve?.desfazer();
         desfazAbas.forEach(x => x());
       },
       atingidos: [raiz, ...abas],
@@ -430,7 +478,7 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
   if (f === 'veneno' || f === 'fraqueza') {
     const raiz = alvos.raiz();
     if (!raiz) return { desfazer: () => {}, atingidos: [] };
-    porFiltro(raiz, f, f === 'veneno' ? FILTRO_VENENO : FILTRO_FRAQUEZA);
+    const destingir = tingir(raiz, f, f === 'veneno' ? FILTRO_VENENO : FILTRO_FRAQUEZA, VEU_LEVE[f]);
     const borda = f === 'veneno' ? veu('veneno') : null;
     // Na Fraqueza as abas desbotam também (parte delas, pela força).
     const abas = f === 'fraqueza' ? alvos.abas() : [];
@@ -438,7 +486,7 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
     fracas.forEach(el => el.classList.add('bx-enf-fraco'));
     return {
       desfazer: () => {
-        porFiltro(raiz, f, null);
+        destingir();
         borda?.desfazer();
         fracas.forEach(el => {
           el.classList.remove('bx-enf-fraco');

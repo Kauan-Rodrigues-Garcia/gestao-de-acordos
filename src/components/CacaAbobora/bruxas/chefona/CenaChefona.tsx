@@ -32,7 +32,7 @@ import { carregarFontesPixel } from '@/components/Halloween/fonte';
 import { criarDetector, type Detector } from '../../autoclick';
 import { volumeDoChefao } from '../../sons';
 import { nomeCurto } from '../../caca';
-import { RANKING_MS, type Golpeador, type MeuPlacar } from '../../chefao';
+import { RANKING_MS, desligarChefao, type Golpeador, type MeuPlacar } from '../../chefao';
 import { canvasDaImagem } from '../pixels';
 import { cabecaMC } from './arte';
 import { PalcoChefona, type EventoChefona, type FonteDoBanco } from './palcoChefona';
@@ -117,6 +117,36 @@ function Time({ host, rodada, eu, meuDano, minhaPosicao, superAdmin }: {
         </div>
       )}
     </div>,
+    host,
+  );
+}
+
+// ── O botão de esconder ─────────────────────────────────────────────────────
+
+/**
+ * «Esconder» ao lado da barra de corações (15/10/2026). Antes era só o X no
+ * meio da barra do topo do Gestão, que ficava atrás da barra de vida dela, e
+ * centrado na barra do app (não na tela). Agora mora no palco, por cima do
+ * escudo, sempre no mesmo lugar — na contagem e na luta. Escondida, o palco
+ * desmonta (as poções e o escudo vão junto) e o X do topo volta para mostrar.
+ */
+function BotaoEsconder({ host, perfilId }: { host: HTMLElement; perfilId: string }) {
+  function esconder() {
+    desligarChefao(perfilId, true);
+    toast('Chefona escondida', {
+      description: 'Você não vê nem ouve a Bruxa do Pântano, e o Gestão volta a funcionar. Clique no X no topo para voltar.',
+    });
+  }
+  return createPortal(
+    <button type="button" className="bxc-esconder" onClick={esconder} title="Esconder a chefona e voltar a usar o Gestão">
+      <svg viewBox="0 0 10 10" width={10} height={10} shapeRendering="crispEdges" aria-hidden="true">
+        <g fill="currentColor">
+          {[0, 1, 2, 3, 4].map(i => <rect key={`a${i}`} x={i * 2} y={i * 2} width={2} height={2} />)}
+          {[0, 1, 2, 3, 4].map(i => <rect key={`b${i}`} x={8 - i * 2} y={i * 2} width={2} height={2} />)}
+        </g>
+      </svg>
+      Esconder
+    </button>,
     host,
   );
 }
@@ -222,8 +252,10 @@ function RankingChefona({ rodada, eu, meu, aoFechar }: {
  * A chefona de uma rodada, do começo ao fim: montada com a chave da rodada
  * (`../../index.tsx`), vive até ela cair ou fugir e o ranking ser fechado.
  */
-export function CenaChefona({ rodada, eu, superAdmin, aoAcabar }: {
+export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   rodada: RodadaChefona;
+  /** Quem está na tela (o perfil), para o «Esconder» guardar a escolha dela. */
+  perfilId?: string | null;
   /** Quem está na tela, para achar a pessoa no ranking. */
   eu: string | null;
   /** O super_admin ouve inteiro e tem os botões; o operador ouve a 12% (`VOLUME_DO_OPERADOR`). */
@@ -443,6 +475,7 @@ export function CenaChefona({ rodada, eu, superAdmin, aoAcabar }: {
       {host && situacao === 'ativo' && !chegando && viuViva.current && (
         <Time host={host} rodada={rodada} eu={eu} meuDano={meuDano} minhaPosicao={minhaPosicao} superAdmin={superAdmin} />
       )}
+      {host && perfilId && situacao === 'ativo' && viuViva.current && <BotaoEsconder host={host} perfilId={perfilId} />}
       {ranking && <RankingChefona rodada={rodada} eu={eu} meu={meu} aoFechar={fecharRanking} />}
     </>
   );
