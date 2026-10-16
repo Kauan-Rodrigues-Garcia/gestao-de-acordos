@@ -4,7 +4,9 @@ import { describe, it, expect, vi } from 'vitest';
 // createClient() explode em teste por falta de VITE_SUPABASE_URL.
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
 
-import { formatarLinhaPix, formatarCopiaPix, formatarCopiaPixPorOperador } from './pix_automatico.service';
+import {
+  formatarLinhaPix, formatarCopiaPix, formatarCopiaPixPorOperador, separarParaCopiaPix,
+} from './pix_automatico.service';
 
 describe('formatarLinhaPix', () => {
   it('leva só o código do acordo', () => {
@@ -94,5 +96,40 @@ describe('formatarCopiaPixPorOperador', () => {
 
   it('devolve string vazia sem acordos', () => {
     expect(formatarCopiaPixPorOperador([])).toBe('');
+  });
+});
+
+describe('separarParaCopiaPix', () => {
+  const linha = (id: string, status: 'pendente' | 'aprovado' | 'desaprovado', pago = false) =>
+    ({ id, status, pago });
+
+  it('o filtro "Aprovados" traz os pagos junto, e eles não entram no texto', () => {
+    // 15/10/2026: a seleção levou os já pagos e o Pix saiu a mais.
+    const r = separarParaCopiaPix([
+      linha('a', 'aprovado'), linha('b', 'aprovado', true), linha('c', 'aprovado'),
+    ]);
+    expect(r.copiar.map(i => i.id)).toEqual(['a', 'c']);
+    expect(r.porOperador).toBe(true);
+    expect(r.jaPagos).toBe(1);
+  });
+
+  it('com aprovado a pagar na seleção, só ele entra', () => {
+    const r = separarParaCopiaPix([
+      linha('a', 'aprovado'), linha('p', 'pendente'), linha('d', 'desaprovado'),
+    ]);
+    expect(r.copiar.map(i => i.id)).toEqual(['a']);
+    expect(r.foraDosAprovados).toBe(2);
+  });
+
+  it('só pendentes: copia para encaminhar, sem agrupar', () => {
+    const r = separarParaCopiaPix([linha('p1', 'pendente'), linha('p2', 'pendente')]);
+    expect(r.copiar.map(i => i.id)).toEqual(['p1', 'p2']);
+    expect(r.porOperador).toBe(false);
+  });
+
+  it('tudo pago: nada a copiar', () => {
+    const r = separarParaCopiaPix([linha('a', 'aprovado', true)]);
+    expect(r.copiar).toEqual([]);
+    expect(r.jaPagos).toBe(1);
   });
 });

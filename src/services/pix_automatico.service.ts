@@ -330,6 +330,32 @@ export function formatarCopiaPixPorOperador(
   return blocos.join('\n\n');
 }
 
+/**
+ * O que da seleção entra no texto do "Copiar".
+ *
+ * Pago NUNCA entra. O filtro "Aprovados" olha só o status, e acordo pago
+ * continua `aprovado` — em 15/10/2026 a seleção do Receptivo levou junto os
+ * já pagos, o texto somou tudo e o Pix saiu a mais. Quem recebe o texto paga o
+ * total, então o filtro tem de estar aqui, e não na disciplina de quem filtra.
+ *
+ * Havendo aprovado a pagar, só ele entra (e o texto sai por operador): é o que
+ * vai ser pago. Sem nenhum, a cópia é de pendentes para encaminhar, como antes.
+ */
+export function separarParaCopiaPix<T extends Pick<PixAutoAcordo, 'status' | 'pago'>>(
+  selecionados: T[],
+): { copiar: T[]; porOperador: boolean; jaPagos: number; foraDosAprovados: number } {
+  const aPagar = selecionados.filter(i => !i.pago);
+  const jaPagos = selecionados.length - aPagar.length;
+  const aprovados = aPagar.filter(i => i.status === 'aprovado');
+  const copiar = aprovados.length > 0 ? aprovados : aPagar;
+  return {
+    copiar,
+    porOperador: aprovados.length > 0,
+    jaPagos,
+    foraDosAprovados: aPagar.length - copiar.length,
+  };
+}
+
 // ── Acordos ────────────────────────────────────────────────────────────────
 
 /**
