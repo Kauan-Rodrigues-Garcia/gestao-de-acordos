@@ -1,0 +1,108 @@
+/**
+ * Variáveis de 16/10/2026: 12x, 20x e 21x em todas as modalidades parceladas,
+ * e os dados do cliente que vêm do mailing (endereço, cidade, local de
+ * trabalho, ocupação e tempo de atraso).
+ */
+import { describe, expect, it } from 'vitest';
+import { CampaignCore, type RawRecord } from './lib/campaign-core';
+import { mensagemUsaValores } from './regras-mensagem';
+import { VARIABLE_GROUPS, VARIABLE_LABELS } from './VariaveisMensagem';
+
+function registro(extra: Record<string, string> = {}): RawRecord {
+  const values: Record<string, string> = {
+    Nome: 'MARIA DA SILVA', CPF: '123', Contrato: '999', 'Parcelas em atraso': '2', Protesto: '0',
+    Valor: '400', 'Valor Aberto': '2000', 'Valor Atualizado': '2100', 'Tp. Venda': 'PRO',
+    'Whats Titular': '18999999999', ...extra,
+  };
+  const normalized = Object.fromEntries(Object.entries(values).map(([k, v]) => [CampaignCore.normalizeHeader(k), v]));
+  return { rowNumber: 2, values, normalized, sourceType: 'report-247', financialDataAvailable: true };
+}
+
+describe('parcelamentos em 12x, 20x e 21x', () => {
+  const descontos = { ...CampaignCore.DEFAULT_DISCOUNTS, settlement: 30, annual: 25, pix_automatico: 5 };
+  const item = CampaignCore.deriveRecord(registro(), descontos);
+  const v = CampaignCore.variablesFor(item, descontos);
+
+  it('cartão: quitação e anual, o total ÷ n arredondado para cima', () => {
+    expect(item.settlement).toBe(1400); // 2000 × 0,70
+    expect(v.cartao_quitacao).toBe(CampaignCore.formatCurrency(117)); // 1400 / 12 = 116,67
+    expect(v.cartao_quitacao_20x).toBe(CampaignCore.formatCurrency(70));
+    expect(v.cartao_quitacao_21x).toBe(CampaignCore.formatCurrency(67)); // 66,67
+    expect(item.annual).toBe(1800); // 200 × 12 × 0,75
+    expect(v.cartao_anual_20x).toBe(CampaignCore.formatCurrency(90));
+    expect(v.cartao_anual_21x).toBe(CampaignCore.formatCurrency(86)); // 85,71
+  });
+
+  it('Pix Automático: com e sem desconto, e o 21x de antes continua igual', () => {
+    expect(v.pix_automatico_12x).toBe(CampaignCore.formatCurrency(175)); // 2100 / 12
+    expect(v.pix_automatico_20x).toBe(CampaignCore.formatCurrency(105));
+    expect(v.pix_automatico_21x).toBe(CampaignCore.formatCurrency(100));
+    expect(v.pix_automatico_desconto_12x).toBe(CampaignCore.formatCurrency(167)); // 1995 / 12 = 166,25
+    expect(v.pix_automatico_desconto_20x).toBe(CampaignCore.formatCurrency(100)); // 99,75
+    expect(v.pix_automatico_desconto_21x).toBe(CampaignCore.formatCurrency(95));
+  });
+
+  it('as variáveis novas de valor travam no relatório sem valores', () => {
+    for (const k of ['cartao_quitacao_20x', 'cartao_anual_21x', 'pix_automatico_12x', 'pix_automatico_desconto_20x']) {
+      expect(mensagemUsaValores(`x {{${k}}} y`)).toBe(true);
+    }
+  });
+});
+
+describe('dados do mailing', () => {
+  it('pelo nome da coluna, ou pelo pedaço do nome', () => {
+    const item = CampaignCore.deriveRecord(registro({
+      'Endereço': 'Rua das Flores, 10', 'Cidade': 'Birigui', 'Local Trabalho Cliente': 'Hospital Central',
+      'Profissão': 'Enfermeira', 'Dias de Atraso': '45',
+    }));
+    const v = CampaignCore.variablesFor(item, CampaignCore.DEFAULT_DISCOUNTS);
+    expect(v.endereco).toBe('Rua das Flores, 10');
+    expect(v.cidade).toBe('Birigui');
+    expect(v.local_trabalho).toBe('Hospital Central');
+    expect(v.ocupacao).toBe('Enfermeira');
+    expect(v.tempo_atraso).toBe('45 dias');
+  });
+
+  it('«Endereço de e-mail» não vira endereço; «Parcelas em atraso» não vira tempo de atraso', () => {
+    const item = CampaignCore.deriveRecord(registro({ 'Endereço de E-mail': 'ana@x.com' }));
+    expect(item.mailing.endereco).toBe('');
+    expect(item.mailing.tempo_atraso).toBe('');
+  });
+
+  it('não são valor: servem ao relatório 245, que traz o «Atraso» em dias', () => {
+    expect(mensagemUsaValores('{{cidade}} {{tempo_atraso}} {{endereco}}')).toBe(false);
+    const CAB = ['Grupo', 'Usuário', 'Dt.Pagamento', 'Cód.Cliente', 'Cliente', 'Nr.Documento', 'Empresa',
+      'Valor Aberto', 'DDD 1', 'Telefone 1', 'Atraso', 'Cidade'];
+    const linha = ['COB PLAY 1', 'ANA', '', '1', 'ANA SOUZA', '123', 'BOOKPLAY', '9', '18', '999999999', '1', 'Marília'];
+    const r = CampaignCore.parseReport245([CAB, linha]);
+    const item = CampaignCore.deriveRecord(r.records[0]);
+    expect(item.mailing.tempo_atraso).toBe('1 dia');
+    expect(item.mailing.cidade).toBe('Marília');
+  });
+
+  it('mensagem que cita um dado ausente pede revisão, sem travar', () => {
+    const [item] = CampaignCore.buildCampaign([registro()], { template: 'Olá {{primeiro_nome}} de {{cidade}}', senders: ['Ana'] });
+    expect(item.issues).toContain('Cidade ausente no mailing');
+    expect(item.status).toBe('Revisar');
+    expect(item.hasBlockingIssues).toBe(false);
+  });
+});
+
+describe('os botões das variáveis, por categoria', () => {
+  it('nome e empresa (sem valor) ficam separados dos valores', () => {
+    const grupo = (k: string) => VARIABLE_GROUPS.find((g) => g.itens.some(([v]) => v === k))?.titulo;
+    expect(grupo('nome')).toBe(grupo('empresa'));
+    expect(grupo('quitacao')).not.toBe(grupo('nome'));
+    expect(grupo('cidade')).toBe('Do mailing');
+    expect(grupo('cartao_quitacao_21x')).toBe('Cartão de crédito');
+    expect(grupo('pix_automatico_12x')).toBe('Pix Automático');
+  });
+
+  it('toda variável que a mensagem conhece tem botão, e nenhuma aparece duas vezes', () => {
+    const item = CampaignCore.deriveRecord(registro());
+    const conhecidas = Object.keys(CampaignCore.variablesFor(item, CampaignCore.DEFAULT_DISCOUNTS)).filter((k) => k !== 'telefone');
+    const botoes = VARIABLE_LABELS.map(([k]) => k);
+    expect(new Set(botoes).size).toBe(botoes.length);
+    expect([...conhecidas].sort()).toEqual([...botoes].sort());
+  });
+});

@@ -15,8 +15,59 @@
     pix_automatico: 5,
   });
 
-  /** Pix Automático: sempre em 21 parcelas. */
+  /** Pix Automático: o padrão é 21 parcelas. */
   const PIX_AUTO_PARCELAS = 21;
+
+  /**
+   * Em quantas vezes cada modalidade parcelada sai (16/10/2026): o 12x
+   * continua, e entram 20x e 21x em todas — cartão (quitação e anual) e Pix
+   * Automático (com e sem desconto).
+   */
+  const PARCELAMENTOS = Object.freeze([12, 20, 21]);
+
+  /**
+   * Dados do cliente que vêm do mailing e a mensagem pode citar (16/10/2026):
+   * endereço, cidade, local de trabalho, ocupação e tempo de atraso. Nenhum é
+   * valor: a mensagem que só usa estes continua servindo ao relatório 245.
+   *
+   * Cada exportação chama a coluna de um jeito, então vale o primeiro nome de
+   * `names` que existir e, sem nenhum, a coluna cujo nome contém um dos
+   * `partials` (e nenhum dos `excludes` — «Endereço de e-mail» não é endereço).
+   * Coluna ausente deixa a variável vazia; a campanha avisa no «Revisar».
+   */
+  const MAILING_FIELDS = Object.freeze([
+    {
+      key: "endereco", header: "Endereço",
+      names: ["Endereço", "Endereco", "Endereço Residencial", "Endereço Completo", "Logradouro"],
+      partials: ["ENDERECO", "LOGRADOURO"],
+      excludes: ["EMAIL", "ELETRONICO", "TRABALHO", "COMERCIAL", "EMPRESA"],
+    },
+    {
+      key: "cidade", header: "Cidade",
+      names: ["Cidade", "Município", "Municipio", "Cidade Residencial"],
+      partials: ["CIDADE", "MUNICIPIO"],
+      excludes: ["TRABALHO", "COMERCIAL", "EMPRESA", "NASC"],
+    },
+    {
+      key: "local_trabalho", header: "Local de trabalho",
+      names: ["Local de Trabalho", "Local Trabalho", "Empresa onde trabalha", "Empresa Trabalho", "Empregador"],
+      partials: ["LOCALDETRABALHO", "LOCALTRABALHO", "EMPREGADOR", "EMPRESATRABALHO", "TRABALHO"],
+      excludes: ["ENDERECO", "CIDADE", "FONE", "TELEFONE", "RAMAL"],
+    },
+    {
+      key: "ocupacao", header: "Ocupação",
+      names: ["Ocupação", "Ocupacao", "Profissão", "Profissao"],
+      partials: ["OCUPACAO", "PROFISSAO"],
+      excludes: [],
+    },
+    {
+      key: "tempo_atraso", header: "Tempo de atraso",
+      // «Atraso» é a coluna do 245: os dias desde o vencimento.
+      names: ["Tempo de atraso", "Dias de atraso", "Dias em atraso", "Dias Atraso", "Atraso"],
+      partials: ["DIASDEATRASO", "DIASEMATRASO", "DIASATRASO", "TEMPODEATRASO", "TEMPOATRASO", "ATRASODIAS"],
+      excludes: ["PARCELA"],
+    },
+  ]);
 
   const DEFAULT_SENDERS = Object.freeze([]);
 
@@ -760,10 +811,22 @@ Contrato: *{{contrato}}*
       return index === undefined ? "" : String(row[index] ?? "").trim();
     };
 
+    // O primeiro dos nomes que o arquivo tiver. Para os dados do cliente que a
+    // mensagem pode citar (cidade, endereço…), que cada exportação chama de um
+    // jeito.
+    const firstReportValue = (row, names) => {
+      for (const name of names) {
+        const value = reportValue(row, name);
+        if (value !== "") return value;
+      }
+      return "";
+    };
+
     const headers = [
       "Código", "Nome", "CPF", "Contratos", "Parcelas em atraso", "Protesto",
       "Valor", "Valor Aberto", "Valor Atualizado", "Tp. Venda", "1", "2",
       "Whats Titular", "Aniversariante", "Operador",
+      ...MAILING_FIELDS.map((field) => field.header),
     ];
     const stats = estatisticasVazias();
     const records = [];
@@ -824,6 +887,8 @@ Contrato: *{{contrato}}*
         "Whats Titular": phone,
         "Aniversariante": "",
         "Operador": "",
+        // O «Atraso» do 245 é o tempo de atraso, em dias.
+        ...Object.fromEntries(MAILING_FIELDS.map((field) => [field.header, firstReportValue(row, field.names)])),
       };
       const normalized = {};
       headers.forEach((header) => {
@@ -884,6 +949,48 @@ Contrato: *{{contrato}}*
       if (value !== "") return value;
     }
     return "";
+  }
+
+  /*
+   * A coluna de cada dado do mailing, achada pelo pedaço do nome. Todos os
+   * clientes de um arquivo têm as mesmas colunas: a busca roda uma vez por
+   * arquivo (pela assinatura das colunas), não uma vez por cliente.
+   */
+  const COLUNA_DO_CAMPO = new Map();
+  function fuzzyMailingKey(record, field, signature) {
+    let porCampo = COLUNA_DO_CAMPO.get(signature);
+    if (!porCampo) {
+      if (COLUNA_DO_CAMPO.size > 20) COLUNA_DO_CAMPO.clear();
+      porCampo = new Map();
+      COLUNA_DO_CAMPO.set(signature, porCampo);
+    }
+    if (!porCampo.has(field.key)) {
+      const key = Object.keys(record.normalized).find((k) =>
+        field.partials.some((p) => k.includes(p)) && !field.excludes.some((x) => k.includes(x)));
+      porCampo.set(field.key, key ?? null);
+    }
+    return porCampo.get(field.key);
+  }
+
+  function formatOverdueTime(value) {
+    const match = /^(\d+)(?:[.,]0+)?$/.exec(value);
+    if (!match) return value;
+    const days = Number(match[1]);
+    return `${days} ${days === 1 ? "dia" : "dias"}`;
+  }
+
+  /** Os dados do mailing de um cliente: {endereco, cidade, …}, vazio se a coluna faltar. */
+  function mailingFieldsFor(record) {
+    const signature = Object.keys(record.normalized || {}).join("|");
+    return Object.fromEntries(MAILING_FIELDS.map((field) => {
+      let value = getField(record, ...field.names);
+      if (!value) {
+        const key = fuzzyMailingKey(record, field, signature);
+        value = key ? cleanValue(record.normalized[key]) : "";
+      }
+      if (field.key === "tempo_atraso") value = formatOverdueTime(value);
+      return [field.key, value];
+    }));
   }
 
   function parseNumber(value) {
@@ -1152,6 +1259,18 @@ Contrato: *{{contrato}}*
     const pixAutoDiscount = financialDataAvailable
       ? roundUp((valueWithInterest * (1 - rates.pix_automatico)) / PIX_AUTO_PARCELAS)
       : null;
+    // As outras quantidades de parcelas (16/10/2026), na mesma conta: o total
+    // da modalidade ÷ n, arredondado para cima. Chave = n de parcelas.
+    const emParcelas = (total) => Object.fromEntries(PARCELAMENTOS.map((n) => [
+      n,
+      financialDataAvailable ? (total > 0 ? roundUp(total / n) : 0) : null,
+    ]));
+    const installments = {
+      cardSettlement: emParcelas(settlement),
+      cardAnnual: emParcelas(annual),
+      pixAuto: emParcelas(valueWithInterest),
+      pixAutoDiscount: emParcelas(financialDataAvailable ? valueWithInterest * (1 - rates.pix_automatico) : 0),
+    };
 
     const issues = [];
     const blockingIssues = [];
@@ -1207,6 +1326,8 @@ Contrato: *{{contrato}}*
       cardAnnual,
       pixAuto,
       pixAutoDiscount,
+      installments,
+      mailing: mailingFieldsFor(record),
       saleType,
       company: mapCompany(saleType),
       phone: contact,
@@ -1243,6 +1364,18 @@ Contrato: *{{contrato}}*
       cartao_anual: formatCurrency(item.cardAnnual),
       pix_automatico_21x: formatCurrency(item.pixAuto),
       pix_automatico_desconto_21x: formatCurrency(item.pixAutoDiscount),
+      // 20x e 21x em todas as modalidades (16/10/2026). O 12x do cartão segue
+      // em {{cartao_quitacao}} / {{cartao_anual}}, e o 21x do Pix Automático
+      // nas variáveis acima.
+      cartao_quitacao_20x: formatCurrency(item.installments?.cardSettlement[20]),
+      cartao_quitacao_21x: formatCurrency(item.installments?.cardSettlement[21]),
+      cartao_anual_20x: formatCurrency(item.installments?.cardAnnual[20]),
+      cartao_anual_21x: formatCurrency(item.installments?.cardAnnual[21]),
+      pix_automatico_12x: formatCurrency(item.installments?.pixAuto[12]),
+      pix_automatico_20x: formatCurrency(item.installments?.pixAuto[20]),
+      pix_automatico_desconto_12x: formatCurrency(item.installments?.pixAutoDiscount[12]),
+      pix_automatico_desconto_20x: formatCurrency(item.installments?.pixAutoDiscount[20]),
+      ...(item.mailing || {}),
       pct_atraso: formatPercent(discounts.overdue),
       pct_quitacao: formatPercent(discounts.settlement),
       pct_juros: formatPercent(discounts.interest),
@@ -1258,8 +1391,14 @@ Contrato: *{{contrato}}*
   }
 
   function templateRequiresFinancialData(template) {
-    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao|cartao_anual|pix_automatico_21x|pix_automatico_desconto_21x)\s*}}/i
+    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x)\s*}}/i
       .test(String(template ?? ""));
+  }
+
+  /** Os dados do mailing ({{cidade}}, {{endereco}}…) que a mensagem cita. */
+  function mailingFieldsInTemplate(template) {
+    const text = String(template ?? "");
+    return MAILING_FIELDS.filter((field) => new RegExp(`{{\\s*${field.key}\\s*}}`, "i").test(text));
   }
 
   function templateWithoutForwarder(template) {
@@ -1282,6 +1421,7 @@ Contrato: *{{contrato}}*
     const senders = normalizeSenders(options.senders);
     const template = templateWithoutForwarder(options.template || TEMPLATES[0].body);
     const requiresFinancialData = templateRequiresFinancialData(template);
+    const mailingFieldsUsed = mailingFieldsInTemplate(template);
 
     return records.map((record, index) => {
       const item = deriveRecord(record, discounts);
@@ -1292,6 +1432,13 @@ Contrato: *{{contrato}}*
         item.hasBlockingIssues = true;
         item.status = "Revisar";
       }
+      // A mensagem cita um dado do mailing que este cliente não tem: sairia um
+      // buraco no texto. Não trava — só pede revisão.
+      mailingFieldsUsed.forEach((field) => {
+        if (item.mailing[field.key]) return;
+        item.issues.push(`${field.header} ausente no mailing`);
+        item.status = "Revisar";
+      });
       item.sender = senders.length ? senders[index % senders.length] : "";
       if (!item.sender) {
         item.issues.push("Quem encaminhará não informado");
@@ -1354,6 +1501,8 @@ Contrato: *{{contrato}}*
     DEFAULT_DISCOUNTS,
     DEFAULT_SENDERS,
     TEMPLATES,
+    PARCELAMENTOS,
+    MAILING_FIELDS,
     normalizeHeader,
     parseDelimited,
     detectDelimiter,

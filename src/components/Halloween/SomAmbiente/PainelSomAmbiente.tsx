@@ -18,7 +18,7 @@
  *
  * Baixa sob demanda (ver `BotaoSomAmbiente`).
  */
-import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
@@ -35,7 +35,8 @@ import {
   escolher, limparFila, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida, type PlaylistSalva,
+  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida,
+  type Genero, type Musica, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, estiloDaFaixa, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { CapaFaixa } from './CapaFaixa';
@@ -319,12 +320,19 @@ const ALTURA_LISTA = 'max-h-[294px] min-h-[134px]';
  * `min-h` dela. Arredondado para cima — sobrar é melhor que a lista invadir
  * o rodapé.
  */
-function minimoDoMeio(temBusca: boolean, youtube: boolean, fila: number): number {
+function minimoDoMeio(temBusca: boolean, youtube: boolean, fila: number, generos = false): number {
   const base = 12 + 36 + 8 + 134 + 8; // respiro, abas, respiro, lista, respiro
   const busca = temBusca ? 40 : 0;
   const yt = youtube ? 40 + 24 + (fila > 0 ? 40 : 0) : 0; // campo, aviso, «Na fila»
-  return base + busca + yt;
+  const chips = generos ? 34 : 0; // a fileira dos gêneros
+  return base + busca + yt + chips;
 }
+
+/** O gênero de uma faixa da aba «Músicas»; `null` para as demais. */
+function generoDe(id: string): Genero | null {
+  return (MUSICAS as readonly string[]).includes(id) ? GENERO_DA_MUSICA[id as Musica] : null;
+}
+const ROTULO_GENERO = Object.fromEntries(GENEROS.map((g) => [g.id, g.rotulo])) as Record<Genero, string>;
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
@@ -342,6 +350,8 @@ interface ItemDaLista {
 
 /**
  * Temas de terror e músicas em abas separadas (e «Playlists», no completo).
+ * Na aba «Músicas», as faixas vêm agrupadas pelo gênero, com o título de cada
+ * um, e uma fileira de gêneros filtra a lista (16/10/2026).
  * A lista mostra `LINHAS_VISIVEIS` e rola por dentro; passando disso aparece
  * também a busca, por nome ou artista, sem acento. Abre — e volta, a cada
  * troca pelo anterior/próxima — na aba da faixa escolhida, rolada até ela.
@@ -377,15 +387,20 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
   };
   const [aba, setAba] = useState<Aba>(abaInicial);
   const [busca, setBusca] = useState('');
+  // O gênero na aba «Músicas» (16/10/2026); `todos` mostra cada gênero com o
+  // seu título na lista.
+  const [genero, setGenero] = useState<Genero | 'todos'>('todos');
   const lista = useRef<HTMLDivElement>(null);
 
-  // Trocou a faixa (anterior/próxima, ou a sequência andou): vai até ela.
+  // Trocou a faixa (anterior/próxima, ou a sequência andou): vai até ela —
+  // e o filtro de gênero solta, se ela é de outro.
   const ultima = useRef(escolhida);
   useEffect(() => {
     if (ultima.current === escolhida) return;
     ultima.current = escolhida;
     setAba(abaInicial());
     setBusca('');
+    setGenero((g) => (g === 'todos' || generoDe(escolhida) === g ? g : 'todos'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escolhida]);
 
@@ -404,19 +419,26 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
     if (topo < caixa.scrollTop || topo + linha.offsetHeight > caixa.scrollTop + caixa.clientHeight) {
       caixa.scrollTop = Math.max(0, topo - (caixa.clientHeight - linha.offsetHeight) / 2);
     }
-  }, [aba, escolhida, buscando]);
+  }, [aba, escolhida, buscando, genero]);
 
   const trocarAba = (a: Aba) => {
     setAba(a);
     setBusca('');
+    setGenero('todos');
   };
 
-  const todos = listas[aba];
+  const naAbaMusicas = aba === 'musicas';
+  const todos = naAbaMusicas && genero !== 'todos'
+    ? listas.musicas.filter(x => generoDe(x.id) === genero)
+    : listas[aba];
   const termo = semAcento(busca);
+  // A busca também acha pelo gênero («funk», «sertanejo»).
   const filtrados = termo
-    ? todos.filter(x => semAcento(`${x.info.nome} ${x.info.descricao}`).includes(termo))
+    ? todos.filter(x => semAcento(`${x.info.nome} ${x.info.descricao} ${ROTULO_GENERO[generoDe(x.id) as Genero] ?? ''}`).includes(termo))
     : todos;
-  const temBusca = todos.length > LINHAS_VISIVEIS;
+  const temBusca = listas[aba].length > LINHAS_VISIVEIS;
+  // Títulos de gênero dentro da lista: só com todos os gêneros à vista.
+  const comTitulos = naAbaMusicas && genero === 'todos';
 
   // A única caixa que rola. Na aba do YouTube, os resultados da busca vêm
   // dentro dela, em cima da lista guardada.
@@ -430,16 +452,29 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
       {topo && listas[aba].length > 0 && (
         <p className="px-1 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sua lista</p>
       )}
-      {filtrados.map(x => (
-        <LinhaFaixa
-          key={x.id}
-          id={x.id}
-          info={x.info}
-          escolhida={escolhida === x.id}
-          tocando={noAr === x.id}
-          onRemover={x.onRemover}
-        />
-      ))}
+      {filtrados.map((x, i) => {
+        const g = comTitulos ? generoDe(x.id) : null;
+        const abreGenero = g !== null && (i === 0 || generoDe(filtrados[i - 1].id) !== g);
+        return (
+          <Fragment key={x.id}>
+            {abreGenero && (
+              <p className={cn(
+                'px-1.5 pb-0.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+                i === 0 ? 'pt-0.5' : 'pt-2.5',
+              )}>
+                {ROTULO_GENERO[g]}
+              </p>
+            )}
+            <LinhaFaixa
+              id={x.id}
+              info={x.info}
+              escolhida={escolhida === x.id}
+              tocando={noAr === x.id}
+              onRemover={x.onRemover}
+            />
+          </Fragment>
+        );
+      })}
       {filtrados.length === 0 && (
         <p className="py-4 text-center text-xs text-muted-foreground">
           {termo ? <>Nada com «{busca.trim()}».</> : 'Sua lista está vazia. Busque uma música acima.'}
@@ -452,7 +487,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
   return (
     <div
       className="flex min-h-0 flex-col px-3 pb-2 pt-3"
-      style={{ minHeight: minimoDoMeio(temBusca, naAbaYoutube, fila.length) }}
+      style={{ minHeight: minimoDoMeio(temBusca, naAbaYoutube, fila.length, naAbaMusicas) }}
     >
       <div role="tablist" aria-label="Tipo de som" className="flex shrink-0 gap-1 rounded-lg bg-muted p-1">
         {abas.map(a => {
@@ -482,6 +517,38 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
         })}
       </div>
 
+      {naAbaMusicas && (
+        <div role="radiogroup" aria-label="Gênero" className="som-generos mt-2 flex shrink-0 gap-1 overflow-x-auto pb-0.5">
+          {[{ id: 'todos' as const, rotulo: 'Todos' }, ...GENEROS].map(g => {
+            const ativo = genero === g.id;
+            const qtd = g.id === 'todos' ? listas.musicas.length : listas.musicas.filter(x => generoDe(x.id) === g.id).length;
+            const temEscolhida = g.id !== 'todos' && generoDe(escolhida) === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                role="radio"
+                aria-checked={ativo}
+                onClick={() => { setGenero(g.id); if (lista.current) lista.current.scrollTop = 0; }}
+                className={cn(
+                  'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  ativo
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+                )}
+              >
+                {g.rotulo}
+                <span className="tabular-nums opacity-60">{qtd}</span>
+                {temEscolhida && !ativo && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" title="A faixa escolhida está aqui" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {naAbaYoutube && (
         <BuscaYoutube playlists={playlists} escolhida={escolhida} fila={fila} lista={caixaDaLista} />
       )}
@@ -492,7 +559,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
           <Input
             value={busca}
             onChange={e => { setBusca(e.target.value); if (lista.current) lista.current.scrollTop = 0; }}
-            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música ou artista' : 'Filtrar a sua lista'}
+            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música, artista ou gênero' : 'Filtrar a sua lista'}
             aria-label="Buscar na lista"
             className="h-8 pl-8 pr-8 text-xs"
           />

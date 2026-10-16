@@ -1,0 +1,7 @@
+.whisper/
+out/
+node_modules/
+.wav-16k/
+
+# Os vídeos prontos ficam só no computador (decisão do Cleber, 16/10/2026).
+prontos/*.mp4

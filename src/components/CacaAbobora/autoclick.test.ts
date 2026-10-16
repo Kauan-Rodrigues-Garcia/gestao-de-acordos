@@ -150,6 +150,26 @@ describe('o detector na tela', () => {
     expect(d.colher().cliques).toBe(0);
   });
 
+  it('com esquecerAoSuspeitar, a mesma rajada marca UM lote, não vários seguidos', () => {
+    const rajada = (d: ReturnType<typeof criarDetector>, a: ReturnType<typeof alvoFalso>, t0: number) => {
+      for (let i = 0; i < 20; i++) a.ouvintes.get('pointerdown')!(evento({ timeStamp: t0 + i * 100 }));
+      return d;
+    };
+    const semEsquecer = alvoFalso();
+    const d1 = rajada(criarDetector(semEsquecer as unknown as Window), semEsquecer, 1000);
+    expect(d1.colher().suspeita & MOTIVO.ritmo).toBe(MOTIVO.ritmo);
+    // A rajada continua na janela de 6 s: o lote seguinte, sem clique novo, vem marcado de novo.
+    expect(d1.colher().suspeita & MOTIVO.ritmo).toBe(MOTIVO.ritmo);
+
+    const comEsquecer = alvoFalso();
+    const d2 = rajada(criarDetector(comEsquecer as unknown as Window, { esquecerAoSuspeitar: true }), comEsquecer, 1000);
+    expect(d2.colher().suspeita & MOTIVO.ritmo).toBe(MOTIVO.ritmo);
+    expect(d2.colher().suspeita).toBe(0);
+    // Outra rajada de máquina: outra pista.
+    rajada(d2, comEsquecer, 4000);
+    expect(d2.colher().suspeita & MOTIVO.ritmo).toBe(MOTIVO.ritmo);
+  });
+
   it('o lote freado devolve o que colheu, e o próximo leva junto', () => {
     const a = alvoFalso();
     const d = criarDetector(a as unknown as Window);

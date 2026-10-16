@@ -10,7 +10,8 @@
  * o sinal `campanhas:<operador>` e a aba aberta relê na hora — a campanha some.
  *
  * O operador avalia o retorno de cada campanha — joinha ou mãozinha para baixo
- * (20261009150000); o líder vê a contagem no histórico.
+ * (20261009150000); o líder vê a contagem no histórico. E deixa uma observação
+ * para o líder (20261016120000), que chega a ele como notificação.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -21,7 +22,7 @@ import { copiarTextoSilencioso } from '@/lib/clipboard';
 import { listarMinhasCampanhas, type EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
 import {
   CampanhaIndisponivel, avaliarCampanha, definirStatus, editarMensagem, listarContatos, minhasAvaliacoes,
-  type Avaliacao,
+  observarCampanha, type Avaliacao,
 } from './campanhasWhatsapp.service';
 import {
   contar, linkWhatsApp, textoDoContato,
@@ -207,14 +208,36 @@ export function useCampanhasWhatsapp() {
   avaliacoesRef.current = avaliacoes;
   const chaveLotes = useMemo(() => [...new Set(campanhas.map(c => c.lote_id))].sort().join(','), [campanhas]);
 
+  // A observação para o líder (20261016120000), uma por campanha também.
+  const [observacoes, setObservacoes] = useState<Map<string, string>>(new Map());
+
   useEffect(() => {
-    if (!chaveLotes) { setAvaliacoes(new Map()); return; }
+    if (!chaveLotes) { setAvaliacoes(new Map()); setObservacoes(new Map()); return; }
     let ativo = true;
     minhasAvaliacoes(chaveLotes.split(','))
-      .then((m) => { if (ativo) setAvaliacoes(m); })
+      .then((m) => { if (ativo) { setAvaliacoes(m.votos); setObservacoes(m.observacoes); } })
       .catch((err) => console.warn('[CampanhasWhatsapp] avaliações:', err));
     return () => { ativo = false; };
   }, [chaveLotes]);
+
+  /** Devolve se gravou. Texto vazio apaga a observação. */
+  const observar = useCallback(async (loteId: string, texto: string): Promise<boolean> => {
+    const limpo = texto.trim();
+    try {
+      await observarCampanha(loteId, limpo);
+      setObservacoes((m) => {
+        const x = new Map(m);
+        if (limpo) x.set(loteId, limpo); else x.delete(loteId);
+        return x;
+      });
+      toast.success(limpo ? 'Observação enviada ao líder.' : 'Observação apagada.');
+      return true;
+    } catch (err) {
+      console.error('[CampanhasWhatsapp] observar:', err);
+      toast.error('Não foi possível salvar a observação. Tente de novo.');
+      return false;
+    }
+  }, []);
 
   /** Clicar no voto que já está marcado tira o voto. */
   const avaliar = useCallback(async (loteId: string, bom: Avaliacao) => {
@@ -246,6 +269,6 @@ export function useCampanhasWhatsapp() {
     perfilId, carregando, campanhas, selecionada, selecionar, recarregar,
     contatos, carregandoContatos, contagem,
     modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
-    avaliacoes, avaliar,
+    avaliacoes, avaliar, observacoes, observar,
   };
 }

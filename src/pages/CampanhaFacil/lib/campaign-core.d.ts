@@ -12,6 +12,18 @@ export interface Discounts {
   pix_automatico: number;
 }
 
+/** Os dados do cliente que vêm do mailing e viram variável da mensagem. */
+export type MailingFieldKey = 'endereco' | 'cidade' | 'local_trabalho' | 'ocupacao' | 'tempo_atraso';
+
+export interface MailingField {
+  key: MailingFieldKey;
+  /** O nome da coluna, como aparece no aviso de revisão. */
+  header: string;
+  names: readonly string[];
+  partials: readonly string[];
+  excludes: readonly string[];
+}
+
 export interface Template {
   id: string;
   name: string;
@@ -96,6 +108,13 @@ export interface CampaignItem {
   pixAuto: number | null;
   /** Parcela do Pix Automático com o desconto: valor com juros × (1 − %) ÷ 21. */
   pixAutoDiscount: number | null;
+  /**
+   * Cada modalidade parcelada em 12x, 20x e 21x (16/10/2026): a chave é o
+   * número de parcelas. `null` no relatório sem valores.
+   */
+  installments: Record<'cardSettlement' | 'cardAnnual' | 'pixAuto' | 'pixAutoDiscount', Record<number, number | null>>;
+  /** Os dados do cliente que vêm do mailing; vazio quando a coluna falta. */
+  mailing: Record<MailingFieldKey, string>;
   saleType: string;
   company: string;
   phone: string;
@@ -125,6 +144,9 @@ export interface CampaignCoreApi {
   readonly DEFAULT_DISCOUNTS: Discounts;
   readonly DEFAULT_SENDERS: readonly string[];
   readonly TEMPLATES: readonly Template[];
+  /** Em quantas vezes as modalidades parceladas saem: 12, 20 e 21. */
+  readonly PARCELAMENTOS: readonly number[];
+  readonly MAILING_FIELDS: readonly MailingField[];
   normalizeHeader(value: unknown): string;
   parseDelimited(text: string, delimiter: string): string[][];
   detectDelimiter(text: string): string;

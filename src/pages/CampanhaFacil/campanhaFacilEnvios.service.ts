@@ -56,7 +56,13 @@ export function mensagemDoErro(err: unknown, padrao: string): string {
 // ── Quem pode receber ────────────────────────────────────────────────────────
 
 /**
- * Operadores ativos do setor, com os clones dele.
+ * Quem encaminha como operador: o operador e, desde 16/10/2026, a Elite — que
+ * também atende cliente (conta no recebimento) e antes não aparecia na lista.
+ */
+const CARGOS_QUE_ENCAMINHAM = ['operador', 'elite'] as const;
+
+/**
+ * Operadores ativos do setor (e a Elite), com os clones dele.
  *
  * O setor alternativo (Treinamento) vive de clones: o operador mantém o
  * `setor_id` de origem e entra no setor pela `equipe_operadores_clones`. Ler só
@@ -67,9 +73,9 @@ export async function listarOperadoresParaCampanha(
   empresaId: string, setorId: string,
 ): Promise<OperadorCampanha[]> {
   const [{ data: doSetor, error: e1 }, { data: equipes, error: e2 }] = await Promise.all([
-    supabase.from('perfis').select('id, nome, foto_url, equipe_id')
+    supabase.from('perfis').select('id, nome, foto_url, equipe_id, perfil')
       .eq('empresa_id', empresaId).eq('setor_id', setorId)
-      .eq('perfil', 'operador').eq('ativo', true),
+      .in('perfil', [...CARGOS_QUE_ENCAMINHAM]).eq('ativo', true),
     supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId).eq('setor_id', setorId),
   ]);
   if (e1) throw e1;
@@ -78,13 +84,14 @@ export async function listarOperadoresParaCampanha(
   // Só as equipes DESTE setor dão nome ao filtro; equipe de outro setor conta
   // como «sem equipe» aqui.
   const nomeEquipe = new Map(((equipes ?? []) as { id: string; nome: string }[]).map(e => [e.id, e.nome]));
-  const comEquipe = (p: { id: string; nome: string; foto_url: string | null; equipe_id: string | null }, equipeId: string | null) => ({
+  type PerfilLido = { id: string; nome: string; foto_url: string | null; equipe_id: string | null; perfil?: string | null };
+  const comEquipe = (p: PerfilLido, equipeId: string | null): OperadorCampanha => ({
     id: p.id, nome: p.nome, foto_url: p.foto_url,
     equipe_id: equipeId && nomeEquipe.has(equipeId) ? equipeId : null,
     equipe_nome: equipeId ? (nomeEquipe.get(equipeId) ?? null) : null,
+    ...(p.perfil === 'elite' ? { elite: true } : {}),
   });
 
-  type PerfilLido = { id: string; nome: string; foto_url: string | null; equipe_id: string | null };
   const lista = new Map<string, OperadorCampanha>();
   for (const p of (doSetor ?? []) as PerfilLido[]) lista.set(p.id, comEquipe(p, p.equipe_id));
 
@@ -99,8 +106,9 @@ export async function listarOperadoresParaCampanha(
     }
     if (equipeDoClone.size > 0) {
       // Da mesma empresa: o envio só aceita operador da empresa da campanha.
-      const { data: perfisClones, error: e4 } = await supabase.from('perfis').select('id, nome, foto_url, equipe_id')
-        .in('id', [...equipeDoClone.keys()]).eq('empresa_id', empresaId).eq('perfil', 'operador').eq('ativo', true);
+      const { data: perfisClones, error: e4 } = await supabase.from('perfis').select('id, nome, foto_url, equipe_id, perfil')
+        .in('id', [...equipeDoClone.keys()]).eq('empresa_id', empresaId)
+        .in('perfil', [...CARGOS_QUE_ENCAMINHAM]).eq('ativo', true);
       if (e4) throw e4;
       for (const p of (perfisClones ?? []) as PerfilLido[]) lista.set(p.id, comEquipe(p, equipeDoClone.get(p.id) ?? null));
     }
@@ -277,6 +285,8 @@ export interface LoteCampanha {
   /** Quantos operadores votaram que o retorno foi bom / que não deu (20261009150000). */
   votos_bom: number;
   votos_ruim: number;
+  /** Quantas observações a operação deixou (20261016120000); 0 sem a migration. */
+  observacoes?: number;
   /** Quem lançou: o histórico separa as minhas das dos outros líderes do setor. */
   criado_por: string;
   criado_por_nome: string | null;
@@ -295,6 +305,13 @@ const COLUNAS_LOTE =
   + 'votos_bom, votos_ruim, criado_por, criado_por_nome';
 
 /**
+ * Coluna que ainda não existe no banco (42703): a migration 20261016120000
+ * não foi aplicada. A leitura refaz sem as colunas novas em vez de derrubar o
+ * histórico do líder.
+ */
+const semColuna = (e: { code?: string } | null) => e?.code === '42703';
+
+/**
  * As campanhas que ESTE líder lançou e as dos outros líderes do setor
  * (16/10/2026 — antes era só a própria), da mais nova para a mais antiga.
  * Quem vê as do setor é o RLS (`fn_cf_alcanca_setor`, 20261016210000); a tela
@@ -302,13 +319,17 @@ const COLUNAS_LOTE =
  */
 export async function listarHistorico(autorId: string, setorId: string | null): Promise<LoteCampanha[]> {
   const todos: LoteCampanha[] = [];
+  let colunas = `${COLUNAS_LOTE}, observacoes`;
   for (let de = 0; ; de += PAGINA) {
-    let q = db.from('campanha_facil_lotes').select(COLUNAS_LOTE);
-    q = setorId ? q.or(`criado_por.eq.${autorId},setor_id.eq.${setorId}`) : q.eq('criado_por', autorId);
-    const { data, error } = await q
-      .not('lancada_em', 'is', null)
-      .order('criado_em', { ascending: false })
-      .range(de, de + PAGINA - 1);
+    const pedir = () => {
+      const q = db.from('campanha_facil_lotes').select(colunas);
+      return (setorId ? q.or(`criado_por.eq.${autorId},setor_id.eq.${setorId}`) : q.eq('criado_por', autorId))
+        .not('lancada_em', 'is', null)
+        .order('criado_em', { ascending: false })
+        .range(de, de + PAGINA - 1);
+    };
+    let { data, error } = await pedir();
+    if (semColuna(error)) { colunas = COLUNAS_LOTE; ({ data, error } = await pedir()); }
     if (error) throw error;
     todos.push(...((data ?? []) as unknown as LoteCampanha[]));
     if ((data ?? []).length < PAGINA) break;
@@ -316,17 +337,29 @@ export async function listarHistorico(autorId: string, setorId: string | null): 
   return todos;
 }
 
+/** O que um operador disse da campanha: o voto e a observação para o líder. */
+export interface AvaliacaoDoOperador {
+  /** `true` = bom retorno, `false` = não deu, `null` = só deixou observação. */
+  bom: boolean | null;
+  observacao: string | null;
+  observado_em: string | null;
+}
+
 /**
- * O voto de cada operador na campanha: `true` = bom retorno, `false` = não
- * deu. Quem não votou fica fora do mapa. O líder lê pela policy da
- * 20261013120000; sem ela aplicada, a leitura volta vazia e a tela segue só
- * com os números.
+ * O voto e a observação de cada operador na campanha. Quem não disse nada
+ * fica fora do mapa. O líder lê pela policy da 20261013120000; sem ela
+ * aplicada, a leitura volta vazia e a tela segue só com os números.
  */
-export async function votosDoLote(loteId: string): Promise<Map<string, boolean>> {
-  const { data, error } = await db.from('campanha_facil_avaliacoes')
-    .select('operador_id, bom').eq('lote_id', loteId);
+export async function votosDoLote(loteId: string): Promise<Map<string, AvaliacaoDoOperador>> {
+  type Linha = { operador_id: string; bom: boolean | null; observacao?: string | null; observado_em?: string | null };
+  const ler = (colunas: string) => db.from('campanha_facil_avaliacoes')
+    .select(colunas).eq('lote_id', loteId) as unknown as PromiseLike<{ data: Linha[] | null; error: { code?: string } | null }>;
+  let { data, error } = await ler('operador_id, bom, observacao, observado_em');
+  if (semColuna(error)) ({ data, error } = await ler('operador_id, bom'));
   if (error) throw error;
-  return new Map(((data ?? []) as { operador_id: string; bom: boolean }[]).map(v => [v.operador_id, v.bom]));
+  return new Map(((data ?? []) as Linha[]).map(v => [v.operador_id, {
+    bom: v.bom, observacao: v.observacao ?? null, observado_em: v.observado_em ?? null,
+  }]));
 }
 
 export interface Progresso { total: number; enviados: number; nao_enviados: number }

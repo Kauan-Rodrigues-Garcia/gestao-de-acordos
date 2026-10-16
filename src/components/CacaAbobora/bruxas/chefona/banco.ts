@@ -41,6 +41,15 @@ import {
   type Golpeador, type MeuPlacar, type RodadaChefao,
 } from '../../chefao';
 import { MOTIVO, normalizarFichas, type Colheita, type FichaDeCliques } from '../../autoclick';
+import { CONTAGEM_LOBBY_S } from './lobby/trilha';
+import { RITMO, curaDoRitmo, ritmoDaLuta } from './ritmo';
+
+/** Quem entrou no lobby (os últimos 24 que o banco manda). */
+export interface NoLobby {
+  usuario: string;
+  nome:    string;
+  setor:   string | null;
+}
 
 export interface RodadaChefona extends RodadaChefao {
   /** A Absorção do totem (a parte dourada da barra): gasta antes da vida. */
@@ -53,14 +62,25 @@ export interface RodadaChefona extends RodadaChefao {
   totem_vida:   number;
   totens:       number;
   curas:        number;
+  /** O lobby (16/10/2026, migration 20261016120000): quantos entraram, e os últimos 24 na ordem de chegada. */
+  lobby_total:  number;
+  lobby:        NoLobby[];
+  /**
+   * O multiplicador do dano agora (o diretor de ritmo, `ritmo.ts`, migration
+   * 20261016200000). `null`: o banco ainda não tem o ritmo — a tela não aplica.
+   */
+  ritmo:        number | null;
 }
 
 /** Os números que a migration também usa — mudou um, mude o outro. */
 export const LOTE_MS = 1_000;
 export const MAX_ACERTOS_POR_LOTE = 12;
+/** Lotes com pista forte de autoclick que bloqueiam a pessoa na chefona (migration 20261016120000). */
+export const PISTAS_PARA_BLOQUEAR = 3;
 /** O dano de um acerto, no máximo: cabeça (6) com ela tonta (2×). */
 export const MAX_DANO_POR_ACERTO = 12;
-export const ESPERA_S = 60;
+/** A contagem antes dela: 3 minutos de lobby (16/10/2026; era 1 minuto). */
+export const ESPERA_S = CONTAGEM_LOBBY_S;
 export const PRAZO_MIN = 2;
 /** A Poção de Cura (o `CURA_FRACAO` do palco) e quanto ela leva bebendo. */
 export const CURA_FRACAO = 0.22;
@@ -74,13 +94,26 @@ const FOLGA_EXPIRA_MS = 3_000;
 
 // ── Quanto de vida ──────────────────────────────────────────────────────────
 //
-// A conta (15/10/2026), a mesma do Rei do Pop com o dano dela: uma pessoa
-// clica 3 a 4 vezes por segundo e acerta perto da metade (ela é grande, mas
-// some na pérola e desvia nas poções); o acerto vale 3 no corpo e 6 na cabeça,
-// mais quando ela prepara poção. Dá ~4 de dano por segundo por pessoa. Com
-// `PRAZO_MIN` = 2, tirando a entrada, as manobras e as poções, sobram ~95 s
-// úteis: ~400 por pessoa é o Médio. A cura (22%) e o totem (1 vida + 15%)
-// esticam a luta — por isso a base é maior que a do Rei do Pop.
+// A vida é `base + porPessoa × quem acertou` (a parte de cada um entra no
+// primeiro tiro que CONTOU). Então a luta dura
+//
+//     base ÷ (dano por segundo × pessoas)  +  porPessoa ÷ dano por segundo
+//
+// e a segunda parte não depende de quantos são: com 10 ou com 40 a luta dura
+// parecido, e a base só pesa quando há pouca gente.
+//
+// O dano por segundo de uma pessoa (revisto em 16/10/2026): ela é grande
+// (108 × 252 px na tela), então quem mira acerta 6 a 7 de cada 10 cliques; o
+// acerto vale ~3 na média (corpo 3, cabeça 6, chapéu e vassoura 2, raspão
+// metade). Clicando 2 vezes por segundo, ~4; clicando 3,5, ~7. O teto do banco
+// (9 acertos por segundo) fica bem acima disso.
+//
+// A conta de 15/10 (700 + 400 por pessoa no Médio) supunha ~4 e deixava a luta
+// em ~110 s com quem joga devagar: com a cura ou o totem do super_admin, ela
+// fugia antes de cair (o prazo é 2 minutos). O Médio agora dá ~75 s a 5 de dano
+// por segundo, ~95 s a 4 e ~55 s a 7, de 10 a 40 pessoas — sobra prazo para a
+// cura e o totem. Os números de cada dificuldade estão em `duracaoEstimadaS`
+// e no teste.
 
 export interface DificuldadeChefona {
   nome: string;
@@ -89,10 +122,16 @@ export interface DificuldadeChefona {
 }
 
 export const DIFICULDADES_CHEFONA: readonly DificuldadeChefona[] = [
-  { nome: 'Fácil', base: 400, porPessoa: 230 },
-  { nome: 'Médio', base: 700, porPessoa: 400 },
-  { nome: 'Difícil', base: 1100, porPessoa: 620 },
+  { nome: 'Fácil', base: 250, porPessoa: 250 },
+  { nome: 'Médio', base: 400, porPessoa: 350 },
+  { nome: 'Difícil', base: 600, porPessoa: 450 },
 ];
+
+/** Quanto tempo (s) a luta leva com `pessoas` tirando `danoPorSegundo` cada, sem cura nem totem. */
+export function duracaoEstimadaS(d: Pick<DificuldadeChefona, 'base' | 'porPessoa'>, pessoas: number, danoPorSegundo: number): number {
+  const n = Math.max(1, pessoas);
+  return (d.base + d.porPessoa * n) / (danoPorSegundo * n);
+}
 
 // ── Puras (exportadas para os testes) ─────────────────────────────────────────
 
@@ -120,7 +159,20 @@ export function normalizarChefona(bruto: unknown): RodadaChefona | null {
     totem_vida:   Math.max(0, inteiro(r.totem_vida)),
     totens:       Math.max(0, inteiro(r.totens)),
     curas:        Math.max(0, inteiro(r.curas)),
+    lobby_total:  Math.max(0, inteiro(r.lobby_total)),
+    lobby:        normalizarLobby(r.lobby),
+    ritmo:        r.ritmo != null && Number.isFinite(Number(r.ritmo)) && Number(r.ritmo) > 0 ? Number(r.ritmo) : null,
   };
+}
+
+function normalizarLobby(bruto: unknown): NoLobby[] {
+  if (!Array.isArray(bruto)) return [];
+  return bruto.flatMap((b): NoLobby[] => {
+    if (!b || typeof b !== 'object') return [];
+    const l = b as Record<string, unknown>;
+    if (typeof l.usuario !== 'string') return [];
+    return [{ usuario: l.usuario, nome: texto(l.nome) ?? 'Alguém', setor: texto(l.setor) }];
+  });
 }
 
 export function normalizarPlacarChefona(bruto: unknown): MeuPlacar | null {
@@ -173,12 +225,14 @@ export function vidaNaTela(r: RodadaChefona, agora: number, pendente: number): n
 /**
  * Um lote, pela regra da migration (`fn_chefona_acertar`): a vida cresce com a
  * caçadora nova, a Absorção paga primeiro, e o golpe fatal com o totem na mão
- * vira 1 de vida + Regeneração. Serve ao ensaio e aos testes — o banco é quem
- * manda de verdade.
+ * vira 1 de vida + Regeneração. Com `comRitmo` (o padrão), o diretor de ritmo
+ * da 20261016200000: o dano que sai da vida é multiplicado, o piso antes dos
+ * 60 s, o golpe de misericórdia dos 115 s e a cura sozinha — e o ranking soma o
+ * dano antes do ritmo. Serve ao ensaio e aos testes — o banco é quem manda.
  */
 export function aplicarLote(
   r: RodadaChefona, quem: { usuario: string; nome: string; foto?: string | null },
-  acertos: number, criticos: number, dano: number, agora: number,
+  acertos: number, criticos: number, dano: number, agora: number, comRitmo = true,
 ): RodadaChefona {
   const a = Math.max(0, Math.min(MAX_ACERTOS_POR_LOTE, Math.trunc(acertos)));
   const c = Math.max(0, Math.min(a, Math.trunc(criticos)));
@@ -189,24 +243,41 @@ export function aplicarLote(
   const max = r.vida_max + extra;
   let vida = r.vida + extra;
   let absorcao = r.absorcao;
-  const gasta = Math.min(absorcao, d);
+  const t = (agora - Date.parse(r.solta_em)) / 1000;
+  let tira = d;
+  if (comRitmo) {
+    tira = Math.max(1, Math.round(d * ritmoDaLuta(t, vida / Math.max(1, max))));
+    if (t >= RITMO.maxS) tira = vida + absorcao;
+  }
+  const gasta = Math.min(absorcao, tira);
   absorcao -= gasta;
-  const resto = d - gasta;
-  let efetivo = d;
+  let resto = tira - gasta;
+  if (comRitmo && t < RITMO.minS) resto = Math.max(0, Math.min(resto, vida - Math.max(1, Math.ceil(max * RITMO.piso))));
+  let efetivo = comRitmo ? d : tira;
   let morreu = false;
   let totem = false;
   let regen = 0;
   if (vida - resto > 0) vida -= resto;
   else if (r.protegida) {
     totem = true;
-    efetivo = gasta + (vida - 1);
+    if (!comRitmo) efetivo = gasta + (vida - 1);
     regen = Math.min(max - 1, Math.max(1, Math.round(max * REGEN_FRACAO)));
     vida = 1 + regen;
     absorcao = Math.round(max * ABSORCAO_FRACAO);
   } else {
     morreu = true;
-    efetivo = gasta + vida;
+    if (!comRitmo) efetivo = gasta + vida;
     vida = 0;
+  }
+  // Time forte demais: ela bebe sozinha (a mesma regra do banco).
+  let cura = 0;
+  if (comRitmo && !morreu && !totem) {
+    const desde = r.cura_em ? (agora - Date.parse(r.cura_em)) / 1000 : Infinity;
+    const fracao = curaDoRitmo(t, vida / Math.max(1, max), desde);
+    if (fracao > 0) {
+      cura = Math.min(max - vida, Math.max(1, Math.round(max * fracao)));
+      vida += cura;
+    }
   }
   const eu: Golpeador = {
     usuario: quem.usuario, nome: quem.nome, foto: quem.foto ?? null,
@@ -220,6 +291,8 @@ export function aplicarLote(
     ...r, vida, vida_max: max, absorcao, versao: r.versao + 1,
     ranking, participantes: Math.max(r.participantes + (antes ? 0 : 1), ranking.length),
     ...(totem ? { protegida: false, totem_em: quando, totem_vida: regen, totens: r.totens + 1 } : {}),
+    ...(cura > 0 ? { cura_em: quando, cura_vida: cura, curas: r.curas + 1 } : {}),
+    ritmo: comRitmo ? ritmoDaLuta(t, vida / Math.max(1, max)) : 1,
     ...(morreu ? {
       situacao: 'derrotado' as const, derrotado_em: quando,
       golpe_final_por: quem.usuario, golpe_final_nome: quem.nome, golpe_final_foto: quem.foto ?? null,
@@ -227,25 +300,121 @@ export function aplicarLote(
   };
 }
 
+// ── A hora do banco ──────────────────────────────────────────────────────────
+//
+// Cada tela compara os horários da chefona com o próprio relógio. O estado
+// traz `agora` (a hora do banco, migration 20261016170000): a diferença para
+// esta tela ajusta todos os horários, e a bruxa nasce (e a música do lobby
+// bate o drop) no mesmo instante em todo computador, certo ou errado o
+// relógio dele. A medida inclui o atraso da rede, que só a diminui: vale a
+// maior. Se o relógio daqui mudar (pulou mais de 5 s), recomeça.
+
+let desvioRelogio = 0;
+let temDesvio = false;
+/** Abaixo disto (ms) não ajusta: a diferença é da rede, não do relógio. */
+const DESVIO_MINIMO_MS = 250;
+const HORARIOS = ['solta_em', 'expira_em', 'derrotado_em', 'cura_em', 'cura_ate', 'protegida_em', 'totem_em'] as const;
+
+/** Mede a diferença entre a hora do banco e a desta tela (ms). */
+export function ajustarRelogio(agoraDoBanco: unknown, agora = Date.now()): void {
+  if (typeof agoraDoBanco !== 'string') return;
+  const t = Date.parse(agoraDoBanco);
+  if (!Number.isFinite(t)) return;
+  const medido = t - agora;
+  if (!temDesvio || medido > desvioRelogio || desvioRelogio - medido > 5_000) {
+    desvioRelogio = medido;
+    temDesvio = true;
+  }
+}
+
+/** A chefona com os horários na hora DESTA tela. */
+export function naHoraDaqui<R extends Pick<RodadaChefona, (typeof HORARIOS)[number]>>(r: R): R {
+  if (!temDesvio || Math.abs(desvioRelogio) < DESVIO_MINIMO_MS) return r;
+  const c: Record<string, unknown> = { ...r };
+  for (const k of HORARIOS) {
+    const v = c[k];
+    if (typeof v === 'string') c[k] = new Date(Date.parse(v) - desvioRelogio).toISOString();
+  }
+  return c as R;
+}
+
 // ── O estado do app ──────────────────────────────────────────────────────────
 
 let estado: RodadaChefona | null = null;
+/**
+ * A chefona em cujo lobby ESTA pessoa está. É de cada um: vem só nas respostas
+ * dela (a leitura de entrada, entrar, sair), nunca no aviso geral.
+ */
+let euNoLobby: number | null = null;
 const ouvintes = new Set<() => void>();
+
+function avisarOuvintes(): void {
+  for (const o of [...ouvintes]) o();
+}
 
 function publicar(proximo: RodadaChefona | null): void {
   if (proximo === estado) return;
   estado = proximo;
-  for (const o of [...ouvintes]) o();
+  avisarOuvintes();
+}
+
+function marcarLobby(rodadaId: number, dentro: boolean): void {
+  const proximo = dentro ? rodadaId : euNoLobby === rodadaId ? null : euNoLobby;
+  if (proximo === euNoLobby) return;
+  euNoLobby = proximo;
+  avisarOuvintes();
 }
 
 /** O que chegou do banco (Broadcast, resposta do tiro ou leitura). */
 export function aceitarChefona(bruto: unknown): void {
-  const nova = normalizarChefona(bruto);
-  if (nova) publicar(juntarChefao(estado, nova));
+  if (bruto && typeof bruto === 'object') ajustarRelogio((bruto as { agora?: unknown }).agora);
+  const lida = normalizarChefona(bruto);
+  if (!lida) return;
+  const nova = lida.id > 0 ? naHoraDaqui(lida) : lida;
+  const dentro = (bruto as { eu_no_lobby?: unknown }).eu_no_lobby;
+  if (typeof dentro === 'boolean') marcarLobby(nova.id, dentro);
+  publicar(juntarChefao(estado, nova));
 }
 
 export function estadoChefona(): RodadaChefona | null {
   return estado;
+}
+
+/** Esta pessoa está no lobby desta chefona? */
+export function useEuNoLobbyChefona(rodadaId: number | null | undefined): boolean {
+  const id = useSyncExternalStore(
+    o => { ouvintes.add(o); return () => { ouvintes.delete(o); }; },
+    () => euNoLobby,
+  );
+  return rodadaId != null && id === rodadaId;
+}
+
+/** O banco ainda não tem o lobby (migration 20261016120000 por aplicar). */
+const semLobbyNoBanco = (erro: string) => /fn_chefona_lobby|PGRST202|schema cache|does not exist/.test(erro);
+
+/**
+ * Entra no lobby. Banco sem a migration do lobby: entra só nesta tela (o banco
+ * velho deixa todo mundo acertar), para a chefona não sumir até aplicarem.
+ */
+export async function entrarNoLobbyChefona(rodadaId: number): Promise<{ erro: string | null }> {
+  if (rodadaId < 0) { ensaioEntrarNoLobby(rodadaId); return { erro: null }; }
+  const { data, error } = await rpc<unknown>('fn_chefona_lobby_entrar', { p_rodada: rodadaId });
+  if (error) {
+    if (semLobbyNoBanco(error.message)) { marcarLobby(rodadaId, true); return { erro: null }; }
+    return { erro: error.message };
+  }
+  aceitarChefona(data);
+  marcarLobby(rodadaId, true);
+  return { erro: null };
+}
+
+export async function sairDoLobbyChefona(rodadaId: number): Promise<{ erro: string | null }> {
+  marcarLobby(rodadaId, false);
+  if (rodadaId < 0) { ensaioSairDoLobby(rodadaId); return { erro: null }; }
+  const { data, error } = await rpc<unknown>('fn_chefona_lobby_sair', { p_rodada: rodadaId });
+  if (error) return { erro: semLobbyNoBanco(error.message) ? null : error.message };
+  aceitarChefona(data);
+  return { erro: null };
 }
 
 function rpc<T>(nome: string, args?: Record<string, unknown>) {
@@ -294,6 +463,11 @@ export interface ResultadoLoteChefona {
   erro:   string | null;
   /** O banco achou o lote cedo demais: os tiros NÃO entraram, e voltam no próximo. */
   freio:  boolean;
+  /**
+   * Quantos acertos do lote o banco NÃO contou (rápido demais, ou cliques com
+   * pista de autoclick: migration 20261016120000). Não voltam.
+   */
+  descartados?: number;
 }
 
 /** Manda um lote. A resposta já atualiza a vida e o ranking nesta aba. */
@@ -306,13 +480,16 @@ export async function enviarLoteChefona(
   const d = Math.max(0, Math.min(a * MAX_DANO_POR_ACERTO, Math.round(dano)));
   if (a === 0 || d === 0) return { rodada: estado, eu: null, erro: null, freio: false };
   if (rodadaId < 0) return loteNoEnsaio(rodadaId, a, c, d, EU_NO_ENSAIO, 'Você (ensaio)', colheita);
-  const { data, error } = await rpc<{ eu?: unknown; freio?: unknown } & Record<string, unknown>>(
+  const { data, error } = await rpc<{ eu?: unknown; freio?: unknown; descartados?: unknown } & Record<string, unknown>>(
     'fn_chefona_acertar',
     { p_rodada: rodadaId, p_acertos: a, p_criticos: c, p_dano: d, p_cliques: colheita.cliques, p_suspeita: colheita.suspeita },
   );
   if (error) return { rodada: null, eu: null, erro: error.message, freio: false };
   aceitarChefona(data);
-  return { rodada: estado, eu: normalizarPlacarChefona(data?.eu), erro: null, freio: data?.freio === true };
+  return {
+    rodada: estado, eu: normalizarPlacarChefona(data?.eu), erro: null, freio: data?.freio === true,
+    descartados: Math.max(0, inteiro(data?.descartados)),
+  };
 }
 
 // ── O painel do super_admin ──────────────────────────────────────────────────
@@ -354,6 +531,7 @@ export function motivoDoErroDaChefona(erro: string): string {
   if (erro.includes('JA_PROTEGIDA')) return 'Ela já está segurando o totem.';
   if (erro.includes('AINDA_CHEGANDO')) return 'Ela ainda não chegou.';
   if (erro.includes('SEM_CHEFONA')) return 'Ela não está mais na tela.';
+  if (/fn_chefona_lobby/.test(erro)) return 'O banco ainda não tem o lobby da chefona (migration 20261016120000).';
   if (/fn_chefona_|PGRST202|schema cache/.test(erro)) return 'O banco ainda não tem a chefona (migration 20261015230000).';
   return erro;
 }
@@ -391,7 +569,22 @@ export function ensaioSoltarChefona(vida = 300, minutos = PRAZO_MIN, esperaS = 0
     cura_em: null, cura_ate: null, cura_vida: 0, cura_semente: 0,
     versao: 1, participantes: 0, ranking: [],
     absorcao: 0, protegida: false, protegida_em: null, totem_em: null, totem_vida: 0, totens: 0, curas: 0,
+    lobby_total: 0, lobby: [], ritmo: 1,
   });
+}
+
+function ensaioEntrarNoLobby(rodadaId: number): void {
+  const r = estado;
+  marcarLobby(rodadaId, true);
+  if (!r || r.id !== rodadaId || r.lobby.some(l => l.usuario === EU_NO_ENSAIO)) return;
+  const lobby = [...r.lobby, { usuario: EU_NO_ENSAIO, nome: 'Você (ensaio)', setor: null }].slice(-24);
+  publicar({ ...r, lobby, lobby_total: r.lobby_total + 1, versao: r.versao + 1 });
+}
+
+function ensaioSairDoLobby(rodadaId: number): void {
+  const r = estado;
+  if (!r || r.id !== rodadaId || !r.lobby.some(l => l.usuario === EU_NO_ENSAIO)) return;
+  publicar({ ...r, lobby: r.lobby.filter(l => l.usuario !== EU_NO_ENSAIO), lobby_total: Math.max(0, r.lobby_total - 1), versao: r.versao + 1 });
 }
 
 function loteNoEnsaio(
@@ -399,6 +592,19 @@ function loteNoEnsaio(
 ): ResultadoLoteChefona {
   const r = estado;
   if (!r || r.id !== rodadaId) return { rodada: r, eu: null, erro: null, freio: false };
+  // O autoclick, como no banco (20261016120000): lote com pista forte não conta,
+  // e quem soma `PISTAS_PARA_BLOQUEAR` não conta mais nada — nem no ritmo.
+  const ficha = fichasDoEnsaio.get(usuario);
+  const forte = (colheita.suspeita & (MOTIVO.ritmo | MOTIVO.rapido | MOTIVO.sintetico)) !== 0;
+  if (forte || (ficha?.suspeitas ?? 0) >= PISTAS_PARA_BLOQUEAR) {
+    if (forte) fichasDoEnsaio.set(usuario, {
+      usuario, nome, dano: ficha?.dano ?? 0, acertos: ficha?.acertos ?? 0, headshots: ficha?.headshots ?? 0,
+      cliques: (ficha?.cliques ?? 0) + colheita.cliques, lotes: (ficha?.lotes ?? 0) + 1,
+      lotes_no_teto: ficha?.lotes_no_teto ?? 0, suspeitas: (ficha?.suspeitas ?? 0) + 1,
+      motivos: (ficha?.motivos ?? 0) | colheita.suspeita, segundos: (ficha?.segundos ?? 0) + 1,
+    });
+    return { rodada: r, eu: null, erro: null, freio: false, descartados: a };
+  }
   const nova = aplicarLote(r, { usuario, nome }, a, c, d, Date.now());
   if (nova !== r) {
     const g = nova.ranking.find(x => x.usuario === usuario)!;
@@ -477,6 +683,32 @@ export function ensaioPularContagemChefona(): void {
   publicar({ ...r, solta_em: new Date(agora).toISOString(), expira_em: new Date(agora + dura).toISOString(), versao: r.versao + 1 });
 }
 
+/**
+ * Adianta o relógio da contagem do ensaio para faltar `faltaS` (só adianta,
+ * nunca atrasa). A música do lobby e a chegada dela leem o mesmo relógio:
+ * pulam juntas, e a bruxa continua nascendo no drop.
+ */
+export function ensaioIrParaChefona(faltaS: number): void {
+  const r = estado;
+  const agora = Date.now();
+  if (!r || r.id >= 0 || !chefaoChegando(r, agora)) return;
+  const solta = Date.parse(r.solta_em);
+  const nova = Math.min(solta, agora + Math.max(0, faltaS) * 1000);
+  if (nova === solta) return;
+  const recuo = solta - nova;
+  publicar({
+    ...r, solta_em: new Date(nova).toISOString(),
+    expira_em: new Date(Date.parse(r.expira_em) - recuo).toISOString(), versao: r.versao + 1,
+  });
+}
+
+/** Adianta a contagem do ensaio em `s` segundos. */
+export function ensaioAdiantarChefona(s: number): void {
+  const r = estado;
+  if (!r || r.id >= 0) return;
+  ensaioIrParaChefona((Date.parse(r.solta_em) - Date.now()) / 1000 - s);
+}
+
 export function ensaioFugirChefona(): void {
   const r = estado;
   if (!r || r.id >= 0 || r.situacao !== 'ativo') return;
@@ -494,5 +726,8 @@ export function ensaioLimparChefona(): void {
 export function __resetChefonaParaTestes(): void {
   ensaioRobosChefona(false);
   estado = null;
+  euNoLobby = null;
+  desvioRelogio = 0;
+  temDesvio = false;
   ouvintes.clear();
 }

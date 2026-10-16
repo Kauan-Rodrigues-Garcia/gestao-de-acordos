@@ -384,9 +384,11 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     // 07/10/2026, migration 20261007150000: a parte do operador na campanha
     // liberada pelo líder, para enviar direto pelo WhatsApp.
+    // Elite desde 16/10/2026 (migration 20261016120000): ela recebe a campanha
+    // como operador e precisa da aba para enviar.
     key: 'ver_campanhas_whatsapp', label: 'Aba Campanhas de WhatsApp',
     descricao: 'Receber as campanhas liberadas pelo líder e enviar cada mensagem pelo WhatsApp',
-    grupo: 'Abas e telas', tenants: ['bookplay'], padrao: { operador: true },
+    grupo: 'Abas e telas', tenants: ['bookplay'], padrao: { operador: true, elite: true },
   },
   {
     /*

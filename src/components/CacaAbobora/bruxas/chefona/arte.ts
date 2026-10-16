@@ -34,7 +34,7 @@
 import { NUMERO_DA_PARTE, type Imagem, type NomeParte } from '../arte';
 import {
   ACUCAR_MC, CINZA_DO_LIQUIDO_MC, GARRAFA_VAZIA_MC, GLOWSTONE_MC, GRAVETO_MC, OLHO_MC, PEROLA_MC, POCAO_MC, POLVORA_MC,
-  REDSTONE_MC, TEIA_MC, TOTEM_MC, VIDRO_MC,
+  REDSTONE_MC, TOTEM_MC, VIDRO_MC,
 } from './texturasMC';
 
 /** O modelo em texels, com o contorno. */
@@ -592,9 +592,6 @@ export const TOTEM: Item = TOTEM_MC;
 
 /** A Pérola do Ender do jogo (a que ela joga para se teleportar). */
 export const PEROLA: Item = PEROLA_MC;
-
-/** A teia de aranha do jogo (a Poção de Lentidão). */
-export const TEIA: Item = TEIA_MC;
 
 /** O item com contorno escuro de 1 pixel (para ler na tela clara do Gestão). */
 export function comContorno(it: Item): Item {

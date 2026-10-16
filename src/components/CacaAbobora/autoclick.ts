@@ -300,12 +300,26 @@ export interface Detector {
 /** Quantos movimentos do mouse guardar (só os últimos ~200 ms importam). */
 const MOVIMENTOS = 24;
 
+export interface OpcoesDetector {
+  /**
+   * Depois de uma colheita com pista FORTE, esquece os cliques analisados: a
+   * próxima pista precisa de cliques novos. Sem isso, a mesma rajada fica na
+   * janela de 6 s e marca 5 ou 6 lotes seguidos — e a chefona, que bloqueia
+   * quem soma 3 lotes com pista forte (migration 20261016120000), bloquearia
+   * por um único episódio. Com, 3 pistas são 3 episódios.
+   */
+  esquecerAoSuspeitar?: boolean;
+}
+
 /**
  * Ouve os cliques da página inteira enquanto o chefão está na tela (na fase
  * de captura, sem atrapalhar ninguém) e guarda os últimos `JANELA_CLIQUES`.
  * Ouve também o movimento do mouse, para saber a velocidade de cada clique.
  */
-export function criarDetector(alvo: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): Detector {
+export function criarDetector(
+  alvo: Pick<Window, 'addEventListener' | 'removeEventListener'> = window,
+  config: OpcoesDetector = {},
+): Detector {
   const cliques: Clique[] = [];
   const movimentos: { t: number; x: number; y: number }[] = [];
   const apertados = new Map<number, Clique>();
@@ -349,6 +363,7 @@ export function criarDetector(alvo: Pick<Window, 'addEventListener' | 'removeEve
       const c = { cliques: contados, suspeita: analisarCliques(cliques) | devolvidos };
       contados = 0;
       devolvidos = 0;
+      if (config.esquecerAoSuspeitar && (c.suspeita & MOTIVOS_FORTES) !== 0) cliques.length = 0;
       return c;
     },
     devolver(c) {

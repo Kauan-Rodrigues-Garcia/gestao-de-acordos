@@ -16,13 +16,15 @@ describe('motor do Som ambiente', () => {
 
   it('próxima e anterior dão a volta pela lista, com as playlists no fim', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
+    // As músicas na ordem do painel, agrupadas pelo gênero (16/10/2026).
     expect(ordemDasFaixas(prefs)).toEqual([
       'saw', 'deadsilence', 'it', 'halloween', 'stranger',
-      'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao',
-      'poesiaacustica', 'vidachique', 'malvadinho', 'infiel', 'innerbloom', 'deixemeir', 'somebody',
+      'malvadinho', 'famosoima', 'penaporta', 'termineicomaex', 'barulhodorock', 'longedemagnata',
+      'provavelmente', 'novobalanco', 'vidachique', 'flexiona', 'raindance', 'poesiaacustica', 'deixemeir',
+      'leao', 'infiel', 'doiwannaknow', 'somebody', 'innerbloom',
       'youtube:playlist:X',
     ]);
-    expect(vizinha(prefs, 'somebody', 1)).toBe('youtube:playlist:X');
+    expect(vizinha(prefs, 'innerbloom', 1)).toBe('youtube:playlist:X');
     expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('saw');
     expect(vizinha(prefs, 'saw', -1)).toBe('youtube:playlist:X');
     expect(vizinha(prefs, 'sumiu', 1)).toBe('saw');
@@ -30,12 +32,8 @@ describe('motor do Som ambiente', () => {
 
   it('enxuto: sem playlists na lista e no anterior/próxima', () => {
     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
-    expect(ordemDasFaixas(prefs, false)).toEqual([
-      'saw', 'deadsilence', 'it', 'halloween', 'stranger',
-      'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao',
-      'poesiaacustica', 'vidachique', 'malvadinho', 'infiel', 'innerbloom', 'deixemeir', 'somebody',
-    ]);
-    expect(vizinha(prefs, 'somebody', 1, false)).toBe('saw');
+    expect(ordemDasFaixas(prefs, false)).toEqual([...TEMAS_DE_TERROR, ...MUSICAS]);
+    expect(vizinha(prefs, 'innerbloom', 1, false)).toBe('saw');
   });
 
   it('enxuto: volume até 50 e faixa de fábrica; completo não muda nada', () => {
@@ -50,10 +48,12 @@ describe('motor do Som ambiente', () => {
 
   it('no fim de uma faixa de fábrica, a sequência fica no grupo dela e dá a volta', () => {
     expect(proximaEmbutida('halloween')).toBe('stranger');
-    expect(proximaEmbutida('raindance')).toBe('leao');
-    expect(proximaEmbutida('leao')).toBe('poesiaacustica');
+    // As músicas seguem a ordem do painel, agrupadas pelo gênero (16/10/2026):
+    // do último funk ao primeiro rap, do último rap ao primeiro sertanejo.
+    expect(proximaEmbutida('longedemagnata')).toBe('provavelmente');
+    expect(proximaEmbutida('deixemeir')).toBe('leao');
     // A última música volta à primeira música, não cai nos temas (14/10/2026).
-    expect(proximaEmbutida('somebody')).toBe('provavelmente');
+    expect(proximaEmbutida('innerbloom')).toBe('malvadinho');
     expect(proximaEmbutida(MUSICAS[MUSICAS.length - 1])).toBe(MUSICAS[0]);
     // E o último tema volta ao primeiro tema.
     expect(proximaEmbutida(TEMAS_DE_TERROR[TEMAS_DE_TERROR.length - 1])).toBe(TEMAS_DE_TERROR[0]);
@@ -61,8 +61,8 @@ describe('motor do Som ambiente', () => {
 
   it('cada faixa tem o seu ganho, e o volume final nunca passa de 1', () => {
     for (const f of FAIXAS_EMBUTIDAS) {
-      // «Leão» veio a -7,0 LUFS: o menor ganho, exatamente 0,5.
-      expect(GANHO[f]).toBeGreaterThanOrEqual(0.5);
+      // «Escuta o Barulho do Rock» veio a -5,6 LUFS: o menor ganho, 0,42 (16/10/2026).
+      expect(GANHO[f]).toBeGreaterThanOrEqual(0.4);
       // «Somebody That I Used To Know» veio a -22,1 LUFS: o maior ganho, 2,86.
       expect(GANHO[f]).toBeLessThan(3);
     }

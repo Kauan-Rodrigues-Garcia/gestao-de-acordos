@@ -31,7 +31,7 @@ import { comNovaTentativa, precarregarQuandoOcioso } from '@/lib/sobDemanda';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { aboboraNaTela, faixaNaTela, useCacaAbobora } from './caca';
 import { EU_NO_ENSAIO, chefaoNaTela, useChefao, useChefaoDesligado } from './chefao';
-import { chefonaNaTela, useChefona } from './bruxas/chefona/banco';
+import { chefonaChegando, chefonaNaTela, useChefona, useEuNoLobbyChefona } from './bruxas/chefona/banco';
 
 export { BotaoChefao } from './BotaoChefao';
 
@@ -54,6 +54,9 @@ const CenaChefao = lazy(() => carregarChefao().then(m => ({ default: m.CenaChefa
 // A chefona das bruxas (15/10/2026): a regra em `bruxas/chefona/banco.ts`.
 const carregarChefona = comNovaTentativa(() => import('./bruxas/chefona/CenaChefona'));
 const CenaChefona = lazy(() => carregarChefona().then(m => ({ default: m.CenaChefona })));
+// O lobby dela (16/10/2026): o convite, a espera de 3 minutos e a música.
+const carregarLobby = comNovaTentativa(() => import('./bruxas/chefona/lobby/LobbyDaChefona'));
+const LobbyDaChefona = lazy(() => carregarLobby().then(m => ({ default: m.LobbyDaChefona })));
 
 /**
  * Os pedaços da caça descem quando o app abre, com a tela já assentada — não
@@ -67,7 +70,7 @@ const CenaChefona = lazy(() => carregarChefona().then(m => ({ default: m.CenaChe
  * abertura, o pedaço é da mesma versão da aba e já está na memória quando a
  * rodada chega: deploy depois disso não pega ninguém.
  */
-const PEDACOS_DA_CACA = [carregarCena, carregarBruxas, carregarFaixaBruxas, carregarChefao, carregarChefona] as const;
+const PEDACOS_DA_CACA = [carregarCena, carregarBruxas, carregarFaixaBruxas, carregarChefao, carregarChefona, carregarLobby] as const;
 
 const Laboratorio = import.meta.env.DEV ? lazy(() => import('./laboratorio')) : null;
 const comLaboratorio = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('zumbis');
@@ -144,28 +147,65 @@ function ChefesDaCaca() {
   const usuario = auth?.user?.id ?? null;
   const superAdmin = auth?.perfil?.perfil === 'super_admin';
   const perfilId = auth?.perfil?.id ?? null;
+  const nome = auth?.perfil?.nome ?? 'Você';
   const desligado = useChefaoDesligado(perfilId);
   if (desligado) return null;
   return (
     <>
       <ChefaoDaCaca usuario={usuario} superAdmin={superAdmin} />
-      <ChefonaDaCaca usuario={usuario} perfilId={perfilId} superAdmin={superAdmin} />
+      <ChefonaDaCaca usuario={usuario} nome={nome} perfilId={perfilId} superAdmin={superAdmin} />
     </>
   );
 }
 
-/** A chefona: montada quando ela aparece, e assim fica até ela cair ou fugir e o ranking fechar. */
-function ChefonaDaCaca({ usuario, perfilId, superAdmin }: { usuario: string | null; perfilId: string | null; superAdmin: boolean }) {
+/**
+ * A chefona, em duas partes (16/10/2026):
+ *
+ *   - o LOBBY, para todo mundo, da contagem ao fim da luta: o convite, a
+ *     espera de 3 minutos e a música (`bruxas/chefona/lobby/`);
+ *   - a CENA (a bruxa, a luta e o ranking), só para quem entrou no lobby — o
+ *     super_admin também (16/10/2026: «não é para aparecer nada» para quem não
+ *     escolheu). Quem não entrou não vê a bruxa, nem as poções, nem o escudo,
+ *     nem a contagem: só o menu do lobby no alto.
+ *
+ * Quem entra no lobby durante a contagem já monta a cena ali, escondida:
+ * sprite, texturas e sons do jogo ficam prontos durante a espera (cada um
+ * entra num momento, então isso se espalha pelos 3 minutos), e no drop ela
+ * só aparece. Cada parte fica montada até acabar a sua vez (a música sumir, o
+ * ranking fechar).
+ */
+function ChefonaDaCaca({ usuario, nome, perfilId, superAdmin }: {
+  usuario: string | null; nome: string; perfilId: string | null; superAdmin: boolean;
+}) {
   const rodada = useChefona();
+  const noLobby = useEuNoLobbyChefona(rodada?.id);
   const ativa = chefonaNaTela(rodada, Date.now());
+  const [lobby, setLobby] = useState<number | null>(null);
   const [cena, setCena] = useState<number | null>(null);
-  useEffect(() => { if (ativa && rodada) setCena(rodada.id); }, [ativa, rodada]);
-  const acabar = useCallback(() => setCena(null), []);
-  if (!rodada || cena !== rodada.id) return null;
+  const vePalco = noLobby;
+  useEffect(() => { if (ativa && rodada) setLobby(rodada.id); }, [ativa, rodada]);
+  useEffect(() => { if (ativa && rodada && vePalco) setCena(rodada.id); }, [ativa, rodada, vePalco]);
+  // Saiu do lobby na contagem: a cena (ainda escondida) sai junto.
+  useEffect(() => {
+    if (rodada && !vePalco && chefonaChegando(rodada, Date.now())) setCena(c => (c === rodada.id ? null : c));
+  }, [rodada, vePalco]);
+  const acabarLobby = useCallback(() => setLobby(null), []);
+  const acabarCena = useCallback(() => setCena(null), []);
+  if (!rodada) return null;
+  const eu = rodada.id < 0 ? EU_NO_ENSAIO : usuario;
   return (
-    <Suspense fallback={null}>
-      <CenaChefona key={rodada.id} rodada={rodada} eu={rodada.id < 0 ? EU_NO_ENSAIO : usuario} perfilId={perfilId} superAdmin={superAdmin} aoAcabar={acabar} />
-    </Suspense>
+    <>
+      {lobby === rodada.id && eu && (
+        <Suspense fallback={null}>
+          <LobbyDaChefona key={rodada.id} rodada={rodada} eu={{ id: eu, nome }} noLobby={noLobby} aoAcabar={acabarLobby} />
+        </Suspense>
+      )}
+      {cena === rodada.id && (
+        <Suspense fallback={null}>
+          <CenaChefona key={rodada.id} rodada={rodada} eu={eu} perfilId={perfilId} superAdmin={superAdmin} aoAcabar={acabarCena} />
+        </Suspense>
+      )}
+    </>
   );
 }
 

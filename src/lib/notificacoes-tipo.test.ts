@@ -68,6 +68,8 @@ const INVENTARIO: Caso[] = [
   ['Campanha pronta — Pix do acordo', '/campanha-facil/envio/0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
   ['Campanha repassada — Preventivo', '/campanha-facil/envio/0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
   ['Campanha de WhatsApp pronta', '/campanhas-whatsapp?envio=0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
+  // fn_campanha_facil_observar (20261016120000) — a observação vai para o líder.
+  ['Observação na campanha', '/campanha-facil?campanha=0b7c2a4e-1d2f-4a6b-9c8d-7e6f5a4b3c2d', 'campanha', 'atencao'],
 ];
 
 describe('inventário de produtores', () => {

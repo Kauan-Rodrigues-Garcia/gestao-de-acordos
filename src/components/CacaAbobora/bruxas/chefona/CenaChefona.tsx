@@ -29,15 +29,17 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { carregarFontesPixel } from '@/components/Halloween/fonte';
-import { criarDetector, type Detector } from '../../autoclick';
+import { MOTIVOS_FORTES, criarDetector, type Detector } from '../../autoclick';
 import { volumeDoChefao } from '../../sons';
 import { nomeCurto } from '../../caca';
 import { RANKING_MS, desligarChefao, type Golpeador, type MeuPlacar } from '../../chefao';
 import { canvasDaImagem } from '../pixels';
 import { cabecaMC } from './arte';
-import { PalcoChefona, type EventoChefona, type FonteDoBanco } from './palcoChefona';
+import { PalcoChefona, milhar, type EventoChefona, type FonteDoBanco } from './palcoChefona';
+import { PLACA_MS } from './conquista';
+import { RITMO, ritmoDaLuta } from './ritmo';
 import {
-  BEBER_MS, LOTE_MS, MAX_ACERTOS_POR_LOTE, chefonaChegando, curarChefona, enviarLoteChefona, lerChefona,
+  BEBER_MS, LOTE_MS, MAX_ACERTOS_POR_LOTE, PISTAS_PARA_BLOQUEAR, chefonaChegando, curarChefona, enviarLoteChefona, lerChefona,
   motivoDoErroDaChefona, protegerChefona, situacaoDaChefona, vidaPorAparecer,
   type ResultadoLoteChefona, type RodadaChefona,
 } from './banco';
@@ -53,6 +55,12 @@ const RELER_QUIETO_MS = 5_000;
 const CENA_ATRASADA_MS = 4_000;
 /** Depois que ela cai: o ranking espera o tombo e o «puf»; o palco fica até os drops sumirem. */
 const RANKING_DEPOIS_DA_QUEDA_MS = 2_600;
+/**
+ * Quem ajudou ganha a placa de conquista logo depois do «puf»: o ranking espera
+ * a placa ter o seu momento grande e aí abre, com a placa subindo para o alto
+ * (`ancorarConquista`). Os dois nunca se cobrem.
+ */
+const RANKING_COM_PLACA_MS = 4_600;
 const PALCO_DEPOIS_DA_QUEDA_MS = 13_000;
 
 // ── O placar do time ────────────────────────────────────────────────────────
@@ -81,7 +89,7 @@ function Time({ host, rodada, eu, meuDano, minhaPosicao, superAdmin }: {
     <div className="bxc-time" role="status" aria-live="off">
       <div className="bxc-time-linha">
         {rodada.participantes > 0 ? `${rodada.participantes} na caçada` : 'Atire nela!'}
-        {meuDano > 0 && <> · você: <b>{meuDano}</b>{minhaPosicao > 0 ? ` (${minhaPosicao}º)` : ''}</>}
+        {meuDano > 0 && <> · você: <b>{milhar(meuDano)}</b>{minhaPosicao > 0 ? ` (${minhaPosicao}º)` : ''}</>}
       </div>
       {top.length > 0 && (
         <ol className="bxc-time-top">
@@ -89,7 +97,7 @@ function Time({ host, rodada, eu, meuDano, minhaPosicao, superAdmin }: {
             <li key={g.usuario} className={g.usuario === eu ? 'eu' : undefined}>
               <span className="pos">{i + 1}º</span>
               <span className="nome">{nomeCurto(g.nome)}</span>
-              <span className="dano">{g.dano}</span>
+              <span className="dano">{milhar(g.dano)}</span>
             </li>
           ))}
         </ol>
@@ -174,10 +182,12 @@ function Cabeca() {
   return <span ref={ref} className="bxc-final-cabeca" aria-hidden="true" />;
 }
 
-function RankingChefona({ rodada, eu, meu, aoFechar }: {
+function RankingChefona({ rodada, eu, meu, comPlaca, aoFechar }: {
   rodada: RodadaChefona;
   eu: string | null;
   meu: MeuPlacar | null;
+  /** A placa de conquista está no alto: o ranking começa embaixo dela. */
+  comPlaca: boolean;
   aoFechar: () => void;
 }) {
   useEffect(() => {
@@ -191,7 +201,11 @@ function RankingChefona({ rodada, eu, meu, aoFechar }: {
   const maior = Math.max(1, ...rodada.ranking.map(g => g.dano));
   const estouNoTopo = !!eu && rodada.ranking.some(g => g.usuario === eu);
   return createPortal(
-    <div className={derrotada ? 'zb-chefao-final bruxa' : 'zb-chefao-final bruxa fugiu'} role="dialog" aria-label="Ranking da chefona">
+    <div
+      className={`zb-chefao-final bruxa${derrotada ? '' : ' fugiu'}${comPlaca ? ' com-placa' : ''}`}
+      role="dialog"
+      aria-label="Ranking da chefona"
+    >
       <div className="zb-chefao-final-topo">
         <Cabeca />
         <div>
@@ -201,7 +215,7 @@ function RankingChefona({ rodada, eu, meu, aoFechar }: {
               Golpe final de <b>{rodada.golpe_final_por === eu ? 'você' : nomeCurto(rodada.golpe_final_nome)}</b>
             </span>
           ) : (
-            <span className="zb-chefao-final-golpe">Sobrou <b>{rodada.vida}</b> de {rodada.vida_max} de vida.</span>
+            <span className="zb-chefao-final-golpe">Sobrou <b>{milhar(rodada.vida)}</b> de {milhar(rodada.vida_max)} de vida.</span>
           )}
           {rodada.participantes > 0 && (
             <span className="zb-chefao-final-sub">
@@ -228,7 +242,7 @@ function RankingChefona({ rodada, eu, meu, aoFechar }: {
                 <span className="barra"><i style={{ width: `${(g.dano / maior) * 100}%` }} /></span>
               </span>
               <span className="numeros">
-                <span className="dano">{g.dano}</span>
+                <span className="dano">{milhar(g.dano)}</span>
                 <span className="detalhe">
                   {g.acertos} {g.acertos === 1 ? 'tiro' : 'tiros'}
                   {g.headshots > 0 && ` · ${g.headshots} ${g.headshots === 1 ? 'crítico' : 'críticos'}`}
@@ -239,7 +253,7 @@ function RankingChefona({ rodada, eu, meu, aoFechar }: {
         </ol>
       )}
       {!estouNoTopo && meu && meu.dano > 0 && (
-        <p className="zb-chefao-final-eu">Você: {meu.posicao}º lugar, {meu.dano} de dano.</p>
+        <p className="zb-chefao-final-eu">Você: {meu.posicao}º lugar, {milhar(meu.dano)} de dano.</p>
       )}
     </div>,
     document.body,
@@ -268,6 +282,9 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   const viuViva = useRef(situacao === 'ativo');
   const [palcoNaTela, setPalcoNaTela] = useState(situacao === 'ativo');
   const [ranking, setRanking] = useState(false);
+  // A placa de conquista na tela (o ranking abre embaixo dela).
+  const [placa, setPlaca] = useState(false);
+  const relogioPlaca = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const palcoRef = useRef<PalcoChefona | null>(null);
 
@@ -276,10 +293,26 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   const superAdminRef = useRef(superAdmin);
   superAdminRef.current = superAdmin;
   // Os tiros guardados até o próximo lote, e o dano que ainda não voltou do banco.
-  const lote = useRef({ acertos: 0, criticos: 0, dano: 0 });
+  /**
+   * `dano` é o que a pessoa fez (vai ao banco e ao ranking); `vida` é o que
+   * isso tira da barra com o ritmo de agora (`ritmo.ts`) — o mesmo que o banco
+   * vai tirar, então a barra não desce e volta quando a resposta chega.
+   */
+  const lote = useRef({ acertos: 0, criticos: 0, dano: 0, vida: 0 });
   const pendente = useRef(0);
+  /** O dano a caminho antes do ritmo (o placar da pessoa). */
+  const pendenteBruto = useRef(0);
   const [meu, setMeu] = useState<MeuPlacar | null>(null);
   const avisouErro = useRef(false);
+  const avisouDescarte = useRef(false);
+  /**
+   * Os lotes com pista forte de autoclick que o banco aceitou. No
+   * `PISTAS_PARA_BLOQUEAR`, o banco não conta mais nada desta pessoa: a tela
+   * para de mandar lote (cada um seria uma ida ao banco à toa, na linha que
+   * todo mundo disputa) e de mostrar o dano dela na barra.
+   */
+  const pistas = useRef(0);
+  const bloqueado = useRef(false);
   const detector = useRef<Detector | null>(null);
   const ultimaVersao = useRef({ versao: rodada.versao, em: Date.now(), relido: false });
   // O placar do time se redesenha sozinho (o meu dano a caminho mora num ref).
@@ -300,8 +333,13 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
       p?.definirProtegida(rodadaRef.current.protegida);
     } else if (e.tipo === 'fugiu') {
       setPalcoNaTela(false);
+    } else if (e.tipo === 'conquista') {
+      setPlaca(true);
+      clearTimeout(relogioPlaca.current);
+      relogioPlaca.current = setTimeout(() => setPlaca(false), PLACA_MS + 600);
     }
   }, []);
+  useEffect(() => () => clearTimeout(relogioPlaca.current), []);
 
   // O palco: num elemento do `<body>`, fora do `#root` que as poções distorcem.
   useLayoutEffect(() => {
@@ -315,19 +353,30 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
         const p = pendente.current;
         // Os meus tiros a caminho gastam primeiro a Absorção, como no banco.
         const absorcao = Math.max(0, r.absorcao - p);
-        const vida = Math.max(0, r.vida - Math.max(0, p - r.absorcao) - vidaPorAparecer(r, agora));
+        let vida = Math.max(0, r.vida - Math.max(0, p - r.absorcao) - vidaPorAparecer(r, agora));
+        // Antes dos 60 s ela não cai (o piso do ritmo): a barra também não passa dele.
+        if (r.ritmo !== null && (agora - Date.parse(r.solta_em)) / 1000 < RITMO.minS) vida = Math.max(vida, Math.min(r.vida, Math.ceil(r.vida_max * RITMO.piso)));
         return { vida, vidaMax: r.vida_max, absorcao, restanteS: Math.max(0, (Date.parse(r.expira_em) - agora) / 1000) };
       },
       aoAcertar: (dano, critico) => {
+        if (bloqueado.current) return;
         const l = lote.current;
+        const r = rodadaRef.current;
+        const vidaAgora = Math.max(0, r.vida - pendente.current);
+        // Banco sem o ritmo (`ritmo` nulo): a tela também não aplica — a barra bate com o banco.
+        const tira = r.ritmo === null ? dano
+          : dano * ritmoDaLuta((Date.now() - Date.parse(r.solta_em)) / 1000, vidaAgora / Math.max(1, r.vida_max));
         l.acertos += 1;
         if (critico) l.criticos += 1;
         l.dano += dano;
-        pendente.current += dano;
+        l.vida += tira;
+        pendente.current += tira;
+        pendenteBruto.current += dano;
       },
     };
     // O super_admin não tem escudo: ele comanda a luta e segue usando o Gestão.
-    const palco = new PalcoChefona(el, { banco: fonte, aoEvento, escudo: !superAdminRef.current });
+    // A contagem é do lobby (`lobby/LobbyDaChefona.tsx`): o palco só espera, sem desenhar.
+    const palco = new PalcoChefona(el, { banco: fonte, aoEvento, escudo: !superAdminRef.current, contagem: false });
     palcoRef.current = palco;
     setHost(el);
     return () => {
@@ -358,7 +407,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   // O detector de autoclick: ouve os cliques enquanto ela está na tela.
   useEffect(() => {
     if (situacao !== 'ativo' || chegando) return;
-    const d = criarDetector();
+    // Cada pista vale uma vez: a mesma rajada não marca 6 lotes seguidos.
+    const d = criarDetector(window, { esquecerAoSuspeitar: true });
     detector.current = d;
     return () => { d.parar(); if (detector.current === d) detector.current = null; };
   }, [situacao, chegando]);
@@ -393,13 +443,16 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   useEffect(() => {
     if (situacao === 'ativo' || fim.current) return;
     fim.current = situacao;
-    lote.current = { acertos: 0, criticos: 0, dano: 0 };
+    lote.current = { acertos: 0, criticos: 0, dano: 0, vida: 0 };
     pendente.current = 0;
+    pendenteBruto.current = 0;
     const p = palcoRef.current;
     if (!viuViva.current) { setPalcoNaTela(false); return; }
     if (situacao === 'derrotado') {
+      // Quem acertou ganha a placa: o ranking espera o momento dela.
+      const espera = p?.ajudou ? RANKING_COM_PLACA_MS : RANKING_DEPOIS_DA_QUEDA_MS;
       p?.derrubar();
-      const r = setTimeout(() => setRanking(true), RANKING_DEPOIS_DA_QUEDA_MS);
+      const r = setTimeout(() => setRanking(true), espera);
       const s = setTimeout(() => setPalcoNaTela(false), PALCO_DEPOIS_DA_QUEDA_MS);
       return () => { clearTimeout(r); clearTimeout(s); };
     }
@@ -419,8 +472,13 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
     const quieto = RELER_QUIETO_MS + Math.random() * RELER_QUIETO_MS;
     const tique = () => {
       setTique(n => n + 1);
-      if (noAr) return;
-      const { acertos, criticos, dano } = lote.current;
+      // O sinal do ritmo na bruxa («RESISTENTE!» / «ENFRAQUECENDO!»), uma vez por segundo.
+      const rr = rodadaRef.current;
+      if (rr.ritmo !== null && Date.now() >= chega) {
+        palcoRef.current?.sinalDoRitmo(ritmoDaLuta((Date.now() - chega) / 1000, Math.max(0, rr.vida - pendente.current) / Math.max(1, rr.vida_max)));
+      }
+      if (noAr || bloqueado.current) return;
+      const { acertos, criticos, dano, vida } = lote.current;
       if (acertos === 0) {
         const u = ultimaVersao.current;
         const agora = Date.now();
@@ -434,7 +492,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
       const a = Math.min(acertos, MAX_ACERTOS_POR_LOTE);
       const c = Math.min(criticos, a);
       const d = acertos === a ? dano : Math.round((dano * a) / acertos);
-      lote.current = { acertos: acertos - a, criticos: criticos - c, dano: dano - d };
+      const v = acertos === a ? vida : (vida * a) / acertos;
+      lote.current = { acertos: acertos - a, criticos: criticos - c, dano: dano - d, vida: vida - v };
       const colheita = detector.current?.colher() ?? { cliques: 0, suspeita: 0 };
       noAr = true;
       void enviarLoteChefona(rodada.id, a, c, d, colheita)
@@ -447,11 +506,32 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
             lote.current.acertos += a;
             lote.current.criticos += c;
             lote.current.dano += d;
+            lote.current.vida += v;
             detector.current?.devolver(colheita);
             return;
           }
-          pendente.current = Math.max(0, pendente.current - d);
+          pendente.current = Math.max(0, pendente.current - v);
+          pendenteBruto.current = Math.max(0, pendenteBruto.current - d);
           if (res.eu) setMeu(res.eu);
+          if (!res.erro && (colheita.suspeita & MOTIVOS_FORTES) !== 0) pistas.current += 1;
+          if (pistas.current >= PISTAS_PARA_BLOQUEAR && !bloqueado.current) {
+            bloqueado.current = true;
+            lote.current = { acertos: 0, criticos: 0, dano: 0, vida: 0 };
+            pendente.current = 0;
+            pendenteBruto.current = 0;
+            toast.error('Clique automático detectado', {
+              description: 'Seus cliques não contam mais nesta luta: autoclick e macro não valem.',
+              duration: 10_000,
+            });
+            return;
+          }
+          // O banco não contou parte do lote (rápido demais ou autoclick): avisa uma vez.
+          if ((res.descartados ?? 0) > 0 && !avisouDescarte.current) {
+            avisouDescarte.current = true;
+            toast.warning('Alguns cliques não contaram', {
+              description: 'Clique rápido demais ou automático (autoclick, macro) não tira vida da bruxa nem conta no ranking.',
+            });
+          }
           if (res.erro && !avisouErro.current) {
             avisouErro.current = true;
             toast.error('Seus tiros não chegaram', { description: res.erro });
@@ -465,21 +545,27 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
 
   const fecharRanking = useCallback(() => setRanking(false), []);
 
+  // O ranking abriu: a placa (a que está na tela e a que ainda vier) sobe para o alto.
+  useEffect(() => {
+    if (ranking) palcoRef.current?.ancorarConquista();
+  }, [ranking]);
+
   useEffect(() => {
     if (!palcoNaTela && !ranking) aoAcabar();
   }, [palcoNaTela, ranking, aoAcabar]);
 
   const minhaPosicao = (eu ? rodada.ranking.findIndex(g => g.usuario === eu) + 1 : 0) || (meu?.posicao ?? 0);
   const doRanking = eu ? rodada.ranking.find(g => g.usuario === eu)?.dano ?? 0 : 0;
-  const meuDano = Math.round(Math.max(doRanking, meu?.dano ?? 0) + pendente.current);
+  const meuDano = Math.round(Math.max(doRanking, meu?.dano ?? 0) + pendenteBruto.current);
 
   return (
     <>
       {host && situacao === 'ativo' && !chegando && viuViva.current && (
         <Time host={host} rodada={rodada} eu={eu} meuDano={meuDano} minhaPosicao={minhaPosicao} superAdmin={superAdmin} />
       )}
-      {host && perfilId && situacao === 'ativo' && viuViva.current && <BotaoEsconder host={host} perfilId={perfilId} />}
-      {ranking && <RankingChefona rodada={rodada} eu={eu} meu={meu} aoFechar={fecharRanking} />}
+      {/* Na contagem o palco está só se preparando (quem conta é o lobby): o «Esconder» vem com ela. */}
+      {host && perfilId && situacao === 'ativo' && !chegando && viuViva.current && <BotaoEsconder host={host} perfilId={perfilId} />}
+      {ranking && <RankingChefona rodada={rodada} eu={eu} meu={meu} comPlaca={placa} aoFechar={fecharRanking} />}
     </>
   );
 }

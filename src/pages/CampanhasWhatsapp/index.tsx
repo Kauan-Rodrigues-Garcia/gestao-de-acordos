@@ -6,10 +6,10 @@
  * o app do computador), pode editar a mensagem de um contato só, e fica
  * registrado o que já saiu e o que não deu para enviar.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
-  Globe, History, Layers, Repeat, ThumbsDown, ThumbsUp,
+  Globe, History, Layers, NotebookPen, Repeat, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
 import { useCampanhasWhatsapp } from './useCampanhasWhatsapp';
+import { LIMITE_OBSERVACAO } from './campanhasWhatsapp.service';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
 import { HistoricoOperador } from './HistoricoOperador';
 import {
@@ -207,6 +208,13 @@ export default function CampanhasWhatsapp() {
                     onVotar={(bom) => void w.avaliar(w.selecionada!.lote_id, bom)}
                   />
 
+                  <ObservacaoParaLider
+                    key={w.selecionada.lote_id}
+                    salva={w.observacoes.get(w.selecionada.lote_id) ?? ''}
+                    destaque={contagem.pendentes === 0 && contagem.total > 0}
+                    onSalvar={(texto) => w.observar(w.selecionada!.lote_id, texto)}
+                  />
+
                   <div className="flex flex-wrap items-center gap-2">
                     <div role="tablist" aria-label="Situação" className="flex flex-wrap gap-1 rounded-lg bg-muted/60 p-1">
                       <Aba ativo={filtro === 'pendentes'} onClick={() => setFiltro('pendentes')} icone={<Clock className="h-3.5 w-3.5" />} rotulo="Pendentes" n={contagem.pendentes} />
@@ -306,7 +314,7 @@ function SeletorModo({ modo, onChange }: { modo: ModoAbrir; onChange: (m: ModoAb
 
 /**
  * «Joinha verde: a campanha teve bom retorno. Mãozinha vermelha: não teve.»
- * Clicar no que já está marcado tira o voto. O líder vê só a contagem.
+ * Clicar no que já está marcado tira o voto. O líder vê a contagem e o voto de cada um.
  */
 function AvaliacaoCampanha({ voto, onVotar }: { voto: boolean | undefined; onVotar: (bom: boolean) => void }) {
   return (
@@ -340,6 +348,79 @@ function AvaliacaoCampanha({ voto, onVotar }: { voto: boolean | undefined; onVot
         >
           <ThumbsDown className="h-4 w-4" /> Sem retorno
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * «Um campo de observação depois de realizar a campanha, para o líder saber se
+ * a campanha está okay» (16/10/2026, migration 20261016120000). Vai para o
+ * líder com o nome de quem escreveu, e ele recebe uma notificação. Ganha
+ * destaque quando não falta nada para enviar — é a hora de contar como foi.
+ */
+function ObservacaoParaLider({ salva, destaque, onSalvar }: {
+  salva: string;
+  destaque: boolean;
+  onSalvar: (texto: string) => Promise<boolean>;
+}) {
+  const [texto, setTexto] = useState(salva);
+  const [salvando, setSalvando] = useState(false);
+  const mudou = texto.trim() !== salva.trim();
+
+  // A salva chega do banco depois de a caixa abrir: entra, se a pessoa ainda
+  // não começou a escrever por cima.
+  const anterior = useRef(salva);
+  useEffect(() => {
+    setTexto((t) => (t === anterior.current ? salva : t));
+    anterior.current = salva;
+  }, [salva]);
+
+  async function salvar() {
+    setSalvando(true);
+    try { await onSalvar(texto); } finally { setSalvando(false); }
+  }
+
+  return (
+    <div className={cn(
+      'space-y-2 rounded-lg border px-3 py-2.5',
+      destaque && !salva ? 'border-amber-500/50 bg-amber-500/5' : 'border-border bg-muted/30',
+    )}>
+      <label htmlFor="cw-observacao" className="flex items-start gap-2 text-sm">
+        <NotebookPen className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span>
+          <span className="font-medium">Observação para o líder</span>
+          <span className="block text-xs text-muted-foreground">
+            {salva
+              ? 'Enviada ao líder. Pode mudar ou apagar quando quiser.'
+              : destaque
+                ? 'Campanha concluída: conte ao líder se correu tudo bem.'
+                : 'Opcional. Ex.: clientes reclamaram do valor, número errado, muita gente pediu boleto…'}
+          </span>
+        </span>
+      </label>
+      <Textarea
+        id="cw-observacao" value={texto} rows={2} maxLength={LIMITE_OBSERVACAO}
+        onChange={(e) => setTexto(e.target.value)}
+        placeholder="Escreva aqui como foi a campanha"
+        className="resize-y text-sm"
+      />
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] tabular-nums text-muted-foreground">{texto.length}/{LIMITE_OBSERVACAO}</span>
+        <div className="flex gap-2">
+          {salva && (
+            <Button
+              type="button" variant="ghost" size="sm" className="h-8 text-muted-foreground"
+              disabled={salvando} onClick={() => { setTexto(''); void onSalvar(''); }}
+            >
+              Apagar
+            </Button>
+          )}
+          <Button type="button" size="sm" className="h-8 gap-1.5" disabled={!mudou || salvando || !texto.trim()} onClick={() => void salvar()}>
+            {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {salva ? 'Atualizar' : 'Enviar ao líder'}
+          </Button>
+        </div>
       </div>
     </div>
   );

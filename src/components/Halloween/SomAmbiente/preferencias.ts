@@ -14,12 +14,51 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
 export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'stranger'] as const;
 /**
  * As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026 («Raindance» ficou; «Leão» entrou no fim no mesmo dia).
- * Sete entraram no fim em 14/10/2026, de «Poesia Acústica #6» a «Somebody That I Used To Know».
+ * Sete entraram em 14/10/2026, de «Poesia Acústica #6» a «Somebody That I Used To Know».
+ *
+ * Desde 16/10/2026 ficam agrupadas pelo gênero (`GENERO_DA_MUSICA`), na
+ * ordem de `GENEROS` — é a ordem do painel e a da sequência. Seis entraram no
+ * mesmo dia: cinco funks e «Flexiona / Poder da Gestão».
  */
 export const MUSICAS = [
-  'provavelmente', 'doiwannaknow', 'novobalanco', 'raindance', 'leao',
-  'poesiaacustica', 'vidachique', 'malvadinho', 'infiel', 'innerbloom', 'deixemeir', 'somebody',
+  // Funk
+  'malvadinho', 'famosoima', 'penaporta', 'termineicomaex', 'barulhodorock', 'longedemagnata',
+  // Rap e trap
+  'provavelmente', 'novobalanco', 'vidachique', 'flexiona', 'raindance', 'poesiaacustica', 'deixemeir',
+  // Sertanejo
+  'leao', 'infiel',
+  // Pop e rock
+  'doiwannaknow', 'somebody',
+  // Eletrônica
+  'innerbloom',
 ] as const;
+export type Musica = (typeof MUSICAS)[number];
+
+/**
+ * Os gêneros das músicas, na ordem do painel (16/10/2026: «separe por
+ * categorias, funk, eletrônica etc.»). O gênero de cada uma foi conferido
+ * pelo artista e pela faixa no Spotify; rap e trap ficam juntos porque os
+ * artistas transitam entre os dois (Veigh, Nagalli), e pop e rock também —
+ * são duas faixas.
+ */
+export const GENEROS = [
+  { id: 'funk', rotulo: 'Funk' },
+  { id: 'rap', rotulo: 'Rap e trap' },
+  { id: 'sertanejo', rotulo: 'Sertanejo' },
+  { id: 'pop', rotulo: 'Pop e rock' },
+  { id: 'eletronica', rotulo: 'Eletrônica' },
+] as const;
+export type Genero = (typeof GENEROS)[number]['id'];
+
+export const GENERO_DA_MUSICA: Record<Musica, Genero> = {
+  malvadinho: 'funk', famosoima: 'funk', penaporta: 'funk', termineicomaex: 'funk',
+  barulhodorock: 'funk', longedemagnata: 'funk',
+  provavelmente: 'rap', novobalanco: 'rap', vidachique: 'rap', flexiona: 'rap',
+  raindance: 'rap', poesiaacustica: 'rap', deixemeir: 'rap',
+  leao: 'sertanejo', infiel: 'sertanejo',
+  doiwannaknow: 'pop', somebody: 'pop',
+  innerbloom: 'eletronica',
+};
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
@@ -45,6 +84,12 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   innerbloom: '/sounds/halloween-rufus-du-sol-innerbloom.mp3',
   deixemeir: '/sounds/halloween-1kilo-deixe-me-ir.mp3',
   somebody: '/sounds/halloween-gotye-somebody.mp3',
+  famosoima: '/sounds/halloween-famoso-ima-poderoso-chatao.mp3',
+  penaporta: '/sounds/halloween-leozinho-zs-pe-na-porta.mp3',
+  termineicomaex: '/sounds/halloween-terminei-com-a-ex.mp3',
+  barulhodorock: '/sounds/halloween-escuta-o-barulho-do-rock.mp3',
+  longedemagnata: '/sounds/halloween-longe-de-magnata.mp3',
+  flexiona: '/sounds/halloween-nagalli-flexiona.mp3',
 };
 
 /**
@@ -63,6 +108,11 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * As de 14/10/2026 também (a régua de novo conferida em Raindance, Halloween e
  * Stranger Things). «Somebody That I Used To Know» veio ainda mais baixa que
  * «Every 27 Years»: ganho 2,86, e o teto chega mais cedo.
+ *
+ * As de 16/10/2026 também, decodificadas no Edge (a régua conferida em
+ * Raindance −9,1, Halloween −11,3 e Stranger Things −13,2). Os funks vieram
+ * bem altos: «Escuta o Barulho do Rock» a −5,6, a mais alta de todas — ganho
+ * 0,42, o primeiro abaixo de 0,5.
  *
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
@@ -84,6 +134,12 @@ export const GANHO: Record<FaixaEmbutida, number> = {
   innerbloom: 0.73,    // -10,3
   deixemeir: 0.92,     // -12,3
   somebody: 2.86,      // -22,1 — a mais baixa da lista
+  famosoima: 0.50,     // -7,0 (16/10/2026)
+  penaporta: 0.67,     // -9,5
+  termineicomaex: 0.56, // -8,0
+  barulhodorock: 0.42, // -5,6 — a mais alta da lista
+  longedemagnata: 0.77, // -10,8
+  flexiona: 0.55,      // -7,8
 };
 
 /**

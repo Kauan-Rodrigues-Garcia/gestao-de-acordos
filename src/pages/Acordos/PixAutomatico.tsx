@@ -104,7 +104,7 @@ import {
   purgarLixeiraPixExpirada, type PixLixeiraItem,
   fetchLogPix, type PixLogItem,
   setPermiteRegistroOperador, normalizarNr,
-  comissaoDe, valorAPagarDe, formatarCopiaPix, formatarCopiaPixPorOperador, criarAcordosPixLote, editarAcordoPix,
+  comissaoDe, valorAPagarDe, formatarCopiaPix, formatarCopiaPixPorOperador, separarParaCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, quemJaDecidiuPix, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
@@ -2037,25 +2037,34 @@ export function PixAutomatico() {
     // `valorAPagarDe`, e não `comissaoDe`: quem recebe este texto vai PAGAR o
     // total. Deixar a correção de fora aqui seria mandar o Pix errado de novo,
     // que é exatamente o que ela existe para consertar.
-    const alvos = visiveis
-      .filter(i => selecionados.has(i.id))
-      .map(i => ({
-        acordo: i,
-        comissao: valorAPagarDe(i, pctPorSetor),
-        ajuste: i.ajuste_valor,
-      }));
-    if (alvos.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
+    const marcados = visiveis.filter(i => selecionados.has(i.id));
+    if (marcados.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
+    // Já pago não entra no texto — ver `separarParaCopiaPix`.
+    const { copiar, porOperador, jaPagos, foraDosAprovados } = separarParaCopiaPix(marcados);
+    if (copiar.length === 0) {
+      toast.error('Todos os selecionados já foram pagos — nada a copiar.');
+      return;
+    }
+    const alvos = copiar.map(i => ({
+      acordo: i,
+      comissao: valorAPagarDe(i, pctPorSetor),
+      ajuste: i.ajuste_valor,
+    }));
     // Só NR e comissão, com o TOTAL somado no fim quando há mais de um — ver
     // `formatarCopiaPix`. Somar isso à mão no WhatsApp é onde o erro entrava.
-    // Só aprovados é o que vai ser pago, e o Pix sai por operador: aí o texto
-    // vem agrupado, com o nome e o total de cada um.
+    // Aprovado a pagar é o que vai ser pago, e o Pix sai por operador: aí o
+    // texto vem agrupado, com o nome e o total de cada um.
     const total = alvos.reduce((s, a) => s + a.comissao, 0);
-    const soAprovados = alvos.every(a => a.acordo.status === 'aprovado');
+    const deFora = [
+      jaPagos > 0 && `${jaPagos} já pago${jaPagos !== 1 ? 's' : ''}`,
+      foraDosAprovados > 0 && `${foraDosAprovados} não aprovado${foraDosAprovados !== 1 ? 's' : ''}`,
+    ].filter(Boolean).join(' e ');
     await copiarTexto(
-      soAprovados ? formatarCopiaPixPorOperador(alvos) : formatarCopiaPix(alvos),
-      alvos.length === 1
+      porOperador ? formatarCopiaPixPorOperador(alvos) : formatarCopiaPix(alvos),
+      (alvos.length === 1
         ? 'Acordo copiado para encaminhar.'
-        : `${alvos.length} acordos copiados · total ${formatCurrency(total)}.`,
+        : `${alvos.length} acordos copiados · total ${formatCurrency(total)}.`)
+        + (deFora ? ` Ficaram de fora: ${deFora}.` : ''),
     );
   }
 

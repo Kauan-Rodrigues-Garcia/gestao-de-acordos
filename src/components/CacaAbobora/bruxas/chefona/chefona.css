@@ -122,6 +122,9 @@
 }
 .bxc-letreiro.hs { font-family: var(--bxc-arcade); font-size: 14px; color: #ff3a4a; }
 .bxc-letreiro.esquiva { color: #5ae0ff; }
+.bxc-letreiro.esquiva-forte { color: #5ae0ff; font-size: 26px; line-height: 1.05; text-align: center; text-shadow: 3px 3px 0 #0b2a40, -1px -1px 0 #0b2a40; }
+.bxc-letreiro small { display: block; font-size: 12px; text-align: center; opacity: .95; }
+.bxc-letreiro.esquiva-forte small { display: block; font-size: 13px; color: #c8f3ff; text-shadow: 2px 2px 0 #0b2a40; }
 .bxc-letreiro.feitico { color: #e8b0ff; font-size: 20px; }
 .bxc-letreiro.dano { color: #ffe14d; font-size: 14px; }
 .bxc-letreiro.quebra { color: #ffd34d; font-size: 22px; }
@@ -195,9 +198,18 @@
   animation: bx-enf-flutua 1.1s ease-in-out infinite;
 }
 
+/* A Invisibilidade fantasma: a linha pisca meio transparente, cada uma no seu
+   tempo (`--bx-enf-atraso`). Só opacidade: a placa de vídeo compõe. */
+.bx-enf-fantasma {
+  animation: bx-enf-fantasma 1.4s steps(4, end) infinite;
+  animation-delay: var(--bx-enf-atraso, 0s);
+}
+@keyframes bx-enf-fantasma { 0%, 100% { opacity: .15; } 50% { opacity: .6; } }
+
 /* Os véus por cima da página (15/10/2026), embaixo da bruxa e sem pegar clique.
-   A Cegueira: tudo escuro, menos a volta do mouse. O Veneno: a borda verde
-   pulsando, como os corações envenenados do jogo. */
+   A Cegueira: tudo escuro, menos o buraco (em volta do mouse, ou a lanterna
+   que anda sozinha). Na Escuridão o escuro pulsa, como o efeito do jogo — só
+   opacidade, sem repintar o gradiente. */
 .bx-enf-veu {
   position: fixed;
   inset: 0;
@@ -214,27 +226,13 @@
     rgba(8, 6, 12, .96) 100%
   );
 }
-/* O pulso é só de opacidade: a placa de vídeo compõe, sem repintar a sombra. */
-.bx-enf-veu-veneno {
-  box-shadow: inset 0 0 120px 34px rgba(90, 170, 55, .65);
-  animation: bx-enf-veu-entra .5s ease-out, bx-enf-veneno 1.1s ease-in-out infinite;
-}
+.bx-enf-veu-escuridao { animation: bx-enf-veu-entra .5s ease-out, bx-enf-escuridao 1.6s ease-in-out infinite; }
 @keyframes bx-enf-veu-entra { from { opacity: 0; } }
-@keyframes bx-enf-veneno { 50% { opacity: .5; } }
-
-/* A Fraqueza: a aba desbota e encolhe um pouco. */
-.bx-enf-fraco { opacity: .45 !important; transition: opacity .4s ease-in; }
-
-/* A Levitação: sobe e desce, cada um no seu tempo (`--bx-enf-atraso`). */
-.bx-enf-levita {
-  display: inline-block;
-  animation: bx-enf-levita 1.6s ease-in-out infinite;
-  animation-delay: var(--bx-enf-atraso, 0s);
-}
-@keyframes bx-enf-levita { 50% { transform: translateY(-7px) rotate(-2deg); } }
+@keyframes bx-enf-escuridao { 50% { opacity: .55; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .bx-enf-levita, .bx-enf-veu-veneno { animation: none; }
+  .bx-enf-fantasma { animation: none; opacity: .35; }
+  .bx-enf-veu-escuridao { animation: none; }
 }
 
 .bxc-letreiro.cura { color: #ff8a8a; font-size: 16px; }
@@ -400,8 +398,14 @@
   .bxc-time-top { display: none; }
 }
 
-/* O ranking final é o do Rei do Pop (caca.css), com a cor da bruxa. */
-.zb-chefao-final.bruxa { --zb-borda: #b040e0; }
+/* O ranking final é o do Rei do Pop (caca.css), com a cor da bruxa. Fica por
+   cima do palco (a placa, as estrelinhas e os drops), nunca embaixo; com a
+   placa de conquista no alto, desce para começar abaixo dela. */
+.zb-chefao-final.bruxa { --zb-borda: #b040e0; z-index: 61; transition: top .5s cubic-bezier(.3, .7, .3, 1); }
+.zb-chefao-final.bruxa.com-placa {
+  top: calc(50% + 56px);
+  max-height: calc(100vh - 64px - 112px);
+}
 .zb-chefao-final.bruxa.fugiu { --zb-borda: #5a2a8a; }
 .zb-chefao-final.bruxa .zb-chefao-final-titulo { text-shadow: 2px 2px 0 #6a1fb0, 4px 4px 0 #2a0a4a; }
 .bxc-final-cabeca { flex: none; display: block; }
@@ -421,6 +425,13 @@
   transform: translateX(-50%);
   pointer-events: none;
   animation: bxc-placa-entra .7s cubic-bezier(.2, 1.5, .4, 1) both, bxc-placa-sai .6s ease-in calc(var(--bxc-placa-ms, 7000ms) - 600ms) forwards;
+  transition: top .5s cubic-bezier(.3, .7, .3, 1), width .5s cubic-bezier(.3, .7, .3, 1);
+}
+/* O ranking abriu: a placa sobe para a faixa do alto, com metade do tamanho,
+   e o ranking começa embaixo dela (`.com-placa`). Os dois nunca se cobrem. */
+.bxc-placa.no-alto {
+  top: 8px;
+  width: min(calc(var(--bxc-placa-w, 660px) * .5), 60vw);
 }
 .bxc-placa-corpo {
   position: relative;
@@ -435,13 +446,15 @@
   overflow: hidden;
   pointer-events: none;
 }
+/* Anda por `transform` (só composição), não por `left` (que refazia o layout a cada quadro). */
 .bxc-placa-reflexo::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   width: 30%;
-  left: -40%;
+  left: 0;
+  transform: translateX(-133%);
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55) 45%, rgba(255, 230, 255, .8) 50%, rgba(255, 255, 255, .55) 55%, transparent);
   animation: bxc-placa-reflexo 1.8s ease-in-out .5s infinite;
 }
@@ -464,7 +477,7 @@
   100% { opacity: 1; transform: translateX(-50%) scale(1); filter: none; }
 }
 @keyframes bxc-placa-sai { to { opacity: 0; transform: translateX(-50%) translateY(-40px) scale(.94); } }
-@keyframes bxc-placa-reflexo { 0% { left: -40%; } 55%, 100% { left: 120%; } }
+@keyframes bxc-placa-reflexo { 0% { transform: translateX(-133%); } 55%, 100% { transform: translateX(400%); } }
 @keyframes bxc-placa-gira { to { transform: translate(-50%, -50%) rotate(360deg); } }
 /* Leve e quem pede menos movimento: sem os raios girando e sem o brilho com filtro. */
 .bxc-palco.leve .bxc-placa-raios { animation: none; }
