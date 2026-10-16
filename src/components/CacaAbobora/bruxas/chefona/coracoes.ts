@@ -4,8 +4,9 @@
  *
  * Os corações são os do jogo (`texturasMC.ts`), no estilo do modo hardcore, o
  * de quem não tem segunda chance: o de chefe. A adaptação é a escala: uma
- * pessoa tem 10 corações; ela tem `TOTAL` (duas fileiras de 20), e cada
- * coração é uma fração da vida máxima (com 3.000 de vida, cada um vale 75).
+ * pessoa tem 10 corações; ela tem `TOTAL` (uma fileira de 20 — eram duas até
+ * 16/10/2026, o Cleber pediu uma só e menor), e cada coração é uma fração da
+ * vida máxima (com 3.000 de vida, cada um vale 150).
  *
  * Como no jogo:
  *
@@ -22,7 +23,7 @@
 
 /** Corações por fileira, e quantos ela tem ao todo. */
 export const POR_FILEIRA = 20;
-export const TOTAL = 40;
+export const TOTAL = 20;
 /** O passo entre um coração e outro (px da textura), e o tamanho de um. */
 export const PASSO = 8;
 export const LADO = 9;

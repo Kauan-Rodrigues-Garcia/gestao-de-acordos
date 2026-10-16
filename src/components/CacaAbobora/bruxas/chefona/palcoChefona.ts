@@ -149,29 +149,38 @@ const DOR_MS = 260;
  * Eram 12–18 s e ela quase não jogava (Kauan, 15/10/2026: «está usando poucos
  * feitiços»); passou a 7–11 s. Em 16/10/2026 saíram quatro poções e ficaram
  * seis, cada uma com jeitos diferentes de cair: ela joga mais (5–8 s) e
- * passa por todas antes de repetir (`RECENTES`).
+ * passa por todas antes de repetir (`RECENTES`). Ainda em 16/10/2026 (Cleber:
+ * «muda o sistema inteiro»): 9–13 s (6–9 na fúria), a primeira aos 6 s, e o
+ * Encantamento mais espaçado.
  */
-const INTERVALO: readonly [number, number] = [5, 8];
-const INTERVALO_FURIA: readonly [number, number] = [3.5, 6];
-const PRIMEIRO_FEITICO_S = 3;
+const INTERVALO: readonly [number, number] = [9, 13];
+const INTERVALO_FURIA: readonly [number, number] = [6, 9];
+const PRIMEIRO_FEITICO_S = 6;
 /** Quantas das últimas poções ela evita repetir (se houver outra para jogar). */
 const RECENTES = 3;
 /** O Encantamento: o primeiro não antes disto (s de luta), e depois um a cada tanto. */
-const PRIMEIRO_FORTE_S = 20;
-const ENTRE_FORTES_S = 22;
+const PRIMEIRO_FORTE_S = 30;
+const ENTRE_FORTES_S = 32;
 /**
  * Tiros dentro de `JANELA_S` que fazem ela desviar, e a folga entre manobras.
  * Subiram em 15/10/2026: com 6 tiros em 1,6 s ela desviava o tempo todo de
- * quem clica rápido.
+ * quem clica rápido. Em 16/10/2026 de novo (Cleber: «ela tá esquivando muito»):
+ * na manobra todo tiro é de raspão, e com 9 tiros, 4% de sorte por tiro e 4 s
+ * de folga, quem clicava rápido a deixava em manobra quase o tempo todo.
  */
 const JANELA_S = 1.6;
-const LIMIAR_DESVIO = 9;
-const LIMIAR_DESVIO_FURIA = 7;
-const CHANCE_DESVIO = 0.04;
-const CHANCE_DESVIO_FURIA = 0.07;
-const FOLGA_MANOBRA_S = 4;
+const LIMIAR_DESVIO = 14;
+const LIMIAR_DESVIO_FURIA = 11;
+const CHANCE_DESVIO = 0.015;
+const CHANCE_DESVIO_FURIA = 0.03;
+const FOLGA_MANOBRA_S = 8;
+/** O rastro de vultos que ela deixa na manobra (s entre um e outro). */
+const RASTRO_S = 0.09;
+const RASTRO_LEVE_S = 0.16;
+/** O «ESQUIVOU!» de quem errou nela durante a manobra: no máximo um a cada tanto (ms). */
+const AVISO_ESQUIVA_MS = 450;
 /** O tiro de raspão: a chance fora das manobras, a fração do dano, e a esquiva (s e px da arte). */
-export const CHANCE_RASPAO = 0.12;
+export const CHANCE_RASPAO = 0.06;
 export const DANO_RASPAO = 0.5;
 const ESQUIVA_S = 0.3;
 const ESQUIVA_PX = 8;
@@ -212,7 +221,8 @@ const MAX_PARTICULAS = 700;
 const MAX_PARTICULAS_LEVE = 220;
 const SOBRA_DE_PARTICULAS_LEVE = 0.5;
 /** Cada pixel do coração vira tantos px da tela (o jogo usa a escala da interface). */
-const ESCALA_CORACAO = 3;
+/** Os corações na tela: 2 pixels por pixel da textura (eram 3, em duas fileiras; 16/10/2026: uma só, menor). */
+const ESCALA_CORACAO = 2;
 /** As estantes da mesa de encantamento: a distância da mesa (px da arte). */
 const ESTANTE_LONGE = 58;
 const MAX_LETREIROS = 14;
@@ -613,6 +623,9 @@ export class PalcoChefona {
   /** A esquiva do raspão (para que lado, e quanto já andou) e os rastros dela. */
   private esquiva: { t: number; dir: 1 | -1 } | null = null;
   private ultimoRaspao = 0;
+  /** O próximo vulto do rastro da manobra (s do relógio), e o último «ESQUIVOU!» do tiro errado (ms). */
+  private proximoRastro = 0;
+  private ultimoAvisoEsquiva = 0;
   private fantasmas: { x: number; y: number; quadro: number; lado: 1 | -1; estagio: number; vida: number }[] = [];
   /** A barra de corações e os textos dela (guardados: são lidos a cada quadro). */
   private readonly cvCoracoes: HTMLCanvasElement;
@@ -700,8 +713,7 @@ export class PalcoChefona {
     el.addEventListener('pointerdown', e => {
       segurar(e);
       if (e.button !== 0) return;
-      furo(e.clientX, e.clientY);
-      this.aoEvento?.({ tipo: 'errou' });
+      this.errou(e.clientX, e.clientY);
     });
     for (const tipo of ['click', 'dblclick', 'auxclick', 'contextmenu', 'mousedown', 'mouseup', 'pointerup']) el.addEventListener(tipo, segurar);
     el.addEventListener('wheel', e => {
@@ -1163,8 +1175,7 @@ export class PalcoChefona {
     const { lx, ly } = this.paraSprite(wx, wy);
     const num = parteComFolga(imagemDoQuadro(this.quadroAtual()), lx, ly);
     if (!num) {
-      furo(clientX, clientY);
-      this.aoEvento?.({ tipo: 'errou' });
+      this.errou(clientX, clientY);
       return;
     }
     somTiro();
@@ -1223,6 +1234,33 @@ export class PalcoChefona {
    * A esquiva do raspão: ela dá um passo para o lado (o desenho e a mira andam
    * juntos, em `centroSprite`) e deixa um rastro roxo de onde estava.
    */
+  /**
+   * O tiro que não pegou: o furo na parede. Com ela em manobra (ou sumida no
+   * teleporte), o «ESQUIVOU!» onde o tiro caiu — sem isso, parecia que ela
+   * simplesmente parou de tomar dano.
+   */
+  private errou(clientX: number, clientY: number): void {
+    furo(clientX, clientY);
+    this.aoEvento?.({ tipo: 'errou' });
+    const corpo = this.corpo;
+    if (!corpo || !this.atingivel() || (!corpo.manobra && corpo.visivel)) return;
+    const agora = performance.now();
+    if (agora - this.ultimoAvisoEsquiva < AVISO_ESQUIVA_MS) return;
+    this.ultimoAvisoEsquiva = agora;
+    const r = this.raiz.getBoundingClientRect();
+    this.letreiro('ESQUIVOU!', (clientX - r.left) / this.escala, (clientY - r.top) / this.escala - 8, 'esquiva');
+  }
+
+  /** Na manobra ela deixa um rastro de vultos: dá para ver que está fugindo dos tiros. */
+  private rastroDaManobra(): void {
+    const corpo = this.corpo;
+    if (!corpo?.manobra || !corpo.visivel || this.relogio < this.proximoRastro) return;
+    this.proximoRastro = this.relogio + (this.leve ? RASTRO_LEVE_S : RASTRO_S);
+    const s = this.centroSprite();
+    this.fantasmas.push({ x: s.x, y: s.y, quadro: this.quadroAtual(), lado: corpo.lado, estagio: this.estagio, vida: 0.32 });
+    if (this.fantasmas.length > (this.leve ? 3 : 6)) this.fantasmas.shift();
+  }
+
   private esquivar(dir: number): void {
     const corpo = this.corpo;
     if (!corpo) return;
@@ -1298,7 +1336,9 @@ export class PalcoChefona {
     // A pérola faz o som quando sai da mão (o evento `lancou`); as poções, o gole.
     if (tipo !== 'perola') { somBeber(); somVento(); }
     this.efeito(corpo.x, corpo.y, [COR_MANOBRA[tipo], '#ffffff'], 18);
-    this.letreiro(NOME_MANOBRA[tipo], corpo.x, corpo.y - ALT / 2 - 8, 'esquiva');
+    // O que acontece em letras grandes, e qual poção ela usou embaixo (um letreiro só:
+    // dois separados se empilhavam quando ela estava no alto da tela).
+    this.letreiro('ESQUIVOU!', corpo.x, corpo.y - ALT / 2 - 14, 'esquiva-forte', NOME_MANOBRA[tipo]);
     this.aoEvento?.({ tipo: 'manobra', manobra: tipo });
   }
 
@@ -1831,6 +1871,7 @@ export class PalcoChefona {
     const corpo = this.corpo;
     const z = this.zona();
     if (this.banco && corpo && this.atingivel()) this.sincronizarComBanco();
+    this.rastroDaManobra();
     if (corpo && this.atingivel()) {
       this.tempo += dt;
       // Com o banco, o prazo é dele: quem comanda chama `fugir()`.
@@ -2133,7 +2174,7 @@ export class PalcoChefona {
 
   /**
    * Os corações no canvas da barra, em pixel do jogo (ampliado pelo CSS sem
-   * borrar): a fileira dourada por cima (Absorção), depois as duas da vida.
+   * borrar): a fileira dourada por cima (Absorção), depois a da vida.
    * Cada coração é o fundo (o vazio do hardcore) e, por cima, o que ele tem.
    */
   private desenharCoracoes(lista: readonly Coracao[], ouro: readonly ('cheio' | 'metade')[], pisca: boolean, treme: number, pulo: number, seco: boolean): void {
@@ -2573,10 +2614,19 @@ export class PalcoChefona {
 
   // ── Letreiros ────────────────────────────────────────────────────────────
 
-  private letreiro(texto: string, x: number, y: number, tipo: 'hs' | 'esquiva' | 'feitico' | 'dano' | 'quebra' | 'cura' | 'totem'): void {
+  private letreiro(
+    texto: string, x: number, y: number,
+    tipo: 'hs' | 'esquiva' | 'esquiva-forte' | 'feitico' | 'dano' | 'quebra' | 'cura' | 'totem',
+    linhaDeBaixo?: string,
+  ): void {
     const el = document.createElement('div');
     el.className = `bxc-letreiro ${tipo}`;
     el.textContent = texto;
+    if (linhaDeBaixo) {
+      const s = document.createElement('small');
+      s.textContent = linhaDeBaixo;
+      el.appendChild(s);
+    }
     el.style.left = `${Math.round(x * this.escala)}px`;
     // Nunca por cima da barra de chefe e do aviso, lá no alto.
     el.style.top = `${Math.max(Math.round(y * this.escala), 150)}px`;

@@ -20,11 +20,11 @@ describe('os corações da barra', () => {
   });
 
   it('cada coração é uma fração da vida, com meio coração no fim', () => {
-    // 40 corações = 80 metades: 1.000 de 3.000 são 26,7 metades → 27 (13 cheios e meio).
-    const l = coracoesDaVida(1000, 3000);
-    expect(conta(l, 'cheio')).toBe(13);
-    expect(l[13]).toBe('metade');
-    expect(conta(l, 'vazio')).toBe(TOTAL - 14);
+    // 20 corações = 40 metades: 950 de 3.000 são 12,7 metades → 13 (6 cheios e meio).
+    const l = coracoesDaVida(950, 3000);
+    expect(conta(l, 'cheio')).toBe(6);
+    expect(l[6]).toBe('metade');
+    expect(conta(l, 'vazio')).toBe(TOTAL - 7);
   });
 
   it('qualquer vida acima de zero mostra pelo menos meio coração', () => {
@@ -33,36 +33,38 @@ describe('os corações da barra', () => {
 
   it('a cura a caminho pinta os vazios logo depois da vida', () => {
     const l = coracoesDaVida(1500, 3000, 600);
-    expect(conta(l, 'cheio')).toBe(20);
-    expect(conta(l, 'cura') + conta(l, 'cura-metade')).toBe(8);
-    expect(l[20]).toBe('cura');
+    expect(conta(l, 'cheio')).toBe(10);
+    expect(conta(l, 'cura') + conta(l, 'cura-metade')).toBe(4);
+    expect(l[10]).toBe('cura');
   });
 
   it('a Absorção vira uma fileira dourada, no máximo uma', () => {
     expect(coracoesDeOuro(0, 3000)).toEqual([]);
-    expect(coracoesDeOuro(300, 3000)).toHaveLength(4);
+    expect(coracoesDeOuro(300, 3000)).toHaveLength(2);
     expect(coracoesDeOuro(999_999, 3000)).toHaveLength(POR_FILEIRA);
   });
 
-  it('duas fileiras de 20, e a dourada empurra as da vida para baixo', () => {
+  it('uma fileira de 20, e a dourada empurra a da vida para baixo', () => {
+    expect(TOTAL).toBe(POR_FILEIRA);
     expect(posicaoDoCoracao(0, false)).toEqual({ x: 0, y: 0 });
-    expect(posicaoDoCoracao(20, false)).toEqual({ x: 0, y: 10 });
-    expect(posicaoDoCoracao(20, true)).toEqual({ x: 0, y: 20 });
-    expect(tamanhoDosCoracoes(false)).toEqual({ largura: 161, altura: 19 });
-    expect(tamanhoDosCoracoes(true).altura).toBe(29);
+    expect(posicaoDoCoracao(19, false)).toEqual({ x: 152, y: 0 });
+    expect(posicaoDoCoracao(0, true)).toEqual({ x: 0, y: 10 });
+    expect(tamanhoDosCoracoes(false)).toEqual({ largura: 161, altura: 9 });
+    expect(tamanhoDosCoracoes(true).altura).toBe(19);
   });
 
   it('com muita gente a vida passa de dezenas de milhares: o texto leva o ponto do milhar', () => {
     expect(milhar(40700)).toBe('40.700');
     expect(milhar(700)).toBe('700');
-    // Cada coração continua sendo 1/40 da vida, por maior que ela seja.
-    expect(conta(coracoesDaVida(20350, 40700), 'cheio')).toBe(20);
+    // Cada coração continua sendo 1/20 da vida, por maior que ela seja.
+    expect(conta(coracoesDaVida(20350, 40700), 'cheio')).toBe(10);
   });
 
   it('a Regeneração corre um coração por vez; sem ela, nenhum', () => {
     expect(pulinhoDaRegeneracao(0, false)).toBe(-1);
     const vistos = new Set(Array.from({ length: 200 }, (_, i) => pulinhoDaRegeneracao(i / 60, true)));
-    expect(vistos.size).toBeGreaterThan(30);
+    // A onda passa por todos os corações da fileira.
+    expect(vistos.size).toBe(TOTAL);
   });
 });
 
