@@ -11,7 +11,7 @@ import { useCurrentFrame } from 'remotion';
 import { cn } from '@/lib/utils';
 import { entrada, entre, ms, SUAVE } from '../../movimento';
 import {
-  AGENDADO_POR_DIA, DIAS_UTEIS, HOJE, MES_ROTULO, OPERADORA, POR_DIA, RECORTES, SEM_EXPEDIENTE,
+  AGENDADO_POR_DIA, DIAS_UTEIS, HOJE, MES_ROTULO, POR_DIA, RECORTES, SEM_EXPEDIENTE,
   type NumerosDoRecorte, type Recorte,
 } from '../dados';
 import type { TempoApp } from '../roteiro';
@@ -19,6 +19,7 @@ import {
   AnelProjecao, COR_QUARTIL, corDaMeta, corProjecao, corTexto, Destaque, DonutChart, formatBRL, MetricCard,
 } from '../ui';
 import { FormaSaudacao } from './FormaSaudacao';
+import { usePessoa } from '../pessoa';
 
 type Props = { t: TempoApp; entra: number; visita: 1 | 2 };
 
@@ -45,6 +46,7 @@ function troca(f: number, desde: number): React.CSSProperties {
 
 export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
   const f = useCurrentFrame();
+  const pessoa = usePessoa();
   const { atual, anterior, desde } = recorteEm(t, f);
   const n = RECORTES[atual];
   const nAnt = RECORTES[anterior];
@@ -78,12 +80,12 @@ export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
         <div className="flex items-start justify-between mb-6" style={E(0)}>
           <div>
             <h1 className="flex items-center gap-1.5 text-2xl font-bold text-foreground">
-              <span>Boa tarde, {OPERADORA.primeiroNome}!</span>
+              <span>Boa tarde, {pessoa.primeiroNome}!</span>
               <FormaSaudacao />
             </h1>
             <p className="text-sm text-muted-foreground capitalize mt-0.5">{HOJE.semana}, {HOJE.extenso}</p>
             <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
-              <Building2 className="w-3 h-3" /> {OPERADORA.marca}
+              <Building2 className="w-3 h-3" /> {pessoa.marca}
             </p>
           </div>
         </div>

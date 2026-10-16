@@ -11,7 +11,7 @@ import {
 import { Img, staticFile, useCurrentFrame } from 'remotion';
 import { cn } from '@/lib/utils';
 import { aperto, entrada, entre, mola, ms } from '../movimento';
-import { OPERADORA } from './dados';
+import { usePessoa } from './pessoa';
 import { APP_A, APP_L, CABECALHO, type IdMenu, LOGO_ALTURA, MENU_PASSO, MENU_TOPO, SIDEBAR } from './layout';
 
 export const MENU: { id: IdMenu; rotulo: string; Icone: React.ElementType }[] = [
@@ -49,6 +49,10 @@ export const AvatarIniciais: React.FC<{ iniciais: string; className?: string; st
 
 export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliques, desempenhoAberto, children, sobre }) => {
   const f = useCurrentFrame();
+  const OPERADORA = usePessoa();
+  const cargoClasse = OPERADORA.papel === 'lider'
+    ? 'bg-role-lider/10 text-role-lider border-role-lider/30'
+    : 'bg-role-operador/10 text-role-operador border-role-operador/30';
   const iAtivo = MENU.findIndex((m) => m.id === ativo);
   const iAnterior = MENU.findIndex((m) => m.id === anterior);
   const desliza = iAtivo === iAnterior ? 1 : mola(f, trocaEm);
@@ -124,7 +128,7 @@ export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliq
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-sidebar-foreground truncate">{OPERADORA.nome}</p>
               <p className="text-xs text-sidebar-foreground/60 flex items-center gap-1">
-                <span className="inline-block px-1.5 py-0 rounded text-[10px] font-medium bg-role-operador/10 text-role-operador border-role-operador/30">
+                <span className={cn('inline-block px-1.5 py-0 rounded text-[10px] font-medium', cargoClasse)}>
                   {OPERADORA.cargo}
                 </span>
                 <span className="truncate">· {OPERADORA.setor}</span>
@@ -175,7 +179,7 @@ export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliq
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="max-w-[220px] truncate text-xs font-semibold leading-4 text-foreground">{OPERADORA.nome}</span>
                 <span className="flex h-4 min-w-0 items-center gap-1 text-[11px] leading-4 text-muted-foreground">
-                  <span className="inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded border px-1.5 text-[10px] font-medium leading-none bg-role-operador/10 text-role-operador border-role-operador/30">
+                  <span className={cn('inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded border px-1.5 text-[10px] font-medium leading-none', cargoClasse)}>
                     {OPERADORA.cargo}
                   </span>
                   <span className="max-w-[200px] truncate">· {OPERADORA.setor}</span>
