@@ -399,7 +399,7 @@ function SecaoChefona() {
       toast.error('Não deu para soltar a chefona', { description: motivoDoErroDaChefona(erro) });
       return;
     }
-    toast.success('Contagem começou 🧙', { description: `A Bruxa do Pântano chega em ${ESPERA_CHEFONA_S / 60} minuto na tela de todo mundo, e fica ${PRAZO_CHEFONA_MIN} minutos.` });
+    toast.success('Lobby aberto 🧙', { description: `O convite chegou na tela de todo mundo. A Bruxa do Pântano chega em ${ESPERA_CHEFONA_S / 60} minutos para quem entrar no lobby, e fica ${PRAZO_CHEFONA_MIN} minutos.` });
   }
 
   return (

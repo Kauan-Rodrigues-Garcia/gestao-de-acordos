@@ -41,6 +41,14 @@ import {
   type Golpeador, type MeuPlacar, type RodadaChefao,
 } from '../../chefao';
 import { MOTIVO, normalizarFichas, type Colheita, type FichaDeCliques } from '../../autoclick';
+import { CONTAGEM_LOBBY_S } from './lobby/trilha';
+
+/** Quem entrou no lobby (os últimos 24 que o banco manda). */
+export interface NoLobby {
+  usuario: string;
+  nome:    string;
+  setor:   string | null;
+}
 
 export interface RodadaChefona extends RodadaChefao {
   /** A Absorção do totem (a parte dourada da barra): gasta antes da vida. */
@@ -53,6 +61,9 @@ export interface RodadaChefona extends RodadaChefao {
   totem_vida:   number;
   totens:       number;
   curas:        number;
+  /** O lobby (16/10/2026, migration 20261016120000): quantos entraram, e os últimos 24 na ordem de chegada. */
+  lobby_total:  number;
+  lobby:        NoLobby[];
 }
 
 /** Os números que a migration também usa — mudou um, mude o outro. */
@@ -60,7 +71,8 @@ export const LOTE_MS = 1_000;
 export const MAX_ACERTOS_POR_LOTE = 12;
 /** O dano de um acerto, no máximo: cabeça (6) com ela tonta (2×). */
 export const MAX_DANO_POR_ACERTO = 12;
-export const ESPERA_S = 60;
+/** A contagem antes dela: 3 minutos de lobby (16/10/2026; era 1 minuto). */
+export const ESPERA_S = CONTAGEM_LOBBY_S;
 export const PRAZO_MIN = 2;
 /** A Poção de Cura (o `CURA_FRACAO` do palco) e quanto ela leva bebendo. */
 export const CURA_FRACAO = 0.22;
@@ -120,7 +132,19 @@ export function normalizarChefona(bruto: unknown): RodadaChefona | null {
     totem_vida:   Math.max(0, inteiro(r.totem_vida)),
     totens:       Math.max(0, inteiro(r.totens)),
     curas:        Math.max(0, inteiro(r.curas)),
+    lobby_total:  Math.max(0, inteiro(r.lobby_total)),
+    lobby:        normalizarLobby(r.lobby),
   };
+}
+
+function normalizarLobby(bruto: unknown): NoLobby[] {
+  if (!Array.isArray(bruto)) return [];
+  return bruto.flatMap((b): NoLobby[] => {
+    if (!b || typeof b !== 'object') return [];
+    const l = b as Record<string, unknown>;
+    if (typeof l.usuario !== 'string') return [];
+    return [{ usuario: l.usuario, nome: texto(l.nome) ?? 'Alguém', setor: texto(l.setor) }];
+  });
 }
 
 export function normalizarPlacarChefona(bruto: unknown): MeuPlacar | null {
@@ -230,22 +254,78 @@ export function aplicarLote(
 // ── O estado do app ──────────────────────────────────────────────────────────
 
 let estado: RodadaChefona | null = null;
+/**
+ * A chefona em cujo lobby ESTA pessoa está. É de cada um: vem só nas respostas
+ * dela (a leitura de entrada, entrar, sair), nunca no aviso geral.
+ */
+let euNoLobby: number | null = null;
 const ouvintes = new Set<() => void>();
+
+function avisarOuvintes(): void {
+  for (const o of [...ouvintes]) o();
+}
 
 function publicar(proximo: RodadaChefona | null): void {
   if (proximo === estado) return;
   estado = proximo;
-  for (const o of [...ouvintes]) o();
+  avisarOuvintes();
+}
+
+function marcarLobby(rodadaId: number, dentro: boolean): void {
+  const proximo = dentro ? rodadaId : euNoLobby === rodadaId ? null : euNoLobby;
+  if (proximo === euNoLobby) return;
+  euNoLobby = proximo;
+  avisarOuvintes();
 }
 
 /** O que chegou do banco (Broadcast, resposta do tiro ou leitura). */
 export function aceitarChefona(bruto: unknown): void {
   const nova = normalizarChefona(bruto);
-  if (nova) publicar(juntarChefao(estado, nova));
+  if (!nova) return;
+  const dentro = (bruto as { eu_no_lobby?: unknown }).eu_no_lobby;
+  if (typeof dentro === 'boolean') marcarLobby(nova.id, dentro);
+  publicar(juntarChefao(estado, nova));
 }
 
 export function estadoChefona(): RodadaChefona | null {
   return estado;
+}
+
+/** Esta pessoa está no lobby desta chefona? */
+export function useEuNoLobbyChefona(rodadaId: number | null | undefined): boolean {
+  const id = useSyncExternalStore(
+    o => { ouvintes.add(o); return () => { ouvintes.delete(o); }; },
+    () => euNoLobby,
+  );
+  return rodadaId != null && id === rodadaId;
+}
+
+/** O banco ainda não tem o lobby (migration 20261016120000 por aplicar). */
+const semLobbyNoBanco = (erro: string) => /fn_chefona_lobby|PGRST202|schema cache|does not exist/.test(erro);
+
+/**
+ * Entra no lobby. Banco sem a migration do lobby: entra só nesta tela (o banco
+ * velho deixa todo mundo acertar), para a chefona não sumir até aplicarem.
+ */
+export async function entrarNoLobbyChefona(rodadaId: number): Promise<{ erro: string | null }> {
+  if (rodadaId < 0) { ensaioEntrarNoLobby(rodadaId); return { erro: null }; }
+  const { data, error } = await rpc<unknown>('fn_chefona_lobby_entrar', { p_rodada: rodadaId });
+  if (error) {
+    if (semLobbyNoBanco(error.message)) { marcarLobby(rodadaId, true); return { erro: null }; }
+    return { erro: error.message };
+  }
+  aceitarChefona(data);
+  marcarLobby(rodadaId, true);
+  return { erro: null };
+}
+
+export async function sairDoLobbyChefona(rodadaId: number): Promise<{ erro: string | null }> {
+  marcarLobby(rodadaId, false);
+  if (rodadaId < 0) { ensaioSairDoLobby(rodadaId); return { erro: null }; }
+  const { data, error } = await rpc<unknown>('fn_chefona_lobby_sair', { p_rodada: rodadaId });
+  if (error) return { erro: semLobbyNoBanco(error.message) ? null : error.message };
+  aceitarChefona(data);
+  return { erro: null };
 }
 
 function rpc<T>(nome: string, args?: Record<string, unknown>) {
@@ -294,6 +374,11 @@ export interface ResultadoLoteChefona {
   erro:   string | null;
   /** O banco achou o lote cedo demais: os tiros NÃO entraram, e voltam no próximo. */
   freio:  boolean;
+  /**
+   * Quantos acertos do lote o banco NÃO contou (rápido demais, ou cliques com
+   * pista de autoclick: migration 20261016120000). Não voltam.
+   */
+  descartados?: number;
 }
 
 /** Manda um lote. A resposta já atualiza a vida e o ranking nesta aba. */
@@ -306,13 +391,16 @@ export async function enviarLoteChefona(
   const d = Math.max(0, Math.min(a * MAX_DANO_POR_ACERTO, Math.round(dano)));
   if (a === 0 || d === 0) return { rodada: estado, eu: null, erro: null, freio: false };
   if (rodadaId < 0) return loteNoEnsaio(rodadaId, a, c, d, EU_NO_ENSAIO, 'Você (ensaio)', colheita);
-  const { data, error } = await rpc<{ eu?: unknown; freio?: unknown } & Record<string, unknown>>(
+  const { data, error } = await rpc<{ eu?: unknown; freio?: unknown; descartados?: unknown } & Record<string, unknown>>(
     'fn_chefona_acertar',
     { p_rodada: rodadaId, p_acertos: a, p_criticos: c, p_dano: d, p_cliques: colheita.cliques, p_suspeita: colheita.suspeita },
   );
   if (error) return { rodada: null, eu: null, erro: error.message, freio: false };
   aceitarChefona(data);
-  return { rodada: estado, eu: normalizarPlacarChefona(data?.eu), erro: null, freio: data?.freio === true };
+  return {
+    rodada: estado, eu: normalizarPlacarChefona(data?.eu), erro: null, freio: data?.freio === true,
+    descartados: Math.max(0, inteiro(data?.descartados)),
+  };
 }
 
 // ── O painel do super_admin ──────────────────────────────────────────────────
@@ -354,6 +442,7 @@ export function motivoDoErroDaChefona(erro: string): string {
   if (erro.includes('JA_PROTEGIDA')) return 'Ela já está segurando o totem.';
   if (erro.includes('AINDA_CHEGANDO')) return 'Ela ainda não chegou.';
   if (erro.includes('SEM_CHEFONA')) return 'Ela não está mais na tela.';
+  if (/fn_chefona_lobby/.test(erro)) return 'O banco ainda não tem o lobby da chefona (migration 20261016120000).';
   if (/fn_chefona_|PGRST202|schema cache/.test(erro)) return 'O banco ainda não tem a chefona (migration 20261015230000).';
   return erro;
 }
@@ -391,7 +480,22 @@ export function ensaioSoltarChefona(vida = 300, minutos = PRAZO_MIN, esperaS = 0
     cura_em: null, cura_ate: null, cura_vida: 0, cura_semente: 0,
     versao: 1, participantes: 0, ranking: [],
     absorcao: 0, protegida: false, protegida_em: null, totem_em: null, totem_vida: 0, totens: 0, curas: 0,
+    lobby_total: 0, lobby: [],
   });
+}
+
+function ensaioEntrarNoLobby(rodadaId: number): void {
+  const r = estado;
+  marcarLobby(rodadaId, true);
+  if (!r || r.id !== rodadaId || r.lobby.some(l => l.usuario === EU_NO_ENSAIO)) return;
+  const lobby = [...r.lobby, { usuario: EU_NO_ENSAIO, nome: 'Você (ensaio)', setor: null }].slice(-24);
+  publicar({ ...r, lobby, lobby_total: r.lobby_total + 1, versao: r.versao + 1 });
+}
+
+function ensaioSairDoLobby(rodadaId: number): void {
+  const r = estado;
+  if (!r || r.id !== rodadaId || !r.lobby.some(l => l.usuario === EU_NO_ENSAIO)) return;
+  publicar({ ...r, lobby: r.lobby.filter(l => l.usuario !== EU_NO_ENSAIO), lobby_total: Math.max(0, r.lobby_total - 1), versao: r.versao + 1 });
 }
 
 function loteNoEnsaio(
@@ -494,5 +598,6 @@ export function ensaioLimparChefona(): void {
 export function __resetChefonaParaTestes(): void {
   ensaioRobosChefona(false);
   estado = null;
+  euNoLobby = null;
   ouvintes.clear();
 }

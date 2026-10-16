@@ -275,6 +275,13 @@ export interface OpcoesChefona {
   banco?: FonteDoBanco;
   /** O escudo que segura os cliques no Gestão (padrão: ligado). O super_admin passa `false`. */
   escudo?: boolean;
+  /**
+   * A contagem do palco (o relógio no alto, os números e o tique). Padrão:
+   * ligada. Com o lobby (16/10/2026) quem conta é ele (`lobby/lobby.ts`): o
+   * palco passa `false`, fica montado e pronto durante a espera SEM desenhar
+   * quadro nenhum, e ela entra na hora certa por um relógio só.
+   */
+  contagem?: boolean;
 }
 
 /** ponto, cruz, estrela (o brilho), espiral (a partícula de efeito de poção). */
@@ -598,6 +605,9 @@ export class PalcoChefona {
   private readonly escudo: HTMLDivElement;
   private escudoLigado = false;
   private readonly comEscudo: boolean;
+  private readonly comContagem: boolean;
+  /** Sem a contagem do palco: o relógio que solta ela na hora (`esperarChegada`). */
+  private relogioChegada: ReturnType<typeof setTimeout> | undefined;
   /** Quando o escudo mede de novo onde fica a barra lateral (s do relógio). */
   private proximaMedidaDoEscudo = 0;
   /** A esquiva do raspão (para que lado, e quanto já andou) e os rastros dela. */
@@ -622,6 +632,7 @@ export class PalcoChefona {
     this.aoEvento = opcoes.aoEvento;
     this.banco = opcoes.banco;
     this.comEscudo = opcoes.escudo ?? true;
+    this.comContagem = opcoes.contagem ?? true;
     this.raiz = document.createElement('div');
     this.raiz.className = 'bxc-palco';
     this.canvas = document.createElement('canvas');
@@ -796,8 +807,9 @@ export class PalcoChefona {
     if (espera > 0) {
       this.chegaEm = performance.now() + espera * 1000;
       this.mudarFase('chegando');
-      this.montarContagem();
       this.aoEvento?.({ tipo: 'chegando', segundos: espera });
+      if (!this.comContagem) { this.esperarChegada(); return; }
+      this.montarContagem();
       this.acordar();
       return;
     }
@@ -823,11 +835,29 @@ export class PalcoChefona {
   /** O laboratório pula o resto da contagem. */
   pularContagem(): void {
     if (this.fase === 'chegando') this.chegaEm = performance.now();
+    if (!this.comContagem) this.esperarChegada();
   }
 
   /** Com o banco: a contagem segue a hora de chegada dele (`solta_em`), não a desta tela. */
   chegarEm(segundos: number): void {
     if (this.fase === 'chegando') this.chegaEm = performance.now() + Math.max(0, segundos) * 1000;
+    if (!this.comContagem) this.esperarChegada();
+  }
+
+  /**
+   * Sem a contagem do palco: um relógio só, sem laço de quadros. Na espera de
+   * 3 minutos o palco não desenha nada (computador fraco agradece) e ela entra
+   * no segundo certo.
+   */
+  private esperarChegada(): void {
+    clearTimeout(this.relogioChegada);
+    if (this.fase !== 'chegando') return;
+    const falta = Math.max(0, this.chegaEm - performance.now());
+    this.relogioChegada = setTimeout(() => {
+      if (this.fase !== 'chegando') return;
+      this.entrar();
+      this.acordar();
+    }, falta);
   }
 
   private entrar(): void {
@@ -955,6 +985,7 @@ export class PalcoChefona {
 
   /** Apaga tudo e desfaz toda poção. */
   limpar(): void {
+    clearTimeout(this.relogioChegada);
     this.desfazerTodos();
     clearTimeout(this.relogioConquista);
     this.conquistaNoAlto = false;

@@ -1,0 +1,415 @@
+/*
+ * lobby.css — o convite e o lobby antes da Bruxa do Pântano (exemplo de 16/10/2026).
+ *
+ * Mesma família visual da chefona (`../chefona.css`): roxo do pântano, borda
+ * dupla de pixel, Pixelify no texto e Press Start 2P nos números. Os botões
+ * são os de pedra do Minecraft; o de entrar é verde, e a barra da contagem é a
+ * barra de XP do jogo.
+ */
+.bxl {
+  --bxl-texto: 'Pixelify Sans', ui-monospace, Consolas, monospace;
+  --bxl-arcade: 'Press Start 2P', ui-monospace, Consolas, monospace;
+  --bxl-fundo: rgba(26, 9, 38, .96);
+  --bxl-fundo-2: rgba(44, 18, 62, .9);
+  --bxl-borda: #b040e0;
+  --bxl-borda-escura: #170f1f;
+  --bxl-lilas: #e8b0ff;
+  --bxl-xp: #80ff20;
+  /* Centrado sem `transform`: com ele, o número grande e a chegada (fixed)
+     passariam a se medir pela caixa do lobby, e não pela tela. */
+  position: fixed;
+  top: 12px;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  z-index: 70;
+  width: min(640px, calc(100vw - 24px));
+  font-family: var(--bxl-texto);
+  color: #f4e9ff;
+  pointer-events: none;
+}
+.bxl > * { pointer-events: auto; }
+.bxl-caixa {
+  background: var(--bxl-fundo);
+  border: 2px solid var(--bxl-borda);
+  /* Sem sombra borrada: em computador fraco ela custa a cada repintura. */
+  box-shadow: 0 0 0 2px var(--bxl-borda-escura), 0 6px 0 rgb(0 0 0 / .35);
+  animation: bxl-entra .35s cubic-bezier(.25, 1, .5, 1);
+}
+@keyframes bxl-entra { from { transform: translateY(-16px); opacity: 0; } }
+.bxl-cabeca { image-rendering: pixelated; flex: none; display: block; }
+.bxl-rosto {
+  image-rendering: pixelated;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  box-shadow: 0 0 0 2px #0d0612;
+}
+
+/* ── Os botões (pedra do Minecraft) ───────────────────────────────────── */
+.bxl-btn {
+  font-family: var(--bxl-texto);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 2px 2px 0 #3f3f3f;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 2px solid #000;
+  background: #737373;
+  box-shadow: inset 2px 2px 0 #a8a8a8, inset -2px -4px 0 #4d4d4d;
+  transition: transform .08s;
+  white-space: nowrap;
+}
+.bxl-btn:hover { background: #7e8fc8; box-shadow: inset 2px 2px 0 #b9c6f0, inset -2px -4px 0 #4d5a8f; }
+.bxl-btn:active { transform: translateY(2px); }
+.bxl-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.bxl-btn.verde { background: #3c8527; box-shadow: inset 2px 2px 0 #6fc94f, inset -2px -4px 0 #24561a; text-shadow: 2px 2px 0 #1d3f12; }
+.bxl-btn.verde:hover { background: #4aa232; box-shadow: inset 2px 2px 0 #8ee36b, inset -2px -4px 0 #2b6a1f; }
+.bxl-btn.mini { font-size: 12px; padding: 4px 9px; box-shadow: inset 2px 2px 0 #a8a8a8, inset -2px -3px 0 #4d4d4d; }
+.bxl-btn.mini.verde { box-shadow: inset 2px 2px 0 #6fc94f, inset -2px -3px 0 #24561a; }
+
+/* ── O relógio ─────────────────────────────────────────────────────────── */
+.bxl-rotulo { font-size: 11px; letter-spacing: .12em; opacity: .75; }
+.bxl-relogio {
+  font-family: var(--bxl-arcade);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--bxl-lilas);
+  text-shadow: 2px 2px 0 #3e1656;
+  font-variant-numeric: tabular-nums;
+}
+.bxl-relogio.grande { font-size: 34px; text-shadow: 3px 3px 0 #3e1656; }
+.bxl-relogio.urgente, .bxl-pilula-relogio.urgente { color: #ff5a5a; animation: bxl-pisca 1s steps(1, end) infinite; }
+@keyframes bxl-pisca { 50% { opacity: .35; } }
+
+/* ── O número que pula (o «bump» de quando alguém entra) ───────────────── */
+.bxl-num { font-family: var(--bxl-arcade); font-size: 13px; color: var(--bxl-xp); text-shadow: 2px 2px 0 #1d3f12; }
+.pulou .bxl-num { display: inline-block; animation: bxl-pula .5s cubic-bezier(.25, 1, .5, 1); }
+@keyframes bxl-pula { 0% { transform: scale(1.9); color: #fff; } 100% { transform: scale(1); } }
+
+/* ── 1. O convite ──────────────────────────────────────────────────────── */
+.bxl-convite {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+}
+.bxl-convite-meio { display: grid; gap: 4px; min-width: 0; }
+.bxl-kicker {
+  justify-self: start;
+  font-size: 10px;
+  letter-spacing: .16em;
+  padding: 2px 6px;
+  color: #1a0a24;
+  background: var(--bxl-lilas);
+  animation: bxl-pisca 1.4s steps(1, end) infinite;
+}
+.bxl-titulo { font-size: 17px; font-weight: 700; letter-spacing: .05em; color: #fff; line-height: 1.15; }
+.bxl-linha { font-size: 13px; opacity: .88; }
+.bxl-quem { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; flex-wrap: wrap; }
+.bxl-monte { display: flex; }
+.bxl-monte .bxl-rosto { width: 20px; height: 20px; margin-right: -5px; }
+.bxl-monte .bxl-rosto.chegou { animation: bxl-rosto-chega .45s cubic-bezier(.25, 1, .5, 1); }
+@keyframes bxl-rosto-chega { from { transform: translateY(-10px) scale(1.4); } }
+.bxl-convite-lado { display: grid; gap: 6px; justify-items: stretch; text-align: center; }
+
+/* ── 2. As pílulas (fora, lobby recolhido, luta) ───────────────────────── */
+.bxl-pilula {
+  justify-self: center;
+  margin: 0 auto;
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.bxl-pilula-relogio { font-family: var(--bxl-arcade); font-size: 13px; color: var(--bxl-lilas); }
+.bxl-pilula-n { opacity: .9; }
+.bxl-pilula.dentro {
+  border-color: #4aa232;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+/* «segure TAB» no computador, «segure aqui» no celular (que não tem Tab). */
+.bxl kbd {
+  font: 10px/1 var(--bxl-arcade);
+  padding: 2px 4px 3px;
+  color: #fff;
+  background: #3a3a3a;
+  border: 2px solid #000;
+  box-shadow: inset -2px -2px 0 #222, inset 2px 2px 0 #5a5a5a;
+}
+.bxl-dica-tab { font-size: 11px; opacity: .75; white-space: nowrap; }
+.so-toque { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .so-teclado { display: none; }
+  .so-toque { display: inline; }
+}
+.bxl-pilula.luta { position: fixed; bottom: 16px; right: 16px; }
+/* De fora, com a luta acontecendo: o convite para entrar no meio. */
+.bxl-pilula.acontecendo { border-color: #ff5a5a; }
+.bxl-pilula-alerta { font-weight: 700; color: #ffd6d6; }
+
+/* ── 3. O painel do lobby ──────────────────────────────────────────────── */
+.bxl-painel { display: grid; gap: 10px; padding: 0 0 10px; }
+/* Aberto pelo Tab: aparece na hora (sem a descida) e avisa como fechar. */
+.bxl-painel.espiando { animation: bxl-espia .12s ease-out; }
+@keyframes bxl-espia { from { opacity: 0; } }
+.bxl-solte {
+  position: absolute;
+  left: 50%;
+  bottom: -30px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  white-space: nowrap;
+  color: #fff;
+  padding: 3px 8px;
+  background: var(--bxl-fundo);
+  border: 2px solid var(--bxl-borda-escura);
+  pointer-events: none;
+}
+.bxl-painel { position: relative; }
+.bxl-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: linear-gradient(#5b1f80, #3a1356);
+  border-bottom: 2px solid var(--bxl-borda-escura);
+}
+.bxl-topo-titulo { font-family: var(--bxl-arcade); font-size: 11px; letter-spacing: .06em; }
+.bxl-topo-dentro { font-size: 12px; color: var(--bxl-xp); margin-left: auto; }
+.bxl-icone {
+  font: 700 14px/1 var(--bxl-texto);
+  color: #fff;
+  background: rgb(0 0 0 / .3);
+  border: 2px solid #000;
+  width: 26px;
+  height: 22px;
+  cursor: pointer;
+}
+.bxl-icone:hover { background: rgb(255 255 255 / .15); }
+
+.bxl-heroi { display: flex; gap: 14px; align-items: center; padding: 0 14px; }
+.bxl-heroi .bxl-cabeca { animation: bxl-flutua 2.4s ease-in-out infinite; }
+@keyframes bxl-flutua { 50% { transform: translateY(-4px); } }
+.bxl-heroi-meio { flex: 1; display: grid; gap: 4px; min-width: 0; }
+
+/* A barra de XP do jogo: verde, em gomos, com o número no meio. */
+.bxl-xp {
+  position: relative;
+  height: 10px;
+  background: #1b1b1b;
+  border: 2px solid #000;
+  box-shadow: inset 0 2px 0 #333;
+}
+.bxl-xp::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(5.55% - 2px), #000 calc(5.55% - 2px) 5.55%);
+  pointer-events: none;
+}
+/* A barra anda por transform (só composição; `width` recalcula o layout). */
+.bxl-xp-cheio {
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  background: linear-gradient(#b5ff6a, var(--bxl-xp) 50%, #4fae0e);
+  transition: transform .9s linear;
+}
+.bxl-xp-nivel {
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  transform: translateX(-50%);
+  font-family: var(--bxl-arcade);
+  font-size: 10px;
+  color: var(--bxl-xp);
+  text-shadow: 1px 0 #000, -1px 0 #000, 0 1px #000, 0 -1px #000;
+}
+
+.bxl-secao { padding: 0 14px; display: grid; gap: 6px; }
+.bxl-secao-cab { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.bxl-cont { font-size: 14px; }
+.bxl-cont .bxl-num { font-size: 15px; }
+.bxl-dica { font-size: 11px; opacity: .6; margin-left: auto; }
+.bxl-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 5px;
+  max-height: 168px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.bxl-card {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  background: var(--bxl-fundo-2);
+  border: 2px solid #2a1438;
+  min-width: 0;
+}
+.bxl-card.eu { border-color: #4aa232; background: rgb(60 133 39 / .22); }
+.bxl-card.chegou { animation: bxl-card-chega .7s cubic-bezier(.25, 1, .5, 1); }
+@keyframes bxl-card-chega {
+  0%   { transform: scale(.4); opacity: 0; border-color: #fff; }
+  55%  { transform: scale(1.06); opacity: 1; border-color: var(--bxl-xp); box-shadow: 0 0 14px rgb(128 255 32 / .55); }
+  100% { transform: scale(1); }
+}
+.bxl-card.vazio {
+  justify-content: center;
+  color: rgb(255 255 255 / .2);
+  border-style: dashed;
+  background: transparent;
+  font-family: var(--bxl-arcade);
+  font-size: 10px;
+  min-height: 36px;
+}
+.bxl-card.mais { justify-content: center; font-family: var(--bxl-arcade); font-size: 11px; color: var(--bxl-lilas); }
+.bxl-card-nomes { display: grid; min-width: 0; line-height: 1.1; }
+.bxl-card-nome { font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bxl-card-setor { font-size: 10px; opacity: .6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* O chat do jogo (amarelo do «entrou no jogo»). */
+.bxl-feed { padding: 0 14px; display: grid; gap: 1px; min-height: 18px; }
+.bxl-feed-linha { font-size: 12px; color: #ffff55; text-shadow: 1px 1px 0 #3f3f15; }
+.bxl-feed-linha::before { content: '» '; opacity: .6; }
+.bxl-feed-linha:nth-child(2) { opacity: .7; }
+.bxl-feed-linha:nth-child(3) { opacity: .45; }
+.bxl-feed-linha:nth-child(4) { opacity: .25; }
+.bxl-feed-linha.nova { animation: bxl-feed-entra .4s ease-out; }
+@keyframes bxl-feed-entra { from { transform: translateX(-10px); opacity: 0; } }
+
+/* ── A música ──────────────────────────────────────────────────────────── */
+.bxl-musica {
+  margin: 0 14px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+  background: rgb(0 0 0 / .35);
+  border: 2px solid #2a1438;
+}
+.bxl-musica-l1 { display: flex; align-items: center; gap: 10px; }
+.bxl-nota { font-size: 20px; color: var(--bxl-lilas); animation: bxl-flutua 1.6s ease-in-out infinite; }
+.bxl-musica-info { display: grid; line-height: 1.15; min-width: 0; flex: 1; }
+.bxl-musica-status { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--bxl-xp); }
+.bxl-eq { display: flex; align-items: flex-end; gap: 2px; height: 26px; flex: none; }
+.bxl-eq i {
+  display: block;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(to top, #6a1f94, var(--bxl-borda) 55%, var(--bxl-lilas));
+  transform-origin: bottom;
+  transform: scaleY(.08);
+  transition: transform .07s linear;
+}
+.bxl-eq.mini { height: 14px; }
+.bxl-eq.mini i { width: 3px; }
+.bxl-musica-l2 { display: flex; align-items: center; gap: 8px; }
+.bxl-trilho { position: relative; flex: 1; height: 6px; background: #1b1b1b; border: 2px solid #000; }
+.bxl-trilho-pos { height: 100%; width: 100%; transform-origin: left; transform: scaleX(0); background: var(--bxl-borda); }
+.bxl-trilho-marca { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.bxl-trilho-marca::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  bottom: -6px;
+  width: 2px;
+  background: #ff5a5a;
+  transform: translateX(-50%);
+  z-index: -1;
+}
+
+.bxl-sair {
+  justify-self: center;
+  font: 12px var(--bxl-texto);
+  color: rgb(255 255 255 / .55);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.bxl-sair:hover { color: #fff; }
+
+/* ── A chegada e o número grande ───────────────────────────────────────── */
+.bxl-numerao {
+  position: fixed;
+  left: 50%;
+  top: 46vh;
+  pointer-events: none;
+  font-family: var(--bxl-arcade);
+  font-size: 96px;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    6px 0 0 #3e1656, -6px 0 0 #3e1656, 0 6px 0 #3e1656, 0 -6px 0 #3e1656,
+    0 0 24px rgba(176, 64, 224, .8), 10px 10px 0 rgb(0 0 0 / .45);
+  animation: bxl-numerao 1s steps(10, end) forwards;
+}
+@keyframes bxl-numerao {
+  0%   { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+  15%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  75%  { transform: translate(-50%, -50%) scale(.9); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+}
+.bxl-chegou {
+  position: fixed;
+  left: 50%;
+  top: 40vh;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  pointer-events: none;
+  text-align: center;
+  animation: bxl-chegou 2.6s ease-out forwards;
+}
+.bxl-chegou span {
+  font-family: var(--bxl-texto);
+  font-weight: 700;
+  font-size: clamp(26px, 6vw, 54px);
+  color: #fff;
+  text-shadow: 4px 4px 0 #3e1656, 0 0 30px rgb(176 64 224 / .9);
+  white-space: nowrap;
+}
+.bxl-chegou small { font-size: 18px; color: var(--bxl-lilas); text-shadow: 2px 2px 0 #000; }
+@keyframes bxl-chegou {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.6); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -60%); }
+}
+
+/* ── Celular ───────────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .bxl { top: 8px; }
+  .bxl-convite { grid-template-columns: auto 1fr; }
+  .bxl-convite-lado { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+  .bxl-convite-lado .bxl-rotulo, .bxl-convite-lado .bxl-relogio { grid-column: 1 / -1; }
+  .bxl-titulo { font-size: 15px; }
+  .bxl-relogio.grande { font-size: 26px; }
+  .bxl-eq { display: none; }
+  .bxl-dica { display: none; }
+  .bxl-numerao { font-size: 64px; }
+}
+
+/* Modo leve da chefona (computador fraco) e quem pediu menos movimento: nada anima. */
+.bxl.leve, .bxl.leve * { animation: none !important; transition: none !important; }
+.bxl.leve .bxl-eq i { transform: scaleY(.3); }
+.bxl.leve .bxl-eq i:nth-child(3n + 1) { transform: scaleY(.55); }
+.bxl.leve .bxl-eq i:nth-child(4n + 2) { transform: scaleY(.8); }
+@media (prefers-reduced-motion: reduce) {
+  .bxl *, .bxl-caixa { animation: none !important; transition: none !important; }
+}

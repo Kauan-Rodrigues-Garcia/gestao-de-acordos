@@ -296,6 +296,7 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   const pendente = useRef(0);
   const [meu, setMeu] = useState<MeuPlacar | null>(null);
   const avisouErro = useRef(false);
+  const avisouDescarte = useRef(false);
   const detector = useRef<Detector | null>(null);
   const ultimaVersao = useRef({ versao: rodada.versao, em: Date.now(), relido: false });
   // O placar do time se redesenha sozinho (o meu dano a caminho mora num ref).
@@ -348,7 +349,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
       },
     };
     // O super_admin não tem escudo: ele comanda a luta e segue usando o Gestão.
-    const palco = new PalcoChefona(el, { banco: fonte, aoEvento, escudo: !superAdminRef.current });
+    // A contagem é do lobby (`lobby/LobbyDaChefona.tsx`): o palco só espera, sem desenhar.
+    const palco = new PalcoChefona(el, { banco: fonte, aoEvento, escudo: !superAdminRef.current, contagem: false });
     palcoRef.current = palco;
     setHost(el);
     return () => {
@@ -475,6 +477,13 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
           }
           pendente.current = Math.max(0, pendente.current - d);
           if (res.eu) setMeu(res.eu);
+          // O banco não contou parte do lote (rápido demais ou autoclick): avisa uma vez.
+          if ((res.descartados ?? 0) > 0 && !avisouDescarte.current) {
+            avisouDescarte.current = true;
+            toast.warning('Alguns cliques não contaram', {
+              description: 'Clique rápido demais ou automático (autoclick, macro) não tira vida da bruxa nem conta no ranking.',
+            });
+          }
           if (res.erro && !avisouErro.current) {
             avisouErro.current = true;
             toast.error('Seus tiros não chegaram', { description: res.erro });
@@ -506,7 +515,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
       {host && situacao === 'ativo' && !chegando && viuViva.current && (
         <Time host={host} rodada={rodada} eu={eu} meuDano={meuDano} minhaPosicao={minhaPosicao} superAdmin={superAdmin} />
       )}
-      {host && perfilId && situacao === 'ativo' && viuViva.current && <BotaoEsconder host={host} perfilId={perfilId} />}
+      {/* Na contagem o palco está só se preparando (quem conta é o lobby): o «Esconder» vem com ela. */}
+      {host && perfilId && situacao === 'ativo' && !chegando && viuViva.current && <BotaoEsconder host={host} perfilId={perfilId} />}
       {ranking && <RankingChefona rodada={rodada} eu={eu} meu={meu} comPlaca={placa} aoFechar={fecharRanking} />}
     </>
   );
