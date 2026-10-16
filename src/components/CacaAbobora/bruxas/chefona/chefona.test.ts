@@ -17,9 +17,9 @@ import {
 import { glifoMC, larguraTextoMC } from './fonteMC';
 import { ENCANTO, letrasComRuna, paraGalatico } from './galatico';
 import {
-  ATRIBUTO_TEXTO, CLASSE_VEU, FEITICOS, FILTROS_VISAO, FILTRO_LENTIDAO, FILTRO_VENENO, LISTA_FEITICOS, PASSO_VISAO_MS,
-  alvosPorAtributo, disponivel,
-  duracaoDoFeitico, forcaDoFeitico, lancar, negativar, nivelDaPocao, nomeEstranho, quantosAlvos, sortearSumico,
+  ATRIBUTO_TEXTO, CLASSE_VEU, FEITICOS, FILTROS_OFUSCANTE, FILTROS_VISAO, FILTRO_NEGATIVO, LISTA_FEITICOS, PASSO_VISAO_MS,
+  alvosPorAtributo, deTrasParaFrente, disponivel, duracaoDoFeitico, embaralhar, encantoDa, escolherVariante, forcaDoFeitico,
+  lancar, negativar, nivelDaPocao, nomeEstranho, quantosAlvos, sortearSumico, variantesDisponiveis, zerar,
 } from './feiticos';
 import {
   MANOBRAS, avancarCorpo, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, invulneravel, type Zona,
@@ -297,12 +297,18 @@ describe('as poções', () => {
     return document.getElementById('tela')!;
   }
 
-  it('toda poção tem a cor do jogo e nome de poção', () => {
+  it('toda poção tem a cor do jogo, nome de poção e mais de um jeito de cair', () => {
     for (const f of LISTA_FEITICOS) {
       expect(FEITICOS[f].cor).toMatch(/^#[0-9a-f]{6}$/);
       expect(FEITICOS[f].corClara).toMatch(/^#[0-9a-f]{6}$/);
+      expect(FEITICOS[f].variantes.length).toBeGreaterThan(1);
+      expect(new Set(FEITICOS[f].variantes.map(v => v.id)).size).toBe(FEITICOS[f].variantes.length);
     }
     expect(FEITICOS.invisibilidade.titulo).toBe('Poção de Invisibilidade');
+  });
+
+  it('saíram Lentidão, Veneno, Fraqueza e Levitação (16/10/2026): ficam seis', () => {
+    expect([...LISTA_FEITICOS].sort()).toEqual(['cegueira', 'dano', 'encantamento', 'estranha', 'invisibilidade', 'visao']);
   });
 
   it('as contas: negativo, nome do Minecraft e quantas linhas somem', () => {
@@ -321,49 +327,147 @@ describe('as poções', () => {
   });
 
   for (const f of LISTA_FEITICOS) {
-    it(`${f}: cai na tela e desfaz deixando o HTML igual ao de antes`, () => {
-      vi.useFakeTimers();
-      const raiz = tela();
-      const antes = raiz.outerHTML;
-      const textoAntes = raiz.textContent;
-      const alvos = alvosPorAtributo(() => raiz, () => raiz);
-      expect(disponivel(f, alvos)).toBe(true);
-      const l = lancar(f, alvos, semente(5));
-      expect(l.atingidos.length).toBeGreaterThan(0);
-      // O texto do React nunca é reescrito: só atributo e classe por cima.
-      expect(raiz.textContent).toBe(textoAntes);
-      vi.advanceTimersByTime(PASSO_VISAO_MS * 3);
-      l.desfazer();
-      expect(raiz.outerHTML.replace(/ class=""/g, '').replace(/ style=""/g, '')).toBe(antes);
-      // O véu da Cegueira e a borda do Veneno saem junto.
-      expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
-    });
+    for (const { id } of FEITICOS[f].variantes) {
+      it(`${f} (${id}): cai na tela e desfaz deixando o HTML igual ao de antes`, () => {
+        vi.useFakeTimers();
+        const raiz = tela();
+        const antes = raiz.outerHTML;
+        const textoAntes = raiz.textContent;
+        const alvos = alvosPorAtributo(() => raiz, () => raiz);
+        expect(disponivel(f, alvos)).toBe(true);
+        expect(variantesDisponiveis(f, alvos).map(v => v.id)).toContain(id);
+        const l = lancar(f, alvos, semente(5), 1, id);
+        expect(l.atingidos.length).toBeGreaterThan(0);
+        // O texto do React nunca é reescrito: só atributo e classe por cima.
+        expect(raiz.textContent).toBe(textoAntes);
+        vi.advanceTimersByTime(PASSO_VISAO_MS * 3);
+        l.desfazer();
+        expect(raiz.outerHTML.replace(/ class=""/g, '').replace(/ style=""/g, '')).toBe(antes);
+        // O véu da Cegueira sai junto.
+        expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
+      });
+    }
   }
 
-  it('a Cegueira põe o véu que segue o mouse, e o Veneno esverdeia com a borda', () => {
+  it('a Cegueira põe o véu que segue o mouse (uma pintura por quadro)', () => {
+    vi.useFakeTimers();
     const raiz = tela();
-    const alvos = alvosPorAtributo(() => raiz, () => raiz);
-    const cego = lancar('cegueira', alvos);
+    const cego = lancar('cegueira', alvosPorAtributo(() => raiz, () => raiz));
     const veu = document.querySelector<HTMLElement>(`.${CLASSE_VEU}-cegueira`)!;
     expect(veu).not.toBeNull();
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 120, clientY: 80 }));
-    expect(veu.style.getPropertyValue('--bx-veu-x')).toBe('120px');
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 130, clientY: 90 }));
+    vi.advanceTimersByTime(50);
+    expect(veu.style.getPropertyValue('--bx-veu-x')).toBe('130px');
+    expect(veu.style.getPropertyValue('--bx-veu-y')).toBe('90px');
     cego.desfazer();
-    const veneno = lancar('veneno', alvos);
-    expect(raiz.style.filter).toBe(FILTRO_VENENO);
-    expect(document.querySelector(`.${CLASSE_VEU}-veneno`)).not.toBeNull();
-    veneno.desfazer();
+    expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
+  });
+
+  it('a Escuridão pulsa e a lanterna anda sozinha, sem o mouse', () => {
+    vi.useFakeTimers();
+    const raiz = tela();
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    const escuro = lancar('cegueira', alvos, semente(1), 1, 'escuridao');
+    expect(document.querySelector(`.${CLASSE_VEU}-escuridao`)).not.toBeNull();
+    escuro.desfazer();
+    const lanterna = lancar('cegueira', alvos, semente(1), 1, 'lanterna');
+    const veu = document.querySelector<HTMLElement>(`.${CLASSE_VEU}-cegueira`)!;
+    const antes = veu.style.getPropertyValue('--bx-veu-x');
+    vi.advanceTimersByTime(700);
+    expect(veu.style.getPropertyValue('--bx-veu-x')).not.toBe(antes);
+    lanterna.desfazer();
+    expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
+  });
+
+  it('o jeito sorteado nunca repete o da última vez (quando há outro que caiba)', () => {
+    const raiz = tela();
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    const r = semente(9);
+    for (const f of LISTA_FEITICOS) {
+      let ultima: string | null = null;
+      for (let i = 0; i < 20; i++) {
+        const v = escolherVariante(f, alvos, ultima, r);
+        expect(v).not.toBeNull();
+        expect(v).not.toBe(ultima);
+        ultima = v;
+      }
+    }
+    expect(encantoDa('dano', 'zerado')).toBe('O dinheiro evaporou!');
+    expect(encantoDa('dano', 'nao-existe')).toBe(encantoDa('dano'));
+  });
+
+  it('sem linhas, a Invisibilidade ainda pode sumir com os valores; com uma aba só, nada de trocar', () => {
+    document.body.innerHTML = '<div id="t"><span data-alvo-feitico="aba">Metas</span><b data-alvo-feitico="valor">R$ 1,00</b></div>';
+    const raiz = document.getElementById('t')!;
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    expect(variantesDisponiveis('invisibilidade', alvos).map(v => v.id)).toEqual(['valores']);
+    expect(variantesDisponiveis('estranha', alvos).map(v => v.id)).toEqual(['minecraft', 'avesso']);
+  });
+
+  it('os jeitos da Poção de Dano: zerado e embaralhado', () => {
+    expect(zerar(' R$ 48.312,90 ')).toBe('R$ 0,00');
+    expect(zerar('72%')).toBe('0%');
+    expect(zerar('1.234 acordos')).toBe('0 acordos');
+    const e = embaralhar('R$ 48.312,90', semente(3));
+    expect(e).not.toBe('R$ 48.312,90');
+    // A pontuação fica no lugar e os dígitos são os mesmos.
+    expect(e.replace(/\d/g, '#')).toBe('R$ ##.###,##');
+    expect([...e.replace(/\D/g, '')].sort().join('')).toBe([...'4831290'].sort().join(''));
+    // Sem dois dígitos diferentes, fica negativo.
+    expect(embaralhar('R$ 11,11', semente(3))).toBe('-R$ 11,11');
+  });
+
+  it('os jeitos da Poção Estranha: avesso e abas trocadas', () => {
+    const raiz = tela();
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    const avesso = lancar('estranha', alvos, semente(1), 1, 'avesso');
+    const nomes = () => [...raiz.querySelectorAll('[data-alvo-feitico="aba"]')].map(a => a.getAttribute(ATRIBUTO_TEXTO));
+    expect(nomes()).toEqual([deTrasParaFrente('Acordos'), deTrasParaFrente('Analítico')]);
+    avesso.desfazer();
+    const trocadas = lancar('estranha', alvos, semente(1), 0.35, 'trocadas');
+    expect(nomes()).toEqual(['Analítico', 'Acordos']);
+    trocadas.desfazer();
+  });
+
+  it('a Invisibilidade some com os valores, ou deixa as linhas fantasmas piscando', () => {
+    const raiz = tela();
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    const valores = lancar('invisibilidade', alvos, semente(2), 1, 'valores');
+    expect(raiz.querySelector('[data-alvo-feitico="valor"]')!.classList.contains('bx-enf-sumido')).toBe(true);
+    valores.desfazer();
+    const fantasma = lancar('invisibilidade', alvos, semente(2), 1, 'fantasma');
+    const fantasmas = [...raiz.querySelectorAll<HTMLElement>('.bx-enf-fantasma')];
+    expect(fantasmas.length).toBeGreaterThan(1);
+    expect(new Set(fantasmas.map(el => el.style.getPropertyValue('--bx-enf-atraso'))).size).toBeGreaterThan(1);
+    expect(raiz.querySelector('.bx-enf-sumido')).toBeNull();
+    fantasma.desfazer();
+  });
+
+  it('a Visão Noturna em negativo fica parada; a ofuscante pulsa', () => {
+    vi.useFakeTimers();
+    const raiz = tela();
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    const negativo = lancar('visao', alvos, semente(1), 1, 'negativo');
+    expect(raiz.style.filter).toBe(FILTRO_NEGATIVO);
+    vi.advanceTimersByTime(PASSO_VISAO_MS * 4);
+    expect(raiz.style.filter).toBe(FILTRO_NEGATIVO);
+    negativo.desfazer();
+    const ofusca = lancar('visao', alvos, semente(1), 1, 'ofuscante');
+    expect(raiz.style.filter).toBe(FILTROS_OFUSCANTE[0]);
+    vi.advanceTimersByTime(PASSO_VISAO_MS * 1.5);
+    expect(raiz.style.filter).toBe(FILTROS_OFUSCANTE[1]);
+    ofusca.desfazer();
     expect(raiz.style.filter).toBe('');
   });
 
-  it('a Levitação faz abas e valores flutuarem, cada um no seu tempo', () => {
+  it('o Encantamento «tudo» também põe os valores em runas', () => {
     const raiz = tela();
-    const l = lancar('levitacao', alvosPorAtributo(() => raiz, () => raiz), semente(4));
-    const flutuando = [...raiz.querySelectorAll<HTMLElement>('.bx-enf-levita')];
-    expect(flutuando.length).toBe(3);
-    expect(new Set(flutuando.map(el => el.style.getPropertyValue('--bx-enf-atraso'))).size).toBe(3);
+    const l = lancar('encantamento', alvosPorAtributo(() => raiz, () => raiz), semente(1), 1, 'tudo');
+    expect(raiz.querySelector('[data-alvo-feitico="valor"]')!.classList.contains('bx-enf-galatico')).toBe(true);
+    expect(raiz.querySelectorAll('.bx-enf-galatico')).toHaveLength(3);
     l.desfazer();
-    expect(raiz.querySelector('.bx-enf-levita')).toBeNull();
+    expect(raiz.querySelector('.bx-enf-galatico')).toBeNull();
   });
 
   it('a Poção de Dano e a Estranha desenham o texto novo pelo atributo', () => {
@@ -387,16 +491,6 @@ describe('as poções', () => {
     expect(raiz.style.filter).toBe('');
   });
 
-  it('a Lentidão apaga a tela e escolhe onde cair as teias', () => {
-    const raiz = tela();
-    const l = lancar('lentidao', alvosPorAtributo(() => raiz, () => raiz), semente(2));
-    expect(raiz.style.filter).toBe(FILTRO_LENTIDAO);
-    expect(l.atingidos[0]).toBe(raiz);
-    expect(l.atingidos.length).toBeGreaterThan(1);
-    l.desfazer();
-    expect(raiz.style.filter).toBe('');
-  });
-
   it('tela sem alvo: só as poções que pegam a tela toda', () => {
     document.body.innerHTML = '<div id="vazia"></div>';
     const raiz = document.getElementById('vazia')!;
@@ -405,12 +499,9 @@ describe('as poções', () => {
     expect(disponivel('estranha', alvos)).toBe(false);
     expect(disponivel('invisibilidade', alvos)).toBe(false);
     expect(disponivel('visao', alvos)).toBe(true);
-    expect(disponivel('lentidao', alvos)).toBe(true);
     expect(disponivel('encantamento', alvos)).toBe(true);
     expect(disponivel('cegueira', alvos)).toBe(true);
-    expect(disponivel('veneno', alvos)).toBe(true);
-    expect(disponivel('fraqueza', alvos)).toBe(true);
-    expect(disponivel('levitacao', alvos)).toBe(false);
+    expect(escolherVariante('dano', alvos, null)).toBeNull();
   });
 });
 
@@ -445,20 +536,19 @@ describe('a força e o Encantamento', () => {
     l.desfazer();
   });
 
-  it('Visão Noturna, Lentidão e Encantamento juntos: um acabar não apaga o outro', () => {
+  it('Visão Noturna e Encantamento juntos: um acabar não apaga o outro', () => {
     vi.useFakeTimers();
     document.body.innerHTML = '<div id="t" style="filter: blur(0px)"><span data-alvo-feitico="aba">Metas</span></div>';
     const raiz = document.getElementById('t')!;
     const alvos = alvosPorAtributo(() => raiz, () => raiz);
-    const visao = lancar('visao', alvos);
-    const lenta = lancar('lentidao', alvos);
+    const visao = lancar('visao', alvos, semente(1), 1, 'negativo');
     const enc = lancar('encantamento', alvos);
     expect(raiz.style.filter).toContain('url(#bx-distorcao)');
-    visao.desfazer();
-    expect(raiz.style.filter).toContain('url(#bx-distorcao)');
-    expect(raiz.style.filter).toContain('saturate(0.45)');
-    lenta.desfazer();
+    expect(raiz.style.filter).toContain(FILTRO_NEGATIVO);
     enc.desfazer();
+    expect(raiz.style.filter).toContain(FILTRO_NEGATIVO);
+    expect(raiz.style.filter).not.toContain('url(#bx-distorcao)');
+    visao.desfazer();
     expect(raiz.style.filter).toBe('blur(0px)');
     expect(document.getElementById('bx-distorcao')).toBeNull();
   });

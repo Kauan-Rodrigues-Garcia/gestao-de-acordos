@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   POR_FILEIRA, TOTAL, coracoesDaVida, coracoesDeOuro, posicaoDoCoracao, pulinhoDaRegeneracao, tamanhoDosCoracoes,
 } from './coracoes';
-import { CLASSE_VEU, FILTRO_LENTIDAO, VEU_LEVE, alvosPorAtributo, feiticosLeves, lancar } from './feiticos';
+import { CLASSE_VEU, FILTRO_NEGATIVO, VEU_LEVE, alvosPorAtributo, feiticosLeves, lancar } from './feiticos';
 import { JANELA_S, QUADRO_PESADO_MS, criarVigiaDeQuadros } from './leve';
 import { tamanhoDaPlaca } from './conquista';
 import { glifoMC } from './fonteMC';
-import { CONQUISTA } from './palcoChefona';
+import { CONQUISTA, milhar } from './palcoChefona';
 
 const conta = (l: readonly string[], k: string) => l.filter(x => x === k).length;
 
@@ -52,6 +52,13 @@ describe('os corações da barra', () => {
     expect(tamanhoDosCoracoes(true).altura).toBe(29);
   });
 
+  it('com muita gente a vida passa de dezenas de milhares: o texto leva o ponto do milhar', () => {
+    expect(milhar(40700)).toBe('40.700');
+    expect(milhar(700)).toBe('700');
+    // Cada coração continua sendo 1/40 da vida, por maior que ela seja.
+    expect(conta(coracoesDaVida(20350, 40700), 'cheio')).toBe(20);
+  });
+
   it('a Regeneração corre um coração por vez; sem ela, nenhum', () => {
     expect(pulinhoDaRegeneracao(0, false)).toBe(-1);
     const vistos = new Set(Array.from({ length: 200 }, (_, i) => pulinhoDaRegeneracao(i / 60, true)));
@@ -71,21 +78,23 @@ describe('a chefona em computador fraco', () => {
     expect(Array.from({ length: lentos }, () => pesado(QUADRO_PESADO_MS + 20)).some(Boolean)).toBe(true);
   });
 
-  it('leve, a Lentidão vira um véu de cor: o filtro da página fica intacto', () => {
+  it('leve, a Visão Noturna vira um véu de cor: o filtro da página fica intacto', () => {
     document.body.innerHTML = '<div id="tela"><span data-alvo-feitico="aba">Acordos</span></div>';
     const raiz = document.getElementById('tela')!;
     feiticosLeves(true);
-    const l = lancar('lentidao', alvosPorAtributo(() => raiz, () => raiz));
-    expect(raiz.style.filter).toBe('');
-    const veu = document.querySelector<HTMLElement>(`.${CLASSE_VEU}`)!;
-    expect(veu.style.background).toContain('rgba');
-    l.desfazer();
-    expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
+    for (const v of ['temas', 'negativo', 'ofuscante']) {
+      const l = lancar('visao', alvosPorAtributo(() => raiz, () => raiz), Math.random, 1, v);
+      expect(raiz.style.filter).toBe('');
+      const veu = document.querySelector<HTMLElement>(`.${CLASSE_VEU}`)!;
+      expect(veu.style.background).toContain('rgba');
+      l.desfazer();
+      expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
+    }
     feiticosLeves(false);
-    const n = lancar('lentidao', alvosPorAtributo(() => raiz, () => raiz));
-    expect(raiz.style.filter).toBe(FILTRO_LENTIDAO);
+    const n = lancar('visao', alvosPorAtributo(() => raiz, () => raiz), Math.random, 1, 'negativo');
+    expect(raiz.style.filter).toBe(FILTRO_NEGATIVO);
     n.desfazer();
-    expect(VEU_LEVE.lentidao).toMatch(/^rgba/);
+    expect(VEU_LEVE.negativo).toMatch(/^rgba/);
   });
 
   it('leve, o Encantamento não distorce a página (sem o filtro SVG)', () => {

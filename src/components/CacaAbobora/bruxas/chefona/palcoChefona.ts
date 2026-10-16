@@ -57,6 +57,11 @@
  *   sorte, o tiro é DE RASPÃO: metade do dano, e ela se esquiva para o lado,
  *   deixando um rastro de si mesma.
  * - Quem ajudou a derrubar ganha a PLACA de conquista épica (`conquista.ts`).
+ *   Quando o ranking abre, ela sobe para a faixa do alto, menor
+ *   (`ancorarConquista`, 16/10/2026), e o ranking começa embaixo dela: a placa
+ *   nunca cobre o dano e o golpe final.
+ * - A fúria e o estrago acompanham os corações: se a vida volta (a cura, ou
+ *   gente nova entrando, que aumenta a vida de todos), a fúria passa.
  * - Em computador fraco ela roda LEVE (`leve.ts`): 30 quadros por segundo,
  *   menos partículas, e as poções da tela toda sem `filter`. O palco mede os
  *   próprios quadros e liga o leve sozinho se a luta engasgar.
@@ -81,13 +86,13 @@ import {
 import {
   ALTURA_MC, BOCA, COR_DA_CURA, DROPS, ESCALA_CHEFONA, GARRAFA, LARGURA_MC, MAO_ERGUIDA, MAO_NO_ALTO, NOME_CHEFONA, OUTRA_MAO,
   PEROLA, PIXEL_MC, PONTA_DO_CHAPEU, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC, PRIMEIRO_SEGURANDO_MC,
-  PRIMEIRO_TOTEM_MC, QUADROS_FLUTUANDO, TEIA, TOTEM, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC,
+  PRIMEIRO_TOTEM_MC, QUADROS_FLUTUANDO, TOTEM, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC,
   type Item,
 } from './arte';
 import { escreverMC, larguraTextoMC } from './fonteMC';
 import {
-  FEITICOS, FEITICO_FORTE, LISTA_FEITICOS, alvoDaPocao, alvosPorAtributo, disponivel, duracaoDoFeitico,
-  feiticosLeves, forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
+  FEITICOS, FEITICO_FORTE, LISTA_FEITICOS, alvoDaPocao, alvosPorAtributo, disponivel, duracaoDoFeitico, encantoDa,
+  escolherVariante, feiticosLeves, forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
 } from './feiticos';
 import { ESCALA_PLACA, PLACA_MS, montarPlaca } from './conquista';
 import { chefonaLeve, criarVigiaDeQuadros, marcarChefonaLeve } from './leve';
@@ -125,8 +130,9 @@ const VELOCIDADE_FURIA = 105;
 export const DANO: Readonly<Record<ReturnType<typeof alvoDaParte>, number>> = {
   cabeca: 6, corpo: 3, vassoura: 2, chapeu: 2, raspao: 1,
 };
-/** Abaixo desta fração da vida, a fúria. */
+/** Abaixo desta fração da vida, a fúria; ela só passa se a vida voltar a esta folga acima. */
 export const FURIA_EM = 0.35;
+export const SAI_DA_FURIA = 0.1;
 /** Preparando a poção ela apanha 50% a mais; tonta, o dobro. */
 const MULT_CONJURANDO = 1.5;
 const MULT_TONTA = 2;
@@ -141,14 +147,18 @@ const DOR_MS = 260;
 /**
  * Entre uma poção e outra (s), normal e na fúria. A primeira sai mais cedo.
  * Eram 12–18 s e ela quase não jogava (Kauan, 15/10/2026: «está usando poucos
- * feitiços»); com dez poções agora, sai uma a cada 7–11 s.
+ * feitiços»); passou a 7–11 s. Em 16/10/2026 saíram quatro poções e ficaram
+ * seis, cada uma com jeitos diferentes de cair: ela joga mais (5–8 s) e
+ * passa por todas antes de repetir (`RECENTES`).
  */
-const INTERVALO: readonly [number, number] = [7, 11];
-const INTERVALO_FURIA: readonly [number, number] = [5, 8];
-const PRIMEIRO_FEITICO_S = 4;
+const INTERVALO: readonly [number, number] = [5, 8];
+const INTERVALO_FURIA: readonly [number, number] = [3.5, 6];
+const PRIMEIRO_FEITICO_S = 3;
+/** Quantas das últimas poções ela evita repetir (se houver outra para jogar). */
+const RECENTES = 3;
 /** O Encantamento: o primeiro não antes disto (s de luta), e depois um a cada tanto. */
-const PRIMEIRO_FORTE_S = 22;
-const ENTRE_FORTES_S = 26;
+const PRIMEIRO_FORTE_S = 20;
+const ENTRE_FORTES_S = 22;
 /**
  * Tiros dentro de `JANELA_S` que fazem ela desviar, e a folga entre manobras.
  * Subiram em 15/10/2026: com 6 tiros em 1,6 s ela desviava o tempo todo de
@@ -234,8 +244,8 @@ export type EventoChefona =
   | { tipo: 'errou' }
   | { tipo: 'esquivou'; manobra: Manobra }
   | { tipo: 'manobra'; manobra: Manobra }
-  | { tipo: 'conjurando'; feitico: NomeFeitico }
-  | { tipo: 'feitico'; feitico: NomeFeitico; forca: number; duracaoMs: number }
+  | { tipo: 'conjurando'; feitico: NomeFeitico; variante: string }
+  | { tipo: 'feitico'; feitico: NomeFeitico; variante: string; forca: number; duracaoMs: number }
   | { tipo: 'quebrou'; feitico: NomeFeitico }
   | { tipo: 'bebendo' }
   | { tipo: 'curou'; vida: number }
@@ -280,8 +290,8 @@ interface Particula {
 
 interface Anel { x: number; y: number; r: number; vr: number; vida: number; max: number; cor: string }
 
-/** A garrafa voando em arco até o alvo. */
-interface Garrafa { feitico: NomeFeitico; t: number; dura: number; de: { x: number; y: number }; ate: { x: number; y: number }; altura: number }
+/** A garrafa voando em arco até o alvo (com o jeito que a poção vai cair). */
+interface Garrafa { feitico: NomeFeitico; variante: string; t: number; dura: number; de: { x: number; y: number }; ate: { x: number; y: number }; altura: number }
 
 /** A Poção de Cura na boca: o tempo bebendo, quanto ela vai curar e o próximo gole. */
 interface Cura { t: number; total: number; proximoGole: number }
@@ -296,8 +306,6 @@ interface Mesa { x: number; t: number; aparecendo: number; saindo: boolean }
 
 /** Uma runa voando para o livro da mesa. */
 interface RunaVoando { de: { x: number; y: number }; t: number; dura: number; letra: string }
-
-interface Teia { x: number; y: number; nasceu: number; ate: number }
 
 interface Drop { item: Item; x: number; y: number; vx: number; vy: number; t: number; fase: number; noChao: boolean }
 
@@ -337,6 +345,9 @@ function rolavel(el: Element | null): Element | null {
 }
 
 const sorteia = <T,>(l: readonly T[]): T => l[Math.floor(Math.random() * l.length)];
+const FORMATO_MILHAR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+/** 40700 → «40.700». */
+export const milhar = (n: number): string => FORMATO_MILHAR.format(n);
 const suave = (u: number) => u * u * (3 - 2 * u);
 
 // ── Os desenhos prontos (guardados: são poucos) ────────────────────────────
@@ -502,13 +513,6 @@ function mesa() {
   return mesaPronta;
 }
 
-let teiaPronta: HTMLCanvasElement | null = null;
-/** A teia de aranha do jogo (`texturasMC.ts`), com o contorno para ler no claro. */
-function teia(): HTMLCanvasElement {
-  if (!teiaPronta) teiaPronta = canvasDaImagem(imagemDoItem(contornado(TEIA)), false);
-  return teiaPronta;
-}
-
 export class PalcoChefona {
   readonly raiz: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
@@ -537,11 +541,15 @@ export class PalcoChefona {
   private tempo = 0;
   private relogio = 0;
   private furia = false;
+  /** A fúria veio da vida baixa (e sai quando a vida volta); a do laboratório fica. */
+  private furiaPorVida = false;
   private tFase = 0;
   private dorAte = 0;
   /** Esta tela acertou ao menos um tiro (nela): ganha a conquista. */
   private ajudei = false;
   private relogioConquista: ReturnType<typeof setTimeout> | undefined;
+  /** O ranking abriu: a placa de conquista mora na faixa do alto, fora do caminho dele. */
+  private conquistaNoAlto = false;
   private ultimaDor = 0;
   private estagioVisto = 0;
   private acertos: number[] = [];
@@ -549,11 +557,15 @@ export class PalcoChefona {
   private ultimaManobra: Manobra | null = null;
   private proximoFeitico = PRIMEIRO_FEITICO_S;
   private proximoForte = PRIMEIRO_FORTE_S;
-  private ultimoFeitico: NomeFeitico | null = null;
-  private conjuro: { feitico: NomeFeitico; dano: number } | null = null;
+  /** As últimas poções jogadas (a mais nova no fim), e o último jeito de cada uma. */
+  private recentes: NomeFeitico[] = [];
+  private readonly ultimaVariante = new Map<NomeFeitico, string>();
+  private conjuro: { feitico: NomeFeitico; variante: string; dano: number } | null = null;
   private voando: Garrafa | null = null;
-  private ativos = new Map<NomeFeitico, { desfazer: () => void }>();
+  private ativos = new Map<NomeFeitico, { desfazer: () => void; variante: string }>();
   private particulas: Particula[] = [];
+  /** Cheio de partículas, a nova entra no lugar da mais velha (a roda, sem arrastar a lista). */
+  private rodaParticulas = 0;
   private aneis: Anel[] = [];
   private clarao = 0;
   private sobraRastro = 0;
@@ -565,7 +577,6 @@ export class PalcoChefona {
   private regen: Regen | null = null;
   private mesa: Mesa | null = null;
   private runas: RunaVoando[] = [];
-  private teias: Teia[] = [];
   private queda: Queda | null = null;
   private drops: Drop[] = [];
   private orbes: Orbe[] = [];
@@ -599,6 +610,11 @@ export class PalcoChefona {
   private readonly txtTempo: HTMLDivElement;
   private readonly iconeTotem: HTMLCanvasElement;
   private chaveCoracoes = '';
+  /** Os números do texto da vida da última vez (o texto só é refeito quando eles mudam). */
+  private chaveTextoVida = '';
+  /** O tamanho e o lugar da caixa de tiro da última vez (o estilo só é escrito quando muda). */
+  private tamanhoCaixa = '';
+  private lugarCaixa = '';
 
   constructor(host: HTMLElement, opcoes: OpcoesChefona = {}) {
     this.escala = opcoes.escala ?? ESCALA_CHEFONA;
@@ -719,6 +735,8 @@ export class PalcoChefona {
     feiticosLeves(true);
     this.raiz.classList.add('leve');
     if (this.particulas.length > MAX_PARTICULAS_LEVE) this.particulas.splice(0, this.particulas.length - MAX_PARTICULAS_LEVE);
+    // O que pesa e já está na tela sai agora (o filtro na página toda): as próximas já vêm leves.
+    for (const f of ['encantamento', 'visao'] as const) this.ativos.get(f)?.desfazer();
   }
 
   // ── Tamanho e zona ───────────────────────────────────────────────────────
@@ -786,6 +804,22 @@ export class PalcoChefona {
     this.entrar();
   }
 
+  /** Esta tela acertou a chefona nesta luta (vai ganhar a placa de conquista quando ela cair). */
+  get ajudou(): boolean {
+    return this.ajudei;
+  }
+
+  /**
+   * O ranking abriu: a placa de conquista sobe para a faixa do alto, menor, e
+   * o ranking começa embaixo dela. Vale também para a placa que ainda vai
+   * aparecer. O aviso do alto sai, para não ficar atrás da placa.
+   */
+  ancorarConquista(): void {
+    this.conquistaNoAlto = true;
+    this.raiz.querySelectorAll('.bxc-placa').forEach(p => p.classList.add('no-alto'));
+    this.raiz.querySelectorAll('.bxc-aviso').forEach(a => a.remove());
+  }
+
   /** O laboratório pula o resto da contagem. */
   pularContagem(): void {
     if (this.fase === 'chegando') this.chegaEm = performance.now();
@@ -800,6 +834,7 @@ export class PalcoChefona {
     this.desmontarContagem();
     this.tempo = 0;
     this.furia = false;
+    this.furiaPorVida = false;
     this.protegida = false;
     this.absorcao = 0;
     this.regen = null;
@@ -809,6 +844,7 @@ export class PalcoChefona {
     this.ajudei = false;
     this.proximoFeitico = PRIMEIRO_FEITICO_S;
     this.proximoForte = PRIMEIRO_FORTE_S;
+    this.recentes = [];
     this.corpo = criarCorpo(this.zona(), Math.random);
     this.mudarFase('entrando');
     this.barra.hidden = false;
@@ -838,12 +874,12 @@ export class PalcoChefona {
     this.depoisDoDano();
   }
 
-  /** Joga uma poção já (o laboratório escolhe qual). */
-  conjurar(f?: NomeFeitico): void {
+  /** Joga uma poção já (o laboratório escolhe qual, e o jeito, se quiser). */
+  conjurar(f?: NomeFeitico, variante?: string): void {
     if (!this.corpo || !['voando', 'entrando'].includes(this.fase)) return;
     this.corpo.manobra = null;
     this.corpo.visivel = true;
-    this.iniciarConjuro(f);
+    this.iniciarConjuro(f, variante);
   }
 
   /** Faz uma manobra já. */
@@ -898,7 +934,7 @@ export class PalcoChefona {
 
   enfurecer(): void {
     if (!this.corpo || this.furia || !this.atingivel()) return;
-    this.entrarNaFuria();
+    this.entrarNaFuria(false);
   }
 
   /** O prazo acabou: ela gargalha e vai embora. */
@@ -921,7 +957,8 @@ export class PalcoChefona {
   limpar(): void {
     this.desfazerTodos();
     clearTimeout(this.relogioConquista);
-    this.raiz.querySelectorAll('.bxc-conquista, .bxc-totem').forEach(a => a.remove());
+    this.conquistaNoAlto = false;
+    this.raiz.querySelectorAll('.bxc-conquista, .bxc-placa, .bxc-totem').forEach(a => a.remove());
     this.desmontarContagem();
     this.fase = 'fora';
     this.corpo = null;
@@ -934,19 +971,20 @@ export class PalcoChefona {
     this.regen = null;
     this.mesa = null;
     this.runas = [];
-    this.teias = [];
     this.drops = [];
     this.orbes = [];
     this.perola = null;
     this.esquiva = null;
     this.fantasmas = [];
     this.particulas = [];
+    this.rodaParticulas = 0;
     this.aneis = [];
     this.acertos = [];
     this.caixa.style.display = 'none';
     this.escudar(false);
     this.barra.hidden = true;
     this.chaveCoracoes = '';
+    this.chaveTextoVida = '';
     for (const l of this.letreiros) l.remove();
     this.letreiros = [];
     this.raiz.querySelectorAll('.bxc-aviso, .bxc-numerao').forEach(a => a.remove());
@@ -1194,7 +1232,7 @@ export class PalcoChefona {
       somBloco();
       this.estilhacos(c.x, c.y, [...CORES_MANTO, ...CORES_FUMACA_DANO], 24);
     }
-    if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria();
+    if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria(true);
     // A poção quebra se o time bater forte enquanto ela prepara.
     const limiar = this.conjuro?.feitico === FEITICO_FORTE ? QUEBRA_FORTE : QUEBRA_FEITICO;
     if (this.conjuro && this.conjuro.dano >= this.vidaMax * limiar) {
@@ -1233,8 +1271,9 @@ export class PalcoChefona {
     this.aoEvento?.({ tipo: 'manobra', manobra: tipo });
   }
 
-  private entrarNaFuria(): void {
+  private entrarNaFuria(porVida: boolean): void {
     this.furia = true;
+    this.furiaPorVida = porVida;
     this.barra.classList.add('furia');
     somBrava();
     setTimeout(somGargalhada, 250);
@@ -1242,6 +1281,20 @@ export class PalcoChefona {
     this.letreiro('FÚRIA!', c.x, c.y - ALT / 2 - 8, 'quebra');
     this.proximoFeitico = Math.min(this.proximoFeitico, 3);
     this.aoEvento?.({ tipo: 'furia' });
+  }
+
+  /**
+   * A vida voltou (a cura, a Regeneração, ou gente nova entrando na luta, que
+   * aumenta a vida de todos): os corações enchem, e a fúria e o estrago
+   * acompanham. Sem isso, a barra cheia aparecia com ela furiosa e em
+   * frangalhos. A folga (`SAI_DA_FURIA`) não deixa ela piscar na beira.
+   */
+  private acompanharVida(): void {
+    if (this.estagio < this.estagioVisto) this.estagioVisto = this.estagio;
+    if (!this.furia || !this.furiaPorVida || this.fracao <= FURIA_EM + SAI_DA_FURIA) return;
+    this.furia = false;
+    this.furiaPorVida = false;
+    this.barra.classList.remove('furia');
   }
 
   // ── A Poção de Cura ──────────────────────────────────────────────────────
@@ -1405,19 +1458,32 @@ export class PalcoChefona {
 
   // ── As poções ────────────────────────────────────────────────────────────
 
-  private iniciarConjuro(forcado?: NomeFeitico): void {
+  /**
+   * Qual poção agora: nenhuma que já está na tela, e de preferência nenhuma
+   * das últimas (`RECENTES`) — ela passa pelas seis antes de repetir. O forte,
+   * quando liberado, sai na frente dos outros na metade das vezes.
+   */
+  private escolherFeitico(): NomeFeitico | null {
     const forteLiberado = this.tempo >= this.proximoForte;
-    const possiveis = LISTA_FEITICOS.filter(f => f !== this.ultimoFeitico && !this.ativos.has(f)
-      && (f !== FEITICO_FORTE || forteLiberado) && disponivel(f, this.alvos));
-    // O forte, quando liberado, sai na frente dos outros na metade das vezes.
+    const possiveis = LISTA_FEITICOS.filter(f => !this.ativos.has(f) && (f !== FEITICO_FORTE || forteLiberado) && disponivel(f, this.alvos));
+    if (possiveis.includes(FEITICO_FORTE) && Math.random() < 0.5) return FEITICO_FORTE;
     const comuns = possiveis.filter(p => p !== FEITICO_FORTE);
-    const f = forcado ?? (possiveis.includes(FEITICO_FORTE) && Math.random() < 0.5
-      ? FEITICO_FORTE
-      : possiveis.length ? sorteia(comuns.length ? comuns : possiveis) : null);
-    if (!f) { this.proximoFeitico = 4; return; }
+    const novos = comuns.filter(p => !this.recentes.includes(p));
+    // Sem nenhuma nova, a que saiu há mais tempo (a última jogada nunca repete de cara).
+    const velha = this.recentes.find(p => comuns.includes(p) && p !== this.recentes[this.recentes.length - 1]);
+    if (novos.length) return sorteia(novos);
+    if (velha) return velha;
+    return possiveis.length ? sorteia(comuns.length ? comuns : possiveis) : null;
+  }
+
+  private iniciarConjuro(forcado?: NomeFeitico, varianteForcada?: string): void {
+    const f = forcado ?? this.escolherFeitico();
+    const variante = f ? varianteForcada ?? escolherVariante(f, this.alvos, this.ultimaVariante.get(f)) : null;
+    if (!f || !variante) { this.proximoFeitico = 3; return; }
     if (f === FEITICO_FORTE) this.proximoForte = this.tempo + ENTRE_FORTES_S;
-    this.ultimoFeitico = f;
-    this.conjuro = { feitico: f, dano: 0 };
+    this.recentes = [...this.recentes.filter(p => p !== f), f].slice(-RECENTES);
+    this.ultimaVariante.set(f, variante);
+    this.conjuro = { feitico: f, variante, dano: 0 };
     this.mudarFase('conjurando');
     const c = this.corpo!;
     const nivel = nivelDaPocao(forcaDoFeitico(this.fracao));
@@ -1430,7 +1496,7 @@ export class PalcoChefona {
       somGargalhada();
       this.letreiro(`${FEITICOS[f].titulo.toUpperCase()} ${nivel}`, c.x, c.y - ALT / 2 - 8, 'feitico');
     }
-    this.aoEvento?.({ tipo: 'conjurando', feitico: f });
+    this.aoEvento?.({ tipo: 'conjurando', feitico: f, variante });
   }
 
   private duracaoDoConjuro(): number {
@@ -1439,7 +1505,7 @@ export class PalcoChefona {
 
   /** O preparo terminou sem quebrar: a garrafa sai voando (ou a onda do Encantamento). */
   private soltarFeitico(): void {
-    const f = this.conjuro!.feitico;
+    const { feitico: f, variante } = this.conjuro!;
     this.conjuro = null;
     if (f === FEITICO_FORTE) {
       // O forte não tem garrafa: a onda sai dela e varre a tela inteira.
@@ -1449,50 +1515,55 @@ export class PalcoChefona {
       this.anel(c.x, c.y, FEITICOS[f].cor, 300, 1.3);
       this.clarao = 0.4;
       this.tremeAte = performance.now() + 500;
-      this.aplicarFeitico(f);
+      this.aplicarFeitico(f, variante);
       this.encerrarMesa();
       this.mudarFase('voando');
       return;
     }
-    const el = alvoDaPocao(f, this.alvos);
+    const el = alvoDaPocao(f, this.alvos, variante);
     const ate = el && el !== this.alvos.raiz() ? this.centroDoElemento(el) : { x: this.larg / 2 + entre(-40, 40), y: this.alt * 0.55 };
     const de = this.paraTelaMaoErguida();
     const dist = Math.hypot(ate.x - de.x, ate.y - de.y);
-    this.voando = { feitico: f, t: 0, dura: 0.55 + Math.min(0.6, dist / 500), de, ate, altura: 30 + dist * 0.25 };
+    this.voando = { feitico: f, variante, t: 0, dura: 0.55 + Math.min(0.6, dist / 500), de, ate, altura: 30 + dist * 0.25 };
     somArremesso();
     this.mudarFase('voando');
   }
 
-  private aplicarFeitico(f: NomeFeitico): void {
-    const forca = forcaDoFeitico(this.fracao);
-    const duracaoMs = duracaoDoFeitico(f, forca);
-    // As abas não aguentam dois nomes de uma vez: a nova tira a velha.
-    if (f === 'encantamento') this.ativos.get('estranha')?.desfazer();
-    if (f === 'estranha') this.ativos.get('encantamento')?.desfazer();
-    const l = lancar(f, this.alvos, Math.random, forca);
-    const raiz = this.alvos.raiz();
-    const info = FEITICOS[f];
-    for (const el of l.atingidos.slice(0, 12)) {
-      if (el === raiz) continue;
-      const p = this.centroDoElemento(el);
-      this.efeito(p.x, p.y, [info.cor, info.corClara], 10);
+  /**
+   * Os textos por cima (`data-bx-feitico`) não aguentam dois feitiços na mesma
+   * peça: o novo tira o velho. A Poção Estranha e o Encantamento disputam as
+   * abas; a Poção de Dano e o Encantamento «tudo», os valores.
+   */
+  private tirarQuemDisputa(f: NomeFeitico, variante: string): void {
+    const enc = this.ativos.get('encantamento');
+    if (f === 'estranha' || (f === 'dano' && enc?.variante === 'tudo')) enc?.desfazer();
+    if (f === 'encantamento') {
+      this.ativos.get('estranha')?.desfazer();
+      if (variante === 'tudo') this.ativos.get('dano')?.desfazer();
     }
-    let desfazer = l.desfazer;
-    if (f === 'lentidao') {
-      const agora = performance.now();
-      const pontos = l.atingidos.filter(el => el !== raiz).map(el => this.centroDoElemento(el));
-      while (pontos.length < 4) pontos.push({ x: entre(20, this.larg - 20), y: entre(this.alt * 0.25, this.alt * 0.85) });
-      this.teias = pontos.map(p => ({ x: p.x, y: p.y, nasceu: agora + entre(0, 300), ate: agora + duracaoMs }));
-      desfazer = () => { l.desfazer(); this.teias = []; };
-    }
-    this.registrar(f, desfazer, duracaoMs);
-    const nivel = nivelDaPocao(forca);
-    const fraca = nivel === 'I' ? ' · fraca: ela está rachando' : '';
-    this.aviso(f === FEITICO_FORTE ? info.titulo : `${info.titulo} ${nivel}`, `${info.encanto} (${Math.round(duracaoMs / 1000)} s${fraca})`);
-    this.aoEvento?.({ tipo: 'feitico', feitico: f, forca, duracaoMs });
   }
 
-  private registrar(f: NomeFeitico, desfazer: () => void, duracaoMs: number): void {
+  private aplicarFeitico(f: NomeFeitico, variante: string): void {
+    const forca = forcaDoFeitico(this.fracao);
+    const duracaoMs = duracaoDoFeitico(f, forca);
+    this.tirarQuemDisputa(f, variante);
+    const l = lancar(f, this.alvos, Math.random, forca, variante);
+    const raiz = this.alvos.raiz();
+    const info = FEITICOS[f];
+    const base = this.raiz.getBoundingClientRect();
+    for (const el of l.atingidos.slice(0, 12)) {
+      if (el === raiz) continue;
+      const p = this.centroDoElemento(el, base);
+      this.efeito(p.x, p.y, [info.cor, info.corClara], 10);
+    }
+    this.registrar(f, variante, l.desfazer, duracaoMs);
+    const nivel = nivelDaPocao(forca);
+    const fraca = nivel === 'I' ? ' · fraca: ela está rachando' : '';
+    this.aviso(f === FEITICO_FORTE ? info.titulo : `${info.titulo} ${nivel}`, `${encantoDa(f, variante)} (${Math.round(duracaoMs / 1000)} s${fraca})`);
+    this.aoEvento?.({ tipo: 'feitico', feitico: f, variante, forca, duracaoMs });
+  }
+
+  private registrar(f: NomeFeitico, variante: string, desfazer: () => void, duracaoMs: number): void {
     this.ativos.get(f)?.desfazer();
     let feito = false;
     const desfazerUmaVez = () => {
@@ -1503,18 +1574,17 @@ export class PalcoChefona {
       if (this.ativos.get(f)?.desfazer === desfazerUmaVez) this.ativos.delete(f);
     };
     const relogio = setTimeout(desfazerUmaVez, duracaoMs);
-    this.ativos.set(f, { desfazer: desfazerUmaVez });
+    this.ativos.set(f, { desfazer: desfazerUmaVez, variante });
   }
 
   private desfazerTodos(): void {
     for (const a of [...this.ativos.values()]) a.desfazer();
     this.ativos.clear();
-    this.teias = [];
   }
 
-  private centroDoElemento(el: HTMLElement): { x: number; y: number } {
+  /** O meio do elemento, em px da arte. `base` é o retângulo do palco, quando já foi medido. */
+  private centroDoElemento(el: HTMLElement, base: DOMRect = this.raiz.getBoundingClientRect()): { x: number; y: number } {
     const r = el.getBoundingClientRect();
-    const base = this.raiz.getBoundingClientRect();
     return { x: (r.left + r.width / 2 - base.left) / this.escala, y: (r.top + r.height / 2 - base.top) / this.escala };
   }
 
@@ -1718,7 +1788,7 @@ export class PalcoChefona {
 
   private vivo(): boolean {
     return this.fase !== 'fora' || this.particulas.length > 0 || this.aneis.length > 0
-      || !!this.mesa || this.runas.length > 0 || this.teias.length > 0 || this.drops.length > 0 || this.orbes.length > 0;
+      || !!this.mesa || this.runas.length > 0 || this.drops.length > 0 || this.orbes.length > 0;
   }
 
   private avancar(dt: number): void {
@@ -1825,7 +1895,7 @@ export class PalcoChefona {
           break;
       }
     }
-    if (this.corpo && this.atingivel()) { this.rastro(dt); this.passoRegen(dt); }
+    if (this.corpo && this.atingivel()) { this.rastro(dt); this.passoRegen(dt); this.acompanharVida(); }
     if (this.esquiva) { this.esquiva.t += dt; if (this.esquiva.t >= ESQUIVA_S) this.esquiva = null; }
     if (this.fantasmas.length) {
       for (const f of this.fantasmas) f.vida -= dt;
@@ -1838,14 +1908,14 @@ export class PalcoChefona {
         this.voando = null;
         somVidro();
         this.estourarGarrafa(g.ate.x, g.ate.y, g.feitico);
-        this.aplicarFeitico(g.feitico);
+        this.aplicarFeitico(g.feitico, g.variante);
       }
     }
     this.passoMesa(dt);
-    for (const r of this.runas) r.t += dt;
-    this.runas = this.runas.filter(r => r.t < r.dura);
-    const agora = performance.now();
-    this.teias = this.teias.filter(t => agora < t.ate + 600);
+    if (this.runas.length) {
+      for (const r of this.runas) r.t += dt;
+      this.runas = this.runas.filter(r => r.t < r.dura);
+    }
     this.passoDrops(dt);
     this.moverParticulas(dt);
     this.atualizarBarra();
@@ -1869,7 +1939,7 @@ export class PalcoChefona {
     if (this.primeiraLeitura) {
       this.primeiraLeitura = false;
       this.estagioVisto = this.estagio;
-      if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria();
+      if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria(true);
       return;
     }
     if (queda > 0.5) {
@@ -1937,12 +2007,18 @@ export class PalcoChefona {
     }
   }
 
+  /**
+   * Uma partícula nova. No teto, ela entra no lugar de uma das antigas, em
+   * roda (antes era `shift()`, que arrasta a lista toda a cada partícula —
+   * no estouro do totem, 140 vezes seguidas).
+   */
   private particula(p: Omit<Particula, 'max' | 'gruda'> & { gruda?: boolean }): void {
-    if (this.leve) {
-      if (Math.random() > SOBRA_DE_PARTICULAS_LEVE) return;
-      if (this.particulas.length >= MAX_PARTICULAS_LEVE) this.particulas.shift();
-    } else if (this.particulas.length >= MAX_PARTICULAS) this.particulas.shift();
-    this.particulas.push({ ...p, gruda: p.gruda ?? false, max: p.vida });
+    if (this.leve && Math.random() > SOBRA_DE_PARTICULAS_LEVE) return;
+    const teto = this.leve ? MAX_PARTICULAS_LEVE : MAX_PARTICULAS;
+    const nova: Particula = { ...p, gruda: p.gruda ?? false, max: p.vida };
+    if (this.particulas.length < teto) { this.particulas.push(nova); return; }
+    this.rodaParticulas = (this.rodaParticulas + 1) % this.particulas.length;
+    this.particulas[this.rodaParticulas] = nova;
   }
 
   private anel(x: number, y: number, cor: string, vr: number, vida: number): void {
@@ -1964,10 +2040,16 @@ export class PalcoChefona {
     }
   }
 
+  /** Anda com as partículas e tira as apagadas no lugar (sem uma lista nova a cada quadro). */
   private moverParticulas(dt: number): void {
     const chao = this.zona().chao;
-    for (const p of this.particulas) {
+    const ps = this.particulas;
+    let vivas = 0;
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
       p.vida -= dt;
+      if (p.vida <= 0) continue;
+      ps[vivas++] = p;
       if (p.gruda && p.g === 0 && p.vx === 0 && p.vy === 0) continue;
       p.vy += p.g * dt;
       p.x += p.vx * dt;
@@ -1979,9 +2061,11 @@ export class PalcoChefona {
         p.vida = p.max = entre(3, 5);
       }
     }
-    this.particulas = this.particulas.filter(p => p.vida > 0);
-    for (const a of this.aneis) { a.vida -= dt; a.r += a.vr * dt; }
-    this.aneis = this.aneis.filter(a => a.vida > 0);
+    ps.length = vivas;
+    if (this.aneis.length) {
+      for (const a of this.aneis) { a.vida -= dt; a.r += a.vr * dt; }
+      this.aneis = this.aneis.filter(a => a.vida > 0);
+    }
   }
 
   private atualizarBarra(): void {
@@ -2000,9 +2084,13 @@ export class PalcoChefona {
       this.desenharCoracoes(lista, ouro, pisca, treme, pulo, seco);
     }
     if (this.iconeTotem.hidden === this.protegida) this.iconeTotem.hidden = !this.protegida;
-    const dourada = this.absorcao >= 1 ? ` + ${Math.ceil(this.absorcao)}` : '';
-    const texto = `${Math.max(0, Math.ceil(this.vida))}${dourada} / ${this.vidaMax}`;
-    if (this.txtVida.textContent !== texto) {
+    // Com muita gente a vida passa de dezenas de milhares: o número vai com o
+    // ponto do milhar, e só é refeito quando muda.
+    const vida = Math.max(0, Math.ceil(this.vida)), dourada = this.absorcao >= 1 ? Math.ceil(this.absorcao) : 0;
+    const chaveTexto = `${vida}|${dourada}|${this.vidaMax}`;
+    if (chaveTexto !== this.chaveTextoVida) {
+      this.chaveTextoVida = chaveTexto;
+      const texto = `${milhar(vida)}${dourada ? ` + ${milhar(dourada)}` : ''} / ${milhar(this.vidaMax)}`;
       this.txtVida.textContent = texto;
       this.cvCoracoes.setAttribute('aria-label', `Vida: ${texto}`);
     }
@@ -2053,15 +2141,24 @@ export class PalcoChefona {
     });
   }
 
+  /** A caixa de tiro segue a bruxa. O estilo só é escrito quando muda (escrever igual também custa recálculo). */
   private posicionarCaixas(): void {
     const corpo = this.corpo;
-    this.escudar(!!corpo && this.atingivel());
-    if (corpo && this.atingivel()) {
-      const s = this.centroSprite();
-      const folga = 6;
+    const vale = !!corpo && this.atingivel();
+    this.escudar(vale);
+    if (!vale) return;
+    const s = this.centroSprite();
+    const folga = 6;
+    const tamanho = `${(LARG + folga * 2) * this.escala}|${(ALT + folga * 2) * this.escala}`;
+    if (tamanho !== this.tamanhoCaixa) {
+      this.tamanhoCaixa = tamanho;
       this.caixa.style.width = `${(LARG + folga * 2) * this.escala}px`;
       this.caixa.style.height = `${(ALT + folga * 2) * this.escala}px`;
-      this.caixa.style.transform = `translate(${Math.round((s.x - LARG / 2 - folga) * this.escala)}px, ${Math.round((s.y - ALT / 2 - folga) * this.escala)}px)`;
+    }
+    const lugar = `translate(${Math.round((s.x - LARG / 2 - folga) * this.escala)}px, ${Math.round((s.y - ALT / 2 - folga) * this.escala)}px)`;
+    if (lugar !== this.lugarCaixa) {
+      this.lugarCaixa = lugar;
+      this.caixa.style.transform = lugar;
     }
   }
 
@@ -2077,7 +2174,6 @@ export class PalcoChefona {
       c.fillStyle = `rgba(20,6,40,${Math.min(0.32, this.tFase / CONJURO_FORTE_S * 0.32)})`;
       c.fillRect(-4, -4, this.larg + 8, this.alt + 8);
     }
-    this.desenharTeias(agora);
     this.desenharMesa();
     this.desenharDrops();
     this.desenharAneis();
@@ -2419,20 +2515,6 @@ export class PalcoChefona {
     if (Math.random() < 0.7) this.particula({ x, y, vx: entre(-8, 8), vy: entre(-8, 8), vida: 0.35, cor: info.corClara, tam: 1, g: 0, forma: 'espiral' });
   }
 
-  private desenharTeias(agora: number): void {
-    if (!this.teias.length) return;
-    const c = this.c;
-    const t = teia();
-    for (const w of this.teias) {
-      const nasce = Math.max(0, Math.min(1, (agora - w.nasceu) / 250));
-      const some = agora > w.ate ? Math.max(0, 1 - (agora - w.ate) / 600) : 1;
-      if (nasce <= 0) continue;
-      c.globalAlpha = 0.95 * nasce * some;
-      c.drawImage(t, Math.round(w.x - t.width / 2), Math.round(w.y - t.height / 2));
-    }
-    c.globalAlpha = 1;
-  }
-
   private desenharDrops(): void {
     if (!this.drops.length) return;
     const c = this.c;
@@ -2484,6 +2566,8 @@ export class PalcoChefona {
   private mostrarConquista(): void {
     this.raiz.querySelectorAll('.bxc-placa').forEach(a => a.remove());
     const el = montarPlaca(CONQUISTA, miniatura(contornado(DROPS[0]))[0]);
+    // O ranking já abriu: ela nasce na faixa do alto, fora do caminho dele.
+    if (this.conquistaNoAlto) el.classList.add('no-alto');
     this.raiz.appendChild(el);
     somConquista();
     this.aoEvento?.({ tipo: 'conquista', nome: CONQUISTA.nome });

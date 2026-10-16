@@ -333,7 +333,7 @@ mostrarPlacar();
 /** O último acontecimento da luta, para a linha de estado do painel. */
 let ultimoDaChefona = '';
 function aoEventoChefona(e: EventoChefona): void {
-  if (e.tipo === 'feitico') ultimoDaChefona = `poção: ${FEITICOS[e.feitico].titulo} (${Math.round(e.forca * 100)}%, ${Math.round(e.duracaoMs / 1000)} s)`;
+  if (e.tipo === 'feitico') ultimoDaChefona = `poção: ${FEITICOS[e.feitico].titulo} · ${e.variante} (${Math.round(e.forca * 100)}%, ${Math.round(e.duracaoMs / 1000)} s)`;
   else if (e.tipo === 'curou') ultimoDaChefona = `bebeu a Poção de Cura: vida ${e.vida}`;
   else if (e.tipo === 'bebendo') ultimoDaChefona = 'bebendo a Poção de Cura';
   else if (e.tipo === 'protegida') ultimoDaChefona = 'protegida pelo Totem da Imortalidade';
