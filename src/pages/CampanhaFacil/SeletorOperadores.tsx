@@ -3,7 +3,8 @@
  * de marcar.
  *
  * Substitui o campo de nomes digitados (29/09/2026). O líder preso a um setor
- * só vê o dele; gerência para cima escolhe o setor antes. A busca (07/10/2026)
+ * só vê o dele; gerência para cima escolhe o setor no topo da página
+ * (`SetorDaCampanha`, 16/10/2026 — o setor vale para a aba toda). A busca (07/10/2026)
  * só filtra a lista: quem está marcado continua marcado fora do filtro.
  * Desde 09/10/2026 cada um aparece com a foto do perfil.
  *
@@ -22,9 +23,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { SeletorMultiplo, type ItemFiltro } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resumoDaEquipe, rotuloEquipe, type OperadorCampanha } from './envios';
@@ -49,7 +47,7 @@ function legenda(o: OperadorCampanha, umaEquipe: boolean): { texto: string; lide
 
 export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; destacarVazio: boolean }) {
   const {
-    setorFixo, setores, setorId, setSetorId, busca, setBusca,
+    setorFixo, setorId, busca, setBusca,
     equipes, filtroEquipes, escolherEquipes,
     operadores, operadoresDoRecorte, operadoresVisiveis, operadoresSelecionados,
     carregandoOperadores, selecionados, alternar, marcarTodos, desmarcarTodos,
@@ -79,22 +77,15 @@ export function SeletorOperadores({ envios, destacarVazio }: { envios: Envios; d
 
   return (
     <div className="space-y-2">
-      {!setorFixo && (
-        <Select value={setorId ?? ''} onValueChange={setSetorId}>
-          <SelectTrigger className="h-9"><SelectValue placeholder="Escolha o setor" /></SelectTrigger>
-          <SelectContent>
-            {setores.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      )}
-
       {carregandoOperadores ? (
         <p className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando operadores do setor…
         </p>
       ) : !setorId ? (
         <p className="py-2 text-xs text-destructive">
-          Seu usuário não tem setor cadastrado. Peça para vincularem você a um setor.
+          {setorFixo
+            ? 'Seu usuário não tem setor cadastrado. Peça para vincularem você a um setor.'
+            : 'Escolha o setor da campanha no topo da página.'}
         </p>
       ) : operadores.length === 0 ? (
         <p className="py-2 text-xs text-muted-foreground">Nenhum operador ativo neste setor.</p>

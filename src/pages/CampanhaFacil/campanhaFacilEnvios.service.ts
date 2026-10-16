@@ -277,6 +277,9 @@ export interface LoteCampanha {
   /** Quantos operadores votaram que o retorno foi bom / que não deu (20261009150000). */
   votos_bom: number;
   votos_ruim: number;
+  /** Quem lançou: o histórico separa as minhas das dos outros líderes do setor. */
+  criado_por: string;
+  criado_por_nome: string | null;
 }
 
 export type SituacaoLote = 'ativa' | 'desativada' | 'encerrada';
@@ -289,15 +292,21 @@ export function situacaoDoLote(l: Pick<LoteCampanha, 'ativa' | 'encerrada_em'>):
 const COLUNAS_LOTE =
   'id, empresa_id, setor_id, setor_nome, titulo, arquivo_nome, modelo, sem_valores, total, ativa, '
   + 'lancada_em, desativada_em, relancada_em, editada_em, criado_em, expira_em, encerrada_em, placar, '
-  + 'votos_bom, votos_ruim';
+  + 'votos_bom, votos_ruim, criado_por, criado_por_nome';
 
-/** As campanhas que ESTE líder lançou, da mais nova para a mais antiga. */
-export async function listarHistorico(autorId: string): Promise<LoteCampanha[]> {
+/**
+ * As campanhas que ESTE líder lançou e as dos outros líderes do setor
+ * (16/10/2026 — antes era só a própria), da mais nova para a mais antiga.
+ * Quem vê as do setor é o RLS (`fn_cf_alcanca_setor`, 20261016210000); a tela
+ * separa as duas listas por `criado_por`.
+ */
+export async function listarHistorico(autorId: string, setorId: string | null): Promise<LoteCampanha[]> {
   const todos: LoteCampanha[] = [];
   for (let de = 0; ; de += PAGINA) {
-    const { data, error } = await db.from('campanha_facil_lotes')
-      .select(COLUNAS_LOTE)
-      .eq('criado_por', autorId).not('lancada_em', 'is', null)
+    let q = db.from('campanha_facil_lotes').select(COLUNAS_LOTE);
+    q = setorId ? q.or(`criado_por.eq.${autorId},setor_id.eq.${setorId}`) : q.eq('criado_por', autorId);
+    const { data, error } = await q
+      .not('lancada_em', 'is', null)
       .order('criado_em', { ascending: false })
       .range(de, de + PAGINA - 1);
     if (error) throw error;
@@ -362,6 +371,20 @@ export async function enviosDoLote(loteId: string): Promise<EnvioResumo[]> {
     .select(COLUNAS_ENVIO).eq('lote_id', loteId).order('criado_em');
   if (error) throw error;
   return comProgresso((data ?? []) as Omit<EnvioResumo, 'progresso'>[]);
+}
+
+/**
+ * Os envios da campanha de OUTRO líder do setor, com o andamento — só os
+ * números, pela função (20261016210000): quem só acompanha não lê envios nem
+ * contatos direto.
+ */
+export async function enviosDoLoteDoSetor(loteId: string): Promise<EnvioResumo[]> {
+  const { data, error } = await db.rpc('fn_campanha_facil_envios_do_lote', { p_lote: loteId });
+  if (error) throw error;
+  type Linha = Omit<EnvioResumo, 'progresso'> & Progresso;
+  return ((data ?? []) as Linha[]).map(({ total, enviados, nao_enviados, ...e }) => ({
+    ...e, progresso: { total, enviados, nao_enviados },
+  }));
 }
 
 /** Um por operador, somando o original e os repasses. */

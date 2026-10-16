@@ -1,15 +1,17 @@
 /**
- * Persistência do Campanha Fácil — COMPARTILHADA por empresa (BookPlay).
+ * Persistência do Campanha Fácil — de cada SETOR (16/10/2026).
  *
- * No app original tudo isso era localStorage; aqui vive no Supabase, visível e
- * editável por toda a empresa (tabelas campanha_facil_* — ver migration
- * 20260723a). O gate "só BookPlay" é da UI; a isolação por empresa é do RLS.
+ * No app original tudo isso era localStorage; aqui vive no Supabase (tabelas
+ * campanha_facil_* — ver migration 20260723a). Até 20261016210000 valia para a
+ * empresa inteira; agora mensagens, excluídas e descontos são do setor: o
+ * líder vê e mexe só no dele, a gerência no setor escolhido. A tela filtra
+ * pelo setor e o RLS (`fn_cf_alcanca_setor`) garante.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Discounts } from './lib/campaign-core';
 
-/** Para o que nasceu depois dos tipos gerados (favoritas, `pix_automatico`). */
+/** Para o que nasceu depois dos tipos gerados (favoritas, `pix_automatico`, `setor_id`). */
 const dbSemTipos = supabase as unknown as SupabaseClient;
 
 export interface CampanhaMensagem {
@@ -44,11 +46,11 @@ function toDiscounts(row: Record<string, unknown>): Discounts {
 
 // ─── Mensagens adicionadas ───────────────────────────────────────────────────
 
-export async function fetchMensagens(empresaId: string): Promise<CampanhaMensagem[]> {
-  const { data, error } = await supabase
+export async function fetchMensagens(empresaId: string, setorId: string): Promise<CampanhaMensagem[]> {
+  const { data, error } = await dbSemTipos
     .from('campanha_facil_mensagens')
     .select('id, titulo, categoria, corpo, criado_por, criado_por_nome, criado_em, atualizado_em')
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresaId).eq('setor_id', setorId)
     .order('criado_em', { ascending: true });
   if (error) throw error;
   return (data ?? []) as CampanhaMensagem[];
@@ -56,16 +58,18 @@ export async function fetchMensagens(empresaId: string): Promise<CampanhaMensage
 
 export async function criarMensagem(params: {
   empresaId: string;
+  setorId: string;
   titulo: string;
   categoria: string;
   corpo: string;
   criadoPor: string | null;
   criadoPorNome: string | null;
 }): Promise<CampanhaMensagem> {
-  const { data, error } = await supabase
+  const { data, error } = await dbSemTipos
     .from('campanha_facil_mensagens')
     .insert({
       empresa_id: params.empresaId,
+      setor_id: params.setorId,
       titulo: params.titulo,
       categoria: params.categoria,
       corpo: params.corpo,
@@ -93,12 +97,12 @@ export async function excluirMensagem(id: string): Promise<void> {
 
 // ─── Configurações de desconto ───────────────────────────────────────────────
 
-export async function fetchDescontos(empresaId: string): Promise<CampanhaDesconto[]> {
+export async function fetchDescontos(empresaId: string, setorId: string): Promise<CampanhaDesconto[]> {
   // `pix_automatico` (20261009180000) nasceu depois dos tipos gerados.
   const { data, error } = await dbSemTipos
     .from('campanha_facil_descontos')
     .select('id, nome, overdue, settlement, interest, bundle, annual, pix_automatico')
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresaId).eq('setor_id', setorId)
     .order('nome', { ascending: true });
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
@@ -109,22 +113,24 @@ export async function fetchDescontos(empresaId: string): Promise<CampanhaDescont
 }
 
 /**
- * Salva (ou atualiza, se já existir uma com o mesmo nome case-insensitive) uma
- * configuração de desconto. Espelha o comportamento do app original, que
- * sobrescrevia a configuração de mesmo nome. Retorna o id afetado.
+ * Salva (ou atualiza, se já existir uma com o mesmo nome case-insensitive NO
+ * SETOR) uma configuração de desconto. Espelha o comportamento do app
+ * original, que sobrescrevia a configuração de mesmo nome. Retorna o id
+ * afetado.
  */
 export async function salvarDesconto(params: {
   empresaId: string;
+  setorId: string;
   nome: string;
   discounts: Discounts;
   criadoPor: string | null;
 }): Promise<{ id: string; atualizado: boolean }> {
   const valores = Object.fromEntries(DISCOUNT_KEYS.map((k) => [k, params.discounts[k]]));
 
-  const { data: existentes, error: buscaErro } = await supabase
+  const { data: existentes, error: buscaErro } = await dbSemTipos
     .from('campanha_facil_descontos')
     .select('id')
-    .eq('empresa_id', params.empresaId)
+    .eq('empresa_id', params.empresaId).eq('setor_id', params.setorId)
     .ilike('nome', params.nome)
     .limit(1);
   if (buscaErro) throw buscaErro;
@@ -139,9 +145,9 @@ export async function salvarDesconto(params: {
     return { id: existente.id as string, atualizado: true };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dbSemTipos
     .from('campanha_facil_descontos')
-    .insert({ empresa_id: params.empresaId, nome: params.nome, criado_por: params.criadoPor, ...valores })
+    .insert({ empresa_id: params.empresaId, setor_id: params.setorId, nome: params.nome, criado_por: params.criadoPor, ...valores })
     .select('id')
     .single();
   if (error) throw error;
@@ -181,36 +187,37 @@ export async function definirFavorita(empresaId: string, templateId: string, fav
   }
 }
 
-// ─── Mensagens padrão ocultadas ──────────────────────────────────────────────
+// ─── Mensagens padrão ocultadas (de cada setor) ──────────────────────────────
 
-export async function fetchOcultas(empresaId: string): Promise<string[]> {
-  const { data, error } = await supabase
+export async function fetchOcultas(empresaId: string, setorId: string): Promise<string[]> {
+  const { data, error } = await dbSemTipos
     .from('campanha_facil_mensagens_ocultas')
     .select('template_id')
-    .eq('empresa_id', empresaId);
+    .eq('empresa_id', empresaId).eq('setor_id', setorId);
   if (error) throw error;
-  return (data ?? []).map((r) => r.template_id as string);
+  return ((data ?? []) as { template_id: string }[]).map((r) => r.template_id);
 }
 
 export async function ocultarMensagemPadrao(params: {
   empresaId: string;
+  setorId: string;
   templateId: string;
   ocultadoPor: string | null;
 }): Promise<void> {
-  const { error } = await supabase
+  const { error } = await dbSemTipos
     .from('campanha_facil_mensagens_ocultas')
     .upsert(
-      { empresa_id: params.empresaId, template_id: params.templateId, ocultado_por: params.ocultadoPor },
-      { onConflict: 'empresa_id,template_id' },
+      { empresa_id: params.empresaId, setor_id: params.setorId, template_id: params.templateId, ocultado_por: params.ocultadoPor },
+      { onConflict: 'empresa_id,setor_id,template_id' },
     );
   if (error) throw error;
 }
 
-/** Restaura TODAS as mensagens padrão ocultadas da empresa (como no original). */
-export async function restaurarMensagensPadrao(empresaId: string): Promise<void> {
-  const { error } = await supabase
+/** Restaura TODAS as mensagens padrão ocultadas do setor (como no original). */
+export async function restaurarMensagensPadrao(empresaId: string, setorId: string): Promise<void> {
+  const { error } = await dbSemTipos
     .from('campanha_facil_mensagens_ocultas')
     .delete()
-    .eq('empresa_id', empresaId);
+    .eq('empresa_id', empresaId).eq('setor_id', setorId);
   if (error) throw error;
 }

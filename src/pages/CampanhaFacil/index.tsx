@@ -8,14 +8,14 @@
  *
  * A lógica de negócio é a mesma do app original (campaign-core / xlsx-export,
  * portados verbatim); esta página é a interface reescrita com o design system
- * do próprio painel. Persistência de mensagens/descontos é compartilhada por
- * empresa via Supabase (useCampanhaFacil).
+ * do próprio painel. Mensagens, excluídas e descontos são do SETOR da
+ * campanha (20261016210000): o do líder, ou o que a gerência escolhe no topo.
  */
 import { useRef, useState } from 'react';
 import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
   ChevronLeft, ChevronRight, MessageSquare, Percent,
-  AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send, Filter, UserX, Undo2, Star,
+  AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send, Filter, UserX, Undo2, Star, Building2,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -81,6 +81,8 @@ export default function CampanhaFacil() {
   const categorias = Array.from(new Set(cf.templates.map((t) => t.category)));
 
   const presetReal = cf.selectedDiscountPresetId !== 'custom' && cf.selectedDiscountPresetId !== 'macro-default';
+  /** «do setor Cobrança» — onde as mensagens e descontos ficam guardados. */
+  const doSetor = cf.envios.setorNome ? `do setor ${cf.envios.setorNome}` : 'do seu setor';
   const presetSelecionado = cf.discountPresets.find((p) => p.id === cf.selectedDiscountPresetId);
 
   // ── Gate BookPlay (defesa em profundidade; a aba já só aparece na BookPlay) ──
@@ -158,6 +160,8 @@ export default function CampanhaFacil() {
             <h1 className="mt-1 text-xl font-bold leading-tight">Configure uma vez.<br />Gere tudo pronto.</h1>
             <p className="mt-1 text-sm text-muted-foreground">Importe o arquivo do sistema, escolha a mensagem e revise o resultado.</p>
           </div>
+
+          <SetorDaCampanha envios={cf.envios} />
 
           {/* Passo 1 — Importar */}
           <Card>
@@ -248,7 +252,7 @@ export default function CampanhaFacil() {
           {/* Passo 2 — Mensagem */}
           <Card>
             <CardContent className="space-y-3 p-4">
-              <StepTitle n={2} title="Escolher mensagem" subtitle="Modelo aplicado a todos os contatos" />
+              <StepTitle n={2} title="Escolher mensagem" subtitle={`Mensagens ${doSetor}`} />
               {/* Relatório cadastral não tem valores: as mensagens que citam
                   parcela, quitação ou cartão sairiam com buracos no lugar dos
                   números, então ficam travadas na lista. */}
@@ -397,6 +401,7 @@ export default function CampanhaFacil() {
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <Percent className="h-4 w-4 text-primary" /> Descontos e cálculos
+                  <span className="ml-auto truncate text-[11px] font-normal text-muted-foreground">Configurações {doSetor}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={cf.selectedDiscountPresetId} onValueChange={cf.applyDiscountPreset}>
@@ -726,7 +731,7 @@ export default function CampanhaFacil() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Adicionar mensagem</DialogTitle>
-            <DialogDescription>O texto será salvo exatamente como for digitado e ficará disponível para toda a BookPlay.</DialogDescription>
+            <DialogDescription>O texto será salvo exatamente como for digitado e ficará disponível só para os líderes {doSetor}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -764,8 +769,8 @@ export default function CampanhaFacil() {
             <AlertDialogTitle>Excluir mensagem?</AlertDialogTitle>
             <AlertDialogDescription>
               {cf.isUserTemplate(cf.selectedTemplate.id)
-                ? `A mensagem “${cf.selectedTemplate.name}” será excluída para toda a BookPlay.`
-                : `O modelo padrão “${cf.selectedTemplate.name}” deixará de aparecer na lista. Você poderá restaurá-lo depois.`}
+                ? `A mensagem “${cf.selectedTemplate.name}” será excluída ${doSetor}.`
+                : `O modelo padrão “${cf.selectedTemplate.name}” deixará de aparecer na lista ${doSetor}. Os outros setores continuam com ele. Você poderá restaurá-lo depois.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -840,7 +845,7 @@ export default function CampanhaFacil() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Salvar configuração</DialogTitle>
-            <DialogDescription>Guarde estes percentuais para reutilizar. Fica disponível para toda a BookPlay.</DialogDescription>
+            <DialogDescription>Guarde estes percentuais para reutilizar. Fica disponível só para os líderes {doSetor}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -873,7 +878,7 @@ export default function CampanhaFacil() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir configuração?</AlertDialogTitle>
             <AlertDialogDescription>
-              A configuração “{presetSelecionado?.nome}” será removida para toda a BookPlay.
+              A configuração “{presetSelecionado?.nome}” será removida {doSetor}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -890,6 +895,34 @@ export default function CampanhaFacil() {
 }
 
 // ── Componentes auxiliares ───────────────────────────────────────────────────
+
+/**
+ * O setor da campanha, no topo: vale para a aba toda — mensagens, excluídas,
+ * descontos, quem encaminha e as campanhas do setor (16/10/2026). O líder vê o
+ * dele, travado; a gerência escolhe.
+ */
+function SetorDaCampanha({ envios }: { envios: ReturnType<typeof useCampanhaFacil>['envios'] }) {
+  const { setorFixo, setores, setorId, setSetorId, setorNome } = envios;
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+      <Building2 className="h-4 w-4 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Setor da campanha</p>
+        {setorFixo ? (
+          <p className="truncate text-sm font-semibold">{setorId ? (setorNome ?? 'Seu setor') : 'Sem setor cadastrado'}</p>
+        ) : (
+          <Select value={setorId ?? ''} onValueChange={setSetorId}>
+            <SelectTrigger className="mt-1 h-8 bg-background"><SelectValue placeholder="Escolha o setor" /></SelectTrigger>
+            <SelectContent>
+              {setores.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      {setorFixo && <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Só o seu setor" />}
+    </div>
+  );
+}
 
 function StepTitle({ n, title, subtitle }: { n: number; title: string; subtitle: string }) {
   return (

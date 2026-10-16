@@ -6,8 +6,9 @@
  * clones), filtra pelo nome, marca quem vai mandar e libera. Cada um recebe
  * uma notificação e acha a parte dele na aba Campanhas de WhatsApp.
  *
- * O histórico é das campanhas DESTE líder: as abertas com o andamento ao vivo,
- * as encerradas com o placar congelado. Dali ele repassa, desativa, edita,
+ * O histórico traz as campanhas DESTE líder e, só para acompanhar, as dos
+ * outros líderes do setor (16/10/2026): as abertas com o andamento ao vivo, as
+ * encerradas com o placar congelado. Nas dele, repassa, desativa, edita,
  * relança e exclui.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -76,15 +77,16 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
 
   const autorId = perfil?.id ?? null;
 
-  // Gerência para cima escolhe o setor; começa pelo dela, se tiver.
+  // Gerência para cima escolhe o setor; começa pelo dela, se tiver. O líder
+  // também carrega a lista, só para mostrar o nome do setor dele no topo.
   useEffect(() => {
-    if (setorFixo || !empresaId) return;
+    if (!empresaId) return;
     let ativo = true;
     listarSetoresParaCampanha(empresaId)
       .then((lista) => {
         if (!ativo) return;
         setSetores(lista);
-        setSetorEscolhido((atual) => atual ?? perfil?.setor_id ?? lista[0]?.id ?? null);
+        if (!setorFixo) setSetorEscolhido((atual) => atual ?? perfil?.setor_id ?? lista[0]?.id ?? null);
       })
       .catch((err) => console.error('[CampanhaFacil] setores:', err));
     return () => { ativo = false; };
@@ -115,13 +117,13 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
   const recarregarHistorico = useCallback(async () => {
     if (!autorId) return;
     try {
-      setHistorico(await listarHistorico(autorId));
+      setHistorico(await listarHistorico(autorId, setorId));
     } catch (err) {
       console.warn('[CampanhaFacil] histórico:', err);
     } finally {
       setCarregandoHistorico(false);
     }
-  }, [autorId]);
+  }, [autorId, setorId]);
 
   useEffect(() => { void recarregarHistorico(); }, [recarregarHistorico]);
 
@@ -235,11 +237,12 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
 
   return {
     setorFixo, setores, setorId, setSetorId: setSetorEscolhido,
+    setorNome: setores.find((s) => s.id === setorId)?.nome ?? null,
     operadores, operadoresDoRecorte, operadoresVisiveis, busca, setBusca,
     equipes, filtroEquipes, escolherEquipes,
     carregandoOperadores, selecionados, operadoresSelecionados,
     alternar, marcarTodos, desmarcarTodos,
-    empresaId, historico, carregandoHistorico, recarregarHistorico,
+    empresaId, autorId, historico, carregandoHistorico, recarregarHistorico,
     liberando, liberar, repassar, ativar, excluir, editar,
   };
 }

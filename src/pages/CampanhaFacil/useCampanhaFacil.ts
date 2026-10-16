@@ -3,8 +3,8 @@
  *
  * Porta a máquina de estado do app.js original para React, reaproveitando a
  * lógica pura (campaign-core.js / xlsx-export.js) sem alterá-la. A persistência
- * de mensagens, descontos e ocultas passou de localStorage para Supabase
- * compartilhado por empresa (campanhaFacil.service).
+ * de mensagens, descontos e ocultas passou de localStorage para Supabase,
+ * separada por setor desde 20261016210000 (campanhaFacil.service).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -121,12 +121,20 @@ export function useCampanhaFacil() {
     return () => clearTimeout(t);
   }, [discountsInput]);
 
-  // ── Carga inicial da persistência ──────────────────────────────────────────
+  // ── Carga da persistência: do SETOR da campanha (20261016210000) ───────────
+  //
+  // O setor é o do topo da página: o do líder, ou o que a gerência escolheu. Trocar
+  // de setor troca a lista de mensagens, as excluídas e os descontos.
+  const { setorId } = envios;
   useEffect(() => {
-    if (!empresaId) return;
+    setUserMessages([]);
+    setDiscountPresets([]);
+    setHiddenIds(new Set());
+    setCustomBodies(new Map());
+    if (!empresaId || !setorId) { setLoadingConfig(false); return; }
     let ativo = true;
     setLoadingConfig(true);
-    Promise.all([fetchMensagens(empresaId), fetchDescontos(empresaId), fetchOcultas(empresaId)])
+    Promise.all([fetchMensagens(empresaId, setorId), fetchDescontos(empresaId, setorId), fetchOcultas(empresaId, setorId)])
       .then(([msgs, descs, ocultas]) => {
         if (!ativo) return;
         setUserMessages(msgs);
@@ -139,7 +147,7 @@ export function useCampanhaFacil() {
       })
       .finally(() => { if (ativo) setLoadingConfig(false); });
     return () => { ativo = false; };
-  }, [empresaId]);
+  }, [empresaId, setorId]);
 
   // ── Favoritas: de cada líder, não da empresa (20261009180000) ──────────────
   const [favoritas, setFavoritas] = useState<string[]>([]);
@@ -489,10 +497,12 @@ export function useCampanhaFacil() {
 
   const addMessage = useCallback(async (titulo: string, categoria: string, corpo: string) => {
     if (!empresaId) return;
+    if (!setorId) { toast.error('Escolha o setor antes de adicionar a mensagem.'); return; }
     if (!titulo.trim() || !corpo.trim()) { toast.error('Informe o título e o texto da mensagem.'); return; }
     try {
       const nova = await criarMensagem({
         empresaId,
+        setorId,
         titulo: titulo.trim(),
         categoria: categoria.trim() || 'Personalizadas',
         corpo,
@@ -506,11 +516,11 @@ export function useCampanhaFacil() {
       console.error(error);
       toast.error('Não foi possível adicionar a mensagem.');
     }
-  }, [empresaId, perfil]);
+  }, [empresaId, setorId, perfil]);
 
   const deleteSelectedMessage = useCallback(async () => {
     if (templates.length <= 1) { toast.error('Mantenha ao menos uma mensagem na biblioteca.'); return; }
-    if (!empresaId) return;
+    if (!empresaId || !setorId) return;
     const id = selectedTemplate.id;
     const idx = templates.findIndex((t) => t.id === id);
     try {
@@ -519,7 +529,7 @@ export function useCampanhaFacil() {
         setUserMessages((prev) => prev.filter((m) => m.id !== id));
         toast.success('Mensagem excluída.');
       } else {
-        await ocultarMensagemPadrao({ empresaId, templateId: id, ocultadoPor: perfil?.id ?? null });
+        await ocultarMensagemPadrao({ empresaId, setorId, templateId: id, ocultadoPor: perfil?.id ?? null });
         setHiddenIds((prev) => new Set(prev).add(id));
         toast.success('Mensagem removida da lista.');
       }
@@ -532,19 +542,19 @@ export function useCampanhaFacil() {
       console.error(error);
       toast.error('Não foi possível excluir a mensagem.');
     }
-  }, [templates, empresaId, selectedTemplate, isUserTemplate, perfil]);
+  }, [templates, empresaId, setorId, selectedTemplate, isUserTemplate, perfil]);
 
   const restoreDefaults = useCallback(async () => {
-    if (!empresaId || hiddenIds.size === 0) return;
+    if (!empresaId || !setorId || hiddenIds.size === 0) return;
     try {
-      await restaurarMensagensPadrao(empresaId);
+      await restaurarMensagensPadrao(empresaId, setorId);
       setHiddenIds(new Set());
       toast.success('Mensagens padrão restauradas.');
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível restaurar as mensagens padrão.');
     }
-  }, [empresaId, hiddenIds]);
+  }, [empresaId, setorId, hiddenIds]);
 
   // ── Descontos ──────────────────────────────────────────────────────────────
   const setDiscount = useCallback((key: keyof Discounts, value: number | string) => {
@@ -563,19 +573,20 @@ export function useCampanhaFacil() {
 
   const saveDiscountPreset = useCallback(async (nome: string) => {
     if (!empresaId) return;
+    if (!setorId) { toast.error('Escolha o setor antes de salvar a configuração.'); return; }
     if (!nome.trim()) { toast.error('Informe um nome para a configuração.'); return; }
     try {
       const { atualizado } = await salvarDesconto({
-        empresaId, nome: nome.trim(), discounts: discountsInput, criadoPor: perfil?.id ?? null,
+        empresaId, setorId, nome: nome.trim(), discounts: discountsInput, criadoPor: perfil?.id ?? null,
       });
-      const frescos = await fetchDescontos(empresaId);
+      const frescos = await fetchDescontos(empresaId, setorId);
       setDiscountPresets(frescos);
       toast.success(atualizado ? 'Configuração de desconto atualizada.' : 'Configuração de desconto salva.');
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível salvar a configuração de desconto.');
     }
-  }, [empresaId, discountsInput, perfil]);
+  }, [empresaId, setorId, discountsInput, perfil]);
 
   const deleteDiscountPreset = useCallback(async (id: string) => {
     try {

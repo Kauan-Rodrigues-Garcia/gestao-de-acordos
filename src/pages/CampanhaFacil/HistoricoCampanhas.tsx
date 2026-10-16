@@ -10,11 +10,18 @@
  * Campanha aberta mostra o andamento ao vivo (botão Atualizar); encerrada
  * mostra o placar que a faxina congelou. O repasse de quem faltou (29/09) mora
  * aqui também.
+ *
+ * ## As campanhas do setor (16/10/2026)
+ *
+ * O líder também vê as campanhas dos outros líderes do setor, num cartão à
+ * parte e só para acompanhar: o andamento, os votos e a mensagem, sem
+ * repassar, desativar, editar, relançar nem excluir — isso continua de quem
+ * lançou (o banco confere). Ver 20261016210000.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRightLeft, CalendarDays, CheckCircle2, Clock, History, Loader2, Pencil, Power, PowerOff,
-  RefreshCw, Send, ThumbsDown, ThumbsUp, Trash2, XCircle,
+  ArrowRightLeft, CalendarDays, CheckCircle2, Clock, Eye, History, Loader2, Pencil, Power, PowerOff,
+  RefreshCw, Send, ThumbsDown, ThumbsUp, Trash2, Users, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -35,7 +42,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
-  enviosDoLote, listarOperadoresParaCampanha, mensagensDoLote, placarDosEnvios, situacaoDoLote, votosDoLote,
+  enviosDoLote, enviosDoLoteDoSetor, listarOperadoresParaCampanha, mensagensDoLote, placarDosEnvios, situacaoDoLote, votosDoLote,
   type EnvioResumo, type LoteCampanha, type PlacarOperador, type SituacaoLote,
 } from './campanhaFacilEnvios.service';
 import { redistribuir, type MensagemDaCampanha, type OperadorCampanha } from './envios';
@@ -84,7 +91,29 @@ function SeloSituacao({ s }: { s: SituacaoLote }) {
 // ── O cartão da lateral ──────────────────────────────────────────────────────
 
 export function HistoricoCampanhas({ envios }: { envios: Envios }) {
-  const { historico } = envios;
+  const { historico, autorId } = envios;
+  // As minhas e as dos outros líderes do setor, sempre separadas.
+  const minhas = useMemo(() => historico.filter((l) => l.criado_por === autorId), [historico, autorId]);
+  const doSetor = useMemo(() => historico.filter((l) => l.criado_por !== autorId), [historico, autorId]);
+
+  if (envios.carregandoHistorico && historico.length === 0) return null;
+  if (historico.length === 0) return null;
+
+  return (
+    <>
+      {minhas.length > 0 && <CartaoCampanhas lista={minhas} envios={envios} />}
+      {doSetor.length > 0 && <CartaoCampanhas lista={doSetor} envios={envios} somenteLeitura />}
+    </>
+  );
+}
+
+/**
+ * Um cartão do histórico: o das minhas (com as ações) ou o do setor (só
+ * acompanhar, com quem lançou em cada linha).
+ */
+function CartaoCampanhas({ lista: historico, envios, somenteLeitura = false }: {
+  lista: LoteCampanha[]; envios: Envios; somenteLeitura?: boolean;
+}) {
   const [aberto, setAberto] = useState<LoteCampanha | null>(null);
   const [verTudo, setVerTudo] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
@@ -100,15 +129,21 @@ export function HistoricoCampanhas({ envios }: { envios: Envios }) {
     try { await envios.recarregarHistorico(); } finally { setAtualizando(false); }
   }
 
-  if (envios.carregandoHistorico && historico.length === 0) return null;
-  if (historico.length === 0) return null;
-
   return (
-    <Card>
+    <Card className={cn(somenteLeitura && 'border-dashed bg-muted/20')}>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center gap-2">
-          <Send className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Minhas campanhas</span>
+          {somenteLeitura
+            ? <Users className="h-4 w-4 text-muted-foreground" />
+            : <Send className="h-4 w-4 text-primary" />}
+          <div className="min-w-0">
+            <span className="text-sm font-semibold">
+              {somenteLeitura ? 'Campanhas do setor' : 'Minhas campanhas'}
+            </span>
+            {somenteLeitura && (
+              <p className="text-[11px] text-muted-foreground">Dos outros líderes · só acompanhar</p>
+            )}
+          </div>
           <Button
             variant="ghost" size="icon" className="ml-auto h-7 w-7" onClick={() => void atualizar()}
             title="Atualizar" aria-label="Atualizar campanhas" disabled={atualizando}
@@ -132,7 +167,7 @@ export function HistoricoCampanhas({ envios }: { envios: Envios }) {
           <ul className="space-y-1.5">
             {abertas.map((l) => (
               <li key={l.id}>
-                <LinhaLote l={l} onClick={() => setAberto(l)} />
+                <LinhaLote l={l} mostrarAutor={somenteLeitura} onClick={() => setAberto(l)} />
               </li>
             ))}
           </ul>
@@ -148,6 +183,7 @@ export function HistoricoCampanhas({ envios }: { envios: Envios }) {
       {verTudo && (
         <DialogoHistorico
           historico={historico}
+          somenteLeitura={somenteLeitura}
           onFechar={() => setVerTudo(false)}
           onAbrir={(l) => setAberto(l)}
         />
@@ -158,6 +194,7 @@ export function HistoricoCampanhas({ envios }: { envios: Envios }) {
           key={loteAberto.id}
           lote={loteAberto}
           envios={envios}
+          somenteLeitura={somenteLeitura}
           onFechar={() => setAberto(null)}
         />
       )}
@@ -165,7 +202,7 @@ export function HistoricoCampanhas({ envios }: { envios: Envios }) {
   );
 }
 
-function LinhaLote({ l, onClick }: { l: LoteCampanha; onClick: () => void }) {
+function LinhaLote({ l, mostrarAutor = false, onClick }: { l: LoteCampanha; mostrarAutor?: boolean; onClick: () => void }) {
   return (
     <button
       type="button" onClick={onClick}
@@ -177,6 +214,9 @@ function LinhaLote({ l, onClick }: { l: LoteCampanha; onClick: () => void }) {
           {quando(l.lancada_em ?? l.criado_em)} · {n(l.total)} {l.total === 1 ? 'mensagem' : 'mensagens'}
           {l.setor_nome ? ` · ${l.setor_nome}` : ''}
         </p>
+        {mostrarAutor && (
+          <p className="truncate text-[11px] font-medium text-foreground/80">por {l.criado_por_nome || 'outro líder'}</p>
+        )}
       </div>
       {(l.votos_bom > 0 || l.votos_ruim > 0) && (
         <span
@@ -244,8 +284,8 @@ function RetornoDaOperacao({ lote, operadores }: { lote: LoteCampanha; operadore
 
 // ── Histórico por mês ────────────────────────────────────────────────────────
 
-function DialogoHistorico({ historico, onFechar, onAbrir }: {
-  historico: LoteCampanha[]; onFechar: () => void; onAbrir: (l: LoteCampanha) => void;
+function DialogoHistorico({ historico, somenteLeitura, onFechar, onAbrir }: {
+  historico: LoteCampanha[]; somenteLeitura: boolean; onFechar: () => void; onAbrir: (l: LoteCampanha) => void;
 }) {
   const meses = useMemo(() => {
     const m = new Map<string, LoteCampanha[]>();
@@ -263,8 +303,12 @@ function DialogoHistorico({ historico, onFechar, onAbrir }: {
     <Dialog open onOpenChange={(v) => { if (!v) onFechar(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Histórico de campanhas</DialogTitle>
-          <DialogDescription>As campanhas que você lançou. Clique numa para ver a mensagem e quem encaminhou.</DialogDescription>
+          <DialogTitle>{somenteLeitura ? 'Campanhas do setor' : 'Histórico de campanhas'}</DialogTitle>
+          <DialogDescription>
+            {somenteLeitura
+              ? 'As campanhas que os outros líderes do setor lançaram. Clique numa para acompanhar — as ações ficam com quem lançou.'
+              : 'As campanhas que você lançou. Clique numa para ver a mensagem e quem encaminhou.'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -284,7 +328,7 @@ function DialogoHistorico({ historico, onFechar, onAbrir }: {
 
         <ul className="max-h-[55vh] space-y-1.5 overflow-y-auto pr-1">
           {lista.map((l) => (
-            <li key={l.id}><LinhaLote l={l} onClick={() => onAbrir(l)} /></li>
+            <li key={l.id}><LinhaLote l={l} mostrarAutor={somenteLeitura} onClick={() => onAbrir(l)} /></li>
           ))}
         </ul>
       </DialogContent>
@@ -296,7 +340,9 @@ function DialogoHistorico({ historico, onFechar, onAbrir }: {
 
 type Placar = PlacarOperador & { repasse?: boolean };
 
-function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envios: Envios; onFechar: () => void }) {
+function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
+  lote: LoteCampanha; envios: Envios; somenteLeitura: boolean; onFechar: () => void;
+}) {
   const situacao = situacaoDoLote(lote);
   const aberta = situacao !== 'encerrada';
   const [enviosLote, setEnviosLote] = useState<EnvioResumo[]>([]);
@@ -313,26 +359,27 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
     try {
       // O histórico traz a contagem de votos da campanha.
       if (comHistorico) void recarregarHistorico();
-      setEnviosLote(await enviosDoLote(lote.id));
+      // A de outro líder vem pela função, só com os números.
+      setEnviosLote(await (somenteLeitura ? enviosDoLoteDoSetor(lote.id) : enviosDoLote(lote.id)));
       setAtualizadoEm(new Date());
     } catch (err) {
       console.error('[CampanhaFacil] placar:', err);
     } finally {
       setCarregando(false);
     }
-  }, [aberta, lote.id, recarregarHistorico]);
+  }, [aberta, somenteLeitura, lote.id, recarregarHistorico]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
-  // Os operadores do setor da campanha: para editar e repassar.
+  // Os operadores do setor da campanha: para editar e repassar (só nas minhas).
   useEffect(() => {
-    if (!aberta || !lote.setor_id) return;
+    if (somenteLeitura || !aberta || !lote.setor_id) return;
     let vivo = true;
     listarOperadoresParaCampanha(lote.empresa_id, lote.setor_id)
       .then((l) => { if (vivo) setOperadoresSetor(l); })
       .catch((err) => console.warn('[CampanhaFacil] operadores do setor:', err));
     return () => { vivo = false; };
-  }, [aberta, lote.empresa_id, lote.setor_id]);
+  }, [somenteLeitura, aberta, lote.empresa_id, lote.setor_id]);
 
   // Quem votou o quê (13/10/2026). Também na encerrada: o voto sobrevive à
   // faxina. Relê quando a contagem muda ou o líder clica em Atualizar.
@@ -377,6 +424,12 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
             <DialogTitle className="min-w-0 flex-1 leading-snug">{lote.titulo}</DialogTitle>
             <SeloSituacao s={situacao} />
           </div>
+          {somenteLeitura && (
+            <p className="flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+              <Eye className="h-3.5 w-3.5 shrink-0" />
+              Campanha de <strong className="text-foreground">{lote.criado_por_nome || 'outro líder'}</strong> — só acompanhar.
+            </p>
+          )}
           <DialogDescription>
             Lançada {quando(lote.lancada_em ?? lote.criado_em)}
             {lote.setor_nome ? ` · ${lote.setor_nome}` : ''}
@@ -443,36 +496,39 @@ function DialogoCampanha({ lote, envios, onFechar }: { lote: LoteCampanha; envio
           {lote.arquivo_nome && <p className="text-[11px] text-muted-foreground">Arquivo: {lote.arquivo_nome}</p>}
         </section>
 
-        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-          <Button
-            variant="ghost" className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => setAcao('excluir')} disabled={ocupado}
-          >
-            <Trash2 className="h-4 w-4" /> Excluir
-          </Button>
-          <div className="flex flex-wrap gap-2">
-            {situacao === 'ativa' && (
-              <>
-                <Button variant="outline" className="gap-1.5" onClick={() => setAcao('repasse')} disabled={ocupado || carregando}>
-                  <ArrowRightLeft className="h-4 w-4" /> Repassar
-                </Button>
-                <Button variant="outline" className="gap-1.5" onClick={() => setAcao('desativar')} disabled={ocupado}>
-                  <PowerOff className="h-4 w-4" /> Desativar
-                </Button>
-              </>
-            )}
-            {situacao === 'desativada' && (
-              <>
-                <Button variant="outline" className="gap-1.5" onClick={() => setAcao('editar')} disabled={ocupado || carregando}>
-                  <Pencil className="h-4 w-4" /> Editar
-                </Button>
-                <Button className="gap-1.5" onClick={() => void executar(() => envios.ativar(lote, true))} disabled={ocupado}>
-                  {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} Liberar de novo
-                </Button>
-              </>
-            )}
-          </div>
-        </DialogFooter>
+        {/* As ações são de quem lançou: na campanha do setor, só acompanhar. */}
+        {!somenteLeitura && (
+          <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+            <Button
+              variant="ghost" className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setAcao('excluir')} disabled={ocupado}
+            >
+              <Trash2 className="h-4 w-4" /> Excluir
+            </Button>
+            <div className="flex flex-wrap gap-2">
+              {situacao === 'ativa' && (
+                <>
+                  <Button variant="outline" className="gap-1.5" onClick={() => setAcao('repasse')} disabled={ocupado || carregando}>
+                    <ArrowRightLeft className="h-4 w-4" /> Repassar
+                  </Button>
+                  <Button variant="outline" className="gap-1.5" onClick={() => setAcao('desativar')} disabled={ocupado}>
+                    <PowerOff className="h-4 w-4" /> Desativar
+                  </Button>
+                </>
+              )}
+              {situacao === 'desativada' && (
+                <>
+                  <Button variant="outline" className="gap-1.5" onClick={() => setAcao('editar')} disabled={ocupado || carregando}>
+                    <Pencil className="h-4 w-4" /> Editar
+                  </Button>
+                  <Button className="gap-1.5" onClick={() => void executar(() => envios.ativar(lote, true))} disabled={ocupado}>
+                    {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} Liberar de novo
+                  </Button>
+                </>
+              )}
+            </div>
+          </DialogFooter>
+        )}
       </DialogContent>
 
       <AlertDialog open={acao === 'desativar'} onOpenChange={(v) => { if (!v) setAcao(null); }}>

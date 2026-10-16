@@ -1746,7 +1746,14 @@ recebimento pelo analítico, e somar aqui contaria o mesmo dinheiro duas vezes.
 Transforma exportações do sistema (mailing CSV/TXT, relatórios 245 ou 247 em
 Excel) em campanhas de cobrança: aplica descontos, substitui variáveis da
 mensagem, distribui responsáveis em **rodízio** e exporta um Excel pronto.
-Mensagens e descontos são compartilhados por empresa.
+
+**Tudo é do setor (16/10/2026).** A lista de mensagens, as mensagens padrão
+excluídas e as configurações de desconto são de cada **setor**, não da empresa.
+O líder vê e mexe só no dele; quem tem `campanha_escopo_todos_setores`
+(gerência para cima) escolhe o setor no topo da aba, e o setor vale para a aba
+toda. O nome da configuração de desconto é único no setor. O que existia antes
+foi para o setor de quem criou. As favoritas continuam de cada pessoa. Quem
+garante é o banco (`fn_cf_alcanca_setor`, migration `20261016210000`).
 
 **Quem encaminha (29/09/2026).** Não se digita mais nome: o líder marca os
 operadores do **próprio setor** (clones do setor alternativo entram; gerência
@@ -1756,8 +1763,15 @@ então homônimos continuam sendo duas pessoas.
 **Liberar.** Grava a parte de cada operador em `campanha_facil_envios` (as
 linhas prontas, não o arquivo) e cria uma notificação com
 `rota = /campanha-facil/envio/<id>`. O operador **não tem aba**: o clique na
-notificação monta e baixa a planilha. Vale **2 dias** — a policy esconde o
-vencido e um pg_cron apaga de hora em hora.
+notificação monta e baixa a planilha. Vale **até o mês virar** (horário de
+Brasília, `20261015200000` — eram 2 dias) — a policy esconde o vencido e um
+pg_cron encerra de hora em hora. Liberar só aceita o setor alcançado e quem é
+do setor da campanha (do setor, clone numa equipe dele ou líder de equipe dele).
+
+**Histórico.** O líder vê as campanhas dele e, num cartão à parte, as dos
+outros líderes do setor — essas só para acompanhar (andamento, votos e
+mensagem). Repassar, desativar, editar, relançar e excluir continuam só de quem
+lançou. Os dados dos clientes (contatos) não abrem para os outros líderes.
 
 **Repasse.** Se alguém faltou, o líder marca quem faltou e quem recebe: um
 recebedor leva tudo, vários dividem em rodízio. «Encaminhada por» vira o nome
