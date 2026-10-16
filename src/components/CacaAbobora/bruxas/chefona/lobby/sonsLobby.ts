@@ -4,7 +4,7 @@
  * É o MESMO som do `somTique` da caça (`../../../sons.ts`): um bipe quadrado
  * de 50 ms, 880 Hz nos segundos 10 a 4 e 1320 Hz nos 3 últimos, com um chiado
  * agudo de 20 ms. Mas lá ele passa pelo volume do chefão, que para o operador
- * é 12%: com a trilha do lobby subindo para 15%, o tique sumia debaixo dela.
+ * é 12%: com a trilha do lobby tocando por cima, o tique sumia debaixo dela.
  * Aqui ele toca no volume cheio do som (o que o super_admin já ouve).
  */
 import { contextoDoLobby } from './audio';

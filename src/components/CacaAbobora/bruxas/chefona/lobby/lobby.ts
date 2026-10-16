@@ -9,9 +9,10 @@
  * subindo baixinha até a bruxa nascer no drop dela (2:27,4).
  *
  * SÓ QUEM ENTROU vê a bruxa e luta (`LobbyDaChefona.tsx` monta a cena só para
- * ele, e o banco só conta tiro de quem está no lobby). Quem não entrou vê só
- * este menu no alto: na contagem, «Você ficou de fora»; na luta, «A batalha
- * está acontecendo», com o botão para entrar.
+ * ele, e o banco só conta tiro de quem está no lobby) — o super_admin também
+ * precisa entrar. Quem não entrou vê só este menu no alto, sem a contagem
+ * (tique, números grandes, «chegou»): na espera, o convite ou «Você ficou de
+ * fora»; na luta, «A batalha está acontecendo», com o botão para entrar.
  *
  * Estados de quem vê:
  *  - `convite`: ainda não respondeu. Faixa no alto com os dois botões.
@@ -406,8 +407,9 @@ export class LobbyChefona {
     const seg = Math.ceil(falta);
     if (seg !== this.segAnterior) {
       this.segAnterior = seg;
-      if (falta > 0) {
-        // O tique da contagem original, para todo mundo (entrou, ficou de fora ou ainda não respondeu).
+      // A contagem (o tique original e os números grandes) é só de quem entrou:
+      // quem não escolheu, ou ficou de fora, não participa (16/10/2026).
+      if (falta > 0 && this.estado === 'lobby') {
         if (seg >= 1 && seg <= TIQUE_S) tiqueDaContagem(seg <= 3);
         if (seg >= 1 && seg <= NUMERAO_S) this.numerao(seg);
       }

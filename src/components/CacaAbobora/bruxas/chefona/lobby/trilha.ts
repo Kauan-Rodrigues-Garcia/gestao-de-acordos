@@ -4,9 +4,9 @@
  * ## O pedido (16/10/2026, Cleber)
  *
  * A contagem passa a ter 3 minutos. Quem entra no lobby ouve «The Mad King»
- * (RokNardin) começando quase no início em 10% e subindo até 15% na
+ * (RokNardin) começando quase no início em 6% e subindo até 10% na
  * hora em que a bruxa nasce. A bruxa nasce exatamente no DROP da música, e
- * durante a luta ela segue em 15% (16/10: o Cleber testou 0→20%, 15→30% e 7→20%; ficou 10→15%).
+ * durante a luta ela segue em 10% (16/10: o Cleber testou 0→20%, 15→30%, 7→20% e 10→15%; ficou 6→10%).
  *
  * ## A conta
  *
@@ -39,9 +39,9 @@ export const PONTO_DA_BRUXA_S = 2 * 60 + 27.4;
 /** A duração da faixa: o arquivo foi cortado em 4:35 (a espera, 2 min de luta e folga; 3,3 MB em vez de 6,3). */
 export const DURACAO_MUSICA_S = 275;
 /** O volume na luta (e o teto da subida). */
-export const VOLUME_LUTA = 0.15;
+export const VOLUME_LUTA = 0.1;
 /** O volume no primeiro segundo da música. */
-export const VOLUME_INICIO = 0.1;
+export const VOLUME_INICIO = 0.06;
 /** A curva da subida (2 = quadrática). */
 const CURVA = 2.2;
 /** Desvio tolerado antes de pular a música para o ponto certo (s). */

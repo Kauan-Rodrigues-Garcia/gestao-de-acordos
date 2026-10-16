@@ -27,7 +27,7 @@ describe('trilha do lobby da bruxa', () => {
     expect(posicaoDaMusica(-300)).toBeNull();
   });
 
-  it('o volume começa em 10%, só sobe e chega a 15% na chegada', () => {
+  it('o volume começa em 6%, só sobe e chega a 10% na chegada', () => {
     expect(volumeDaMusica(170)).toBe(0);
     expect(volumeDaMusica(PONTO_DA_BRUXA_S)).toBeCloseTo(VOLUME_INICIO, 5);
     let antes = 0;
@@ -38,10 +38,10 @@ describe('trilha do lobby da bruxa', () => {
     }
     expect(volumeDaMusica(0)).toBeCloseTo(VOLUME_LUTA, 5);
     expect(volumeDaMusica(-30)).toBe(VOLUME_LUTA);
-    // Começa em 10% e chega a 15%; na metade da espera ainda está perto do começo.
-    expect(VOLUME_INICIO).toBe(0.1);
-    expect(VOLUME_LUTA).toBe(0.15);
-    expect(volumeDaMusica(73)).toBeLessThan(0.115);
+    // Começa em 6% e chega a 10%; na metade da espera ainda está perto do começo.
+    expect(VOLUME_INICIO).toBe(0.06);
+    expect(VOLUME_LUTA).toBe(0.1);
+    expect(volumeDaMusica(73)).toBeLessThan(0.075);
   });
 
   it('só pula a música quando o desvio passa da tolerância', () => {

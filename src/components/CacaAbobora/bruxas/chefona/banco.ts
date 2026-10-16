@@ -581,6 +581,32 @@ export function ensaioPularContagemChefona(): void {
   publicar({ ...r, solta_em: new Date(agora).toISOString(), expira_em: new Date(agora + dura).toISOString(), versao: r.versao + 1 });
 }
 
+/**
+ * Adianta o relógio da contagem do ensaio para faltar `faltaS` (só adianta,
+ * nunca atrasa). A música do lobby e a chegada dela leem o mesmo relógio:
+ * pulam juntas, e a bruxa continua nascendo no drop.
+ */
+export function ensaioIrParaChefona(faltaS: number): void {
+  const r = estado;
+  const agora = Date.now();
+  if (!r || r.id >= 0 || !chefaoChegando(r, agora)) return;
+  const solta = Date.parse(r.solta_em);
+  const nova = Math.min(solta, agora + Math.max(0, faltaS) * 1000);
+  if (nova === solta) return;
+  const recuo = solta - nova;
+  publicar({
+    ...r, solta_em: new Date(nova).toISOString(),
+    expira_em: new Date(Date.parse(r.expira_em) - recuo).toISOString(), versao: r.versao + 1,
+  });
+}
+
+/** Adianta a contagem do ensaio em `s` segundos. */
+export function ensaioAdiantarChefona(s: number): void {
+  const r = estado;
+  if (!r || r.id >= 0) return;
+  ensaioIrParaChefona((Date.parse(r.solta_em) - Date.now()) / 1000 - s);
+}
+
 export function ensaioFugirChefona(): void {
   const r = estado;
   if (!r || r.id >= 0 || r.situacao !== 'ativo') return;

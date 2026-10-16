@@ -163,9 +163,10 @@ function ChefesDaCaca() {
  *
  *   - o LOBBY, para todo mundo, da contagem ao fim da luta: o convite, a
  *     espera de 3 minutos e a música (`bruxas/chefona/lobby/`);
- *   - a CENA (a bruxa, a luta e o ranking), só para quem entrou no lobby — e
- *     para o super_admin, que comanda a luta. Quem não entrou não vê a bruxa,
- *     nem as poções, nem o escudo: só o menu do lobby no alto.
+ *   - a CENA (a bruxa, a luta e o ranking), só para quem entrou no lobby — o
+ *     super_admin também (16/10/2026: «não é para aparecer nada» para quem não
+ *     escolheu). Quem não entrou não vê a bruxa, nem as poções, nem o escudo,
+ *     nem a contagem: só o menu do lobby no alto.
  *
  * Quem entra no lobby durante a contagem já monta a cena ali, escondida:
  * sprite, texturas e sons do jogo ficam prontos durante a espera (cada um
@@ -181,7 +182,7 @@ function ChefonaDaCaca({ usuario, nome, perfilId, superAdmin }: {
   const ativa = chefonaNaTela(rodada, Date.now());
   const [lobby, setLobby] = useState<number | null>(null);
   const [cena, setCena] = useState<number | null>(null);
-  const vePalco = noLobby || superAdmin;
+  const vePalco = noLobby;
   useEffect(() => { if (ativa && rodada) setLobby(rodada.id); }, [ativa, rodada]);
   useEffect(() => { if (ativa && rodada && vePalco) setCena(rodada.id); }, [ativa, rodada, vePalco]);
   // Saiu do lobby na contagem: a cena (ainda escondida) sai junto.
