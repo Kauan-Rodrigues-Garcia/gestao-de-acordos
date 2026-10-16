@@ -149,6 +149,31 @@ function tocar(f: (c: AudioContext) => void): void {
 
 const entre = (a: number, b: number) => a + Math.random() * (b - a);
 
+/** Decodifica um áudio em arquivo no contexto da caça. `null` sem áudio no navegador. */
+export function decodificarAudio(dados: ArrayBuffer): Promise<AudioBuffer | null> {
+  const c = contexto();
+  return c ? c.decodeAudioData(dados) : Promise.resolve(null);
+}
+
+/**
+ * Toca um áudio em arquivo já decodificado, no volume da caça (e no do
+ * chefão, com ele na tela): `ganho` multiplica o `VOLUME`, como o `pico` dos
+ * sintetizados. `taxa` muda a altura junto com a velocidade, como o «pitch» do
+ * Minecraft.
+ */
+export function tocarAudio(buffer: AudioBuffer, o: { ganho: number; taxa?: number; atraso?: number }): void {
+  tocar(c => {
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = o.taxa ?? 1;
+    const g = c.createGain();
+    g.gain.value = o.ganho * VOLUME * escala;
+    src.connect(g);
+    g.connect(c.destination);
+    src.start(c.currentTime + (o.atraso ?? 0));
+  });
+}
+
 // ── Os sons ─────────────────────────────────────────────────────────────────
 
 /** O disparo: estalo de ruído com um soco grave embaixo. */

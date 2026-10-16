@@ -11,11 +11,13 @@
  * - Antes dela, a CONTAGEM (1 min, como o Rei do Pop): o aviso no alto com o
  *   relógio, o tique nos 10 s finais e o 5, 4, 3, 2, 1 grande no meio.
  * - Ela flutua sob Levitação. Tiro por peça: a cabeça é CRÍTICO, o chapéu
- *   quase nada. Cada tiro deixa ela vermelha um instante (o dano do jogo), e
- *   ela vai RACHANDO como bloco sendo quebrado (três estágios). Quanto mais
- *   rachada, mais FRACA e CURTA a poção (nível II → I).
- * - Apanhou demais em pouco tempo: ela bebe uma poção ou usa a pérola do
- *   Ender (`movimento.ts`) e o tiro passa a ser «ESQUIVOU!» até o fim dela.
+ *   quase nada; o tiro que passa raspando (até `FOLGA_MIRA`) pega a peça mais
+ *   perto. Cada tiro deixa ela vermelha um instante (o dano do jogo), e ela
+ *   vai ficando ESTRAGADA (três estágios: fuligem, rasgos, curativo; ver
+ *   `estragos` em `arte.ts`), soltando fumaça. Quanto mais estragada, mais
+ *   FRACA e CURTA a poção (nível II → I).
+ * - Apanhou demais em pouco tempo: ela bebe uma poção ou JOGA a pérola do
+ *   Ender (`movimento.ts`). Só some do tiro no instante do teleporte.
  * - De tempos em tempos ela para, gargalha, ergue a garrafa e JOGA A POÇÃO: a
  *   garrafa voa em arco, gira, estoura no alvo e o efeito pega a tela. Quem
  *   atira enquanto ela prepara tira mais vida, e dano suficiente QUEBRA a
@@ -35,7 +37,10 @@
  * - Vida zero: a morte do Minecraft — vermelha, cai, tomba de lado, some num
  *   «puf» de fumaça branca e deixa os drops dela (garrafa, redstone, pedra
  *   luminosa, açúcar, olho de aranha, graveto, pólvora) e as bolinhas de XP,
- *   que voam para a barra. Toda poção ativa se desfaz na hora.
+ *   que voam para a barra; a última toca o «subiu de nível». Toda poção ativa
+ *   se desfaz na hora.
+ *
+ * Os itens e os sons são os do jogo (`texturasMC.ts`, `sonsMC.ts`, 15/10/2026).
  * - Prazo acabou: ela gargalha e vai embora.
  *
  * No laboratório (`../laboratorio.ts`) a vida é desta tela. Na caça de
@@ -49,14 +54,12 @@ import { furo } from '../../furo';
 import { somAcerto, somCerebro, somTiro, somTique } from '../../sons';
 import { NUMERO_DA_PARTE, PARTE_DO_NUMERO, alvoDaParte, centroDaParte, parteNoPonto, type Imagem, type NomeParte } from '../arte';
 import { canvasDaImagem, miniatura } from '../pixels';
+import { somBloco, somBrava, somCura, somOnda, somPuf, somPufMorte, somVento } from '../sons';
 import {
-  somArremesso, somBeber, somBloco, somBrava, somConquista, somCura, somDor, somEncantamento,
-  somGargalhada, somMorte, somOnda, somPuf, somPufMorte, somTeleporte, somTotem, somVento, somVidro, somXp,
-} from '../sons';
-import {
-  ALTURA_MC, BOCA, DROPS, ESCALA_CHEFONA, GARRAFA, LARGURA_MC, MAO_ERGUIDA, MAO_NO_ALTO, NOME_CHEFONA, OUTRA_MAO, PIXEL_MC,
-  PONTA_DO_CHAPEU, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC, PRIMEIRO_SEGURANDO_MC, PRIMEIRO_TOTEM_MC,
-  QUADROS_FLUTUANDO, TOTEM, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC, type Item,
+  ALTURA_MC, BOCA, COR_DA_CURA, DROPS, ESCALA_CHEFONA, GARRAFA, LARGURA_MC, MAO_ERGUIDA, MAO_NO_ALTO, NOME_CHEFONA, OUTRA_MAO,
+  PEROLA, PIXEL_MC, PONTA_DO_CHAPEU, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC, PRIMEIRO_SEGURANDO_MC,
+  PRIMEIRO_TOTEM_MC, QUADROS_FLUTUANDO, TEIA, TOTEM, cabecaMC, comContorno, coresDaPocao, estagioDoDano, montarBruxaMC,
+  type Item,
 } from './arte';
 import { escreverMC, larguraTextoMC } from './fonteMC';
 import {
@@ -65,9 +68,14 @@ import {
 } from './feiticos';
 import { ENCANTO, glifo, letrasComRuna } from './galatico';
 import {
-  COR_MANOBRA, NOME_MANOBRA, avancarCorpo, balanco, criarCorpo, escolherManobra, iniciarManobra, invulneravel, novoAlvo,
-  pairar, type Corpo, type Manobra, type Zona,
+  COR_MANOBRA, NOME_MANOBRA, avancarCorpo, balanco, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, invulneravel,
+  novoAlvo, pairar, type Corpo, type Manobra, type Zona,
 } from './movimento';
+import {
+  prepararSonsMC, somArremesso, somBeber, somComemora, somConquista, somDor, somEncantamento, somGargalhada, somMorte,
+  somNivel, somPerola, somTeleporte, somTotem, somVidro, somXp,
+} from './sonsMC';
+import { ORBES_MC } from './texturasMC';
 import './chefona.css';
 
 const LARG = LARGURA_MC;
@@ -101,25 +109,37 @@ const CONJURO_FORTE_S = 2.8;
 const TONTA_S = 1.8;
 /** O vermelho do dano (o do jogo). */
 const DOR_MS = 260;
-/** Entre uma poção e outra (s), normal e na fúria. A primeira sai mais cedo. */
-const INTERVALO: readonly [number, number] = [12, 18];
-const INTERVALO_FURIA: readonly [number, number] = [8, 12];
-const PRIMEIRO_FEITICO_S = 6;
+/**
+ * Entre uma poção e outra (s), normal e na fúria. A primeira sai mais cedo.
+ * Eram 12–18 s e ela quase não jogava (Kauan, 15/10/2026: «está usando poucos
+ * feitiços»); com dez poções agora, sai uma a cada 7–11 s.
+ */
+const INTERVALO: readonly [number, number] = [7, 11];
+const INTERVALO_FURIA: readonly [number, number] = [5, 8];
+const PRIMEIRO_FEITICO_S = 4;
 /** O Encantamento: o primeiro não antes disto (s de luta), e depois um a cada tanto. */
-const PRIMEIRO_FORTE_S = 25;
-const ENTRE_FORTES_S = 35;
-/** Tiros dentro de `JANELA_S` que fazem ela desviar, e a folga entre manobras. */
+const PRIMEIRO_FORTE_S = 22;
+const ENTRE_FORTES_S = 26;
+/**
+ * Tiros dentro de `JANELA_S` que fazem ela desviar, e a folga entre manobras.
+ * Subiram em 15/10/2026: com 6 tiros em 1,6 s ela desviava o tempo todo de
+ * quem clica rápido.
+ */
 const JANELA_S = 1.6;
-const LIMIAR_DESVIO = 6;
-const LIMIAR_DESVIO_FURIA = 4;
-const CHANCE_DESVIO = 0.07;
-const CHANCE_DESVIO_FURIA = 0.12;
-const FOLGA_MANOBRA_S = 2.2;
+const LIMIAR_DESVIO = 9;
+const LIMIAR_DESVIO_FURIA = 7;
+const CHANCE_DESVIO = 0.04;
+const CHANCE_DESVIO_FURIA = 0.07;
+const FOLGA_MANOBRA_S = 4;
+/** O tiro que passa a até tantos pixels da arte dela ainda pega (a peça mais perto). */
+export const FOLGA_MIRA = 4;
+/** A pérola voando: a altura do arco (px da arte). */
+const ARCO_PEROLA = 46;
 /** A Poção de Cura: quanto da vida ela devolve e quanto tempo ela leva bebendo (o gole do jogo é 1,6 s). */
 export const CURA_FRACAO = 0.22;
 export const BEBER_S = 1.8;
 /** A cor da Poção de Cura (a da Vida Instantânea do jogo). */
-const COR_CURA = '#f82423';
+const COR_CURA = COR_DA_CURA;
 /** O feitiço de proteção: quanto tempo ela leva erguendo o totem. */
 const PROTEGER_S = 1.3;
 /** O totem salvou: a Absorção (fração da vida máxima, a parte dourada) e a Regeneração. */
@@ -158,6 +178,9 @@ const CORES_REGEN = ['#cd5cab', '#e88ad0', '#f4b8e4'] as const;
 const CORES_MANTO = ['#6a1fb0', '#5a1a9a', '#8a3ad0', '#1f8a2a', '#1a1a1c'] as const;
 /** A fumaça roxa que sai da ponta do chapéu (a da referência). */
 const CORES_FUMACA_CHAPEU = ['#8a1ad0', '#a83ae8', '#6a10a8', '#c070ff'] as const;
+/** A fumaça cinza de quem está estragada (estágio 2 em diante) e as fagulhas do estágio 3. */
+const CORES_FUMACA_DANO = ['#6a6460', '#857e78', '#4e4844'] as const;
+const CORES_FAGULHA = ['#ff8a2a', '#ffb040', '#ffd870'] as const;
 
 export type Fase =
   | 'fora' | 'chegando' | 'entrando' | 'voando' | 'conjurando' | 'tonta' | 'curando' | 'protegendo'
@@ -237,7 +260,30 @@ interface Drop { item: Item; x: number; y: number; vx: number; vy: number; t: nu
 
 interface Orbe { x: number; y: number; vx: number; vy: number; t: number; voando: boolean; tam: number; pegou: boolean }
 
+/** A Pérola do Ender voando: de onde saiu e onde vai cair (px da arte). */
+interface PerolaVoando { de: { x: number; y: number }; ate: { x: number; y: number } }
+
 const entre = (a: number, b: number) => a + Math.random() * (b - a);
+
+/**
+ * A peça no ponto, ou a mais perto até `FOLGA_MIRA` pixels (15/10/2026: ela é
+ * fina no chapéu e nos pés, e voa; o tiro que passava raspando virava furo).
+ */
+export function parteComFolga(img: Imagem, x: number, y: number): number {
+  const exato = parteNoPonto(img, x, y);
+  if (exato) return exato;
+  for (let d = 2; d <= FOLGA_MIRA; d++) {
+    for (let dy = -d; dy <= d; dy++) {
+      for (let dx = -d; dx <= d; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue;
+        const p = parteNoPonto(img, x + dx, y + dy);
+        if (p) return p;
+      }
+    }
+  }
+  return 0;
+}
+
 const sorteia = <T,>(l: readonly T[]): T => l[Math.floor(Math.random() * l.length)];
 const suave = (u: number) => u * u * (3 - 2 * u);
 
@@ -270,13 +316,6 @@ function sprite(estagio: number, quadro: number, lado: 1 | -1, vermelho: boolean
   return c;
 }
 
-/** A cor misturada com preto (`k` de 0 a 1): o fundo escuro do líquido. */
-function escurecer(hex: string, k: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const canal = (s: number) => Math.round(((n >> s) & 255) * (1 - k)).toString(16).padStart(2, '0');
-  return `#${canal(16)}${canal(8)}${canal(0)}`;
-}
-
 const cacheItens = new Map<Item, Item>();
 /** O item com o contorno escuro, guardado (o `miniatura` guarda pelo objeto). */
 function contornado(it: Item): Item {
@@ -286,14 +325,40 @@ function contornado(it: Item): Item {
 }
 
 const cacheGarrafas = new Map<string, Item>();
-/** A garrafa de poção do jogo com o líquido da poção. */
-function garrafa(cor: string, clara: string): HTMLCanvasElement {
+/** A garrafa de poção do jogo com o líquido da poção (a cor multiplica o cinza do líquido, como no jogo). */
+function garrafa(cor: string): HTMLCanvasElement {
   let it = cacheGarrafas.get(cor);
   if (!it) {
-    it = contornado({ nome: cor, linhas: GARRAFA, cores: coresDaPocao(cor, clara, escurecer(cor, 0.45)) });
+    it = contornado({ nome: cor, linhas: GARRAFA, cores: coresDaPocao(cor) });
     cacheGarrafas.set(cor, it);
   }
   return miniatura(it)[0];
+}
+
+const cacheOrbes = new Map<string, HTMLCanvasElement>();
+/**
+ * A bolinha de XP do jogo: a textura em cinza pintada na hora. O jogo varia o
+ * vermelho num seno (verde ↔ amarelo) e deixa o verde no máximo; `tom` vai de
+ * 0 a 7.
+ */
+function orbe(tamanho: number, tom: number): HTMLCanvasElement {
+  const chave = `${tamanho}:${tom}`;
+  let c = cacheOrbes.get(chave);
+  if (!c) {
+    const o = ORBES_MC[Math.max(0, Math.min(ORBES_MC.length - 1, tamanho))];
+    const k = (Math.sin((tom / 8) * Math.PI * 2) + 1) / 2;
+    const r = 0.5 + 0.5 * k, b = 0.1 * k;
+    const w = o.linhas[0].length, h = o.linhas.length;
+    const img: Imagem = { largura: w, altura: h, cores: new Array(w * h).fill(null), partes: new Uint8Array(w * h) };
+    const hex = (v: number) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
+    o.linhas.forEach((l, j) => [...l].forEach((ch, i) => {
+      const g = o.cinzas[ch];
+      if (g !== undefined) img.cores[j * w + i] = `#${hex(g * r)}${hex(g)}${hex(g * b)}`;
+    }));
+    c = canvasDaImagem(img, false);
+    cacheOrbes.set(chave, c);
+  }
+  return c;
 }
 
 /** O item como imagem (um canvas novo a cada chamada: para pôr na página). */
@@ -332,33 +397,10 @@ export function toastDeConquista(titulo: string, nome: string, icone: HTMLCanvas
 }
 
 let teiaPronta: HTMLCanvasElement | null = null;
-/** A teia de aranha do jogo: oito fios e dois anéis, com sombra para ler no claro. */
+/** A teia de aranha do jogo (`texturasMC.ts`), com o contorno para ler no claro. */
 function teia(): HTMLCanvasElement {
-  if (teiaPronta) return teiaPronta;
-  const N = 21, m = 10;
-  const c = document.createElement('canvas');
-  c.width = N;
-  c.height = N;
-  const ctx = c.getContext('2d')!;
-  const fios: [number, number][] = [];
-  for (let k = 0; k < 8; k++) {
-    const a = (k * Math.PI) / 4;
-    for (let r = 0; r <= m; r++) fios.push([Math.round(m + Math.cos(a) * r), Math.round(m + Math.sin(a) * r)]);
-  }
-  for (const r of [4, 8]) {
-    for (let i = 0; i < 40; i++) {
-      const a = (i / 40) * Math.PI * 2;
-      // O anel do jogo é meio torto.
-      const rr = r + (i % 5 === 0 ? 1 : 0);
-      fios.push([Math.round(m + Math.cos(a) * rr), Math.round(m + Math.sin(a) * rr)]);
-    }
-  }
-  ctx.fillStyle = 'rgba(40,44,52,0.55)';
-  for (const [x, y] of fios) ctx.fillRect(x + 1, y + 1, 1, 1);
-  ctx.fillStyle = '#e8ecf2';
-  for (const [x, y] of fios) ctx.fillRect(x, y, 1, 1);
-  teiaPronta = c;
-  return c;
+  if (!teiaPronta) teiaPronta = canvasDaImagem(imagemDoItem(contornado(TEIA)), false);
+  return teiaPronta;
 }
 
 export class PalcoChefona {
@@ -421,6 +463,9 @@ export class PalcoChefona {
   private queda: Queda | null = null;
   private drops: Drop[] = [];
   private orbes: Orbe[] = [];
+  /** As bolinhas que já chegaram (a última toca o «subiu de nível»). */
+  private orbesPegos = 0;
+  private perola: PerolaVoando | null = null;
   private tremeAte = 0;
   private chegaEm = 0;
   private segContagem = -1;
@@ -458,6 +503,8 @@ export class PalcoChefona {
     this.observador?.observe(this.raiz);
     // O sprite fica pronto antes de ela entrar: o primeiro quadro não engasga.
     sprite(0, 0, 1, false);
+    // Os sons do jogo descem durante a contagem (sem eles, toca o sintetizado).
+    prepararSonsMC();
   }
 
   private novaCaixa(rotulo: string, aoTiro: (x: number, y: number) => void): HTMLDivElement {
@@ -672,7 +719,7 @@ export class PalcoChefona {
     this.cura = null;
     this.encerrarMesa();
     this.mudarFase('fugindo');
-    somGargalhada();
+    somComemora();
     this.aviso('Ela fugiu!', 'A bruxa voltou para a cabana do pântano');
     this.caixa.style.display = 'none';
   }
@@ -697,6 +744,7 @@ export class PalcoChefona {
     this.teias = [];
     this.drops = [];
     this.orbes = [];
+    this.perola = null;
     this.particulas = [];
     this.aneis = [];
     this.acertos = [];
@@ -788,6 +836,7 @@ export class PalcoChefona {
       case 'tonta': case 'caindo': case 'tombando': return PRIMEIRO_DOR_MC + par(200);
       case 'fugindo': return PRIMEIRO_RINDO_MC + par(140);
       default:
+        if (this.corpo && faseDaPerola(this.corpo)?.mirando) return PRIMEIRO_SEGURANDO_MC + par(180);
         if (performance.now() < this.dorAte) return PRIMEIRO_DOR_MC;
         // Acabou de jogar a garrafa: a gargalhada.
         if (this.fase === 'voando' && this.tFase < 0.5 && this.voando) return PRIMEIRO_RINDO_MC + par(120);
@@ -841,7 +890,7 @@ export class PalcoChefona {
       return;
     }
     const { lx, ly } = this.paraSprite(wx, wy);
-    const num = parteNoPonto(imagemDoQuadro(this.quadroAtual()), lx, ly);
+    const num = parteComFolga(imagemDoQuadro(this.quadroAtual()), lx, ly);
     if (!num) {
       furo(clientX, clientY);
       this.aoEvento?.({ tipo: 'errou' });
@@ -911,12 +960,12 @@ export class PalcoChefona {
       if (this.protegida) this.usarTotem(); else this.derrotar();
       return;
     }
-    // Rachou mais um estágio: as lascas grandes do bloco.
+    // Estragou mais um estágio: o «crec» e os pedaços de pano e de fuligem voando.
     if (this.estagio > this.estagioVisto) {
       this.estagioVisto = this.estagio;
       const c = this.corpo!;
       somBloco();
-      this.estilhacos(c.x, c.y, CORES_MANTO, 24);
+      this.estilhacos(c.x, c.y, [...CORES_MANTO, ...CORES_FUMACA_DANO], 24);
     }
     if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria();
     // A poção quebra se o time bater forte enquanto ela prepara.
@@ -950,7 +999,8 @@ export class PalcoChefona {
     this.ultimaManobra = tipo;
     this.folgaManobra = FOLGA_MANOBRA_S;
     this.acertos = [];
-    if (tipo === 'perola') somTeleporte(); else { somBeber(); somVento(); }
+    // A pérola faz o som quando sai da mão (o evento `lancou`); as poções, o gole.
+    if (tipo !== 'perola') { somBeber(); somVento(); }
     this.efeito(corpo.x, corpo.y, [COR_MANOBRA[tipo], '#ffffff'], 18);
     this.letreiro(NOME_MANOBRA[tipo], corpo.x, corpo.y - ALT / 2 - 8, 'esquiva');
     this.aoEvento?.({ tipo: 'manobra', manobra: tipo });
@@ -1361,8 +1411,10 @@ export class PalcoChefona {
     let itens = DROPS.filter(() => Math.random() < 0.5);
     if (itens.length < 2) itens = [...DROPS].sort(() => Math.random() - 0.5).slice(0, 2);
     this.drops = itens.map(item => ({ item, x: cx + entre(-16, 16), y: cy, vx: entre(-90, 90), vy: entre(-120, -60), t: 0, fase: Math.random() * 6, noChao: false }));
+    this.orbesPegos = 0;
     this.orbes = Array.from({ length: ORBES_XP }, () => ({
-      x: cx + entre(-8, 8), y: cy, vx: entre(-70, 70), vy: entre(-140, -50), t: entre(0, 0.3), voando: false, tam: sorteia([2, 2, 3]), pegou: false,
+      // `tam` é o quadro da textura (0 a menor): quase todas pequenas, como as do jogo.
+      x: cx + entre(-8, 8), y: cy, vx: entre(-70, 70), vy: entre(-140, -50), t: entre(0, 0.3), voando: false, tam: sorteia([0, 0, 0, 1, 1, 2]), pegou: false,
     }));
     this.corpo = null;
     this.queda = null;
@@ -1397,7 +1449,12 @@ export class PalcoChefona {
         const v = 120 + Math.max(0, o.t - 1.4) * 260;
         o.x += (dx / d) * Math.min(d, v * dt);
         o.y += (dy / d) * Math.min(d, v * dt);
-        if (d < 6) { o.pegou = true; somXp(); }
+        if (d < 6) {
+          o.pegou = true;
+          this.orbesPegos += 1;
+          // A última: o «subiu de nível» do jogo, um pouco depois do «plim».
+          if (this.orbesPegos === ORBES_XP) { somXp(); setTimeout(somNivel, 120); } else somXp();
+        }
       }
     }
     this.orbes = this.orbes.filter(o => !o.pegou);
@@ -1455,7 +1512,21 @@ export class PalcoChefona {
           break;
         case 'voando': {
           for (const e of avancarCorpo(corpo, z, dt, this.furia ? VELOCIDADE_FURIA : VELOCIDADE, Math.random)) {
-            if (e.tipo === 'some' || e.tipo === 'aparece') { this.efeito(e.x, e.y, CORES_PORTAL, 30); if (e.tipo === 'aparece') somTeleporte(); }
+            if (e.tipo === 'lancou') {
+              this.perola = { de: this.paraTelaMaoErguida(), ate: { x: e.ateX, y: e.ateY } };
+              somPerola();
+            } else if (e.tipo === 'some') {
+              // A pérola caiu: ela some daqui num redemoinho roxo...
+              this.perola = null;
+              this.efeito(e.x, e.y, CORES_PORTAL, 34);
+              this.portal(e.x, e.y, 26);
+              somTeleporte();
+            } else if (e.tipo === 'aparece') {
+              // ... e aparece onde a pérola caiu.
+              this.efeito(e.x, e.y, CORES_PORTAL, 40);
+              this.portal(e.x, e.y, 34);
+              this.anel(e.x, e.y, '#c040ff', 70, 0.4);
+            }
           }
           if (corpo.manobra) {
             // O rastro do efeito da poção que ela bebeu.
@@ -1604,6 +1675,19 @@ export class PalcoChefona {
         cor: sorteia(CORES_FUMACA_CHAPEU), tam: PIXEL_MC, g: -4, forma: 'ponto',
       });
     }
+    // Estragada (estágio 2 em diante): fumaça cinza saindo do manto; no 3, fagulhas.
+    const estagio = this.estagio;
+    if (estagio >= 2 && Math.random() < dt * (estagio === 3 ? 14 : 7)) {
+      const p = this.paraTela(entre(6, LARG - 6), entre(ALT * 0.3, ALT * 0.85));
+      this.particula({
+        x: p.x, y: p.y, vx: entre(-6, 6), vy: entre(-22, -10), vida: entre(0.8, 1.4),
+        cor: sorteia(CORES_FUMACA_DANO), tam: sorteia([PIXEL_MC, PIXEL_MC, 3]), g: -6, forma: 'ponto',
+      });
+    }
+    if (estagio === 3 && Math.random() < dt * 5) {
+      const p = this.paraTela(entre(8, LARG - 8), entre(ALT * 0.55, ALT * 0.9));
+      this.particula({ x: p.x, y: p.y, vx: entre(-20, 20), vy: entre(-50, -20), vida: entre(0.3, 0.6), cor: sorteia(CORES_FAGULHA), tam: 1, g: 60, forma: 'ponto' });
+    }
     this.sobraRastro += dt * (this.furia ? 30 : 18);
     while (this.sobraRastro >= 1) {
       this.sobraRastro -= 1;
@@ -1726,6 +1810,7 @@ export class PalcoChefona {
       if (this.conjuro?.feitico === FEITICO_FORTE) this.desenharEncanto();
     }
     if (this.voando) this.desenharGarrafaVoando();
+    this.desenharPerolaVoando();
     this.desenharOrbes(agora);
     if (this.clarao > 0) {
       c.fillStyle = `rgba(230,200,255,${this.clarao})`;
@@ -1909,12 +1994,12 @@ export class PalcoChefona {
     const preparando = this.fase === 'conjurando' && !!this.conjuro && this.conjuro.feitico !== FEITICO_FORTE;
     if (preparando) {
       const info = FEITICOS[this.conjuro!.feitico];
-      const g = garrafa(info.cor, info.corClara);
+      const g = garrafa(info.cor);
       const p = this.paraTelaMaoErguida();
       c.drawImage(g, Math.round(p.x - g.width / 2), Math.round(p.y - g.height / 2 - (Math.floor(agora / 180) % 2)));
     }
     if (this.fase === 'curando' && this.cura) {
-      const g = garrafa(COR_CURA, '#ff8a8a');
+      const g = garrafa(COR_CURA);
       const boca = this.paraTela(BOCA.x * PIXEL_MC, BOCA.y * PIXEL_MC);
       // Vira a garrafa em passos de 45° (como item do jogo, sem borrar o pixel) até o fundo ficar
       // para cima, com o gargalo na boca; cada gole dá um tranco de 1 pixel.
@@ -1926,6 +2011,12 @@ export class PalcoChefona {
       c.rotate(giro);
       c.drawImage(g, -g.width / 2, -g.height / 2);
       c.restore();
+    }
+    // A Pérola do Ender na mão, enquanto ela mira.
+    if (faseDaPerola(corpo)?.mirando) {
+      const p = miniatura(contornado(PEROLA))[0];
+      const m = this.paraTelaMaoErguida();
+      c.drawImage(p, Math.round(m.x - p.width / 2), Math.round(m.y - p.height / 2 - (Math.floor(agora / 160) % 2)));
     }
     // O totem: erguido bem alto no feitiço, e depois na outra mão enquanto ela está protegida.
     const totem = miniatura(contornado(TOTEM))[0];
@@ -1946,6 +2037,32 @@ export class PalcoChefona {
     }
   }
 
+  /** A Pérola do Ender em arco, deixando o rastro roxo de portal (a do jogo). */
+  private desenharPerolaVoando(): void {
+    const p = this.perola;
+    const corpo = this.corpo;
+    const u = corpo ? faseDaPerola(corpo)?.voo : null;
+    if (!p || u == null) return;
+    const x = p.de.x + (p.ate.x - p.de.x) * u;
+    const y = p.de.y + (p.ate.y - p.de.y) * u - ARCO_PEROLA * 4 * u * (1 - u);
+    const img = miniatura(contornado(PEROLA))[0];
+    this.c.drawImage(img, Math.round(x - img.width / 2), Math.round(y - img.height / 2));
+    if (Math.random() < 0.85) {
+      this.particula({ x: x + entre(-3, 3), y: y + entre(-3, 3), vx: entre(-10, 10), vy: entre(-6, 14), vida: entre(0.3, 0.6), cor: sorteia(CORES_PORTAL), tam: 1, g: 0, forma: 'ponto' });
+    }
+  }
+
+  /** O redemoinho do teleporte: as partículas de portal do Enderman, que caem girando para o centro. */
+  private portal(x: number, y: number, n: number): void {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, r = entre(10, 30);
+      this.particula({
+        x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 1.4, vx: -Math.cos(a) * r * 1.8, vy: -Math.sin(a) * r * 2.2 + 10,
+        vida: entre(0.4, 0.7), cor: sorteia(CORES_PORTAL), tam: sorteia([1, 1, 2]), g: 0, forma: 'ponto',
+      });
+    }
+  }
+
   /** A garrafa em arco: sobe, gira e desce no alvo. */
   private desenharGarrafaVoando(): void {
     const v = this.voando!;
@@ -1954,7 +2071,7 @@ export class PalcoChefona {
     const x = v.de.x + (v.ate.x - v.de.x) * u;
     const y = v.de.y + (v.ate.y - v.de.y) * u - v.altura * 4 * u * (1 - u);
     const info = FEITICOS[v.feitico];
-    const g = garrafa(info.cor, info.corClara);
+    const g = garrafa(info.cor);
     c.save();
     c.translate(Math.round(x), Math.round(y));
     // Gira em passos de 45°, como item do jogo voando.
@@ -1995,16 +2112,11 @@ export class PalcoChefona {
     if (!this.orbes.length) return;
     const c = this.c;
     for (const o of this.orbes) {
-      // A bolinha de XP do jogo: verde e amarela, piscando de cor.
-      const brilho = Math.floor(agora / 90 + o.x) % 2 === 0;
-      const x = Math.round(o.x), y = Math.round(o.y + (o.voando ? 0 : Math.sin(o.t * 6)));
-      const t = o.tam;
-      c.fillStyle = '#2a5a0a';
-      c.fillRect(x - 1, y - 1, t + 2, t + 2);
-      c.fillStyle = brilho ? '#d8ff4a' : '#8ae01e';
-      c.fillRect(x, y, t, t);
-      c.fillStyle = '#ffffc8';
-      c.fillRect(x, y, 1, 1);
+      // A bolinha de XP do jogo (a textura), mudando de verde para amarelo.
+      const tom = Math.floor(agora / 70 + o.x * 0.3) % 8;
+      const img = orbe(o.tam, tom);
+      const x = Math.round(o.x - img.width / 2), y = Math.round(o.y - img.height / 2 + (o.voando ? 0 : Math.sin(o.t * 6)));
+      c.drawImage(img, x, y);
     }
   }
 

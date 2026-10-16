@@ -12,6 +12,14 @@
  *   lentidao        Poção de Lentidão: teias de aranha pela tela, tudo apagado
  *   encantamento    o forte, da mesa de encantamento: abas em runas do
  *                   Alfabeto Galáctico e a tela ondulando (a náusea do jogo)
+ *   cegueira        Poção de Cegueira: a tela escurece, só a volta do mouse
+ *                   fica à vista (15/10/2026)
+ *   veneno          Poção de Veneno: a tela esverdeia e a borda pulsa, como os
+ *                   corações verdes do jogo (15/10/2026)
+ *   fraqueza        Poção de Fraqueza: a tela perde a cor e as abas desbotam
+ *                   (15/10/2026)
+ *   levitacao       Poção de Levitação: as abas e os valores flutuam, cada um
+ *                   no seu ritmo (15/10/2026)
  *
  * Tudo é VISUAL e volta sozinho: nenhum dado muda, nenhum clique é
  * bloqueado, e o operador em atendimento continua trabalhando por baixo.
@@ -45,7 +53,9 @@
  */
 import { paraGalatico } from './galatico';
 
-export type NomeFeitico = 'dano' | 'estranha' | 'invisibilidade' | 'visao' | 'lentidao' | 'encantamento';
+export type NomeFeitico =
+  | 'dano' | 'estranha' | 'invisibilidade' | 'visao' | 'lentidao' | 'encantamento'
+  | 'cegueira' | 'veneno' | 'fraqueza' | 'levitacao';
 
 export interface InfoFeitico {
   /** Como aparece no aviso: «Poção de Dano Instantâneo». */
@@ -66,9 +76,18 @@ export const FEITICOS: Readonly<Record<NomeFeitico, InfoFeitico>> = {
   visao: { titulo: 'Poção de Visão Noturna', encanto: 'A tela pisca!', duracaoMs: 6_000, cor: '#1f1fa1', corClara: '#6a6aff' },
   lentidao: { titulo: 'Poção de Lentidão', encanto: 'Teias por toda parte!', duracaoMs: 9_000, cor: '#5a6c81', corClara: '#aab8c8' },
   encantamento: { titulo: 'Encantamento', encanto: 'A tela inteira se dobra!', duracaoMs: 8_000, cor: '#7a2ad0', corClara: '#d08aff' },
+  cegueira: { titulo: 'Poção de Cegueira', encanto: 'Só dá para ver em volta do mouse!', duracaoMs: 7_000, cor: '#1f1f23', corClara: '#6a6a78' },
+  veneno: { titulo: 'Poção de Veneno', encanto: 'O Gestão está envenenado!', duracaoMs: 9_000, cor: '#4e9331', corClara: '#9ad86a' },
+  fraqueza: { titulo: 'Poção de Fraqueza', encanto: 'A tela perdeu as forças!', duracaoMs: 9_000, cor: '#484d48', corClara: '#9aa09a' },
+  levitacao: { titulo: 'Poção de Levitação', encanto: 'Nada fica parado!', duracaoMs: 10_000, cor: '#ceffff', corClara: '#ffffff' },
 };
 
-export const LISTA_FEITICOS: readonly NomeFeitico[] = ['dano', 'estranha', 'invisibilidade', 'visao', 'lentidao', 'encantamento'];
+export const LISTA_FEITICOS: readonly NomeFeitico[] = [
+  'dano', 'estranha', 'invisibilidade', 'visao', 'lentidao', 'encantamento', 'cegueira', 'veneno', 'fraqueza', 'levitacao',
+];
+
+/** As poções que pegam a tela toda (a página, sem precisar de alvo marcado). */
+const DA_TELA: readonly NomeFeitico[] = ['visao', 'encantamento', 'lentidao', 'cegueira', 'veneno', 'fraqueza'];
 
 /** O feitiço forte: conjuro mais longo, e só sai de vez em quando. */
 export const FEITICO_FORTE: NomeFeitico = 'encantamento';
@@ -202,6 +221,12 @@ export const PASSO_VISAO_MS = 380;
 
 /** A Lentidão: tudo mais apagado e azulado (as teias o palco desenha). */
 export const FILTRO_LENTIDAO = 'saturate(0.45) brightness(0.92) hue-rotate(-12deg)';
+/** O Veneno: a tela esverdeada. */
+export const FILTRO_VENENO = 'sepia(0.35) hue-rotate(45deg) saturate(1.35)';
+/** A Fraqueza: a tela sem cor e sem contraste. */
+export const FILTRO_FRAQUEZA = 'grayscale(0.85) contrast(0.88) brightness(1.04)';
+/** O véu da Cegueira e a borda do Veneno: por cima da página, embaixo da bruxa, sem pegar clique. */
+export const CLASSE_VEU = 'bx-enf-veu';
 
 // ── Os filtros da raiz, empilhados ─────────────────────────────────────────
 //
@@ -270,7 +295,8 @@ function filtroDistorcao(): { svg: SVGSVGElement; ruido: SVGElement; desloca: SV
 
 /** O feitiço tem onde cair nesta tela? */
 export function disponivel(f: NomeFeitico, alvos: AlvosFeitico): boolean {
-  if (f === 'visao' || f === 'encantamento' || f === 'lentidao') return !!alvos.raiz();
+  if (DA_TELA.includes(f)) return !!alvos.raiz();
+  if (f === 'levitacao') return alvos.abas().length + alvos.valores().length > 0;
   if (f === 'dano') return alvos.valores().length > 0;
   if (f === 'estranha') return alvos.abas().length > 0;
   return alvos.linhas().length > 0;
@@ -281,6 +307,7 @@ export function alvoDaPocao(f: NomeFeitico, alvos: AlvosFeitico): HTMLElement | 
   if (f === 'dano') return alvos.valores()[0] ?? null;
   if (f === 'estranha') return alvos.abas()[0] ?? null;
   if (f === 'invisibilidade') return alvos.linhas()[0] ?? null;
+  if (f === 'levitacao') return alvos.abas()[0] ?? alvos.valores()[0] ?? null;
   return alvos.raiz();
 }
 
@@ -302,6 +329,15 @@ function sobrepor(el: HTMLElement, texto: string, classe: string): () => void {
     if (!el.getAttribute('style')) el.removeAttribute('style');
     if (!el.getAttribute('class')) el.removeAttribute('class');
   };
+}
+
+/** O véu por cima da página (a Cegueira, a borda do Veneno). Some no `desfazer`. */
+function veu(tipo: 'cegueira' | 'veneno'): { el: HTMLDivElement; desfazer: () => void } {
+  const el = document.createElement('div');
+  el.className = `${CLASSE_VEU} ${CLASSE_VEU}-${tipo}`;
+  el.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(el);
+  return { el, desfazer: () => el.remove() };
 }
 
 /** Lança o feitiço com a força dada (1 = vida cheia). */
@@ -376,6 +412,58 @@ export function lancar(f: NomeFeitico, alvos: AlvosFeitico, r: () => number = Ma
         desfazAbas.forEach(x => x());
       },
       atingidos: [raiz, ...abas],
+    };
+  }
+  if (f === 'cegueira') {
+    const raiz = alvos.raiz();
+    if (!raiz) return { desfazer: () => {}, atingidos: [] };
+    // O buraco do véu segue o mouse: quanto mais forte, menor o que dá para ver.
+    const v = veu('cegueira');
+    v.el.style.setProperty('--bx-veu-raio', `${Math.round(190 - 70 * forca)}px`);
+    const mover = (e: PointerEvent) => {
+      v.el.style.setProperty('--bx-veu-x', `${e.clientX}px`);
+      v.el.style.setProperty('--bx-veu-y', `${e.clientY}px`);
+    };
+    window.addEventListener('pointermove', mover, { passive: true });
+    return { desfazer: () => { window.removeEventListener('pointermove', mover); v.desfazer(); }, atingidos: [raiz] };
+  }
+  if (f === 'veneno' || f === 'fraqueza') {
+    const raiz = alvos.raiz();
+    if (!raiz) return { desfazer: () => {}, atingidos: [] };
+    porFiltro(raiz, f, f === 'veneno' ? FILTRO_VENENO : FILTRO_FRAQUEZA);
+    const borda = f === 'veneno' ? veu('veneno') : null;
+    // Na Fraqueza as abas desbotam também (parte delas, pela força).
+    const abas = f === 'fraqueza' ? alvos.abas() : [];
+    const fracas = sortear(abas.length, quantosAlvos(abas.length, forca * 0.7), r).map(i => abas[i]);
+    fracas.forEach(el => el.classList.add('bx-enf-fraco'));
+    return {
+      desfazer: () => {
+        porFiltro(raiz, f, null);
+        borda?.desfazer();
+        fracas.forEach(el => {
+          el.classList.remove('bx-enf-fraco');
+          if (!el.getAttribute('class')) el.removeAttribute('class');
+        });
+      },
+      atingidos: [raiz, ...fracas],
+    };
+  }
+  if (f === 'levitacao') {
+    const todos = [...alvos.abas(), ...alvos.valores()];
+    const els = sortear(todos.length, quantosAlvos(todos.length, forca), r).map(i => todos[i]);
+    // Cada um sobe e desce no seu tempo, como mob levitando.
+    els.forEach((el, i) => {
+      el.style.setProperty('--bx-enf-atraso', `${-((i * 0.37) % 1.6)}s`);
+      el.classList.add('bx-enf-levita');
+    });
+    return {
+      desfazer: () => els.forEach(el => {
+        el.classList.remove('bx-enf-levita');
+        el.style.removeProperty('--bx-enf-atraso');
+        if (!el.getAttribute('style')) el.removeAttribute('style');
+        if (!el.getAttribute('class')) el.removeAttribute('class');
+      }),
+      atingidos: els,
     };
   }
   return { desfazer: () => {}, atingidos: [] };

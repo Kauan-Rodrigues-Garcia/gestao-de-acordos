@@ -14,13 +14,19 @@
  * ## Manobras: o desvio
  *
  * Quando apanha demais (ou na sorte), ela bebe uma poção (ou usa um item) e
- * fica intocável até o efeito passar — o tiro nessa hora é «ESQUIVOU!»:
+ * foge do tiro:
  *
  *   velocidade  Poção de Velocidade: dispara de lado
  *   salto       Poção de Salto: despenca até quase o chão e pula de volta
- *   perola      Pérola do Ender: some em partículas roxas e aparece em outro
- *               lugar (o teleporte do Enderman)
+ *   perola      Pérola do Ender: ergue a pérola, JOGA (ela voa em arco até
+ *               outro lugar) e, quando a pérola cai, ela se teleporta para lá
+ *               (o teleporte do Enderman)
  *   levitacao   Poção de Levitação: sobe de uma vez
+ *
+ * Desde 15/10/2026 ela só é intocável no instante do teleporte (`invulneravel`):
+ * antes ficava intocável a manobra inteira, e quem clicava rápido via metade
+ * dos cliques virar «ESQUIVOU!» (o Kauan: «não está indo vários cliques»). Nas
+ * poções ela continua levando tiro; o desvio é a velocidade.
  */
 
 export type Manobra = 'velocidade' | 'salto' | 'perola' | 'levitacao';
@@ -47,9 +53,18 @@ export const COR_MANOBRA: Readonly<Record<Manobra, string>> = {
 export const DURACAO_MANOBRA: Readonly<Record<Manobra, number>> = {
   velocidade: 0.65,
   salto: 1.4,
-  perola: 1.0,
+  perola: 1.5,
   levitacao: 1.2,
 };
+
+/**
+ * A Pérola do Ender, em fração da manobra: até `SAI` ela mira com a pérola na
+ * mão; de `SAI` a `CHEGA` a pérola voa; em `CHEGA` ela some e reaparece onde a
+ * pérola caiu; de `VOLTA` em diante ela já está lá, visível.
+ */
+export const PEROLA_SAI = 0.22;
+export const PEROLA_CHEGA = 0.74;
+export const PEROLA_VOLTA = 0.8;
 
 export interface Zona { x0: number; y0: number; x1: number; y1: number; chao: number }
 
@@ -86,6 +101,8 @@ export interface Corpo {
 export type EventoMovimento =
   | { tipo: 'some'; x: number; y: number }
   | { tipo: 'aparece'; x: number; y: number }
+  /** A pérola saiu da mão (de onde ela está, para onde vai). */
+  | { tipo: 'lancou'; x: number; y: number; ateX: number; ateY: number }
   | { tipo: 'fim' };
 
 /** Quão rápido a velocidade vira para o alvo (1/s). */
@@ -121,9 +138,19 @@ export function criarCorpo(z: Zona, r: () => number): Corpo {
   return c;
 }
 
-/** Na manobra ela não leva tiro. */
+/** Só no teleporte da pérola ela não leva tiro (some de um lugar e aparece no outro). */
 export function invulneravel(c: Corpo): boolean {
-  return c.manobra !== null;
+  return c.manobra?.tipo === 'perola' && !c.visivel;
+}
+
+/** Onde está a manobra da pérola: mirando, com a pérola no ar (0–1 do voo), ou já foi. */
+export function faseDaPerola(c: Corpo): { mirando: boolean; voo: number | null } | null {
+  const m = c.manobra;
+  if (!m || m.tipo !== 'perola') return null;
+  const u = m.t / m.dura;
+  if (u < PEROLA_SAI) return { mirando: true, voo: null };
+  if (u < PEROLA_CHEGA) return { mirando: false, voo: (u - PEROLA_SAI) / (PEROLA_CHEGA - PEROLA_SAI) };
+  return { mirando: false, voo: null };
 }
 
 /** Uma manobra que caiba onde ela está (o salto precisa de chão; a levitação, de céu). */
@@ -143,7 +170,14 @@ export function iniciarManobra(c: Corpo, tipo: Manobra, z: Zona, r: () => number
   const dir: 1 | -1 = c.x - z.x0 > z.x1 - c.x ? -1 : 1;
   let x1 = c.x, y1 = c.y;
   if (tipo === 'velocidade') x1 = limitar(c.x + dir * 150, z.x0, z.x1);
-  if (tipo === 'perola') { x1 = entre(r, z.x0, z.x1); y1 = entre(r, z.y0, z.y1); }
+  if (tipo === 'perola') {
+    // Longe de onde ela está: a pérola tem que ir de verdade para outro canto.
+    for (let i = 0; i < 8; i++) {
+      x1 = entre(r, z.x0, z.x1);
+      y1 = entre(r, z.y0, z.y1);
+      if (Math.abs(x1 - c.x) > (z.x1 - z.x0) / 3) break;
+    }
+  }
   c.manobra = { tipo, t: 0, dura: DURACAO_MANOBRA[tipo], x0: c.x, y0: c.y, x1, y1, dir, trocou: false };
   c.lado = dir;
   c.giro = 0;
@@ -175,11 +209,18 @@ function passoManobra(c: Corpo, z: Zona, dt: number): EventoMovimento[] {
       break;
     }
     case 'perola': {
-      if (u < 0.3) c.visivel = true;
-      else if (u < 0.7) {
-        if (c.visivel) { c.visivel = false; ev.push({ tipo: 'some', x: c.x, y: c.y }); }
-        if (!m.trocou && u >= 0.5) { m.trocou = true; c.x = m.x1; c.y = m.y1; }
-      } else if (!c.visivel) {
+      // Parada no ar enquanto mira e enquanto a pérola voa; olha para onde jogou.
+      c.lado = m.x1 >= m.x0 ? 1 : -1;
+      if (u >= PEROLA_SAI && m.t - dt < PEROLA_SAI * m.dura) ev.push({ tipo: 'lancou', x: c.x, y: c.y, ateX: m.x1, ateY: m.y1 });
+      if (u >= PEROLA_CHEGA && !m.trocou) {
+        // A pérola caiu: ela some daqui e aparece lá.
+        m.trocou = true;
+        ev.push({ tipo: 'some', x: c.x, y: c.y });
+        c.visivel = false;
+        c.x = m.x1;
+        c.y = m.y1;
+      }
+      if (u >= PEROLA_VOLTA && !c.visivel) {
         c.visivel = true;
         ev.push({ tipo: 'aparece', x: c.x, y: c.y });
       }

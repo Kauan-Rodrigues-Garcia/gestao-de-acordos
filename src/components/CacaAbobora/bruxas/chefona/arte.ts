@@ -32,6 +32,10 @@
  * o tiro por peça, o crítico na cabeça e o dano vêm de `alvoDaParte`.
  */
 import { NUMERO_DA_PARTE, type Imagem, type NomeParte } from '../arte';
+import {
+  ACUCAR_MC, CINZA_DO_LIQUIDO_MC, GARRAFA_VAZIA_MC, GLOWSTONE_MC, GRAVETO_MC, OLHO_MC, PEROLA_MC, POCAO_MC, POLVORA_MC,
+  REDSTONE_MC, TEIA_MC, TOTEM_MC, VIDRO_MC,
+} from './texturasMC';
 
 /** O modelo em texels, com o contorno. */
 export const TEXELS_LARGURA = 18;
@@ -320,15 +324,20 @@ function braco(tipo: Braco, por: (x: number, y: number, l: string) => void, dy: 
   por(15, mao + 1 + dy, 'T');
 }
 
-/** O modelo de frente, texel a texel, no quadro pedido. */
-export function montarTexels(quadro: number): Texels {
+/** O modelo de frente, texel a texel, no quadro pedido, com o estrago do estágio (`estragos`). */
+export function montarTexels(quadro: number, estagio = 0): Texels {
   const qd = QUADROS_MC[((quadro % QUADROS_MC.length) + QUADROS_MC.length) % QUADROS_MC.length];
   const W = TEXELS_LARGURA, H = TEXELS_ALTURA;
   const t: Texels = { cores: new Array(W * H).fill(null), partes: new Uint8Array(W * H) };
+  const estrago = estragos(estagio);
   const por = (x: number, y: number, letra: string, xo = x, yo = y) => {
     if (x < 0 || y < 0 || x >= W || y >= H) return;
     const l = LETRAS[letra];
-    t.cores[y * W + x] = corDa(l, xo, yo);
+    // O estrago mora na posição do MODELO: anda junto quando ela respira ou gargalha.
+    const e = estrago.get(yo * W + xo);
+    if (e === 'some') return;
+    const base = corDa(l, xo, yo);
+    t.cores[y * W + x] = !e ? base : 'cor' in e ? e.cor : misturar(base, e.mistura, e.k);
     t.partes[y * W + x] = NUMERO_DA_PARTE[l.parte];
   };
   const dyCorpo = qd.respira;
@@ -384,14 +393,24 @@ export function texelsParaImagem(t: Texels): Imagem {
   return img;
 }
 
-// ── O dano (15/10/2026) ────────────────────────────────────────────────────
+// ── O dano (15/10/2026, refeito na mesma noite) ────────────────────────────
 //
-// No Minecraft nada sangra: o que «apanha» são os blocos, que racham em dez
-// estágios antes de quebrar. Ela racha assim também, em três estágios (75%,
-// 50% e 25% da vida). As rachaduras são linhas de texel que andam ao acaso a
-// partir de pontos fixos, então ficam no mesmo lugar em todo quadro.
+// A primeira versão rachava como bloco: linhas de texel quase pretas. Numa
+// bruxa que já é preta e roxa, isso virou «ela ficando só preta» (Kauan). Agora
+// ela fica ESTRAGADA, cada estágio por cima do anterior (75%, 50% e 25% da vida):
+//
+//   1  fuligem no manto e nos ombros, um arranhão na bochecha, a pedra verde do
+//      chapéu lascando
+//   2  o manto rasga (aparece o linho cru por baixo), um remendo no ombro, a
+//      barra esfarrapada, o olho roxo, a aba do chapéu queimada
+//   3  mais rasgo e mais fuligem, a manga rasgada, a pele esverdeada de quem
+//      está passando mal, um curativo no nariz e brasas no manto
+//
+// Tudo em posições fixas do MODELO (sorteio fixo por texel), então o estrago
+// não pisca e só cresce. O tiro por peça usa o sprite inteiro (`imagemDoQuadro`
+// no palco): um rasgo não vira buraco na mira.
 
-/** 0 inteira … 3 em pedaços. */
+/** 0 inteira … 3 em frangalhos. */
 export function estagioDoDano(fracaoDaVida: number): 0 | 1 | 2 | 3 {
   if (fracaoDaVida > 0.75) return 0;
   if (fracaoDaVida > 0.5) return 1;
@@ -399,40 +418,118 @@ export function estagioDoDano(fracaoDaVida: number): 0 | 1 | 2 | 3 {
   return 3;
 }
 
-const COR_RACHADURA = '#0e0b14';
-const RACHADURAS_POR_ESTAGIO = [0, 3, 6, 10] as const;
-const PASSOS_POR_ESTAGIO = [0, 4, 6, 8] as const;
+/** O que acontece com um texel: cor nova, misturado com outra cor, ou some (o pano que rasgou). */
+export type Estrago = { cor: string } | { mistura: string; k: number } | 'some';
 
-/** Os texels de rachadura do estágio (posições fixas, em texel). */
-export function rachaduras(estagio: number): Set<number> {
-  const s = new Set<number>();
-  const e = Math.max(0, Math.min(3, estagio));
-  for (let k = 0; k < RACHADURAS_POR_ESTAGIO[e]; k++) {
-    let x = 4 + Math.floor(acaso(k, 1, 11) * 10);
-    let y = 4 + Math.floor(acaso(k, 2, 13) * 34);
-    for (let p = 0; p < PASSOS_POR_ESTAGIO[e]; p++) {
-      s.add(y * TEXELS_LARGURA + x);
-      const r = acaso(k, p, 17);
-      if (r < 0.4) x += 1; else if (r < 0.7) x -= 1;
-      y += acaso(p, k, 19) < 0.6 ? 1 : 0;
-      x = Math.max(0, Math.min(TEXELS_LARGURA - 1, x));
-      y = Math.min(TEXELS_ALTURA - 1, y);
-    }
-  }
-  return s;
+/** As cores do estrago: nenhuma é preta (a bruxa já é escura). */
+export const CORES_ESTRAGO = {
+  fuligem: '#5b4a3e',
+  linho: ['#dcc7a1', '#b59d77', '#8c7556'],
+  remendo: ['#7d5c33', '#9b7747'],
+  costura: '#d8c090',
+  arranhao: ['#b85a52', '#9a4a44'],
+  olhoRoxo: '#6a3f78',
+  curativo: ['#e9cfa6', '#f3dcb5'],
+  enjoo: '#8fa070',
+  pedraLascada: ['#707070', '#555555'],
+  queimado: ['#4b3221', '#3a281c'],
+  brasa: ['#ff8a2a', '#ffb040'],
+} as const;
+
+/** Mistura duas cores (`k` = quanto da segunda). */
+export function misturar(a: string, b: string, k: number): string {
+  const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16);
+  const canal = (s: number) => Math.round(((na >> s) & 255) * (1 - k) + ((nb >> s) & 255) * k).toString(16).padStart(2, '0');
+  return `#${canal(16)}${canal(8)}${canal(0)}`;
 }
 
-/** Os texels com as rachaduras do estágio. Só as cores mudam (o tiro por peça continua igual). */
-export function rachar(t: Texels, estagio: number): Texels {
-  if (estagio <= 0) return t;
-  const cores = t.cores.slice();
-  for (const i of rachaduras(estagio)) if (cores[i] && cores[i] !== CORES_MC.contorno) cores[i] = COR_RACHADURA;
-  return { cores, partes: t.partes };
+const cacheEstragos = new Map<number, ReadonlyMap<number, Estrago>>();
+
+/**
+ * Os texels estragados do estágio, pela posição no `MODELO` (y × largura + x).
+ * Cada tipo de estrago tem a sua ordem fixa: o estágio seguinte pega os mesmos
+ * do anterior e mais alguns.
+ */
+export function estragos(estagio: number): ReadonlyMap<number, Estrago> {
+  const e = Math.max(0, Math.min(3, Math.floor(estagio)));
+  const pronto = cacheEstragos.get(e);
+  if (pronto) return pronto;
+  const W = TEXELS_LARGURA;
+  const m = new Map<number, Estrago>();
+  cacheEstragos.set(e, m);
+  if (e === 0) return m;
+  const E = CORES_ESTRAGO;
+  const letra = (x: number, y: number) => MODELO[y]?.[x] ?? '.';
+  const por = (x: number, y: number, v: Estrago) => { if (letra(x, y) !== '.') m.set(y * W + x, v); };
+  const onde = (f: (ch: string, x: number, y: number) => boolean, semente: number) => {
+    const l: [number, number][] = [];
+    MODELO.forEach((linha, y) => [...linha].forEach((ch, x) => { if (ch !== '.' && f(ch, x, y)) l.push([x, y]); }));
+    return l.sort((a, b) => acaso(a[0], a[1], semente) - acaso(b[0], b[1], semente));
+  };
+  const ROUPA = 'oOdDrRxvV';
+
+  // 1 · A fuligem: borrões de três texels no manto e nos ombros.
+  for (const [x, y] of onde(ch => ROUPA.includes(ch), 21).slice(0, [0, 4, 8, 13][e])) {
+    por(x, y, { mistura: E.fuligem, k: e === 3 ? 0.72 : 0.62 });
+    for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
+      if (ROUPA.includes(letra(x + dx, y + dy)) && !m.has((y + dy) * W + x + dx)) por(x + dx, y + dy, { mistura: E.fuligem, k: 0.45 });
+    }
+  }
+  // 1 · A pedra verde do chapéu lascando.
+  onde(ch => ch === 'g' || ch === 'G', 23).slice(0, e).forEach(([x, y], i) => por(x, y, { cor: E.pedraLascada[i % 2] }));
+  // 1 · O arranhão na bochecha.
+  por(6, 16, { cor: E.arranhao[0] });
+  por(6, 17, { cor: E.arranhao[1] });
+
+  if (e >= 2) {
+    // 2 · O manto rasgado: o linho cru aparece por baixo, num rasgo de três texels.
+    for (const [x, y] of onde((ch, _x, y) => (ch === 'r' || ch === 'R') && y >= 27 && y <= 33, 29).slice(0, e === 3 ? 4 : 2)) {
+      [[0, 0], [1, 1], [1, 2]].forEach(([dx, dy], i) => { if (ROUPA.includes(letra(x + dx, y + dy))) por(x + dx, y + dy, { cor: E.linho[i] }); });
+    }
+    // 2 · O remendo no ombro, com a costura no canto.
+    for (const [x, y] of onde((ch, x, y) => ch === 'O' && y >= 21 && y <= 22 && (x <= 5 || x >= 12), 31).slice(0, e === 3 ? 2 : 1)) {
+      por(x, y, { cor: E.remendo[0] });
+      por(x + 1, y, { cor: E.remendo[1] });
+      por(x, y + 1, { cor: E.remendo[1] });
+      por(x + 1, y + 1, { cor: E.costura });
+    }
+    // 2 · A barra esfarrapada: a última linha do manto perde pedaços.
+    const barra = onde((_ch, _x, y) => y === 36, 33).slice(0, e === 3 ? 5 : 3);
+    barra.forEach(([x, y]) => por(x, y, 'some'));
+    if (e === 3) barra.slice(0, 2).forEach(([x]) => por(x, 35, 'some'));
+    // 2 · O olho roxo (o da esquerda).
+    for (const [x, y] of [[5, 13], [5, 14], [5, 15], [6, 15], [7, 15]] as const) por(x, y, { mistura: E.olhoRoxo, k: 0.55 });
+    // 2 · A aba do chapéu queimada na ponta.
+    por(4, 8, 'some');
+    por(5, 8, { cor: E.queimado[0] });
+    por(4, 9, { cor: E.queimado[1] });
+  }
+
+  if (e >= 3) {
+    // 3 · A manga rasgada na beirada.
+    for (const [x, y] of [[1, 20], [1, 22], [16, 21], [16, 23]] as const) por(x, y, 'some');
+    // 3 · A pele esverdeada de quem está passando mal (sem apagar o olho roxo nem o arranhão).
+    for (const [x, y] of onde(ch => 'sS1t'.includes(ch), 37)) if (!m.has(y * W + x)) por(x, y, { mistura: E.enjoo, k: 0.22 });
+    // 3 · O curativo atravessado no nariz.
+    por(7, 16, { cor: E.curativo[0] });
+    por(8, 16, { cor: E.curativo[1] });
+    por(9, 16, { cor: E.curativo[1] });
+    por(10, 16, { cor: E.curativo[0] });
+    // 3 · Mais aba queimada, com a brasa acesa, e o chapéu chamuscado.
+    por(13, 8, 'some');
+    por(12, 8, { cor: E.brasa[0] });
+    por(6, 8, { cor: E.brasa[1] });
+    onde(ch => ch === 'H', 41).slice(0, 2).forEach(([x, y]) => por(x, y, { mistura: E.queimado[0], k: 0.5 }));
+    // 3 · As brasas na beirada do manto.
+    onde((ch, x, y) => (x === 4 || x === 13) && y >= 28 && y <= 35 && 'rR'.includes(ch), 43).slice(0, 2)
+      .forEach(([x, y], i) => por(x, y, { cor: E.brasa[i % 2] }));
+  }
+  return m;
 }
 
 /** O sprite pronto: quadro, estágio do dano. */
 export function montarBruxaMC(quadro: number, estagio = 0): Imagem {
-  return texelsParaImagem(rachar(montarTexels(quadro), estagio));
+  return texelsParaImagem(montarTexels(quadro, estagio));
 }
 
 /** Só a cabeça com o chapéu e a gola (o retrato da contagem), em texels. */
@@ -450,158 +547,63 @@ export function cabecaMC(): Imagem {
   return img;
 }
 
-// ── A garrafa de poção e os itens (os da referência, 16 × 16) ──────────────
+// ── A garrafa de poção e os itens (os do jogo, `texturasMC.ts`) ─────────────
 //
-// A garrafa da referência: rolha laranja (C) presa num aro de vidro, com a
-// rolha aparecendo clara pelo vidro (K) e escura embaixo (c); o gargalo oco
-// (só as duas paredes de vidro, g); os ombros; o bojo redondo com o vidro
-// em volta, o líquido (L), o brilho do líquido (l), o fundo escuro (D), o
-// reflexo comprido do vidro (w) e o quadradinho rosado de luz (h). TODA poção
-// é esta garrafa, só trocando as cores do líquido. Sem líquido, é a Garrafa
-// de Vidro.
+// Desde 15/10/2026 as texturas são as do Minecraft (o Kauan pediu: «pode puxar
+// para itens e detalhes»; o totem desenhado à mão tinha ficado feio). Toda
+// poção é a garrafa do jogo, e o líquido é o cinza do `potion_overlay`
+// multiplicado pela cor da poção, como o jogo faz.
 
 export interface Item { nome: string; linhas: readonly string[]; cores: Readonly<Record<string, string>> }
 
-export const GARRAFA: readonly string[] = [
-  '......CCCC......',
-  '.....gKKKKg.....',
-  '.....gccccg.....',
-  '......g..g......',
-  '......g..g......',
-  '.....gg..gg.....',
-  '....gwhLLLDg....',
-  '...gLLwLLLLDg...',
-  '..gLLLwLLLLLDg..',
-  '..gLLLwLLLLlDg..',
-  '..gLLLLLLLgLDg..',
-  '..gDLLLLLLgLDg..',
-  '..gDDLLLLLLDDg..',
-  '...gDDDDlDDDg...',
-  '....gggggggg....',
-  '................',
-];
+/** A garrafa de poção do jogo (letras: vidro e rolha; dígitos: o líquido). */
+export const GARRAFA: readonly string[] = POCAO_MC;
 
-const VIDRO = { C: '#d0783a', K: '#ecc0a0', c: '#a2501e', g: '#cfe4f6', w: '#ffffff' } as const;
-
-/** A cor misturada com branco (`k` de 0 a 1): o quadradinho de luz. */
-function clarear(hex: string, k: number): string {
+/** A cor multiplicada pelo cinza (0–255), como o jogo pinta o líquido. */
+function multiplicar(hex: string, cinza: number): string {
   const n = parseInt(hex.slice(1), 16);
-  const canal = (s: number) => Math.round(((n >> s) & 255) + (255 - ((n >> s) & 255)) * k).toString(16).padStart(2, '0');
+  const canal = (s: number) => Math.round((((n >> s) & 255) * cinza) / 255).toString(16).padStart(2, '0');
   return `#${canal(16)}${canal(8)}${canal(0)}`;
 }
 
-/** As cores de uma poção: o líquido, o brilho e o fundo (o resto é a garrafa, igual para todas). */
-export function coresDaPocao(cor: string, clara: string, escura: string): Record<string, string> {
-  return { ...VIDRO, L: cor, l: clara, D: escura, h: clarear(cor, 0.55) };
+/** As cores de uma poção: o vidro do jogo e o líquido na cor dela (o jogo só multiplica a cor pelo cinza). */
+export function coresDaPocao(cor: string): Record<string, string> {
+  const liquido = Object.fromEntries(Object.entries(CINZA_DO_LIQUIDO_MC).map(([k, g]) => [k, multiplicar(cor, g)]));
+  return { ...VIDRO_MC, ...liquido };
 }
 
-/** O Bastão de Bruxa: a vareta na diagonal, em gomos claros e escuros. */
-const BASTAO: readonly string[] = [
-  '................',
-  '.............dd.',
-  '............dWd.',
-  '...........dwd..',
-  '..........dWd...',
-  '.........dwd....',
-  '........dWd.....',
-  '.......dwd......',
-  '......dWd.......',
-  '.....dwd........',
-  '....dWd.........',
-  '...dwd..........',
-  '..dWd...........',
-  '.dwd............',
-  '.dd.............',
-  '................',
-];
+/** A Poção de Cura (Vida Instantânea): a cor do jogo. */
+export const COR_DA_CURA = '#f82423';
 
-/** O montinho de pó (o mesmo para a redstone e a glowstone, só trocando a cor). */
-const MONTE: readonly string[] = [
-  '................',
-  '................',
-  '.......rr.......',
-  '......rRHr......',
-  '.....rRHRRr.....',
-  '....rRRmHRRr....',
-  '...rHRRRRRmRr...',
-  '..rHHRRmRRHRRr..',
-  '.rRHRRRRRRRmRRr.',
-  '.rRRHRmRRRHRRRr.',
-  '..rRmRRrRRRmrr..',
-  '...rrRRRRmRrr...',
-  '....rrRRRRrr....',
-  '......rrrr......',
-  '................',
-  '................',
-];
-
-const OLHO: readonly string[] = [
-  '................',
-  '................',
-  '....rrrrrr......',
-  '...rHHRRRRr.....',
-  '..rHHRRRRRRr....',
-  '..rHRkkRRRRr....',
-  '..rRRkkkRRMr....',
-  '..rRRRRRRRMr....',
-  '...rrRRRRRMr....',
-  '.....rrRRRMr....',
-  '.......rRRMr....',
-  '.......rRRRRrr..',
-  '........rRRRMRr.',
-  '........rRRrrr..',
-  '.........rr.....',
-  '................',
-];
-
-/** Os drops dela, como na referência: cada um sai 0 ou 1 vez. */
+/** Os drops dela, como no jogo (a bruxa larga estes sete, e a poção que bebia). */
 export const DROPS: readonly Item[] = [
-  { nome: 'Poção de Cura', linhas: GARRAFA, cores: coresDaPocao('#d01a24', '#ff6a6a', '#860a12') },
-  { nome: 'Poção de Veneno', linhas: GARRAFA, cores: coresDaPocao('#4e8a1c', '#8ac83a', '#2a5a10') },
-  { nome: 'Poção de Fraqueza', linhas: GARRAFA, cores: coresDaPocao('#7a2ae0', '#b88aff', '#4a1090') },
-  { nome: 'Garrafa de Vidro', linhas: GARRAFA, cores: { ...VIDRO } },
-  { nome: 'Bastão de Bruxa', linhas: BASTAO, cores: { W: '#b8864a', w: '#94642e', d: '#3e2810' } },
-  { nome: 'Pó de Redstone', linhas: MONTE, cores: { r: '#5a0606', R: '#c41410', m: '#8a0a08', H: '#ff3a2a' } },
-  { nome: 'Pó de Glowstone', linhas: MONTE, cores: { r: '#7a5208', R: '#eab21c', m: '#c48a14', H: '#fff27a' } },
-  { nome: 'Olho de Aranha', linhas: OLHO, cores: { r: '#5a0818', R: '#c02a48', M: '#9a1a34', H: '#ff96aa', k: '#1a0a0e' } },
+  { nome: 'Poção de Cura', linhas: GARRAFA, cores: coresDaPocao(COR_DA_CURA) },
+  GARRAFA_VAZIA_MC,
+  GLOWSTONE_MC,
+  REDSTONE_MC,
+  OLHO_MC,
+  ACUCAR_MC,
+  POLVORA_MC,
+  GRAVETO_MC,
 ];
 
-/** O Totem da Imortalidade do jogo: o ídolo dourado de olhos e barriga de esmeralda. */
-export const TOTEM: Item = {
-  nome: 'Totem da Imortalidade',
-  linhas: [
-    '................',
-    '.....oooooo.....',
-    '....owYYYYYo....',
-    '....oYGYYGYo....',
-    '....oyYYYYyo....',
-    '.....oyyyyo.....',
-    '.oooooYYYYooooo.',
-    'oYYYYYYwYYYYYYYo',
-    'oyyyoYYYYYYoyyyo',
-    '.ooo.oYGGYo.ooo.',
-    '.....oYYYYo.....',
-    '.....oyYYyo.....',
-    '......oYYo......',
-    '......oyyo......',
-    '.......oo.......',
-    '................',
-  ],
-  cores: { o: '#6a4608', Y: '#f8d64a', y: '#c8921a', w: '#fff6b0', G: '#36dc58' },
-};
+/** O Totem da Imortalidade do jogo. */
+export const TOTEM: Item = TOTEM_MC;
+
+/** A Pérola do Ender do jogo (a que ela joga para se teleportar). */
+export const PEROLA: Item = PEROLA_MC;
+
+/** A teia de aranha do jogo (a Poção de Lentidão). */
+export const TEIA: Item = TEIA_MC;
 
 /** O item com contorno escuro de 1 pixel (para ler na tela clara do Gestão). */
 export function comContorno(it: Item): Item {
   const h = it.linhas.length, w = it.linhas[0].length;
   const cheio = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && it.linhas[y][x] !== '.';
+  const fora = 'o' in it.cores ? '#' : 'o';
   const linhas = it.linhas.map((l, y) => [...l].map((ch, x) => {
     if (ch !== '.') return ch;
-    return cheio(x + 1, y) || cheio(x - 1, y) || cheio(x, y + 1) || cheio(x, y - 1) ? 'o' : '.';
+    return cheio(x + 1, y) || cheio(x - 1, y) || cheio(x, y + 1) || cheio(x, y - 1) ? fora : '.';
   }).join(''));
-  // O totem usa `o` para o dourado escuro: o contorno de fora ganha outra letra.
-  if ('o' in it.cores) {
-    const fora = linhas.map((l, y) => [...l].map((ch, x) => (ch === 'o' && it.linhas[y][x] === '.' ? '#' : ch)).join(''));
-    return { ...it, linhas: fora, cores: { ...it.cores, '#': CORES_MC.contorno } };
-  }
-  return { ...it, linhas, cores: { ...it.cores, o: CORES_MC.contorno } };
+  return { ...it, linhas, cores: { ...it.cores, [fora]: CORES_MC.contorno } };
 }

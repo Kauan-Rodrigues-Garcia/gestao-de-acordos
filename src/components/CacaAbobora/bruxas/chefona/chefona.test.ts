@@ -2,25 +2,30 @@
  * chefona.test.ts — a Bruxa do Pântano (a bruxa do Minecraft), sem navegador.
  *
  * O que se protege: o modelo monta inteiro, com as peças certas para o tiro;
- * as manobras deixam ela intocável e dentro da tela; e toda poção volta a
- * página EXATAMENTE como estava — nenhum texto do React é reescrito.
+ * o tiro raspando ainda pega; as manobras deixam ela dentro da tela e só a
+ * pérola some do tiro (no teleporte); o estrago cresce sem ficar preto; e toda
+ * poção volta a página EXATAMENTE como estava — nenhum texto do React é
+ * reescrito.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NUMERO_DA_PARTE, alvoDaParte, parteNoPonto } from '../arte';
 import {
   ALTURA_MC, CORES_MC, DROPS, GARRAFA, LARGURA_MC, MODELO, PIXEL_MC, PRIMEIRO_BEBENDO_MC, PRIMEIRO_DOR_MC, PRIMEIRO_RINDO_MC,
   PRIMEIRO_SEGURANDO_MC, PRIMEIRO_TOTEM_MC, QUADROS_FLUTUANDO, QUADROS_MC, TEXELS_ALTURA, TEXELS_LARGURA, TOTEM,
-  cabecaMC, comContorno, estagioDoDano, montarBruxaMC, montarTexels, rachar, rachaduras,
+  CORES_ESTRAGO, PEROLA, cabecaMC, comContorno, coresDaPocao, estagioDoDano, estragos, montarBruxaMC, montarTexels,
 } from './arte';
 import { glifoMC, larguraTextoMC } from './fonteMC';
 import { ENCANTO, letrasComRuna, paraGalatico } from './galatico';
 import {
-  ATRIBUTO_TEXTO, FEITICOS, FILTROS_VISAO, FILTRO_LENTIDAO, LISTA_FEITICOS, PASSO_VISAO_MS, alvosPorAtributo, disponivel,
+  ATRIBUTO_TEXTO, CLASSE_VEU, FEITICOS, FILTROS_VISAO, FILTRO_LENTIDAO, FILTRO_VENENO, LISTA_FEITICOS, PASSO_VISAO_MS,
+  alvosPorAtributo, disponivel,
   duracaoDoFeitico, forcaDoFeitico, lancar, negativar, nivelDaPocao, nomeEstranho, quantosAlvos, sortearSumico,
 } from './feiticos';
 import {
-  MANOBRAS, avancarCorpo, criarCorpo, escolherManobra, iniciarManobra, invulneravel, type Zona,
+  MANOBRAS, avancarCorpo, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, invulneravel, type Zona,
 } from './movimento';
+import { FOLGA_MIRA, parteComFolga } from './palcoChefona';
+import { CINZA_DO_LIQUIDO_MC, VIDRO_MC } from './texturasMC';
 
 /** Sorteio repetível (mulberry32), como em `../bruxas.test.ts`. */
 function semente(n: number): () => number {
@@ -106,63 +111,94 @@ describe('o modelo da bruxa do Minecraft', () => {
     expect(c.cores).not.toContain(CORES_MC.ombroFundo);
   });
 
-  it('os drops da referência: 16 × 16, toda letra na paleta, e o contorno em volta', () => {
+  it('o tiro que passa raspando ainda pega a peça mais perto, até FOLGA_MIRA', () => {
+    const img = montarBruxaMC(0);
+    // Logo acima da ponta do chapéu (texel 9, 1): fora do sprite.
+    const x = 9 * PIXEL_MC, y = 1 * PIXEL_MC - FOLGA_MIRA;
+    expect(parteNoPonto(img, x, y)).toBe(0);
+    expect(parteComFolga(img, x, y)).toBe(NUMERO_DA_PARTE.chapeu);
+    // Longe demais, continua furo.
+    expect(parteComFolga(img, 0, 0)).toBe(0);
+  });
+
+  it('os drops do jogo: 16 × 16, toda letra com cor, e o contorno em volta', () => {
     expect(DROPS.map(d => d.nome)).toEqual([
-      'Poção de Cura', 'Poção de Veneno', 'Poção de Fraqueza', 'Garrafa de Vidro',
-      'Bastão de Bruxa', 'Pó de Redstone', 'Pó de Glowstone', 'Olho de Aranha',
+      'Poção de Cura', 'Garrafa de Vidro', 'Pó de Glowstone', 'Pó de Redstone', 'Olho de Aranha', 'Açúcar', 'Pólvora', 'Graveto',
     ]);
-    for (const d of DROPS) {
+    for (const d of [...DROPS, TOTEM, PEROLA]) {
       const c = comContorno(d);
       expect(c.linhas).toHaveLength(16);
       for (const l of c.linhas) {
         expect(l).toHaveLength(16);
-        // A garrafa vazia não tem líquido: L, l, D e h ficam transparentes nela.
-        for (const ch of l) if (ch !== '.' && !(d.nome === 'Garrafa de Vidro' && 'LlDh'.includes(ch))) expect(c.cores[ch], `${d.nome} «${ch}»`).toBeTruthy();
+        for (const ch of l) if (ch !== '.') expect(c.cores[ch], `${d.nome} «${ch}»`).toBeTruthy();
       }
+      expect(c.linhas.join('')).toContain('o');
+      expect(c.cores.o).toBe(CORES_MC.contorno);
     }
   });
 
-  it('toda poção é a mesma garrafa da referência, só trocando a cor do líquido', () => {
-    const pocoes = DROPS.filter(d => d.nome.startsWith('Poção'));
-    expect(pocoes).toHaveLength(3);
-    for (const p of pocoes) {
-      expect(p.linhas).toBe(GARRAFA);
-      for (const vidro of ['C', 'K', 'c', 'g', 'w']) expect(p.cores[vidro]).toBe(pocoes[0].cores[vidro]);
-    }
-    expect(new Set(pocoes.map(p => p.cores.L)).size).toBe(3);
+  it('toda poção é a garrafa do jogo: o vidro igual, o líquido é a cor multiplicada pelo cinza', () => {
+    expect(DROPS[0].linhas).toBe(GARRAFA);
+    const verde = coresDaPocao('#4e9331'), vermelha = coresDaPocao('#f82423');
+    for (const k of Object.keys(VIDRO_MC)) expect(verde[k]).toBe(vermelha[k]);
+    for (const k of Object.keys(CINZA_DO_LIQUIDO_MC)) expect(verde[k]).not.toBe(vermelha[k]);
+    // Onde o líquido é branco (255), a cor é a da poção, sem mudar.
+    const branco = Object.entries(CINZA_DO_LIQUIDO_MC).find(([, g]) => g === 255)![0];
+    expect(verde[branco]).toBe('#4e9331');
   });
 
-  it('o Totem da Imortalidade: 16 × 16, olhos de esmeralda, e o contorno não apaga o dourado escuro', () => {
-    expect(TOTEM.linhas).toHaveLength(16);
-    const c = comContorno(TOTEM);
-    for (const l of c.linhas) for (const ch of l) if (ch !== '.') expect(c.cores[ch], ch).toBeTruthy();
-    expect(c.cores.o).toBe(TOTEM.cores.o);
-    expect(c.linhas.join('')).toContain('#');
+  it('o Totem da Imortalidade do jogo, com os olhos de esmeralda', () => {
+    expect(Object.values(TOTEM.cores)).toContain('#41e67f');
   });
 
 });
 
-describe('o dano: ela racha como bloco', () => {
+describe('o dano: ela fica estragada (não preta)', () => {
   it('estágios pela vida: inteira, 1, 2 e 3', () => {
     expect([1, 0.8, 0.7, 0.5, 0.3, 0.2, 0].map(estagioDoDano)).toEqual([0, 0, 1, 2, 2, 3, 3]);
   });
 
-  it('cada estágio racha mais, só as cores mudam (o tiro por peça continua igual)', () => {
-    const t = montarTexels(0);
-    const sujos = [0, 1, 2, 3].map(e => {
-      const r = rachar(t, e);
-      expect(r.partes).toBe(t.partes);
-      return r.cores.filter((c, i) => c !== t.cores[i]).length;
-    });
-    expect(sujos[0]).toBe(0);
-    expect(sujos[1]).toBeGreaterThan(0);
-    expect(sujos[2]).toBeGreaterThan(sujos[1]);
-    expect(sujos[3]).toBeGreaterThan(sujos[2]);
+  it('cada estágio estraga mais, e o tiro por peça não muda onde ainda há pano', () => {
+    for (let q = 0; q < QUADROS_MC.length; q++) {
+      const inteira = montarTexels(q);
+      const mexidos = [0, 1, 2, 3].map(e => {
+        const t = montarTexels(q, e);
+        // Fora do contorno (que se refaz em volta do rasgo), cada texel continua da mesma peça.
+        t.cores.forEach((c, i) => {
+          if (c && c !== CORES_MC.contorno && inteira.cores[i] && inteira.cores[i] !== CORES_MC.contorno) expect(t.partes[i]).toBe(inteira.partes[i]);
+        });
+        return t.cores.filter((c, i) => c !== inteira.cores[i]).length;
+      });
+      expect(mexidos[0], `q${q}`).toBe(0);
+      expect(mexidos[1], `q${q}`).toBeGreaterThan(0);
+      expect(mexidos[2], `q${q}`).toBeGreaterThan(mexidos[1]);
+      expect(mexidos[3], `q${q}`).toBeGreaterThan(mexidos[2]);
+    }
   });
 
-  it('a rachadura só cresce e fica no mesmo lugar (não pisca)', () => {
-    expect([...rachaduras(3)]).toEqual([...rachaduras(3)]);
-    for (const i of rachaduras(1)) expect(rachaduras(3).has(i)).toBe(true);
+  it('nenhuma cor nova é preta: fuligem, linho, remendo, curativo e brasa', () => {
+    const antes = new Set(montarTexels(0).cores);
+    const novas = new Set(montarTexels(0, 3).cores.filter((c): c is string => !!c && !antes.has(c)));
+    expect(novas.size).toBeGreaterThan(5);
+    for (const c of novas) {
+      const n = parseInt(c.slice(1), 16);
+      // Nada perto do preto da rachadura antiga (#0e0b14).
+      expect(Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255), c).toBeGreaterThanOrEqual(0x30);
+    }
+    const doEstagio = (e: number) => new Set(montarTexels(0, e).cores);
+    expect(doEstagio(2).has(CORES_ESTRAGO.linho[0])).toBe(true);
+    expect(doEstagio(3).has(CORES_ESTRAGO.curativo[1])).toBe(true);
+    expect(doEstagio(3).has(CORES_ESTRAGO.brasa[0])).toBe(true);
+    // O pano rasga: a barra esfarrapada tem menos texel pintado.
+    const pintados = (e: number) => montarTexels(0, e).cores.filter(Boolean).length;
+    expect(pintados(3)).toBeLessThan(pintados(0));
+  });
+
+  it('o estrago só cresce e fica no mesmo lugar (não pisca)', () => {
+    expect(estragos(3)).toBe(estragos(3));
+    expect(estragos(0).size).toBe(0);
+    for (const k of estragos(1).keys()) expect(estragos(2).has(k)).toBe(true);
+    for (const k of estragos(2).keys()) expect(estragos(3).has(k)).toBe(true);
   });
 
 });
@@ -189,14 +225,14 @@ describe('movimento da Bruxa do Pântano', () => {
   });
 
   for (const m of MANOBRAS) {
-    it(`${m}: intocável do começo ao fim, e volta ao voo de pé`, () => {
+    it(`${m}: leva tiro (só a pérola some no teleporte), e volta ao voo de pé`, () => {
       const r = semente(3);
       const c = criarCorpo(Z, r);
       c.x = 300; c.y = 120;
       iniciarManobra(c, m, Z, r);
       let passos = 0;
       while (c.manobra && passos < 600) {
-        expect(invulneravel(c)).toBe(true);
+        if (m !== 'perola') expect(invulneravel(c)).toBe(false);
         avancarCorpo(c, Z, 1 / 60, 70, r);
         // Nunca abaixo do chão nem fora da tela pelos lados.
         expect(c.y).toBeLessThan(Z.chao - 30);
@@ -210,6 +246,30 @@ describe('movimento da Bruxa do Pântano', () => {
       expect(c.visivel).toBe(true);
     });
   }
+
+  it('a pérola: mira com ela na mão, joga, ela voa, e o teleporte é onde caiu', () => {
+    const r = semente(9);
+    const c = criarCorpo(Z, r);
+    c.x = 120; c.y = 120;
+    iniciarManobra(c, 'perola', Z, r);
+    const destino = { x: c.manobra!.x1, y: c.manobra!.y1 };
+    expect(Math.abs(destino.x - 120)).toBeGreaterThan((Z.x1 - Z.x0) / 3);
+    expect(faseDaPerola(c)).toEqual({ mirando: true, voo: null });
+    const ordem: string[] = [];
+    let intocavel = 0, voou = false;
+    for (let i = 0; i < 600 && c.manobra; i++) {
+      for (const e of avancarCorpo(c, Z, 1 / 60, 70, r)) ordem.push(e.tipo);
+      const f = faseDaPerola(c);
+      if (f?.voo != null) { voou = true; expect(c.x).toBe(120); }
+      if (invulneravel(c)) intocavel++;
+    }
+    expect(voou).toBe(true);
+    expect(ordem).toEqual(['lancou', 'some', 'aparece', 'fim']);
+    // Intocável só no piscar do teleporte (uns 0,09 s de 1,5 s).
+    expect(intocavel).toBeGreaterThan(0);
+    expect(intocavel).toBeLessThan(10);
+    expect([c.x, c.y]).toEqual([destino.x, destino.y]);
+  });
 
   it('não repete a manobra anterior, e sem céu não levita', () => {
     const r = semente(11);
@@ -275,8 +335,36 @@ describe('as poções', () => {
       vi.advanceTimersByTime(PASSO_VISAO_MS * 3);
       l.desfazer();
       expect(raiz.outerHTML.replace(/ class=""/g, '').replace(/ style=""/g, '')).toBe(antes);
+      // O véu da Cegueira e a borda do Veneno saem junto.
+      expect(document.querySelector(`.${CLASSE_VEU}`)).toBeNull();
     });
   }
+
+  it('a Cegueira põe o véu que segue o mouse, e o Veneno esverdeia com a borda', () => {
+    const raiz = tela();
+    const alvos = alvosPorAtributo(() => raiz, () => raiz);
+    const cego = lancar('cegueira', alvos);
+    const veu = document.querySelector<HTMLElement>(`.${CLASSE_VEU}-cegueira`)!;
+    expect(veu).not.toBeNull();
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 120, clientY: 80 }));
+    expect(veu.style.getPropertyValue('--bx-veu-x')).toBe('120px');
+    cego.desfazer();
+    const veneno = lancar('veneno', alvos);
+    expect(raiz.style.filter).toBe(FILTRO_VENENO);
+    expect(document.querySelector(`.${CLASSE_VEU}-veneno`)).not.toBeNull();
+    veneno.desfazer();
+    expect(raiz.style.filter).toBe('');
+  });
+
+  it('a Levitação faz abas e valores flutuarem, cada um no seu tempo', () => {
+    const raiz = tela();
+    const l = lancar('levitacao', alvosPorAtributo(() => raiz, () => raiz), semente(4));
+    const flutuando = [...raiz.querySelectorAll<HTMLElement>('.bx-enf-levita')];
+    expect(flutuando.length).toBe(3);
+    expect(new Set(flutuando.map(el => el.style.getPropertyValue('--bx-enf-atraso'))).size).toBe(3);
+    l.desfazer();
+    expect(raiz.querySelector('.bx-enf-levita')).toBeNull();
+  });
 
   it('a Poção de Dano e a Estranha desenham o texto novo pelo atributo', () => {
     const raiz = tela();
@@ -319,6 +407,10 @@ describe('as poções', () => {
     expect(disponivel('visao', alvos)).toBe(true);
     expect(disponivel('lentidao', alvos)).toBe(true);
     expect(disponivel('encantamento', alvos)).toBe(true);
+    expect(disponivel('cegueira', alvos)).toBe(true);
+    expect(disponivel('veneno', alvos)).toBe(true);
+    expect(disponivel('fraqueza', alvos)).toBe(true);
+    expect(disponivel('levitacao', alvos)).toBe(false);
   });
 });
 
