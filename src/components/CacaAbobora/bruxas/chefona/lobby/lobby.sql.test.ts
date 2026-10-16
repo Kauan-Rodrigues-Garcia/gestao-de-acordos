@@ -19,6 +19,7 @@ const migration = (nome: string) => readFileSync(resolve(__dirname, '../../../..
 const SQL_REI = migration('20261009120000_chefao_rei_do_pop.sql');
 const SQL_CHEFONA = migration('20261015230000_chefona_bruxa_do_pantano.sql');
 const SQL = migration('20261016120000_chefona_lobby_e_autoclick.sql');
+const SQL_HORA = migration('20261016170000_chefona_hora_do_banco.sql');
 
 let db: PGlite;
 
@@ -78,6 +79,8 @@ beforeAll(async () => {
   await db.exec(SQL);
   // Reexecutável.
   await db.exec(SQL);
+  await db.exec(SQL_HORA);
+  await db.exec(SQL_HORA);
 });
 
 beforeEach(async () => {
@@ -216,5 +219,20 @@ describe('20261016120000 — cliques automáticos não contam', () => {
     const r = await atirar(BRUNO, id, 4, 12, 0);
     expect(r.vida).toBe(988);
     expect(r.ranking.map(g => g.usuario)).toEqual([BRUNO]);
+  });
+});
+
+describe('20261016170000 — a hora do banco', () => {
+  it('o estado (resposta e aviso) leva a hora do banco, e o resto continua igual', async () => {
+    const id = await soltar(500, 180);
+    const r = await entrar(ANA, id) as Estado & { agora?: string };
+    expect(Date.parse(r.agora!)).toBeGreaterThan(Date.now() - 60_000);
+    expect(r.lobby_total).toBe(1);
+    const enviado = (await db.query<{ payload: Record<string, unknown> }>('select payload from realtime.enviados order by n desc limit 1')).rows[0].payload;
+    expect(enviado).toHaveProperty('agora');
+  });
+
+  it('o bloqueio por pistas do app usa o mesmo número do banco', () => {
+    expect(SQL).toContain('>= 3 THEN');
   });
 });

@@ -69,6 +69,8 @@ export interface RodadaChefona extends RodadaChefao {
 /** Os números que a migration também usa — mudou um, mude o outro. */
 export const LOTE_MS = 1_000;
 export const MAX_ACERTOS_POR_LOTE = 12;
+/** Lotes com pista forte de autoclick que bloqueiam a pessoa na chefona (migration 20261016120000). */
+export const PISTAS_PARA_BLOQUEAR = 3;
 /** O dano de um acerto, no máximo: cabeça (6) com ela tonta (2×). */
 export const MAX_DANO_POR_ACERTO = 12;
 /** A contagem antes dela: 3 minutos de lobby (16/10/2026; era 1 minuto). */
@@ -86,13 +88,26 @@ const FOLGA_EXPIRA_MS = 3_000;
 
 // ── Quanto de vida ──────────────────────────────────────────────────────────
 //
-// A conta (15/10/2026), a mesma do Rei do Pop com o dano dela: uma pessoa
-// clica 3 a 4 vezes por segundo e acerta perto da metade (ela é grande, mas
-// some na pérola e desvia nas poções); o acerto vale 3 no corpo e 6 na cabeça,
-// mais quando ela prepara poção. Dá ~4 de dano por segundo por pessoa. Com
-// `PRAZO_MIN` = 2, tirando a entrada, as manobras e as poções, sobram ~95 s
-// úteis: ~400 por pessoa é o Médio. A cura (22%) e o totem (1 vida + 15%)
-// esticam a luta — por isso a base é maior que a do Rei do Pop.
+// A vida é `base + porPessoa × quem acertou` (a parte de cada um entra no
+// primeiro tiro que CONTOU). Então a luta dura
+//
+//     base ÷ (dano por segundo × pessoas)  +  porPessoa ÷ dano por segundo
+//
+// e a segunda parte não depende de quantos são: com 10 ou com 40 a luta dura
+// parecido, e a base só pesa quando há pouca gente.
+//
+// O dano por segundo de uma pessoa (revisto em 16/10/2026): ela é grande
+// (108 × 252 px na tela), então quem mira acerta 6 a 7 de cada 10 cliques; o
+// acerto vale ~3 na média (corpo 3, cabeça 6, chapéu e vassoura 2, raspão
+// metade). Clicando 2 vezes por segundo, ~4; clicando 3,5, ~7. O teto do banco
+// (9 acertos por segundo) fica bem acima disso.
+//
+// A conta de 15/10 (700 + 400 por pessoa no Médio) supunha ~4 e deixava a luta
+// em ~110 s com quem joga devagar: com a cura ou o totem do super_admin, ela
+// fugia antes de cair (o prazo é 2 minutos). O Médio agora dá ~75 s a 5 de dano
+// por segundo, ~95 s a 4 e ~55 s a 7, de 10 a 40 pessoas — sobra prazo para a
+// cura e o totem. Os números de cada dificuldade estão em `duracaoEstimadaS`
+// e no teste.
 
 export interface DificuldadeChefona {
   nome: string;
@@ -101,10 +116,16 @@ export interface DificuldadeChefona {
 }
 
 export const DIFICULDADES_CHEFONA: readonly DificuldadeChefona[] = [
-  { nome: 'Fácil', base: 400, porPessoa: 230 },
-  { nome: 'Médio', base: 700, porPessoa: 400 },
-  { nome: 'Difícil', base: 1100, porPessoa: 620 },
+  { nome: 'Fácil', base: 250, porPessoa: 250 },
+  { nome: 'Médio', base: 400, porPessoa: 350 },
+  { nome: 'Difícil', base: 600, porPessoa: 450 },
 ];
+
+/** Quanto tempo (s) a luta leva com `pessoas` tirando `danoPorSegundo` cada, sem cura nem totem. */
+export function duracaoEstimadaS(d: Pick<DificuldadeChefona, 'base' | 'porPessoa'>, pessoas: number, danoPorSegundo: number): number {
+  const n = Math.max(1, pessoas);
+  return (d.base + d.porPessoa * n) / (danoPorSegundo * n);
+}
 
 // ── Puras (exportadas para os testes) ─────────────────────────────────────────
 
@@ -251,6 +272,44 @@ export function aplicarLote(
   };
 }
 
+// ── A hora do banco ──────────────────────────────────────────────────────────
+//
+// Cada tela compara os horários da chefona com o próprio relógio. O estado
+// traz `agora` (a hora do banco, migration 20261016170000): a diferença para
+// esta tela ajusta todos os horários, e a bruxa nasce (e a música do lobby
+// bate o drop) no mesmo instante em todo computador, certo ou errado o
+// relógio dele. A medida inclui o atraso da rede, que só a diminui: vale a
+// maior. Se o relógio daqui mudar (pulou mais de 5 s), recomeça.
+
+let desvioRelogio = 0;
+let temDesvio = false;
+/** Abaixo disto (ms) não ajusta: a diferença é da rede, não do relógio. */
+const DESVIO_MINIMO_MS = 250;
+const HORARIOS = ['solta_em', 'expira_em', 'derrotado_em', 'cura_em', 'cura_ate', 'protegida_em', 'totem_em'] as const;
+
+/** Mede a diferença entre a hora do banco e a desta tela (ms). */
+export function ajustarRelogio(agoraDoBanco: unknown, agora = Date.now()): void {
+  if (typeof agoraDoBanco !== 'string') return;
+  const t = Date.parse(agoraDoBanco);
+  if (!Number.isFinite(t)) return;
+  const medido = t - agora;
+  if (!temDesvio || medido > desvioRelogio || desvioRelogio - medido > 5_000) {
+    desvioRelogio = medido;
+    temDesvio = true;
+  }
+}
+
+/** A chefona com os horários na hora DESTA tela. */
+export function naHoraDaqui<R extends Pick<RodadaChefona, (typeof HORARIOS)[number]>>(r: R): R {
+  if (!temDesvio || Math.abs(desvioRelogio) < DESVIO_MINIMO_MS) return r;
+  const c: Record<string, unknown> = { ...r };
+  for (const k of HORARIOS) {
+    const v = c[k];
+    if (typeof v === 'string') c[k] = new Date(Date.parse(v) - desvioRelogio).toISOString();
+  }
+  return c as R;
+}
+
 // ── O estado do app ──────────────────────────────────────────────────────────
 
 let estado: RodadaChefona | null = null;
@@ -280,8 +339,10 @@ function marcarLobby(rodadaId: number, dentro: boolean): void {
 
 /** O que chegou do banco (Broadcast, resposta do tiro ou leitura). */
 export function aceitarChefona(bruto: unknown): void {
-  const nova = normalizarChefona(bruto);
-  if (!nova) return;
+  if (bruto && typeof bruto === 'object') ajustarRelogio((bruto as { agora?: unknown }).agora);
+  const lida = normalizarChefona(bruto);
+  if (!lida) return;
+  const nova = lida.id > 0 ? naHoraDaqui(lida) : lida;
   const dentro = (bruto as { eu_no_lobby?: unknown }).eu_no_lobby;
   if (typeof dentro === 'boolean') marcarLobby(nova.id, dentro);
   publicar(juntarChefao(estado, nova));
@@ -625,5 +686,7 @@ export function __resetChefonaParaTestes(): void {
   ensaioRobosChefona(false);
   estado = null;
   euNoLobby = null;
+  desvioRelogio = 0;
+  temDesvio = false;
   ouvintes.clear();
 }

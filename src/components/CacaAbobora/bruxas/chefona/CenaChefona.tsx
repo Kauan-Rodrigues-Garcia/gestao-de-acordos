@@ -29,7 +29,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { carregarFontesPixel } from '@/components/Halloween/fonte';
-import { criarDetector, type Detector } from '../../autoclick';
+import { MOTIVOS_FORTES, criarDetector, type Detector } from '../../autoclick';
 import { volumeDoChefao } from '../../sons';
 import { nomeCurto } from '../../caca';
 import { RANKING_MS, desligarChefao, type Golpeador, type MeuPlacar } from '../../chefao';
@@ -38,7 +38,7 @@ import { cabecaMC } from './arte';
 import { PalcoChefona, milhar, type EventoChefona, type FonteDoBanco } from './palcoChefona';
 import { PLACA_MS } from './conquista';
 import {
-  BEBER_MS, LOTE_MS, MAX_ACERTOS_POR_LOTE, chefonaChegando, curarChefona, enviarLoteChefona, lerChefona,
+  BEBER_MS, LOTE_MS, MAX_ACERTOS_POR_LOTE, PISTAS_PARA_BLOQUEAR, chefonaChegando, curarChefona, enviarLoteChefona, lerChefona,
   motivoDoErroDaChefona, protegerChefona, situacaoDaChefona, vidaPorAparecer,
   type ResultadoLoteChefona, type RodadaChefona,
 } from './banco';
@@ -297,6 +297,14 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   const [meu, setMeu] = useState<MeuPlacar | null>(null);
   const avisouErro = useRef(false);
   const avisouDescarte = useRef(false);
+  /**
+   * Os lotes com pista forte de autoclick que o banco aceitou. No
+   * `PISTAS_PARA_BLOQUEAR`, o banco não conta mais nada desta pessoa: a tela
+   * para de mandar lote (cada um seria uma ida ao banco à toa, na linha que
+   * todo mundo disputa) e de mostrar o dano dela na barra.
+   */
+  const pistas = useRef(0);
+  const bloqueado = useRef(false);
   const detector = useRef<Detector | null>(null);
   const ultimaVersao = useRef({ versao: rodada.versao, em: Date.now(), relido: false });
   // O placar do time se redesenha sozinho (o meu dano a caminho mora num ref).
@@ -341,6 +349,7 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
         return { vida, vidaMax: r.vida_max, absorcao, restanteS: Math.max(0, (Date.parse(r.expira_em) - agora) / 1000) };
       },
       aoAcertar: (dano, critico) => {
+        if (bloqueado.current) return;
         const l = lote.current;
         l.acertos += 1;
         if (critico) l.criticos += 1;
@@ -381,7 +390,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   // O detector de autoclick: ouve os cliques enquanto ela está na tela.
   useEffect(() => {
     if (situacao !== 'ativo' || chegando) return;
-    const d = criarDetector();
+    // Cada pista vale uma vez: a mesma rajada não marca 6 lotes seguidos.
+    const d = criarDetector(window, { esquecerAoSuspeitar: true });
     detector.current = d;
     return () => { d.parar(); if (detector.current === d) detector.current = null; };
   }, [situacao, chegando]);
@@ -444,7 +454,7 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
     const quieto = RELER_QUIETO_MS + Math.random() * RELER_QUIETO_MS;
     const tique = () => {
       setTique(n => n + 1);
-      if (noAr) return;
+      if (noAr || bloqueado.current) return;
       const { acertos, criticos, dano } = lote.current;
       if (acertos === 0) {
         const u = ultimaVersao.current;
@@ -477,6 +487,17 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
           }
           pendente.current = Math.max(0, pendente.current - d);
           if (res.eu) setMeu(res.eu);
+          if (!res.erro && (colheita.suspeita & MOTIVOS_FORTES) !== 0) pistas.current += 1;
+          if (pistas.current >= PISTAS_PARA_BLOQUEAR && !bloqueado.current) {
+            bloqueado.current = true;
+            lote.current = { acertos: 0, criticos: 0, dano: 0 };
+            pendente.current = 0;
+            toast.error('Clique automático detectado', {
+              description: 'Seus cliques não contam mais nesta luta: autoclick e macro não valem.',
+              duration: 10_000,
+            });
+            return;
+          }
           // O banco não contou parte do lote (rápido demais ou autoclick): avisa uma vez.
           if ((res.descartados ?? 0) > 0 && !avisouDescarte.current) {
             avisouDescarte.current = true;

@@ -30,7 +30,8 @@
  * cada segundo (e no máximo 4 vezes por segundo), os elementos que ele mexe
  * ficam guardados (nada de procurar no DOM a cada passo), as barrinhas da
  * música só animam com ela tocando e à vista (30 por segundo), e no modo leve
- * da chefona (`../leve.ts`) não há animação nenhuma.
+ * da chefona (`../leve.ts`) sai o que anima sem parar e as barrinhas ao vivo
+ * (as entradas curtas ficam: só transform e opacidade, ver `lobby.css`).
  */
 import './lobby.css';
 import { tiqueDaContagem } from './sonsLobby';
@@ -335,7 +336,7 @@ export class LobbyChefona {
     this.estado = naLuta ? 'luta' : 'lobby';
     this.recolhido = false;
     this.espiando = false;
-    if (!this.leve) tocarArquivo('nivel', 0.25);
+    tocarArquivo('nivel', 0.25);
     this.montar();
     clearTimeout(this.recolherTimer);
     // Mostra o lobby por uns segundos e recolhe sozinho: o Tab abre de novo.

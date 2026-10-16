@@ -405,8 +405,19 @@
   .bxl-numerao { font-size: 64px; }
 }
 
-/* Modo leve da chefona (computador fraco) e quem pediu menos movimento: nada anima. */
-.bxl.leve, .bxl.leve * { animation: none !important; transition: none !important; }
+/*
+ * Modo leve da chefona (computador fraco): sai só o que anima SEM PARAR (o
+ * pisca, as flutuações, o relógio urgente) e as barrinhas ao vivo. As
+ * entradas curtas (a carta que pula, o número grande, o «chegou») ficam: são
+ * só transform e opacidade, que a placa de vídeo compõe sem repintar — e são
+ * o que deixa o lobby vivo.
+ */
+.bxl.leve .bxl-kicker,
+.bxl.leve .bxl-heroi .bxl-cabeca,
+.bxl.leve .bxl-nota,
+.bxl.leve .bxl-relogio.urgente,
+.bxl.leve .bxl-pilula-relogio.urgente { animation: none; }
+.bxl.leve .bxl-xp-cheio, .bxl.leve .bxl-eq i { transition: none; }
 .bxl.leve .bxl-eq i { transform: scaleY(.3); }
 .bxl.leve .bxl-eq i:nth-child(3n + 1) { transform: scaleY(.55); }
 .bxl.leve .bxl-eq i:nth-child(4n + 2) { transform: scaleY(.8); }

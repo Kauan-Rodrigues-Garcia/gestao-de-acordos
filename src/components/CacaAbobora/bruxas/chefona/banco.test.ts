@@ -7,8 +7,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  ABSORCAO_FRACAO, BEBER_MS, CURA_FRACAO, DIFICULDADES_CHEFONA, MAX_ACERTOS_POR_LOTE, MAX_DANO_POR_ACERTO, REGEN_FRACAO,
-  REGEN_MS, __resetChefonaParaTestes, aceitarChefona, aplicarLote, chefonaNaTela, ensaioLimparChefona, ensaioSoltarChefona,
+  ABSORCAO_FRACAO, BEBER_MS, CURA_FRACAO, DIFICULDADES_CHEFONA, MAX_ACERTOS_POR_LOTE, MAX_DANO_POR_ACERTO, PRAZO_MIN, REGEN_FRACAO,
+  duracaoEstimadaS,
+  REGEN_MS, __resetChefonaParaTestes, aceitarChefona, ajustarRelogio, naHoraDaqui, aplicarLote, chefonaNaTela, ensaioLimparChefona, ensaioSoltarChefona,
   enviarLoteChefona, estadoChefona, motivoDoErroDaChefona, normalizarChefona, normalizarPlacarChefona, situacaoDaChefona,
   vidaNaTela, vidaPorAparecer, type RodadaChefona,
 } from './banco';
@@ -31,6 +32,7 @@ function rodada(extra: Partial<RodadaChefona> = {}): RodadaChefona {
     cura_em: null, cura_ate: null, cura_vida: 0, cura_semente: 0,
     versao: 1, participantes: 0, ranking: [],
     absorcao: 0, protegida: false, protegida_em: null, totem_em: null, totem_vida: 0, totens: 0, curas: 0,
+    lobby_total: 0, lobby: [],
     ...extra,
   };
 }
@@ -157,6 +159,25 @@ describe('os números que o app, o palco e a migration dividem', () => {
     expect(SQL).toContain("realtime.send(p_estado, 'chefona', 'abobora:'");
   });
 
+  it('a luta cabe nos 2 minutos de 10 a 40 pessoas, com folga para a cura e o totem', () => {
+    const [facil, medio, dificil] = DIFICULDADES_CHEFONA;
+    for (const n of [10, 20, 30, 40]) {
+      // Médio: ~75 s a 5 de dano por segundo; nem demora (≤ 100 s a 4) nem acaba num piscar (≥ 50 s a 7).
+      expect(duracaoEstimadaS(medio, n, 5)).toBeGreaterThan(70);
+      expect(duracaoEstimadaS(medio, n, 5)).toBeLessThan(80);
+      expect(duracaoEstimadaS(medio, n, 4)).toBeLessThan(100);
+      expect(duracaoEstimadaS(medio, n, 7)).toBeGreaterThan(50);
+      // Com uma Poção de Cura (+22% da vida) ainda cabe no prazo a 5.
+      expect(duracaoEstimadaS(medio, n, 5) * 1.22).toBeLessThan(PRAZO_MIN * 60 - 15);
+      // Fácil é mais rápido e o Difícil, mais longo — mas o Difícil ainda cai a 5.
+      expect(duracaoEstimadaS(facil, n, 5)).toBeLessThan(duracaoEstimadaS(medio, n, 5));
+      expect(duracaoEstimadaS(dificil, n, 5)).toBeGreaterThan(duracaoEstimadaS(medio, n, 5));
+      expect(duracaoEstimadaS(dificil, n, 5)).toBeLessThan(PRAZO_MIN * 60 - 15);
+    }
+    // Com 10 ou com 40, quase o mesmo tempo (a parte de cada pessoa manda).
+    expect(Math.abs(duracaoEstimadaS(medio, 10, 5) - duracaoEstimadaS(medio, 40, 5))).toBeLessThan(10);
+  });
+
   it('a vida das dificuldades cabe no banco', () => {
     for (const d of DIFICULDADES_CHEFONA) {
       expect(d.base).toBeGreaterThanOrEqual(10);
@@ -183,5 +204,34 @@ describe('os erros em palavras', () => {
     expect(motivoDoErroDaChefona('CHEFAO_NA_TELA: x')).toMatch(/Rei do Pop/);
     expect(motivoDoErroDaChefona('JA_PROTEGIDA')).toMatch(/totem/);
     expect(motivoDoErroDaChefona('Could not find the function public.fn_chefona_soltar')).toMatch(/20261015230000/);
+  });
+});
+
+describe('a hora do banco (20261016170000)', () => {
+  it('relógio desta tela atrasado 20 s: os horários da chefona vêm para a hora daqui', () => {
+    ajustarRelogio(iso(AGORA + 20_000), AGORA);
+    const r = naHoraDaqui(rodada());
+    expect(Date.parse(r.solta_em)).toBe(AGORA - 30_000);
+    expect(Date.parse(r.expira_em)).toBe(AGORA + 90_000);
+  });
+
+  it('a rede só diminui a medida: vale a maior; o relógio que pula mais de 5 s recomeça', () => {
+    ajustarRelogio(iso(AGORA + 20_000), AGORA);
+    ajustarRelogio(iso(AGORA + 19_600), AGORA); // a mesma diferença, com 400 ms de rede
+    expect(Date.parse(naHoraDaqui(rodada()).solta_em)).toBe(AGORA - 30_000);
+    ajustarRelogio(iso(AGORA + 2_000), AGORA); // acertaram o relógio daqui
+    expect(Date.parse(naHoraDaqui(rodada()).solta_em)).toBe(AGORA - 12_000);
+  });
+
+  it('diferença pequena (da rede) não mexe em nada', () => {
+    ajustarRelogio(iso(AGORA + 150), AGORA);
+    const r = rodada();
+    expect(naHoraDaqui(r)).toBe(r);
+  });
+
+  it('o estado que chega com «agora» já entra na hora daqui', () => {
+    const agora = Date.now();
+    aceitarChefona({ ...rodada({ solta_em: iso(agora + 60_000), expira_em: iso(agora + 180_000) }), agora: iso(agora + 30_000) });
+    expect(Date.parse(estadoChefona()!.solta_em)).toBeCloseTo(agora + 30_000, -2);
   });
 });
