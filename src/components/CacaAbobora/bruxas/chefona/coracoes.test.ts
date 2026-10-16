@@ -7,6 +7,9 @@ import {
 } from './coracoes';
 import { CLASSE_VEU, FILTRO_LENTIDAO, VEU_LEVE, alvosPorAtributo, feiticosLeves, lancar } from './feiticos';
 import { JANELA_S, QUADRO_PESADO_MS, criarVigiaDeQuadros } from './leve';
+import { tamanhoDaPlaca } from './conquista';
+import { glifoMC } from './fonteMC';
+import { CONQUISTA } from './palcoChefona';
 
 const conta = (l: readonly string[], k: string) => l.filter(x => x === k).length;
 
@@ -94,5 +97,15 @@ describe('a chefona em computador fraco', () => {
     expect(document.getElementById('bx-distorcao')).toBeNull();
     expect(raiz.style.filter).toBe('');
     l.desfazer();
+  });
+});
+
+describe('a placa de conquista épica', () => {
+  it('cresce com o texto mais comprido, e a estrela da raridade tem desenho próprio', () => {
+    const t = tamanhoDaPlaca(CONQUISTA);
+    expect(t.altura).toBe(62);
+    expect(t.largura).toBeGreaterThanOrEqual(200);
+    expect(tamanhoDaPlaca({ ...CONQUISTA, descricao: 'x'.repeat(80) }).largura).toBeGreaterThan(t.largura);
+    expect(glifoMC('★')).not.toEqual(glifoMC('?'));
   });
 });

@@ -406,3 +406,69 @@
 .zb-chefao-final.bruxa .zb-chefao-final-titulo { text-shadow: 2px 2px 0 #6a1fb0, 4px 4px 0 #2a0a4a; }
 .bxc-final-cabeca { flex: none; display: block; }
 .bxc-final-cabeca canvas { display: block; image-rendering: pixelated; }
+
+/* ── A placa de conquista épica (conquista.ts, 15/10/2026) ────────────────
+   Como a do mod «Advancement Plaques»: grande, no alto e no meio da tela.
+   Entra com um clarão, os raios roxos e dourados giram atrás, o reflexo passa
+   pela placa e, no fim, ela sobe e some. */
+.bxc-placa {
+  position: absolute;
+  /* Abaixo do aviso «foi abatida» (que vai até uns 130 px). */
+  top: max(150px, 20vh);
+  left: 50%;
+  z-index: 62;
+  width: min(var(--bxc-placa-w, 660px), 94vw);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: bxc-placa-entra .7s cubic-bezier(.2, 1.5, .4, 1) both, bxc-placa-sai .6s ease-in calc(var(--bxc-placa-ms, 7000ms) - 600ms) forwards;
+}
+.bxc-placa-corpo {
+  position: relative;
+  filter: drop-shadow(0 0 14px rgba(255, 85, 255, .65)) drop-shadow(0 6px 0 rgba(0, 0, 0, .35));
+}
+.bxc-placa-cv { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+/* O reflexo: uma faixa clara que atravessa as caixas de tempo em tempo. */
+.bxc-placa-reflexo {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bxc-placa-reflexo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  left: -40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55) 45%, rgba(255, 230, 255, .8) 50%, rgba(255, 255, 255, .55) 55%, transparent);
+  animation: bxc-placa-reflexo 1.8s ease-in-out .5s infinite;
+}
+/* Os raios: um leque roxo e dourado girando atrás, que some nas pontas. */
+.bxc-placa-raios {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(from 0deg, rgba(255, 85, 255, .34) 0deg 7deg, transparent 7deg 18deg, rgba(255, 211, 77, .28) 18deg 24deg, transparent 24deg 36deg);
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  animation: bxc-placa-gira 9s linear infinite;
+}
+@keyframes bxc-placa-entra {
+  0%   { opacity: 0; transform: translateX(-50%) scale(.35); filter: brightness(3); }
+  60%  { opacity: 1; transform: translateX(-50%) scale(1.08); filter: brightness(1.6); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); filter: none; }
+}
+@keyframes bxc-placa-sai { to { opacity: 0; transform: translateX(-50%) translateY(-40px) scale(.94); } }
+@keyframes bxc-placa-reflexo { 0% { left: -40%; } 55%, 100% { left: 120%; } }
+@keyframes bxc-placa-gira { to { transform: translate(-50%, -50%) rotate(360deg); } }
+/* Leve e quem pede menos movimento: sem os raios girando e sem o brilho com filtro. */
+.bxc-palco.leve .bxc-placa-raios { animation: none; }
+.bxc-palco.leve .bxc-placa-corpo { filter: drop-shadow(0 6px 0 rgba(0, 0, 0, .35)); }
+@media (prefers-reduced-motion: reduce) {
+  .bxc-placa, .bxc-placa-raios, .bxc-placa-reflexo::before { animation: none; }
+}

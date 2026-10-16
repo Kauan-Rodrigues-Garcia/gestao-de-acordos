@@ -48,8 +48,15 @@
  *   os do modo hardcore, que piscam, tremem e ficam dourados como no jogo.
  * - Enquanto ela está na tela, um ESCUDO cobre o Gestão: clique fora dela não
  *   chega no app (ninguém abre acordo, apaga linha ou troca de aba sem querer
- *   atirando). A rolagem passa. Quem esconde o chefão desmonta o palco e o
- *   escudo vai junto.
+ *   atirando). A rolagem passa, e o que estiver marcado com
+ *   `data-chefona-livre` (a barra lateral) fica de fora. O super_admin não tem
+ *   escudo (`escudo: false`). Quem esconde o chefão desmonta o palco e o escudo
+ *   vai junto.
+ * - Tiro nela SEMPRE tira vida (15/10/2026: «clicar nela e ela não tomar dano é
+ *   frustrante»). Nas manobras, no piscar do teleporte e de vez em quando na
+ *   sorte, o tiro é DE RASPÃO: metade do dano, e ela se esquiva para o lado,
+ *   deixando um rastro de si mesma.
+ * - Quem ajudou a derrubar ganha a PLACA de conquista épica (`conquista.ts`).
  * - Em computador fraco ela roda LEVE (`leve.ts`): 30 quadros por segundo,
  *   menos partículas, e as poções da tela toda sem `filter`. O palco mede os
  *   próprios quadros e liga o leve sozinho se a luta engasgar.
@@ -82,11 +89,12 @@ import {
   FEITICOS, FEITICO_FORTE, LISTA_FEITICOS, alvoDaPocao, alvosPorAtributo, disponivel, duracaoDoFeitico,
   feiticosLeves, forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
 } from './feiticos';
+import { ESCALA_PLACA, PLACA_MS, montarPlaca } from './conquista';
 import { chefonaLeve, criarVigiaDeQuadros, marcarChefonaLeve } from './leve';
 import { ENCANTO, glifo, letrasComRuna } from './galatico';
 import {
-  COR_MANOBRA, NOME_MANOBRA, avancarCorpo, balanco, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, invulneravel,
-  novoAlvo, pairar, type Corpo, type Manobra, type Zona,
+  COR_MANOBRA, NOME_MANOBRA, avancarCorpo, balanco, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, novoAlvo,
+  pairar, type Corpo, type Manobra, type Zona,
 } from './movimento';
 import {
   prepararSonsMC, somArremesso, somBeber, somComemora, somConquista, somDor, somEncantamento, somGargalhada, somMorte,
@@ -152,6 +160,11 @@ const LIMIAR_DESVIO_FURIA = 7;
 const CHANCE_DESVIO = 0.04;
 const CHANCE_DESVIO_FURIA = 0.07;
 const FOLGA_MANOBRA_S = 4;
+/** O tiro de raspão: a chance fora das manobras, a fração do dano, e a esquiva (s e px da arte). */
+export const CHANCE_RASPAO = 0.12;
+export const DANO_RASPAO = 0.5;
+const ESQUIVA_S = 0.3;
+const ESQUIVA_PX = 8;
 /** O tiro que passa a até tantos pixels da arte dela ainda pega (a peça mais perto). */
 export const FOLGA_MIRA = 4;
 /** A pérola voando: a altura do arco (px da arte). */
@@ -172,11 +185,11 @@ export const CONQUISTA = {
   titulo: 'Desafio concluído!',
   nome: 'Quem Mandou Jogar Poção?',
   descricao: `Ajudou a derrubar a ${NOME_CHEFONA}`,
+  raridade: '★ Raridade épica ★',
 } as const;
-/** A toast do jogo: a cor do título de desafio (§d) e quanto tempo ela fica. */
+/** A toast do jogo (`toastDeConquista`): a cor do título de desafio (§d). */
 const COR_DESAFIO = '#ff55ff';
 const SOMBRA_DESAFIO = '#3f153f';
-const TOAST_MS = 5000;
 /** A morte: gravidade, o tombo de lado, o tempo deitada e quanto os drops ficam. */
 const GRAVIDADE = 330;
 const TOMBO_S = 0.45;
@@ -250,6 +263,8 @@ export interface OpcoesChefona {
   aoEvento?: (e: EventoChefona) => void;
   /** Com o banco, a vida é dele (ver `FonteDoBanco`). Sem, é desta tela (o laboratório). */
   banco?: FonteDoBanco;
+  /** O escudo que segura os cliques no Gestão (padrão: ligado). O super_admin passa `false`. */
+  escudo?: boolean;
 }
 
 /** ponto, cruz, estrela (o brilho), espiral (a partícula de efeito de poção). */
@@ -571,6 +586,13 @@ export class PalcoChefona {
   /** O escudo que cobre o Gestão enquanto ela está na tela (clique fora dela não chega no app). */
   private readonly escudo: HTMLDivElement;
   private escudoLigado = false;
+  private readonly comEscudo: boolean;
+  /** Quando o escudo mede de novo onde fica a barra lateral (s do relógio). */
+  private proximaMedidaDoEscudo = 0;
+  /** A esquiva do raspão (para que lado, e quanto já andou) e os rastros dela. */
+  private esquiva: { t: number; dir: 1 | -1 } | null = null;
+  private ultimoRaspao = 0;
+  private fantasmas: { x: number; y: number; quadro: number; lado: 1 | -1; estagio: number; vida: number }[] = [];
   /** A barra de corações e os textos dela (guardados: são lidos a cada quadro). */
   private readonly cvCoracoes: HTMLCanvasElement;
   private readonly txtVida: HTMLDivElement;
@@ -583,6 +605,7 @@ export class PalcoChefona {
     this.alvos = opcoes.alvos ?? alvosPorAtributo();
     this.aoEvento = opcoes.aoEvento;
     this.banco = opcoes.banco;
+    this.comEscudo = opcoes.escudo ?? true;
     this.raiz = document.createElement('div');
     this.raiz.className = 'bxc-palco';
     this.canvas = document.createElement('canvas');
@@ -645,7 +668,7 @@ export class PalcoChefona {
     el.className = 'bxc-escudo';
     el.style.display = 'none';
     el.innerHTML = '<span class="bxc-escudo-dica"></span>';
-    el.firstElementChild!.textContent = 'O Gestão está pausado enquanto a chefona estiver na tela · «Esconder» volta ao trabalho';
+    el.firstElementChild!.textContent = 'A tela está pausada enquanto a chefona estiver aqui (o menu ao lado funciona) · «Esconder» volta ao trabalho';
     const segurar = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
     el.addEventListener('pointerdown', e => {
       segurar(e);
@@ -663,11 +686,29 @@ export class PalcoChefona {
     return el;
   }
 
-  /** Liga ou desliga o escudo (só mexe no DOM quando muda). */
+  /** Liga ou desliga o escudo (só mexe no DOM quando muda). Sem escudo (o super_admin), nunca liga. */
   private escudar(ligado: boolean): void {
-    if (ligado === this.escudoLigado) return;
-    this.escudoLigado = ligado;
-    this.escudo.style.display = ligado ? '' : 'none';
+    const vale = ligado && this.comEscudo;
+    if (vale && this.relogio >= this.proximaMedidaDoEscudo) {
+      // A barra lateral fica livre: o escudo começa onde ela termina. Ela abre e
+      // fecha, então mede de novo a cada meio segundo (sem ler layout a cada quadro).
+      this.proximaMedidaDoEscudo = this.relogio + 0.5;
+      this.liberarLaterais();
+    }
+    if (vale === this.escudoLigado) return;
+    this.escudoLigado = vale;
+    this.escudo.style.display = vale ? '' : 'none';
+  }
+
+  /** Começa o escudo depois do que estiver encostado na esquerda com `data-chefona-livre` (a barra lateral). */
+  private liberarLaterais(): void {
+    let esquerda = 0;
+    for (const el of document.querySelectorAll<HTMLElement>('[data-chefona-livre]')) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && r.left <= 1) esquerda = Math.max(esquerda, r.right);
+    }
+    const v = `${Math.round(esquerda)}px`;
+    if (this.escudo.style.left !== v) this.escudo.style.left = v;
   }
 
   /** A luta engasgou: daqui em diante, leve (`leve.ts`). */
@@ -784,13 +825,9 @@ export class PalcoChefona {
   tiroDeOutro(): void {
     const corpo = this.corpo;
     if (!corpo || !this.atingivel()) return;
-    if (invulneravel(corpo)) {
-      if (Math.random() < 0.25) this.letreiro('ESQUIVOU!', corpo.x, corpo.y - 20, 'esquiva');
-      return;
-    }
     const sorte = Math.random();
     const parte: NomeParte = sorte < 0.2 ? 'cabeca' : sorte < 0.65 ? 'tronco' : sorte < 0.85 ? 'bracoFrente' : 'chapeu';
-    this.ferir(parte, this.pontoDaParte(parte), false);
+    this.ferir(parte, this.pontoDaParte(parte), false, !!corpo.manobra || !corpo.visivel || Math.random() < CHANCE_RASPAO);
   }
 
   /** Tira uma fração da vida de uma vez (o «arrancar» do laboratório). */
@@ -901,6 +938,8 @@ export class PalcoChefona {
     this.drops = [];
     this.orbes = [];
     this.perola = null;
+    this.esquiva = null;
+    this.fantasmas = [];
     this.particulas = [];
     this.aneis = [];
     this.acertos = [];
@@ -1005,7 +1044,13 @@ export class PalcoChefona {
   private centroSprite(): { x: number; y: number } {
     const corpo = this.corpo!;
     const flutua = !['caindo', 'tombando'].includes(this.fase);
-    return { x: corpo.x, y: corpo.y + (flutua ? balanco(this.relogio) : 0) };
+    // A esquiva do raspão: vai para o lado e volta, num arco curto.
+    const e = this.esquiva;
+    const k = e ? Math.sin(Math.min(1, e.t / ESQUIVA_S) * Math.PI) : 0;
+    return {
+      x: corpo.x + (e ? e.dir * Math.round(ESQUIVA_PX * k) : 0),
+      y: corpo.y + (flutua ? balanco(this.relogio) : 0) - Math.round(2 * k),
+    };
   }
 
   /** Ponto da tela (px da arte) → pixel do sprite, desfazendo giro e espelho. */
@@ -1040,11 +1085,10 @@ export class PalcoChefona {
     if (!corpo || !this.atingivel()) return;
     const r = this.raiz.getBoundingClientRect();
     const wx = (clientX - r.left) / this.escala, wy = (clientY - r.top) / this.escala;
-    if (invulneravel(corpo) || !corpo.visivel) {
+    // No piscar do teleporte ela não tem desenho: quem clicou onde ela estava pega de raspão.
+    if (!corpo.visivel) {
       somTiro();
-      somVento();
-      this.letreiro('ESQUIVOU!', wx, wy - 6, 'esquiva');
-      this.aoEvento?.({ tipo: 'esquivou', manobra: corpo.manobra?.tipo ?? 'perola' });
+      this.ferir('tronco', { x: wx, y: wy }, true, true);
       return;
     }
     const { lx, ly } = this.paraSprite(wx, wy);
@@ -1055,14 +1099,23 @@ export class PalcoChefona {
       return;
     }
     somTiro();
-    this.ferir(PARTE_DO_NUMERO[num]!, { x: wx, y: wy }, true);
+    // Nas manobras (e na sorte) o tiro é de raspão: tira menos, e ela se esquiva.
+    this.ferir(PARTE_DO_NUMERO[num]!, { x: wx, y: wy }, true, !!corpo.manobra || Math.random() < CHANCE_RASPAO);
   }
 
-  private ferir(parte: NomeParte, onde: { x: number; y: number }, meu: boolean): void {
+  private ferir(parte: NomeParte, onde: { x: number; y: number }, meu: boolean, raspao = false): void {
     const alvo = alvoDaParte(parte);
     let dano = DANO[alvo];
     if (this.fase === 'conjurando') dano *= MULT_CONJURANDO;
     if (this.fase === 'tonta') dano *= MULT_TONTA;
+    if (raspao) {
+      dano *= DANO_RASPAO;
+      this.esquivar(Math.sign((this.corpo?.x ?? onde.x) - onde.x) || 1);
+      // Um letreiro por vez: em rajada eles se empilhavam.
+      const agora = performance.now();
+      if (meu && agora - this.ultimoRaspao > 350) { this.ultimoRaspao = agora; this.letreiro('DE RASPÃO!', onde.x, onde.y - 16, 'esquiva'); }
+      this.aoEvento?.({ tipo: 'esquivou', manobra: this.corpo?.manobra?.tipo ?? 'velocidade' });
+    }
     this.tirarVida(dano);
     if (meu) this.ajudei = true;
     if (meu) this.banco?.aoAcertar(dano, alvo === 'cabeca');
@@ -1095,6 +1148,22 @@ export class PalcoChefona {
     if (this.conjuro) this.conjuro.dano += dano;
     this.acertos.push(this.tempo);
     this.depoisDoDano();
+  }
+
+  /**
+   * A esquiva do raspão: ela dá um passo para o lado (o desenho e a mira andam
+   * juntos, em `centroSprite`) e deixa um rastro roxo de onde estava.
+   */
+  private esquivar(dir: number): void {
+    const corpo = this.corpo;
+    if (!corpo) return;
+    if (!this.esquiva || this.esquiva.t > ESQUIVA_S * 0.6) {
+      const s = this.centroSprite();
+      this.fantasmas.push({ x: s.x, y: s.y, quadro: this.quadroAtual(), lado: corpo.lado, estagio: this.estagio, vida: 0.32 });
+      if (this.fantasmas.length > 4) this.fantasmas.shift();
+      somVento();
+    }
+    this.esquiva = { t: 0, dir: dir < 0 ? -1 : 1 };
   }
 
   /** O vermelho do dano e o «hmf» (o som não repete em rajada). */
@@ -1571,7 +1640,7 @@ export class PalcoChefona {
     this.orbesPegos = 0;
     this.orbes = Array.from({ length: ORBES_XP }, () => ({
       // `tam` é o quadro da textura (0 a menor): quase todas pequenas, como as do jogo.
-      x: cx + entre(-8, 8), y: cy, vx: entre(-70, 70), vy: entre(-140, -50), t: entre(0, 0.3), voando: false, tam: sorteia([0, 0, 0, 1, 1, 2]), pegou: false,
+      x: cx + entre(-8, 8), y: cy, vx: entre(-70, 70), vy: entre(-140, -50), t: entre(0, 0.3), voando: false, tam: sorteia([0, 0, 0, 0, 1]), pegou: false,
     }));
     this.corpo = null;
     this.queda = null;
@@ -1757,6 +1826,11 @@ export class PalcoChefona {
       }
     }
     if (this.corpo && this.atingivel()) { this.rastro(dt); this.passoRegen(dt); }
+    if (this.esquiva) { this.esquiva.t += dt; if (this.esquiva.t >= ESQUIVA_S) this.esquiva = null; }
+    if (this.fantasmas.length) {
+      for (const f of this.fantasmas) f.vida -= dt;
+      this.fantasmas = this.fantasmas.filter(f => f.vida > 0);
+    }
     if (this.voando) {
       const g = this.voando;
       g.t += dt;
@@ -2010,6 +2084,12 @@ export class PalcoChefona {
     for (const p of this.particulas) this.desenharParticula(p);
     c.globalAlpha = 1;
     this.desenharRunasVoando();
+    // Os rastros da esquiva, por baixo dela: cópias que apagam.
+    for (const f of this.fantasmas) {
+      c.globalAlpha = Math.max(0, Math.min(0.45, f.vida * 1.4));
+      c.drawImage(sprite(f.estagio, f.quadro, f.lado, false), Math.round(f.x - LARG / 2), Math.round(f.y - ALT / 2));
+    }
+    c.globalAlpha = 1;
     const corpo = this.corpo;
     if (corpo && corpo.visivel) {
       if (this.conjuro?.feitico === FEITICO_FORTE) this.desenharCirculo(agora);
@@ -2397,25 +2477,38 @@ export class PalcoChefona {
   }
 
   /**
-   * A conquista de quem ajudou, como a toast do Minecraft: a caixa escura de
-   * 160 × 32 com a borda cinza e os cantos cortados, o ícone do item (a Poção
-   * de Cura, 16 × 16) à esquerda, «Desafio concluído!» na cor dos desafios
-   * (§d, rosa) e o nome em branco embaixo, na letra do jogo, com a sombra.
-   * Entra deslizando pela direita, no canto de cima, fica 5 s e sai.
+   * A conquista de quem ajudou: a placa épica (`conquista.ts`) no alto da tela,
+   * com a fanfarra de desafio do jogo e três estouros de estrelinhas douradas e
+   * roxas em volta dela.
    */
   private mostrarConquista(): void {
-    this.raiz.querySelectorAll('.bxc-conquista').forEach(a => a.remove());
-    const el = toastDeConquista(CONQUISTA.titulo, CONQUISTA.nome, miniatura(DROPS[0])[0]);
-    el.className = 'bxc-conquista';
-    el.setAttribute('role', 'status');
-    el.setAttribute('aria-label', `${CONQUISTA.titulo} ${CONQUISTA.nome}. ${CONQUISTA.descricao}`);
-    el.style.width = `${el.width * 2}px`;
-    el.style.height = `${el.height * 2}px`;
-    el.style.setProperty('--bxc-toast-ms', `${TOAST_MS}ms`);
+    this.raiz.querySelectorAll('.bxc-placa').forEach(a => a.remove());
+    const el = montarPlaca(CONQUISTA, miniatura(contornado(DROPS[0]))[0]);
     this.raiz.appendChild(el);
     somConquista();
     this.aoEvento?.({ tipo: 'conquista', nome: CONQUISTA.nome });
-    setTimeout(() => el.remove(), TOAST_MS + 1300);
+    setTimeout(() => el.remove(), PLACA_MS + 600);
+    // Os estouros em volta da placa (o meio dela, em px da arte).
+    const r = el.getBoundingClientRect();
+    const base = this.raiz.getBoundingClientRect();
+    const cx = (r.left + r.width / 2 - base.left) / this.escala;
+    const cy = (r.top + r.height / 2 - base.top) / this.escala;
+    const meia = (r.width / 2 / this.escala) || (80 * ESCALA_PLACA) / this.escala;
+    const estouro = () => {
+      for (let i = 0; i < 46; i++) {
+        const a = Math.random() * Math.PI * 2, v = entre(40, 140);
+        this.particula({
+          x: cx + entre(-meia, meia), y: cy + entre(-8, 8), vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - 30,
+          vida: entre(0.7, 1.4), cor: sorteia(['#ff55ff', '#ffd34d', '#fff6a0', '#c070ff', '#ffffff']), tam: 1, g: 60,
+          forma: Math.random() < 0.5 ? 'estrela' : 'cruz',
+        });
+      }
+      this.anel(cx, cy, '#ff55ff', 160, 0.6);
+      this.acordar();
+    };
+    estouro();
+    setTimeout(estouro, 550);
+    setTimeout(estouro, 1150);
   }
 
   private aviso(titulo: string, sub: string): void {

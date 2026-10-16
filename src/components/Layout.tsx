@@ -765,8 +765,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           e ele só acende quando a busca passa de 320 ms. */}
       <BarraAtualizacao />
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar. `data-chefona-livre`: com a chefona da caça na tela, a
+          barra lateral continua clicável (o escudo dela começa depois daqui). */}
       <motion.aside
+        data-chefona-livre=""
         animate={{ width: sidebarOpen ? 240 : 64 }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         className="hidden md:flex flex-col bg-sidebar border-r border-sidebar-border overflow-hidden flex-shrink-0"
@@ -782,7 +784,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setMobileOpen(false)} />
-            <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+            <motion.aside data-chefona-livre="" initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border z-50 md:hidden">
               {sidebarContent}

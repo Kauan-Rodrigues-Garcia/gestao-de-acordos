@@ -273,6 +273,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
 
   const rodadaRef = useRef(rodada);
   rodadaRef.current = rodada;
+  const superAdminRef = useRef(superAdmin);
+  superAdminRef.current = superAdmin;
   // Os tiros guardados até o próximo lote, e o dano que ainda não voltou do banco.
   const lote = useRef({ acertos: 0, criticos: 0, dano: 0 });
   const pendente = useRef(0);
@@ -324,7 +326,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
         pendente.current += dano;
       },
     };
-    const palco = new PalcoChefona(el, { banco: fonte, aoEvento });
+    // O super_admin não tem escudo: ele comanda a luta e segue usando o Gestão.
+    const palco = new PalcoChefona(el, { banco: fonte, aoEvento, escudo: !superAdminRef.current });
     palcoRef.current = palco;
     setHost(el);
     return () => {
