@@ -13,7 +13,7 @@ export function FaixaBruxas({ rodada }: { rodada: RodadaAbobora }) {
   const lugar = useRef<HTMLDivElement>(null);
   const d = dadosDaRodada(rodada);
   // O que muda a faixa: a rodada, e o «2x» que chega depois.
-  const chave = `${rodada.id}:${d.dobrado ? 1 : 0}:${d.morte}:${d.nome}:${d.foto ?? ''}:${d.rapida ? 1 : 0}:${d.hsRapido ? 1 : 0}`;
+  const chave = `${rodada.id}:${d.dobrado ? 1 : 0}:${d.morte}:${d.nome}:${d.setor ?? ''}:${d.foto ?? ''}:${d.rapida ? 1 : 0}:${d.hsRapido ? 1 : 0}`;
 
   useLayoutEffect(() => {
     const el = lugar.current;

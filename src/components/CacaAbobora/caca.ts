@@ -49,6 +49,8 @@ export interface RodadaAbobora {
   achada_por_nome:    string | null;
   /** Só com foto: a faixa mostra a foto. Sem ela, só o nome. */
   achada_por_foto:    string | null;
+  /** O setor de quem pegou, gravado no tiro. Antes da migration 20261015233000, `null`. */
+  achada_por_setor:   string | null;
   ms:                 number | null;
   /** O mais rápido do dia, de qualquer tiro. */
   mais_rapida_do_dia: boolean;
@@ -120,6 +122,7 @@ export function normalizarRodada(bruto: unknown): RodadaAbobora | null {
     achada_por:         texto(r.achada_por),
     achada_por_nome:    texto(r.achada_por_nome),
     achada_por_foto:    texto(r.achada_por_foto),
+    achada_por_setor:   texto(r.achada_por_setor),
     ms:                 r.ms == null ? null : Number(r.ms),
     mais_rapida_do_dia: r.mais_rapida_do_dia === true,
     zumbi:              r.zumbi == null || !Number.isFinite(Number(r.zumbi)) ? null : Number(r.zumbi),
@@ -370,7 +373,7 @@ function rodadaDeEnsaio(p: Partial<RodadaAbobora>): RodadaAbobora {
     id: ultimoEnsaio, dia: '', solta_em: new Date(agora).toISOString(),
     expira_em: new Date(agora + 15 * 60_000).toISOString(),
     semente: Math.floor(Math.random() * 2 ** 31), origem: 'teste', situacao: 'solta',
-    achada_em: null, achada_por: null, achada_por_nome: null, achada_por_foto: null, ms: null,
+    achada_em: null, achada_por: null, achada_por_nome: null, achada_por_foto: null, achada_por_setor: null, ms: null,
     mais_rapida_do_dia: false, zumbi: 0, headshot: false, headshot_mais_rapido_do_dia: false,
     tema: 'zumbis', bruxa: null, tiro: null,
     finalizada_em: null, finalizada_por: null, finalizada_por_nome: null, dobrado: false,
@@ -382,7 +385,7 @@ function matarNoEnsaio(r: RodadaAbobora, nome: string, headshot: boolean, extra:
   const agora = Date.now();
   return {
     ...r, situacao: 'achada', achada_em: new Date(agora).toISOString(), achada_por: 'ensaio',
-    achada_por_nome: nome, ms: Math.max(0, agora - Date.parse(r.solta_em)), headshot, ...extra,
+    achada_por_nome: nome, achada_por_setor: 'Setor do Ensaio', ms: Math.max(0, agora - Date.parse(r.solta_em)), headshot, ...extra,
   };
 }
 

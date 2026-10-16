@@ -116,7 +116,7 @@ export function CenaBruxas({ rodada, naTela, eu }: {
         } else {
           if (rr?.achada_por) palcoRef.current?.trocarQuem(rr.achada_por);
           toast(rr?.situacao === 'achada'
-            ? `${nomeCurto(rr.achada_por_nome)} derrubou primeiro.`
+            ? `${nomeCurto(rr.achada_por_nome)}${rr.achada_por_setor ? ` (${rr.achada_por_setor})` : ''} derrubou primeiro.`
             : 'Ela já tinha ido embora.');
         }
       } else if (e.tipo === 'finalizou' && e.quem === eu) {

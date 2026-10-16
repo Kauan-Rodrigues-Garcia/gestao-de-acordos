@@ -17,7 +17,7 @@ import { dadosDaRodada } from './rodada';
 const BRUTA = {
   id: 7, dia: '2026-10-20', solta_em: '2026-10-20T13:00:00Z', expira_em: '2026-10-20T13:15:00Z',
   semente: 123, origem: 'sorteio', situacao: 'achada', achada_em: '2026-10-20T13:00:04Z',
-  achada_por: 'u1', achada_por_nome: 'Mariana de Souza Lima', achada_por_foto: 'https://x/f.jpg', ms: 4213,
+  achada_por: 'u1', achada_por_nome: 'Mariana de Souza Lima', achada_por_foto: 'https://x/f.jpg', achada_por_setor: 'Play 2', ms: 4213,
   mais_rapida_do_dia: true, zumbi: null, headshot: false, headshot_mais_rapido_do_dia: false,
   tema: 'bruxas', bruxa: 2, tiro: 'vassoura',
   finalizada_em: null, finalizada_por: null, finalizada_por_nome: null, dobrado: false,
@@ -59,6 +59,10 @@ describe('a rodada de bruxa', () => {
     expect(d.morte).toBe('vassoura');
     expect(d.dobrado).toBe(true);
     expect(d.rapida).toBe(true);
+    expect(d.setor).toBe('Play 2');
+    // Antes da migration 20261015233000 a coluna não vem: sem setor.
+    const { achada_por_setor: _semColuna, ...antiga } = BRUTA;
+    expect(dadosDaRodada(normalizarRodada(antiga)! as RodadaAbobora).setor).toBeNull();
     // Rodada sem `tiro`: cabeça ou corpo, pelo headshot.
     expect(dadosDaRodada({ ...r, tiro: null, headshot: true }).morte).toBe('cabeca');
   });

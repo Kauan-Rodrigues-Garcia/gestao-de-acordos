@@ -10,6 +10,7 @@ export function dadosDaRodada(r: RodadaAbobora): DadosFaixa {
   return {
     nome: nomeCurto(r.achada_por_nome),
     foto: r.achada_por_foto,
+    setor: r.achada_por_setor,
     bruxa: bruxaDaRodada(r),
     morte: r.tiro ?? (r.headshot ? 'cabeca' : 'corpo'),
     ms: r.ms,

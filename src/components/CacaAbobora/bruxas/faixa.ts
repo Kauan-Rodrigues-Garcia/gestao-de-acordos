@@ -29,6 +29,8 @@ import type { Morte } from './queda';
 export interface DadosFaixa {
   nome: string;
   foto?: string | null;
+  /** O setor de quem derrubou (15/10/2026). Sem ele (rodada antiga), só o nome. */
+  setor?: string | null;
   bruxa: Bruxa;
   morte: Morte;
   ms: number | null;
@@ -59,7 +61,7 @@ export function feitoDaFaixa(d: Pick<DadosFaixa, 'bruxa' | 'morte'>): string {
 
 /** A frase inteira, para o leitor de tela e para o teste. */
 export function fraseDaFaixa(d: DadosFaixa): string {
-  return `${d.nome} ${feitoDaFaixa(d)} primeiro`
+  return `${d.nome}${d.setor ? `, do setor ${d.setor},` : ''} ${feitoDaFaixa(d)} primeiro`
     + (d.morte === 'cabeca' ? ', com um headshot,' : '')
     + ` em ${formatarTempo(d.ms)}`
     + (d.rapida ? ' — o mais rápido do dia' : '')
@@ -215,6 +217,7 @@ function umRecado(d: DadosFaixa): HTMLSpanElement {
   nome.appendChild(el('b', '', d.nome));
   nome.appendChild(icone('brilho', 1, 'bx-faixa-brilho bx-faixa-brilho-2'));
   r.appendChild(nome);
+  if (d.setor) r.appendChild(el('span', 'bx-faixa-setor', d.setor));
 
   for (const e of etiquetasDaFaixa(d)) {
     const t = ROTULO[e];

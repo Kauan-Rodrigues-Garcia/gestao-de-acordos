@@ -232,6 +232,13 @@ describe('faixa', () => {
       .toBe(`Mariana Souza abateu ${bruxa.nome} primeiro, com um headshot, em 12,4 s — o mais rápido do dia.`);
   });
 
+  it('a frase leva o setor de quem derrubou, quando a rodada tem', () => {
+    expect(fraseDaFaixa({ nome: 'Mariana Souza', setor: 'Play 2', bruxa, morte: 'corpo', ms: 12_400 }))
+      .toBe(`Mariana Souza, do setor Play 2, abateu ${bruxa.nome} primeiro em 12,4 s.`);
+    expect(fraseDaFaixa({ nome: 'Mariana Souza', setor: null, bruxa, morte: 'corpo', ms: 12_400 }))
+      .toBe(`Mariana Souza abateu ${bruxa.nome} primeiro em 12,4 s.`);
+  });
+
   it('as etiquetas: headshot, vassourada, nocaute do fofo e recordes', () => {
     expect(etiquetasDaFaixa({ bruxa, morte: 'cabeca', hsRapido: true })).toEqual(['headshot', 'hsRapido']);
     expect(etiquetasDaFaixa({ bruxa, morte: 'vassoura' })).toEqual(['vassourada']);
