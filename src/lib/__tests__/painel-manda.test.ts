@@ -110,6 +110,10 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a etiqueta ADM do chat ROTULA o super_admin, não libera nada — não há acesso a conceder, e uma chave de painel para "mostrar quem é o dono do sistema" seria uma permissão que ninguém deveria poder desligar.',
   },
+  'components/Chat/BolhaChat.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'a conversa de Autorizações fica DISCRETA para o super_admin (decisão do Cleber em 15/10/2026): sem aviso de pedido novo, sem contar na bolha. Não libera nem tira acesso — quem decide se ele vê a fila e se pode autorizar continua sendo `temPermissao`.',
+  },
   'pages/AdminLogs/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'idem useLogs: o seletor de empresa da trilha só existe para super_admin.',

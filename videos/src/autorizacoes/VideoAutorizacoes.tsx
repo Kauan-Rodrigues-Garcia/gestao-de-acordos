@@ -20,7 +20,7 @@ import { tempoApp, type TempoApp } from '../app/roteiro';
 import { Manchete } from '../cenas/Manchete';
 import { Cursor, type PontoCursor } from '../componentes/Cursor';
 import { Fundo } from '../componentes/Fundo';
-import { ACELERA, entrada, entre, mola, ms, SUAVE, SUAVE_IDA_VOLTA } from '../movimento';
+import { ACELERA, entrada, entre, mola, ms, SUAVE_IDA_VOLTA } from '../movimento';
 import { COR, FONTE, GRADIENTE_MARCA, SOMBRA_FLUTUA } from '../tema';
 import { ChatAutorizacoes, GEO } from './ChatAutorizacoes';
 import { DECIDE, T } from './tempos';

@@ -82,7 +82,14 @@ function montar() {
   return render(React.createElement(MemoryRouter, null, React.createElement(AdminSetoresAba)));
 }
 
-const lixeira = (nome: string) => screen.findByRole('button', { name: `Remover setor ${nome}` });
+/*
+ * Esperas de 5 s, e não o 1 s padrão: com a suíte inteira rodando (9 mil
+ * testes em paralelo) a primeira montagem da aba passava de 1 s às vezes, e o
+ * teste caía sem nada estar errado (16/10/2026).
+ */
+const ESPERA = { timeout: 5_000 };
+const lixeira = (nome: string) =>
+  screen.findByRole('button', { name: `Remover setor ${nome}` }, ESPERA);
 
 beforeEach(() => {
   temPermissao.mockImplementation(() => true);
@@ -93,8 +100,8 @@ beforeEach(() => {
 describe('AdminSetoresAba — remover setor', () => {
   it('com usuário ou com equipe, a lixeira nasce desabilitada', async () => {
     montar();
-    await waitFor(async () => expect(await lixeira('Play 1')).toBeDisabled());
-    await waitFor(async () => expect(await lixeira('Só equipe')).toBeDisabled());
+    await waitFor(async () => expect(await lixeira('Play 1')).toBeDisabled(), ESPERA);
+    await waitFor(async () => expect(await lixeira('Só equipe')).toBeDisabled(), ESPERA);
     expect(await lixeira('teste')).toBeEnabled();
   });
 

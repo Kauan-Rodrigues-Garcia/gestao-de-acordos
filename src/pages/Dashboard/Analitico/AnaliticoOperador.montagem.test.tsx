@@ -36,6 +36,14 @@ vi.mock('@/services/situacaoUsuario.service', () => ({
 }));
 
 /** Uma linha real o bastante para a tabela desenhar de verdade. */
+/*
+ * Import estático, e não `await import()` dentro de cada teste: o primeiro
+ * caso pagava sozinho a compilação do componente e das dependências, e com a
+ * suíte inteira rodando isso às vezes estourava (16/10/2026). Os `vi.mock`
+ * acima são içados, então continuam valendo para este import.
+ */
+import { AnaliticoOperador } from './AnaliticoOperador';
+
 const linha = {
   id: 'linha-1', empresa_id: 'empresa-1', operador_id: 'op-1',
   operador_usuario: 'ana.silva', codigo: '12345', nome_cliente: 'Cliente Um',
@@ -70,26 +78,22 @@ describe('AnaliticoOperador monta', () => {
   it.each(recortes.map(r => [r.modo, r] as const))(
     'monta sem lançar no recorte %s',
     async (_modo, recorte) => {
-      const { AnaliticoOperador } = await import('./AnaliticoOperador');
       expect(() => render(<AnaliticoOperador {...props} recorte={recorte} />)).not.toThrow();
     },
   );
 
   it('monta com o ranking liberado — o caminho do tile de posição', async () => {
-    const { AnaliticoOperador } = await import('./AnaliticoOperador');
     expect(() => render(
       <AnaliticoOperador {...props} podeVerRanking recorte={{ modo: 'mes', mes: '2026-09' }} />,
     )).not.toThrow();
   });
 
   it('sem a chave, a aba de formas não entra na régua', async () => {
-    const { AnaliticoOperador } = await import('./AnaliticoOperador');
     render(<AnaliticoOperador {...props} recorte={{ modo: 'mes', mes: '2026-09' }} />);
     expect(screen.queryByRole('button', { name: /Formas de pagamento/ })).not.toBeInTheDocument();
   });
 
   it('com a chave, a aba de formas aparece', async () => {
-    const { AnaliticoOperador } = await import('./AnaliticoOperador');
     render(
       <AnaliticoOperador {...props} podeVerFormas recorte={{ modo: 'mes', mes: '2026-09' }} />,
     );
@@ -97,7 +101,6 @@ describe('AnaliticoOperador monta', () => {
   });
 
   it('monta sem nenhum recebimento', async () => {
-    const { AnaliticoOperador } = await import('./AnaliticoOperador');
     render(<AnaliticoOperador {...props} dados={[]} recorte={{ modo: 'mes', mes: '2026-09' }} />);
     expect(screen.getByText(/Nenhum recebimento encontrado/)).toBeInTheDocument();
   });

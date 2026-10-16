@@ -815,37 +815,93 @@ export function PixAutomatico() {
    */
   const primeiraCargaPix = useRef(guardado == null);
 
+  /*
+   * O que `carregar` NÃO refaz a cada clique (16/10/2026).
+   *
+   * Ela roda depois de toda ação — aprovar, pagar, excluir —, e a cada uma
+   * relia também o que quase nunca muda: operadores, equipes, setores e o
+   * retrato do mês, além de disparar o expurgo dos desaprovados (uma ESCRITA).
+   * Um líder aprovando 40 linhas fazia 40 vezes as três consultas de cadastro
+   * e 40 expurgos idênticos.
+   *
+   *   • expurgo ........ uma vez por abertura da tela (o job das 05h20 no banco
+   *                      é quem cobra o prazo de verdade — ver a migration
+   *                      20260909100100; aqui é só o reforço de quem abre);
+   *   • cadastro ....... na primeira carga do recorte, na troca de recorte, e
+   *                      depois de 5 minutos — gente nova entra sem F5, mas
+   *                      não a cada clique.
+   */
+  const expurgoFeitoRef = useRef(false);
+  const estruturaRef = useRef<{
+    chave: string; em: number;
+    ops: OperadorInfo[]; eqs: EquipeComSetor[]; sets: SetorDaAba[];
+  } | null>(null);
+
   const carregar = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
     const comEsqueleto = primeiraCargaPix.current;
     if (comEsqueleto) setLoading(true);
     try {
-      // Expurgo dos desaprovados vencidos ANTES de listar: sem job agendado, é
-      // a abertura da tela que cobra o prazo. Só líder+ tem a policy — para o
-      // operador a chamada volta zero e a lista segue igual.
-      //
-      // O try/catch é a segunda trava: o expurgo é acessório, a listagem é a
-      // tela. Enquanto ele estourava (RPC ainda não aplicada no banco), a
-      // exceção abortava o `carregar` inteiro e a aba aparecia VAZIA — com 73
-      // pendentes e 148 aprovados intactos no banco. Nada aqui pode impedir a
-      // lista de carregar.
-      //
-      // Os clones vêm junto, ANTES da lista: é deles que sai quem tem Pix
-      // compartilhado entre dois setores. Ver «Linha compartilhada» em
-      // pixAutomaticoView.
-      const [, vinculos] = await Promise.all([
-        podeVerDeOutros
+      const estrutura = estruturaRef.current;
+      const precisaEstrutura = podeVerDeOutros && (
+        !estrutura || estrutura.chave !== chaveDados || Date.now() - estrutura.em > 5 * 60_000
+      );
+      const fazExpurgo = podeVerDeOutros && !expurgoFeitoRef.current;
+      expurgoFeitoRef.current = expurgoFeitoRef.current || fazExpurgo;
+
+      /*
+       * Fase 1, tudo junto: o que não depende de nada.
+       *
+       * Expurgo dos desaprovados vencidos ANTES de listar — só líder+ tem a
+       * policy. O try/catch é a segunda trava: o expurgo é acessório, a
+       * listagem é a tela. Enquanto ele estourava (RPC ainda não aplicada no
+       * banco), a exceção abortava o `carregar` inteiro e a aba aparecia VAZIA
+       * — com 73 pendentes e 148 aprovados intactos no banco.
+       *
+       * Os clones vêm junto, ANTES da lista: é deles que sai quem tem Pix
+       * compartilhado entre dois setores. Ver «Linha compartilhada» em
+       * pixAutomaticoView.
+       *
+       * O cadastro (nomes/equipes/setores para filtros, vínculo e coluna
+       * Operador) também não depende da lista, e entra aqui em vez de esperar
+       * por ela. Preso ao setor do líder — ver `setorEscopo`. `foto_url` entra
+       * por causa do pódio do ranking — ver `PixRankingSetor`.
+       */
+      const consultaEstrutura = precisaEstrutura ? (() => {
+        let qOps = supabase.from('perfis')
+          .select('id, nome, equipe_id, setor_id, perfil, foto_url')
+          .eq('empresa_id', empresa.id);
+        let qEqs = supabase.from('equipes').select('id, nome, setor_id')
+          .eq('empresa_id', empresa.id);
+        let qSets = supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO)
+          .eq('empresa_id', empresa.id);
+        if (setorEscopo) {
+          qOps  = qOps.eq('setor_id', setorEscopo);
+          qEqs  = qEqs.eq('setor_id', setorEscopo);
+          qSets = qSets.eq('id', setorEscopo);
+        }
+        return Promise.all([
+          qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
+          // Mês fechado tem foto. Ver `fetchRetratoPixDoMes`.
+          ehMesAtual(mes) ? Promise.resolve(null) : fetchRetratoPixDoMes(empresa.id, mes),
+        ]);
+      })() : null;
+
+      const [, vinculos, meus] = await Promise.all([
+        fazExpurgo
           ? expurgarDesaprovadosVencidos(empresa.id).catch(e => {
               console.warn('[PixAutomatico] expurgo dos desaprovados:', e);
             })
           : Promise.resolve(),
         podeVerDeOutros ? lerVinculosDeClone(empresa.id) : Promise.resolve([]),
+        fetchMeusSetores(),
       ]);
       const setoresDaPessoa = setoresPorPessoaClonada(vinculos);
       const compartilhadas = setorEscopo
         ? pessoasCompartilhadasCom(setoresDaPessoa, setorEscopo)
         : [];
 
+      // ── Fase 2: as listas (dependem dos clones) ──
       const [listaDoSetor, listaCompartilhada, cfgs, bloqueados, saldosDoEscopo, pedidos, pagamentos] = await Promise.all([
         fetchAcordosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
@@ -869,6 +925,10 @@ export function PixAutomatico() {
           ? fetchPremiacoesPagamento(empresa.id, mes)
           : Promise.resolve([]),
       ]);
+      // As assinaturas de quem já decidiu um lado. Fila vazia não vai ao banco.
+      // Sai já, e corre junto com o processamento abaixo.
+      const assinaturasP = fetchAprovacoesPedidosNr(pedidos.map(x => x.id));
+
       const lista = setorEscopo
         ? juntarLinhasCompartilhadas(listaDoSetor, listaCompartilhada, setorEscopo, setoresDaPessoa)
         : listaDoSetor;
@@ -879,10 +939,7 @@ export function PixAutomatico() {
       setItens(atual => reconciliarLista(atual, lista, { chave: i => i.id }));
       setSaldos(atual => reconciliarLista(atual, saldosDoEscopo, { chave: s => s.id }));
       setPedidosNr(atual => reconciliarLista(atual, pedidos, { chave: x => x.id }));
-      // As assinaturas de quem já decidiu um lado. Fila vazia não vai ao banco.
-      const assinaturas = await fetchAprovacoesPedidosNr(pedidos.map(x => x.id));
-      setMeusSetores(await fetchMeusSetores());
-      setAprovacoesNr(atual => reconciliarLista(atual, assinaturas, { chave: a => a.id }));
+      setMeusSetores(meus);
       setPagamentosPremiacao(atual => reconciliarLista(
         atual, pagamentos, { chave: x => x.id },
       ));
@@ -893,51 +950,37 @@ export function PixAutomatico() {
       // dele re-renderizaria a cada ação, com o mesmo conteúdo dentro.
       setDonosDeNr(atual => donosIguais(atual, bloqueados) ? atual : bloqueados);
 
-      let listaOps: OperadorInfo[] = [];
-      let listaEqs: EquipeComSetor[] = [];
-      let listaSets: SetorDaAba[] = [];
+      let listaOps: OperadorInfo[] = estrutura?.ops ?? [];
+      let listaEqs: EquipeComSetor[] = estrutura?.eqs ?? [];
+      let listaSets: SetorDaAba[] = estrutura?.sets ?? [];
 
       if (podeVerDeOutros) {
-        // Nomes/equipes/setores para filtros, vínculo e coluna Operador.
-        // Presos ao setor do líder — ver `setorEscopo`.
-        // `foto_url` entra por causa do pódio do ranking — ver `PixRankingSetor`.
-        let qOps = supabase.from('perfis')
-          .select('id, nome, equipe_id, setor_id, perfil, foto_url')
-          .eq('empresa_id', empresa.id);
-        let qEqs = supabase.from('equipes').select('id, nome, setor_id')
-          .eq('empresa_id', empresa.id);
-        let qSets = supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO)
-          .eq('empresa_id', empresa.id);
-        if (setorEscopo) {
-          qOps  = qOps.eq('setor_id', setorEscopo);
-          qEqs  = qEqs.eq('setor_id', setorEscopo);
-          qSets = qSets.eq('id', setorEscopo);
-        }
-        const [{ data: ops }, { data: eqs }, { data: sets }, retrato] = await Promise.all([
-          qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
-          // Mês fechado tem foto. Ver `fetchRetratoPixDoMes`.
-          ehMesAtual(mes) ? Promise.resolve(null) : fetchRetratoPixDoMes(empresa.id, mes),
-        ]);
-        listaOps  = (ops  ?? []) as OperadorInfo[];
-        listaEqs  = (eqs  ?? []) as EquipeComSetor[];
-        // `tipo` (fase 6) ainda não está em `database.types.ts`.
-        listaSets = (sets ?? []) as unknown as SetorDaAba[];
-
         // Clone não muda o setor do cadastro — ver «Clones» em pixAutomaticoView.
         // O setor de cada equipe vem do próprio vínculo, e não de `listaEqs`:
         // esta já está presa ao setor do líder, e o líder do Receptivo perderia
-        // de vista onde a pessoa dele foi clonada.
+        // de vista onde a pessoa dele foi clonada. Recalculado a cada carga: os
+        // vínculos acabaram de ser lidos, e a conta não vai ao banco.
         const clones = clonesPorOperador(
           vinculos,
           vinculos.map(v => ({ id: v.equipe_id, setor_id: v.setor_da_equipe })),
         );
         clonesRef.current = clones;
+      }
+
+      if (consultaEstrutura) {
+        const [{ data: ops }, { data: eqs }, { data: sets }, retrato] = await consultaEstrutura;
+        listaOps  = (ops  ?? []) as OperadorInfo[];
+        listaEqs  = (eqs  ?? []) as EquipeComSetor[];
+        // `tipo` (fase 6) ainda não está em `database.types.ts`.
+        listaSets = (sets ?? []) as unknown as SetorDaAba[];
+
         /*
          * O líder preso a um setor alternativo (Treinamento) não tem operador
          * nenhum com `setor_id` dele: são todos clones. Sem esta leitura, o
          * vínculo abria vazio e ele não registrava Pix para ninguém.
          */
         if (setorEscopo) {
+          const clones = clonesRef.current;
           const naLista = new Set(listaOps.map(o => o.id));
           const faltando = Object.keys(clones).filter(id =>
             !naLista.has(id) && clones[id].some(c => c.setor_id === setorEscopo));
@@ -986,10 +1029,16 @@ export function PixAutomatico() {
           ).map(s => ({ ...s, ativo: cadastro.get(s.id)?.ativo, tipo: cadastro.get(s.id)?.tipo }));
         }
 
+        estruturaRef.current = {
+          chave: chaveDados, em: Date.now(), ops: listaOps, eqs: listaEqs, sets: listaSets,
+        };
         setOperadores(atual => reconciliarLista(atual, listaOps, { chave: o => o.id }));
         setEquipes(atual => reconciliarLista(atual, listaEqs, { chave: e => e.id }));
         setSetores(atual => reconciliarLista(atual, listaSets, { chave: x => x.id }));
       }
+
+      const assinaturas = await assinaturasP;
+      setAprovacoesNr(atual => reconciliarLista(atual, assinaturas, { chave: a => a.id }));
 
       // O retrato para a próxima montagem. Ver `chaveDados`.
       gravarInstantaneo<InstantaneoPix>(chaveDados, {

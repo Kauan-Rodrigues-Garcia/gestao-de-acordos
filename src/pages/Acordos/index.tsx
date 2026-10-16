@@ -44,6 +44,7 @@ import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { emGruposParalelos } from '@/lib/emGruposParalelos';
 import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
@@ -711,9 +712,20 @@ export default function Acordos() {
     // Guarda o rótulo de cada acordo ANTES de excluir: depois do delete a linha
     // não existe mais, e o resumo do lote precisa dizer quais NRs saíram.
     const excluidos: string[] = [];
-    for (const id of selecionados) {
+    /*
+     * 4 NRs por vez, e o par Direto/Extra do mesmo NR sempre em fila
+     * (16/10/2026). Antes era um acordo de cada vez, cada um com 3 a 4 idas ao
+     * banco: 100 selecionados levavam o tempo de ~400 pedidos seguidos. Ver
+     * `emGruposParalelos` para o porquê do grupo.
+     */
+    const porId = new Map(acordos.map(a => [a.id, a]));
+    await emGruposParalelos(selecionados, id => {
+      const a = porId.get(id);
+      const chave = (isPP ? a?.instituicao : a?.nr_cliente)?.trim();
+      return chave ? `nr:${chave}` : `id:${id}`;
+    }, 4, async id => {
       setExcluindoId(id);
-      const acordo = acordos.find(a => a.id === id);
+      const acordo = porId.get(id);
       if (acordo) {
         try { await tratarExclusaoVinculo({ acordo, isPaguePlay: isPP, operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null }); }
         catch (e) { console.warn('[excluirSelecionados] tratarExclusaoVinculo falhou:', e); }
@@ -730,7 +742,7 @@ export default function Acordos() {
         // registra abaixo, uma vez.
         if (acordo) excluidos.push(`NR ${acordo.nr_cliente} — ${acordo.nome_cliente}`);
       }
-    }
+    });
     setExcluindoId(null);
     setSelecionados([]);
 

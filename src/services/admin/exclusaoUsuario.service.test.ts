@@ -54,12 +54,26 @@ import {
   traduzirErro,
 } from './exclusaoUsuario.service';
 
-/** `from('acordos').select().eq().eq().order()` devolvendo as linhas dadas. */
-function comAcordos(linhas: unknown[], error: { message: string } | null = null) {
+/**
+ * `from('acordos').select().eq().order().order().range(de, ate)` servindo as
+ * linhas dadas em páginas — como o PostgREST, que corta em 1000 por pedido.
+ * `erroNaPagina` faz a página de número N (a partir de 0) falhar.
+ */
+function comAcordos(
+  linhas: unknown[], error: { message: string } | null = null, erroNaPagina?: number,
+) {
   const cadeia: Record<string, unknown> = {};
+  let pagina = 0;
   cadeia.select = vi.fn(() => cadeia);
   cadeia.eq     = vi.fn(() => cadeia);
-  cadeia.order  = vi.fn(() => Promise.resolve({ data: linhas, error }));
+  cadeia.order  = vi.fn(() => cadeia);
+  cadeia.range  = vi.fn((de: number, ate: number) => {
+    const esta = pagina++;
+    if (error || esta === erroNaPagina) {
+      return Promise.resolve({ data: null, error: error ?? { message: 'statement timeout' } });
+    }
+    return Promise.resolve({ data: linhas.slice(de, ate + 1), error: null });
+  });
   fromMock.mockReturnValue(cadeia);
   return cadeia;
 }
@@ -162,6 +176,37 @@ describe('excluirUsuarioComAcordos', () => {
     expect(rpcMock).toHaveBeenCalledWith('fn_admin_delete_user', {
       p_user_id: 'u-1', p_apagar_acordos: true,
     });
+  });
+
+  /*
+   * 16/10/2026: a planilha é a única cópia do que o banco vai apagar. Sem
+   * paginar, o PostgREST cortava em 1000 linhas e quem tinha mais tabulações
+   * perdia o resto sem cópia nenhuma.
+   */
+  it('mais de 1000 tabulações: a planilha leva TODAS', async () => {
+    const linhas = Array.from({ length: 2_500 }, (_, i) => ({ id: `a${i}`, nr_cliente: String(i) }));
+    const cadeia = comAcordos(linhas);
+    rpcMock.mockResolvedValue({ data: { ok: true, acordos_apagados: 2_500 }, error: null });
+
+    const xlsx = await import('@e965/xlsx');
+    const paraPlanilha = vi.mocked(xlsx.utils.json_to_sheet);
+    paraPlanilha.mockClear();
+
+    const r = await excluirUsuarioComAcordos({ userId: 'u-1', nome: 'Fulano' });
+
+    expect(r.status).toBe('ok');
+    expect(cadeia.range).toHaveBeenCalledTimes(3);
+    expect((paraPlanilha.mock.calls[0]?.[0] as unknown[]).length).toBe(2_500);
+  });
+
+  it('a leitura falhou no meio: NADA é excluído (antes seguia com planilha vazia)', async () => {
+    comAcordos(Array.from({ length: 1_500 }, (_, i) => ({ id: `a${i}` })), null, 1);
+
+    const r = await excluirUsuarioComAcordos({ userId: 'u-1', nome: 'Fulano' });
+
+    expect(r.status).toBe('falha');
+    expect(r.status === 'falha' && r.mensagem).toContain('nada foi excluído');
+    expect(rpcMock).not.toHaveBeenCalledWith('fn_admin_delete_user', expect.anything());
   });
 
   it('relatório falhou: NADA é excluído', async () => {

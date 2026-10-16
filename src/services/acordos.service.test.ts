@@ -14,7 +14,6 @@
  *   Funções puras (sem mock de Supabase):
  *     - calcularMetricas         (lista → MetricasAcordos)
  *     - calcularMetricasMes      (lista → MetricasMes, "hoje" fixo)
- *     - calcularMetricasDashboard (lista → MetricasDashboard, "hoje" fixo)
  *
  * Padrão de mock idêntico ao de `lixeira.service.test.ts` e
  * `notificacoes.service.test.ts`, acrescentando:
@@ -105,7 +104,6 @@ import {
   verificarNrsDuplicadosEmLote,
   calcularMetricas,
   calcularMetricasMes,
-  calcularMetricasDashboard,
 } from './acordos.service';
 import type { Acordo } from '@/lib/supabase';
 
@@ -627,33 +625,3 @@ describe('calcularMetricasMes (pura)', () => {
   });
 });
 
-describe('calcularMetricasDashboard (pura)', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-04-22T12:00:00Z'));
-  });
-  afterEach(() => vi.useRealTimers());
-
-  it('separa "hoje" de "todos" e soma valores com sumSafe', () => {
-    const hojeArr = [
-      { status: 'pago',               valor: '100', vencimento: '2026-04-22' },
-      { status: 'verificar_pendente', valor: '50',  vencimento: '2026-04-22' },
-    ];
-    const outrosArr = [
-      { status: 'verificar_pendente', valor: '30',  vencimento: '2026-04-10' }, // vencido
-      { status: 'pago',               valor: '1000',vencimento: '2026-03-01' }, // passado, não vencido
-      { status: 'nao_pago',           valor: '77',  vencimento: '2026-04-01' }, // cancelado
-    ];
-
-    const r = calcularMetricasDashboard([...hojeArr, ...outrosArr]);
-
-    expect(r.total_geral).toBe(5);
-    expect(r.acordos_hoje).toBe(2);
-    expect(r.pagos_hoje).toBe(1);
-    expect(r.pendentes_hoje).toBe(1);
-    expect(r.vencidos).toBe(1);             // só o verificar_pendente vencido
-    expect(r.em_acompanhamento).toBe(0);
-    expect(r.valor_previsto_hoje).toBeCloseTo(150, 2);
-    expect(r.valor_recebido_hoje).toBeCloseTo(100, 2);
-  });
-});

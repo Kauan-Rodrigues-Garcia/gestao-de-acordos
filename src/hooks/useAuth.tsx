@@ -50,6 +50,7 @@ import { limparCacheCurto } from '@/lib/cacheCurto';
 import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
 import { definirRegraDaSessao, ehRegraDoSetor } from '@/lib/regraDoSetor';
 import { produtoDaEmpresa } from '@/lib/produto';
+import { atrasoDaTentativa } from '@/lib/atrasoDaTentativa';
 
 /**
  * De quanto em quanto tempo a volta à aba pode reler o perfil da MESMA pessoa.
@@ -168,7 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null);
     try {
       // Aumentado para 7 tentativas com backoff exponencial (cap 8 s)
-      // para tolerar banco sob alta carga. Delays: 500ms → 1s → 2s → 4s → 8s → 8s → 8s
+      // para tolerar banco sob alta carga. Delays: 500ms → 1s → 2s → 4s → 8s → 8s → 8s,
+      // cada um sorteado entre a metade e o valor cheio (16/10/2026).
       const MAX_ATTEMPTS = 7;
       const BASE_DELAY_MS = 500;
       const MAX_DELAY_MS = 8000;
@@ -250,7 +252,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Perfil ainda não criado pelo trigger — backoff exponencial com cap
         if (attempt < MAX_ATTEMPTS) {
-          const delay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt - 1), MAX_DELAY_MS);
+          // Com sorteio: sem ele, quem entrou no mesmo minuto tentava de novo
+          // no mesmo milissegundo. Ver `atrasoDaTentativa`.
+          const delay = atrasoDaTentativa(attempt, { baseMs: BASE_DELAY_MS, tetoMs: MAX_DELAY_MS });
           console.info(`[useAuth] perfil não encontrado, aguardando ${delay}ms (tentativa ${attempt}/${MAX_ATTEMPTS})...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }

@@ -18,6 +18,7 @@
  * segue contando nos totais de setor e equipe.
  */
 import { supabase, type Acordo } from '@/lib/supabase';
+import { lerTodasAsPaginas } from '@/lib/lerTodasAsPaginas';
 
 export interface ResumoExclusao {
   nome:      string | null;
@@ -144,18 +145,37 @@ const COLUNAS: Array<[titulo: string, ler: (a: Acordo) => unknown]> = [
   ['Observações',   a => a.observacoes ?? ''],
 ];
 
-/** Todas as tabulações do usuário. `empresaId` limita à empresa (troca de empresa). */
+/**
+ * Todas as tabulações do usuário. `empresaId` limita à empresa (troca de empresa).
+ *
+ * ## Inteira, ou erro (16/10/2026)
+ *
+ * Esta lista vira a planilha que fica como cópia ANTES de o banco apagar os
+ * acordos. Ela tinha dois furos, e os dois terminavam em acordo apagado sem
+ * cópia:
+ *
+ *   • sem paginação, o PostgREST cortava em 1000 linhas sem avisar — quem
+ *     tinha mais tabulações que isso saía com a planilha incompleta, e o banco
+ *     apagava TODAS;
+ *   • com erro na leitura, devolvia lista vazia — a planilha saía vazia (ou
+ *     nem saía) e a exclusão seguia.
+ *
+ * Agora pagina até o fim e LANÇA em qualquer falha. Os três chamadores já
+ * tratam o erro como «nada foi excluído/transferido».
+ */
 export async function buscarAcordosDoUsuario(
   userId: string, empresaId?: string | null,
 ): Promise<Acordo[]> {
-  let q = supabase.from('acordos').select('*').eq('operador_id', userId);
-  if (empresaId) q = q.eq('empresa_id', empresaId);
-  const { data, error } = await q.order('data_cadastro', { ascending: false });
-  if (error) {
-    console.warn('[exclusaoUsuario] falha ao ler acordos:', error.message);
-    return [];
-  }
-  return (data ?? []) as Acordo[];
+  return lerTodasAsPaginas<Acordo>((de, ate) => {
+    let q = supabase.from('acordos').select('*').eq('operador_id', userId);
+    if (empresaId) q = q.eq('empresa_id', empresaId);
+    // `id` desempata: `data_cadastro` se repete num lote importado, e sem
+    // ordem total uma linha poderia cair em duas páginas — ou em nenhuma.
+    return q
+      .order('data_cadastro', { ascending: false })
+      .order('id', { ascending: true })
+      .range(de, ate);
+  });
 }
 
 /** `Fulano-de-Tal` → nome de arquivo sem acento, espaço ou barra. */

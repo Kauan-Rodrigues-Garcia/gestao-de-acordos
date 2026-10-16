@@ -1,22 +1,18 @@
 /**
  * src/hooks/__tests__/useAcordos.test.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Testes unitários para o hook useAcordos (e useDashboardMetricas).
+ * Testes unitários para o hook useAcordos. (`useDashboardMetricas`, que lia a
+ * empresa inteira sem paginar e não tinha nenhum uso, saiu em 16/10/2026.)
  *
  * Estratégia de mock:
  *  • useAuth / useEmpresa / useRealtimeAcordos  → vi.mock + vi.hoisted
  *  • fetchAcordosService                        → vi.mock('@/services/acordos.service')
  *  • supabase.from('perfis')                    → builder thenable para o
  *    ramo equipe_id do useEffect de resolução de operadores
- *  • supabase.from('acordos')                   → builder thenable para
- *    useDashboardMetricas
  *
  * Não testamos:
  *  • matchesFiltros isoladamente — é privado; seu comportamento é coberto
  *    nos testes de evento INSERT com/sem filtro.
- *  • useDashboardMetricas.subscribe-loop — o provider é mockado com no-ops;
- *    cobrir o loop exigiria simular vários eventos, o que seria teste do
- *    provider, não do hook de métricas.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook as renderHookBase, act, waitFor } from '@testing-library/react';
@@ -57,16 +53,6 @@ const {
 
 vi.mock('@/services/acordos.service', () => ({
   fetchAcordos: mockFetchAcordos,
-  calcularMetricasDashboard: vi.fn((data: unknown[]) => ({
-    acordos_hoje:        data.length,
-    pagos_hoje:          0,
-    pendentes_hoje:      0,
-    vencidos:            0,
-    valor_previsto_hoje: 0,
-    valor_recebido_hoje: 0,
-    em_acompanhamento:   0,
-    total_geral:         data.length,
-  })),
 }));
 
 vi.mock('@/hooks/useAuth', () => ({
@@ -150,7 +136,7 @@ vi.mock('@/lib/supabase', () => ({
 
 // ── 3. Importa SUT APÓS os mocks ─────────────────────────────────────────────
 
-import { useAcordos, useDashboardMetricas, MS_AGRUPAMENTO_METRICAS } from '../useAcordos';
+import { useAcordos } from '../useAcordos';
 import type { Acordo } from '@/lib/supabase';
 
 // ── 4. Factories ──────────────────────────────────────────────────────────────
@@ -206,7 +192,7 @@ function fakeAcordo(overrides?: Partial<Acordo>): Acordo {
 }
 
 // ── 4b. renderHook com QueryClientProvider ───────────────────────────────────
-// `useAcordos` e `useDashboardMetricas` usam React Query (useQuery /
+// `useAcordos` usa React Query (useQuery /
 // useQueryClient). Sem um QueryClientProvider acima deles, o primeiro render
 // lança "No QueryClient set" — era a causa das 37 falhas deste arquivo. No app
 // real o provider vem de `App.tsx`.
@@ -247,16 +233,6 @@ async function esperarFetchInicial(result: { current: { loading: boolean } }) {
     expect(mockFetchAcordos).toHaveBeenCalled();
     expect(result.current.loading).toBe(false);
   });
-  await act(async () => { await Promise.resolve(); });
-}
-
-/**
- * Equivalente para `useDashboardMetricas`, que NÃO passa por `fetchAcordos` —
- * ele consulta `supabase.from('acordos')` direto. Esperar por `mockFetchAcordos`
- * aqui nunca resolveria.
- */
-async function esperarMetricas(result: { current: { loading: boolean } }) {
-  await waitFor(() => expect(result.current.loading).toBe(false));
   await act(async () => { await Promise.resolve(); });
 }
 
@@ -826,138 +802,5 @@ describe('useAcordos', () => {
       // A lista de operadores é limpa — o hook não deve travar
       await act(async () => { await new Promise(r => setTimeout(r, 10)); });
     });
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  useDashboardMetricas
-// ═══════════════════════════════════════════════════════════════════════════════
-
-describe('useDashboardMetricas', () => {
-  it('estado inicial: loading=true, metricas zeradas', () => {
-    const { result } = renderHook(() => useDashboardMetricas());
-    expect(result.current.loading).toBe(true);
-    expect(result.current.metricas.total_geral).toBe(0);
-    expect(result.current.metricas.acordos_hoje).toBe(0);
-  });
-
-  it('não faz fetch quando perfil/empresa são nulos', async () => {
-    // Reset explícito do spy para contar apenas chamadas DESTE teste
-    (mockSupabaseFromSpy as Mock).mockClear();
-
-    renderHook(() => useDashboardMetricas());
-    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
-
-    // Sem perfil/empresa nenhuma query à tabela 'acordos' deve ter ocorrido
-    const acordosCalls = supabaseCalls.filter(c => c.table === 'acordos');
-    expect(acordosCalls).toHaveLength(0);
-  });
-
-  it('fetch bem-sucedido: seta loading=false e chama calcularMetricasDashboard', async () => {
-    mockPerfilValue.current  = fakePerfil();
-    mockEmpresaValue.current = fakeEmpresa();
-
-    const rows = [
-      { status: 'pago', valor: 100, vencimento: '2024-06-01' },
-      { status: 'nao_pago', valor: 200, vencimento: '2024-06-02' },
-    ];
-    supabaseResultsByTable['acordos'] = [{ data: rows, error: null, count: 2 }];
-
-    const { result } = renderHook(() => useDashboardMetricas());
-
-    await esperarMetricas(result);
-    // calcularMetricasDashboard mockado retorna { total_geral: data.length }
-    expect(result.current.metricas.total_geral).toBe(2);
-  });
-
-  it('fetch com erro: seta loading=false sem alterar metricas', async () => {
-    mockPerfilValue.current  = fakePerfil();
-    mockEmpresaValue.current = fakeEmpresa();
-
-    supabaseResultsByTable['acordos'] = [
-      { data: null, error: { message: 'DB error' }, count: null },
-    ];
-
-    const { result } = renderHook(() => useDashboardMetricas());
-
-    await esperarMetricas(result);
-    // metricas permanecem zeradas (o handler de erro faz return antes de setMetricas)
-    expect(result.current.metricas.total_geral).toBe(0);
-  });
-
-  it('chama subscribe no mount e unsubscribe no unmount', async () => {
-    mockPerfilValue.current  = fakePerfil();
-    mockEmpresaValue.current = fakeEmpresa();
-
-    supabaseResultsByTable['acordos'] = [{ data: [], error: null, count: 0 }];
-
-    const { unmount } = renderHook(() => useDashboardMetricas());
-
-    await waitFor(() => expect(mockRealtimeSubscribe).toHaveBeenCalled());
-    expect(mockRealtimeSubscribe).toHaveBeenCalledWith(
-      expect.stringContaining('useDashboardMetricas-'),
-      expect.any(Function),
-    );
-
-    const [instanceId] = mockRealtimeSubscribe.mock.calls[0];
-    unmount();
-    expect(mockRealtimeUnsubscribe).toHaveBeenCalledWith(instanceId);
-  });
-
-  it('re-fetch é disparado quando o subscriber de realtime é chamado', async () => {
-    mockPerfilValue.current  = fakePerfil();
-    mockEmpresaValue.current = fakeEmpresa();
-
-    const rows1 = [{ status: 'pago', valor: 100, vencimento: '2024-06-01' }];
-    const rows2 = [
-      { status: 'pago',     valor: 100, vencimento: '2024-06-01' },
-      { status: 'nao_pago', valor: 200, vencimento: '2024-06-02' },
-    ];
-
-    supabaseResultsByTable['acordos'] = [
-      { data: rows1, error: null, count: 1 },
-      { data: rows2, error: null, count: 2 },
-    ];
-
-    const { result } = renderHook(() => useDashboardMetricas());
-    await esperarMetricas(result);
-    expect(result.current.metricas.total_geral).toBe(1);
-
-    // Captura o subscriber e simula um evento
-    const [, realtimeCallback] = mockRealtimeSubscribe.mock.calls[0];
-    await act(async () => {
-      realtimeCallback({ eventType: 'INSERT', newRecord: rows2[1] });
-      // A releitura e AGRUPADA: uma importacao de 300 acordos dispara 300
-      // eventos, e sem a janela cada um custaria uma varredura da empresa
-      // inteira. Esperar a janela e parte do contrato.
-      await new Promise(r => setTimeout(r, MS_AGRUPAMENTO_METRICAS + 80));
-    });
-
-    expect(result.current.metricas.total_geral).toBe(2);
-  });
-
-  it('uma rajada de eventos vira UMA releitura, nao uma por evento', async () => {
-    mockPerfilValue.current  = fakePerfil();
-    mockEmpresaValue.current = fakeEmpresa();
-
-    const linha = { status: 'pago', valor: 100, vencimento: '2024-06-01' };
-    supabaseResultsByTable['acordos'] = [
-      { data: [linha], error: null, count: 1 },
-      { data: [linha], error: null, count: 1 },
-      { data: [linha], error: null, count: 1 },
-    ];
-
-    const { result } = renderHook(() => useDashboardMetricas());
-    await esperarMetricas(result);
-    const consultasDepoisDaCarga = supabaseCalls.filter(c => c.table === 'acordos').length;
-
-    const [, realtimeCallback] = mockRealtimeSubscribe.mock.calls[0];
-    await act(async () => {
-      for (let i = 0; i < 10; i++) realtimeCallback({ eventType: 'INSERT', newRecord: linha });
-      await new Promise(r => setTimeout(r, MS_AGRUPAMENTO_METRICAS + 80));
-    });
-
-    const novas = supabaseCalls.filter(c => c.table === 'acordos').length - consultasDepoisDaCarga;
-    expect(novas).toBe(1);
   });
 });

@@ -34,8 +34,6 @@ import {
 import {
   type FiltrosAcordo,
   fetchAcordos as fetchAcordosService,
-  calcularMetricasDashboard,
-  type MetricasDashboard,
 } from '@/services/acordos.service';
 
 export type { FiltrosAcordo };
@@ -341,89 +339,4 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     refetch:    async () => { await refetch(); },
     patchAcordo, removeAcordo, addAcordo,
   };
-}
-
-/**
- * Janela de agrupamento das releituras de métrica disparadas pelo realtime.
- *
- * Exportada para o teste não cravar o número: quem muda a constante muda o
- * teste junto, sem descobrir por um teste vermelho que não explica nada.
- */
-export const MS_AGRUPAMENTO_METRICAS = 500;
-
-// ─── Hook de métricas do dashboard ───────────────────────────────────────────
-export function useDashboardMetricas() {
-  const { perfil }  = useAuth();
-  const { empresa } = useEmpresa();
-  const queryClient = useQueryClient();
-  const { subscribe, unsubscribe } = useRealtimeAcordos();
-
-  const empresaId = empresa?.id ?? perfil?.empresa_id;
-  const instanceId = useRef(`useDashboardMetricas-${Math.random().toString(36).slice(2, 10)}`).current;
-
-  const { data: metricas, isLoading } = useQuery({
-    queryKey: ['metricas-dashboard', empresaId ?? ''],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('acordos')
-        .select('status, valor, vencimento')
-        .eq('empresa_id', empresaId!);
-      if (error) throw error;
-      return calcularMetricasDashboard(
-        (data ?? []) as { status: string; valor: unknown; vencimento: string }[]
-      );
-    },
-    enabled: !!perfil && !!empresaId,
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  /*
-   * Invalida o cache de métricas em qualquer evento do realtime — agrupado.
-   *
-   * Sem o agrupamento, uma importação de 300 acordos disparava 300 eventos e,
-   * com eles, 300 releituras de `status, valor, vencimento` da empresa inteira.
-   * O resultado era o oposto do pretendido: a tela ficava MAIS lenta justamente
-   * quando havia mais dado chegando.
-   *
-   * Meio segundo é curto o bastante para parecer instantâneo a quem acabou de
-   * marcar um acordo como pago, e longo o bastante para uma rajada de
-   * importação virar uma consulta só.
-   *
-   * O React Query preserva a identidade das partes que não mudaram
-   * (`structuralSharing`, padrão na v5), então uma releitura que devolve os
-   * mesmos números não re-renderiza os cards.
-   */
-  const agrupador = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    subscribe(instanceId, () => {
-      if (agrupador.current) clearTimeout(agrupador.current);
-      agrupador.current = setTimeout(() => {
-        agrupador.current = null;
-        queryClient.invalidateQueries({ queryKey: ['metricas-dashboard', empresaId ?? ''] });
-      }, MS_AGRUPAMENTO_METRICAS);
-    });
-    return () => {
-      if (agrupador.current) clearTimeout(agrupador.current);
-      unsubscribe(instanceId);
-    };
-  }, [subscribe, unsubscribe, instanceId, queryClient, empresaId]);
-
-  const defaultMetricas: MetricasDashboard = {
-    acordos_hoje:        0,
-    pagos_hoje:          0,
-    pendentes_hoje:      0,
-    vencidos:            0,
-    valor_previsto_hoje: 0,
-    valor_recebido_hoje: 0,
-    em_acompanhamento:   0,
-    total_geral:         0,
-  };
-
-  // Mesma correção do useAcordos: query desabilitada (sem perfil/empresa ainda)
-  // tem isLoading=false, e os cards mostrariam zeros como se fossem o resultado.
-  const aguardandoSessao = (!perfil || !empresaId) && !metricas;
-
-  return { metricas: metricas ?? defaultMetricas, loading: isLoading || aguardandoSessao };
 }

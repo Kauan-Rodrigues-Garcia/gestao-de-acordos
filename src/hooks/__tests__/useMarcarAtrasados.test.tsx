@@ -15,7 +15,8 @@ const mock = vi.hoisted(() => ({
   /** Chaves que `temPermissao` libera depois de carregar. */
   liberadas: new Set<string>(),
   consultas: 0,
-  filtros: [] as [string, unknown][],
+  /** Os parâmetros de cada chamada ao serviço. */
+  chamadas: [] as { empresaId: string; operadorId: string | null; hoje: string }[],
 }));
 
 vi.mock('@/hooks/useAuth', () => ({
@@ -41,21 +42,14 @@ vi.mock('@/lib/index', () => ({
   formatDate: (v: string) => v,
 }));
 vi.mock('sonner', () => ({ toast: { info: vi.fn() } }));
-vi.mock('@/services/notificacoes.service', () => ({ criarNotificacao: vi.fn() }));
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: () => {
-      mock.consultas++;
-      const cadeia = {
-        select: () => cadeia,
-        eq: (coluna: string, valor: unknown) => { mock.filtros.push([coluna, valor]); return cadeia; },
-        lt: () => cadeia,
-        then: (ok: (r: { data: unknown[]; error: null }) => unknown) =>
-          Promise.resolve({ data: [], error: null }).then(ok),
-      };
-      return cadeia;
-    },
-  },
+// A conversão em si tem teste próprio (`atrasados.service.test.ts`); aqui
+// importa QUANDO o hook chama e com que escopo.
+vi.mock('@/services/atrasados.service', () => ({
+  converterAtrasados: vi.fn(async (p: { empresaId: string; operadorId: string | null; hoje: string }) => {
+    mock.consultas++;
+    mock.chamadas.push(p);
+    return 0;
+  }),
 }));
 
 import { useMarcarAtrasados } from '../useMarcarAtrasados';
@@ -64,7 +58,7 @@ beforeEach(() => {
   mock.permissoesCarregando = true;
   mock.liberadas = new Set(['dashboard_escopo_setor']);
   mock.consultas = 0;
-  mock.filtros = [];
+  mock.chamadas = [];
 });
 
 describe('useMarcarAtrasados', () => {
@@ -80,8 +74,7 @@ describe('useMarcarAtrasados', () => {
     rerender();
 
     await waitFor(() => expect(mock.consultas).toBe(1));
-    expect(mock.filtros).toContainEqual(['empresa_id', 'empresa-1']);
-    expect(mock.filtros.find(([coluna]) => coluna === 'operador_id')).toBeUndefined();
+    expect(mock.chamadas[0]).toEqual({ empresaId: 'empresa-1', operadorId: null, hoje: '2026-09-13' });
   });
 
   it('quem só vê a si varre só a própria fila', async () => {
@@ -91,7 +84,7 @@ describe('useMarcarAtrasados', () => {
     rerender();
 
     await waitFor(() => expect(mock.consultas).toBe(1));
-    expect(mock.filtros).toContainEqual(['operador_id', 'lider-1']);
+    expect(mock.chamadas[0]?.operadorId).toBe('lider-1');
   });
 
   it('roda uma vez só, mesmo que as permissões se releiam', async () => {

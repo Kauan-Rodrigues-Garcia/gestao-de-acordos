@@ -8,6 +8,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { sumSafe } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
+import { lerTodasAsPaginas } from '@/lib/lerTodasAsPaginas';
 
 export interface FiltrosAcordo {
   status?: string;
@@ -95,19 +96,22 @@ export async function fetchTagsEmUso(
     if (membrosEquipe.length === 0) return [];
   }
 
-  let q = supabase.from('acordos').select('tag_ids').not('tag_ids', 'eq', '{}');
-  if (filtros?.empresa_id)  q = q.eq('empresa_id', filtros.empresa_id);
-  if (filtros?.operador_id) q = q.eq('operador_id', filtros.operador_id);
-  if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
-  if (membrosEquipe)        q = q.in('operador_id', membrosEquipe);
-  if (filtros?.data_inicio) q = q.gte('vencimento', filtros.data_inicio);
-  if (filtros?.data_fim)    q = q.lte('vencimento', filtros.data_fim);
-
-  const { data, error } = await q;
-  if (error) throw error;
+  // Paginado (16/10/2026): sem recorte de data, a empresa passa de 1000 acordos
+  // com tag fácil, e o PostgREST cortava em silêncio — a tag que só aparecia
+  // nos acordos de depois do corte sumia do filtro.
+  const linhas = await lerTodasAsPaginas<{ tag_ids: string[] | null }>((de, ate) => {
+    let q = supabase.from('acordos').select('tag_ids').not('tag_ids', 'eq', '{}');
+    if (filtros?.empresa_id)  q = q.eq('empresa_id', filtros.empresa_id);
+    if (filtros?.operador_id) q = q.eq('operador_id', filtros.operador_id);
+    if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
+    if (membrosEquipe)        q = q.in('operador_id', membrosEquipe);
+    if (filtros?.data_inicio) q = q.gte('vencimento', filtros.data_inicio);
+    if (filtros?.data_fim)    q = q.lte('vencimento', filtros.data_fim);
+    return q.order('id', { ascending: true }).range(de, ate);
+  });
 
   const vistas = new Set<string>();
-  for (const linha of (data ?? []) as { tag_ids: string[] | null }[]) {
+  for (const linha of linhas) {
     for (const id of linha.tag_ids ?? []) vistas.add(id);
   }
   return [...vistas];
@@ -461,31 +465,3 @@ export async function verificarNrsDuplicadosEmLote(
   return resultado;
 }
 
-/** Métricas do dashboard (hoje) */
-export interface MetricasDashboard {
-  acordos_hoje:       number;
-  pagos_hoje:         number;
-  pendentes_hoje:     number;
-  vencidos:           number;
-  valor_previsto_hoje: number;
-  valor_recebido_hoje: number;
-  em_acompanhamento:  number;
-  total_geral:        number;
-}
-
-export function calcularMetricasDashboard(
-  acordos: { status: string; valor: unknown; vencimento: string }[]
-): MetricasDashboard {
-  const hoje = getTodayISO();
-  const hoje_arr = acordos.filter(a => a.vencimento === hoje);
-  return {
-    total_geral:          acordos.length,
-    acordos_hoje:         hoje_arr.length,
-    pagos_hoje:           hoje_arr.filter(a => a.status === 'pago').length,
-    pendentes_hoje:       hoje_arr.filter(a => a.status === 'verificar_pendente').length,
-    vencidos:             acordos.filter(a => a.vencimento < hoje && !['pago','nao_pago'].includes(a.status)).length,
-    valor_previsto_hoje:  sumSafe(hoje_arr.map(a => a.valor)),
-    valor_recebido_hoje:  sumSafe(hoje_arr.filter(a => a.status === 'pago').map(a => a.valor)),
-    em_acompanhamento:    0,
-  };
-}
