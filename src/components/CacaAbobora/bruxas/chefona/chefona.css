@@ -123,6 +123,7 @@
 .bxc-letreiro.hs { font-family: var(--bxc-arcade); font-size: 14px; color: #ff3a4a; }
 .bxc-letreiro.esquiva { color: #5ae0ff; }
 .bxc-letreiro.esquiva-forte { color: #5ae0ff; font-size: 26px; line-height: 1.05; text-align: center; text-shadow: 3px 3px 0 #0b2a40, -1px -1px 0 #0b2a40; }
+.bxc-letreiro small { display: block; font-size: 12px; text-align: center; opacity: .95; }
 .bxc-letreiro.esquiva-forte small { display: block; font-size: 13px; color: #c8f3ff; text-shadow: 2px 2px 0 #0b2a40; }
 .bxc-letreiro.feitico { color: #e8b0ff; font-size: 20px; }
 .bxc-letreiro.dano { color: #ffe14d; font-size: 14px; }

@@ -107,32 +107,32 @@ describe('o lote, pela regra da migration', () => {
   const ana = { usuario: 'ana', nome: 'Ana' };
 
   it('caçadora nova soma vida antes do tiro', () => {
-    const r = aplicarLote(rodada({ vida_por_pessoa: 40 }), ana, 3, 1, 15, AGORA);
+    const r = aplicarLote(rodada({ vida_por_pessoa: 40 }), ana, 3, 1, 15, AGORA, false);
     expect(r).toMatchObject({ vida_max: 140, vida: 125, participantes: 1 });
     expect(r.ranking[0]).toMatchObject({ dano: 15, acertos: 3, headshots: 1 });
   });
 
   it('não confia: 12 acertos e 12 de dano por acerto', () => {
-    const r = aplicarLote(rodada({ vida_max: 5000, vida: 5000 }), ana, 50, 50, 99_999, AGORA);
+    const r = aplicarLote(rodada({ vida_max: 5000, vida: 5000 }), ana, 50, 50, 99_999, AGORA, false);
     expect(r.vida).toBe(5000 - MAX_ACERTOS_POR_LOTE * MAX_DANO_POR_ACERTO);
     expect(r.ranking[0].headshots).toBe(12);
   });
 
   it('na contagem ou depois do prazo, nada', () => {
     const chegando = rodada({ solta_em: iso(AGORA + 5_000) });
-    expect(aplicarLote(chegando, ana, 3, 0, 9, AGORA)).toBe(chegando);
+    expect(aplicarLote(chegando, ana, 3, 0, 9, AGORA, false)).toBe(chegando);
     const vencida = rodada({ expira_em: iso(AGORA - 1) });
-    expect(aplicarLote(vencida, ana, 3, 0, 9, AGORA)).toBe(vencida);
+    expect(aplicarLote(vencida, ana, 3, 0, 9, AGORA, false)).toBe(vencida);
   });
 
   it('o totem: 1 de vida + Regeneração, Absorção, e o dano conta só até sobrar 1', () => {
-    const r = aplicarLote(rodada({ protegida: true }), ana, 12, 0, 140, AGORA);
+    const r = aplicarLote(rodada({ protegida: true }), ana, 12, 0, 140, AGORA, false);
     expect(r).toMatchObject({ situacao: 'ativo', protegida: false, vida: 16, absorcao: 10, totem_vida: 15, totens: 1 });
     expect(r.ranking[0].dano).toBe(99);
     // A Absorção paga primeiro; sem totem, o próximo golpe fatal derruba.
-    const depois = aplicarLote(r, ana, 2, 0, 14, AGORA);
+    const depois = aplicarLote(r, ana, 2, 0, 14, AGORA, false);
     expect(depois).toMatchObject({ absorcao: 0, vida: 12 });
-    const fim = aplicarLote(depois, ana, 12, 0, 140, AGORA);
+    const fim = aplicarLote(depois, ana, 12, 0, 140, AGORA, false);
     expect(fim).toMatchObject({ situacao: 'derrotado', vida: 0, golpe_final_por: 'ana' });
   });
 });
@@ -188,11 +188,13 @@ describe('os números que o app, o palco e a migration dividem', () => {
 
 describe('o ensaio do laboratório (sem banco)', () => {
   it('o tiro na chefona de mentira se resolve aqui, com ranking', async () => {
-    ensaioSoltarChefona(100, 2, 0, 0);
+    // 1.000 de vida: um lote pequeno no começo fica na linha do ritmo (com 100, 15% de
+    // uma vez no segundo zero já é «time forte demais» e ela bebe — ver ritmo.ts).
+    ensaioSoltarChefona(1000, 2, 0, 0);
     const r = estadoChefona()!;
     expect(r.id).toBeLessThan(0);
     const res = await enviarLoteChefona(r.id, 3, 1, 15);
-    expect(res.rodada?.vida).toBe(85);
+    expect(res.rodada?.vida).toBe(985);
     expect(res.eu).toMatchObject({ dano: 15, headshots: 1, posicao: 1 });
     ensaioLimparChefona();
     expect(estadoChefona()).toBeNull();
@@ -233,5 +235,37 @@ describe('a hora do banco (20261016170000)', () => {
     const agora = Date.now();
     aceitarChefona({ ...rodada({ solta_em: iso(agora + 60_000), expira_em: iso(agora + 180_000) }), agora: iso(agora + 30_000) });
     expect(Date.parse(estadoChefona()!.solta_em)).toBeCloseTo(agora + 30_000, -2);
+  });
+});
+
+describe('o diretor de ritmo no ensaio (o mesmo do banco, 20261016200000)', () => {
+  const ana = { usuario: 'ana', nome: 'Ana' };
+  const aos = (s: number, extra: Partial<RodadaChefona> = {}) =>
+    rodada({ vida_max: 1000, vida: 1000, solta_em: iso(AGORA - s * 1000), expira_em: iso(AGORA + 60_000), ...extra });
+
+  it('atrás da linha o dano vale mais; o ranking soma o dano de verdade', () => {
+    const r = aplicarLote(aos(30), ana, 3, 0, 9, AGORA);
+    expect(r.vida).toBe(1000 - 45);
+    expect(r.ranking[0].dano).toBe(9);
+    expect(r.ritmo).toBeGreaterThan(1);
+  });
+
+  it('time forte demais: ela bebe sozinha', () => {
+    const r = aplicarLote(aos(30, { vida: 300 }), ana, 3, 0, 9, AGORA);
+    expect(r.cura_em).not.toBeNull();
+    expect(r.vida).toBeGreaterThan(500);
+  });
+
+  it('antes dos 60 s ela não cai; dos 115 s em diante, qualquer tiro a derruba', () => {
+    expect(aplicarLote(aos(59, { vida: 60, cura_em: iso(AGORA) }), ana, 12, 0, 144, AGORA).situacao).toBe('ativo');
+    expect(aplicarLote(aos(116, { vida: 900 }), ana, 1, 0, 3, AGORA).situacao).toBe('derrotado');
+  });
+
+  it('no ensaio, lote com pista forte de autoclick não conta (nem no ritmo)', async () => {
+    ensaioSoltarChefona(1000, 2, 0, 0);
+    const id = estadoChefona()!.id;
+    const res = await enviarLoteChefona(id, 5, 0, 15, { cliques: 30, suspeita: 1 });
+    expect(res.descartados).toBe(5);
+    expect(estadoChefona()!.vida).toBe(1000);
   });
 });

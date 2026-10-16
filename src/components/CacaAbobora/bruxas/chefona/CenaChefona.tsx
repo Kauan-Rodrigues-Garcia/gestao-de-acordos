@@ -37,6 +37,7 @@ import { canvasDaImagem } from '../pixels';
 import { cabecaMC } from './arte';
 import { PalcoChefona, milhar, type EventoChefona, type FonteDoBanco } from './palcoChefona';
 import { PLACA_MS } from './conquista';
+import { RITMO, ritmoDaLuta } from './ritmo';
 import {
   BEBER_MS, LOTE_MS, MAX_ACERTOS_POR_LOTE, PISTAS_PARA_BLOQUEAR, chefonaChegando, curarChefona, enviarLoteChefona, lerChefona,
   motivoDoErroDaChefona, protegerChefona, situacaoDaChefona, vidaPorAparecer,
@@ -292,8 +293,15 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   const superAdminRef = useRef(superAdmin);
   superAdminRef.current = superAdmin;
   // Os tiros guardados até o próximo lote, e o dano que ainda não voltou do banco.
-  const lote = useRef({ acertos: 0, criticos: 0, dano: 0 });
+  /**
+   * `dano` é o que a pessoa fez (vai ao banco e ao ranking); `vida` é o que
+   * isso tira da barra com o ritmo de agora (`ritmo.ts`) — o mesmo que o banco
+   * vai tirar, então a barra não desce e volta quando a resposta chega.
+   */
+  const lote = useRef({ acertos: 0, criticos: 0, dano: 0, vida: 0 });
   const pendente = useRef(0);
+  /** O dano a caminho antes do ritmo (o placar da pessoa). */
+  const pendenteBruto = useRef(0);
   const [meu, setMeu] = useState<MeuPlacar | null>(null);
   const avisouErro = useRef(false);
   const avisouDescarte = useRef(false);
@@ -345,16 +353,25 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
         const p = pendente.current;
         // Os meus tiros a caminho gastam primeiro a Absorção, como no banco.
         const absorcao = Math.max(0, r.absorcao - p);
-        const vida = Math.max(0, r.vida - Math.max(0, p - r.absorcao) - vidaPorAparecer(r, agora));
+        let vida = Math.max(0, r.vida - Math.max(0, p - r.absorcao) - vidaPorAparecer(r, agora));
+        // Antes dos 60 s ela não cai (o piso do ritmo): a barra também não passa dele.
+        if (r.ritmo !== null && (agora - Date.parse(r.solta_em)) / 1000 < RITMO.minS) vida = Math.max(vida, Math.min(r.vida, Math.ceil(r.vida_max * RITMO.piso)));
         return { vida, vidaMax: r.vida_max, absorcao, restanteS: Math.max(0, (Date.parse(r.expira_em) - agora) / 1000) };
       },
       aoAcertar: (dano, critico) => {
         if (bloqueado.current) return;
         const l = lote.current;
+        const r = rodadaRef.current;
+        const vidaAgora = Math.max(0, r.vida - pendente.current);
+        // Banco sem o ritmo (`ritmo` nulo): a tela também não aplica — a barra bate com o banco.
+        const tira = r.ritmo === null ? dano
+          : dano * ritmoDaLuta((Date.now() - Date.parse(r.solta_em)) / 1000, vidaAgora / Math.max(1, r.vida_max));
         l.acertos += 1;
         if (critico) l.criticos += 1;
         l.dano += dano;
-        pendente.current += dano;
+        l.vida += tira;
+        pendente.current += tira;
+        pendenteBruto.current += dano;
       },
     };
     // O super_admin não tem escudo: ele comanda a luta e segue usando o Gestão.
@@ -426,8 +443,9 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
   useEffect(() => {
     if (situacao === 'ativo' || fim.current) return;
     fim.current = situacao;
-    lote.current = { acertos: 0, criticos: 0, dano: 0 };
+    lote.current = { acertos: 0, criticos: 0, dano: 0, vida: 0 };
     pendente.current = 0;
+    pendenteBruto.current = 0;
     const p = palcoRef.current;
     if (!viuViva.current) { setPalcoNaTela(false); return; }
     if (situacao === 'derrotado') {
@@ -454,8 +472,13 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
     const quieto = RELER_QUIETO_MS + Math.random() * RELER_QUIETO_MS;
     const tique = () => {
       setTique(n => n + 1);
+      // O sinal do ritmo na bruxa («RESISTENTE!» / «ENFRAQUECENDO!»), uma vez por segundo.
+      const rr = rodadaRef.current;
+      if (rr.ritmo !== null && Date.now() >= chega) {
+        palcoRef.current?.sinalDoRitmo(ritmoDaLuta((Date.now() - chega) / 1000, Math.max(0, rr.vida - pendente.current) / Math.max(1, rr.vida_max)));
+      }
       if (noAr || bloqueado.current) return;
-      const { acertos, criticos, dano } = lote.current;
+      const { acertos, criticos, dano, vida } = lote.current;
       if (acertos === 0) {
         const u = ultimaVersao.current;
         const agora = Date.now();
@@ -469,7 +492,8 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
       const a = Math.min(acertos, MAX_ACERTOS_POR_LOTE);
       const c = Math.min(criticos, a);
       const d = acertos === a ? dano : Math.round((dano * a) / acertos);
-      lote.current = { acertos: acertos - a, criticos: criticos - c, dano: dano - d };
+      const v = acertos === a ? vida : (vida * a) / acertos;
+      lote.current = { acertos: acertos - a, criticos: criticos - c, dano: dano - d, vida: vida - v };
       const colheita = detector.current?.colher() ?? { cliques: 0, suspeita: 0 };
       noAr = true;
       void enviarLoteChefona(rodada.id, a, c, d, colheita)
@@ -482,16 +506,19 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
             lote.current.acertos += a;
             lote.current.criticos += c;
             lote.current.dano += d;
+            lote.current.vida += v;
             detector.current?.devolver(colheita);
             return;
           }
-          pendente.current = Math.max(0, pendente.current - d);
+          pendente.current = Math.max(0, pendente.current - v);
+          pendenteBruto.current = Math.max(0, pendenteBruto.current - d);
           if (res.eu) setMeu(res.eu);
           if (!res.erro && (colheita.suspeita & MOTIVOS_FORTES) !== 0) pistas.current += 1;
           if (pistas.current >= PISTAS_PARA_BLOQUEAR && !bloqueado.current) {
             bloqueado.current = true;
-            lote.current = { acertos: 0, criticos: 0, dano: 0 };
+            lote.current = { acertos: 0, criticos: 0, dano: 0, vida: 0 };
             pendente.current = 0;
+            pendenteBruto.current = 0;
             toast.error('Clique automático detectado', {
               description: 'Seus cliques não contam mais nesta luta: autoclick e macro não valem.',
               duration: 10_000,
@@ -529,7 +556,7 @@ export function CenaChefona({ rodada, eu, perfilId, superAdmin, aoAcabar }: {
 
   const minhaPosicao = (eu ? rodada.ranking.findIndex(g => g.usuario === eu) + 1 : 0) || (meu?.posicao ?? 0);
   const doRanking = eu ? rodada.ranking.find(g => g.usuario === eu)?.dano ?? 0 : 0;
-  const meuDano = Math.round(Math.max(doRanking, meu?.dano ?? 0) + pendente.current);
+  const meuDano = Math.round(Math.max(doRanking, meu?.dano ?? 0) + pendenteBruto.current);
 
   return (
     <>

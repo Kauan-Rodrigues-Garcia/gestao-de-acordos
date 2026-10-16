@@ -101,6 +101,7 @@ import {
   COR_MANOBRA, NOME_MANOBRA, avancarCorpo, balanco, criarCorpo, escolherManobra, faseDaPerola, iniciarManobra, novoAlvo,
   pairar, type Corpo, type Manobra, type Zona,
 } from './movimento';
+import { faixaDoRitmo, type FaixaDoRitmo } from './ritmo';
 import {
   prepararSonsMC, somArremesso, somBeber, somComemora, somConquista, somDor, somEncantamento, somGargalhada, somMorte,
   somNivel, somPerola, somTeleporte, somTotem, somVidro, somXp,
@@ -626,6 +627,9 @@ export class PalcoChefona {
   /** O próximo vulto do rastro da manobra (s do relógio), e o último «ESQUIVOU!» do tiro errado (ms). */
   private proximoRastro = 0;
   private ultimoAvisoEsquiva = 0;
+  /** A faixa do diretor de ritmo que esta tela já mostrou, e quando foi o último sinal (ms). */
+  private faixaRitmo: FaixaDoRitmo = 'normal';
+  private ultimoSinalRitmo = 0;
   private fantasmas: { x: number; y: number; quadro: number; lado: 1 | -1; estagio: number; vida: number }[] = [];
   /** A barra de corações e os textos dela (guardados: são lidos a cada quadro). */
   private readonly cvCoracoes: HTMLCanvasElement;
@@ -842,6 +846,30 @@ export class PalcoChefona {
     this.conquistaNoAlto = true;
     this.raiz.querySelectorAll('.bxc-placa').forEach(p => p.classList.add('no-alto'));
     this.raiz.querySelectorAll('.bxc-aviso').forEach(a => a.remove());
+  }
+
+  /**
+   * O diretor de ritmo (`ritmo.ts`) mudou de faixa: a bruxa mostra. Sem isso, o
+   * dano valendo menos parecia «ela parou de tomar dano». Resistente: um brilho
+   * azul e «RESISTENTE!»; fraca: faíscas vermelhas e «ENFRAQUECENDO!». No
+   * máximo um sinal a cada 5 s, e a faixa tem folga (não pisca na beira).
+   */
+  sinalDoRitmo(mult: number): void {
+    const corpo = this.corpo;
+    if (!corpo || !this.atingivel()) return;
+    const nova = faixaDoRitmo(mult, this.faixaRitmo);
+    if (nova === this.faixaRitmo) return;
+    this.faixaRitmo = nova;
+    const agora = performance.now();
+    if (nova === 'normal' || agora - this.ultimoSinalRitmo < 5_000) return;
+    this.ultimoSinalRitmo = agora;
+    if (nova === 'resistente') {
+      this.efeito(corpo.x, corpo.y, ['#7dd3fc', '#ffffff', '#a78bfa'], 22);
+      this.letreiro('RESISTENTE!', corpo.x, corpo.y - ALT / 2 - 14, 'feitico', 'ela está segurando os golpes');
+    } else {
+      this.efeito(corpo.x, corpo.y, ['#ff5a5a', '#ffd34d'], 22);
+      this.letreiro('ENFRAQUECENDO!', corpo.x, corpo.y - ALT / 2 - 14, 'quebra', 'ataquem agora!');
+    }
   }
 
   /** O laboratório pula o resto da contagem. */

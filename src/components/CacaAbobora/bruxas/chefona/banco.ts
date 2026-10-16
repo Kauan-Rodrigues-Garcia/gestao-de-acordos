@@ -42,6 +42,7 @@ import {
 } from '../../chefao';
 import { MOTIVO, normalizarFichas, type Colheita, type FichaDeCliques } from '../../autoclick';
 import { CONTAGEM_LOBBY_S } from './lobby/trilha';
+import { RITMO, curaDoRitmo, ritmoDaLuta } from './ritmo';
 
 /** Quem entrou no lobby (os últimos 24 que o banco manda). */
 export interface NoLobby {
@@ -64,6 +65,11 @@ export interface RodadaChefona extends RodadaChefao {
   /** O lobby (16/10/2026, migration 20261016120000): quantos entraram, e os últimos 24 na ordem de chegada. */
   lobby_total:  number;
   lobby:        NoLobby[];
+  /**
+   * O multiplicador do dano agora (o diretor de ritmo, `ritmo.ts`, migration
+   * 20261016200000). `null`: o banco ainda não tem o ritmo — a tela não aplica.
+   */
+  ritmo:        number | null;
 }
 
 /** Os números que a migration também usa — mudou um, mude o outro. */
@@ -155,6 +161,7 @@ export function normalizarChefona(bruto: unknown): RodadaChefona | null {
     curas:        Math.max(0, inteiro(r.curas)),
     lobby_total:  Math.max(0, inteiro(r.lobby_total)),
     lobby:        normalizarLobby(r.lobby),
+    ritmo:        r.ritmo != null && Number.isFinite(Number(r.ritmo)) && Number(r.ritmo) > 0 ? Number(r.ritmo) : null,
   };
 }
 
@@ -218,12 +225,14 @@ export function vidaNaTela(r: RodadaChefona, agora: number, pendente: number): n
 /**
  * Um lote, pela regra da migration (`fn_chefona_acertar`): a vida cresce com a
  * caçadora nova, a Absorção paga primeiro, e o golpe fatal com o totem na mão
- * vira 1 de vida + Regeneração. Serve ao ensaio e aos testes — o banco é quem
- * manda de verdade.
+ * vira 1 de vida + Regeneração. Com `comRitmo` (o padrão), o diretor de ritmo
+ * da 20261016200000: o dano que sai da vida é multiplicado, o piso antes dos
+ * 60 s, o golpe de misericórdia dos 115 s e a cura sozinha — e o ranking soma o
+ * dano antes do ritmo. Serve ao ensaio e aos testes — o banco é quem manda.
  */
 export function aplicarLote(
   r: RodadaChefona, quem: { usuario: string; nome: string; foto?: string | null },
-  acertos: number, criticos: number, dano: number, agora: number,
+  acertos: number, criticos: number, dano: number, agora: number, comRitmo = true,
 ): RodadaChefona {
   const a = Math.max(0, Math.min(MAX_ACERTOS_POR_LOTE, Math.trunc(acertos)));
   const c = Math.max(0, Math.min(a, Math.trunc(criticos)));
@@ -234,24 +243,41 @@ export function aplicarLote(
   const max = r.vida_max + extra;
   let vida = r.vida + extra;
   let absorcao = r.absorcao;
-  const gasta = Math.min(absorcao, d);
+  const t = (agora - Date.parse(r.solta_em)) / 1000;
+  let tira = d;
+  if (comRitmo) {
+    tira = Math.max(1, Math.round(d * ritmoDaLuta(t, vida / Math.max(1, max))));
+    if (t >= RITMO.maxS) tira = vida + absorcao;
+  }
+  const gasta = Math.min(absorcao, tira);
   absorcao -= gasta;
-  const resto = d - gasta;
-  let efetivo = d;
+  let resto = tira - gasta;
+  if (comRitmo && t < RITMO.minS) resto = Math.max(0, Math.min(resto, vida - Math.max(1, Math.ceil(max * RITMO.piso))));
+  let efetivo = comRitmo ? d : tira;
   let morreu = false;
   let totem = false;
   let regen = 0;
   if (vida - resto > 0) vida -= resto;
   else if (r.protegida) {
     totem = true;
-    efetivo = gasta + (vida - 1);
+    if (!comRitmo) efetivo = gasta + (vida - 1);
     regen = Math.min(max - 1, Math.max(1, Math.round(max * REGEN_FRACAO)));
     vida = 1 + regen;
     absorcao = Math.round(max * ABSORCAO_FRACAO);
   } else {
     morreu = true;
-    efetivo = gasta + vida;
+    if (!comRitmo) efetivo = gasta + vida;
     vida = 0;
+  }
+  // Time forte demais: ela bebe sozinha (a mesma regra do banco).
+  let cura = 0;
+  if (comRitmo && !morreu && !totem) {
+    const desde = r.cura_em ? (agora - Date.parse(r.cura_em)) / 1000 : Infinity;
+    const fracao = curaDoRitmo(t, vida / Math.max(1, max), desde);
+    if (fracao > 0) {
+      cura = Math.min(max - vida, Math.max(1, Math.round(max * fracao)));
+      vida += cura;
+    }
   }
   const eu: Golpeador = {
     usuario: quem.usuario, nome: quem.nome, foto: quem.foto ?? null,
@@ -265,6 +291,8 @@ export function aplicarLote(
     ...r, vida, vida_max: max, absorcao, versao: r.versao + 1,
     ranking, participantes: Math.max(r.participantes + (antes ? 0 : 1), ranking.length),
     ...(totem ? { protegida: false, totem_em: quando, totem_vida: regen, totens: r.totens + 1 } : {}),
+    ...(cura > 0 ? { cura_em: quando, cura_vida: cura, curas: r.curas + 1 } : {}),
+    ritmo: comRitmo ? ritmoDaLuta(t, vida / Math.max(1, max)) : 1,
     ...(morreu ? {
       situacao: 'derrotado' as const, derrotado_em: quando,
       golpe_final_por: quem.usuario, golpe_final_nome: quem.nome, golpe_final_foto: quem.foto ?? null,
@@ -541,7 +569,7 @@ export function ensaioSoltarChefona(vida = 300, minutos = PRAZO_MIN, esperaS = 0
     cura_em: null, cura_ate: null, cura_vida: 0, cura_semente: 0,
     versao: 1, participantes: 0, ranking: [],
     absorcao: 0, protegida: false, protegida_em: null, totem_em: null, totem_vida: 0, totens: 0, curas: 0,
-    lobby_total: 0, lobby: [],
+    lobby_total: 0, lobby: [], ritmo: 1,
   });
 }
 
@@ -564,6 +592,19 @@ function loteNoEnsaio(
 ): ResultadoLoteChefona {
   const r = estado;
   if (!r || r.id !== rodadaId) return { rodada: r, eu: null, erro: null, freio: false };
+  // O autoclick, como no banco (20261016120000): lote com pista forte não conta,
+  // e quem soma `PISTAS_PARA_BLOQUEAR` não conta mais nada — nem no ritmo.
+  const ficha = fichasDoEnsaio.get(usuario);
+  const forte = (colheita.suspeita & (MOTIVO.ritmo | MOTIVO.rapido | MOTIVO.sintetico)) !== 0;
+  if (forte || (ficha?.suspeitas ?? 0) >= PISTAS_PARA_BLOQUEAR) {
+    if (forte) fichasDoEnsaio.set(usuario, {
+      usuario, nome, dano: ficha?.dano ?? 0, acertos: ficha?.acertos ?? 0, headshots: ficha?.headshots ?? 0,
+      cliques: (ficha?.cliques ?? 0) + colheita.cliques, lotes: (ficha?.lotes ?? 0) + 1,
+      lotes_no_teto: ficha?.lotes_no_teto ?? 0, suspeitas: (ficha?.suspeitas ?? 0) + 1,
+      motivos: (ficha?.motivos ?? 0) | colheita.suspeita, segundos: (ficha?.segundos ?? 0) + 1,
+    });
+    return { rodada: r, eu: null, erro: null, freio: false, descartados: a };
+  }
   const nova = aplicarLote(r, { usuario, nome }, a, c, d, Date.now());
   if (nova !== r) {
     const g = nova.ranking.find(x => x.usuario === usuario)!;
