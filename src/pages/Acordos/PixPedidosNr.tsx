@@ -74,12 +74,11 @@
  */
 import { useState } from 'react';
 import {
-  ShieldQuestion, Check, X, ArrowRight, ArrowRightLeft, AlertTriangle, Loader2, Sparkles,
-  ChevronDown, Building2,
+  Check, X, ArrowRight, ArrowRightLeft, AlertTriangle, Loader2, Sparkles,
+  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
@@ -140,8 +139,8 @@ function Lado({
 }) {
   return (
     <div className={cn(
-      'min-w-0 rounded-lg border px-2.5 py-2',
-      destaque ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/30',
+      'min-w-0 rounded-lg border px-3 py-2',
+      destaque ? 'border-primary/25 bg-primary/[0.04]' : 'border-border bg-muted/30',
     )}>
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">
         {titulo}
@@ -265,34 +264,31 @@ function CartaoPedido({
   }
 
   return (
-    <div className="border-t border-border/60 px-3 py-3">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold">
-          NR {p.nr_cliente}
-        </span>
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {/* ── Qual NR, de onde, desde quando ── */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3.5">
+        <span className="font-mono text-sm font-semibold text-foreground">NR {p.nr_cliente}</span>
         {nomeSetor && (
-          <Badge
-            variant="outline"
-            className="h-5 shrink-0 gap-1 border-violet-500/40 px-1.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400"
-          >
-            <Building2 className="h-2.5 w-2.5" /> {nomeSetor}
-          </Badge>
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Building2 className="h-3 w-3" /> {nomeSetor}
+          </span>
         )}
-        <span className="text-[11px] text-muted-foreground">
+        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
           pedido em {quando(p.criado_em)}
         </span>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+      {/* ── Os dois lados: com quem está → quem pede ── */}
+      <div className="grid gap-2 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
         <Lado
-          titulo={`Hoje está com${setorTem ? ` · ${setorTem}` : ''}`}
+          titulo={`Está com${setorTem ? ` · ${setorTem}` : ''}`}
           nome={p.conflito_operador}
           valor={p.conflito_valor}
           em={p.conflito_em}
         />
-        <ArrowRight className="mx-auto hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" />
+        <ArrowRight className="mx-auto hidden h-4 w-4 shrink-0 text-muted-foreground/60 sm:block" />
         <Lado
-          titulo={`Pede para ficar com o NR${setorPede ? ` · ${setorPede}` : ''}`}
+          titulo={`Pede o NR${setorPede ? ` · ${setorPede}` : ''}`}
           nome={p.operador_nome}
           valor={p.valor}
           em={p.criado_em}
@@ -301,36 +297,32 @@ function CartaoPedido({
         />
       </div>
 
-      {/* ── O que cada botão faz, em frase inteira ── */}
-      <div className="mt-2 space-y-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 text-[11px] leading-relaxed">
-        <p className="flex gap-1.5">
-          <ArrowRightLeft className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-          <span>
-            <strong className="text-foreground">Transferir:</strong>{' '}
-            {origemExiste ? (
-              <>
-                o NR sai de <strong className="text-foreground">{quemTem}</strong> (o registro vai para a
-                lixeira do Pix) e passa para <strong className="text-foreground">{quemPede}</strong>,
-                pendente de avaliação.
-              </>
-            ) : (
-              <>
-                o registro de {quemTem} já foi excluído; o NR é registrado para{' '}
-                <strong className="text-foreground">{quemPede}</strong>, pendente de avaliação.
-              </>
-            )}
-            {doisLados && ' Só acontece quando os dois setores autorizarem.'}
-          </span>
+      {/* ── O que cada botão faz, em frase inteira ──
+          Uma linha cada, sem caixa em volta. A frase fica: foi a falta dela
+          que fez o NR 12139503 ser autorizado ao contrário (28/09/2026). */}
+      <div className="space-y-1 px-4 pb-3 text-[11px] leading-relaxed text-muted-foreground">
+        <p>
+          <strong className="font-semibold text-foreground">Transferir</strong>{' '}
+          {origemExiste ? (
+            <>
+              — o NR sai de <span className="text-foreground">{quemTem}</span> (o registro vai para a
+              lixeira do Pix) e passa para <span className="text-foreground">{quemPede}</span>, pendente
+              de avaliação.
+            </>
+          ) : (
+            <>
+              — o registro de {quemTem} já foi excluído; o NR é registrado para{' '}
+              <span className="text-foreground">{quemPede}</span>, pendente de avaliação.
+            </>
+          )}
+          {doisLados && ' Só acontece quando os dois setores autorizarem.'}
         </p>
-        <p className="flex gap-1.5">
-          <X className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
-          <span>
-            <strong className="text-foreground">Manter:</strong>{' '}
-            o NR continua com <strong className="text-foreground">{quemTem}</strong> e o pedido de {quemPede} é descartado.
-          </span>
+        <p>
+          <strong className="font-semibold text-foreground">Manter</strong>{' '}
+          — o NR continua com <span className="text-foreground">{quemTem}</span> e o pedido de {quemPede} é descartado.
         </p>
         {origemExiste && p.conflito_status === 'aprovado' && (
-          <p className="flex gap-1.5 text-amber-700 dark:text-amber-400">
+          <p className="flex gap-1.5 text-warning">
             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
             <span>
               O registro de {quemTem} já está <strong>aprovado</strong> — transferir tira essa aprovação
@@ -341,13 +333,13 @@ function CartaoPedido({
       </div>
 
       {p.motivo && (
-        <p className="mt-2 rounded-lg border-l-2 border-primary/40 bg-muted/40 px-2.5 py-1.5 text-[11px] leading-relaxed">
+        <p className="mx-4 mb-3 rounded-md border-l-2 border-border bg-muted/40 px-2.5 py-1.5 text-[11px] leading-relaxed">
           <span className="text-muted-foreground">Justificativa: </span>{p.motivo}
         </p>
       )}
 
       {!origemExiste && (
-        <p className="mt-2 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
+        <p className="px-4 pb-3 text-[11px] leading-relaxed text-warning">
           O registro em conflito foi excluído depois deste pedido. Os dados acima
           são a cópia guardada no momento do pedido.
         </p>
@@ -357,7 +349,7 @@ function CartaoPedido({
           Só aparece quando há dois setores envolvidos: com um lado só, «falta
           o líder» é o que a própria fila já diz. */}
       {doisLados && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
           {estado.lados.map(lado => {
             const assinatura = estado.assinado[lado];
             return (
@@ -367,8 +359,8 @@ function CartaoPedido({
                 className={cn(
                   'h-5 gap-1 px-1.5 text-[10px] font-medium',
                   assinatura
-                    ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
-                    : 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+                    ? 'border-success/30 text-success'
+                    : 'border-border text-muted-foreground',
                 )}
                 title={assinatura
                   ? `${assinatura.aprovador_nome ?? 'Líder'} autorizou a transferência em ${quando(assinatura.criado_em)}`
@@ -382,7 +374,8 @@ function CartaoPedido({
         </div>
       )}
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+      {/* ── Rodapé: a decisão ── */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-border bg-muted/30 px-4 py-2.5">
         {podeDecidir && estado.meusLados.length > 0 ? (
           confirmando ? (
             /* Transferir tira o NR de alguém: pede um segundo clique, com a
@@ -434,7 +427,7 @@ function CartaoPedido({
               ))}
               <Button
                 size="sm" variant="outline"
-                className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
+                className="h-7 gap-1.5 text-xs"
                 disabled={ocupado}
                 onClick={() => (recusando
                   ? void decidir(false, estado.meusLados[0])
@@ -481,42 +474,23 @@ function CartaoPedido({
   );
 }
 
+/**
+ * A fila: um cartão por NR em disputa.
+ *
+ * Sem moldura nem cabeçalho próprios desde 16/10/2026: ela mora na seção
+ * «NRs em disputa» da sub-aba NRs divergentes, que já diz o que é e quantos
+ * são. Uma caixa âmbar em volta de cartões repetia o título e gritava mais que
+ * a decisão que está dentro.
+ */
 export function PixPedidosNr({
   pedidos, aprovacoes, podeDecidir, meuId, meusSetores, vejoTodosOsSetores,
   nomePorSetor, mostrarSetor = false, onMudou,
 }: Props) {
-  const [aberto, setAberto] = useState(true);
   if (pedidos.length === 0) return null;
 
   return (
-    <Card className="border-amber-500/30 bg-amber-500/[0.03]">
-      <CardContent className="p-0">
-        <button
-          type="button"
-          onClick={() => setAberto(a => !a)}
-          aria-expanded={aberto}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-amber-500/5"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10">
-            <ShieldQuestion className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-tight">
-              {pedidos.length} {pedidos.length === 1 ? 'NR em disputa' : 'NRs em disputa'} aguardando decisão
-            </p>
-            <p className="text-[11px] leading-tight text-muted-foreground">
-              {podeDecidir
-                ? 'Alguém pediu um NR que já está com outra pessoa. Transferir tira de quem tem e passa para quem pediu; manter deixa como está.'
-                : 'Seu pedido está na fila do líder.'}
-            </p>
-          </div>
-          <ChevronDown className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-            aberto && 'rotate-180',
-          )} />
-        </button>
-
-        {aberto && pedidos.map(p => (
+    <div className="space-y-2.5">
+        {pedidos.map(p => (
           <CartaoPedido
             key={p.id} p={p}
             aprovacoes={aprovacoes}
@@ -534,7 +508,6 @@ export function PixPedidosNr({
             onMudou={onMudou}
           />
         ))}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

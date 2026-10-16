@@ -23,11 +23,10 @@
  * existe para que continue assim.
  */
 import { useState } from 'react';
-import { ClipboardList, ChevronDown, Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
 import { nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
 import type { AcordoSemRegistroPix } from '@/services/pix_automatico.service';
@@ -46,8 +45,13 @@ function dia(iso: string): string {
   return ano && mes && d ? `${d}/${mes}` : String(iso);
 }
 
+/*
+ * Desde 16/10/2026 mora na seção «Sem registro no Pix» da sub-aba NRs
+ * divergentes, que já traz título e explicação: aqui fica só a lista, sem
+ * moldura colorida nem abrir/fechar — fechada, ela sumia justamente na aba
+ * aberta para resolvê-la.
+ */
 export function PixAcordosSemRegistro({ acordos, onRegistrar, podeRegistrar }: Props) {
-  const [aberto, setAberto] = useState(true);
   const [ocupadoId, setOcupadoId] = useState<string | null>(null);
 
   if (acordos.length === 0) return null;
@@ -60,45 +64,18 @@ export function PixAcordosSemRegistro({ acordos, onRegistrar, podeRegistrar }: P
   const total = acordos.reduce((s, a) => s + Number(a.valor), 0);
 
   return (
-    <Card className="border-sky-500/30 bg-sky-500/[0.03]">
+    <Card className="overflow-hidden border-border">
       <CardContent className="p-0">
-        <button
-          type="button"
-          onClick={() => setAberto(x => !x)}
-          aria-expanded={aberto}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-sky-500/5"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/10">
-            <ClipboardList className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-tight">
-              {acordos.length === 1
-                ? '1 acordo seu ainda não está no Pix automático'
-                : `${acordos.length} acordos seus ainda não estão no Pix automático`}
-            </p>
-            <p className="text-[11px] leading-tight text-muted-foreground">
-              Tabulados na aba Acordos, somando {formatCurrency(total)}. A comissão
-              e a meta de acordos saem daqui — sem o registro, eles não contam.
-            </p>
-          </div>
-          <ChevronDown className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-            aberto && 'rotate-180',
-          )} />
-        </button>
-
-        {aberto && (
-          <div className="border-t border-border/60">
+        <div className="divide-y divide-border">
             {acordos.map(a => (
               <div
                 key={a.id}
-                className="flex flex-wrap items-center gap-2 border-b border-border/40 px-3 py-2 last:border-b-0"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5"
               >
-                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold">
+                <span className="font-mono text-sm font-semibold text-foreground">
                   NR {a.nr_cliente}
                 </span>
-                <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-medium">
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground">
                   {nomeDaFormaRecorrente(a.tipo)}
                 </Badge>
                 <span className="text-xs tabular-nums text-muted-foreground">
@@ -126,6 +103,11 @@ export function PixAcordosSemRegistro({ acordos, onRegistrar, podeRegistrar }: P
                 </div>
               </div>
             ))}
+        </div>
+        {acordos.length > 1 && (
+          <div className="flex items-center justify-between border-t border-border bg-muted/30 px-4 py-2 text-[11px] text-muted-foreground">
+            <span>{acordos.length} acordos</span>
+            <span className="tabular-nums">somando <strong className="text-foreground">{formatCurrency(total)}</strong></span>
           </div>
         )}
       </CardContent>

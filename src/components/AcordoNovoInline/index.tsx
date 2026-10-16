@@ -878,7 +878,7 @@ export function AcordoNovoInline({
   function irParaPixAutomatico() {
     const nr = avisoPixAutomatico?.nr ?? '';
     setAvisoPixAutomatico(null);
-    navigate(`${ROUTE_PATHS.ACORDOS}?tab=pix&novo_nr=${encodeURIComponent(nr)}`);
+    navigate(`${ROUTE_PATHS.PIX_AUTOMATICO}?novo_nr=${encodeURIComponent(nr)}`);
   }
 
   /** «Agora não» — segue o caminho normal de quem acabou de salvar. */

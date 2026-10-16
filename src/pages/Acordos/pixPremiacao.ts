@@ -286,6 +286,80 @@ export function totalDoPainel(linhas: readonly Premiacao[]): {
   };
 }
 
+/** Quem ainda não dobrou, mas está perto — o que falta para cada um. */
+export interface QuaseDobra {
+  operadorId: string;
+  nome: string;
+  /** Comissão aprovada do mês — é o que a dobra pagaria de novo. */
+  comissao: number;
+  feitos: number;
+  meta: number;
+  faltamAcordos: number;
+  acordosOk: boolean;
+  pctAcordos: number;
+  metaDefinida: boolean;
+  metaOk: boolean;
+  faltaMeta: number;
+  pctMeta: number;
+  requisitosOk: number;
+}
+
+/**
+ * Quem está PERTO de dobrar a comissão (16/10/2026).
+ *
+ * O painel da premiação só lista quem dobrou — e passava o mês inteiro vazio
+ * até o primeiro fechar os dois requisitos, sem dizer nada a quem paga nem a
+ * quem cobra o time. Esta lista responde a pergunta do meio do mês: quem está
+ * a um passo, e qual passo.
+ *
+ * «Perto» é ter um dos dois requisitos fechado, ou 70% de um deles. Quem
+ * dobrou já está no painel e não entra; quem não tem comissão aprovada também
+ * não — dobrar zero é zero, e a lista é sobre dinheiro que pode sair.
+ *
+ * Ordem: quem já fechou um requisito vem antes; entre iguais, quem está mais
+ * adiantado na soma dos dois.
+ */
+export function pertoDeDobrar(p: {
+  itens: readonly PixAutoAcordo[];
+  pctPorSetor: Record<string, number>;
+  mes: MesRef;
+  nomePorOperador?: Record<string, string>;
+  metaPorOperador?: Record<string, MetaRecebimentoDobra>;
+  metaPorSetor?: Record<string, number>;
+}): QuaseDobra[] {
+  const ids = new Map<string, string>();
+  for (const i of p.itens) {
+    if (!noMesPix(i.criado_em, p.mes)) continue;
+    if (!ids.has(i.operador_id)) {
+      ids.set(i.operador_id, p.nomePorOperador?.[i.operador_id] ?? i.operador_nome ?? '—');
+    }
+  }
+
+  return [...ids.entries()]
+    .map(([operadorId, nome]) => {
+      const d = calcularDobraComissao(
+        [...p.itens], operadorId, p.pctPorSetor, p.mes,
+        p.metaPorOperador?.[operadorId], p.metaPorSetor ?? {},
+      );
+      return {
+        operadorId, nome,
+        comissao: centavos(d.comissao),
+        feitos: d.feitos, meta: d.meta, faltamAcordos: d.faltam,
+        acordosOk: d.acordosOk, pctAcordos: d.pctAcordos,
+        metaDefinida: d.metaDefinida, metaOk: d.metaOk,
+        faltaMeta: centavos(d.faltaMeta), pctMeta: d.pctMeta,
+        requisitosOk: d.requisitosOk,
+        dobrou: d.atingiu,
+      };
+    })
+    .filter(q => !q.dobrou && q.comissao > 0
+      && (q.requisitosOk >= 1 || q.pctAcordos >= 70 || q.pctMeta >= 70))
+    .sort((a, b) => b.requisitosOk - a.requisitosOk
+      || (b.pctAcordos + b.pctMeta) - (a.pctAcordos + a.pctMeta)
+      || a.nome.localeCompare(b.nome, 'pt-BR'))
+    .map(({ dobrou: _dobrou, ...q }) => q);
+}
+
 /** Comissão aprovada do mês, sem dobra — a base que os cards já mostravam. */
 export function comissaoAprovadaNoMes(
   itens: readonly PixAutoAcordo[],

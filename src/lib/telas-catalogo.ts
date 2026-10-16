@@ -43,6 +43,9 @@ export const TELA_LABEL: Record<string, string> = {
   'acordos/detalhe':           'Detalhe do acordo',
   'acordos/editar':            'Editar acordo',
   'acordos/importar':          'Importar Excel',
+  // Tela própria desde 16/10/2026. Antes era a sub-aba `acordos:pix`, que fica
+  // no catálogo abaixo porque o histórico de uso já gravou com ela.
+  'pix-automatico':            'Pix Automático',
   'analitico':                 'Analítico',
   'lider':                     'Painel do Líder',
   // Aba removida em 31/08/2026. O rótulo FICA: já há histórico de uso gravado
@@ -133,6 +136,10 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'acordos': {
     todos: 'Todos', verificar: 'Verificar', pagos: 'Pagos / Quitados',
     nao_pagos: 'Não pagos', pix: 'Pix Automático',
+  },
+  'pix-automatico': {
+    registros: 'Registros', divergencias: 'NRs divergentes',
+    premiacao: 'Premiação dobrada', ranking: 'Ranking',
   },
   'admin/usuarios': {
     usuarios: 'Lista', setores: 'Setores', equipes: 'Equipes', metas: 'Metas',

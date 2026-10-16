@@ -66,6 +66,7 @@ const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
 const ProdutoEmMontagem = lazy(() => import('@/pages/ProdutoEmMontagem'));
 const Acordos           = lazy(() => import('@/pages/Acordos'));
+const PaginaPixAutomatico = lazy(() => import('@/pages/PixAutomatico'));
 const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
 const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
@@ -475,6 +476,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="criar_acordos">
                     <AcordoForm />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Pix Automático — tela própria desde 16/10/2026. A chave é a
+                  mesma que abria a aba dentro de Acordos. */}
+              <Route path={ROUTE_PATHS.PIX_AUTOMATICO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_pix_automatico">
+                    <PaginaPixAutomatico />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

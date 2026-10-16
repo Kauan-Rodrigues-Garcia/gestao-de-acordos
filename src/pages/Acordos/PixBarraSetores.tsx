@@ -65,7 +65,7 @@ export function PixBarraSetores({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
-      <Building2 className="h-4 w-4 shrink-0 text-violet-700 dark:text-violet-400" />
+      <Building2 className="h-4 w-4 shrink-0 text-primary" />
       <span className="shrink-0 text-xs font-medium text-muted-foreground">Setor:</span>
       <div className="flex flex-wrap gap-1.5">
         {setores.map(s => (
@@ -111,8 +111,8 @@ function ChipSetor({
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
         ativo
-          ? 'border-violet-500 bg-violet-500 text-white'
-          : 'border-border bg-background text-muted-foreground hover:border-violet-500/50 hover:text-foreground',
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground',
       )}
     >
       <span className="truncate">{nome}</span>

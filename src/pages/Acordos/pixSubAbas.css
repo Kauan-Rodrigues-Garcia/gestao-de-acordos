@@ -1,0 +1,32 @@
+/*
+ * A sub-aba «NRs divergentes» piscando: há NR em disputa ou acordo que ficou
+ * só na lista de acordos. Não para de piscar quando a pessoa a abre — para
+ * quando a divergência é RESOLVIDA, porque é isso que a contagem mede.
+ *
+ * Um anel na cor de alerta do tema (`--warning`) que se abre e some: chama o
+ * olho sem tremer o texto e sem pintar a aba inteira. Quem pediu menos
+ * movimento ao sistema vê a aba acesa, parada — o aviso continua.
+ */
+@keyframes pix-aba-anel {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--warning) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in oklch, var(--warning) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--warning) 0%, transparent); }
+}
+@keyframes pix-aba-ponto {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.35); opacity: 0.5; }
+}
+
+.pix-aba-alerta {
+  border-color: color-mix(in oklch, var(--warning) 55%, var(--border));
+  background-color: color-mix(in oklch, var(--warning) 7%, var(--background));
+  animation: pix-aba-anel 1.8s ease-out infinite;
+}
+.pix-aba-ponto {
+  animation: pix-aba-ponto 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pix-aba-alerta,
+  .pix-aba-ponto { animation: none; }
+}

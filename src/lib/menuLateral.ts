@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send,
+  ShoppingBag, Handshake, Send, Zap,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -67,6 +67,12 @@ export interface NavItem {
   hiddenForBookplay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
+  /**
+   * Rota da aba que esta segue de perto. Só pesa quando o cargo tem uma ordem
+   * de menu SALVA anterior a esta aba: em vez de ir para o fim da lista, ela
+   * entra logo abaixo da vizinha. Ver `ordenarMenu`.
+   */
+  depoisDe?: string;
 }
 
 /**
@@ -213,6 +219,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira_vendas' },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  // Pix Automático — tela própria desde 16/10/2026. Era a quinta aba DENTRO de
+  // Acordos, e tudo (registro, metas, fila de NR, premiação, ranking, tabela)
+  // dividia uma página só. A chave é a mesma que já abria a aba; a marca segue
+  // a de Acordos, de onde ela saiu. `depoisDe` a mantém embaixo de Novo Acordo
+  // também para quem já tinha arrumado o menu antes dela existir.
+  { label: 'Pix Automático',   icon: Zap,             to: ROUTE_PATHS.PIX_AUTOMATICO,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_pix_automatico', depoisDe: ROUTE_PATHS.ACORDO_NOVO },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre

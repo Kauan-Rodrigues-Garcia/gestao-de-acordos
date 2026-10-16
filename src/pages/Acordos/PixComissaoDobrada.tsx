@@ -77,7 +77,7 @@ function Requisito({
         <div className="mt-1.5 h-1 w-full rounded-full bg-muted overflow-hidden">
           <div
             className={cn('h-full rounded-full transition-all duration-500',
-              ok ? (dourado ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-violet-400/70')}
+              ok ? (dourado ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-primary/60')}
             style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
           />
         </div>
@@ -99,7 +99,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
         'rounded-xl border bg-gradient-to-br p-4 space-y-3.5',
         dobrou
           ? 'from-amber-500/20 to-orange-600/5 border-amber-500/40'
-          : 'from-violet-500/12 to-fuchsia-600/5 border-violet-500/25',
+          : 'from-primary/[0.07] to-transparent border-border',
       )}>
 
         {/* ── Cabeçalho: o que é, e quanto dos requisitos já fechou ── */}
@@ -107,7 +107,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
           <div className="flex items-center gap-2.5 min-w-0">
             {dobrou
               ? <Trophy className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0" />
-              : <Zap className="w-5 h-5 text-violet-700 dark:text-violet-400 shrink-0" />}
+              : <Zap className="w-5 h-5 text-primary shrink-0" />}
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground leading-tight">Comissão dobrada</p>
               <p className="text-[11px] text-muted-foreground">
@@ -178,7 +178,7 @@ export function PixComissaoDobrada({ dobra, projecao }: PixComissaoDobradaProps)
                 Comissão aprovada até agora — cumprindo os dois requisitos, você
                 recebe <strong className="text-foreground">este mesmo valor de novo</strong>.
               </p>
-              <p className="text-sm font-mono font-bold text-violet-700 dark:text-violet-400">
+              <p className="text-sm font-mono font-bold text-primary">
                 {formatCurrency(dobra.comissao)}
                 <span className="text-muted-foreground font-normal mx-1.5">→</span>
                 <span className="text-foreground">{formatCurrency(dobra.comissao * 2)}</span>

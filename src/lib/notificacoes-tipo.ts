@@ -214,7 +214,9 @@ const REGRAS: readonly Regra[] = [
   // ANTES das regras de acordo/exclusão: "Pix automático — registro excluído"
   // casaria em 'excluído' e cairia na categoria errada.
   {
-    casa: (t, r) => t.includes('pix') || r.includes('tab=pix'),
+    // `tab=pix` é o link de antes de 16/10/2026, que as notificações já
+    // gravadas carregam; `/pix-automatico` é a tela própria de agora.
+    casa: (t, r) => t.includes('pix') || r.includes('tab=pix') || r.includes('/pix-automatico'),
     tipo: { categoria: 'pix', urgencia: 'critica' },
   },
 

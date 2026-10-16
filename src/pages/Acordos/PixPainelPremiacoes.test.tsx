@@ -9,7 +9,8 @@
  *
  *   • **pagar é um botão**, e o rótulo dele carrega o valor que vai sair. Era um
  *     `<Switch>` de «Foi pago?», que não dizia nem o que ia acontecer nem
- *     quanto.
+ *     quanto. Desde 16/10/2026 (sub-aba própria, cartões em grade) o botão
+ *     pede um segundo clique, que diz para quem.
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -94,34 +95,55 @@ const base = {
 let contador = 0;
 const chaveNova = () => `teste-premiacoes-${contador++}`;
 
+/** O número grande do resumo: «Falta pagar». */
+function faltaPagarDoResumo(): HTMLElement {
+  const rotulo = screen.getAllByText('Falta pagar')
+    .find(el => el.className.includes('tracking-wider') && el.closest('.grid'));
+  return rotulo!.parentElement!;
+}
+
 describe('PixPainelPremiacoes — quem entra na lista', () => {
-  it('não renderiza nada quando ninguém dobrou', () => {
-    // Mesmos acordos, SEM a meta de recebimento: a dobra não fecha, e o painel
-    // deixa de existir. Quem tem só comissão simples é pago pela lista do Pix.
-    const { container } = render(
+  it('ninguém dobrou: diz isso, em vez de uma lista vazia', () => {
+    // Mesmos acordos, SEM a meta de recebimento: a dobra não fecha. Quem tem só
+    // comissão simples é pago pela lista do Pix — e ninguém vira cartão aqui.
+    render(
       <PixPainelPremiacoes
         {...base}
         metaPorOperador={{}}
+        rotuloMes="agosto de 2026"
         chaveEstado={chaveNova()}
       />,
     );
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText(/Ninguém dobrou a comissão em agosto de 2026/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /marcar a premiação/i })).not.toBeInTheDocument();
   });
 
-  it('mostra a conta da dobra na linha de quem cumpriu os dois requisitos', () => {
+  it('mostra a conta da dobra no cartão de quem cumpriu os dois requisitos', () => {
     render(<PixPainelPremiacoes {...base} chaveEstado={chaveNova()} />);
 
     expect(screen.getByText('Ana Operadora')).toBeInTheDocument();
     // A conta embaixo do valor dobrado: sem ela, quem sabe de cor quanto a
     // pessoa fez acha que o número está errado.
     expect(screen.getByText('R$ 2.000,00 × 2')).toBeInTheDocument();
-    const cabecalho = screen.getByRole('button', { name: /Premiação dobrada a pagar/i });
-    expect(within(cabecalho).getByText('R$ 4.000,00')).toBeInTheDocument();
+    expect(within(faltaPagarDoResumo()).getByText('R$ 4.000,00')).toBeInTheDocument();
+  });
+
+  it('quem falta só a meta aparece em «Perto de dobrar», com o que falta', () => {
+    render(
+      <PixPainelPremiacoes
+        {...base}
+        metaPorOperador={{ 'operador-1': { metaValor: 1_000, recebidoMes: 500 } }}
+        chaveEstado={chaveNova()}
+      />,
+    );
+    expect(screen.getByText('Perto de dobrar')).toBeInTheDocument();
+    expect(screen.getByText(/faltam R\$ 500,00/)).toBeInTheDocument();
+    expect(screen.getByText('+R$ 2.000,00')).toBeInTheDocument();
   });
 });
 
 describe('PixPainelPremiacoes — status de pagamento', () => {
-  it('o botão de pagar diz o valor que vai sair, e é ele que quita', async () => {
+  it('o botão de pagar diz o valor que vai sair, e a confirmação é que quita', async () => {
     const user = userEvent.setup();
     const onMarcarPago = vi.fn();
     render(
@@ -136,9 +158,25 @@ describe('PixPainelPremiacoes — status de pagamento', () => {
     const botao = screen.getByRole('button', { name: /marcar a premiação de Ana Operadora/i });
     expect(botao).toHaveTextContent('Pagar R$ 4.000,00');
     await user.click(botao);
+    // O primeiro clique não paga: pergunta. Num grid de cartões, um clique
+    // errado pagaria a pessoa ao lado.
+    expect(onMarcarPago).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /confirmar o pagamento da premiação de Ana Operadora/i }));
     // O terceiro argumento é o que a marcação QUITA — o «falta pagar» daquele
-    // instante. Sem ele o carimbo não conversaria com o número da mesma linha.
+    // instante. Sem ele o carimbo não conversaria com o número do cartão.
     expect(onMarcarPago).toHaveBeenCalledWith('operador-1', true, 4_000);
+  });
+
+  it('cancelar a confirmação não paga nada', async () => {
+    const user = userEvent.setup();
+    const onMarcarPago = vi.fn();
+    render(
+      <PixPainelPremiacoes {...base} podeMarcarPago onMarcarPago={onMarcarPago} chaveEstado={chaveNova()} />,
+    );
+    await user.click(screen.getByRole('button', { name: /marcar a premiação de Ana Operadora/i }));
+    await user.click(screen.getByRole('button', { name: /cancelar o pagamento/i }));
+    expect(onMarcarPago).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /marcar a premiação de Ana Operadora/i })).toBeInTheDocument();
   });
 
   it('marcar como paga zera o que falta, mesmo sem valor gravado (linha antiga)', () => {
@@ -149,8 +187,7 @@ describe('PixPainelPremiacoes — status de pagamento', () => {
     // `pagamento` é anterior à migration 20260903100000: `pago` sem valor.
     // A leitura conservadora é «quitou o que faltava» — quem já marcou
     // pagamento antes desta versão não pode ver a dívida reabrir.
-    const cabecalho = screen.getByRole('button', { name: /Premiação dobrada a pagar/i });
-    expect(within(cabecalho).getByText('R$ 0,00')).toBeInTheDocument();
+    expect(within(faltaPagarDoResumo()).getByText('R$ 0,00')).toBeInTheDocument();
     expect(screen.getByText(/R\$ 4\.000,00 na premiação/)).toBeInTheDocument();
   });
 
@@ -163,8 +200,7 @@ describe('PixPainelPremiacoes — status de pagamento', () => {
       />,
     );
 
-    const cabecalho = screen.getByRole('button', { name: /Premiação dobrada a pagar/i });
-    expect(within(cabecalho).getByText('R$ 3.000,00')).toBeInTheDocument();
+    expect(within(faltaPagarDoResumo()).getByText('R$ 3.000,00')).toBeInTheDocument();
   });
 
   it('mostra o estado para quem só pode consultar e tira o pago do total pendente', () => {
@@ -176,8 +212,7 @@ describe('PixPainelPremiacoes — status de pagamento', () => {
     expect(screen.queryByRole('button', { name: /marcar a premiação/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /desfazer o pagamento/i })).not.toBeInTheDocument();
     expect(screen.getByText('Pago')).toBeInTheDocument();
-    const cabecalho = screen.getByRole('button', { name: /Premiação dobrada a pagar/i });
-    expect(within(cabecalho).getByText('R$ 0,00')).toBeInTheDocument();
+    expect(within(faltaPagarDoResumo()).getByText('R$ 0,00')).toBeInTheDocument();
   });
 
   it('pago, o botão vira desfazer — e desfazer não manda valor nenhum', async () => {

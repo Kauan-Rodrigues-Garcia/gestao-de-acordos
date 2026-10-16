@@ -26,7 +26,7 @@ import { podeReagendar, avisoParcelaJaAgendada } from '@/services/reagendamento/
 import { agendarProximaParcela } from '@/services/reagendamento/agendarProximaParcela';
 import { useParcelasExistentes } from '@/hooks/useParcelasExistentes';
 import { toast } from 'sonner';
-import { formatDate, getTodayISO, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY } from '@/lib/index';
+import { formatDate, getTodayISO, ROUTE_PATHS, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY } from '@/lib/index';
 import {
   desfazerPagoNoBanco, esquecerPagoDesfazivel, guardarPagoDesfazivel, pagoDesfazivel,
 } from '@/lib/desfazerPago';
@@ -56,7 +56,6 @@ import {
 } from './MensagensWhatsapp';
 import { TableSkeleton } from './TableSkeleton';
 import { AcordosFilters } from './AcordosFilters';
-import { PixAutomatico } from './PixAutomatico';
 import { AcordosTableBody } from './AcordosTableBody';
 import { AcordosModals } from './AcordosModals';
 
@@ -188,14 +187,16 @@ export default function Acordos() {
   const [activeTab, setActiveTab] = useState<'analitico' | 'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
-  // Aba destacada Pix Automático (BookPlay): substitui o conteúdo da lista
-  const [pixAba, setPixAba] = useState(searchParams.get('tab') === 'pix');
+  /*
+   * O Pix Automático saiu daqui em 16/10/2026 e virou tela própria
+   * (`/pix-automatico`). O link antigo `?tab=pix` continua chegando — as
+   * notificações já gravadas no banco o carregam, e quem salvou o endereço
+   * também —, então ele é levado para lá com o resto da busca (o `novo_nr`
+   * do aviso pós-gravação, por exemplo).
+   */
+  const linkAntigoDoPix = searchParams.get('tab') === 'pix';
   // Monitoramento de uso: 'analitico' é o nome interno da aba Verificar.
-  useSubAbaUso(
-    pixAba && temPermissao('ver_pix_automatico') ? 'pix'
-      : activeTab === 'analitico' ? 'verificar'
-      : activeTab,
-  );
+  useSubAbaUso(activeTab === 'analitico' ? 'verificar' : activeTab);
 
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
@@ -300,22 +301,15 @@ export default function Acordos() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
-      // O Pix Automático é uma aba como as outras para quem olha a tela, mas
-      // mora em `pixAba`, fora da união de `activeTab`. Enquanto só `activeTab`
-      // alimentava a URL, entrar no Pix APAGAVA o `tab=pix` 400 ms depois — e
-      // qualquer remontagem (voltar de outro app, refresh do token, realtime
-      // reconectando) relia a URL sem `pix` e devolvia a pessoa para "Todos"
-      // sozinha. A aba agora só sai quando alguém clica em outra.
-      if (pixAba)                    params.set('tab', 'pix');
-      else if (activeTab !== 'todos') params.set('tab', activeTab);
-      else                            params.delete('tab');
+      if (activeTab !== 'todos') params.set('tab', activeTab);
+      else                       params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       if (filtroTag && filtroTag !== 'all') params.set('tag', filtroTag); else params.delete('tag');
       params.set('page', currentPage.toString());
       return params;
     }), 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, pixAba, filtroVinculo, filtroTag, currentPage]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, filtroTag, currentPage]);
 
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
     ? filtroStatus
@@ -835,6 +829,13 @@ export default function Acordos() {
   }, [acordos, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
   if (isPP) return <Navigate to="/" replace />;
+  if (linkAntigoDoPix) {
+    const resto = new URLSearchParams(searchParams);
+    resto.delete('tab');
+    resto.delete('page');
+    const consulta = resto.toString();
+    return <Navigate to={`${ROUTE_PATHS.PIX_AUTOMATICO}${consulta ? `?${consulta}` : ''}`} replace />;
+  }
 
   // Coluna "Operador" só para cargos que veem todos os acordos (líder/elite+);
   // para operador (só vê os próprios) a coluna é removida.
@@ -982,18 +983,11 @@ export default function Acordos() {
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
           operadoresDoFiltro={operadoresDoFiltro ?? []}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}
-          isPP={isPP} usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
+          usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
           temPermissao={temPermissao}
           setCurrentPage={setCurrentPage} limparFiltros={limparFiltros}
-          pixAbaAtiva={pixAba} setPixAbaAtiva={setPixAba}
           onAbrirMensagens={() => setEditorMensagensAberto(true)}
         />
-
-        {/* Aba Pix Automático substitui a lista inteira. A permissão vale para
-            a aba inteira: quem não pode ver o painel cai de volta na lista, em
-            vez de abrir uma tela vazia. */}
-        {pixAba && temPermissao('ver_pix_automatico') ? <PixAutomatico /> : (
-        <>
 
         {/* Âncora de scroll */}
         <div ref={novoInlineRef} />
@@ -1076,9 +1070,6 @@ export default function Acordos() {
               </Button>
             </div>
           </div>
-        )}
-
-        </>
         )}
       </div>
 

@@ -1,6 +1,10 @@
 /**
- * pages/Acordos/PixAutomatico.tsx — aba destacada "Pix Automático" (BookPlay)
+ * pages/Acordos/PixAutomatico.tsx — a tela "Pix Automático" (BookPlay)
  * ─────────────────────────────────────────────────────────────────────────
+ * Desde 16/10/2026 é tela própria no menu (`/pix-automatico`, ver
+ * `pages/PixAutomatico`), dividida em sub-abas — Registros, NRs divergentes,
+ * Premiação dobrada e Ranking. O porquê está em `PixSubAbas`.
+ *
  * Acompanhamento de comissão de acordos fechados no Pix automático, SEM
  * vínculo com a tabela `acordos`.
  *
@@ -38,6 +42,7 @@ import {
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
   Copy, Upload, Download, Building2, Lock,
   Pencil, Banknote, AlertTriangle, History, Scale, Eraser, Sparkles,
+  ListChecks, ShieldAlert, Trophy, Medal, ArrowRight, ShieldCheck,
 } from 'lucide-react';
 import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
@@ -121,6 +126,11 @@ import { PixSaldoPainel } from './PixSaldoPainel';
 import { PixPainelPremiacoes } from './PixPainelPremiacoes';
 import { PixPedidosNr } from './PixPedidosNr';
 import { PixAcordosSemRegistro } from './PixAcordosSemRegistro';
+import { ResumoDivergencias, SecaoDivergencia } from './PixDivergencias';
+import { PixSubAbas, type OpcaoSubAbaPix } from './PixSubAbas';
+import { SUB_ABAS_PIX, type SubAbaPix } from './subAbasPix';
+import { painelPremiacoes, totalDoPainel } from './pixPremiacao';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
 import { chaveDeCache, gravarInstantaneo, valorInstantaneo } from '@/lib/cacheInstantaneo';
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
@@ -271,7 +281,7 @@ const PIX_LOG_LABEL: Record<PixLogItem['acao'], string> = {
 const PIX_LOG_ESTILO: Record<PixLogItem['acao'], string> = {
   registrado:         'border-border text-muted-foreground',
   restaurado:         'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  editado:            'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400',
+  editado:            'border-primary/30 bg-primary/10 text-primary',
   aprovado:           'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
   desaprovado:        'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
   voltou_pendente:    'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
@@ -461,13 +471,16 @@ export function PixAutomatico() {
     /*
      * Apagar SEMPRE que ele aparecer, e preencher UMA vez só.
      *
-     * A página Acordos reescreve a barra de endereço 400 ms depois de montar,
-     * a partir dos parâmetros que leu na montagem — e devolve o `novo_nr` que
-     * esta aba acabou de tirar. Sem o `ref`, essa volta reabria o aviso e
-     * apagava o valor que a pessoa já tivesse digitado nesses 400 ms.
+     * Quando esta tela morava dentro de Acordos, a página reescrevia a barra
+     * de endereço 400 ms depois de montar e devolvia o `novo_nr` que esta aba
+     * acabou de tirar. Desde 16/10/2026 a tela é própria e isso não acontece
+     * mais, mas o `ref` fica: qualquer outra volta do parâmetro (o «voltar» do
+     * navegador, um link repetido) não pode apagar o que a pessoa digitou.
      */
     const params = new URLSearchParams(searchParams);
     params.delete('novo_nr');
+    // O formulário mora na sub-aba Registros: o NR chega e a tela vai até ele.
+    params.delete('aba');
     setSearchParams(params, { replace: true });
 
     if (nrDeForaRef.current === nrDeFora) return;
@@ -478,6 +491,29 @@ export function PixAutomatico() {
     // O cursor no campo que falta, depois de a aba desenhar.
     requestAnimationFrame(() => valorNovoRef.current?.focus());
   }, [searchParams, setSearchParams]);
+
+  /*
+   * A sub-aba aberta mora na URL (`?aba=divergencias`): o F5 volta para ela, o
+   * «voltar» do navegador anda entre elas, e um link pode abrir direto a fila
+   * de NR. Registros é a porta — sem parâmetro.
+   *
+   * O Ranking é só de quem vê o Pix dos outros (o operador enxerga só as
+   * próprias linhas, e um pódio de uma pessoa não diz nada): pedido por quem
+   * não pode, cai em Registros em vez de abrir uma aba vazia.
+   */
+  const abaDaUrl = searchParams.get('aba');
+  const subAbaPedida: SubAbaPix = (SUB_ABAS_PIX as readonly string[]).includes(abaDaUrl ?? '')
+    ? abaDaUrl as SubAbaPix
+    : 'registros';
+  const subAba: SubAbaPix = subAbaPedida === 'ranking' && !podeVerDeOutros ? 'registros' : subAbaPedida;
+  const trocarSubAba = useCallback((aba: SubAbaPix) => {
+    setSearchParams(atual => {
+      const params = new URLSearchParams(atual);
+      if (aba === 'registros') params.delete('aba'); else params.set('aba', aba);
+      return params;
+    });
+  }, [setSearchParams]);
+  useSubAbaUso(subAba);
   /** Etiqueta EXTRA do proximo registro. Some depois de registrar. */
   const [extraNovo, setExtraNovo] = useState(false);
   /*
@@ -1284,7 +1320,7 @@ export function PixAutomatico() {
   // ele bater a meta. Estado do card vem da meta + quartis configurados:
   //   • meta batida → valor garantido (verde)
   //   • 1º quartil  → projetando a meta, mensagem de incentivo (azul)
-  //   • demais      → informativo (violeta)
+  //   • demais      → informativo (destaque do tema)
   const bonusMeta = useMemo(() => calcularBonusMeta({
     operadorId: perfil?.id, itens, pctPorSetor, metaValor, recebidoMes, configMes,
     // Mês e "hoje" de São Paulo, não do relógio de quem abre a tela.
@@ -2218,6 +2254,73 @@ export function PixAutomatico() {
     }
   }
 
+  // ── Sub-abas ────────────────────────────────────────────────────────────
+  /*
+   * O que conta como divergência aberta — o que faz a aba piscar.
+   *
+   * O NR em disputa conta pela fila INTEIRA do escopo, e não só pelo setor em
+   * foco: trocar o foco na barra de setores não pode apagar o aviso de um NR
+   * que continua parado. O acordo que ficou só na lista de acordos é sempre da
+   * própria pessoa (ver `acordosSemPix`). A correção de valor NÃO conta: ela é
+   * anotação que espera o próximo pagamento, e não decisão de alguém.
+   */
+  const divergenciasAbertas = pedidosNr.length + acordosSemPix.length;
+
+  /** O resumo da premiação para o rótulo da aba — a mesma conta do painel. */
+  const resumoPremiacao = useMemo(() => {
+    if (!podeVerDeOutros) return null;
+    const carimbos: Record<string, { pago: boolean; valorPago?: number | null }> = {};
+    for (const p of pagamentosPremiacao) {
+      carimbos[p.operador_id] = {
+        pago: p.pago === true,
+        valorPago: p.valor_pago == null ? null : Number(p.valor_pago),
+      };
+    }
+    const linhas = painelPremiacoes({
+      itens: visiveis, pctPorSetor, mes, metaPorOperador, metaPorSetor,
+      pagamentoPorOperador: carimbos,
+    });
+    return {
+      pessoas: linhas.length,
+      aPagar: linhas.filter(l => l.falta >= 0.005).length,
+      falta: totalDoPainel(linhas).falta,
+    };
+  }, [podeVerDeOutros, pagamentosPremiacao, visiveis, pctPorSetor, mes, metaPorOperador, metaPorSetor]);
+
+  const opcoesSubAba: OpcaoSubAbaPix[] = [
+    {
+      key: 'registros', label: 'Registros', Icon: ListChecks,
+      resumo: loading
+        ? 'Carregando…'
+        : `${totais.pendente.qtd} pendente${totais.pendente.qtd !== 1 ? 's' : ''} · ${totais.aprovado.qtd} aprovado${totais.aprovado.qtd !== 1 ? 's' : ''}`,
+    },
+    {
+      key: 'divergencias', label: 'NRs divergentes', Icon: divergenciasAbertas > 0 ? ShieldAlert : ShieldCheck,
+      resumo: divergenciasAbertas > 0
+        ? `${divergenciasAbertas} ${divergenciasAbertas === 1 ? 'pendência' : 'pendências'} a resolver`
+        : 'Nada divergente',
+      contador: divergenciasAbertas,
+      alerta: divergenciasAbertas > 0,
+    },
+    {
+      key: 'premiacao', label: 'Premiação dobrada', Icon: Trophy,
+      resumo: resumoPremiacao
+        ? resumoPremiacao.pessoas === 0
+          ? 'Ninguém dobrou ainda'
+          : resumoPremiacao.falta >= 0.005
+            ? `${formatCurrency(resumoPremiacao.falta)} a pagar`
+            : 'Tudo quitado'
+        : dobra.atingiu
+          ? 'Sua comissão dobrou!'
+          : `${dobra.requisitosOk}/2 requisitos cumpridos`,
+      contador: resumoPremiacao?.aPagar ?? 0,
+    },
+    ...(podeVerDeOutros ? [{
+      key: 'ranking' as const, label: 'Ranking', Icon: Medal,
+      resumo: 'Pódio do setor no mês',
+    }] : []),
+  ];
+
   // ── Render ──────────────────────────────────────────────────────────────
   const statsCards = [
     {
@@ -2252,11 +2355,12 @@ export function PixAutomatico() {
       {/* ── Cabeçalho da aba ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/10 border border-violet-500/25 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-violet-700 dark:text-violet-400" />
+          <div className="w-11 h-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Zap className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-foreground leading-tight">Pix Automático</h2>
+            {/* Título da TELA desde 16/10/2026 — antes era o de uma aba de Acordos. */}
+            <h1 className="text-xl font-bold text-foreground leading-tight">Pix Automático</h1>
             <p className="text-[11px] text-muted-foreground">
               Comissão de {fmtPct(pctDoMeuSetor)} por acordo aprovado — sem vínculo com a lista de acordos.
             </p>
@@ -2350,9 +2454,46 @@ export function PixAutomatico() {
         </Card>
       )}
 
+      {/* ── As sub-abas ── ver `PixSubAbas` */}
+      <PixSubAbas abas={opcoesSubAba} ativa={subAba} onTrocar={trocarSubAba} />
+
+      {/* ── A divergência não sai da tela até ser resolvida ──
+          Em qualquer outra sub-aba, uma faixa fixa — sem botão de fechar, de
+          propósito — leva até a fila. Some sozinha quando a contagem zera. */}
+      {!loading && divergenciasAbertas > 0 && subAba !== 'divergencias' && (
+        <button
+          type="button"
+          onClick={() => trocarSubAba('divergencias')}
+          className="flex w-full items-center gap-3 rounded-lg border border-warning/40 bg-warning/[0.08] px-4 py-2 text-left transition-colors hover:bg-warning/[0.12]"
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0 text-warning" />
+          <span className="min-w-0 flex-1 text-xs">
+            <strong className="text-foreground">
+              {divergenciasAbertas} {divergenciasAbertas === 1 ? 'divergência esperando' : 'divergências esperando'} resolução
+            </strong>
+            <span className="text-muted-foreground">
+              {[
+                pedidosNr.length > 0
+                  ? `${pedidosNr.length} NR${pedidosNr.length !== 1 ? 's' : ''} em disputa`
+                  : null,
+                acordosSemPix.length > 0
+                  ? `${acordosSemPix.length} acordo${acordosSemPix.length !== 1 ? 's' : ''} sem registro no Pix`
+                  : null,
+              ].filter(Boolean).map(t => ` · ${t}`).join('')}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-warning">
+            Resolver <ArrowRight className="h-3.5 w-3.5" />
+          </span>
+        </button>
+      )}
+
+      {/* ════════════════ Sub-aba: Registros ════════════════ */}
+      {subAba === 'registros' && (
+      <>
       {/* ── Registrar novo ── */}
       {podeRegistrar ? (
-      <Card className="border-violet-500/20 bg-violet-500/[0.03]">
+      <Card className="border-primary/20 bg-primary/[0.03]">
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
             <div className="space-y-1 flex-1 max-w-[220px]">
@@ -2390,7 +2531,7 @@ export function PixAutomatico() {
                   <User className="w-3 h-3" /> Vincular a um operador
                 </Label>
                 {vinculoOp ? (
-                  <div className="h-9 flex items-center justify-between gap-2 rounded-md border border-violet-500/40 bg-violet-500/10 px-3">
+                  <div className="h-9 flex items-center justify-between gap-2 rounded-md border border-primary/40 bg-primary/10 px-3">
                     <span className="text-xs font-medium truncate">{vinculoOp.nome}</span>
                     <button onClick={() => { setVinculoOp(null); setVinculoBusca(''); }}
                       className="text-muted-foreground hover:text-foreground" title="Remover vínculo">
@@ -2454,7 +2595,7 @@ export function PixAutomatico() {
             {valorNovo && !isNaN(parseCurrencyInput(valorNovo)) && parseCurrencyInput(valorNovo) > 0 && (
               <p className="text-[11px] text-muted-foreground pb-2.5">
                 Comissão estimada:{' '}
-                <span className="font-mono font-semibold text-violet-700 dark:text-violet-400">
+                <span className="font-mono font-semibold text-primary">
                   {formatCurrency(Math.round(parseCurrencyInput(valorNovo) * pctDoMeuSetor) / 100)}
                 </span>
               </p>
@@ -2539,80 +2680,12 @@ export function PixAutomatico() {
         />
       ))}
 
-      {/* ── O acordo que ficou só na aba Acordos ──
-          Antes da fila de duplicidade: é trabalho da PRÓPRIA pessoa, e ela é
-          quem abre esta aba com mais frequência. */}
-      {!loading && acordosSemPix.length > 0 && (
-        <PixAcordosSemRegistro
-          acordos={acordosSemPix}
-          onRegistrar={registrarDaListaDeAcordos}
-          podeRegistrar={podeRegistrar}
-        />
-      )}
-
-      {/* ── NRs duplicados esperando decisão ──
-          No topo da área de painéis: é fila de trabalho, e fila que fica
-          embaixo não é vista. O operador enxerga só o próprio pedido — quem
-          recorta é a RLS, não esta condição. */}
-      {!loading && pedidosDoFoco.length > 0 && (
-        <PixPedidosNr
-          pedidos={pedidosDoFoco}
-          aprovacoes={aprovacoesNr}
-          podeDecidir={temPermissao('aprovar_pix_automatico')}
-          meuId={perfil?.id ?? null}
-          /* Por quais setores eu assino. Os dois valores saem da MESMA fonte que
-             `fn_pix_pode_decidir_lado` consulta do lado do banco: o escopo da aba
-             e `fn_setores_do_operador`. As duas pontas têm de dizer a mesma
-             coisa, e já disseram coisas diferentes — ver `podeAssinarLadoNr`. */
-          meusSetores={meusSetores}
-          vejoTodosOsSetores={podeVerTodosSetores}
-          nomePorSetor={nomePorSetor}
-          /* Só em «todos»: com um setor em foco a fila já é dele, e carimbar o
-             nome em toda linha seria repetir o óbvio. */
-          mostrarSetor={setorFoco === null}
-          onMudou={carregar}
-        />
-      )}
-
-      {/* ── Quanto ainda sai para cada pessoa ──
-          Só para quem já vê o Pix dos outros: é a lista de pagamento, e ela
-          responde a pergunta que obrigava a somar as linhas de cabeça. Lê a
-          MESMA lista visível, então filtrar por equipe filtra o painel junto. */}
-      {!loading && podeVerDeOutros && (
-        <PixPainelPremiacoes
-          itens={visiveis}
-          pctPorSetor={pctPorSetor}
-          mes={mes}
-          metaPorOperador={metaPorOperador}
-          metaPorSetor={metaPorSetor}
-          pagamentos={pagamentosPremiacao}
-          podeMarcarPago={podeMarcarPremiacaoPaga}
-          alterandoOperadorId={alterandoPremiacaoId}
-          // Aberto/fechado, busca e recorte sobrevivem a sair da aba e voltar.
-          chaveEstado={`${chaveAba}|premiacoes`}
-          onMarcarPago={alternarPremiacaoPaga}
-        />
-      )}
-
-      {/* ── Correção de valor divergente (líder+ com a chave) ──
-          Fica perto das metas e longe do formulário de registro de propósito:
-          é acerto de pagamento, não registro de acordo. */}
-      {!loading && podeAjustarSaldo && empresa?.id && (
-        <PixSaldoPainel
-          empresaId={empresa.id}
-          operadores={operadoresFiltro}
-          saldos={saldos}
-          nrPorAcordo={nrPorAcordo}
-          onMudou={carregar}
-        />
-      )}
-
       {/* O operador não anota saldo, mas precisa saber que há um no nome dele —
           senão o próximo Pix chega com valor diferente e ninguém explicou. */}
       {!loading && !podeAjustarSaldo && saldos.length > 0 && (
-        <Card className="border-violet-500/25 bg-violet-500/5">
+        <Card className="border-primary/25 bg-primary/5">
           <CardContent className="p-3 flex items-start gap-2">
-            <Scale className="w-4 h-4 text-violet-700 dark:text-violet-400 shrink-0 mt-0.5" />
+            <Scale className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <div className="space-y-0.5 min-w-0">
               <p className="text-xs font-semibold text-foreground">
                 Há correção de valor pendente para você
@@ -2628,29 +2701,6 @@ export function PixAutomatico() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* ── Comissão dobrada: os dois requisitos num card só ──
-          É individual: aparece para quem tem acordos Pix próprios no mês, e
-          sempre para o operador — que precisa saber que a regra existe.
-          Substituiu o contador dos 18 + o bloco de "bônus por meta", que eram
-          dois desenhos diferentes contando metades da mesma regra. */}
-      {!loading && (!podeVerDeOutros || dobra.feitos > 0) && (
-        <PixComissaoDobrada dobra={dobra} projecao={bonusMeta?.projecao ?? null} />
-      )}
-
-      {/* ── Ranking do setor ──
-          Só para líder+: o operador enxerga apenas os próprios acordos (RLS),
-          então um "ranking" para ele seria uma lista de uma pessoa só. */}
-      {!loading && podeVerDeOutros && (
-        <PixRankingSetor
-          abas={abasRanking}
-          /* Abre no setor em foco quando há um; as abas do card seguem
-             independentes da barra depois disso — ver o cabeçalho do card. */
-          setorInicial={setorFoco ?? meuSetor}
-          fotoPorOperador={fotoPorOperador}
-          destacarOperadorId={perfil?.id}
-        />
       )}
 
       {/* ── Aviso do prazo dos desaprovados ──
@@ -2774,15 +2824,15 @@ export function PixAutomatico() {
       {podeEditarConfig && setorConfig && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400" />
+            <Building2 className="w-3.5 h-3.5 text-primary" />
             {setores.find(s => s.id === setorConfig)?.nome ?? 'Meu setor'}
           </span>
           <div className="flex items-center gap-1.5">
-            <Percent className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400 shrink-0" />
+            <Percent className="w-3.5 h-3.5 text-primary shrink-0" />
             <span className="text-[11px] text-muted-foreground shrink-0">Comissão do setor:</span>
             <Input value={pctInput} onChange={e => setPctInput(e.target.value)}
               className="h-7 w-16 text-xs text-center font-mono" />
-            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-violet-700 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300"
+            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
               onClick={pedirConfirmacaoPct} disabled={salvandoPct} title="Confirmar novo percentual do setor">
               {salvandoPct ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Confirmar
@@ -2851,8 +2901,8 @@ export function PixAutomatico() {
 
       {/* ── Barra de ação em lote (líder) ── */}
       {podeAgirSobreOutros && selecionados.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2">
-          <span className="text-xs font-medium text-violet-500 mr-1">{selecionados.size} selecionado(s)</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
+          <span className="text-xs font-medium text-primary mr-1">{selecionados.size} selecionado(s)</span>
           <Button size="sm" onClick={copiarSelecionados} disabled={loteProcessando} className="h-7 gap-1.5 text-xs">
             <Copy className="w-3.5 h-3.5" /> Copiar
           </Button>
@@ -2977,7 +3027,7 @@ export function PixAutomatico() {
                                 </span>
                               )}
                               <button title="Copiar NR" onClick={() => copiarTexto(item.nr_cliente, 'NR copiado.')}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-violet-400">
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-primary">
                                 <Copy className="w-3 h-3" />
                               </button>
                             </div>
@@ -2999,7 +3049,7 @@ export function PixAutomatico() {
                           ) : formatCurrency(item.valor)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-violet-700 dark:text-violet-400')}>
+                          <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-primary')}>
                             {formatCurrency(comissao)}
                           </span>
                           <span className="text-[10px] text-muted-foreground ml-1">({fmtPct(pctLinha)})</span>
@@ -3084,7 +3134,7 @@ export function PixAutomatico() {
                                 valor são a base da comissão que o líder já conferiu. */}
                             {podeEditarLinha(item) && (
                               <button title="Editar NR e valor" onClick={() => abrirEdicao(item)}
-                                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10">
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10">
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -3112,7 +3162,7 @@ export function PixAutomatico() {
                                 title={`Aplicar ${formatCurrency(saldoAplicavelNa(item)!.valor)} de correção neste pagamento`}
                                 disabled={ajustandoId === item.id}
                                 onClick={() => aplicarCorrecao(item)}
-                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-300 border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 disabled:opacity-50">
+                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-primary border border-primary/30 bg-primary/10 hover:bg-primary/20 disabled:opacity-50">
                                 {ajustandoId === item.id
                                   ? <RefreshCw className="w-3 h-3 animate-spin" />
                                   : <Scale className="w-3 h-3" />}
@@ -3216,6 +3266,189 @@ export function PixAutomatico() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
+
+      {/* ════════════════ Sub-aba: NRs divergentes ════════════════
+          Tudo o que precisa de ação para o Pix bater com a realidade, na ordem
+          de urgência: o NR em disputa (espera decisão de líder), o acordo que
+          ficou só na lista de acordos (espera registro) e, para quem pode, a
+          correção de valor de um Pix que saiu errado. */}
+      {subAba === 'divergencias' && (
+        loading ? (
+          <div className="space-y-2.5">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+          </div>
+        ) : (
+        <div className="space-y-6">
+          <ResumoDivergencias
+            pendencias={divergenciasAbertas}
+            partes={[
+              pedidosNr.length > 0
+                ? `${pedidosNr.length} NR${pedidosNr.length !== 1 ? 's' : ''} em disputa`
+                : null,
+              acordosSemPix.length > 0
+                ? `${acordosSemPix.length} acordo${acordosSemPix.length !== 1 ? 's' : ''} sem registro no Pix`
+                : null,
+            ].filter((t): t is string => t != null)}
+          />
+
+          {/* ── 1. NRs em disputa ──
+              Primeiro: é a única fila que espera decisão de OUTRA pessoa. O
+              operador enxerga só o próprio pedido — quem recorta é a RLS. */}
+          <SecaoDivergencia
+            numero={1}
+            titulo="NRs em disputa"
+            descricao={temPermissao('aprovar_pix_automatico')
+              ? 'Alguém pediu um NR que já está com outra pessoa. Decida com quem ele fica.'
+              : 'Você pediu um NR que já estava com outra pessoa. A decisão é do líder.'}
+            contador={pedidosNr.length}
+            vazio="Nenhum NR em disputa."
+          >
+            <div className="space-y-2.5">
+              {pedidosDoFoco.length > 0 && (
+                <PixPedidosNr
+                  pedidos={pedidosDoFoco}
+                  aprovacoes={aprovacoesNr}
+                  podeDecidir={temPermissao('aprovar_pix_automatico')}
+                  meuId={perfil?.id ?? null}
+                  /* Por quais setores eu assino. Os dois valores saem da MESMA fonte que
+                     `fn_pix_pode_decidir_lado` consulta do lado do banco: o escopo da aba
+                     e `fn_setores_do_operador`. As duas pontas têm de dizer a mesma
+                     coisa, e já disseram coisas diferentes — ver `podeAssinarLadoNr`. */
+                  meusSetores={meusSetores}
+                  vejoTodosOsSetores={podeVerTodosSetores}
+                  nomePorSetor={nomePorSetor}
+                  /* Só em «todos»: com um setor em foco a fila já é dele, e carimbar o
+                     nome em toda linha seria repetir o óbvio. */
+                  mostrarSetor={setorFoco === null}
+                  onMudou={carregar}
+                />
+              )}
+
+              {/* O foco da barra de setores escondeu parte da fila: dizer, e dar o
+                  caminho. Sem isto a aba piscaria com a lista vazia na frente. */}
+              {pedidosNr.length > pedidosDoFoco.length && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-4 py-2.5 text-[11px] text-muted-foreground">
+                  <span className="min-w-0 flex-1">
+                    {pedidosNr.length - pedidosDoFoco.length}{' '}
+                    {pedidosNr.length - pedidosDoFoco.length === 1 ? 'NR está' : 'NRs estão'}{' '}
+                    em outro setor, fora do foco escolhido na barra de setores.
+                  </span>
+                  {podeVerTodosSetores && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => setFiltroSetor(TODOS_SETORES)}>
+                      Ver todos os setores
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </SecaoDivergencia>
+
+          {/* ── 2. O acordo que ficou só na lista de acordos ── */}
+          <SecaoDivergencia
+            numero={2}
+            titulo="Sem registro no Pix"
+            descricao="Seus acordos de Pix Automático ou Cartão Recorrente tabulados na aba Acordos que ainda não estão aqui — sem o registro, não contam comissão nem meta."
+            contador={acordosSemPix.length}
+            vazio="Todos os seus acordos recorrentes já estão registrados."
+          >
+            <PixAcordosSemRegistro
+              acordos={acordosSemPix}
+              onRegistrar={registrarDaListaDeAcordos}
+              podeRegistrar={podeRegistrar}
+            />
+          </SecaoDivergencia>
+
+          {/* ── 3. Correção de valor divergente (líder+ com a chave) ──
+              Aqui e não em Registros: é acerto de um Pix que saiu com valor
+              errado, não registro de acordo. Não faz a aba piscar — é anotação
+              que espera o próximo pagamento, não decisão. */}
+          {podeAjustarSaldo && empresa?.id && (
+            <SecaoDivergencia
+              numero={3}
+              titulo="Correção de valor"
+              descricao="Um Pix saiu com valor a mais ou a menos? Anote aqui; o acerto entra no próximo pagamento da pessoa."
+              contador={saldos.length}
+              alerta={false}
+            >
+              <PixSaldoPainel
+                empresaId={empresa.id}
+                operadores={operadoresFiltro}
+                saldos={saldos}
+                nrPorAcordo={nrPorAcordo}
+                onMudou={carregar}
+              />
+            </SecaoDivergencia>
+          )}
+        </div>
+        )
+      )}
+
+      {/* ════════════════ Sub-aba: Premiação dobrada ════════════════
+          Em cima, a dobra de QUEM ESTÁ OLHANDO — sempre para o operador, que
+          precisa saber que a regra existe, e para o líder que também fecha
+          acordo. Embaixo, para quem vê o Pix dos outros, a lista de quem dobrou
+          e quanto falta pagar. */}
+      {subAba === 'premiacao' && (
+        loading ? (
+          <div className="space-y-2.5">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+          </div>
+        ) : (
+        <div className="space-y-4">
+          {(!podeVerDeOutros || dobra.feitos > 0) && (
+            <PixComissaoDobrada dobra={dobra} projecao={bonusMeta?.projecao ?? null} />
+          )}
+          {podeVerDeOutros && (
+            <PixPainelPremiacoes
+              itens={visiveis}
+              pctPorSetor={pctPorSetor}
+              mes={mes}
+              metaPorOperador={metaPorOperador}
+              metaPorSetor={metaPorSetor}
+              pagamentos={pagamentosPremiacao}
+              podeMarcarPago={podeMarcarPremiacaoPaga}
+              alterandoOperadorId={alterandoPremiacaoId}
+              fotoPorOperador={fotoPorOperador}
+              rotuloMes={rotuloDoMes(mes)}
+              // Busca e recorte sobrevivem a sair da aba e voltar.
+              chaveEstado={`${chaveAba}|premiacoes`}
+              onMarcarPago={alternarPremiacaoPaga}
+            />
+          )}
+        </div>
+        )
+      )}
+
+      {/* ════════════════ Sub-aba: Ranking ════════════════
+          Só para quem vê o Pix dos outros: o operador enxerga apenas os
+          próprios acordos (RLS), e um "ranking" dele teria uma pessoa só. */}
+      {subAba === 'ranking' && podeVerDeOutros && (
+        loading ? (
+          <Skeleton className="h-64 w-full rounded-xl" />
+        ) : (
+          <PixRankingSetor
+            abas={abasRanking}
+            /* Abre no setor em foco quando há um; as abas do card seguem
+               independentes da barra depois disso — ver o cabeçalho do card. */
+            setorInicial={setorFoco ?? meuSetor}
+            fotoPorOperador={fotoPorOperador}
+            destacarOperadorId={perfil?.id}
+            recolhivel={false}
+            vazio={
+              <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-12 text-center">
+                <Medal className="h-8 w-8 text-muted-foreground/30" />
+                <p className="text-sm font-medium text-foreground">Ranking vazio em {rotuloDoMes(mes)}</p>
+                <p className="max-w-sm text-[11px] text-muted-foreground">
+                  Assim que o setor tiver acordos Pix registrados no mês, o pódio aparece aqui.
+                </p>
+              </div>
+            }
+          />
+        )
+      )}
 
       {/* ── Lixeira ────────────────────────────────────────────────────────
           Existe porque o excluir apagava de vez: sem log, sem auditoria, sem

@@ -80,4 +80,27 @@ describe('ordenarMenu', () => {
       expect(new Set(rotas(saida))).toEqual(new Set(rotas(menu)));
     }
   });
+
+  it('aba nova com vizinha declarada entra embaixo dela, e não no fim', () => {
+    // O Pix Automático nasceu em 16/10/2026, depois de muita ordem já salva.
+    const comPix = [...menu, { to: '/pix', label: 'Pix', depoisDe: '/acordos' }];
+    const salva = ['/lixeira', '/acordos', '/dashboard', '/analitico'];
+    expect(rotas(ordenarMenu(comPix, salva))).toEqual(
+      ['/lixeira', '/acordos', '/pix', '/dashboard', '/analitico'],
+    );
+  });
+
+  it('a vizinha declarada não manda em quem já está na ordem salva', () => {
+    const comPix = [...menu, { to: '/pix', label: 'Pix', depoisDe: '/acordos' }];
+    const salva = ['/pix', '/lixeira', '/acordos', '/dashboard', '/analitico'];
+    expect(rotas(ordenarMenu(comPix, salva))).toEqual(salva);
+  });
+
+  it('vizinha que não existe neste menu: a aba nova vai para o fim', () => {
+    const comPix = [...menu, { to: '/pix', label: 'Pix', depoisDe: '/acordos/novo' }];
+    const salva = ['/acordos', '/dashboard'];
+    expect(rotas(ordenarMenu(comPix, salva))).toEqual(
+      ['/acordos', '/dashboard', '/analitico', '/lixeira', '/pix'],
+    );
+  });
 });

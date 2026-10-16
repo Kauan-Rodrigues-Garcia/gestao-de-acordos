@@ -12,6 +12,13 @@ export const ROUTE_PATHS = {
   ACORDO_EDITAR: '/acordos/:id/editar',
   ACORDO_DETALHE: '/acordos/:id',
   IMPORTAR_EXCEL: '/acordos/importar',
+  /**
+   * O Pix automático em tela própria (16/10/2026). Era uma aba DENTRO de
+   * Acordos (`/acordos?tab=pix`), e o link antigo — que as notificações já
+   * gravadas no banco carregam — continua chegando aqui pelo redirecionamento
+   * da página Acordos.
+   */
+  PIX_AUTOMATICO: '/pix-automatico',
   PAINEL_LIDER: '/lider',
   PAINEL_LIDER_OPERADOR: '/lider/operador/:id',
   PAINEL_DIRETORIA: '/diretoria',

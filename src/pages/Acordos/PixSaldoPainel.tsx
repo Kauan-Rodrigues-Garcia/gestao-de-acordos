@@ -149,10 +149,10 @@ export function PixSaldoPainel({
           aria-expanded={aberto}
         >
           <span className="flex items-center gap-2 min-w-0">
-            <Scale className="w-4 h-4 text-violet-700 dark:text-violet-400 shrink-0" />
+            <Scale className="w-4 h-4 text-primary shrink-0" />
             <span className="text-xs font-semibold text-foreground">Corrigir valor divergente</span>
             {saldos.length > 0 && (
-              <Badge variant="outline" className="text-[10px] border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+              <Badge variant="outline" className="text-[10px] border-primary/30 bg-primary/10 text-primary">
                 {saldos.length} em aberto · {formatCurrency(totalAberto)}
               </Badge>
             )}
@@ -324,7 +324,7 @@ export function PixSaldoPainel({
                           <p className="text-[10px] text-muted-foreground truncate">{s.motivo}</p>
                         )}
                         {s.acordo_id && (
-                          <p className="text-[10px] text-violet-700 dark:text-violet-300 inline-flex items-center gap-1">
+                          <p className="text-[10px] text-primary inline-flex items-center gap-1">
                             <Link2 className="w-2.5 h-2.5 shrink-0" />
                             aplicado no NR {nrPorAcordo[s.acordo_id] ?? '—'} — aguardando pagamento
                           </p>

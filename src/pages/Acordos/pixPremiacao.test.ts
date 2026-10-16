@@ -12,7 +12,7 @@
  * direito ao dobro.
  */
 import { describe, it, expect } from 'vitest';
-import { premiacaoDoOperador, painelPremiacoes, totalDoPainel } from './pixPremiacao';
+import { premiacaoDoOperador, painelPremiacoes, pertoDeDobrar, totalDoPainel } from './pixPremiacao';
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 
 const MES = '2026-09';
@@ -326,5 +326,51 @@ describe('premiacaoDoOperador — pagamento mensal da premiação', () => {
     expect(bruno?.falta).toBe(800);
     expect(totalDoPainel(linhas).falta).toBe(800);
     expect(totalDoPainel(linhas).pagoNaPremiacao).toBe(400);
+  });
+});
+
+describe('pertoDeDobrar — quem está a um passo', () => {
+  const META_LONGE = { metaValor: 1000, recebidoMes: 100 };
+
+  it('entra quem fechou os acordos e falta a meta, com o que falta escrito', () => {
+    const itens = Array.from({ length: 20 }, (_, i) => acordo({ id: `a-${i}`, valor: 1000 }));
+    const [ana] = pertoDeDobrar({
+      itens, pctPorSetor: PCT, mes: MES, metaPorOperador: { ana: META_LONGE },
+    });
+    expect(ana.operadorId).toBe('ana');
+    expect(ana.acordosOk).toBe(true);
+    expect(ana.metaOk).toBe(false);
+    expect(ana.faltaMeta).toBe(900);
+    expect(ana.comissao).toBe(200);
+  });
+
+  it('quem já dobrou não entra — ele está no painel', () => {
+    const itens = Array.from({ length: 20 }, (_, i) => acordo({ id: `a-${i}`, valor: 1000 }));
+    expect(pertoDeDobrar({
+      itens, pctPorSetor: PCT, mes: MES, metaPorOperador: { ana: META_BATIDA },
+    })).toEqual([]);
+  });
+
+  it('longe dos dois requisitos não entra', () => {
+    const itens = [acordo({ id: 'a-1', valor: 1000 })];
+    expect(pertoDeDobrar({
+      itens, pctPorSetor: PCT, mes: MES, metaPorOperador: { ana: META_LONGE },
+    })).toEqual([]);
+  });
+
+  it('um requisito fechado vem antes de dois quase lá', () => {
+    const itens = [
+      // Ana: 20 acordos (requisito 1 fechado), meta longe.
+      ...Array.from({ length: 20 }, (_, i) => acordo({ id: `ana-${i}`, valor: 1000 })),
+      // Bruno: 15 de 18 (83%), meta em 90% — nenhum fechado.
+      ...Array.from({ length: 15 }, (_, i) => acordo({
+        id: `bru-${i}`, valor: 1000, operador_id: 'bruno', operador_nome: 'Bruno',
+      })),
+    ];
+    const lista = pertoDeDobrar({
+      itens, pctPorSetor: PCT, mes: MES,
+      metaPorOperador: { ana: META_LONGE, bruno: { metaValor: 1000, recebidoMes: 900 } },
+    });
+    expect(lista.map(q => q.operadorId)).toEqual(['ana', 'bruno']);
   });
 });

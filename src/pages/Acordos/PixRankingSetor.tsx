@@ -109,6 +109,13 @@ export interface PixRankingSetorProps {
   fotoPorOperador?: Record<string, string | null>;
   /** Destaca a linha de quem está olhando. */
   destacarOperadorId?: string | null;
+  /**
+   * Abre e fecha? Na sub-aba Ranking (16/10/2026) não: a aba inteira É o
+   * ranking, e um card fechado ali seria uma aba vazia. Padrão `true`.
+   */
+  recolhivel?: boolean;
+  /** O que desenhar quando o setor não tem ninguém no ranking. Padrão: nada. */
+  vazio?: React.ReactNode;
 }
 
 /** Selo de "cumpriu a meta de acordos do setor" — não afirma que a comissão dobrou. */
@@ -125,8 +132,10 @@ function SeloAcordos() {
 
 export function PixRankingSetor({
   abas, setorInicial, fotoPorOperador, destacarOperadorId,
+  recolhivel = true, vazio = null,
 }: PixRankingSetorProps) {
-  const [aberto, setAberto] = useState<boolean>(() => lido(CHAVE_ABERTO) !== 'nao');
+  const [abertoGuardado, setAberto] = useState<boolean>(() => lido(CHAVE_ABERTO) !== 'nao');
+  const aberto = recolhivel ? abertoGuardado : true;
 
   /*
    * A aba escolhida é lembrada, mas a lembrança só vale se o setor ainda
@@ -159,7 +168,7 @@ export function PixRankingSetor({
   }
 
   const aba = abas.find(a => a.setorId === ativo) ?? abas[0];
-  if (!aba || aba.linhas.length === 0) return null;
+  if (!aba || aba.linhas.length === 0) return <>{vazio}</>;
 
   const { linhas } = aba;
   const podio  = linhas.slice(0, 3);
@@ -172,9 +181,13 @@ export function PixRankingSetor({
       <CardContent className="p-0">
         {/* ── Cabeçalho: sempre visível, é ele que abre e fecha ── */}
         <button
-          onClick={alternar}
-          aria-expanded={aberto}
-          className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-accent/20 transition-colors"
+          type="button"
+          onClick={recolhivel ? alternar : undefined}
+          aria-expanded={recolhivel ? aberto : undefined}
+          className={cn(
+            'w-full flex items-center gap-2 px-4 py-3 text-left transition-colors',
+            recolhivel ? 'hover:bg-accent/20' : 'cursor-default',
+          )}
         >
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500/25 to-orange-600/10 border border-amber-500/30 flex items-center justify-center shrink-0">
             <Trophy className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
@@ -188,12 +201,16 @@ export function PixRankingSetor({
               {totalAcordos !== 1 ? 's' : ''} no mês
             </p>
           </div>
-          <span className="text-[10.5px] text-muted-foreground inline-flex items-center gap-1 shrink-0">
-            {aberto ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {aberto ? 'Ocultar' : 'Mostrar'}
-          </span>
-          <ChevronDown className={cn('w-4 h-4 text-muted-foreground shrink-0 transition-transform',
-            aberto && 'rotate-180')} />
+          {recolhivel && (
+            <>
+              <span className="text-[10.5px] text-muted-foreground inline-flex items-center gap-1 shrink-0">
+                {aberto ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {aberto ? 'Ocultar' : 'Mostrar'}
+              </span>
+              <ChevronDown className={cn('w-4 h-4 text-muted-foreground shrink-0 transition-transform',
+                aberto && 'rotate-180')} />
+            </>
+          )}
         </button>
 
         <AnimatePresence initial={false}>
@@ -249,7 +266,7 @@ export function PixRankingSetor({
                           'flex flex-col gap-2 rounded-xl border',
                           ehLider ? 'p-3.5 sm:gap-2.5' : 'p-2.5',
                           cor.cartao,
-                          ehVoce && 'ring-1 ring-violet-500/50',
+                          ehVoce && 'ring-1 ring-primary/50',
                         )}
                       >
                         <div className="flex items-center gap-2 min-w-0">
@@ -281,7 +298,7 @@ export function PixRankingSetor({
                           </div>
                           {l.requisitoAcordosOk && <SeloAcordos />}
                           {ehVoce && (
-                            <Badge variant="outline" className="shrink-0 border-violet-500/40 px-1 py-0 text-[9px] text-violet-500 dark:text-violet-400">
+                            <Badge variant="outline" className="shrink-0 border-primary/40 px-1 py-0 text-[9px] text-primary">
                               você
                             </Badge>
                           )}
@@ -312,7 +329,7 @@ export function PixRankingSetor({
 
                         <div className="flex items-center justify-between text-[10.5px] tabular-nums">
                           <span className="text-muted-foreground">{formatCurrency(l.valor)}</span>
-                          <span className="font-mono font-semibold text-violet-500 dark:text-violet-400">
+                          <span className="font-mono font-semibold text-primary">
                             {formatCurrency(l.comissao)}
                           </span>
                         </div>
@@ -334,7 +351,7 @@ export function PixRankingSetor({
                           transition={{ delay: Math.min(i * 0.015, 0.25), duration: 0.2 }}
                           className={cn(
                             'flex items-center gap-3 px-4 py-2 hover:bg-accent/20 transition-colors',
-                            ehVoce && 'bg-violet-500/[0.07]',
+                            ehVoce && 'bg-primary/[0.07]',
                           )}
                         >
                           <span className="w-6 text-[10.5px] font-bold text-muted-foreground tabular-nums shrink-0">
@@ -343,12 +360,12 @@ export function PixRankingSetor({
                           <span className="text-xs text-foreground/90 truncate flex-1 min-w-0">{l.nome}</span>
                           {l.requisitoAcordosOk && <SeloAcordos />}
                           {ehVoce && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-violet-500/40 text-violet-500 dark:text-violet-400 shrink-0">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-primary/40 text-primary shrink-0">
                               você
                             </Badge>
                           )}
                           <div className="hidden sm:block w-24 h-1 rounded-full bg-muted overflow-hidden shrink-0">
-                            <div className="h-full rounded-full bg-violet-400/70"
+                            <div className="h-full rounded-full bg-primary/60"
                               style={{ width: `${Math.round((l.acordos / maximo) * 100)}%` }} />
                           </div>
                           <span className="w-8 text-right text-xs font-mono font-bold text-foreground shrink-0">
@@ -357,7 +374,7 @@ export function PixRankingSetor({
                           <span className="w-24 text-right text-[10.5px] font-mono text-muted-foreground shrink-0 hidden sm:inline">
                             {formatCurrency(l.valor)}
                           </span>
-                          <span className="w-20 text-right text-[10.5px] font-mono font-semibold text-violet-500 dark:text-violet-400 shrink-0">
+                          <span className="w-20 text-right text-[10.5px] font-mono font-semibold text-primary shrink-0">
                             {formatCurrency(l.comissao)}
                           </span>
                         </motion.div>
