@@ -18,7 +18,7 @@ const migration = (nome: string) => readFileSync(resolve(__dirname, '../../../..
 const SQLS = [
   '20261009120000_chefao_rei_do_pop.sql', '20261015230000_chefona_bruxa_do_pantano.sql',
   '20261016120000_chefona_lobby_e_autoclick.sql', '20261016170000_chefona_hora_do_banco.sql',
-  '20261016200000_chefona_ritmo.sql',
+  '20261016200000_chefona_ritmo.sql', '20261016220000_chefona_lobby_foto.sql',
 ].map(migration);
 
 let db: PGlite;
@@ -65,7 +65,7 @@ beforeAll(async () => {
     insert into public.empresas values ('${EMPRESA}');
     create table public.setores (id uuid primary key, nome text);
     create table public.perfis (id uuid primary key, nome text, foto_url text, setor_id uuid);
-    insert into public.perfis values ('${ANA}', 'Ana Paula', null, null), ('${ADMIN}', 'Cleber', null, null);
+    insert into public.perfis values ('${ANA}', 'Ana Paula', null, null), ('${ADMIN}', 'Cleber', 'https://x/cleber.png', null);
     create function public.fn_user_is_super_admin() returns boolean language sql stable
       as $$ select current_setting('teste.super', true) = 'sim' $$;
   `);
@@ -184,5 +184,17 @@ describe('20261016200000 — o diretor de ritmo', () => {
     expect(e.ritmo).toBeCloseTo(1, 1);
     await db.exec(`update public.chefona_rodadas set solta_em = clock_timestamp() + interval '30 seconds' where id = ${id}`);
     expect((await como<Estado>(ANA, 'select public.fn_chefona_atual() v')).ritmo).toBe(1);
+  });
+});
+
+describe('20261016220000 — a foto no lobby', () => {
+  it('quem tem foto entra com ela; quem não tem, sem (o app mostra o rostinho)', async () => {
+    const id = await como<number>(ADMIN, 'select public.fn_chefona_soltar(1000, 2, 180, 0) v');
+    await como(ANA, 'select public.fn_chefona_lobby_entrar($1) v', [id]);
+    const r = await como<{ lobby: { usuario: string; foto: string | null }[] }>(ADMIN, 'select public.fn_chefona_lobby_entrar($1) v', [id]);
+    expect(r.lobby).toEqual([
+      expect.objectContaining({ usuario: ANA, foto: null }),
+      expect.objectContaining({ usuario: ADMIN, foto: 'https://x/cleber.png' }),
+    ]);
   });
 });

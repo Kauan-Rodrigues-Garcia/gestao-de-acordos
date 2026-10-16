@@ -84,7 +84,7 @@ export function LobbyDaChefona({ rodada, eu, noLobby, aoAcabar }: {
   // Quem entrou (os últimos 24) e quantos ao todo.
   useEffect(() => {
     lobbyRef.current?.atualizarGuerreiros(
-      rodada.lobby.map(g => ({ id: g.usuario, nome: g.nome, setor: g.setor })),
+      rodada.lobby.map(g => ({ id: g.usuario, nome: g.nome, setor: g.setor, foto: g.foto })),
       rodada.lobby_total,
     );
   }, [rodada.lobby, rodada.lobby_total]);

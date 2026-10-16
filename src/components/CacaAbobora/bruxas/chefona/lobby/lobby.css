@@ -45,6 +45,8 @@
   flex: none;
   box-shadow: 0 0 0 2px #0d0612;
 }
+/* A foto do perfil: suave (não pixelada) e cortada no quadradinho. */
+.bxl-rosto.foto { image-rendering: auto; object-fit: cover; background: #2a1438; }
 
 /* ── Os botões (pedra do Minecraft) ───────────────────────────────────── */
 .bxl-btn {

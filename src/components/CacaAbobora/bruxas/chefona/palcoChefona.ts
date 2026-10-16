@@ -137,9 +137,17 @@ export const SAI_DA_FURIA = 0.1;
 /** Preparando a poção ela apanha 50% a mais; tonta, o dobro. */
 const MULT_CONJURANDO = 1.5;
 const MULT_TONTA = 2;
-/** Dano no preparo (fração da vida máxima) que quebra a poção; o Encantamento pede mais. */
-export const QUEBRA_FEITICO = 0.06;
-const QUEBRA_FORTE = 0.09;
+/**
+ * Quebrar a poção no preparo (16/10/2026, Cleber: «coloca a chance de ser
+ * aleatória, porque como é muita gente clicando vai quebrar toda hora»). Antes
+ * quebrava quando o dano no preparo passava de 6% da vida — somando os tiros do
+ * time inteiro que chegam do banco, então com muita gente quebrava quase
+ * sempre. Agora é sorte, e só pelos tiros DESTA tela: só `POCAO_QUEBRAVEL` das
+ * poções podem quebrar, e numa dessas cada tiro meu tem `QUEBRA_POR_TIRO`.
+ * O Encantamento (o feitiço que treme a tela) nunca quebra: ela sempre termina.
+ */
+export const POCAO_QUEBRAVEL = 0.35;
+export const QUEBRA_POR_TIRO = 0.2;
 const CONJURO_S = 1.4;
 const CONJURO_FORTE_S = 2.8;
 const TONTA_S = 1.8;
@@ -578,7 +586,8 @@ export class PalcoChefona {
   /** As últimas poções jogadas (a mais nova no fim), e o último jeito de cada uma. */
   private recentes: NomeFeitico[] = [];
   private readonly ultimaVariante = new Map<NomeFeitico, string>();
-  private conjuro: { feitico: NomeFeitico; variante: string; dano: number } | null = null;
+  /** A poção sendo preparada: se esta pode quebrar (sorteado no começo) e se um tiro já a quebrou. */
+  private conjuro: { feitico: NomeFeitico; variante: string; quebravel: boolean; quebrou: boolean } | null = null;
   private voando: Garrafa | null = null;
   private ativos = new Map<NomeFeitico, { desfazer: () => void; variante: string }>();
   private particulas: Particula[] = [];
@@ -968,6 +977,9 @@ export class PalcoChefona {
     const pode = this.banco ? ['voando', 'entrando', 'conjurando', 'tonta'] : ['voando', 'entrando'];
     if (!pode.includes(this.fase)) return;
     if (!this.banco && this.vida >= this.vidaMax) return;
+    // O Encantamento não é interrompido por nada (16/10/2026): ela termina e lança.
+    // A cura do banco vale do mesmo jeito — a vida volta direto na barra, sem o gole.
+    if (this.conjuro?.feitico === FEITICO_FORTE) return;
     // Com o banco, a cura vale de todo jeito: a poção que ela preparava fica para depois.
     if (this.conjuro) { this.conjuro = null; this.encerrarMesa(); }
     this.corpo.manobra = null;
@@ -1253,7 +1265,7 @@ export class PalcoChefona {
       else this.letreiro(`-${Math.round(dano)}`, onde.x + entre(-6, 6), onde.y - 4, 'dano');
     }
     this.aoEvento?.({ tipo: 'acertou', dano, parte, vida: Math.max(0, this.vida), meu });
-    if (this.conjuro) this.conjuro.dano += dano;
+    if (this.conjuro?.quebravel && meu && Math.random() < QUEBRA_POR_TIRO) this.conjuro.quebrou = true;
     this.acertos.push(this.tempo);
     this.depoisDoDano();
   }
@@ -1330,9 +1342,8 @@ export class PalcoChefona {
       this.estilhacos(c.x, c.y, [...CORES_MANTO, ...CORES_FUMACA_DANO], 24);
     }
     if (!this.furia && this.fracao <= FURIA_EM) this.entrarNaFuria(true);
-    // A poção quebra se o time bater forte enquanto ela prepara.
-    const limiar = this.conjuro?.feitico === FEITICO_FORTE ? QUEBRA_FORTE : QUEBRA_FEITICO;
-    if (this.conjuro && this.conjuro.dano >= this.vidaMax * limiar) {
+    // A poção quebra na sorte (ver `POCAO_QUEBRAVEL`); o Encantamento, nunca.
+    if (this.conjuro?.quebrou) {
       const f = this.conjuro.feitico;
       this.conjuro = null;
       this.encerrarMesa();
@@ -1342,7 +1353,7 @@ export class PalcoChefona {
       const c = this.corpo!;
       const mao = this.paraTelaMaoErguida();
       this.estourarGarrafa(mao.x, mao.y, f, 0.6);
-      this.letreiro(f === FEITICO_FORTE ? 'ENCANTAMENTO QUEBRADO!' : 'POÇÃO QUEBRADA!', c.x, c.y - ALT / 2 - 6, 'quebra');
+      this.letreiro('POÇÃO QUEBRADA!', c.x, c.y - ALT / 2 - 6, 'quebra');
       this.aoEvento?.({ tipo: 'quebrou', feitico: f });
       return;
     }
@@ -1582,7 +1593,7 @@ export class PalcoChefona {
     if (f === FEITICO_FORTE) this.proximoForte = this.tempo + ENTRE_FORTES_S;
     this.recentes = [...this.recentes.filter(p => p !== f), f].slice(-RECENTES);
     this.ultimaVariante.set(f, variante);
-    this.conjuro = { feitico: f, variante, dano: 0 };
+    this.conjuro = { feitico: f, variante, quebravel: f !== FEITICO_FORTE && Math.random() < POCAO_QUEBRAVEL, quebrou: false };
     this.mudarFase('conjurando');
     const c = this.corpo!;
     const nivel = nivelDaPocao(forcaDoFeitico(this.fracao));
@@ -2044,7 +2055,6 @@ export class PalcoChefona {
     }
     if (queda > 0.5) {
       this.dorAte = performance.now() + DOR_MS;
-      if (this.conjuro) this.conjuro.dano += queda;
       this.depoisDoDano();
     }
   }

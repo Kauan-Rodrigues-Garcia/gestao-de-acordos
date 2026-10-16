@@ -49,6 +49,8 @@ export interface NoLobby {
   usuario: string;
   nome:    string;
   setor:   string | null;
+  /** A foto do perfil (migration 20261016220000); sem ela, o lobby desenha o rostinho. */
+  foto:    string | null;
 }
 
 export interface RodadaChefona extends RodadaChefao {
@@ -171,7 +173,7 @@ function normalizarLobby(bruto: unknown): NoLobby[] {
     if (!b || typeof b !== 'object') return [];
     const l = b as Record<string, unknown>;
     if (typeof l.usuario !== 'string') return [];
-    return [{ usuario: l.usuario, nome: texto(l.nome) ?? 'Alguém', setor: texto(l.setor) }];
+    return [{ usuario: l.usuario, nome: texto(l.nome) ?? 'Alguém', setor: texto(l.setor), foto: texto(l.foto) }];
   });
 }
 
@@ -577,7 +579,7 @@ function ensaioEntrarNoLobby(rodadaId: number): void {
   const r = estado;
   marcarLobby(rodadaId, true);
   if (!r || r.id !== rodadaId || r.lobby.some(l => l.usuario === EU_NO_ENSAIO)) return;
-  const lobby = [...r.lobby, { usuario: EU_NO_ENSAIO, nome: 'Você (ensaio)', setor: null }].slice(-24);
+  const lobby = [...r.lobby, { usuario: EU_NO_ENSAIO, nome: 'Você (ensaio)', setor: null, foto: null }].slice(-24);
   publicar({ ...r, lobby, lobby_total: r.lobby_total + 1, versao: r.versao + 1 });
 }
 

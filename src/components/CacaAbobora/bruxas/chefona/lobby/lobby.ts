@@ -44,6 +44,8 @@ export interface Guerreiro {
   id: string;
   nome: string;
   setor?: string | null;
+  /** A foto do perfil; sem ela (ou se não carregar), o rostinho de pixel. */
+  foto?: string | null;
 }
 
 export type EstadoLobby = 'convite' | 'fora' | 'lobby' | 'luta' | 'fim';
@@ -141,6 +143,26 @@ function cabeca(escala: number): HTMLImageElement {
   img.className = 'bxl-cabeca';
   img.style.width = `${base.width * escala}px`;
   img.style.height = `${base.height * escala}px`;
+  return img;
+}
+
+/**
+ * A cara de quem está no lobby: a foto do perfil, se tiver; senão (ou se a
+ * foto não carregar) o rostinho de pixel, sempre o mesmo para a mesma pessoa.
+ */
+export function cara(g: Guerreiro): HTMLImageElement {
+  if (!g.foto) return rostinho(g.id);
+  const img = document.createElement('img');
+  img.src = g.foto;
+  img.alt = '';
+  img.className = 'bxl-rosto foto';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => {
+    const r = rostinho(g.id);
+    img.src = r.src;
+    img.className = r.className;
+  }, { once: true });
   return img;
 }
 
@@ -522,7 +544,7 @@ export class LobbyChefona {
   private monte(chegaram: string[]): HTMLElement {
     const m = el('div', 'bxl-monte');
     for (const g of this.guerreiros.slice(-MAX_NO_MONTE).reverse()) {
-      const r = rostinho(g.id);
+      const r = cara(g);
       r.title = g.nome;
       if (chegaram.includes(g.id)) r.classList.add('chegou');
       m.appendChild(r);
@@ -647,7 +669,7 @@ export class LobbyChefona {
       const nomes = el('div', 'bxl-card-nomes');
       nomes.append(el('span', 'bxl-card-nome', g.id === this.op.eu.id ? 'Você' : primeiroNome(g.nome)));
       if (g.setor) nomes.append(el('span', 'bxl-card-setor', g.setor));
-      card.append(rostinho(g.id), nomes);
+      card.append(cara(g), nomes);
       grade.appendChild(card);
     }
     if (this.total > mostrar.length) grade.appendChild(el('div', 'bxl-card mais', `+${this.total - mostrar.length}`));
