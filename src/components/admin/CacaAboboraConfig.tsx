@@ -50,7 +50,8 @@ import {
 import { ordenarFichas, type Avaliacao, type FichaDeCliques, type Nivel } from '@/components/CacaAbobora/autoclick';
 import {
   DIFICULDADES_CHEFONA, ESPERA_S as ESPERA_CHEFONA_S, PRAZO_MIN as PRAZO_CHEFONA_MIN, chefonaChegando, chefonaNaTela,
-  lerSuspeitosChefona, motivoDoErroDaChefona, soltarChefona, useChefona,
+  ensaioArrancarChefona, ensaioFugirChefona, ensaioLimparChefona, ensaioPularContagemChefona, ensaioRobosChefona,
+  ensaioSoltarChefona, lerSuspeitosChefona, motivoDoErroDaChefona, soltarChefona, useChefona,
 } from '@/components/CacaAbobora/bruxas/chefona/banco';
 import { cabecaMC } from '@/components/CacaAbobora/bruxas/chefona/arte';
 import { canvasDaImagem } from '@/components/CacaAbobora/bruxas/pixels';
@@ -494,6 +495,81 @@ function SecaoChefona() {
   );
 }
 
+/**
+ * Testar a chefona só na tela do super_admin (pedido de 15/10/2026: «liberar só
+ * para super admin para eu testar como ela está dentro do gestão»). É o ensaio
+ * do laboratório (`ensaioSoltarChefona`, rodada de id negativo): a vida mora
+ * só nesta aba, não passa pelo banco nem pelo aviso da caça, e ninguém mais vê.
+ * Os robôs fazem o papel do time; a Poção de Cura e o Totem são os mesmos
+ * botões da tela. Vale com qualquer tema, sem mexer no que o sorteio solta.
+ */
+function TesteDaChefona() {
+  const chefona = useChefona();
+  const chefao = useChefao();
+  const [nivel, setNivel] = useState(1);
+  const [robos, setRobos] = useState(false);
+  const dificuldade = DIFICULDADES_CHEFONA[nivel];
+  const noEnsaio = !!chefona && chefona.id < 0 && chefonaNaTela(chefona, Date.now());
+  const chegando = noEnsaio && chefonaChegando(chefona, Date.now());
+  // Com uma chefe de verdade (ou o Rei do Pop) na tela, o teste espera: são dois chefes ao mesmo tempo.
+  const chefeDeVerdade = (chefonaNaTela(chefona, Date.now()) && (chefona?.id ?? 0) > 0)
+    || (chefaoNaTela(chefao, Date.now()) && (chefao?.id ?? 0) > 0);
+
+  function soltar(esperaS: number) {
+    setRobos(false);
+    ensaioSoltarChefona(dificuldade.base, PRAZO_CHEFONA_MIN, esperaS, dificuldade.porPessoa);
+    toast.success('Chefona de teste solta 🧙', { description: 'Só na sua tela. Ninguém mais vê, e nada vai para o banco.' });
+  }
+  function virarRobos() { ensaioRobosChefona(!robos); setRobos(!robos); }
+  function parar(fn: () => void) { setRobos(false); fn(); }
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <p className="text-xs font-semibold">Testar a chefona só na minha tela</p>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        A Bruxa do Pântano aparece só para você, com a vida nesta aba: nada vai para o banco, ninguém recebe aviso
+        e o ranking é de mentira. Os robôs fazem o papel do time; a Poção de Cura e o Totem ficam nos botões da tela.
+        Se você escondeu o chefão (o X no meio da barra do topo), mostre de novo para ver.
+      </p>
+      <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Vida da chefona de teste">
+        {DIFICULDADES_CHEFONA.map((d, i) => (
+          <button
+            key={d.nome}
+            type="button"
+            role="radio"
+            aria-checked={nivel === i}
+            onClick={() => setNivel(i)}
+            className={cn(
+              'rounded-md border px-2 py-1 text-[11px] transition-colors',
+              nivel === i ? 'border-violet-500 bg-violet-500/10 font-semibold text-foreground' : 'border-border text-muted-foreground hover:bg-muted',
+            )}
+          >
+            {d.nome} <span className="tabular-nums opacity-70">{d.base}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" className="gap-1.5" disabled={chefeDeVerdade} onClick={() => soltar(10)}
+          title={chefeDeVerdade ? 'Há um chefe de verdade na tela: espere ele cair ou fugir' : 'Com 10 segundos de contagem'}>
+          <Sparkles className="h-3.5 w-3.5" /> Soltar o teste
+        </Button>
+        <Button size="sm" variant="outline" disabled={chefeDeVerdade} onClick={() => soltar(0)}>Sem contagem</Button>
+        {noEnsaio && (
+          <>
+            {chegando && <Button size="sm" variant="ghost" onClick={ensaioPularContagemChefona}>Pular contagem</Button>}
+            <Button size="sm" variant="ghost" aria-pressed={robos} onClick={virarRobos} className="gap-1.5">
+              <Bot className="h-3.5 w-3.5" /> {robos ? 'Parar os robôs' : 'Robôs atirando'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => ensaioArrancarChefona(0.3)}>Tirar 30%</Button>
+            <Button size="sm" variant="ghost" onClick={() => parar(ensaioFugirChefona)}>Fugir</Button>
+          </>
+        )}
+        {chefona && chefona.id < 0 && <Button size="sm" variant="ghost" onClick={() => parar(ensaioLimparChefona)}>Limpar</Button>}
+      </div>
+    </div>
+  );
+}
+
 /** A cabeça da Bruxa do Pântano, em pixel, para o cartão. */
 function CabecaDaChefona() {
   const ref = useRef<HTMLSpanElement>(null);
@@ -760,6 +836,7 @@ export default function CacaAboboraConfig() {
 
             {/* Cada tema com o seu chefe: o Rei do Pop nos zumbis, a Bruxa do Pântano nas bruxas. */}
             {bruxas ? <SecaoChefona /> : <SecaoChefao />}
+            <TesteDaChefona />
           </>
         )}
       </CardContent>
